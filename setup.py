@@ -139,17 +139,6 @@ ext_hdist = Extension(name="bodo.hdist",
                       library_dirs = lid,
 )
 
-ext_chiframes = Extension(name="bodo.chiframes",
-                          sources=["bodo/_hiframes.cpp"],
-                          libraries = MPI_LIBS,
-                          depends=["bodo/_hpat_sort.h"],
-                          extra_compile_args = eca,
-                          extra_link_args = ela,
-                          include_dirs = ind,
-                          library_dirs = lid,
-)
-
-
 ext_dict = Extension(name="bodo.hdict_ext",
                      sources=["bodo/_dict_ext.cpp"],
                      extra_compile_args = eca,
@@ -272,7 +261,7 @@ ext_xenon_wrapper = Extension(name="bodo.hxe_ext",
                               extra_link_args = ela,
 )
 
-_ext_mods = [ext_hdist, ext_chiframes, ext_dict, ext_set, ext_str, ext_quantile, ext_dt, ext_io]
+_ext_mods = [ext_hdist, ext_dict, ext_set, ext_str, ext_quantile, ext_dt, ext_io]
 
 if _has_h5py:
     _ext_mods.append(ext_hdf5)

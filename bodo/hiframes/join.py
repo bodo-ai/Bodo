@@ -669,9 +669,6 @@ from llvmlite import ir as lir
 import llvmlite.binding as ll
 from numba.targets.arrayobj import make_array
 from bodo.utils import _numba_to_c_type_map
-from .. import chiframes
-ll.add_symbol('get_join_sendrecv_counts', chiframes.get_join_sendrecv_counts)
-ll.add_symbol('timsort', chiframes.timsort)
 from .. import hdist
 ll.add_symbol('c_alltoallv', hdist.c_alltoallv)
 
