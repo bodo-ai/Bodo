@@ -555,21 +555,6 @@ class DistributedPass(object):
             out += f_block.body[:-2]
             out[-1].target = assign.target
 
-        if (bodo.config._has_ros
-                and fdef == ('read_ros_images_inner', 'bodo.ros')
-                and self._is_1D_arr(rhs.args[0].name)):
-            arr = rhs.args[0].name
-            assert len(self._array_starts[arr]) == 4, "only 4D arrs in ros"
-            start_var = self._array_starts[arr][0]
-            count_var = self._array_counts[arr][0]
-            rhs.args += [start_var, count_var]
-
-            def f(arr, bag, start, count):  # pragma: no cover
-                return bodo.ros.read_ros_images_inner_parallel(arr, bag,
-                                                               start, count)
-
-            return self._replace_func(f, rhs.args)
-
         if (func_mod == 'bodo.hiframes.api' and func_name in (
                 'to_arr_from_series', 'ts_series_to_arr_typ',
                 'to_date_series_type', 'init_series')
