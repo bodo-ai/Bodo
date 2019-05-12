@@ -1,10 +1,10 @@
 import numba
-import hpat
+import bodo
 from numba import types
 from numba.typing.templates import infer_global, AbstractTemplate, infer, signature
 from numba.extending import lower_builtin, overload, intrinsic
 from numba import cgutils
-from hpat.str_ext import string_type
+from bodo.str_ext import string_type
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 from numba.targets.arrayobj import _empty_nd_impl
 

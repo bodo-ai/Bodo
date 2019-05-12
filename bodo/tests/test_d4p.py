@@ -8,8 +8,8 @@ else:
     import numpy as np
     from math import sqrt
     import numba
-    import hpat
-    from hpat.tests.test_utils import (count_array_REPs, count_parfor_REPs,
+    import bodo
+    from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
                                        count_parfor_OneDs, count_array_OneDs,
                                        count_parfor_OneD_Vars, count_array_OneD_Vars,
                                        dist_IR_contains)
@@ -36,8 +36,8 @@ else:
                                                           resultsToCompute="computeClassesLabels|computeClassesProbabilities|computeClassesLogProbabilities")
                 return algo.compute(w, model)
             
-            train_hpat = hpat.jit(train_impl)
-            prdct_hpat = hpat.jit(prdct_impl)
+            train_hpat = bodo.jit(train_impl)
+            prdct_hpat = bodo.jit(prdct_impl)
             n = 11
             d = 4
             pred_impl = prdct_impl(n, d, train_impl(n, d).model).prediction

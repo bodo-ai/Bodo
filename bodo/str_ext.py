@@ -12,8 +12,8 @@ from numba import cgutils
 import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
 import llvmlite.binding as ll
-import hpat
-#from hpat.utils import unliteral_all
+import bodo
+#from bodo.utils import unliteral_all
 # TODO: resolve import conflict
 def unliteral_all(args):
     return tuple(types.unliteral(a) for a in args)
@@ -434,17 +434,17 @@ def gen_unicode_to_std_str(context, builder, unicode_val):
 def gen_std_str_to_unicode(context, builder, std_str_val, del_str=False):
     kind = numba.unicode.PY_UNICODE_1BYTE_KIND
     def _std_str_to_unicode(std_str):
-        length = hpat.str_ext.get_std_str_len(std_str)
+        length = bodo.str_ext.get_std_str_len(std_str)
         ret = numba.unicode._empty_string(kind, length)
-        hpat.str_arr_ext._memcpy(
-            ret._data, hpat.str_ext.get_c_str(std_str), length, 1)
+        bodo.str_arr_ext._memcpy(
+            ret._data, bodo.str_ext.get_c_str(std_str), length, 1)
         if del_str:
-            hpat.str_ext.del_str(std_str)
+            bodo.str_ext.del_str(std_str)
         return ret
     val = context.compile_internal(
             builder,
             _std_str_to_unicode,
-            string_type(hpat.str_ext.std_str_type),
+            string_type(bodo.str_ext.std_str_type),
             [std_str_val])
     return val
 

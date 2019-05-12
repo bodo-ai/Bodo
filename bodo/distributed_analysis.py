@@ -13,15 +13,15 @@ from numba.parfor import Parfor
 from numba.parfor import wrap_parfor_blocks, unwrap_parfor_blocks
 
 import numpy as np
-import hpat
-import hpat.io
-import hpat.io.np_io
-from hpat.hiframes.pd_series_ext import SeriesType
-from hpat.utils import (get_constant, is_alloc_callname,
+import bodo
+import bodo.io
+import bodo.io.np_io
+from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.utils import (get_constant, is_alloc_callname,
                         is_whole_slice, is_array, is_array_container,
                         is_np_array, find_build_tuple, debug_prints,
                         is_const_slice)
-from hpat.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from enum import Enum
 
 
@@ -289,8 +289,8 @@ class DistributedAnalysis(object):
             self._analyze_call_df(lhs, func_mod, func_name, args, array_dists)
             return
 
-        # hpat.distributed_api functions
-        if isinstance(func_mod, str) and func_mod == 'hpat.distributed_api':
+        # bodo.distributed_api functions
+        if isinstance(func_mod, str) and func_mod == 'bodo.distributed_api':
             self._analyze_call_hpat_dist(lhs, func_name, args, array_dists)
             return
 
@@ -298,25 +298,25 @@ class DistributedAnalysis(object):
         if func_name == 'len' and func_mod in ('__builtin__', 'builtins'):
             return
 
-        if hpat.config._has_h5py and (func_mod == 'hpat.io.pio_api'
+        if bodo.config._has_h5py and (func_mod == 'bodo.io.pio_api'
                 and func_name in ('h5read', 'h5write', 'h5read_filter')):
             return
 
-        if hpat.config._has_h5py and (func_mod == 'hpat.io.pio_api'
+        if bodo.config._has_h5py and (func_mod == 'bodo.io.pio_api'
                 and func_name == 'get_filter_read_indices'):
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
             return
 
-        if fdef == ('quantile', 'hpat.hiframes.api'):
+        if fdef == ('quantile', 'bodo.hiframes.api'):
             # quantile doesn't affect input's distribution
             return
 
-        if fdef == ('nunique', 'hpat.hiframes.api'):
+        if fdef == ('nunique', 'bodo.hiframes.api'):
             # nunique doesn't affect input's distribution
             return
 
-        if fdef == ('unique', 'hpat.hiframes.api'):
+        if fdef == ('unique', 'bodo.hiframes.api'):
             # doesn't affect distribution of input since input can stay 1D
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD_Var
@@ -326,46 +326,46 @@ class DistributedAnalysis(object):
             array_dists[lhs] = new_dist
             return
 
-        if fdef == ('rolling_fixed', 'hpat.hiframes.rolling'):
+        if fdef == ('rolling_fixed', 'bodo.hiframes.rolling'):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
-        if fdef == ('rolling_variable', 'hpat.hiframes.rolling'):
+        if fdef == ('rolling_variable', 'bodo.hiframes.rolling'):
             # lhs, in_arr, on_arr should have the same distribution
             new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             new_dist = self._meet_array_dists(lhs, rhs.args[1].name, array_dists, new_dist)
             array_dists[rhs.args[0].name] = new_dist
             return
 
-        if fdef == ('shift', 'hpat.hiframes.rolling'):
+        if fdef == ('shift', 'bodo.hiframes.rolling'):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
-        if fdef == ('pct_change', 'hpat.hiframes.rolling'):
+        if fdef == ('pct_change', 'bodo.hiframes.rolling'):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
-        if fdef == ('nlargest', 'hpat.hiframes.api'):
+        if fdef == ('nlargest', 'bodo.hiframes.api'):
             # output of nlargest is REP
             array_dists[lhs] = Distribution.REP
             return
 
-        if fdef == ('median', 'hpat.hiframes.api'):
+        if fdef == ('median', 'bodo.hiframes.api'):
             return
 
-        if fdef == ('concat', 'hpat.hiframes.api'):
+        if fdef == ('concat', 'bodo.hiframes.api'):
             # hiframes concat is similar to np.concatenate
             self._analyze_call_np_concatenate(lhs, args, array_dists)
             return
 
-        if fdef == ('isna', 'hpat.hiframes.api'):
+        if fdef == ('isna', 'bodo.hiframes.api'):
             return
 
-        if fdef == ('get_series_name', 'hpat.hiframes.api'):
+        if fdef == ('get_series_name', 'bodo.hiframes.api'):
             return
 
         # dummy hiframes functions
-        if func_mod == 'hpat.hiframes.api' and func_name in ('get_series_data',
+        if func_mod == 'bodo.hiframes.api' and func_name in ('get_series_data',
                 'get_series_index',
                 'to_arr_from_series', 'ts_series_to_arr_typ',
                 'to_date_series_type', 'dummy_unbox_series',
@@ -374,7 +374,7 @@ class DistributedAnalysis(object):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
-        if fdef == ('init_series', 'hpat.hiframes.api'):
+        if fdef == ('init_series', 'bodo.hiframes.api'):
             # lhs, in_arr, and index should have the same distribution
             new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             if len(rhs.args) > 1 and self.typemap[rhs.args[1].name] != types.none:
@@ -382,7 +382,7 @@ class DistributedAnalysis(object):
                 array_dists[rhs.args[0].name] = new_dist
             return
 
-        if fdef == ('init_dataframe', 'hpat.hiframes.pd_dataframe_ext'):
+        if fdef == ('init_dataframe', 'bodo.hiframes.pd_dataframe_ext'):
             # lhs, data arrays, and index should have the same distribution
             df_typ = self.typemap[lhs]
             n_cols = len(df_typ.columns)
@@ -395,30 +395,30 @@ class DistributedAnalysis(object):
                 array_dists[rhs.args[i].name] = new_dist
             return
 
-        if fdef == ('get_dataframe_data', 'hpat.hiframes.pd_dataframe_ext'):
+        if fdef == ('get_dataframe_data', 'bodo.hiframes.pd_dataframe_ext'):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
-        if fdef == ('compute_split_view', 'hpat.hiframes.split_impl'):
+        if fdef == ('compute_split_view', 'bodo.hiframes.split_impl'):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
-        if fdef == ('get_split_view_index', 'hpat.hiframes.split_impl'):
+        if fdef == ('get_split_view_index', 'bodo.hiframes.split_impl'):
             # just used in str.get() implementation for now so we know it is
             # parallel
             # TODO: handle index similar to getitem to support more cases
             return
 
-        if fdef == ('get_split_view_data_ptr', 'hpat.hiframes.split_impl'):
+        if fdef == ('get_split_view_data_ptr', 'bodo.hiframes.split_impl'):
             return
 
-        if fdef == ('setitem_str_arr_ptr', 'hpat.str_arr_ext'):
+        if fdef == ('setitem_str_arr_ptr', 'bodo.str_arr_ext'):
             return
 
-        if fdef == ('num_total_chars', 'hpat.str_arr_ext'):
+        if fdef == ('num_total_chars', 'bodo.str_arr_ext'):
             return
 
-        if fdef == ('_series_dropna_str_alloc_impl_inner', 'hpat.hiframes.series_kernels'):
+        if fdef == ('_series_dropna_str_alloc_impl_inner', 'bodo.hiframes.series_kernels'):
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD_Var
             in_dist = array_dists[rhs.args[0].name]
@@ -430,41 +430,41 @@ class DistributedAnalysis(object):
                 array_dists[rhs.args[0].name] = out_dist
             return
 
-        if (fdef == ('copy_non_null_offsets', 'hpat.str_arr_ext')
-                or fdef == ('copy_data', 'hpat.str_arr_ext')):
+        if (fdef == ('copy_non_null_offsets', 'bodo.str_arr_ext')
+                or fdef == ('copy_data', 'bodo.str_arr_ext')):
             out_arrname = rhs.args[0].name
             in_arrname = rhs.args[1].name
             self._meet_array_dists(out_arrname, in_arrname, array_dists)
             return
 
-        if fdef == ('str_arr_item_to_numeric', 'hpat.str_arr_ext'):
+        if fdef == ('str_arr_item_to_numeric', 'bodo.str_arr_ext'):
             out_arrname = rhs.args[0].name
             in_arrname = rhs.args[2].name
             self._meet_array_dists(out_arrname, in_arrname, array_dists)
             return
 
         # np.fromfile()
-        if fdef == ('file_read', 'hpat.io.np_io'):
+        if fdef == ('file_read', 'bodo.io.np_io'):
             return
 
-        if hpat.config._has_ros and fdef == ('read_ros_images_inner', 'hpat.ros'):
+        if bodo.config._has_ros and fdef == ('read_ros_images_inner', 'bodo.ros'):
             return
 
-        if hpat.config._has_pyarrow and fdef == ('read_parquet', 'hpat.io.parquet_pio'):
+        if bodo.config._has_pyarrow and fdef == ('read_parquet', 'bodo.io.parquet_pio'):
             return
 
-        if hpat.config._has_pyarrow and fdef == ('read_parquet_str', 'hpat.io.parquet_pio'):
+        if bodo.config._has_pyarrow and fdef == ('read_parquet_str', 'bodo.io.parquet_pio'):
             # string read creates array in output
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
             return
 
         # TODO: fix "numba.extending" in function def
-        if hpat.config._has_xenon and fdef == ('read_xenon_col', 'numba.extending'):
+        if bodo.config._has_xenon and fdef == ('read_xenon_col', 'numba.extending'):
             array_dists[args[4].name] = Distribution.REP
             return
 
-        if hpat.config._has_xenon and fdef == ('read_xenon_str', 'numba.extending'):
+        if bodo.config._has_xenon and fdef == ('read_xenon_str', 'numba.extending'):
             array_dists[args[4].name] = Distribution.REP
             # string read creates array in output
             if lhs not in array_dists:
@@ -472,20 +472,20 @@ class DistributedAnalysis(object):
             return
 
         if func_name == 'train' and isinstance(func_mod, ir.Var):
-            if self.typemap[func_mod.name] == hpat.ml.svc.svc_type:
+            if self.typemap[func_mod.name] == bodo.ml.svc.svc_type:
                 self._meet_array_dists(
                     args[0].name, args[1].name, array_dists, Distribution.Thread)
                 return
-            if self.typemap[func_mod.name] == hpat.ml.naive_bayes.mnb_type:
+            if self.typemap[func_mod.name] == bodo.ml.naive_bayes.mnb_type:
                 self._meet_array_dists(args[0].name, args[1].name, array_dists)
                 return
 
         if func_name == 'predict' and isinstance(func_mod, ir.Var):
-            if self.typemap[func_mod.name] == hpat.ml.svc.svc_type:
+            if self.typemap[func_mod.name] == bodo.ml.svc.svc_type:
                 self._meet_array_dists(
                     lhs, args[0].name, array_dists, Distribution.Thread)
                 return
-            if self.typemap[func_mod.name] == hpat.ml.naive_bayes.mnb_type:
+            if self.typemap[func_mod.name] == bodo.ml.naive_bayes.mnb_type:
                 self._meet_array_dists(lhs, args[0].name, array_dists)
                 return
 
@@ -611,8 +611,8 @@ class DistributedAnalysis(object):
         self._analyze_call_set_REP(lhs, args, array_dists, 'df.' + func_name)
 
     def _analyze_call_hpat_dist(self, lhs, func_name, args, array_dists):
-        """analyze distributions of hpat distributed functions
-        (hpat.distributed_api.func_name)
+        """analyze distributions of bodo distributed functions
+        (bodo.distributed_api.func_name)
         """
         if func_name == 'local_len':
             return
@@ -647,7 +647,7 @@ class DistributedAnalysis(object):
             return
 
         # set REP if not found
-        self._analyze_call_set_REP(lhs, args, array_dists, 'hpat.distributed_api.' + func_name)
+        self._analyze_call_set_REP(lhs, args, array_dists, 'bodo.distributed_api.' + func_name)
 
     def _analyze_call_np_concatenate(self, lhs, args, array_dists):
         assert len(args) == 1
@@ -925,8 +925,8 @@ class DistributedAnalysis(object):
                     nodes = [inst]
 
                     def f(in_arr):  # pragma: no cover
-                        out_a = hpat.distributed_api.rebalance_array(in_arr)
-                    f_block = compile_to_numba_ir(f, {'hpat': hpat}, self.typingctx,
+                        out_a = bodo.distributed_api.rebalance_array(in_arr)
+                    f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
                                                   (self.typemap[tmp_arr.name],),
                                                   self.typemap, self.calltypes).blocks.popitem()[1]
                     replace_arg_nodes(f_block, [tmp_arr])
@@ -1052,11 +1052,11 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
                 if isinstance(rhs, ir.Expr) and rhs.op == 'call':
                     fdef = guard(find_callname, func_ir, rhs, typemap)
                     if fdef is not None:
-                        if fdef == ('get_split_view_index', 'hpat.hiframes.split_impl'):
+                        if fdef == ('get_split_view_index', 'bodo.hiframes.split_impl'):
                             accesses.add((rhs.args[0].name, rhs.args[1].name))
-                        if fdef == ('setitem_str_arr_ptr', 'hpat.str_arr_ext'):
+                        if fdef == ('setitem_str_arr_ptr', 'bodo.str_arr_ext'):
                             accesses.add((rhs.args[0].name, rhs.args[1].name))
-                        if fdef == ('str_arr_item_to_numeric', 'hpat.str_arr_ext'):
+                        if fdef == ('str_arr_item_to_numeric', 'bodo.str_arr_ext'):
                             accesses.add((rhs.args[0].name, rhs.args[1].name))
                             accesses.add((rhs.args[2].name, rhs.args[3].name))
             for T, f in array_accesses_extensions.items():

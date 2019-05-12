@@ -2,15 +2,15 @@
 HPAT
 *****
 
-.. image:: https://badges.gitter.im/IntelLabs/hpat.svg
-   :alt: Join the chat at https://gitter.im/IntelLabs/hpat
-   :target: https://gitter.im/IntelLabs/hpat?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
+.. image:: https://badges.gitter.im/IntelLabs/bodo.svg
+   :alt: Join the chat at https://gitter.im/IntelLabs/bodo
+   :target: https://gitter.im/IntelLabs/bodo?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
 
-.. image:: https://travis-ci.org/IntelLabs/hpat.svg?branch=master
-    :target: https://travis-ci.org/IntelLabs/hpat
+.. image:: https://travis-ci.org/IntelLabs/bodo.svg?branch=master
+    :target: https://travis-ci.org/IntelLabs/bodo
 
-.. image:: https://coveralls.io/repos/github/IntelLabs/hpat/badge.svg?branch=master
-    :target: https://coveralls.io/github/IntelLabs/hpat?branch=master
+.. image:: https://coveralls.io/repos/github/IntelLabs/bodo/badge.svg?branch=master
+    :target: https://coveralls.io/github/IntelLabs/bodo?branch=master
 
 A compiler-based framework for big data in Python
 #################################################
@@ -22,7 +22,7 @@ with MPI, requiring only minimal code changes.
 HPAT is orders of magnitude faster than
 alternatives like `Apache Spark <http://spark.apache.org/>`_.
 
-HPAT's documentation can be found `here <https://intellabs.github.io/hpat-doc/>`_.
+HPAT's documentation can be found `here <https://intellabs.github.io/bodo-doc/>`_.
 
 Installation
 ############
@@ -30,10 +30,10 @@ Installation
 HPAT can be installed in `Anaconda <https://www.anaconda.com/download/>`_
 environment easily (Linux/Mac/Windows)::
 
-    conda create -n HPAT -c ehsantn -c anaconda -c conda-forge hpat
+    conda create -n HPAT -c ehsantn -c anaconda -c conda-forge bodo
 
-.. used if master of Numba is needed for latest hpat package
-.. conda create -n HPAT -c ehsantn -c numba/label/dev -c anaconda -c conda-forge hpat
+.. used if master of Numba is needed for latest bodo package
+.. conda create -n HPAT -c ehsantn -c numba/label/dev -c anaconda -c conda-forge bodo
 
 Windows installaton requires
 `Intel MPI <https://software.intel.com/en-us/intel-mpi-library>`_ to be
@@ -44,7 +44,7 @@ Docker Container
 
 An HPAT docker image is also available for running containers. For example::
 
-    docker run -it ehsantn/hpat bash
+    docker run -it ehsantn/bodo bash
 
 Example
 #######
@@ -53,11 +53,11 @@ Here is a Pi calculation example in HPAT:
 
 .. code:: python
 
-    import hpat
+    import bodo
     import numpy as np
     import time
 
-    @hpat.jit
+    @bodo.jit
     def calc_pi(n):
         t1 = time.time()
         x = 2 * np.random.ranf(n) - 1
@@ -73,7 +73,7 @@ Save this in a file named `pi.py` and run (on 8 cores)::
     mpiexec -n 8 python pi.py
 
 This should demonstrate about 100x speedup compared to regular Python version
-without `@hpat.jit` and `mpiexec`.
+without `@bodo.jit` and `mpiexec`.
 
 Jupyter Notebook
 ################

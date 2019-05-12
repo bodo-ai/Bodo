@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
-import hpat
+import bodo
 
-@hpat.jit
+@bodo.jit
 def concat_df(n):
     df1 = pd.DataFrame({'key1': np.arange(n), 'A': np.arange(n)+1.0})
     df2 = pd.DataFrame({'key2': n-np.arange(n), 'A': n+np.arange(n)+1.0})
@@ -11,4 +11,4 @@ def concat_df(n):
 
 n = 10
 print(concat_df(n))
-#hpat.distribution_report()
+#bodo.distribution_report()

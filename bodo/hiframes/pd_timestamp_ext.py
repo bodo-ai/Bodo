@@ -14,8 +14,8 @@ from numba.typing.templates import (infer_getattr, AttributeTemplate,
 import numpy as np
 import ctypes
 import inspect
-import hpat.str_ext
-import hpat.utils
+import bodo.str_ext
+import bodo.utils
 
 from llvmlite import ir as lir
 
@@ -233,7 +233,7 @@ def int_array_to_datetime_date(ia):
 
 def box_datetime_date_array(typ, val, c):
     ary = box_array(types.Array(types.int64, 1, 'C'), val, c)
-    hpat_name = c.context.insert_const_string(c.builder.module, 'hpat')
+    hpat_name = c.context.insert_const_string(c.builder.module, 'bodo')
     hpat_mod = c.pyapi.import_module_noblock(hpat_name)
     hi_mod = c.pyapi.object_getattr_string(hpat_mod, 'hiframes')
     pte_mod = c.pyapi.object_getattr_string(hi_mod, 'pd_timestamp_ext')
@@ -844,7 +844,7 @@ convert_datetimestruct_to_datetime = types.ExternalFunction("convert_datetimestr
 
 @numba.njit(locals={'arg1': numba.int32, 'arg3': numba.int32, 'arg4': numba.int32})
 def parse_datetime_str(str):
-    arg0 = hpat.str_ext.unicode_to_char_ptr(str)
+    arg0 = bodo.str_ext.unicode_to_char_ptr(str)
     arg1 = len(str)
     arg2 = PANDAS_DATETIMESTRUCT()
     arg3 = np.int32(13)

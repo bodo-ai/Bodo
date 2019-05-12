@@ -1,10 +1,10 @@
 import numpy as np
 import numba
-import hpat
+import bodo
 from numba import types, cgutils
 from numba.targets.arrayobj import make_array
 from numba.extending import overload, intrinsic, overload_method
-from hpat.str_ext import string_type
+from bodo.str_ext import string_type
 
 from numba.ir_utils import (compile_to_numba_ir, replace_arg_nodes,
                             find_callname, guard)
@@ -122,8 +122,8 @@ def file_write_parallel_overload(fname, arr, start, count):
         def _impl(fname, arr, start, count):
             A = np.ascontiguousarray(arr)
             dtype_size = get_dtype_size(A.dtype)
-            elem_size = dtype_size * hpat.distributed_lower.get_tuple_prod(A.shape[1:])
-            # hpat.cprint(start, count, elem_size)
+            elem_size = dtype_size * bodo.distributed_lower.get_tuple_prod(A.shape[1:])
+            # bodo.cprint(start, count, elem_size)
             _file_write_parallel(fname._data, A.ctypes,
                         start, count, elem_size)
         return _impl

@@ -9,12 +9,12 @@ from numba.extending import (models, register_model, lower_cast, infer_getattr,
 from numba.typing.templates import (infer_global, AbstractTemplate, signature,
     AttributeTemplate, bound_function)
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
-import hpat
-from hpat.hiframes.pd_series_ext import (SeriesType, _get_series_array_type,
+import bodo
+from bodo.hiframes.pd_series_ext import (SeriesType, _get_series_array_type,
     arr_to_series_type)
-from hpat.str_ext import string_type
-from hpat.hiframes.pd_dataframe_ext import DataFrameType
-from hpat.hiframes.rolling import supported_rolling_funcs
+from bodo.str_ext import string_type
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.rolling import supported_rolling_funcs
 
 
 class RollingType(types.Type):
@@ -50,7 +50,7 @@ def df_rolling_overload(df, window, min_periods=None, center=False,
 
     def _impl(df, window, min_periods=None, center=False,
             win_type=None, on=None, axis=0, closed=None):
-        return hpat.hiframes.pd_rolling_ext.rolling_dummy(
+        return bodo.hiframes.pd_rolling_ext.rolling_dummy(
             df, window, center, on)
 
     return _impl

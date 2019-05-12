@@ -11,11 +11,11 @@ from numba.typing.templates import infer_global, AbstractTemplate
 from numba.typing import signature
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 import numpy as np
-import hpat
-from hpat.str_ext import string_type, unicode_to_char_ptr
-from hpat.str_arr_ext import StringArray, StringArrayPayloadType, construct_string_array
-from hpat.str_arr_ext import string_array_type
-from hpat.utils import unliteral_all
+import bodo
+from bodo.str_ext import string_type, unicode_to_char_ptr
+from bodo.str_arr_ext import StringArray, StringArrayPayloadType, construct_string_array
+from bodo.str_arr_ext import string_array_type
+from bodo.utils import unliteral_all
 
 
 # from parquet/types.h
@@ -159,7 +159,7 @@ def get_column_read_nodes(c_type, cvar, arrow_readers_var, i):
         if el_type == repr(types.NPDatetime('ns')):
             func_text += '  column_tmp = np.empty(col_size, dtype=np.int64)\n'
             # TODO: fix alloc
-            func_text += '  column = hpat.hiframes.api.ts_series_to_arr_typ(column_tmp)\n'
+            func_text += '  column = bodo.hiframes.api.ts_series_to_arr_typ(column_tmp)\n'
         else:
             func_text += '  column = np.empty(col_size, dtype=np.{})\n'.format(
                 el_type)
@@ -174,7 +174,7 @@ def get_column_read_nodes(c_type, cvar, arrow_readers_var, i):
                                       'read_parquet': read_parquet,
                                       'read_parquet_str': read_parquet_str,
                                       'np': np,
-                                      'hpat': hpat,
+                                      'bodo': bodo,
                                       'StringArray': StringArray}).blocks.popitem()
 
     replace_arg_nodes(f_block, [arrow_readers_var])
@@ -306,7 +306,7 @@ from numba.targets.arrayobj import make_array
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 
-from hpat.config import _has_pyarrow
+from bodo.config import _has_pyarrow
 if _has_pyarrow:
     from .. import parquet_cpp
     ll.add_symbol('get_arrow_readers', parquet_cpp.get_arrow_readers)

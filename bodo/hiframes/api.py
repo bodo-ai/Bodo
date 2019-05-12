@@ -17,26 +17,26 @@ from numba.targets.imputils import (impl_ret_new_ref, impl_ret_borrowed,
 from numba.targets.arrayobj import _getitem_array1d
 from numba.extending import register_model, models
 
-import hpat
-from hpat.str_ext import string_type, list_string_array_type
-from hpat.str_arr_ext import (StringArrayType, string_array_type,
+import bodo
+from bodo.str_ext import string_type, list_string_array_type
+from bodo.str_arr_ext import (StringArrayType, string_array_type,
     is_str_arr_typ)
 
-from hpat.set_ext import build_set
+from bodo.set_ext import build_set
 from numba.targets.imputils import lower_builtin, impl_ret_untracked
-from hpat.hiframes.pd_timestamp_ext import (pandas_timestamp_type,
+from bodo.hiframes.pd_timestamp_ext import (pandas_timestamp_type,
     datetime_date_type, set_df_datetime_date_lower)
-from hpat.hiframes.pd_series_ext import (SeriesType,
+from bodo.hiframes.pd_series_ext import (SeriesType,
     is_str_series_typ, if_arr_to_series_type,
     series_to_array_type, if_series_to_array_type, is_dt64_series_typ)
-from hpat.hiframes.pd_index_ext import DatetimeIndexType, TimedeltaIndexType
-from hpat.hiframes.sort import (
+from bodo.hiframes.pd_index_ext import DatetimeIndexType, TimedeltaIndexType
+from bodo.hiframes.sort import (
       alltoallv,
     alltoallv_tup, finalize_shuffle_meta,
     update_shuffle_meta,  alloc_pre_shuffle_metadata,
     )
-from hpat.hiframes.join import write_send_buff
-from hpat.hiframes.split_impl import string_array_split_view_type
+from bodo.hiframes.join import write_send_buff
+from bodo.hiframes.split_impl import string_array_split_view_type
 
 # XXX: used in agg func output to avoid mutating filter, agg, join, etc.
 # TODO: fix type inferrer and remove this
@@ -51,7 +51,7 @@ ll.add_symbol('quantile_parallel', quantile_alg.quantile_parallel)
 ll.add_symbol('nth_sequential', quantile_alg.nth_sequential)
 ll.add_symbol('nth_parallel', quantile_alg.nth_parallel)
 from numba.targets.arrayobj import make_array
-from hpat.utils import _numba_to_c_type_map, unliteral_all
+from bodo.utils import _numba_to_c_type_map, unliteral_all
 
 
 nth_sequential = types.ExternalFunction("nth_sequential",
@@ -125,14 +125,14 @@ def concat(arr_list):
 @numba.njit
 def nth_element(arr, k, parallel=False):
     res = np.empty(1, arr.dtype)
-    type_enum = hpat.distributed_api.get_type_enum(arr)
+    type_enum = bodo.distributed_api.get_type_enum(arr)
     if parallel:
         nth_parallel(res.ctypes, arr.ctypes, len(arr), k, type_enum)
     else:
         nth_sequential(res.ctypes, arr.ctypes, len(arr), k, type_enum)
     return res[0]
 
-sum_op = hpat.distributed_api.Reduce_Type.Sum.value
+sum_op = bodo.distributed_api.Reduce_Type.Sum.value
 
 @numba.njit
 def median(arr, parallel=False):
@@ -140,7 +140,7 @@ def median(arr, parallel=False):
     # TODO: check return types, e.g. float32 -> float32
     n = len(arr)
     if parallel:
-        n = hpat.distributed_api.dist_reduce(n, np.int32(sum_op))
+        n = bodo.distributed_api.dist_reduce(n, np.int32(sum_op))
     k = n // 2
 
     # odd length case
@@ -187,17 +187,17 @@ def concat_overload(arr_list):
             for A in in_arrs:
                 arr = dummy_unbox_series(A)
                 num_strs += len(arr)
-                num_chars += hpat.str_arr_ext.num_total_chars(arr)
-            out_arr = hpat.str_arr_ext.pre_alloc_string_array(num_strs, num_chars)
+                num_chars += bodo.str_arr_ext.num_total_chars(arr)
+            out_arr = bodo.str_arr_ext.pre_alloc_string_array(num_strs, num_chars)
             # copy data to output
             curr_str_ind = 0
             curr_chars_ind = 0
             for A in in_arrs:
                 arr = dummy_unbox_series(A)
-                hpat.str_arr_ext.set_string_array_range(
+                bodo.str_arr_ext.set_string_array_range(
                     out_arr, arr, curr_str_ind, curr_chars_ind)
                 curr_str_ind += len(arr)
-                curr_chars_ind += hpat.str_arr_ext.num_total_chars(arr)
+                curr_chars_ind += bodo.str_arr_ext.num_total_chars(arr)
             return out_arr
 
         return string_concat_impl
@@ -245,12 +245,12 @@ def lower_nunique_parallel(context, builder, sig, args):
 
 # @overload(nunique_parallel)
 def nunique_overload_parallel(arr_typ):
-    sum_op = hpat.distributed_api.Reduce_Type.Sum.value
+    sum_op = bodo.distributed_api.Reduce_Type.Sum.value
 
     def nunique_par(A):
-        uniq_A = hpat.hiframes.api.unique_parallel(A)
+        uniq_A = bodo.hiframes.api.unique_parallel(A)
         loc_nuniq = len(uniq_A)
-        return hpat.distributed_api.dist_reduce(loc_nuniq, np.int32(sum_op))
+        return bodo.distributed_api.dist_reduce(loc_nuniq, np.int32(sum_op))
 
     return nunique_par
 
@@ -280,7 +280,7 @@ def lower_unique(context, builder, sig, args):
 def unique_overload(arr_typ):
     # TODO: extend to other types like datetime?
     def unique_seq(A):
-        return hpat.utils.to_array(build_set(A))
+        return bodo.utils.to_array(build_set(A))
     return unique_seq
 
 @lower_builtin(unique_parallel, types.Any)  # TODO: replace Any with types
@@ -293,10 +293,10 @@ def lower_unique_parallel(context, builder, sig, args):
 def unique_overload_parallel(arr_typ):
 
     def unique_par(A):
-        uniq_A = hpat.utils.to_array(build_set(A))
+        uniq_A = bodo.utils.to_array(build_set(A))
         key_arrs = (uniq_A,)
 
-        n_pes = hpat.distributed_api.get_size()
+        n_pes = bodo.distributed_api.get_size()
         pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, (), n_pes, False)
 
         # calc send/recv counts
@@ -318,7 +318,7 @@ def unique_overload_parallel(arr_typ):
         # shuffle
         out_arr, = alltoallv_tup(key_arrs, shuffle_meta)
 
-        return hpat.utils.to_array(build_set(out_arr))
+        return bodo.utils.to_array(build_set(out_arr))
 
     return unique_par
 
@@ -330,14 +330,14 @@ convert_len_arr_to_offset = types.ExternalFunction("convert_len_arr_to_offset", 
 # TODO: refactor with join
 @numba.njit
 def set_recv_counts_chars(key_arr):
-    n_pes = hpat.distributed_api.get_size()
+    n_pes = bodo.distributed_api.get_size()
     send_counts = np.zeros(n_pes, np.int32)
     recv_counts = np.empty(n_pes, np.int32)
     for i in range(len(key_arr)):
         str = key_arr[i]
         node_id = hash(str) % n_pes
         send_counts[node_id] += len(str)
-    hpat.distributed_api.alltoall(send_counts, recv_counts, 1)
+    bodo.distributed_api.alltoall(send_counts, recv_counts, 1)
     return send_counts, recv_counts
 
 
@@ -443,7 +443,7 @@ def isna(arr, i):
 @overload(isna)
 def isna_overload(arr, i):
     if arr == string_array_type:
-        return lambda arr, i: hpat.str_arr_ext.str_arr_is_na(arr, i)
+        return lambda arr, i: bodo.str_arr_ext.str_arr_is_na(arr, i)
     # TODO: support NaN in list(list(str))
     if arr == list_string_array_type:
         return lambda arr, i: False
@@ -553,16 +553,16 @@ def nlargest_parallel(A, k, is_largest, cmp_f):
     # parallel algorithm: assuming k << len(A), just call nlargest on chunks
     # of A, gather the result and return the largest k
     # TODO: support cases where k is not too small
-    my_rank = hpat.distributed_api.get_rank()
+    my_rank = bodo.distributed_api.get_rank()
     local_res = nlargest(A, k, is_largest, cmp_f)
-    all_largest = hpat.distributed_api.gatherv(local_res)
+    all_largest = bodo.distributed_api.gatherv(local_res)
 
     # TODO: handle len(res) < k case
     if my_rank == MPI_ROOT:
         res = nlargest(all_largest, k, is_largest, cmp_f)
     else:
         res = np.empty(k, A.dtype)
-    hpat.distributed_api.bcast(res)
+    bodo.distributed_api.bcast(res)
     return res
 
 
@@ -760,7 +760,7 @@ def set_df_col(df, cname, arr):
 @infer_global(set_df_col)
 class SetDfColInfer(AbstractTemplate):
     def generic(self, args, kws):
-        from hpat.hiframes.pd_dataframe_ext import DataFrameType
+        from bodo.hiframes.pd_dataframe_ext import DataFrameType
         assert not kws
         assert len(args) == 3
         assert isinstance(args[1], types.Literal)
@@ -916,17 +916,17 @@ def alias_ext_init_series(lhs_name, args, alias_map, arg_aliases):
 
 
 if hasattr(numba.ir_utils, 'alias_func_extensions'):
-    numba.ir_utils.alias_func_extensions[('init_series', 'hpat.hiframes.api')] = alias_ext_init_series
-    numba.ir_utils.alias_func_extensions[('get_series_data', 'hpat.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('get_series_index', 'hpat.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('init_datetime_index', 'hpat.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('get_index_data', 'hpat.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('dummy_unbox_series', 'hpat.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('get_dataframe_data', 'hpat.hiframes.pd_dataframe_ext')] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[('init_series', 'bodo.hiframes.api')] = alias_ext_init_series
+    numba.ir_utils.alias_func_extensions[('get_series_data', 'bodo.hiframes.api')] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[('get_series_index', 'bodo.hiframes.api')] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[('init_datetime_index', 'bodo.hiframes.api')] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[('get_index_data', 'bodo.hiframes.api')] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[('dummy_unbox_series', 'bodo.hiframes.api')] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[('get_dataframe_data', 'bodo.hiframes.pd_dataframe_ext')] = alias_ext_dummy_func
     # TODO: init_dataframe
-    numba.ir_utils.alias_func_extensions[('to_arr_from_series', 'hpat.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('ts_series_to_arr_typ', 'hpat.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('to_date_series_type', 'hpat.hiframes.api')] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[('to_arr_from_series', 'bodo.hiframes.api')] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[('ts_series_to_arr_typ', 'bodo.hiframes.api')] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[('to_date_series_type', 'bodo.hiframes.api')] = alias_ext_dummy_func
 
 @numba.njit
 def agg_typer(a, _agg_f):
@@ -1029,7 +1029,7 @@ class FixDfArrayType(AbstractTemplate):
         if isinstance(column, types.List) and column.dtype == string_type:
             ret_typ = string_array_type
         if isinstance(column, DatetimeIndexType):
-            ret_typ = hpat.hiframes.pd_index_ext._dt_index_data_typ
+            ret_typ = bodo.hiframes.pd_index_ext._dt_index_data_typ
         if isinstance(column, SeriesType):
             ret_typ = column.data
         # TODO: add other types
@@ -1054,14 +1054,14 @@ def fix_df_array_overload(column):
     # convert list of strings to string array
     if isinstance(column, types.List) and column.dtype == string_type:
         def fix_df_array_str_impl(column):  # pragma: no cover
-            return hpat.str_arr_ext.StringArray(column)
+            return bodo.str_arr_ext.StringArray(column)
         return fix_df_array_str_impl
 
     if isinstance(column, DatetimeIndexType):
-        return lambda column: hpat.hiframes.api.get_index_data(column)
+        return lambda column: bodo.hiframes.api.get_index_data(column)
 
     if isinstance(column, SeriesType):
-        return lambda column: hpat.hiframes.api.get_series_data(column)
+        return lambda column: bodo.hiframes.api.get_series_data(column)
 
     # column is array if not list
     assert isinstance(column, (types.Array, StringArrayType, SeriesType))
@@ -1339,7 +1339,7 @@ def join_dummy(left_df, right_df, left_on, right_on, how):
 @infer_global(join_dummy)
 class JoinTyper(AbstractTemplate):
     def generic(self, args, kws):
-        from hpat.hiframes.pd_dataframe_ext import DataFrameType
+        from bodo.hiframes.pd_dataframe_ext import DataFrameType
         assert not kws
         left_df, right_df, left_on, right_on, how = args
 
@@ -1391,12 +1391,12 @@ def drop_inplace(df):
 def drop_inplace_overload(df, labels=None, axis=0, index=None, columns=None,
         level=None, inplace=False, errors='raise'):
 
-    from hpat.hiframes.pd_dataframe_ext import DataFrameType
+    from bodo.hiframes.pd_dataframe_ext import DataFrameType
     assert isinstance(df, DataFrameType)
     # TODO: support recovery when object is not df
     def _impl(df, labels=None, axis=0, index=None, columns=None,
             level=None, inplace=False, errors='raise'):
-        new_df = hpat.hiframes.pd_dataframe_ext.drop_dummy(
+        new_df = bodo.hiframes.pd_dataframe_ext.drop_dummy(
             df, labels, axis, columns, inplace)
         return new_df, None
 
@@ -1424,7 +1424,7 @@ def list_str_arr_getitem_array(arr, ind):
         # TODO: convert to parfor in typed pass
         def list_str_arr_getitem_impl(arr, ind):
             n = ind.sum()
-            out_arr = hpat.str_ext.alloc_list_list_str(n)
+            out_arr = bodo.str_ext.alloc_list_list_str(n)
             j = 0
             for i in range(len(ind)):
                 if ind[i]:
@@ -1549,7 +1549,7 @@ def iternext_itertuples(context, builder, sig, args, result):
             if arr_typ == types.Array(types.NPDatetime('ns'), 1, 'C'):
                 getitem_sig = signature(pandas_timestamp_type, arr_typ, types.intp)
                 val = context.compile_internal(builder,
-                    lambda a,i: hpat.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(np.int64(a[i])),
+                    lambda a,i: bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(np.int64(a[i])),
                         getitem_sig, [arr_ptr, index])
             else:
                 getitem_sig = signature(arr_typ.dtype, arr_typ, types.intp)

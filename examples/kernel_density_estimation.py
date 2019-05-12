@@ -1,11 +1,11 @@
-import hpat
-from hpat import prange
+import bodo
+from bodo import prange
 import numpy as np
 import h5py
 import argparse
 import time
 
-@hpat.jit
+@bodo.jit
 def kde():
     f = h5py.File("kde.hdf5", "r")
     X = f['points'][:]

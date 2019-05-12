@@ -1,8 +1,8 @@
 import numpy as np
-import hpat
+import bodo
 import time
 
-@hpat.jit
+@bodo.jit
 def logistic_regression(iterations):
     t1 = time.time()
     N = 10**8

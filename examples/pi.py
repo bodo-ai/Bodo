@@ -1,9 +1,9 @@
-import hpat
+import bodo
 import numpy as np
 import argparse
 import time
 
-@hpat.jit
+@bodo.jit
 def calc_pi(n):
     t1 = time.time()
     x = 2 * np.random.ranf(n) - 1

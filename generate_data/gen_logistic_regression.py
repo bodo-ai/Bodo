@@ -2,9 +2,9 @@ import h5py
 import numpy as np
 import argparse
 import time
-import hpat
+import bodo
 
-@hpat.jit
+@bodo.jit
 def gen_lir(N, D, file_name):
     # np.random.seed(0)
     points = np.random.random((N,D))

@@ -19,20 +19,20 @@ from numba.analysis import compute_use_defs
 from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.extending import overload, lower_builtin
-import hpat
-from hpat.utils import (is_call_assign, is_var_assign, is_assign, debug_prints,
+import bodo
+from bodo.utils import (is_call_assign, is_var_assign, is_assign, debug_prints,
         alloc_arr_tup, empty_like_type)
-from hpat import distributed, distributed_analysis
-from hpat.distributed_analysis import Distribution
-from hpat.utils import _numba_to_c_type_map, unliteral_all
-from hpat.str_ext import string_type
-from hpat.set_ext import num_total_chars_set_string, build_set
-from hpat.str_arr_ext import (string_array_type, pre_alloc_string_array,
+from bodo import distributed, distributed_analysis
+from bodo.distributed_analysis import Distribution
+from bodo.utils import _numba_to_c_type_map, unliteral_all
+from bodo.str_ext import string_type
+from bodo.set_ext import num_total_chars_set_string, build_set
+from bodo.str_arr_ext import (string_array_type, pre_alloc_string_array,
                               get_offset_ptr, get_data_ptr)
 
-from hpat.hiframes.join import write_send_buff
-from hpat.timsort import getitem_arr_tup
-from hpat.shuffle_utils import (getitem_arr_tup_single, val_to_tup, alltoallv,
+from bodo.hiframes.join import write_send_buff
+from bodo.timsort import getitem_arr_tup
+from bodo.shuffle_utils import (getitem_arr_tup_single, val_to_tup, alltoallv,
     alltoallv_tup, finalize_shuffle_meta, update_shuffle_meta,
     alloc_pre_shuffle_metadata, _get_keys_tup, _get_data_tup)
 
@@ -46,7 +46,7 @@ supported_agg_funcs = ['sum', 'count', 'mean',
 
 
 def get_agg_func(func_ir, func_name, rhs):
-    from hpat.hiframes.series_kernels import series_replace_funcs
+    from bodo.hiframes.series_kernels import series_replace_funcs
     if func_name == 'var':
         return _column_var_impl_linear
     if func_name == 'std':
@@ -96,7 +96,7 @@ def _var_combine(ssqdm_a, mean_a, nobs_a, ssqdm_b, mean_b, nobs_b):  # pragma: n
     M2 = ssqdm_a + ssqdm_b + delta * delta * nobs_a * nobs_b / nobs
     return M2, mean_x, nobs
 
-# XXX: njit doesn't work when hpat.jit() is used for agg_func in hiframes
+# XXX: njit doesn't work when bodo.jit() is used for agg_func in hiframes
 #@numba.njit
 def __special_combine(*args):
     return
@@ -119,8 +119,8 @@ def _column_var_impl_linear(A):  # pragma: no cover
     ssqdm_x = 0.0
     N = len(A)
     for i in numba.parfor.internal_prange(N):
-        hpat.hiframes.aggregate.__special_combine(
-            ssqdm_x, mean_x, nobs, hpat.hiframes.aggregate._var_combine)
+        bodo.hiframes.aggregate.__special_combine(
+            ssqdm_x, mean_x, nobs, bodo.hiframes.aggregate._var_combine)
         val = A[i]
         if not np.isnan(val):
             nobs += 1
@@ -130,7 +130,7 @@ def _column_var_impl_linear(A):  # pragma: no cover
             # ssqdm_x += ((nobs - 1) * delta ** 2) / nobs
             delta2 = val - mean_x
             ssqdm_x += delta * delta2
-    return hpat.hiframes.rolling.calc_var(2, nobs, mean_x, ssqdm_x)
+    return bodo.hiframes.rolling.calc_var(2, nobs, mean_x, ssqdm_x)
 
 # TODO: avoid code duplication
 def _column_std_impl_linear(A):  # pragma: no cover
@@ -139,8 +139,8 @@ def _column_std_impl_linear(A):  # pragma: no cover
     ssqdm_x = 0.0
     N = len(A)
     for i in numba.parfor.internal_prange(N):
-        hpat.hiframes.aggregate.__special_combine(
-            ssqdm_x, mean_x, nobs, hpat.hiframes.aggregate._var_combine)
+        bodo.hiframes.aggregate.__special_combine(
+            ssqdm_x, mean_x, nobs, bodo.hiframes.aggregate._var_combine)
         val = A[i]
         if not np.isnan(val):
             nobs += 1
@@ -150,7 +150,7 @@ def _column_std_impl_linear(A):  # pragma: no cover
             # ssqdm_x += ((nobs - 1) * delta ** 2) / nobs
             delta2 = val - mean_x
             ssqdm_x += delta * delta2
-    v = hpat.hiframes.rolling.calc_var(2, nobs, mean_x, ssqdm_x)
+    v = bodo.hiframes.rolling.calc_var(2, nobs, mean_x, ssqdm_x)
     return v**0.5
 
 
@@ -253,7 +253,7 @@ numba.analysis.ir_extension_usedefs[Aggregate] = aggregate_usedefs
 
 def remove_dead_aggregate(aggregate_node, lives, arg_aliases, alias_map, func_ir, typemap):
     #
-    if not hpat.hiframes.api.enable_hiframes_remove_dead:
+    if not bodo.hiframes.api.enable_hiframes_remove_dead:
         return aggregate_node
 
     dead_cols = []
@@ -561,7 +561,7 @@ def agg_distributed_run(agg_node, array_dists, typemap, calltypes, typingctx, ta
         agg_node.df_in_vars.keys(), agg_node.df_out_vars.keys(), parallel)
 
     f_block = compile_to_numba_ir(top_level_func,
-                                  {'hpat': hpat, 'np': np,
+                                  {'bodo': bodo, 'np': np,
                                   'agg_seq_iter': agg_seq_iter,
                                   'parallel_agg' : parallel_agg,
                                   '__update_redvars': agg_func_struct.update_all_func,
@@ -608,7 +608,7 @@ distributed.distributed_run_extensions[Aggregate] = agg_distributed_run
 def parallel_agg(key_arrs, data_redvar_dummy, out_dummy_tup, data_in, init_vals,
         __update_redvars, __combine_redvars, __eval_res, return_key, pivot_arr):  # pragma: no cover
     # alloc shuffle meta
-    n_pes = hpat.distributed_api.get_size()
+    n_pes = bodo.distributed_api.get_size()
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data_redvar_dummy, n_pes, False)
 
     # calc send/recv counts
@@ -647,8 +647,8 @@ def agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy,
     # _init_val_1 = np.int64(0)
     # redvar_1_arr = np.full(n_uniq_keys, _init_val_1, np.int64)
     # out_key = np.empty(n_uniq_keys, np.float64)
-    n_pes = hpat.distributed_api.get_size()
-    # hpat.dict_ext.init_dict_float64_int64()
+    n_pes = bodo.distributed_api.get_size()
+    # bodo.dict_ext.init_dict_float64_int64()
     # key_write_map = get_key_dict(key_arrs[0])
     key_write_map, byte_v = get_key_dict(key_arrs)
 
@@ -668,7 +668,7 @@ def agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy,
             w_ind = key_write_map[k]
         __update_redvars(redvar_arrs, data_in, w_ind, i, pivot_arr)
         #redvar_arrs[0][w_ind], redvar_arrs[1][w_ind] = __update_redvars(redvar_arrs[0][w_ind], redvar_arrs[1][w_ind], data_in[0][i])
-    hpat.dict_ext.byte_vec_free(byte_v)
+    bodo.dict_ext.byte_vec_free(byte_v)
     return
 
 
@@ -702,7 +702,7 @@ def agg_parallel_combine_iter(key_arrs, reduce_recvs, out_dummy_tup, init_vals,
     for j in range(n_uniq_keys):
         __eval_res(local_redvars, out_arrs, j)
 
-    hpat.dict_ext.byte_vec_free(byte_v)
+    bodo.dict_ext.byte_vec_free(byte_v)
     return out_arrs
 
 @numba.njit
@@ -734,7 +734,7 @@ def agg_seq_iter(key_arrs, redvar_dummy_tup, out_dummy_tup, data_in, init_vals,
     for j in range(n_uniq_keys):
         __eval_res(local_redvars, out_arrs, j)
 
-    hpat.dict_ext.byte_vec_free(byte_v)
+    bodo.dict_ext.byte_vec_free(byte_v)
     return out_arrs
 
 
@@ -772,18 +772,18 @@ def get_key_dict_overload(arr):
         for t in arr.types:
             n_bytes += context.get_abi_sizeof(context.get_data_type(t.dtype))
         def _impl(arr):
-            b_v = hpat.dict_ext.byte_vec_init(n_bytes, 0)
-            b_dict = hpat.dict_ext.dict_byte_vec_int64_init()
+            b_v = bodo.dict_ext.byte_vec_init(n_bytes, 0)
+            b_dict = bodo.dict_ext.dict_byte_vec_int64_init()
             return b_dict, b_v
         return _impl
 
     # regular scalar keys
     dtype = arr.types[0].dtype
     func_text = "def k_dict_impl(arr):\n"
-    func_text += "  b_v = hpat.dict_ext.byte_vec_init(1, 0)\n"
-    func_text += "  return hpat.dict_ext.dict_{}_int64_init(), b_v\n".format(dtype)
+    func_text += "  b_v = bodo.dict_ext.byte_vec_init(1, 0)\n"
+    func_text += "  return bodo.dict_ext.dict_{}_int64_init(), b_v\n".format(dtype)
     loc_vars = {}
-    exec(func_text, {'hpat': hpat}, loc_vars)
+    exec(func_text, {'bodo': bodo}, loc_vars)
     k_dict_impl = loc_vars['k_dict_impl']
     return k_dict_impl
 
@@ -799,12 +799,12 @@ def _getitem_keys_overload(arrs, ind, b_v):
         for i, t in enumerate(arrs.types):
             n_bytes = context.get_abi_sizeof(context.get_data_type(t.dtype))
             func_text += "  arr_ptr = arrs[{}].ctypes.data + ind * {}\n".format(i, n_bytes)
-            func_text += "  hpat.dict_ext.byte_vec_set(b_v, {}, arr_ptr, {})\n".format(offset, n_bytes)
+            func_text += "  bodo.dict_ext.byte_vec_set(b_v, {}, arr_ptr, {})\n".format(offset, n_bytes)
             offset += n_bytes
 
         func_text += "  return b_v\n"
         loc_vars = {}
-        exec(func_text, {'hpat': hpat}, loc_vars)
+        exec(func_text, {'bodo': bodo}, loc_vars)
         getitem_impl = loc_vars['getitem_impl']
         return getitem_impl
 
@@ -842,7 +842,7 @@ def get_key_set(arr):  # pragma: no cover
 def get_key_set_overload(arr):
     if arr == string_array_type or (isinstance(arr, types.BaseTuple)
             and len(arr.types) == 1 and arr.types[0] == string_array_type):
-        return lambda arr: hpat.set_ext.init_set_string()
+        return lambda arr: bodo.set_ext.init_set_string()
 
     if isinstance(arr, types.BaseTuple):
         def get_set_tup(arr):
@@ -1016,7 +1016,7 @@ def gen_top_level_agg_func(key_names, return_key, red_var_typs, out_typs,
 def compile_to_optimized_ir(func, arg_typs, typingctx):
     # XXX are outside function's globals needed?
     code = func.code if hasattr(func, 'code') else func.__code__
-    f_ir = get_ir_of_code({'numba': numba, 'np': np, 'hpat': hpat}, code)
+    f_ir = get_ir_of_code({'numba': numba, 'np': np, 'bodo': bodo}, code)
 
     # rename all variables to avoid conflict (init and eval nodes)
     var_table = get_name_var_table(f_ir.blocks)
@@ -1028,7 +1028,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
 
     assert f_ir.arg_count == 1, "agg function should have one input"
     input_name = f_ir.arg_names[0]
-    df_pass = hpat.hiframes.hiframes_untyped.HiFrames(
+    df_pass = bodo.hiframes.hiframes_untyped.HiFrames(
         f_ir, typingctx, arg_typs, {}, {})
     df_pass.run()
     remove_dead(f_ir.blocks, f_ir.arg_names, f_ir)
@@ -1052,7 +1052,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
             )
     preparfor_pass.run()
     f_ir._definitions = build_definitions(f_ir.blocks)
-    df_t_pass = hpat.hiframes.hiframes_typed.HiFramesTyped(f_ir, typingctx, typemap, calltypes)
+    df_t_pass = bodo.hiframes.hiframes_typed.HiFramesTyped(f_ir, typingctx, typemap, calltypes)
     df_t_pass.run()
     numba.rewrites.rewrite_registry.apply('after-inference', pm, f_ir)
     parfor_pass = numba.parfor.ParforPass(f_ir, typemap,
@@ -1474,7 +1474,7 @@ def gen_eval_func(f_ir, eval_nodes, reduce_vars, var_types, pm, typingctx, targe
     agg_eval = loc_vars['agg_eval']
 
     arg_typs = tuple(var_types)
-    f_ir = compile_to_numba_ir(agg_eval, {'numba': numba, 'hpat':hpat, 'np': np, '_zero': zero},  # TODO: add outside globals
+    f_ir = compile_to_numba_ir(agg_eval, {'numba': numba, 'bodo':bodo, 'np': np, '_zero': zero},  # TODO: add outside globals
                                   typingctx, arg_typs,
                                   pm.typemap, pm.calltypes)
 
@@ -1523,7 +1523,7 @@ def gen_combine_func(f_ir, parfor, redvars, var_to_redvar, var_types, arr_var,
         bl = parfor.loop_body[label]
         for stmt in bl.body:
             if is_call_assign(stmt) and (guard(find_callname, f_ir, stmt.value)
-                    == ('__special_combine', 'hpat.hiframes.aggregate')):
+                    == ('__special_combine', 'bodo.hiframes.aggregate')):
                 args = stmt.value.args
                 l_argnames = []
                 r_argnames = []
@@ -1539,8 +1539,8 @@ def gen_combine_func(f_ir, parfor, redvars, var_to_redvar, var_types, arr_var,
                 sp_func = guard(find_callname, f_ir, dummy_call)
                 # XXX: only var supported for now
                 # TODO: support general functions
-                assert sp_func == ('_var_combine', 'hpat.hiframes.aggregate')
-                sp_func = hpat.hiframes.aggregate._var_combine
+                assert sp_func == ('_var_combine', 'bodo.hiframes.aggregate')
+                sp_func = bodo.hiframes.aggregate._var_combine
                 special_combines[comb_name] = sp_func
 
             # reduction variables
@@ -1569,7 +1569,7 @@ def gen_combine_func(f_ir, parfor, redvars, var_to_redvar, var_types, arr_var,
     # reduction variable types for new input and existing values
     arg_typs = tuple(2 * var_types)
 
-    glbs = {'numba': numba, 'hpat':hpat, 'np': np}
+    glbs = {'numba': numba, 'bodo':bodo, 'np': np}
     glbs.update(special_combines)
     f_ir = compile_to_numba_ir(agg_combine, glbs,  # TODO: add outside globals
                                   typingctx, arg_typs,
@@ -1635,11 +1635,11 @@ def gen_update_func(parfor, redvars, var_to_redvar, var_types, arr_var,
                 continue
             if is_getitem(stmt) and stmt.value.value.name == arr_var.name:
                 stmt.value = in_vars[0]
-            # XXX replace hpat.hiframes.api.isna(A, i) for now
+            # XXX replace bodo.hiframes.api.isna(A, i) for now
             # TODO: handle actual NA
             # for test_agg_seq_count_str test
             if (is_call_assign(stmt) and guard(find_callname, pm.func_ir, stmt.value)
-                    == ('isna', 'hpat.hiframes.api')
+                    == ('isna', 'bodo.hiframes.api')
                     and stmt.value.args[0].name == arr_var.name):
                 stmt.value = ir.Const(False, stmt.target.loc)
             # store reduction variables

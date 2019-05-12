@@ -1,7 +1,7 @@
 import operator
 import numpy as np
 import numba
-import hpat
+import bodo
 from numba import types
 from numba.typing.templates import (infer_global, AbstractTemplate, infer,
     signature, AttributeTemplate, infer_getattr, bound_function)
@@ -10,10 +10,10 @@ from numba.extending import (typeof_impl, type_callable, models, register_model,
                              make_attribute_wrapper, lower_builtin, box, unbox,
                              lower_getattr, intrinsic, overload_method, overload, overload_attribute)
 from numba import cgutils
-from hpat.str_ext import string_type
+from bodo.str_ext import string_type
 from numba.targets.imputils import (impl_ret_new_ref, impl_ret_borrowed,
     iternext_impl, RefType)
-from hpat.str_arr_ext import (string_array_type, get_data_ptr,
+from bodo.str_arr_ext import (string_array_type, get_data_ptr,
     is_str_arr_typ, pre_alloc_string_array, _memcpy)
 
 import llvmlite.llvmpy.core as lc
@@ -396,7 +396,7 @@ def str_arr_split_view_getitem_overload(A, ind):
             end_index = getitem_c_arr(A._index_offsets, ind+1)
             n = end_index - start_index - 1
 
-            str_list = hpat.str_ext.alloc_str_list(n)
+            str_list = bodo.str_ext.alloc_str_list(n)
             for i in range(n):
                 data_start = getitem_c_arr(
                     A._data_offsets, start_index + i)

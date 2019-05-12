@@ -8,25 +8,25 @@ from numba.extending import overload
 from numba.ir_utils import (visit_vars_inner, replace_vars_inner,
                             compile_to_numba_ir, replace_arg_nodes,
                             mk_unique_var)
-import hpat
-from hpat import distributed, distributed_analysis
-from hpat.utils import debug_prints, alloc_arr_tup, empty_like_type
-from hpat.distributed_analysis import Distribution
+import bodo
+from bodo import distributed, distributed_analysis
+from bodo.utils import debug_prints, alloc_arr_tup, empty_like_type
+from bodo.distributed_analysis import Distribution
 
-from hpat.str_arr_ext import (string_array_type, to_string_list,
+from bodo.str_arr_ext import (string_array_type, to_string_list,
                               cp_str_list_to_array, str_list_to_array,
                               get_offset_ptr, get_data_ptr, convert_len_arr_to_offset,
                               pre_alloc_string_array, num_total_chars,
                               getitem_str_offset, copy_str_arr_slice,
                               str_copy_ptr, get_utf8_size,
                               setitem_str_offset, str_arr_set_na)
-from hpat.str_ext import string_type
-from hpat.timsort import copyElement_tup, getitem_arr_tup, setitem_arr_tup
-from hpat.shuffle_utils import (getitem_arr_tup_single, val_to_tup, alltoallv,
+from bodo.str_ext import string_type
+from bodo.timsort import copyElement_tup, getitem_arr_tup, setitem_arr_tup
+from bodo.shuffle_utils import (getitem_arr_tup_single, val_to_tup, alltoallv,
     alltoallv_tup, finalize_shuffle_meta,
     update_shuffle_meta,  alloc_pre_shuffle_metadata,
     _get_keys_tup, _get_data_tup)
-from hpat.hiframes.pd_categorical_ext import CategoricalArray
+from bodo.hiframes.pd_categorical_ext import CategoricalArray
 
 
 class Join(ir.Stmt):
@@ -191,7 +191,7 @@ ir_utils.visit_vars_extensions[Join] = visit_vars_join
 
 
 def remove_dead_join(join_node, lives, arg_aliases, alias_map, func_ir, typemap):
-    if not hpat.hiframes.api.enable_hiframes_remove_dead:
+    if not bodo.hiframes.api.enable_hiframes_remove_dead:
         return join_node
     # if an output column is dead, the related input column is not needed
     # anymore in the join
@@ -351,8 +351,8 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx, 
     if method == 'sort' and join_node.how != 'asof':
         # asof key is already sorted, TODO: add error checking
         # local sort
-        func_text += "    hpat.hiframes.sort.local_sort(t1_keys, data_left)\n"
-        func_text += "    hpat.hiframes.sort.local_sort(t2_keys, data_right)\n"
+        func_text += "    bodo.hiframes.sort.local_sort(t1_keys, data_left)\n"
+        func_text += "    bodo.hiframes.sort.local_sort(t2_keys, data_right)\n"
 
     # align output variables for local merge
     # add keys first (TODO: remove dead keys)
@@ -375,15 +375,15 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx, 
 
     if join_node.how == 'asof':
         func_text += ("    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
-        " = hpat.hiframes.join.local_merge_asof(t1_keys, t2_keys, data_left, data_right)\n")
+        " = bodo.hiframes.join.local_merge_asof(t1_keys, t2_keys, data_left, data_right)\n")
     elif method == 'sort':
         func_text += ("    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
-        " = hpat.hiframes.join.local_merge_new(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
+        " = bodo.hiframes.join.local_merge_new(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
             join_node.how in ('left', 'outer'), join_node.how == 'outer'))
     else:
         assert method == 'hash'
         func_text += ("    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
-        " = hpat.hiframes.join.local_hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
+        " = bodo.hiframes.join.local_hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
             join_node.how in ('left', 'outer'), join_node.how == 'outer'))
 
     for i in range(len(left_other_names)):
@@ -416,7 +416,7 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx, 
 
     # print(func_text)
 
-    glbs = {'hpat': hpat, 'np': np,
+    glbs = {'bodo': bodo, 'np': np,
                                   'to_string_list': to_string_list,
                                   'cp_str_list_to_array': cp_str_list_to_array,
                                   'parallel_join': parallel_join,
@@ -463,7 +463,7 @@ def _get_table_parallel_flags(join_node, array_dists):
 # @numba.njit
 def parallel_join_impl(key_arrs, data):
     # alloc shuffle meta
-    n_pes = hpat.distributed_api.get_size()
+    n_pes = bodo.distributed_api.get_size()
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, False)
 
 
@@ -501,13 +501,13 @@ def parallel_join(key_arrs, data):
 def parallel_asof_comm(left_key_arrs, right_key_arrs, right_data):
     # align the left and right intervals
     # allgather the boundaries of all left intervals and calculate overlap
-    # rank = hpat.distributed_api.get_rank()
-    n_pes = hpat.distributed_api.get_size()
+    # rank = bodo.distributed_api.get_rank()
+    n_pes = bodo.distributed_api.get_size()
     # TODO: multiple keys
     bnd_starts = np.empty(n_pes, left_key_arrs[0].dtype)
     bnd_ends = np.empty(n_pes, left_key_arrs[0].dtype)
-    hpat.distributed_api.allgather(bnd_starts, left_key_arrs[0][0])
-    hpat.distributed_api.allgather(bnd_ends, left_key_arrs[0][-1])
+    bodo.distributed_api.allgather(bnd_starts, left_key_arrs[0][0])
+    bodo.distributed_api.allgather(bnd_ends, left_key_arrs[0][-1])
 
     send_counts = np.zeros(n_pes, np.int32)
     send_disp = np.zeros(n_pes, np.int32)
@@ -536,15 +536,15 @@ def parallel_asof_comm(left_key_arrs, right_key_arrs, right_data):
         send_disp[i] = len(right_key_arrs[0]) - 1
         i += 1
 
-    hpat.distributed_api.alltoall(send_counts, recv_counts, 1)
+    bodo.distributed_api.alltoall(send_counts, recv_counts, 1)
     n_total_recv = recv_counts.sum()
     out_r_keys = np.empty(n_total_recv, right_key_arrs[0].dtype)
     # TODO: support string
     out_r_data = alloc_arr_tup(n_total_recv, right_data)
-    recv_disp = hpat.hiframes.join.calc_disp(recv_counts)
-    hpat.distributed_api.alltoallv(right_key_arrs[0], out_r_keys, send_counts,
+    recv_disp = bodo.hiframes.join.calc_disp(recv_counts)
+    bodo.distributed_api.alltoallv(right_key_arrs[0], out_r_keys, send_counts,
                                    recv_counts, send_disp, recv_disp)
-    hpat.distributed_api.alltoallv_tup(right_data, out_r_data, send_counts,
+    bodo.distributed_api.alltoallv_tup(right_data, out_r_data, send_counts,
                                    recv_counts, send_disp, recv_disp)
 
     return (out_r_keys,), out_r_data
@@ -668,7 +668,7 @@ from numba import cgutils
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 from numba.targets.arrayobj import make_array
-from hpat.utils import _numba_to_c_type_map
+from bodo.utils import _numba_to_c_type_map
 from .. import chiframes
 ll.add_symbol('get_join_sendrecv_counts', chiframes.get_join_sendrecv_counts)
 ll.add_symbol('timsort', chiframes.timsort)
@@ -691,7 +691,7 @@ def ensure_capacity(arr, new_size):
     curr_len = len(arr)
     if curr_len < new_size:
         new_len = 2 * curr_len
-        new_arr = hpat.hiframes.pd_categorical_ext.fix_cat_array_type(
+        new_arr = bodo.hiframes.pd_categorical_ext.fix_cat_array_type(
             np.empty(new_len, arr.dtype))
         new_arr[:curr_len] = arr
     return new_arr
@@ -804,7 +804,7 @@ def copy_elem_buff_tup_overload(data, ind, val):
     return cp_impl
 
 def trim_arr(arr, size):  # pragma: no cover
-    return hpat.hiframes.pd_categorical_ext.fix_cat_array_type(arr[:size])
+    return bodo.hiframes.pd_categorical_ext.fix_cat_array_type(arr[:size])
 
 @overload(trim_arr)
 def trim_arr_overload(arr, size):
@@ -885,18 +885,18 @@ def local_hash_join_impl(left_keys, right_keys, data_left, data_right, is_left=F
         r_matched = np.full(r_len, False, np.bool_)
 
     out_ind = 0
-    m = hpat.dict_ext.multimap_int64_init()
+    m = bodo.dict_ext.multimap_int64_init()
     for i in range(r_len):
         # store hash if keys are tuple or non-int
         k = _hash_if_tup(getitem_arr_tup(right_keys, i))
-        hpat.dict_ext.multimap_int64_insert(m, k, i)
+        bodo.dict_ext.multimap_int64_insert(m, k, i)
 
-    r = hpat.dict_ext.multimap_int64_equal_range_alloc()
+    r = bodo.dict_ext.multimap_int64_equal_range_alloc()
     for i in range(l_len):
         l_key = getitem_arr_tup(left_keys, i)
         l_data_val = getitem_arr_tup(data_left, i)
         k = _hash_if_tup(l_key)
-        hpat.dict_ext.multimap_int64_equal_range_inplace(m, k, r)
+        bodo.dict_ext.multimap_int64_equal_range_inplace(m, k, r)
         num_matched = 0
         for j in r:
             # if hash for stored, check left key against the actual right key
@@ -917,7 +917,7 @@ def local_hash_join_impl(left_keys, right_keys, data_left, data_right, is_left=F
             out_data_right = setnan_elem_buff_tup(out_data_right, out_ind)
             out_ind += 1
 
-    hpat.dict_ext.multimap_int64_equal_range_dealloc(r)
+    bodo.dict_ext.multimap_int64_equal_range_dealloc(r)
 
     # produce NA rows for unmatched right keys
     if is_right:
@@ -1112,7 +1112,7 @@ def setitem_arr_nan_overload(arr, ind):
 
     if isinstance(arr, CategoricalArray):
         def setitem_arr_nan_cat(arr, ind):
-            int_arr = hpat.hiframes.pd_categorical_ext.cat_array_to_int(arr)
+            int_arr = bodo.hiframes.pd_categorical_ext.cat_array_to_int(arr)
             int_arr[ind] = -1
         return setitem_arr_nan_cat
 

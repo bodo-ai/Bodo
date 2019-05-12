@@ -1,9 +1,9 @@
 import unittest
-import hpat.tests
+import bodo.tests
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
-    suite.addTests(loader.loadTestsFromModule(hpat.tests))
+    suite.addTests(loader.loadTestsFromModule(bodo.tests))
     return suite
 
 if __name__ == '__main__':

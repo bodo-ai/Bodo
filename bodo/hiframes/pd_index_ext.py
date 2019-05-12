@@ -9,13 +9,13 @@ from numba.typing.templates import (infer_global, AbstractTemplate, signature,
     AttributeTemplate, bound_function)
 from numba.targets.boxing import box_array
 
-import hpat
-from hpat.str_ext import string_type
-import hpat.hiframes
-from hpat.hiframes.pd_series_ext import (is_str_series_typ, string_array_type,
+import bodo
+from bodo.str_ext import string_type
+import bodo.hiframes
+from bodo.hiframes.pd_series_ext import (is_str_series_typ, string_array_type,
     SeriesType)
-from hpat.hiframes.pd_timestamp_ext import pandas_timestamp_type, datetime_date_type
-from hpat.hiframes.datetime_date_ext import array_datetime_date
+from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type, datetime_date_type
+from bodo.hiframes.datetime_date_ext import array_datetime_date
 
 _dt_index_data_typ = types.Array(types.NPDatetime('ns'), 1, 'C')
 _timedelta_index_data_typ = types.Array(types.NPTimedelta('ns'), 1, 'C')
@@ -116,7 +116,7 @@ def resolve_date_field(self, ary):
     # TODO: return Int64Index
     return SeriesType(types.int64)
 
-for field in hpat.hiframes.pd_timestamp_ext.date_fields:
+for field in bodo.hiframes.pd_timestamp_ext.date_fields:
     setattr(DatetimeIndexAttribute, "resolve_" + field, resolve_date_field)
 
 
@@ -134,15 +134,15 @@ def pd_datetimeindex_overload(data=None, freq=None, start=None, end=None,
         return (lambda data=None, freq=None, start=None, end=None,
         periods=None, tz=None, normalize=False, closed=None, ambiguous='raise',
         dayfirst=False, yearfirst=False, dtype=None, copy=False, name=None,
-        verify_integrity=True: hpat.hiframes.api.init_datetime_index(
-            hpat.hiframes.api.ts_series_to_arr_typ(data), name))
+        verify_integrity=True: bodo.hiframes.api.init_datetime_index(
+            bodo.hiframes.api.ts_series_to_arr_typ(data), name))
 
     def f(data=None, freq=None, start=None, end=None,
         periods=None, tz=None, normalize=False, closed=None, ambiguous='raise',
         dayfirst=False, yearfirst=False, dtype=None, copy=False, name=None,
         verify_integrity=True):
-        S = hpat.hiframes.api.parse_datetimes_from_strings(data)
-        return hpat.hiframes.api.init_datetime_index(S, name)
+        S = bodo.hiframes.api.parse_datetimes_from_strings(data)
+        return bodo.hiframes.api.init_datetime_index(S, name)
 
     return f
 
@@ -213,5 +213,5 @@ def resolve_timedelta_field(self, ary):
     # TODO: return Int64Index
     return types.Array(types.int64, 1, 'C')
 
-for field in hpat.hiframes.pd_timestamp_ext.timedelta_fields:
+for field in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
     setattr(TimedeltaIndexAttribute, "resolve_" + field, resolve_timedelta_field)

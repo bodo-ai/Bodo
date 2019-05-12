@@ -11,9 +11,9 @@ from numba.targets.imputils import lower_builtin
 from numba.extending import overload, intrinsic, lower_cast
 import collections
 import numpy as np
-import hpat
-from hpat.str_ext import string_type, list_string_array_type
-from hpat.str_arr_ext import string_array_type, num_total_chars, pre_alloc_string_array
+import bodo
+from bodo.str_ext import string_type, list_string_array_type
+from bodo.str_arr_ext import string_array_type, num_total_chars, pre_alloc_string_array
 from enum import Enum
 
 
@@ -52,7 +52,7 @@ _numba_to_c_type_map = {
 
 
 # silence Numba error messages for now
-# TODO: customize through @hpat.jit
+# TODO: customize through @bodo.jit
 numba.errors.error_extras = {'unsupported_error': '', 'typing': '', 'reportable': '', 'interpreter': '', 'constant_inference': ''}
 
 # sentinel value representing non-constant values
@@ -169,9 +169,9 @@ def is_alloc_callname(func_name, mod_name):
         or (func_name == 'empty_inferred'
             and mod_name in ('numba.extending', 'numba.unsafe.ndarray'))
         or (func_name == 'pre_alloc_string_array'
-            and mod_name == 'hpat.str_arr_ext')
+            and mod_name == 'bodo.str_arr_ext')
         or (func_name in ('alloc_str_list', 'alloc_list_list_str')
-            and mod_name == 'hpat.str_ext'))
+            and mod_name == 'bodo.str_ext'))
 
 def find_build_tuple(func_ir, var):
     """Check if a variable is constructed via build_tuple
@@ -213,7 +213,7 @@ ll.add_symbol('print_char', hstr_ext.print_char)
 
 @lower_builtin(cprint, types.VarArg(types.Any))
 def cprint_lower(context, builder, sig, args):
-    from hpat.str_ext import string_type, char_type
+    from bodo.str_ext import string_type, char_type
 
     for i, val in enumerate(args):
         typ = sig.args[i]
@@ -241,7 +241,7 @@ def cprint_lower(context, builder, sig, args):
 
 
 def print_dist(d):
-    from hpat.distributed_analysis import Distribution
+    from bodo.distributed_analysis import Distribution
     if d == Distribution.REP:
         return "REP"
     if d == Distribution.OneD:
@@ -255,14 +255,14 @@ def print_dist(d):
 
 
 def distribution_report():
-    import hpat.distributed
-    if hpat.distributed.dist_analysis is None:
+    import bodo.distributed
+    if bodo.distributed.dist_analysis is None:
         return
     print("Array distributions:")
-    for arr, dist in hpat.distributed.dist_analysis.array_dists.items():
+    for arr, dist in bodo.distributed.dist_analysis.array_dists.items():
         print("   {0:20} {1}".format(arr, print_dist(dist)))
     print("\nParfor distributions:")
-    for p, dist in hpat.distributed.dist_analysis.parfor_dists.items():
+    for p, dist in bodo.distributed.dist_analysis.parfor_dists.items():
         print("   {0:<20} {1}".format(p, print_dist(dist)))
 
 
@@ -309,8 +309,8 @@ def is_array(typemap, varname):
     return (varname in typemap
         and (is_np_array(typemap, varname)
         or typemap[varname] in (string_array_type, list_string_array_type,
-            hpat.hiframes.split_impl.string_array_split_view_type)
-        or isinstance(typemap[varname], hpat.hiframes.pd_series_ext.SeriesType)))
+            bodo.hiframes.split_impl.string_array_split_view_type)
+        or isinstance(typemap[varname], bodo.hiframes.pd_series_ext.SeriesType)))
 
 def is_np_array(typemap, varname):
     return (varname in typemap
@@ -322,7 +322,7 @@ def is_array_container(typemap, varname):
                 and (isinstance(typemap[varname].dtype, types.Array)
                 or typemap[varname].dtype == string_array_type
                 or isinstance(typemap[varname].dtype,
-                hpat.hiframes.pd_series_ext.SeriesType)))
+                bodo.hiframes.pd_series_ext.SeriesType)))
 
 
 # converts an iterable to array, similar to np.array, but can support
@@ -347,8 +347,8 @@ def empty_like_type(n, arr):
 
 @overload(empty_like_type)
 def empty_like_type_overload(n, arr):
-    if isinstance(arr, hpat.hiframes.pd_categorical_ext.CategoricalArray):
-        from hpat.hiframes.pd_categorical_ext import fix_cat_array_type
+    if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArray):
+        from bodo.hiframes.pd_categorical_ext import fix_cat_array_type
         return lambda n, arr: fix_cat_array_type(np.empty(n, arr.dtype))
     if isinstance(arr, types.Array):
         return lambda n, arr: np.empty(n, arr.dtype)

@@ -5,11 +5,11 @@ from numba import types
 from numba.typing.templates import infer_global, AbstractTemplate, infer
 from numba.typing import signature
 from numba.extending import models, register_model, intrinsic, overload
-import hpat
-from hpat.str_arr_ext import (string_array_type, num_total_chars, StringArray,
+import bodo
+from bodo.str_arr_ext import (string_array_type, num_total_chars, StringArray,
                               pre_alloc_string_array, get_offset_ptr,
                               get_data_ptr, convert_len_arr_to_offset)
-from hpat.utils import (debug_prints, empty_like_type, _numba_to_c_type_map,
+from bodo.utils import (debug_prints, empty_like_type, _numba_to_c_type_map,
     unliteral_all)
 import time
 from llvmlite import ir as lir
@@ -46,8 +46,8 @@ def get_type_enum(arr):
 @overload(get_type_enum)
 def get_type_enum_overload(arr):
     dtype = arr.dtype
-    if isinstance(dtype, hpat.hiframes.pd_categorical_ext.PDCategoricalDtype):
-        dtype = hpat.hiframes.pd_categorical_ext.get_categories_int_type(dtype)
+    if isinstance(dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
+        dtype = bodo.hiframes.pd_categorical_ext.get_categories_int_type(dtype)
 
     typ_val = _numba_to_c_type_map[dtype]
     return lambda arr: np.int32(typ_val)
@@ -97,8 +97,8 @@ def gather_scalar_overload(val):
     typ_val = _numba_to_c_type_map[val]
     func_text = (
     "def gather_scalar_impl(val):\n"
-    "  n_pes = hpat.distributed_api.get_size()\n"
-    "  rank = hpat.distributed_api.get_rank()\n"
+    "  n_pes = bodo.distributed_api.get_size()\n"
+    "  rank = bodo.distributed_api.get_rank()\n"
     "  send = np.full(1, val, np.{})\n"
     "  res_size = n_pes if rank == {} else 0\n"
     "  res = np.empty(res_size, np.{})\n"
@@ -106,7 +106,7 @@ def gather_scalar_overload(val):
     "  return res\n").format(val, MPI_ROOT, val, typ_val)
 
     loc_vars = {}
-    exec(func_text, {'hpat': hpat, 'np': np, 'c_gather_scalar': c_gather_scalar}, loc_vars)
+    exec(func_text, {'bodo': bodo, 'np': np, 'c_gather_scalar': c_gather_scalar}, loc_vars)
     gather_impl = loc_vars['gather_scalar_impl']
     return gather_impl
 
@@ -125,7 +125,7 @@ def gatherv_overload(data):
         typ_val = _numba_to_c_type_map[data.dtype]
 
         def gatherv_impl(data):
-            rank = hpat.distributed_api.get_rank()
+            rank = bodo.distributed_api.get_rank()
             n_loc = len(data)
             recv_counts = gather_scalar(np.int32(n_loc))
             n_total = recv_counts.sum()
@@ -133,7 +133,7 @@ def gatherv_overload(data):
             # displacements
             displs = np.empty(1, np.int32)
             if rank == MPI_ROOT:
-                displs = hpat.hiframes.join.calc_disp(recv_counts)
+                displs = bodo.hiframes.join.calc_disp(recv_counts)
             #  print(rank, n_loc, n_total, recv_counts, displs)
             c_gatherv(data.ctypes, np.int32(n_loc), all_data.ctypes, recv_counts.ctypes, displs.ctypes, np.int32(typ_val))
             return all_data
@@ -145,7 +145,7 @@ def gatherv_overload(data):
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
 
         def gatherv_str_arr_impl(data):
-            rank = hpat.distributed_api.get_rank()
+            rank = bodo.distributed_api.get_rank()
             n_loc = len(data)
             n_all_chars = num_total_chars(data)
 
@@ -170,8 +170,8 @@ def gatherv_overload(data):
 
             if rank == MPI_ROOT:
                 all_data = pre_alloc_string_array(n_total, n_total_char)
-                displs = hpat.hiframes.join.calc_disp(recv_counts)
-                displs_char = hpat.hiframes.join.calc_disp(recv_counts_char)
+                displs = bodo.hiframes.join.calc_disp(recv_counts)
+                displs_char = bodo.hiframes.join.calc_disp(recv_counts_char)
 
             #  print(rank, n_loc, n_total, recv_counts, displs)
             offset_ptr = get_offset_ptr(all_data)
@@ -207,7 +207,7 @@ def bcast_overload(data):
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
 
         def bcast_str_impl(data):
-            rank = hpat.distributed_api.get_rank()
+            rank = bodo.distributed_api.get_rank()
             n_loc = len(data)
             n_all_chars = num_total_chars(data)
             assert n_loc < INT_MAX
@@ -253,7 +253,7 @@ def bcast_scalar_overload(val):
     "  return send[0]\n").format(val, typ_val)
 
     loc_vars = {}
-    exec(func_text, {'hpat': hpat, 'np': np, 'c_bcast': c_bcast}, loc_vars)
+    exec(func_text, {'bodo': bodo, 'np': np, 'c_bcast': c_bcast}, loc_vars)
     bcast_scalar_impl = loc_vars['bcast_scalar_impl']
     return bcast_scalar_impl
 
@@ -265,7 +265,7 @@ def prealloc_str_for_bcast(arr):
 def prealloc_str_for_bcast_overload(arr):
     if arr == string_array_type:
         def prealloc_impl(arr):
-            rank = hpat.distributed_api.get_rank()
+            rank = bodo.distributed_api.get_rank()
             n_loc = bcast_scalar(len(arr))
             n_all_char = bcast_scalar(np.int64(num_total_chars(arr)))
             if rank != MPI_ROOT:
@@ -287,15 +287,15 @@ def const_slice_getitem_overload(arr, slice_index, start, count):
     if arr == string_array_type:
         reduce_op = Reduce_Type.Sum.value
         def getitem_str_impl(arr, slice_index, start, count):
-            rank = hpat.distributed_api.get_rank()
+            rank = bodo.distributed_api.get_rank()
             k = slice_index.stop
             # get total characters for allocation
             n_chars = np.uint64(0)
             if k > count:
                 my_end = min(count, max(k-start, 0))
                 my_arr = arr[:my_end]
-                my_arr = hpat.distributed_api.gatherv(my_arr)
-                n_chars = hpat.distributed_api.dist_reduce(
+                my_arr = bodo.distributed_api.gatherv(my_arr)
+                n_chars = bodo.distributed_api.dist_reduce(
                     num_total_chars(my_arr), np.int32(reduce_op))
                 if rank == 0:
                     out_arr = my_arr
@@ -309,26 +309,26 @@ def const_slice_getitem_overload(arr, slice_index, start, count):
                 out_arr = pre_alloc_string_array(k, n_chars)
 
             # actual communication
-            hpat.distributed_api.bcast(out_arr)
+            bodo.distributed_api.bcast(out_arr)
             return out_arr
 
         return getitem_str_impl
 
     def getitem_impl(arr, slice_index, start, count):
-        rank = hpat.distributed_api.get_rank()
+        rank = bodo.distributed_api.get_rank()
         k = slice_index.stop
         out_arr = np.empty(k, arr.dtype)
         if k > count:
             my_end = min(count, max(k-start, 0))
             my_arr = arr[:my_end]
-            my_arr = hpat.distributed_api.gatherv(my_arr)
+            my_arr = bodo.distributed_api.gatherv(my_arr)
             if rank == 0:
                 print(my_arr)
                 out_arr = my_arr
         else:
             if rank == 0:
                 out_arr = arr[:k]
-        hpat.distributed_api.bcast(out_arr)
+        bodo.distributed_api.bcast(out_arr)
         return out_arr
 
     return getitem_impl

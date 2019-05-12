@@ -3,9 +3,9 @@ from math import sqrt
 import argparse
 import time
 import h5py
-import hpat
+import bodo
 
-@hpat.jit
+@bodo.jit
 def kmeans(numCenter, numIter):
     f = h5py.File("lr.hdf5", "r")
     A = f['points'][:]

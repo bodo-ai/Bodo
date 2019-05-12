@@ -1,5 +1,5 @@
 import numba
-import hpat
+import bodo
 
 
 def jit(signature_or_function=None, **options):
@@ -43,4 +43,4 @@ def jit(signature_or_function=None, **options):
     # this is for previous version of pipeline manipulation (numba hpat_req <0.38)
     # from .compiler import add_hpat_stages
     # return numba.jit(signature_or_function, user_pipeline_funcs=[add_hpat_stages], **options)
-    return numba.jit(signature_or_function, pipeline_class=hpat.compiler.HPATPipeline, **options)
+    return numba.jit(signature_or_function, pipeline_class=bodo.compiler.HPATPipeline, **options)

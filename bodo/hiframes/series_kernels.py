@@ -7,29 +7,29 @@ from numba import types
 from numba.extending import overload
 from numba.typing.templates import infer_global, AbstractTemplate, signature
 
-import hpat
-from hpat.str_ext import string_type, unicode_to_std_str, std_str_to_unicode
-from hpat.str_arr_ext import (string_array_type, StringArrayType,
+import bodo
+from bodo.str_ext import string_type, unicode_to_std_str, std_str_to_unicode
+from bodo.str_arr_ext import (string_array_type, StringArrayType,
     is_str_arr_typ, pre_alloc_string_array, get_utf8_size)
 
 
 # float columns can have regular np.nan
 def _column_filter_impl(B, ind):  # pragma: no cover
-    dtype = hpat.hiframes.api.shift_dtype(B.dtype)
+    dtype = bodo.hiframes.api.shift_dtype(B.dtype)
     A = np.empty(len(B), dtype)
     for i in numba.parfor.internal_prange(len(A)):
         if ind[i]:
             A[i] = B[i]
         else:
-            hpat.hiframes.join.setitem_arr_nan(A, i)
-    return hpat.hiframes.api.init_series(A)
+            bodo.hiframes.join.setitem_arr_nan(A, i)
+    return bodo.hiframes.api.init_series(A)
 
 
 def _column_count_impl(A):  # pragma: no cover
     numba.parfor.init_prange()
     count = 0
     for i in numba.parfor.internal_prange(len(A)):
-        if not hpat.hiframes.api.isna(A, i):
+        if not bodo.hiframes.api.isna(A, i):
             count += 1
 
     res = count
@@ -39,7 +39,7 @@ def _column_count_impl(A):  # pragma: no cover
 def _column_fillna_impl(A, B, fill):  # pragma: no cover
     for i in numba.parfor.internal_prange(len(A)):
         s = B[i]
-        if hpat.hiframes.api.isna(B, i):
+        if bodo.hiframes.api.isna(B, i):
             s = fill
         A[i] = s
 
@@ -49,17 +49,17 @@ def _series_fillna_str_alloc_impl(B, fill):  # pragma: no cover
     # get total chars in new array
     for i in numba.parfor.internal_prange(n):
         s = B[i]
-        if hpat.hiframes.api.isna(B, i):
+        if bodo.hiframes.api.isna(B, i):
             num_chars += len(fill)
         else:
             num_chars += len(s)
-    A = hpat.str_arr_ext.pre_alloc_string_array(n, num_chars)
-    hpat.hiframes.api.fillna(A, B, fill)
-    return hpat.hiframes.api.init_series(A)
+    A = bodo.str_arr_ext.pre_alloc_string_array(n, num_chars)
+    bodo.hiframes.api.fillna(A, B, fill)
+    return bodo.hiframes.api.init_series(A)
 
 def _series_dropna_float_impl(S, name):  # pragma: no cover
     old_len = len(S)
-    new_len = old_len - hpat.hiframes.api.init_series(S).isna().sum()
+    new_len = old_len - bodo.hiframes.api.init_series(S).isna().sum()
     A = np.empty(new_len, S.dtype)
     curr_ind = 0
     for i in numba.parfor.internal_prange(old_len):
@@ -68,7 +68,7 @@ def _series_dropna_float_impl(S, name):  # pragma: no cover
             A[curr_ind] = val
             curr_ind += 1
 
-    return hpat.hiframes.api.init_series(A, None, name)
+    return bodo.hiframes.api.init_series(A, None, name)
 
 
 # using njit since 1D_var is broken for alloc when there is calculation of len
@@ -79,20 +79,20 @@ def _series_dropna_str_alloc_impl_inner(B):  # pragma: no cover
     old_len = len(B)
     na_count = 0
     for i in range(len(B)):
-        if hpat.str_arr_ext.str_arr_is_na(B, i):
+        if bodo.str_arr_ext.str_arr_is_na(B, i):
             na_count += 1
     # TODO: more efficient null counting
     new_len = old_len - na_count
-    num_chars = hpat.str_arr_ext.num_total_chars(B)
-    A = hpat.str_arr_ext.pre_alloc_string_array(new_len, num_chars)
-    hpat.str_arr_ext.copy_non_null_offsets(A, B)
-    hpat.str_arr_ext.copy_data(A, B)
+    num_chars = bodo.str_arr_ext.num_total_chars(B)
+    A = bodo.str_arr_ext.pre_alloc_string_array(new_len, num_chars)
+    bodo.str_arr_ext.copy_non_null_offsets(A, B)
+    bodo.str_arr_ext.copy_data(A, B)
     return A
 
 
 def _series_dropna_str_alloc_impl(B, name):  # pragma: no cover
-    A = hpat.hiframes.series_kernels._series_dropna_str_alloc_impl_inner(B)
-    return hpat.hiframes.api.init_series(A, None, name)
+    A = bodo.hiframes.series_kernels._series_dropna_str_alloc_impl_inner(B)
+    return bodo.hiframes.api.init_series(A, None, name)
 
 
 # return the nan value for the type (handle dt64)
@@ -113,7 +113,7 @@ def _get_type_max_value(dtype):
 @overload(_get_type_max_value)
 def _get_type_max_value_overload(dtype):
     if isinstance(dtype.dtype, (types.NPDatetime, types.NPTimedelta)):
-        return lambda dtype: hpat.hiframes.pd_timestamp_ext.integer_to_dt64(
+        return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
             numba.targets.builtins.get_type_max_value(numba.types.int64))
     return lambda dtype: numba.targets.builtins.get_type_max_value(dtype)
 
@@ -121,7 +121,7 @@ def _get_type_max_value_overload(dtype):
 @numba.njit
 def _sum_handle_nan(s, count):  # pragma: no cover
     if not count:
-        s = hpat.hiframes.series_kernels._get_nan(s)
+        s = bodo.hiframes.series_kernels._get_nan(s)
     return s
 
 def _column_sum_impl_basic(A):  # pragma: no cover
@@ -147,7 +147,7 @@ def _column_sum_impl_count(A):  # pragma: no cover
             s += val
             count += 1
 
-    res = hpat.hiframes.series_kernels._sum_handle_nan(s, count)
+    res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
     return res
 
 def _column_prod_impl_basic(A):  # pragma: no cover
@@ -181,7 +181,7 @@ def _column_mean_impl(A):  # pragma: no cover
             s += val
             count += 1
 
-    res = hpat.hiframes.series_kernels._mean_handle_nan(s, count)
+    res = bodo.hiframes.series_kernels._mean_handle_nan(s, count)
     return res
 
 
@@ -205,7 +205,7 @@ def _column_var_impl(A):  # pragma: no cover
             count_m += 1
 
     numba.parfor.init_prange()
-    m = hpat.hiframes.series_kernels._mean_handle_nan(m, count_m)
+    m = bodo.hiframes.series_kernels._mean_handle_nan(m, count_m)
     s = 0
     count = 0
     for i in numba.parfor.internal_prange(len(A)):
@@ -214,32 +214,32 @@ def _column_var_impl(A):  # pragma: no cover
             s += (val - m)**2
             count += 1
 
-    res = hpat.hiframes.series_kernels._var_handle_nan(s, count)
+    res = bodo.hiframes.series_kernels._var_handle_nan(s, count)
     return res
 
 def _column_std_impl(A):  # pragma: no cover
-    var = hpat.hiframes.api.var(A)
+    var = bodo.hiframes.api.var(A)
     return var**0.5
 
 def _column_min_impl(in_arr):  # pragma: no cover
     numba.parfor.init_prange()
     count = 0
-    s = hpat.hiframes.series_kernels._get_type_max_value(in_arr.dtype)
+    s = bodo.hiframes.series_kernels._get_type_max_value(in_arr.dtype)
     for i in numba.parfor.internal_prange(len(in_arr)):
         val = in_arr[i]
-        if not hpat.hiframes.api.isna(in_arr, i):
+        if not bodo.hiframes.api.isna(in_arr, i):
             s = min(s, val)
             count += 1
-    res = hpat.hiframes.series_kernels._sum_handle_nan(s, count)
+    res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
     return res
 
 def _column_min_impl_no_isnan(in_arr):  # pragma: no cover
     numba.parfor.init_prange()
     s = numba.targets.builtins.get_type_max_value(numba.types.int64)
     for i in numba.parfor.internal_prange(len(in_arr)):
-        val = hpat.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
+        val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
         s = min(s, val)
-    return hpat.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(s)
+    return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(s)
 
 # TODO: fix for dt64
 def _column_max_impl(in_arr):  # pragma: no cover
@@ -251,7 +251,7 @@ def _column_max_impl(in_arr):  # pragma: no cover
         if not np.isnan(val):
             s = max(s, val)
             count += 1
-    res = hpat.hiframes.series_kernels._sum_handle_nan(s, count)
+    res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
     return res
 
 def _column_max_impl_no_isnan(in_arr):  # pragma: no cover
@@ -259,27 +259,27 @@ def _column_max_impl_no_isnan(in_arr):  # pragma: no cover
     s = numba.targets.builtins.get_type_min_value(numba.types.int64)
     for i in numba.parfor.internal_prange(len(in_arr)):
         val = in_arr[i]
-        s = max(s, hpat.hiframes.pd_timestamp_ext.dt64_to_integer(val))
-    return hpat.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(s)
+        s = max(s, bodo.hiframes.pd_timestamp_ext.dt64_to_integer(val))
+    return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(s)
 
 def _column_sub_impl_datetime_series_timestamp(in_arr, ts):  # pragma: no cover
     numba.parfor.init_prange()
     n = len(in_arr)
     S = numba.unsafe.ndarray.empty_inferred((n,))
-    tsint = hpat.hiframes.pd_timestamp_ext.convert_timestamp_to_datetime64(ts)
+    tsint = bodo.hiframes.pd_timestamp_ext.convert_timestamp_to_datetime64(ts)
     for i in numba.parfor.internal_prange(n):
-        S[i] = hpat.hiframes.pd_timestamp_ext.integer_to_timedelta64(hpat.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i]) - tsint)
-    return hpat.hiframes.api.init_series(S)
+        S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i]) - tsint)
+    return bodo.hiframes.api.init_series(S)
 
 
 def _column_sub_impl_datetimeindex_timestamp(in_arr, ts):  # pragma: no cover
     numba.parfor.init_prange()
     n = len(in_arr)
     S = numba.unsafe.ndarray.empty_inferred((n,))
-    tsint = hpat.hiframes.pd_timestamp_ext.convert_timestamp_to_datetime64(ts)
+    tsint = bodo.hiframes.pd_timestamp_ext.convert_timestamp_to_datetime64(ts)
     for i in numba.parfor.internal_prange(n):
-        S[i] = hpat.hiframes.pd_timestamp_ext.integer_to_timedelta64(hpat.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i]) - tsint)
-    return hpat.hiframes.api.init_timedelta_index(S)
+        S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i]) - tsint)
+    return bodo.hiframes.api.init_timedelta_index(S)
 
 
 def _column_describe_impl(S):  # pragma: no cover
@@ -307,16 +307,16 @@ def _column_describe_impl(S):  # pragma: no cover
 def _column_fillna_alloc_impl(S, val):  # pragma: no cover
     # TODO: handle string, etc.
     B = np.empty(len(S), S.dtype)
-    hpat.hiframes.api.fillna(B, S, val)
-    return hpat.hiframes.api.init_series(B)
+    bodo.hiframes.api.fillna(B, S, val)
+    return bodo.hiframes.api.init_series(B)
 
 
 def _str_contains_regex_impl(str_arr, pat):  # pragma: no cover
-    e = hpat.str_ext.compile_regex(pat)
-    return hpat.hiframes.api.str_contains_regex(str_arr, e)
+    e = bodo.str_ext.compile_regex(pat)
+    return bodo.hiframes.api.str_contains_regex(str_arr, e)
 
 def _str_contains_noregex_impl(str_arr, pat):  # pragma: no cover
-    return hpat.hiframes.api.str_contains_noregex(str_arr, pat)
+    return bodo.hiframes.api.str_contains_noregex(str_arr, pat)
 
 
 
@@ -345,24 +345,24 @@ def _column_corr_impl(S1, S2):  # pragma: no cover
 
 
 def _series_append_single_impl(arr, other):
-    return hpat.hiframes.api.init_series(
-        hpat.hiframes.api.concat((arr, other)))
+    return bodo.hiframes.api.init_series(
+        bodo.hiframes.api.concat((arr, other)))
 
 def _series_append_tuple_impl(arr, other):
-    tup_other = hpat.hiframes.api.to_const_tuple(other)
-    tup_other = hpat.hiframes.api.series_tup_to_arr_tup(tup_other)
+    tup_other = bodo.hiframes.api.to_const_tuple(other)
+    tup_other = bodo.hiframes.api.series_tup_to_arr_tup(tup_other)
     arrs = (arr,) + tup_other
-    c_arrs = hpat.hiframes.api.to_const_tuple(arrs)
-    return hpat.hiframes.api.init_series(
-        hpat.hiframes.api.concat(c_arrs))
+    c_arrs = bodo.hiframes.api.to_const_tuple(arrs)
+    return bodo.hiframes.api.init_series(
+        bodo.hiframes.api.concat(c_arrs))
 
 def _series_isna_impl(arr):
     numba.parfor.init_prange()
     n = len(arr)
     out_arr = np.empty(n, np.bool_)
     for i in numba.parfor.internal_prange(n):
-        out_arr[i] = hpat.hiframes.api.isna(arr, i)
-    return hpat.hiframes.api.init_series(out_arr)
+        out_arr[i] = bodo.hiframes.api.isna(arr, i)
+    return bodo.hiframes.api.init_series(out_arr)
 
 def _series_astype_str_impl(arr):
     n = len(arr)
@@ -372,25 +372,25 @@ def _series_astype_str_impl(arr):
         s = arr[i]
         num_chars += len(str(s))  # TODO: check NA
 
-    A = hpat.str_arr_ext.pre_alloc_string_array(n, num_chars)
+    A = bodo.str_arr_ext.pre_alloc_string_array(n, num_chars)
     for i in numba.parfor.internal_prange(n):
         s = arr[i]
         A[i] = str(s)  # TODO: check NA
-    return hpat.hiframes.api.init_series(A)
+    return bodo.hiframes.api.init_series(A)
 
 
 # def _str_replace_regex_impl(str_arr, pat, val):
 #     numba.parfor.init_prange()
-#     e = hpat.str_ext.compile_regex(unicode_to_std_str(pat))
+#     e = bodo.str_ext.compile_regex(unicode_to_std_str(pat))
 #     val = unicode_to_std_str(val)
 #     n = len(str_arr)
 #     n_total_chars = 0
-#     str_list = hpat.str_ext.alloc_str_list(n)
+#     str_list = bodo.str_ext.alloc_str_list(n)
 #     for i in numba.parfor.internal_prange(n):
 #         # TODO: support unicode
 #         in_str = unicode_to_std_str(str_arr[i])
 #         out_str = std_str_to_unicode(
-#             hpat.str_ext.str_replace_regex(in_str, e, val))
+#             bodo.str_ext.str_replace_regex(in_str, e, val))
 #         str_list[i] = out_str
 #         n_total_chars += len(out_str)
 #     numba.parfor.init_prange()
@@ -398,7 +398,7 @@ def _series_astype_str_impl(arr):
 #     for i in numba.parfor.internal_prange(n):
 #         _str = str_list[i]
 #         out_arr[i] = _str
-#     return hpat.hiframes.api.init_series(out_arr)
+#     return bodo.hiframes.api.init_series(out_arr)
 
 
 def _str_replace_regex_impl(str_arr, pat, val):
@@ -406,7 +406,7 @@ def _str_replace_regex_impl(str_arr, pat, val):
     e = re.compile(pat)
     n = len(str_arr)
     n_total_chars = 0
-    str_list = hpat.str_ext.alloc_str_list(n)
+    str_list = bodo.str_ext.alloc_str_list(n)
     for i in numba.parfor.internal_prange(n):
         out_str = e.sub(val, str_arr[i])
         str_list[i] = out_str
@@ -416,7 +416,7 @@ def _str_replace_regex_impl(str_arr, pat, val):
     for i in numba.parfor.internal_prange(n):
         _str = str_list[i]
         out_arr[i] = _str
-    return hpat.hiframes.api.init_series(out_arr)
+    return bodo.hiframes.api.init_series(out_arr)
 
 
 # TODO: refactor regex and noregex
@@ -427,12 +427,12 @@ def _str_replace_regex_impl(str_arr, pat, val):
 #     val = unicode_to_std_str(val)
 #     n = len(str_arr)
 #     n_total_chars = 0
-#     str_list = hpat.str_ext.alloc_str_list(n)
+#     str_list = bodo.str_ext.alloc_str_list(n)
 #     for i in numba.parfor.internal_prange(n):
 #         # TODO: support unicode
 #         in_str = unicode_to_std_str(str_arr[i])
 #         out_str = std_str_to_unicode(
-#             hpat.str_ext.str_replace_noregex(in_str, e, val))
+#             bodo.str_ext.str_replace_noregex(in_str, e, val))
 #         str_list[i] = out_str
 #         n_total_chars += len(out_str)
 #     numba.parfor.init_prange()
@@ -440,14 +440,14 @@ def _str_replace_regex_impl(str_arr, pat, val):
 #     for i in numba.parfor.internal_prange(n):
 #         _str = str_list[i]
 #         out_arr[i] = _str
-#     return hpat.hiframes.api.init_series(out_arr)
+#     return bodo.hiframes.api.init_series(out_arr)
 
 
 def _str_replace_noregex_impl(str_arr, pat, val):
     numba.parfor.init_prange()
     n = len(str_arr)
     n_total_chars = 0
-    str_list = hpat.str_ext.alloc_str_list(n)
+    str_list = bodo.str_ext.alloc_str_list(n)
     for i in numba.parfor.internal_prange(n):
         out_str = str_arr[i].replace(pat, val)
         str_list[i] = out_str
@@ -457,7 +457,7 @@ def _str_replace_noregex_impl(str_arr, pat, val):
     for i in numba.parfor.internal_prange(n):
         _str = str_list[i]
         out_arr[i] = _str
-    return hpat.hiframes.api.init_series(out_arr)
+    return bodo.hiframes.api.init_series(out_arr)
 
 
 @numba.njit
@@ -477,20 +477,20 @@ series_replace_funcs = {
     'min': defaultdict(lambda: _column_min_impl, [(types.NPDatetime('ns'), _column_min_impl_no_isnan)]),
     'var': _column_var_impl,
     'std': _column_std_impl,
-    'nunique': lambda A: hpat.hiframes.api.nunique(A),
-    'unique': lambda A: hpat.hiframes.api.unique(A),
+    'nunique': lambda A: bodo.hiframes.api.nunique(A),
+    'unique': lambda A: bodo.hiframes.api.unique(A),
     'describe': _column_describe_impl,
     'fillna_alloc': _column_fillna_alloc_impl,
     'fillna_str_alloc': _series_fillna_str_alloc_impl,
     'dropna_float': _series_dropna_float_impl,
     'dropna_str_alloc': _series_dropna_str_alloc_impl,
-    'shift': lambda A, shift: hpat.hiframes.api.init_series(hpat.hiframes.rolling.shift(A, shift, False)),
-    'shift_default': lambda A: hpat.hiframes.api.init_series(hpat.hiframes.rolling.shift(A, 1, False)),
-    'pct_change': lambda A, shift: hpat.hiframes.api.init_series(hpat.hiframes.rolling.pct_change(A, shift, False)),
-    'pct_change_default': lambda A: hpat.hiframes.api.init_series(hpat.hiframes.rolling.pct_change(A, 1, False)),
+    'shift': lambda A, shift: bodo.hiframes.api.init_series(bodo.hiframes.rolling.shift(A, shift, False)),
+    'shift_default': lambda A: bodo.hiframes.api.init_series(bodo.hiframes.rolling.shift(A, 1, False)),
+    'pct_change': lambda A, shift: bodo.hiframes.api.init_series(bodo.hiframes.rolling.pct_change(A, shift, False)),
+    'pct_change_default': lambda A: bodo.hiframes.api.init_series(bodo.hiframes.rolling.pct_change(A, 1, False)),
     'str_contains_regex': _str_contains_regex_impl,
     'str_contains_noregex': _str_contains_noregex_impl,
-    'abs': lambda A: hpat.hiframes.api.init_series(np.abs(A)),  # TODO: timedelta
+    'abs': lambda A: bodo.hiframes.api.init_series(np.abs(A)),  # TODO: timedelta
     'cov': _column_cov_impl,
     'corr': _column_corr_impl,
     'append_single': _series_append_single_impl,
@@ -499,13 +499,13 @@ series_replace_funcs = {
     # isnull is just alias of isna
     'isnull': _series_isna_impl,
     'astype_str': _series_astype_str_impl,
-    'nlargest': lambda A, k, name: hpat.hiframes.api.init_series(hpat.hiframes.api.nlargest(A, k, True, gt_f), None, name),
-    'nlargest_default': lambda A, name: hpat.hiframes.api.init_series(hpat.hiframes.api.nlargest(A, 5, True, gt_f), None, name),
-    'nsmallest': lambda A, k, name: hpat.hiframes.api.init_series(hpat.hiframes.api.nlargest(A, k, False, lt_f), None, name),
-    'nsmallest_default': lambda A, name: hpat.hiframes.api.init_series(hpat.hiframes.api.nlargest(A, 5, False, lt_f), None, name),
-    'head': lambda A, I, k, name: hpat.hiframes.api.init_series(A[:k], None, name),
-    'head_index': lambda A, I, k, name: hpat.hiframes.api.init_series(A[:k], I[:k], name),
-    'median': lambda A: hpat.hiframes.api.median(A),
+    'nlargest': lambda A, k, name: bodo.hiframes.api.init_series(bodo.hiframes.api.nlargest(A, k, True, gt_f), None, name),
+    'nlargest_default': lambda A, name: bodo.hiframes.api.init_series(bodo.hiframes.api.nlargest(A, 5, True, gt_f), None, name),
+    'nsmallest': lambda A, k, name: bodo.hiframes.api.init_series(bodo.hiframes.api.nlargest(A, k, False, lt_f), None, name),
+    'nsmallest_default': lambda A, name: bodo.hiframes.api.init_series(bodo.hiframes.api.nlargest(A, 5, False, lt_f), None, name),
+    'head': lambda A, I, k, name: bodo.hiframes.api.init_series(A[:k], None, name),
+    'head_index': lambda A, I, k, name: bodo.hiframes.api.init_series(A[:k], I[:k], name),
+    'median': lambda A: bodo.hiframes.api.median(A),
     # TODO: handle NAs in argmin/argmax
     'idxmin': lambda A: A.argmin(),
     'idxmax': lambda A: A.argmax(),

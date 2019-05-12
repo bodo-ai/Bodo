@@ -7,7 +7,7 @@ HPAT automatically parallelizes a subset of Python that is commonly used for
 data analytics and machine learning. This section describes this subset
 and how parallelization is performed.
 
-HPAT compiles and parallelizes the functions annotated with the `@hpat.jit`
+HPAT compiles and parallelizes the functions annotated with the `@bodo.jit`
 decorator. The decorated functions are replaced with generated parallel
 binaries that run on bare metal.
 The supported data structures for large datasets
@@ -22,7 +22,7 @@ pattern. Put simply, this means the compiler analyzes the program to
 determine whether each array should be distributed or not. This analysis uses
 the semantics of array operations as the program below demonstrates::
 
-    @hpat.jit
+    @bodo.jit
     def example_1D(n):
         f = h5py.File("data.h5", "r")
         A = f['A'][:]
@@ -76,12 +76,12 @@ distributed data. In this case,
 the user is responsile for handling of the distributed data chunks outside
 the HPAT scope. For example, the data can come from other jitted functions::
 
-    @hpat.jit(distributed={'A'})
+    @bodo.jit(distributed={'A'})
     def example_return(n):
         A = np.arange(n)
         return A
 
-    @hpat.jit(distributed={'B'})
+    @bodo.jit(distributed={'B'})
     def example_arg(B):
         return B.sum()
 
@@ -93,7 +93,7 @@ Distribution Report
 ~~~~~~~~~~~~~~~~~~~
 
 The distributions found by HPAT can be printed using the
-`hpat.distribution_report()` function. The distribution report for the above
+`bodo.distribution_report()` function. The distribution report for the above
 example code is as follows::
 
     Array distributions:
@@ -114,7 +114,7 @@ The `np.dot` function has different distribution rules based on the number of
 dimensions and the distributions of its input arrays. The example below
 demonstrates two cases::
 
-    @hpat.jit
+    @bodo.jit
     def example_dot(N, D):
         X = np.random.ranf((N, D))
         Y = np.random.ranf(N)
@@ -123,9 +123,9 @@ demonstrates two cases::
         return z.sum()
 
     example_dot(1024, 10)
-    hpat.distribution_report()
+    bodo.distribution_report()
 
-Here is the output of `hpat.distribution_report()`::
+Here is the output of `bodo.distribution_report()`::
 
     Array distributions:
        $X.43                1D_Block
@@ -214,7 +214,7 @@ loop does not have cross iteration dependencies except for supported reductions.
 
 The example below demonstrates a parallel loop with a reduction::
 
-    from hpat import jit, prange
+    from bodo import jit, prange
     @jit
     def prange_test(n):
         A = np.random.ranf(n)
@@ -235,7 +235,7 @@ Currently, HPAT supports I/O for the `HDF5 <http://www.h5py.org/>`_ and
 For HDF5, the syntax is the same as the `h5py <http://www.h5py.org/>`_ package.
 For example::
 
-    @hpat.jit
+    @bodo.jit
     def example():
         f = h5py.File("lr.hdf5", "r")
         X = f['points'][:]
@@ -244,7 +244,7 @@ For example::
 For Parquet, the syntax is the same as `pyarrow <https://arrow.apache.org/docs/python/>`_::
 
     import pyarrow.parquet as pq
-    @hpat.jit
+    @bodo.jit
     def kde():
         t = pq.read_table('kde.parquet')
         df = t.to_pandas()
@@ -260,7 +260,7 @@ Otherwise, the user is responsile for providing the types similar to
 <http://numba.pydata.org/numba-doc/latest/reference/types.html>`_. For
 example::
 
-     @hpat.jit(locals={'X': hpat.float64[:,:], 'Y': hpat.float64[:]})
+     @bodo.jit(locals={'X': bodo.float64[:,:], 'Y': bodo.float64[:]})
      def example(file_name):
          f = h5py.File(file_name, "r")
          X = f['points'][:]

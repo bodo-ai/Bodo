@@ -1,8 +1,8 @@
 import numpy as np
 from math import sqrt
-import hpat
-import hpat.ros
-from hpat import prange, stencil
+import bodo
+import bodo.ros
+from bodo import prange, stencil
 import time
 
 @stencil
@@ -13,10 +13,10 @@ def gaussian_blur(a):
             a[-2, 1] * 0.0133 + a[-1, 1] * 0.0596 + a[0, 1] * 0.0983 + a[1, 1] * 0.0596 + a[2, 1] * 0.0133 +
             a[-2, 2] * 0.003  + a[-1, 2] * 0.0133 + a[0, 2] * 0.0219 + a[1, 2] * 0.0133 + a[2, 2] * 0.0030)
 
-@hpat.jit
+@bodo.jit
 def read_example():
     t1 = time.time()
-    A = hpat.ros.read_ros_images("image_test.bag")
+    A = bodo.ros.read_ros_images("image_test.bag")
     # crop out dashboard
     B = A[:,:-50,:,:]
     # intensity threshold
@@ -54,4 +54,4 @@ def read_example():
     return centroids
 
 print(read_example().sum())
-#hpat.distribution_report()
+#bodo.distribution_report()

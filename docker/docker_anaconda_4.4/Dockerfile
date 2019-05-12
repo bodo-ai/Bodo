@@ -22,8 +22,8 @@ RUN source activate HPAT && \
     conda install -y numpy scipy pandas mpich2 llvmlite &&\
     git clone https://github.com/IntelLabs/numba.git && \
     cd numba && git checkout hpat_req && python setup.py install && cd .. &&\
-    git clone https://github.com/IntelLabs/hpat.git && \
-    cd hpat && LDSHARED="mpicxx -shared -cxx=g++-4.9" \
+    git clone https://github.com/IntelLabs/bodo.git && \
+    cd bodo && LDSHARED="mpicxx -shared -cxx=g++-4.9" \
     CC="mpicxx -std=c++11 -cxx=g++-4.9" CXX="mpicxx -std=c++11 -cxx=g++-4.9" \
     python setup.py install
 

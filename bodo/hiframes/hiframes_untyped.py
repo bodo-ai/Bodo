@@ -20,31 +20,31 @@ from numba.ir_utils import (mk_unique_var, replace_vars_inner, find_topo_order,
 from numba.inline_closurecall import inline_closure_call
 from numba.analysis import compute_cfg_from_blocks
 
-import hpat
-from hpat import utils, config
-import hpat.io
-from hpat.io import pio, parquet_pio
-from hpat.hiframes import filter, join, aggregate, sort
-from hpat.utils import (get_constant, NOT_CONSTANT, debug_prints,
+import bodo
+from bodo import utils, config
+import bodo.io
+from bodo.io import pio, parquet_pio
+from bodo.hiframes import filter, join, aggregate, sort
+from bodo.utils import (get_constant, NOT_CONSTANT, debug_prints,
     inline_new_blocks, ReplaceFunc, is_call, is_assign)
-import hpat.hiframes.api
-from hpat.str_ext import string_type
-from hpat.str_arr_ext import string_array_type
-import hpat.io
-from hpat.io import csv_ext
+import bodo.hiframes.api
+from bodo.str_ext import string_type
+from bodo.str_arr_ext import string_array_type
+import bodo.io
+from bodo.io import csv_ext
 
 import pandas as pd
 import numpy as np
 import math
-import hpat.io
-from hpat.io.parquet_pio import ParquetHandler
-from hpat.hiframes.pd_timestamp_ext import (datetime_date_type,
+import bodo.io
+from bodo.io.parquet_pio import ParquetHandler
+from bodo.hiframes.pd_timestamp_ext import (datetime_date_type,
                                     datetime_date_to_int, int_to_datetime_date)
-from hpat.hiframes.pd_series_ext import SeriesType
-from hpat.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
-from hpat.hiframes.rolling import get_rolling_setup_args, supported_rolling_funcs
-from hpat.hiframes.aggregate import get_agg_func, supported_agg_funcs
-import hpat.hiframes.pd_dataframe_ext
+from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
+from bodo.hiframes.rolling import get_rolling_setup_args, supported_rolling_funcs
+from bodo.hiframes.aggregate import get_agg_func, supported_agg_funcs
+import bodo.hiframes.pd_dataframe_ext
 
 
 def remove_hiframes(rhs, lives, call_list):
@@ -58,30 +58,30 @@ def remove_hiframes(rhs, lives, call_list):
     # used in stencil generation of rolling
     if call_list == ['ceil', math]:
         return True
-    if (len(call_list) == 4 and call_list[1:] == ['api', 'hiframes', hpat] and
+    if (len(call_list) == 4 and call_list[1:] == ['api', 'hiframes', bodo] and
             call_list[0] in ['fix_df_array', 'fix_rolling_array',
             'concat', 'count', 'mean', 'quantile', 'var',
             'str_contains_regex', 'str_contains_noregex', 'column_sum',
             'nunique', 'init_series', 'init_datetime_index',
             'convert_tup_to_rec', 'convert_rec_to_tup']):
         return True
-    if (len(call_list) == 4 and call_list[1:] == ['series_kernels', 'hiframes', hpat] and
+    if (len(call_list) == 4 and call_list[1:] == ['series_kernels', 'hiframes', bodo] and
             call_list[0]
             in ['_sum_handle_nan', '_mean_handle_nan', '_var_handle_nan']):
         return True
-    if call_list == ['dist_return', 'distributed_api', hpat]:
+    if call_list == ['dist_return', 'distributed_api', bodo]:
         return True
-    if call_list == ['init_dataframe', 'pd_dataframe_ext', 'hiframes', hpat]:
+    if call_list == ['init_dataframe', 'pd_dataframe_ext', 'hiframes', bodo]:
         return True
-    if call_list == ['get_dataframe_data', 'pd_dataframe_ext', 'hiframes', hpat]:
+    if call_list == ['get_dataframe_data', 'pd_dataframe_ext', 'hiframes', bodo]:
         return True
-    if call_list == ['get_dataframe_index', 'pd_dataframe_ext', 'hiframes', hpat]:
+    if call_list == ['get_dataframe_index', 'pd_dataframe_ext', 'hiframes', bodo]:
         return True
-    # if call_list == ['set_parent_dummy', 'pd_dataframe_ext', 'hiframes', hpat]:
+    # if call_list == ['set_parent_dummy', 'pd_dataframe_ext', 'hiframes', bodo]:
     #     return True
-    if call_list == ['rolling_dummy', 'pd_rolling_ext', 'hiframes', hpat]:
+    if call_list == ['rolling_dummy', 'pd_rolling_ext', 'hiframes', bodo]:
         return True
-    if call_list == ['agg_typer', 'api', 'hiframes', hpat]:
+    if call_list == ['agg_typer', 'api', 'hiframes', bodo]:
         return True
     if call_list == [list]:
         return True
@@ -288,9 +288,9 @@ class HiFrames(object):
                     # a = add_consts_to_type(tmp, 'A', 'B')
                     vals_expr = ", ".join("'{}'".format(c) if isinstance(c, str) else "{}".format(c) for c in vals)
                     func_text = "def _build_f(a):\n"
-                    func_text += "  return hpat.hiframes.api.add_consts_to_type(a, {})\n".format(vals_expr)
+                    func_text += "  return bodo.hiframes.api.add_consts_to_type(a, {})\n".format(vals_expr)
                     loc_vars = {}
-                    exec(func_text, {'hpat': hpat}, loc_vars)
+                    exec(func_text, {'bodo': bodo}, loc_vars)
                     _build_f = loc_vars['_build_f']
                     target = assign.target
                     tmp_target = ir.Var(
@@ -322,7 +322,7 @@ class HiFrames(object):
             self._working_body.insert(0, meta_assign)
             pivot_call.kws = list(pivot_call.kws)
             pivot_call.kws.append(('_pivot_values', meta_var))
-            self.locals[meta_var.name] = hpat.hiframes.api.MetaType(pivot_values)
+            self.locals[meta_var.name] = bodo.hiframes.api.MetaType(pivot_values)
 
 
         # handle copies lhs = f
@@ -389,7 +389,7 @@ class HiFrames(object):
         if fdef == ('to_numeric', 'pandas'):
             return self._handle_pd_to_numeric(assign, lhs, rhs)
 
-        if fdef == ('read_ros_images', 'hpat.ros'):
+        if fdef == ('read_ros_images', 'bodo.ros'):
             return self._handle_ros(assign, lhs, rhs)
 
         if isinstance(func_mod, ir.Var) and self._is_df_var(func_mod):
@@ -416,10 +416,10 @@ class HiFrames(object):
             return self.h5_handler._handle_h5_File_call(assign, lhs, rhs)
 
         if fdef == ('fromfile', 'numpy'):
-            return hpat.io.np_io._handle_np_fromfile(assign, lhs, rhs)
+            return bodo.io.np_io._handle_np_fromfile(assign, lhs, rhs)
 
-        if fdef == ('read_xenon', 'hpat.xenon_ext'):
-            col_items, nodes = hpat.xenon_ext._handle_read(assign, lhs, rhs, self.func_ir)
+        if fdef == ('read_xenon', 'bodo.xenon_ext'):
+            col_items, nodes = bodo.xenon_ext._handle_read(assign, lhs, rhs, self.func_ir)
             df_nodes, col_map = self._process_df_build_map(col_items)
             self._create_df(lhs.name, col_map, label)
             nodes += df_nodes
@@ -483,10 +483,10 @@ class HiFrames(object):
                 other_colmap = {c: other for c in df_col_map.keys()}
 
         out_df_map = {}
-        isin_func = lambda A, B: hpat.hiframes.api.df_isin(A, B)
-        isin_vals_func = lambda A, B: hpat.hiframes.api.df_isin_vals(A, B)
+        isin_func = lambda A, B: bodo.hiframes.api.df_isin(A, B)
+        isin_vals_func = lambda A, B: bodo.hiframes.api.df_isin_vals(A, B)
         # create array of False values used when other col not available
-        bool_arr_func = lambda A: hpat.hiframes.api.init_series(np.zeros(len(A), np.bool_))
+        bool_arr_func = lambda A: bodo.hiframes.api.init_series(np.zeros(len(A), np.bool_))
         # use the first array of df to get len. TODO: check for empty df
         false_arr_args = [list(df_col_map.values())[0]]
 
@@ -501,7 +501,7 @@ class HiFrames(object):
             else:
                 func = bool_arr_func
                 args = false_arr_args
-            f_block = compile_to_numba_ir(func, {'hpat': hpat, 'np': np}).blocks.popitem()[1]
+            f_block = compile_to_numba_ir(func, {'bodo': bodo, 'np': np}).blocks.popitem()[1]
             replace_arg_nodes(f_block, args)
             nodes += f_block.body[:-2]
             out_df_map[cname] = nodes[-1].target
@@ -557,13 +557,13 @@ class HiFrames(object):
         out_names = ", ".join([mk_unique_var(cname).replace('.', '_') for cname in col_names])
 
         func_text = "def _dropna_imp({}, inplace):\n".format(arg_names)
-        func_text += "  ({},) = hpat.hiframes.api.dropna(({},), inplace)\n".format(
+        func_text += "  ({},) = bodo.hiframes.api.dropna(({},), inplace)\n".format(
             out_names, arg_names)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _dropna_imp = loc_vars['_dropna_imp']
 
-        f_block = compile_to_numba_ir(_dropna_imp, {'hpat': hpat}).blocks.popitem()[1]
+        f_block = compile_to_numba_ir(_dropna_imp, {'bodo': bodo}).blocks.popitem()[1]
         replace_arg_nodes(f_block, col_vars + [inplace_var])
         nodes += f_block.body[:-3]
 
@@ -597,8 +597,8 @@ class HiFrames(object):
             # is not used in other code paths
             # replace func variable with drop_inplace
             f_block = compile_to_numba_ir(
-                lambda: hpat.hiframes.api.drop_inplace,
-                {'hpat': hpat}).blocks.popitem()[1]
+                lambda: bodo.hiframes.api.drop_inplace,
+                {'bodo': bodo}).blocks.popitem()[1]
             nodes = f_block.body[:-2]
             new_func_var = nodes[-1].target
             rhs.func = new_func_var
@@ -699,7 +699,7 @@ class HiFrames(object):
         col_args = ", ".join('col{}'.format(i) for i in range(n_cols))
 
         func_text = "def _init_df({}, index, {}):\n".format(data_args, col_args)
-        func_text += "  return hpat.hiframes.pd_dataframe_ext.init_dataframe({}, index, {})\n".format(
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, index, {})\n".format(
             data_args, col_args)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
@@ -817,14 +817,14 @@ class HiFrames(object):
         data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
 
         func_text = "def _init_df({}):\n".format(data_args)
-        func_text += "  return hpat.hiframes.pd_dataframe_ext.init_dataframe({}, None, {})\n".format(
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, None, {})\n".format(
             data_args, ", ".join("'{}'".format(c) for c in columns))
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars['_init_df']
 
         f_block = compile_to_numba_ir(
-            _init_df, {'hpat': hpat}).blocks.popitem()[1]
+            _init_df, {'bodo': bodo}).blocks.popitem()[1]
         replace_arg_nodes(f_block, data_arrs)
         nodes += f_block.body[:-2]
         nodes[-1].target = lhs
@@ -908,13 +908,13 @@ class HiFrames(object):
                 in_data = arg_def.vararg
                 arg_def.vararg = None  # avoid typing error
                 return self._replace_func(
-                    lambda l: hpat.hiframes.api.flatten_to_series(l),
+                    lambda l: bodo.hiframes.api.flatten_to_series(l),
                     [in_data]
                 )
 
         # pd.Series() is handled in typed pass now
-        # return self._replace_func(lambda arr: hpat.hiframes.api.init_series(
-        #         hpat.hiframes.api.fix_df_array(arr)),
+        # return self._replace_func(lambda arr: bodo.hiframes.api.init_series(
+        #         bodo.hiframes.api.fix_df_array(arr)),
         #     [data])
         return [assign]
 
@@ -934,7 +934,7 @@ class HiFrames(object):
         arg = rhs.args[0]
 
         return self._replace_func(
-            lambda arr: hpat.hiframes.api.to_numeric(arr, dtype),
+            lambda arr: bodo.hiframes.api.to_numeric(arr, dtype),
             [arg], extra_globals={'dtype': dtype})
 
     def _handle_pq_read_table(self, assign, lhs, rhs):
@@ -955,7 +955,7 @@ class HiFrames(object):
         data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
 
         func_text = "def _init_df({}):\n".format(data_args)
-        func_text += "  return hpat.hiframes.pd_dataframe_ext.init_dataframe({}, None, {})\n".format(
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, None, {})\n".format(
             data_args, ", ".join("'{}'".format(c) for c in columns))
         loc_vars = {}
         exec(func_text, {}, loc_vars)
@@ -1006,7 +1006,7 @@ class HiFrames(object):
         # gen concat function
         arg_names = ", ".join(['in{}'.format(i) for i in range(len(df_list))])
         func_text = "def _concat_imp({}):\n".format(arg_names)
-        func_text += "    return hpat.hiframes.api.init_series(hpat.hiframes.api.concat(({})))\n".format(
+        func_text += "    return bodo.hiframes.api.init_series(bodo.hiframes.api.concat(({})))\n".format(
             arg_names)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
@@ -1024,7 +1024,7 @@ class HiFrames(object):
                     # use a df column just for len()
                     len_arr = list(df_col_map.values())[0]
                     f_block = compile_to_numba_ir(gen_nan_func,
-                            {'hpat': hpat, 'np': np}).blocks.popitem()[1]
+                            {'bodo': bodo, 'np': np}).blocks.popitem()[1]
                     replace_arg_nodes(f_block, [len_arr])
                     nodes += f_block.body[:-2]
                     args.append(nodes[-1].target)
@@ -1032,7 +1032,7 @@ class HiFrames(object):
                     args.append(df_col_map[cname])
 
             f_block = compile_to_numba_ir(_concat_imp,
-                        {'hpat': hpat, 'np': np}).blocks.popitem()[1]
+                        {'bodo': bodo, 'np': np}).blocks.popitem()[1]
             replace_arg_nodes(f_block, args)
             nodes += f_block.body[:-2]
             done_cols[cname] = nodes[-1].target
@@ -1043,14 +1043,14 @@ class HiFrames(object):
     def _handle_concat_series(self, lhs, rhs):
         # defer to typed pass since the type might be non-numerical
         def f(arr_list):  # pragma: no cover
-            return hpat.hiframes.api.init_series(hpat.hiframes.api.concat(arr_list))
+            return bodo.hiframes.api.init_series(bodo.hiframes.api.concat(arr_list))
         return self._replace_func(f, rhs.args)
 
     def _handle_ros(self, assign, lhs, rhs):
         if len(rhs.args) != 1:  # pragma: no cover
             raise ValueError("Invalid read_ros_images() arguments")
-        import hpat.ros
-        return hpat.ros._handle_read_images(lhs, rhs)
+        import bodo.ros
+        return bodo.ros._handle_read_images(lhs, rhs)
 
     def _fix_df_arrays(self, items_list):
         nodes = []
@@ -1063,9 +1063,9 @@ class HiFrames(object):
             col_arr = self._fix_df_list_of_array(col_arr)
 
             def f(arr):  # pragma: no cover
-                df_arr = hpat.hiframes.api.fix_df_array(arr)
+                df_arr = bodo.hiframes.api.fix_df_array(arr)
             f_block = compile_to_numba_ir(
-                f, {'hpat': hpat}).blocks.popitem()[1]
+                f, {'bodo': bodo}).blocks.popitem()[1]
             replace_arg_nodes(f_block, [col_arr])
             nodes += f_block.body[:-3]  # remove none return
             new_col_arr = nodes[-1].target
@@ -1092,9 +1092,9 @@ class HiFrames(object):
                         "data frame column names should be constant")
             # cast to series type
             def f(arr):  # pragma: no cover
-                df_arr = hpat.hiframes.api.init_series(arr)
+                df_arr = bodo.hiframes.api.init_series(arr)
             f_block = compile_to_numba_ir(
-                f, {'hpat': hpat}).blocks.popitem()[1]
+                f, {'bodo': bodo}).blocks.popitem()[1]
             replace_arg_nodes(f_block, [item[1]])
             nodes += f_block.body[:-3]  # remove none return
             new_col_arr = nodes[-1].target
@@ -1119,8 +1119,8 @@ class HiFrames(object):
         dummy_ir.blocks[0].body = all_body
 
         _globals = self.func_ir.func_id.func.__globals__
-        _globals.update({'hpat': hpat, 'numba': numba, 'np': np})
-        f_ir = compile_to_numba_ir(wrapper_func, {'hpat': hpat})
+        _globals.update({'bodo': bodo, 'numba': numba, 'np': np})
+        f_ir = compile_to_numba_ir(wrapper_func, {'bodo': bodo})
         # fix definitions to enable finding sentinel
         f_ir._definitions = build_definitions(f_ir.blocks)
         first_label = min(f_ir.blocks)
@@ -1194,9 +1194,9 @@ class HiFrames(object):
         agg_gb_var = ir.Var(lhs.scope, mk_unique_var("agg_gb"), lhs.loc)
         nodes = [ir.Assign(ir.Global("agg_gb", agg_func_dis, lhs.loc), agg_gb_var, lhs.loc)]
         def to_arr(a, _agg_f):
-            b = hpat.hiframes.api.to_arr_from_series(a)
-            res = hpat.hiframes.api.init_series(hpat.hiframes.api.agg_typer(b, _agg_f))
-        f_block = compile_to_numba_ir(to_arr, {'hpat': hpat, 'np': np}).blocks.popitem()[1]
+            b = bodo.hiframes.api.to_arr_from_series(a)
+            res = bodo.hiframes.api.init_series(bodo.hiframes.api.agg_typer(b, _agg_f))
+        f_block = compile_to_numba_ir(to_arr, {'bodo': bodo, 'np': np}).blocks.popitem()[1]
         replace_arg_nodes(f_block, [in_vars[values_arg], agg_gb_var])
         nodes += f_block.body[:-3]  # remove none return
         out_types = {values_arg: nodes[-1].target}
@@ -1267,8 +1267,8 @@ class HiFrames(object):
         in_vars = {}
         # output of crosstab is array[int64]
         def to_arr():
-            res = hpat.hiframes.api.init_series(np.empty(1, np.int64))
-        f_block = compile_to_numba_ir(to_arr, {'hpat': hpat, 'np': np}).blocks.popitem()[1]
+            res = bodo.hiframes.api.init_series(np.empty(1, np.int64))
+        f_block = compile_to_numba_ir(to_arr, {'bodo': bodo, 'np': np}).blocks.popitem()[1]
         nodes = f_block.body[:-3]  # remove none return
         out_tp_var = nodes[-1].target
         out_types = {'__dummy__': out_tp_var}
@@ -1354,17 +1354,17 @@ class HiFrames(object):
         agg_func = get_agg_func(self.func_ir, func_name, rhs)
         out_tp_vars = {}
 
-        # hpat.jit() instead of numba.njit() to handle str arrs etc
-        agg_func_dis = hpat.jit(agg_func)
+        # bodo.jit() instead of numba.njit() to handle str arrs etc
+        agg_func_dis = bodo.jit(agg_func)
         #agg_func_dis = numba.njit(agg_func)
         agg_gb_var = ir.Var(lhs.scope, mk_unique_var("agg_gb"), lhs.loc)
         nodes = [ir.Assign(ir.Global("agg_gb", agg_func_dis, lhs.loc), agg_gb_var, lhs.loc)]
         for out_cname in out_colnames:
             in_var = in_vars[out_cname]
             def to_arr(a, _agg_f):
-                b = hpat.hiframes.api.to_arr_from_series(a)
-                res = hpat.hiframes.api.init_series(hpat.hiframes.api.agg_typer(b, _agg_f))
-            f_block = compile_to_numba_ir(to_arr, {'hpat': hpat, 'np': np}).blocks.popitem()[1]
+                b = bodo.hiframes.api.to_arr_from_series(a)
+                res = bodo.hiframes.api.init_series(bodo.hiframes.api.agg_typer(b, _agg_f))
+            f_block = compile_to_numba_ir(to_arr, {'bodo': bodo, 'np': np}).blocks.popitem()[1]
             replace_arg_nodes(f_block, [in_var, agg_gb_var])
             nodes += f_block.body[:-3]  # remove none return
             out_tp_vars[out_cname] = nodes[-1].target
@@ -1401,7 +1401,7 @@ class HiFrames(object):
         if by_arg_def is None:
             # try add_consts_to_type
             by_arg_call = guard(get_definition, self.func_ir, by_arg)
-            if guard(find_callname, self.func_ir, by_arg_call) == ('add_consts_to_type', 'hpat.hiframes.api'):
+            if guard(find_callname, self.func_ir, by_arg_call) == ('add_consts_to_type', 'bodo.hiframes.api'):
                 by_arg_def = guard(find_build_sequence, self.func_ir, by_arg_call.args[0])
 
         if by_arg_def is None:
@@ -1562,56 +1562,56 @@ class HiFrames(object):
             if on_arr is not None:
                 if func_name == 'cov':
                     def f(arr, other, on_arr, w, center):  # pragma: no cover
-                        df_arr = hpat.hiframes.api.init_series(
-                            hpat.hiframes.rolling.rolling_cov(
+                        df_arr = bodo.hiframes.api.init_series(
+                            bodo.hiframes.rolling.rolling_cov(
                                 arr, other, on_arr, w, center))
                 if func_name == 'corr':
                     def f(arr, other, on_arr, w, center):  # pragma: no cover
-                        df_arr = hpat.hiframes.api.init_series(
-                            hpat.hiframes.rolling.rolling_corr(
+                        df_arr = bodo.hiframes.api.init_series(
+                            bodo.hiframes.rolling.rolling_corr(
                                 arr, other, on_arr, w, center))
                 args = [in_col_var, other, on_arr, window, center]
             else:
                 if func_name == 'cov':
                     def f(arr, other, w, center):  # pragma: no cover
-                        df_arr = hpat.hiframes.api.init_series(
-                            hpat.hiframes.rolling.rolling_cov(
+                        df_arr = bodo.hiframes.api.init_series(
+                            bodo.hiframes.rolling.rolling_cov(
                                 arr, other, w, center))
                 if func_name == 'corr':
                     def f(arr, other, w, center):  # pragma: no cover
-                        df_arr = hpat.hiframes.api.init_series(
-                            hpat.hiframes.rolling.rolling_corr(
+                        df_arr = bodo.hiframes.api.init_series(
+                            bodo.hiframes.rolling.rolling_corr(
                                 arr, other, w, center))
                 args = [in_col_var, other, window, center]
         # variable window case
         elif on_arr is not None:
             if func_name == 'apply':
                 def f(arr, on_arr, w, center, func):  # pragma: no cover
-                    df_arr = hpat.hiframes.api.init_series(
-                        hpat.hiframes.rolling.rolling_variable(
+                    df_arr = bodo.hiframes.api.init_series(
+                        bodo.hiframes.rolling.rolling_variable(
                             arr, on_arr, w, center, False, func))
                 args = [in_col_var, on_arr, window, center, args[0]]
             else:
                 def f(arr, on_arr, w, center):  # pragma: no cover
-                    df_arr = hpat.hiframes.api.init_series(
-                        hpat.hiframes.rolling.rolling_variable(
+                    df_arr = bodo.hiframes.api.init_series(
+                        bodo.hiframes.rolling.rolling_variable(
                             arr, on_arr, w, center, False, _func_name))
                 args = [in_col_var, on_arr, window, center]
         else:  # fixed window
             # apply case takes the passed function instead of just name
             if func_name == 'apply':
                 def f(arr, w, center, func):  # pragma: no cover
-                    df_arr = hpat.hiframes.api.init_series(
-                        hpat.hiframes.rolling.rolling_fixed(
+                    df_arr = bodo.hiframes.api.init_series(
+                        bodo.hiframes.rolling.rolling_fixed(
                             arr, w, center, False, func))
                 args = [in_col_var, window, center, args[0]]
             else:
                 def f(arr, w, center):  # pragma: no cover
-                    df_arr = hpat.hiframes.api.init_series(
-                        hpat.hiframes.rolling.rolling_fixed(
+                    df_arr = bodo.hiframes.api.init_series(
+                        bodo.hiframes.rolling.rolling_fixed(
                             arr, w, center, False, _func_name))
                 args = [in_col_var, window, center]
-        f_block = compile_to_numba_ir(f, {'hpat': hpat, '_func_name': func_name}).blocks.popitem()[1]
+        f_block = compile_to_numba_ir(f, {'bodo': bodo, '_func_name': func_name}).blocks.popitem()[1]
         replace_arg_nodes(f_block, args)
         nodes += f_block.body[:-3]  # remove none return
         nodes[-1].target = out_col_var
@@ -1623,8 +1623,8 @@ class HiFrames(object):
         """
         # TODO: check all possible funcs
         def f(arr):  # pragma: no cover
-            df_arr = hpat.hiframes.api.fix_rolling_array(arr)
-        f_block = compile_to_numba_ir(f, {'hpat': hpat}).blocks.popitem()[1]
+            df_arr = bodo.hiframes.api.fix_rolling_array(arr)
+        f_block = compile_to_numba_ir(f, {'bodo': bodo}).blocks.popitem()[1]
         replace_arg_nodes(f_block, [col_var])
         nodes = f_block.body[:-3]  # remove none return
         new_col_var = nodes[-1].target
@@ -1736,14 +1736,14 @@ class HiFrames(object):
     def _gen_replace_dist_return(self, var, flag):
         if flag == 'distributed':
             def f(_dist_arr):  # pragma: no cover
-                _d_arr = hpat.distributed_api.dist_return(_dist_arr)
+                _d_arr = bodo.distributed_api.dist_return(_dist_arr)
         elif flag == 'threaded':
             def f(_threaded_arr):  # pragma: no cover
-                _th_arr = hpat.distributed_api.threaded_return(_threaded_arr)
+                _th_arr = bodo.distributed_api.threaded_return(_threaded_arr)
         else:
             raise ValueError("Invalid return flag {}".format(flag))
         f_block = compile_to_numba_ir(
-            f, {'hpat': hpat}).blocks.popitem()[1]
+            f, {'bodo': bodo}).blocks.popitem()[1]
         replace_arg_nodes(f_block, [var])
         return f_block.body[:-3]  # remove none return
 
@@ -1785,8 +1785,8 @@ class HiFrames(object):
         cname_var = ir.Var(inst.value.scope, mk_unique_var("$cname_const"), inst.loc)
         nodes = [ir.Assign(ir.Const(inst.index, inst.loc), cname_var, inst.loc)]
 
-        func = lambda df, cname, arr: hpat.hiframes.api.set_df_col(df, cname, arr)
-        f_block = compile_to_numba_ir(func, {'hpat': hpat}).blocks.popitem()[1]
+        func = lambda df, cname, arr: bodo.hiframes.api.set_df_col(df, cname, arr)
+        f_block = compile_to_numba_ir(func, {'bodo': bodo}).blocks.popitem()[1]
         replace_arg_nodes(f_block, [df_var, cname_var, inst.value])
         nodes += f_block.body[:-2]
 
@@ -1798,7 +1798,7 @@ class HiFrames(object):
 
     def _replace_func(self, func, args, const=False, array_typ_convert=True,
                       pre_nodes=None, extra_globals=None):
-        glbls = {'numba': numba, 'np': np, 'hpat': hpat}
+        glbls = {'numba': numba, 'np': np, 'bodo': bodo}
         if extra_globals is not None:
             glbls.update(extra_globals)
         return ReplaceFunc(func, None, args, glbls, pre_nodes)

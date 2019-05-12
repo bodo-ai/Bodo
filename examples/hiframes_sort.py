@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
-import hpat
+import bodo
 
-@hpat.jit
+@bodo.jit
 def df_sort(df):
     df2 = df.sort_values('A')
     print(df2.A.values)

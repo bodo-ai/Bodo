@@ -5,12 +5,12 @@ import pandas as pd
 import numpy as np
 
 import numba
-import hpat
-from hpat.tests.test_utils import (count_array_REPs, count_parfor_REPs,
+import bodo
+from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_start_end)
 
 
-@hpat.jit
+@bodo.jit
 def inner_get_column(df):
     # df2 = df[['A', 'C']]
     # df2['D'] = np.ones(3)
@@ -24,7 +24,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.ones(n), 'B': np.random.ranf(n)})
             return df.A
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_series_equal(hpat_func(n), test_impl(n))
 
@@ -36,7 +36,7 @@ class TestDataFrame(unittest.TestCase):
                 df = pd.DataFrame({'A': B})
             return df.A
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         A = np.ones(n)
         B = np.arange(n) + 1.0
@@ -49,7 +49,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df):
             return df.A
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'A': np.arange(n), 'B': np.random.ranf(n)})
         pd.testing.assert_series_equal(hpat_func(df), test_impl(df))
@@ -62,7 +62,7 @@ class TestDataFrame(unittest.TestCase):
                 df['A'] = np.arange(n) + 2.0
             return df.A
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'A': np.ones(n), 'B': np.random.ranf(n)})
         pd.testing.assert_series_equal(hpat_func(df.copy(), True), test_impl(df.copy(), True))
@@ -74,7 +74,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.ones(n), 'B': np.arange(n)})
             return df
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_frame_equal(hpat_func(n), test_impl(n))
 
@@ -83,7 +83,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': [1,2,3], 'B': ['a', 'bb', 'ccc']})
             return df
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(), test_impl())
 
     @unittest.skip("pending df filter support")
@@ -92,7 +92,7 @@ class TestDataFrame(unittest.TestCase):
             df = df[df.A != 'dd']
             return df
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         df = pd.DataFrame({'A': ['aa', 'bb', 'cc']})
         pd.testing.assert_frame_equal(hpat_func(df), test_impl(df))
 
@@ -101,14 +101,14 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.ones(n), 'B': np.arange(n)})
             return df
 
-        hpat_func = hpat.jit(distributed={'df'})(test_impl)
+        hpat_func = bodo.jit(distributed={'df'})(test_impl)
         n = 11
         hres, res = hpat_func(n), test_impl(n)
         self.assertEqual(count_array_OneDs(), 3)
         self.assertEqual(count_parfor_OneDs(), 2)
-        dist_sum = hpat.jit(
-            lambda a: hpat.distributed_api.dist_reduce(
-                a, np.int32(hpat.distributed_api.Reduce_Type.Sum.value)))
+        dist_sum = bodo.jit(
+            lambda a: bodo.distributed_api.dist_reduce(
+                a, np.int32(bodo.distributed_api.Reduce_Type.Sum.value)))
         dist_sum(1)  # run to compile
         np.testing.assert_allclose(dist_sum(hres.A.sum()), res.A.sum())
         np.testing.assert_allclose(dist_sum(hres.B.sum()), res.B.sum())
@@ -118,7 +118,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.ones(n, np.int64), 'B': np.random.ranf(n)})
             return len(df)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -129,7 +129,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.ones(n, np.int64), 'B': np.random.ranf(n)})
             return df.shape
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -141,7 +141,7 @@ class TestDataFrame(unittest.TestCase):
             Ac = df['A'].values
             return Ac.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -152,7 +152,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df):
             return df[['A', 'C']]
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame(
             {'A': np.arange(n), 'B': np.ones(n), 'C': np.random.ranf(n)})
@@ -164,7 +164,7 @@ class TestDataFrame(unittest.TestCase):
             df1 = df[df.A > .5]
             return df1.B.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -176,7 +176,7 @@ class TestDataFrame(unittest.TestCase):
             df1 = df.loc[df.A > .5]
             return np.sum(df1.B)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -188,7 +188,7 @@ class TestDataFrame(unittest.TestCase):
             df1 = df.iloc[(df.A > .5).values]
             return np.sum(df1.B)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -198,7 +198,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df, n):
             return df.iloc[1:n].B.values
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'A': np.arange(n), 'B': np.arange(n)**2})
         np.testing.assert_array_equal(hpat_func(df, n), test_impl(df, n))
@@ -207,7 +207,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df, n):
             return df.iloc[np.array([1,4,9])].B.values
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'A': np.arange(n), 'B': np.arange(n)**2})
         np.testing.assert_array_equal(hpat_func(df, n), test_impl(df, n))
@@ -216,7 +216,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df):
             return df.iloc[:,1].values
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'A': np.arange(n), 'B': np.arange(n)**2})
         np.testing.assert_array_equal(hpat_func(df), test_impl(df))
@@ -226,7 +226,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df, n):
             return df.iloc[[1,4,9]].B.values
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'A': np.arange(n), 'B': np.arange(n)**2})
         np.testing.assert_array_equal(hpat_func(df, n), test_impl(df, n))
@@ -236,7 +236,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df):
             return df.iloc[:,COL_IND].values
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'A': np.arange(n), 'B': np.arange(n)**2})
         np.testing.assert_array_equal(hpat_func(df), test_impl(df))
@@ -245,7 +245,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df):
             return df.loc[:,'B'].values
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'A': np.arange(n), 'B': np.arange(n)**2})
         np.testing.assert_array_equal(hpat_func(df), test_impl(df))
@@ -254,14 +254,14 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(n):
             df = pd.DataFrame({'B': np.ones(n), 'A': np.arange(n)+n})
             return df.iat[3, 1]
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(hpat_func(n), test_impl(n))
 
     def test_iat2(self):
         def test_impl(df):
             return df.iat[3, 1]
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'B': np.ones(n), 'A': np.arange(n)+n})
         self.assertEqual(hpat_func(df), test_impl(df))
@@ -269,7 +269,7 @@ class TestDataFrame(unittest.TestCase):
     def test_iat3(self):
         def test_impl(df, n):
             return df.iat[n-1, 1]
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'B': np.ones(n), 'A': np.arange(n)+n})
         self.assertEqual(hpat_func(df, n), test_impl(df, n))
@@ -278,7 +278,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df, n):
             df.iat[n-1, 1] = n**2
             return df.A  # return the column to check column aliasing
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'B': np.ones(n), 'A': np.arange(n)+n})
         df2 = df.copy()
@@ -288,7 +288,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df, n):
             df.iat[n-1, 1] = n**2
             return df  # check df aliasing/boxing
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'B': np.ones(n), 'A': np.arange(n)+n})
         df2 = df.copy()
@@ -301,7 +301,7 @@ class TestDataFrame(unittest.TestCase):
             df['A'] = np.arange(n)
             return df
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_frame_equal(hpat_func(n), test_impl(n))
 
@@ -310,7 +310,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df, n):
             df['A'] = np.arange(n)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df1 = pd.DataFrame({'A': np.ones(n, np.int64), 'B': np.arange(n)+3.0})
         df2 = df1.copy()
@@ -325,7 +325,7 @@ class TestDataFrame(unittest.TestCase):
             df['A'] = np.arange(n)
             return df
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_frame_equal(hpat_func(n), test_impl(n))
 
@@ -336,7 +336,7 @@ class TestDataFrame(unittest.TestCase):
             df['C'] = np.arange(n)
             return df
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_frame_equal(hpat_func(n), test_impl(n))
 
@@ -345,7 +345,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df, n):
             df['C'] = np.arange(n)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df1 = pd.DataFrame({'A': np.ones(n, np.int64), 'B': np.arange(n)+3.0})
         df2 = df1.copy()
@@ -357,7 +357,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df):
             df['C'] = df['A'][df['B']]
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         df = pd.DataFrame({'A': [1,2,3], 'B': [True, False, True]})
         df2 = df.copy()
         test_impl(df2)
@@ -369,7 +369,7 @@ class TestDataFrame(unittest.TestCase):
             df['C'] = arr
             return df.C.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         arr = np.random.ranf(n)
         df = pd.DataFrame({'A': np.ones(n), 'B': np.random.ranf(n)})
@@ -382,7 +382,7 @@ class TestDataFrame(unittest.TestCase):
             df['C'] = arr
             return df.C.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         arr = np.random.ranf(n)
         df = pd.DataFrame({'A': np.ones(n), 'B': np.random.ranf(n)})
@@ -394,7 +394,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.ones(n), 'B': np.arange(n)})
             return df.values
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         np.testing.assert_array_equal(hpat_func(n), test_impl(n))
 
@@ -402,7 +402,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df):
             return df.values
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'A': np.ones(n), 'B': np.arange(n)})
         np.testing.assert_array_equal(hpat_func(df), test_impl(df))
@@ -412,7 +412,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.ones(n), 'B': np.arange(n)})
             return df.values.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         np.testing.assert_array_equal(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -425,7 +425,7 @@ class TestDataFrame(unittest.TestCase):
             return df.B.sum()
 
         n = 121
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(n), test_impl(n))
 
     def test_df_apply_branch(self):
@@ -435,7 +435,7 @@ class TestDataFrame(unittest.TestCase):
             return df.B.sum()
 
         n = 121
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(n), test_impl(n))
 
     def test_df_describe(self):
@@ -445,7 +445,7 @@ class TestDataFrame(unittest.TestCase):
             #df.A[0:1] = np.nan
             return df.describe()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 1001
         hpat_func(n)
         # XXX: test actual output
@@ -460,7 +460,7 @@ class TestDataFrame(unittest.TestCase):
         n = 1211
         np.random.seed(2)
         df = pd.DataFrame({'A': np.random.ranf(n), 'B': np.arange(n), 'C': np.random.ranf(n)})
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(df.copy()), test_impl(df))
 
     def test_sort_values_copy(self):
@@ -471,7 +471,7 @@ class TestDataFrame(unittest.TestCase):
         n = 1211
         np.random.seed(2)
         df = pd.DataFrame({'A': np.random.ranf(n), 'B': np.arange(n), 'C': np.random.ranf(n)})
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(df.copy()), test_impl(df))
 
     def test_sort_values_single_col(self):
@@ -482,7 +482,7 @@ class TestDataFrame(unittest.TestCase):
         n = 1211
         np.random.seed(2)
         df = pd.DataFrame({'A': np.random.ranf(n)})
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(df.copy()), test_impl(df))
 
     def test_sort_values_single_col_str(self):
@@ -499,7 +499,7 @@ class TestDataFrame(unittest.TestCase):
             val = ''.join(random.choices(string.ascii_uppercase + string.digits, k=k))
             str_vals.append(val)
         df = pd.DataFrame({'A': str_vals})
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         self.assertTrue((hpat_func(df.copy()) == test_impl(df)).all())
 
     def test_sort_values_str(self):
@@ -522,7 +522,7 @@ class TestDataFrame(unittest.TestCase):
         df = pd.DataFrame({'A': str_vals, 'B': str_vals2})
         # use mergesort for stability, in str generation equal keys are more probable
         sorted_df = df.sort_values('A', inplace=False, kind='mergesort')
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         self.assertTrue((hpat_func(df) == sorted_df.B.values).all())
 
     def test_sort_parallel_single_col(self):
@@ -533,15 +533,15 @@ class TestDataFrame(unittest.TestCase):
             res = df.points.values
             return res
 
-        hpat_func = hpat.jit(locals={'res:return': 'distributed'})(test_impl)
+        hpat_func = bodo.jit(locals={'res:return': 'distributed'})(test_impl)
 
-        save_min_samples = hpat.hiframes.sort.MIN_SAMPLES
+        save_min_samples = bodo.hiframes.sort.MIN_SAMPLES
         try:
-            hpat.hiframes.sort.MIN_SAMPLES = 10
+            bodo.hiframes.sort.MIN_SAMPLES = 10
             res = hpat_func()
             self.assertTrue((np.diff(res)>=0).all())
         finally:
-            hpat.hiframes.sort.MIN_SAMPLES = save_min_samples  # restore global val
+            bodo.hiframes.sort.MIN_SAMPLES = save_min_samples  # restore global val
 
     def test_sort_parallel(self):
         # TODO: better parallel sort test
@@ -552,15 +552,15 @@ class TestDataFrame(unittest.TestCase):
             res = df.A.values
             return res
 
-        hpat_func = hpat.jit(locals={'res:return': 'distributed'})(test_impl)
+        hpat_func = bodo.jit(locals={'res:return': 'distributed'})(test_impl)
 
-        save_min_samples = hpat.hiframes.sort.MIN_SAMPLES
+        save_min_samples = bodo.hiframes.sort.MIN_SAMPLES
         try:
-            hpat.hiframes.sort.MIN_SAMPLES = 10
+            bodo.hiframes.sort.MIN_SAMPLES = 10
             res = hpat_func()
             self.assertTrue((np.diff(res)>=0).all())
         finally:
-            hpat.hiframes.sort.MIN_SAMPLES = save_min_samples  # restore global val
+            bodo.hiframes.sort.MIN_SAMPLES = save_min_samples  # restore global val
 
     def test_itertuples(self):
         def test_impl(df):
@@ -569,7 +569,7 @@ class TestDataFrame(unittest.TestCase):
                 res += r[1]
             return res
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'A': np.arange(n), 'B': np.ones(n, np.int64)})
         self.assertEqual(hpat_func(df), test_impl(df))
@@ -581,7 +581,7 @@ class TestDataFrame(unittest.TestCase):
                 res += r[1]
             return res
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 3
         df = pd.DataFrame({'A': ['aa', 'bb', 'cc'], 'B': np.ones(n, np.int64)})
         self.assertEqual(hpat_func(df), test_impl(df))
@@ -594,7 +594,7 @@ class TestDataFrame(unittest.TestCase):
                 res += r[1]
             return res
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(hpat_func(n), test_impl(n))
 
@@ -611,7 +611,7 @@ class TestDataFrame(unittest.TestCase):
                     res += len(A)
             return res
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(hpat_func(n), test_impl(n))
 
@@ -620,7 +620,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.ones(n), 'B': np.arange(n)})
             return df.head(3)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_frame_equal(hpat_func(n), test_impl(n))
 
@@ -629,7 +629,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.arange(n)+1.0, 'B': np.arange(n)+1})
             return df.pct_change(3)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_frame_equal(hpat_func(n), test_impl(n))
 
@@ -639,7 +639,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.arange(n)+1.0, 'B': np.arange(n)+1})
             return df.mean()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_series_equal(hpat_func(n), test_impl(n))
 
@@ -649,7 +649,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.arange(n)+1.0, 'B': np.arange(n)+1})
             return df.std()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_series_equal(hpat_func(n), test_impl(n))
 
@@ -659,7 +659,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.arange(n)+1.0, 'B': np.arange(n)+1})
             return df.var()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_series_equal(hpat_func(n), test_impl(n))
 
@@ -669,7 +669,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.arange(n)+1.0, 'B': np.arange(n)+1})
             return df.max()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_series_equal(hpat_func(n), test_impl(n))
 
@@ -679,7 +679,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.arange(n)+1.0, 'B': np.arange(n)+1})
             return df.min()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_series_equal(hpat_func(n), test_impl(n))
 
@@ -689,7 +689,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.arange(n)+1.0, 'B': np.arange(n)+1})
             return df.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_series_equal(hpat_func(n), test_impl(n))
 
@@ -699,7 +699,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.arange(n)+1.0, 'B': np.arange(n)+1})
             return df.prod()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_series_equal(hpat_func(n), test_impl(n))
 
@@ -709,7 +709,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({'A': np.arange(n)+1.0, 'B': np.arange(n)+1})
             return df.count()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_series_equal(hpat_func(n), test_impl(n))
 
@@ -718,7 +718,7 @@ class TestDataFrame(unittest.TestCase):
             return df.fillna(5.0)
 
         df = pd.DataFrame({'A': [1.0, 2.0, np.nan, 1.0]})
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(df), test_impl(df))
 
     def test_df_fillna_str1(self):
@@ -726,7 +726,7 @@ class TestDataFrame(unittest.TestCase):
             return df.fillna("dd")
 
         df = pd.DataFrame({'A': ['aa', 'b', None, 'ccc']})
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(df), test_impl(df))
 
     def test_df_fillna_inplace1(self):
@@ -736,7 +736,7 @@ class TestDataFrame(unittest.TestCase):
 
         df = pd.DataFrame({'A': [1.0, 2.0, np.nan, 1.0]})
         df2 = df.copy()
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(df), test_impl(df2))
 
     def test_df_reset_index1(self):
@@ -744,7 +744,7 @@ class TestDataFrame(unittest.TestCase):
             return df.reset_index(drop=True)
 
         df = pd.DataFrame({'A': [1.0, 2.0, np.nan, 1.0]})
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(df), test_impl(df))
 
     def test_df_reset_index_inplace1(self):
@@ -753,7 +753,7 @@ class TestDataFrame(unittest.TestCase):
             df.reset_index(drop=True, inplace=True)
             return df
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(), test_impl())
 
     def test_df_dropna1(self):
@@ -761,7 +761,7 @@ class TestDataFrame(unittest.TestCase):
             return df.dropna()
 
         df = pd.DataFrame({'A': [1.0, 2.0, np.nan, 1.0], 'B': [4, 5, 6, 7]})
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         out = test_impl(df).reset_index(drop=True)
         h_out = hpat_func(df)
         pd.testing.assert_frame_equal(out, h_out)
@@ -771,7 +771,7 @@ class TestDataFrame(unittest.TestCase):
             return df.dropna()
 
         df = pd.DataFrame({'A': [1.0, 2.0, np.nan, 1.0]})
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         out = test_impl(df).reset_index(drop=True)
         h_out = hpat_func(df)
         pd.testing.assert_frame_equal(out, h_out)
@@ -784,7 +784,7 @@ class TestDataFrame(unittest.TestCase):
 
         df = pd.DataFrame({'A': [1.0, 2.0, np.nan, 1.0], 'B': [4, 5, 6, 7]})
         df2 = df.copy()
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         out = test_impl(df).reset_index(drop=True)
         h_out = hpat_func(df2)
         pd.testing.assert_frame_equal(out, h_out)
@@ -794,7 +794,7 @@ class TestDataFrame(unittest.TestCase):
             return df.dropna()
 
         df = pd.DataFrame({'A': [1.0, 2.0, 4.0, 1.0], 'B': ['aa', 'b', None, 'ccc']})
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         out = test_impl(df).reset_index(drop=True)
         h_out = hpat_func(df)
         pd.testing.assert_frame_equal(out, h_out)
@@ -804,7 +804,7 @@ class TestDataFrame(unittest.TestCase):
             return df.drop(columns=['A'])
 
         df = pd.DataFrame({'A': [1.0, 2.0, np.nan, 1.0], 'B': [4, 5, 6, 7]})
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(df), test_impl(df))
 
     def test_df_drop_inplace2(self):
@@ -816,7 +816,7 @@ class TestDataFrame(unittest.TestCase):
             return df2
 
         df = pd.DataFrame({'A': [1,2,3], 'B': [2,3,4]})
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(df), test_impl(df))
 
     def test_df_drop_inplace1(self):
@@ -826,14 +826,14 @@ class TestDataFrame(unittest.TestCase):
 
         df = pd.DataFrame({'A': [1.0, 2.0, np.nan, 1.0], 'B': [4, 5, 6, 7]})
         df2 = df.copy()
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(df), test_impl(df2))
 
     def test_isin_df1(self):
         def test_impl(df, df2):
             return df.isin(df2)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'A': np.arange(n), 'B': np.arange(n)**2})
         df2 = pd.DataFrame({'A': np.arange(n), 'C': np.arange(n)**2})
@@ -846,7 +846,7 @@ class TestDataFrame(unittest.TestCase):
             vals = {'A': [2,3,4], 'C': [4,5,6]}
             return df.isin(vals)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'A': np.arange(n), 'B': np.arange(n)**2})
         pd.testing.assert_frame_equal(hpat_func(df), test_impl(df))
@@ -856,7 +856,7 @@ class TestDataFrame(unittest.TestCase):
             vals = [2,3,4]
             return df.isin(vals)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'A': np.arange(n), 'B': np.arange(n)**2})
         pd.testing.assert_frame_equal(hpat_func(df), test_impl(df))
@@ -865,7 +865,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df, df2):
             return df.append(df2, ignore_index=True)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'A': np.arange(n), 'B': np.arange(n)**2})
         df2 = pd.DataFrame({'A': np.arange(n), 'C': np.arange(n)**2})
@@ -876,7 +876,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df, df2, df3):
             return df.append([df2, df3], ignore_index=True)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({'A': np.arange(n), 'B': np.arange(n)**2})
         df2 = pd.DataFrame({'A': np.arange(n), 'B': np.arange(n)**2})
@@ -889,7 +889,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(S1, S2):
             return pd.concat([S1, S2], axis=1)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         S1 = pd.Series([4, 5])
         S2 = pd.Series([6., 7.])
         # TODO: support int as column name
@@ -907,7 +907,7 @@ class TestDataFrame(unittest.TestCase):
             df['C'] = np.ones(3)
             return inner_get_column(df)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(hpat_func(), test_impl(), check_names=False)
 
 

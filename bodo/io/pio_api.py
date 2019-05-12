@@ -6,14 +6,14 @@ from numba.typing.templates import infer_global, AbstractTemplate, AttributeTemp
 from numba.typing import signature
 from llvmlite import ir as lir
 from numba.extending import register_model, models, infer_getattr, infer, intrinsic
-from hpat.str_ext import string_type
-import hpat
-from hpat.utils import unliteral_all
-import hpat.io
+from bodo.str_ext import string_type
+import bodo
+from bodo.utils import unliteral_all
+import bodo.io
 
-if hpat.config._has_h5py:
+if bodo.config._has_h5py:
     import h5py
-    from hpat.io import _hdf5
+    from bodo.io import _hdf5
     import llvmlite.binding as ll
     ll.add_symbol('hpat_h5_read_filter', _hdf5.hpat_h5_read_filter)
 
@@ -49,7 +49,7 @@ h5dataset_or_group_type = H5DatasetOrGroupType()
 
 h5file_data_type = types.int64
 
-if hpat.config._has_h5py:
+if bodo.config._has_h5py:
     # hid_t is 32bit in 1.8 but 64bit in 1.10
     if h5py.version.hdf5_version_tuple[1] == 8:
         h5file_data_type = types.int32
@@ -193,7 +193,7 @@ class H5ReadType(AbstractTemplate):
         return signature(ret_typ, *args)
 
 
-if hpat.config._has_h5py:
+if bodo.config._has_h5py:
     @infer_global(h5py.File)
     class H5File(AbstractTemplate):
         def generic(self, args, kws):
@@ -264,37 +264,37 @@ class H5GgetObjNameByIdx(AbstractTemplate):
         assert len(args) == 2
         return signature(string_type, *args)
 
-sum_op = hpat.distributed_api.Reduce_Type.Sum.value
+sum_op = bodo.distributed_api.Reduce_Type.Sum.value
 
 @numba.njit
 def get_filter_read_indices(bool_arr):
     indices = bool_arr.nonzero()[0]
-    rank = hpat.distributed_api.get_rank()
-    n_pes = hpat.distributed_api.get_size()
+    rank = bodo.distributed_api.get_rank()
+    n_pes = bodo.distributed_api.get_size()
 
     # get number of elements before this processor to align the indices
     # assuming bool_arr can be 1D_Var
     all_starts = np.empty(n_pes, np.int64)
     n_bool = len(bool_arr)
-    hpat.distributed_api.allgather(all_starts, n_bool)
+    bodo.distributed_api.allgather(all_starts, n_bool)
     ind_start = all_starts.cumsum()[rank] - n_bool
-    #n_arr = hpat.distributed_api.dist_reduce(len(bool_arr), np.int32(sum_op))
-    #ind_start = hpat.distributed_api.get_start(n_arr, n_pes, rank)
+    #n_arr = bodo.distributed_api.dist_reduce(len(bool_arr), np.int32(sum_op))
+    #ind_start = bodo.distributed_api.get_start(n_arr, n_pes, rank)
     indices += ind_start
 
     # TODO: use prefix-sum and all-to-all
     # all_indices = np.empty(n, indices.dtype)
     # allgatherv(all_indices, indices)
-    n = hpat.distributed_api.dist_reduce(len(indices), np.int32(sum_op))
-    inds = hpat.distributed_api.gatherv(indices)
+    n = bodo.distributed_api.dist_reduce(len(indices), np.int32(sum_op))
+    inds = bodo.distributed_api.gatherv(indices)
     if rank == 0:
         all_indices = inds
     else:
         all_indices = np.empty(n, indices.dtype)
-    hpat.distributed_api.bcast(all_indices)
+    bodo.distributed_api.bcast(all_indices)
 
-    start = hpat.distributed_api.get_start(n, n_pes, rank)
-    end = hpat.distributed_api.get_end(n, n_pes, rank)
+    start = bodo.distributed_api.get_start(n, n_pes, rank)
+    end = bodo.distributed_api.get_end(n, n_pes, rank)
     return all_indices[start:end]
 
 @intrinsic
@@ -313,6 +313,6 @@ _h5read_filter = types.ExternalFunction("hpat_h5_read_filter",
 def h5read_filter(dset_id, ndim, starts, counts, is_parallel, out_arr, read_indices):
     starts_ptr = tuple_to_ptr(starts)
     counts_ptr = tuple_to_ptr(counts)
-    type_enum = hpat.distributed_api.get_type_enum(out_arr)
+    type_enum = bodo.distributed_api.get_type_enum(out_arr)
     return _h5read_filter(dset_id, ndim, starts_ptr, counts_ptr, is_parallel,
                    out_arr.ctypes, type_enum, read_indices.ctypes, len(read_indices))

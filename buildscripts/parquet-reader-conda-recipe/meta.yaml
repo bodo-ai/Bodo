@@ -1,5 +1,5 @@
 package:
-  name: hpat-parquet-reader
+  name: bodo-parquet-reader
   version: "0.1.1"
 
 source:
@@ -20,6 +20,6 @@ requirements:
 
 
 about:
-  home: https://github.com/IntelLabs/hpat
+  home: https://github.com/IntelLabs/bodo
   license: BSD
   summary: Parquet reader for HPAT

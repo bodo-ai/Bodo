@@ -27,7 +27,7 @@ except ImportError:
     _has_opencv = False
 else:
     _has_opencv = True
-    import hpat.cv_ext
+    import bodo.cv_ext
 
 try:
     from . import hxe_ext
@@ -35,4 +35,4 @@ except ImportError:
     _has_xenon = False
 else:
     _has_xenon = True
-    import hpat.io.xenon_ext
+    import bodo.io.xenon_ext

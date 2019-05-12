@@ -4,12 +4,12 @@ import numba
 from numba import typeinfer, ir, ir_utils, config, types
 from numba.ir_utils import visit_vars_inner, replace_vars_inner
 from numba.typing import signature
-import hpat
-from hpat import distributed, distributed_analysis
-from hpat.distributed_analysis import Distribution
-from hpat.utils import debug_prints
-from hpat.str_arr_ext import string_array_type
-from hpat.hiframes.split_impl import string_array_split_view_type
+import bodo
+from bodo import distributed, distributed_analysis
+from bodo.distributed_analysis import Distribution
+from bodo.utils import debug_prints
+from bodo.str_arr_ext import string_array_type
+from bodo.hiframes.split_impl import string_array_split_view_type
 
 
 class Filter(ir.Stmt):
@@ -38,7 +38,7 @@ def filter_array_analysis(filter_node, equiv_set, typemap, array_analysis):
     post = []
     # empty filter nodes should be deleted in remove dead
     assert len(filter_node.df_in_vars) > 0, "empty filter in array analysis"
-    from hpat.str_ext import list_string_array_type
+    from bodo.str_ext import list_string_array_type
 
     # arrays of input df have same size in first dimension
     all_shapes = []
@@ -193,7 +193,7 @@ ir_utils.visit_vars_extensions[Filter] = visit_vars_filter
 
 
 def remove_dead_filter(filter_node, lives, arg_aliases, alias_map, func_ir, typemap):
-    if not hpat.hiframes.api.enable_hiframes_remove_dead:
+    if not bodo.hiframes.api.enable_hiframes_remove_dead:
         return filter_node
 
     dead_cols = []

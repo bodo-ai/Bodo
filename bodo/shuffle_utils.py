@@ -4,11 +4,11 @@ import numpy as np
 from numba import types
 from numba.extending import overload
 
-import hpat
-from hpat.utils import get_ctypes_ptr, _numba_to_c_type_map
-from hpat.timsort import getitem_arr_tup
-from hpat.str_ext import string_type
-from hpat.str_arr_ext import (string_array_type, to_string_list,
+import bodo
+from bodo.utils import get_ctypes_ptr, _numba_to_c_type_map
+from bodo.timsort import getitem_arr_tup
+from bodo.str_ext import string_type
+from bodo.str_arr_ext import (string_array_type, to_string_list,
     get_offset_ptr, get_data_ptr, convert_len_arr_to_offset,
     pre_alloc_string_array, num_total_chars)
 
@@ -130,11 +130,11 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
     func_text += "  send_counts = pre_shuffle_meta.send_counts\n"
     func_text += "  recv_counts = np.empty(n_pes, np.int32)\n"
     func_text += "  tmp_offset = np.zeros(n_pes, np.int32)\n"  # for non-contig
-    func_text += "  hpat.distributed_api.alltoall(send_counts, recv_counts, 1)\n"
+    func_text += "  bodo.distributed_api.alltoall(send_counts, recv_counts, 1)\n"
     func_text += "  n_out = recv_counts.sum()\n"
     func_text += "  n_send = send_counts.sum()\n"
-    func_text += "  send_disp = hpat.hiframes.join.calc_disp(send_counts)\n"
-    func_text += "  recv_disp = hpat.hiframes.join.calc_disp(recv_counts)\n"
+    func_text += "  send_disp = bodo.hiframes.join.calc_disp(send_counts)\n"
+    func_text += "  recv_disp = bodo.hiframes.join.calc_disp(recv_counts)\n"
 
     n_keys = len(key_arrs.types)
     n_all = len(key_arrs.types + data.types)
@@ -158,15 +158,15 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
             # send/recv counts
             func_text += "  send_counts_char_{} = pre_shuffle_meta.send_counts_char_tup[{}]\n".format(n_str, n_str)
             func_text += "  recv_counts_char_{} = np.empty(n_pes, np.int32)\n".format(n_str)
-            func_text += ("  hpat.distributed_api.alltoall("
+            func_text += ("  bodo.distributed_api.alltoall("
                 "send_counts_char_{}, recv_counts_char_{}, 1)\n").format(n_str, n_str)
             # alloc output
             func_text += "  n_all_chars = recv_counts_char_{}.sum()\n".format(n_str)
             func_text += "  out_arr_{} = pre_alloc_string_array(n_out, n_all_chars)\n".format(i)
             # send/recv disp
-            func_text += ("  send_disp_char_{} = hpat.hiframes.join."
+            func_text += ("  send_disp_char_{} = bodo.hiframes.join."
                 "calc_disp(send_counts_char_{})\n").format(n_str, n_str)
-            func_text += ("  recv_disp_char_{} = hpat.hiframes.join."
+            func_text += ("  recv_disp_char_{} = bodo.hiframes.join."
                 "calc_disp(recv_counts_char_{})\n").format(n_str, n_str)
 
             # tmp_offset_char, send_arr_lens
@@ -207,14 +207,14 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
     # print(func_text)
 
     loc_vars = {}
-    exec(func_text, {'np': np, 'hpat': hpat,
+    exec(func_text, {'np': np, 'bodo': bodo,
          'pre_alloc_string_array': pre_alloc_string_array,
          'num_total_chars': num_total_chars,
          'get_data_ptr': get_data_ptr,
          'ShuffleMeta': ShuffleMeta,
          'get_ctypes_ptr': get_ctypes_ptr,
          'fix_cat_array_type':
-         hpat.hiframes.pd_categorical_ext.fix_cat_array_type}, loc_vars)
+         bodo.hiframes.pd_categorical_ext.fix_cat_array_type}, loc_vars)
     finalize_impl = loc_vars['f']
     return finalize_impl
 
@@ -227,7 +227,7 @@ def alltoallv(arr, m):
 def alltoallv_impl(arr, metadata):
     if isinstance(arr, types.Array):
         def a2av_impl(arr, metadata):
-            hpat.distributed_api.alltoallv(
+            bodo.distributed_api.alltoallv(
                 metadata.send_buff, metadata.out_arr, metadata.send_counts,
                 metadata.recv_counts, metadata.send_disp, metadata.recv_disp)
         return a2av_impl
@@ -238,10 +238,10 @@ def alltoallv_impl(arr, metadata):
     def a2av_str_impl(arr, metadata):
         # TODO: increate refcount?
         offset_ptr = get_offset_ptr(metadata.out_arr)
-        hpat.distributed_api.c_alltoallv(
+        bodo.distributed_api.c_alltoallv(
             metadata.send_arr_lens.ctypes, offset_ptr, metadata.send_counts.ctypes,
             metadata.recv_counts.ctypes, metadata.send_disp.ctypes, metadata.recv_disp.ctypes, int32_typ_enum)
-        hpat.distributed_api.c_alltoallv(
+        bodo.distributed_api.c_alltoallv(
             metadata.send_arr_chars, get_data_ptr(metadata.out_arr), metadata.send_counts_char.ctypes,
             metadata.recv_counts_char.ctypes, metadata.send_disp_char.ctypes, metadata.recv_disp_char.ctypes, char_typ_enum)
         convert_len_arr_to_offset(offset_ptr, metadata.n_out)
@@ -258,19 +258,19 @@ def alltoallv_tup_overload(arrs, meta):
     n_str = 0
     for i, typ in enumerate(arrs.types):
         if isinstance(typ, types.Array):
-            func_text += ("  hpat.distributed_api.alltoallv("
+            func_text += ("  bodo.distributed_api.alltoallv("
                 "meta.send_buff_tup[{}], meta.out_arr_tup[{}], meta.send_counts,"
                 "meta.recv_counts, meta.send_disp, meta.recv_disp)\n").format(i, i)
         else:
             assert typ == string_array_type
             func_text += "  offset_ptr_{} = get_offset_ptr(meta.out_arr_tup[{}])\n".format(i, i)
 
-            func_text += ("  hpat.distributed_api.c_alltoallv("
+            func_text += ("  bodo.distributed_api.c_alltoallv("
                 "meta.send_arr_lens_tup[{}].ctypes, offset_ptr_{}, meta.send_counts.ctypes, "
                 "meta.recv_counts.ctypes, meta.send_disp.ctypes, "
                 "meta.recv_disp.ctypes, int32_typ_enum)\n").format(n_str, i)
 
-            func_text += ("  hpat.distributed_api.c_alltoallv("
+            func_text += ("  bodo.distributed_api.c_alltoallv("
                 "meta.send_arr_chars_tup[{}], get_data_ptr(meta.out_arr_tup[{}]), meta.send_counts_char_tup[{}].ctypes,"
                 "meta.recv_counts_char_tup[{}].ctypes, meta.send_disp_char_tup[{}].ctypes,"
                 "meta.recv_disp_char_tup[{}].ctypes, char_typ_enum)\n").format(n_str, i, n_str, n_str, n_str, n_str)
@@ -285,7 +285,7 @@ def alltoallv_tup_overload(arrs, meta):
     int32_typ_enum = np.int32(_numba_to_c_type_map[types.int32])
     char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
     loc_vars = {}
-    exec(func_text, {'hpat': hpat, 'get_offset_ptr': get_offset_ptr,
+    exec(func_text, {'bodo': bodo, 'get_offset_ptr': get_offset_ptr,
          'get_data_ptr': get_data_ptr, 'int32_typ_enum': int32_typ_enum,
          'char_typ_enum': char_typ_enum,
          'convert_len_arr_to_offset': convert_len_arr_to_offset}, loc_vars)

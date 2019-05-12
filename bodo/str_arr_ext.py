@@ -1,7 +1,7 @@
 import operator
 import numpy as np
 import numba
-import hpat
+import bodo
 from numba import types
 from numba.typing.templates import (infer_global, AbstractTemplate, infer,
     signature, AttributeTemplate, infer_getattr, bound_function)
@@ -10,7 +10,7 @@ from numba.extending import (typeof_impl, type_callable, models, register_model,
                              make_attribute_wrapper, lower_builtin, box, unbox,
                              lower_getattr, intrinsic, overload_method, overload, overload_attribute)
 from numba import cgutils
-from hpat.str_ext import string_type
+from bodo.str_ext import string_type
 from numba.targets.imputils import (impl_ret_new_ref, impl_ret_borrowed,
     iternext_impl, RefType)
 from numba.targets.hashing import _Py_hash_t
@@ -492,7 +492,7 @@ class CmpOpLTStringArray(CmpOpEqStringArray):
     key = '<'
 
 def is_str_arr_typ(typ):
-    from hpat.hiframes.pd_series_ext import is_str_series_typ
+    from bodo.hiframes.pd_series_ext import is_str_series_typ
     return typ == string_array_type or is_str_series_typ(typ)
 
 # @infer_global(len)
@@ -1182,7 +1182,7 @@ def lower_string_arr_getitem_slice(context, builder, sig, args):
 
 @numba.njit(no_cpython_wrapper=True)
 def str_arr_item_to_numeric(out_arr, out_ind, str_arr, ind):
-    return _str_arr_item_to_numeric(hpat.hiframes.split_impl.get_c_arr_ptr(
+    return _str_arr_item_to_numeric(bodo.hiframes.split_impl.get_c_arr_ptr(
         out_arr.ctypes, out_ind), str_arr, ind, out_arr.dtype)
 
 

@@ -9,7 +9,7 @@ HPAT scales analytics programs in python to cluster/cloud environments
 automatically, requiring only minimal code changes. Here is a logistic
 regression program using HPAT::
 
-    @hpat.jit
+    @bodo.jit
     def logistic_regression(iterations):
         f = h5py.File("lr.hdf5", "r")
         X = f['points'][:]

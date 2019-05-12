@@ -3,22 +3,22 @@ from numba.ir_utils import (compile_to_numba_ir, replace_arg_nodes)
 from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.extending import models, register_model, lower_builtin
-import hpat
+import bodo
 import numpy as np
 
 
 def read_ros_images(f_name):
     # implementation to enable regular python
     def f(file_name):  # pragma: no cover
-        bag = hpat.ros.open_bag(file_name)
-        num_msgs = hpat.ros.get_msg_count(bag)
-        m, n = hpat.ros.get_image_dims(bag)
-        # hpat.cprint(num_msgs, m, n)
+        bag = bodo.ros.open_bag(file_name)
+        num_msgs = bodo.ros.get_msg_count(bag)
+        m, n = bodo.ros.get_image_dims(bag)
+        # bodo.cprint(num_msgs, m, n)
         A = np.empty((num_msgs, m, n, 3), dtype=np.uint8)
-        s = hpat.ros.read_ros_images_inner(A, bag)
+        s = bodo.ros.read_ros_images_inner(A, bag)
         return A
 
-    return hpat.jit(f)(f_name)
+    return bodo.jit(f)(f_name)
 
 # inner functions
 
@@ -47,15 +47,15 @@ def _handle_read_images(lhs, rhs):
     fname = rhs.args[0]
 
     def f(file_name):  # pragma: no cover
-        bag = hpat.ros.open_bag(file_name)
-        _num_msgs = hpat.ros.get_msg_count(bag)
-        _ros_m, _ros_n = hpat.ros.get_image_dims(bag)
-        # hpat.cprint(num_msgs, m, n)
+        bag = bodo.ros.open_bag(file_name)
+        _num_msgs = bodo.ros.get_msg_count(bag)
+        _ros_m, _ros_n = bodo.ros.get_image_dims(bag)
+        # bodo.cprint(num_msgs, m, n)
         _in_ros_arr = np.empty((_num_msgs, _ros_m, _ros_n, 3), dtype=np.uint8)
-        _ret = hpat.ros.read_ros_images_inner(_in_ros_arr, bag)
+        _ret = bodo.ros.read_ros_images_inner(_in_ros_arr, bag)
 
     f_block = compile_to_numba_ir(
-        f, {'np': np, 'hpat': hpat}).blocks.popitem()[1]
+        f, {'np': np, 'bodo': bodo}).blocks.popitem()[1]
     replace_arg_nodes(f_block, [fname])
     nodes = f_block.body[:-3]  # remove none return
     A_var = nodes[-2].value.args[0]
@@ -134,7 +134,7 @@ ll.add_symbol('read_images', ros_cpp.read_images)
 ll.add_symbol('read_images_parallel', ros_cpp.read_images_parallel)
 
 
-@lower_builtin(open_bag, hpat.string_type)
+@lower_builtin(open_bag, bodo.string_type)
 def lower_open_bag(context, builder, sig, args):
     fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
                             [lir.IntType(8).as_pointer()])

@@ -11,11 +11,11 @@ from numba.ir_utils import (mk_unique_var, replace_vars_inner, find_topo_order,
 
 import numpy as np
 
-import hpat
-from hpat import utils
-import hpat.io
-from hpat.io import pio_api, pio_lower
-from hpat.utils import find_str_const, debug_prints
+import bodo
+from bodo import utils
+import bodo.io
+from bodo.io import pio_api, pio_lower
+from bodo.utils import find_str_const, debug_prints
 
 
 
@@ -45,12 +45,12 @@ class PIO(object):
             dtype_str = str(tp.dtype)
             func_text = "def _h5_read_impl(dset, index):\n"
             # TODO: index arg?
-            func_text += "  arr = hpat.io.pio_api.h5_read_dummy(dset, {}, '{}', index)\n".format(tp.ndim, dtype_str)
+            func_text += "  arr = bodo.io.pio_api.h5_read_dummy(dset, {}, '{}', index)\n".format(tp.ndim, dtype_str)
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             _h5_read_impl = loc_vars['_h5_read_impl']
             f_block = compile_to_numba_ir(
-                    _h5_read_impl, {'hpat': hpat}).blocks.popitem()[1]
+                    _h5_read_impl, {'bodo': bodo}).blocks.popitem()[1]
             index_var = rhs.index if rhs.op == 'getitem' else rhs.index_var
             replace_arg_nodes(f_block, [rhs.value, index_var])
             nodes = f_block.body[:-3]  # remove none return

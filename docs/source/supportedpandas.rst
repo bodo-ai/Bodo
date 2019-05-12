@@ -190,7 +190,7 @@ Reshaping, sorting, transposing
 
    * Arguments ``values``, ``index``, ``columns`` and ``aggfunc`` are supported.
    * Annotation of pivot values is required.
-     For example, `@hpat.jit(pivots={'pt': ['small', 'large']})` declares the output pivot table `pt` will have columns called `small` and `large`.
+     For example, `@bodo.jit(pivots={'pt': ['small', 'large']})` declares the output pivot table `pt` will have columns called `small` and `large`.
 
 * :meth:`DataFrame.sort_values` `by` argument should be constant string or constant list of strings.
 * :meth:`DataFrame.append`

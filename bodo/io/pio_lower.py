@@ -2,19 +2,19 @@ import operator
 from numba import types, cgutils
 from numba.targets.imputils import lower_builtin
 from numba.targets.arrayobj import make_array
-import hpat.io
-from hpat.io import pio_api
-from hpat.utils import _numba_to_c_type_map
-from hpat.io.pio_api import (h5file_type, h5dataset_or_group_type, h5dataset_type,
+import bodo.io
+from bodo.io import pio_api
+from bodo.utils import _numba_to_c_type_map
+from bodo.io.pio_api import (h5file_type, h5dataset_or_group_type, h5dataset_type,
                           h5group_type)
-from hpat.str_ext import string_type, gen_get_unicode_chars, gen_std_str_to_unicode
+from bodo.str_ext import string_type, gen_get_unicode_chars, gen_std_str_to_unicode
 
 from llvmlite import ir as lir
 import llvmlite.binding as ll
-import hpat.io
-if hpat.config._has_h5py:
+import bodo.io
+if bodo.config._has_h5py:
     import h5py
-    from hpat.io import _hdf5
+    from bodo.io import _hdf5
     ll.add_symbol('hpat_h5_open', _hdf5.hpat_h5_open)
     ll.add_symbol('hpat_h5_open_dset_or_group_obj', _hdf5.hpat_h5_open_dset_or_group_obj)
     ll.add_symbol('hpat_h5_size', _hdf5.hpat_h5_size)
@@ -30,7 +30,7 @@ if hpat.config._has_h5py:
 
 h5file_lir_type = lir.IntType(64)
 
-if hpat.config._has_h5py:
+if bodo.config._has_h5py:
     # hid_t is 32bit in 1.8 but 64bit in 1.10
     if h5py.version.hdf5_version_tuple[1] == 8:
         h5file_lir_type = lir.IntType(32)
@@ -50,7 +50,7 @@ def h5_open_dset_lower(context, builder, sig, args):
     return builder.call(fn, [fg_id, dset_name])
 
 
-if hpat.config._has_h5py:
+if bodo.config._has_h5py:
     @lower_builtin(h5py.File, string_type, string_type)
     @lower_builtin(h5py.File, string_type, string_type, types.int64)
     def h5_open(context, builder, sig, args):

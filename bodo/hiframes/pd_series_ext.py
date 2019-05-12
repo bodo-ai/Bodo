@@ -12,16 +12,16 @@ from numba.typing.arraydecl import (get_array_index_type, _expand_integer,
 from numba.typing.npydecl import (Numpy_rules_ufunc, NumpyRulesArrayOperator,
     NumpyRulesInplaceArrayOperator, NumpyRulesUnaryArrayOperator,
     NdConstructorLike)
-import hpat
-from hpat.str_ext import string_type, list_string_array_type
-from hpat.str_arr_ext import (string_array_type, offset_typ, char_typ,
+import bodo
+from bodo.str_ext import string_type, list_string_array_type
+from bodo.str_arr_ext import (string_array_type, offset_typ, char_typ,
     str_arr_payload_type, StringArrayType, GetItemStringArray)
-from hpat.hiframes.pd_timestamp_ext import pandas_timestamp_type, datetime_date_type
-from hpat.hiframes.pd_categorical_ext import (PDCategoricalDtype,
+from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type, datetime_date_type
+from bodo.hiframes.pd_categorical_ext import (PDCategoricalDtype,
     CategoricalArray)
-from hpat.hiframes.rolling import supported_rolling_funcs
+from bodo.hiframes.rolling import supported_rolling_funcs
 import datetime
-from hpat.hiframes.split_impl import (string_array_split_view_type,
+from bodo.hiframes.split_impl import (string_array_split_view_type,
     GetItemStringArraySplitView)
 
 
@@ -639,7 +639,7 @@ class SeriesDtMethodAttribute(AttributeTemplate):
 def resolve_date_field(self, ary):
     return SeriesType(types.int64)
 
-for field in hpat.hiframes.pd_timestamp_ext.date_fields:
+for field in bodo.hiframes.pd_timestamp_ext.date_fields:
     setattr(SeriesDtMethodAttribute, "resolve_" + field, resolve_date_field)
 
 
@@ -708,7 +708,7 @@ class GetItemSeriesIat(AbstractTemplate):
 class SeriesCompEqual(AbstractTemplate):
     key = '=='
     def generic(self, args, kws):
-        from hpat.str_arr_ext import is_str_arr_typ
+        from bodo.str_arr_ext import is_str_arr_typ
         assert not kws
         [va, vb] = args
         # if one of the inputs is string array
@@ -1018,9 +1018,9 @@ def type_sub(context):
         if is_dt64_series_typ(val1) and val2 == pandas_timestamp_type:
             return SeriesType(types.NPTimedelta('ns'))
 
-        from hpat.hiframes.pd_index_ext import DatetimeIndexType
+        from bodo.hiframes.pd_index_ext import DatetimeIndexType
         if isinstance(val1, DatetimeIndexType) and val2 == pandas_timestamp_type:
-            from hpat.hiframes.pd_index_ext import TimedeltaIndexType
+            from bodo.hiframes.pd_index_ext import TimedeltaIndexType
             return TimedeltaIndexType(False)
     return typer
 
@@ -1032,12 +1032,12 @@ def pd_series_overload(data=None, index=None, dtype=None, name=None, copy=False,
 
     if index is not None:
         return (lambda data=None, index=None, dtype=None, name=None, copy=False,
-        fastpath=False: hpat.hiframes.api.init_series(
-            hpat.hiframes.api.fix_df_array(data),
-            hpat.hiframes.api.fix_df_array(index),
+        fastpath=False: bodo.hiframes.api.init_series(
+            bodo.hiframes.api.fix_df_array(data),
+            bodo.hiframes.api.fix_df_array(index),
             name
         ))
 
     return (lambda data=None, index=None, dtype=None, name=None, copy=False,
-        fastpath=False: hpat.hiframes.api.init_series(
-            hpat.hiframes.api.fix_df_array(data), index, name))
+        fastpath=False: bodo.hiframes.api.init_series(
+            bodo.hiframes.api.fix_df_array(data), index, name))

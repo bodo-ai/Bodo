@@ -10,10 +10,10 @@ from numba.extending import (models, register_model, lower_cast, infer_getattr,
 from numba.typing.templates import (infer_global, AbstractTemplate, signature,
     AttributeTemplate, bound_function)
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
-import hpat
-from hpat.hiframes.pd_series_ext import SeriesType
-from hpat.str_ext import string_type
-from hpat.str_arr_ext import string_array_type
+import bodo
+from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.str_ext import string_type
+from bodo.str_arr_ext import string_array_type
 
 
 class DataFrameType(types.Type):  # TODO: IterableType over column names
@@ -257,7 +257,7 @@ def get_dataframe_data(df, i):
     def _impl(df, i):
         if has_parent(df) and df._unboxed[i] == 0:
             # TODO: make df refcounted to avoid repeated unboxing
-            df = hpat.hiframes.boxing.unbox_dataframe_column(df, i)
+            df = bodo.hiframes.boxing.unbox_dataframe_column(df, i)
         return df._data[i]
 
     return _impl
@@ -390,7 +390,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr):
         # call boxing for array data
         # TODO: check complex data types possible for Series for dataframes set column here
         c = numba.pythonapi._BoxContext(context, builder, pyapi, env_manager)
-        py_arr = hpat.hiframes.boxing._box_series_data(arr.dtype, arr, arr_arg, c)
+        py_arr = bodo.hiframes.boxing._box_series_data(arr.dtype, arr, arr_arg, c)
 
         # get column as string obj
         cstr = context.insert_const_string(builder.module, col_name)
@@ -425,7 +425,7 @@ def df_len_overload(df):
 def df_getitem_overload(df, ind):
     if isinstance(df, DataFrameType) and isinstance(ind, types.StringLiteral):
         index = df.columns.index(ind.literal_value)
-        return lambda df, ind: hpat.hiframes.api.init_series(df._data[index])
+        return lambda df, ind: bodo.hiframes.api.init_series(df._data[index])
 
 
 @infer_global(operator.getitem)
@@ -634,7 +634,7 @@ def merge_overload(left, right, how='inner', on=None, left_on=None,
         if on is not None:
             left_on = right_on = on
 
-        return hpat.hiframes.api.join_dummy(
+        return bodo.hiframes.api.join_dummy(
             left, right, left_on, right_on, how)
 
     return _impl
@@ -652,7 +652,7 @@ def merge_asof_overload(left, right, on=None, left_on=None, right_on=None,
         if on is not None:
             left_on = right_on = on
 
-        return hpat.hiframes.api.join_dummy(
+        return bodo.hiframes.api.join_dummy(
             left, right, left_on, right_on, 'asof')
 
     return _impl
@@ -666,7 +666,7 @@ def pivot_table_overload(df, values=None, index=None, columns=None, aggfunc='mea
             fill_value=None, margins=False, dropna=True, margins_name='All',
             _pivot_values=None):
 
-        return hpat.hiframes.pd_groupby_ext.pivot_table_dummy(
+        return bodo.hiframes.pd_groupby_ext.pivot_table_dummy(
             df, values, index, columns, aggfunc, _pivot_values)
 
     return _impl
@@ -681,7 +681,7 @@ def crosstab_overload(index, columns, values=None, rownames=None, colnames=None,
     def _impl(index, columns, values=None, rownames=None, colnames=None,
             aggfunc=None, margins=False, margins_name='All', dropna=True,
             normalize=False, _pivot_values=None):
-        return hpat.hiframes.pd_groupby_ext.crosstab_dummy(
+        return bodo.hiframes.pd_groupby_ext.crosstab_dummy(
             index, columns, _pivot_values)
     return _impl
 
@@ -694,7 +694,7 @@ def concat_overload(objs, axis=0, join='outer', join_axes=None,
     return (lambda objs, axis=0, join='outer', join_axes=None,
             ignore_index=False, keys=None, levels=None, names=None,
             verify_integrity=False, sort=None, copy=True:
-            hpat.hiframes.pd_dataframe_ext.concat_dummy(objs, axis))
+            bodo.hiframes.pd_dataframe_ext.concat_dummy(objs, axis))
 
 def concat_dummy(objs):
     return pd.concat(objs)
@@ -763,8 +763,8 @@ class ConcatDummyTyper(AbstractTemplate):
                 # TODO: fix NA column additions for other types
                 if len(arr_args) < len(objs.types):
                     arr_args.append(types.Array(types.float64, 1, 'C'))
-                # use hpat.hiframes.api.concat() typer
-                concat_typ = hpat.hiframes.api.ConcatType(
+                # use bodo.hiframes.api.concat() typer
+                concat_typ = bodo.hiframes.api.ConcatType(
                     self.context).generic((types.Tuple(arr_args),), {})
                 all_data.append(concat_typ.return_type)
 
@@ -775,7 +775,7 @@ class ConcatDummyTyper(AbstractTemplate):
         elif isinstance(objs.types[0], SeriesType):
             assert all(isinstance(t, SeriesType) for t in objs.types)
             arr_args = [S.data for S in objs.types]
-            concat_typ = hpat.hiframes.api.ConcatType(
+            concat_typ = bodo.hiframes.api.ConcatType(
                     self.context).generic((types.Tuple(arr_args),), {})
             ret_typ = SeriesType(concat_typ.return_type.dtype)
             return signature(ret_typ, *args)
@@ -798,7 +798,7 @@ def sort_values_overload(df, by, axis=0, ascending=True, inplace=False,
     def _impl(df, by, axis=0, ascending=True, inplace=False, kind='quicksort',
             na_position='last'):
 
-        return hpat.hiframes.pd_dataframe_ext.sort_values_dummy(
+        return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
             df, by, ascending, inplace)
 
     return _impl
@@ -815,7 +815,7 @@ class SortDummyTyper(AbstractTemplate):
         df, by, ascending, inplace = args
 
         # inplace value
-        if isinstance(inplace, hpat.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
@@ -865,7 +865,7 @@ def lower_set_parent_dummy(context, builder, sig, args):
 def itertuples_overload(df, index=True, name='Pandas'):
 
     def _impl(df, index=True, name='Pandas'):
-        return hpat.hiframes.pd_dataframe_ext.itertuples_dummy(df)
+        return bodo.hiframes.pd_dataframe_ext.itertuples_dummy(df)
 
     return _impl
 
@@ -881,7 +881,7 @@ class ItertuplesDummyTyper(AbstractTemplate):
         assert "Index" not in df.columns
         columns = ('Index',) + df.columns
         arr_types = (types.Array(types.int64, 1, 'C'),) + df.data
-        iter_typ = hpat.hiframes.api.DataFrameTupleIterator(columns, arr_types)
+        iter_typ = bodo.hiframes.api.DataFrameTupleIterator(columns, arr_types)
         return signature(iter_typ, *args)
 
 @lower_builtin(itertuples_dummy, types.VarArg(types.Any))
@@ -896,7 +896,7 @@ def head_overload(df, n=5):
 
     # TODO: avoid dummy and generate func here when inlining is possible
     def _impl(df, n=5):
-        return hpat.hiframes.pd_dataframe_ext.head_dummy(df, n)
+        return bodo.hiframes.pd_dataframe_ext.head_dummy(df, n)
 
     return _impl
 
@@ -927,7 +927,7 @@ def fillna_overload(df, value=None, method=None, axis=None, inplace=False,
     # TODO: inplace of df with parent that has a string column (reflection)
     def _impl(df, value=None, method=None, axis=None, inplace=False,
             limit=None, downcast=None):
-        return hpat.hiframes.pd_dataframe_ext.fillna_dummy(df, value, inplace)
+        return bodo.hiframes.pd_dataframe_ext.fillna_dummy(df, value, inplace)
 
     return _impl
 
@@ -939,7 +939,7 @@ class FillnaDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         df, value, inplace = args
         # inplace value
-        if isinstance(inplace, hpat.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
@@ -968,7 +968,7 @@ def reset_index_overload(df, level=None, drop=False, inplace=False,
     # TODO: inplace of df with parent (reflection)
     def _impl(df, level=None, drop=False, inplace=False,
             col_level=0, col_fill=''):
-        return hpat.hiframes.pd_dataframe_ext.reset_index_dummy(df, inplace)
+        return bodo.hiframes.pd_dataframe_ext.reset_index_dummy(df, inplace)
 
     return _impl
 
@@ -980,7 +980,7 @@ class ResetIndexDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         df, inplace = args
         # inplace value
-        if isinstance(inplace, hpat.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
@@ -1007,7 +1007,7 @@ def dropna_overload(df, axis=0, how='any', thresh=None, subset=None,
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: inplace of df with parent (reflection)
     def _impl(df, axis=0, how='any', thresh=None, subset=None, inplace=False):
-        return hpat.hiframes.pd_dataframe_ext.dropna_dummy(df, inplace)
+        return bodo.hiframes.pd_dataframe_ext.dropna_dummy(df, inplace)
 
     return _impl
 
@@ -1019,7 +1019,7 @@ class DropnaDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         df, inplace = args
         # inplace value
-        if isinstance(inplace, hpat.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
@@ -1047,7 +1047,7 @@ def drop_overload(df, labels=None, axis=0, index=None, columns=None,
     # TODO: inplace of df with parent (reflection)
     def _impl(df, labels=None, axis=0, index=None, columns=None,
             level=None, inplace=False, errors='raise'):
-        return hpat.hiframes.pd_dataframe_ext.drop_dummy(
+        return bodo.hiframes.pd_dataframe_ext.drop_dummy(
             df, labels, axis, columns, inplace)
 
     return _impl
@@ -1085,7 +1085,7 @@ class DropDummyTyper(AbstractTemplate):
         new_data = tuple(df.data[df.columns.index(c)] for c in new_cols)
 
         # inplace value
-        if isinstance(inplace, hpat.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
@@ -1112,7 +1112,7 @@ def lower_drop_dummy(context, builder, sig, args):
 def isin_overload(df, values):
 
     def _impl(df, values):
-        return hpat.hiframes.pd_dataframe_ext.isin_dummy(df, values)
+        return bodo.hiframes.pd_dataframe_ext.isin_dummy(df, values)
 
     return _impl
 
@@ -1158,7 +1158,7 @@ def pct_change_overload(df, periods=1, fill_method='pad', limit=None, freq=None)
     # TODO: kwargs
     # TODO: avoid dummy and generate func here when inlining is possible
     def _impl(df, periods=1, fill_method='pad', limit=None, freq=None):
-        return hpat.hiframes.pd_dataframe_ext.pct_change_dummy(df, periods)
+        return bodo.hiframes.pd_dataframe_ext.pct_change_dummy(df, periods)
 
     return _impl
 
@@ -1186,7 +1186,7 @@ def mean_overload(df, axis=None, skipna=None, level=None, numeric_only=None):
     # TODO: kwargs
     # TODO: avoid dummy and generate func here when inlining is possible
     def _impl(df, axis=None, skipna=None, level=None, numeric_only=None):
-        return hpat.hiframes.pd_dataframe_ext.mean_dummy(df)
+        return bodo.hiframes.pd_dataframe_ext.mean_dummy(df)
 
     return _impl
 
@@ -1217,7 +1217,7 @@ def std_overload(df, axis=None, skipna=None, level=None, ddof=1, numeric_only=No
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: support ddof
     def _impl(df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None):
-        return hpat.hiframes.pd_dataframe_ext.std_dummy(df)
+        return bodo.hiframes.pd_dataframe_ext.std_dummy(df)
 
     return _impl
 
@@ -1248,7 +1248,7 @@ def var_overload(df, axis=None, skipna=None, level=None, ddof=1, numeric_only=No
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: support ddof
     def _impl(df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None):
-        return hpat.hiframes.pd_dataframe_ext.var_dummy(df)
+        return bodo.hiframes.pd_dataframe_ext.var_dummy(df)
 
     return _impl
 
@@ -1278,7 +1278,7 @@ def max_overload(df, axis=None, skipna=None, level=None, numeric_only=None):
     # TODO: kwargs
     # TODO: avoid dummy and generate func here when inlining is possible
     def _impl(df, axis=None, skipna=None, level=None, numeric_only=None):
-        return hpat.hiframes.pd_dataframe_ext.max_dummy(df)
+        return bodo.hiframes.pd_dataframe_ext.max_dummy(df)
 
     return _impl
 
@@ -1308,7 +1308,7 @@ def min_overload(df, axis=None, skipna=None, level=None, numeric_only=None):
     # TODO: kwargs
     # TODO: avoid dummy and generate func here when inlining is possible
     def _impl(df, axis=None, skipna=None, level=None, numeric_only=None):
-        return hpat.hiframes.pd_dataframe_ext.min_dummy(df)
+        return bodo.hiframes.pd_dataframe_ext.min_dummy(df)
 
     return _impl
 
@@ -1339,7 +1339,7 @@ def sum_overload(df, axis=None, skipna=None, level=None, numeric_only=None,
     # TODO: avoid dummy and generate func here when inlining is possible
     def _impl(df, axis=None, skipna=None, level=None, numeric_only=None,
                                                                   min_count=0):
-        return hpat.hiframes.pd_dataframe_ext.sum_dummy(df)
+        return bodo.hiframes.pd_dataframe_ext.sum_dummy(df)
 
     return _impl
 
@@ -1352,7 +1352,7 @@ class SumDummyTyper(AbstractTemplate):
         df = args[0]
         # TODO: ignore non-numerics
         # get series sum output types
-        dtypes = tuple(hpat.hiframes.pd_series_ext.SeriesAttribute.resolve_sum(
+        dtypes = tuple(bodo.hiframes.pd_series_ext.SeriesAttribute.resolve_sum(
             self, SeriesType(d.dtype)).get_call_type(self, (), {}).return_type
             for d in df.data)
 
@@ -1375,7 +1375,7 @@ def prod_overload(df, axis=None, skipna=None, level=None, numeric_only=None,
     # TODO: avoid dummy and generate func here when inlining is possible
     def _impl(df, axis=None, skipna=None, level=None, numeric_only=None,
                                                                   min_count=0):
-        return hpat.hiframes.pd_dataframe_ext.prod_dummy(df)
+        return bodo.hiframes.pd_dataframe_ext.prod_dummy(df)
 
     return _impl
 
@@ -1388,7 +1388,7 @@ class ProdDummyTyper(AbstractTemplate):
         df = args[0]
         # TODO: ignore non-numerics
         # get series prod output types
-        dtypes = tuple(hpat.hiframes.pd_series_ext.SeriesAttribute.resolve_prod(
+        dtypes = tuple(bodo.hiframes.pd_series_ext.SeriesAttribute.resolve_prod(
             self, SeriesType(d.dtype)).get_call_type(self, (), {}).return_type
             for d in df.data)
 
@@ -1409,7 +1409,7 @@ def lower_prod_dummy(context, builder, sig, args):
 def count_overload(df, axis=0, level=None, numeric_only=False):
     # TODO: avoid dummy and generate func here when inlining is possible
     def _impl(df, axis=0, level=None, numeric_only=False):
-        return hpat.hiframes.pd_dataframe_ext.count_dummy(df)
+        return bodo.hiframes.pd_dataframe_ext.count_dummy(df)
 
     return _impl
 

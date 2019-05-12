@@ -3,12 +3,12 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: my-hpat-cluster
+  name: my-bodo-cluster
   labels:
-    app: my-hpat-test
+    app: my-bodo-test
 spec:
   selector:
-    app: my-hpat-test
+    app: my-bodo-test
   clusterIP: None
   ports:
   - name: dummy # Actually, no port is needed.
@@ -21,22 +21,22 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: my-hpat-cluster-worker
+  name: my-bodo-cluster-worker
   labels:
-    app: my-hpat-test
+    app: my-bodo-test
     role: worker
 spec:
   selector:
     matchLabels:
-      app: my-hpat-test
+      app: my-bodo-test
       role: worker
-  serviceName: my-hpat-cluster
+  serviceName: my-bodo-cluster
   podManagementPolicy: Parallel
   replicas: 2
   template:
     metadata:
       labels:
-        app: my-hpat-test
+        app: my-bodo-test
         role: worker
     spec:
       securityContext:
@@ -48,7 +48,7 @@ spec:
          readOnly: true
       containers:
       - name: mpi-worker
-        image: "ehsantn/hpat:latest"
+        image: "ehsantn/bodo:latest"
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 2022

@@ -1,10 +1,10 @@
 import numpy as np
 import time
 import pandas as pd
-import hpat
+import bodo
 
 
-@hpat.jit
+@bodo.jit
 def accel_infer(n):
 
     t1 = time.time()

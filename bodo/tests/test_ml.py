@@ -3,8 +3,8 @@ import pandas as pd
 import numpy as np
 from math import sqrt
 import numba
-import hpat
-from hpat.tests.test_utils import (count_array_REPs, count_parfor_REPs,
+import bodo
+from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
                             count_parfor_OneDs, count_array_OneDs,
                             count_parfor_OneD_Vars, count_array_OneD_Vars,
                             dist_IR_contains)
@@ -22,7 +22,7 @@ class TestML(unittest.TestCase):
                 w -= np.dot(((1.0 / (1.0 + np.exp(-Y * np.dot(X,w))) - 1.0) * Y), X)
             return w
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         d = 4
         np.testing.assert_allclose(hpat_func(n, d), test_impl(n, d))
@@ -43,7 +43,7 @@ class TestML(unittest.TestCase):
                 accuracy = np.sum(R == Y) / N
             return accuracy
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         d = 4
         np.testing.assert_approx_equal(hpat_func(n, d), test_impl(n, d))
@@ -62,7 +62,7 @@ class TestML(unittest.TestCase):
                 w -= alphaN * np.dot(X.T, np.dot(X, w) - Y)
             return w
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         d = 4
         np.testing.assert_allclose(hpat_func(n, d), test_impl(n, d))
@@ -76,14 +76,14 @@ class TestML(unittest.TestCase):
             points = np.array([-1.0, 2.0, 5.0])
             N = points.shape[0]
             exps = 0
-            for i in hpat.prange(n):
+            for i in bodo.prange(n):
                 p = X[i]
                 d = (-(p - points)**2) / (2 * b**2)
                 m = np.min(d)
                 exps += m - np.log(b * N)+np.log(np.sum(np.exp(d - m)))
             return exps
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         np.testing.assert_approx_equal(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_OneDs(), 1)
@@ -105,7 +105,7 @@ class TestML(unittest.TestCase):
 
             return centroids
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 11
         np.testing.assert_allclose(hpat_func(1, 1, n, 2), test_impl(1, 1, n, 2))
         self.assertEqual(count_array_OneDs(), 4)

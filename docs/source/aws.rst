@@ -35,11 +35,11 @@ recommended for production usage due to security, performance and other consider
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
-    conda create -n HPAT -c ehsantn -c anaconda -c conda-forge hpat
+    conda create -n HPAT -c ehsantn -c anaconda -c conda-forge bodo
     source activate HPAT
 
 
-4. Copy the `Pi example <https://github.com/IntelLabs/hpat#example>`_ to a file called pi.py in the home directory of
+4. Copy the `Pi example <https://github.com/IntelLabs/bodo#example>`_ to a file called pi.py in the home directory of
 all instances and run it with and without MPI and see execution times.
 You should see speed up when running on more cores ("-n 2" and "-n 4" cases)::
 
@@ -49,5 +49,5 @@ You should see speed up when running on more cores ("-n 2" and "-n 4" cases)::
 
 
 Possible next experiments from here are running a more complex example like the
-`logistic regression example <https://github.com/IntelLabs/hpat/blob/master/examples/logistic_regression_rand.py>`_.
+`logistic regression example <https://github.com/IntelLabs/bodo/blob/master/examples/logistic_regression_rand.py>`_.
 Furthermore, attaching a shared EFS storage volume and experimenting with parallel I/O in HPAT is recommended.

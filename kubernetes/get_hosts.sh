@@ -1,6 +1,6 @@
 # kubectl get statefulsets my-mpi-cluster-worker -o jsonpath='{.status.replicas}'
 
-pod_names=$(kubectl get pod --selector=app=my-hpat-test,role=worker -o=jsonpath='{.items[*].metadata.name}')
+pod_names=$(kubectl get pod --selector=app=my-bodo-test,role=worker -o=jsonpath='{.items[*].metadata.name}')
 
 if [ -f hostfile ]; then
   rm hostfile

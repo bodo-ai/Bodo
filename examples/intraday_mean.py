@@ -2,15 +2,15 @@ import pandas as pd
 import numpy as np
 import h5py
 import time
-import hpat
-from hpat import prange
+import bodo
+from bodo import prange
 
 # adopted from:
 # http://www.pythonforfinance.net/2017/02/20/intraday-stock-mean-reversion-trading-backtest-in-python/
 
-@hpat.jit(locals={'s_open': hpat.float64[:], 's_high': hpat.float64[:],
-        's_low': hpat.float64[:], 's_close': hpat.float64[:],
-        's_vol': hpat.float64[:]})
+@bodo.jit(locals={'s_open': bodo.float64[:], 's_high': bodo.float64[:],
+        's_low': bodo.float64[:], 's_close': bodo.float64[:],
+        's_vol': bodo.float64[:]})
 def intraday_mean_revert():
     file_name = "stock_data_all_google.hdf5"
     f = h5py.File(file_name, "r")

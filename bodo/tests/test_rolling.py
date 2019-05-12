@@ -4,10 +4,10 @@ import os
 import pandas as pd
 import numpy as np
 import numba
-import hpat
-from hpat.tests.test_utils import (count_array_REPs, count_parfor_REPs,
+import bodo
+from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, dist_IR_contains)
-from hpat.hiframes.rolling import supported_rolling_funcs
+from bodo.hiframes.rolling import supported_rolling_funcs
 
 LONG_TEST = (int(os.environ['HPAT_LONG_ROLLING_TEST']) != 0
              if 'HPAT_LONG_ROLLING_TEST' in os.environ else False)
@@ -31,7 +31,7 @@ class TestRolling(unittest.TestCase):
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars['test_impl']
-            hpat_func = hpat.jit(test_impl)
+            hpat_func = bodo.jit(test_impl)
 
             for args in itertools.product(wins, centers):
                 df = pd.DataFrame({'B': [0, 1, 2, np.nan, 4]})
@@ -52,7 +52,7 @@ class TestRolling(unittest.TestCase):
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars['test_impl']
-            hpat_func = hpat.jit(test_impl)
+            hpat_func = bodo.jit(test_impl)
             for n, w, c in itertools.product(sizes, wins, centers):
                 df = pd.DataFrame({'B': np.arange(n)})
                 pd.testing.assert_frame_equal(hpat_func(df, w, c), test_impl(df, w, c))
@@ -61,7 +61,7 @@ class TestRolling(unittest.TestCase):
         # test sequentially with manually created dfs
         def test_impl(df, w, c):
             return df.rolling(w, center=c).apply(lambda a: a.sum())
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         wins = (3,)
         if LONG_TEST:
             wins = (2, 3, 5)
@@ -76,7 +76,7 @@ class TestRolling(unittest.TestCase):
         # test sequentially with generated dfs
         def test_impl(df, w, c):
             return df.rolling(w, center=c).apply(lambda a: a.sum())
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         sizes = (121,)
         wins = (3,)
         if LONG_TEST:
@@ -93,7 +93,7 @@ class TestRolling(unittest.TestCase):
             R = df.rolling(w, center=center).sum()
             return R.B.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         sizes = (121,)
         wins = (5,)
         if LONG_TEST:
@@ -112,7 +112,7 @@ class TestRolling(unittest.TestCase):
             R = df.rolling(w, center=center).apply(lambda a: a.sum())
             return R.B.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         sizes = (121,)
         wins = (5,)
         if LONG_TEST:
@@ -148,7 +148,7 @@ class TestRolling(unittest.TestCase):
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars['test_impl']
-            hpat_func = hpat.jit(test_impl)
+            hpat_func = bodo.jit(test_impl)
             # XXX: skipping min/max for this test since the behavior of Pandas
             # is inconsistent: it assigns NaN to last output instead of 4!
             if func_name not in ('min', 'max'):
@@ -168,7 +168,7 @@ class TestRolling(unittest.TestCase):
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars['test_impl']
-            hpat_func = hpat.jit(test_impl)
+            hpat_func = bodo.jit(test_impl)
             for n in sizes:
                 time = pd.date_range(start='1/1/2018', periods=n, freq='s')
                 df = pd.DataFrame({'B': np.arange(n), 'time': time})
@@ -197,7 +197,7 @@ class TestRolling(unittest.TestCase):
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars['test_impl']
-            hpat_func = hpat.jit(test_impl)
+            hpat_func = bodo.jit(test_impl)
             pd.testing.assert_frame_equal(hpat_func(df1), test_impl(df1))
             pd.testing.assert_frame_equal(hpat_func(df2), test_impl(df2))
 
@@ -215,7 +215,7 @@ class TestRolling(unittest.TestCase):
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars['test_impl']
-            hpat_func = hpat.jit(test_impl)
+            hpat_func = bodo.jit(test_impl)
             for n in sizes:
                 time = pd.date_range(start='1/1/2018', periods=n, freq='s')
                 df = pd.DataFrame({'B': np.arange(n), 'time': time})
@@ -238,7 +238,7 @@ class TestRolling(unittest.TestCase):
             loc_vars = {}
             exec(func_text, {'pd': pd, 'np': np}, loc_vars)
             test_impl = loc_vars['test_impl']
-            hpat_func = hpat.jit(test_impl)
+            hpat_func = bodo.jit(test_impl)
             for n in sizes:
                 np.testing.assert_almost_equal(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -261,7 +261,7 @@ class TestRolling(unittest.TestCase):
             loc_vars = {}
             exec(func_text, {'pd': pd, 'np': np}, loc_vars)
             test_impl = loc_vars['test_impl']
-            hpat_func = hpat.jit(test_impl)
+            hpat_func = bodo.jit(test_impl)
             for n in sizes:
                 np.testing.assert_almost_equal(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -281,14 +281,14 @@ class TestRolling(unittest.TestCase):
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars['test_impl']
-            hpat_func = hpat.jit(test_impl)
+            hpat_func = bodo.jit(test_impl)
             for args in itertools.product(wins, centers):
                 pd.testing.assert_series_equal(hpat_func(S1, *args), test_impl(S1, *args))
                 pd.testing.assert_series_equal(hpat_func(S2, *args), test_impl(S2, *args))
         # test apply
         def apply_test_impl(S, w, c):
             return S.rolling(w, center=c).apply(lambda a: a.sum())
-        hpat_func = hpat.jit(apply_test_impl)
+        hpat_func = bodo.jit(apply_test_impl)
         for args in itertools.product(wins, centers):
             pd.testing.assert_series_equal(hpat_func(S1, *args), apply_test_impl(S1, *args))
             pd.testing.assert_series_equal(hpat_func(S2, *args), apply_test_impl(S2, *args))
@@ -304,13 +304,13 @@ class TestRolling(unittest.TestCase):
         centers = (False, True)
         def test_impl(S, S2, w, c):
             return S.rolling(w, center=c).cov(S2)
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         for args in itertools.product([S1, S2], [S1, S2], wins, centers):
             pd.testing.assert_series_equal(hpat_func(*args), test_impl(*args))
             pd.testing.assert_series_equal(hpat_func(*args), test_impl(*args))
         def test_impl2(S, S2, w, c):
             return S.rolling(w, center=c).corr(S2)
-        hpat_func = hpat.jit(test_impl2)
+        hpat_func = bodo.jit(test_impl2)
         for args in itertools.product([S1, S2], [S1, S2], wins, centers):
             pd.testing.assert_series_equal(hpat_func(*args), test_impl2(*args))
             pd.testing.assert_series_equal(hpat_func(*args), test_impl2(*args))
@@ -326,13 +326,13 @@ class TestRolling(unittest.TestCase):
         centers = (False, True)
         def test_impl(df, df2, w, c):
             return df.rolling(w, center=c).cov(df2)
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         for args in itertools.product([df1, df2], [df1, df2], wins, centers):
             pd.testing.assert_frame_equal(hpat_func(*args), test_impl(*args))
             pd.testing.assert_frame_equal(hpat_func(*args), test_impl(*args))
         def test_impl2(df, df2, w, c):
             return df.rolling(w, center=c).corr(df2)
-        hpat_func = hpat.jit(test_impl2)
+        hpat_func = bodo.jit(test_impl2)
         for args in itertools.product([df1, df2], [df1, df2], wins, centers):
             pd.testing.assert_frame_equal(hpat_func(*args), test_impl2(*args))
             pd.testing.assert_frame_equal(hpat_func(*args), test_impl2(*args))

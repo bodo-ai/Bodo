@@ -1,14 +1,14 @@
 import pandas as pd
 import numpy as np
-import hpat
+import bodo
 
-@hpat.jit
+@bodo.jit
 def shift_df1(n):
     df = pd.DataFrame({'A': np.arange(n)+1.0, 'B': np.random.ranf(n)})
     Ac = df.A.shift(1)
     return Ac.sum()
 
-@hpat.jit
+@bodo.jit
 def shift_df2(n):
     df = pd.DataFrame({'A': np.arange(n)+1.0, 'B': np.random.ranf(n)})
     Ac = df.A.pct_change()

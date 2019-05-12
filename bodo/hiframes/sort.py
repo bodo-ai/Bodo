@@ -8,25 +8,25 @@ from numba.ir_utils import (visit_vars_inner, replace_vars_inner,
                             mk_unique_var)
 from numba.typing import signature
 from numba.extending import overload
-import hpat
-import hpat.timsort
-from hpat.timsort import getitem_arr_tup
-from hpat.utils import _numba_to_c_type_map
-from hpat import distributed, distributed_analysis
-from hpat.distributed_api import Reduce_Type
-from hpat.distributed_analysis import Distribution
-from hpat.utils import (debug_prints, empty_like_type, get_ctypes_ptr,
+import bodo
+import bodo.timsort
+from bodo.timsort import getitem_arr_tup
+from bodo.utils import _numba_to_c_type_map
+from bodo import distributed, distributed_analysis
+from bodo.distributed_api import Reduce_Type
+from bodo.distributed_analysis import Distribution
+from bodo.utils import (debug_prints, empty_like_type, get_ctypes_ptr,
     gen_getitem)
 
-from hpat.shuffle_utils import (alltoallv, alltoallv_tup,
+from bodo.shuffle_utils import (alltoallv, alltoallv_tup,
     finalize_shuffle_meta, update_shuffle_meta,  alloc_pre_shuffle_metadata,
     _get_keys_tup, _get_data_tup)
 
-from hpat.str_arr_ext import (string_array_type, to_string_list,
+from bodo.str_arr_ext import (string_array_type, to_string_list,
                               cp_str_list_to_array, str_list_to_array,
                               get_offset_ptr, get_data_ptr, convert_len_arr_to_offset,
                               pre_alloc_string_array, num_total_chars)
-from hpat.str_ext import string_type
+from bodo.str_ext import string_type
 
 
 MIN_SAMPLES = 1000000
@@ -192,7 +192,7 @@ ir_utils.visit_vars_extensions[Sort] = visit_vars_sort
 
 def remove_dead_sort(sort_node, lives, arg_aliases, alias_map, func_ir, typemap):
     # TODO: remove this feature
-    if not hpat.hiframes.api.enable_hiframes_remove_dead:
+    if not bodo.hiframes.api.enable_hiframes_remove_dead:
         return sort_node
 
     # TODO: arg aliases for inplace case?
@@ -303,7 +303,7 @@ def sort_distributed_run(sort_node, array_dists, typemap, calltypes, typingctx,
     func_text += "  key_arrs = ({},)\n".format(key_name_args)
     func_text += "  data = ({}{})\n".format(col_name_args,
         "," if len(in_vars) == 1 else "")  # single value needs comma to become tuple
-    func_text += "  hpat.hiframes.sort.local_sort(key_arrs, data, {})\n".format(sort_node.ascending)
+    func_text += "  bodo.hiframes.sort.local_sort(key_arrs, data, {})\n".format(sort_node.ascending)
     func_text += "  return key_arrs, data\n"
 
     loc_vars = {}
@@ -314,7 +314,7 @@ def sort_distributed_run(sort_node, array_dists, typemap, calltypes, typingctx,
     data_tup_typ = types.Tuple([typemap[v.name] for v in in_vars])
 
     f_block = compile_to_numba_ir(sort_impl,
-                                    {'hpat': hpat,
+                                    {'bodo': bodo,
                                     'to_string_list': to_string_list,
                                     'cp_str_list_to_array': cp_str_list_to_array},
                                     typingctx,
@@ -349,11 +349,11 @@ def sort_distributed_run(sort_node, array_dists, typemap, calltypes, typingctx,
         out_key, out_data = parallel_sort(key_arrs, data, ascending)
         # TODO: use k-way merge instead of sort
         # sort output
-        hpat.hiframes.sort.local_sort(out_key, out_data, ascending)
+        bodo.hiframes.sort.local_sort(out_key, out_data, ascending)
         return out_key, out_data
 
     f_block = compile_to_numba_ir(par_sort_impl,
-                                    {'hpat': hpat,
+                                    {'bodo': bodo,
                                     'parallel_sort': parallel_sort,
                                     'to_string_list': to_string_list,
                                     'cp_str_list_to_array': cp_str_list_to_array},
@@ -397,7 +397,7 @@ def _copy_array_nodes(var, nodes, typingctx, typemap, calltypes):
 
 def to_string_list_typ(typ):
     if typ == string_array_type:
-        return types.List(hpat.str_ext.string_type)
+        return types.List(bodo.str_ext.string_type)
 
     if isinstance(typ, (types.Tuple, types.UniTuple)):
         new_typs = []
@@ -415,9 +415,9 @@ def local_sort(key_arrs, data, ascending=True):
     l_key_arrs = to_string_list(key_arrs)
     l_data = to_string_list(data)
     n_out = len(key_arrs[0])
-    hpat.timsort.sort(l_key_arrs, 0, n_out, l_data)
+    bodo.timsort.sort(l_key_arrs, 0, n_out, l_data)
     if not ascending:
-        hpat.timsort.reverseRange(l_key_arrs, 0, n_out, l_data)
+        bodo.timsort.reverseRange(l_key_arrs, 0, n_out, l_data)
     cp_str_list_to_array(key_arrs, l_key_arrs)
     cp_str_list_to_array(data, l_data)
 
@@ -425,10 +425,10 @@ def local_sort(key_arrs, data, ascending=True):
 @numba.njit(no_cpython_wrapper=True, cache=True)
 def parallel_sort(key_arrs, data, ascending=True):
     n_local = len(key_arrs[0])
-    n_total = hpat.distributed_api.dist_reduce(n_local, np.int32(Reduce_Type.Sum.value))
+    n_total = bodo.distributed_api.dist_reduce(n_local, np.int32(Reduce_Type.Sum.value))
 
-    n_pes = hpat.distributed_api.get_size()
-    my_rank = hpat.distributed_api.get_rank()
+    n_pes = bodo.distributed_api.get_size()
+    my_rank = bodo.distributed_api.get_rank()
 
     # similar to Spark's sample computation Partitioner.scala
     sampleSize = min(samplePointsPerPartitionHint * n_pes, MIN_SAMPLES)
@@ -439,7 +439,7 @@ def parallel_sort(key_arrs, data, ascending=True):
     samples = key_arrs[0][inds]
     # print(sampleSize, fraction, n_local, n_loc_samples, len(samples))
 
-    all_samples = hpat.distributed_api.gatherv(samples)
+    all_samples = bodo.distributed_api.gatherv(samples)
     all_samples = to_string_list(all_samples)
     bounds = empty_like_type(n_pes-1, all_samples)
 
@@ -454,8 +454,8 @@ def parallel_sort(key_arrs, data, ascending=True):
         # print(bounds)
 
     bounds = str_list_to_array(bounds)
-    bounds = hpat.distributed_api.prealloc_str_for_bcast(bounds)
-    hpat.distributed_api.bcast(bounds)
+    bounds = bodo.distributed_api.prealloc_str_for_bcast(bounds)
+    bodo.distributed_api.bcast(bounds)
 
     # calc send/recv counts
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, True)

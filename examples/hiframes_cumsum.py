@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
-import hpat
+import bodo
 
-@hpat.jit
+@bodo.jit
 def cumsum_df(n):
     df = pd.DataFrame({'A': np.arange(n)+1.0, 'B': np.random.ranf(n)})
     Ac = df.A.cumsum()
@@ -10,4 +10,4 @@ def cumsum_df(n):
 
 n = 10
 print(cumsum_df(n))
-hpat.distribution_report()
+bodo.distribution_report()

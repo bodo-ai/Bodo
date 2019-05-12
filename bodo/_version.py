@@ -42,8 +42,8 @@ def get_config():
     cfg.VCS = "git"
     cfg.style = "pep440"
     cfg.tag_prefix = ""
-    cfg.parentdir_prefix = "hpat-"
-    cfg.versionfile_source = "hpat/_version.py"
+    cfg.parentdir_prefix = "bodo-"
+    cfg.versionfile_source = "bodo/_version.py"
     cfg.verbose = False
     return cfg
 

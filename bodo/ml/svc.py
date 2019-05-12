@@ -1,6 +1,6 @@
 import numba
-import hpat
-from hpat.utils import debug_prints
+import bodo
+from bodo.utils import debug_prints
 from numba import types
 from numba.typing.templates import (infer_global, AbstractTemplate, infer,
                     signature, AttributeTemplate, infer_getattr, bound_function)

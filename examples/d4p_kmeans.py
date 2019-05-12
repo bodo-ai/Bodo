@@ -1,9 +1,9 @@
 import daal4py
-import daal4py.hpat
-import hpat
+import daal4py.bodo
+import bodo
 import numpy as np
 
-@hpat.jit(nopython=True)
+@bodo.jit(nopython=True)
 def kmeans(N, D, nClusters, maxit):
     a = np.random.ranf((N,D)) # doesn't make much sense, but ok for now
     kmi = daal4py.kmeans_init(nClusters, method='plusPlusDense')
@@ -13,4 +13,4 @@ def kmeans(N, D, nClusters, maxit):
 
 print(kmeans(10000, 20, 2, 30))
 
-hpat.distribution_report()
+bodo.distribution_report()

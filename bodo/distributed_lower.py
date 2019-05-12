@@ -7,10 +7,10 @@ import numba.targets.arrayobj
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 from numba.typing.builtins import IndexValueType
 import numpy as np
-import hpat
-from hpat import distributed_api
-from hpat.utils import _numba_to_c_type_map
-from hpat.distributed_api import mpi_req_numba_type, ReqArrayType, req_array_type
+import bodo
+from bodo import distributed_api
+from bodo.utils import _numba_to_c_type_map
+from bodo.distributed_api import mpi_req_numba_type, ReqArrayType, req_array_type
 import time
 from llvmlite import ir as lir
 from . import hdist
@@ -308,8 +308,8 @@ def lower_dist_rebalance_array_parallel(context, builder, sig, args):
     alloc_text = "np.empty(({}), in_arr.dtype)".format(shape_tup)
 
     func_text = """def f(in_arr, count):
-    n_pes = hpat.distributed_api.get_size()
-    my_rank = hpat.distributed_api.get_rank()
+    n_pes = bodo.distributed_api.get_size()
+    my_rank = bodo.distributed_api.get_rank()
     out_arr = {}
     # copy old data
     old_len = len(in_arr)
@@ -320,10 +320,10 @@ def lower_dist_rebalance_array_parallel(context, builder, sig, args):
     # get diff data for all procs
     my_diff = old_len - count
     all_diffs = np.empty(n_pes, np.int64)
-    hpat.distributed_api.allgather(all_diffs, my_diff)
+    bodo.distributed_api.allgather(all_diffs, my_diff)
     # alloc comm requests
     comm_req_ind = 0
-    comm_reqs = hpat.distributed_api.comm_req_alloc(n_pes)
+    comm_reqs = bodo.distributed_api.comm_req_alloc(n_pes)
     req_ind = 0
     # for each potential receiver
     for i in range(n_pes):
@@ -337,14 +337,14 @@ def lower_dist_rebalance_array_parallel(context, builder, sig, args):
                     # if I'm receiver
                     if my_rank == i:
                         buff = out_arr[out_ind:(out_ind+send_size)]
-                        comm_reqs[comm_req_ind] = hpat.distributed_api.irecv(
+                        comm_reqs[comm_req_ind] = bodo.distributed_api.irecv(
                             buff, np.int32(buff.size), np.int32(j), np.int32(9))
                         comm_req_ind += 1
                         out_ind += send_size
                     # if I'm sender
                     if my_rank == j:
                         buff = np.ascontiguousarray(in_arr[out_ind:(out_ind+send_size)])
-                        comm_reqs[comm_req_ind] = hpat.distributed_api.isend(
+                        comm_reqs[comm_req_ind] = bodo.distributed_api.isend(
                             buff, np.int32(buff.size), np.int32(i), np.int32(9))
                         comm_req_ind += 1
                         out_ind += send_size
@@ -353,13 +353,13 @@ def lower_dist_rebalance_array_parallel(context, builder, sig, args):
                     all_diffs[j] -= send_size
                     # if receiver is done, stop sender search
                     if all_diffs[i] == 0: break
-    hpat.distributed_api.waitall(np.int32(comm_req_ind), comm_reqs)
-    hpat.distributed_api.comm_req_dealloc(comm_reqs)
+    bodo.distributed_api.waitall(np.int32(comm_req_ind), comm_reqs)
+    bodo.distributed_api.comm_req_dealloc(comm_reqs)
     return out_arr
     """.format(alloc_text)
 
     loc = {}
-    exec(func_text, {'hpat': hpat, 'np': np}, loc)
+    exec(func_text, {'bodo': bodo, 'np': np}, loc)
     rebalance_impl = loc['f']
 
     res = context.compile_internal(builder, rebalance_impl, sig, args)

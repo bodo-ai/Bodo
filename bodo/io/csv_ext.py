@@ -5,23 +5,23 @@ from numba.typing.templates import signature
 from numba.extending import overload, intrinsic, register_model, models, box
 from numba.ir_utils import (visit_vars_inner, replace_vars_inner,
                             compile_to_numba_ir, replace_arg_nodes)
-import hpat
-from hpat import distributed, distributed_analysis
-from hpat.utils import debug_prints, alloc_arr_tup, empty_like_type
-from hpat.distributed_analysis import Distribution
-from hpat.str_ext import string_type
-from hpat.str_arr_ext import (string_array_type, to_string_list,
+import bodo
+from bodo import distributed, distributed_analysis
+from bodo.utils import debug_prints, alloc_arr_tup, empty_like_type
+from bodo.distributed_analysis import Distribution
+from bodo.str_ext import string_type
+from bodo.str_arr_ext import (string_array_type, to_string_list,
                               cp_str_list_to_array, str_list_to_array,
                               get_offset_ptr, get_data_ptr, convert_len_arr_to_offset,
                               pre_alloc_string_array, num_total_chars,
                               getitem_str_offset, copy_str_arr_slice)
-from hpat.timsort import copyElement_tup, getitem_arr_tup
-from hpat.utils import _numba_to_c_type_map
-from hpat import objmode
+from bodo.timsort import copyElement_tup, getitem_arr_tup
+from bodo.utils import _numba_to_c_type_map
+from bodo import objmode
 import pandas as pd
 import numpy as np
 
-from hpat.hiframes.pd_categorical_ext import (PDCategoricalDtype,
+from bodo.hiframes.pd_categorical_ext import (PDCategoricalDtype,
     CategoricalArray)
 
 
@@ -232,10 +232,10 @@ def csv_distributed_run(csv_node, array_dists, typemap, calltypes, typingctx, ta
     # get global array sizes by calling allreduce on chunk lens
     # TODO: get global size from C
     for arr in csv_node.out_vars:
-        f = lambda A: hpat.distributed_api.dist_reduce(len(A), np.int32(_op))
+        f = lambda A: bodo.distributed_api.dist_reduce(len(A), np.int32(_op))
         f_block = compile_to_numba_ir(
-            f, {'hpat': hpat, 'np': np,
-            '_op': hpat.distributed_api.Reduce_Type.Sum.value},
+            f, {'bodo': bodo, 'np': np,
+            '_op': bodo.distributed_api.Reduce_Type.Sum.value},
             typingctx, (typemap[arr.name],), typemap, calltypes).blocks.popitem()[1]
         replace_arg_nodes(f_block, [arr])
         nodes += f_block.body[:-2]
@@ -243,7 +243,7 @@ def csv_distributed_run(csv_node, array_dists, typemap, calltypes, typingctx, ta
         dist_pass._array_sizes[arr.name] = [size_var]
         out, start_var, end_var = dist_pass._gen_1D_div(
             size_var, arr.scope, csv_node.loc, "$alloc", "get_node_portion",
-            hpat.distributed_api.get_node_portion)
+            bodo.distributed_api.get_node_portion)
         dist_pass._array_starts[arr.name] = [start_var]
         dist_pass._array_counts[arr.name] = [end_var]
         nodes += out

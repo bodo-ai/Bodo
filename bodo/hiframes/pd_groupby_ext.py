@@ -9,12 +9,12 @@ from numba.extending import (models, register_model, lower_cast, infer_getattr,
 from numba.typing.templates import (infer_global, AbstractTemplate, signature,
     AttributeTemplate, bound_function)
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
-import hpat
-from hpat.hiframes.pd_series_ext import (SeriesType, _get_series_array_type,
+import bodo
+from bodo.hiframes.pd_series_ext import (SeriesType, _get_series_array_type,
     arr_to_series_type)
-from hpat.str_ext import string_type
-from hpat.hiframes.pd_dataframe_ext import DataFrameType
-from hpat.hiframes.aggregate import get_agg_func
+from bodo.str_ext import string_type
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.aggregate import get_agg_func
 
 
 class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
@@ -53,7 +53,7 @@ def df_groupby_overload(df, by=None, axis=0, level=None, as_index=True,
 
     def _impl(df, by=None, axis=0, level=None, as_index=True,
             sort=True, group_keys=True, squeeze=False, observed=False):
-        return hpat.hiframes.pd_groupby_ext.groupby_dummy(df, by, as_index)
+        return bodo.hiframes.pd_groupby_ext.groupby_dummy(df, by, as_index)
 
     return _impl
 
@@ -78,7 +78,7 @@ class GroupbyTyper(AbstractTemplate):
         for k in keys:
             selection.remove(k)
 
-        if isinstance(as_index, hpat.utils.BooleanLiteral):
+        if isinstance(as_index, bodo.utils.BooleanLiteral):
             as_index = as_index.literal_value
         else:
             # XXX as_index type is just bool when value not passed. Therefore,
@@ -123,7 +123,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     def _get_agg_typ(self, grp, args, code):
         f_ir = numba.ir_utils.get_ir_of_code(
-            {'np': np, 'numba': numba, 'hpat': hpat}, code)
+            {'np': np, 'numba': numba, 'bodo': bodo}, code)
         out_data = []
         out_columns = []
         # add key columns of not as_index
@@ -225,7 +225,7 @@ class PivotTyper(AbstractTemplate):
         data = df.data[df.columns.index(values)]
         func = get_agg_func(None, aggfunc.literal_value, None)
         f_ir = numba.ir_utils.get_ir_of_code(
-            {'np': np, 'numba': numba, 'hpat': hpat}, func.__code__)
+            {'np': np, 'numba': numba, 'bodo': bodo}, func.__code__)
         _, out_dtype, _ = numba.compiler.type_inference_stage(
             self.context, f_ir, (data,), None)
         out_arr_typ = _get_series_array_type(out_dtype)

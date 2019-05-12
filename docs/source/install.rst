@@ -6,10 +6,10 @@ Installing HPAT
 HPAT can be installed in `Anaconda <https://www.anaconda.com/download/>`_ environment
 easily. On Linux/Mac/Windows::
 
-    conda create -n HPAT -c ehsantn -c anaconda -c conda-forge hpat
+    conda create -n HPAT -c ehsantn -c anaconda -c conda-forge bodo
 
-.. used if master of Numba is needed for latest hpat package
-.. conda create -n HPAT -c ehsantn -c numba/label/dev -c anaconda -c conda-forge hpat
+.. used if master of Numba is needed for latest bodo package
+.. conda create -n HPAT -c ehsantn -c numba/label/dev -c anaconda -c conda-forge bodo
 
 Windows installaton requires
 `Intel MPI <https://software.intel.com/en-us/intel-mpi-library>`_ to be
@@ -33,8 +33,8 @@ such as Numba on Ubuntu Linux::
     conda install pyarrow
     conda install h5py -c ehsantn
     conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64
-    git clone https://github.com/IntelLabs/hpat
-    cd hpat
+    git clone https://github.com/IntelLabs/bodo
+    cd bodo
     # build HPAT
     HDF5_DIR=$CONDA_PREFIX python setup.py develop
 
@@ -46,7 +46,7 @@ A command line for running the Pi example on 4 cores::
 Running unit tests::
 
     conda install pyspark
-    python hpat/tests/gen_test_data.py
+    python bodo/tests/gen_test_data.py
     python -m unittest
 
 In case of issues, reinstalling in a new conda environment is recommended.
@@ -68,8 +68,8 @@ Building HPAT on Windows requires Build Tools for Visual Studio 2017 (14.0) and 
     conda create -n HPAT -c ehsantn -c numba/label/dev -c anaconda -c conda-forge python=3.7 pandas pyarrow h5py numba scipy boost libboost tbb-devel mkl-devel
     activate HPAT
     conda install vc vs2015_runtime vs2015_win-64
-    git clone https://github.com/IntelLabs/hpat.git
-    cd hpat
+    git clone https://github.com/IntelLabs/bodo.git
+    cd bodo
     set INCLUDE=%INCLUDE%;%CONDA_PREFIX%\Library\include
     set LIB=%LIB%;%CONDA_PREFIX%\Library\lib
     "%I_MPI_ROOT%"\intel64\bin\mpivars.bat

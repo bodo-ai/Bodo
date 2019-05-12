@@ -23,23 +23,23 @@ from numba.parfor import (get_parfor_reductions, get_parfor_params,
 from numba.parfor import Parfor, lower_parfor_sequential
 import numpy as np
 
-import hpat
-from hpat.io.pio_api import h5file_type, h5group_type
-from hpat import (distributed_api,
+import bodo
+from bodo.io.pio_api import h5file_type, h5group_type
+from bodo import (distributed_api,
                   distributed_lower)  # import lower for module initialization
-from hpat.str_ext import string_type
-from hpat.str_arr_ext import string_array_type
-from hpat.distributed_analysis import (Distribution,
+from bodo.str_ext import string_type
+from bodo.str_arr_ext import string_array_type
+from bodo.distributed_analysis import (Distribution,
                                        DistributedAnalysis)
 
 # from mpi4py import MPI
-import hpat.utils
-from hpat.utils import (is_alloc_callname, is_whole_slice, is_array_container,
+import bodo.utils
+from bodo.utils import (is_alloc_callname, is_whole_slice, is_array_container,
                         get_slice_step, is_array, is_np_array, find_build_tuple,
                         debug_prints, ReplaceFunc, gen_getitem, is_call,
                         is_const_slice)
-from hpat.distributed_api import Reduce_Type
-from hpat.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.distributed_api import Reduce_Type
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
 distributed_run_extensions = {}
 
@@ -103,7 +103,7 @@ class DistributedPass(object):
         dprint_func_ir(self.func_ir, "after distributed pass")
         lower_parfor_sequential(
             self.typingctx, self.func_ir, self.typemap, self.calltypes)
-        if hpat.multithread_mode:
+        if bodo.multithread_mode:
             # parfor params need to be updated for multithread_mode since some
             # new variables like alloc_start are introduced by distributed pass
             # and are used in later parfors
@@ -289,8 +289,8 @@ class DistributedPass(object):
     def _gen_1D_Var_len(self, arr):
         def f(A, op):  # pragma: no cover
             c = len(A)
-            res = hpat.distributed_api.dist_reduce(c, op)
-        f_block = compile_to_numba_ir(f, {'hpat': hpat}, self.typingctx,
+            res = bodo.distributed_api.dist_reduce(c, op)
+        f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
                                       (self.typemap[arr.name], types.int32),
                                       self.typemap, self.calltypes).blocks.popitem()[1]
         replace_arg_nodes(
@@ -314,11 +314,11 @@ class DistributedPass(object):
         self.typemap[self._set0_var.name] = types.int64
         set0_assign = ir.Assign(ir.Const(0, loc), self._set0_var, loc)
         out.append(set0_assign)
-        # g_dist_var = Global(hpat.distributed_api)
+        # g_dist_var = Global(bodo.distributed_api)
         g_dist_var = ir.Var(scope, mk_unique_var("$distributed_g_var"), loc)
         self._g_dist_var = g_dist_var
-        self.typemap[g_dist_var.name] = types.misc.Module(hpat.distributed_api)
-        g_dist = ir.Global('distributed_api', hpat.distributed_api, loc)
+        self.typemap[g_dist_var.name] = types.misc.Module(bodo.distributed_api)
+        g_dist = ir.Global('distributed_api', bodo.distributed_api, loc)
         g_dist_assign = ir.Assign(g_dist, g_dist_var, loc)
         # attr call: rank_attr = getattr(g_dist_var, get_rank)
         rank_attr_call = ir.Expr.getattr(g_dist_var, "get_rank", loc)
@@ -326,7 +326,7 @@ class DistributedPass(object):
         self.typemap[rank_attr_var.name] = get_global_func_typ(
             distributed_api.get_rank)
         rank_attr_assign = ir.Assign(rank_attr_call, rank_attr_var, loc)
-        # rank_var = hpat.distributed_api.get_rank()
+        # rank_var = bodo.distributed_api.get_rank()
         rank_var = ir.Var(scope, mk_unique_var("$rank"), loc)
         self.typemap[rank_var.name] = types.int32
         rank_call = ir.Expr.call(rank_attr_var, [], (), loc)
@@ -342,7 +342,7 @@ class DistributedPass(object):
         self.typemap[size_attr_var.name] = get_global_func_typ(
             distributed_api.get_size)
         size_attr_assign = ir.Assign(size_attr_call, size_attr_var, loc)
-        # size_var = hpat.distributed_api.get_size()
+        # size_var = bodo.distributed_api.get_size()
         size_var = ir.Var(scope, mk_unique_var("$dist_size"), loc)
         self.typemap[size_var.name] = types.int32
         size_call = ir.Expr.call(size_attr_var, [], (), loc)
@@ -435,7 +435,7 @@ class DistributedPass(object):
             out[-1].target = assign.target
             self.oneDVar_len_vars[assign.target.name] = arr_var
 
-        if (hpat.config._has_h5py and (func_mod == 'hpat.io.pio_api'
+        if (bodo.config._has_h5py and (func_mod == 'bodo.io.pio_api'
                 and func_name in ('h5read', 'h5write', 'h5read_filter'))
                 and self._is_1D_arr(rhs.args[5].name)):
             # TODO: make create_dataset/create_group collective
@@ -461,7 +461,7 @@ class DistributedPass(object):
             file_varname = rhs.args[0].name
             self._file_open_set_parallel(file_varname)
 
-        if hpat.config._has_h5py and (func_mod == 'hpat.io.pio_api'
+        if bodo.config._has_h5py and (func_mod == 'bodo.io.pio_api'
                 and func_name == 'get_filter_read_indices'):
             #
             out += self._gen_1D_Var_len(assign.target)
@@ -474,8 +474,8 @@ class DistributedPass(object):
             self._array_counts[lhs] = [count_var]
             out += g_out
 
-        if (hpat.config._has_pyarrow
-                and fdef == ('read_parquet', 'hpat.io.parquet_pio')
+        if (bodo.config._has_pyarrow
+                and fdef == ('read_parquet', 'bodo.io.parquet_pio')
                 and self._is_1D_arr(rhs.args[2].name)):
             arr = rhs.args[2].name
             assert len(self._array_starts[arr]) == 1, "only 1D arrs in parquet"
@@ -484,13 +484,13 @@ class DistributedPass(object):
             rhs.args += [start_var, count_var]
 
             def f(fname, cindex, arr, out_dtype, start, count):  # pragma: no cover
-                return hpat.io.parquet_pio.read_parquet_parallel(fname, cindex,
+                return bodo.io.parquet_pio.read_parquet_parallel(fname, cindex,
                                                               arr, out_dtype, start, count)
 
             return self._replace_func(f, rhs.args)
 
-        if (hpat.config._has_pyarrow
-                and fdef == ('read_parquet_str', 'hpat.io.parquet_pio')
+        if (bodo.config._has_pyarrow
+                and fdef == ('read_parquet_str', 'bodo.io.parquet_pio')
                 and self._is_1D_arr(lhs)):
             arr = lhs
             size_var = rhs.args[2]
@@ -504,10 +504,10 @@ class DistributedPass(object):
             rhs.args.append(count_var)
 
             def f(fname, cindex, start, count):  # pragma: no cover
-                return hpat.io.parquet_pio.read_parquet_str_parallel(fname, cindex,
+                return bodo.io.parquet_pio.read_parquet_str_parallel(fname, cindex,
                                                                   start, count)
 
-            f_block = compile_to_numba_ir(f, {'hpat': hpat}, self.typingctx,
+            f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
                                           (self.typemap[rhs.args[0].name], types.intp,
                                            types.intp, types.intp),
                                           self.typemap, self.calltypes).blocks.popitem()[1]
@@ -516,7 +516,7 @@ class DistributedPass(object):
             out[-1].target = assign.target
 
         # TODO: fix numba.extending
-        if hpat.config._has_xenon and (fdef == ('read_xenon_col', 'numba.extending')
+        if bodo.config._has_xenon and (fdef == ('read_xenon_col', 'numba.extending')
                 and self._is_1D_arr(rhs.args[3].name)):
             arr = rhs.args[3].name
             assert len(self._array_starts[arr]) == 1, "only 1D arrs in Xenon"
@@ -525,11 +525,11 @@ class DistributedPass(object):
             rhs.args += [start_var, count_var]
 
             def f(connect_tp, dset_tp, col_id_tp, column_tp, schema_arr_tp, start, count):  # pragma: no cover
-                return hpat.io.xenon_ext.read_xenon_col_parallel(connect_tp, dset_tp, col_id_tp, column_tp, schema_arr_tp, start, count)
+                return bodo.io.xenon_ext.read_xenon_col_parallel(connect_tp, dset_tp, col_id_tp, column_tp, schema_arr_tp, start, count)
 
             return self._replace_func(f, rhs.args)
 
-        if hpat.config._has_xenon and (fdef == ('read_xenon_str', 'numba.extending')
+        if bodo.config._has_xenon and (fdef == ('read_xenon_str', 'numba.extending')
                 and self._is_1D_arr(lhs)):
             arr = lhs
             size_var = rhs.args[3]
@@ -544,19 +544,19 @@ class DistributedPass(object):
             rhs.args.append(count_var)
 
             def f(connect_tp, dset_tp, col_id_tp, schema_arr_tp, start_tp, count_tp):  # pragma: no cover
-                return hpat.io.xenon_ext.read_xenon_str_parallel(connect_tp, dset_tp, col_id_tp, schema_arr_tp, start_tp, count_tp)
+                return bodo.io.xenon_ext.read_xenon_str_parallel(connect_tp, dset_tp, col_id_tp, schema_arr_tp, start_tp, count_tp)
 
 
-            f_block = compile_to_numba_ir(f, {'hpat': hpat}, self.typingctx,
-                                          (hpat.io.xenon_ext.xe_connect_type, hpat.io.xenon_ext.xe_dset_type, types.intp,
+            f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
+                                          (bodo.io.xenon_ext.xe_connect_type, bodo.io.xenon_ext.xe_dset_type, types.intp,
                                            self.typemap[rhs.args[3].name], types.intp, types.intp),
                                           self.typemap, self.calltypes).blocks.popitem()[1]
             replace_arg_nodes(f_block, rhs.args)
             out += f_block.body[:-2]
             out[-1].target = assign.target
 
-        if (hpat.config._has_ros
-                and fdef == ('read_ros_images_inner', 'hpat.ros')
+        if (bodo.config._has_ros
+                and fdef == ('read_ros_images_inner', 'bodo.ros')
                 and self._is_1D_arr(rhs.args[0].name)):
             arr = rhs.args[0].name
             assert len(self._array_starts[arr]) == 4, "only 4D arrs in ros"
@@ -565,12 +565,12 @@ class DistributedPass(object):
             rhs.args += [start_var, count_var]
 
             def f(arr, bag, start, count):  # pragma: no cover
-                return hpat.ros.read_ros_images_inner_parallel(arr, bag,
+                return bodo.ros.read_ros_images_inner_parallel(arr, bag,
                                                                start, count)
 
             return self._replace_func(f, rhs.args)
 
-        if (func_mod == 'hpat.hiframes.api' and func_name in (
+        if (func_mod == 'bodo.hiframes.api' and func_name in (
                 'to_arr_from_series', 'ts_series_to_arr_typ',
                 'to_date_series_type', 'init_series')
                 and self._is_1D_arr(rhs.args[0].name)):
@@ -580,21 +580,21 @@ class DistributedPass(object):
             self._array_counts[lhs] = self._array_counts[in_arr]
             self._array_sizes[lhs] = self._array_sizes[in_arr]
 
-        if (fdef == ('init_dataframe', 'hpat.hiframes.pd_dataframe_ext')
+        if (fdef == ('init_dataframe', 'bodo.hiframes.pd_dataframe_ext')
                 and self._is_1D_arr(rhs.args[0].name)):
             in_arr = rhs.args[0].name
             self._array_starts[lhs] = self._array_starts[in_arr]
             self._array_counts[lhs] = self._array_counts[in_arr]
             self._array_sizes[lhs] = self._array_sizes[in_arr]
 
-        if (fdef == ('compute_split_view', 'hpat.hiframes.split_impl')
+        if (fdef == ('compute_split_view', 'bodo.hiframes.split_impl')
                 and self._is_1D_arr(rhs.args[0].name)):
             in_arr = rhs.args[0].name
             self._array_starts[lhs] = self._array_starts[in_arr]
             self._array_counts[lhs] = self._array_counts[in_arr]
             self._array_sizes[lhs] = self._array_sizes[in_arr]
 
-        if (fdef == ('get_split_view_index', 'hpat.hiframes.split_impl')
+        if (fdef == ('get_split_view_index', 'bodo.hiframes.split_impl')
                 and self._is_1D_arr(rhs.args[0].name)):
             arr = rhs.args[0]
             index_var = rhs.args[1]
@@ -605,7 +605,7 @@ class DistributedPass(object):
             out.append(assign)
             return out
 
-        if (fdef == ('setitem_str_arr_ptr', 'hpat.str_arr_ext')
+        if (fdef == ('setitem_str_arr_ptr', 'bodo.str_arr_ext')
                 and self._is_1D_arr(rhs.args[0].name)):
             arr = rhs.args[0]
             index_var = rhs.args[1]
@@ -616,7 +616,7 @@ class DistributedPass(object):
             out.append(assign)
             return out
 
-        if (fdef == ('str_arr_item_to_numeric', 'hpat.str_arr_ext')
+        if (fdef == ('str_arr_item_to_numeric', 'bodo.str_arr_ext')
                 and self._is_1D_arr(rhs.args[0].name)):
             # TODO: test parallel
             arr = rhs.args[0]
@@ -635,7 +635,7 @@ class DistributedPass(object):
             out.append(assign)
             return out
 
-        if fdef == ('isna', 'hpat.hiframes.api') and self._is_1D_arr(rhs.args[0].name):
+        if fdef == ('isna', 'bodo.hiframes.api') and self._is_1D_arr(rhs.args[0].name):
             # fix index in call to isna
             arr = rhs.args[0]
             ind = rhs.args[1]
@@ -643,7 +643,7 @@ class DistributedPass(object):
             rhs.args[1] = out[-1].target
             out.append(assign)
 
-        if fdef == ('rolling_fixed', 'hpat.hiframes.rolling') and (
+        if fdef == ('rolling_fixed', 'bodo.hiframes.rolling') and (
                     self._is_1D_arr(rhs.args[0].name)
                     or self._is_1D_Var_arr(rhs.args[0].name)):
             in_arr = rhs.args[0].name
@@ -657,7 +657,7 @@ class DistributedPass(object):
             rhs.args[3] = true_var
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
 
-        if fdef == ('rolling_variable', 'hpat.hiframes.rolling') and (
+        if fdef == ('rolling_variable', 'bodo.hiframes.rolling') and (
                     self._is_1D_arr(rhs.args[0].name)
                     or self._is_1D_Var_arr(rhs.args[0].name)):
             in_arr = rhs.args[0].name
@@ -671,7 +671,7 @@ class DistributedPass(object):
             rhs.args[4] = true_var
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
 
-        if (func_mod == 'hpat.hiframes.rolling'
+        if (func_mod == 'bodo.hiframes.rolling'
                     and func_name in ('shift', 'pct_change')
                     and (self._is_1D_arr(rhs.args[0].name)
                     or self._is_1D_Var_arr(rhs.args[0].name))):
@@ -686,7 +686,7 @@ class DistributedPass(object):
             rhs.args[2] = true_var
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
 
-        if fdef == ('quantile', 'hpat.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
+        if fdef == ('quantile', 'bodo.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             arr = rhs.args[0].name
             if arr in self._array_sizes:
@@ -697,41 +697,41 @@ class DistributedPass(object):
                 size_var = self._set0_var
             rhs.args += [size_var]
 
-            f = lambda arr, q, size: hpat.hiframes.api.quantile_parallel(
+            f = lambda arr, q, size: bodo.hiframes.api.quantile_parallel(
                                                                   arr, q, size)
             return self._replace_func(f, rhs.args)
 
-        if fdef == ('nunique', 'hpat.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
+        if fdef == ('nunique', 'bodo.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
-            f = lambda arr: hpat.hiframes.api.nunique_parallel(arr)
+            f = lambda arr: bodo.hiframes.api.nunique_parallel(arr)
             return self._replace_func(f, rhs.args)
 
-        if fdef == ('unique', 'hpat.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
+        if fdef == ('unique', 'bodo.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
-            f = lambda arr: hpat.hiframes.api.unique_parallel(arr)
+            f = lambda arr: bodo.hiframes.api.unique_parallel(arr)
             return self._replace_func(f, rhs.args)
 
-        if fdef == ('nlargest', 'hpat.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
+        if fdef == ('nlargest', 'bodo.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
-            f = lambda arr, k, i, f: hpat.hiframes.api.nlargest_parallel(arr, k, i, f)
+            f = lambda arr, k, i, f: bodo.hiframes.api.nlargest_parallel(arr, k, i, f)
             return self._replace_func(f, rhs.args)
 
-        if fdef == ('median', 'hpat.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
+        if fdef == ('median', 'bodo.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
-            f = lambda arr: hpat.hiframes.api.median(arr, True)
+            f = lambda arr: bodo.hiframes.api.median(arr, True)
             return self._replace_func(f, rhs.args)
 
-        if fdef == ('convert_rec_to_tup', 'hpat.hiframes.api'):
+        if fdef == ('convert_rec_to_tup', 'bodo.hiframes.api'):
             # optimize Series back to back map pattern with tuples
             # TODO: create another optimization pass?
             arg_def = guard(get_definition, self.func_ir, rhs.args[0])
             if (is_call(arg_def) and
                     guard(find_callname, self.func_ir, arg_def)
-                    == ('convert_tup_to_rec', 'hpat.hiframes.api')):
+                    == ('convert_tup_to_rec', 'bodo.hiframes.api')):
                 assign.value = arg_def.args[0]
             return out
 
-        if fdef == ('dist_return', 'hpat.distributed_api'):
+        if fdef == ('dist_return', 'bodo.distributed_api'):
             # always rebalance returned distributed arrays
             # TODO: need different flag for 1D_Var return (distributed_var)?
             # TODO: rebalance strings?
@@ -739,9 +739,9 @@ class DistributedPass(object):
             assign.value = rhs.args[0]
             return [assign]
 
-        if (fdef == ('get_series_data', 'hpat.hiframes.api')
-                or fdef == ('get_series_index', 'hpat.hiframes.api')
-                or fdef == ('get_dataframe_data', 'hpat.hiframes.pd_dataframe_ext')):
+        if (fdef == ('get_series_data', 'bodo.hiframes.api')
+                or fdef == ('get_series_index', 'bodo.hiframes.api')
+                or fdef == ('get_dataframe_data', 'bodo.hiframes.pd_dataframe_ext')):
             out = [assign]
             arr = assign.target
             # gen len() using 1D_Var reduce approach.
@@ -766,11 +766,11 @@ class DistributedPass(object):
             return out
 
 
-        if fdef == ('threaded_return', 'hpat.distributed_api'):
+        if fdef == ('threaded_return', 'bodo.distributed_api'):
             assign.value = rhs.args[0]
             return [assign]
 
-        if fdef == ('rebalance_array', 'hpat.distributed_api'):
+        if fdef == ('rebalance_array', 'bodo.distributed_api'):
             return self._run_call_rebalance_array(lhs, assign, rhs.args)
 
 
@@ -779,20 +779,20 @@ class DistributedPass(object):
         if func_name == 'predict':
             getattr_call = guard(get_definition, self.func_ir, func_var)
             if (getattr_call and self.typemap[getattr_call.value.name]
-                    == hpat.ml.naive_bayes.mnb_type):
+                    == bodo.ml.naive_bayes.mnb_type):
                 in_arr = rhs.args[0].name
                 self._array_starts[lhs] = [self._array_starts[in_arr][0]]
                 self._array_counts[lhs] = [self._array_counts[in_arr][0]]
                 self._array_sizes[lhs] = [self._array_sizes[in_arr][0]]
 
-        if fdef == ('file_read', 'hpat.io.np_io') and rhs.args[1].name in self._array_starts:
+        if fdef == ('file_read', 'bodo.io.np_io') and rhs.args[1].name in self._array_starts:
             _fname = rhs.args[0]
             _data_ptr = rhs.args[1]
             _start = self._array_starts[_data_ptr.name][0]
             _count = self._array_counts[_data_ptr.name][0]
 
             def f(fname, data_ptr, start, count):  # pragma: no cover
-                return hpat.io.np_io.file_read_parallel(fname, data_ptr, start, count)
+                return bodo.io.np_io.file_read_parallel(fname, data_ptr, start, count)
             return self._replace_func(f, [_fname, _data_ptr, _start, _count])
 
         return out
@@ -802,7 +802,7 @@ class DistributedPass(object):
         """
         # allocs are handled separately
         assert not ((self._is_1D_Var_arr(lhs) or self._is_1D_arr(lhs))
-                    and func_name in hpat.utils.np_alloc_callnames), (
+                    and func_name in bodo.utils.np_alloc_callnames), (
                     "allocation calls handled separately "
                     "'empty', 'zeros', 'ones', 'full' etc.")
         out = [assign]
@@ -931,7 +931,7 @@ class DistributedPass(object):
                 _count = self._array_counts[arr.name][0]
 
                 def f(fname, arr, start, count):  # pragma: no cover
-                    return hpat.io.np_io.file_write_parallel(fname, arr, start, count)
+                    return bodo.io.np_io.file_write_parallel(fname, arr, start, count)
 
                 return self._replace_func(f, [_fname, arr, _start, _count])
 
@@ -940,8 +940,8 @@ class DistributedPass(object):
 
                 def f(fname, arr):  # pragma: no cover
                     count = len(arr)
-                    start = hpat.distributed_api.dist_exscan(count)
-                    return hpat.io.np_io.file_write_parallel(fname, arr, start, count)
+                    start = bodo.distributed_api.dist_exscan(count)
+                    return bodo.io.np_io.file_write_parallel(fname, arr, start, count)
 
                 return self._replace_func(f, [_fname, arr])
 
@@ -958,7 +958,7 @@ class DistributedPass(object):
             # df2 = df(index=range(index_start, index_start+l))
             # header = header and is_root  # only first line has header
             # str_out = df2.to_csv(None, header=header)
-            # hpat.io.np_io._file_write_parallel(fname, str_out)
+            # bodo.io.np_io._file_write_parallel(fname, str_out)
 
             df_typ = self.typemap[df.name]
             rhs = assign.value
@@ -1030,8 +1030,8 @@ class DistributedPass(object):
 
             def f(fname, str_out):  # pragma: no cover
                 count = len(str_out)
-                start = hpat.distributed_api.dist_exscan(count)
-                hpat.io.np_io._file_write_parallel(
+                start = bodo.distributed_api.dist_exscan(count)
+                bodo.io.np_io._file_write_parallel(
                     fname._data, str_out._data, start, count, 1)
                 dummy_use(str_out)
 
@@ -1042,8 +1042,8 @@ class DistributedPass(object):
 
     def _gen_is_root_and_cond(self, cond_var):
         def f(cond):
-            return cond & (hpat.distributed_api.get_rank() == 0)
-        f_block = compile_to_numba_ir(f, {'hpat': hpat},
+            return cond & (bodo.distributed_api.get_rank() == 0)
+        f_block = compile_to_numba_ir(f, {'bodo': bodo},
                                     self.typingctx,
                                     (self.typemap[cond_var.name],),
                                     self.typemap,
@@ -1055,12 +1055,12 @@ class DistributedPass(object):
     def _fix_parallel_df_index(self, df):
         def f(df):  # pragma: no cover
             l = len(df)
-            start = hpat.distributed_api.dist_exscan(l)
+            start = bodo.distributed_api.dist_exscan(l)
             ind = np.arange(start, start+l)
-            df2 = hpat.hiframes.pd_dataframe_ext.set_df_index(df, ind)
+            df2 = bodo.hiframes.pd_dataframe_ext.set_df_index(df, ind)
             return df2
 
-        f_block = compile_to_numba_ir(f, {'hpat': hpat, 'np': np},
+        f_block = compile_to_numba_ir(f, {'bodo': bodo, 'np': np},
                                     self.typingctx,
                                     (self.typemap[df.name],),
                                     self.typemap,
@@ -1074,9 +1074,9 @@ class DistributedPass(object):
         n = args[0]
 
         def f(lhs, n):
-            hpat.distributed_lower.dist_permutation_int(lhs, n)
+            bodo.distributed_lower.dist_permutation_int(lhs, n)
 
-        f_block = compile_to_numba_ir(f, {'hpat': hpat},
+        f_block = compile_to_numba_ir(f, {'bodo': bodo},
                                       self.typingctx,
                                       (self.typemap[lhs.name], types.intp),
                                       self.typemap,
@@ -1101,10 +1101,10 @@ class DistributedPass(object):
                         *self._array_sizes[lhs.name][1:]), dtype, scope, loc)
 
         def f(lhs, lhs_len, dtype_size, rhs, idx, idx_len):
-            hpat.distributed_lower.dist_permutation_array_index(
+            bodo.distributed_lower.dist_permutation_array_index(
                 lhs, lhs_len, dtype_size, rhs, idx, idx_len)
 
-        f_block = compile_to_numba_ir(f, {'hpat': hpat},
+        f_block = compile_to_numba_ir(f, {'bodo': bodo},
                                       self.typingctx,
                                       (self.typemap[lhs.name],
                                        types.intp,
@@ -1144,10 +1144,10 @@ class DistributedPass(object):
                         new_local_shape_var, dtype, scope, loc)
 
         def f(lhs, in_arr, new_0dim_global_len, old_0dim_global_len, dtype_size):  # pragma: no cover
-            hpat.distributed_lower.dist_oneD_reshape_shuffle(
+            bodo.distributed_lower.dist_oneD_reshape_shuffle(
                 lhs, in_arr, new_0dim_global_len, old_0dim_global_len, dtype_size)
 
-        f_block = compile_to_numba_ir(f, {'hpat': hpat},
+        f_block = compile_to_numba_ir(f, {'bodo': bodo},
                                     self.typingctx,
                                    (self.typemap[lhs.name], self.typemap[in_arr.name],
                                     types.intp, types.intp, types.intp),
@@ -1197,9 +1197,9 @@ class DistributedPass(object):
         self._array_sizes[lhs][0] = total_length
 
         def f(arr, count):  # pragma: no cover
-            b_arr = hpat.distributed_api.rebalance_array_parallel(arr, count)
+            b_arr = bodo.distributed_api.rebalance_array_parallel(arr, count)
 
-        f_block = compile_to_numba_ir(f, {'hpat': hpat}, self.typingctx,
+        f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
                                       (self.typemap[arr.name], types.intp),
                                       self.typemap, self.calltypes).blocks.popitem()[1]
         replace_arg_nodes(f_block, [arr, count_var])
@@ -1329,7 +1329,7 @@ class DistributedPass(object):
 
             def f(oneD_var_arr):  # pragma: no cover
                 arr_len = len(oneD_var_arr)
-            f_block = compile_to_numba_ir(f, {'hpat': hpat}, self.typingctx,
+            f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
                                           (self.typemap[arr_var.name],),
                                           self.typemap, self.calltypes).blocks.popitem()[1]
             replace_arg_nodes(f_block, [arr_var])
@@ -1362,7 +1362,7 @@ class DistributedPass(object):
 
         def f(oneD_var_arr):  # pragma: no cover
             arr_len = len(oneD_var_arr)
-        f_block = compile_to_numba_ir(f, {'hpat': hpat}, self.typingctx,
+        f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
                                       (self.typemap[arr_var.name],),
                                       self.typemap, self.calltypes).blocks.popitem()[1]
         replace_arg_nodes(f_block, [arr_var])
@@ -1489,7 +1489,7 @@ class DistributedPass(object):
 
             if isinstance(self.typemap[index_var.name], types.Integer):
                 def f(A, val, index, chunk_start, chunk_count):  # pragma: no cover
-                    hpat.distributed_lower._set_if_in_range(
+                    bodo.distributed_lower._set_if_in_range(
                         A, val, index, chunk_start, chunk_count)
 
                 return self._replace_func(
@@ -1501,7 +1501,7 @@ class DistributedPass(object):
             # convert setitem with global range to setitem with local range
             # that overlaps with the local array chunk
             def f(A, val, start, stop, chunk_start, chunk_count):  # pragma: no cover
-                loc_start, loc_stop = hpat.distributed_lower._get_local_range(
+                loc_start, loc_stop = bodo.distributed_lower._get_local_range(
                     start, stop, chunk_start, chunk_count)
                 A[loc_start:loc_stop] = val
 
@@ -1593,7 +1593,7 @@ class DistributedPass(object):
                 start = self._array_starts[in_arr.name][0]
                 count = self._array_counts[in_arr.name][0]
                 return self._replace_func(
-                    lambda arr, slice_index, start, count: hpat.distributed_api.const_slice_getitem(
+                    lambda arr, slice_index, start, count: bodo.distributed_api.const_slice_getitem(
                         arr, slice_index, start, count), [in_arr, index_var, start, count])
 
         return out
@@ -1603,7 +1603,7 @@ class DistributedPass(object):
         #     parfor, self.typemap)
 
         # Thread and 1D parfors turn to gufunc in multithread mode
-        if (hpat.multithread_mode
+        if (bodo.multithread_mode
                 and self._dist_analysis.parfor_dists[parfor.id]
                 != Distribution.REP):
             parfor.no_sequential_lowering = True
@@ -1676,7 +1676,7 @@ class DistributedPass(object):
 
                 def f(A):  # pragma: no cover
                     arr_len = len(A)
-                f_block = compile_to_numba_ir(f, {'hpat': hpat}, self.typingctx,
+                f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
                                                 (self.typemap[arr_var.name],),
                                                 self.typemap, self.calltypes).blocks.popitem()[1]
                 replace_arg_nodes(f_block, [arr_var])
@@ -1709,12 +1709,12 @@ class DistributedPass(object):
                 l_nest.start = start_var
 
             def _fix_ind_bounds(start, stop):
-                prefix = hpat.distributed_api.dist_exscan(stop - start)
-                # rank = hpat.distributed_api.get_rank()
+                prefix = bodo.distributed_api.dist_exscan(stop - start)
+                # rank = bodo.distributed_api.get_rank()
                 # print(rank, prefix, start, stop)
                 return start + prefix, stop + prefix
 
-            f_block = compile_to_numba_ir(_fix_ind_bounds, {'hpat': hpat},
+            f_block = compile_to_numba_ir(_fix_ind_bounds, {'bodo': bodo},
                 self.typingctx, (types.intp,types.intp), self.typemap,
                 self.calltypes).blocks.popitem()[1]
             replace_arg_nodes(f_block, [l_nest.start, l_nest.stop])
@@ -1748,9 +1748,9 @@ class DistributedPass(object):
             return None
 
         # TODO: comprehensive support for Series vars
-        from hpat.hiframes.pd_series_ext import SeriesType
+        from bodo.hiframes.pd_series_ext import SeriesType
         if isinstance(typ, (SeriesType,
-                hpat.hiframes.pd_dataframe_ext.DataFrameType)):
+                bodo.hiframes.pd_dataframe_ext.DataFrameType)):
             return None
 
         # gen len() using 1D_Var reduce approach.
@@ -1977,9 +1977,9 @@ class DistributedPass(object):
 
     def _gen_barrier(self):
         def f():  # pragma: no cover
-            return hpat.distributed_api.barrier()
+            return bodo.distributed_api.barrier()
 
-        f_blocks = compile_to_numba_ir(f, {'hpat': hpat}, self.typingctx, {},
+        f_blocks = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx, {},
                                        self.typemap, self.calltypes).blocks
         block = f_blocks[min(f_blocks.keys())]
         return block.body[:-2]  # remove return
@@ -1990,9 +1990,9 @@ class DistributedPass(object):
         op_assign = ir.Assign(ir.Const(reduce_op.value, loc), op_var, loc)
 
         def f(val, op):  # pragma: no cover
-            hpat.distributed_api.dist_reduce(val, op)
+            bodo.distributed_api.dist_reduce(val, op)
 
-        f_ir = compile_to_numba_ir(f, {'hpat': hpat}, self.typingctx,
+        f_ir = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
                                    (self.typemap[reduce_var.name],
                                     types.int32),
                                    self.typemap, self.calltypes)
@@ -2066,13 +2066,13 @@ class DistributedPass(object):
             pre_init_val = "v = np.full_like(s, {}, s.dtype)".format(init_val)
             init_val = "v"
 
-        f_text = "def f(s):\n  {}\n  s = hpat.distributed_lower._root_rank_select(s, {})".format(
+        f_text = "def f(s):\n  {}\n  s = bodo.distributed_lower._root_rank_select(s, {})".format(
             pre_init_val, init_val)
         loc_vars = {}
         exec(f_text, {}, loc_vars)
         f = loc_vars['f']
 
-        f_block = compile_to_numba_ir(f, {'hpat': hpat, 'numba': numba, 'np': np},
+        f_block = compile_to_numba_ir(f, {'bodo': bodo, 'numba': numba, 'np': np},
                                       self.typingctx, (red_var_typ,), self.typemap, self.calltypes).blocks.popitem()[1]
         replace_arg_nodes(f_block, [reduce_var])
         nodes = f_block.body[:-3]
@@ -2129,7 +2129,7 @@ class DistributedPass(object):
 
     def _replace_func(self, func, args, const=False,
                       pre_nodes=None, extra_globals=None):
-        glbls = {'numba': numba, 'np': np, 'hpat': hpat}
+        glbls = {'numba': numba, 'np': np, 'bodo': bodo}
         if extra_globals is not None:
             glbls.update(extra_globals)
         arg_typs = tuple(self.typemap[v.name] for v in args)

@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import argparse
 import time
-import hpat
+import bodo
 
 def gen_kde(N, file_name):
     # np.random.seed(0)

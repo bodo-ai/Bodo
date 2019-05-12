@@ -3,9 +3,9 @@ import pandas as pd
 import numpy as np
 import itertools
 import numba
-import hpat
+import bodo
 import random
-from hpat.tests.test_utils import (count_array_REPs, count_parfor_REPs,
+from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, count_array_OneD_Vars,
     dist_IR_contains, get_rank, get_start_end)
 
@@ -26,18 +26,18 @@ class BaseTest(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.rank = hpat.jit(lambda: hpat.distributed_api.get_rank())()
-        self.num_ranks = hpat.jit(lambda: hpat.distributed_api.get_size())()
+        self.rank = bodo.jit(lambda: bodo.distributed_api.get_rank())()
+        self.num_ranks = bodo.jit(lambda: bodo.distributed_api.get_size())()
 
     def _rank_begin(self, arr_len):
-        f = hpat.jit(
-            lambda arr_len, num_ranks, rank: hpat.distributed_api.get_start(
+        f = bodo.jit(
+            lambda arr_len, num_ranks, rank: bodo.distributed_api.get_start(
                 arr_len, np.int32(num_ranks), np.int32(rank)))
         return f(arr_len, self.num_ranks, self.rank)
 
     def _rank_end(self, arr_len):
-        f = hpat.jit(
-            lambda arr_len, num_ranks, rank: hpat.distributed_api.get_end(
+        f = bodo.jit(
+            lambda arr_len, num_ranks, rank: bodo.distributed_api.get_end(
                 arr_len, np.int32(num_ranks), np.int32(rank)))
         return f(arr_len, self.num_ranks, self.rank)
 
@@ -58,7 +58,7 @@ class TestBasic(BaseTest):
             C = A[B]
             return C.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 128
         np.testing.assert_allclose(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -70,7 +70,7 @@ class TestBasic(BaseTest):
             A[0] = 30
             return A.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 128
         np.testing.assert_allclose(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -82,7 +82,7 @@ class TestBasic(BaseTest):
             A[0:4] = 30
             return A.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 128
         np.testing.assert_allclose(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -92,7 +92,7 @@ class TestBasic(BaseTest):
         def test_impl(N):
             return np.ones(N).astype(np.int32).sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 128
         np.testing.assert_allclose(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -102,7 +102,7 @@ class TestBasic(BaseTest):
         def test_impl(N):
             return np.ones(N).shape[0]
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 128
         np.testing.assert_allclose(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -111,7 +111,7 @@ class TestBasic(BaseTest):
         # def test_impl(N):
         #     return np.ones((N, 3, 4)).shape
         #
-        # hpat_func = hpat.jit(test_impl)
+        # hpat_func = bodo.jit(test_impl)
         # n = 128
         # np.testing.assert_allclose(hpat_func(n), test_impl(n))
         # self.assertEqual(count_array_REPs(), 0)
@@ -125,7 +125,7 @@ class TestBasic(BaseTest):
             B += A
             return B.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 128
         np.testing.assert_allclose(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -138,7 +138,7 @@ class TestBasic(BaseTest):
             C = A[B, 2]
             return C.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 128
         np.testing.assert_allclose(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -150,7 +150,7 @@ class TestBasic(BaseTest):
             X[:,3] = (X[:,3]) / (np.max(X[:,3]) - np.min(X[:,3]))
             return X.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 128
         np.testing.assert_allclose(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -162,7 +162,7 @@ class TestBasic(BaseTest):
             B = A[::7]
             return B.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 128
         np.testing.assert_allclose(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -173,17 +173,17 @@ class TestBasic(BaseTest):
         def g(a):
             assert a==0
 
-        hpat_g = hpat.jit(g)
+        hpat_g = bodo.jit(g)
         def f():
             hpat_g(0)
 
-        hpat_f = hpat.jit(f)
+        hpat_f = bodo.jit(f)
         hpat_f()
 
     @unittest.skip("pending Numba #3946")
     def test_inline_locals(self):
         # make sure locals in inlined function works
-        @hpat.jit(locals={'B': hpat.float64[:]})
+        @bodo.jit(locals={'B': bodo.float64[:]})
         def g(S):
             B = pd.to_numeric(S, errors='coerce')
             return B
@@ -191,7 +191,7 @@ class TestBasic(BaseTest):
         def f():
             return g(pd.Series(['1.2']))
 
-        pd.testing.assert_series_equal(hpat.jit(f)(), f())
+        pd.testing.assert_series_equal(bodo.jit(f)(), f())
 
     def test_reduce(self):
         import sys
@@ -210,7 +210,7 @@ class TestBasic(BaseTest):
             exec(func_text, {'np': np}, loc_vars)
             test_impl = loc_vars['f']
 
-            hpat_func = hpat.jit(test_impl)
+            hpat_func = bodo.jit(test_impl)
             n = 21  # XXX arange() on float32 has overflow issues on large n
             np.testing.assert_almost_equal(hpat_func(n), test_impl(n))
             self.assertEqual(count_array_REPs(), 0)
@@ -232,7 +232,7 @@ class TestBasic(BaseTest):
             exec(func_text, {'np': np}, loc_vars)
             test_impl = loc_vars['f']
 
-            hpat_func = hpat.jit(locals={'A:input':'distributed'})(test_impl)
+            hpat_func = bodo.jit(locals={'A:input':'distributed'})(test_impl)
             n = 21
             start, end = get_start_end(n)
             np.random.seed(0)
@@ -259,7 +259,7 @@ class TestBasic(BaseTest):
             exec(func_text, {'np': np}, loc_vars)
             test_impl = loc_vars['f']
 
-            hpat_func = hpat.jit(locals={'A:input':'distributed'})(test_impl)
+            hpat_func = bodo.jit(locals={'A:input':'distributed'})(test_impl)
             n = 21
             start, end = get_start_end(n)
             np.random.seed(0)
@@ -285,7 +285,7 @@ class TestBasic(BaseTest):
             exec(func_text, {'np': np, 'numba': numba}, loc_vars)
             test_impl = loc_vars['f']
 
-            hpat_func = hpat.jit(test_impl)
+            hpat_func = bodo.jit(test_impl)
             n = 128
             np.testing.assert_allclose(hpat_func(n), test_impl(n))
             self.assertEqual(count_array_OneDs(), 0)
@@ -296,11 +296,11 @@ class TestBasic(BaseTest):
             A = np.arange(N)
             return A
 
-        hpat_func = hpat.jit(locals={'A:return': 'distributed'})(test_impl)
+        hpat_func = bodo.jit(locals={'A:return': 'distributed'})(test_impl)
         n = 128
-        dist_sum = hpat.jit(
-            lambda a: hpat.distributed_api.dist_reduce(
-                a, np.int32(hpat.distributed_api.Reduce_Type.Sum.value)))
+        dist_sum = bodo.jit(
+            lambda a: bodo.distributed_api.dist_reduce(
+                a, np.int32(bodo.distributed_api.Reduce_Type.Sum.value)))
         dist_sum(1)  # run to compile
         np.testing.assert_allclose(
             dist_sum(hpat_func(n).sum()), test_impl(n).sum())
@@ -313,12 +313,12 @@ class TestBasic(BaseTest):
             B = np.arange(N)+1.5
             return A, B
 
-        hpat_func = hpat.jit(locals={'A:return': 'distributed',
+        hpat_func = bodo.jit(locals={'A:return': 'distributed',
                                      'B:return': 'distributed'})(test_impl)
         n = 128
-        dist_sum = hpat.jit(
-            lambda a: hpat.distributed_api.dist_reduce(
-                a, np.int32(hpat.distributed_api.Reduce_Type.Sum.value)))
+        dist_sum = bodo.jit(
+            lambda a: bodo.distributed_api.dist_reduce(
+                a, np.int32(bodo.distributed_api.Reduce_Type.Sum.value)))
         dist_sum(1.0)  # run to compile
         np.testing.assert_allclose(
             dist_sum((hpat_func(n)[0] + hpat_func(n)[1]).sum()),
@@ -330,7 +330,7 @@ class TestBasic(BaseTest):
         def test_impl(A):
             return len(A)
 
-        hpat_func = hpat.jit(distributed=['A'])(test_impl)
+        hpat_func = bodo.jit(distributed=['A'])(test_impl)
         n = 128
         arr = np.ones(n)
         np.testing.assert_allclose(hpat_func(arr) / self.num_ranks, test_impl(arr))
@@ -340,18 +340,18 @@ class TestBasic(BaseTest):
         def test_impl(N):
             A = np.arange(n)
             B = A[A>10]
-            C = hpat.distributed_api.rebalance_array(B)
+            C = bodo.distributed_api.rebalance_array(B)
             return C.sum()
 
         try:
-            hpat.distributed_analysis.auto_rebalance = True
-            hpat_func = hpat.jit(test_impl)
+            bodo.distributed_analysis.auto_rebalance = True
+            hpat_func = bodo.jit(test_impl)
             n = 128
             np.testing.assert_allclose(hpat_func(n), test_impl(n))
             self.assertEqual(count_array_OneDs(), 3)
             self.assertEqual(count_parfor_OneDs(), 2)
         finally:
-            hpat.distributed_analysis.auto_rebalance = False
+            bodo.distributed_analysis.auto_rebalance = False
 
     def test_rebalance_loop(self):
         def test_impl(N):
@@ -363,15 +363,15 @@ class TestBasic(BaseTest):
             return s
 
         try:
-            hpat.distributed_analysis.auto_rebalance = True
-            hpat_func = hpat.jit(test_impl)
+            bodo.distributed_analysis.auto_rebalance = True
+            hpat_func = bodo.jit(test_impl)
             n = 128
             np.testing.assert_allclose(hpat_func(n), test_impl(n))
             self.assertEqual(count_array_OneDs(), 4)
             self.assertEqual(count_parfor_OneDs(), 2)
             self.assertIn('allgather', list(hpat_func.inspect_llvm().values())[0])
         finally:
-            hpat.distributed_analysis.auto_rebalance = False
+            bodo.distributed_analysis.auto_rebalance = False
 
     def test_transpose(self):
         def test_impl(n):
@@ -380,7 +380,7 @@ class TestBasic(BaseTest):
             C = A.transpose(0, 2, 1)
             return B.sum() + C.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 128
         np.testing.assert_allclose(hpat_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
@@ -422,7 +422,7 @@ class TestBasic(BaseTest):
         # details please see https://github.com/numba/numba/issues/2782.
         r = self._follow_cpython(get_np_state_ptr())
 
-        hpat_func1 = hpat.jit(locals={'A:return': 'distributed',
+        hpat_func1 = bodo.jit(locals={'A:return': 'distributed',
                                       'B:return': 'distributed'})(test_one_dim)
 
         # Test one-dimensional array indexing.
@@ -452,7 +452,7 @@ class TestBasic(BaseTest):
             A, B = A[P], B[P]
             return A, B
 
-        hpat_func2 = hpat.jit(locals={'A:return': 'distributed',
+        hpat_func2 = bodo.jit(locals={'A:return': 'distributed',
                                       'B:return': 'distributed'})(test_two_dim)
 
         for arr_len in [18, 66, 128]:
@@ -471,7 +471,7 @@ class TestBasic(BaseTest):
             C = A[P]
             return A, B, C
 
-        hpat_func3 = hpat.jit(locals={'A:return': 'distributed',
+        hpat_func3 = bodo.jit(locals={'A:return': 'distributed',
                                       'B:return': 'distributed',
                                       'C:return': 'distributed'})(test_rhs)
 

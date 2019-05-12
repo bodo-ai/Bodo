@@ -1,19 +1,19 @@
 import numpy as np
-import hpat
-from hpat import prange
-import hpat.ml
+import bodo
+from bodo import prange
+import bodo.ml
 import time
 
-hpat.multithread_mode = True
+bodo.multithread_mode = True
 
-@hpat.jit
+@bodo.jit
 def f(N, D, M):
     X = np.random.ranf((N, D))
     y = np.empty(N)
     for i in prange(N):
         y[i] = i%4
     p = np.random.ranf((M, D))
-    clf = hpat.ml.SVC(n_classes=4)
+    clf = bodo.ml.SVC(n_classes=4)
     t1 = time.time()
     clf.train(X, y)
     res = clf.predict(p)

@@ -22,10 +22,10 @@ ll.add_symbol('set_nextval_string', hset_ext.set_nextval_string)
 ll.add_symbol('num_total_chars_set_string', hset_ext.num_total_chars_set_string)
 ll.add_symbol('populate_str_arr_from_set', hset_ext.populate_str_arr_from_set)
 
-import hpat
-from hpat.utils import to_array
-from hpat.str_ext import string_type, gen_get_unicode_chars
-from hpat.str_arr_ext import (StringArray, StringArrayType, string_array_type,
+import bodo
+from bodo.utils import to_array
+from bodo.str_ext import string_type, gen_get_unicode_chars
+from bodo.str_arr_ext import (StringArray, StringArrayType, string_array_type,
                               pre_alloc_string_array, StringArrayPayloadType,
                               is_str_arr_typ)
 
@@ -89,7 +89,7 @@ def build_set(A):
 
 
 def _build_str_set_impl(A):
-    str_arr = hpat.hiframes.api.dummy_unbox_series(A)
+    str_arr = bodo.hiframes.api.dummy_unbox_series(A)
     str_set = init_set_string()
     n = len(str_arr)
     for i in range(n):
@@ -245,11 +245,11 @@ def iternext_setiter(context, builder, sig, args, result):
     kind = numba.unicode.PY_UNICODE_1BYTE_KIND
 
     def std_str_to_unicode(std_str):
-        length = hpat.str_ext.get_std_str_len(std_str)
+        length = bodo.str_ext.get_std_str_len(std_str)
         ret = numba.unicode._empty_string(kind, length)
-        hpat.str_arr_ext._memcpy(
-            ret._data, hpat.str_ext.get_c_str(std_str), length, 1)
-        hpat.str_ext.del_str(std_str)
+        bodo.str_arr_ext._memcpy(
+            ret._data, bodo.str_ext.get_c_str(std_str), length, 1)
+        bodo.str_ext.del_str(std_str)
         return ret
 
     with builder.if_then(is_valid):
@@ -257,6 +257,6 @@ def iternext_setiter(context, builder, sig, args, result):
         val = context.compile_internal(
             builder,
             std_str_to_unicode,
-            string_type(hpat.str_ext.std_str_type),
+            string_type(bodo.str_ext.std_str_type),
             [val])
         result.yield_(val)

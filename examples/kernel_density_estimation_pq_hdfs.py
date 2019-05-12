@@ -1,11 +1,11 @@
 import pyarrow.parquet as pq
-import hpat
-from hpat import prange
+import bodo
+from bodo import prange
 import numpy as np
 import argparse
 import time
 
-@hpat.jit
+@bodo.jit
 def kde():
     t = pq.read_table('hdfs://localhost:9016/user/etotoni/kde.parquet')
     df = t.to_pandas()

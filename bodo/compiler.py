@@ -1,21 +1,21 @@
 # from .pio import PIO
-import hpat
-import hpat.hiframes
-import hpat.hiframes.hiframes_untyped
-import hpat.hiframes.hiframes_typed
-from hpat.hiframes.hiframes_untyped import HiFrames
-from hpat.hiframes.hiframes_typed import HiFramesTyped
-from hpat.hiframes.dataframe_pass import DataFramePass
+import bodo
+import bodo.hiframes
+import bodo.hiframes.hiframes_untyped
+import bodo.hiframes.hiframes_typed
+from bodo.hiframes.hiframes_untyped import HiFrames
+from bodo.hiframes.hiframes_typed import HiFramesTyped
+from bodo.hiframes.dataframe_pass import DataFramePass
 import numba
 import numba.compiler
 from numba import ir_utils, ir, postproc
 from numba.targets.registry import CPUDispatcher
 from numba.ir_utils import guard, get_definition
 from numba.inline_closurecall import inline_closure_call, InlineClosureCallPass
-from hpat import config
-import hpat.io
+from bodo import config
+import bodo.io
 if config._has_h5py:
-    from hpat.io import pio
+    from bodo.io import pio
 
 # workaround for Numba #3876 issue with large labels in mortgage benchmark
 from llvmlite import binding
@@ -155,7 +155,7 @@ class HPATPipeline(numba.compiler.BasePipeline):
     """HPAT compiler pipeline
     """
     def define_pipelines(self, pm):
-        name = 'hpat'
+        name = 'bodo'
         pm.create_pipeline(name)
         self.add_preprocessing_stage(pm)
         self.add_with_handling_stage(pm)
@@ -233,7 +233,7 @@ class HPATPipeline(numba.compiler.BasePipeline):
         """
         # Ensure we have an IR and type information.
         assert self.func_ir
-        from hpat.distributed import DistributedPass
+        from bodo.distributed import DistributedPass
         dist_pass = DistributedPass(
             self.func_ir, self.typingctx, self.targetctx,
             self.type_annotation.typemap, self.type_annotation.calltypes,

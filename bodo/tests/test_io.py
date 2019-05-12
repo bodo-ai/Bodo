@@ -4,8 +4,8 @@ from pandas.api.types import CategoricalDtype
 import numpy as np
 import h5py
 import pyarrow.parquet as pq
-import hpat
-from hpat.tests.test_utils import (count_array_REPs, count_parfor_REPs,
+import bodo
+from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_rank,
     get_start_end)
 
@@ -55,7 +55,7 @@ class TestIO(unittest.TestCase):
             f.close()
             return X
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_allclose(hpat_func(), test_impl())
 
     def test_h5_read_const_infer_seq(self):
@@ -67,7 +67,7 @@ class TestIO(unittest.TestCase):
             f.close()
             return X
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_allclose(hpat_func(), test_impl())
 
     def test_h5_read_parallel(self):
@@ -78,7 +78,7 @@ class TestIO(unittest.TestCase):
             f.close()
             return X.sum() + Y.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(), test_impl(), decimal=2)
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -97,7 +97,7 @@ class TestIO(unittest.TestCase):
 
         N = 101
         D = 10
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         hpat_func(N, D)
         f = h5py.File("lr_w.hdf5", "r")
         X = f['points'][:]
@@ -120,7 +120,7 @@ class TestIO(unittest.TestCase):
         n = 101
         arr = np.arange(n)
         fname = "test_group.hdf5"
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         hpat_func(n, fname)
         f = h5py.File(fname, "r")
         X = f['G']['data'][:]
@@ -135,7 +135,7 @@ class TestIO(unittest.TestCase):
             f.close()
             return X.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         self.assertEqual(hpat_func(), test_impl())
 
     def test_h5_file_keys(self):
@@ -148,10 +148,10 @@ class TestIO(unittest.TestCase):
             f.close()
             return s
 
-        hpat_func = hpat.jit(test_impl, h5_types={'X': hpat.int64[:]})
+        hpat_func = bodo.jit(test_impl, h5_types={'X': bodo.int64[:]})
         self.assertEqual(hpat_func(), test_impl())
         # test using locals for typing
-        hpat_func = hpat.jit(test_impl, locals={'X': hpat.int64[:]})
+        hpat_func = bodo.jit(test_impl, locals={'X': bodo.int64[:]})
         self.assertEqual(hpat_func(), test_impl())
 
     def test_h5_group_keys(self):
@@ -165,7 +165,7 @@ class TestIO(unittest.TestCase):
             f.close()
             return s
 
-        hpat_func = hpat.jit(test_impl, h5_types={'X': hpat.int64[:]})
+        hpat_func = bodo.jit(test_impl, h5_types={'X': bodo.int64[:]})
         self.assertEqual(hpat_func(), test_impl())
 
     def test_h5_filter(self):
@@ -176,7 +176,7 @@ class TestIO(unittest.TestCase):
             f.close()
             return X
 
-        hpat_func = hpat.jit(locals={'X:return': 'distributed'})(test_impl)
+        hpat_func = bodo.jit(locals={'X:return': 'distributed'})(test_impl)
         n = 4  # len(test_impl())
         start, end = get_start_end(n)
         np.testing.assert_allclose(hpat_func(), test_impl()[start:end])
@@ -188,7 +188,7 @@ class TestIO(unittest.TestCase):
             X = df['points']
             return X.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(), test_impl())
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -199,7 +199,7 @@ class TestIO(unittest.TestCase):
             X = df['points']
             return X.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(), test_impl())
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -211,7 +211,7 @@ class TestIO(unittest.TestCase):
             X = df['points']
             return X.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(), test_impl())
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -222,7 +222,7 @@ class TestIO(unittest.TestCase):
             X = df['points']
             return X.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(), test_impl())
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -233,7 +233,7 @@ class TestIO(unittest.TestCase):
             A = df.two.values=='foo'
             return A.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(), test_impl())
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -244,7 +244,7 @@ class TestIO(unittest.TestCase):
             A = df.five.values=='foo'
             return A
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(), test_impl())
 
     def test_pq_str_with_nan_par(self):
@@ -253,7 +253,7 @@ class TestIO(unittest.TestCase):
             A = df.five.values=='foo'
             return A.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(), test_impl())
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -264,7 +264,7 @@ class TestIO(unittest.TestCase):
             A = df.five.values=='foo'
             return A.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(), test_impl())
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -274,7 +274,7 @@ class TestIO(unittest.TestCase):
             df = pq.read_table('example.parquet').to_pandas()
             return df.three.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(), test_impl())
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -284,7 +284,7 @@ class TestIO(unittest.TestCase):
             df = pq.read_table('example.parquet').to_pandas()
             return df.one.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(), test_impl())
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -294,7 +294,7 @@ class TestIO(unittest.TestCase):
             df = pq.read_table('example.parquet').to_pandas()
             return df.four.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(), test_impl())
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -304,7 +304,7 @@ class TestIO(unittest.TestCase):
             df = pd.read_parquet('pandas_dt.pq')
             return pd.DataFrame({'DT64': df.DT64, 'col2': df.DATE})
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(), test_impl())
 
     def test_pq_spark_date(self):
@@ -312,7 +312,7 @@ class TestIO(unittest.TestCase):
             df = pd.read_parquet('sdf_dt.pq')
             return pd.DataFrame({'DT64': df.DT64, 'col2': df.DATE})
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(), test_impl())
 
     def test_csv1(self):
@@ -321,7 +321,7 @@ class TestIO(unittest.TestCase):
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':np.float, 'D':np.int},
             )
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(), test_impl())
 
     def test_csv_keys1(self):
@@ -331,7 +331,7 @@ class TestIO(unittest.TestCase):
                 names=dtype.keys(),
                 dtype=dtype,
             )
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(), test_impl())
 
     def test_csv_const_dtype1(self):
@@ -341,14 +341,14 @@ class TestIO(unittest.TestCase):
                 names=dtype.keys(),
                 dtype=dtype,
             )
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(), test_impl())
 
     def test_csv_infer1(self):
         def test_impl():
             return pd.read_csv("csv_data_infer1.csv")
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(), test_impl())
 
     def test_csv_infer_parallel1(self):
@@ -356,7 +356,7 @@ class TestIO(unittest.TestCase):
             df = pd.read_csv("csv_data_infer1.csv")
             return df.A.sum(), df.B.sum(), df.C.sum(), df.D.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         self.assertEqual(hpat_func(), test_impl())
 
     def test_csv_skip1(self):
@@ -366,14 +366,14 @@ class TestIO(unittest.TestCase):
                 dtype={'A':np.int, 'B':np.float, 'C':np.float, 'D':np.int},
                 skiprows=2,
             )
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(), test_impl())
 
     def test_csv_infer_skip1(self):
         def test_impl():
             return pd.read_csv("csv_data_infer1.csv", skiprows=2)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(), test_impl())
 
     def test_csv_infer_skip_parallel1(self):
@@ -382,7 +382,7 @@ class TestIO(unittest.TestCase):
                 names=['A', 'B', 'C', 'D'])
             return df.A.sum(), df.B.sum(), df.C.sum(), df.D.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         self.assertEqual(hpat_func(), test_impl())
 
     def test_csv_rm_dead1(self):
@@ -391,7 +391,7 @@ class TestIO(unittest.TestCase):
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':np.float, 'D':np.int},)
             return df.B.values
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_array_equal(hpat_func(), test_impl())
 
     def test_csv_date1(self):
@@ -400,7 +400,7 @@ class TestIO(unittest.TestCase):
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':str, 'D':np.int},
                 parse_dates=[2])
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(), test_impl())
 
     def test_csv_str1(self):
@@ -408,7 +408,7 @@ class TestIO(unittest.TestCase):
             return pd.read_csv("csv_data_date1.csv",
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':str, 'D':np.int})
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(), test_impl())
 
     def test_csv_parallel1(self):
@@ -417,7 +417,7 @@ class TestIO(unittest.TestCase):
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':np.float, 'D':np.int})
             return (df.A.sum(), df.B.sum(), df.C.sum(), df.D.sum())
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         self.assertEqual(hpat_func(), test_impl())
 
     def test_csv_str_parallel1(self):
@@ -427,7 +427,7 @@ class TestIO(unittest.TestCase):
                 dtype={'A':np.int, 'B':np.float, 'C':str, 'D':np.int})
             return (df.A.sum(), df.B.sum(), (df.C == '1966-11-13').sum(),
                     df.D.sum())
-        hpat_func = hpat.jit(locals={'df:return': 'distributed'})(test_impl)
+        hpat_func = bodo.jit(locals={'df:return': 'distributed'})(test_impl)
         self.assertEqual(hpat_func(), test_impl())
 
     def test_csv_usecols1(self):
@@ -437,7 +437,7 @@ class TestIO(unittest.TestCase):
                 dtype={'C':np.float},
                 usecols=[2],
             )
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(), test_impl())
 
     def test_csv_cat1(self):
@@ -449,7 +449,7 @@ class TestIO(unittest.TestCase):
                 dtype=dtypes,
             )
             return df.C2
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(
             hpat_func(), test_impl(), check_names=False)
 
@@ -461,7 +461,7 @@ class TestIO(unittest.TestCase):
                 dtype={'C1':np.int, 'C2': ct_dtype, 'C3':str},
             )
             return df
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(), test_impl())
 
     def test_csv_single_dtype1(self):
@@ -471,14 +471,14 @@ class TestIO(unittest.TestCase):
                 dtype=np.float64,
             )
             return df
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(hpat_func(), test_impl())
 
     def test_write_csv1(self):
         def test_impl(df, fname):
             df.to_csv(fname)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 111
         df = pd.DataFrame({'A': np.arange(n)})
         hp_fname = 'test_write_csv1_hpat.csv'
@@ -493,7 +493,7 @@ class TestIO(unittest.TestCase):
             df = pd.DataFrame({'A': np.arange(n)})
             df.to_csv(fname)
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 111
         hp_fname = 'test_write_csv1_hpat_par.csv'
         pd_fname = 'test_write_csv1_pd_par.csv'
@@ -511,7 +511,7 @@ class TestIO(unittest.TestCase):
             A = np.fromfile("np_file1.dat", np.float64)
             return A
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(), test_impl())
 
     def test_np_io2(self):
@@ -520,7 +520,7 @@ class TestIO(unittest.TestCase):
             A = np.fromfile("np_file1.dat", np.float64)
             return A.sum()
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         np.testing.assert_almost_equal(hpat_func(), test_impl())
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -530,7 +530,7 @@ class TestIO(unittest.TestCase):
             if get_rank() == 0:
                 A.tofile("np_file_3.dat")
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 111
         A = np.random.ranf(n)
         hpat_func(A)
@@ -544,7 +544,7 @@ class TestIO(unittest.TestCase):
             A = np.arange(n)
             A.tofile("np_file_3.dat")
 
-        hpat_func = hpat.jit(test_impl)
+        hpat_func = bodo.jit(test_impl)
         n = 111
         A = np.arange(n)
         hpat_func(n)

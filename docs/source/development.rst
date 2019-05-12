@@ -48,7 +48,7 @@ is necessary.
     It has examples of calling into C code which is implemented as
     `a C extension library <https://github.com/numba/numba/blob/master/numba/_dictobject.c>`_.
     For a simpler example of calling into C library, see HPAT's I/O features like
-    `get_file_size <https://github.com/IntelLabs/hpat/blob/master/hpat/io.py#L12>`_.
+    `get_file_size <https://github.com/IntelLabs/bodo/blob/master/bodo/io.py#L12>`_.
 - | `Developer reference manual <http://numba.pydata.org/numba-doc/latest/developer/index.html>`_
     provides more details if necessary.
 
@@ -58,8 +58,8 @@ HPAT Development
 HPAT implements Pandas and Numpy API as a DSL.
 Data structures are implemented as Numba extensions, and
 compiler stages are responsible for different levels of abstraction.
-For example, `Series data type support <https://github.com/IntelLabs/hpat/blob/master/hpat/hiframes/pd_series_ext.py>`_
-and `Series transformations <https://github.com/IntelLabs/hpat/blob/master/hpat/hiframes/hiframes_typed.py>`_
+For example, `Series data type support <https://github.com/IntelLabs/bodo/blob/master/bodo/hiframes/pd_series_ext.py>`_
+and `Series transformations <https://github.com/IntelLabs/bodo/blob/master/bodo/hiframes/hiframes_typed.py>`_
 implement the `Pandas Series API <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.html>`_.
 Follow the pipeline for a simple function like `Series.sum()`
 for initial understanding of the transformations.

@@ -9,12 +9,12 @@ from numba.extending import models, register_model, infer_getattr
 from numba.extending import lower_builtin, overload_method, overload
 from numba.targets.imputils import (impl_ret_new_ref, impl_ret_borrowed,
     iternext_impl, RefType)
-from hpat.str_ext import string_type, gen_unicode_to_std_str, gen_std_str_to_unicode
+from bodo.str_ext import string_type, gen_unicode_to_std_str, gen_std_str_to_unicode
 from numba import cgutils
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 from . import hdict_ext
-from hpat.utils import unliteral_all
+from bodo.utils import unliteral_all
 
 ll_voidp = lir.IntType(8).as_pointer()
 
