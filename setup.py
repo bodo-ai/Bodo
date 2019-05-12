@@ -47,29 +47,6 @@ except ImportError:
 else:
     _has_pyarrow = True
 
-_has_daal = False
-DAALROOT = ""
-
-if 'DAALROOT' in os.environ:
-    _has_daal = True
-    DAALROOT = os.environ['DAALROOT']
-
-_has_ros = False
-if 'ROS_PACKAGE_PATH' in os.environ:
-    _has_ros = True
-
-
-_has_opencv = False
-OPENCV_DIR = ""
-
-if 'OPENCV_DIR' in os.environ:
-    _has_opencv = True
-    OPENCV_DIR = os.environ['OPENCV_DIR'].replace('"', '')
-    # TODO: fix opencv link
-    # import subprocess
-    # p_cvconf = subprocess.run(["pkg-config", "--libs", "--static","opencv"], stdout=subprocess.PIPE)
-    # cv_link_args = p_cvconf.stdout.decode().split()
-
 _has_xenon = False
 
 if 'HPAT_XE_SUPPORT' in os.environ and  os.environ['HPAT_XE_SUPPORT'] != "0":
@@ -223,33 +200,6 @@ ext_parquet = Extension(name="bodo.parquet_cpp",
                         library_dirs = lid,
 )
 
-#ext_daal_wrapper = Extension(name="bodo.daal_wrapper",
-#                             include_dirs = [DAALROOT+'/include'],
-#                             libraries = ['daal_core', 'daal_thread']+MPI_LIBS,
-#                             sources=["bodo/_daal.cpp"]
-#                             )
-
-ext_ros = Extension(name="bodo.ros_cpp",
-                    sources=["bodo/_ros.cpp"],
-                    include_dirs = ['/opt/ros/lunar/include', '/opt/ros/lunar/include/xmlrpcpp', PREFIX_DIR+'/include/', './ros_include'],
-                    extra_compile_args = eca,
-                    extra_link_args = ela  + '-rdynamic /opt/ros/lunar/lib/librosbag.so /opt/ros/lunar/lib/librosbag_storage.so -lboost_program_options /opt/ros/lunar/lib/libroslz4.so /opt/ros/lunar/lib/libtopic_tools.so /opt/ros/lunar/lib/libroscpp.so -lboost_filesystem -lboost_signals /opt/ros/lunar/lib/librosconsole.so /opt/ros/lunar/lib/librosconsole_log4cxx.so /opt/ros/lunar/lib/librosconsole_backend_interface.so -lboost_regex /opt/ros/lunar/lib/libroscpp_serialization.so /opt/ros/lunar/lib/librostime.so /opt/ros/lunar/lib/libxmlrpcpp.so /opt/ros/lunar/lib/libcpp_common.so -lboost_system -lboost_thread -lboost_chrono -lboost_date_time -lboost_atomic -lpthread -Wl,-rpath,/opt/ros/lunar/lib'.split(),
-                    library_dirs = lid,
-)
-
-cv_libs = ['opencv_core', 'opencv_imgproc', 'opencv_imgcodecs', 'opencv_highgui']
-# XXX cv lib file name needs version on Windows
-if is_win:
-    cv_libs = [l+'331' for l in cv_libs]
-
-ext_cv_wrapper = Extension(name="bodo.cv_wrapper",
-                           sources=["bodo/_cv.cpp"],
-                           include_dirs = [OPENCV_DIR+'/include'] + ind,
-                           library_dirs = [os.path.join(OPENCV_DIR,'lib')] + lid,
-                           libraries = cv_libs,
-                           #extra_link_args = cv_link_args,
-                           language="c++",
-)
 
 ext_xenon_wrapper = Extension(name="bodo.hxe_ext",
                               sources=["bodo/io/_xe_wrapper.cpp"],
@@ -267,12 +217,7 @@ if _has_h5py:
     _ext_mods.append(ext_hdf5)
 if _has_pyarrow:
     _ext_mods.append(ext_parquet)
-#if _has_daal:
-#    _ext_mods.append(ext_daal_wrapper)
-if _has_ros:
-    _ext_mods.append(ext_ros)
-if _has_opencv:
-    _ext_mods.append(ext_cv_wrapper)
+
 
 if _has_xenon:
     _ext_mods.append(ext_xenon_wrapper)

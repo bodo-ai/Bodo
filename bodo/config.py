@@ -7,6 +7,7 @@ except ImportError:
 else:
     _has_h5py = True
 
+
 try:
     import pyarrow
 except ImportError:
@@ -14,20 +15,6 @@ except ImportError:
 else:
     _has_pyarrow = True
 
-try:
-    from . import ros_cpp
-except ImportError:
-    _has_ros = False
-else:
-    _has_ros = True
-
-try:
-    from . import cv_wrapper
-except ImportError:
-    _has_opencv = False
-else:
-    _has_opencv = True
-    import bodo.cv_ext
 
 try:
     from . import hxe_ext

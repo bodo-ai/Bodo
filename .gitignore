@@ -23,6 +23,8 @@ docs/gh-pages/
 # data files for testing
 *.pq
 *.csv
+*.h5
+*.dat
 *.parquet
 *.hdf5
 tmp_tests/

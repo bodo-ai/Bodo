@@ -447,9 +447,6 @@ class DistributedAnalysis(object):
         if fdef == ('file_read', 'bodo.io.np_io'):
             return
 
-        if bodo.config._has_ros and fdef == ('read_ros_images_inner', 'bodo.ros'):
-            return
-
         if bodo.config._has_pyarrow and fdef == ('read_parquet', 'bodo.io.parquet_pio'):
             return
 
