@@ -17,8 +17,8 @@ ENV CXX g++-4.9
 ENV LD gcc-4.9
 ENV LDSHARED "gcc-4.9 -shared"
 
-RUN conda create -y -n HPAT
-RUN source activate HPAT && \
+RUN conda create -y -n Bodo
+RUN source activate Bodo && \
     conda install -y numpy scipy pandas mpich2 llvmlite &&\
     git clone https://github.com/IntelLabs/numba.git && \
     cd numba && git checkout hpat_req && python setup.py install && cd .. &&\
@@ -28,7 +28,7 @@ RUN source activate HPAT && \
     python setup.py install
 
 RUN echo "export PATH=/root/anaconda3/bin/:${PATH}" >> /root/.bashrc
-RUN echo "source activate HPAT" >> /root/.bashrc
+RUN echo "source activate Bodo" >> /root/.bashrc
 
 #ENV http_proxy ""
 #ENV https_proxy ""

@@ -4,7 +4,7 @@ AWS Setup
 =========
 
 
-This page describes a simple setup process for HPAT on Amazon EC2 instances. You need to have an account on Amazon Web Services (AWS)
+This page describes a simple setup process for Bodo on Amazon EC2 instances. You need to have an account on Amazon Web Services (AWS)
 and be familiar with the general AWS EC2 instance launch interface. The process below is for demonstration purposes only and is not
 recommended for production usage due to security, performance and other considerations.
 
@@ -29,14 +29,14 @@ recommended for production usage due to security, performance and other consider
 
         echo -e "ip-11-11-11-11.us-east-2.compute.internal\nip-11-11-11-12.us-east-2.compute.internal\n" > hosts
 
-3. Install Anaconda Python distribution and HPAT on all instances::
+3. Install Anaconda Python distribution and Bodo on all instances::
 
     wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
-    conda create -n HPAT -c ehsantn -c anaconda -c conda-forge bodo
-    source activate HPAT
+    conda create -n Bodo -c ehsantn -c anaconda -c conda-forge bodo
+    source activate Bodo
 
 
 4. Copy the `Pi example <https://github.com/IntelLabs/bodo#example>`_ to a file called pi.py in the home directory of
@@ -50,4 +50,4 @@ You should see speed up when running on more cores ("-n 2" and "-n 4" cases)::
 
 Possible next experiments from here are running a more complex example like the
 `logistic regression example <https://github.com/IntelLabs/bodo/blob/master/examples/logistic_regression_rand.py>`_.
-Furthermore, attaching a shared EFS storage volume and experimenting with parallel I/O in HPAT is recommended.
+Furthermore, attaching a shared EFS storage volume and experimenting with parallel I/O in Bodo is recommended.

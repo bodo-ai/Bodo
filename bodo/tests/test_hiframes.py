@@ -17,7 +17,7 @@ from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
 class TestHiFrames(unittest.TestCase):
 
     def test_column_list_select2(self):
-        # make sure HPAT copies the columns like Pandas does
+        # make sure Bodo copies the columns like Pandas does
         def test_impl(df):
             df2 = df[['A']]
             df2['A'] += 10

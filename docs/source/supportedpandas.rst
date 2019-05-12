@@ -1,7 +1,7 @@
 Supported Pandas Operations
 ---------------------------
 
-Below is the list of the Pandas operators that HPAT supports.
+Below is the list of the Pandas operators that Bodo supports.
 Optional arguments are not supported unless if specified.
 Since Numba doesn't support Pandas, only these operations
 can be used for both large and small datasets.
@@ -22,7 +22,7 @@ Integer NaN Issue
 DataFrame columns with integer data need special care. Pandas dynamically
 converts integer columns to floating point when NaN values are needed.
 This is because Numpy does not support NaN values for integers.
-HPAT does not perform this conversion unless enough information is
+Bodo does not perform this conversion unless enough information is
 available at compilation time. Hence, the user is responsible for manual
 conversion of integer data to floating point data if needed.
 
@@ -38,7 +38,7 @@ Input/Output
 
 * :func:`pandas.read_parquet`
 
-   * If filename is constant, HPAT finds the schema from file at compilation time. Otherwise, schema should be provided.
+   * If filename is constant, Bodo finds the schema from file at compilation time. Otherwise, schema should be provided.
 
 General functions
 ~~~~~~~~~~~~~~~~~

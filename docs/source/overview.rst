@@ -2,12 +2,12 @@
 Overview
 ========
 
-High Performance Analytics Toolkit (HPAT) is a big data analytics and machine
+High Performance Analytics Toolkit (Bodo) is a big data analytics and machine
 learning framework that provides Python's ease of use but is extremely fast.
 
-HPAT scales analytics programs in python to cluster/cloud environments
+Bodo scales analytics programs in python to cluster/cloud environments
 automatically, requiring only minimal code changes. Here is a logistic
-regression program using HPAT::
+regression program using Bodo::
 
     @bodo.jit
     def logistic_regression(iterations):
@@ -25,9 +25,9 @@ regression program using HPAT::
 This code runs on cluster and cloud environments using a simple command like
 `mpiexec -n 1024 python logistic_regression.py`.
 
-HPAT compiles a :ref:`subset of Python <supported>` to efficient native parallel code
+Bodo compiles a :ref:`subset of Python <supported>` to efficient native parallel code
 (with `MPI <https://en.wikipedia.org/wiki/Message_Passing_Interface>`_).
 This is in contrast to other frameworks such as Apache Spark which are
-master-executor libraries. Hence, HPAT is typically 100x or more faster.
-HPAT is built on top of `Numba <https://github.com/numba/numba>`_
+master-executor libraries. Hence, Bodo is typically 100x or more faster.
+Bodo is built on top of `Numba <https://github.com/numba/numba>`_
 and `LLVM <https://llvm.org/>`_ compilers.

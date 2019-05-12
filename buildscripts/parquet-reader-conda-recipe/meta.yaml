@@ -22,4 +22,4 @@ requirements:
 about:
   home: https://github.com/IntelLabs/bodo
   license: BSD
-  summary: Parquet reader for HPAT
+  summary: Parquet reader for Bodo

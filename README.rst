@@ -1,5 +1,5 @@
 *****
-HPAT
+Bodo
 *****
 
 .. image:: https://badges.gitter.im/IntelLabs/bodo.svg
@@ -15,25 +15,25 @@ HPAT
 A compiler-based framework for big data in Python
 #################################################
 
-High Performance Analytics Toolkit (HPAT) scales analytics/ML codes in Python
+High Performance Analytics Toolkit (Bodo) scales analytics/ML codes in Python
 to bare-metal cluster/cloud performance automatically.
 It compiles a subset of Python (Pandas/Numpy) to efficient parallel binaries
 with MPI, requiring only minimal code changes.
-HPAT is orders of magnitude faster than
+Bodo is orders of magnitude faster than
 alternatives like `Apache Spark <http://spark.apache.org/>`_.
 
-HPAT's documentation can be found `here <https://intellabs.github.io/bodo-doc/>`_.
+Bodo's documentation can be found `here <https://intellabs.github.io/bodo-doc/>`_.
 
 Installation
 ############
 
-HPAT can be installed in `Anaconda <https://www.anaconda.com/download/>`_
+Bodo can be installed in `Anaconda <https://www.anaconda.com/download/>`_
 environment easily (Linux/Mac/Windows)::
 
-    conda create -n HPAT -c ehsantn -c anaconda -c conda-forge bodo
+    conda create -n Bodo -c ehsantn -c anaconda -c conda-forge bodo
 
 .. used if master of Numba is needed for latest bodo package
-.. conda create -n HPAT -c ehsantn -c numba/label/dev -c anaconda -c conda-forge bodo
+.. conda create -n Bodo -c ehsantn -c numba/label/dev -c anaconda -c conda-forge bodo
 
 Windows installaton requires
 `Intel MPI <https://software.intel.com/en-us/intel-mpi-library>`_ to be
@@ -42,14 +42,14 @@ installed.
 Docker Container
 ----------------
 
-An HPAT docker image is also available for running containers. For example::
+An Bodo docker image is also available for running containers. For example::
 
     docker run -it ehsantn/bodo bash
 
 Example
 #######
 
-Here is a Pi calculation example in HPAT:
+Here is a Pi calculation example in Bodo:
 
 .. code:: python
 
@@ -78,7 +78,7 @@ without `@bodo.jit` and `mpiexec`.
 Jupyter Notebook
 ################
 
-To use HPAT with Jupyter Notebook, install jupyter, ipython, and ipyparallel.
+To use Bodo with Jupyter Notebook, install jupyter, ipython, and ipyparallel.
 Then, create a mpi profile for ipython::
 
     ipython profile create --parallel --profile=mpi
@@ -93,7 +93,7 @@ following line::
 
 Then, start the Jupyter notebook and click on IPython Clusters, select the
 number of engines (i.e., cores) you'd like to use and click Start next to the
-mpi profile.  You can now run an HPAT function and the work will be distributed
+mpi profile.  You can now run an Bodo function and the work will be distributed
 across the number of cores you selected on the current node.
 
 If you wish to run across multiple nodes, you can add the following to
@@ -109,8 +109,8 @@ More information about the -machinefile option can be found
 References
 ##########
 
-These academic papers describe the underlying methods in HPAT:
+These academic papers describe the underlying methods in Bodo:
 
-- `HPAT paper at ICS'17 <http://dl.acm.org/citation.cfm?id=3079099>`_
-- `HPAT at HotOS'17 <http://dl.acm.org/citation.cfm?id=3103004>`_
+- `Bodo paper at ICS'17 <http://dl.acm.org/citation.cfm?id=3079099>`_
+- `Bodo at HotOS'17 <http://dl.acm.org/citation.cfm?id=3103004>`_
 - `HiFrames on arxiv <https://arxiv.org/abs/1704.02341>`_

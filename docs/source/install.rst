@@ -1,33 +1,33 @@
 .. _install:
 
-Installing HPAT
+Installing Bodo
 ===============
 
-HPAT can be installed in `Anaconda <https://www.anaconda.com/download/>`_ environment
+Bodo can be installed in `Anaconda <https://www.anaconda.com/download/>`_ environment
 easily. On Linux/Mac/Windows::
 
-    conda create -n HPAT -c ehsantn -c anaconda -c conda-forge bodo
+    conda create -n Bodo -c ehsantn -c anaconda -c conda-forge bodo
 
 .. used if master of Numba is needed for latest bodo package
-.. conda create -n HPAT -c ehsantn -c numba/label/dev -c anaconda -c conda-forge bodo
+.. conda create -n Bodo -c ehsantn -c numba/label/dev -c anaconda -c conda-forge bodo
 
 Windows installaton requires
 `Intel MPI <https://software.intel.com/en-us/intel-mpi-library>`_ to be
 installed.
 
-Building HPAT from Source
+Building Bodo from Source
 -------------------------
 
 We use `Anaconda <https://www.anaconda.com/download/>`_ distribution of
-Python for setting up HPAT. These commands install HPAT and its dependencies
+Python for setting up Bodo. These commands install Bodo and its dependencies
 such as Numba on Ubuntu Linux::
 
     wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
-    conda create -n HPAT -q -y numpy scipy pandas boost cmake
-    source activate HPAT
+    conda create -n Bodo -q -y numpy scipy pandas boost cmake
+    source activate Bodo
     conda install -c numba/label/dev numba
     conda install mpich mpi -c conda-forge
     conda install pyarrow
@@ -35,7 +35,7 @@ such as Numba on Ubuntu Linux::
     conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64
     git clone https://github.com/IntelLabs/bodo
     cd bodo
-    # build HPAT
+    # build Bodo
     HDF5_DIR=$CONDA_PREFIX python setup.py develop
 
 
@@ -57,7 +57,7 @@ to check the channel of ``hdf5`` package.
 Building from Source on Windows
 -------------------------------
 
-Building HPAT on Windows requires Build Tools for Visual Studio 2017 (14.0) and Intel MPI:
+Building Bodo on Windows requires Build Tools for Visual Studio 2017 (14.0) and Intel MPI:
 
 * Install `Build Tools for Visual Studio 2017 (14.0) <https://www.visualstudio.com/downloads/#build-tools-for-visual-studio-2017>`_.
 * Install `Intel MPI <https://software.intel.com/en-us/intel-mpi-library>`_.
@@ -65,8 +65,8 @@ Building HPAT on Windows requires Build Tools for Visual Studio 2017 (14.0) and 
 * Start 'Anaconda prompt'
 * Setup the Conda environment in Anaconda Prompt::
 
-    conda create -n HPAT -c ehsantn -c numba/label/dev -c anaconda -c conda-forge python=3.7 pandas pyarrow h5py numba scipy boost libboost tbb-devel mkl-devel
-    activate HPAT
+    conda create -n Bodo -c ehsantn -c numba/label/dev -c anaconda -c conda-forge python=3.7 pandas pyarrow h5py numba scipy boost libboost tbb-devel mkl-devel
+    activate Bodo
     conda install vc vs2015_runtime vs2015_win-64
     git clone https://github.com/IntelLabs/bodo.git
     cd bodo

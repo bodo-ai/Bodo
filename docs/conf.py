@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# HPAT documentation build configuration file, created by
+# Bodo documentation build configuration file, created by
 # sphinx-quickstart on Wed Sep  6 09:29:19 2017.
 #
 # This file is execfile()d with the current directory set to its
@@ -50,7 +50,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'HPAT'
+project = 'Bodo'
 #copyright = '2017, Ehsan Totoni'
 author = 'Ehsan Totoni'
 
@@ -131,7 +131,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'HPAT.tex', 'HPAT Documentation',
+    (master_doc, 'Bodo.tex', 'Bodo Documentation',
      'Ehsan Totoni', 'manual'),
 ]
 
@@ -141,7 +141,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'bodo', 'HPAT Documentation',
+    (master_doc, 'bodo', 'Bodo Documentation',
      [author], 1)
 ]
 
@@ -152,8 +152,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'HPAT', 'HPAT Documentation',
-     author, 'HPAT', 'One line description of project.',
+    (master_doc, 'Bodo', 'Bodo Documentation',
+     author, 'Bodo', 'One line description of project.',
      'Miscellaneous'),
 ]
 

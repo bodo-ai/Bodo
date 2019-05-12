@@ -3,11 +3,11 @@
 User Guide
 ==========
 
-HPAT automatically parallelizes a subset of Python that is commonly used for
+Bodo automatically parallelizes a subset of Python that is commonly used for
 data analytics and machine learning. This section describes this subset
 and how parallelization is performed.
 
-HPAT compiles and parallelizes the functions annotated with the `@bodo.jit`
+Bodo compiles and parallelizes the functions annotated with the `@bodo.jit`
 decorator. The decorated functions are replaced with generated parallel
 binaries that run on bare metal.
 The supported data structures for large datasets
@@ -17,7 +17,7 @@ are `Numpy <http://www.numpy.org/>`_ arrays and
 Automatic Parallelization
 -------------------------
 
-HPAT parallelizes programs automatically based on the `map-reduce` parallel
+Bodo parallelizes programs automatically based on the `map-reduce` parallel
 pattern. Put simply, this means the compiler analyzes the program to
 determine whether each array should be distributed or not. This analysis uses
 the semantics of array operations as the program below demonstrates::
@@ -30,16 +30,16 @@ the semantics of array operations as the program below demonstrates::
 
 This program reads a one-dimensional array called `A` from file and sums its
 values. Array `A` is the output of an I/O operation and is input to `np.sum`.
-Based on semantics of I/O and `np.sum`, HPAT determines that `A` can be
+Based on semantics of I/O and `np.sum`, Bodo determines that `A` can be
 distributed since I/O can output a distributed array and `np.sum` can
 take a distributed array as input.
 In `map-reduce` terminology, `A` is output of a `map` operator and is input
 to a `reduce` operator. Hence,
-HPAT distributes `A` and all operations associated with `A`
+Bodo distributes `A` and all operations associated with `A`
 (i.e. I/O and `np.sum`) and generates a parallel binary.
 This binary replaces the `example_1D` function in the Python program.
 
-HPAT can only analyze and parallelize the supported data-parallel operations of
+Bodo can only analyze and parallelize the supported data-parallel operations of
 Numpy and Pandas (listed below). Hence, only the supported operations can be
 used for distributed datasets and computations.
 The sequential computation on small data can be any code that
@@ -64,17 +64,17 @@ as a 9 by 2 array, on three processors:
     :alt: distribution of 1D array
     :align: center
 
-HPAT replicates the arrays that are not distributed.
+Bodo replicates the arrays that are not distributed.
 This is called `REP` distribution for consistency.
 
 Argument and Return Variables
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-HPAT assumes argument and return variables to jitted functions are
+Bodo assumes argument and return variables to jitted functions are
 replicated. However, the user can annotate these variables to indicate
 distributed data. In this case,
 the user is responsile for handling of the distributed data chunks outside
-the HPAT scope. For example, the data can come from other jitted functions::
+the Bodo scope. For example, the data can come from other jitted functions::
 
     @bodo.jit(distributed={'A'})
     def example_return(n):
@@ -92,7 +92,7 @@ the HPAT scope. For example, the data can come from other jitted functions::
 Distribution Report
 ~~~~~~~~~~~~~~~~~~~
 
-The distributions found by HPAT can be printed using the
+The distributions found by Bodo can be printed using the
 `bodo.distribution_report()` function. The distribution report for the above
 example code is as follows::
 
@@ -154,7 +154,7 @@ and consumed on-the-fly, without memory load/store overheads.
 Supported Numpy Operations
 --------------------------
 
-Below is the list of the data-parallel Numpy operators that HPAT can optimize
+Below is the list of the data-parallel Numpy operators that Bodo can optimize
 and parallelize.
 
 1. Numpy `element-wise` array operations:
@@ -208,7 +208,7 @@ Explicit Parallel Loops
 
 Sometimes explicit parallel loops are required since a program cannot be written
 in terms of data-parallel operators easily.
-In this case, one can use HPAT's ``prange`` in place of ``range`` to specify
+In this case, one can use Bodo's ``prange`` in place of ``range`` to specify
 that a loop can be parallelized. The user is required to make sure the
 loop does not have cross iteration dependencies except for supported reductions.
 
@@ -230,7 +230,7 @@ supported.
 File I/O
 --------
 
-Currently, HPAT supports I/O for the `HDF5 <http://www.h5py.org/>`_ and
+Currently, Bodo supports I/O for the `HDF5 <http://www.h5py.org/>`_ and
 `Parquet <http://parquet.apache.org/>`_ formats.
 For HDF5, the syntax is the same as the `h5py <http://www.h5py.org/>`_ package.
 For example::
@@ -250,11 +250,11 @@ For Parquet, the syntax is the same as `pyarrow <https://arrow.apache.org/docs/p
         df = t.to_pandas()
         X = df['points'].values
 
-HPAT automatically parallelizes I/O of different nodes in a distributed setting
+Bodo automatically parallelizes I/O of different nodes in a distributed setting
 without any code changes.
 
-HPAT needs to know the types of input arrays. If the file name is a constant
-string, HPAT tries to look at the file at compile time and recognize the types.
+Bodo needs to know the types of input arrays. If the file name is a constant
+string, Bodo tries to look at the file at compile time and recognize the types.
 Otherwise, the user is responsile for providing the types similar to
 `Numba's typing syntax
 <http://numba.pydata.org/numba-doc/latest/reference/types.html>`_. For
@@ -276,7 +276,7 @@ one processor only since all processors have the same copy.
 Strings
 -------
 
-Currently, HPAT provides basic ASCII string support. Constant strings, equality
+Currently, Bodo provides basic ASCII string support. Constant strings, equality
 comparison of strings (``==`` and ``!=``), ``split`` function, extracting
 characters (e.g. ``s[1]``), concatination, and convertion to `int` and `float`
 are supported. Here are some examples::
@@ -293,7 +293,7 @@ are supported. Here are some examples::
 Dictionaries
 ------------
 
-HPAT supports basic integer dictionaries currently. ``DictIntInt`` is the type
+Bodo supports basic integer dictionaries currently. ``DictIntInt`` is the type
 for dictionaries with 64-bit integer keys and values, while ``DictInt32Int32``
 is for 32-bit integer ones. Getting and setting values, ``pop`` and ``get``
 operators, as well as ``min`` and ``max`` of keys is supported. For example::

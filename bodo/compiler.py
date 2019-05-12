@@ -152,7 +152,7 @@ def inline_calls(func_ir, _locals):
 
 
 class HPATPipeline(numba.compiler.BasePipeline):
-    """HPAT compiler pipeline
+    """Bodo compiler pipeline
     """
     def define_pipelines(self, pm):
         name = 'bodo'
@@ -264,7 +264,7 @@ class HPATPipeline(numba.compiler.BasePipeline):
         df_pass.run()
 
 class HPATPipelineSeq(HPATPipeline):
-    """HPAT pipeline without the distributed pass (used in rolling kernels)
+    """Bodo pipeline without the distributed pass (used in rolling kernels)
     """
     def define_pipelines(self, pm):
         name = 'hpat_seq'

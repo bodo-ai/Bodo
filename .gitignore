@@ -26,3 +26,6 @@ docs/gh-pages/
 *.parquet
 *.hdf5
 tmp_tests/
+
+# VS Code config
+.vscode

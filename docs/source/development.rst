@@ -1,26 +1,26 @@
 .. _development:
 
-HPAT Development
+Bodo Development
 ================
 
 Technology Overview and Architecture
 ------------------------------------
 
 This `slide deck <https://drive.google.com/open?id=1jLikSEAqOFf8kKO8vgT7ru6dKU1LGiDR>`_
-provides an overview of HPAT technology and software architecture.
+provides an overview of Bodo technology and software architecture.
 
 These papers provide deeper dive in technical ideas (might not be necessary for many developers):
 
-- `HPAT paper on automatic parallelization for distributed memory <http://dl.acm.org/citation.cfm?id=3079099>`_
-- `HPAT paper on system architecture versus Spark <http://dl.acm.org/citation.cfm?id=3103004>`_
-- `HPAT Dataframe DSL approach <https://arxiv.org/abs/1704.02341>`_
+- `Bodo paper on automatic parallelization for distributed memory <http://dl.acm.org/citation.cfm?id=3079099>`_
+- `Bodo paper on system architecture versus Spark <http://dl.acm.org/citation.cfm?id=3103004>`_
+- `Bodo Dataframe DSL approach <https://arxiv.org/abs/1704.02341>`_
 - `ParallelAccelerator DSL approach <https://users.soe.ucsc.edu/~lkuper/papers/parallelaccelerator-ecoop17.pdf>`_
 
 
 Numba Development
 -----------------
 
-HPAT sits on top of Numba and is heavily tied to many of its features.
+Bodo sits on top of Numba and is heavily tied to many of its features.
 Therefore, understanding Numba's internal details and being able to develop Numba extensions
 is necessary.
 
@@ -28,14 +28,14 @@ is necessary.
 - Start with `basic overview of Numba use <http://numba.pydata.org/numba-doc/latest/user/5minguide.html>`_ and try the examples.
 - `User documentation <http://numba.pydata.org/numba-doc/latest/user/index.html>`_ is generally helpful for overview of features.
 - | `ParallelAccelerator documentation <http://numba.pydata.org/numba-doc/latest/user/parallel.html>`_
-    provides overview of parallel analysis and transformations in Numba (also used in HPAT).
+    provides overview of parallel analysis and transformations in Numba (also used in Bodo).
 - `Setting up Numba for development <http://numba.pydata.org/numba-doc/latest/developer/contributing.html>`_
 - | `Numba architecture page <http://numba.pydata.org/numba-doc/latest/developer/architecture.html>`_
     is a good starting point for understanding the internals.
 - | Learning Numba IR is crucial for understanding transformations.
     See the `IR classes <https://github.com/numba/numba/blob/master/numba/ir.py>`_.
     Setting `NUMBA_DEBUG_ARRAY_OPT=1` shows the IR at different stages
-    of ParallelAccelerator and HPAT transformations. Run `a simple parallel
+    of ParallelAccelerator and Bodo transformations. Run `a simple parallel
     example <http://numba.pydata.org/numba-doc/latest/user/parallel.html#explicit-parallel-loops>`_
     and make sure you understad the IR at different stages.
 - | `Exending Numba page <http://numba.pydata.org/numba-doc/latest/extending/index.html>`_
@@ -47,15 +47,15 @@ is necessary.
     Numba <https://github.com/numba/numba/blob/master/numba/dictobject.py>`_ (documentation planned).
     It has examples of calling into C code which is implemented as
     `a C extension library <https://github.com/numba/numba/blob/master/numba/_dictobject.c>`_.
-    For a simpler example of calling into C library, see HPAT's I/O features like
+    For a simpler example of calling into C library, see Bodo's I/O features like
     `get_file_size <https://github.com/IntelLabs/bodo/blob/master/bodo/io.py#L12>`_.
 - | `Developer reference manual <http://numba.pydata.org/numba-doc/latest/developer/index.html>`_
     provides more details if necessary.
 
-HPAT Development
+Bodo Development
 ----------------
 
-HPAT implements Pandas and Numpy API as a DSL.
+Bodo implements Pandas and Numpy API as a DSL.
 Data structures are implemented as Numba extensions, and
 compiler stages are responsible for different levels of abstraction.
 For example, `Series data type support <https://github.com/IntelLabs/bodo/blob/master/bodo/hiframes/pd_series_ext.py>`_

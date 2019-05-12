@@ -1,7 +1,7 @@
 # HPAT_tutorial
 
 ## Setting up your environment
-This HPAT tutorial makes use of bodo (latest), numpy, pandas, daal4py (latest) and their dependences.
+This Bodo tutorial makes use of bodo (latest), numpy, pandas, daal4py (latest) and their dependences.
 
 The easiest and most reliable way is to create a python environment using conda:
 
@@ -20,6 +20,6 @@ The main material is provided as juypter notebooks. To get started simply type
 
 `jupyter notebook`
 
-The main HPAT tutorial is in the notebook `bodo.ipynb`.
+The main Bodo tutorial is in the notebook `bodo.ipynb`.
 An example of an advanced analytics code is provided in `intraday_mean.py`.
-A more complete notebook about using daal4py with HPAT can be found in `	daal4py_data_science.ipynb`.
+A more complete notebook about using daal4py with Bodo can be found in `	daal4py_data_science.ipynb`.

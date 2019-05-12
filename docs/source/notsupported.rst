@@ -3,9 +3,9 @@
 Not Supported Python Programs
 =============================
 
-HPAT statically compiles user codes to generate efficient parallel programs.
+Bodo statically compiles user codes to generate efficient parallel programs.
 Hence, the user code needs to be `statically compilable`.
-This means that HPAT should be able to infer all the variable types, and be able
+This means that Bodo should be able to infer all the variable types, and be able
 to analyze the computations.
 
 Type Stability
