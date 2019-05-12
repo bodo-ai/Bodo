@@ -1,4 +1,6 @@
 import operator
+import sys
+import atexit
 from numba import types, cgutils
 from numba.targets.imputils import lower_builtin
 from numba.targets.arrayobj import make_array
@@ -583,8 +585,14 @@ def lower_hpat_finalize(context, builder, sig, args):
 def call_finalize():
     hpat_finalize()
 
-import atexit
-import sys
+
+def flush_stdout():
+    # using a function since pytest throws an error sometimes
+    # if flush function is passed directly to atexit
+    if not sys.stdout.closed:
+        sys.stdout.flush()
+
+
 atexit.register(call_finalize)
 # flush output before finalize
-atexit.register(sys.stdout.flush)
+atexit.register(flush_stdout)
