@@ -383,9 +383,6 @@ class HiFrames(object):
         if fdef == ('concat', 'pandas'):
             return self._handle_concat(assign, lhs, rhs, label)
 
-        # if fdef == ('crosstab', 'pandas'):
-        #     return self._handle_crosstab(lhs, rhs, label)
-
         if fdef == ('to_numeric', 'pandas'):
             return self._handle_pd_to_numeric(assign, lhs, rhs)
 
@@ -540,45 +537,6 @@ class HiFrames(object):
         if (inplace_var.name == inplace_default.name
                 or guard(find_const, self.func_ir, inplace_var) == False):
             self._create_df(lhs.name, out_col_map, label)
-        return nodes
-
-    def _handle_df_dropna(self, lhs, rhs, df_var, label):
-        nodes = []
-        inplace_default = ir.Var(lhs.scope, mk_unique_var("dropna_default"), lhs.loc)
-        nodes.append(ir.Assign(ir.Const(False, lhs.loc), inplace_default, lhs.loc))
-        inplace_var = self._get_arg('dropna', rhs.args, dict(rhs.kws), 4, 'inplace', default=inplace_default)
-
-        col_names = self._get_df_col_names(df_var)
-        col_vars = self._get_df_col_vars(df_var)
-        arg_names = ", ".join([mk_unique_var(cname).replace('.', '_') for cname in col_names])
-        out_names = ", ".join([mk_unique_var(cname).replace('.', '_') for cname in col_names])
-
-        func_text = "def _dropna_imp({}, inplace):\n".format(arg_names)
-        func_text += "  ({},) = bodo.hiframes.api.dropna(({},), inplace)\n".format(
-            out_names, arg_names)
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        _dropna_imp = loc_vars['_dropna_imp']
-
-        f_block = compile_to_numba_ir(_dropna_imp, {'bodo': bodo}).blocks.popitem()[1]
-        replace_arg_nodes(f_block, col_vars + [inplace_var])
-        nodes += f_block.body[:-3]
-
-        # extract column vars from output
-        out_col_map = {}
-        for i, cname in enumerate(col_names):
-            out_col_map[cname] = nodes[-len(col_names) + i].target
-
-        # create output df if not inplace
-        if (inplace_var.name == inplace_default.name
-                or guard(find_const, self.func_ir, inplace_var) == False):
-            self._create_df(lhs.name, out_col_map, label)
-        else:
-            # assign back to column vars for inplace case
-            for i in range(len(col_vars)):
-                c_var = col_vars[i]
-                dropped_var = list(out_col_map.values())[i]
-                nodes.append(ir.Assign(dropped_var, c_var, lhs.loc))
         return nodes
 
     def _handle_df_drop(self, assign, lhs, rhs, df_var):
@@ -1037,12 +995,6 @@ class HiFrames(object):
         self._create_df(lhs.name, done_cols, label)
         return nodes
 
-    def _handle_concat_series(self, lhs, rhs):
-        # defer to typed pass since the type might be non-numerical
-        def f(arr_list):  # pragma: no cover
-            return bodo.hiframes.api.init_series(bodo.hiframes.api.concat(arr_list))
-        return self._replace_func(f, rhs.args)
-
     def _fix_df_arrays(self, items_list):
         nodes = []
         new_list = []
@@ -1247,45 +1199,6 @@ class HiFrames(object):
                 err_msg = "{} requires '{}' argument".format(f_name, arg_name)
             raise ValueError(err_msg)
         return arg
-
-    def _handle_crosstab(self, lhs, rhs, label):
-        kws = dict(rhs.kws)
-        # TODO: hanlde multiple keys (index args)
-        index_arg = self._get_arg('crosstab', rhs.args, kws, 0, 'index')
-        columns_arg = self._get_arg('crosstab', rhs.args, kws, 1, 'columns')
-        # TODO: handle values and aggfunc options
-
-        in_vars = {}
-        # output of crosstab is array[int64]
-        def to_arr():
-            res = bodo.hiframes.api.init_series(np.empty(1, np.int64))
-        f_block = compile_to_numba_ir(to_arr, {'bodo': bodo, 'np': np}).blocks.popitem()[1]
-        nodes = f_block.body[:-3]  # remove none return
-        out_tp_var = nodes[-1].target
-        out_types = {'__dummy__': out_tp_var}
-
-        pivot_values = self._get_pivot_values(lhs.name)
-        df_col_map = ({col: ir.Var(lhs.scope, mk_unique_var(col), lhs.loc)
-                                for col in pivot_values})
-        out_df = df_col_map.copy()
-        self._create_df(lhs.name, out_df, label)
-        pivot_arr = columns_arg
-
-        def _agg_len_impl(in_arr):  # pragma: no cover
-            numba.parfor.init_prange()
-            count = 0
-            for i in numba.parfor.internal_prange(len(in_arr)):
-                count += 1
-            return count
-
-        # TODO: make out_key_var an index column
-
-        agg_node = aggregate.Aggregate(
-            lhs.name, 'crosstab', [index_arg.name], None, df_col_map,
-            in_vars, [index_arg],
-            _agg_len_impl, out_types, lhs.loc, pivot_arr, pivot_values, True)
-        nodes.append(agg_node)
-        return nodes
 
     def _handle_aggregate(self, lhs, rhs, obj_var, func_name, label):
         # format df.groupby('A')['B'].agg(lambda x: x.max()-x.min())
