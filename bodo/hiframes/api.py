@@ -18,11 +18,11 @@ from numba.targets.arrayobj import _getitem_array1d
 from numba.extending import register_model, models
 
 import bodo
-from bodo.str_ext import string_type, list_string_array_type
-from bodo.str_arr_ext import (StringArrayType, string_array_type,
+from bodo.libs.str_ext import string_type, list_string_array_type
+from bodo.libs.str_arr_ext import (StringArrayType, string_array_type,
     is_str_arr_typ)
 
-from bodo.set_ext import build_set
+from bodo.libs.set_ext import build_set
 from numba.targets.imputils import lower_builtin, impl_ret_untracked
 from bodo.hiframes.pd_timestamp_ext import (pandas_timestamp_type,
     datetime_date_type, set_df_datetime_date_lower)
@@ -45,7 +45,7 @@ enable_hiframes_remove_dead = True
 # quantile imports?
 import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
-from .. import quantile_alg
+from bodo.libs import quantile_alg
 import llvmlite.binding as ll
 ll.add_symbol('quantile_parallel', quantile_alg.quantile_parallel)
 ll.add_symbol('nth_sequential', quantile_alg.nth_sequential)
@@ -187,17 +187,17 @@ def concat_overload(arr_list):
             for A in in_arrs:
                 arr = dummy_unbox_series(A)
                 num_strs += len(arr)
-                num_chars += bodo.str_arr_ext.num_total_chars(arr)
-            out_arr = bodo.str_arr_ext.pre_alloc_string_array(num_strs, num_chars)
+                num_chars += bodo.libs.str_arr_ext.num_total_chars(arr)
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(num_strs, num_chars)
             # copy data to output
             curr_str_ind = 0
             curr_chars_ind = 0
             for A in in_arrs:
                 arr = dummy_unbox_series(A)
-                bodo.str_arr_ext.set_string_array_range(
+                bodo.libs.str_arr_ext.set_string_array_range(
                     out_arr, arr, curr_str_ind, curr_chars_ind)
                 curr_str_ind += len(arr)
-                curr_chars_ind += bodo.str_arr_ext.num_total_chars(arr)
+                curr_chars_ind += bodo.libs.str_arr_ext.num_total_chars(arr)
             return out_arr
 
         return string_concat_impl
@@ -443,7 +443,7 @@ def isna(arr, i):
 @overload(isna)
 def isna_overload(arr, i):
     if arr == string_array_type:
-        return lambda arr, i: bodo.str_arr_ext.str_arr_is_na(arr, i)
+        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
     # TODO: support NaN in list(list(str))
     if arr == list_string_array_type:
         return lambda arr, i: False
@@ -1054,7 +1054,7 @@ def fix_df_array_overload(column):
     # convert list of strings to string array
     if isinstance(column, types.List) and column.dtype == string_type:
         def fix_df_array_str_impl(column):  # pragma: no cover
-            return bodo.str_arr_ext.StringArray(column)
+            return bodo.libs.str_arr_ext.StringArray(column)
         return fix_df_array_str_impl
 
     if isinstance(column, DatetimeIndexType):
@@ -1424,7 +1424,7 @@ def list_str_arr_getitem_array(arr, ind):
         # TODO: convert to parfor in typed pass
         def list_str_arr_getitem_impl(arr, ind):
             n = ind.sum()
-            out_arr = bodo.str_ext.alloc_list_list_str(n)
+            out_arr = bodo.libs.str_ext.alloc_list_list_str(n)
             j = 0
             for i in range(len(ind)):
                 if ind[i]:

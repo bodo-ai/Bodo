@@ -6,9 +6,9 @@ from numba.extending import overload
 
 import bodo
 from bodo.utils import get_ctypes_ptr, _numba_to_c_type_map
-from bodo.timsort import getitem_arr_tup
-from bodo.str_ext import string_type
-from bodo.str_arr_ext import (string_array_type, to_string_list,
+from bodo.libs.timsort import getitem_arr_tup
+from bodo.libs.str_ext import string_type
+from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
     get_offset_ptr, get_data_ptr, convert_len_arr_to_offset,
     pre_alloc_string_array, num_total_chars)
 

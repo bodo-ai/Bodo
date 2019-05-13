@@ -13,8 +13,8 @@ from numba.typing.npydecl import (Numpy_rules_ufunc, NumpyRulesArrayOperator,
     NumpyRulesInplaceArrayOperator, NumpyRulesUnaryArrayOperator,
     NdConstructorLike)
 import bodo
-from bodo.str_ext import string_type, list_string_array_type
-from bodo.str_arr_ext import (string_array_type, offset_typ, char_typ,
+from bodo.libs.str_ext import string_type, list_string_array_type
+from bodo.libs.str_arr_ext import (string_array_type, offset_typ, char_typ,
     str_arr_payload_type, StringArrayType, GetItemStringArray)
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type, datetime_date_type
 from bodo.hiframes.pd_categorical_ext import (PDCategoricalDtype,
@@ -708,7 +708,7 @@ class GetItemSeriesIat(AbstractTemplate):
 class SeriesCompEqual(AbstractTemplate):
     key = '=='
     def generic(self, args, kws):
-        from bodo.str_arr_ext import is_str_arr_typ
+        from bodo.libs.str_arr_ext import is_str_arr_typ
         assert not kws
         [va, vb] = args
         # if one of the inputs is string array

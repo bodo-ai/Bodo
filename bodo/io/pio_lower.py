@@ -7,7 +7,7 @@ from bodo.io import pio_api
 from bodo.utils import _numba_to_c_type_map
 from bodo.io.pio_api import (h5file_type, h5dataset_or_group_type, h5dataset_type,
                           h5group_type)
-from bodo.str_ext import string_type, gen_get_unicode_chars, gen_std_str_to_unicode
+from bodo.libs.str_ext import string_type, gen_get_unicode_chars, gen_std_str_to_unicode
 
 from llvmlite import ir as lir
 import llvmlite.binding as ll

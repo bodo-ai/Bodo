@@ -20,9 +20,9 @@ from numba.targets.arrayobj import make_array
 import numpy as np
 import bodo
 from bodo.utils import get_constant, NOT_CONSTANT
-from bodo.str_ext import string_type, unicode_to_char_ptr
-from bodo.str_arr_ext import StringArray, StringArrayPayloadType, construct_string_array
-from bodo.str_arr_ext import string_array_type
+from bodo.libs.str_ext import string_type, unicode_to_char_ptr
+from bodo.libs.str_arr_ext import StringArray, StringArrayPayloadType, construct_string_array
+from bodo.libs.str_arr_ext import string_array_type
 
 def remove_xenon(rhs, lives, call_list):
     # the call is dead if the read array is dead

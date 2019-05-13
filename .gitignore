@@ -7,6 +7,7 @@
 # cache
 bodo/__pycache__
 bodo/hiframes/__pycache__
+bodo/libs/__pycache__
 
 # Python egg metadata, regenerated from source files by setuptools.
 /*.egg-info

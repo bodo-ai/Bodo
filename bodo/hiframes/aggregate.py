@@ -25,13 +25,13 @@ from bodo.utils import (is_call_assign, is_var_assign, is_assign, debug_prints,
 from bodo import distributed, distributed_analysis
 from bodo.distributed_analysis import Distribution
 from bodo.utils import _numba_to_c_type_map, unliteral_all
-from bodo.str_ext import string_type
-from bodo.set_ext import num_total_chars_set_string, build_set
-from bodo.str_arr_ext import (string_array_type, pre_alloc_string_array,
+from bodo.libs.str_ext import string_type
+from bodo.libs.set_ext import num_total_chars_set_string, build_set
+from bodo.libs.str_arr_ext import (string_array_type, pre_alloc_string_array,
                               get_offset_ptr, get_data_ptr)
 
 from bodo.hiframes.join import write_send_buff
-from bodo.timsort import getitem_arr_tup
+from bodo.libs.timsort import getitem_arr_tup
 from bodo.shuffle_utils import (getitem_arr_tup_single, val_to_tup, alltoallv,
     alltoallv_tup, finalize_shuffle_meta, update_shuffle_meta,
     alloc_pre_shuffle_metadata, _get_keys_tup, _get_data_tup)
@@ -648,7 +648,7 @@ def agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy,
     # redvar_1_arr = np.full(n_uniq_keys, _init_val_1, np.int64)
     # out_key = np.empty(n_uniq_keys, np.float64)
     n_pes = bodo.distributed_api.get_size()
-    # bodo.dict_ext.init_dict_float64_int64()
+    # bodo.libs.dict_ext.init_dict_float64_int64()
     # key_write_map = get_key_dict(key_arrs[0])
     key_write_map, byte_v = get_key_dict(key_arrs)
 
@@ -668,7 +668,7 @@ def agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy,
             w_ind = key_write_map[k]
         __update_redvars(redvar_arrs, data_in, w_ind, i, pivot_arr)
         #redvar_arrs[0][w_ind], redvar_arrs[1][w_ind] = __update_redvars(redvar_arrs[0][w_ind], redvar_arrs[1][w_ind], data_in[0][i])
-    bodo.dict_ext.byte_vec_free(byte_v)
+    bodo.libs.dict_ext.byte_vec_free(byte_v)
     return
 
 
@@ -702,7 +702,7 @@ def agg_parallel_combine_iter(key_arrs, reduce_recvs, out_dummy_tup, init_vals,
     for j in range(n_uniq_keys):
         __eval_res(local_redvars, out_arrs, j)
 
-    bodo.dict_ext.byte_vec_free(byte_v)
+    bodo.libs.dict_ext.byte_vec_free(byte_v)
     return out_arrs
 
 @numba.njit
@@ -734,7 +734,7 @@ def agg_seq_iter(key_arrs, redvar_dummy_tup, out_dummy_tup, data_in, init_vals,
     for j in range(n_uniq_keys):
         __eval_res(local_redvars, out_arrs, j)
 
-    bodo.dict_ext.byte_vec_free(byte_v)
+    bodo.libs.dict_ext.byte_vec_free(byte_v)
     return out_arrs
 
 
@@ -772,16 +772,16 @@ def get_key_dict_overload(arr):
         for t in arr.types:
             n_bytes += context.get_abi_sizeof(context.get_data_type(t.dtype))
         def _impl(arr):
-            b_v = bodo.dict_ext.byte_vec_init(n_bytes, 0)
-            b_dict = bodo.dict_ext.dict_byte_vec_int64_init()
+            b_v = bodo.libs.dict_ext.byte_vec_init(n_bytes, 0)
+            b_dict = bodo.libs.dict_ext.dict_byte_vec_int64_init()
             return b_dict, b_v
         return _impl
 
     # regular scalar keys
     dtype = arr.types[0].dtype
     func_text = "def k_dict_impl(arr):\n"
-    func_text += "  b_v = bodo.dict_ext.byte_vec_init(1, 0)\n"
-    func_text += "  return bodo.dict_ext.dict_{}_int64_init(), b_v\n".format(dtype)
+    func_text += "  b_v = bodo.libs.dict_ext.byte_vec_init(1, 0)\n"
+    func_text += "  return bodo.libs.dict_ext.dict_{}_int64_init(), b_v\n".format(dtype)
     loc_vars = {}
     exec(func_text, {'bodo': bodo}, loc_vars)
     k_dict_impl = loc_vars['k_dict_impl']
@@ -799,7 +799,7 @@ def _getitem_keys_overload(arrs, ind, b_v):
         for i, t in enumerate(arrs.types):
             n_bytes = context.get_abi_sizeof(context.get_data_type(t.dtype))
             func_text += "  arr_ptr = arrs[{}].ctypes.data + ind * {}\n".format(i, n_bytes)
-            func_text += "  bodo.dict_ext.byte_vec_set(b_v, {}, arr_ptr, {})\n".format(offset, n_bytes)
+            func_text += "  bodo.libs.dict_ext.byte_vec_set(b_v, {}, arr_ptr, {})\n".format(offset, n_bytes)
             offset += n_bytes
 
         func_text += "  return b_v\n"
@@ -842,7 +842,7 @@ def get_key_set(arr):  # pragma: no cover
 def get_key_set_overload(arr):
     if arr == string_array_type or (isinstance(arr, types.BaseTuple)
             and len(arr.types) == 1 and arr.types[0] == string_array_type):
-        return lambda arr: bodo.set_ext.init_set_string()
+        return lambda arr: bodo.libs.set_ext.init_set_string()
 
     if isinstance(arr, types.BaseTuple):
         def get_set_tup(arr):

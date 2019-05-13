@@ -22,9 +22,9 @@ import bodo
 from bodo import hiframes
 from bodo.utils import (debug_prints, inline_new_blocks, ReplaceFunc,
     is_whole_slice, is_array)
-from bodo.str_ext import (string_type, unicode_to_std_str, std_str_to_unicode,
+from bodo.libs.str_ext import (string_type, unicode_to_std_str, std_str_to_unicode,
     list_string_array_type)
-from bodo.str_arr_ext import (string_array_type, StringArrayType,
+from bodo.libs.str_arr_ext import (string_array_type, StringArrayType,
     is_str_arr_typ, pre_alloc_string_array, get_utf8_size)
 from bodo.hiframes.pd_series_ext import (SeriesType, is_str_series_typ,
     series_to_array_type, is_dt64_series_typ,
@@ -792,7 +792,7 @@ class SeriesPass(object):
                 n = len(A)
                 B = np.empty(n, out_dtype)
                 for i in numba.parfor.internal_prange(n):
-                    bodo.str_arr_ext.str_arr_item_to_numeric(B, i, A, i)
+                    bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, A, i)
 
                 return bodo.hiframes.api.init_series(B)
 
@@ -1126,7 +1126,7 @@ class SeriesPass(object):
                 # optimization: just set null bit if fill is empty
                 if guard(find_const, self.func_ir, val) == "":
                     return self._replace_func(
-                        lambda A: bodo.str_arr_ext.set_null_bits(A),
+                        lambda A: bodo.libs.str_arr_ext.set_null_bits(A),
                         [data],
                         pre_nodes=nodes)
                 # Since string arrays can't be changed, we have to create a new
@@ -1685,7 +1685,7 @@ class SeriesPass(object):
                 func_text += '    num_chars = 0\n'
                 func_text += '    for i in numba.parfor.internal_prange(n):\n'
                 func_text += '        num_chars += get_utf8_size(str_arr[i].{}())\n'.format(func_name)
-            func_text += '    S = bodo.str_arr_ext.pre_alloc_string_array(n, num_chars)\n'
+            func_text += '    S = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)\n'
             func_text += '    for i in numba.parfor.internal_prange(n):\n'
             func_text += '        S[i] = str_arr[i].{}()\n'.format(func_name)
             func_text += '    return bodo.hiframes.api.init_series(S)\n'
@@ -1695,8 +1695,8 @@ class SeriesPass(object):
             f = loc_vars['f']
             return self._replace_func(f, [arr], pre_nodes=nodes,
                 extra_globals={
-                    'num_total_chars': bodo.str_arr_ext.num_total_chars,
-                    'get_utf8_size': bodo.str_arr_ext.get_utf8_size,
+                    'num_total_chars': bodo.libs.str_arr_ext.num_total_chars,
+                    'get_utf8_size': bodo.libs.str_arr_ext.get_utf8_size,
                 })
 
         if func_name == 'contains':
@@ -1769,7 +1769,7 @@ class SeriesPass(object):
         def _str_split_impl(str_arr, sep):
             numba.parfor.init_prange()
             n = len(str_arr)
-            out_arr = bodo.str_ext.alloc_list_list_str(n)
+            out_arr = bodo.libs.str_ext.alloc_list_list_str(n)
             for i in numba.parfor.internal_prange(n):
                 in_str = str_arr[i]
                 out_arr[i] = in_str.split(sep)
@@ -1796,7 +1796,7 @@ class SeriesPass(object):
             numba.parfor.init_prange()
             n = len(str_arr)
             n_total_chars = 0
-            str_list = bodo.str_ext.alloc_str_list(n)
+            str_list = bodo.libs.str_ext.alloc_str_list(n)
             for i in numba.parfor.internal_prange(n):
                 # TODO: support NAN
                 in_list_str = str_arr[i]
@@ -1824,7 +1824,7 @@ class SeriesPass(object):
                 for i in numba.parfor.internal_prange(n):
                     data_start, length = get_split_view_index(arr, i, ind)
                     ptr = get_split_view_data_ptr(arr, data_start)
-                    bodo.str_arr_ext.setitem_str_arr_ptr(out_arr, i, ptr, length)
+                    bodo.libs.str_arr_ext.setitem_str_arr_ptr(out_arr, i, ptr, length)
                 return bodo.hiframes.api.init_series(out_arr)
 
         return self._replace_func(_str_get_impl, [arr, ind_var],
@@ -2017,9 +2017,9 @@ class SeriesPass(object):
     def _handle_str_contains(self, assign, lhs, rhs, fname):
 
         if fname == 'str_contains_regex':
-            comp_func = 'bodo.str_ext.contains_regex'
+            comp_func = 'bodo.libs.str_ext.contains_regex'
         elif fname == 'str_contains_noregex':
-            comp_func = 'bodo.str_ext.contains_noregex'
+            comp_func = 'bodo.libs.str_ext.contains_noregex'
         else:
             assert False
 
@@ -2118,9 +2118,9 @@ class SeriesPass(object):
             func_text += "      num_chars_{} += len({}[i])\n".format(c, c)
         for v, out in zip(in_names, out_names):
             if v in str_colnames:
-                func_text += "  {} = bodo.str_arr_ext.pre_alloc_string_array(new_len, num_chars_{})\n".format(out, v)
+                func_text += "  {} = bodo.libs.str_arr_ext.pre_alloc_string_array(new_len, num_chars_{})\n".format(out, v)
             elif v in list_str_colnames:
-                func_text += "  {} = bodo.str_ext.alloc_list_list_str(new_len)\n".format(out)
+                func_text += "  {} = bodo.libs.str_ext.alloc_list_list_str(new_len)\n".format(out)
             elif v in split_view_colnames:
                 # TODO support dropna() for split view
                 func_text += "  {} = {}\n".format(out, v)

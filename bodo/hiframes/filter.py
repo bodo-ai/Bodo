@@ -8,7 +8,7 @@ import bodo
 from bodo import distributed, distributed_analysis
 from bodo.distributed_analysis import Distribution
 from bodo.utils import debug_prints
-from bodo.str_arr_ext import string_array_type
+from bodo.libs.str_arr_ext import string_array_type
 from bodo.hiframes.split_impl import string_array_split_view_type
 
 
@@ -38,7 +38,7 @@ def filter_array_analysis(filter_node, equiv_set, typemap, array_analysis):
     post = []
     # empty filter nodes should be deleted in remove dead
     assert len(filter_node.df_in_vars) > 0, "empty filter in array analysis"
-    from bodo.str_ext import list_string_array_type
+    from bodo.libs.str_ext import list_string_array_type
 
     # arrays of input df have same size in first dimension
     all_shapes = []

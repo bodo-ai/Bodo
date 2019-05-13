@@ -14,7 +14,7 @@ from numba.typing.templates import (infer_getattr, AttributeTemplate,
 import numpy as np
 import ctypes
 import inspect
-import bodo.str_ext
+import bodo.libs.str_ext
 import bodo.utils
 
 from llvmlite import ir as lir
@@ -28,7 +28,7 @@ import pandas as pd
 #     pandas_present = False
 
 import datetime
-from .. import hdatetime_ext
+from bodo.libs import hdatetime_ext
 import llvmlite.binding as ll
 ll.add_symbol('parse_iso_8601_datetime', hdatetime_ext.parse_iso_8601_datetime)
 ll.add_symbol('convert_datetimestruct_to_datetime', hdatetime_ext.convert_datetimestruct_to_datetime)
@@ -844,7 +844,7 @@ convert_datetimestruct_to_datetime = types.ExternalFunction("convert_datetimestr
 
 @numba.njit(locals={'arg1': numba.int32, 'arg3': numba.int32, 'arg4': numba.int32})
 def parse_datetime_str(str):
-    arg0 = bodo.str_ext.unicode_to_char_ptr(str)
+    arg0 = bodo.libs.str_ext.unicode_to_char_ptr(str)
     arg1 = len(str)
     arg2 = PANDAS_DATETIMESTRUCT()
     arg3 = np.int32(13)
@@ -881,7 +881,7 @@ def parse_datetime_str(str):
 # from numba.targets.listobj import ListInstance
 # from llvmlite import ir as lir
 # import llvmlite.binding as ll
-# #from .. import hdatetime_ext
+# #from bodo.libs import hdatetime_ext
 # #ll.add_symbol('dt_to_timestamp', hdatetime_ext.dt_to_timestamp)
 #
 # @lower_builtin(operator.getitem, TimestampSeriesType, types.Integer)

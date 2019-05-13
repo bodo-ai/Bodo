@@ -12,8 +12,8 @@ from numba.extending import overload, intrinsic, lower_cast
 import collections
 import numpy as np
 import bodo
-from bodo.str_ext import string_type, list_string_array_type
-from bodo.str_arr_ext import string_array_type, num_total_chars, pre_alloc_string_array
+from bodo.libs.str_ext import string_type, list_string_array_type
+from bodo.libs.str_arr_ext import string_array_type, num_total_chars, pre_alloc_string_array
 from enum import Enum
 
 
@@ -169,9 +169,9 @@ def is_alloc_callname(func_name, mod_name):
         or (func_name == 'empty_inferred'
             and mod_name in ('numba.extending', 'numba.unsafe.ndarray'))
         or (func_name == 'pre_alloc_string_array'
-            and mod_name == 'bodo.str_arr_ext')
+            and mod_name == 'bodo.libs.str_arr_ext')
         or (func_name in ('alloc_str_list', 'alloc_list_list_str')
-            and mod_name == 'bodo.str_ext'))
+            and mod_name == 'bodo.libs.str_ext'))
 
 def find_build_tuple(func_ir, var):
     """Check if a variable is constructed via build_tuple
@@ -206,14 +206,14 @@ typ_to_format = {
 
 from llvmlite import ir as lir
 import llvmlite.binding as ll
-from . import hstr_ext
+from bodo.libs import hstr_ext
 ll.add_symbol('print_str', hstr_ext.print_str)
 ll.add_symbol('print_char', hstr_ext.print_char)
 
 
 @lower_builtin(cprint, types.VarArg(types.Any))
 def cprint_lower(context, builder, sig, args):
-    from bodo.str_ext import string_type, char_type
+    from bodo.libs.str_ext import string_type, char_type
 
     for i, val in enumerate(args):
         typ = sig.args[i]

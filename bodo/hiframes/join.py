@@ -13,15 +13,15 @@ from bodo import distributed, distributed_analysis
 from bodo.utils import debug_prints, alloc_arr_tup, empty_like_type
 from bodo.distributed_analysis import Distribution
 
-from bodo.str_arr_ext import (string_array_type, to_string_list,
+from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
                               cp_str_list_to_array, str_list_to_array,
                               get_offset_ptr, get_data_ptr, convert_len_arr_to_offset,
                               pre_alloc_string_array, num_total_chars,
                               getitem_str_offset, copy_str_arr_slice,
                               str_copy_ptr, get_utf8_size,
                               setitem_str_offset, str_arr_set_na)
-from bodo.str_ext import string_type
-from bodo.timsort import copyElement_tup, getitem_arr_tup, setitem_arr_tup
+from bodo.libs.str_ext import string_type
+from bodo.libs.timsort import copyElement_tup, getitem_arr_tup, setitem_arr_tup
 from bodo.shuffle_utils import (getitem_arr_tup_single, val_to_tup, alltoallv,
     alltoallv_tup, finalize_shuffle_meta,
     update_shuffle_meta,  alloc_pre_shuffle_metadata,
@@ -669,7 +669,7 @@ from llvmlite import ir as lir
 import llvmlite.binding as ll
 from numba.targets.arrayobj import make_array
 from bodo.utils import _numba_to_c_type_map
-from .. import hdist
+from bodo.libs import hdist
 ll.add_symbol('c_alltoallv', hdist.c_alltoallv)
 
 
@@ -882,18 +882,18 @@ def local_hash_join_impl(left_keys, right_keys, data_left, data_right, is_left=F
         r_matched = np.full(r_len, False, np.bool_)
 
     out_ind = 0
-    m = bodo.dict_ext.multimap_int64_init()
+    m = bodo.libs.dict_ext.multimap_int64_init()
     for i in range(r_len):
         # store hash if keys are tuple or non-int
         k = _hash_if_tup(getitem_arr_tup(right_keys, i))
-        bodo.dict_ext.multimap_int64_insert(m, k, i)
+        bodo.libs.dict_ext.multimap_int64_insert(m, k, i)
 
-    r = bodo.dict_ext.multimap_int64_equal_range_alloc()
+    r = bodo.libs.dict_ext.multimap_int64_equal_range_alloc()
     for i in range(l_len):
         l_key = getitem_arr_tup(left_keys, i)
         l_data_val = getitem_arr_tup(data_left, i)
         k = _hash_if_tup(l_key)
-        bodo.dict_ext.multimap_int64_equal_range_inplace(m, k, r)
+        bodo.libs.dict_ext.multimap_int64_equal_range_inplace(m, k, r)
         num_matched = 0
         for j in r:
             # if hash for stored, check left key against the actual right key
@@ -914,7 +914,7 @@ def local_hash_join_impl(left_keys, right_keys, data_left, data_right, is_left=F
             out_data_right = setnan_elem_buff_tup(out_data_right, out_ind)
             out_ind += 1
 
-    bodo.dict_ext.multimap_int64_equal_range_dealloc(r)
+    bodo.libs.dict_ext.multimap_int64_equal_range_dealloc(r)
 
     # produce NA rows for unmatched right keys
     if is_right:

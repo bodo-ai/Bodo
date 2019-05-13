@@ -28,8 +28,8 @@ from bodo.hiframes import filter, join, aggregate, sort
 from bodo.utils import (get_constant, NOT_CONSTANT, debug_prints,
     inline_new_blocks, ReplaceFunc, is_call, is_assign)
 import bodo.hiframes.api
-from bodo.str_ext import string_type
-from bodo.str_arr_ext import string_array_type
+from bodo.libs.str_ext import string_type
+from bodo.libs.str_arr_ext import string_array_type
 import bodo.io
 from bodo.io import csv_ext
 

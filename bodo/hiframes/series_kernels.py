@@ -8,8 +8,8 @@ from numba.extending import overload
 from numba.typing.templates import infer_global, AbstractTemplate, signature
 
 import bodo
-from bodo.str_ext import string_type, unicode_to_std_str, std_str_to_unicode
-from bodo.str_arr_ext import (string_array_type, StringArrayType,
+from bodo.libs.str_ext import string_type, unicode_to_std_str, std_str_to_unicode
+from bodo.libs.str_arr_ext import (string_array_type, StringArrayType,
     is_str_arr_typ, pre_alloc_string_array, get_utf8_size)
 
 
@@ -53,7 +53,7 @@ def _series_fillna_str_alloc_impl(B, fill):  # pragma: no cover
             num_chars += len(fill)
         else:
             num_chars += len(s)
-    A = bodo.str_arr_ext.pre_alloc_string_array(n, num_chars)
+    A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
     bodo.hiframes.api.fillna(A, B, fill)
     return bodo.hiframes.api.init_series(A)
 
@@ -79,14 +79,14 @@ def _series_dropna_str_alloc_impl_inner(B):  # pragma: no cover
     old_len = len(B)
     na_count = 0
     for i in range(len(B)):
-        if bodo.str_arr_ext.str_arr_is_na(B, i):
+        if bodo.libs.str_arr_ext.str_arr_is_na(B, i):
             na_count += 1
     # TODO: more efficient null counting
     new_len = old_len - na_count
-    num_chars = bodo.str_arr_ext.num_total_chars(B)
-    A = bodo.str_arr_ext.pre_alloc_string_array(new_len, num_chars)
-    bodo.str_arr_ext.copy_non_null_offsets(A, B)
-    bodo.str_arr_ext.copy_data(A, B)
+    num_chars = bodo.libs.str_arr_ext.num_total_chars(B)
+    A = bodo.libs.str_arr_ext.pre_alloc_string_array(new_len, num_chars)
+    bodo.libs.str_arr_ext.copy_non_null_offsets(A, B)
+    bodo.libs.str_arr_ext.copy_data(A, B)
     return A
 
 
@@ -312,7 +312,7 @@ def _column_fillna_alloc_impl(S, val):  # pragma: no cover
 
 
 def _str_contains_regex_impl(str_arr, pat):  # pragma: no cover
-    e = bodo.str_ext.compile_regex(pat)
+    e = bodo.libs.str_ext.compile_regex(pat)
     return bodo.hiframes.api.str_contains_regex(str_arr, e)
 
 def _str_contains_noregex_impl(str_arr, pat):  # pragma: no cover
@@ -372,7 +372,7 @@ def _series_astype_str_impl(arr):
         s = arr[i]
         num_chars += len(str(s))  # TODO: check NA
 
-    A = bodo.str_arr_ext.pre_alloc_string_array(n, num_chars)
+    A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
     for i in numba.parfor.internal_prange(n):
         s = arr[i]
         A[i] = str(s)  # TODO: check NA
@@ -381,16 +381,16 @@ def _series_astype_str_impl(arr):
 
 # def _str_replace_regex_impl(str_arr, pat, val):
 #     numba.parfor.init_prange()
-#     e = bodo.str_ext.compile_regex(unicode_to_std_str(pat))
+#     e = bodo.libs.str_ext.compile_regex(unicode_to_std_str(pat))
 #     val = unicode_to_std_str(val)
 #     n = len(str_arr)
 #     n_total_chars = 0
-#     str_list = bodo.str_ext.alloc_str_list(n)
+#     str_list = bodo.libs.str_ext.alloc_str_list(n)
 #     for i in numba.parfor.internal_prange(n):
 #         # TODO: support unicode
 #         in_str = unicode_to_std_str(str_arr[i])
 #         out_str = std_str_to_unicode(
-#             bodo.str_ext.str_replace_regex(in_str, e, val))
+#             bodo.libs.str_ext.str_replace_regex(in_str, e, val))
 #         str_list[i] = out_str
 #         n_total_chars += len(out_str)
 #     numba.parfor.init_prange()
@@ -406,7 +406,7 @@ def _str_replace_regex_impl(str_arr, pat, val):
     e = re.compile(pat)
     n = len(str_arr)
     n_total_chars = 0
-    str_list = bodo.str_ext.alloc_str_list(n)
+    str_list = bodo.libs.str_ext.alloc_str_list(n)
     for i in numba.parfor.internal_prange(n):
         out_str = e.sub(val, str_arr[i])
         str_list[i] = out_str
@@ -427,12 +427,12 @@ def _str_replace_regex_impl(str_arr, pat, val):
 #     val = unicode_to_std_str(val)
 #     n = len(str_arr)
 #     n_total_chars = 0
-#     str_list = bodo.str_ext.alloc_str_list(n)
+#     str_list = bodo.libs.str_ext.alloc_str_list(n)
 #     for i in numba.parfor.internal_prange(n):
 #         # TODO: support unicode
 #         in_str = unicode_to_std_str(str_arr[i])
 #         out_str = std_str_to_unicode(
-#             bodo.str_ext.str_replace_noregex(in_str, e, val))
+#             bodo.libs.str_ext.str_replace_noregex(in_str, e, val))
 #         str_list[i] = out_str
 #         n_total_chars += len(out_str)
 #     numba.parfor.init_prange()
@@ -447,7 +447,7 @@ def _str_replace_noregex_impl(str_arr, pat, val):
     numba.parfor.init_prange()
     n = len(str_arr)
     n_total_chars = 0
-    str_list = bodo.str_ext.alloc_str_list(n)
+    str_list = bodo.libs.str_ext.alloc_str_list(n)
     for i in numba.parfor.internal_prange(n):
         out_str = str_arr[i].replace(pat, val)
         str_list[i] = out_str

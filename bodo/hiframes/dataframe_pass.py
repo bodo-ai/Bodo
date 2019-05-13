@@ -21,8 +21,8 @@ import bodo
 from bodo import hiframes
 from bodo.utils import (debug_prints, inline_new_blocks, ReplaceFunc,
     is_whole_slice, is_array, is_assign, sanitize_varname)
-from bodo.str_ext import string_type
-from bodo.str_arr_ext import (string_array_type, StringArrayType,
+from bodo.libs.str_ext import string_type
+from bodo.libs.str_arr_ext import (string_array_type, StringArrayType,
     is_str_arr_typ, pre_alloc_string_array)
 from bodo.io.pio_api import h5dataset_type
 from bodo.hiframes.rolling import get_rolling_setup_args
@@ -1205,7 +1205,7 @@ class DataFramePass(object):
             func_text += "  {} = {}.{}()\n".format(d+'_O', d+'_S', func_name)
         func_text += "  data = np.array(({},))\n".format(
             ", ".join(d+'_O' for d in data_args))
-        func_text += "  index = bodo.str_arr_ext.StringArray(({},))\n".format(
+        func_text += "  index = bodo.libs.str_arr_ext.StringArray(({},))\n".format(
             ", ".join("'{}'".format(c) for c in df_typ.columns))
         func_text += "  return bodo.hiframes.api.init_series(data, index)\n"
         loc_vars = {}

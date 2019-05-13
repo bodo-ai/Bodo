@@ -8,8 +8,8 @@ import glob
 import gc
 import re
 import pyarrow.parquet as pq
-from bodo.str_arr_ext import StringArray
-from bodo.str_ext import unicode_to_std_str, std_str_to_unicode
+from bodo.libs.str_arr_ext import StringArray
+from bodo.libs.str_ext import unicode_to_std_str, std_str_to_unicode
 
 
 class TestString(unittest.TestCase):
@@ -116,7 +116,7 @@ class TestString(unittest.TestCase):
 
     def test_regex_std(self):
         def test_impl(_str, _pat):
-            return bodo.str_ext.contains_regex(_str, bodo.str_ext.compile_regex(_pat))
+            return bodo.libs.str_ext.contains_regex(_str, bodo.libs.str_ext.compile_regex(_pat))
         hpat_func = bodo.jit(test_impl)
         self.assertEqual(hpat_func('What does the fox say', r'd.*(the |fox ){2}'), True)
         self.assertEqual(hpat_func('What does the fox say', r'[kz]u*'), False)
@@ -125,9 +125,9 @@ class TestString(unittest.TestCase):
     def test_replace_regex_std(self):
         def test_impl(_str, pat, val):
             s = unicode_to_std_str(_str)
-            e = bodo.str_ext.compile_regex(unicode_to_std_str(pat))
+            e = bodo.libs.str_ext.compile_regex(unicode_to_std_str(pat))
             val = unicode_to_std_str(val)
-            out = bodo.str_ext.str_replace_regex(s, e, val)
+            out = bodo.libs.str_ext.str_replace_regex(s, e, val)
             return std_str_to_unicode(out)
 
         _str = 'What does the fox say'
@@ -142,7 +142,7 @@ class TestString(unittest.TestCase):
             s = unicode_to_std_str(_str)
             e = unicode_to_std_str(pat)
             val = unicode_to_std_str(val)
-            out = bodo.str_ext.str_replace_noregex(s, e, val)
+            out = bodo.libs.str_ext.str_replace_noregex(s, e, val)
             return std_str_to_unicode(out)
 
         _str = 'What does the fox say'
@@ -259,7 +259,7 @@ class TestString(unittest.TestCase):
 
     def test_set_string(self):
         def test_impl():
-            s = bodo.set_ext.init_set_string()
+            s = bodo.libs.set_ext.init_set_string()
             s.add('ff')
             for v in s:
                 pass
@@ -270,7 +270,7 @@ class TestString(unittest.TestCase):
 
     def test_dict_string(self):
         def test_impl():
-            s = bodo.dict_ext.dict_unicode_type_unicode_type_init()
+            s = bodo.libs.dict_ext.dict_unicode_type_unicode_type_init()
             s['aa'] = 'bb'
             return s['aa'], ('aa' in s)
 

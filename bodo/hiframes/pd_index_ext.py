@@ -10,7 +10,7 @@ from numba.typing.templates import (infer_global, AbstractTemplate, signature,
 from numba.targets.boxing import box_array
 
 import bodo
-from bodo.str_ext import string_type
+from bodo.libs.str_ext import string_type
 import bodo.hiframes
 from bodo.hiframes.pd_series_ext import (is_str_series_typ, string_array_type,
     SeriesType)

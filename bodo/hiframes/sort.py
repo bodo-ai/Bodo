@@ -9,8 +9,8 @@ from numba.ir_utils import (visit_vars_inner, replace_vars_inner,
 from numba.typing import signature
 from numba.extending import overload
 import bodo
-import bodo.timsort
-from bodo.timsort import getitem_arr_tup
+import bodo.libs.timsort
+from bodo.libs.timsort import getitem_arr_tup
 from bodo.utils import _numba_to_c_type_map
 from bodo import distributed, distributed_analysis
 from bodo.distributed_api import Reduce_Type
@@ -22,11 +22,11 @@ from bodo.shuffle_utils import (alltoallv, alltoallv_tup,
     finalize_shuffle_meta, update_shuffle_meta,  alloc_pre_shuffle_metadata,
     _get_keys_tup, _get_data_tup)
 
-from bodo.str_arr_ext import (string_array_type, to_string_list,
+from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
                               cp_str_list_to_array, str_list_to_array,
                               get_offset_ptr, get_data_ptr, convert_len_arr_to_offset,
                               pre_alloc_string_array, num_total_chars)
-from bodo.str_ext import string_type
+from bodo.libs.str_ext import string_type
 
 
 MIN_SAMPLES = 1000000
@@ -397,7 +397,7 @@ def _copy_array_nodes(var, nodes, typingctx, typemap, calltypes):
 
 def to_string_list_typ(typ):
     if typ == string_array_type:
-        return types.List(bodo.str_ext.string_type)
+        return types.List(bodo.libs.str_ext.string_type)
 
     if isinstance(typ, (types.Tuple, types.UniTuple)):
         new_typs = []
@@ -415,9 +415,9 @@ def local_sort(key_arrs, data, ascending=True):
     l_key_arrs = to_string_list(key_arrs)
     l_data = to_string_list(data)
     n_out = len(key_arrs[0])
-    bodo.timsort.sort(l_key_arrs, 0, n_out, l_data)
+    bodo.libs.timsort.sort(l_key_arrs, 0, n_out, l_data)
     if not ascending:
-        bodo.timsort.reverseRange(l_key_arrs, 0, n_out, l_data)
+        bodo.libs.timsort.reverseRange(l_key_arrs, 0, n_out, l_data)
     cp_str_list_to_array(key_arrs, l_key_arrs)
     cp_str_list_to_array(data, l_data)
 

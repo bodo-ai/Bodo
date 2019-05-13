@@ -19,7 +19,7 @@ def unliteral_all(args):
     return tuple(types.unliteral(a) for a in args)
 
 # relative import seems required for C extensions
-from . import hstr_ext
+from bodo.libs import hstr_ext
 ll.add_symbol('get_char_from_string', hstr_ext.get_char_from_string)
 ll.add_symbol('get_char_ptr', hstr_ext.get_char_ptr)
 ll.add_symbol('del_str', hstr_ext.del_str)
@@ -434,17 +434,17 @@ def gen_unicode_to_std_str(context, builder, unicode_val):
 def gen_std_str_to_unicode(context, builder, std_str_val, del_str=False):
     kind = numba.unicode.PY_UNICODE_1BYTE_KIND
     def _std_str_to_unicode(std_str):
-        length = bodo.str_ext.get_std_str_len(std_str)
+        length = bodo.libs.str_ext.get_std_str_len(std_str)
         ret = numba.unicode._empty_string(kind, length)
-        bodo.str_arr_ext._memcpy(
-            ret._data, bodo.str_ext.get_c_str(std_str), length, 1)
+        bodo.libs.str_arr_ext._memcpy(
+            ret._data, bodo.libs.str_ext.get_c_str(std_str), length, 1)
         if del_str:
-            bodo.str_ext.del_str(std_str)
+            bodo.libs.str_ext.del_str(std_str)
         return ret
     val = context.compile_internal(
             builder,
             _std_str_to_unicode,
-            string_type(bodo.str_ext.std_str_type),
+            string_type(bodo.libs.str_ext.std_str_type),
             [std_str_val])
     return val
 

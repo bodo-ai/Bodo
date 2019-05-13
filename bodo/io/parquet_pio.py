@@ -12,9 +12,9 @@ from numba.typing import signature
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 import numpy as np
 import bodo
-from bodo.str_ext import string_type, unicode_to_char_ptr
-from bodo.str_arr_ext import StringArray, StringArrayPayloadType, construct_string_array
-from bodo.str_arr_ext import string_array_type
+from bodo.libs.str_ext import string_type, unicode_to_char_ptr
+from bodo.libs.str_arr_ext import StringArray, StringArrayPayloadType, construct_string_array
+from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils import unliteral_all
 
 

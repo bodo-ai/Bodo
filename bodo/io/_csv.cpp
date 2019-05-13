@@ -19,8 +19,8 @@
 #include <boost/tokenizer.hpp>
 #include <boost/filesystem/operations.hpp>
 
-#include "../_datetime_ext.h"
-#include "../_distributed.h"
+#include "../libs/_datetime_ext.h"
+#include "../libs/_distributed.h"
 #include "_csv.h"
 
 #include <Python.h>
@@ -191,7 +191,7 @@ static PyMethodDef stream_reader_methods[] = {
 // the actual Python type class
 static PyTypeObject stream_reader_type = {
     PyObject_HEAD_INIT(NULL)
-    "bodo.hio.StreamReader",   /*tp_name*/
+    "bodo.libs.hio.StreamReader",   /*tp_name*/
     sizeof(stream_reader),     /*tp_basicsize*/
     0,                         /*tp_itemsize*/
     (destructor)stream_reader_dealloc,/*tp_dealloc*/

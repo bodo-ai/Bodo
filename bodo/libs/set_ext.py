@@ -11,7 +11,7 @@ from numba.typing.templates import signature, AbstractTemplate, infer, infer_glo
 
 from llvmlite import ir as lir
 import llvmlite.binding as ll
-from . import hset_ext
+from bodo.libs import hset_ext
 ll.add_symbol('init_set_string', hset_ext.init_set_string)
 ll.add_symbol('insert_set_string', hset_ext.insert_set_string)
 ll.add_symbol('len_set_string', hset_ext.len_set_string)
@@ -24,8 +24,8 @@ ll.add_symbol('populate_str_arr_from_set', hset_ext.populate_str_arr_from_set)
 
 import bodo
 from bodo.utils import to_array
-from bodo.str_ext import string_type, gen_get_unicode_chars
-from bodo.str_arr_ext import (StringArray, StringArrayType, string_array_type,
+from bodo.libs.str_ext import string_type, gen_get_unicode_chars
+from bodo.libs.str_arr_ext import (StringArray, StringArrayType, string_array_type,
                               pre_alloc_string_array, StringArrayPayloadType,
                               is_str_arr_typ)
 
@@ -245,11 +245,11 @@ def iternext_setiter(context, builder, sig, args, result):
     kind = numba.unicode.PY_UNICODE_1BYTE_KIND
 
     def std_str_to_unicode(std_str):
-        length = bodo.str_ext.get_std_str_len(std_str)
+        length = bodo.libs.str_ext.get_std_str_len(std_str)
         ret = numba.unicode._empty_string(kind, length)
-        bodo.str_arr_ext._memcpy(
-            ret._data, bodo.str_ext.get_c_str(std_str), length, 1)
-        bodo.str_ext.del_str(std_str)
+        bodo.libs.str_arr_ext._memcpy(
+            ret._data, bodo.libs.str_ext.get_c_str(std_str), length, 1)
+        bodo.libs.str_ext.del_str(std_str)
         return ret
 
     with builder.if_then(is_valid):
@@ -257,6 +257,6 @@ def iternext_setiter(context, builder, sig, args, result):
         val = context.compile_internal(
             builder,
             std_str_to_unicode,
-            string_type(bodo.str_ext.std_str_type),
+            string_type(bodo.libs.str_ext.std_str_type),
             [val])
         result.yield_(val)

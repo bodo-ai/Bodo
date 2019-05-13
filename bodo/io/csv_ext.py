@@ -9,13 +9,13 @@ import bodo
 from bodo import distributed, distributed_analysis
 from bodo.utils import debug_prints, alloc_arr_tup, empty_like_type
 from bodo.distributed_analysis import Distribution
-from bodo.str_ext import string_type
-from bodo.str_arr_ext import (string_array_type, to_string_list,
+from bodo.libs.str_ext import string_type
+from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
                               cp_str_list_to_array, str_list_to_array,
                               get_offset_ptr, get_data_ptr, convert_len_arr_to_offset,
                               pre_alloc_string_array, num_total_chars,
                               getitem_str_offset, copy_str_arr_slice)
-from bodo.timsort import copyElement_tup, getitem_arr_tup
+from bodo.libs.timsort import copyElement_tup, getitem_arr_tup
 from bodo.utils import _numba_to_c_type_map
 from bodo import objmode
 import pandas as pd
@@ -192,7 +192,7 @@ def build_csv_definitions(csv_node, definitions=None):
 
 ir_utils.build_defs_extensions[CsvReader] = build_csv_definitions
 
-from .. import hio
+from bodo.libs import hio
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 ll.add_symbol('csv_file_chunk_reader', hio.csv_file_chunk_reader)

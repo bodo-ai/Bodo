@@ -80,11 +80,14 @@ io_libs = MPI_LIBS
 if not is_win:
     io_libs += ['boost_filesystem', 'boost_system']
 
-ext_io = Extension(name="bodo.hio",
+
+ext_io = Extension(name="bodo.libs.hio",
                    sources=["bodo/io/_io.cpp", "bodo/io/_csv.cpp"],
-                   depends=["bodo/_hpat_common.h", "bodo/_distributed.h",
-                            "bodo/_import_py.h", "bodo/io/_csv.h",
-                            "bodo/_datetime_ext.h"],
+                   depends=["bodo/libs/_hpat_common.h",
+                            "bodo/libs/_distributed.h",
+                            "bodo/libs/_import_py.h",
+                            "bodo/io/_csv.h",
+                            "bodo/libs/_datetime_ext.h"],
                    libraries = io_libs,
                    include_dirs = ind + np_compile_args['include_dirs'],
                    library_dirs = lid,
@@ -106,9 +109,10 @@ ext_hdf5 = Extension(name="bodo.io._hdf5",
                    language="c++"
 )
 
-ext_hdist = Extension(name="bodo.hdist",
-                      sources=["bodo/_distributed.cpp"],
-                      depends=["bodo/_hpat_common.h"],
+
+ext_hdist = Extension(name="bodo.libs.hdist",
+                      sources=["bodo/libs/_distributed.cpp"],
+                      depends=["bodo/libs/_hpat_common.h"],
                       libraries = MPI_LIBS,
                       extra_compile_args = eca,
                       extra_link_args = ela,
@@ -116,16 +120,17 @@ ext_hdist = Extension(name="bodo.hdist",
                       library_dirs = lid,
 )
 
-ext_dict = Extension(name="bodo.hdict_ext",
-                     sources=["bodo/_dict_ext.cpp"],
+
+ext_dict = Extension(name="bodo.libs.hdict_ext",
+                     sources=["bodo/libs/_dict_ext.cpp"],
                      extra_compile_args = eca,
                      extra_link_args = ela,
                      include_dirs = ind,
                      library_dirs = lid,
 )
 
-ext_set = Extension(name="bodo.hset_ext",
-                     sources=["bodo/_set_ext.cpp"],
+ext_set = Extension(name="bodo.libs.hset_ext",
+                     sources=["bodo/libs/_set_ext.cpp"],
                      extra_compile_args = eca,
                      extra_link_args = ela,
                      include_dirs = ind,
@@ -137,8 +142,8 @@ str_libs = np_compile_args['libraries']
 if not is_win:
     str_libs += ['boost_regex']
 
-ext_str = Extension(name="bodo.hstr_ext",
-                    sources=["bodo/_str_ext.cpp"],
+ext_str = Extension(name="bodo.libs.hstr_ext",
+                    sources=["bodo/libs/_str_ext.cpp"],
                     libraries=str_libs,
                     define_macros = np_compile_args['define_macros'] + [('USE_BOOST_REGEX', None)],
                     extra_compile_args = eca,
@@ -152,8 +157,9 @@ ext_str = Extension(name="bodo.hstr_ext",
 #dt_args['library_dirs'] = dt_args['library_dirs'] + [PANDAS_DIR+'/_libs/tslibs']
 #dt_args['libraries'] = dt_args['libraries'] + ['np_datetime']
 
-ext_dt = Extension(name="bodo.hdatetime_ext",
-                   sources=["bodo/_datetime_ext.cpp"],
+
+ext_dt = Extension(name="bodo.libs.hdatetime_ext",
+                   sources=["bodo/libs/_datetime_ext.cpp"],
                    libraries=np_compile_args['libraries'],
                    define_macros = np_compile_args['define_macros'],
                    extra_compile_args=['-std=c++11'],
@@ -163,9 +169,10 @@ ext_dt = Extension(name="bodo.hdatetime_ext",
                    language="c++"
 )
 
-ext_quantile = Extension(name="bodo.quantile_alg",
-                         sources=["bodo/_quantile_alg.cpp"],
-                         depends=["bodo/_hpat_common.h"],
+
+ext_quantile = Extension(name="bodo.libs.quantile_alg",
+                         sources=["bodo/libs/_quantile_alg.cpp"],
+                         depends=["bodo/libs/_hpat_common.h"],
                          libraries = MPI_LIBS,
                          extra_compile_args = eca,
                          extra_link_args = ela,

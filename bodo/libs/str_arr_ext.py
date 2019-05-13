@@ -10,7 +10,7 @@ from numba.extending import (typeof_impl, type_callable, models, register_model,
                              make_attribute_wrapper, lower_builtin, box, unbox,
                              lower_getattr, intrinsic, overload_method, overload, overload_attribute)
 from numba import cgutils
-from bodo.str_ext import string_type
+from bodo.libs.str_ext import string_type
 from numba.targets.imputils import (impl_ret_new_ref, impl_ret_borrowed,
     iternext_impl, RefType)
 from numba.targets.hashing import _Py_hash_t
@@ -586,7 +586,7 @@ def str_arr_len_overload(str_arr):
 from numba.targets.listobj import ListInstance
 from llvmlite import ir as lir
 import llvmlite.binding as ll
-from . import hstr_ext
+from bodo.libs import hstr_ext
 ll.add_symbol('get_str_len', hstr_ext.get_str_len)
 ll.add_symbol('allocate_string_array', hstr_ext.allocate_string_array)
 ll.add_symbol('setitem_string_array', hstr_ext.setitem_string_array)

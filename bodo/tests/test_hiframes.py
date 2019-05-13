@@ -8,7 +8,7 @@ import pyarrow.parquet as pq
 import numba
 import bodo
 from bodo import hiframes
-from bodo.str_arr_ext import StringArray
+from bodo.libs.str_arr_ext import StringArray
 from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
                             count_parfor_OneDs, count_array_OneDs, dist_IR_contains,
                             get_start_end)

@@ -27,8 +27,8 @@ import bodo
 from bodo.io.pio_api import h5file_type, h5group_type
 from bodo import (distributed_api,
                   distributed_lower)  # import lower for module initialization
-from bodo.str_ext import string_type
-from bodo.str_arr_ext import string_array_type
+from bodo.libs.str_ext import string_type
+from bodo.libs.str_arr_ext import string_array_type
 from bodo.distributed_analysis import (Distribution,
                                        DistributedAnalysis)
 
@@ -590,7 +590,7 @@ class DistributedPass(object):
             out.append(assign)
             return out
 
-        if (fdef == ('setitem_str_arr_ptr', 'bodo.str_arr_ext')
+        if (fdef == ('setitem_str_arr_ptr', 'bodo.libs.str_arr_ext')
                 and self._is_1D_arr(rhs.args[0].name)):
             arr = rhs.args[0]
             index_var = rhs.args[1]
@@ -601,7 +601,7 @@ class DistributedPass(object):
             out.append(assign)
             return out
 
-        if (fdef == ('str_arr_item_to_numeric', 'bodo.str_arr_ext')
+        if (fdef == ('str_arr_item_to_numeric', 'bodo.libs.str_arr_ext')
                 and self._is_1D_arr(rhs.args[0].name)):
             # TODO: test parallel
             arr = rhs.args[0]
@@ -993,7 +993,7 @@ class DistributedPass(object):
             # nodes.append(print_node)
 
             # TODO: fix lazy IO load
-            from . import hio
+            from bodo.libs import hio
             import llvmlite.binding as ll
             ll.add_symbol('file_write_parallel', hio.file_write_parallel)
             # HACK use the string in a dummy function to avoid refcount issues

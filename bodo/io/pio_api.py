@@ -6,7 +6,7 @@ from numba.typing.templates import infer_global, AbstractTemplate, AttributeTemp
 from numba.typing import signature
 from llvmlite import ir as lir
 from numba.extending import register_model, models, infer_getattr, infer, intrinsic
-from bodo.str_ext import string_type
+from bodo.libs.str_ext import string_type
 import bodo
 from bodo.utils import unliteral_all
 import bodo.io

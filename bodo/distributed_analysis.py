@@ -412,10 +412,10 @@ class DistributedAnalysis(object):
         if fdef == ('get_split_view_data_ptr', 'bodo.hiframes.split_impl'):
             return
 
-        if fdef == ('setitem_str_arr_ptr', 'bodo.str_arr_ext'):
+        if fdef == ('setitem_str_arr_ptr', 'bodo.libs.str_arr_ext'):
             return
 
-        if fdef == ('num_total_chars', 'bodo.str_arr_ext'):
+        if fdef == ('num_total_chars', 'bodo.libs.str_arr_ext'):
             return
 
         if fdef == ('_series_dropna_str_alloc_impl_inner', 'bodo.hiframes.series_kernels'):
@@ -430,14 +430,14 @@ class DistributedAnalysis(object):
                 array_dists[rhs.args[0].name] = out_dist
             return
 
-        if (fdef == ('copy_non_null_offsets', 'bodo.str_arr_ext')
-                or fdef == ('copy_data', 'bodo.str_arr_ext')):
+        if (fdef == ('copy_non_null_offsets', 'bodo.libs.str_arr_ext')
+                or fdef == ('copy_data', 'bodo.libs.str_arr_ext')):
             out_arrname = rhs.args[0].name
             in_arrname = rhs.args[1].name
             self._meet_array_dists(out_arrname, in_arrname, array_dists)
             return
 
-        if fdef == ('str_arr_item_to_numeric', 'bodo.str_arr_ext'):
+        if fdef == ('str_arr_item_to_numeric', 'bodo.libs.str_arr_ext'):
             out_arrname = rhs.args[0].name
             in_arrname = rhs.args[2].name
             self._meet_array_dists(out_arrname, in_arrname, array_dists)
@@ -1033,9 +1033,9 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
                     if fdef is not None:
                         if fdef == ('get_split_view_index', 'bodo.hiframes.split_impl'):
                             accesses.add((rhs.args[0].name, rhs.args[1].name))
-                        if fdef == ('setitem_str_arr_ptr', 'bodo.str_arr_ext'):
+                        if fdef == ('setitem_str_arr_ptr', 'bodo.libs.str_arr_ext'):
                             accesses.add((rhs.args[0].name, rhs.args[1].name))
-                        if fdef == ('str_arr_item_to_numeric', 'bodo.str_arr_ext'):
+                        if fdef == ('str_arr_item_to_numeric', 'bodo.libs.str_arr_ext'):
                             accesses.add((rhs.args[0].name, rhs.args[1].name))
                             accesses.add((rhs.args[2].name, rhs.args[3].name))
             for T, f in array_accesses_extensions.items():

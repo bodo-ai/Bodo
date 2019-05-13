@@ -6,14 +6,14 @@ from numba.typing.templates import infer_global, AbstractTemplate, infer
 from numba.typing import signature
 from numba.extending import models, register_model, intrinsic, overload
 import bodo
-from bodo.str_arr_ext import (string_array_type, num_total_chars, StringArray,
+from bodo.libs.str_arr_ext import (string_array_type, num_total_chars, StringArray,
                               pre_alloc_string_array, get_offset_ptr,
                               get_data_ptr, convert_len_arr_to_offset)
 from bodo.utils import (debug_prints, empty_like_type, _numba_to_c_type_map,
     unliteral_all)
 import time
 from llvmlite import ir as lir
-from . import hdist
+from bodo.libs import hdist
 import llvmlite.binding as ll
 ll.add_symbol('c_alltoall', hdist.c_alltoall)
 ll.add_symbol('c_gather_scalar', hdist.c_gather_scalar)
@@ -25,7 +25,6 @@ ll.add_symbol('c_send', hdist.hpat_dist_send)
 from enum import Enum
 
 # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
-from . import hdist
 mpi_req_numba_type = getattr(types, "int"+str(8 * hdist.mpi_req_num_bytes))
 
 MPI_ROOT = 0

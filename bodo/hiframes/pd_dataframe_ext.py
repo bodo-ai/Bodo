@@ -12,8 +12,8 @@ from numba.typing.templates import (infer_global, AbstractTemplate, signature,
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.str_ext import string_type
-from bodo.str_arr_ext import string_array_type
+from bodo.libs.str_ext import string_type
+from bodo.libs.str_arr_ext import string_array_type
 
 
 class DataFrameType(types.Type):  # TODO: IterableType over column names

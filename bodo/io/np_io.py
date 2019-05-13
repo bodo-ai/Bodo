@@ -4,7 +4,7 @@ import bodo
 from numba import types, cgutils
 from numba.targets.arrayobj import make_array
 from numba.extending import overload, intrinsic, overload_method
-from bodo.str_ext import string_type
+from bodo.libs.str_ext import string_type
 
 from numba.ir_utils import (compile_to_numba_ir, replace_arg_nodes,
                             find_callname, guard)
@@ -53,7 +53,7 @@ def _handle_np_fromfile(assign, lhs, rhs):
             "np.fromfile(): file name and dtype expected")
 
     # FIXME: import here since hio has hdf5 which might not be available
-    from .. import hio
+    from bodo.libs import hio
     import llvmlite.binding as ll
     ll.add_symbol('get_file_size', hio.get_file_size)
     ll.add_symbol('file_read', hio.file_read)
@@ -88,7 +88,7 @@ def get_dtype_size(typingctx, dtype=None):
 @overload_method(types.Array, 'tofile')
 def tofile_overload(arr_ty, fname_ty):
     # FIXME: import here since hio has hdf5 which might not be available
-    from .. import hio
+    from bodo.libs import hio
     import llvmlite.binding as ll
     ll.add_symbol('file_write', hio.file_write)
     ll.add_symbol('file_write_parallel', hio.file_write_parallel)

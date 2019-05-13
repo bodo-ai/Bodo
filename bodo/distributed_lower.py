@@ -15,7 +15,7 @@ from bodo.utils import _numba_to_c_type_map
 from bodo.distributed_api import mpi_req_numba_type, ReqArrayType, req_array_type
 import time
 from llvmlite import ir as lir
-from . import hdist
+from bodo.libs import hdist
 import llvmlite.binding as ll
 ll.add_symbol('hpat_dist_get_rank', hdist.hpat_dist_get_rank)
 ll.add_symbol('hpat_dist_get_size', hdist.hpat_dist_get_size)
