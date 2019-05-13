@@ -1538,7 +1538,7 @@ class HiFramesTyped(object):
         # XXX seq pipeline used since dist pass causes a hang
         m = numba.ir_utils._max_label
         impl_disp = numba.njit(
-            kernel_func, pipeline_class=bodo.compiler.HPATPipelineSeq)
+            kernel_func, pipeline_class=bodo.compiler.BodoPipelineSeq)
         # precompile to avoid REP counting conflict in testing
         sig = out_dtype(types.Array(dtype, 1, 'C'))
         impl_disp.compile(sig)

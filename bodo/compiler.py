@@ -1,4 +1,6 @@
-# from .pio import PIO
+"""
+Defines Bodo's compiler pipeline.
+"""
 import bodo
 import bodo.hiframes
 import bodo.hiframes.hiframes_untyped
@@ -21,137 +23,8 @@ if config._has_h5py:
 from llvmlite import binding
 binding.set_option("tmp", "-non-global-value-max-name-size=2048")
 
-# this is for previous version of pipeline manipulation (numba hpat_req <0.38)
-# def stage_io_pass(pipeline):
-#     """
-#     Convert IO calls
-#     """
-#     # Ensure we have an IR and type information.
-#     assert pipeline.func_ir
-#     if config._has_h5py:
-#         io_pass = pio.PIO(pipeline.func_ir, pipeline.locals)
-#         io_pass.run()
-#
-#
-# def stage_distributed_pass(pipeline):
-#     """
-#     parallelize for distributed-memory
-#     """
-#     # Ensure we have an IR and type information.
-#     assert pipeline.func_ir
-#     dist_pass = DistributedPass(pipeline.func_ir, pipeline.typingctx,
-#                                 pipeline.type_annotation.typemap, pipeline.type_annotation.calltypes)
-#     dist_pass.run()
-#
-#
-# def stage_df_pass(pipeline):
-#     """
-#     Convert DataFrame calls
-#     """
-#     # Ensure we have an IR and type information.
-#     assert pipeline.func_ir
-#     df_pass = HiFrames(pipeline.func_ir, pipeline.typingctx,
-#                        pipeline.args, pipeline.locals)
-#     df_pass.run()
-#
-#
-# def stage_df_typed_pass(pipeline):
-#     """
-#     Convert HiFrames after typing
-#     """
-#     # Ensure we have an IR and type information.
-#     assert pipeline.func_ir
-#     df_pass = HiFramesTyped(pipeline.func_ir, pipeline.typingctx,
-#                             pipeline.type_annotation.typemap, pipeline.type_annotation.calltypes)
-#     df_pass.run()
-#
-#
-# def stage_inline_pass(pipeline):
-#     """
-#     Inline function calls (to enable distributed pass analysis)
-#     """
-#     # Ensure we have an IR and type information.
-#     assert pipeline.func_ir
-#     inline_calls(pipeline.func_ir)
-#
-#
-# def stage_repeat_inline_closure(pipeline):
-#     assert pipeline.func_ir
-#     inline_pass = InlineClosureCallPass(
-#         pipeline.func_ir, pipeline.flags.auto_parallel)
-#     inline_pass.run()
-#     post_proc = postproc.PostProcessor(pipeline.func_ir)
-#     post_proc.run()
-#
-#
-# def add_hpat_stages(pipeline_manager, pipeline):
-#     pp = pipeline_manager.pipeline_stages['nopython']
-#     new_pp = []
-#     for (func, desc) in pp:
-#         if desc == 'nopython frontend':
-#             # before type inference: add inline calls pass,
-#             # untyped hiframes pass, hdf5 io
-#             # also repeat inline closure pass to inline df stencils
-#             new_pp.append(
-#                 (lambda: stage_inline_pass(pipeline), "inline funcs"))
-#             new_pp.append((lambda: stage_df_pass(
-#                 pipeline), "convert DataFrames"))
-#             new_pp.append((lambda: stage_io_pass(
-#                 pipeline), "replace IO calls"))
-#             new_pp.append((lambda: stage_repeat_inline_closure(
-#                 pipeline), "repeat inline closure"))
-#         # need to handle string array exprs before nopython rewrites converts
-#         # them to arrayexpr.
-#         # since generic_rewrites has the same description, we check func name
-#         if desc == 'nopython rewrites' and 'generic_rewrites' not in str(func):
-#             new_pp.append((lambda: stage_df_typed_pass(
-#                 pipeline), "typed hiframes pass"))
-#         if desc == 'nopython mode backend':
-#             # distributed pass after parfor pass and before lowering
-#             new_pp.append((lambda: stage_distributed_pass(
-#                 pipeline), "convert to distributed"))
-#         new_pp.append((func, desc))
-#     pipeline_manager.pipeline_stages['nopython'] = new_pp
 
-
-def inline_calls(func_ir, _locals):
-    work_list = list(func_ir.blocks.items())
-    while work_list:
-        label, block = work_list.pop()
-        for i, instr in enumerate(block.body):
-            if isinstance(instr, ir.Assign):
-                lhs = instr.target
-                expr = instr.value
-                if isinstance(expr, ir.Expr) and expr.op == 'call':
-                    func_def = guard(get_definition, func_ir, expr.func)
-                    if (isinstance(func_def, (ir.Global, ir.FreeVar))
-                            and isinstance(func_def.value, CPUDispatcher)):
-                        py_func = func_def.value.py_func
-                        inline_out = inline_closure_call(
-                            func_ir, py_func.__globals__, block, i, py_func,
-                            work_list=work_list)
-
-                        # TODO remove if when inline_closure_call() output fix
-                        # is merged in Numba
-                        if isinstance(inline_out, tuple):
-                            var_dict = inline_out[1]
-                            # TODO: update '##distributed' and '##threaded' in _locals
-                            _locals.update((var_dict[k].name, v)
-                                        for k,v in func_def.value.locals.items()
-                                        if k in var_dict)
-                        # for block in new_blocks:
-                        #     work_list.append(block)
-                        # current block is modified, skip the rest
-                        # (included in new blocks)
-                        break
-
-    # sometimes type inference fails after inlining since blocks are inserted
-    # at the end and there are agg constraints (categorical_split case)
-    # CFG simplification fixes this case
-    func_ir.blocks = ir_utils.simplify_CFG(func_ir.blocks)
-
-
-class HPATPipeline(numba.compiler.BasePipeline):
+class BodoPipeline(numba.compiler.BasePipeline):
     """Bodo compiler pipeline
     """
     def define_pipelines(self, pm):
@@ -162,8 +35,8 @@ class HPATPipeline(numba.compiler.BasePipeline):
         self.add_pre_typing_stage(pm)
         pm.add_stage(self.stage_inline_pass, "inline funcs")
         pm.add_stage(self.stage_df_pass, "convert DataFrames")
-        # pm.add_stage(self.stage_io_pass, "replace IO calls")
         # repeat inline closure pass to inline df stencils
+        # TODO: still needed?
         pm.add_stage(self.stage_repeat_inline_closure, "repeat inline closure")
         self.add_typing_stage(pm)
         # breakup optimization stage since df_typed needs to run before
@@ -263,7 +136,8 @@ class HPATPipeline(numba.compiler.BasePipeline):
                                 self.type_annotation.calltypes)
         df_pass.run()
 
-class HPATPipelineSeq(HPATPipeline):
+
+class BodoPipelineSeq(BodoPipeline):
     """Bodo pipeline without the distributed pass (used in rolling kernels)
     """
     def define_pipelines(self, pm):
@@ -294,3 +168,42 @@ class HPATPipelineSeq(HPATPipeline):
     def stage_lower_parfor_seq(self):
         numba.parfor.lower_parfor_sequential(
                 self.typingctx, self.func_ir, self.typemap, self.calltypes)
+
+
+def inline_calls(func_ir, _locals):
+    """Inlines all decorated functions. Use Numba's #3743 when merged.
+    """
+    work_list = list(func_ir.blocks.items())
+    while work_list:
+        label, block = work_list.pop()
+        for i, instr in enumerate(block.body):
+            if isinstance(instr, ir.Assign):
+                lhs = instr.target
+                expr = instr.value
+                if isinstance(expr, ir.Expr) and expr.op == 'call':
+                    func_def = guard(get_definition, func_ir, expr.func)
+                    if (isinstance(func_def, (ir.Global, ir.FreeVar))
+                            and isinstance(func_def.value, CPUDispatcher)):
+                        py_func = func_def.value.py_func
+                        inline_out = inline_closure_call(
+                            func_ir, py_func.__globals__, block, i, py_func,
+                            work_list=work_list)
+
+                        # TODO remove if when inline_closure_call() output fix
+                        # is merged in Numba
+                        if isinstance(inline_out, tuple):
+                            var_dict = inline_out[1]
+                            # TODO: update '##distributed' and '##threaded' in _locals
+                            _locals.update((var_dict[k].name, v)
+                                        for k,v in func_def.value.locals.items()
+                                        if k in var_dict)
+                        # for block in new_blocks:
+                        #     work_list.append(block)
+                        # current block is modified, skip the rest
+                        # (included in new blocks)
+                        break
+
+    # sometimes type inference fails after inlining since blocks are inserted
+    # at the end and there are agg constraints (categorical_split case)
+    # CFG simplification fixes this case
+    func_ir.blocks = ir_utils.simplify_CFG(func_ir.blocks)

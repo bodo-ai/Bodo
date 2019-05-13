@@ -1,3 +1,7 @@
+"""
+Checks for available configurations and sets config flags.
+"""
+
 try:
     from .io import _hdf5
     import h5py
