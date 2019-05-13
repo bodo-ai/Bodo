@@ -126,7 +126,7 @@ class BodoPipelineSeq(BodoPipeline):
     """Bodo pipeline without the distributed pass (used in rolling kernels)
     """
     def define_pipelines(self, pm):
-        name = 'hpat_seq'
+        name = 'bodo_seq'
         pm.create_pipeline(name)
         self.add_preprocessing_stage(pm)
         self.add_with_handling_stage(pm)
