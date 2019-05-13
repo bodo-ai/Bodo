@@ -864,7 +864,7 @@ class ToConstTupleTyper(AbstractTemplate):
         assert len(args) == 1
         arr = args[0]
         ret_typ = arr
-        # XXX: returns a dummy type that should be fixed in hiframes_typed
+        # XXX: returns a dummy type that should be fixed in series_pass
         if isinstance(arr, types.List):
             ret_typ = types.Tuple((arr.dtype,))
         return signature(ret_typ, arr)
@@ -1134,7 +1134,7 @@ class ParseDTArrType(AbstractTemplate):
 @lower_builtin(parse_datetimes_from_strings, types.Any)
 def lower_parse_datetimes_from_strings(context, builder, sig, args):
     # dummy implementation to avoid @overload errors
-    # replaced in hiframes_typed pass
+    # replaced in series_pass pass
     res = make_array(sig.return_type)(context, builder)
     return impl_ret_borrowed(context, builder, sig.return_type, res._getvalue())
 

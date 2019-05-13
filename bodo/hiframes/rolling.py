@@ -106,7 +106,7 @@ class RollingVarType(AbstractTemplate):
 class RollingCovType(AbstractTemplate):
     def generic(self, args, kws):
         arr = args[0]  # array or series
-        # hiframes_typed pass replaces series input with array after typing
+        # series_pass pass replaces series input with array after typing
         from bodo.hiframes.pd_series_ext import if_series_to_array_type
         ret_typ = if_series_to_array_type(arr).copy(dtype=types.float64)
         return signature(ret_typ, *unliteral_all(args))

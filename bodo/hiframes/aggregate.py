@@ -228,7 +228,7 @@ def aggregate_usedefs(aggregate_node, use_set=None, def_set=None):
         def_set = set()
 
     if aggregate_node.out_typer_vars is not None:
-        # typer vars are used before typing (hiframes_typed should set None)
+        # typer vars are used before typing (series_pass should set None)
         for v in aggregate_node.out_typer_vars.values():
             use_set.add(v.name)
     # key array and input columns are used
@@ -1052,7 +1052,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
             )
     preparfor_pass.run()
     f_ir._definitions = build_definitions(f_ir.blocks)
-    df_t_pass = bodo.hiframes.hiframes_typed.HiFramesTyped(f_ir, typingctx, typemap, calltypes)
+    df_t_pass = bodo.hiframes.series_pass.SeriesPass(f_ir, typingctx, typemap, calltypes)
     df_t_pass.run()
     numba.rewrites.rewrite_registry.apply('after-inference', pm, f_ir)
     parfor_pass = numba.parfor.ParforPass(f_ir, typemap,

@@ -80,7 +80,7 @@ _binop_to_str = {
 }
 
 
-class HiFramesTyped(object):
+class SeriesPass(object):
     """Analyze and transform hiframes calls after typing"""
 
     def __init__(self, func_ir, typingctx, typemap, calltypes):
@@ -153,7 +153,7 @@ class HiFramesTyped(object):
             pass
 
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
-        dprint_func_ir(self.func_ir, "after hiframes_typed")
+        dprint_func_ir(self.func_ir, "after series_pass")
         return
 
     def _run_assign(self, assign):
@@ -462,7 +462,7 @@ class HiFramesTyped(object):
         # replace _get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
         # TODO: min
-        if fdef == ('_get_type_max_value', 'bodo.hiframes.hiframes_typed'):
+        if fdef == ('_get_type_max_value', 'bodo.hiframes.series_pass'):
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime('ns')):
                 return self._replace_func(
                     lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(

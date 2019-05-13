@@ -377,7 +377,7 @@ class SeriesAttribute(AttributeTemplate):
             dtype = pandas_timestamp_type
         code = args[0].literal_value.code
         _globals = {'np': np}
-        # XXX hack in hiframes_typed to make globals available
+        # XXX hack in series_pass to make globals available
         if hasattr(args[0].literal_value, 'globals'):
             # TODO: use code.co_names to find globals actually used?
             _globals = args[0].literal_value.globals
@@ -425,7 +425,7 @@ class SeriesAttribute(AttributeTemplate):
         return signature(ret_typ, *args)
 
     def _resolve_cov_func(self, ary, args, kws):
-        # array is valid since hiframes_typed calls this after type replacement
+        # array is valid since series_pass calls this after type replacement
         assert len(args) == 1 and isinstance(args[0], (SeriesType, types.Array))
         assert isinstance(ary.dtype, types.Number)
         assert isinstance(args[0].dtype, types.Number)
