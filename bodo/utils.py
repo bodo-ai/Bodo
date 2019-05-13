@@ -255,14 +255,14 @@ def print_dist(d):
 
 
 def distribution_report():
-    import bodo.transforms.distributed
-    if bodo.transforms.distributed.dist_analysis is None:
+    import bodo.transforms.distributed_pass
+    if bodo.transforms.distributed_pass.dist_analysis is None:
         return
     print("Array distributions:")
-    for arr, dist in bodo.transforms.distributed.dist_analysis.array_dists.items():
+    for arr, dist in bodo.transforms.distributed_pass.dist_analysis.array_dists.items():
         print("   {0:20} {1}".format(arr, print_dist(dist)))
     print("\nParfor distributions:")
-    for p, dist in bodo.transforms.distributed.dist_analysis.parfor_dists.items():
+    for p, dist in bodo.transforms.distributed_pass.dist_analysis.parfor_dists.items():
         print("   {0:<20} {1}".format(p, print_dist(dist)))
 
 

@@ -6,7 +6,7 @@ from numba.extending import overload, intrinsic, register_model, models, box
 from numba.ir_utils import (visit_vars_inner, replace_vars_inner,
                             compile_to_numba_ir, replace_arg_nodes)
 import bodo
-from bodo.transforms import distributed, distributed_analysis
+from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.utils import debug_prints, alloc_arr_tup, empty_like_type
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.libs.str_ext import string_type
@@ -200,8 +200,8 @@ ll.add_symbol('csv_file_chunk_reader', hio.csv_file_chunk_reader)
 def csv_distributed_run(csv_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass):
     parallel = True
     for v in csv_node.out_vars:
-        if (array_dists[v.name] != distributed.Distribution.OneD
-                and array_dists[v.name] != distributed.Distribution.OneD_Var):
+        if (array_dists[v.name] != distributed_pass.Distribution.OneD
+                and array_dists[v.name] != distributed_pass.Distribution.OneD_Var):
             parallel = False
 
     n_cols = len(csv_node.out_vars)
@@ -251,7 +251,7 @@ def csv_distributed_run(csv_node, array_dists, typemap, calltypes, typingctx, ta
     return nodes
 
 
-distributed.distributed_run_extensions[CsvReader] = csv_distributed_run
+distributed_pass.distributed_run_extensions[CsvReader] = csv_distributed_run
 
 
 class StreamReaderType(types.Opaque):

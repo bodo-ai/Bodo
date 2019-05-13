@@ -12,7 +12,7 @@ import bodo
 import bodo.libs.timsort
 from bodo.libs.timsort import getitem_arr_tup
 from bodo.utils import _numba_to_c_type_map
-from bodo.transforms import distributed, distributed_analysis
+from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.distributed_api import Reduce_Type
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils import (debug_prints, empty_like_type, get_ctypes_ptr,
@@ -275,8 +275,8 @@ def sort_distributed_run(sort_node, array_dists, typemap, calltypes, typingctx,
     in_vars = list(sort_node.df_in_vars.values())
     out_vars = list(sort_node.df_out_vars.values())
     for v in sort_node.key_arrs + sort_node.out_key_arrs + in_vars + out_vars:
-        if (array_dists[v.name] != distributed.Distribution.OneD
-                and array_dists[v.name] != distributed.Distribution.OneD_Var):
+        if (array_dists[v.name] != distributed_pass.Distribution.OneD
+                and array_dists[v.name] != distributed_pass.Distribution.OneD_Var):
             parallel = False
 
     loc = sort_node.loc
@@ -383,7 +383,7 @@ def sort_distributed_run(sort_node, array_dists, typemap, calltypes, typingctx,
     return nodes
 
 
-distributed.distributed_run_extensions[Sort] = sort_distributed_run
+distributed_pass.distributed_run_extensions[Sort] = sort_distributed_run
 
 def _copy_array_nodes(var, nodes, typingctx, typemap, calltypes):
     def _impl(arr):

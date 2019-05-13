@@ -9,7 +9,7 @@ from numba.ir_utils import (visit_vars_inner, replace_vars_inner,
                             compile_to_numba_ir, replace_arg_nodes,
                             mk_unique_var)
 import bodo
-from bodo.transforms import distributed, distributed_analysis
+from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.utils import debug_prints, alloc_arr_tup, empty_like_type
 from bodo.transforms.distributed_analysis import Distribution
 
@@ -435,12 +435,12 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx, 
     return nodes
 
 
-distributed.distributed_run_extensions[Join] = join_distributed_run
+distributed_pass.distributed_run_extensions[Join] = join_distributed_run
 
 
 def _get_table_parallel_flags(join_node, array_dists):
-    par_dists = (distributed.Distribution.OneD,
-                 distributed.Distribution.OneD_Var)
+    par_dists = (distributed_pass.Distribution.OneD,
+                 distributed_pass.Distribution.OneD_Var)
 
     left_parallel = all(array_dists[v.name] in par_dists
                         for v in join_node.left_vars.values())

@@ -92,7 +92,7 @@ class BodoPipeline(numba.compiler.BasePipeline):
         """
         # Ensure we have an IR and type information.
         assert self.func_ir
-        from bodo.transforms.distributed import DistributedPass
+        from bodo.transforms.distributed_pass import DistributedPass
         dist_pass = DistributedPass(
             self.func_ir, self.typingctx, self.targetctx,
             self.type_annotation.typemap, self.type_annotation.calltypes,

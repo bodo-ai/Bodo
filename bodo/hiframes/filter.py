@@ -4,7 +4,7 @@ from numba import typeinfer, ir, ir_utils, config, types
 from numba.ir_utils import visit_vars_inner, replace_vars_inner
 from numba.typing import signature
 import bodo
-from bodo.transforms import distributed, distributed_analysis
+from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils import debug_prints
 from bodo.libs.str_arr_ext import string_array_type
@@ -157,7 +157,7 @@ def filter_distributed_run(filter_node, array_dists, typemap, calltypes, typingc
     return out
 
 
-distributed.distributed_run_extensions[Filter] = filter_distributed_run
+distributed_pass.distributed_run_extensions[Filter] = filter_distributed_run
 
 
 def filter_typeinfer(filter_node, typeinferer):

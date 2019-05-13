@@ -20,7 +20,7 @@ from numba.extending import overload, lower_builtin
 import bodo
 from bodo.utils import (is_call_assign, is_var_assign, is_assign, debug_prints,
         alloc_arr_tup, empty_like_type)
-from bodo.transforms import distributed, distributed_analysis
+from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils import _numba_to_c_type_map, unliteral_all
 from bodo.libs.str_ext import string_type
@@ -521,8 +521,8 @@ def agg_distributed_run(agg_node, array_dists, typemap, calltypes, typingctx, ta
     parallel = True
     for v in (list(agg_node.df_in_vars.values())
               + list(agg_node.df_out_vars.values()) + agg_node.key_arrs):
-        if (array_dists[v.name] != distributed.Distribution.OneD
-                and array_dists[v.name] != distributed.Distribution.OneD_Var):
+        if (array_dists[v.name] != distributed_pass.Distribution.OneD
+                and array_dists[v.name] != distributed_pass.Distribution.OneD_Var):
             parallel = False
         # TODO: check supported types
         # if (typemap[v.name] != types.Array(types.intp, 1, 'C')
@@ -600,7 +600,7 @@ def agg_distributed_run(agg_node, array_dists, typemap, calltypes, typingctx, ta
     return nodes
 
 
-distributed.distributed_run_extensions[Aggregate] = agg_distributed_run
+distributed_pass.distributed_run_extensions[Aggregate] = agg_distributed_run
 
 @numba.njit
 def parallel_agg(key_arrs, data_redvar_dummy, out_dummy_tup, data_in, init_vals,
