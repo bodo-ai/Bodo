@@ -189,16 +189,12 @@ pq_libs = MPI_LIBS.copy()
 if not is_win:
     pq_libs += ['boost_filesystem']
 
-# if is_win:
-#     pq_libs += ['arrow', 'parquet']
-# else:
-#     # seperate parquet reader used due to ABI incompatibility of arrow
-#     pq_libs += ['hpat_parquet_reader']
-
 pq_libs += ['arrow', 'parquet']
 
+
 ext_parquet = Extension(name="bodo.parquet_cpp",
-                        sources=["bodo/io/_parquet.cpp"],
+                        sources=["bodo/io/_parquet.cpp",
+                                "bodo/io/_parquet_reader.cpp"],
                         libraries = pq_libs,
                         include_dirs = ['.'] + ind,
                         define_macros = [('BUILTIN_PARQUET_READER', None)],

@@ -11,34 +11,14 @@
 
 #include "parquet/arrow/reader.h"
 using parquet::arrow::FileReader;
+#include "_parquet_reader.h"
+
 
 typedef std::vector< std::shared_ptr<FileReader> > FileReaderVec;
 
-// just include parquet reader on Windows since the GCC ABI change issue
-// doesn't exist, and VC linker removes unused lib symbols
-#if defined(_MSC_VER) || defined(BUILTIN_PARQUET_READER)
-#include <parquet_reader/hpat_parquet_reader.cpp>
-#else
 
 
-extern "C" {
 
-void pq_init_reader(const char* file_name, std::shared_ptr<FileReader> *a_reader);
-int64_t pq_get_size_single_file(std::shared_ptr<FileReader>, int64_t column_idx);
-int64_t pq_read_single_file(std::shared_ptr<FileReader>, int64_t column_idx, uint8_t *out,
-                int out_dtype);
-int pq_read_parallel_single_file(std::shared_ptr<FileReader>, int64_t column_idx,
-                uint8_t* out_data, int out_dtype, int64_t start, int64_t count);
-int64_t pq_read_string_single_file(std::shared_ptr<FileReader>, int64_t column_idx,
-                                uint32_t **out_offsets, uint8_t **out_data, uint8_t **out_nulls,
-    std::vector<uint32_t> *offset_vec=NULL, std::vector<uint8_t> *data_vec=NULL, std::vector<bool> *null_vec=NULL);
-int pq_read_string_parallel_single_file(std::shared_ptr<FileReader>, int64_t column_idx,
-        uint32_t **out_offsets, uint8_t **out_data, uint8_t **out_nulls, int64_t start, int64_t count,
-        std::vector<uint32_t> *offset_vec=NULL, std::vector<uint8_t> *data_vec=NULL, std::vector<bool> *null_vec=NULL);
-
-}  // extern "C"
-
-#endif  // _MSC_VER
 
 FileReaderVec* get_arrow_readers(char* file_name);
 void del_arrow_readers(FileReaderVec *readers);
