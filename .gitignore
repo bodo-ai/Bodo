@@ -6,6 +6,8 @@
 
 # cache
 bodo/__pycache__
+bodo/io/__pycache__
+bodo/tests/__pycache__
 bodo/hiframes/__pycache__
 bodo/libs/__pycache__
 

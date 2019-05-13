@@ -1,7 +1,8 @@
-from __future__ import print_function, division, absolute_import
 from collections import namedtuple
 import copy
 import warnings
+from enum import Enum
+import numpy as np
 
 import numba
 from numba import ir, ir_utils, types
@@ -12,7 +13,6 @@ from numba.ir_utils import (find_topo_order, guard, get_definition, require,
 from numba.parfor import Parfor
 from numba.parfor import wrap_parfor_blocks, unwrap_parfor_blocks
 
-import numpy as np
 import bodo
 import bodo.io
 import bodo.io.np_io
@@ -22,7 +22,6 @@ from bodo.utils import (get_constant, is_alloc_callname,
                         is_np_array, find_build_tuple, debug_prints,
                         is_const_slice)
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from enum import Enum
 
 
 class Distribution(Enum):

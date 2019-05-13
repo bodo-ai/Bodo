@@ -1,4 +1,3 @@
-from __future__ import print_function, division, absolute_import
 import types as pytypes  # avoid confusion with numba.types
 
 import numba
@@ -16,7 +15,6 @@ from bodo import utils
 import bodo.io
 from bodo.io import pio_api, pio_lower
 from bodo.utils import find_str_const, debug_prints
-
 
 
 def remove_h5(rhs, lives, call_list):

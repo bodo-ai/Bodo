@@ -1,5 +1,3 @@
-from __future__ import print_function, division, absolute_import
-
 import operator
 from collections import namedtuple, defaultdict
 from functools import reduce

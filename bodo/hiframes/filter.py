@@ -1,4 +1,3 @@
-from __future__ import print_function, division, absolute_import
 from collections import defaultdict
 import numba
 from numba import typeinfer, ir, ir_utils, config, types
