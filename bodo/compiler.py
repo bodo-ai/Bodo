@@ -3,9 +3,9 @@ Defines Bodo's compiler pipeline.
 """
 import bodo
 import bodo.hiframes
-import bodo.hiframes.hiframes_untyped
+import bodo.hiframes.untyped_pass
 import bodo.hiframes.series_pass
-from bodo.hiframes.hiframes_untyped import HiFrames
+from bodo.hiframes.untyped_pass import UntypedPass
 from bodo.hiframes.series_pass import SeriesPass
 from bodo.hiframes.dataframe_pass import DataFramePass
 import numba
@@ -75,7 +75,7 @@ class BodoPipeline(numba.compiler.BasePipeline):
         """
         # Ensure we have an IR and type information.
         assert self.func_ir
-        df_pass = HiFrames(self.func_ir, self.typingctx,
+        df_pass = UntypedPass(self.func_ir, self.typingctx,
                            self.args, self.locals, self.metadata)
         df_pass.run()
 

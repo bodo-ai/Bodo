@@ -1028,7 +1028,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
 
     assert f_ir.arg_count == 1, "agg function should have one input"
     input_name = f_ir.arg_names[0]
-    df_pass = bodo.hiframes.hiframes_untyped.HiFrames(
+    df_pass = bodo.hiframes.untyped_pass.UntypedPass(
         f_ir, typingctx, arg_typs, {}, {})
     df_pass.run()
     remove_dead(f_ir.blocks, f_ir.arg_names, f_ir)

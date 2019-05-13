@@ -101,7 +101,7 @@ def remove_hiframes(rhs, lives, call_list):
 
 numba.ir_utils.remove_call_handlers.append(remove_hiframes)
 
-class HiFrames(object):
+class UntypedPass(object):
     """analyze and transform hiframes calls"""
 
     def __init__(self, func_ir, typingctx, args, _locals, metadata):

@@ -103,7 +103,7 @@ ipcluster_config.py::
 
 This machinefile option is forwarded to mpi and the specified machine file in
 the second argument contains a list of machine names across which to distribute work.
-More information about the -machinefile option can be found 
+More information about the -machinefile option can be found
 `here <https://www.open-mpi.org/faq/?category=running#mpirun-hostfile>`_.
 
 References

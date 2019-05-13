@@ -898,7 +898,7 @@ class TestDataFrame(unittest.TestCase):
             test_impl(S1, S2).rename(columns={0:'0', 1:'1'}))
 
     def test_var_rename(self):
-        # tests df variable replacement in hiframes_untyped where inlining
+        # tests df variable replacement in untyped_pass where inlining
         # can cause extra assignments and definition handling errors
         # TODO: inline freevar
         def test_impl():
