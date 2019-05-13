@@ -308,7 +308,7 @@ import llvmlite.binding as ll
 
 from bodo.config import _has_pyarrow
 if _has_pyarrow:
-    from .. import parquet_cpp
+    from bodo.io import parquet_cpp
     ll.add_symbol('get_arrow_readers', parquet_cpp.get_arrow_readers)
     ll.add_symbol('del_arrow_readers', parquet_cpp.del_arrow_readers)
     ll.add_symbol('pq_read', parquet_cpp.read)
