@@ -34,7 +34,7 @@ class BodoPipeline(numba.compiler.BasePipeline):
         self.add_with_handling_stage(pm)
         self.add_pre_typing_stage(pm)
         pm.add_stage(self.stage_inline_pass, "inline funcs")
-        pm.add_stage(self.stage_df_pass, "convert DataFrames")
+        pm.add_stage(self.stage_untyped_pass, "untyped pass")
         # repeat inline closure pass to inline df stencils
         # TODO: still needed?
         pm.add_stage(self.stage_repeat_inline_closure, "repeat inline closure")
@@ -48,7 +48,7 @@ class BodoPipeline(numba.compiler.BasePipeline):
         # need updating, and A.call to np.call transformation is invalid for
         # Series (e.g. S.var is not the same as np.var(S))
         pm.add_stage(self.stage_dataframe_pass, "typed dataframe pass")
-        pm.add_stage(self.stage_df_typed_pass, "typed hiframes pass")
+        pm.add_stage(self.stage_series_pass, "typed series pass")
         pm.add_stage(self.stage_pre_parfor_pass, "Preprocessing for parfors")
         if not self.flags.no_rewrites:
             pm.add_stage(self.stage_nopython_rewrites, "nopython rewrites")
@@ -68,28 +68,15 @@ class BodoPipeline(numba.compiler.BasePipeline):
         assert self.func_ir
         inline_calls(self.func_ir, self.locals)
 
-
-    def stage_df_pass(self):
+    def stage_untyped_pass(self):
         """
-        Convert DataFrame calls
+        Fix IR before typing to handle untypeable cases
         """
         # Ensure we have an IR and type information.
         assert self.func_ir
         df_pass = UntypedPass(self.func_ir, self.typingctx,
                            self.args, self.locals, self.metadata)
         df_pass.run()
-
-
-    def stage_io_pass(self):
-        """
-        Convert IO calls
-        """
-        # Ensure we have an IR and type information.
-        assert self.func_ir
-        if config._has_h5py:
-            io_pass = pio.PIO(self.func_ir, self.locals)
-            io_pass.run()
-
 
     def stage_repeat_inline_closure(self):
         assert self.func_ir
@@ -98,7 +85,6 @@ class BodoPipeline(numba.compiler.BasePipeline):
         inline_pass.run()
         post_proc = postproc.PostProcessor(self.func_ir)
         post_proc.run()
-
 
     def stage_distributed_pass(self):
         """
@@ -113,10 +99,9 @@ class BodoPipeline(numba.compiler.BasePipeline):
             self.metadata)
         dist_pass.run()
 
-
-    def stage_df_typed_pass(self):
+    def stage_series_pass(self):
         """
-        Convert HiFrames after typing
+        Convert Series after typing
         """
         # Ensure we have an IR and type information.
         assert self.func_ir
@@ -147,12 +132,12 @@ class BodoPipelineSeq(BodoPipeline):
         self.add_with_handling_stage(pm)
         self.add_pre_typing_stage(pm)
         pm.add_stage(self.stage_inline_pass, "inline funcs")
-        pm.add_stage(self.stage_df_pass, "convert DataFrames")
+        pm.add_stage(self.stage_untyped_pass, "untyped pass")
         pm.add_stage(self.stage_repeat_inline_closure, "repeat inline closure")
         self.add_typing_stage(pm)
         # TODO: dataframe pass needed?
         pm.add_stage(self.stage_dataframe_pass, "typed dataframe pass")
-        pm.add_stage(self.stage_df_typed_pass, "typed hiframes pass")
+        pm.add_stage(self.stage_series_pass, "typed series pass")
         pm.add_stage(self.stage_pre_parfor_pass, "Preprocessing for parfors")
         if not self.flags.no_rewrites:
             pm.add_stage(self.stage_nopython_rewrites, "nopython rewrites")
