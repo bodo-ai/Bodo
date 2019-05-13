@@ -6,9 +6,9 @@ from numba.extending import overload, intrinsic, register_model, models, box
 from numba.ir_utils import (visit_vars_inner, replace_vars_inner,
                             compile_to_numba_ir, replace_arg_nodes)
 import bodo
-from bodo import distributed, distributed_analysis
+from bodo.transforms import distributed, distributed_analysis
 from bodo.utils import debug_prints, alloc_arr_tup, empty_like_type
-from bodo.distributed_analysis import Distribution
+from bodo.transforms.distributed_analysis import Distribution
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
                               cp_str_list_to_array, str_list_to_array,

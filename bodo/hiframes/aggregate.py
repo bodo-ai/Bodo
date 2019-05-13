@@ -20,8 +20,8 @@ from numba.extending import overload, lower_builtin
 import bodo
 from bodo.utils import (is_call_assign, is_var_assign, is_assign, debug_prints,
         alloc_arr_tup, empty_like_type)
-from bodo import distributed, distributed_analysis
-from bodo.distributed_analysis import Distribution
+from bodo.transforms import distributed, distributed_analysis
+from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils import _numba_to_c_type_map, unliteral_all
 from bodo.libs.str_ext import string_type
 from bodo.libs.set_ext import num_total_chars_set_string, build_set
@@ -1026,7 +1026,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
 
     assert f_ir.arg_count == 1, "agg function should have one input"
     input_name = f_ir.arg_names[0]
-    df_pass = bodo.hiframes.untyped_pass.UntypedPass(
+    df_pass = bodo.transforms.untyped_pass.UntypedPass(
         f_ir, typingctx, arg_typs, {}, {})
     df_pass.run()
     remove_dead(f_ir.blocks, f_ir.arg_names, f_ir)
@@ -1050,7 +1050,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
             )
     preparfor_pass.run()
     f_ir._definitions = build_definitions(f_ir.blocks)
-    df_t_pass = bodo.hiframes.series_pass.SeriesPass(f_ir, typingctx, typemap, calltypes)
+    df_t_pass = bodo.transforms.series_pass.SeriesPass(f_ir, typingctx, typemap, calltypes)
     df_t_pass.run()
     numba.rewrites.rewrite_registry.apply('after-inference', pm, f_ir)
     parfor_pass = numba.parfor.ParforPass(f_ir, typemap,

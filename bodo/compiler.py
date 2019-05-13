@@ -2,12 +2,12 @@
 Defines Bodo's compiler pipeline.
 """
 import bodo
-import bodo.hiframes
-import bodo.hiframes.untyped_pass
-import bodo.hiframes.series_pass
-from bodo.hiframes.untyped_pass import UntypedPass
-from bodo.hiframes.series_pass import SeriesPass
-from bodo.hiframes.dataframe_pass import DataFramePass
+import bodo.transforms
+import bodo.transforms.untyped_pass
+import bodo.transforms.series_pass
+from bodo.transforms.untyped_pass import UntypedPass
+from bodo.transforms.series_pass import SeriesPass
+from bodo.transforms.dataframe_pass import DataFramePass
 import numba
 import numba.compiler
 from numba import ir_utils, ir, postproc
@@ -92,7 +92,7 @@ class BodoPipeline(numba.compiler.BasePipeline):
         """
         # Ensure we have an IR and type information.
         assert self.func_ir
-        from bodo.distributed import DistributedPass
+        from bodo.transforms.distributed import DistributedPass
         dist_pass = DistributedPass(
             self.func_ir, self.typingctx, self.targetctx,
             self.type_annotation.typemap, self.type_annotation.calltypes,

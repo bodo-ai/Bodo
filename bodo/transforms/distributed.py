@@ -27,7 +27,7 @@ from bodo import (distributed_api,
                   distributed_lower)  # import lower for module initialization
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
-from bodo.distributed_analysis import (Distribution,
+from bodo.transforms.distributed_analysis import (Distribution,
                                        DistributedAnalysis)
 
 # from mpi4py import MPI

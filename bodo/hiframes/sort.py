@@ -12,9 +12,9 @@ import bodo
 import bodo.libs.timsort
 from bodo.libs.timsort import getitem_arr_tup
 from bodo.utils import _numba_to_c_type_map
-from bodo import distributed, distributed_analysis
+from bodo.transforms import distributed, distributed_analysis
 from bodo.distributed_api import Reduce_Type
-from bodo.distributed_analysis import Distribution
+from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils import (debug_prints, empty_like_type, get_ctypes_ptr,
     gen_getitem)
 

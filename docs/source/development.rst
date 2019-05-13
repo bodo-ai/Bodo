@@ -59,7 +59,7 @@ Bodo implements Pandas and Numpy API as a DSL.
 Data structures are implemented as Numba extensions, and
 compiler stages are responsible for different levels of abstraction.
 For example, `Series data type support <https://github.com/IntelLabs/bodo/blob/master/bodo/hiframes/pd_series_ext.py>`_
-and `Series transformations <https://github.com/IntelLabs/bodo/blob/master/bodo/hiframes/series_pass.py>`_
+and `Series transformations <https://github.com/IntelLabs/bodo/blob/master/bodo/transforms/series_pass.py>`_
 implement the `Pandas Series API <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.html>`_.
 Follow the pipeline for a simple function like `Series.sum()`
 for initial understanding of the transformations.

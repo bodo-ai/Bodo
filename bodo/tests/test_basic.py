@@ -344,14 +344,14 @@ class TestBasic(BaseTest):
             return C.sum()
 
         try:
-            bodo.distributed_analysis.auto_rebalance = True
+            bodo.transforms.distributed_analysis.auto_rebalance = True
             hpat_func = bodo.jit(test_impl)
             n = 128
             np.testing.assert_allclose(hpat_func(n), test_impl(n))
             self.assertEqual(count_array_OneDs(), 3)
             self.assertEqual(count_parfor_OneDs(), 2)
         finally:
-            bodo.distributed_analysis.auto_rebalance = False
+            bodo.transforms.distributed_analysis.auto_rebalance = False
 
     def test_rebalance_loop(self):
         def test_impl(N):
@@ -363,7 +363,7 @@ class TestBasic(BaseTest):
             return s
 
         try:
-            bodo.distributed_analysis.auto_rebalance = True
+            bodo.transforms.distributed_analysis.auto_rebalance = True
             hpat_func = bodo.jit(test_impl)
             n = 128
             np.testing.assert_allclose(hpat_func(n), test_impl(n))
@@ -371,7 +371,7 @@ class TestBasic(BaseTest):
             self.assertEqual(count_parfor_OneDs(), 2)
             self.assertIn('allgather', list(hpat_func.inspect_llvm().values())[0])
         finally:
-            bodo.distributed_analysis.auto_rebalance = False
+            bodo.transforms.distributed_analysis.auto_rebalance = False
 
     def test_transpose(self):
         def test_impl(n):

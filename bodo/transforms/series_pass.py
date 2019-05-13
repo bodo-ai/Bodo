@@ -462,7 +462,7 @@ class SeriesPass(object):
         # replace _get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
         # TODO: min
-        if fdef == ('_get_type_max_value', 'bodo.hiframes.series_pass'):
+        if fdef == ('_get_type_max_value', 'bodo.transforms.series_pass'):
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime('ns')):
                 return self._replace_func(
                     lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
