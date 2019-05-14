@@ -1321,23 +1321,7 @@ def gen_all_update_func(update_funcs, reduce_var_types, in_col_types,
     loc_vars = {}
     exec(func_text, glbs, loc_vars)
     update_all_f = loc_vars['update_all_f']
-
-    f_ir = compile_to_numba_ir(update_all_f, glbs)
-
-    # compile implementation to binary (Dispatcher)
-    update_all_func = compiler.compile_ir(
-            typingctx,
-            targetctx,
-            f_ir,
-            arg_typs,
-            types.none,
-            compiler.DEFAULT_FLAGS,
-            {}
-    )
-
-    imp_dis = numba.targets.registry.dispatcher_registry['cpu'](update_all_f)
-    imp_dis.add_overload(update_all_func)
-    return imp_dis
+    return numba.njit(update_all_f)
 
 def gen_all_combine_func(combine_funcs, reduce_var_types, redvar_offsets,
                                 typingctx, targetctx, pivot_typ, pivot_values):
@@ -1437,23 +1421,8 @@ def gen_all_eval_func(eval_funcs, reduce_var_types, redvar_offsets,
     loc_vars = {}
     exec(func_text, glbs, loc_vars)
     eval_all_f = loc_vars['eval_all_f']
+    return numba.njit(eval_all_f)
 
-    f_ir = compile_to_numba_ir(eval_all_f, glbs)
-
-    # compile implementation to binary (Dispatcher)
-    eval_all_func = compiler.compile_ir(
-            typingctx,
-            targetctx,
-            f_ir,
-            arg_typs,
-            types.none,
-            compiler.DEFAULT_FLAGS,
-            {}
-    )
-
-    imp_dis = numba.targets.registry.dispatcher_registry['cpu'](eval_all_f)
-    imp_dis.add_overload(eval_all_func)
-    return imp_dis
 
 def gen_eval_func(f_ir, eval_nodes, reduce_vars, var_types, pm, typingctx, targetctx):
 
