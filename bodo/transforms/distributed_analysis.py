@@ -1,3 +1,7 @@
+"""
+analyzes the IR to decide parallelism of arrays and parfors
+for distributed transformation.
+"""
 from collections import namedtuple
 import copy
 import warnings

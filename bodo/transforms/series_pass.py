@@ -1,3 +1,7 @@
+"""
+converts Series operations to array operations as much as possible
+to provide implementation and enable optimization.
+"""
 import operator
 from collections import defaultdict, namedtuple
 import re

@@ -1,3 +1,8 @@
+"""
+converts data frame operations to Series and Array operations
+as much as possible to provide implementation and enable optimization.
+Creates specialized IR nodes for complex operations like Join.
+"""
 import operator
 from collections import defaultdict, namedtuple
 import numpy as np

@@ -63,3 +63,31 @@ and `Series transformations <https://github.com/IntelLabs/bodo/blob/master/bodo/
 implement the `Pandas Series API <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.html>`_.
 Follow the pipeline for a simple function like `Series.sum()`
 for initial understanding of the transformations.
+
+Code Structures
+---------------
+
+Below is the high level structure of the code.
+
+- `decorators.py` is the starting point, which defines decorators of Bodo.
+  Currently just `@jit` is provided but more is expected.
+- `compiler.py` defines the compiler pipeline for this decorator.
+- `transforms` directory defines Bodo specific analysis and transformation passes.
+
+    - `untyped_pass.py`: transforms the IR to remove features that Numba's type inference cannot support
+      such as non-uniform dictionary input of `pd.DataFrame({})`.
+    - `dataframe_pass.py`: converts data frame operations to Series and Array operations
+      as much as possible to provide implementation and enable optimization.
+      Creates specialized IR nodes for complex operations like Join.
+    - `series_pass.py`: converts Series operations to array operations as much as possible
+      to provide implementation and enable optimization.
+    - `distributed_analysis.py`: analyzes the IR to decide parallelism of arrays and parfors
+      for distributed transformation.
+    - `distributed_pass.py`: parallelizes the IR for distributed execution and inserts MPI calls.
+
+- `hiframes` directory provides Pandas functionality such as DataFrame, Series and Index.
+- `ir` directory defines and implements Bodo specific IR nodes such as Sort and Join.
+- `libs` directory provides supporting data structures and libraries such as strings,
+  dictionary, quantiles, timsort. It also includes helper C extensions.
+- `io` directory provides I/O support such as CSV, HDF5, Parquet and Numpy.
+- `tests` provides unittests.

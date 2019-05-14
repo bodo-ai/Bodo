@@ -1,3 +1,6 @@
+"""
+Parallelizes the IR for distributed execution and inserts MPI calls.
+"""
 import operator
 import types as pytypes  # avoid confusion with numba.types
 import copy
