@@ -35,12 +35,12 @@ def dist_IR_contains(*args):
 
 @bodo.jit
 def get_rank():
-    return bodo.distributed_api.get_rank()
+    return bodo.libs.distributed_api.get_rank()
 
 @bodo.jit
 def get_start_end(n):
-    rank = bodo.distributed_api.get_rank()
-    n_pes = bodo.distributed_api.get_size()
-    start = bodo.distributed_api.get_start(n, n_pes, rank)
-    end = bodo.distributed_api.get_end(n, n_pes, rank)
+    rank = bodo.libs.distributed_api.get_rank()
+    n_pes = bodo.libs.distributed_api.get_size()
+    start = bodo.libs.distributed_api.get_start(n, n_pes, rank)
+    end = bodo.libs.distributed_api.get_end(n, n_pes, rank)
     return start, end

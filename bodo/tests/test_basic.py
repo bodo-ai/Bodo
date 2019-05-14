@@ -26,18 +26,18 @@ class BaseTest(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.rank = bodo.jit(lambda: bodo.distributed_api.get_rank())()
-        self.num_ranks = bodo.jit(lambda: bodo.distributed_api.get_size())()
+        self.rank = bodo.jit(lambda: bodo.libs.distributed_api.get_rank())()
+        self.num_ranks = bodo.jit(lambda: bodo.libs.distributed_api.get_size())()
 
     def _rank_begin(self, arr_len):
         f = bodo.jit(
-            lambda arr_len, num_ranks, rank: bodo.distributed_api.get_start(
+            lambda arr_len, num_ranks, rank: bodo.libs.distributed_api.get_start(
                 arr_len, np.int32(num_ranks), np.int32(rank)))
         return f(arr_len, self.num_ranks, self.rank)
 
     def _rank_end(self, arr_len):
         f = bodo.jit(
-            lambda arr_len, num_ranks, rank: bodo.distributed_api.get_end(
+            lambda arr_len, num_ranks, rank: bodo.libs.distributed_api.get_end(
                 arr_len, np.int32(num_ranks), np.int32(rank)))
         return f(arr_len, self.num_ranks, self.rank)
 
@@ -299,8 +299,8 @@ class TestBasic(BaseTest):
         hpat_func = bodo.jit(locals={'A:return': 'distributed'})(test_impl)
         n = 128
         dist_sum = bodo.jit(
-            lambda a: bodo.distributed_api.dist_reduce(
-                a, np.int32(bodo.distributed_api.Reduce_Type.Sum.value)))
+            lambda a: bodo.libs.distributed_api.dist_reduce(
+                a, np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)))
         dist_sum(1)  # run to compile
         np.testing.assert_allclose(
             dist_sum(hpat_func(n).sum()), test_impl(n).sum())
@@ -317,8 +317,8 @@ class TestBasic(BaseTest):
                                      'B:return': 'distributed'})(test_impl)
         n = 128
         dist_sum = bodo.jit(
-            lambda a: bodo.distributed_api.dist_reduce(
-                a, np.int32(bodo.distributed_api.Reduce_Type.Sum.value)))
+            lambda a: bodo.libs.distributed_api.dist_reduce(
+                a, np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)))
         dist_sum(1.0)  # run to compile
         np.testing.assert_allclose(
             dist_sum((hpat_func(n)[0] + hpat_func(n)[1]).sum()),
@@ -340,7 +340,7 @@ class TestBasic(BaseTest):
         def test_impl(N):
             A = np.arange(n)
             B = A[A>10]
-            C = bodo.distributed_api.rebalance_array(B)
+            C = bodo.libs.distributed_api.rebalance_array(B)
             return C.sum()
 
         try:

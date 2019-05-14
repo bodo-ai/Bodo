@@ -13,7 +13,7 @@ import bodo.libs.timsort
 from bodo.libs.timsort import getitem_arr_tup
 from bodo.utils import _numba_to_c_type_map
 from bodo.transforms import distributed_pass, distributed_analysis
-from bodo.distributed_api import Reduce_Type
+from bodo.libs.distributed_api import Reduce_Type
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils import (debug_prints, empty_like_type, get_ctypes_ptr,
     gen_getitem)
@@ -425,10 +425,10 @@ def local_sort(key_arrs, data, ascending=True):
 @numba.njit(no_cpython_wrapper=True, cache=True)
 def parallel_sort(key_arrs, data, ascending=True):
     n_local = len(key_arrs[0])
-    n_total = bodo.distributed_api.dist_reduce(n_local, np.int32(Reduce_Type.Sum.value))
+    n_total = bodo.libs.distributed_api.dist_reduce(n_local, np.int32(Reduce_Type.Sum.value))
 
-    n_pes = bodo.distributed_api.get_size()
-    my_rank = bodo.distributed_api.get_rank()
+    n_pes = bodo.libs.distributed_api.get_size()
+    my_rank = bodo.libs.distributed_api.get_rank()
 
     # similar to Spark's sample computation Partitioner.scala
     sampleSize = min(samplePointsPerPartitionHint * n_pes, MIN_SAMPLES)
@@ -439,7 +439,7 @@ def parallel_sort(key_arrs, data, ascending=True):
     samples = key_arrs[0][inds]
     # print(sampleSize, fraction, n_local, n_loc_samples, len(samples))
 
-    all_samples = bodo.distributed_api.gatherv(samples)
+    all_samples = bodo.libs.distributed_api.gatherv(samples)
     all_samples = to_string_list(all_samples)
     bounds = empty_like_type(n_pes-1, all_samples)
 
@@ -454,8 +454,8 @@ def parallel_sort(key_arrs, data, ascending=True):
         # print(bounds)
 
     bounds = str_list_to_array(bounds)
-    bounds = bodo.distributed_api.prealloc_str_for_bcast(bounds)
-    bodo.distributed_api.bcast(bounds)
+    bounds = bodo.libs.distributed_api.prealloc_str_for_bcast(bounds)
+    bodo.libs.distributed_api.bcast(bounds)
 
     # calc send/recv counts
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, True)

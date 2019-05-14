@@ -122,7 +122,7 @@ def file_write_parallel_overload(fname, arr, start, count):
         def _impl(fname, arr, start, count):
             A = np.ascontiguousarray(arr)
             dtype_size = get_dtype_size(A.dtype)
-            elem_size = dtype_size * bodo.distributed_lower.get_tuple_prod(A.shape[1:])
+            elem_size = dtype_size * bodo.libs.distributed_lower.get_tuple_prod(A.shape[1:])
             # bodo.cprint(start, count, elem_size)
             _file_write_parallel(fname._data, A.ctypes,
                         start, count, elem_size)

@@ -264,37 +264,37 @@ class H5GgetObjNameByIdx(AbstractTemplate):
         assert len(args) == 2
         return signature(string_type, *args)
 
-sum_op = bodo.distributed_api.Reduce_Type.Sum.value
+sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
 
 @numba.njit
 def get_filter_read_indices(bool_arr):
     indices = bool_arr.nonzero()[0]
-    rank = bodo.distributed_api.get_rank()
-    n_pes = bodo.distributed_api.get_size()
+    rank = bodo.libs.distributed_api.get_rank()
+    n_pes = bodo.libs.distributed_api.get_size()
 
     # get number of elements before this processor to align the indices
     # assuming bool_arr can be 1D_Var
     all_starts = np.empty(n_pes, np.int64)
     n_bool = len(bool_arr)
-    bodo.distributed_api.allgather(all_starts, n_bool)
+    bodo.libs.distributed_api.allgather(all_starts, n_bool)
     ind_start = all_starts.cumsum()[rank] - n_bool
-    #n_arr = bodo.distributed_api.dist_reduce(len(bool_arr), np.int32(sum_op))
-    #ind_start = bodo.distributed_api.get_start(n_arr, n_pes, rank)
+    #n_arr = bodo.libs.distributed_api.dist_reduce(len(bool_arr), np.int32(sum_op))
+    #ind_start = bodo.libs.distributed_api.get_start(n_arr, n_pes, rank)
     indices += ind_start
 
     # TODO: use prefix-sum and all-to-all
     # all_indices = np.empty(n, indices.dtype)
     # allgatherv(all_indices, indices)
-    n = bodo.distributed_api.dist_reduce(len(indices), np.int32(sum_op))
-    inds = bodo.distributed_api.gatherv(indices)
+    n = bodo.libs.distributed_api.dist_reduce(len(indices), np.int32(sum_op))
+    inds = bodo.libs.distributed_api.gatherv(indices)
     if rank == 0:
         all_indices = inds
     else:
         all_indices = np.empty(n, indices.dtype)
-    bodo.distributed_api.bcast(all_indices)
+    bodo.libs.distributed_api.bcast(all_indices)
 
-    start = bodo.distributed_api.get_start(n, n_pes, rank)
-    end = bodo.distributed_api.get_end(n, n_pes, rank)
+    start = bodo.libs.distributed_api.get_start(n, n_pes, rank)
+    end = bodo.libs.distributed_api.get_end(n, n_pes, rank)
     return all_indices[start:end]
 
 @intrinsic
@@ -313,6 +313,6 @@ _h5read_filter = types.ExternalFunction("hpat_h5_read_filter",
 def h5read_filter(dset_id, ndim, starts, counts, is_parallel, out_arr, read_indices):
     starts_ptr = tuple_to_ptr(starts)
     counts_ptr = tuple_to_ptr(counts)
-    type_enum = bodo.distributed_api.get_type_enum(out_arr)
+    type_enum = bodo.libs.distributed_api.get_type_enum(out_arr)
     return _h5read_filter(dset_id, ndim, starts_ptr, counts_ptr, is_parallel,
                    out_arr.ctypes, type_enum, read_indices.ctypes, len(read_indices))

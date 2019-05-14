@@ -107,8 +107,8 @@ class TestDataFrame(unittest.TestCase):
         self.assertEqual(count_array_OneDs(), 3)
         self.assertEqual(count_parfor_OneDs(), 2)
         dist_sum = bodo.jit(
-            lambda a: bodo.distributed_api.dist_reduce(
-                a, np.int32(bodo.distributed_api.Reduce_Type.Sum.value)))
+            lambda a: bodo.libs.distributed_api.dist_reduce(
+                a, np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)))
         dist_sum(1)  # run to compile
         np.testing.assert_allclose(dist_sum(hres.A.sum()), res.A.sum())
         np.testing.assert_allclose(dist_sum(hres.B.sum()), res.B.sum())

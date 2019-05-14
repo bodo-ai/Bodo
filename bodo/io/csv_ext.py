@@ -232,10 +232,10 @@ def csv_distributed_run(csv_node, array_dists, typemap, calltypes, typingctx, ta
     # get global array sizes by calling allreduce on chunk lens
     # TODO: get global size from C
     for arr in csv_node.out_vars:
-        f = lambda A: bodo.distributed_api.dist_reduce(len(A), np.int32(_op))
+        f = lambda A: bodo.libs.distributed_api.dist_reduce(len(A), np.int32(_op))
         f_block = compile_to_numba_ir(
             f, {'bodo': bodo, 'np': np,
-            '_op': bodo.distributed_api.Reduce_Type.Sum.value},
+            '_op': bodo.libs.distributed_api.Reduce_Type.Sum.value},
             typingctx, (typemap[arr.name],), typemap, calltypes).blocks.popitem()[1]
         replace_arg_nodes(f_block, [arr])
         nodes += f_block.body[:-2]
@@ -243,7 +243,7 @@ def csv_distributed_run(csv_node, array_dists, typemap, calltypes, typingctx, ta
         dist_pass._array_sizes[arr.name] = [size_var]
         out, start_var, end_var = dist_pass._gen_1D_div(
             size_var, arr.scope, csv_node.loc, "$alloc", "get_node_portion",
-            bodo.distributed_api.get_node_portion)
+            bodo.libs.distributed_api.get_node_portion)
         dist_pass._array_starts[arr.name] = [start_var]
         dist_pass._array_counts[arr.name] = [end_var]
         nodes += out

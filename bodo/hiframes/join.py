@@ -463,7 +463,7 @@ def _get_table_parallel_flags(join_node, array_dists):
 # @numba.njit
 def parallel_join_impl(key_arrs, data):
     # alloc shuffle meta
-    n_pes = bodo.distributed_api.get_size()
+    n_pes = bodo.libs.distributed_api.get_size()
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, False)
 
 
@@ -501,13 +501,13 @@ def parallel_join(key_arrs, data):
 def parallel_asof_comm(left_key_arrs, right_key_arrs, right_data):
     # align the left and right intervals
     # allgather the boundaries of all left intervals and calculate overlap
-    # rank = bodo.distributed_api.get_rank()
-    n_pes = bodo.distributed_api.get_size()
+    # rank = bodo.libs.distributed_api.get_rank()
+    n_pes = bodo.libs.distributed_api.get_size()
     # TODO: multiple keys
     bnd_starts = np.empty(n_pes, left_key_arrs[0].dtype)
     bnd_ends = np.empty(n_pes, left_key_arrs[0].dtype)
-    bodo.distributed_api.allgather(bnd_starts, left_key_arrs[0][0])
-    bodo.distributed_api.allgather(bnd_ends, left_key_arrs[0][-1])
+    bodo.libs.distributed_api.allgather(bnd_starts, left_key_arrs[0][0])
+    bodo.libs.distributed_api.allgather(bnd_ends, left_key_arrs[0][-1])
 
     send_counts = np.zeros(n_pes, np.int32)
     send_disp = np.zeros(n_pes, np.int32)
@@ -536,15 +536,15 @@ def parallel_asof_comm(left_key_arrs, right_key_arrs, right_data):
         send_disp[i] = len(right_key_arrs[0]) - 1
         i += 1
 
-    bodo.distributed_api.alltoall(send_counts, recv_counts, 1)
+    bodo.libs.distributed_api.alltoall(send_counts, recv_counts, 1)
     n_total_recv = recv_counts.sum()
     out_r_keys = np.empty(n_total_recv, right_key_arrs[0].dtype)
     # TODO: support string
     out_r_data = alloc_arr_tup(n_total_recv, right_data)
     recv_disp = bodo.hiframes.join.calc_disp(recv_counts)
-    bodo.distributed_api.alltoallv(right_key_arrs[0], out_r_keys, send_counts,
+    bodo.libs.distributed_api.alltoallv(right_key_arrs[0], out_r_keys, send_counts,
                                    recv_counts, send_disp, recv_disp)
-    bodo.distributed_api.alltoallv_tup(right_data, out_r_data, send_counts,
+    bodo.libs.distributed_api.alltoallv_tup(right_data, out_r_data, send_counts,
                                    recv_counts, send_disp, recv_disp)
 
     return (out_r_keys,), out_r_data

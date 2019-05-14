@@ -99,8 +99,8 @@ def gather_scalar_overload(val):
     typ_val = _numba_to_c_type_map[val]
     func_text = (
     "def gather_scalar_impl(val):\n"
-    "  n_pes = bodo.distributed_api.get_size()\n"
-    "  rank = bodo.distributed_api.get_rank()\n"
+    "  n_pes = bodo.libs.distributed_api.get_size()\n"
+    "  rank = bodo.libs.distributed_api.get_rank()\n"
     "  send = np.full(1, val, np.{})\n"
     "  res_size = n_pes if rank == {} else 0\n"
     "  res = np.empty(res_size, np.{})\n"
@@ -127,7 +127,7 @@ def gatherv_overload(data):
         typ_val = _numba_to_c_type_map[data.dtype]
 
         def gatherv_impl(data):
-            rank = bodo.distributed_api.get_rank()
+            rank = bodo.libs.distributed_api.get_rank()
             n_loc = len(data)
             recv_counts = gather_scalar(np.int32(n_loc))
             n_total = recv_counts.sum()
@@ -147,7 +147,7 @@ def gatherv_overload(data):
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
 
         def gatherv_str_arr_impl(data):
-            rank = bodo.distributed_api.get_rank()
+            rank = bodo.libs.distributed_api.get_rank()
             n_loc = len(data)
             n_all_chars = num_total_chars(data)
 
@@ -209,7 +209,7 @@ def bcast_overload(data):
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
 
         def bcast_str_impl(data):
-            rank = bodo.distributed_api.get_rank()
+            rank = bodo.libs.distributed_api.get_rank()
             n_loc = len(data)
             n_all_chars = num_total_chars(data)
             assert n_loc < INT_MAX
@@ -267,7 +267,7 @@ def prealloc_str_for_bcast(arr):
 def prealloc_str_for_bcast_overload(arr):
     if arr == string_array_type:
         def prealloc_impl(arr):
-            rank = bodo.distributed_api.get_rank()
+            rank = bodo.libs.distributed_api.get_rank()
             n_loc = bcast_scalar(len(arr))
             n_all_char = bcast_scalar(np.int64(num_total_chars(arr)))
             if rank != MPI_ROOT:
@@ -289,15 +289,15 @@ def const_slice_getitem_overload(arr, slice_index, start, count):
     if arr == string_array_type:
         reduce_op = Reduce_Type.Sum.value
         def getitem_str_impl(arr, slice_index, start, count):
-            rank = bodo.distributed_api.get_rank()
+            rank = bodo.libs.distributed_api.get_rank()
             k = slice_index.stop
             # get total characters for allocation
             n_chars = np.uint64(0)
             if k > count:
                 my_end = min(count, max(k-start, 0))
                 my_arr = arr[:my_end]
-                my_arr = bodo.distributed_api.gatherv(my_arr)
-                n_chars = bodo.distributed_api.dist_reduce(
+                my_arr = bodo.libs.distributed_api.gatherv(my_arr)
+                n_chars = bodo.libs.distributed_api.dist_reduce(
                     num_total_chars(my_arr), np.int32(reduce_op))
                 if rank == 0:
                     out_arr = my_arr
@@ -311,26 +311,26 @@ def const_slice_getitem_overload(arr, slice_index, start, count):
                 out_arr = pre_alloc_string_array(k, n_chars)
 
             # actual communication
-            bodo.distributed_api.bcast(out_arr)
+            bodo.libs.distributed_api.bcast(out_arr)
             return out_arr
 
         return getitem_str_impl
 
     def getitem_impl(arr, slice_index, start, count):
-        rank = bodo.distributed_api.get_rank()
+        rank = bodo.libs.distributed_api.get_rank()
         k = slice_index.stop
         out_arr = np.empty(k, arr.dtype)
         if k > count:
             my_end = min(count, max(k-start, 0))
             my_arr = arr[:my_end]
-            my_arr = bodo.distributed_api.gatherv(my_arr)
+            my_arr = bodo.libs.distributed_api.gatherv(my_arr)
             if rank == 0:
                 print(my_arr)
                 out_arr = my_arr
         else:
             if rank == 0:
                 out_arr = arr[:k]
-        bodo.distributed_api.bcast(out_arr)
+        bodo.libs.distributed_api.bcast(out_arr)
         return out_arr
 
     return getitem_impl

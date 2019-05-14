@@ -606,7 +606,7 @@ distributed_pass.distributed_run_extensions[Aggregate] = agg_distributed_run
 def parallel_agg(key_arrs, data_redvar_dummy, out_dummy_tup, data_in, init_vals,
         __update_redvars, __combine_redvars, __eval_res, return_key, pivot_arr):  # pragma: no cover
     # alloc shuffle meta
-    n_pes = bodo.distributed_api.get_size()
+    n_pes = bodo.libs.distributed_api.get_size()
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data_redvar_dummy, n_pes, False)
 
     # calc send/recv counts
@@ -645,7 +645,7 @@ def agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy,
     # _init_val_1 = np.int64(0)
     # redvar_1_arr = np.full(n_uniq_keys, _init_val_1, np.int64)
     # out_key = np.empty(n_uniq_keys, np.float64)
-    n_pes = bodo.distributed_api.get_size()
+    n_pes = bodo.libs.distributed_api.get_size()
     # bodo.libs.dict_ext.init_dict_float64_int64()
     # key_write_map = get_key_dict(key_arrs[0])
     key_write_map, byte_v = get_key_dict(key_arrs)

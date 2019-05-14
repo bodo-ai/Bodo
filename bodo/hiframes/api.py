@@ -125,14 +125,14 @@ def concat(arr_list):
 @numba.njit
 def nth_element(arr, k, parallel=False):
     res = np.empty(1, arr.dtype)
-    type_enum = bodo.distributed_api.get_type_enum(arr)
+    type_enum = bodo.libs.distributed_api.get_type_enum(arr)
     if parallel:
         nth_parallel(res.ctypes, arr.ctypes, len(arr), k, type_enum)
     else:
         nth_sequential(res.ctypes, arr.ctypes, len(arr), k, type_enum)
     return res[0]
 
-sum_op = bodo.distributed_api.Reduce_Type.Sum.value
+sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
 
 @numba.njit
 def median(arr, parallel=False):
@@ -140,7 +140,7 @@ def median(arr, parallel=False):
     # TODO: check return types, e.g. float32 -> float32
     n = len(arr)
     if parallel:
-        n = bodo.distributed_api.dist_reduce(n, np.int32(sum_op))
+        n = bodo.libs.distributed_api.dist_reduce(n, np.int32(sum_op))
     k = n // 2
 
     # odd length case
@@ -245,12 +245,12 @@ def lower_nunique_parallel(context, builder, sig, args):
 
 # @overload(nunique_parallel)
 def nunique_overload_parallel(arr_typ):
-    sum_op = bodo.distributed_api.Reduce_Type.Sum.value
+    sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
 
     def nunique_par(A):
         uniq_A = bodo.hiframes.api.unique_parallel(A)
         loc_nuniq = len(uniq_A)
-        return bodo.distributed_api.dist_reduce(loc_nuniq, np.int32(sum_op))
+        return bodo.libs.distributed_api.dist_reduce(loc_nuniq, np.int32(sum_op))
 
     return nunique_par
 
@@ -296,7 +296,7 @@ def unique_overload_parallel(arr_typ):
         uniq_A = bodo.utils.to_array(build_set(A))
         key_arrs = (uniq_A,)
 
-        n_pes = bodo.distributed_api.get_size()
+        n_pes = bodo.libs.distributed_api.get_size()
         pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, (), n_pes, False)
 
         # calc send/recv counts
@@ -330,14 +330,14 @@ convert_len_arr_to_offset = types.ExternalFunction("convert_len_arr_to_offset", 
 # TODO: refactor with join
 @numba.njit
 def set_recv_counts_chars(key_arr):
-    n_pes = bodo.distributed_api.get_size()
+    n_pes = bodo.libs.distributed_api.get_size()
     send_counts = np.zeros(n_pes, np.int32)
     recv_counts = np.empty(n_pes, np.int32)
     for i in range(len(key_arr)):
         str = key_arr[i]
         node_id = hash(str) % n_pes
         send_counts[node_id] += len(str)
-    bodo.distributed_api.alltoall(send_counts, recv_counts, 1)
+    bodo.libs.distributed_api.alltoall(send_counts, recv_counts, 1)
     return send_counts, recv_counts
 
 
@@ -553,16 +553,16 @@ def nlargest_parallel(A, k, is_largest, cmp_f):
     # parallel algorithm: assuming k << len(A), just call nlargest on chunks
     # of A, gather the result and return the largest k
     # TODO: support cases where k is not too small
-    my_rank = bodo.distributed_api.get_rank()
+    my_rank = bodo.libs.distributed_api.get_rank()
     local_res = nlargest(A, k, is_largest, cmp_f)
-    all_largest = bodo.distributed_api.gatherv(local_res)
+    all_largest = bodo.libs.distributed_api.gatherv(local_res)
 
     # TODO: handle len(res) < k case
     if my_rank == MPI_ROOT:
         res = nlargest(all_largest, k, is_largest, cmp_f)
     else:
         res = np.empty(k, A.dtype)
-    bodo.distributed_api.bcast(res)
+    bodo.libs.distributed_api.bcast(res)
     return res
 
 

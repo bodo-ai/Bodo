@@ -9,7 +9,7 @@ from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.ir_utils import guard, find_const
 
-from bodo.distributed_api import Reduce_Type
+from bodo.libs.distributed_api import Reduce_Type
 from bodo.hiframes.pd_timestamp_ext import integer_to_dt64
 from bodo.utils import unliteral_all
 
@@ -200,8 +200,8 @@ comm_border_tag = 22  # arbitrary, TODO: revisit comm tags
 @numba.njit
 def roll_fixed_linear_generic(in_arr, win, center, parallel, init_data,
                               add_obs, remove_obs, calc_out):  # pragma: no cover
-    rank = bodo.distributed_api.get_rank()
-    n_pes = bodo.distributed_api.get_size()
+    rank = bodo.libs.distributed_api.get_rank()
+    n_pes = bodo.libs.distributed_api.get_size()
     N = len(in_arr)
     # TODO: support minp arg end_range etc.
     minp = win
@@ -227,7 +227,7 @@ def roll_fixed_linear_generic(in_arr, win, center, parallel, init_data,
 
         # recv right
         if center and rank != n_pes - 1:
-            bodo.distributed_api.wait(r_recv_req, True)
+            bodo.libs.distributed_api.wait(r_recv_req, True)
 
             for i in range(0, halo_size):
                 data = add_obs(r_recv_buff[i], *data)
@@ -239,7 +239,7 @@ def roll_fixed_linear_generic(in_arr, win, center, parallel, init_data,
 
         # recv left
         if rank != 0:
-            bodo.distributed_api.wait(l_recv_req, True)
+            bodo.libs.distributed_api.wait(l_recv_req, True)
             data = init_data()
             for i in range(0, halo_size):
                 data = add_obs(l_recv_buff[i], *data)
@@ -297,8 +297,8 @@ def roll_fixed_linear_generic_seq(in_arr, win, center, init_data, add_obs,
 
 @numba.njit
 def roll_fixed_apply(in_arr, win, center, parallel, kernel_func):  # pragma: no cover
-    rank = bodo.distributed_api.get_rank()
-    n_pes = bodo.distributed_api.get_size()
+    rank = bodo.libs.distributed_api.get_rank()
+    n_pes = bodo.libs.distributed_api.get_size()
     N = len(in_arr)
     # TODO: support minp arg end_range etc.
     minp = win
@@ -323,7 +323,7 @@ def roll_fixed_apply(in_arr, win, center, parallel, kernel_func):  # pragma: no 
 
         # recv right
         if center and rank != n_pes - 1:
-            bodo.distributed_api.wait(r_recv_req, True)
+            bodo.libs.distributed_api.wait(r_recv_req, True)
             border_data = np.concatenate((in_arr[N-win+1:], r_recv_buff))
             ind = 0
             for i in range(max(N-offset, 0), N):
@@ -332,7 +332,7 @@ def roll_fixed_apply(in_arr, win, center, parallel, kernel_func):  # pragma: no 
 
         # recv left
         if rank != 0:
-            bodo.distributed_api.wait(l_recv_req, True)
+            bodo.libs.distributed_api.wait(l_recv_req, True)
             border_data = np.concatenate((l_recv_buff, in_arr[:win-1]))
             for i in range(0, win - offset - 1):
                 output[i] = kernel_func(border_data[i:i+win])
@@ -367,8 +367,8 @@ def roll_fixed_apply_seq(in_arr, win, center, kernel_func):  # pragma: no cover
 @numba.njit
 def roll_var_linear_generic(in_arr, on_arr_dt, win, center, parallel, init_data,
                               add_obs, remove_obs, calc_out):  # pragma: no cover
-    rank = bodo.distributed_api.get_rank()
-    n_pes = bodo.distributed_api.get_size()
+    rank = bodo.libs.distributed_api.get_rank()
+    n_pes = bodo.libs.distributed_api.get_size()
     on_arr = cast_dt64_arr_to_int(on_arr_dt)
     N = len(in_arr)
     # TODO: support minp arg end_range etc.
@@ -397,8 +397,8 @@ def roll_var_linear_generic(in_arr, on_arr_dt, win, center, parallel, init_data,
 
         # recv left
         if rank != 0:
-            bodo.distributed_api.wait(l_recv_req, True)
-            bodo.distributed_api.wait(l_recv_t_req, True)
+            bodo.libs.distributed_api.wait(l_recv_req, True)
+            bodo.libs.distributed_api.wait(l_recv_t_req, True)
 
             # values with start == 0 could potentially have left halo starts
             num_zero_starts = 0
@@ -504,8 +504,8 @@ def roll_var_linear_generic_seq(in_arr, on_arr, win, start, end, init_data,
 
 @numba.njit
 def roll_variable_apply(in_arr, on_arr_dt, win, center, parallel, kernel_func):  # pragma: no cover
-    rank = bodo.distributed_api.get_rank()
-    n_pes = bodo.distributed_api.get_size()
+    rank = bodo.libs.distributed_api.get_rank()
+    n_pes = bodo.libs.distributed_api.get_size()
     on_arr = cast_dt64_arr_to_int(on_arr_dt)
     N = len(in_arr)
     # TODO: support minp arg end_range etc.
@@ -533,8 +533,8 @@ def roll_variable_apply(in_arr, on_arr_dt, win, center, parallel, kernel_func): 
 
         # recv left
         if rank != 0:
-            bodo.distributed_api.wait(l_recv_req, True)
-            bodo.distributed_api.wait(l_recv_t_req, True)
+            bodo.libs.distributed_api.wait(l_recv_req, True)
+            bodo.libs.distributed_api.wait(l_recv_t_req, True)
 
             # values with start == 0 could potentially have left halo starts
             num_zero_starts = 0
@@ -790,8 +790,8 @@ def shift_overload(in_arr, shift, parallel):
 def shift_impl(in_arr, shift, parallel):  # pragma: no cover
     N = len(in_arr)
     if parallel:
-        rank = bodo.distributed_api.get_rank()
-        n_pes = bodo.distributed_api.get_size()
+        rank = bodo.libs.distributed_api.get_rank()
+        n_pes = bodo.libs.distributed_api.get_size()
         halo_size = np.int32(shift)
         if _is_small_for_parallel(N, halo_size):
             return _handle_small_data_shift(in_arr, shift, rank, n_pes)
@@ -808,7 +808,7 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
 
         # recv left
         if rank != 0:
-            bodo.distributed_api.wait(l_recv_req, True)
+            bodo.libs.distributed_api.wait(l_recv_req, True)
 
             for i in range(0, halo_size):
                 output[i] = l_recv_buff[i]
@@ -842,8 +842,8 @@ def pct_change_overload(in_arr, shift, parallel):
 def pct_change_impl(in_arr, shift, parallel):  # pragma: no cover
     N = len(in_arr)
     if parallel:
-        rank = bodo.distributed_api.get_rank()
-        n_pes = bodo.distributed_api.get_size()
+        rank = bodo.libs.distributed_api.get_rank()
+        n_pes = bodo.libs.distributed_api.get_size()
         halo_size = np.int32(shift)
         if _is_small_for_parallel(N, halo_size):
             return _handle_small_data_pct_change(in_arr, shift, rank, n_pes)
@@ -860,7 +860,7 @@ def pct_change_impl(in_arr, shift, parallel):  # pragma: no cover
 
         # recv left
         if rank != 0:
-            bodo.distributed_api.wait(l_recv_req, True)
+            bodo.libs.distributed_api.wait(l_recv_req, True)
 
             for i in range(0, halo_size):
                 prev = l_recv_buff[i]
@@ -891,17 +891,17 @@ def _border_icomm(in_arr, rank, n_pes, halo_size, dtype, center):  # pragma: no 
         r_recv_buff = np.empty(halo_size, dtype)
     # send right
     if rank != n_pes - 1:
-        r_send_req = bodo.distributed_api.isend(in_arr[-halo_size:], halo_size, np.int32(rank+1), comm_tag, True)
+        r_send_req = bodo.libs.distributed_api.isend(in_arr[-halo_size:], halo_size, np.int32(rank+1), comm_tag, True)
     # recv left
     if rank != 0:
-        l_recv_req = bodo.distributed_api.irecv(l_recv_buff, halo_size, np.int32(rank-1), comm_tag, True)
+        l_recv_req = bodo.libs.distributed_api.irecv(l_recv_buff, halo_size, np.int32(rank-1), comm_tag, True)
     # center cases
     # send left
     if center and rank != 0:
-        l_send_req = bodo.distributed_api.isend(in_arr[:halo_size], halo_size, np.int32(rank-1), comm_tag, True)
+        l_send_req = bodo.libs.distributed_api.isend(in_arr[:halo_size], halo_size, np.int32(rank-1), comm_tag, True)
     # recv right
     if center and rank != n_pes - 1:
-        r_recv_req = bodo.distributed_api.irecv(r_recv_buff, halo_size, np.int32(rank+1), comm_tag, True)
+        r_recv_req = bodo.libs.distributed_api.irecv(r_recv_buff, halo_size, np.int32(rank+1), comm_tag, True)
 
     return l_recv_buff, r_recv_buff, l_send_req, r_send_req, l_recv_req, r_recv_req
 
@@ -921,16 +921,16 @@ def _border_icomm_var(in_arr, on_arr, rank, n_pes, win_size, dtype):  # pragma: 
 
     # send right
     if rank != n_pes - 1:
-        bodo.distributed_api.send(halo_size, np.int32(rank+1), comm_tag)
-        r_send_req = bodo.distributed_api.isend(in_arr[-halo_size:], np.int32(halo_size), np.int32(rank+1), comm_tag, True)
-        r_send_t_req = bodo.distributed_api.isend(on_arr[-halo_size:], np.int32(halo_size), np.int32(rank+1), comm_tag, True)
+        bodo.libs.distributed_api.send(halo_size, np.int32(rank+1), comm_tag)
+        r_send_req = bodo.libs.distributed_api.isend(in_arr[-halo_size:], np.int32(halo_size), np.int32(rank+1), comm_tag, True)
+        r_send_t_req = bodo.libs.distributed_api.isend(on_arr[-halo_size:], np.int32(halo_size), np.int32(rank+1), comm_tag, True)
     # recv left
     if rank != 0:
-        halo_size = bodo.distributed_api.recv(np.int64, np.int32(rank-1), comm_tag)
+        halo_size = bodo.libs.distributed_api.recv(np.int64, np.int32(rank-1), comm_tag)
         l_recv_buff = np.empty(halo_size, dtype)
-        l_recv_req = bodo.distributed_api.irecv(l_recv_buff, np.int32(halo_size), np.int32(rank-1), comm_tag, True)
+        l_recv_req = bodo.libs.distributed_api.irecv(l_recv_buff, np.int32(halo_size), np.int32(rank-1), comm_tag, True)
         l_recv_t_buff = np.empty(halo_size, np.int64)
-        l_recv_t_req = bodo.distributed_api.irecv(l_recv_t_buff, np.int32(halo_size), np.int32(rank-1), comm_tag, True)
+        l_recv_t_req = bodo.libs.distributed_api.irecv(l_recv_t_buff, np.int32(halo_size), np.int32(rank-1), comm_tag, True)
 
     return l_recv_buff, l_recv_t_buff, r_send_req, r_send_t_req, l_recv_req, l_recv_t_req
 
@@ -939,10 +939,10 @@ def _border_icomm_var(in_arr, on_arr, rank, n_pes, win_size, dtype):  # pragma: 
 def _border_send_wait(r_send_req, l_send_req, rank, n_pes, center):  # pragma: no cover
     # wait on send right
     if rank != n_pes - 1:
-        bodo.distributed_api.wait(r_send_req, True)
+        bodo.libs.distributed_api.wait(r_send_req, True)
     # wait on send left
     if center and rank != 0:
-        bodo.distributed_api.wait(l_send_req, True)
+        bodo.libs.distributed_api.wait(l_send_req, True)
 
 @numba.njit
 def _is_small_for_parallel(N, halo_size):  # pragma: no cover
@@ -953,7 +953,7 @@ def _is_small_for_parallel(N, halo_size):  # pragma: no cover
     # TODO: avoid reduce for obvious cases like no center and large 1D_Block
     # using 2*halo_size+1 to accomodate center cases with data on more than
     # 2 processor
-    num_small = bodo.distributed_api.dist_reduce(
+    num_small = bodo.libs.distributed_api.dist_reduce(
         int(N<=2*halo_size+1), np.int32(Reduce_Type.Sum.value))
     return num_small != 0
 
@@ -961,60 +961,60 @@ def _is_small_for_parallel(N, halo_size):  # pragma: no cover
 @numba.njit
 def _handle_small_data(in_arr, win, center, rank, n_pes, init_data, add_obs,
                                                          remove_obs, calc_out):  # pragma: no cover
-    all_N = bodo.distributed_api.dist_reduce(
+    all_N = bodo.libs.distributed_api.dist_reduce(
         len(in_arr), np.int32(Reduce_Type.Sum.value))
-    all_in_arr = bodo.distributed_api.gatherv(in_arr)
+    all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
     if rank == 0:
         all_out, _ = roll_fixed_linear_generic_seq(all_in_arr, win, center,
                                       init_data, add_obs, remove_obs, calc_out)
     else:
         all_out = np.empty(all_N, np.float64)
-    bodo.distributed_api.bcast(all_out)
-    start = bodo.distributed_api.get_start(all_N, n_pes, rank)
-    end = bodo.distributed_api.get_end(all_N, n_pes, rank)
+    bodo.libs.distributed_api.bcast(all_out)
+    start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
+    end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
     return all_out[start:end]
 
 @numba.njit
 def _handle_small_data_apply(in_arr, win, center, rank, n_pes, kernel_func):  # pragma: no cover
-    all_N = bodo.distributed_api.dist_reduce(
+    all_N = bodo.libs.distributed_api.dist_reduce(
         len(in_arr), np.int32(Reduce_Type.Sum.value))
-    all_in_arr = bodo.distributed_api.gatherv(in_arr)
+    all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
     if rank == 0:
         all_out = roll_fixed_apply_seq(all_in_arr, win, center,
                                                    kernel_func)
     else:
         all_out = np.empty(all_N, np.float64)
-    bodo.distributed_api.bcast(all_out)
-    start = bodo.distributed_api.get_start(all_N, n_pes, rank)
-    end = bodo.distributed_api.get_end(all_N, n_pes, rank)
+    bodo.libs.distributed_api.bcast(all_out)
+    start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
+    end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
     return all_out[start:end]
 
 @numba.njit
 def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
-    all_N = bodo.distributed_api.dist_reduce(
+    all_N = bodo.libs.distributed_api.dist_reduce(
         len(in_arr), np.int32(Reduce_Type.Sum.value))
-    all_in_arr = bodo.distributed_api.gatherv(in_arr)
+    all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
     if rank == 0:
         all_out = shift_seq(all_in_arr, shift)
     else:
         all_out = np.empty(all_N, np.float64)
-    bodo.distributed_api.bcast(all_out)
-    start = bodo.distributed_api.get_start(all_N, n_pes, rank)
-    end = bodo.distributed_api.get_end(all_N, n_pes, rank)
+    bodo.libs.distributed_api.bcast(all_out)
+    start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
+    end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
     return all_out[start:end]
 
 @numba.njit
 def _handle_small_data_pct_change(in_arr, shift, rank, n_pes):  # pragma: no cover
-    all_N = bodo.distributed_api.dist_reduce(
+    all_N = bodo.libs.distributed_api.dist_reduce(
         len(in_arr), np.int32(Reduce_Type.Sum.value))
-    all_in_arr = bodo.distributed_api.gatherv(in_arr)
+    all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
     if rank == 0:
         all_out = pct_change_seq(all_in_arr, shift)
     else:
         all_out = np.empty(all_N, np.float64)
-    bodo.distributed_api.bcast(all_out)
-    start = bodo.distributed_api.get_start(all_N, n_pes, rank)
-    end = bodo.distributed_api.get_end(all_N, n_pes, rank)
+    bodo.libs.distributed_api.bcast(all_out)
+    start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
+    end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
     return all_out[start:end]
 
 def cast_dt64_arr_to_int(arr):  # pragma: no cover
@@ -1047,44 +1047,44 @@ def _is_small_for_parallel_variable(on_arr, win_size):  # pragma: no cover
     start = on_arr[0]
     end = on_arr[-1]
     pe_range = end - start
-    num_small = bodo.distributed_api.dist_reduce(
+    num_small = bodo.libs.distributed_api.dist_reduce(
         int(pe_range<=win_size), np.int32(Reduce_Type.Sum.value))
     return num_small != 0
 
 @numba.njit
 def _handle_small_data_variable(in_arr, on_arr, win, rank, n_pes, init_data,
                                                 add_obs, remove_obs, calc_out):  # pragma: no cover
-    all_N = bodo.distributed_api.dist_reduce(
+    all_N = bodo.libs.distributed_api.dist_reduce(
         len(in_arr), np.int32(Reduce_Type.Sum.value))
-    all_in_arr = bodo.distributed_api.gatherv(in_arr)
-    all_on_arr = bodo.distributed_api.gatherv(on_arr)
+    all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
+    all_on_arr = bodo.libs.distributed_api.gatherv(on_arr)
     if rank == 0:
         start, end = _build_indexer(all_on_arr, all_N, win, False, True)
         all_out = roll_var_linear_generic_seq(all_in_arr, all_on_arr, win,
                           start, end, init_data, add_obs, remove_obs, calc_out)
     else:
         all_out = np.empty(all_N, np.float64)
-    bodo.distributed_api.bcast(all_out)
-    start = bodo.distributed_api.get_start(all_N, n_pes, rank)
-    end = bodo.distributed_api.get_end(all_N, n_pes, rank)
+    bodo.libs.distributed_api.bcast(all_out)
+    start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
+    end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
     return all_out[start:end]
 
 @numba.njit
 def _handle_small_data_variable_apply(in_arr, on_arr, win, rank, n_pes,
                                         kernel_func):  # pragma: no cover
-    all_N = bodo.distributed_api.dist_reduce(
+    all_N = bodo.libs.distributed_api.dist_reduce(
         len(in_arr), np.int32(Reduce_Type.Sum.value))
-    all_in_arr = bodo.distributed_api.gatherv(in_arr)
-    all_on_arr = bodo.distributed_api.gatherv(on_arr)
+    all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
+    all_on_arr = bodo.libs.distributed_api.gatherv(on_arr)
     if rank == 0:
         start, end = _build_indexer(all_on_arr, all_N, win, False, True)
         all_out = roll_variable_apply_seq(all_in_arr, all_on_arr, win,
                           start, end, kernel_func)
     else:
         all_out = np.empty(all_N, np.float64)
-    bodo.distributed_api.bcast(all_out)
-    start = bodo.distributed_api.get_start(all_N, n_pes, rank)
-    end = bodo.distributed_api.get_end(all_N, n_pes, rank)
+    bodo.libs.distributed_api.bcast(all_out)
+    start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
+    end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
     return all_out[start:end]
 
 @numba.njit

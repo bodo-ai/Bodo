@@ -288,8 +288,8 @@ class DistributedAnalysis(object):
             self._analyze_call_df(lhs, func_mod, func_name, args, array_dists)
             return
 
-        # bodo.distributed_api functions
-        if isinstance(func_mod, str) and func_mod == 'bodo.distributed_api':
+        # bodo.libs.distributed_api functions
+        if isinstance(func_mod, str) and func_mod == 'bodo.libs.distributed_api':
             self._analyze_call_hpat_dist(lhs, func_name, args, array_dists)
             return
 
@@ -590,7 +590,7 @@ class DistributedAnalysis(object):
 
     def _analyze_call_hpat_dist(self, lhs, func_name, args, array_dists):
         """analyze distributions of bodo distributed functions
-        (bodo.distributed_api.func_name)
+        (bodo.libs.distributed_api.func_name)
         """
         if func_name == 'local_len':
             return
@@ -625,7 +625,7 @@ class DistributedAnalysis(object):
             return
 
         # set REP if not found
-        self._analyze_call_set_REP(lhs, args, array_dists, 'bodo.distributed_api.' + func_name)
+        self._analyze_call_set_REP(lhs, args, array_dists, 'bodo.libs.distributed_api.' + func_name)
 
     def _analyze_call_np_concatenate(self, lhs, args, array_dists):
         assert len(args) == 1
@@ -903,7 +903,7 @@ class DistributedAnalysis(object):
                     nodes = [inst]
 
                     def f(in_arr):  # pragma: no cover
-                        out_a = bodo.distributed_api.rebalance_array(in_arr)
+                        out_a = bodo.libs.distributed_api.rebalance_array(in_arr)
                     f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
                                                   (self.typemap[tmp_arr.name],),
                                                   self.typemap, self.calltypes).blocks.popitem()[1]

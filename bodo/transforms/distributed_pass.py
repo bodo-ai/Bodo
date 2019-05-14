@@ -23,7 +23,7 @@ import numpy as np
 
 import bodo
 from bodo.io.pio_api import h5file_type, h5group_type
-from bodo import (distributed_api,
+from bodo.libs import (distributed_api,
                   distributed_lower)  # import lower for module initialization
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
@@ -36,7 +36,7 @@ from bodo.utils import (is_alloc_callname, is_whole_slice, is_array_container,
                         get_slice_step, is_array, is_np_array, find_build_tuple,
                         debug_prints, ReplaceFunc, gen_getitem, is_call,
                         is_const_slice)
-from bodo.distributed_api import Reduce_Type
+from bodo.libs.distributed_api import Reduce_Type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
 distributed_run_extensions = {}
@@ -287,7 +287,7 @@ class DistributedPass(object):
     def _gen_1D_Var_len(self, arr):
         def f(A, op):  # pragma: no cover
             c = len(A)
-            res = bodo.distributed_api.dist_reduce(c, op)
+            res = bodo.libs.distributed_api.dist_reduce(c, op)
         f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
                                       (self.typemap[arr.name], types.int32),
                                       self.typemap, self.calltypes).blocks.popitem()[1]
@@ -312,11 +312,11 @@ class DistributedPass(object):
         self.typemap[self._set0_var.name] = types.int64
         set0_assign = ir.Assign(ir.Const(0, loc), self._set0_var, loc)
         out.append(set0_assign)
-        # g_dist_var = Global(bodo.distributed_api)
+        # g_dist_var = Global(bodo.libs.distributed_api)
         g_dist_var = ir.Var(scope, mk_unique_var("$distributed_g_var"), loc)
         self._g_dist_var = g_dist_var
-        self.typemap[g_dist_var.name] = types.misc.Module(bodo.distributed_api)
-        g_dist = ir.Global('distributed_api', bodo.distributed_api, loc)
+        self.typemap[g_dist_var.name] = types.misc.Module(bodo.libs.distributed_api)
+        g_dist = ir.Global('distributed_api', bodo.libs.distributed_api, loc)
         g_dist_assign = ir.Assign(g_dist, g_dist_var, loc)
         # attr call: rank_attr = getattr(g_dist_var, get_rank)
         rank_attr_call = ir.Expr.getattr(g_dist_var, "get_rank", loc)
@@ -324,7 +324,7 @@ class DistributedPass(object):
         self.typemap[rank_attr_var.name] = get_global_func_typ(
             distributed_api.get_rank)
         rank_attr_assign = ir.Assign(rank_attr_call, rank_attr_var, loc)
-        # rank_var = bodo.distributed_api.get_rank()
+        # rank_var = bodo.libs.distributed_api.get_rank()
         rank_var = ir.Var(scope, mk_unique_var("$rank"), loc)
         self.typemap[rank_var.name] = types.int32
         rank_call = ir.Expr.call(rank_attr_var, [], (), loc)
@@ -340,7 +340,7 @@ class DistributedPass(object):
         self.typemap[size_attr_var.name] = get_global_func_typ(
             distributed_api.get_size)
         size_attr_assign = ir.Assign(size_attr_call, size_attr_var, loc)
-        # size_var = bodo.distributed_api.get_size()
+        # size_var = bodo.libs.distributed_api.get_size()
         size_var = ir.Var(scope, mk_unique_var("$dist_size"), loc)
         self.typemap[size_var.name] = types.int32
         size_call = ir.Expr.call(size_attr_var, [], (), loc)
@@ -714,7 +714,7 @@ class DistributedPass(object):
                 assign.value = arg_def.args[0]
             return out
 
-        if fdef == ('dist_return', 'bodo.distributed_api'):
+        if fdef == ('dist_return', 'bodo.libs.distributed_api'):
             # always rebalance returned distributed arrays
             # TODO: need different flag for 1D_Var return (distributed_var)?
             # TODO: rebalance strings?
@@ -749,11 +749,11 @@ class DistributedPass(object):
             return out
 
 
-        if fdef == ('threaded_return', 'bodo.distributed_api'):
+        if fdef == ('threaded_return', 'bodo.libs.distributed_api'):
             assign.value = rhs.args[0]
             return [assign]
 
-        if fdef == ('rebalance_array', 'bodo.distributed_api'):
+        if fdef == ('rebalance_array', 'bodo.libs.distributed_api'):
             return self._run_call_rebalance_array(lhs, assign, rhs.args)
 
         if fdef == ('file_read', 'bodo.io.np_io') and rhs.args[1].name in self._array_starts:
@@ -911,7 +911,7 @@ class DistributedPass(object):
 
                 def f(fname, arr):  # pragma: no cover
                     count = len(arr)
-                    start = bodo.distributed_api.dist_exscan(count)
+                    start = bodo.libs.distributed_api.dist_exscan(count)
                     return bodo.io.np_io.file_write_parallel(fname, arr, start, count)
 
                 return self._replace_func(f, [_fname, arr])
@@ -1001,7 +1001,7 @@ class DistributedPass(object):
 
             def f(fname, str_out):  # pragma: no cover
                 count = len(str_out)
-                start = bodo.distributed_api.dist_exscan(count)
+                start = bodo.libs.distributed_api.dist_exscan(count)
                 bodo.io.np_io._file_write_parallel(
                     fname._data, str_out._data, start, count, 1)
                 dummy_use(str_out)
@@ -1013,7 +1013,7 @@ class DistributedPass(object):
 
     def _gen_is_root_and_cond(self, cond_var):
         def f(cond):
-            return cond & (bodo.distributed_api.get_rank() == 0)
+            return cond & (bodo.libs.distributed_api.get_rank() == 0)
         f_block = compile_to_numba_ir(f, {'bodo': bodo},
                                     self.typingctx,
                                     (self.typemap[cond_var.name],),
@@ -1026,7 +1026,7 @@ class DistributedPass(object):
     def _fix_parallel_df_index(self, df):
         def f(df):  # pragma: no cover
             l = len(df)
-            start = bodo.distributed_api.dist_exscan(l)
+            start = bodo.libs.distributed_api.dist_exscan(l)
             ind = np.arange(start, start+l)
             df2 = bodo.hiframes.pd_dataframe_ext.set_df_index(df, ind)
             return df2
@@ -1045,7 +1045,7 @@ class DistributedPass(object):
         n = args[0]
 
         def f(lhs, n):
-            bodo.distributed_lower.dist_permutation_int(lhs, n)
+            bodo.libs.distributed_lower.dist_permutation_int(lhs, n)
 
         f_block = compile_to_numba_ir(f, {'bodo': bodo},
                                       self.typingctx,
@@ -1072,7 +1072,7 @@ class DistributedPass(object):
                         *self._array_sizes[lhs.name][1:]), dtype, scope, loc)
 
         def f(lhs, lhs_len, dtype_size, rhs, idx, idx_len):
-            bodo.distributed_lower.dist_permutation_array_index(
+            bodo.libs.distributed_lower.dist_permutation_array_index(
                 lhs, lhs_len, dtype_size, rhs, idx, idx_len)
 
         f_block = compile_to_numba_ir(f, {'bodo': bodo},
@@ -1115,7 +1115,7 @@ class DistributedPass(object):
                         new_local_shape_var, dtype, scope, loc)
 
         def f(lhs, in_arr, new_0dim_global_len, old_0dim_global_len, dtype_size):  # pragma: no cover
-            bodo.distributed_lower.dist_oneD_reshape_shuffle(
+            bodo.libs.distributed_lower.dist_oneD_reshape_shuffle(
                 lhs, in_arr, new_0dim_global_len, old_0dim_global_len, dtype_size)
 
         f_block = compile_to_numba_ir(f, {'bodo': bodo},
@@ -1168,7 +1168,7 @@ class DistributedPass(object):
         self._array_sizes[lhs][0] = total_length
 
         def f(arr, count):  # pragma: no cover
-            b_arr = bodo.distributed_api.rebalance_array_parallel(arr, count)
+            b_arr = bodo.libs.distributed_api.rebalance_array_parallel(arr, count)
 
         f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
                                       (self.typemap[arr.name], types.intp),
@@ -1460,7 +1460,7 @@ class DistributedPass(object):
 
             if isinstance(self.typemap[index_var.name], types.Integer):
                 def f(A, val, index, chunk_start, chunk_count):  # pragma: no cover
-                    bodo.distributed_lower._set_if_in_range(
+                    bodo.libs.distributed_lower._set_if_in_range(
                         A, val, index, chunk_start, chunk_count)
 
                 return self._replace_func(
@@ -1472,7 +1472,7 @@ class DistributedPass(object):
             # convert setitem with global range to setitem with local range
             # that overlaps with the local array chunk
             def f(A, val, start, stop, chunk_start, chunk_count):  # pragma: no cover
-                loc_start, loc_stop = bodo.distributed_lower._get_local_range(
+                loc_start, loc_stop = bodo.libs.distributed_lower._get_local_range(
                     start, stop, chunk_start, chunk_count)
                 A[loc_start:loc_stop] = val
 
@@ -1564,7 +1564,7 @@ class DistributedPass(object):
                 start = self._array_starts[in_arr.name][0]
                 count = self._array_counts[in_arr.name][0]
                 return self._replace_func(
-                    lambda arr, slice_index, start, count: bodo.distributed_api.const_slice_getitem(
+                    lambda arr, slice_index, start, count: bodo.libs.distributed_api.const_slice_getitem(
                         arr, slice_index, start, count), [in_arr, index_var, start, count])
 
         return out
@@ -1680,8 +1680,8 @@ class DistributedPass(object):
                 l_nest.start = start_var
 
             def _fix_ind_bounds(start, stop):
-                prefix = bodo.distributed_api.dist_exscan(stop - start)
-                # rank = bodo.distributed_api.get_rank()
+                prefix = bodo.libs.distributed_api.dist_exscan(stop - start)
+                # rank = bodo.libs.distributed_api.get_rank()
                 # print(rank, prefix, start, stop)
                 return start + prefix, stop + prefix
 
@@ -1948,7 +1948,7 @@ class DistributedPass(object):
 
     def _gen_barrier(self):
         def f():  # pragma: no cover
-            return bodo.distributed_api.barrier()
+            return bodo.libs.distributed_api.barrier()
 
         f_blocks = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx, {},
                                        self.typemap, self.calltypes).blocks
@@ -1961,7 +1961,7 @@ class DistributedPass(object):
         op_assign = ir.Assign(ir.Const(reduce_op.value, loc), op_var, loc)
 
         def f(val, op):  # pragma: no cover
-            bodo.distributed_api.dist_reduce(val, op)
+            bodo.libs.distributed_api.dist_reduce(val, op)
 
         f_ir = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
                                    (self.typemap[reduce_var.name],
@@ -2037,7 +2037,7 @@ class DistributedPass(object):
             pre_init_val = "v = np.full_like(s, {}, s.dtype)".format(init_val)
             init_val = "v"
 
-        f_text = "def f(s):\n  {}\n  s = bodo.distributed_lower._root_rank_select(s, {})".format(
+        f_text = "def f(s):\n  {}\n  s = bodo.libs.distributed_lower._root_rank_select(s, {})".format(
             pre_init_val, init_val)
         loc_vars = {}
         exec(f_text, {}, loc_vars)
