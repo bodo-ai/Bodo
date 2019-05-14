@@ -33,7 +33,7 @@ import bodo.hiframes.pd_groupby_ext
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 import bodo.hiframes.pd_rolling_ext
 from bodo.hiframes.pd_rolling_ext import RollingType
-from bodo.hiframes.aggregate import get_agg_func
+from bodo.ir.aggregate import get_agg_func
 
 
 class DataFramePass(object):
@@ -344,7 +344,7 @@ class DataFramePass(object):
             in_vars[col] = in_arr
             out_vars[col] = out_arr
 
-        nodes.append(hiframes.filter.Filter(
+        nodes.append(bodo.ir.filter.Filter(
             lhs.name, df_var.name, index_var, out_vars, in_vars, lhs.loc))
 
         _init_df = _gen_init_df(df_typ.columns)
@@ -1093,7 +1093,7 @@ class DataFramePass(object):
             for k in key_names:
                 out_key_vars.append(out_vars.pop(k))
 
-        nodes.append(hiframes.sort.Sort(df_var.name, lhs.name, in_key_arrs, out_key_vars,
+        nodes.append(bodo.ir.sort.Sort(df_var.name, lhs.name, in_key_arrs, out_key_vars,
                                       in_vars, out_vars, inplace, lhs.loc, ascending))
 
         _init_df = _gen_init_df(df_typ.columns)
@@ -1508,7 +1508,7 @@ class DataFramePass(object):
         right_arrs = {c: self._get_dataframe_data(right_df, c, nodes)
                             for c in self.typemap[right_df.name].columns}
 
-        nodes.append(hiframes.join.Join(lhs.name, left_df.name,
+        nodes.append(bodo.ir.join.Join(lhs.name, left_df.name,
                                    right_df.name,
                                    left_on, right_on, out_data_vars, left_arrs,
                                    right_arrs, how, lhs.loc))
@@ -1550,7 +1550,7 @@ class DataFramePass(object):
 
         agg_func = get_agg_func(self.func_ir, func_name, rhs)
 
-        agg_node = hiframes.aggregate.Aggregate(
+        agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name, df_var.name, grp_typ.keys, out_key_vars, df_col_map,
             in_vars, in_key_arrs,
             agg_func, None, lhs.loc)
@@ -1603,7 +1603,7 @@ class DataFramePass(object):
         index_arr = self._get_dataframe_data(df_var, index, nodes)
         agg_func = get_agg_func(self.func_ir, func_name, rhs)
 
-        agg_node = hiframes.aggregate.Aggregate(
+        agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name, df_var.name, [index], None, df_col_map,
             in_vars, [index_arr],
             agg_func, None, lhs.loc, pivot_arr, pivot_values)
@@ -1642,7 +1642,7 @@ class DataFramePass(object):
 
         # TODO: make out_key_var an index column
         # TODO: check Series vs. array for index/columns
-        agg_node = bodo.hiframes.aggregate.Aggregate(
+        agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name, 'crosstab', [index.name], None, df_col_map,
             in_vars, [index],
             _agg_len_impl, None, lhs.loc, pivot_arr, pivot_values, True)

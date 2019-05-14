@@ -28,7 +28,7 @@ from bodo.libs.set_ext import num_total_chars_set_string, build_set
 from bodo.libs.str_arr_ext import (string_array_type, pre_alloc_string_array,
                               get_offset_ptr, get_data_ptr)
 
-from bodo.hiframes.join import write_send_buff
+from bodo.ir.join import write_send_buff
 from bodo.libs.timsort import getitem_arr_tup
 from bodo.shuffle_utils import (getitem_arr_tup_single, val_to_tup, alltoallv,
     alltoallv_tup, finalize_shuffle_meta, update_shuffle_meta,
@@ -117,8 +117,8 @@ def _column_var_impl_linear(A):  # pragma: no cover
     ssqdm_x = 0.0
     N = len(A)
     for i in numba.parfor.internal_prange(N):
-        bodo.hiframes.aggregate.__special_combine(
-            ssqdm_x, mean_x, nobs, bodo.hiframes.aggregate._var_combine)
+        bodo.ir.aggregate.__special_combine(
+            ssqdm_x, mean_x, nobs, bodo.ir.aggregate._var_combine)
         val = A[i]
         if not np.isnan(val):
             nobs += 1
@@ -137,8 +137,8 @@ def _column_std_impl_linear(A):  # pragma: no cover
     ssqdm_x = 0.0
     N = len(A)
     for i in numba.parfor.internal_prange(N):
-        bodo.hiframes.aggregate.__special_combine(
-            ssqdm_x, mean_x, nobs, bodo.hiframes.aggregate._var_combine)
+        bodo.ir.aggregate.__special_combine(
+            ssqdm_x, mean_x, nobs, bodo.ir.aggregate._var_combine)
         val = A[i]
         if not np.isnan(val):
             nobs += 1
@@ -1521,7 +1521,7 @@ def gen_combine_func(f_ir, parfor, redvars, var_to_redvar, var_types, arr_var,
         bl = parfor.loop_body[label]
         for stmt in bl.body:
             if is_call_assign(stmt) and (guard(find_callname, f_ir, stmt.value)
-                    == ('__special_combine', 'bodo.hiframes.aggregate')):
+                    == ('__special_combine', 'bodo.ir.aggregate')):
                 args = stmt.value.args
                 l_argnames = []
                 r_argnames = []
@@ -1537,8 +1537,8 @@ def gen_combine_func(f_ir, parfor, redvars, var_to_redvar, var_types, arr_var,
                 sp_func = guard(find_callname, f_ir, dummy_call)
                 # XXX: only var supported for now
                 # TODO: support general functions
-                assert sp_func == ('_var_combine', 'bodo.hiframes.aggregate')
-                sp_func = bodo.hiframes.aggregate._var_combine
+                assert sp_func == ('_var_combine', 'bodo.ir.aggregate')
+                sp_func = bodo.ir.aggregate._var_combine
                 special_combines[comb_name] = sp_func
 
             # reduction variables

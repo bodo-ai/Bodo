@@ -535,13 +535,13 @@ class TestDataFrame(unittest.TestCase):
 
         hpat_func = bodo.jit(locals={'res:return': 'distributed'})(test_impl)
 
-        save_min_samples = bodo.hiframes.sort.MIN_SAMPLES
+        save_min_samples = bodo.ir.sort.MIN_SAMPLES
         try:
-            bodo.hiframes.sort.MIN_SAMPLES = 10
+            bodo.ir.sort.MIN_SAMPLES = 10
             res = hpat_func()
             self.assertTrue((np.diff(res)>=0).all())
         finally:
-            bodo.hiframes.sort.MIN_SAMPLES = save_min_samples  # restore global val
+            bodo.ir.sort.MIN_SAMPLES = save_min_samples  # restore global val
 
     def test_sort_parallel(self):
         # TODO: better parallel sort test
@@ -554,13 +554,13 @@ class TestDataFrame(unittest.TestCase):
 
         hpat_func = bodo.jit(locals={'res:return': 'distributed'})(test_impl)
 
-        save_min_samples = bodo.hiframes.sort.MIN_SAMPLES
+        save_min_samples = bodo.ir.sort.MIN_SAMPLES
         try:
-            bodo.hiframes.sort.MIN_SAMPLES = 10
+            bodo.ir.sort.MIN_SAMPLES = 10
             res = hpat_func()
             self.assertTrue((np.diff(res)>=0).all())
         finally:
-            bodo.hiframes.sort.MIN_SAMPLES = save_min_samples  # restore global val
+            bodo.ir.sort.MIN_SAMPLES = save_min_samples  # restore global val
 
     def test_itertuples(self):
         def test_impl(df):

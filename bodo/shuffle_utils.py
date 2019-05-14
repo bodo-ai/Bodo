@@ -133,8 +133,8 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
     func_text += "  bodo.libs.distributed_api.alltoall(send_counts, recv_counts, 1)\n"
     func_text += "  n_out = recv_counts.sum()\n"
     func_text += "  n_send = send_counts.sum()\n"
-    func_text += "  send_disp = bodo.hiframes.join.calc_disp(send_counts)\n"
-    func_text += "  recv_disp = bodo.hiframes.join.calc_disp(recv_counts)\n"
+    func_text += "  send_disp = bodo.ir.join.calc_disp(send_counts)\n"
+    func_text += "  recv_disp = bodo.ir.join.calc_disp(recv_counts)\n"
 
     n_keys = len(key_arrs.types)
     n_all = len(key_arrs.types + data.types)
@@ -164,9 +164,9 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
             func_text += "  n_all_chars = recv_counts_char_{}.sum()\n".format(n_str)
             func_text += "  out_arr_{} = pre_alloc_string_array(n_out, n_all_chars)\n".format(i)
             # send/recv disp
-            func_text += ("  send_disp_char_{} = bodo.hiframes.join."
+            func_text += ("  send_disp_char_{} = bodo.ir.join."
                 "calc_disp(send_counts_char_{})\n").format(n_str, n_str)
-            func_text += ("  recv_disp_char_{} = bodo.hiframes.join."
+            func_text += ("  recv_disp_char_{} = bodo.ir.join."
                 "calc_disp(recv_counts_char_{})\n").format(n_str, n_str)
 
             # tmp_offset_char, send_arr_lens

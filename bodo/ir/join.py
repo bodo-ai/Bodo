@@ -351,8 +351,8 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx, 
     if method == 'sort' and join_node.how != 'asof':
         # asof key is already sorted, TODO: add error checking
         # local sort
-        func_text += "    bodo.hiframes.sort.local_sort(t1_keys, data_left)\n"
-        func_text += "    bodo.hiframes.sort.local_sort(t2_keys, data_right)\n"
+        func_text += "    bodo.ir.sort.local_sort(t1_keys, data_left)\n"
+        func_text += "    bodo.ir.sort.local_sort(t2_keys, data_right)\n"
 
     # align output variables for local merge
     # add keys first (TODO: remove dead keys)
@@ -375,15 +375,15 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx, 
 
     if join_node.how == 'asof':
         func_text += ("    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
-        " = bodo.hiframes.join.local_merge_asof(t1_keys, t2_keys, data_left, data_right)\n")
+        " = bodo.ir.join.local_merge_asof(t1_keys, t2_keys, data_left, data_right)\n")
     elif method == 'sort':
         func_text += ("    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
-        " = bodo.hiframes.join.local_merge_new(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
+        " = bodo.ir.join.local_merge_new(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
             join_node.how in ('left', 'outer'), join_node.how == 'outer'))
     else:
         assert method == 'hash'
         func_text += ("    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
-        " = bodo.hiframes.join.local_hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
+        " = bodo.ir.join.local_hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
             join_node.how in ('left', 'outer'), join_node.how == 'outer'))
 
     for i in range(len(left_other_names)):
@@ -541,7 +541,7 @@ def parallel_asof_comm(left_key_arrs, right_key_arrs, right_data):
     out_r_keys = np.empty(n_total_recv, right_key_arrs[0].dtype)
     # TODO: support string
     out_r_data = alloc_arr_tup(n_total_recv, right_data)
-    recv_disp = bodo.hiframes.join.calc_disp(recv_counts)
+    recv_disp = bodo.ir.join.calc_disp(recv_counts)
     bodo.libs.distributed_api.alltoallv(right_key_arrs[0], out_r_keys, send_counts,
                                    recv_counts, send_disp, recv_disp)
     bodo.libs.distributed_api.alltoallv_tup(right_data, out_r_data, send_counts,

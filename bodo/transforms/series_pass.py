@@ -34,7 +34,7 @@ from bodo.hiframes.pd_series_ext import (SeriesType, is_str_series_typ,
 from bodo.hiframes.pd_index_ext import DatetimeIndexType
 from bodo.io.pio_api import h5dataset_type
 from bodo.hiframes.rolling import get_rolling_setup_args
-from bodo.hiframes.aggregate import Aggregate
+from bodo.ir.aggregate import Aggregate
 from bodo.hiframes import series_kernels, split_impl
 from bodo.hiframes.series_kernels import series_replace_funcs
 from bodo.hiframes.split_impl import (string_array_split_view_type,
@@ -110,9 +110,9 @@ class SeriesPass(object):
                 elif isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
                     out_nodes = self._run_setitem(inst)
                 else:
-                    if isinstance(inst, (Aggregate, hiframes.sort.Sort,
-                            hiframes.join.Join, hiframes.filter.Filter,
-                            bodo.io.csv_ext.CsvReader)):
+                    if isinstance(inst, (Aggregate, bodo.ir.sort.Sort,
+                            bodo.ir.join.Join, bodo.ir.filter.Filter,
+                            bodo.ir.csv_ext.CsvReader)):
                         out_nodes = self._handle_hiframes_nodes(inst)
 
 
@@ -988,7 +988,7 @@ class SeriesPass(object):
             out_data_var = ir.Var(lhs.scope, mk_unique_var(lhs.name + '_data'), lhs.loc)
             self.typemap[out_data_var.name] = self.typemap[lhs.name].data
             agg_func = series_replace_funcs['count']
-            agg_node = hiframes.aggregate.Aggregate(
+            agg_node = bodo.ir.aggregate.Aggregate(
                 lhs.name, 'series', ['series'], [out_key_var],
                 {'data': out_data_var}, {'data': data}, [data], agg_func,
                 None, lhs.loc)
@@ -1100,7 +1100,7 @@ class SeriesPass(object):
                 ascending = find_const(self.func_ir, ascending)
 
         # Sort node
-        nodes.append(hiframes.sort.Sort(data.name, lhs.name, in_keys,
+        nodes.append(bodo.ir.sort.Sort(data.name, lhs.name, in_keys,
             out_keys, in_df, out_df, False, lhs.loc, ascending))
 
         # create output Series
@@ -2418,28 +2418,28 @@ class SeriesPass(object):
             def_vars = list(inst.df_out_vars.values())
             if inst.out_key_vars is not None:
                 def_vars += inst.out_key_vars
-            apply_copies_func = hiframes.aggregate.apply_copies_aggregate
-        elif isinstance(inst, hiframes.sort.Sort):
+            apply_copies_func = bodo.ir.aggregate.apply_copies_aggregate
+        elif isinstance(inst, bodo.ir.sort.Sort):
             use_vars = inst.key_arrs + list(inst.df_in_vars.values())
             def_vars = []
             if not inst.inplace:
                 def_vars = inst.out_key_arrs + list(inst.df_out_vars.values())
-            apply_copies_func = hiframes.sort.apply_copies_sort
-        elif isinstance(inst, hiframes.join.Join):
+            apply_copies_func = bodo.ir.sort.apply_copies_sort
+        elif isinstance(inst, bodo.ir.join.Join):
             use_vars = list(inst.right_vars.values()) + list(inst.left_vars.values())
             def_vars = list(inst.df_out_vars.values())
-            apply_copies_func = hiframes.join.apply_copies_join
-        elif isinstance(inst, bodo.io.csv_ext.CsvReader):
+            apply_copies_func = bodo.ir.join.apply_copies_join
+        elif isinstance(inst, bodo.ir.csv_ext.CsvReader):
             use_vars = []
             def_vars = inst.out_vars
-            apply_copies_func = bodo.io.csv_ext.apply_copies_csv
+            apply_copies_func = bodo.ir.csv_ext.apply_copies_csv
         else:
-            assert isinstance(inst, hiframes.filter.Filter)
+            assert isinstance(inst, bodo.ir.filter.Filter)
             use_vars = list(inst.df_in_vars.values())
             if isinstance(self.typemap[inst.bool_arr.name], SeriesType):
                 use_vars.append(inst.bool_arr)
             def_vars = list(inst.df_out_vars.values())
-            apply_copies_func = hiframes.filter.apply_copies_filter
+            apply_copies_func = bodo.ir.filter.apply_copies_filter
 
         out_nodes = self._convert_series_hiframes_nodes(
                 inst, use_vars, def_vars, apply_copies_func)

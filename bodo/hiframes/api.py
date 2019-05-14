@@ -30,12 +30,12 @@ from bodo.hiframes.pd_series_ext import (SeriesType,
     is_str_series_typ, if_arr_to_series_type,
     series_to_array_type, if_series_to_array_type, is_dt64_series_typ)
 from bodo.hiframes.pd_index_ext import DatetimeIndexType, TimedeltaIndexType
-from bodo.hiframes.sort import (
+from bodo.ir.sort import (
       alltoallv,
     alltoallv_tup, finalize_shuffle_meta,
     update_shuffle_meta,  alloc_pre_shuffle_metadata,
     )
-from bodo.hiframes.join import write_send_buff
+from bodo.ir.join import write_send_buff
 from bodo.hiframes.split_impl import string_array_split_view_type
 
 # XXX: used in agg func output to avoid mutating filter, agg, join, etc.

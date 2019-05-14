@@ -1,6 +1,9 @@
 import warnings
 from collections import namedtuple
 import itertools
+import pandas as pd
+import numpy as np
+import math
 
 import numba
 from numba import ir, ir_utils, types
@@ -23,26 +26,26 @@ import bodo
 from bodo import utils, config
 import bodo.io
 from bodo.io import pio, parquet_pio
-from bodo.hiframes import filter, join, aggregate, sort
+from bodo.io.parquet_pio import ParquetHandler
 from bodo.utils import (get_constant, NOT_CONSTANT, debug_prints,
     inline_new_blocks, ReplaceFunc, is_call, is_assign)
 import bodo.hiframes.api
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
-import bodo.io
-from bodo.io import csv_ext
+import bodo.ir
+import bodo.ir.aggregate
+import bodo.ir.filter
+import bodo.ir.join
+import bodo.ir.sort
+from bodo.ir import csv_ext
 
-import pandas as pd
-import numpy as np
-import math
-import bodo.io
-from bodo.io.parquet_pio import ParquetHandler
+
 from bodo.hiframes.pd_timestamp_ext import (datetime_date_type,
                                     datetime_date_to_int, int_to_datetime_date)
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 from bodo.hiframes.rolling import get_rolling_setup_args, supported_rolling_funcs
-from bodo.hiframes.aggregate import get_agg_func, supported_agg_funcs
+from bodo.ir.aggregate import get_agg_func, supported_agg_funcs
 import bodo.hiframes.pd_dataframe_ext
 
 

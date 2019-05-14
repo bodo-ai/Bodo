@@ -303,7 +303,7 @@ def sort_distributed_run(sort_node, array_dists, typemap, calltypes, typingctx,
     func_text += "  key_arrs = ({},)\n".format(key_name_args)
     func_text += "  data = ({}{})\n".format(col_name_args,
         "," if len(in_vars) == 1 else "")  # single value needs comma to become tuple
-    func_text += "  bodo.hiframes.sort.local_sort(key_arrs, data, {})\n".format(sort_node.ascending)
+    func_text += "  bodo.ir.sort.local_sort(key_arrs, data, {})\n".format(sort_node.ascending)
     func_text += "  return key_arrs, data\n"
 
     loc_vars = {}
@@ -349,7 +349,7 @@ def sort_distributed_run(sort_node, array_dists, typemap, calltypes, typingctx,
         out_key, out_data = parallel_sort(key_arrs, data, ascending)
         # TODO: use k-way merge instead of sort
         # sort output
-        bodo.hiframes.sort.local_sort(out_key, out_data, ascending)
+        bodo.ir.sort.local_sort(out_key, out_data, ascending)
         return out_key, out_data
 
     f_block = compile_to_numba_ir(par_sort_impl,

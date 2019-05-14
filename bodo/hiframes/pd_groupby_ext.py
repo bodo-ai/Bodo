@@ -14,7 +14,7 @@ from bodo.hiframes.pd_series_ext import (SeriesType, _get_series_array_type,
     arr_to_series_type)
 from bodo.libs.str_ext import string_type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from bodo.hiframes.aggregate import get_agg_func
+from bodo.ir.aggregate import get_agg_func
 
 
 class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
