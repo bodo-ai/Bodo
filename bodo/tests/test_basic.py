@@ -168,18 +168,6 @@ class TestBasic(BaseTest):
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
-    def test_assert(self):
-        # make sure assert in an inlined function works
-        def g(a):
-            assert a==0
-
-        hpat_g = bodo.jit(g)
-        def f():
-            hpat_g(0)
-
-        hpat_f = bodo.jit(f)
-        hpat_f()
-
     @unittest.skip("pending Numba #3946")
     def test_inline_locals(self):
         # make sure locals in inlined function works
