@@ -1,4 +1,7 @@
 
+"""
+Boxing and unboxing support for DataFrame, Series, etc.
+"""
 import pandas as pd
 import numpy as np
 import datetime
@@ -14,7 +17,8 @@ from numba.targets.boxing import _NumbaTypeHelper
 from numba.targets import listobj
 
 import bodo
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_dataframe_ext import (DataFrameType, construct_dataframe,
+    DataFramePayloadType)
 from bodo.hiframes.pd_timestamp_ext import (datetime_date_type,
     unbox_datetime_date_array, box_datetime_date_array)
 from bodo.libs.str_ext import string_type, list_string_array_type
@@ -68,9 +72,6 @@ def unbox_dataframe(typ, val, c):
     n_cols = len(typ.columns)
     column_strs = [numba.unicode.make_string_from_constant(
                 c.context, c.builder, string_type, a) for a in typ.columns]
-    # create dataframe struct and store values
-    dataframe = cgutils.create_struct_proxy(
-        typ)(c.context, c.builder)
 
     column_tup = c.context.make_tuple(
         c.builder, types.UniTuple(string_type, n_cols), column_strs)
@@ -80,10 +81,22 @@ def unbox_dataframe(typ, val, c):
 
     # TODO: support unboxing index
     if typ.index == types.none:
-        dataframe.index = c.context.get_constant(types.none, None)
-    dataframe.columns = column_tup
-    dataframe.unboxed = unboxed_tup
-    dataframe.parent = val
+        index_val = c.context.get_constant(types.none, None)
+    else:
+        ind_obj = c.pyapi.object_getattr_string(val, 'index')
+        arr_obj = c.pyapi.object_getattr_string(ind_obj, 'values')
+        index_val = unbox_array(typ.index, arr_obj, c).value
+        c.pyapi.decref(ind_obj)
+        c.pyapi.decref(arr_obj)
+
+    # TODO: does this work for array types?
+    data_nulls = [c.context.get_constant_null(t) for t in typ.data]
+    data_tup = c.context.make_tuple(
+        c.builder, types.Tuple(typ.data), data_nulls)
+
+    dataframe_val = construct_dataframe(
+        c.context, c.builder, typ, data_tup, index_val, column_tup,
+        unboxed_tup, val)
 
     # increase refcount of stored values
     if c.context.enable_nrt:
@@ -91,7 +104,7 @@ def unbox_dataframe(typ, val, c):
         for var in column_strs:
             c.context.nrt.incref(c.builder, string_type, var)
 
-    return NativeValue(dataframe._getvalue())
+    return NativeValue(dataframe_val)
 
 
 def get_hiframes_dtypes(df):
@@ -170,9 +183,12 @@ def box_dataframe(typ, val, c):
     arr_typs = typ.data
     dtypes = [a.dtype for a in arr_typs]  # TODO: check Categorical
 
+    dataframe_payload = bodo.hiframes.pd_dataframe_ext.get_dataframe_payload(
+        c.context, c.builder, typ, val)
     dataframe = cgutils.create_struct_proxy(typ)(
         context, builder, value=val)
-    col_arrs = [builder.extract_value(dataframe.data, i) for i in range(n_cols)]
+
+    col_arrs = [builder.extract_value(dataframe_payload.data, i) for i in range(n_cols)]
     # df unboxed from Python
     has_parent = cgutils.is_not_null(builder, dataframe.parent)
 
@@ -189,7 +205,7 @@ def box_dataframe(typ, val, c):
         name_str = context.insert_const_string(c.builder.module, cname)
         cname_obj = pyapi.string_from_string(name_str)
         # if column not unboxed, just used the boxed version from parent
-        unboxed_val = builder.extract_value(dataframe.unboxed, i)
+        unboxed_val = builder.extract_value(dataframe_payload.unboxed, i)
         not_unboxed = builder.icmp(lc.ICMP_EQ, unboxed_val, context.get_constant(types.int8, 0))
         use_parent = builder.and_(has_parent, not_unboxed)
 
@@ -221,7 +237,7 @@ def box_dataframe(typ, val, c):
 
     # set df.index if necessary
     if typ.index != types.none:
-        arr_obj = box_array(typ.index, dataframe.index, c)
+        arr_obj = box_array(typ.index, dataframe_payload.index, c)
         pyapi.object_setattr_string(df_obj, 'index', arr_obj)
 
     pyapi.decref(class_obj)
@@ -255,13 +271,21 @@ def unbox_dataframe_column(typingctx, df, i=None):
         c.pyapi.decref(arr_obj)
 
         # assign array and set unboxed flag
-        dataframe.data = builder.insert_value(
-            dataframe.data, native_val.value, col_ind)
-        dataframe.unboxed = builder.insert_value(
-            dataframe.unboxed, context.get_constant(types.int8, 1), col_ind)
-        return dataframe._getvalue()
+        dataframe_payload = bodo.hiframes.pd_dataframe_ext.get_dataframe_payload(
+            c.context, c.builder, df_typ, args[0])
+        dataframe_payload.data = builder.insert_value(
+            dataframe_payload.data, native_val.value, col_ind)
+        dataframe_payload.unboxed = builder.insert_value(
+            dataframe_payload.unboxed, context.get_constant(types.int8, 1), col_ind)
 
-    return signature(df, df, i), codegen
+        # store payload
+        payload_type = DataFramePayloadType(df_typ)
+        payload_ptr = context.nrt.meminfo_data(builder, dataframe.meminfo)
+        ptrty = context.get_data_type(payload_type).as_pointer()
+        payload_ptr = builder.bitcast(payload_ptr, ptrty)
+        builder.store(dataframe_payload._getvalue(), payload_ptr)
+
+    return signature(types.none, df, i), codegen
 
 
 @unbox(SeriesType)

@@ -1,3 +1,6 @@
+"""
+Implement pd.DataFrame typing and data model handling.
+"""
 import operator
 from collections import namedtuple
 import pandas as pd
@@ -87,6 +90,16 @@ class DataFrameType(types.Type):  # TODO: IterableType over column names
         return all(a.is_precise() for a in self.data) and self.index.is_precise()
 
 
+# payload type inside meminfo so that mutation are seen by all references
+class DataFramePayloadType(types.Type):
+    def __init__(self, df_type):
+        self.df_type = df_type
+        super(DataFramePayloadType, self).__init__(
+            name='DataFramePayloadType({})'.format(df_type))
+
+
+
+
 # TODO: encapsulate in meminfo since dataframe is mutible, for example:
 # df = pd.DataFrame({'A': A})
 # df2 = df
@@ -94,26 +107,38 @@ class DataFrameType(types.Type):  # TODO: IterableType over column names
 #    df['A'] = B
 # df2.A
 # TODO: meminfo for reference counting of dataframes
-@register_model(DataFrameType)
-class DataFrameModel(models.StructModel):
+@register_model(DataFramePayloadType)
+class DataFramePayloadModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        n_cols = len(fe_type.columns)
+        n_cols = len(fe_type.df_type.columns)
         members = [
-            ('data', types.Tuple(fe_type.data)),
-            ('index', fe_type.index),
-            ('columns', types.UniTuple(string_type, n_cols)),
+            ('data', types.Tuple(fe_type.df_type.data)),
+            ('index', fe_type.df_type.index),
             # for lazy unboxing of df coming from Python (usually argument)
             # list of flags noting which columns and index are unboxed
             # index flag is last
             ('unboxed', types.UniTuple(types.int8, n_cols + 1)),
+        ]
+        super(DataFramePayloadModel, self).__init__(dmm, fe_type, members)
+
+
+@register_model(DataFrameType)
+class DataFrameModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        n_cols = len(fe_type.columns)
+        payload_type = DataFramePayloadType(fe_type)
+        #payload_type = types.Opaque('Opaque.DataFrame')
+        # TODO: does meminfo decref content when object is deallocated?
+        members = [
+            ('columns', types.UniTuple(string_type, n_cols)),
+            ('meminfo', types.MemInfoPointer(payload_type)),
+            # for boxed DataFrames, enables updating original DataFrame object
             ('parent', types.pyobject),
         ]
         super(DataFrameModel, self).__init__(dmm, fe_type, members)
 
-make_attribute_wrapper(DataFrameType, 'data', '_data')
-make_attribute_wrapper(DataFrameType, 'index', '_index')
+
 make_attribute_wrapper(DataFrameType, 'columns', '_columns')
-make_attribute_wrapper(DataFrameType, 'unboxed', '_unboxed')
 make_attribute_wrapper(DataFrameType, 'parent', '_parent')
 
 
@@ -186,6 +211,40 @@ class DataFrameAttribute(AttributeTemplate):
             return SeriesType(arr_typ.dtype, arr_typ, df.index, True)
 
 
+def construct_dataframe(context, builder, df_type, data_tup, index_val,
+                                         column_tup, unboxed_tup, parent=None):
+
+    # create payload struct and store values
+    payload_type = DataFramePayloadType(df_type)
+    dataframe_payload = cgutils.create_struct_proxy(
+        payload_type)(context, builder)
+    dataframe_payload.data = data_tup
+    dataframe_payload.index = index_val
+    dataframe_payload.unboxed = unboxed_tup
+
+    # create meminfo and store payload
+    payload_ll_type = context.get_data_type(payload_type)
+    payload_size = context.get_abi_sizeof(payload_ll_type)
+    meminfo = context.nrt.meminfo_alloc(
+        builder, context.get_constant(types.uintp, payload_size))
+    meminfo_data_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_data_ptr,
+                                        payload_ll_type.as_pointer())
+    builder.store(dataframe_payload._getvalue(), meminfo_data_ptr)
+
+    # create dataframe struct
+    dataframe = cgutils.create_struct_proxy(
+        df_type)(context, builder)
+    dataframe.columns = column_tup
+    dataframe.meminfo = meminfo
+    if parent is None:
+        # Set parent to NULL
+        dataframe.parent = cgutils.get_null_value(dataframe.parent.type)
+    else:
+        dataframe.parent = parent
+    return dataframe._getvalue()
+
+
 @intrinsic
 def init_dataframe(typingctx, *args):
     """Create a DataFrame with provided data, index and columns values.
@@ -202,13 +261,11 @@ def init_dataframe(typingctx, *args):
 
     def codegen(context, builder, signature, args):
         in_tup = args[0]
+        df_type = signature.return_type
         data_arrs = [builder.extract_value(in_tup, i) for i in range(n_cols)]
-        index = builder.extract_value(in_tup, n_cols)
+        index_val = builder.extract_value(in_tup, n_cols)
         column_strs = [numba.unicode.make_string_from_constant(
                     context, builder, string_type, c) for c in column_names]
-        # create dataframe struct and store values
-        dataframe = cgutils.create_struct_proxy(
-            signature.return_type)(context, builder)
 
         data_tup = context.make_tuple(
             builder, types.Tuple(data_typs), data_arrs)
@@ -218,21 +275,19 @@ def init_dataframe(typingctx, *args):
         unboxed_tup = context.make_tuple(
             builder, types.UniTuple(types.int8, n_cols+1), [zero]*(n_cols+1))
 
-        dataframe.data = data_tup
-        dataframe.index = index
-        dataframe.columns = column_tup
-        dataframe.unboxed = unboxed_tup
-        dataframe.parent = context.get_constant_null(types.pyobject)
+        dataframe_val = construct_dataframe(
+            context, builder, df_type, data_tup, index_val, column_tup,
+            unboxed_tup)
 
         # increase refcount of stored values
         if context.enable_nrt:
-            context.nrt.incref(builder, index_typ, index)
+            context.nrt.incref(builder, index_typ, index_val)
             for var, typ in zip(data_arrs, data_typs):
                 context.nrt.incref(builder, typ, var)
             for var in column_strs:
                 context.nrt.incref(builder, string_type, var)
 
-        return dataframe._getvalue()
+        return dataframe_val
 
     ret_typ = DataFrameType(data_typs, index_typ, column_names)
     sig = signature(ret_typ, types.Tuple(args))
@@ -248,6 +303,63 @@ def has_parent(typingctx, df=None):
     return signature(types.bool_, df), codegen
 
 
+def get_dataframe_payload(context, builder, df_type, value):
+    meminfo = cgutils.create_struct_proxy(
+        df_type)(context, builder, value).meminfo
+    payload_type = DataFramePayloadType(df_type)
+    payload = context.nrt.meminfo_data(builder, meminfo)
+    ptrty = context.get_data_type(payload_type).as_pointer()
+    payload = builder.bitcast(payload, ptrty)
+    return context.make_data_helper(builder, payload_type, ref=payload)
+
+
+
+@intrinsic
+def _get_dataframe_unboxed(typingctx, df_typ=None):
+
+    n_cols = len(df_typ.columns)
+    ret_typ = types.UniTuple(types.int8, n_cols+1)
+
+    def codegen(context, builder, signature, args):
+        dataframe_payload = get_dataframe_payload(
+            context, builder, signature.args[0], args[0])
+        return impl_ret_borrowed(
+            context, builder, ret_typ,
+            dataframe_payload.unboxed)
+
+    sig = signature(ret_typ, df_typ)
+    return sig, codegen
+
+
+@intrinsic
+def _get_dataframe_data(typingctx, df_typ=None):
+
+    ret_typ = types.Tuple(df_typ.data)
+
+    def codegen(context, builder, signature, args):
+        dataframe_payload = get_dataframe_payload(
+            context, builder, signature.args[0], args[0])
+        return impl_ret_borrowed(
+            context, builder, ret_typ, dataframe_payload.data)
+
+    sig = signature(ret_typ, df_typ)
+    return sig, codegen
+
+
+@intrinsic
+def _get_dataframe_index(typingctx, df_typ=None):
+
+    def codegen(context, builder, signature, args):
+        dataframe_payload = get_dataframe_payload(
+            context, builder, signature.args[0], args[0])
+        return impl_ret_borrowed(
+            context, builder, df_typ.index, dataframe_payload.index)
+
+    ret_typ = df_typ.index
+    sig = signature(ret_typ, df_typ)
+    return sig, codegen
+
+
 # TODO: alias analysis
 # this function should be used for getting df._data for alias analysis to work
 # no_cpython_wrapper since Array(DatetimeDate) cannot be boxed
@@ -255,10 +367,9 @@ def has_parent(typingctx, df=None):
 def get_dataframe_data(df, i):
 
     def _impl(df, i):
-        if has_parent(df) and df._unboxed[i] == 0:
-            # TODO: make df refcounted to avoid repeated unboxing
-            df = bodo.hiframes.boxing.unbox_dataframe_column(df, i)
-        return df._data[i]
+        if has_parent(df) and _get_dataframe_unboxed(df)[i] == 0:
+            bodo.hiframes.boxing.unbox_dataframe_column(df, i)
+        return _get_dataframe_data(df)[i]
 
     return _impl
 
@@ -266,7 +377,8 @@ def get_dataframe_data(df, i):
 # TODO: use separate index type instead of just storing array
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_dataframe_index(df):
-    return lambda df: df._index
+    return lambda df: _get_dataframe_index(df)
+
 
 @intrinsic
 def set_df_index(typingctx, df_t, index_t=None):
@@ -277,29 +389,28 @@ def set_df_index(typingctx, df_t, index_t=None):
 
     def codegen(context, builder, signature, args):
         in_df_arg = args[0]
-        index = args[1]
+        index_val = args[1]
+        df_typ = signature.args[0]
         in_df = cgutils.create_struct_proxy(
-            signature.args[0])(context, builder, value=in_df_arg)
-        # create dataframe struct and store values
-        dataframe = cgutils.create_struct_proxy(
-            signature.return_type)(context, builder)
+            df_typ)(context, builder, value=in_df_arg)
+        in_df_payload = get_dataframe_payload(
+            context, builder, df_typ, in_df_arg)
 
-        dataframe.data = in_df.data
-        dataframe.index = index
-        dataframe.columns = in_df.columns
-        dataframe.unboxed = in_df.unboxed
-        dataframe.parent = in_df.parent
+        dataframe = construct_dataframe(
+            context, builder, signature.return_type, in_df_payload.data,
+            index_val, in_df.columns,
+            in_df_payload.unboxed, in_df.parent)
 
         # increase refcount of stored values
         if context.enable_nrt:
-            context.nrt.incref(builder, index_t, index)
+            context.nrt.incref(builder, index_t, index_val)
             # TODO: refcount
-            context.nrt.incref(builder, types.Tuple(df_t.data), dataframe.data)
+            context.nrt.incref(builder, types.Tuple(df_t.data), in_df_payload.data)
             context.nrt.incref(
                 builder, types.UniTuple(string_type, len(df_t.columns)),
-                dataframe.columns)
+                in_df.columns)
 
-        return dataframe._getvalue()
+        return dataframe
 
     ret_typ = DataFrameType(df_t.data, index_t, df_t.columns)
     sig = signature(ret_typ, df_t, index_t)
@@ -332,10 +443,12 @@ def set_df_column_with_reflect(typingctx, df, cname, arr):
     def codegen(context, builder, signature, args):
         df_arg, _, arr_arg = args
 
+        in_dataframe_payload = get_dataframe_payload(
+            context, builder, df, df_arg)
         in_dataframe = cgutils.create_struct_proxy(df)(
             context, builder, value=df_arg)
 
-        data_arrs = [builder.extract_value(in_dataframe.data, i)
+        data_arrs = [builder.extract_value(in_dataframe_payload.data, i)
                     if i != col_ind else arr_arg for i in range(n_cols)]
         if is_new_col:
             data_arrs.append(arr_arg)
@@ -345,17 +458,14 @@ def set_df_column_with_reflect(typingctx, df, cname, arr):
 
         zero = context.get_constant(types.int8, 0)
         one = context.get_constant(types.int8, 1)
-        unboxed_vals = [builder.extract_value(in_dataframe.unboxed, i)
+        unboxed_vals = [builder.extract_value(in_dataframe_payload.unboxed, i)
                         if i != col_ind else one for i in range(n_cols)]
 
         if is_new_col:
             unboxed_vals.append(one)  # for new data array
         unboxed_vals.append(zero)  # for index
 
-        index = in_dataframe.index
-        # create dataframe struct and store values
-        out_dataframe = cgutils.create_struct_proxy(
-            signature.return_type)(context, builder)
+        index_val = in_dataframe_payload.index
 
         data_tup = context.make_tuple(
             builder, types.Tuple(data_typs), data_arrs)
@@ -364,15 +474,14 @@ def set_df_column_with_reflect(typingctx, df, cname, arr):
         unboxed_tup = context.make_tuple(
             builder, types.UniTuple(types.int8, new_n_cols+1), unboxed_vals)
 
-        out_dataframe.data = data_tup
-        out_dataframe.index = index
-        out_dataframe.columns = column_tup
-        out_dataframe.unboxed = unboxed_tup
-        out_dataframe.parent = in_dataframe.parent  # TODO: refcount of parent?
+        # TODO: refcount of parent?
+        out_dataframe = construct_dataframe(
+            context, builder, signature.return_type, data_tup, index_val, column_tup,
+            unboxed_tup, in_dataframe.parent)
 
         # increase refcount of stored values
         if context.enable_nrt:
-            context.nrt.incref(builder, index_typ, index)
+            context.nrt.incref(builder, index_typ, index_val)
             for var, typ in zip(data_arrs, data_typs):
                 context.nrt.incref(builder, typ, var)
             for var in column_strs:
@@ -404,7 +513,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr):
 
         pyapi.gil_release(gil_state)    # release GIL
 
-        return out_dataframe._getvalue()
+        return out_dataframe
 
     ret_typ = DataFrameType(data_typs, index_typ, column_names, True)
     sig = signature(ret_typ, df, cname, arr)
@@ -418,7 +527,7 @@ def df_len_overload(df):
 
     if len(df.columns) == 0:  # empty df
         return lambda df: 0
-    return lambda df: len(df._data[0])
+    return lambda df: len(_get_dataframe_data(df)[0])
 
 
 @overload(operator.getitem)  # TODO: avoid lowering?
@@ -426,7 +535,7 @@ def df_getitem_overload(df, ind):
     if isinstance(df, DataFrameType) and isinstance(ind, types.StringLiteral):
         index = df.columns.index(ind.literal_value)
         return lambda df, ind: bodo.hiframes.api.init_series(
-            df._data[index], df._index, df._columns[index])
+            _get_dataframe_data(df)[index], _get_dataframe_index(df), df._columns[index])
 
 
 @infer_global(operator.getitem)

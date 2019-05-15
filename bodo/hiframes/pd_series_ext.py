@@ -1,3 +1,6 @@
+"""
+Implement pd.Series typing and data model handling.
+"""
 import operator
 import pandas as pd
 import numpy as np
