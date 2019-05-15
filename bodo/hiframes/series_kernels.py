@@ -13,6 +13,7 @@ from bodo.libs.str_arr_ext import (string_array_type, StringArrayType,
     is_str_arr_typ, pre_alloc_string_array, get_utf8_size)
 
 
+# TODO: series index and name
 # float columns can have regular np.nan
 def _column_filter_impl(B, ind):  # pragma: no cover
     dtype = bodo.hiframes.api.shift_dtype(B.dtype)
@@ -262,6 +263,7 @@ def _column_max_impl_no_isnan(in_arr):  # pragma: no cover
         s = max(s, bodo.hiframes.pd_timestamp_ext.dt64_to_integer(val))
     return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(s)
 
+# TODO: handle index and name
 def _column_sub_impl_datetime_series_timestamp(in_arr, ts):  # pragma: no cover
     numba.parfor.init_prange()
     n = len(in_arr)
@@ -344,6 +346,7 @@ def _column_corr_impl(S1, S2):  # pragma: no cover
     return a / np.sqrt(b1*b2)
 
 
+# TODO: index and name for append
 def _series_append_single_impl(arr, other):
     return bodo.hiframes.api.init_series(
         bodo.hiframes.api.concat((arr, other)))
@@ -356,15 +359,17 @@ def _series_append_tuple_impl(arr, other):
     return bodo.hiframes.api.init_series(
         bodo.hiframes.api.concat(c_arrs))
 
-def _series_isna_impl(arr):
+def _series_isna_impl(arr, index, name):
     numba.parfor.init_prange()
     n = len(arr)
     out_arr = np.empty(n, np.bool_)
     for i in numba.parfor.internal_prange(n):
         out_arr[i] = bodo.hiframes.api.isna(arr, i)
-    return bodo.hiframes.api.init_series(out_arr)
 
-def _series_astype_str_impl(arr):
+    return bodo.hiframes.api.init_series(out_arr, index, name)
+
+
+def _series_astype_str_impl(arr, index, name):
     n = len(arr)
     num_chars = 0
     # get total chars in new array
@@ -376,7 +381,8 @@ def _series_astype_str_impl(arr):
     for i in numba.parfor.internal_prange(n):
         s = arr[i]
         A[i] = str(s)  # TODO: check NA
-    return bodo.hiframes.api.init_series(A)
+
+    return bodo.hiframes.api.init_series(A, index, name)
 
 
 # def _str_replace_regex_impl(str_arr, pat, val):
@@ -401,7 +407,7 @@ def _series_astype_str_impl(arr):
 #     return bodo.hiframes.api.init_series(out_arr)
 
 
-def _str_replace_regex_impl(str_arr, pat, val):
+def _str_replace_regex_impl(str_arr, pat, val, index, name):
     numba.parfor.init_prange()
     e = re.compile(pat)
     n = len(str_arr)
@@ -416,7 +422,7 @@ def _str_replace_regex_impl(str_arr, pat, val):
     for i in numba.parfor.internal_prange(n):
         _str = str_list[i]
         out_arr[i] = _str
-    return bodo.hiframes.api.init_series(out_arr)
+    return bodo.hiframes.api.init_series(out_arr, index, name)
 
 
 # TODO: refactor regex and noregex
@@ -443,7 +449,7 @@ def _str_replace_regex_impl(str_arr, pat, val):
 #     return bodo.hiframes.api.init_series(out_arr)
 
 
-def _str_replace_noregex_impl(str_arr, pat, val):
+def _str_replace_noregex_impl(str_arr, pat, val, index, name):
     numba.parfor.init_prange()
     n = len(str_arr)
     n_total_chars = 0
@@ -457,7 +463,7 @@ def _str_replace_noregex_impl(str_arr, pat, val):
     for i in numba.parfor.internal_prange(n):
         _str = str_list[i]
         out_arr[i] = _str
-    return bodo.hiframes.api.init_series(out_arr)
+    return bodo.hiframes.api.init_series(out_arr, index, name)
 
 
 @numba.njit
@@ -484,13 +490,14 @@ series_replace_funcs = {
     'fillna_str_alloc': _series_fillna_str_alloc_impl,
     'dropna_float': _series_dropna_float_impl,
     'dropna_str_alloc': _series_dropna_str_alloc_impl,
-    'shift': lambda A, shift: bodo.hiframes.api.init_series(bodo.hiframes.rolling.shift(A, shift, False)),
-    'shift_default': lambda A: bodo.hiframes.api.init_series(bodo.hiframes.rolling.shift(A, 1, False)),
-    'pct_change': lambda A, shift: bodo.hiframes.api.init_series(bodo.hiframes.rolling.pct_change(A, shift, False)),
-    'pct_change_default': lambda A: bodo.hiframes.api.init_series(bodo.hiframes.rolling.pct_change(A, 1, False)),
+    # TODO: handle index shift properly
+    'shift': lambda A, shift, index, name: bodo.hiframes.api.init_series(bodo.hiframes.rolling.shift(A, shift, False), index, name),
+    'shift_default': lambda A, index, name: bodo.hiframes.api.init_series(bodo.hiframes.rolling.shift(A, 1, False), index, name),
+    'pct_change': lambda A, shift, index, name: bodo.hiframes.api.init_series(bodo.hiframes.rolling.pct_change(A, shift, False), index, name),
+    'pct_change_default': lambda A, index, name: bodo.hiframes.api.init_series(bodo.hiframes.rolling.pct_change(A, 1, False), index, name),
     'str_contains_regex': _str_contains_regex_impl,
     'str_contains_noregex': _str_contains_noregex_impl,
-    'abs': lambda A: bodo.hiframes.api.init_series(np.abs(A)),  # TODO: timedelta
+    'abs': lambda A, index, name: bodo.hiframes.api.init_series(np.abs(A), index, name),  # TODO: timedelta
     'cov': _column_cov_impl,
     'corr': _column_corr_impl,
     'append_single': _series_append_single_impl,

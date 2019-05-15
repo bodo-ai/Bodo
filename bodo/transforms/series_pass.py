@@ -31,7 +31,7 @@ from bodo.libs.str_ext import (string_type, unicode_to_std_str, std_str_to_unico
 from bodo.libs.str_arr_ext import (string_array_type, StringArrayType,
     is_str_arr_typ, pre_alloc_string_array, get_utf8_size)
 from bodo.hiframes.pd_series_ext import (SeriesType, is_str_series_typ,
-    series_to_array_type, is_dt64_series_typ,
+    series_to_array_type, is_dt64_series_typ, is_bool_series_typ,
     if_series_to_array_type, is_series_type,
     series_str_methods_type, SeriesRollingType, SeriesIatType,
     explicit_binop_funcs, series_dt_methods_type)
@@ -200,7 +200,7 @@ class SeriesPass(object):
         nodes = []
         # Series(bool) as index
         if (rhs.op == 'getitem'
-                and self.typemap[rhs.index.name] == SeriesType(types.bool_)):
+                and is_bool_series_typ(self.typemap[rhs.index.name])):
             rhs.index = self._get_series_data(rhs.index, nodes)
 
         if isinstance(self.typemap[rhs.value.name], SeriesIatType):
@@ -236,7 +236,11 @@ class SeriesPass(object):
             return nodes
 
         if isinstance(self.typemap[rhs.value.name], SeriesType):
-            rhs.value = self._get_series_data(rhs.value, nodes)
+            series_var = rhs.value
+            rhs.value = self._get_series_data(series_var, nodes)
+            # TODO: index and name
+            # s_index = self._get_series_index(series_var, nodes)
+            # s_name = self._get_series_name(series_var, nodes)
             self._convert_series_calltype(rhs)
             lhs = assign.target
             # convert output to Series from Array
@@ -246,8 +250,10 @@ class SeriesPass(object):
                 self.typemap[new_lhs.name] = series_to_array_type(
                     self.typemap[lhs.name])
                 nodes.append(ir.Assign(rhs, new_lhs, lhs.loc))
+                # TODO: index and name
                 return self._replace_func(
-                    lambda A: bodo.hiframes.api.init_series(A), [new_lhs],
+                    lambda A: bodo.hiframes.api.init_series(A),
+                    [new_lhs],
                     pre_nodes=nodes)
 
             nodes.append(assign)
@@ -426,6 +432,7 @@ class SeriesPass(object):
                 arg.scope, mk_unique_var(assign.target.name+'_data'), rhs.loc)
             self.typemap[out_data.name] = self.calltypes[rhs].return_type
             nodes.append(ir.Assign(rhs, out_data, rhs.loc))
+            # TODO: index and name
             return self._replace_func(
                 lambda data: bodo.hiframes.api.init_series(data),
                 [out_data],
@@ -782,6 +789,7 @@ class SeriesPass(object):
 
                 return bodo.hiframes.api.init_series(
                     bodo.hiframes.api.parallel_fix_df_array(flat_list))
+            # TODO: index and name?
             return self._replace_func(_flatten_impl, [arg], pre_nodes=nodes)
 
         if func_name == 'to_numeric':
@@ -865,7 +873,12 @@ class SeriesPass(object):
                 data = series_var
             else:
                 data = self._get_series_data(series_var, nodes)
-            return self._replace_func(func, [data], pre_nodes=nodes)
+            args = (data,)
+            if func_name in ('isna', 'isnull', 'abs'):
+                index = self._get_series_index(series_var, nodes)
+                name = self._get_series_name(series_var, nodes)
+                args = (data, index, name)
+            return self._replace_func(func, args, pre_nodes=nodes)
 
         if func_name == 'quantile':
             nodes = []
@@ -895,14 +908,16 @@ class SeriesPass(object):
         if func_name in ('shift', 'pct_change'):
             nodes = []
             data = self._get_series_data(series_var, nodes)
+            index = self._get_series_index(series_var, nodes)
+            name = self._get_series_name(series_var, nodes)
             # TODO: support default period argument
             if len(rhs.args) == 0:
-                args = [data]
+                args = (data, index, name)
                 func = series_replace_funcs[func_name + "_default"]
             else:
                 assert len(rhs.args) == 1, "invalid args for " + func_name
                 shift_const = rhs.args[0]
-                args = [data, shift_const]
+                args = (data, shift_const, index, name)
                 func = series_replace_funcs[func_name]
             return self._replace_func(func, args, pre_nodes=nodes)
 
@@ -967,13 +982,18 @@ class SeriesPass(object):
         if func_name == 'append':
             nodes = []
             data = self._get_series_data(series_var, nodes)
+            index = self._get_series_index(series_var, nodes)
+            # TODO: support index in append
+            assert self.typemap[index.name] == types.none
+            # name = self._get_series_name(series_var, nodes)
             other = rhs.args[0]
             if isinstance(self.typemap[other.name], SeriesType):
                 func = series_replace_funcs['append_single']
                 other = self._get_series_data(other, nodes)
             else:
                 func = series_replace_funcs['append_tuple']
-            return self._replace_func(func, [data, other], pre_nodes=nodes)
+            return self._replace_func(
+                func, (data, other), pre_nodes=nodes)
 
         if func_name == 'notna':
             # TODO: make sure this is fused and optimized properly
@@ -1010,7 +1030,10 @@ class SeriesPass(object):
             func = series_replace_funcs['astype_str']
             nodes = []
             data = self._get_series_data(series_var, nodes)
-            return self._replace_func(func, [data], pre_nodes=nodes)
+            index = self._get_series_index(series_var, nodes)
+            name = self._get_series_name(series_var, nodes)
+            return self._replace_func(
+                func, (data, index, name), pre_nodes=nodes)
 
         if func_name in explicit_binop_funcs.values():
             binop_map = {v: _binop_to_str[k] for k, v in explicit_binop_funcs.items()}
@@ -1139,17 +1162,18 @@ class SeriesPass(object):
                 # array and assign it back to the same Series variable
                 # result back to the same variable
                 # TODO: handle string array reflection
-                def str_fillna_impl(A, fill):
+                def str_fillna_impl(A, fill, index, name):
                     # not using A.fillna since definition list is not working
                     # for A to find callname
-                    return bodo.hiframes.api.fillna_str_alloc(A, fill)
+                    return bodo.hiframes.api.fillna_str_alloc(
+                        A, fill, index, name)
                     #A.fillna(fill)
 
                 fill_var = rhs.args[0]
                 assign.target = series_var  # replace output
                 return self._replace_func(
                     str_fillna_impl,
-                    [data, fill_var],
+                    (data, fill_var, index, name),
                     pre_nodes=nodes)
             else:
                 return self._replace_func(
@@ -1678,10 +1702,12 @@ class SeriesPass(object):
 
         nodes = []
         arr = self._get_series_data(series_var, nodes)
+        index = self._get_series_index(series_var, nodes)
+        name = self._get_series_name(series_var, nodes)
 
         # string 2 string methods
         if func_name in bodo.hiframes.pd_series_ext.str2str_methods:
-            func_text = 'def f(str_arr):\n'
+            func_text = 'def f(str_arr, index, name):\n'
             func_text += '    numba.parfor.init_prange()\n'
             func_text += '    n = len(str_arr)\n'
             # functions that don't change the number of characters
@@ -1694,12 +1720,12 @@ class SeriesPass(object):
             func_text += '    S = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)\n'
             func_text += '    for i in numba.parfor.internal_prange(n):\n'
             func_text += '        S[i] = str_arr[i].{}()\n'.format(func_name)
-            func_text += '    return bodo.hiframes.api.init_series(S)\n'
+            func_text += '    return bodo.hiframes.api.init_series(S, index, name)\n'
             loc_vars = {}
             # print(func_text)
             exec(func_text, {}, loc_vars)
             f = loc_vars['f']
-            return self._replace_func(f, [arr], pre_nodes=nodes,
+            return self._replace_func(f, (arr, index, name), pre_nodes=nodes,
                 extra_globals={
                     'num_total_chars': bodo.libs.str_arr_ext.num_total_chars,
                     'get_utf8_size': bodo.libs.str_arr_ext.get_utf8_size,
@@ -1709,7 +1735,8 @@ class SeriesPass(object):
             return self._run_series_str_contains(rhs, arr, nodes)
 
         if func_name == 'replace':
-            return self._run_series_str_replace(assign, lhs, arr, rhs, nodes)
+            return self._run_series_str_replace(
+                assign, lhs, arr, index, name, rhs, nodes)
 
         if func_name == 'split':
             return self._run_series_str_split(assign, lhs, arr, rhs, nodes)
@@ -1736,7 +1763,8 @@ class SeriesPass(object):
 
         return self._replace_func(f, [arr], pre_nodes=nodes)
 
-    def _run_series_str_replace(self, assign, lhs, arr, rhs, nodes):
+    def _run_series_str_replace(self, assign, lhs, arr, index, name, rhs,
+                                                                        nodes):
         regex = True
         # TODO: refactor arg parsing
         kws = dict(rhs.kws)
@@ -1751,7 +1779,8 @@ class SeriesPass(object):
 
         return self._replace_func(
             impl,
-            [arr, rhs.args[0], rhs.args[1]], pre_nodes=nodes,
+            (arr, rhs.args[0], rhs.args[1], index, name),
+            pre_nodes=nodes,
             extra_globals={'unicode_to_std_str': unicode_to_std_str,
                             'std_str_to_unicode': std_str_to_unicode,
                             'pre_alloc_string_array': pre_alloc_string_array,
@@ -2029,6 +2058,7 @@ class SeriesPass(object):
         else:
             assert False
 
+        # TODO: index and name
         func_text = 'def f(str_arr, pat):\n'
         func_text += '  l = len(str_arr)\n'
         func_text += '  S = np.empty(l, dtype=np.bool_)\n'
@@ -2155,6 +2185,7 @@ class SeriesPass(object):
         self.typemap[arr_tup.name] = types.Tuple([self.typemap[a.name] for a in arrs])
         tup_expr = ir.Expr.build_tuple(arrs, arr_tup.loc)
         nodes.append(ir.Assign(tup_expr, arr_tup, arr_tup.loc))
+        # TODO: index and name
         return self._replace_func(
             lambda arr_list: bodo.hiframes.api.init_series(bodo.hiframes.api.concat(arr_list)),
             [arr_tup], pre_nodes=nodes)

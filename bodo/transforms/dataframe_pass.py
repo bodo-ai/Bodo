@@ -237,10 +237,14 @@ class DataFramePass(object):
                             df_var.name, index))
 
                 arr = self._get_dataframe_data(df_var, index, nodes)
-                # TODO: index
+                # TODO: series index
+                name_str = index
+                name_var = ir.Var(lhs.scope, mk_unique_var('S_name'), lhs.loc)
+                self.typemap[name_var.name] = types.StringLiteral(name_str)
+                nodes.append(ir.Assign(ir.Const(name_str, lhs.loc), name_var, lhs.loc))
                 return  self._replace_func(
-                    lambda A: bodo.hiframes.api.init_series(A),
-                    [arr], pre_nodes=nodes)
+                    lambda A, name: bodo.hiframes.api.init_series(A, None, name),
+                    (arr, name_var), pre_nodes=nodes)
 
             # df[['C1', 'C2']]
             if isinstance(index, list) and all(isinstance(c, str)
@@ -961,6 +965,7 @@ class DataFramePass(object):
         col_name_args = ', '.join(["c"+str(i) for i in range(len(used_cols))])
         row_args = ', '.join(["c"+str(i)+"[i]" for i in range(len(used_cols))])
 
+        # TODO: series index and name
         func_text = "def f({}):\n".format(col_name_args)
         # make series to enable getitem of dt64 to timestamp for example
         for i in range(len(used_cols)):
@@ -1567,9 +1572,15 @@ class DataFramePass(object):
             assert (len(grp_typ.selection) == 1
                 and grp_typ.explicit_select
                 and grp_typ.as_index)
+            # TODO: proper index
+            name_str = list(df_col_map.keys())[0]
+            name_var = ir.Var(lhs.scope, mk_unique_var('S_name'), lhs.loc)
+            self.typemap[name_var.name] = types.StringLiteral(name_str)
+            nodes.append(ir.Assign(ir.Const(name_str, lhs.loc), name_var, lhs.loc))
             return self._replace_func(
-                    lambda A: bodo.hiframes.api.init_series(A),
-                    list(df_col_map.values()), pre_nodes=nodes)
+                    lambda A, name: bodo.hiframes.api.init_series(A, None, name),
+                    list(df_col_map.values())+[name_var],
+                    pre_nodes=nodes)
 
         _init_df = _gen_init_df(out_typ.columns)
 

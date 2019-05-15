@@ -129,8 +129,13 @@ def _get_series_array_type(dtype):
     return types.Array(dtype, 1, 'C')
 
 
+def is_bool_series_typ(t):
+    return isinstance(t, SeriesType) and t.dtype == types.bool_
+
+
 def is_str_series_typ(t):
     return isinstance(t, SeriesType) and t.dtype == string_type
+
 
 def is_dt64_series_typ(t):
     return isinstance(t, SeriesType) and t.dtype == types.NPDatetime('ns')
