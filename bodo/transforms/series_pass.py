@@ -1118,6 +1118,8 @@ class SeriesPass(object):
         val = rhs.args[0]
         nodes = []
         data = self._get_series_data(series_var, nodes)
+        index = self._get_series_index(series_var, nodes)
+        name = self._get_series_name(series_var, nodes)
         kws = dict(rhs.kws)
         inplace = False
         if 'inplace' in kws:
@@ -1159,7 +1161,7 @@ class SeriesPass(object):
                 func = series_replace_funcs['fillna_str_alloc']
             else:
                 func = series_replace_funcs['fillna_alloc']
-            return self._replace_func(func, [data, val], pre_nodes=nodes)
+            return self._replace_func(func, [data, val, index, name], pre_nodes=nodes)
 
     def _run_call_series_dropna(self, assign, lhs, rhs, series_var):
         dtype = self.typemap[series_var.name].dtype

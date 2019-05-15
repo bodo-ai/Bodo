@@ -727,7 +727,8 @@ class DistributedPass(object):
 
         if (fdef == ('get_series_data', 'bodo.hiframes.api')
                 or fdef == ('get_series_index', 'bodo.hiframes.api')
-                or fdef == ('get_dataframe_data', 'bodo.hiframes.pd_dataframe_ext')):
+                or fdef == ('get_dataframe_data', 'bodo.hiframes.pd_dataframe_ext')
+                ) and self._is_1D_arr(assign.target.name):
             out = [assign]
             arr = assign.target
             # gen len() using 1D_Var reduce approach.
@@ -748,9 +749,7 @@ class DistributedPass(object):
             self._array_starts[lhs][0] = start_var
             self._array_counts[lhs][0] = count_var
             self._array_sizes[lhs][0] = total_length
-
             return out
-
 
         if fdef == ('threaded_return', 'bodo.libs.distributed_api'):
             assign.value = rhs.args[0]

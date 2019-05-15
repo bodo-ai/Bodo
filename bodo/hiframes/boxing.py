@@ -267,19 +267,26 @@ def unbox_dataframe_column(typingctx, df, i=None):
 @unbox(SeriesType)
 def unbox_series(typ, val, c):
     arr_obj = c.pyapi.object_getattr_string(val, "values")
-    series = cgutils.create_struct_proxy(typ)(c.context, c.builder)
-    series.data = _unbox_series_data(typ.dtype, typ.data, arr_obj, c).value
+    data_val = _unbox_series_data(typ.dtype, typ.data, arr_obj, c).value
     # TODO: other indices
     if typ.index == string_array_type:
         index_obj = c.pyapi.object_getattr_string(val, "index")
-        series.index = unbox_str_series(string_array_type, index_obj, c).value
+        index_val = unbox_str_series(string_array_type, index_obj, c).value
+    else:
+        index_val = c.context.get_constant_generic(c.builder, types.none, None)
     if typ.is_named:
         name_obj = c.pyapi.object_getattr_string(val, "name")
-        series.name = numba.unicode.unbox_unicode_str(
+        name_val = numba.unicode.unbox_unicode_str(
             string_type, name_obj, c).value
+    else:
+        name_val = c.context.get_constant_generic(c.builder, types.none, None)
+
     # TODO: handle index and name
     c.pyapi.decref(arr_obj)
-    return NativeValue(series._getvalue())
+    series_val = bodo.hiframes.api.construct_series(
+        c.context, c.builder, typ, data_val, index_val, name_val)
+    # TODO: set parent pointer
+    return NativeValue(series_val)
 
 
 def _unbox_series_data(dtype, data_typ, arr_obj, c):
@@ -308,20 +315,20 @@ def box_series(typ, val, c):
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
     dtype = typ.dtype
 
-    series = cgutils.create_struct_proxy(
-            typ)(c.context, c.builder, val)
+    series_payload = bodo.hiframes.api.get_series_payload(
+        c.context, c.builder, typ, val)
 
-    arr = _box_series_data(dtype, typ.data, series.data, c)
+    arr = _box_series_data(dtype, typ.data, series_payload.data, c)
 
     if typ.index is types.none:
         index = c.pyapi.make_none()
     else:
         # TODO: index-specific boxing like RangeIndex() etc.
         index = _box_series_data(
-            typ.index.dtype, typ.index, series.index, c)
+            typ.index.dtype, typ.index, series_payload.index, c)
 
     if typ.is_named:
-        name = c.pyapi.from_native_value(string_type, series.name)
+        name = c.pyapi.from_native_value(string_type, series_payload.name)
     else:
         name = c.pyapi.make_none()
 

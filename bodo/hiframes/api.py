@@ -26,7 +26,7 @@ from bodo.libs.set_ext import build_set
 from numba.targets.imputils import lower_builtin, impl_ret_untracked
 from bodo.hiframes.pd_timestamp_ext import (pandas_timestamp_type,
     datetime_date_type, set_df_datetime_date_lower)
-from bodo.hiframes.pd_series_ext import (SeriesType,
+from bodo.hiframes.pd_series_ext import (SeriesType, SeriesPayloadType,
     is_str_series_typ, if_arr_to_series_type,
     series_to_array_type, if_series_to_array_type, is_dt64_series_typ)
 from bodo.hiframes.pd_index_ext import DatetimeIndexType, TimedeltaIndexType
@@ -884,20 +884,76 @@ class SeriesTupleToArrTupleTyper(AbstractTemplate):
         return signature(ret_typ, arr)
 
 
+def get_series_payload(context, builder, series_type, value):
+    meminfo = cgutils.create_struct_proxy(
+        series_type)(context, builder, value).meminfo
+    payload_type = SeriesPayloadType(series_type)
+    payload = context.nrt.meminfo_data(builder, meminfo)
+    ptrty = context.get_data_type(payload_type).as_pointer()
+    payload = builder.bitcast(payload, ptrty)
+    return context.make_data_helper(builder, payload_type, ref=payload)
+
+
+@intrinsic
+def _get_series_data(typingctx, series_typ=None):
+
+    def codegen(context, builder, signature, args):
+        series_payload = get_series_payload(
+            context, builder, signature.args[0], args[0])
+        return impl_ret_borrowed(
+            context, builder, series_typ.data, series_payload.data)
+
+    ret_typ = series_typ.data
+    sig = signature(ret_typ, series_typ)
+    return sig, codegen
+
+
+@intrinsic
+def _get_series_index(typingctx, series_typ=None):
+
+    def codegen(context, builder, signature, args):
+        series_payload = get_series_payload(
+            context, builder, signature.args[0], args[0])
+        return impl_ret_borrowed(
+            context, builder, series_typ.index, series_payload.index)
+
+    ret_typ = series_typ.index
+    sig = signature(ret_typ, series_typ)
+    return sig, codegen
+
+
+@intrinsic
+def _get_series_name(typingctx, series_typ=None):
+
+    def codegen(context, builder, signature, args):
+        series_payload = get_series_payload(
+            context, builder, signature.args[0], args[0])
+        # TODO: is borrowing None reference ok here?
+        return impl_ret_borrowed(
+            context, builder, signature.return_type, series_payload.name)
+
+    ret_typ = string_type
+    if not series_typ.is_named:
+        ret_typ = types.none
+    sig = signature(ret_typ, series_typ)
+    return sig, codegen
+
+
 # this function should be used for getting S._data for alias analysis to work
 # no_cpython_wrapper since Array(DatetimeDate) cannot be boxed
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_series_data(S):
-    return lambda S: S._data
+    return lambda S: _get_series_data(S)
 
 # TODO: use separate index type instead of just storing array
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_series_index(S):
-    return lambda S: S._index
+    return lambda S: _get_series_index(S)
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_series_name(S):
-    return lambda S: S._name
+    return lambda S: _get_series_name(S)
+
 
 @numba.generated_jit(nopython=True)
 def get_index_data(S):
@@ -1139,6 +1195,35 @@ def lower_parse_datetimes_from_strings(context, builder, sig, args):
     return impl_ret_borrowed(context, builder, sig.return_type, res._getvalue())
 
 
+def construct_series(context, builder, series_type, data_val, index_val,
+                                                                     name_val):
+    # create payload struct and store values
+    payload_type = SeriesPayloadType(series_type)
+    series_payload = cgutils.create_struct_proxy(
+        payload_type)(context, builder)
+    series_payload.data = data_val
+    series_payload.index = index_val
+    series_payload.name = name_val
+
+    # create meminfo and store payload
+    payload_ll_type = context.get_data_type(payload_type)
+    payload_size = context.get_abi_sizeof(payload_ll_type)
+    meminfo = context.nrt.meminfo_alloc(
+        builder, context.get_constant(types.uintp, payload_size))
+    meminfo_data_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_data_ptr,
+                                        payload_ll_type.as_pointer())
+    builder.store(series_payload._getvalue(), meminfo_data_ptr)
+
+    # create Series struct
+    series = cgutils.create_struct_proxy(
+        series_type)(context, builder)
+    series.meminfo = meminfo
+    # Set parent to NULL
+    series.parent = cgutils.get_null_value(series.parent.type)
+    return series._getvalue()
+
+
 @intrinsic
 def init_series(typingctx, data, index=None, name=None):
     """Create a Series with provided data, index and name values.
@@ -1154,17 +1239,13 @@ def init_series(typingctx, data, index=None, name=None):
 
     def codegen(context, builder, signature, args):
         data_val, index_val, name_val = args
-        # create series struct and store values
-        series = cgutils.create_struct_proxy(
-            signature.return_type)(context, builder)
-        series.data = data_val
-        series.index = index_val
-        if is_named:
-            if isinstance(name, types.StringLiteral):
-                series.name = numba.unicode.make_string_from_constant(
-                    context, builder, string_type, name.literal_value)
-            else:
-                series.name = name_val
+        series_type = signature.return_type
+        if is_named and isinstance(name, types.StringLiteral):
+            name_val = numba.unicode.make_string_from_constant(
+                context, builder, string_type, name.literal_value)
+
+        series_val = construct_series(
+            context, builder, series_type, data_val, index_val, name_val)
 
         # increase refcount of stored values
         if context.enable_nrt:
@@ -1173,7 +1254,7 @@ def init_series(typingctx, data, index=None, name=None):
             if is_named:
                 context.nrt.incref(builder, signature.args[2], name_val)
 
-        return series._getvalue()
+        return series_val
 
     dtype = data.dtype
     # XXX pd.DataFrame() calls init_series for even Series since it's untyped

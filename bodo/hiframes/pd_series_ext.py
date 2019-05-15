@@ -142,22 +142,39 @@ def is_datetime_date_series_typ(t):
     return isinstance(t, SeriesType) and t.dtype == datetime_date_type
 
 
-# register_model(SeriesType)(models.ArrayModel)
-# need to define model since fix_df_array overload goes to native code
+# payload type inside meminfo so that mutation are seen by all references
+class SeriesPayloadType(types.Type):
+    def __init__(self, series_type):
+        self.series_type = series_type
+        super(SeriesPayloadType, self).__init__(
+            name='SeriesPayloadType({})'.format(series_type))
+
+
+@register_model(SeriesPayloadType)
+class SeriesPayloadModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        name_typ = string_type if fe_type.series_type.is_named else types.none
+        members = [
+            ('data', fe_type.series_type.data),
+            ('index', fe_type.series_type.index),
+            ('name', name_typ),
+        ]
+        super(SeriesPayloadModel, self).__init__(dmm, fe_type, members)
+
+
 @register_model(SeriesType)
 class SeriesModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        name_typ = string_type if fe_type.is_named else types.none
+        payload_type = SeriesPayloadType(fe_type)
+        #payload_type = types.Opaque('Opaque.Series')
+        # TODO: does meminfo decref content when object is deallocated?
         members = [
-            ('data', fe_type.data),
-            ('index', fe_type.index),
-            ('name', name_typ),
+            ('meminfo', types.MemInfoPointer(payload_type)),
+            # for boxed Series, enables updating original Series object
+            ('parent', types.pyobject),
         ]
         super(SeriesModel, self).__init__(dmm, fe_type, members)
 
-make_attribute_wrapper(SeriesType, 'data', '_data')
-make_attribute_wrapper(SeriesType, 'index', '_index')
-make_attribute_wrapper(SeriesType, 'name', '_name')
 
 
 def series_to_array_type(typ, replace_boxed=False):
