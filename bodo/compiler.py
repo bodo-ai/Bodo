@@ -15,6 +15,8 @@ from numba.targets.registry import CPUDispatcher
 from numba.ir_utils import guard, get_definition
 from numba.inline_closurecall import inline_closure_call, InlineClosureCallPass
 from bodo import config
+import bodo.libs
+import bodo.libs.array_kernels  # side effect: install Numba functions
 import bodo.io
 if config._has_h5py:
     from bodo.io import pio

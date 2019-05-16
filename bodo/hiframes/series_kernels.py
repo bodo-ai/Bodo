@@ -512,7 +512,7 @@ series_replace_funcs = {
     'nsmallest_default': lambda A, name: bodo.hiframes.api.init_series(bodo.hiframes.api.nlargest(A, 5, False, lt_f), None, name),
     'head': lambda A, I, k, name: bodo.hiframes.api.init_series(A[:k], None, name),
     'head_index': lambda A, I, k, name: bodo.hiframes.api.init_series(A[:k], I[:k], name),
-    'median': lambda A: bodo.hiframes.api.median(A),
+    'median': lambda A: bodo.libs.array_kernels.median(A),
     # TODO: handle NAs in argmin/argmax
     'idxmin': lambda A: A.argmin(),
     'idxmax': lambda A: A.argmax(),

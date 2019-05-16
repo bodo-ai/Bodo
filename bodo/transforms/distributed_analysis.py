@@ -311,7 +311,7 @@ class DistributedAnalysis(object):
                 array_dists[lhs] = Distribution.OneD
             return
 
-        if fdef == ('quantile', 'bodo.hiframes.api'):
+        if fdef == ('quantile', 'bodo.libs.array_kernels'):
             # quantile doesn't affect input's distribution
             return
 
@@ -353,7 +353,7 @@ class DistributedAnalysis(object):
             array_dists[lhs] = Distribution.REP
             return
 
-        if fdef == ('median', 'bodo.hiframes.api'):
+        if fdef == ('median', 'bodo.libs.array_kernels'):
             return
 
         if fdef == ('concat', 'bodo.hiframes.api'):

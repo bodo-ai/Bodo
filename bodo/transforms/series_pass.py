@@ -884,7 +884,7 @@ class SeriesPass(object):
             nodes = []
             data = self._get_series_data(series_var, nodes)
             return self._replace_func(
-                lambda A, q: bodo.hiframes.api.quantile(A, q),
+                lambda A, q: bodo.libs.array_kernels.quantile(A, q),
                 [data, rhs.args[0]],
                 pre_nodes=nodes
             )

@@ -676,7 +676,7 @@ class DistributedPass(object):
             rhs.args[2] = true_var
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
 
-        if fdef == ('quantile', 'bodo.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
+        if fdef == ('quantile', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             arr = rhs.args[0].name
             if arr in self._array_sizes:
@@ -687,7 +687,7 @@ class DistributedPass(object):
                 size_var = self._set0_var
             rhs.args += [size_var]
 
-            f = lambda arr, q, size: bodo.hiframes.api.quantile_parallel(
+            f = lambda arr, q, size: bodo.libs.array_kernels.quantile_parallel(
                                                                   arr, q, size)
             return self._replace_func(f, rhs.args)
 
@@ -706,9 +706,9 @@ class DistributedPass(object):
             f = lambda arr, k, i, f: bodo.hiframes.api.nlargest_parallel(arr, k, i, f)
             return self._replace_func(f, rhs.args)
 
-        if fdef == ('median', 'bodo.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
+        if fdef == ('median', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
-            f = lambda arr: bodo.hiframes.api.median(arr, True)
+            f = lambda arr: bodo.libs.array_kernels.median(arr, True)
             return self._replace_func(f, rhs.args)
 
         if fdef == ('convert_rec_to_tup', 'bodo.hiframes.api'):
