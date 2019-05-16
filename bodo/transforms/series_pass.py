@@ -586,6 +586,18 @@ class SeriesPass(object):
             if call_def == ('init_dataframe', 'bodo.hiframes.pd_dataframe_ext'):
                 assign.value = var_def.args[1]
 
+        if fdef == ('to_const_tuple', 'bodo.utils.typing'):
+            tup = rhs.args[0]
+            tup_items = self._get_const_tup(tup)
+            new_tup = ir.Expr.build_tuple(tup_items, tup.loc)
+            assign.value = new_tup
+            # fix type and definition of lhs
+            self.typemap.pop(lhs)
+            self._type_changed_vars.append(lhs)
+            self.typemap[lhs] = types.Tuple(tuple(
+                                     self.typemap[a.name] for a in tup_items))
+            return [assign]
+
         # convert Series to Array for unhandled calls
         # TODO check all the functions that get here and handle if necessary
         nodes = []
@@ -668,18 +680,6 @@ class SeriesPass(object):
 
         if func_name == 'series_filter_bool':
             return self._handle_df_col_filter(assign, lhs, rhs)
-
-        if func_name == 'to_const_tuple':
-            tup = rhs.args[0]
-            tup_items = self._get_const_tup(tup)
-            new_tup = ir.Expr.build_tuple(tup_items, tup.loc)
-            assign.value = new_tup
-            # fix type and definition of lhs
-            self.typemap.pop(lhs.name)
-            self._type_changed_vars.append(lhs.name)
-            self.typemap[lhs.name] = types.Tuple(tuple(
-                                     self.typemap[a.name] for a in tup_items))
-            return [assign]
 
         if func_name == 'series_tup_to_arr_tup':
             in_typ = self.typemap[rhs.args[0].name]

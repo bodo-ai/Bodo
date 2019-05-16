@@ -60,10 +60,9 @@ def str_contains_regex(str_arr, pat):  # pragma: no cover
 def str_contains_noregex(str_arr, pat):  # pragma: no cover
     return 0
 
+
 def concat(arr_list):
     return pd.concat(arr_list)
-
-
 
 
 @infer_global(concat)
@@ -82,11 +81,13 @@ class ConcatType(AbstractTemplate):
 
         return signature(ret_typ, arr_list)
 
+
 @lower_builtin(concat, types.Any)  # TODO: replace Any with types
 def lower_concat(context, builder, sig, args):
     func = concat_overload(sig.args[0])
     res = context.compile_internal(builder, func, sig, args)
     return impl_ret_borrowed(context, builder, sig.return_type, res)
+
 
 # @overload(concat)
 def concat_overload(arr_list):
@@ -121,11 +122,14 @@ def concat_overload(arr_list):
     # numerical input
     return lambda a: np.concatenate(dummy_unbox_series(a))
 
+
 def nunique(A):  # pragma: no cover
     return len(set(A))
 
+
 def nunique_parallel(A):  # pragma: no cover
     return len(set(A))
+
 
 @infer_global(nunique)
 @infer_global(nunique_parallel)
@@ -138,11 +142,13 @@ class NuniqueType(AbstractTemplate):
         #     arr = string_array_type
         return signature(types.intp, arr)
 
+
 @lower_builtin(nunique, types.Any)  # TODO: replace Any with types
 def lower_nunique(context, builder, sig, args):
     func = nunique_overload(sig.args[0])
     res = context.compile_internal(builder, func, sig, args)
     return impl_ret_untracked(context, builder, sig.return_type, res)
+
 
 # @overload(nunique)
 def nunique_overload(arr_typ):
@@ -151,11 +157,13 @@ def nunique_overload(arr_typ):
         return len(build_set(A))
     return nunique_seq
 
+
 @lower_builtin(nunique_parallel, types.Any)  # TODO: replace Any with types
 def lower_nunique_parallel(context, builder, sig, args):
     func = nunique_overload_parallel(sig.args[0])
     res = context.compile_internal(builder, func, sig, args)
     return impl_ret_untracked(context, builder, sig.return_type, res)
+
 
 # @overload(nunique_parallel)
 def nunique_overload_parallel(arr_typ):
@@ -172,8 +180,10 @@ def nunique_overload_parallel(arr_typ):
 def unique(A):  # pragma: no cover
     return np.array([a for a in set(A)]).astype(A.dtype)
 
+
 def unique_parallel(A):  # pragma: no cover
     return np.array([a for a in set(A)]).astype(A.dtype)
+
 
 @infer_global(unique)
 @infer_global(unique_parallel)
@@ -184,11 +194,13 @@ class uniqueType(AbstractTemplate):
         arr = args[0]
         return signature(arr, arr)
 
+
 @lower_builtin(unique, types.Any)  # TODO: replace Any with types
 def lower_unique(context, builder, sig, args):
     func = unique_overload(sig.args[0])
     res = context.compile_internal(builder, func, sig, args)
     return impl_ret_untracked(context, builder, sig.return_type, res)
+
 
 # @overload(unique)
 def unique_overload(arr_typ):
@@ -197,11 +209,13 @@ def unique_overload(arr_typ):
         return bodo.utils.utils.to_array(build_set(A))
     return unique_seq
 
+
 @lower_builtin(unique_parallel, types.Any)  # TODO: replace Any with types
 def lower_unique_parallel(context, builder, sig, args):
     func = unique_overload_parallel(sig.args[0])
     res = context.compile_internal(builder, func, sig, args)
     return impl_ret_untracked(context, builder, sig.return_type, res)
+
 
 # @overload(unique_parallel)
 def unique_overload_parallel(arr_typ):
@@ -333,20 +347,14 @@ def parallel_fix_df_array(c):  # pragma: no cover
 def fix_rolling_array(c):  # pragma: no cover
     return c
 
-def sort_values(key_arr):  # pragma: no cover
-    return
-
-@infer_global(sort_values)
-class SortTyping(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        return signature(types.none, *args)
 
 def df_isin(A, B):  # pragma: no cover
     return A
 
+
 def df_isin_vals(A, B):  # pragma: no cover
     return A
+
 
 @infer_global(df_isin)
 @infer_global(df_isin_vals)
@@ -372,8 +380,10 @@ class FlattenTyp(AbstractTemplate):
         dtype = l_dtype.dtype
         return signature(SeriesType(dtype), *unliteral_all(args))
 
+
 def to_numeric(A, dtype):
     return A
+
 
 @infer_global(to_numeric)
 class ToNumeric(AbstractTemplate):
@@ -462,23 +472,6 @@ class DummyToSeriesType(AbstractTemplate):
 @lower_builtin(dummy_unbox_series, types.Any)
 def dummy_unbox_series_impl(context, builder, sig, args):
     return impl_ret_borrowed(context, builder, sig.return_type, args[0])
-
-
-# convert const tuple expressions or const list to tuple statically
-def to_const_tuple(arrs):  # pragma: no cover
-    return tuple(arrs)
-
-@infer_global(to_const_tuple)
-class ToConstTupleTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        arr = args[0]
-        ret_typ = arr
-        # XXX: returns a dummy type that should be fixed in series_pass
-        if isinstance(arr, types.List):
-            ret_typ = types.Tuple((arr.dtype,))
-        return signature(ret_typ, arr)
 
 
 # convert tuple of Series to tuple of arrays statically (for append)
@@ -1053,26 +1046,6 @@ def lower_join_dummy(context, builder, sig, args):
     dataframe = cgutils.create_struct_proxy(
             sig.return_type)(context, builder)
     return dataframe._getvalue()
-
-
-# type used to pass metadata to type inference functions
-# see hiframes.py and df.pivot_table()
-class MetaType(types.Type):
-    def __init__(self, meta):
-        self.meta = meta
-        super(MetaType, self).__init__("MetaType({})".format(meta))
-
-    def can_convert_from(self, typingctx, other):
-        return True
-
-    @property
-    def key(self):
-        # XXX this is needed for _TypeMetaclass._intern to return the proper
-        # cached instance in case meta is changed
-        # (e.g. TestGroupBy -k pivot -k cross)
-        return tuple(self.meta)
-
-register_model(MetaType)(models.OpaqueModel)
 
 
 def drop_inplace(df):

@@ -1,3 +1,7 @@
+"""
+helper data structures and functions for shuffle (alltoall).
+"""
+
 from collections import namedtuple
 import numpy as np
 

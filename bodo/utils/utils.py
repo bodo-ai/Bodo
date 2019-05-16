@@ -1,3 +1,6 @@
+"""
+Collection of utility functions.
+"""
 from collections import namedtuple
 import operator
 import numba

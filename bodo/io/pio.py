@@ -1,3 +1,6 @@
+"""
+Analysis and transformation for HDF5 support.
+"""
 import types as pytypes  # avoid confusion with numba.types
 
 import numba

@@ -352,10 +352,10 @@ def _series_append_single_impl(arr, other):
         bodo.hiframes.api.concat((arr, other)))
 
 def _series_append_tuple_impl(arr, other):
-    tup_other = bodo.hiframes.api.to_const_tuple(other)
+    tup_other = bodo.utils.typing.to_const_tuple(other)
     tup_other = bodo.hiframes.api.series_tup_to_arr_tup(tup_other)
     arrs = (arr,) + tup_other
-    c_arrs = bodo.hiframes.api.to_const_tuple(arrs)
+    c_arrs = bodo.utils.typing.to_const_tuple(arrs)
     return bodo.hiframes.api.init_series(
         bodo.hiframes.api.concat(c_arrs))
 
