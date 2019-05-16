@@ -24,7 +24,7 @@ from bodo.shuffle_utils import (alltoallv, alltoallv_tup,
 
 from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
                               cp_str_list_to_array, str_list_to_array,
-                              get_offset_ptr, get_data_ptr, convert_len_arr_to_offset,
+                              get_offset_ptr, get_data_ptr,
                               pre_alloc_string_array, num_total_chars)
 from bodo.libs.str_ext import string_type
 
@@ -191,9 +191,6 @@ ir_utils.visit_vars_extensions[Sort] = visit_vars_sort
 
 
 def remove_dead_sort(sort_node, lives, arg_aliases, alias_map, func_ir, typemap):
-    # TODO: remove this feature
-    if not bodo.hiframes.api.enable_hiframes_remove_dead:
-        return sort_node
 
     # TODO: arg aliases for inplace case?
     dead_cols = []

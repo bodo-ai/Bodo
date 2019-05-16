@@ -666,7 +666,7 @@ class UntypedPass(object):
         return typ
 
     def _handle_pd_Series(self, assign, lhs, rhs):
-        """transform pd.Series(A) call
+        """transform pd.Series(A) call for flatmap case
         """
         kws = dict(rhs.kws)
         data = self._get_arg('pd.Series', rhs.args, kws, 0, 'data')
@@ -686,9 +686,6 @@ class UntypedPass(object):
                 )
 
         # pd.Series() is handled in typed pass now
-        # return self._replace_func(lambda arr: bodo.hiframes.api.init_series(
-        #         bodo.hiframes.api.fix_df_array(arr)),
-        #     [data])
         return [assign]
 
     def _handle_pd_to_numeric(self, assign, lhs, rhs):

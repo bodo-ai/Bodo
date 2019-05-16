@@ -24,23 +24,18 @@ from bodo.libs.str_arr_ext import (StringArrayType, string_array_type,
 
 from bodo.libs.set_ext import build_set
 from numba.targets.imputils import lower_builtin, impl_ret_untracked
-from bodo.hiframes.pd_timestamp_ext import (pandas_timestamp_type,
-    datetime_date_type, set_df_datetime_date_lower)
+from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 from bodo.hiframes.pd_series_ext import (SeriesType, SeriesPayloadType,
     is_str_series_typ, if_arr_to_series_type,
     series_to_array_type, if_series_to_array_type, is_dt64_series_typ)
 from bodo.hiframes.pd_index_ext import DatetimeIndexType, TimedeltaIndexType
 from bodo.ir.sort import (
-      alltoallv,
     alltoallv_tup, finalize_shuffle_meta,
     update_shuffle_meta,  alloc_pre_shuffle_metadata,
     )
 from bodo.ir.join import write_send_buff
 from bodo.hiframes.split_impl import string_array_split_view_type
 
-# XXX: used in agg func output to avoid mutating filter, agg, join, etc.
-# TODO: fix type inferrer and remove this
-enable_hiframes_remove_dead = True
 
 # quantile imports?
 import llvmlite.llvmpy.core as lc
@@ -321,24 +316,6 @@ def unique_overload_parallel(arr_typ):
         return bodo.utils.to_array(build_set(out_arr))
 
     return unique_par
-
-
-
-c_alltoallv = types.ExternalFunction("c_alltoallv", types.void(types.voidptr, types.voidptr, types.voidptr, types.voidptr, types.voidptr, types.voidptr, types.int32))
-convert_len_arr_to_offset = types.ExternalFunction("convert_len_arr_to_offset", types.void(types.voidptr, types.intp))
-
-# TODO: refactor with join
-@numba.njit
-def set_recv_counts_chars(key_arr):
-    n_pes = bodo.libs.distributed_api.get_size()
-    send_counts = np.zeros(n_pes, np.int32)
-    recv_counts = np.empty(n_pes, np.int32)
-    for i in range(len(key_arr)):
-        str = key_arr[i]
-        node_id = hash(str) % n_pes
-        send_counts[node_id] += len(str)
-    bodo.libs.distributed_api.alltoall(send_counts, recv_counts, 1)
-    return send_counts, recv_counts
 
 
 @infer_global(count)
@@ -787,38 +764,6 @@ class SetDfColInfer(AbstractTemplate):
                 new_typs, target.index, new_cols, target.has_parent)
 
         return signature(ret, *args)
-
-
-#@lower_builtin(set_df_col, DataFrameType, types.Literal, types.Array)
-def set_df_col_lower(context, builder, sig, args):
-    #
-    col_name = sig.args[1].literal_value
-    arr_typ = sig.args[2]
-    if arr_typ.dtype == datetime_date_type:
-        return set_df_datetime_date_lower(context, builder, sig, args)
-
-    # get boxed array
-    pyapi = context.get_python_api(builder)
-    gil_state = pyapi.gil_ensure()  # acquire GIL
-    env_manager = context.get_env_manager(builder)
-
-    if context.enable_nrt:
-        context.nrt.incref(builder, arr_typ, args[2])
-    py_arr = pyapi.from_native_value(arr_typ, args[2], env_manager)    # calls boxing
-
-    # get column as string obj
-    cstr = context.insert_const_string(builder.module, col_name)
-    cstr_obj = pyapi.string_from_string(cstr)
-
-    # set column array
-    pyapi.object_setitem(args[0], cstr_obj, py_arr)
-
-    pyapi.decref(py_arr)
-    pyapi.decref(cstr_obj)
-
-    pyapi.gil_release(gil_state)    # release GIL
-
-    return context.get_dummy_value()
 
 
 def to_arr_from_series(arr):

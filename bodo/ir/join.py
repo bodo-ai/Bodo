@@ -15,7 +15,7 @@ from bodo.transforms.distributed_analysis import Distribution
 
 from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
                               cp_str_list_to_array, str_list_to_array,
-                              get_offset_ptr, get_data_ptr, convert_len_arr_to_offset,
+                              get_offset_ptr, get_data_ptr,
                               pre_alloc_string_array, num_total_chars,
                               getitem_str_offset, copy_str_arr_slice,
                               str_copy_ptr, get_utf8_size,
@@ -191,8 +191,6 @@ ir_utils.visit_vars_extensions[Join] = visit_vars_join
 
 
 def remove_dead_join(join_node, lives, arg_aliases, alias_map, func_ir, typemap):
-    if not bodo.hiframes.api.enable_hiframes_remove_dead:
-        return join_node
     # if an output column is dead, the related input column is not needed
     # anymore in the join
     dead_cols = []

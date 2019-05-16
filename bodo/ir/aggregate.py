@@ -250,9 +250,6 @@ numba.analysis.ir_extension_usedefs[Aggregate] = aggregate_usedefs
 
 
 def remove_dead_aggregate(aggregate_node, lives, arg_aliases, alias_map, func_ir, typemap):
-    #
-    if not bodo.hiframes.api.enable_hiframes_remove_dead:
-        return aggregate_node
 
     dead_cols = []
 
