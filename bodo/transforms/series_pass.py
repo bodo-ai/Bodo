@@ -598,6 +598,27 @@ class SeriesPass(object):
                                      self.typemap[a.name] for a in tup_items))
             return [assign]
 
+        if fdef == ('flatten_to_series', 'bodo.utils.typing'):
+            arg = rhs.args[0]
+            in_typ = self.typemap[arg.name]
+            nodes = []
+            if isinstance(in_typ, SeriesType):
+                arg = self._get_series_data(arg, nodes)
+
+            def _flatten_impl(A):
+                numba.parfor.init_prange()
+                flat_list = []
+                n = len(A)
+                for i in numba.parfor.internal_prange(n):
+                    l = A[i]
+                    for s in l:
+                        flat_list.append(s)
+
+                return bodo.hiframes.api.init_series(
+                    bodo.hiframes.api.parallel_fix_df_array(flat_list))
+            # TODO: index and name?
+            return self._replace_func(_flatten_impl, [arg], pre_nodes=nodes)
+
         # convert Series to Array for unhandled calls
         # TODO check all the functions that get here and handle if necessary
         nodes = []
@@ -770,27 +791,6 @@ class SeriesPass(object):
 
             return self._replace_func(
                 _isin_series, [data, rhs.args[1]], pre_nodes=nodes)
-
-        if func_name == 'flatten_to_series':
-            arg = rhs.args[0]
-            in_typ = self.typemap[arg.name]
-            nodes = []
-            if isinstance(in_typ, SeriesType):
-                arg = self._get_series_data(arg, nodes)
-
-            def _flatten_impl(A):
-                numba.parfor.init_prange()
-                flat_list = []
-                n = len(A)
-                for i in numba.parfor.internal_prange(n):
-                    l = A[i]
-                    for s in l:
-                        flat_list.append(s)
-
-                return bodo.hiframes.api.init_series(
-                    bodo.hiframes.api.parallel_fix_df_array(flat_list))
-            # TODO: index and name?
-            return self._replace_func(_flatten_impl, [arg], pre_nodes=nodes)
 
         if func_name == 'to_numeric':
             out_dtype = self.typemap[lhs.name].dtype

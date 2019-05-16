@@ -682,7 +682,7 @@ class UntypedPass(object):
                 in_data = arg_def.vararg
                 arg_def.vararg = None  # avoid typing error
                 return self._replace_func(
-                    lambda l: bodo.hiframes.api.flatten_to_series(l),
+                    lambda l: bodo.utils.typing.flatten_to_series(l),
                     [in_data]
                 )
 

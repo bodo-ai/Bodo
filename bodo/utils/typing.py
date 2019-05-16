@@ -6,6 +6,8 @@ from numba.extending import register_model, models
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.typing import signature
 
+from bodo.utils.utils import unliteral_all
+
 
 # type used to pass metadata to type inference functions
 # see untyped_pass.py and df.pivot_table()
@@ -44,3 +46,21 @@ class ToConstTupleTyper(AbstractTemplate):
         if isinstance(arr, types.List):
             ret_typ = types.Tuple((arr.dtype,))
         return signature(ret_typ, arr)
+
+
+def flatten_to_series(A):  # pragma: no cover
+    return A
+
+
+@infer_global(flatten_to_series)
+class FlattenTyp(AbstractTemplate):
+    def generic(self, args, kws):
+        from bodo.hiframes.pd_series_ext import SeriesType
+        assert not kws
+        assert len(args) == 1
+        # only list of lists supported
+        assert isinstance(args[0], (types.List, SeriesType))
+        l_dtype = args[0].dtype
+        assert isinstance(l_dtype, types.List)
+        dtype = l_dtype.dtype
+        return signature(SeriesType(dtype), *unliteral_all(args))
