@@ -570,21 +570,21 @@ class SeriesPass(object):
         # example: test_sort_parallel
         if fdef == ('get_dataframe_data', 'bodo.hiframes.pd_dataframe_ext'):
             df_var = rhs.args[0]
-            df_typ = self.typemap[df_var.name]
             ind = guard(find_const, self.func_ir, rhs.args[1])
             var_def = guard(get_definition, self.func_ir, df_var)
             call_def = guard(find_callname, self.func_ir, var_def)
             if call_def == ('init_dataframe', 'bodo.hiframes.pd_dataframe_ext'):
-                assign.value = var_def.args[ind]
+                seq_info = guard(
+                    find_build_sequence, self.func_ir, var_def.args[0])
+                assert seq_info is not None
+                assign.value = seq_info[0][ind]
 
         if fdef == ('get_dataframe_index', 'bodo.hiframes.pd_dataframe_ext'):
             df_var = rhs.args[0]
-            df_typ = self.typemap[df_var.name]
-            n_cols = len(df_typ.columns)
             var_def = guard(get_definition, self.func_ir, df_var)
             call_def = guard(find_callname, self.func_ir, var_def)
             if call_def == ('init_dataframe', 'bodo.hiframes.pd_dataframe_ext'):
-                assign.value = var_def.args[n_cols]
+                assign.value = var_def.args[1]
 
         # convert Series to Array for unhandled calls
         # TODO check all the functions that get here and handle if necessary

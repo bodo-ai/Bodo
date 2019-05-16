@@ -387,15 +387,19 @@ class DistributedAnalysis(object):
 
         if fdef == ('init_dataframe', 'bodo.hiframes.pd_dataframe_ext'):
             # lhs, data arrays, and index should have the same distribution
-            df_typ = self.typemap[lhs]
-            n_cols = len(df_typ.columns)
-            for i in range(n_cols):
-                new_dist = self._meet_array_dists(lhs, rhs.args[i].name, array_dists)
+            # data arrays
+            seq_info = guard(
+                find_build_sequence, self.func_ir, rhs.args[0])
+            assert seq_info is not None
+            for arr in seq_info[0]:
+                new_dist = self._meet_array_dists(lhs, arr.name, array_dists)
+
             # handle index
-            if len(rhs.args) > n_cols and self.typemap[rhs.args[n_cols].name] != types.none:
-                new_dist = self._meet_array_dists(lhs, rhs.args[n_cols].name, array_dists, new_dist)
-            for i in range(n_cols):
-                array_dists[rhs.args[i].name] = new_dist
+            if self.typemap[rhs.args[1].name] != types.none:
+                new_dist = self._meet_array_dists(
+                    lhs, rhs.args[1].name, array_dists, new_dist)
+            for arr in seq_info[0]:
+                array_dists[arr.name] = new_dist
             return
 
         if fdef == ('get_dataframe_data', 'bodo.hiframes.pd_dataframe_ext'):

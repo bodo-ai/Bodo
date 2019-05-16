@@ -1384,7 +1384,7 @@ class ConstListModel(models.ListModel):
         super(ConstListModel, self).__init__(dmm, l_type)
 
 
-# add constant metadata to list or tuple type, see hiframes.py
+# add constant metadata to list or tuple type, see untyped_pass.py
 def add_consts_to_type(a, *args):
     return a
 
@@ -1394,7 +1394,7 @@ class AddConstsTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         ret_typ = args[0]
-        assert isinstance(ret_typ, types.List)  # TODO: other types
+        # assert isinstance(ret_typ, types.List)  # TODO: other types
         # TODO: FloatLiteral e.g. test_fillna
         if all(isinstance(v, types.Literal) for v in args[1:]):
             consts = tuple(v.literal_value for v in args[1:])

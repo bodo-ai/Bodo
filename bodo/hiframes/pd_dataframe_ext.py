@@ -246,7 +246,7 @@ def construct_dataframe(context, builder, df_type, data_tup, index_val,
 
 
 @intrinsic
-def init_dataframe(typingctx, *args):
+def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
     """Create a DataFrame with provided data, index and columns values.
     Used as a single constructor for DataFrame and assigning its data, so that
     optimization passes can look for init_dataframe() to see if underlying
@@ -254,21 +254,18 @@ def init_dataframe(typingctx, *args):
     not changed.
     """
 
-    n_cols = len(args)//2
-    data_typs = tuple(args[:n_cols])
-    index_typ = args[n_cols]
-    column_names = tuple(a.literal_value for a in args[n_cols+1:])
+    n_cols = len(data_tup_typ.types)
+    # assert all(isinstance(t, types.StringLiteral) for t in col_names_typ.types)
+    column_names = col_names_typ.consts
+    assert len(column_names) == n_cols
 
     def codegen(context, builder, signature, args):
-        in_tup = args[0]
         df_type = signature.return_type
-        data_arrs = [builder.extract_value(in_tup, i) for i in range(n_cols)]
-        index_val = builder.extract_value(in_tup, n_cols)
+        data_tup = args[0]
+        index_val = args[1]
         column_strs = [numba.unicode.make_string_from_constant(
                     context, builder, string_type, c) for c in column_names]
 
-        data_tup = context.make_tuple(
-            builder, types.Tuple(data_typs), data_arrs)
         column_tup = context.make_tuple(
             builder, types.UniTuple(string_type, n_cols), column_strs)
         zero = context.get_constant(types.int8, 0)
@@ -281,16 +278,15 @@ def init_dataframe(typingctx, *args):
 
         # increase refcount of stored values
         if context.enable_nrt:
+            context.nrt.incref(builder, data_tup_typ, data_tup)
             context.nrt.incref(builder, index_typ, index_val)
-            for var, typ in zip(data_arrs, data_typs):
-                context.nrt.incref(builder, typ, var)
             for var in column_strs:
                 context.nrt.incref(builder, string_type, var)
 
         return dataframe_val
 
-    ret_typ = DataFrameType(data_typs, index_typ, column_names)
-    sig = signature(ret_typ, types.Tuple(args))
+    ret_typ = DataFrameType(data_tup_typ.types, index_typ, column_names)
+    sig = signature(ret_typ, data_tup_typ, index_typ, col_names_typ)
     return sig, codegen
 
 

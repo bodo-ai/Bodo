@@ -474,9 +474,10 @@ class UntypedPass(object):
         data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
         col_args = ", ".join('col{}'.format(i) for i in range(n_cols))
 
+        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _init_df({}, index, {}):\n".format(data_args, col_args)
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, index, {})\n".format(
-            data_args, col_args)
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), index, {})\n".format(
+            data_args, col_var)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars['_init_df']
@@ -586,9 +587,11 @@ class UntypedPass(object):
         n_cols = len(columns)
         data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
 
+        col_args = ", ".join("'{}'".format(c) for c in columns)
+        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _init_df({}):\n".format(data_args)
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, None, {})\n".format(
-            data_args, ", ".join("'{}'".format(c) for c in columns))
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
+            data_args, col_var)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars['_init_df']
@@ -724,9 +727,11 @@ class UntypedPass(object):
         n_cols = len(columns)
         data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
 
+        col_args = ", ".join("'{}'".format(c) for c in columns)
+        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _init_df({}):\n".format(data_args)
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, None, {})\n".format(
-            data_args, ", ".join("'{}'".format(c) for c in columns))
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
+            data_args, col_var)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars['_init_df']

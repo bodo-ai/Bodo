@@ -568,7 +568,11 @@ class DistributedPass(object):
 
         if (fdef == ('init_dataframe', 'bodo.hiframes.pd_dataframe_ext')
                 and self._is_1D_arr(rhs.args[0].name)):
-            in_arr = rhs.args[0].name
+            seq_info = guard(
+                find_build_sequence, self.func_ir, rhs.args[0])
+            assert seq_info is not None
+            # TODO: dataframe with no data
+            in_arr = seq_info[0][0].name
             self._array_starts[lhs] = self._array_starts[in_arr]
             self._array_counts[lhs] = self._array_counts[in_arr]
             self._array_sizes[lhs] = self._array_sizes[in_arr]

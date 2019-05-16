@@ -1156,13 +1156,15 @@ class DataFramePass(object):
         n_cols = len(df_typ.columns)
         data_args = tuple('data{}'.format(i) for i in range(n_cols))
 
+        col_args = ", ".join("'{}'".format(c) for c in df_typ.columns)
+        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _head_impl({}, n):\n".format(", ".join(data_args))
         for d in data_args:
             func_text += "  {} = bodo.hiframes.api.init_series({})\n".format(d+'_S', d)
             func_text += "  {} = bodo.hiframes.api.get_series_data({}.head(n))\n".format(d+'_O', d+'_S')
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, None, {})\n".format(
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
             ", ".join(d+'_O' for d in data_args),
-            ", ".join("'{}'".format(c) for c in df_typ.columns))
+            col_var)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _head_impl = loc_vars['_head_impl']
@@ -1182,13 +1184,15 @@ class DataFramePass(object):
         n_cols = len(df_typ.columns)
         data_args = tuple('data{}'.format(i) for i in range(n_cols))
 
+        col_args = ", ".join("'{}'".format(c) for c in df_typ.columns)
+        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _pct_change_impl({}, n):\n".format(", ".join(data_args))
         for d in data_args:
             func_text += "  {} = bodo.hiframes.api.init_series({})\n".format(d+'_S', d)
             func_text += "  {} = bodo.hiframes.api.get_series_data({}.pct_change(n))\n".format(d+'_O', d+'_S')
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, None, {})\n".format(
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
             ", ".join(d+'_O' for d in data_args),
-            ", ".join("'{}'".format(c) for c in df_typ.columns))
+            col_var)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _pct_change_impl = loc_vars['_pct_change_impl']
@@ -1238,6 +1242,8 @@ class DataFramePass(object):
         n_cols = len(df_typ.columns)
         data_args = tuple('data{}'.format(i) for i in range(n_cols))
 
+        col_args = ", ".join("'{}'".format(c) for c in df_typ.columns)
+        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _fillna_impl({}, val):\n".format(", ".join(data_args))
         for d in data_args:
             func_text += "  {} = bodo.hiframes.api.init_series({})\n".format(d+'_S', d)
@@ -1246,9 +1252,9 @@ class DataFramePass(object):
             else:
                 func_text += "  {}.fillna(val, inplace=True)\n".format(d+'_S')
             func_text += "  {} = bodo.hiframes.api.get_series_data({})\n".format(d+'_O', d+'_S')
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, None, {})\n".format(
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
             ", ".join(d+'_O' for d in data_args),
-            ", ".join("'{}'".format(c) for c in df_typ.columns))
+            col_var)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _fillna_impl = loc_vars['_fillna_impl']
@@ -1318,13 +1324,15 @@ class DataFramePass(object):
         n_cols = len(df_typ.columns)
         data_args = tuple('data{}'.format(i) for i in range(n_cols))
 
+        col_args = ", ".join("'{}'".format(c) for c in df_typ.columns)
+        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _reset_index_impl({}):\n".format(", ".join(data_args))
         for d in data_args:
             if not inplace:
                 func_text += "  {} = {}.copy()\n".format(d, d)
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, None, {})\n".format(
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
             ", ".join(data_args),
-            ", ".join("'{}'".format(c) for c in df_typ.columns))
+            col_var)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _reset_index_impl = loc_vars['_reset_index_impl']
@@ -1467,10 +1475,11 @@ class DataFramePass(object):
             new_arr_arg = 'data{}'.format(col_ind)
 
         # TODO: fix list, Series data
+        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _init_df({}):\n".format(data_args)
         func_text += "  {} = bodo.hiframes.api.fix_df_array({})\n".format(new_arr_arg, new_arr_arg)
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, None, {})\n".format(
-            data_args, col_args)
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
+            data_args, col_var)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars['_init_df']
@@ -1992,7 +2001,10 @@ class DataFramePass(object):
         var_def = guard(get_definition, self.func_ir, df_var)
         call_def = guard(find_callname, self.func_ir, var_def)
         if call_def == ('init_dataframe', 'bodo.hiframes.pd_dataframe_ext'):
-            return var_def.args[ind]
+            seq_info = guard(
+                find_build_sequence, self.func_ir, var_def.args[0])
+            assert seq_info is not None
+            return seq_info[0][ind]
 
         loc = df_var.loc
         ind_var = ir.Var(df_var.scope, mk_unique_var('col_ind'), loc)
@@ -2015,11 +2027,10 @@ class DataFramePass(object):
 
     def _get_dataframe_index(self, df_var, nodes):
         df_typ = self.typemap[df_var.name]
-        n_cols = len(df_typ.columns)
         var_def = guard(get_definition, self.func_ir, df_var)
         call_def = guard(find_callname, self.func_ir, var_def)
         if call_def == ('init_dataframe', 'bodo.hiframes.pd_dataframe_ext'):
-            return var_def.args[n_cols]
+            return var_def.args[1]
 
         # XXX use get_series_data() for getting data instead of S._data
         # to enable alias analysis
@@ -2170,9 +2181,13 @@ def _gen_init_df(columns):
     n_cols = len(columns)
     data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
 
+    # using add_consts_to_type with list to avoid const tuple problems
+    # TODO: fix type inference for const str
+    col_seq = ", ".join("'{}'".format(c) for c in columns)
+    col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_seq, col_seq)
     func_text = "def _init_df({}):\n".format(data_args)
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, None, {})\n".format(
-        data_args, ", ".join("'{}'".format(c) for c in columns))
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
+        data_args, col_var)
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     _init_df = loc_vars['_init_df']
