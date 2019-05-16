@@ -13,7 +13,7 @@ import bodo
 from bodo.libs.str_arr_ext import (string_array_type, num_total_chars, StringArray,
                               pre_alloc_string_array, get_offset_ptr,
                               get_data_ptr, convert_len_arr_to_offset)
-from bodo.utils import (debug_prints, empty_like_type, _numba_to_c_type_map,
+from bodo.utils.utils import (debug_prints, empty_like_type, _numba_to_c_type_map,
     unliteral_all)
 from llvmlite import ir as lir
 from bodo.libs import hdist

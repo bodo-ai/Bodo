@@ -38,7 +38,7 @@ from bodo.hiframes.split_impl import string_array_split_view_type
 
 
 from numba.targets.arrayobj import make_array
-from bodo.utils import unliteral_all
+from bodo.utils.utils import unliteral_all
 import llvmlite.llvmpy.core as lc
 
 
@@ -194,7 +194,7 @@ def lower_unique(context, builder, sig, args):
 def unique_overload(arr_typ):
     # TODO: extend to other types like datetime?
     def unique_seq(A):
-        return bodo.utils.to_array(build_set(A))
+        return bodo.utils.utils.to_array(build_set(A))
     return unique_seq
 
 @lower_builtin(unique_parallel, types.Any)  # TODO: replace Any with types
@@ -207,7 +207,7 @@ def lower_unique_parallel(context, builder, sig, args):
 def unique_overload_parallel(arr_typ):
 
     def unique_par(A):
-        uniq_A = bodo.utils.to_array(build_set(A))
+        uniq_A = bodo.utils.utils.to_array(build_set(A))
         key_arrs = (uniq_A,)
 
         n_pes = bodo.libs.distributed_api.get_size()
@@ -232,7 +232,7 @@ def unique_overload_parallel(arr_typ):
         # shuffle
         out_arr, = alltoallv_tup(key_arrs, shuffle_meta)
 
-        return bodo.utils.to_array(build_set(out_arr))
+        return bodo.utils.utils.to_array(build_set(out_arr))
 
     return unique_par
 

@@ -15,7 +15,7 @@ import numpy as np
 import ctypes
 import inspect
 import bodo.libs.str_ext
-import bodo.utils
+import bodo.utils.utils
 
 from llvmlite import ir as lir
 

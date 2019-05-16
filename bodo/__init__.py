@@ -17,7 +17,7 @@ from bodo.libs.dict_ext import (DictIntInt, DictInt32Int32, dict_int_int_type,
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from numba.types import List
-from bodo.utils import cprint, distribution_report
+from bodo.utils.utils import cprint, distribution_report
 import bodo.compiler
 import bodo.io
 import bodo.io.np_io

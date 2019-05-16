@@ -15,7 +15,7 @@ import bodo
 from bodo.libs.str_ext import string_type, unicode_to_char_ptr
 from bodo.libs.str_arr_ext import StringArray, StringArrayPayloadType, construct_string_array
 from bodo.libs.str_arr_ext import string_array_type
-from bodo.utils import unliteral_all
+from bodo.utils.utils import unliteral_all
 
 
 # from parquet/types.h

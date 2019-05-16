@@ -10,7 +10,7 @@ from numba.ir_utils import (visit_vars_inner, replace_vars_inner,
                             mk_unique_var)
 import bodo
 from bodo.transforms import distributed_pass, distributed_analysis
-from bodo.utils import debug_prints, alloc_arr_tup, empty_like_type
+from bodo.utils.utils import debug_prints, alloc_arr_tup, empty_like_type
 from bodo.transforms.distributed_analysis import Distribution
 
 from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
@@ -666,7 +666,7 @@ from numba import cgutils
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 from numba.targets.arrayobj import make_array
-from bodo.utils import _numba_to_c_type_map
+from bodo.utils.utils import _numba_to_c_type_map
 from bodo.libs import hdist
 ll.add_symbol('c_alltoallv', hdist.c_alltoallv)
 

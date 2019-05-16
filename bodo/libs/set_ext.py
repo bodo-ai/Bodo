@@ -23,7 +23,7 @@ ll.add_symbol('num_total_chars_set_string', hset_ext.num_total_chars_set_string)
 ll.add_symbol('populate_str_arr_from_set', hset_ext.populate_str_arr_from_set)
 
 import bodo
-from bodo.utils import to_array
+from bodo.utils.utils import to_array
 from bodo.libs.str_ext import string_type, gen_get_unicode_chars
 from bodo.libs.str_arr_ext import (StringArray, StringArrayType, string_array_type,
                               pre_alloc_string_array, StringArrayPayloadType,

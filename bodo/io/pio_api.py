@@ -8,7 +8,7 @@ from llvmlite import ir as lir
 from numba.extending import register_model, models, infer_getattr, infer, intrinsic
 from bodo.libs.str_ext import string_type
 import bodo
-from bodo.utils import unliteral_all
+from bodo.utils.utils import unliteral_all
 import bodo.io
 
 if bodo.config._has_h5py:

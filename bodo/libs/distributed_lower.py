@@ -14,7 +14,7 @@ from numba.typing.builtins import IndexValueType
 
 import bodo
 from bodo.libs import distributed_api
-from bodo.utils import _numba_to_c_type_map
+from bodo.utils.utils import _numba_to_c_type_map
 from bodo.libs.distributed_api import mpi_req_numba_type, ReqArrayType, req_array_type
 from llvmlite import ir as lir
 from bodo.libs import hdist

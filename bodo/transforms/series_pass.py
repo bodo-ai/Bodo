@@ -24,7 +24,7 @@ from numba.extending import overload
 from numba.typing.templates import infer_global, AbstractTemplate, signature
 import bodo
 from bodo import hiframes
-from bodo.utils import (debug_prints, inline_new_blocks, ReplaceFunc,
+from bodo.utils.utils import (debug_prints, inline_new_blocks, ReplaceFunc,
     is_whole_slice, is_array)
 from bodo.libs.str_ext import (string_type, unicode_to_std_str, std_str_to_unicode,
     list_string_array_type)

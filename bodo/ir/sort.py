@@ -11,11 +11,11 @@ from numba.extending import overload
 import bodo
 import bodo.libs.timsort
 from bodo.libs.timsort import getitem_arr_tup
-from bodo.utils import _numba_to_c_type_map
+from bodo.utils.utils import _numba_to_c_type_map
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils import (debug_prints, empty_like_type, get_ctypes_ptr,
+from bodo.utils.utils import (debug_prints, empty_like_type, get_ctypes_ptr,
     gen_getitem)
 
 from bodo.shuffle_utils import (alltoallv, alltoallv_tup,

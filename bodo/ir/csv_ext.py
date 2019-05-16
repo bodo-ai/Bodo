@@ -7,7 +7,7 @@ from numba.ir_utils import (visit_vars_inner, replace_vars_inner,
                             compile_to_numba_ir, replace_arg_nodes)
 import bodo
 from bodo.transforms import distributed_pass, distributed_analysis
-from bodo.utils import debug_prints, alloc_arr_tup, empty_like_type
+from bodo.utils.utils import debug_prints, alloc_arr_tup, empty_like_type
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
@@ -16,7 +16,7 @@ from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
                               pre_alloc_string_array, num_total_chars,
                               getitem_str_offset, copy_str_arr_slice)
 from bodo.libs.timsort import copyElement_tup, getitem_arr_tup
-from bodo.utils import _numba_to_c_type_map
+from bodo.utils.utils import _numba_to_c_type_map
 from bodo import objmode
 import pandas as pd
 import numpy as np

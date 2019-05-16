@@ -21,7 +21,7 @@ import bodo
 import bodo.io
 import bodo.io.np_io
 from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.utils import (get_constant, is_alloc_callname,
+from bodo.utils.utils import (get_constant, is_alloc_callname,
                         is_whole_slice, is_array, is_array_container,
                         is_np_array, find_build_tuple, debug_prints,
                         is_const_slice)

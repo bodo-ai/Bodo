@@ -13,7 +13,7 @@ import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 import bodo
-#from bodo.utils import unliteral_all
+#from bodo.utils.utils import unliteral_all
 # TODO: resolve import conflict
 def unliteral_all(args):
     return tuple(types.unliteral(a) for a in args)

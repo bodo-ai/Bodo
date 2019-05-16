@@ -4,7 +4,7 @@ from numba.targets.imputils import lower_builtin
 from numba.targets.arrayobj import make_array
 import bodo.io
 from bodo.io import pio_api
-from bodo.utils import _numba_to_c_type_map
+from bodo.utils.utils import _numba_to_c_type_map
 from bodo.io.pio_api import (h5file_type, h5dataset_or_group_type, h5dataset_type,
                           h5group_type)
 from bodo.libs.str_ext import string_type, gen_get_unicode_chars, gen_std_str_to_unicode

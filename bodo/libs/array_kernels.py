@@ -12,7 +12,7 @@ from numba.targets.imputils import lower_builtin, impl_ret_untracked
 from numba.targets.arrayobj import make_array
 
 import bodo
-from bodo.utils import _numba_to_c_type_map, unliteral_all
+from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
 
 import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir

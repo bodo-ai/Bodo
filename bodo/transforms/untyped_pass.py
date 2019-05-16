@@ -27,11 +27,11 @@ from numba.inline_closurecall import inline_closure_call
 from numba.analysis import compute_cfg_from_blocks
 
 import bodo
-from bodo import utils, config
+from bodo import config
 import bodo.io
 from bodo.io import pio, parquet_pio
 from bodo.io.parquet_pio import ParquetHandler
-from bodo.utils import (get_constant, NOT_CONSTANT, debug_prints,
+from bodo.utils.utils import (get_constant, NOT_CONSTANT, debug_prints,
     inline_new_blocks, ReplaceFunc, is_call, is_assign)
 import bodo.hiframes.api
 from bodo.libs.str_ext import string_type

@@ -18,11 +18,11 @@ from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.extending import overload, lower_builtin
 import bodo
-from bodo.utils import (is_call_assign, is_var_assign, is_assign, debug_prints,
+from bodo.utils.utils import (is_call_assign, is_var_assign, is_assign, debug_prints,
         alloc_arr_tup, empty_like_type)
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils import _numba_to_c_type_map, unliteral_all
+from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
 from bodo.libs.str_ext import string_type
 from bodo.libs.set_ext import num_total_chars_set_string, build_set
 from bodo.libs.str_arr_ext import (string_array_type, pre_alloc_string_array,

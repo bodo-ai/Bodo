@@ -11,7 +11,7 @@ from numba.ir_utils import guard, find_const
 
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.hiframes.pd_timestamp_ext import integer_to_dt64
-from bodo.utils import unliteral_all
+from bodo.utils.utils import unliteral_all
 
 
 supported_rolling_funcs = ('sum', 'mean', 'var', 'std', 'count', 'median',

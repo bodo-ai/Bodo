@@ -34,8 +34,8 @@ from bodo.transforms.distributed_analysis import (Distribution,
                                        DistributedAnalysis)
 
 # from mpi4py import MPI
-import bodo.utils
-from bodo.utils import (is_alloc_callname, is_whole_slice, is_array_container,
+import bodo.utils.utils
+from bodo.utils.utils import (is_alloc_callname, is_whole_slice, is_array_container,
                         get_slice_step, is_array, is_np_array, find_build_tuple,
                         debug_prints, ReplaceFunc, gen_getitem, is_call,
                         is_const_slice)
@@ -781,7 +781,7 @@ class DistributedPass(object):
         """
         # allocs are handled separately
         assert not ((self._is_1D_Var_arr(lhs) or self._is_1D_arr(lhs))
-                    and func_name in bodo.utils.np_alloc_callnames), (
+                    and func_name in bodo.utils.utils.np_alloc_callnames), (
                     "allocation calls handled separately "
                     "'empty', 'zeros', 'ones', 'full' etc.")
         out = [assign]

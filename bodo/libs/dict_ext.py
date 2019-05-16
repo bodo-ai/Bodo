@@ -14,7 +14,7 @@ from numba import cgutils
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import hdict_ext
-from bodo.utils import unliteral_all
+from bodo.utils.utils import unliteral_all
 
 ll_voidp = lir.IntType(8).as_pointer()
 

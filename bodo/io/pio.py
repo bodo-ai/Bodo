@@ -11,10 +11,9 @@ from numba.ir_utils import (mk_unique_var, replace_vars_inner, find_topo_order,
 import numpy as np
 
 import bodo
-from bodo import utils
 import bodo.io
 from bodo.io import pio_api, pio_lower
-from bodo.utils import find_str_const, debug_prints
+from bodo.utils.utils import find_str_const, debug_prints
 
 
 def remove_h5(rhs, lives, call_list):

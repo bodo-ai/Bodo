@@ -6,7 +6,7 @@ from numba.typing import signature
 import bodo
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils import debug_prints
+from bodo.utils.utils import debug_prints
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.hiframes.split_impl import string_array_split_view_type
 
