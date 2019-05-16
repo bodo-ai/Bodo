@@ -18,7 +18,7 @@ from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.utils import (debug_prints, empty_like_type, get_ctypes_ptr,
     gen_getitem)
 
-from bodo.shuffle_utils import (alltoallv, alltoallv_tup,
+from bodo.utils.shuffle import (alltoallv, alltoallv_tup,
     finalize_shuffle_meta, update_shuffle_meta,  alloc_pre_shuffle_metadata,
     _get_keys_tup, _get_data_tup)
 

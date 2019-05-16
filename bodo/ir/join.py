@@ -22,7 +22,7 @@ from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
                               setitem_str_offset, str_arr_set_na)
 from bodo.libs.str_ext import string_type
 from bodo.libs.timsort import copyElement_tup, getitem_arr_tup, setitem_arr_tup
-from bodo.shuffle_utils import (getitem_arr_tup_single, val_to_tup, alltoallv,
+from bodo.utils.shuffle import (getitem_arr_tup_single, val_to_tup, alltoallv,
     alltoallv_tup, finalize_shuffle_meta,
     update_shuffle_meta,  alloc_pre_shuffle_metadata,
     _get_keys_tup, _get_data_tup)
