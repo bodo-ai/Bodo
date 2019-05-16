@@ -219,7 +219,7 @@ def _column_var_impl(A):  # pragma: no cover
     return res
 
 def _column_std_impl(A):  # pragma: no cover
-    var = bodo.hiframes.api.var(A)
+    var = bodo.hiframes.api.init_series(A).var()
     return var**0.5
 
 def _column_min_impl(in_arr):  # pragma: no cover

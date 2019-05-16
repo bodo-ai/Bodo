@@ -2085,10 +2085,6 @@ class SeriesPass(object):
 
     def _handle_df_col_calls(self, assign, lhs, rhs, func_name):
 
-        if func_name == 'count':
-            return self._replace_func(
-                series_kernels._column_count_impl, rhs.args)
-
         if func_name == 'fillna':
             return self._replace_func(
                 series_kernels._column_fillna_impl, rhs.args)
@@ -2110,18 +2106,6 @@ class SeriesPass(object):
                 # integer case, TODO: bool, date etc.
                 func = lambda A: bodo.hiframes.api.init_series(A)
             return self._replace_func(func, rhs.args)
-
-        if func_name == 'column_sum':
-            return self._replace_func(
-                series_kernels._column_sum_impl_basic, rhs.args)
-
-        if func_name == 'mean':
-            return self._replace_func(
-                series_kernels._column_mean_impl, rhs.args)
-
-        if func_name == 'var':
-            return self._replace_func(
-                series_kernels._column_var_impl, rhs.args)
 
         return [assign]
 

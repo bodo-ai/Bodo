@@ -55,23 +55,6 @@ nth_sequential = types.ExternalFunction("nth_sequential",
 nth_parallel = types.ExternalFunction("nth_parallel",
     types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.int32))
 
-# from numba.typing.templates import infer_getattr, AttributeTemplate, bound_function
-# from numba import types
-#
-# @infer_getattr
-# class PdAttribute(AttributeTemplate):
-#     key = types.Array
-#
-#     @bound_function("array.rolling")
-#     def resolve_rolling(self, ary, args, kws):
-#         #assert not kws
-#         #assert not args
-#         return signature(ary.copy(layout='C'), types.intp)
-
-
-def count(A):  # pragma: no cover
-    return 0
-
 
 def fillna(A):  # pragma: no cover
     return 0
@@ -80,21 +63,6 @@ def fillna_str_alloc(A, fill):  # pragma: no cover
     return 0
 
 def dropna(A):  # pragma: no cover
-    return 0
-
-def column_sum(A):  # pragma: no cover
-    return 0
-
-
-def var(A):  # pragma: no cover
-    return 0
-
-
-def std(A):  # pragma: no cover
-    return 0
-
-
-def mean(A):  # pragma: no cover
     return 0
 
 
@@ -318,14 +286,6 @@ def unique_overload_parallel(arr_typ):
     return unique_par
 
 
-@infer_global(count)
-class CountTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        return signature(types.intp, *args)
-
-
 @infer_global(fillna)
 class FillNaType(AbstractTemplate):
     def generic(self, args, kws):
@@ -353,28 +313,6 @@ class DropNAType(AbstractTemplate):
             # series case
             ret = if_arr_to_series_type(ret)
         return signature(ret, *args)
-
-@infer_global(column_sum)
-class SumType(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        # arg: in_arr
-        return signature(_expand_integer(args[0].dtype), *args)
-
-
-
-# copied from numba/numba/typing/arraydecl.py:563
-@infer_global(mean)
-@infer_global(var)
-@infer_global(std)
-class VarDdof1Type(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        if isinstance(args[0].dtype, (types.Integer, types.Boolean)):
-            return signature(types.float64, *args)
-        return signature(args[0].dtype, *args)
 
 
 @infer_global(quantile)
@@ -541,89 +479,6 @@ def nlargest_parallel(A, k, is_largest, cmp_f):
         res = np.empty(k, A.dtype)
     bodo.libs.distributed_api.bcast(res)
     return res
-
-
-# @jit
-# def describe(a_count, a_mean, a_std, a_min, q25, q50, q75, a_max):
-#     s = "count    "+str(a_count)+"\n"\
-#         "mean     "+str(a_mean)+"\n"\
-#         "std      "+str(a_std)+"\n"\
-#         "min      "+str(a_min)+"\n"\
-#         "25%      "+str(q25)+"\n"\
-#         "50%      "+str(q50)+"\n"\
-#         "75%      "+str(q75)+"\n"\
-#         "max      "+str(a_max)+"\n"
-
-# import numba.typing.arraydecl
-# from numba import types
-# import numba.utils
-# import numpy as np
-
-# copied from numba/numba/typing/arraydecl.py:563
-# def array_attribute_attachment(self, ary):
-#     class VarType(AbstractTemplate):
-#         key = "array.var"
-#         def generic(self, args, kws):
-#             assert not args
-#             # only ddof keyword arg is supported
-#             assert not kws or kws=={'ddof': types.int64}
-#             if isinstance(self.this.dtype, (types.Integer, types.Boolean)):
-#                 sig = signature(types.float64, recvr=self.this)
-#             else:
-#                 sig = signature(self.this.dtype, recvr=self.this)
-#             sig.pysig = numba.utils.pysignature(np.var)
-#             return sig
-#     return types.BoundFunction(VarType, ary)
-#
-# numba.typing.arraydecl.ArrayAttribute.resolve_var = array_attribute_attachment
-
-
-@lower_builtin(mean, types.Array)
-def lower_column_mean_impl(context, builder, sig, args):
-    zero = sig.return_type(0)
-
-    def array_mean_impl(arr):  # pragma: no cover
-        count = 0
-        s = zero
-        for val in arr:
-            if not np.isnan(val):
-                s += val
-                count += 1
-        if not count:
-            s = np.nan
-        else:
-            s = s / count
-        return s
-
-    res = context.compile_internal(builder, array_mean_impl, sig, args,
-                                   locals=dict(s=sig.return_type))
-    return impl_ret_untracked(context, builder, sig.return_type, res)
-
-
-# copied from numba/numba/targets/arraymath.py:119
-@lower_builtin(var, types.Array)
-def array_var(context, builder, sig, args):
-    def array_var_impl(arr):  # pragma: no cover
-        # TODO: ignore NA
-        # Compute the mean
-        m = arr.mean()
-
-        # Compute the sum of square diffs
-        ssd = 0
-        for v in np.nditer(arr):
-            ssd += (v.item() - m) ** 2
-        return ssd / (arr.size - 1)  # ddof=1 in pandas
-
-    res = context.compile_internal(builder, array_var_impl, sig, args)
-    return impl_ret_untracked(context, builder, sig.return_type, res)
-
-
-@lower_builtin(std, types.Array)
-def array_std(context, builder, sig, args):
-    def array_std_impl(arry):  # pragma: no cover
-        return var(arry) ** 0.5
-    res = context.compile_internal(builder, array_std_impl, sig, args)
-    return impl_ret_untracked(context, builder, sig.return_type, res)
 
 
 @lower_builtin(quantile, types.npytypes.Array, types.float64)
