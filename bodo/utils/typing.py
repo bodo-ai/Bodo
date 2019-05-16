@@ -2,9 +2,10 @@
 Helper functions to enable typing.
 """
 from numba import types
-from numba.extending import register_model, models
+from numba.extending import register_model, models, overload
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.typing import signature
+from numba.targets.imputils import lower_builtin, impl_ret_borrowed
 
 from bodo.utils.utils import unliteral_all
 
@@ -48,6 +49,7 @@ class ToConstTupleTyper(AbstractTemplate):
         return signature(ret_typ, arr)
 
 
+# dummy function to enable series flattening, replaced in series_pass
 def flatten_to_series(A):  # pragma: no cover
     return A
 
@@ -64,3 +66,69 @@ class FlattenTyp(AbstractTemplate):
         assert isinstance(l_dtype, types.List)
         dtype = l_dtype.dtype
         return signature(SeriesType(dtype), *unliteral_all(args))
+
+
+# Type used to add constant values to constant lists to enable typing
+class ConstList(types.List):
+    def __init__(self, dtype, consts):
+        dtype = types.unliteral(dtype)
+        self.dtype = dtype
+        self.reflected = False
+        self.consts = consts
+        cls_name = "list[{}]".format(consts)
+        name = "%s(%s)" % (cls_name, self.dtype)
+        super(types.List, self).__init__(name=name)
+
+    def copy(self, dtype=None, reflected=None):
+        if dtype is None:
+            dtype = self.dtype
+        return ConstList(dtype, self.consts)
+
+    def unify(self, typingctx, other):
+        if isinstance(other, ConstList) and self.consts == other.consts:
+            dtype = typingctx.unify_pairs(self.dtype, other.dtype)
+            reflected = self.reflected or other.reflected
+            if dtype is not None:
+                return ConstList(dtype, reflected)
+
+    @property
+    def key(self):
+        return self.dtype, self.reflected, self.consts
+
+
+@register_model(ConstList)
+class ConstListModel(models.ListModel):
+    def __init__(self, dmm, fe_type):
+        l_type = types.List(fe_type.dtype)
+        super(ConstListModel, self).__init__(dmm, l_type)
+
+
+# add constant metadata to list or tuple type, see untyped_pass.py
+def add_consts_to_type(a, *args):
+    return a
+
+
+@infer_global(add_consts_to_type)
+class AddConstsTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        ret_typ = args[0]
+        # assert isinstance(ret_typ, types.List)  # TODO: other types
+        # TODO: FloatLiteral e.g. test_fillna
+        if all(isinstance(v, types.Literal) for v in args[1:]):
+            consts = tuple(v.literal_value for v in args[1:])
+            ret_typ = ConstList(ret_typ.dtype, consts)
+        return signature(ret_typ, *args)
+
+
+@lower_builtin(add_consts_to_type, types.VarArg(types.Any))
+def lower_add_consts_to_type(context, builder, sig, args):
+    return impl_ret_borrowed(context, builder, sig.return_type, args[0])
+
+
+# dummy empty itertools implementation to avoid typing errors for series str
+# flatten case
+import itertools
+@overload(itertools.chain)
+def chain_overload():
+    return lambda: [0]

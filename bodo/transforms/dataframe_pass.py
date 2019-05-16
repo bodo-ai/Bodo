@@ -535,7 +535,7 @@ class DataFramePass(object):
             return self._run_call_dataframe(
                 assign, assign.target, rhs, func_mod, func_name)
 
-        if fdef == ('add_consts_to_type', 'bodo.hiframes.api'):
+        if fdef == ('add_consts_to_type', 'bodo.utils.typing'):
             assign.value = rhs.args[0]
             return [assign]
 
@@ -1157,7 +1157,7 @@ class DataFramePass(object):
         data_args = tuple('data{}'.format(i) for i in range(n_cols))
 
         col_args = ", ".join("'{}'".format(c) for c in df_typ.columns)
-        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
+        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _head_impl({}, n):\n".format(", ".join(data_args))
         for d in data_args:
             func_text += "  {} = bodo.hiframes.api.init_series({})\n".format(d+'_S', d)
@@ -1185,7 +1185,7 @@ class DataFramePass(object):
         data_args = tuple('data{}'.format(i) for i in range(n_cols))
 
         col_args = ", ".join("'{}'".format(c) for c in df_typ.columns)
-        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
+        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _pct_change_impl({}, n):\n".format(", ".join(data_args))
         for d in data_args:
             func_text += "  {} = bodo.hiframes.api.init_series({})\n".format(d+'_S', d)
@@ -1243,7 +1243,7 @@ class DataFramePass(object):
         data_args = tuple('data{}'.format(i) for i in range(n_cols))
 
         col_args = ", ".join("'{}'".format(c) for c in df_typ.columns)
-        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
+        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _fillna_impl({}, val):\n".format(", ".join(data_args))
         for d in data_args:
             func_text += "  {} = bodo.hiframes.api.init_series({})\n".format(d+'_S', d)
@@ -1325,7 +1325,7 @@ class DataFramePass(object):
         data_args = tuple('data{}'.format(i) for i in range(n_cols))
 
         col_args = ", ".join("'{}'".format(c) for c in df_typ.columns)
-        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
+        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _reset_index_impl({}):\n".format(", ".join(data_args))
         for d in data_args:
             if not inplace:
@@ -1475,7 +1475,7 @@ class DataFramePass(object):
             new_arr_arg = 'data{}'.format(col_ind)
 
         # TODO: fix list, Series data
-        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
+        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _init_df({}):\n".format(data_args)
         func_text += "  {} = bodo.hiframes.api.fix_df_array({})\n".format(new_arr_arg, new_arr_arg)
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
@@ -2184,7 +2184,7 @@ def _gen_init_df(columns):
     # using add_consts_to_type with list to avoid const tuple problems
     # TODO: fix type inference for const str
     col_seq = ", ".join("'{}'".format(c) for c in columns)
-    col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_seq, col_seq)
+    col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_seq, col_seq)
     func_text = "def _init_df({}):\n".format(data_args)
     func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
         data_args, col_var)

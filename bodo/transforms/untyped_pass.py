@@ -87,8 +87,6 @@ def remove_hiframes(rhs, lives, call_list):
     #     return True
     if call_list == ['rolling_dummy', 'pd_rolling_ext', 'hiframes', bodo]:
         return True
-    if call_list == ['agg_typer', 'api', 'hiframes', bodo]:
-        return True
     if call_list == [list]:
         return True
     if call_list == ['groupby']:
@@ -287,7 +285,7 @@ class UntypedPass(object):
                     # a = add_consts_to_type(tmp, 'A', 'B')
                     vals_expr = ", ".join("'{}'".format(c) if isinstance(c, str) else "{}".format(c) for c in vals)
                     func_text = "def _build_f(a):\n"
-                    func_text += "  return bodo.hiframes.api.add_consts_to_type(a, {})\n".format(vals_expr)
+                    func_text += "  return bodo.utils.typing.add_consts_to_type(a, {})\n".format(vals_expr)
                     loc_vars = {}
                     exec(func_text, {'bodo': bodo}, loc_vars)
                     _build_f = loc_vars['_build_f']
@@ -475,7 +473,7 @@ class UntypedPass(object):
         data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
         col_args = ", ".join('col{}'.format(i) for i in range(n_cols))
 
-        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
+        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _init_df({}, index, {}):\n".format(data_args, col_args)
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), index, {})\n".format(
             data_args, col_var)
@@ -589,7 +587,7 @@ class UntypedPass(object):
         data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
 
         col_args = ", ".join("'{}'".format(c) for c in columns)
-        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
+        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _init_df({}):\n".format(data_args)
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
             data_args, col_var)
@@ -726,7 +724,7 @@ class UntypedPass(object):
         data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
 
         col_args = ", ".join("'{}'".format(c) for c in columns)
-        col_var = "bodo.hiframes.api.add_consts_to_type([{}], {})".format(col_args, col_args)
+        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _init_df({}):\n".format(data_args)
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
             data_args, col_var)
@@ -828,7 +826,7 @@ class UntypedPass(object):
         if by_arg_def is None:
             # try add_consts_to_type
             by_arg_call = guard(get_definition, self.func_ir, by_arg)
-            if guard(find_callname, self.func_ir, by_arg_call) == ('add_consts_to_type', 'bodo.hiframes.api'):
+            if guard(find_callname, self.func_ir, by_arg_call) == ('add_consts_to_type', 'bodo.utils.typing'):
                 by_arg_def = guard(find_build_sequence, self.func_ir, by_arg_call.args[0])
 
         if by_arg_def is None:
