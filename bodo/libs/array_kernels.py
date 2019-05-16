@@ -4,6 +4,7 @@ Implements array kernels such as median and quantile.
 import numpy as np
 
 import numba
+from numba.extending import overload
 from numba import types, cgutils
 from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
@@ -28,6 +29,12 @@ nth_sequential = types.ExternalFunction("nth_sequential",
 nth_parallel = types.ExternalFunction("nth_parallel",
     types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.int32))
 
+MPI_ROOT = 0
+sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
+
+
+################################ median ####################################
+
 
 @numba.njit
 def nth_element(arr, k, parallel=False):
@@ -38,9 +45,6 @@ def nth_element(arr, k, parallel=False):
     else:
         nth_sequential(res.ctypes, arr.ctypes, len(arr), k, type_enum)
     return res[0]
-
-
-sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
 
 
 @numba.njit
@@ -60,6 +64,8 @@ def median(arr, parallel=False):
     v2 = nth_element(arr, k, parallel)
     return (v1 + v2) / 2
 
+
+################################ quantile ####################################
 
 
 def quantile(A, q):  # pragma: no cover
@@ -107,3 +113,108 @@ def lower_dist_quantile(context, builder, sig, args):
     fnty = lir.FunctionType(lir.DoubleType(), arg_typs)
     fn = builder.module.get_or_insert_function(fnty, name="quantile_parallel")
     return builder.call(fn, call_args)
+
+
+################################ nlargest ####################################
+
+
+@numba.njit
+def min_heapify(arr, n, start, cmp_f):
+    min_ind = start
+    left = 2 * start + 1
+    right = 2 * start + 2
+
+    if left < n and not cmp_f(arr[left], arr[min_ind]):  # < for nlargest
+        min_ind = left
+
+    if right < n and not cmp_f(arr[right], arr[min_ind]):
+        min_ind = right
+
+    if min_ind != start:
+        arr[start], arr[min_ind] = arr[min_ind], arr[start]  # swap
+        min_heapify(arr, n, min_ind, cmp_f)
+
+
+def select_k_nonan(A, m, k):  # pragma: no cover
+    return A
+
+
+@overload(select_k_nonan)
+def select_k_nonan_overload(A, m, k):
+    dtype = A.dtype
+    if isinstance(dtype, types.Integer):
+        # ints don't have nans
+        return lambda A,m,k: (A[:k].copy(), k)
+
+    assert isinstance(dtype, types.Float)
+
+    def select_k_nonan_float(A, m, k):
+        # select the first k elements but ignore NANs
+        min_heap_vals = np.empty(k, A.dtype)
+        i = 0
+        ind = 0
+        while i < m and ind < k:
+            val = A[i]
+            i += 1
+            if not np.isnan(val):
+                min_heap_vals[ind] = val
+                ind += 1
+
+        # if couldn't fill with k values
+        if ind < k:
+            min_heap_vals = min_heap_vals[:ind]
+
+        return min_heap_vals, i
+
+    return select_k_nonan_float
+
+
+@numba.njit
+def nlargest(A, k, is_largest, cmp_f):
+    # algorithm: keep a min heap of k largest values, if a value is greater
+    # than the minimum (root) in heap, replace the minimum and rebuild the heap
+    m = len(A)
+
+    # if all of A, just sort and reverse
+    if k >= m:
+        B = np.sort(A)
+        B = B[~np.isnan(B)]
+        if is_largest:
+            B = B[::-1]
+        return np.ascontiguousarray(B)
+
+    # create min heap but
+    min_heap_vals, start = select_k_nonan(A, m, k)
+    # heapify k/2-1 to 0 instead of sort?
+    min_heap_vals.sort()
+    if not is_largest:
+        min_heap_vals = np.ascontiguousarray(min_heap_vals[::-1])
+
+    for i in range(start, m):
+        if cmp_f(A[i], min_heap_vals[0]):  # > for nlargest
+            min_heap_vals[0] = A[i]
+            min_heapify(min_heap_vals, k, 0, cmp_f)
+
+    # sort and return the heap values
+    min_heap_vals.sort()
+    if is_largest:
+        min_heap_vals = min_heap_vals[::-1]
+    return np.ascontiguousarray(min_heap_vals)
+
+
+@numba.njit
+def nlargest_parallel(A, k, is_largest, cmp_f):
+    # parallel algorithm: assuming k << len(A), just call nlargest on chunks
+    # of A, gather the result and return the largest k
+    # TODO: support cases where k is not too small
+    my_rank = bodo.libs.distributed_api.get_rank()
+    local_res = nlargest(A, k, is_largest, cmp_f)
+    all_largest = bodo.libs.distributed_api.gatherv(local_res)
+
+    # TODO: handle len(res) < k case
+    if my_rank == MPI_ROOT:
+        res = nlargest(all_largest, k, is_largest, cmp_f)
+    else:
+        res = np.empty(k, A.dtype)
+    bodo.libs.distributed_api.bcast(res)
+    return res

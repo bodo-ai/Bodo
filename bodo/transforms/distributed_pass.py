@@ -701,9 +701,9 @@ class DistributedPass(object):
             f = lambda arr: bodo.hiframes.api.unique_parallel(arr)
             return self._replace_func(f, rhs.args)
 
-        if fdef == ('nlargest', 'bodo.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
+        if fdef == ('nlargest', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
-            f = lambda arr, k, i, f: bodo.hiframes.api.nlargest_parallel(arr, k, i, f)
+            f = lambda arr, k, i, f: bodo.libs.array_kernels.nlargest_parallel(arr, k, i, f)
             return self._replace_func(f, rhs.args)
 
         if fdef == ('median', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
