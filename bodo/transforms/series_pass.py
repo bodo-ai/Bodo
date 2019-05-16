@@ -198,6 +198,16 @@ class SeriesPass(object):
 
     def _run_getitem(self, assign, rhs):
         nodes = []
+        # optimize out getitem on built_tuple, important for pd.DataFrame()
+        # since dictionary is converted to tuple
+        if (rhs.op == 'static_getitem'
+                and isinstance(self.typemap[rhs.value.name], types.BaseTuple)
+                and isinstance(rhs.index, int)):
+            val_def = guard(get_definition, self.func_ir, rhs.value)
+            if isinstance(val_def, ir.Expr) and val_def.op == 'build_tuple':
+                assign.value = val_def.items[rhs.index]
+                return [assign]
+
         # Series(bool) as index
         if (rhs.op == 'getitem'
                 and is_bool_series_typ(self.typemap[rhs.index.name])):

@@ -704,11 +704,13 @@ def fix_df_array_overload(column):
         return lambda column: bodo.hiframes.api.get_series_data(column)
 
     # column is array if not list
-    assert isinstance(column, (types.Array, StringArrayType, SeriesType))
+    assert isinstance(column, (types.Array, StringArrayType, SeriesType,
+                                types.NoneType))
     def fix_df_array_impl(column):  # pragma: no cover
         return column
     # FIXME: np.array() for everything else?
     return fix_df_array_impl
+
 
 @infer_global(fix_rolling_array)
 class FixDfRollingArrayType(AbstractTemplate):

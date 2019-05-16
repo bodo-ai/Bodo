@@ -503,6 +503,15 @@ class DataFramePass(object):
         else:
             func_name, func_mod = fdef
 
+        if fdef == ('DataFrame', 'pandas'):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            impl = bodo.hiframes.pd_dataframe_ext.pd_dataframe_overload(
+                *arg_typs, **kw_typs)
+            return self._replace_func(impl, rhs.args,
+                        pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws))
+
         if fdef == ('len', 'builtins') and self._is_df_var(rhs.args[0]):
             return self._run_call_len(lhs, rhs.args[0])
 

@@ -106,7 +106,9 @@ def remove_hiframes(rhs, lives, call_list):
 numba.ir_utils.remove_call_handlers.append(remove_hiframes)
 
 class UntypedPass(object):
-    """analyze and transform hiframes calls"""
+    """
+    Transformations before typing to enable type inference.
+    """
 
     def __init__(self, func_ir, typingctx, args, _locals, metadata):
         self.func_ir = func_ir
@@ -129,7 +131,7 @@ class UntypedPass(object):
     def run(self):
         # FIXME: see why this breaks test_kmeans
         # remove_dels(self.func_ir.blocks)
-        dprint_func_ir(self.func_ir, "starting hiframes")
+        dprint_func_ir(self.func_ir, "starting untyped pass")
         self._handle_metadata()
         blocks = self.func_ir.blocks
         # call build definition since rewrite pass doesn't update definitions
@@ -200,7 +202,7 @@ class UntypedPass(object):
         # while remove_dead(blocks, self.func_ir.arg_names, self.func_ir):
         #     pass
         self.func_ir._definitions = build_definitions(blocks)
-        dprint_func_ir(self.func_ir, "after hiframes")
+        dprint_func_ir(self.func_ir, "after untyped pass")
         return
 
     def _replace_vars(self, inst):
@@ -238,7 +240,7 @@ class UntypedPass(object):
             if rhs.op == 'getattr':
                 val_def = guard(get_definition, self.func_ir, rhs.value)
                 if (isinstance(val_def, ir.Global) and val_def.value == pd
-                        and rhs.attr in ('DataFrame', 'read_csv',
+                        and rhs.attr in ('read_csv',
                                         'read_parquet', 'to_numeric')):
                     # TODO: implement to_numeric in typed pass?
                     # put back the definition removed earlier but remove node
@@ -445,52 +447,48 @@ class UntypedPass(object):
         return
 
     def _handle_pd_DataFrame(self, assign, lhs, rhs, label):
-        """transform pd.DataFrame({'A': A}) call
+        """
+        Enable typing for dictionary data arg to pd.DataFrame({'A': A}) call.
+        Converts constant dictionary to tuple with sentinel if present.
         """
         kws = dict(rhs.kws)
-        if 'data' in kws:
-            data = kws['data']
-            if len(rhs.args) != 0:  # pragma: no cover
+        data_arg = self._get_arg('pd.DataFrame', rhs.args, kws, 0, 'data')
+
+        arg_def = guard(get_definition, self.func_ir, data_arg)
+        if isinstance(arg_def, ir.Expr) and arg_def.op == 'build_map':
+            # check column names to be string
+            col_names = tuple(guard(find_const, self.func_ir, t[0])
+                              for t in arg_def.items)
+            if not all(isinstance(c, str) for c in col_names):
+                # TODO: support int column names?
                 raise ValueError(
-                    "only data argument suppoted in pd.DataFrame()")
-        else:
-            if len(rhs.args) != 1:  # pragma: no cover
-                raise ValueError(
-                    "data argument in pd.DataFrame() expected")
-            data = rhs.args[0]
+                    "DataFrame column names should be constant strings")
 
-        arg_def = guard(get_definition, self.func_ir, data)
-        if (not isinstance(arg_def, ir.Expr)
-                or arg_def.op != 'build_map'):  # pragma: no cover
-            raise ValueError(
-                "Invalid DataFrame() arguments (constant dict of columns expected)")
-        nodes, items = self._fix_df_arrays(arg_def.items)
-        # HACK replace build_map to avoid inference errors
-        arg_def.op = 'build_list'
-        arg_def.items = [v[0] for v in arg_def.items]
+            # create tuple with sentinel
+            sentinel_var = ir.Var(lhs.scope, mk_unique_var('sentinel'), lhs.loc)
+            tup_var = ir.Var(lhs.scope, mk_unique_var('dict_tup'), lhs.loc)
+            nodes = [ir.Assign(ir.Const(
+                '__bodo_tup', lhs.loc), sentinel_var, lhs.loc)]
+            tup_items = ([sentinel_var] + [t[0] for t in arg_def.items]
+                         + [t[1] for t in arg_def.items])
+            nodes.append(ir.Assign(
+                ir.Expr.build_tuple(tup_items, lhs.loc), tup_var, lhs.loc))
 
-        n_cols = len(items)
-        data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
-        col_args = ", ".join('col{}'.format(i) for i in range(n_cols))
+            # replace data arg with dict tuple
+            if 'data' in kws:
+                kws['data'] = tup_var
+                rhs.kws = list(kws.items())
+            else:
+                rhs.args[0] = tup_var
 
-        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
-        func_text = "def _init_df({}, index, {}):\n".format(data_args, col_args)
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), index, {})\n".format(
-            data_args, col_var)
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        _init_df = loc_vars['_init_df']
+            nodes.append(assign)
+            # HACK replace build_map to avoid inference errors
+            # TODO: don't replace if used in other places
+            arg_def.op = 'build_list'
+            arg_def.items = [v[0] for v in arg_def.items]
+            return nodes
 
-        # TODO: support index var
-        index = ir.Var(lhs.scope, mk_unique_var('df_index_none'), lhs.loc)
-        nodes.append(ir.Assign(ir.Const(None, lhs.loc), index, lhs.loc))
-        data_vars = [a[1] for a in items]
-        col_vars = [a[0] for a in items]
-        args = data_vars + [index] + col_vars
-
-        return self._replace_func(_init_df, args,
-                    pre_nodes=nodes
-                )
+        return [assign]
 
     def _handle_pd_read_csv(self, assign, lhs, rhs, label):
         """transform pd.read_csv(names=[A], dtype={'A': np.int32}) call

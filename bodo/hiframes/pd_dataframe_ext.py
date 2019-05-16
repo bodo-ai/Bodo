@@ -516,6 +516,31 @@ def set_df_column_with_reflect(typingctx, df, cname, arr):
     return sig, codegen
 
 
+@overload(pd.DataFrame)
+def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=False):
+    # TODO: support different input combinations
+    assert columns is None or columns == types.none
+
+    # first element is sentinel
+    n_cols = (len(data.types) - 1) // 2
+    assert data.types[0] == types.StringLiteral('__bodo_tup')
+    col_names =  [t.literal_value for t in data.types[1:n_cols+1]]
+
+    data_args = ", ".join('bodo.hiframes.api.fix_df_array(data[{}])'.format(i)
+                          for i in range(n_cols + 1, 2 * n_cols + 1))
+    col_args = ", ".join("'{}'".format(c) for c in col_names)
+    col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
+
+    func_text = "def _init_df(data=None, index=None, columns=None, dtype=None, copy=False):\n"
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), bodo.hiframes.api.fix_df_array(index), {})\n".format(
+        data_args, col_var)
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo}, loc_vars)
+    # print(func_text)
+    _init_df = loc_vars['_init_df']
+    return _init_df
+
+
 @overload(len)  # TODO: avoid lowering?
 def df_len_overload(df):
     if not isinstance(df, DataFrameType):
