@@ -3,7 +3,8 @@ Helper functions to enable typing.
 """
 from numba import types
 from numba.extending import register_model, models, overload
-from numba.typing.templates import infer_global, AbstractTemplate
+from numba.typing.templates import (infer_global, AbstractTemplate,
+    CallableTemplate)
 from numba.typing import signature
 from numba.targets.imputils import lower_builtin, impl_ret_borrowed
 
@@ -132,3 +133,17 @@ import itertools
 @overload(itertools.chain)
 def chain_overload():
     return lambda: [0]
+
+
+# taken from numba/typing/listdecl.py
+@infer_global(sorted)
+class SortedBuiltinLambda(CallableTemplate):
+
+    def generic(self):
+        # TODO: reverse=None
+        def typer(iterable, key=None):
+            if not isinstance(iterable, types.IterableType):
+                return
+            return types.List(iterable.iterator_type.yield_type)
+
+        return typer
