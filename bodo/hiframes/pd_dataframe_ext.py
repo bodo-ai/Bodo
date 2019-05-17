@@ -517,16 +517,25 @@ def set_df_column_with_reflect(typingctx, df, cname, arr):
 
 
 @overload(pd.DataFrame)
-def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=False):
-    # TODO: support different input combinations
+def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None,
+                                                                   copy=False):
+    # TODO: support other input combinations
+    if not (copy == False or copy == bodo.utils.utils.BooleanLiteral(False)):
+        raise ValueError("pd.DataFrame(): copy argument not supported yet")
+
+    # dtype argument
+    astype_str = ''
+    if not (dtype is None or dtype == types.none):
+        astype_str = '.astype(dtype)'
+
 
     # data is sentinel tuple (converted from dictionary)
     # first element is sentinel
     assert data.types[0] == types.StringLiteral('__bodo_tup')
     n_cols = (len(data.types) - 1) // 2
     data_keys = [t.literal_value for t in data.types[1:n_cols+1]]
-    data_arrs = ['bodo.hiframes.api.fix_df_array(data[{}])'.format(i)
-                          for i in range(n_cols + 1, 2 * n_cols + 1)]
+    data_arrs = ['bodo.hiframes.api.fix_df_array(data[{}]){}'.format(
+                 i, astype_str) for i in range(n_cols + 1, 2 * n_cols + 1)]
     data_dict =  dict(zip(data_keys, data_arrs))
 
     if columns is None or columns == types.none:
