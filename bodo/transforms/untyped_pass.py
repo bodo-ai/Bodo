@@ -392,6 +392,25 @@ class UntypedPass(object):
         if fdef == ('fromfile', 'numpy'):
             return bodo.io.np_io._handle_np_fromfile(assign, lhs, rhs)
 
+        if fdef == ('list', 'builtins') and len(rhs.args) == 1:
+            arg_val = guard(find_const, self.func_ir, rhs.args[0])
+            if isinstance(arg_val, str):
+                # a = list('AB') ->
+                # tmp = ['A', 'B']
+                # a = add_consts_to_type(tmp, 'A', 'B')
+                vals_expr = ", ".join("'{}'".format(c) for c in arg_val)
+                func_text = "def _build_f(a):\n"
+                func_text += "  return bodo.utils.typing.add_consts_to_type(a, {})\n".format(vals_expr)
+                loc_vars = {}
+                exec(func_text, {'bodo': bodo}, loc_vars)
+                _build_f = loc_vars['_build_f']
+                target = assign.target
+                tmp_target = ir.Var(
+                    target.scope, mk_unique_var(target.name), rhs.loc)
+                tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
+                return self._replace_func(
+                    _build_f, (tmp_target,), pre_nodes=[tmp_assign])
+
         # TODO: update Xenon handling code
         # if fdef == ('read_xenon', 'bodo.xenon_ext'):
         #     col_items, nodes = bodo.xenon_ext._handle_read(assign, lhs, rhs, self.func_ir)

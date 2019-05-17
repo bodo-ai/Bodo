@@ -538,6 +538,11 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None,
 
 
 def _get_df_args(data, index, columns, dtype, copy):
+    """
+    Check pd.DataFrame() arguments and return column and data arguments
+    (as text) for init_dataframe().
+    Also applies options and fixes input if necessary.
+    """
     # dtype argument
     astype_str = ''
     if not (dtype is None or dtype == types.none):

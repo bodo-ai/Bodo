@@ -57,6 +57,17 @@ class TestDataFrame(unittest.TestCase):
         n = 11
         pd.testing.assert_frame_equal(hpat_func(n), test_impl(n))
 
+    def test_create_column2(self):
+        # column arg uses list('AB')
+        def test_impl(n):
+            df = pd.DataFrame({'A': np.ones(n), 'B': np.arange(n)},
+                              columns=list('AB'))
+            return df
+
+        hpat_func = bodo.jit(test_impl)
+        n = 11
+        pd.testing.assert_frame_equal(hpat_func(n), test_impl(n))
+
     def test_create_ndarray1(self):
         def test_impl(n):
             # TODO: fix in Numba
