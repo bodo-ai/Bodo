@@ -519,15 +519,23 @@ def set_df_column_with_reflect(typingctx, df, cname, arr):
 @overload(pd.DataFrame)
 def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=False):
     # TODO: support different input combinations
-    assert columns is None or columns == types.none
 
+    # data is sentinel tuple (converted from dictionary)
     # first element is sentinel
-    n_cols = (len(data.types) - 1) // 2
     assert data.types[0] == types.StringLiteral('__bodo_tup')
-    col_names =  [t.literal_value for t in data.types[1:n_cols+1]]
+    n_cols = (len(data.types) - 1) // 2
+    data_keys = [t.literal_value for t in data.types[1:n_cols+1]]
+    data_arrs = ['bodo.hiframes.api.fix_df_array(data[{}])'.format(i)
+                          for i in range(n_cols + 1, 2 * n_cols + 1)]
+    data_dict =  dict(zip(data_keys, data_arrs))
 
-    data_args = ", ".join('bodo.hiframes.api.fix_df_array(data[{}])'.format(i)
-                          for i in range(n_cols + 1, 2 * n_cols + 1))
+    if columns is None or columns == types.none:
+        col_names = data_keys
+    else:
+        col_names = columns.consts
+
+    data_args = ", ".join(data_dict[c] for c in col_names)
+
     col_args = ", ".join("'{}'".format(c) for c in col_names)
     col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
 

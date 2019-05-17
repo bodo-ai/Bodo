@@ -28,6 +28,16 @@ class TestDataFrame(unittest.TestCase):
         n = 11
         pd.testing.assert_series_equal(hpat_func(n), test_impl(n))
 
+    def test_create_column1(self):
+        def test_impl(n):
+            df = pd.DataFrame({'A': np.ones(n), 'B': np.arange(n)},
+                              columns=['B'])
+            return df
+
+        hpat_func = bodo.jit(test_impl)
+        n = 11
+        pd.testing.assert_frame_equal(hpat_func(n), test_impl(n))
+
     def test_create_cond1(self):
         def test_impl(A, B, c):
             if c:
