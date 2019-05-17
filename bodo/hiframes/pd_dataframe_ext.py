@@ -520,34 +520,11 @@ def set_df_column_with_reflect(typingctx, df, cname, arr):
 def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None,
                                                                    copy=False):
     # TODO: support other input combinations
-    if not (copy == False or copy == bodo.utils.utils.BooleanLiteral(False)):
-        raise ValueError("pd.DataFrame(): copy argument not supported yet")
+    if not isinstance(copy, (bool, bodo.utils.utils.BooleanLiteral)):
+        raise ValueError("pd.DataFrame(): copy argument should be constant")
 
-    # dtype argument
-    astype_str = ''
-    if not (dtype is None or dtype == types.none):
-        astype_str = '.astype(dtype)'
-
-
-    # data is sentinel tuple (converted from dictionary)
-    # first element is sentinel
-    assert data.types[0] == types.StringLiteral('__bodo_tup')
-    n_cols = (len(data.types) - 1) // 2
-    data_keys = [t.literal_value for t in data.types[1:n_cols+1]]
-    data_arrs = ['bodo.hiframes.api.fix_df_array(data[{}]){}'.format(
-                 i, astype_str) for i in range(n_cols + 1, 2 * n_cols + 1)]
-    data_dict =  dict(zip(data_keys, data_arrs))
-
-    if columns is None or columns == types.none:
-        col_names = data_keys
-    else:
-        col_names = columns.consts
-
-    _fill_null_arrays(data_dict, col_names, index)
-
-    data_args = ", ".join(data_dict[c] for c in col_names)
-
-    col_args = ", ".join("'{}'".format(c) for c in col_names)
+    copy = getattr(copy, 'literal_value', copy)
+    col_args, data_args = _get_df_args(data, index, columns, dtype, copy)
     col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
 
     func_text = "def _init_df(data=None, index=None, columns=None, dtype=None, copy=False):\n"
@@ -555,9 +532,53 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None,
         data_args, col_var)
     loc_vars = {}
     exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
-    # print(func_text)
+    print(func_text)
     _init_df = loc_vars['_init_df']
     return _init_df
+
+
+def _get_df_args(data, index, columns, dtype, copy):
+    # dtype argument
+    astype_str = ''
+    if not (dtype is None or dtype == types.none):
+        astype_str = '.astype(dtype)'
+
+    # data is sentinel tuple (converted from dictionary)
+    if isinstance(data, types.Tuple):
+        # first element is sentinel
+        if not data.types[0] == types.StringLiteral('__bodo_tup'):
+            raise ValueError("pd.DataFrame tuple input data not supported yet")
+        n_cols = (len(data.types) - 1) // 2
+        data_keys = [t.literal_value for t in data.types[1:n_cols+1]]
+        data_arrs = ['bodo.hiframes.api.fix_df_array(data[{}]){}'.format(
+                    i, astype_str) for i in range(n_cols + 1, 2 * n_cols + 1)]
+        data_dict =  dict(zip(data_keys, data_arrs))
+    else:
+        # ndarray case
+        # checks for 2d and column args
+        if not (isinstance(data, types.Array) and data.ndim == 2):
+            raise ValueError("pd.DataFrame() supports constant dictionary and"
+                             "ndarray input")
+        if columns is None or columns == types.none:
+            raise ValueError("pd.DataFrame() column argument is required when"
+                             "ndarray is passed as data")
+        if copy:
+            astype_str += '.copy()'
+        n_cols = len(columns.consts)
+        data_arrs = ['data[:,{}]{}'.format(
+                     i, astype_str) for i in range(n_cols)]
+        data_dict = dict(zip(columns.consts, data_arrs))
+
+    if columns is None or columns == types.none:
+        col_names = data_dict.keys()
+    else:
+        col_names = columns.consts
+
+    _fill_null_arrays(data_dict, col_names, index)
+
+    data_args = ", ".join(data_dict[c] for c in col_names)
+    col_args = ", ".join("'{}'".format(c) for c in col_names)
+    return col_args, data_args
 
 
 def _fill_null_arrays(data_dict, col_names, index):

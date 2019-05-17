@@ -57,6 +57,32 @@ class TestDataFrame(unittest.TestCase):
         n = 11
         pd.testing.assert_frame_equal(hpat_func(n), test_impl(n))
 
+    def test_create_ndarray1(self):
+        def test_impl(n):
+            # TODO: fix in Numba
+            # data = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+            data = np.arange(9).reshape(3, 3)
+            df = pd.DataFrame(data, columns=['a', 'b', 'c'])
+            return df
+
+        hpat_func = bodo.jit(test_impl)
+        n = 11
+        pd.testing.assert_frame_equal(hpat_func(n), test_impl(n))
+
+    def test_create_ndarray_copy1(self):
+        def test_impl(data):
+            # TODO: fix in Numba
+            # data = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+            df = pd.DataFrame(data, columns=['a', 'b', 'c'], copy=True)
+            data[0] = 6
+            return df
+
+        hpat_func = bodo.jit(test_impl)
+        n = 11
+        data = np.arange(9).reshape(3, 3)
+        pd.testing.assert_frame_equal(
+            hpat_func(data.copy()), test_impl(data.copy()))
+
     def test_create_empty_column1(self):
         def test_impl(n):
             df = pd.DataFrame({'A': np.ones(n), 'B': np.arange(n)},
