@@ -28,6 +28,15 @@ class TestDataFrame(unittest.TestCase):
         n = 11
         pd.testing.assert_series_equal(hpat_func(n), test_impl(n))
 
+    def test_create_kws1(self):
+        def test_impl(n):
+            df = pd.DataFrame(data={'A': np.ones(n), 'B': np.random.ranf(n)})
+            return df.A
+
+        hpat_func = bodo.jit(test_impl)
+        n = 11
+        pd.testing.assert_series_equal(hpat_func(n), test_impl(n))
+
     def test_create_column1(self):
         def test_impl(n):
             df = pd.DataFrame({'A': np.ones(n), 'B': np.arange(n)},
