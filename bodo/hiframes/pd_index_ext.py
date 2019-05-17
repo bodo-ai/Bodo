@@ -2,9 +2,9 @@ import operator
 import pandas as pd
 import numpy as np
 import numba
-from numba import types
+from numba import types, cgutils
 from numba.extending import (models, register_model, lower_cast, infer_getattr,
-    type_callable, infer, overload, make_attribute_wrapper, box)
+    type_callable, infer, overload, make_attribute_wrapper, box, intrinsic)
 from numba.typing.templates import (infer_global, AbstractTemplate, signature,
     AttributeTemplate, bound_function)
 from numba.targets.boxing import box_array
@@ -215,3 +215,118 @@ def resolve_timedelta_field(self, ary):
 
 for field in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
     setattr(TimedeltaIndexAttribute, "resolve_" + field, resolve_timedelta_field)
+
+
+# ---------------- RangeIndex -------------------
+
+
+# pd.RangeIndex(): simply keep start/stop/step
+class RangeIndexType(types.IterableType):
+    """type class for pd.RangeIndex() objects.
+    """
+    def __init__(self):
+        super(RangeIndexType, self).__init__(
+            name="RangeIndexType()")
+
+    @property
+    def iterator_type(self):
+        return types.iterators.RangeIteratorType(types.int64)
+
+
+range_index_type = RangeIndexType()
+
+
+@register_model(RangeIndexType)
+class RangeIndexModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [
+            ('start', types.int64),
+            ('stop', types.int64),
+            ('step', types.int64),
+        ]
+        super(RangeIndexModel, self).__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(RangeIndexType, 'start', '_start')
+make_attribute_wrapper(RangeIndexType, 'stop', '_stop')
+make_attribute_wrapper(RangeIndexType, 'step', '_step')
+
+
+@box(RangeIndexType)
+def box_range_index(typ, val, c):
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    class_obj = c.pyapi.import_module_noblock(mod_name)
+    range_val = cgutils.create_struct_proxy(range_index_type)(
+            c.context, c.builder, val)
+    start = c.pyapi.from_native_value(types.int64, range_val.start)
+    stop = c.pyapi.from_native_value(types.int64, range_val.stop)
+    step = c.pyapi.from_native_value(types.int64, range_val.step)
+    range_obj = c.pyapi.call_method(
+        class_obj, "RangeIndex", (start, stop, step))
+    c.pyapi.decref(class_obj)
+    return range_obj
+
+
+@intrinsic
+def init_range_index(typingctx, start, stop, step=None):
+    """Create RangeIndex object
+    """
+
+    def codegen(context, builder, signature, args):
+        assert len(args) == 3
+        range_val = cgutils.create_struct_proxy(range_index_type)(
+            context, builder)
+        range_val.start = args[0]
+        range_val.stop = args[1]
+        range_val.step = args[2]
+        return range_val._getvalue()
+
+    return range_index_type(start, stop, step), codegen
+
+
+@overload(pd.RangeIndex)
+def range_index_overload(start=None, stop=None, step=None, dtype=None,
+                         copy=False, name=None, fastpath=None):
+
+    def _is_none(val):
+        return val is None or val == types.none
+
+    # validate the arguments
+    def _ensure_int_or_none(value, field):
+        msg = ("RangeIndex(...) must be called with integers,"
+                " {value} was passed for {field}")
+        if (not _is_none(value)
+                and not isinstance(value, types.IntegerLiteral)
+                and not value == types.int64):
+            raise TypeError(msg.format(value=value,
+                                        field=field))
+
+    _ensure_int_or_none(start, 'start')
+    _ensure_int_or_none(stop, 'stop')
+    _ensure_int_or_none(step, 'step')
+
+    # all none error case
+    if _is_none(start) and _is_none(stop) and _is_none(step):
+        msg = "RangeIndex(...) must be called with integers"
+        raise TypeError(msg)
+
+    # codegen the init function
+    _start = 'start'
+    _stop = 'stop'
+    _step = 'step'
+
+    if _is_none(start):
+        _start = '0'
+    if _is_none(stop):
+        _stop = 'start'
+        _start = '0'
+    if _is_none(step):
+        _step = '1'
+
+    func_text = "def _pd_range_index_imp(start=None, stop=None, step=None, dtype=None, copy=False, name=None, fastpath=None):\n"
+    func_text += "  return init_range_index({}, {}, {})\n".format(_start, _stop, _step)
+    loc_vars = {}
+    exec(func_text, {'init_range_index': init_range_index}, loc_vars)
+    # print(func_text)
+    _pd_range_index_imp = loc_vars['_pd_range_index_imp']
+    return _pd_range_index_imp
