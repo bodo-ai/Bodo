@@ -534,6 +534,8 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     else:
         col_names = columns.consts
 
+    _fill_null_arrays(data_dict, col_names, index)
+
     data_args = ", ".join(data_dict[c] for c in col_names)
 
     col_args = ", ".join("'{}'".format(c) for c in col_names)
@@ -543,10 +545,39 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), bodo.hiframes.api.fix_df_array(index), {})\n".format(
         data_args, col_var)
     loc_vars = {}
-    exec(func_text, {'bodo': bodo}, loc_vars)
+    exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
     # print(func_text)
     _init_df = loc_vars['_init_df']
     return _init_df
+
+
+def _fill_null_arrays(data_dict, col_names, index):
+    """Fills data_dict with Null arrays if there are columns that are not
+    available in data_dict.
+    """
+    # no null array needed
+    if all(c in data_dict for c in col_names):
+        return
+
+    # get null array, needs index or an array available for length
+    df_len = None
+    for c in col_names:
+        if c in data_dict:
+            df_len = "len({})".format(data_dict[c])
+            break
+
+    if df_len is None and index is not None and index != types.none:
+        df_len = 'len(index)'  # TODO: test
+
+    assert df_len is not None, "empty dataframe with null arrays"  # TODO
+
+    # TODO: object array with NaN (use StringArray?)
+    null_arr = 'np.full({}, np.nan)'.format(df_len)
+    for c in col_names:
+        if c not in data_dict:
+            data_dict[c] = null_arr
+
+    return
 
 
 @overload(len)  # TODO: avoid lowering?
