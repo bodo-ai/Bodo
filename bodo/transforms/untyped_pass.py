@@ -3,7 +3,6 @@ transforms the IR to remove features that Numba's type inference cannot support
 such as non-uniform dictionary input of `pd.DataFrame({})`.
 """
 import warnings
-from collections import namedtuple
 import itertools
 import pandas as pd
 import numpy as np
@@ -11,17 +10,13 @@ import math
 
 import numba
 from numba import ir, ir_utils, types
-from numba import compiler as numba_compiler
 from numba.targets.registry import CPUDispatcher
 
-from numba.ir_utils import (mk_unique_var, replace_vars_inner, find_topo_order,
-                            dprint_func_ir, remove_dead, mk_alloc, remove_dels,
-                            get_name_var_table, replace_var_names,
-                            add_offset_to_labels, get_ir_of_code, find_const,
-                            compile_to_numba_ir, replace_arg_nodes,
-                            find_callname, guard, require, get_definition,
-                            build_definitions, replace_vars_stmt,
-                            replace_vars_inner, find_build_sequence)
+from numba.ir_utils import (
+    mk_unique_var, find_topo_order, dprint_func_ir, remove_dead, remove_dels,
+    replace_var_names, find_const, compile_to_numba_ir, replace_arg_nodes,
+    find_callname, guard, require, get_definition, build_definitions,
+    replace_vars_stmt, find_build_sequence)
 
 from numba.inline_closurecall import inline_closure_call
 from numba.analysis import compute_cfg_from_blocks
@@ -31,10 +26,9 @@ from bodo import config
 import bodo.io
 from bodo.io import pio, parquet_pio
 from bodo.io.parquet_pio import ParquetHandler
-from bodo.utils.utils import (get_constant, NOT_CONSTANT, debug_prints,
+from bodo.utils.utils import (
     inline_new_blocks, ReplaceFunc, is_call, is_assign)
 import bodo.hiframes.api
-from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 import bodo.ir
 import bodo.ir.aggregate
@@ -43,13 +37,8 @@ import bodo.ir.join
 import bodo.ir.sort
 from bodo.ir import csv_ext
 
-
-from bodo.hiframes.pd_timestamp_ext import (datetime_date_type,
-                                    datetime_date_to_int, int_to_datetime_date)
-from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
-from bodo.hiframes.rolling import get_rolling_setup_args, supported_rolling_funcs
-from bodo.ir.aggregate import get_agg_func, supported_agg_funcs
+from bodo.hiframes.pd_categorical_ext import (
+    PDCategoricalDtype, CategoricalArray)
 import bodo.hiframes.pd_dataframe_ext
 
 

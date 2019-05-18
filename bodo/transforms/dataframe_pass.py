@@ -4,36 +4,29 @@ as much as possible to provide implementation and enable optimization.
 Creates specialized IR nodes for complex operations like Join.
 """
 import operator
-from collections import defaultdict, namedtuple
+from collections import namedtuple
 import numpy as np
 import pandas as pd
 import warnings
 
 import numba
 from numba import ir, ir_utils, types
-from numba.ir_utils import (replace_arg_nodes, compile_to_numba_ir,
-                            find_topo_order, gen_np_call, get_definition, guard,
-                            find_callname, mk_alloc, find_const, is_setitem,
-                            is_getitem, mk_unique_var, dprint_func_ir,
-                            build_definitions, find_build_sequence,
-                            GuardException, compute_cfg_from_blocks)
+from numba.ir_utils import (
+    replace_arg_nodes, compile_to_numba_ir, find_topo_order, get_definition,
+    guard, find_callname, find_const, mk_unique_var, dprint_func_ir,
+    build_definitions, find_build_sequence, GuardException,
+    compute_cfg_from_blocks)
 from numba.inline_closurecall import inline_closure_call
-from numba.typing.templates import Signature, bound_function, signature
-from numba.typing.arraydecl import ArrayAttribute
 from numba.extending import overload
-from numba.typing.templates import infer_global, AbstractTemplate, signature
+from numba.typing.templates import signature
+
 import bodo
 from bodo import hiframes
 from bodo.utils.utils import (debug_prints, inline_new_blocks, ReplaceFunc,
     is_whole_slice, is_array, is_assign, sanitize_varname)
-from bodo.libs.str_ext import string_type
-from bodo.libs.str_arr_ext import (string_array_type, StringArrayType,
-    is_str_arr_typ, pre_alloc_string_array)
-from bodo.io.pio_api import h5dataset_type
-from bodo.hiframes.rolling import get_rolling_setup_args
 from bodo.hiframes.pd_dataframe_ext import (DataFrameType, DataFrameLocType,
     DataFrameILocType, DataFrameIatType)
-from bodo.hiframes.pd_series_ext import SeriesType, is_series_type
+from bodo.hiframes.pd_series_ext import SeriesType
 import bodo.hiframes.pd_groupby_ext
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 import bodo.hiframes.pd_rolling_ext

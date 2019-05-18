@@ -60,7 +60,7 @@ class BodoPipeline(numba.compiler.BasePipeline):
             pm.add_stage(self.stage_parfor_pass, "convert to parfors")
         pm.add_stage(self.stage_distributed_pass, "convert to distributed")
         pm.add_stage(self.stage_ir_legalization,
-                "ensure IR is legal prior to lowering")
+                     "ensure IR is legal prior to lowering")
         self.add_lowering_stage(pm)
         self.add_cleanup_stage(pm)
 
@@ -79,7 +79,7 @@ class BodoPipeline(numba.compiler.BasePipeline):
         # Ensure we have an IR and type information.
         assert self.func_ir
         df_pass = UntypedPass(self.func_ir, self.typingctx,
-                           self.args, self.locals, self.metadata)
+                              self.args, self.locals, self.metadata)
         df_pass.run()
 
     def stage_repeat_inline_closure(self):
@@ -110,8 +110,8 @@ class BodoPipeline(numba.compiler.BasePipeline):
         # Ensure we have an IR and type information.
         assert self.func_ir
         df_pass = SeriesPass(self.func_ir, self.typingctx,
-                                self.type_annotation.typemap,
-                                self.type_annotation.calltypes)
+                             self.type_annotation.typemap,
+                             self.type_annotation.calltypes)
         df_pass.run()
 
     def stage_dataframe_pass(self):
@@ -150,7 +150,7 @@ class BodoPipelineSeq(BodoPipeline):
         # pm.add_stage(self.stage_distributed_pass, "convert to distributed")
         pm.add_stage(self.stage_lower_parfor_seq, "parfor seq lower")
         pm.add_stage(self.stage_ir_legalization,
-                "ensure IR is legal prior to lowering")
+                     "ensure IR is legal prior to lowering")
         self.add_lowering_stage(pm)
         self.add_cleanup_stage(pm)
 
@@ -164,10 +164,9 @@ def inline_calls(func_ir, _locals):
     """
     work_list = list(func_ir.blocks.items())
     while work_list:
-        label, block = work_list.pop()
+        _label, block = work_list.pop()
         for i, instr in enumerate(block.body):
             if isinstance(instr, ir.Assign):
-                lhs = instr.target
                 expr = instr.value
                 if isinstance(expr, ir.Expr) and expr.op == 'call':
                     func_def = guard(get_definition, func_ir, expr.func)
@@ -182,10 +181,12 @@ def inline_calls(func_ir, _locals):
                         # is merged in Numba
                         if isinstance(inline_out, tuple):
                             var_dict = inline_out[1]
-                            # TODO: update '##distributed' and '##threaded' in _locals
+                            # TODO: update '##distributed' and '##threaded'
+                            # in _locals
                             _locals.update((var_dict[k].name, v)
-                                        for k,v in func_def.value.locals.items()
-                                        if k in var_dict)
+                                           for k, v in
+                                           func_def.value.locals.items()
+                                           if k in var_dict)
                         # for block in new_blocks:
                         #     work_list.append(block)
                         # current block is modified, skip the rest
