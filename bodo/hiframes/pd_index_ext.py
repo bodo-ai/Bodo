@@ -4,7 +4,8 @@ import numpy as np
 import numba
 from numba import types, cgutils
 from numba.extending import (models, register_model, lower_cast, infer_getattr,
-    type_callable, infer, overload, make_attribute_wrapper, box, intrinsic)
+    type_callable, infer, overload, make_attribute_wrapper, box, intrinsic,
+    typeof_impl, unbox, NativeValue)
 from numba.typing.templates import (infer_global, AbstractTemplate, signature,
     AttributeTemplate, bound_function)
 from numba.targets.boxing import box_array
@@ -236,6 +237,11 @@ class RangeIndexType(types.IterableType):
 range_index_type = RangeIndexType()
 
 
+@typeof_impl.register(pd.RangeIndex)
+def typeof_pd_range_index(val, c):
+    return range_index_type
+
+
 @register_model(RangeIndexType)
 class RangeIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
@@ -285,6 +291,25 @@ def init_range_index(typingctx, start, stop, step=None):
         return range_val._getvalue()
 
     return range_index_type(start, stop, step), codegen
+
+
+@unbox(RangeIndexType)
+def unbox_range_index(typ, val, c):
+    # get start/stop/step attributes
+    start = c.pyapi.to_native_value(
+        types.int64, c.pyapi.object_getattr_string(val, '_start')).value
+    stop = c.pyapi.to_native_value(
+        types.int64, c.pyapi.object_getattr_string(val, '_stop')).value
+    step = c.pyapi.to_native_value(
+        types.int64, c.pyapi.object_getattr_string(val, '_step')).value
+
+    # create range struct
+    range_val = cgutils.create_struct_proxy(range_index_type)(
+            c.context, c.builder)
+    range_val.start = start
+    range_val.stop = stop
+    range_val.step = step
+    return NativeValue(range_val._getvalue())
 
 
 @overload(pd.RangeIndex)
