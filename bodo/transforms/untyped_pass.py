@@ -470,8 +470,10 @@ class UntypedPass(object):
         Enable typing for dictionary data arg to pd.DataFrame({'A': A}) call.
         Converts constant dictionary to tuple with sentinel if present.
         """
+        nodes = [assign]
         kws = dict(rhs.kws)
         data_arg = self._get_arg('pd.DataFrame', rhs.args, kws, 0, 'data')
+        index_arg = self._get_arg('pd.DataFrame', rhs.args, kws, 1, 'index', '')
 
         arg_def = guard(get_definition, self.func_ir, data_arg)
         if isinstance(arg_def, ir.Expr) and arg_def.op == 'build_map':
@@ -486,11 +488,11 @@ class UntypedPass(object):
             # create tuple with sentinel
             sentinel_var = ir.Var(lhs.scope, mk_unique_var('sentinel'), lhs.loc)
             tup_var = ir.Var(lhs.scope, mk_unique_var('dict_tup'), lhs.loc)
-            nodes = [ir.Assign(ir.Const(
+            new_nodes = [ir.Assign(ir.Const(
                 '__bodo_tup', lhs.loc), sentinel_var, lhs.loc)]
             tup_items = ([sentinel_var] + [t[0] for t in arg_def.items]
                          + [t[1] for t in arg_def.items])
-            nodes.append(ir.Assign(
+            new_nodes.append(ir.Assign(
                 ir.Expr.build_tuple(tup_items, lhs.loc), tup_var, lhs.loc))
 
             # replace data arg with dict tuple
@@ -500,14 +502,33 @@ class UntypedPass(object):
             else:
                 rhs.args[0] = tup_var
 
-            nodes.append(assign)
+            nodes = new_nodes + nodes
             # HACK replace build_map to avoid inference errors
             # TODO: don't replace if used in other places
             arg_def.op = 'build_list'
             arg_def.items = [v[0] for v in arg_def.items]
-            return nodes
 
-        return [assign]
+        # replace range() with pd.RangeIndex() for index argument
+        arg_def = guard(get_definition, self.func_ir, index_arg)
+        if is_call(arg_def) and guard(
+                find_callname, self.func_ir, arg_def) == ('range', 'builtins'):
+            # gen pd.RangeIndex() call
+            def _call_range_index():
+                return pd.RangeIndex()
+            f_block = compile_to_numba_ir(
+                _call_range_index, {'pd': pd}).blocks.popitem()[1]
+            new_nodes = f_block.body[:-2]
+            new_nodes[-1].value.args = arg_def.args
+            new_index = new_nodes[-1].target
+            # replace index arg
+            if 'index' in kws:
+                kws['index'] = new_index
+                rhs.kws = list(kws.items())
+            else:
+                rhs.args[1] = new_index
+            nodes = new_nodes + nodes
+
+        return nodes
 
     def _handle_pd_read_csv(self, assign, lhs, rhs, label):
         """transform pd.read_csv(names=[A], dtype={'A': np.int32}) call

@@ -705,7 +705,9 @@ def fix_df_array_overload(column):
 
     # column is array if not list
     assert isinstance(column, (types.Array, StringArrayType, SeriesType,
-                                types.NoneType))
+                                types.NoneType,
+                                # TODO: use separate function for index arg
+                                bodo.hiframes.pd_index_ext.RangeIndexType))
     def fix_df_array_impl(column):  # pragma: no cover
         return column
     # FIXME: np.array() for everything else?
