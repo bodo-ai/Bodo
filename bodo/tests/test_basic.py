@@ -58,9 +58,9 @@ class TestBasic(BaseTest):
             C = A[B]
             return C.sum()
 
-        hpat_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(test_impl)
         n = 128
-        np.testing.assert_allclose(hpat_func(n), test_impl(n))
+        np.testing.assert_allclose(bodo_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
@@ -70,9 +70,9 @@ class TestBasic(BaseTest):
             A[0] = 30
             return A.sum()
 
-        hpat_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(test_impl)
         n = 128
-        np.testing.assert_allclose(hpat_func(n), test_impl(n))
+        np.testing.assert_allclose(bodo_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
@@ -82,9 +82,9 @@ class TestBasic(BaseTest):
             A[0:4] = 30
             return A.sum()
 
-        hpat_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(test_impl)
         n = 128
-        np.testing.assert_allclose(hpat_func(n), test_impl(n))
+        np.testing.assert_allclose(bodo_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
@@ -92,9 +92,9 @@ class TestBasic(BaseTest):
         def test_impl(N):
             return np.ones(N).astype(np.int32).sum()
 
-        hpat_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(test_impl)
         n = 128
-        np.testing.assert_allclose(hpat_func(n), test_impl(n))
+        np.testing.assert_allclose(bodo_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
@@ -102,18 +102,18 @@ class TestBasic(BaseTest):
         def test_impl(N):
             return np.ones(N).shape[0]
 
-        hpat_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(test_impl)
         n = 128
-        np.testing.assert_allclose(hpat_func(n), test_impl(n))
+        np.testing.assert_allclose(bodo_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
         # def test_impl(N):
         #     return np.ones((N, 3, 4)).shape
         #
-        # hpat_func = bodo.jit(test_impl)
+        # bodo_func = bodo.jit(test_impl)
         # n = 128
-        # np.testing.assert_allclose(hpat_func(n), test_impl(n))
+        # np.testing.assert_allclose(bodo_func(n), test_impl(n))
         # self.assertEqual(count_array_REPs(), 0)
         # self.assertEqual(count_parfor_REPs(), 0)
 
@@ -125,9 +125,9 @@ class TestBasic(BaseTest):
             B += A
             return B.sum()
 
-        hpat_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(test_impl)
         n = 128
-        np.testing.assert_allclose(hpat_func(n), test_impl(n))
+        np.testing.assert_allclose(bodo_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
@@ -138,9 +138,9 @@ class TestBasic(BaseTest):
             C = A[B, 2]
             return C.sum()
 
-        hpat_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(test_impl)
         n = 128
-        np.testing.assert_allclose(hpat_func(n), test_impl(n))
+        np.testing.assert_allclose(bodo_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
@@ -150,9 +150,9 @@ class TestBasic(BaseTest):
             X[:,3] = (X[:,3]) / (np.max(X[:,3]) - np.min(X[:,3]))
             return X.sum()
 
-        hpat_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(test_impl)
         n = 128
-        np.testing.assert_allclose(hpat_func(n), test_impl(n))
+        np.testing.assert_allclose(bodo_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
@@ -162,9 +162,9 @@ class TestBasic(BaseTest):
             B = A[::7]
             return B.sum()
 
-        hpat_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(test_impl)
         n = 128
-        np.testing.assert_allclose(hpat_func(n), test_impl(n))
+        np.testing.assert_allclose(bodo_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
@@ -198,9 +198,9 @@ class TestBasic(BaseTest):
             exec(func_text, {'np': np}, loc_vars)
             test_impl = loc_vars['f']
 
-            hpat_func = bodo.jit(test_impl)
+            bodo_func = bodo.jit(test_impl)
             n = 21  # XXX arange() on float32 has overflow issues on large n
-            np.testing.assert_almost_equal(hpat_func(n), test_impl(n))
+            np.testing.assert_almost_equal(bodo_func(n), test_impl(n))
             self.assertEqual(count_array_REPs(), 0)
             self.assertEqual(count_parfor_REPs(), 0)
 
@@ -220,13 +220,13 @@ class TestBasic(BaseTest):
             exec(func_text, {'np': np}, loc_vars)
             test_impl = loc_vars['f']
 
-            hpat_func = bodo.jit(locals={'A:input':'distributed'})(test_impl)
+            bodo_func = bodo.jit(locals={'A:input':'distributed'})(test_impl)
             n = 21
             start, end = get_start_end(n)
             np.random.seed(0)
             A = np.random.randint(0, 10, n).astype(dtype)
             np.testing.assert_almost_equal(
-                hpat_func(A[start:end]), test_impl(A), decimal=3)
+                bodo_func(A[start:end]), test_impl(A), decimal=3)
             self.assertEqual(count_array_REPs(), 0)
             self.assertEqual(count_parfor_REPs(), 0)
 
@@ -247,13 +247,13 @@ class TestBasic(BaseTest):
             exec(func_text, {'np': np}, loc_vars)
             test_impl = loc_vars['f']
 
-            hpat_func = bodo.jit(locals={'A:input':'distributed'})(test_impl)
+            bodo_func = bodo.jit(locals={'A:input':'distributed'})(test_impl)
             n = 21
             start, end = get_start_end(n)
             np.random.seed(0)
             A = np.random.randint(0, 10, n).astype(dtype)
             np.testing.assert_almost_equal(
-                hpat_func(A[start:end]), test_impl(A), decimal=3,
+                bodo_func(A[start:end]), test_impl(A), decimal=3,
                 err_msg="{} on {}".format(func, dtype))
             self.assertEqual(count_array_REPs(), 0)
             self.assertEqual(count_parfor_REPs(), 0)
@@ -273,9 +273,9 @@ class TestBasic(BaseTest):
             exec(func_text, {'np': np, 'numba': numba}, loc_vars)
             test_impl = loc_vars['f']
 
-            hpat_func = bodo.jit(test_impl)
+            bodo_func = bodo.jit(test_impl)
             n = 128
-            np.testing.assert_allclose(hpat_func(n), test_impl(n))
+            np.testing.assert_allclose(bodo_func(n), test_impl(n))
             self.assertEqual(count_array_OneDs(), 0)
             self.assertEqual(count_parfor_OneDs(), 1)
 
@@ -284,14 +284,14 @@ class TestBasic(BaseTest):
             A = np.arange(N)
             return A
 
-        hpat_func = bodo.jit(locals={'A:return': 'distributed'})(test_impl)
+        bodo_func = bodo.jit(locals={'A:return': 'distributed'})(test_impl)
         n = 128
         dist_sum = bodo.jit(
             lambda a: bodo.libs.distributed_api.dist_reduce(
                 a, np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)))
         dist_sum(1)  # run to compile
         np.testing.assert_allclose(
-            dist_sum(hpat_func(n).sum()), test_impl(n).sum())
+            dist_sum(bodo_func(n).sum()), test_impl(n).sum())
         self.assertEqual(count_array_OneDs(), 1)
         self.assertEqual(count_parfor_OneDs(), 1)
 
@@ -301,7 +301,7 @@ class TestBasic(BaseTest):
             B = np.arange(N)+1.5
             return A, B
 
-        hpat_func = bodo.jit(locals={'A:return': 'distributed',
+        bodo_func = bodo.jit(locals={'A:return': 'distributed',
                                      'B:return': 'distributed'})(test_impl)
         n = 128
         dist_sum = bodo.jit(
@@ -309,7 +309,7 @@ class TestBasic(BaseTest):
                 a, np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)))
         dist_sum(1.0)  # run to compile
         np.testing.assert_allclose(
-            dist_sum((hpat_func(n)[0] + hpat_func(n)[1]).sum()),
+            dist_sum((bodo_func(n)[0] + bodo_func(n)[1]).sum()),
                     (test_impl(n)[0] + test_impl(n)[1]).sum())
         self.assertEqual(count_array_OneDs(), 2)
         self.assertEqual(count_parfor_OneDs(), 2)
@@ -318,10 +318,10 @@ class TestBasic(BaseTest):
         def test_impl(A):
             return len(A)
 
-        hpat_func = bodo.jit(distributed=['A'])(test_impl)
+        bodo_func = bodo.jit(distributed=['A'])(test_impl)
         n = 128
         arr = np.ones(n)
-        np.testing.assert_allclose(hpat_func(arr) / self.num_ranks, test_impl(arr))
+        np.testing.assert_allclose(bodo_func(arr) / self.num_ranks, test_impl(arr))
         self.assertEqual(count_array_OneDs(), 1)
 
     def test_rebalance(self):
@@ -333,9 +333,9 @@ class TestBasic(BaseTest):
 
         try:
             bodo.transforms.distributed_analysis.auto_rebalance = True
-            hpat_func = bodo.jit(test_impl)
+            bodo_func = bodo.jit(test_impl)
             n = 128
-            np.testing.assert_allclose(hpat_func(n), test_impl(n))
+            np.testing.assert_allclose(bodo_func(n), test_impl(n))
             self.assertEqual(count_array_OneDs(), 3)
             self.assertEqual(count_parfor_OneDs(), 2)
         finally:
@@ -352,12 +352,12 @@ class TestBasic(BaseTest):
 
         try:
             bodo.transforms.distributed_analysis.auto_rebalance = True
-            hpat_func = bodo.jit(test_impl)
+            bodo_func = bodo.jit(test_impl)
             n = 128
-            np.testing.assert_allclose(hpat_func(n), test_impl(n))
+            np.testing.assert_allclose(bodo_func(n), test_impl(n))
             self.assertEqual(count_array_OneDs(), 4)
             self.assertEqual(count_parfor_OneDs(), 2)
-            self.assertIn('allgather', list(hpat_func.inspect_llvm().values())[0])
+            self.assertIn('allgather', list(bodo_func.inspect_llvm().values())[0])
         finally:
             bodo.transforms.distributed_analysis.auto_rebalance = False
 
@@ -368,9 +368,9 @@ class TestBasic(BaseTest):
             C = A.transpose(0, 2, 1)
             return B.sum() + C.sum()
 
-        hpat_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(test_impl)
         n = 128
-        np.testing.assert_allclose(hpat_func(n), test_impl(n))
+        np.testing.assert_allclose(bodo_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
