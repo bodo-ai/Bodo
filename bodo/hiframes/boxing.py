@@ -44,7 +44,17 @@ def typeof_pd_dataframe(val, c):
     col_names = tuple(val.columns.tolist())
     # TODO: support other types like string and timestamp
     col_types = get_hiframes_dtypes(val)
-    return DataFrameType(col_types, None, col_names, True)
+
+    # special case: using None for Range(0, size) to enable optimization
+    # TODO: use proper size inference for RangeIndex and remove this
+    if (isinstance(val.index, pd.RangeIndex)
+            and val.index._start == 0
+            and val.index._step == 1):
+        index_typ = types.none
+    else:
+        index_typ = numba.typeof(val.index)
+
+    return DataFrameType(col_types, index_typ, col_names, True)
 
 
 # register series types for import
@@ -58,6 +68,15 @@ def typeof_pd_str_series(val, c):
 
 @typeof_impl.register(pd.Index)
 def typeof_pd_index(val, c):
+    # catch-all for non-supportef Index types
+    # RangeIndex is directly supported (TODO: make sure this is not called)
+
+    # int/float indices are supported as regular Numpy arrays
+    # TODO: actual index types for these
+    if isinstance(val, (pd.Int64Index, pd.UInt64Index, pd.Float64Index)):
+        return numba.typeof(val.values)
+
+    # TODO: fix
     if len(val) > 0 and isinstance(val[0], datetime.date):
         return SeriesType(datetime_date_type)
     else:
@@ -82,10 +101,17 @@ def unbox_dataframe(typ, val, c):
     # TODO: support unboxing index
     if typ.index == types.none:
         index_val = c.context.get_constant(types.none, None)
+    elif typ.index == bodo.hiframes.pd_index_ext.range_index_type:
+        # TODO: more Index classes
+        ind_obj = c.pyapi.object_getattr_string(val, 'index')
+        index_val = c.pyapi.to_native_value(typ.index, ind_obj).value
+        c.pyapi.decref(ind_obj)
     else:
+        # treating numerical index like Numpy arrays for now
+        # TODO: proper index types
         ind_obj = c.pyapi.object_getattr_string(val, 'index')
         arr_obj = c.pyapi.object_getattr_string(ind_obj, 'values')
-        index_val = unbox_array(typ.index, arr_obj, c).value
+        index_val = c.pyapi.to_native_value(typ.index, arr_obj).value
         c.pyapi.decref(ind_obj)
         c.pyapi.decref(arr_obj)
 
@@ -242,7 +268,6 @@ def box_dataframe(typ, val, c):
         pyapi.object_setattr_string(df_obj, 'index', arr_obj)
 
     pyapi.decref(class_obj)
-    #pyapi.gil_release(gil_state)    # release GIL
     return df_obj
 
 
@@ -348,6 +373,8 @@ def box_series(typ, val, c):
 
     if typ.index is types.none:
         index = c.pyapi.make_none()
+    elif typ.index == bodo.hiframes.pd_index_ext.range_index_type:
+        index = c.pyapi.from_native_value(typ.index, series_payload.index)
     else:
         # TODO: index-specific boxing like RangeIndex() etc.
         index = _box_series_data(

@@ -3,11 +3,49 @@ import random
 import string
 import pandas as pd
 import numpy as np
+import pytest
 
 import numba
 import bodo
 from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_start_end)
+
+
+# pytest tests
+@pytest.mark.parametrize('df', [
+    pd.DataFrame({'a': [-1, 1, 2]}),    # int
+    pd.DataFrame({'a': [-1, 1, 2]}, dtype=np.int8),  # int8
+    pd.DataFrame({'a': [-1.1, 1.1, 2.2]}),  # float
+    pd.DataFrame({'a': [-1.1, 1.1, 2.2]}, dtype=np.float32),  # float32
+    pd.DataFrame({'a': [False, True]}),  # bool
+    pd.DataFrame({'a': ['ABC', np.nan, 'C D']}),  # string
+    pd.DataFrame({'a': [-1, 1, 2]}, range(1, 4)),  # range index
+    pd.DataFrame({'a': [-1, 1, 2]}, [3, 6, 7]),  # int index
+    pd.DataFrame({'a': [-1, 1, 2]}, [1.1, -2.1, 7.1]),  # float index
+    # TODO: DatetimeIndex, CategoricalIndex, TimeDeltaIndex, PeriodIndex
+])
+def test_unbox_df(df):
+    # just unbox
+    def impl(df_arg):
+        return True
+
+    bodo_func = bodo.jit(impl)
+    assert bodo_func(df)
+
+    # unbox and box
+    def impl2(df_arg):
+        return df_arg
+
+    bodo_func = bodo.jit(impl2)
+    pd.testing.assert_frame_equal(bodo_func(df), impl2(df))
+
+    # unbox and return Series data with index
+    # (previous test can box Index unintentionally)
+    def impl3(df_arg):
+        return df_arg.a
+
+    bodo_func = bodo.jit(impl3)
+    pd.testing.assert_series_equal(bodo_func(df), impl3(df))
 
 
 @bodo.jit
@@ -16,7 +54,9 @@ def inner_get_column(df):
     # df2['D'] = np.ones(3)
     return df.A
 
+
 COL_IND = 0
+
 
 class TestDataFrame(unittest.TestCase):
     def test_create1(self):

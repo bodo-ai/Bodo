@@ -230,14 +230,16 @@ class DataFramePass(object):
                             df_var.name, index))
 
                 arr = self._get_dataframe_data(df_var, index, nodes)
-                # TODO: series index
+                df_index = self._get_dataframe_index(df_var, nodes)
                 name_str = index
                 name_var = ir.Var(lhs.scope, mk_unique_var('S_name'), lhs.loc)
                 self.typemap[name_var.name] = types.StringLiteral(name_str)
                 nodes.append(ir.Assign(ir.Const(name_str, lhs.loc), name_var, lhs.loc))
                 return  self._replace_func(
-                    lambda A, name: bodo.hiframes.api.init_series(A, None, name),
-                    (arr, name_var), pre_nodes=nodes)
+                    lambda A, df_index, name: bodo.hiframes.api.init_series(
+                        A, df_index, name),
+                    (arr, df_index, name_var),
+                    pre_nodes=nodes)
 
             # df[['C1', 'C2']]
             if isinstance(index, list) and all(isinstance(c, str)
