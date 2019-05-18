@@ -1195,11 +1195,11 @@ class DataFramePass(object):
 
         col_args = ", ".join("'{}'".format(c) for c in df_typ.columns)
         col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
-        func_text = "def _pct_change_impl({}, n):\n".format(", ".join(data_args))
+        func_text = "def _pct_change_impl({}, df_index, n):\n".format(", ".join(data_args))
         for d in data_args:
             func_text += "  {} = bodo.hiframes.api.init_series({})\n".format(d+'_S', d)
             func_text += "  {} = bodo.hiframes.api.get_series_data({}.pct_change(n))\n".format(d+'_O', d+'_S')
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), df_index, {})\n".format(
             ", ".join(d+'_O' for d in data_args),
             col_var)
         loc_vars = {}
@@ -1208,7 +1208,8 @@ class DataFramePass(object):
 
         nodes = []
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
-        return self._replace_func(_pct_change_impl, col_vars + [periods], pre_nodes=nodes)
+        df_index = self._get_dataframe_index(df_var, nodes)
+        return self._replace_func(_pct_change_impl, col_vars + [df_index, periods], pre_nodes=nodes)
 
     def _run_call_col_reduce(self, assign, lhs, rhs, func_name):
         """support functions that reduce columns to single output and create

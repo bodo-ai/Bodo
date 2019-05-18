@@ -716,7 +716,8 @@ class TestDataFrame(unittest.TestCase):
 
     def test_pct_change1(self):
         def test_impl(n):
-            df = pd.DataFrame({'A': np.arange(n)+1.0, 'B': np.arange(n)+1})
+            df = pd.DataFrame({'A': np.arange(n)+1.0, 'B': np.arange(n)+1},
+                              np.arange(n)+1.3)
             return df.pct_change(3)
 
         hpat_func = bodo.jit(test_impl)
