@@ -238,7 +238,7 @@ def box_dataframe(typ, val, c):
     # set df.index if necessary
     if typ.index != types.none:
         arr_obj = c.pyapi.from_native_value(
-            typ.index, dataframe_payload.index, c)
+            typ.index, dataframe_payload.index, c.env_manager)
         pyapi.object_setattr_string(df_obj, 'index', arr_obj)
 
     pyapi.decref(class_obj)
@@ -354,7 +354,8 @@ def box_series(typ, val, c):
             typ.index.dtype, typ.index, series_payload.index, c)
 
     if typ.is_named:
-        name = c.pyapi.from_native_value(string_type, series_payload.name)
+        name = c.pyapi.from_native_value(
+            string_type, series_payload.name, c.env_manager)
     else:
         name = c.pyapi.make_none()
 

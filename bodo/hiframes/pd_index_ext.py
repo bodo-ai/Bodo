@@ -258,9 +258,12 @@ def box_range_index(typ, val, c):
     class_obj = c.pyapi.import_module_noblock(mod_name)
     range_val = cgutils.create_struct_proxy(range_index_type)(
             c.context, c.builder, val)
-    start = c.pyapi.from_native_value(types.int64, range_val.start)
-    stop = c.pyapi.from_native_value(types.int64, range_val.stop)
-    step = c.pyapi.from_native_value(types.int64, range_val.step)
+    start = c.pyapi.from_native_value(
+        types.int64, range_val.start, c.env_manager)
+    stop = c.pyapi.from_native_value(
+        types.int64, range_val.stop, c.env_manager)
+    step = c.pyapi.from_native_value(
+        types.int64, range_val.step, c.env_manager)
     range_obj = c.pyapi.call_method(
         class_obj, "RangeIndex", (start, stop, step))
     c.pyapi.decref(class_obj)
