@@ -21,15 +21,41 @@ _pivot_df1 = pd.DataFrame({"A": ["foo", "foo", "foo", "foo", "foo",
 
 def test_agg_parallel_str(datapath):
     fname = datapath("groupby3.pq")
-    def test_impl():
+    def impl():
         df = pq.read_table(fname).to_pandas()
         A = df.groupby('A')['B'].agg(lambda x: x.max()-x.min())
         return A.sum()
 
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func() == test_impl()
+    bodo_func = bodo.jit(impl)
+    assert bodo_func() == impl()
     assert count_array_REPs() == 0
     assert count_parfor_REPs() == 0
+
+
+def test_pivot_parallel(datapath):
+    fname = datapath("pivot2.pq")
+    def impl():
+        df = pd.read_parquet(fname)
+        pt = df.pivot_table(index='A', columns='C', values='D', aggfunc='sum')
+        res = pt.small.values.sum()
+        return res
+
+    bodo_func = bodo.jit(
+        pivots={'pt': ['small', 'large']})(impl)
+    assert bodo_func() == impl()
+
+
+def test_crosstab_parallel1(datapath):
+    fname = datapath("pivot2.pq")
+    def impl():
+        df = pd.read_parquet(fname)
+        pt = pd.crosstab(df.A, df.C)
+        res = pt.small.values.sum()
+        return res
+
+    bodo_func = bodo.jit(
+        pivots={'pt': ['small', 'large']})(impl)
+    assert bodo_func() == impl()
 
 
 class TestGroupBy(unittest.TestCase):
@@ -352,17 +378,6 @@ class TestGroupBy(unittest.TestCase):
         self.assertEqual(
             set(bodo_func(_pivot_df1)[1]), set(test_impl(_pivot_df1)[1]))
 
-    def test_pivot_parallel(self):
-        def test_impl():
-            df = pd.read_parquet("pivot2.pq")
-            pt = df.pivot_table(index='A', columns='C', values='D', aggfunc='sum')
-            res = pt.small.values.sum()
-            return res
-
-        bodo_func = bodo.jit(
-            pivots={'pt': ['small', 'large']})(test_impl)
-        self.assertEqual(bodo_func(), test_impl())
-
     def test_crosstab1(self):
         def test_impl(df):
             pt = pd.crosstab(df.A, df.C)
@@ -373,17 +388,6 @@ class TestGroupBy(unittest.TestCase):
             set(bodo_func(_pivot_df1)[0]), set(test_impl(_pivot_df1)[0]))
         self.assertEqual(
             set(bodo_func(_pivot_df1)[1]), set(test_impl(_pivot_df1)[1]))
-
-    def test_crosstab_parallel1(self):
-        def test_impl():
-            df = pd.read_parquet("pivot2.pq")
-            pt = pd.crosstab(df.A, df.C)
-            res = pt.small.values.sum()
-            return res
-
-        bodo_func = bodo.jit(
-            pivots={'pt': ['small', 'large']})(test_impl)
-        self.assertEqual(bodo_func(), test_impl())
 
 
 if __name__ == "__main__":

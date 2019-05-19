@@ -13,6 +13,19 @@ from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
                             get_start_end)
 
 
+def test_merge_asof_parallel1(datapath):
+    fname1 = datapath('asof1.pq')
+    fname2 = datapath('asof2.pq')
+    def impl():
+        df1 = pd.read_parquet(fname1)
+        df2 = pd.read_parquet(fname2)
+        df3 = pd.merge_asof(df1, df2, on='time')
+        return (df3.A.sum(), df3.time.max(), df3.B.sum())
+
+    bodo_func = bodo.jit(impl)
+    assert bodo_func() == impl()
+
+
 class TestJoin(unittest.TestCase):
     def test_join1(self):
         def test_impl(n):
@@ -204,16 +217,6 @@ class TestJoin(unittest.TestCase):
                 ['2017-01-01', '2017-01-02', '2017-01-04', '2017-02-23',
                 '2017-02-25']), 'A': [2,3,7,8,9]})
         pd.testing.assert_frame_equal(bodo_func(df1, df2), test_impl(df1, df2))
-
-    def test_merge_asof_parallel1(self):
-        def test_impl():
-            df1 = pd.read_parquet('asof1.pq')
-            df2 = pd.read_parquet('asof2.pq')
-            df3 = pd.merge_asof(df1, df2, on='time')
-            return (df3.A.sum(), df3.time.max(), df3.B.sum())
-
-        bodo_func = bodo.jit(test_impl)
-        self.assertEqual(bodo_func(), test_impl())
 
     def test_join_left_seq1(self):
         def test_impl(df1, df2):
