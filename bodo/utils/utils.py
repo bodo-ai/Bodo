@@ -459,7 +459,7 @@ def find_str_const(func_ir, var):
     """
     require(isinstance(var, ir.Var))
     var_def = get_definition(func_ir, var)
-    if isinstance(var_def, ir.Const):
+    if isinstance(var_def, (ir.Const, ir.Global, ir.FreeVar)):
         val = var_def.value
         require(isinstance(val, str))
         return val

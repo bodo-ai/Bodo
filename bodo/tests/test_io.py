@@ -34,6 +34,53 @@ def test_pq_spark_date(datapath):
     pd.testing.assert_frame_equal(bodo_func(), impl())
 
 
+def test_h5_read_group(datapath):
+    fname = datapath("test_group_read.hdf5")
+    def test_impl():
+        f = h5py.File(fname, "r")
+        g1 = f['G']
+        X = g1['data'][:]
+        f.close()
+        return X.sum()
+
+    bodo_func = bodo.jit(test_impl)
+    assert bodo_func() == test_impl()
+
+
+def test_h5_file_keys(datapath):
+    fname = datapath("test_group_read.hdf5")
+    def test_impl():
+        f = h5py.File(fname, "r")
+        s = 0
+        for gname in f.keys():
+            X = f[gname]['data'][:]
+            s += X.sum()
+        f.close()
+        return s
+
+    bodo_func = bodo.jit(test_impl, h5_types={'X': bodo.int64[:]})
+    assert bodo_func() == test_impl()
+    # test using locals for typing
+    bodo_func = bodo.jit(test_impl, locals={'X': bodo.int64[:]})
+    assert bodo_func() == test_impl()
+
+
+def test_h5_group_keys(datapath):
+    fname = datapath("test_group_read.hdf5")
+    def test_impl():
+        f = h5py.File(fname, "r")
+        g1 = f['G']
+        s = 0
+        for dname in g1.keys():
+            X = g1[dname][:]
+            s += X.sum()
+        f.close()
+        return s
+
+    bodo_func = bodo.jit(test_impl, h5_types={'X': bodo.int64[:]})
+    assert bodo_func() == test_impl()
+
+
 class TestIO(unittest.TestCase):
 
     def setUp(self):
@@ -147,47 +194,6 @@ class TestIO(unittest.TestCase):
         X = f['G']['data'][:]
         f.close()
         np.testing.assert_almost_equal(X, arr)
-
-    def test_h5_read_group(self):
-        def test_impl():
-            f = h5py.File("test_group_read.hdf5", "r")
-            g1 = f['G']
-            X = g1['data'][:]
-            f.close()
-            return X.sum()
-
-        bodo_func = bodo.jit(test_impl)
-        self.assertEqual(bodo_func(), test_impl())
-
-    def test_h5_file_keys(self):
-        def test_impl():
-            f = h5py.File("test_group_read.hdf5", "r")
-            s = 0
-            for gname in f.keys():
-                X = f[gname]['data'][:]
-                s += X.sum()
-            f.close()
-            return s
-
-        bodo_func = bodo.jit(test_impl, h5_types={'X': bodo.int64[:]})
-        self.assertEqual(bodo_func(), test_impl())
-        # test using locals for typing
-        bodo_func = bodo.jit(test_impl, locals={'X': bodo.int64[:]})
-        self.assertEqual(bodo_func(), test_impl())
-
-    def test_h5_group_keys(self):
-        def test_impl():
-            f = h5py.File("test_group_read.hdf5", "r")
-            g1 = f['G']
-            s = 0
-            for dname in g1.keys():
-                X = g1[dname][:]
-                s += X.sum()
-            f.close()
-            return s
-
-        bodo_func = bodo.jit(test_impl, h5_types={'X': bodo.int64[:]})
-        self.assertEqual(bodo_func(), test_impl())
 
     def test_h5_filter(self):
         def test_impl():
