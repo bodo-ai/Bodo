@@ -74,6 +74,21 @@ def test_h5_read_parallel(datapath):
     assert count_parfor_REPs() == 0
 
 
+def test_h5_filter(datapath):
+    fname = datapath("h5_test_filter.h5")
+    def test_impl():
+        f = h5py.File(fname, "r")
+        b = np.arange(11) % 3 == 0
+        X = f['test'][b,:,:,:]
+        f.close()
+        return X
+
+    bodo_func = bodo.jit(locals={'X:return': 'distributed'})(test_impl)
+    n = 4  # len(test_impl())
+    start, end = get_start_end(n)
+    np.testing.assert_allclose(bodo_func(), test_impl()[start:end])
+
+
 def test_h5_read_group(datapath):
     fname = datapath("test_group_read.hdf5")
     def test_impl():
@@ -125,13 +140,6 @@ class TestIO(unittest.TestCase):
 
     def setUp(self):
         if get_rank() == 0:
-            # h5 filter test
-            n = 11
-            size = (n, 13, 21, 3)
-            A = np.random.randint(0, 120, size, np.uint8)
-            f = h5py.File('h5_test_filter.h5', "w")
-            f.create_dataset('test', data=A)
-            f.close()
 
             # test_csv_cat1
             data = ("2,B,SA\n"
@@ -199,19 +207,6 @@ class TestIO(unittest.TestCase):
         X = f['G']['data'][:]
         f.close()
         np.testing.assert_almost_equal(X, arr)
-
-    def test_h5_filter(self):
-        def test_impl():
-            f = h5py.File("h5_test_filter.h5", "r")
-            b = np.arange(11) % 3 == 0
-            X = f['test'][b,:,:,:]
-            f.close()
-            return X
-
-        bodo_func = bodo.jit(locals={'X:return': 'distributed'})(test_impl)
-        n = 4  # len(test_impl())
-        start, end = get_start_end(n)
-        np.testing.assert_allclose(bodo_func(), test_impl()[start:end])
 
     def test_pq_read(self):
         def test_impl():

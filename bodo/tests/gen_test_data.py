@@ -43,6 +43,14 @@ dset1 = g1.create_dataset("data", (N,), dtype='i8')
 dset1[:] = arr
 f.close()
 
+# h5 filter test
+n = 11
+size = (n, 13, 21, 3)
+A = np.random.randint(0, 120, size, np.uint8)
+f = h5py.File('h5_test_filter.h5', "w")
+f.create_dataset('test', data=A)
+f.close()
+
 gen_kde_pq('kde.parquet', N)
 gen_pq_test('example.parquet')
 
