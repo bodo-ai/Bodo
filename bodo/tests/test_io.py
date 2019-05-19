@@ -397,6 +397,14 @@ class TestIO(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         self.assertEqual(bodo_func(), test_impl())
 
+    def test_csv_infer_str1(self):
+        def test_impl():
+            df = pd.read_csv("bodo/tests/data/csv_data_cat1.csv")
+            return df
+
+        bodo_func = bodo.jit(test_impl)
+        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+
     def test_csv_skip1(self):
         def test_impl():
             return pd.read_csv("bodo/tests/data/csv_data1.csv",

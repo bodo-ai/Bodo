@@ -582,9 +582,8 @@ class UntypedPass(object):
             df = pd.read_csv(
                 fname_const, nrows=rows_to_read, skiprows=skiprows,
                 header=header)
-            # TODO: string_array, categorical, etc.
-            dtypes = [types.Array(numba.typeof(d).dtype, 1, 'C')
-                      for d in df.dtypes.values]
+            # TODO: categorical, etc.
+            dtypes = numba.typeof(df).data
             cols = df.columns.to_list()
             # overwrite column names like Pandas if explicitly provided
             if col_names != 0:
