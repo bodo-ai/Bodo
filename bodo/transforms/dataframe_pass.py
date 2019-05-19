@@ -297,17 +297,19 @@ class DataFramePass(object):
             nodes.append(
                 ir.Assign(ir.Const(col_name, lhs.loc), name_var, lhs.loc))
             in_arr = self._get_dataframe_data(df_var, col_name, nodes)
+            df_index_var = self._get_dataframe_index(df_var, nodes)
 
             if guard(is_whole_slice, self.typemap, self.func_ir, col_filter_var):
-                func = lambda A, ind, name: bodo.hiframes.api.init_series(
-                    A, None, name)
+                func = lambda A, ind, df_index, name: bodo.hiframes.api.init_series(
+                    A, df_index, name)
             else:
                 # TODO: test this case
-                func = lambda A, ind, name: bodo.hiframes.api.init_series(
+                func = lambda A, ind, df_index, name: bodo.hiframes.api.init_series(
                     A[ind], None, name)
 
             return self._replace_func(func,
-                [in_arr, col_filter_var, name_var], pre_nodes=nodes)
+                [in_arr, col_filter_var, df_index_var, name_var],
+                pre_nodes=nodes)
 
         if self._is_df_iat_var(rhs.value):
             df_var = guard(get_definition, self.func_ir, rhs.value).value
@@ -970,7 +972,7 @@ class DataFramePass(object):
         row_args = ', '.join(["c"+str(i)+"[i]" for i in range(len(used_cols))])
 
         # TODO: series index and name
-        func_text = "def f({}):\n".format(col_name_args)
+        func_text = "def f({}, df_index):\n".format(col_name_args)
         # make series to enable getitem of dt64 to timestamp for example
         for i in range(len(used_cols)):
             func_text += "  c{} = bodo.hiframes.api.init_series(c{})\n".format(i, i)
@@ -980,7 +982,7 @@ class DataFramePass(object):
         func_text += "  for i in numba.parfor.internal_prange(n):\n"
         func_text += "     row = Row({})\n".format(row_args)
         func_text += "     S[i] = map_func(row)\n"
-        func_text += "  return bodo.hiframes.api.init_series(S)\n"
+        func_text += "  return bodo.hiframes.api.init_series(S, df_index, None)\n"
 
         loc_vars = {}
         exec(func_text, {}, loc_vars)
@@ -1008,6 +1010,7 @@ class DataFramePass(object):
                         break
 
         arg_typs = tuple(df_typ.data[df_typ.columns.index(c)] for c in used_cols)
+        arg_typs += (df_typ.index,)
         f_typemap, f_return_type, f_calltypes = numba.compiler.type_inference_stage(
                     self.typingctx, f_ir, arg_typs, None)
         self.typemap.update(f_typemap)
@@ -1015,7 +1018,9 @@ class DataFramePass(object):
 
         nodes = []
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
-        replace_arg_nodes(f_ir.blocks[topo_order[0]], col_vars)
+        df_index_var = self._get_dataframe_index(df_var, nodes)
+        replace_arg_nodes(
+            f_ir.blocks[topo_order[0]], col_vars + [df_index_var])
         f_ir.blocks[topo_order[0]].body = nodes + f_ir.blocks[topo_order[0]].body
         return f_ir.blocks
 
@@ -1249,7 +1254,7 @@ class DataFramePass(object):
 
         col_args = ", ".join("'{}'".format(c) for c in df_typ.columns)
         col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
-        func_text = "def _fillna_impl({}, val):\n".format(", ".join(data_args))
+        func_text = "def _fillna_impl({}, df_index, val):\n".format(", ".join(data_args))
         for d in data_args:
             func_text += "  {} = bodo.hiframes.api.init_series({})\n".format(d+'_S', d)
             if not inplace:
@@ -1257,7 +1262,7 @@ class DataFramePass(object):
             else:
                 func_text += "  {}.fillna(val, inplace=True)\n".format(d+'_S')
             func_text += "  {} = bodo.hiframes.api.get_series_data({})\n".format(d+'_O', d+'_S')
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), df_index, {})\n".format(
             ", ".join(d+'_O' for d in data_args),
             col_var)
         loc_vars = {}
@@ -1266,7 +1271,8 @@ class DataFramePass(object):
 
         nodes = []
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
-        args = col_vars + [value]
+        index_arg = self._get_dataframe_index(df_var, nodes)
+        args = col_vars + [index_arg, value]
         if not inplace:
             return self._replace_func(_fillna_impl, args, pre_nodes=nodes)
         else:
@@ -1463,6 +1469,7 @@ class DataFramePass(object):
                     df, cname, bodo.hiframes.api.fix_df_array(arr)), [df_var, rhs.args[1], new_arr], pre_nodes=nodes)
 
         n_cols = len(df_typ.columns)
+        df_index_var = self._get_dataframe_index(df_var, nodes)
         in_arrs = [self._get_dataframe_data(df_var, c, nodes)
                     for c in df_typ.columns]
         data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
@@ -1481,14 +1488,15 @@ class DataFramePass(object):
 
         # TODO: fix list, Series data
         col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
-        func_text = "def _init_df({}):\n".format(data_args)
+        func_text = "def _init_df({}, df_index):\n".format(data_args)
         func_text += "  {} = bodo.hiframes.api.fix_df_array({})\n".format(new_arr_arg, new_arr_arg)
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), df_index, {})\n".format(
             data_args, col_var)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars['_init_df']
-        return self._replace_func(_init_df, in_arrs, pre_nodes=nodes)
+        return self._replace_func(
+            _init_df, in_arrs + [df_index_var], pre_nodes=nodes)
 
     def _run_call_len(self, lhs, df_var):
         df_typ = self.typemap[df_var.name]

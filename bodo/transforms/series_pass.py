@@ -1398,7 +1398,7 @@ class SeriesPass(object):
         return nodes
 
     def _handle_series_combine(self, assign, lhs, rhs, series_var):
-        """translate s1.combine(s2,lambda x1,x2 :...) to prange()
+        """translate s1.combine(s2, lambda x1,x2 :...) to prange()
         """
         # error checking: make sure there is function input only
         if len(rhs.args) < 2:
