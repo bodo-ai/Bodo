@@ -33,6 +33,46 @@ def test_pq_spark_date(datapath):
     bodo_func = bodo.jit(impl)
     pd.testing.assert_frame_equal(bodo_func(), impl())
 
+def test_h5_read_seq(datapath):
+    fname = datapath("lr.hdf5")
+    def test_impl():
+        f = h5py.File(fname, "r")
+        X = f['points'][:]
+        f.close()
+        return X
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_allclose(bodo_func(), test_impl())
+
+
+def test_h5_read_const_infer_seq(datapath):
+    fname = datapath("")
+    def test_impl():
+        p = fname + 'lr'
+        f = h5py.File(p + ".hdf5", "r")
+        s = 'po'
+        X = f[s + 'ints'][:]
+        f.close()
+        return X
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_allclose(bodo_func(), test_impl())
+
+
+def test_h5_read_parallel(datapath):
+    fname = datapath("lr.hdf5")
+    def test_impl():
+        f = h5py.File(fname, "r")
+        X = f['points'][:]
+        Y = f['responses'][:]
+        f.close()
+        return X.sum() + Y.sum()
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_almost_equal(bodo_func(), test_impl(), decimal=2)
+    assert count_array_REPs() == 0
+    assert count_parfor_REPs() == 0
+
 
 def test_h5_read_group(datapath):
     fname = datapath("test_group_read.hdf5")
@@ -115,41 +155,6 @@ class TestIO(unittest.TestCase):
             n = 111
             A = np.random.ranf(n)
             A.tofile("np_file1.dat")
-
-    def test_h5_read_seq(self):
-        def test_impl():
-            f = h5py.File("lr.hdf5", "r")
-            X = f['points'][:]
-            f.close()
-            return X
-
-        bodo_func = bodo.jit(test_impl)
-        np.testing.assert_allclose(bodo_func(), test_impl())
-
-    def test_h5_read_const_infer_seq(self):
-        def test_impl():
-            p = 'lr'
-            f = h5py.File(p + ".hdf5", "r")
-            s = 'po'
-            X = f[s + 'ints'][:]
-            f.close()
-            return X
-
-        bodo_func = bodo.jit(test_impl)
-        np.testing.assert_allclose(bodo_func(), test_impl())
-
-    def test_h5_read_parallel(self):
-        def test_impl():
-            f = h5py.File("lr.hdf5", "r")
-            X = f['points'][:]
-            Y = f['responses'][:]
-            f.close()
-            return X.sum() + Y.sum()
-
-        bodo_func = bodo.jit(test_impl)
-        np.testing.assert_almost_equal(bodo_func(), test_impl(), decimal=2)
-        self.assertEqual(count_array_REPs(), 0)
-        self.assertEqual(count_parfor_REPs(), 0)
 
     @unittest.skip("fix collective create dataset")
     def test_h5_write_parallel(self):
