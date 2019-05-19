@@ -19,6 +19,19 @@ _pivot_df1 = pd.DataFrame({"A": ["foo", "foo", "foo", "foo", "foo",
             "D": [1, 2, 2, 6, 3, 4, 5, 6, 9]})
 
 
+def test_agg_parallel_str(datapath):
+    fname = datapath("groupby3.pq")
+    def test_impl():
+        df = pq.read_table(fname).to_pandas()
+        A = df.groupby('A')['B'].agg(lambda x: x.max()-x.min())
+        return A.sum()
+
+    bodo_func = bodo.jit(test_impl)
+    assert bodo_func() == test_impl()
+    assert count_array_REPs() == 0
+    assert count_parfor_REPs() == 0
+
+
 class TestGroupBy(unittest.TestCase):
     def test_agg_seq(self):
         def test_impl(df):
@@ -265,17 +278,6 @@ class TestGroupBy(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(bodo_func(n), test_impl(n))
-        self.assertEqual(count_array_REPs(), 0)
-        self.assertEqual(count_parfor_REPs(), 0)
-
-    def test_agg_parallel_str(self):
-        def test_impl():
-            df = pq.read_table("groupby3.pq").to_pandas()
-            A = df.groupby('A')['B'].agg(lambda x: x.max()-x.min())
-            return A.sum()
-
-        bodo_func = bodo.jit(test_impl)
-        self.assertEqual(bodo_func(), test_impl())
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
