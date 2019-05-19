@@ -5,6 +5,7 @@ import numpy as np
 import h5py
 import pyarrow.parquet as pq
 import bodo
+from bodo.utils.testing import ensure_clean
 from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_rank,
     get_start_end)
@@ -483,10 +484,11 @@ class TestIO(unittest.TestCase):
         df = pd.DataFrame({'A': np.arange(n)})
         hp_fname = 'test_write_csv1_hpat.csv'
         pd_fname = 'test_write_csv1_pd.csv'
-        bodo_func(df, hp_fname)
-        test_impl(df, pd_fname)
-        # TODO: delete files
-        pd.testing.assert_frame_equal(pd.read_csv(hp_fname), pd.read_csv(pd_fname))
+        with ensure_clean(pd_fname), ensure_clean(hp_fname):
+            bodo_func(df, hp_fname)
+            test_impl(df, pd_fname)
+            pd.testing.assert_frame_equal(
+                pd.read_csv(hp_fname), pd.read_csv(pd_fname))
 
     def test_write_csv_parallel1(self):
         def test_impl(n, fname):
@@ -497,14 +499,14 @@ class TestIO(unittest.TestCase):
         n = 111
         hp_fname = 'test_write_csv1_hpat_par.csv'
         pd_fname = 'test_write_csv1_pd_par.csv'
-        bodo_func(n, hp_fname)
-        test_impl(n, pd_fname)
-        self.assertEqual(count_array_REPs(), 0)
-        self.assertEqual(count_parfor_REPs(), 0)
-        # TODO: delete files
-        if get_rank() == 0:
-            pd.testing.assert_frame_equal(
-                pd.read_csv(hp_fname), pd.read_csv(pd_fname))
+        with ensure_clean(pd_fname), ensure_clean(hp_fname):
+            bodo_func(n, hp_fname)
+            self.assertEqual(count_array_REPs(), 0)
+            self.assertEqual(count_parfor_REPs(), 0)
+            if get_rank() == 0:
+                test_impl(n, pd_fname)
+                pd.testing.assert_frame_equal(
+                    pd.read_csv(hp_fname), pd.read_csv(pd_fname))
 
     def test_np_io1(self):
         def test_impl():
