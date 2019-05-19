@@ -51,6 +51,11 @@ f = h5py.File('h5_test_filter.h5', "w")
 f.create_dataset('test', data=A)
 f.close()
 
+# test_np_io1
+n = 111
+A = np.random.ranf(n)
+A.tofile("np_file1.dat")
+
 gen_kde_pq('kde.parquet', N)
 gen_pq_test('example.parquet')
 

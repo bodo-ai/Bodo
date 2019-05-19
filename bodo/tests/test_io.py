@@ -136,6 +136,59 @@ def test_h5_group_keys(datapath):
     assert bodo_func() == test_impl()
 
 
+def test_np_io1(datapath):
+    fname = datapath("np_file1.dat")
+    def test_impl():
+        A = np.fromfile(fname, np.float64)
+        return A
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_almost_equal(bodo_func(), test_impl())
+
+
+def test_np_io2(datapath):
+    fname = datapath("np_file1.dat")
+    # parallel version
+    def test_impl():
+        A = np.fromfile(fname, np.float64)
+        return A.sum()
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_almost_equal(bodo_func(), test_impl())
+    assert count_array_REPs() == 0
+    assert count_parfor_REPs() == 0
+
+
+def test_np_io3():
+    def test_impl(A):
+        if get_rank() == 0:
+            A.tofile("np_file_3.dat")
+
+    bodo_func = bodo.jit(test_impl)
+    n = 111
+    A = np.random.ranf(n)
+    with ensure_clean("np_file_3.dat"):
+        bodo_func(A)
+        if get_rank() == 0:
+            B = np.fromfile("np_file_3.dat", np.float64)
+            np.testing.assert_almost_equal(A, B)
+
+
+def test_np_io4():
+    # parallel version
+    def test_impl(n):
+        A = np.arange(n)
+        A.tofile("np_file_3.dat")
+
+    bodo_func = bodo.jit(test_impl)
+    n = 111
+    A = np.arange(n)
+    with ensure_clean("np_file_3.dat"):
+        bodo_func(n)
+        B = np.fromfile("np_file_3.dat", np.int64)
+        np.testing.assert_almost_equal(A, B)
+
+
 class TestIO(unittest.TestCase):
 
     def setUp(self):
@@ -159,10 +212,6 @@ class TestIO(unittest.TestCase):
             with open("csv_data_dtype1.csv", "w") as f:
                 f.write(data)
 
-            # test_np_io1
-            n = 111
-            A = np.random.ranf(n)
-            A.tofile("np_file1.dat")
 
     @unittest.skip("fix collective create dataset")
     def test_h5_write_parallel(self):
@@ -517,51 +566,6 @@ class TestIO(unittest.TestCase):
                 test_impl(n, pd_fname)
                 pd.testing.assert_frame_equal(
                     pd.read_csv(hp_fname), pd.read_csv(pd_fname))
-
-    def test_np_io1(self):
-        def test_impl():
-            A = np.fromfile("np_file1.dat", np.float64)
-            return A
-
-        bodo_func = bodo.jit(test_impl)
-        np.testing.assert_almost_equal(bodo_func(), test_impl())
-
-    def test_np_io2(self):
-        # parallel version
-        def test_impl():
-            A = np.fromfile("np_file1.dat", np.float64)
-            return A.sum()
-
-        bodo_func = bodo.jit(test_impl)
-        np.testing.assert_almost_equal(bodo_func(), test_impl())
-        self.assertEqual(count_array_REPs(), 0)
-        self.assertEqual(count_parfor_REPs(), 0)
-
-    def test_np_io3(self):
-        def test_impl(A):
-            if get_rank() == 0:
-                A.tofile("np_file_3.dat")
-
-        bodo_func = bodo.jit(test_impl)
-        n = 111
-        A = np.random.ranf(n)
-        bodo_func(A)
-        if get_rank() == 0:
-            B = np.fromfile("np_file_3.dat", np.float64)
-            np.testing.assert_almost_equal(A, B)
-
-    def test_np_io4(self):
-        # parallel version
-        def test_impl(n):
-            A = np.arange(n)
-            A.tofile("np_file_3.dat")
-
-        bodo_func = bodo.jit(test_impl)
-        n = 111
-        A = np.arange(n)
-        bodo_func(n)
-        B = np.fromfile("np_file_3.dat", np.int64)
-        np.testing.assert_almost_equal(A, B)
 
 
 if __name__ == "__main__":
