@@ -223,7 +223,7 @@ class TestHiFrames(unittest.TestCase):
     def test_nunique_parallel(self):
         # TODO: test without file
         def test_impl():
-            df = pq.read_table('example.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
             return df.four.nunique()
 
         bodo_func = bodo.jit(test_impl)
@@ -249,7 +249,7 @@ class TestHiFrames(unittest.TestCase):
     def test_nunique_str_parallel(self):
         # TODO: test without file
         def test_impl():
-            df = pq.read_table('example.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
             return df.two.nunique()
 
         bodo_func = bodo.jit(test_impl)
@@ -273,7 +273,7 @@ class TestHiFrames(unittest.TestCase):
     def test_unique_parallel(self):
         # TODO: test without file
         def test_impl():
-            df = pq.read_table('example.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
             return (df.four.unique() == 3.0).sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -292,7 +292,7 @@ class TestHiFrames(unittest.TestCase):
     def test_unique_str_parallel(self):
         # TODO: test without file
         def test_impl():
-            df = pq.read_table('example.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
             return (df.two.unique() == 'foo').sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -645,8 +645,8 @@ class TestHiFrames(unittest.TestCase):
 
     def test_concat_str(self):
         def test_impl():
-            df1 = pq.read_table('example.parquet').to_pandas()
-            df2 = pq.read_table('example.parquet').to_pandas()
+            df1 = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
+            df2 = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
             A3 = pd.concat([df1, df2])
             return (A3.two=='foo').sum()
 
@@ -672,8 +672,8 @@ class TestHiFrames(unittest.TestCase):
 
     def test_concat_series_str(self):
         def test_impl():
-            df1 = pq.read_table('example.parquet').to_pandas()
-            df2 = pq.read_table('example.parquet').to_pandas()
+            df1 = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
+            df2 = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
             A3 = pd.concat([df1.two, df2.two])
             return (A3=='foo').sum()
 

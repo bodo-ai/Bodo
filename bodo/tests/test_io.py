@@ -305,7 +305,7 @@ class TestIO(unittest.TestCase):
 
     def test_pq_str(self):
         def test_impl():
-            df = pq.read_table('example.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
             A = df.two.values=='foo'
             return A.sum()
 
@@ -316,7 +316,7 @@ class TestIO(unittest.TestCase):
 
     def test_pq_str_with_nan_seq(self):
         def test_impl():
-            df = pq.read_table('example.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
             A = df.five.values=='foo'
             return A
 
@@ -325,7 +325,7 @@ class TestIO(unittest.TestCase):
 
     def test_pq_str_with_nan_par(self):
         def test_impl():
-            df = pq.read_table('example.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
             A = df.five.values=='foo'
             return A.sum()
 
@@ -336,7 +336,7 @@ class TestIO(unittest.TestCase):
 
     def test_pq_str_with_nan_par_multigroup(self):
         def test_impl():
-            df = pq.read_table('example2.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/example2.parquet').to_pandas()
             A = df.five.values=='foo'
             return A.sum()
 
@@ -347,7 +347,7 @@ class TestIO(unittest.TestCase):
 
     def test_pq_bool(self):
         def test_impl():
-            df = pq.read_table('example.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
             return df.three.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -357,7 +357,7 @@ class TestIO(unittest.TestCase):
 
     def test_pq_nan(self):
         def test_impl():
-            df = pq.read_table('example.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
             return df.one.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -367,7 +367,7 @@ class TestIO(unittest.TestCase):
 
     def test_pq_float_no_nan(self):
         def test_impl():
-            df = pq.read_table('example.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
             return df.four.sum()
 
         bodo_func = bodo.jit(test_impl)

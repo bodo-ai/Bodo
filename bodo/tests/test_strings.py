@@ -191,7 +191,7 @@ class TestString(unittest.TestCase):
 
     def test_string_NA_box(self):
         def test_impl():
-            df = pq.read_table('example.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
             return df.five
         bodo_func = bodo.jit(test_impl)
         # XXX just checking isna() since Pandas uses None in this case
