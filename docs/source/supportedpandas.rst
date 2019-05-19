@@ -31,8 +31,11 @@ Input/Output
 
 * :func:`pandas.read_csv`
 
-   * Arguments ``filepath_or_buffer``, ``sep``, ``delimiter``, ``names``, ``usecols``, ``dtype``, and ``parse_dates`` are supported.
-   * ``filepath_or_buffer``, ``names`` and ``dtype`` arguments are required.
+   * Arguments ``filepath_or_buffer``, ``sep``, ``delimiter``, ``header``, ``names``,
+     ``usecols``, ``dtype``, ``skiprows`` and ``parse_dates`` are supported.
+   * ``filepath_or_buffer`` should be a string and is required.
+   * Either ``names`` and ``dtype`` arguments should be provided to enable type inference,
+     or ``filepath_or_buffer`` should be a constant string for Bodo to infer types by looking at the file at compile time.
    * ``names``, ``usecols``, ``parse_dates`` should be constant lists.
    * ``dtype`` should be a constant dictionary of strings and types.
 

@@ -539,23 +539,49 @@ class UntypedPass(object):
         # float_precision=None)
 
         kws = dict(rhs.kws)
-        fname = self._get_arg('read_csv', rhs.args, kws, 0, 'filepath_or_buffer')
+        fname = self._get_arg(
+            'read_csv', rhs.args, kws, 0, 'filepath_or_buffer')
         sep = self._get_str_arg('read_csv', rhs.args, kws, 1, 'sep', ',')
         sep = self._get_str_arg('read_csv', rhs.args, kws, 2, 'delimiter', sep)
-        # TODO: header arg
+        header = self._get_str_arg(
+            'read_csv', rhs.args, kws, 3, 'header', 'infer')
         names_var = self._get_arg('read_csv', rhs.args, kws, 4, 'names', '')
+        usecols_var = self._get_arg(
+            'read_csv', rhs.args, kws, 6, 'usecols', '')
         dtype_var = self._get_arg('read_csv', rhs.args, kws, 10, 'dtype', '')
-        skiprows = self._get_str_arg('read_csv', rhs.args, kws, 16, 'skiprows', 0)
+        skiprows = self._get_str_arg(
+            'read_csv', rhs.args, kws, 16, 'skiprows', 0)
+
+        # check unsupported arguments
+        supported_args = ('filepath_or_buffer', 'sep', 'delimiter', 'header',
+            'names', 'usecols', 'dtype', 'skiprows', 'parse_dates')
+        unsupported_args = set(kws.keys()) - set(supported_args)
+        if unsupported_args:
+            raise ValueError(
+                "read_csv() arguments {} not supported yet".format(
+                    unsupported_args))
 
         col_names = self._get_str_or_list(names_var, default=0)
-        if dtype_var is '':
+
+        # infer the column names: if no names
+        # are passed the behavior is identical to ``header=0`` and column
+        # names are inferred from the first line of the file, if column
+        # names are passed explicitly then the behavior is identical to
+        # ``header=None``
+        if header == 'infer':
+            header = 0 if col_names == 0 else None
+
+        # if inference is required
+        if dtype_var is '' or col_names == 0:
             # infer column names and types from constant filename
             fname_const = guard(find_const, self.func_ir, fname)
             if fname_const is None:
                 raise ValueError("pd.read_csv() requires explicit type"
                     "annotation using 'dtype' if filename is not constant")
             rows_to_read = 100  # TODO: tune this
-            df = pd.read_csv(fname_const, nrows=rows_to_read, skiprows=skiprows)
+            df = pd.read_csv(
+                fname_const, nrows=rows_to_read, skiprows=skiprows,
+                header=header)
             # TODO: string_array, categorical, etc.
             dtypes = [types.Array(numba.typeof(d).dtype, 1, 'C')
                       for d in df.dtypes.values]
@@ -563,12 +589,15 @@ class UntypedPass(object):
             # overwrite column names like Pandas if explicitly provided
             if col_names != 0:
                 cols[-len(col_names):] = col_names
-            else:
-                # a row is used for names if not provided
-                skiprows += 1
             col_names = cols
             dtype_map = {c:d for c,d in zip(col_names, dtypes)}
-        else:
+
+        if header is not None:
+            # data starts after header
+            skiprows += header + 1
+
+        # handle dtype arg if provided
+        if dtype_var != '':
             dtype_map = guard(get_definition, self.func_ir, dtype_var)
             if (not isinstance(dtype_map, ir.Expr)
                     or dtype_map.op != 'build_map'):  # pragma: no cover
@@ -591,7 +620,6 @@ class UntypedPass(object):
         if col_names == 0:
             raise ValueError("pd.read_csv() names should be constant list")
 
-        usecols_var = self._get_arg('read_csv', rhs.args, kws, 6, 'usecols', '')
         usecols = list(range(len(col_names)))
         if usecols_var != '':
             err_msg = "pd.read_csv() usecols should be constant list of ints"
