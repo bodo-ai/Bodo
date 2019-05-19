@@ -108,6 +108,26 @@ data = ("0,2.3,2015-01-03,47736\n"
 with open("csv_data_date1.csv", "w") as f:
     f.write(data)
 
+
+# test_csv_cat1
+data = ("2,B,SA\n"
+        "3,A,SBC\n"
+        "4,C,S123\n"
+        "5,B,BCD\n")
+
+with open("csv_data_cat1.csv", "w") as f:
+    f.write(data)
+
+# test_csv_single_dtype1
+data = ("2,4.1\n"
+        "3,3.4\n"
+        "4,1.3\n"
+        "5,1.1\n")
+
+with open("csv_data_dtype1.csv", "w") as f:
+    f.write(data)
+
+
 # generated data for parallel merge_asof testing
 df1 = pd.DataFrame({'time': pd.DatetimeIndex(
     ['2017-01-03', '2017-01-06', '2017-02-15', '2017-02-21']),

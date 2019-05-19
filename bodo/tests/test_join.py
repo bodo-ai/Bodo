@@ -307,7 +307,7 @@ class TestJoin(unittest.TestCase):
         def test_impl():
             ct_dtype = CategoricalDtype(['A', 'B', 'C'])
             dtypes = {'C1':np.int, 'C2': ct_dtype, 'C3':str}
-            df1 = pd.read_csv("csv_data_cat1.csv",
+            df1 = pd.read_csv("bodo/tests/data/csv_data_cat1.csv",
                 names=['C1', 'C2', 'C3'],
                 dtype=dtypes,
             )
@@ -324,7 +324,7 @@ class TestJoin(unittest.TestCase):
         def test_impl():
             ct_dtype = CategoricalDtype(['A', 'B', 'C'])
             dtypes = {'C1':np.int, 'C2': ct_dtype, 'C3':str}
-            df1 = pd.read_csv("csv_data_cat1.csv",
+            df1 = pd.read_csv("bodo/tests/data/csv_data_cat1.csv",
                 names=['C1', 'C2', 'C3'],
                 dtype=dtypes,
             )
@@ -343,7 +343,7 @@ class TestJoin(unittest.TestCase):
         def test_impl():
             ct_dtype = CategoricalDtype(['A', 'B', 'C'])
             dtypes = {'C1':np.int, 'C2': ct_dtype, 'C3':str}
-            df1 = pd.read_csv("csv_data_cat1.csv",
+            df1 = pd.read_csv("bodo/tests/data/csv_data_cat1.csv",
                 names=['C1', 'C2', 'C3'],
                 dtype=dtypes,
             )

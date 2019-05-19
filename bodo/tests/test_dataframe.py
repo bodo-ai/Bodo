@@ -658,7 +658,7 @@ class TestDataFrame(unittest.TestCase):
     def test_sort_parallel_single_col(self):
         # TODO: better parallel sort test
         def test_impl():
-            df = pd.read_parquet('kde.parquet')
+            df = pd.read_parquet('bodo/tests/data/kde.parquet')
             df.sort_values('points', inplace=True)
             res = df.points.values
             return res
@@ -676,7 +676,7 @@ class TestDataFrame(unittest.TestCase):
     def test_sort_parallel(self):
         # TODO: better parallel sort test
         def test_impl():
-            df = pd.read_parquet('kde.parquet')
+            df = pd.read_parquet('bodo/tests/data/kde.parquet')
             df['A'] = df.points.astype(np.float64)
             df.sort_values('points', inplace=True)
             res = df.A.values

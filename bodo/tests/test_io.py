@@ -11,7 +11,7 @@ from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
     get_start_end)
 
 
-kde_file = 'kde.parquet'
+kde_file = 'bodo/tests/data/kde.parquet'
 
 
 def test_pq_pandas_date(datapath):
@@ -191,28 +191,6 @@ def test_np_io4():
 
 class TestIO(unittest.TestCase):
 
-    def setUp(self):
-        if get_rank() == 0:
-
-            # test_csv_cat1
-            data = ("2,B,SA\n"
-                    "3,A,SBC\n"
-                    "4,C,S123\n"
-                    "5,B,BCD\n")
-
-            with open("csv_data_cat1.csv", "w") as f:
-                f.write(data)
-
-            # test_csv_single_dtype1
-            data = ("2,4.1\n"
-                    "3,3.4\n"
-                    "4,1.3\n"
-                    "5,1.1\n")
-
-            with open("csv_data_dtype1.csv", "w") as f:
-                f.write(data)
-
-
     @unittest.skip("fix collective create dataset")
     def test_h5_write_parallel(self):
         def test_impl(N, D):
@@ -259,7 +237,7 @@ class TestIO(unittest.TestCase):
 
     def test_pq_read(self):
         def test_impl():
-            t = pq.read_table('kde.parquet')
+            t = pq.read_table('bodo/tests/data/kde.parquet')
             df = t.to_pandas()
             X = df['points']
             return X.sum()
@@ -281,7 +259,7 @@ class TestIO(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_pq_read_freevar_str1(self):
-        kde_file2 = 'kde.parquet'
+        kde_file2 = 'bodo/tests/data/kde.parquet'
         def test_impl():
             df = pd.read_parquet(kde_file2)
             X = df['points']
@@ -294,7 +272,7 @@ class TestIO(unittest.TestCase):
 
     def test_pd_read_parquet(self):
         def test_impl():
-            df = pd.read_parquet('kde.parquet')
+            df = pd.read_parquet('bodo/tests/data/kde.parquet')
             X = df['points']
             return X.sum()
 
@@ -377,7 +355,7 @@ class TestIO(unittest.TestCase):
 
     def test_csv1(self):
         def test_impl():
-            return pd.read_csv("csv_data1.csv",
+            return pd.read_csv("bodo/tests/data/csv_data1.csv",
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':np.float, 'D':np.int},
             )
@@ -387,7 +365,7 @@ class TestIO(unittest.TestCase):
     def test_csv_keys1(self):
         def test_impl():
             dtype = {'A':np.int, 'B':np.float, 'C':np.float, 'D':np.int}
-            return pd.read_csv("csv_data1.csv",
+            return pd.read_csv("bodo/tests/data/csv_data1.csv",
                 names=dtype.keys(),
                 dtype=dtype,
             )
@@ -397,7 +375,7 @@ class TestIO(unittest.TestCase):
     def test_csv_const_dtype1(self):
         def test_impl():
             dtype = {'A': 'int', 'B': 'float64', 'C': 'float', 'D': 'int64'}
-            return pd.read_csv("csv_data1.csv",
+            return pd.read_csv("bodo/tests/data/csv_data1.csv",
                 names=dtype.keys(),
                 dtype=dtype,
             )
@@ -406,14 +384,14 @@ class TestIO(unittest.TestCase):
 
     def test_csv_infer1(self):
         def test_impl():
-            return pd.read_csv("csv_data_infer1.csv")
+            return pd.read_csv("bodo/tests/data/csv_data_infer1.csv")
 
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv_infer_parallel1(self):
         def test_impl():
-            df = pd.read_csv("csv_data_infer1.csv")
+            df = pd.read_csv("bodo/tests/data/csv_data_infer1.csv")
             return df.A.sum(), df.B.sum(), df.C.sum(), df.D.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -421,7 +399,7 @@ class TestIO(unittest.TestCase):
 
     def test_csv_skip1(self):
         def test_impl():
-            return pd.read_csv("csv_data1.csv",
+            return pd.read_csv("bodo/tests/data/csv_data1.csv",
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':np.float, 'D':np.int},
                 skiprows=2,
@@ -431,14 +409,14 @@ class TestIO(unittest.TestCase):
 
     def test_csv_infer_skip1(self):
         def test_impl():
-            return pd.read_csv("csv_data_infer1.csv", skiprows=2)
+            return pd.read_csv("bodo/tests/data/csv_data_infer1.csv", skiprows=2)
 
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv_infer_skip_parallel1(self):
         def test_impl():
-            df = pd.read_csv("csv_data_infer1.csv", skiprows=2,
+            df = pd.read_csv("bodo/tests/data/csv_data_infer1.csv", skiprows=2,
                 names=['A', 'B', 'C', 'D'])
             return df.A.sum(), df.B.sum(), df.C.sum(), df.D.sum()
 
@@ -447,7 +425,7 @@ class TestIO(unittest.TestCase):
 
     def test_csv_rm_dead1(self):
         def test_impl():
-            df = pd.read_csv("csv_data1.csv",
+            df = pd.read_csv("bodo/tests/data/csv_data1.csv",
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':np.float, 'D':np.int},)
             return df.B.values
@@ -456,7 +434,7 @@ class TestIO(unittest.TestCase):
 
     def test_csv_date1(self):
         def test_impl():
-            return pd.read_csv("csv_data_date1.csv",
+            return pd.read_csv("bodo/tests/data/csv_data_date1.csv",
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':str, 'D':np.int},
                 parse_dates=[2])
@@ -465,7 +443,7 @@ class TestIO(unittest.TestCase):
 
     def test_csv_str1(self):
         def test_impl():
-            return pd.read_csv("csv_data_date1.csv",
+            return pd.read_csv("bodo/tests/data/csv_data_date1.csv",
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':str, 'D':np.int})
         bodo_func = bodo.jit(test_impl)
@@ -473,7 +451,7 @@ class TestIO(unittest.TestCase):
 
     def test_csv_parallel1(self):
         def test_impl():
-            df = pd.read_csv("csv_data1.csv",
+            df = pd.read_csv("bodo/tests/data/csv_data1.csv",
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':np.float, 'D':np.int})
             return (df.A.sum(), df.B.sum(), df.C.sum(), df.D.sum())
@@ -482,7 +460,7 @@ class TestIO(unittest.TestCase):
 
     def test_csv_str_parallel1(self):
         def test_impl():
-            df = pd.read_csv("csv_data_date1.csv",
+            df = pd.read_csv("bodo/tests/data/csv_data_date1.csv",
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':str, 'D':np.int})
             return (df.A.sum(), df.B.sum(), (df.C == '1966-11-13').sum(),
@@ -492,7 +470,7 @@ class TestIO(unittest.TestCase):
 
     def test_csv_usecols1(self):
         def test_impl():
-            return pd.read_csv("csv_data1.csv",
+            return pd.read_csv("bodo/tests/data/csv_data1.csv",
                 names=['C'],
                 dtype={'C':np.float},
                 usecols=[2],
@@ -504,7 +482,7 @@ class TestIO(unittest.TestCase):
         def test_impl():
             ct_dtype = CategoricalDtype(['A', 'B', 'C'])
             dtypes = {'C1':np.int, 'C2': ct_dtype, 'C3':str}
-            df = pd.read_csv("csv_data_cat1.csv",
+            df = pd.read_csv("bodo/tests/data/csv_data_cat1.csv",
                 names=['C1', 'C2', 'C3'],
                 dtype=dtypes,
             )
@@ -516,7 +494,7 @@ class TestIO(unittest.TestCase):
     def test_csv_cat2(self):
         def test_impl():
             ct_dtype = CategoricalDtype(['A', 'B', 'C', 'D'])
-            df = pd.read_csv("csv_data_cat1.csv",
+            df = pd.read_csv("bodo/tests/data/csv_data_cat1.csv",
                 names=['C1', 'C2', 'C3'],
                 dtype={'C1':np.int, 'C2': ct_dtype, 'C3':str},
             )
@@ -526,7 +504,7 @@ class TestIO(unittest.TestCase):
 
     def test_csv_single_dtype1(self):
         def test_impl():
-            df = pd.read_csv("csv_data_dtype1.csv",
+            df = pd.read_csv("bodo/tests/data/csv_data_dtype1.csv",
                 names=['C1', 'C2'],
                 dtype=np.float64,
             )

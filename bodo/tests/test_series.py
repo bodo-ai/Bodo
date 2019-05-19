@@ -1100,7 +1100,7 @@ class TestSeries(unittest.TestCase):
 
     def test_series_nlargest_parallel1(self):
         def test_impl():
-            df = pq.read_table('kde.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/kde.parquet').to_pandas()
             S = df.points
             return S.nlargest(4)
 
@@ -1137,7 +1137,7 @@ class TestSeries(unittest.TestCase):
 
     def test_series_nsmallest_parallel1(self):
         def test_impl():
-            df = pq.read_table('kde.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/kde.parquet').to_pandas()
             S = df.points
             return S.nsmallest(4)
 
@@ -1210,7 +1210,7 @@ class TestSeries(unittest.TestCase):
 
     def test_series_median_parallel1(self):
         def test_impl():
-            df = pq.read_table('kde.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/kde.parquet').to_pandas()
             S = df.points
             return S.median()
 
@@ -1219,7 +1219,7 @@ class TestSeries(unittest.TestCase):
 
     def test_series_argsort_parallel(self):
         def test_impl():
-            df = pq.read_table('kde.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/kde.parquet').to_pandas()
             S = df.points
             return S.argsort().values
 
@@ -1272,7 +1272,7 @@ class TestSeries(unittest.TestCase):
 
     def test_series_sort_values_parallel1(self):
         def test_impl():
-            df = pq.read_table('kde.parquet').to_pandas()
+            df = pq.read_table('bodo/tests/data/kde.parquet').to_pandas()
             S = df.points
             return S.sort_values()
 
