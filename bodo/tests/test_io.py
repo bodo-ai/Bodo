@@ -24,6 +24,16 @@ def test_pq_pandas_date(datapath):
     pd.testing.assert_frame_equal(bodo_func(), impl())
 
 
+def test_pq_spark_date(datapath):
+    fname = datapath('sdf_dt.pq')
+    def impl():
+        df = pd.read_parquet(fname)
+        return pd.DataFrame({'DT64': df.DT64, 'col2': df.DATE})
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(bodo_func(), impl())
+
+
 class TestIO(unittest.TestCase):
 
     def setUp(self):
@@ -309,14 +319,6 @@ class TestIO(unittest.TestCase):
         np.testing.assert_almost_equal(bodo_func(), test_impl())
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
-
-    def test_pq_spark_date(self):
-        def test_impl():
-            df = pd.read_parquet('sdf_dt.pq')
-            return pd.DataFrame({'DT64': df.DT64, 'col2': df.DATE})
-
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv1(self):
         def test_impl():
