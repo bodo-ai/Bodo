@@ -359,10 +359,10 @@ class UntypedPass(object):
 
         if (func_name == 'to_pandas' and isinstance(func_mod, ir.Var)
                 and func_mod.name in self.arrow_tables):
-            return self._handle_pq_to_pandas(assign, lhs, rhs, func_mod, label)
+            return self._handle_pq_to_pandas(assign, lhs, rhs, func_mod)
 
         if fdef == ('read_parquet', 'pandas'):
-            return self._handle_pd_read_parquet(assign, lhs, rhs, label)
+            return self._handle_pd_read_parquet(assign, lhs, rhs)
 
         if fdef == ('concat', 'pandas'):
             return self._handle_concat(assign, lhs, rhs, label)
@@ -786,12 +786,16 @@ class UntypedPass(object):
         self.arrow_tables[lhs.name] = rhs.args[0]
         return []
 
-    def _handle_pq_to_pandas(self, assign, lhs, rhs, t_var, label):
-        return self._gen_parquet_read(self.arrow_tables[t_var.name], lhs, label)
+    def _handle_pq_to_pandas(self, assign, lhs, rhs, t_var):
+        return self._gen_parquet_read(self.arrow_tables[t_var.name], lhs)
 
-    def _gen_parquet_read(self, fname, lhs, label):
+    def _gen_parquet_read(self, fname, lhs, columns=None):
+        # make sure pyarrow is available
+        if not config._has_pyarrow:
+            raise RuntimeError("pyarrow is required for Parquet support")
+
         columns, data_arrs, nodes = self.pq_handler.gen_parquet_read(
-            fname, lhs)
+            fname, lhs, columns)
         n_cols = len(columns)
         data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
 
@@ -806,9 +810,23 @@ class UntypedPass(object):
 
         return self._replace_func(_init_df, data_arrs, pre_nodes=nodes)
 
-    def _handle_pd_read_parquet(self, assign, lhs, rhs, label):
-        fname = rhs.args[0]
-        return self._gen_parquet_read(fname, lhs, label)
+    def _handle_pd_read_parquet(self, assign, lhs, rhs):
+        # get args and check values
+        kws = dict(rhs.kws)
+        fname = self._get_arg('read_parquet', rhs.args, kws, 0, 'path')
+        engine = self._get_arg(
+            'read_parquet', rhs.args, kws, 1, 'engine', 'auto')
+        if engine not in ('auto', 'pyarrow'):
+            raise ValueError("read_parquet: only pyarrow engine supported")
+
+        columns = self._get_arg(
+            'read_parquet', rhs.args, kws, 2, 'columns', -1)
+        if columns == -1:
+            columns = None
+        elif columns is not None:
+            columns = self._get_str_or_list(columns)
+
+        return self._gen_parquet_read(fname, lhs, columns)
 
     def _handle_concat(self, assign, lhs, rhs, label):
         # converting build_list to build_tuple before type inference to avoid

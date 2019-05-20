@@ -1,11 +1,7 @@
 import numba
 from numba import ir, config, ir_utils, types
-from numba.ir_utils import (mk_unique_var, replace_vars_inner, find_topo_order,
-                            dprint_func_ir, remove_dead, mk_alloc, remove_dels,
-                            get_name_var_table, replace_var_names,
-                            add_offset_to_labels, get_ir_of_code,
-                            compile_to_numba_ir, replace_arg_nodes,
-                            find_callname, guard, require, get_definition)
+from numba.ir_utils import (
+    mk_unique_var, find_const, compile_to_numba_ir, replace_arg_nodes, guard)
 
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.typing import signature
@@ -71,7 +67,7 @@ class ParquetHandler(object):
         self.locals = _locals
         self.reverse_copies = _reverse_copies
 
-    def gen_parquet_read(self, file_name, lhs):
+    def gen_parquet_read(self, file_name, lhs, columns):
         scope = file_name.scope
         loc = file_name.loc
 
@@ -89,11 +85,11 @@ class ParquetHandler(object):
             self.locals.pop(self.reverse_copies[lhs.name] + ':convert')
 
         if table_types is None:
-            fname_def = guard(get_definition, self.func_ir, file_name)
-            if (not isinstance(fname_def, (ir.Const, ir.Global, ir.FreeVar))
-                    or not isinstance(fname_def.value, str)):
-                raise ValueError("Parquet schema not available")
-            file_name_str = fname_def.value
+            file_name_str = guard(find_const, self.func_ir, file_name)
+            if not isinstance(file_name_str, str):
+                raise ValueError("Parquet schema not available. Either path "
+                    "argument should be constant for Bodo to look at the file "
+                    "at compile time or schema should be provided.")
             col_names, col_types = parquet_file_schema(file_name_str)
             # remove Pandas index if exists
             # TODO: handle index properly when indices are supported
@@ -101,6 +97,11 @@ class ParquetHandler(object):
         else:
             col_names = list(table_types.keys())
             col_types = list(table_types.values())
+
+        # HACK convert types using decorator for int columns with NaN
+        for i, c in enumerate(col_names):
+            if c in convert_types:
+                col_types[i] = convert_types[c].dtype
 
         out_nodes = []
         # get arrow readers once
@@ -120,8 +121,6 @@ class ParquetHandler(object):
         for i, cname in enumerate(col_names):
             # get column type from schema
             c_type = col_types[i]
-            if cname in convert_types:
-                c_type = convert_types[cname].dtype
 
             # create a variable for column and assign type
             varname = mk_unique_var(cname)
