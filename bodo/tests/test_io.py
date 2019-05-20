@@ -44,11 +44,27 @@ def test_pq_index(datapath):
 
     # string index
     fname = datapath('index_test2.pq')
-    def test_impl():
+    def test_impl2():
         return pd.read_parquet(fname)
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_frame_equal(bodo_func(), test_impl())
+    bodo_func = bodo.jit(test_impl2)
+    pd.testing.assert_frame_equal(bodo_func(), test_impl2())
+
+
+def test_pq_schema(datapath):
+    fname = datapath('example.parquet')
+    def impl(f):
+        df = pd.read_parquet(f)
+        return df
+
+    bodo_func = bodo.jit(
+        locals={'df':{'one': bodo.float64[:],
+                      'two': bodo.string_array_type,
+                      'three': bodo.bool_[:],
+                      'four': bodo.float64[:],
+                      'five': bodo.string_array_type,
+                      }})(impl)
+    pd.testing.assert_frame_equal(bodo_func(fname), impl(fname))
 
 
 def test_h5_read_seq(datapath):

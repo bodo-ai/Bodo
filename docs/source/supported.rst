@@ -230,7 +230,7 @@ supported.
 File I/O
 --------
 
-Currently, Bodo supports I/O for the `HDF5 <http://www.h5py.org/>`_ and
+Currently, Bodo supports I/O for CSV, `HDF5 <http://www.h5py.org/>`_ and
 `Parquet <http://parquet.apache.org/>`_ formats.
 For HDF5, the syntax is the same as the `h5py <http://www.h5py.org/>`_ package.
 For example::
@@ -241,13 +241,11 @@ For example::
         X = f['points'][:]
         Y = f['responses'][:]
 
-For Parquet, the syntax is the same as `pyarrow <https://arrow.apache.org/docs/python/>`_::
+For Parquet, the syntax is the same as Pandas::
 
-    import pyarrow.parquet as pq
     @bodo.jit
     def kde():
-        t = pq.read_table('kde.parquet')
-        df = t.to_pandas()
+        df = pd.read_parquet('kde.parquet')
         X = df['points'].values
 
 Bodo automatically parallelizes I/O of different nodes in a distributed setting

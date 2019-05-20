@@ -41,7 +41,17 @@ Input/Output
 
 * :func:`pandas.read_parquet`
 
-   * If filename is constant, Bodo finds the schema from file at compilation time. Otherwise, schema should be provided.
+   * Arguments ``path`` and ``columns`` are supported. ``columns`` should be a constant list of strings.
+
+   * If ``path`` is constant, Bodo finds the schema from file at compilation time.
+     Otherwise, schema should be provided. For example::
+
+      @bodo.jit(locals={'df':{'A': bodo.float64[:],
+                              'B': bodo.string_array_type}})
+      def impl(f):
+        df = pd.read_parquet(f)
+        return df
+
 
 General functions
 ~~~~~~~~~~~~~~~~~

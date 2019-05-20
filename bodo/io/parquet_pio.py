@@ -96,7 +96,7 @@ class ParquetHandler(object):
                 file_name_str)
         else:
             col_names = list(table_types.keys())
-            col_types = list(table_types.values())
+            col_types = [t.dtype for t in table_types.values()]
             index_col = 'index' if 'index' in col_names else None
 
         col_indices = list(range(len(col_names)))
