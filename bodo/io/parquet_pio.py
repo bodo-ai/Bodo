@@ -98,6 +98,12 @@ class ParquetHandler(object):
             col_names = list(table_types.keys())
             col_types = list(table_types.values())
 
+        col_indices = list(range(len(col_names)))
+        if columns is not None:
+            col_indices = [col_names.index(c) for c in columns]
+            col_types = [col_types[i] for i in col_indices]
+            col_names = columns
+
         # HACK convert types using decorator for int columns with NaN
         for i, c in enumerate(col_names):
             if c in convert_types:
@@ -118,17 +124,15 @@ class ParquetHandler(object):
         arrow_readers_var = out_nodes[-1].target
 
         col_arrs = []
-        for i, cname in enumerate(col_names):
-            # get column type from schema
-            c_type = col_types[i]
-
+        for i, cname, c_type in zip(col_indices, col_names, col_types):
             # create a variable for column and assign type
             varname = mk_unique_var(cname)
             #self.locals[varname] = c_type
             cvar = ir.Var(scope, varname, loc)
             col_arrs.append(cvar)
 
-            out_nodes += get_column_read_nodes(c_type, cvar, arrow_readers_var, i)
+            out_nodes += get_column_read_nodes(
+                c_type, cvar, arrow_readers_var, i)
 
         # delete arrow readers
         def cleanup_arrow_readers(readers):

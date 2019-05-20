@@ -292,6 +292,14 @@ class TestIO(unittest.TestCase):
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
+    def test_pq_columns(self):
+        def test_impl():
+            return pd.read_parquet('bodo/tests/data/example.parquet',
+                                   columns=['three', 'five'])
+
+        bodo_func = bodo.jit(test_impl)
+        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+
     def test_pq_str_with_nan_seq(self):
         def test_impl():
             df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
