@@ -457,6 +457,28 @@ class TestIO(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
+    def test_csv_index_name1(self):
+        def test_impl():
+            return pd.read_csv("bodo/tests/data/csv_data_date1.csv",
+                names=['A', 'B', 'C', 'D'],
+                dtype={'A':np.int, 'B':np.float, 'C':str, 'D':np.int},
+                index_col='A')
+        bodo_func = bodo.jit(test_impl)
+        pd_expected = test_impl()
+        pd_expected.index.name = None  # TODO: handle index name
+        pd.testing.assert_frame_equal(bodo_func(), pd_expected)
+
+    def test_csv_index_ind1(self):
+        def test_impl():
+            return pd.read_csv("bodo/tests/data/csv_data_date1.csv",
+                names=['A', 'B', 'C', 'D'],
+                dtype={'A':np.int, 'B':np.float, 'C':str, 'D':np.int},
+                index_col=1)
+        bodo_func = bodo.jit(test_impl)
+        pd_expected = test_impl()
+        pd_expected.index.name = None  # TODO: handle index name
+        pd.testing.assert_frame_equal(bodo_func(), pd_expected)
+
     def test_csv_parallel1(self):
         def test_impl():
             df = pd.read_csv("bodo/tests/data/csv_data1.csv",

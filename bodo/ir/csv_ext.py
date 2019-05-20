@@ -26,9 +26,10 @@ from bodo.hiframes.pd_categorical_ext import (PDCategoricalDtype,
 
 
 class CsvReader(ir.Stmt):
-    def __init__(self, file_name, df_out, sep, df_colnames, out_vars, out_types, usecols, loc, skiprows=0):
+    def __init__(self, file_name, df_out, sep, df_colnames, out_vars,
+            out_types, usecols, loc, skiprows=0):
         self.file_name = file_name
-        self.df_out = df_out
+        self.df_out = df_out  # used only for printing
         self.sep = sep
         self.df_colnames = df_colnames
         self.out_vars = out_vars

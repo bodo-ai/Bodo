@@ -546,6 +546,8 @@ class UntypedPass(object):
         header = self._get_str_arg(
             'read_csv', rhs.args, kws, 3, 'header', 'infer')
         names_var = self._get_arg('read_csv', rhs.args, kws, 4, 'names', '')
+        index_col = self._get_str_arg(
+            'read_csv', rhs.args, kws, 5, 'index_col', -1)
         usecols_var = self._get_arg(
             'read_csv', rhs.args, kws, 6, 'usecols', '')
         dtype_var = self._get_arg('read_csv', rhs.args, kws, 10, 'dtype', '')
@@ -554,7 +556,8 @@ class UntypedPass(object):
 
         # check unsupported arguments
         supported_args = ('filepath_or_buffer', 'sep', 'delimiter', 'header',
-            'names', 'usecols', 'dtype', 'skiprows', 'parse_dates')
+            'names', 'index_col', 'usecols', 'dtype', 'skiprows',
+            'parse_dates')
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
             raise ValueError(
@@ -637,16 +640,31 @@ class UntypedPass(object):
             fname, lhs.name, sep, columns, data_arrs, out_types, usecols,
             lhs.loc, skiprows)]
 
+        columns = columns.copy()  # copy since modified below
         n_cols = len(columns)
-        data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
+        args = ['data{}'.format(i) for i in range(n_cols)]
+        data_args = args.copy()
+        index_arg = 'None'
+
+        # one column is index
+        if index_col != -1:
+            # convert column number to column name
+            if isinstance(index_col, int):
+                index_col = columns[index_col]
+            index_ind = columns.index(index_col)
+            index_arg = data_args[index_ind]
+            columns.remove(index_col)
+            data_args.remove(data_args[index_ind])
 
         col_args = ", ".join("'{}'".format(c) for c in columns)
+
         col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
-        func_text = "def _init_df({}):\n".format(data_args)
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
-            data_args, col_var)
+        func_text = "def _init_df({}):\n".format(", ".join(args))
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
+            ", ".join(data_args), index_arg, col_var)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
+        # print(func_text)
         _init_df = loc_vars['_init_df']
 
         f_block = compile_to_numba_ir(
