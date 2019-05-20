@@ -33,6 +33,24 @@ def test_pq_spark_date(datapath):
     bodo_func = bodo.jit(impl)
     pd.testing.assert_frame_equal(bodo_func(), impl())
 
+
+def test_pq_index(datapath):
+    fname = datapath('index_test1.pq')
+    def test_impl():
+        return pd.read_parquet(fname)
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_frame_equal(bodo_func(), test_impl())
+
+    # string index
+    fname = datapath('index_test2.pq')
+    def test_impl():
+        return pd.read_parquet(fname)
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_frame_equal(bodo_func(), test_impl())
+
+
 def test_h5_read_seq(datapath):
     fname = datapath("lr.hdf5")
     def test_impl():

@@ -794,17 +794,24 @@ class UntypedPass(object):
         if not config._has_pyarrow:
             raise RuntimeError("pyarrow is required for Parquet support")
 
-        columns, data_arrs, nodes = self.pq_handler.gen_parquet_read(
+        columns, data_arrs, index_col, nodes = self.pq_handler.gen_parquet_read(
             fname, lhs, columns)
         n_cols = len(columns)
-        data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
+        args = ", ".join('data{}'.format(i) for i in range(n_cols))
+        data_args = ", ".join('data{}'.format(i) for i in range(n_cols)
+                       if (index_col is None or i != columns.index(index_col)))
 
-        col_args = ", ".join("'{}'".format(c) for c in columns)
-        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
-        func_text = "def _init_df({}):\n".format(data_args)
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
-            data_args, col_var)
+        index_arg = 'None' if index_col is None else 'data{}'.format(
+            columns.index(index_col))
+        col_args = ", ".join("'{}'".format(c) for c in columns
+                             if (index_col is None or c != index_col))
+        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
+            col_args, col_args)
+        func_text = "def _init_df({}):\n".format(args)
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
+            data_args, index_arg, col_var)
         loc_vars = {}
+        # print(func_text)
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars['_init_df']
 

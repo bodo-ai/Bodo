@@ -72,6 +72,13 @@ df = pd.DataFrame({"A": ["foo", "foo", "foo", "foo", "foo",
                     "D": [1, 2, 2, 6, 3, 4, 5, 6, 9]})
 df.to_parquet("pivot2.pq")
 
+
+df = pd.DataFrame({'A': ['bc']+["a"]*3+ ["bc"]*3+['a']}, index = [-8,1,2,3,1,5,6,7])
+df.to_parquet("index_test1.pq")
+df = pd.DataFrame(index = ['bc']+["a"]*3+ ["bc"]*3+['a'], data={'B': [-8,1,2,3,1,5,6,7]})
+df.to_parquet("index_test2.pq")
+
+
 # test datetime64, spark dates
 dt1 = pd.DatetimeIndex(['2017-03-03 03:23', '1990-10-23', '1993-07-02 10:33:01'])
 df = pd.DataFrame({'DT64': dt1, 'DATE': dt1.copy()})

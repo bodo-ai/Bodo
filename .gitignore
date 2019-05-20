@@ -26,14 +26,5 @@ docs/_build/
 docs/gh-pages/
 *.DS_Store
 
-# data files for testing
-*.pq
-*.csv
-*.h5
-*.dat
-*.parquet
-*.hdf5
-tmp_tests/
-
 # VS Code config
 .vscode

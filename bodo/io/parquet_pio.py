@@ -92,13 +92,12 @@ class ParquetHandler(object):
                 raise ValueError("Parquet schema not available. Either path "
                     "argument should be constant for Bodo to look at the file "
                     "at compile time or schema should be provided.")
-            col_names, col_types = parquet_file_schema(file_name_str)
-            # remove Pandas index if exists
-            # TODO: handle index properly when indices are supported
-            _rm_pd_index(col_names, col_types)
+            col_names, col_types, index_col = parquet_file_schema(
+                file_name_str)
         else:
             col_names = list(table_types.keys())
             col_types = list(table_types.values())
+            index_col = 'index' if 'index' in col_names else None
 
         col_indices = list(range(len(col_names)))
         if columns is not None:
@@ -115,7 +114,7 @@ class ParquetHandler(object):
         nodes = [bodo.ir.parquet_ext.ParquetReader(
             file_name, lhs.name, col_names, col_indices, col_types, data_arrs,
             loc)]
-        return col_names, data_arrs, nodes
+        return col_names, data_arrs, index_col, nodes
 
 
 def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx,
@@ -290,21 +289,24 @@ def parquet_file_schema(file_name):
     pq_dataset = pq.ParquetDataset(file_name)
     col_names = pq_dataset.schema.names
     pa_schema = pq_dataset.schema.to_arrow_schema()
+    index_col = None
+
+    # find pandas index column if any
+    # TODO: other pandas metadata like dtypes needed?
+    # https://pandas.pydata.org/pandas-docs/stable/development/developer.html
+    key = b'pandas'
+    if pa_schema.metadata is not None and key in pa_schema.metadata:
+        import json
+        pandas_metadata = json.loads(pa_schema.metadata[key].decode('utf8'))
+        n_indices = len(pandas_metadata['index_columns'])
+        if n_indices > 1:
+            raise ValueError("read_parquet: MultiIndex not supported yet")
+        index_col = pandas_metadata['index_columns'][0] if n_indices else None
 
     col_types = [_get_numba_typ_from_pa_typ(pa_schema.field_by_name(c).type)
                  for c in col_names]
     # TODO: close file?
-    return col_names, col_types
-
-def _rm_pd_index(col_names, col_types):
-    """remove pandas index if found in columns
-    """
-    try:
-        pd_index_loc = col_names.index('__index_level_0__')
-        del col_names[pd_index_loc]
-        del col_types[pd_index_loc]
-    except ValueError:
-        pass
+    return col_names, col_types, index_col
 
 
 _get_arrow_readers = types.ExternalFunction("get_arrow_readers", types.Opaque('arrow_reader')(types.voidptr))
