@@ -16,7 +16,7 @@ from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
                               pre_alloc_string_array, num_total_chars,
                               getitem_str_offset, copy_str_arr_slice)
 from bodo.libs.timsort import copyElement_tup, getitem_arr_tup
-from bodo.utils.utils import _numba_to_c_type_map
+from bodo.utils.utils import _numba_to_c_type_map, sanitize_varname
 from bodo import objmode
 import pandas as pd
 import numpy as np
@@ -74,6 +74,7 @@ numba.array_analysis.array_analysis_extensions[CsvReader] = csv_array_analysis
 
 
 def csv_distributed_analysis(csv_node, array_dists):
+    # TODO: all vars should have the same distribution for csv
     for v in csv_node.out_vars:
         if v.name not in array_dists:
             array_dists[v.name] = Distribution.OneD
@@ -289,6 +290,7 @@ def _get_dtype_str(t):
         return 'string_array_type'
     return '{}[::1]'.format(dtype)
 
+
 def _get_pd_dtype_str(t):
     dtype = t.dtype
     if isinstance(dtype, PDCategoricalDtype):
@@ -299,17 +301,20 @@ def _get_pd_dtype_str(t):
         return 'str'
     return 'np.{}'.format(dtype)
 
+
 # XXX: temporary fix pending Numba's #3378
 # keep the compiled functions around to make sure GC doesn't delete them and
 # the reference to the dynamic function inside them
 # (numba/lowering.py:self.context.add_dynamic_addr ...)
 compiled_funcs = []
 
-def _gen_csv_reader_py(col_names, col_typs, usecols, sep, typingctx, targetctx, parallel, skiprows):
+
+def _gen_csv_reader_py(col_names, col_typs, usecols, sep, typingctx, targetctx,
+                       parallel, skiprows):
     # TODO: support non-numpy types like strings
     date_inds = ", ".join(str(i) for i, t in enumerate(col_typs)
                            if t.dtype == types.NPDatetime('ns'))
-    typ_strs = ", ".join(["{}='{}'".format(_sanitize_varname(cname), _get_dtype_str(t))
+    typ_strs = ", ".join(["{}='{}'".format(sanitize_varname(cname), _get_dtype_str(t))
                           for cname, t in zip(col_names, col_typs)])
     pd_dtype_strs = ", ".join(["'{}':{}".format(cname, _get_pd_dtype_str(t))
                           for cname, t in zip(col_names, col_typs)])
@@ -324,9 +329,9 @@ def _gen_csv_reader_py(col_names, col_typs, usecols, sep, typingctx, targetctx, 
     func_text += "       dtype={{{}}},\n".format(pd_dtype_strs)
     func_text += "       usecols={}, sep='{}')\n".format(usecols, sep)
     for cname in col_names:
-        func_text += "    {} = df['{}'].values\n".format(_sanitize_varname(cname), cname)
+        func_text += "    {} = df['{}'].values\n".format(sanitize_varname(cname), cname)
         # func_text += "    print({})\n".format(cname)
-    func_text += "  return ({},)\n".format(", ".join(_sanitize_varname(c) for c in col_names))
+    func_text += "  return ({},)\n".format(", ".join(sanitize_varname(c) for c in col_names))
 
     # print(func_text)
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
@@ -340,9 +345,3 @@ def _gen_csv_reader_py(col_names, col_typs, usecols, sep, typingctx, targetctx, 
     jit_func = numba.njit(csv_reader_py)
     compiled_funcs.append(jit_func)
     return jit_func
-
-def _sanitize_varname(varname):
-    new_name = varname.replace('$', '_').replace('.', '_')
-    if not new_name[0].isalpha():
-        new_name = '_' + new_name
-    return new_name

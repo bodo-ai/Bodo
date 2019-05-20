@@ -9,9 +9,11 @@ from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 import numpy as np
 import bodo
 from bodo.libs.str_ext import string_type, unicode_to_char_ptr
-from bodo.libs.str_arr_ext import StringArray, StringArrayPayloadType, construct_string_array
+from bodo.libs.str_arr_ext import StringArrayPayloadType, construct_string_array
 from bodo.libs.str_arr_ext import string_array_type
-from bodo.utils.utils import unliteral_all
+from bodo.utils.utils import unliteral_all, sanitize_varname
+import bodo.ir.parquet_ext
+from bodo.transforms import distributed_pass
 
 
 # from parquet/types.h
@@ -109,86 +111,134 @@ class ParquetHandler(object):
             if c in convert_types:
                 col_types[i] = convert_types[c].dtype
 
-        out_nodes = []
-        # get arrow readers once
-        def init_arrow_readers(fname):
-            arrow_readers = get_arrow_readers(unicode_to_char_ptr(fname))
-
-        f_block = compile_to_numba_ir(init_arrow_readers,
-                                     {'get_arrow_readers': _get_arrow_readers,
-                                     'unicode_to_char_ptr': unicode_to_char_ptr,
-                                     }).blocks.popitem()[1]
-
-        replace_arg_nodes(f_block, [file_name])
-        out_nodes += f_block.body[:-3]
-        arrow_readers_var = out_nodes[-1].target
-
-        col_arrs = []
-        for i, cname, c_type in zip(col_indices, col_names, col_types):
-            # create a variable for column and assign type
-            varname = mk_unique_var(cname)
-            #self.locals[varname] = c_type
-            cvar = ir.Var(scope, varname, loc)
-            col_arrs.append(cvar)
-
-            out_nodes += get_column_read_nodes(
-                c_type, cvar, arrow_readers_var, i)
-
-        # delete arrow readers
-        def cleanup_arrow_readers(readers):
-            s = del_arrow_readers(readers)
-
-        f_block = compile_to_numba_ir(cleanup_arrow_readers,
-                                     {'del_arrow_readers': _del_arrow_readers,
-                                     }).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [arrow_readers_var])
-        out_nodes += f_block.body[:-3]
-        return col_names, col_arrs, out_nodes
+        data_arrs = [ir.Var(scope, mk_unique_var(c), loc) for c in col_names]
+        nodes = [bodo.ir.parquet_ext.ParquetReader(
+            file_name, lhs.name, col_names, col_indices, col_types, data_arrs,
+            loc)]
+        return col_names, data_arrs, nodes
 
 
-def get_column_read_nodes(c_type, cvar, arrow_readers_var, i):
+def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx,
+                       targetctx, dist_pass):
 
-    loc = cvar.loc
-
-    func_text = 'def f(arrow_readers):\n'
-    func_text += '  col_size = get_column_size_parquet(arrow_readers, {})\n'.format(i)
-    # generate strings differently
-    if c_type == string_type:
-        # pass size for easier allocation and distributed analysis
-        func_text += '  column = read_parquet_str(arrow_readers, {}, col_size)\n'.format(
-            i)
-    else:
-        el_type = get_element_type(c_type)
-        if el_type == repr(types.NPDatetime('ns')):
-            func_text += '  column_tmp = np.empty(col_size, dtype=np.int64)\n'
-            # TODO: fix alloc
-            func_text += '  column = bodo.hiframes.api.ts_series_to_arr_typ(column_tmp)\n'
-        else:
-            func_text += '  column = np.empty(col_size, dtype=np.{})\n'.format(
-                el_type)
-        func_text += '  status = read_parquet(arrow_readers, {}, column, np.int32({}))\n'.format(
-            i, _type_to_pq_dtype_number[el_type])
+    n_cols = len(pq_node.out_vars)
+    # get column variables and their sizes
+    arg_names = ", ".join("out" + str(i) for i in range(2 * n_cols))
+    func_text  = "def pq_impl(fname):\n"
+    func_text += "    ({},) = _pq_reader_py(fname)\n".format(arg_names)
+    # print(func_text)
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
-    size_func = loc_vars['f']
-    _, f_block = compile_to_numba_ir(size_func,
-                                     {'get_column_size_parquet': get_column_size_parquet,
-                                      'read_parquet': read_parquet,
-                                      'read_parquet_str': read_parquet_str,
-                                      'np': np,
-                                      'bodo': bodo,
-                                      'StringArray': StringArray}).blocks.popitem()
+    pq_impl = loc_vars['pq_impl']
 
-    replace_arg_nodes(f_block, [arrow_readers_var])
-    out_nodes = f_block.body[:-3]
-    for stmt in reversed(out_nodes):
-        if stmt.target.name.startswith("column"):
-            assign = ir.Assign(stmt.target, cvar, loc)
-            break
+    # parallel columns
+    parallel = [c for c, v in zip(pq_node.col_names, pq_node.out_vars)
+                if array_dists[v.name] in (distributed_pass.Distribution.OneD,
+                    distributed_pass.Distribution.OneD_Var)]
 
-    out_nodes.append(assign)
-    return out_nodes
+    pq_reader_py = _gen_pq_reader_py(
+        pq_node.col_names, pq_node.col_indices, pq_node.out_types,
+        typingctx, targetctx, parallel)
+
+    f_block = compile_to_numba_ir(pq_impl,
+                                  {'_pq_reader_py': pq_reader_py},
+                                  typingctx, (string_type,),
+                                  typemap, calltypes).blocks.popitem()[1]
+    replace_arg_nodes(f_block, [pq_node.file_name])
+    nodes = f_block.body[:-3]
+
+    for i in range(n_cols):
+        nodes[2 * (i - n_cols)].target = pq_node.out_vars[i]
+
+    size_vars = [nodes[2 * (i - n_cols) + 1].target for i in range(n_cols)]
+
+    # set global array sizes in dist_pass
+    for arr, size_var in zip(pq_node.out_vars, size_vars):
+        dist_pass._array_sizes[arr.name] = [size_var]
+        out, start_var, end_var = dist_pass._gen_1D_div(
+            size_var, arr.scope, pq_node.loc, "$alloc", "get_node_portion",
+            bodo.libs.distributed_api.get_node_portion)
+        dist_pass._array_starts[arr.name] = [start_var]
+        dist_pass._array_counts[arr.name] = [end_var]
+        nodes += out
+
+    return nodes
+
+
+distributed_pass.distributed_run_extensions[
+    bodo.ir.parquet_ext.ParquetReader] = pq_distributed_run
+
+
+def _gen_pq_reader_py(col_names, col_indices, out_types, typingctx, targetctx,
+                      parallel):
+
+    func_text = "def pq_reader_py(fname):\n"
+    func_text += "  arrow_readers = get_arrow_readers(unicode_to_char_ptr(fname))\n"
+    for c, ind, t in zip(col_names, col_indices, out_types):
+        func_text = gen_column_read(func_text, c, ind, t, c in parallel)
+    func_text += "  del_arrow_readers(arrow_readers)\n"
+    func_text += "  return ({},)\n".format(", ".join("{0}, {0}_size".format(
+        sanitize_varname(c)) for c in col_names))
+
+    # print(func_text)
+    loc_vars = {}
+    glbs = {'get_arrow_readers': _get_arrow_readers,
+            'del_arrow_readers': _del_arrow_readers,
+            'get_column_size_parquet': get_column_size_parquet,
+            'read_parquet': read_parquet,
+            'read_parquet_parallel': read_parquet_parallel,
+            'read_parquet_str': read_parquet_str,
+            'read_parquet_str_parallel': read_parquet_str_parallel,
+            'get_start_count': bodo.libs.distributed_api.get_start_count,
+            'unicode_to_char_ptr': unicode_to_char_ptr,
+            'np': np,
+            'bodo': bodo}
+    exec(func_text, glbs, loc_vars)
+    pq_reader_py = loc_vars['pq_reader_py']
+
+    # TODO: no_cpython_wrapper=True crashes for some reason
+    jit_func = numba.njit(pq_reader_py)
+    bodo.ir.csv_ext.compiled_funcs.append(jit_func)
+    return jit_func
+
+
+def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
+    cname = sanitize_varname(cname)
+    # handle size variables
+    func_text += '  {}_size = get_column_size_parquet(arrow_readers, {})\n'.format(cname, c_ind)
+    if is_parallel:
+        func_text += '  {0}_start, {0}_count = get_start_count({0}_size)\n'.format(cname)
+        alloc_size = "{}_count".format(cname)
+    else:
+        alloc_size = "{}_size".format(cname)
+
+    # generate strings differently
+    if c_type == string_type:
+        if is_parallel:
+            func_text += '  {0} = read_parquet_str_parallel(arrow_readers, {1}, {0}_start, {0}_count)\n'.format(
+                cname, c_ind)
+        else:
+            # pass size for easier allocation and distributed analysis
+            func_text += '  {} = read_parquet_str(arrow_readers, {}, {}_size)\n'.format(
+                cname, c_ind, cname)
+    else:
+        el_type = get_element_type(c_type)
+        if el_type == repr(types.NPDatetime('ns')):
+            func_text += '  column_tmp = np.empty({}, dtype=np.int64)\n'.format(alloc_size)
+            # TODO: fix alloc
+            func_text += '  {} = bodo.hiframes.api.ts_series_to_arr_typ(column_tmp)\n'.format(cname)
+        else:
+            func_text += '  {} = np.empty({}, dtype=np.{})\n'.format(
+                cname, alloc_size, el_type)
+        if is_parallel:
+            func_text += '  status = read_parquet_parallel(arrow_readers, {0}, {1}, np.int32({2}), {1}_start, {1}_count)\n'.format(
+                c_ind, cname, _type_to_pq_dtype_number[el_type])
+        else:
+            func_text += '  status = read_parquet(arrow_readers, {}, {}, np.int32({}))\n'.format(
+                c_ind, cname, _type_to_pq_dtype_number[el_type])
+
+    return func_text
 
 
 def get_element_type(dtype):
@@ -196,6 +246,7 @@ def get_element_type(dtype):
     if out == 'bool':
         out = 'bool_'
     return out
+
 
 def _get_numba_typ_from_pa_typ(pa_typ):
     import pyarrow as pa
@@ -229,6 +280,7 @@ def _get_numba_typ_from_pa_typ(pa_typ):
     if pa_typ not in _typ_map:
         raise ValueError("Arrow data type {} not supported yet".format(pa_typ))
     return _typ_map[pa_typ]
+
 
 def parquet_file_schema(file_name):
     import pyarrow.parquet as pq

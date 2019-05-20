@@ -19,7 +19,7 @@ from numba.typing.templates import infer_global, AbstractTemplate
 from numba.extending import overload, lower_builtin
 import bodo
 from bodo.utils.utils import (is_call_assign, is_var_assign, is_assign, debug_prints,
-        alloc_arr_tup, empty_like_type)
+        alloc_arr_tup, empty_like_type, sanitize_varname)
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
@@ -961,7 +961,7 @@ def gen_top_level_agg_func(key_names, return_key, red_var_typs, out_typs,
     in_names = tuple("in_{}".format(c) for c in in_col_names)
     out_names = tuple("out_{}".format(c) for c in out_col_names)
     key_args = ", ".join("key_{}".format(
-        _sanitize_varname(c)) for c in key_names)
+        sanitize_varname(c)) for c in key_names)
 
     in_args = ", ".join(in_names)
     if in_args != '':
@@ -984,7 +984,7 @@ def gen_top_level_agg_func(key_names, return_key, red_var_typs, out_typs,
     func_text += "    init_vals = __init_func()\n"
 
     out_keys = tuple("out_key_{}".format(
-        _sanitize_varname(c)) for c in key_names)
+        sanitize_varname(c)) for c in key_names)
     out_tup = ", ".join(out_names + out_keys if return_key else out_names)
 
     if parallel:
@@ -1797,6 +1797,3 @@ def _build_set_tup_overload(arr_tup):
             return s
         return _impl
     return _build_set_tup
-
-def _sanitize_varname(varname):
-    return varname.replace('$', '_').replace('.', '_')

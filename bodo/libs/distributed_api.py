@@ -375,6 +375,16 @@ def alltoallv_tup_overload(send_data, out_data, send_counts, recv_counts, send_d
     a2a_impl = loc_vars['f']
     return a2a_impl
 
+
+@numba.njit
+def get_start_count(n):
+    rank = bodo.libs.distributed_api.get_rank()
+    n_pes = bodo.libs.distributed_api.get_size()
+    start = bodo.libs.distributed_api.get_start(n, n_pes, rank)
+    count = bodo.libs.distributed_api.get_node_portion(n, n_pes, rank)
+    return start, count
+
+
 def get_rank():  # pragma: no cover
     """dummy function for C mpi get_rank"""
     return 0

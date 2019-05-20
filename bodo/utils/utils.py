@@ -1,5 +1,5 @@
 """
-Collection of utility functions.
+Collection of utility functions. Needs to be refactored in separate files.
 """
 from collections import namedtuple
 import operator
@@ -477,27 +477,37 @@ def gen_getitem(out_var, in_var, ind, calltypes, nodes):
     calltypes[getitem] = None
     nodes.append(ir.Assign(getitem, out_var, loc))
 
-def sanitize_varname(varname):
-    return varname.replace('$', '_').replace('.', '_')
 
 def is_call_assign(stmt):
     return (isinstance(stmt, ir.Assign)
             and isinstance(stmt.value, ir.Expr)
             and stmt.value.op == 'call')
 
+
 def is_call(expr):
     return (isinstance(expr, ir.Expr)
             and expr.op == 'call')
 
+
 def is_var_assign(inst):
     return isinstance(inst, ir.Assign) and isinstance(inst.value, ir.Var)
+
 
 def is_assign(inst):
     return isinstance(inst, ir.Assign)
 
+
+def sanitize_varname(varname):
+    new_name = varname.replace('$', '_').replace('.', '_')
+    if not new_name[0].isalpha():
+        new_name = '_' + new_name
+    return new_name
+
+
 def dump_node_list(node_list):
     for n in node_list:
         print("   ", n)
+
 
 def debug_prints():
     return numba.config.DEBUG_ARRAY_OPT == 1
