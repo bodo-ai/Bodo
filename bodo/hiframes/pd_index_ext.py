@@ -18,31 +18,31 @@ from bodo.hiframes.pd_series_ext import (is_str_series_typ, string_array_type,
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type, datetime_date_type
 from bodo.hiframes.datetime_date_ext import array_datetime_date
 
+
 _dt_index_data_typ = types.Array(types.NPDatetime('ns'), 1, 'C')
 _timedelta_index_data_typ = types.Array(types.NPTimedelta('ns'), 1, 'C')
 
 
+# -------------------------  DatetimeIndex -----------------------------
+
+
 class DatetimeIndexType(types.IterableType):
-    """Temporary type class for DatetimeIndex objects.
+    """type class for DatetimeIndex objects.
     """
-    def __init__(self, is_named=False):
+    def __init__(self, name_typ=None):
         # TODO: support other properties like freq/tz/dtype/yearfirst?
-        self.is_named = is_named
+        self.name_typ = name_typ
         super(DatetimeIndexType, self).__init__(
-            name="DatetimeIndex(is_named = {})".format(is_named))
+            name="DatetimeIndex(name = {})".format(name_typ))
 
     def copy(self):
         # XXX is copy necessary?
-        return DatetimeIndexType(self.is_named)
+        return DatetimeIndexType(self.name_typ)
 
     @property
     def key(self):
         # needed?
-        return self.is_named
-
-    def unify(self, typingctx, other):
-        # needed?
-        return super(DatetimeIndexType, self).unify(typingctx, other)
+        return self.name_typ
 
     @property
     def iterator_type(self):
@@ -51,14 +51,19 @@ class DatetimeIndexType(types.IterableType):
         return types.iterators.ArrayIterator(_dt_index_data_typ)
 
 
-#@typeof_impl.register(pd.DatetimeIndex)
+@typeof_impl.register(pd.DatetimeIndex)
+def typeof_datetime_index(val, c):
+    # TODO: check value for freq, tz, etc. and raise error since unsupported
+    return DatetimeIndexType(numba.typeof(val.name))
+
 
 @register_model(DatetimeIndexType)
 class DatetimeIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
+        # TODO: use payload to support mutable name
         members = [
             ('data', _dt_index_data_typ),
-            ('name', string_type),
+            ('name', fe_type.name_typ),
         ]
         super(DatetimeIndexModel, self).__init__(dmm, fe_type, members)
 
@@ -77,18 +82,33 @@ def box_dt_index(typ, val, c):
     dt_index = numba.cgutils.create_struct_proxy(
             typ)(c.context, c.builder, val)
 
-    arr = box_array(_dt_index_data_typ, dt_index.data, c)
+    arr = c.pyapi.from_native_value(
+        _dt_index_data_typ, dt_index.data, c.env_manager)
+    name = c.pyapi.from_native_value(typ.name_typ, dt_index.name)
 
-    # TODO: support name boxing
-    # if typ.is_named:
-    #     name = c.pyapi.from_native_value(string_type, series.name)
-    # else:
-    #     name = c.pyapi.make_none()
-
-    res = c.pyapi.call_method(pd_class_obj, "DatetimeIndex", (arr,))
-
+    # call pd.DatetimeIndex(arr, name=name)
+    kws = c.pyapi.dict_pack([('name', name)])
+    const_call = c.pyapi.object_getattr_string(pd_class_obj, 'DatetimeIndex')
+    res = c.pyapi.call(const_call, c.pyapi.tuple_pack([arr]), kws)
     c.pyapi.decref(pd_class_obj)
+    c.pyapi.decref(const_call)
     return res
+
+
+@unbox(DatetimeIndexType)
+def unbox_datetime_index(typ, val, c):
+    # get data and name attributes
+    # TODO: use to_numpy()
+    data = c.pyapi.to_native_value(
+        _dt_index_data_typ, c.pyapi.object_getattr_string(val, 'values')).value
+    name = c.pyapi.to_native_value(
+        typ.name_typ, c.pyapi.object_getattr_string(val, 'name')).value
+
+    # create index struct
+    index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    index_val.data = data
+    index_val.name = name
+    return NativeValue(index_val._getvalue())
 
 
 @infer_getattr
@@ -400,6 +420,7 @@ def typeof_pd_float64_index(val, c):
 @register_model(NumericIndexType)
 class NumericIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
+        # TODO: nullable integer array (e.g. to hold DatetimeIndex.year)
         members = [
             ('data', types.Array(fe_type.dtype, 1, 'C')),
             ('name', fe_type.name_typ),
@@ -471,7 +492,7 @@ def unbox_numeric_index(typ, val, c):
     name = c.pyapi.to_native_value(
         typ.name_typ, c.pyapi.object_getattr_string(val, 'name')).value
 
-    # create range struct
+    # create index struct
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     index_val.data = data
     index_val.name = name

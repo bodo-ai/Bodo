@@ -103,3 +103,15 @@ def test_numeric_index_box(index):
         return A
 
     pd.testing.assert_index_equal(bodo.jit(impl)(index), impl(index))
+
+
+@pytest.mark.parametrize('dti_val', [
+    pd.date_range(start='2018-04-24', end='2018-04-27', periods=3),
+    pd.date_range(start='2018-04-24', end='2018-04-27', periods=3, name='A'),
+])
+def test_datetime_index_unbox(dti_val):
+    def test_impl(dti):
+        return dti
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_index_equal(bodo_func(dti_val), test_impl(dti_val))

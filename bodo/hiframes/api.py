@@ -857,7 +857,6 @@ def init_datetime_index(typingctx, data, name=None):
     """Create a DatetimeIndex with provided data and name values.
     """
     name = types.none if name is None else name
-    is_named = False if name is types.none else True
 
     def codegen(context, builder, signature, args):
         data_val, name_val = args
@@ -865,22 +864,16 @@ def init_datetime_index(typingctx, data, name=None):
         dt_index = cgutils.create_struct_proxy(
             signature.return_type)(context, builder)
         dt_index.data = data_val
-        if is_named:
-            if isinstance(name, types.StringLiteral):
-                dt_index.name = numba.unicode.make_string_from_constant(
-                    context, builder, string_type, name.literal_value)
-            else:
-                dt_index.name = name_val
+        dt_index.name = name_val
 
         # increase refcount of stored values
         if context.enable_nrt:
             context.nrt.incref(builder, signature.args[0], data_val)
-            if is_named:
-                context.nrt.incref(builder, signature.args[1], name_val)
+            context.nrt.incref(builder, signature.args[1], name_val)
 
         return dt_index._getvalue()
 
-    ret_typ = DatetimeIndexType(is_named)
+    ret_typ = DatetimeIndexType(name)
     sig = signature(ret_typ, data, name)
     return sig, codegen
 

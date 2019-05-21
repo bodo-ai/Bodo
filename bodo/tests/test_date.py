@@ -13,15 +13,6 @@ import random
 
 
 class TestDate(unittest.TestCase):
-    @unittest.skip("needs support for boxing/unboxing DatetimeIndex")
-    def test_datetime_index_in(self):
-        def test_impl(dti):
-            return dti
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        dti = pd.DatetimeIndex(df['str_date'])
-        np.testing.assert_array_equal(bodo_func(dti).values, test_impl(dti).values)
 
     def test_datetime_index(self):
         def test_impl(df):
