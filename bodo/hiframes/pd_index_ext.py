@@ -358,3 +358,173 @@ def range_index_overload(start=None, stop=None, step=None, dtype=None,
     # print(func_text)
     _pd_range_index_imp = loc_vars['_pd_range_index_imp']
     return _pd_range_index_imp
+
+
+# ---------------- NumericIndex -------------------
+
+
+# represents numeric indices (excluding RangeIndex):
+#   Int64Index, UInt64Index, Float64Index
+class NumericIndexType(types.IterableType):
+    """type class for pd.Int64Index/UInt64Index/Float64Index objects.
+    """
+    def __init__(self, dtype, name_typ):
+        self.dtype = dtype
+        self.name_typ = name_typ
+        super(NumericIndexType, self).__init__(
+            name="NumericIndexType({}, {})".format(dtype, name_typ))
+
+    @property
+    def iterator_type(self):
+        # TODO: handle iterator
+        return types.iterators.ArrayIterator(types.Array(self.dtype, 1, 'C'))
+
+
+@typeof_impl.register(pd.Int64Index)
+def typeof_pd_int64_index(val, c):
+    return NumericIndexType(types.int64, numba.typeof(val.name))
+
+
+@typeof_impl.register(pd.UInt64Index)
+def typeof_pd_uint64_index(val, c):
+    return NumericIndexType(types.uint64, numba.typeof(val.name))
+
+
+@typeof_impl.register(pd.Float64Index)
+def typeof_pd_float64_index(val, c):
+    return NumericIndexType(types.float64, numba.typeof(val.name))
+
+
+# even though name attribute is mutable, we don't handle it for now
+# TODO: create refcounted payload to handle mutable name
+@register_model(NumericIndexType)
+class NumericIndexModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [
+            ('data', types.Array(fe_type.dtype, 1, 'C')),
+            ('name', fe_type.name_typ),
+        ]
+        super(NumericIndexModel, self).__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(NumericIndexType, 'data', '_data')
+make_attribute_wrapper(NumericIndexType, 'name', '_name')
+
+
+@box(NumericIndexType)
+def box_numeric_index(typ, val, c):
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    class_obj = c.pyapi.import_module_noblock(mod_name)
+    index_val = cgutils.create_struct_proxy(typ)(
+            c.context, c.builder, val)
+    data = c.pyapi.from_native_value(
+        types.Array(typ.dtype, 1, 'C'), index_val.data, c.env_manager)
+    name = c.pyapi.from_native_value(
+        typ.name_typ, index_val.name, c.env_manager)
+
+    assert typ.dtype in (types.int64, types.uint64, types.float64)
+    func_name = 'Int64Index'
+    if typ.dtype == types.uint64:
+        func_name = 'UInt64Index'
+    elif typ.dtype == types.float64:
+        func_name = 'Float64Index'
+    else:
+        assert typ.dtype == types.int64
+
+    dtype = c.pyapi.make_none()
+    copy = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
+
+    index_obj = c.pyapi.call_method(
+        class_obj, func_name, (data, dtype, copy, name))
+    c.pyapi.decref(class_obj)
+    return index_obj
+
+
+@intrinsic
+def init_numeric_index(typingctx, data, name=None):
+    """Create NumericIndex object
+    """
+
+    def codegen(context, builder, signature, args):
+        assert len(args) == 2
+        index_typ = signature.return_type
+        index_val = cgutils.create_struct_proxy(index_typ)(context, builder)
+        index_val.data = args[0]
+        index_val.name = args[1]
+        # increase refcount of stored values
+        if context.enable_nrt:
+            arr_typ = types.Array(index_typ.dtype, 1, 'C')
+            context.nrt.incref(builder, arr_typ, args[0])
+            context.nrt.incref(builder, index_typ.name_typ, args[1])
+        return index_val._getvalue()
+
+    return NumericIndexType(data.dtype, name)(data, name), codegen
+
+
+@unbox(NumericIndexType)
+def unbox_numeric_index(typ, val, c):
+    # get data and name attributes
+    # TODO: use to_numpy()
+    arr_typ = types.Array(typ.dtype, 1, 'C')
+    data = c.pyapi.to_native_value(
+        arr_typ, c.pyapi.object_getattr_string(val, 'values')).value
+    name = c.pyapi.to_native_value(
+        typ.name_typ, c.pyapi.object_getattr_string(val, 'name')).value
+
+    # create range struct
+    index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    index_val.data = data
+    index_val.name = name
+    return NativeValue(index_val._getvalue())
+
+
+@numba.generated_jit
+def _coerce_to_ndarray(data):
+    # TODO: other cases handled by this function in Pandas like scalar
+    """
+    Coerces data to ndarray.
+    """
+    if isinstance(data, types.Array):
+        return lambda data: data
+
+    if isinstance(data, NumericIndexType):
+        return lambda data: data._data
+
+    if isinstance(data, (types.List, types.Tuple)):
+        # TODO: check homogenous for tuple
+        return lambda data: np.asarray(data)
+
+    if isinstance(data, SeriesType):
+        return lambda data: bodo.hiframes.api.get_series_data(data)
+
+    raise TypeError("cannot coerce {} to array".format(data))
+
+
+@numba.generated_jit
+def _fix_arr_dtype(data, new_dtype):
+    assert isinstance(data, types.Array)
+    assert isinstance(new_dtype, types.DType)
+
+    if data.dtype != new_dtype.dtype:
+        return lambda data, new_dtype: data.astype(new_dtype)
+
+    return lambda data, new_dtype: data
+
+
+def create_numeric_constructor(func, default_dtype):
+
+    def impl(data=None, dtype=None, copy=False, name=None, fastpath=None):
+        data_arr = _coerce_to_ndarray(data)
+        if copy:
+            data_arr = data_arr.copy()  # TODO: np.array() with copy
+        data_res = _fix_arr_dtype(data_arr, np.dtype(default_dtype))
+        return init_numeric_index(data_res, name)
+
+    overload(func)(
+        lambda data=None, dtype=None, copy=False, name=None, fastpath=None:
+        impl)
+
+
+create_numeric_constructor(pd.Int64Index, np.int64)
+create_numeric_constructor(pd.UInt64Index, np.uint64)
+create_numeric_constructor(pd.Float64Index, np.float64)
