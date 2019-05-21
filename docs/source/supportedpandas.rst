@@ -208,6 +208,26 @@ Reshaping, sorting, transposing
 * :meth:`DataFrame.sort_values` `by` argument should be constant string or constant list of strings.
 * :meth:`DataFrame.append`
 
+
+Numeric Index
+~~~~~~~~~~~~~
+
+Numeric index objects ``RangeIndex``, ``Int64Index``, ``UInt64Index`` and
+``Float64Index`` are supported as index to dataframes and series.
+Constructing them in Bodo functions, passing them to Bodo functions (unboxing),
+and returning them from Bodo functions (boxing) are also supported.
+
+* :func:`pandas.RangeIndex`
+
+   * ``start``, ``stop`` and ``step`` arguments are supported.
+
+* :func:`pandas.Int64Index`
+* :func:`pandas.UInt64Index`
+* :func:`pandas.Float64Index`
+
+  * ``data``, ``copy`` and ``name`` arguments are supported. ``data`` can be a list or array.
+
+
 DatetimeIndex
 ~~~~~~~~~~~~~
 
