@@ -19,9 +19,9 @@ from bodo.transforms import distributed_pass
 # from parquet/types.h
 # boolean, int32, int64, int96, float, double, byte
 # XXX arrow converts int96 timestamp to int64
-_type_to_pq_dtype_number = {'bool_': 0, 'int32': 1, 'int64': 2,
-                            'int96': 3, 'float32': 4, 'float64': 5,
-                            repr(types.NPDatetime('ns')): 3, 'int8': 6}
+_type_to_pq_dtype_number = {'np.bool_': 0, 'np.int32': 1, 'np.int64': 2,
+                            'np.int96': 3, 'np.float32': 4, 'np.float64': 5,
+                            'NS_DTYPE': 3, 'np.int8': 6}
 
 
 
@@ -191,6 +191,7 @@ def _gen_pq_reader_py(col_names, col_indices, out_types, typingctx, targetctx,
             'read_parquet_str_parallel': read_parquet_str_parallel,
             'get_start_count': bodo.libs.distributed_api.get_start_count,
             'unicode_to_char_ptr': unicode_to_char_ptr,
+            'NS_DTYPE': np.dtype('M8[ns]'),
             'np': np,
             'bodo': bodo}
     exec(func_text, glbs, loc_vars)
@@ -223,12 +224,7 @@ def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
                 cname, c_ind, cname)
     else:
         el_type = get_element_type(c_type)
-        if el_type == repr(types.NPDatetime('ns')):
-            func_text += '  column_tmp = np.empty({}, dtype=np.int64)\n'.format(alloc_size)
-            # TODO: fix alloc
-            func_text += '  {} = bodo.hiframes.api.ts_series_to_arr_typ(column_tmp)\n'.format(cname)
-        else:
-            func_text += '  {} = np.empty({}, dtype=np.{})\n'.format(
+        func_text += '  {} = np.empty({}, dtype={})\n'.format(
                 cname, alloc_size, el_type)
         if is_parallel:
             func_text += '  status = read_parquet_parallel(arrow_readers, {0}, {1}, np.int32({2}), {1}_start, {1}_count)\n'.format(
@@ -241,10 +237,17 @@ def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
 
 
 def get_element_type(dtype):
+    """get dtype string to pass to empty() allocations
+    """
+    if dtype == types.NPDatetime('ns'):
+        # NS_DTYPE has to be defined in function globals
+        return 'NS_DTYPE'
+
     out = repr(dtype)
-    if out == 'bool':
+    if out == 'bool':  # fix bool string
         out = 'bool_'
-    return out
+
+    return 'np.' + out
 
 
 def _get_numba_typ_from_pa_typ(pa_typ):
