@@ -557,7 +557,7 @@ class DistributedPass(object):
             out[-1].target = assign.target
 
         if (func_mod == 'bodo.hiframes.api' and func_name in (
-                'to_arr_from_series', 'ts_series_to_arr_typ',
+                'to_arr_from_series',
                 'to_date_series_type', 'init_series')
                 and self._is_1D_arr(rhs.args[0].name)):
             # TODO: handle index

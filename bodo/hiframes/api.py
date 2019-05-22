@@ -569,7 +569,6 @@ if hasattr(numba.ir_utils, 'alias_func_extensions'):
     numba.ir_utils.alias_func_extensions[('get_dataframe_data', 'bodo.hiframes.pd_dataframe_ext')] = alias_ext_dummy_func
     # TODO: init_dataframe
     numba.ir_utils.alias_func_extensions[('to_arr_from_series', 'bodo.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('ts_series_to_arr_typ', 'bodo.hiframes.api')] = alias_ext_dummy_func
     numba.ir_utils.alias_func_extensions[('to_date_series_type', 'bodo.hiframes.api')] = alias_ext_dummy_func
 
 
@@ -745,42 +744,6 @@ def fix_rolling_array_overload(column):
         def fix_rolling_array_impl(column):  # pragma: no cover
             return column
     return fix_rolling_array_impl
-
-# dummy function use to change type of timestamp series to array[dt64]
-def ts_series_to_arr_typ(A):
-    return A
-
-@infer_global(ts_series_to_arr_typ)
-class TsSeriesToArrType(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        assert is_dt64_series_typ(args[0]) or args[0] == types.Array(types.int64, 1, 'C')
-        return signature(types.Array(types.NPDatetime('ns'), 1, 'C'), *args)
-
-@lower_builtin(ts_series_to_arr_typ, SeriesType)
-@lower_builtin(ts_series_to_arr_typ, types.Array(types.int64, 1, 'C'))
-def lower_ts_series_to_arr_typ(context, builder, sig, args):
-    return impl_ret_borrowed(context, builder, sig.return_type, args[0])
-
-
-def parse_datetimes_from_strings(A):
-    return A
-
-@infer_global(parse_datetimes_from_strings)
-class ParseDTArrType(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        assert args[0] == string_array_type or is_str_series_typ(args[0])
-        return signature(types.Array(types.NPDatetime('ns'), 1, 'C'), *args)
-
-@lower_builtin(parse_datetimes_from_strings, types.Any)
-def lower_parse_datetimes_from_strings(context, builder, sig, args):
-    # dummy implementation to avoid @overload errors
-    # replaced in series_pass pass
-    res = make_array(sig.return_type)(context, builder)
-    return impl_ret_borrowed(context, builder, sig.return_type, res._getvalue())
 
 
 def construct_series(context, builder, series_type, data_val, index_val,

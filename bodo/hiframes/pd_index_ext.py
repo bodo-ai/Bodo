@@ -17,6 +17,7 @@ from bodo.hiframes.pd_series_ext import (is_str_series_typ, string_array_type,
     SeriesType)
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type, datetime_date_type
 from bodo.hiframes.datetime_date_ext import array_datetime_date
+import bodo.utils.conversion
 
 
 _dt_index_data_typ = types.Array(types.NPDatetime('ns'), 1, 'C')
@@ -151,18 +152,12 @@ def pd_datetimeindex_overload(data=None, freq=None, start=None, end=None,
     if data is None:
         raise ValueError("data argument in pd.DatetimeIndex() expected")
 
-    if data != string_array_type and not is_str_series_typ(data):
-        return (lambda data=None, freq=None, start=None, end=None,
-        periods=None, tz=None, normalize=False, closed=None, ambiguous='raise',
-        dayfirst=False, yearfirst=False, dtype=None, copy=False, name=None,
-        verify_integrity=True: bodo.hiframes.api.init_datetime_index(
-            bodo.hiframes.api.ts_series_to_arr_typ(data), name))
-
     def f(data=None, freq=None, start=None, end=None,
         periods=None, tz=None, normalize=False, closed=None, ambiguous='raise',
         dayfirst=False, yearfirst=False, dtype=None, copy=False, name=None,
         verify_integrity=True):
-        S = bodo.hiframes.api.parse_datetimes_from_strings(data)
+        data_arr = bodo.utils.conversion.coerce_to_array(data)
+        S = bodo.utils.conversion.convert_to_dt64ns(data_arr)
         return bodo.hiframes.api.init_datetime_index(S, name)
 
     return f
@@ -227,6 +222,10 @@ class TimedeltaIndexAttribute(AttributeTemplate):
     # def resolve_min(self, ary, args, kws):
     #     assert not kws
     #     return signature(pandas_timestamp_type, *args)
+
+
+make_attribute_wrapper(TimedeltaIndexType, 'data', '_data')
+make_attribute_wrapper(TimedeltaIndexType, 'name', '_name')
 
 
 # all datetimeindex fields return int64 same as Timestamp fields
@@ -499,46 +498,14 @@ def unbox_numeric_index(typ, val, c):
     return NativeValue(index_val._getvalue())
 
 
-@numba.generated_jit
-def _coerce_to_ndarray(data):
-    # TODO: other cases handled by this function in Pandas like scalar
-    """
-    Coerces data to ndarray.
-    """
-    if isinstance(data, types.Array):
-        return lambda data: data
-
-    if isinstance(data, NumericIndexType):
-        return lambda data: data._data
-
-    if isinstance(data, (types.List, types.Tuple)):
-        # TODO: check homogenous for tuple
-        return lambda data: np.asarray(data)
-
-    if isinstance(data, SeriesType):
-        return lambda data: bodo.hiframes.api.get_series_data(data)
-
-    raise TypeError("cannot coerce {} to array".format(data))
-
-
-@numba.generated_jit
-def _fix_arr_dtype(data, new_dtype):
-    assert isinstance(data, types.Array)
-    assert isinstance(new_dtype, types.DType)
-
-    if data.dtype != new_dtype.dtype:
-        return lambda data, new_dtype: data.astype(new_dtype)
-
-    return lambda data, new_dtype: data
-
-
 def create_numeric_constructor(func, default_dtype):
 
     def impl(data=None, dtype=None, copy=False, name=None, fastpath=None):
-        data_arr = _coerce_to_ndarray(data)
+        data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
         if copy:
             data_arr = data_arr.copy()  # TODO: np.array() with copy
-        data_res = _fix_arr_dtype(data_arr, np.dtype(default_dtype))
+        data_res = bodo.utils.conversion.fix_arr_dtype(
+            data_arr, np.dtype(default_dtype))
         return init_numeric_index(data_res, name)
 
     overload(func)(

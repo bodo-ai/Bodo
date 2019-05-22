@@ -370,7 +370,7 @@ class DistributedAnalysis(object):
         # dummy hiframes functions
         if func_mod == 'bodo.hiframes.api' and func_name in ('get_series_data',
                 'get_series_index',
-                'to_arr_from_series', 'ts_series_to_arr_typ',
+                'to_arr_from_series',
                 'to_date_series_type', 'dummy_unbox_series',
                 'parallel_fix_df_array'):
             # TODO: support Series type similar to Array

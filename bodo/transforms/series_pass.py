@@ -629,6 +629,19 @@ class SeriesPass(object):
             # TODO: index and name?
             return self._replace_func(_flatten_impl, [arg], pre_nodes=nodes)
 
+        # inline conversion functions to enable optimization
+        if func_mod == 'bodo.utils.conversion':
+            # TODO: use overload IR inlining when available
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                        for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(
+                bodo.utils.conversion, 'overload_' + func_name)
+            impl = overload_func(
+                *arg_typs, **kw_typs)
+            return self._replace_func(impl, rhs.args,
+                            pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws))
+
         # convert Series to Array for unhandled calls
         # TODO check all the functions that get here and handle if necessary
         nodes = []
@@ -823,20 +836,6 @@ class SeriesPass(object):
             return self._replace_func(_to_numeric_impl, [data],
                 pre_nodes=nodes,
                 extra_globals={'out_dtype': out_dtype})
-
-        if func_name == 'parse_datetimes_from_strings':
-            nodes = []
-            data = self._get_series_data(rhs.args[0], nodes)
-
-            def parse_impl(data):
-                numba.parfor.init_prange()
-                n = len(data)
-                S = numba.unsafe.ndarray.empty_inferred((n,))
-                for i in numba.parfor.internal_prange(n):
-                    S[i] = bodo.hiframes.pd_timestamp_ext.parse_datetime_str(data[i])
-                return S
-
-            return self._replace_func(parse_impl, [data], pre_nodes=nodes)
 
         if func_name == 'get_itertuples':
             nodes = []

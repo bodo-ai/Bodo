@@ -115,3 +115,21 @@ def test_datetime_index_unbox(dti_val):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_index_equal(bodo_func(dti_val), test_impl(dti_val))
+
+
+@pytest.mark.parametrize('data', [
+    [100, 110],
+    np.arange(10),
+    np.arange(10).view(np.dtype('datetime64[ns]')),
+    pd.Series(np.arange(10)),
+    pd.Series(np.arange(10).view(np.dtype('datetime64[ns]'))),
+    ['2015-8-3', '1990-11-21'],  # TODO: other time formats
+    pd.Series(['2015-8-3', '1990-11-21']),
+    pd.DatetimeIndex(['2015-8-3', '1990-11-21']),
+])
+def test_datetime_index_constructor(data):
+    def test_impl(d):
+        return pd.DatetimeIndex(d)
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_index_equal(bodo_func(data), test_impl(data))
