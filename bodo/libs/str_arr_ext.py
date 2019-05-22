@@ -50,6 +50,7 @@ class StringArrayType(types.IterableType):
     def copy(self):
         return StringArrayType()
 
+
 string_array_type = StringArrayType()
 
 

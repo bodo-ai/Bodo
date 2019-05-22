@@ -59,10 +59,14 @@ def overload_coerce_to_array(data):
     convert data to bodo arrays.
     """
     from bodo.hiframes.pd_series_ext import is_str_series_typ
+    from bodo.hiframes.pd_index_ext import StringIndexType
 
     # string series
     if is_str_series_typ(data):
         return lambda data: bodo.hiframes.api.get_series_data(data)
+
+    if isinstance(data, StringIndexType):
+        return lambda data: bodo.hiframes.api.get_index_data(data)
 
     # string array
     if data == bodo.string_array_type:
@@ -151,11 +155,11 @@ def overload_convert_to_index(data):
     convert data to Index object if necessary.
     """
     from bodo.hiframes.pd_index_ext import (RangeIndexType, NumericIndexType,
-        DatetimeIndexType, TimedeltaIndexType)
+        DatetimeIndexType, TimedeltaIndexType, StringIndexType)
 
     # already Index
     if isinstance(data, (RangeIndexType, NumericIndexType, DatetimeIndexType,
-                         TimedeltaIndexType, types.NoneType)):
+                         TimedeltaIndexType, StringIndexType, types.NoneType)):
         return lambda data: data
 
     def impl(data):
@@ -175,7 +179,7 @@ def overload_index_from_array(data):
     convert data array to Index object.
     """
     if data == bodo.string_array_type:
-        return lambda data: data  # TODO: String index
+        return lambda data: bodo.hiframes.pd_index_ext.init_string_index(data)
 
     assert isinstance(data, types.Array)
     if data.dtype == types.NPDatetime('ns'):
@@ -202,14 +206,10 @@ def overload_index_to_array(I):
     """
     convert Index object to data array.
     """
-    from bodo.hiframes.pd_index_ext import (RangeIndexType, NumericIndexType,
-        DatetimeIndexType, TimedeltaIndexType)
+    from bodo.hiframes.pd_index_ext import RangeIndexType
 
     if isinstance(I, RangeIndexType):
         return lambda I: np.arange(I._start, I._stop, I._step)
-
-    if I == bodo.string_array_type:
-        return lambda I: I  # TODO: String index
 
     # other indices have data
     return lambda I: bodo.hiframes.api.get_index_data(I)

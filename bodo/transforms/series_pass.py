@@ -1140,7 +1140,7 @@ class SeriesPass(object):
         # create output Series
         return self._replace_func(
             lambda A, B: bodo.hiframes.api.init_series(
-                A, bodo.utils.conversion.index_from_array(B)),
+                A, bodo.utils.conversion.convert_to_index(B)),
             args,
             pre_nodes=nodes)
 

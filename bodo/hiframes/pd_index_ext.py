@@ -520,6 +520,99 @@ create_numeric_constructor(pd.UInt64Index, np.uint64)
 create_numeric_constructor(pd.Float64Index, np.float64)
 
 
+
+# ---------------- StringIndex -------------------
+
+
+# represents string index, which doesn't have direct Pandas type
+# pd.Index() infers string
+class StringIndexType(types.IterableType):
+    """type class for pd.Index() objects with 'string' as inferred_dtype.
+    """
+    def __init__(self, name_typ):
+        self.name_typ = name_typ
+        super(StringIndexType, self).__init__(
+            name="StringIndexType({})".format(name_typ))
+
+    @property
+    def iterator_type(self):
+        # TODO: handle iterator
+        return bodo.libs.str_arr_ext.StringArrayIterator()
+
+
+# even though name attribute is mutable, we don't handle it for now
+# TODO: create refcounted payload to handle mutable name
+@register_model(StringIndexType)
+class StringIndexModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [
+            ('data', string_array_type),
+            ('name', fe_type.name_typ),
+        ]
+        super(StringIndexModel, self).__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(StringIndexType, 'data', '_data')
+make_attribute_wrapper(StringIndexType, 'name', '_name')
+
+
+@box(StringIndexType)
+def box_string_index(typ, val, c):
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    class_obj = c.pyapi.import_module_noblock(mod_name)
+    index_val = cgutils.create_struct_proxy(typ)(
+            c.context, c.builder, val)
+    data = c.pyapi.from_native_value(
+        string_array_type, index_val.data, c.env_manager)
+    name = c.pyapi.from_native_value(
+        typ.name_typ, index_val.name, c.env_manager)
+
+    dtype = c.pyapi.make_none()
+    copy = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
+
+    index_obj = c.pyapi.call_method(
+        class_obj, 'Index', (data, dtype, copy, name))
+    c.pyapi.decref(class_obj)
+    return index_obj
+
+
+@intrinsic
+def init_string_index(typingctx, data, name=None):
+    """Create StringIndex object
+    """
+    name = types.none if name is None else name
+
+    def codegen(context, builder, signature, args):
+        assert len(args) == 2
+        index_typ = signature.return_type
+        index_val = cgutils.create_struct_proxy(index_typ)(context, builder)
+        index_val.data = args[0]
+        index_val.name = args[1]
+        # increase refcount of stored values
+        if context.enable_nrt:
+            context.nrt.incref(builder, string_array_type, args[0])
+            context.nrt.incref(builder, index_typ.name_typ, args[1])
+        return index_val._getvalue()
+
+    return StringIndexType(name)(data, name), codegen
+
+
+@unbox(StringIndexType)
+def unbox_string_index(typ, val, c):
+    # get data and name attributes
+    # TODO: use to_numpy()
+    data = c.pyapi.to_native_value(
+        string_array_type, c.pyapi.object_getattr_string(val, 'values')).value
+    name = c.pyapi.to_native_value(
+        typ.name_typ, c.pyapi.object_getattr_string(val, 'name')).value
+
+    # create index struct
+    index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    index_val.data = data
+    index_val.name = name
+    return NativeValue(index_val._getvalue())
+
+
 @overload(operator.getitem)
 def overload_index_getitem(I, ind):
     if isinstance(I, NumericIndexType):

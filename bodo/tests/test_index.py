@@ -96,9 +96,10 @@ def test_numeric_index_constructor():
 @pytest.mark.parametrize('index', [
     pd.Int64Index([10, 12]),
     pd.Float64Index([10.1, 12.1]),
-    pd.UInt64Index([10, 12])
+    pd.UInt64Index([10, 12]),
+    pd.Index(['A', 'B']),
 ])
-def test_numeric_index_box(index):
+def test_array_index_box(index):
     def impl(A):
         return A
 

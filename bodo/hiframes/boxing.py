@@ -68,13 +68,12 @@ def typeof_pd_str_series(val, c):
 
 @typeof_impl.register(pd.Index)
 def typeof_pd_index(val, c):
-    # catch-all for non-supportef Index types
-    # RangeIndex is directly supported (TODO: make sure this is not called)
+    if val.inferred_type == 'string':
+        return bodo.hiframes.pd_index_ext.StringIndexType(
+            numba.typeof(val.name))
 
-    # int/float indices are supported as regular Numpy arrays
-    # TODO: actual index types for these
-    if isinstance(val, (pd.Int64Index, pd.UInt64Index, pd.Float64Index)):
-        return numba.typeof(val.values)
+    # catch-all for non-supported Index types
+    # RangeIndex is directly supported (TODO: make sure this is not called)
 
     # TODO: fix
     if len(val) > 0 and isinstance(val[0], datetime.date):
