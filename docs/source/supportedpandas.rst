@@ -225,11 +225,22 @@ and returning them from Bodo functions (boxing) are also supported.
 * :func:`pandas.UInt64Index`
 * :func:`pandas.Float64Index`
 
-  * ``data``, ``copy`` and ``name`` arguments are supported. ``data`` can be a list or array.
+  * ``data``, ``copy`` and ``name`` arguments are supported.
+    ``data`` can be a list or array.
 
 
 DatetimeIndex
 ~~~~~~~~~~~~~
+
+``DatetimeIndex`` objects are supported. They can be constructed,
+boxed/unboxed, and set as index to dataframes and series.
+
+* :func:`pandas.DatetimeIndex`
+
+   * Only ``data`` argument is supported, and can be array-like
+     of ``datetime64['ns']``, ``int64`` or strings.
+     Strings should be in ISO 8601 format,
+     YYYY-MM-DDT[HH[:MM[:SS[.mmm[uuu]]]]][+HH:MM] (e.g. '2017-09-27').
 
 * :attr:`DatetimeIndex.year`
 * :attr:`DatetimeIndex.month`

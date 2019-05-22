@@ -149,8 +149,12 @@ def pd_datetimeindex_overload(data=None, freq=None, start=None, end=None,
         dayfirst=False, yearfirst=False, dtype=None, copy=False, name=None,
         verify_integrity=True):
     # TODO: check/handle other input
-    if data is None:
+    if _is_none(data):
         raise ValueError("data argument in pd.DatetimeIndex() expected")
+
+    # check unsupported, TODO: normalize, dayfirst, yearfirst, ...
+    if any(not _is_none(a) for a in (freq, start, end, periods, tz, closed)):
+        raise ValueError("only data argument in pd.DatetimeIndex() supported")
 
     def f(data=None, freq=None, start=None, end=None,
         periods=None, tz=None, normalize=False, closed=None, ambiguous='raise',
@@ -335,9 +339,6 @@ def unbox_range_index(typ, val, c):
 def range_index_overload(start=None, stop=None, step=None, dtype=None,
                          copy=False, name=None, fastpath=None):
 
-    def _is_none(val):
-        return val is None or val == types.none
-
     # validate the arguments
     def _ensure_int_or_none(value, field):
         msg = ("RangeIndex(...) must be called with integers,"
@@ -516,3 +517,7 @@ def create_numeric_constructor(func, default_dtype):
 create_numeric_constructor(pd.Int64Index, np.int64)
 create_numeric_constructor(pd.UInt64Index, np.uint64)
 create_numeric_constructor(pd.Float64Index, np.float64)
+
+
+def _is_none(val):
+    return val is None or val == types.none
