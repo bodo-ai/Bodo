@@ -511,12 +511,15 @@ class SeriesAttribute(AttributeTemplate):
     @bound_function("series.nlargest")
     def resolve_nlargest(self, ary, args, kws):
         assert not kws
-        return signature(ary, *args)
+        # TODO: handle index
+        out = SeriesType(ary.dtype, ary.data, None)
+        return signature(out, *args)
 
     @bound_function("series.nsmallest")
     def resolve_nsmallest(self, ary, args, kws):
         assert not kws
-        return signature(ary, *args)
+        out = SeriesType(ary.dtype, ary.data, None)
+        return signature(out, *args)
 
     @bound_function("series.head")
     def resolve_head(self, ary, args, kws):
