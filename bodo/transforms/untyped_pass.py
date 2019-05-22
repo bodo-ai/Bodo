@@ -94,6 +94,7 @@ def remove_hiframes(rhs, lives, call_list):
 
 numba.ir_utils.remove_call_handlers.append(remove_hiframes)
 
+
 class UntypedPass(object):
     """
     Transformations before typing to enable type inference.

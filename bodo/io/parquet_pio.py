@@ -104,6 +104,7 @@ class ParquetHandler(object):
             col_indices = [col_names.index(c) for c in columns]
             col_types = [col_types[i] for i in col_indices]
             col_names = columns
+            index_col = index_col if index_col in col_names else None
 
         # HACK convert types using decorator for int columns with NaN
         for i, c in enumerate(col_names):
