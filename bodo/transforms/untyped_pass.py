@@ -54,11 +54,14 @@ def remove_hiframes(rhs, lives, call_list):
     if call_list == ['ceil', math]:
         return True
     if (len(call_list) == 4 and call_list[1:] == ['api', 'hiframes', bodo] and
-            call_list[0] in ['fix_df_array', 'fix_rolling_array',
+            call_list[0] in ['fix_rolling_array',
             'concat', 'count', 'mean', 'quantile', 'var',
             'str_contains_regex', 'str_contains_noregex',
             'nunique', 'init_series', 'init_datetime_index',
             'convert_tup_to_rec', 'convert_rec_to_tup']):
+        return True
+    if len(call_list) == 4 and call_list[1:] == ['conversion', 'utils', bodo]:
+        # all conversion functions are side effect-free
         return True
     if (len(call_list) == 4 and call_list[1:] == ['series_kernels', 'hiframes', bodo] and
             call_list[0]
@@ -869,7 +872,7 @@ class UntypedPass(object):
             col_arr = self._fix_df_list_of_array(col_arr)
 
             def f(arr):  # pragma: no cover
-                df_arr = bodo.hiframes.api.fix_df_array(arr)
+                df_arr = bodo.utils.conversion.coerce_to_array(arr)
             f_block = compile_to_numba_ir(
                 f, {'bodo': bodo}).blocks.popitem()[1]
             replace_arg_nodes(f_block, [col_arr])
@@ -1132,7 +1135,7 @@ class UntypedPass(object):
 
     def _replace_func(self, func, args, const=False, array_typ_convert=True,
                       pre_nodes=None, extra_globals=None):
-        glbls = {'numba': numba, 'np': np, 'bodo': bodo}
+        glbls = {'numba': numba, 'np': np, 'bodo': bodo, 'pd': pd}
         if extra_globals is not None:
             glbls.update(extra_globals)
         return ReplaceFunc(func, None, args, glbls, pre_nodes)

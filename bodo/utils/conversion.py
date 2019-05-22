@@ -2,6 +2,7 @@
 Utility functions for conversion of data such as list to array.
 Need to be inlined for better optimization.
 """
+import pandas as pd
 import numpy as np
 import numba
 from numba import types
@@ -39,7 +40,7 @@ def overload_coerce_to_ndarray(data):
     # index types
     if isinstance(data, (NumericIndexType, DatetimeIndexType,
                          TimedeltaIndexType)):
-        return lambda data: data._data  # TODO: use get_index_data for opt
+        return lambda data: bodo.hiframes.api.get_index_data(data)
 
     if isinstance(data, RangeIndexType):
         return lambda data: np.arange(data._start, data._stop, data._step)
@@ -138,3 +139,77 @@ def overload_convert_to_dt64ns(data):
                 bodo.utils.conversion.parse_datetimes_from_strings(data))
 
     raise TypeError("invalid data type {} for dt64 conversion".format(data))
+
+
+def convert_to_index(data):
+    return data
+
+
+@overload(convert_to_index)
+def overload_convert_to_index(data):
+    """
+    convert data to Index object if necessary.
+    """
+    from bodo.hiframes.pd_index_ext import (RangeIndexType, NumericIndexType,
+        DatetimeIndexType, TimedeltaIndexType)
+
+    # already Index
+    if isinstance(data, (RangeIndexType, NumericIndexType, DatetimeIndexType,
+                         TimedeltaIndexType, types.NoneType)):
+        return lambda data: data
+
+    def impl(data):
+        data_arr = bodo.utils.conversion.coerce_to_array(data)
+        return bodo.utils.conversion.index_from_array(data_arr)
+
+    return impl
+
+
+def index_from_array(data):
+    return data
+
+
+@overload(index_from_array)
+def overload_index_from_array(data):
+    """
+    convert data array to Index object.
+    """
+    if data == bodo.string_array_type:
+        return lambda data: data  # TODO: String index
+
+    assert isinstance(data, types.Array)
+    if data.dtype == types.NPDatetime('ns'):
+        return lambda data: pd.DatetimeIndex(data)
+
+    if isinstance(data.dtype, types.Integer):
+        if not data.dtype.signed:
+            return lambda data: pd.UInt64Index(data)
+        else:
+            return lambda data: pd.Int64Index(data)
+
+    if isinstance(data.dtype, types.Float):
+        return lambda data: pd.Float64Index(data)
+
+    raise TypeError("invalid index type {}".format(data))
+
+
+def index_to_array(data):
+    return data
+
+
+@overload(index_to_array)
+def overload_index_to_array(I):
+    """
+    convert Index object to data array.
+    """
+    from bodo.hiframes.pd_index_ext import (RangeIndexType, NumericIndexType,
+        DatetimeIndexType, TimedeltaIndexType)
+
+    if isinstance(I, RangeIndexType):
+        return lambda I: np.arange(I._start, I._stop, I._step)
+
+    if I == bodo.string_array_type:
+        return lambda I: I  # TODO: String index
+
+    # other indices have data
+    return lambda I: bodo.hiframes.api.get_index_data(I)

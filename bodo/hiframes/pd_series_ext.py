@@ -1061,11 +1061,11 @@ def pd_series_overload(data=None, index=None, dtype=None, name=None, copy=False,
     if index is not None:
         return (lambda data=None, index=None, dtype=None, name=None, copy=False,
         fastpath=False: bodo.hiframes.api.init_series(
-            bodo.hiframes.api.fix_df_array(data),
-            bodo.hiframes.api.fix_df_array(index),
+            bodo.utils.conversion.coerce_to_array(data),
+            bodo.utils.conversion.convert_to_index(index),
             name
         ))
 
     return (lambda data=None, index=None, dtype=None, name=None, copy=False,
         fastpath=False: bodo.hiframes.api.init_series(
-            bodo.hiframes.api.fix_df_array(data), index, name))
+            bodo.utils.conversion.coerce_to_array(data), index, name))

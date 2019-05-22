@@ -678,8 +678,6 @@ class SeriesPass(object):
             return [assign]
 
         if func_name == 'get_index_data':
-            # fix_df_array() calls get_index_data() for DatetimeIndex
-            # but it can be removed sometimes
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def)
             if call_def == ('init_datetime_index', 'bodo.hiframes.api'):
@@ -687,8 +685,6 @@ class SeriesPass(object):
                 return [assign]
 
         if func_name == 'get_series_data':
-            # fix_df_array() calls get_series_data() (e.g. for dataframes)
-            # but it can be removed sometimes
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def)
             if call_def == ('init_series', 'bodo.hiframes.api'):
@@ -697,12 +693,6 @@ class SeriesPass(object):
 
         if func_name in ('str_contains_regex', 'str_contains_noregex'):
             return self._handle_str_contains(assign, lhs, rhs, func_name)
-
-        # arr = fix_df_array(col) -> arr=col if col is array
-        if func_name == 'fix_df_array':
-            in_typ = self.typemap[rhs.args[0].name]
-            impl = bodo.hiframes.api.fix_df_array_overload(in_typ)
-            return self._replace_func(impl, rhs.args)
 
         # arr = fix_rolling_array(col) -> arr=col if col is float array
         if func_name == 'fix_rolling_array':
@@ -1091,6 +1081,14 @@ class SeriesPass(object):
         # get index array
         if self.typemap[series_var.name].index != types.none:
             index_var = self._get_series_index(series_var, nodes)
+            f_block = compile_to_numba_ir(
+                lambda A: bodo.utils.conversion.index_to_array(A),
+                {'bodo': bodo}, self.typingctx,
+                (self.typemap[index_var.name],),
+                self.typemap, self.calltypes).blocks.popitem()[1]
+            replace_arg_nodes(f_block, [index_var])
+            nodes += f_block.body[:-2]
+            index_var = nodes[-1].target
         else:
             # generating the range Index, TODO: general get_index_values()
             def _get_data(S):  # pragma: no cover
@@ -1141,7 +1139,8 @@ class SeriesPass(object):
 
         # create output Series
         return self._replace_func(
-            lambda A, B: bodo.hiframes.api.init_series(A, B),
+            lambda A, B: bodo.hiframes.api.init_series(
+                A, bodo.utils.conversion.index_from_array(B)),
             args,
             pre_nodes=nodes)
 
@@ -2353,7 +2352,7 @@ class SeriesPass(object):
 
     def _replace_func(self, func, args, const=False,
                       pre_nodes=None, extra_globals=None, pysig=None, kws=None):
-        glbls = {'numba': numba, 'np': np, 'bodo': bodo}
+        glbls = {'numba': numba, 'np': np, 'bodo': bodo, 'pd': pd}
         if extra_globals is not None:
             glbls.update(extra_globals)
 

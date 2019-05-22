@@ -1466,7 +1466,8 @@ class DataFramePass(object):
         if df_typ.has_parent:
             return self._replace_func(
                 lambda df, cname, arr: bodo.hiframes.pd_dataframe_ext.set_df_column_with_reflect(
-                    df, cname, bodo.hiframes.api.fix_df_array(arr)), [df_var, rhs.args[1], new_arr], pre_nodes=nodes)
+                    df, cname, bodo.utils.conversion.coerce_to_array(arr)),
+                    [df_var, rhs.args[1], new_arr], pre_nodes=nodes)
 
         n_cols = len(df_typ.columns)
         df_index_var = self._get_dataframe_index(df_var, nodes)
@@ -1489,7 +1490,7 @@ class DataFramePass(object):
         # TODO: fix list, Series data
         col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
         func_text = "def _init_df({}, df_index):\n".format(data_args)
-        func_text += "  {} = bodo.hiframes.api.fix_df_array({})\n".format(new_arr_arg, new_arr_arg)
+        func_text += "  {} = bodo.utils.conversion.coerce_to_array({})\n".format(new_arr_arg, new_arr_arg)
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), df_index, {})\n".format(
             data_args, col_var)
         loc_vars = {}

@@ -528,7 +528,7 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None,
     col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
 
     func_text = "def _init_df(data=None, index=None, columns=None, dtype=None, copy=False):\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), bodo.hiframes.api.fix_df_array(index), {})\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), bodo.utils.conversion.convert_to_index(index), {})\n".format(
         data_args, col_var)
     loc_vars = {}
     exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
@@ -555,7 +555,7 @@ def _get_df_args(data, index, columns, dtype, copy):
             raise ValueError("pd.DataFrame tuple input data not supported yet")
         n_cols = (len(data.types) - 1) // 2
         data_keys = [t.literal_value for t in data.types[1:n_cols+1]]
-        data_arrs = ['bodo.hiframes.api.fix_df_array(data[{}]){}'.format(
+        data_arrs = ['bodo.utils.conversion.coerce_to_array(data[{}]){}'.format(
                     i, astype_str) for i in range(n_cols + 1, 2 * n_cols + 1)]
         data_dict =  dict(zip(data_keys, data_arrs))
     else:

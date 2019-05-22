@@ -520,5 +520,11 @@ create_numeric_constructor(pd.UInt64Index, np.uint64)
 create_numeric_constructor(pd.Float64Index, np.float64)
 
 
+@overload(operator.getitem)
+def overload_index_getitem(I, ind):
+    if isinstance(I, NumericIndexType):
+        return lambda I, ind: bodo.hiframes.api.get_index_data(I)[ind]
+
+
 def _is_none(val):
     return val is None or val == types.none

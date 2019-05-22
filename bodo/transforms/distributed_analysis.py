@@ -159,7 +159,7 @@ class DistributedAnalysis(object):
         elif (isinstance(rhs, ir.Expr) and rhs.op == 'getattr'
                 and rhs.attr in ['shape', 'ndim', 'size', 'strides', 'dtype',
                                  'itemsize', 'astype', 'reshape', 'ctypes',
-                                 'transpose', 'tofile', 'copy']):
+                                 'transpose', 'tofile', 'copy', 'view']):
             pass  # X.shape doesn't affect X distribution
         elif isinstance(rhs, ir.Expr) and rhs.op == 'call':
             self._analyze_call(lhs, rhs, rhs.func.name, rhs.args, array_dists)
@@ -570,7 +570,7 @@ class DistributedAnalysis(object):
             self._meet_array_dists(lhs, in_arr_name, array_dists)
             return
 
-        if func_name in ('astype', 'reshape', 'copy'):
+        if func_name in ('astype', 'reshape', 'copy', 'view'):
             in_arr_name = arr.name
             self._meet_array_dists(lhs, in_arr_name, array_dists)
             # TODO: support 1D_Var reshape

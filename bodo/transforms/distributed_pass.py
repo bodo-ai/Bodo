@@ -867,7 +867,7 @@ class DistributedPass(object):
     def _run_call_array(self, lhs, arr, func_name, assign, args):
         #
         out = [assign]
-        if func_name in ('astype', 'copy') and self._is_1D_arr(lhs):
+        if func_name in ('astype', 'copy', 'view') and self._is_1D_arr(lhs):
             self._array_starts[lhs] = self._array_starts[arr.name]
             self._array_counts[lhs] = self._array_counts[arr.name]
             self._array_sizes[lhs] = self._array_sizes[arr.name]
@@ -2108,7 +2108,7 @@ class DistributedPass(object):
 
     def _replace_func(self, func, args, const=False,
                       pre_nodes=None, extra_globals=None):
-        glbls = {'numba': numba, 'np': np, 'bodo': bodo}
+        glbls = {'numba': numba, 'np': np, 'bodo': bodo, 'pd': pd}
         if extra_globals is not None:
             glbls.update(extra_globals)
         arg_typs = tuple(self.typemap[v.name] for v in args)

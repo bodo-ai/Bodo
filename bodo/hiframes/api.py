@@ -336,13 +336,11 @@ def isna_overload(arr, i):
     return lambda arr, i: False
 
 
-def fix_df_array(c):  # pragma: no cover
-    return c
-
 # the same as fix_df_array but can be parallel
 @numba.generated_jit(nopython=True)
 def parallel_fix_df_array(c):  # pragma: no cover
-    return lambda c: fix_df_array(c)
+    return lambda c: bodo.utils.conversion.coerce_to_array(c)
+
 
 def fix_rolling_array(c):  # pragma: no cover
     return c
@@ -650,67 +648,6 @@ def lower_convert_rec_tup_impl(context, builder, sig, args):
 
     res = context.compile_internal(builder, _rec_to_tup, tup_typ(rec_typ), [val])
     return impl_ret_borrowed(context, builder, sig.return_type, res)
-
-
-# XXX: use infer_global instead of overload, since overload fails if the same
-# user function is compiled twice
-@infer_global(fix_df_array)
-class FixDfArrayType(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        column = types.unliteral(args[0])
-        ret_typ = column
-        if (isinstance(column, types.List)
-            and (isinstance(column.dtype, types.Number)
-                 or column.dtype == types.boolean)):
-            ret_typ = types.Array(column.dtype, 1, 'C')
-        if isinstance(column, types.List) and column.dtype == string_type:
-            ret_typ = string_array_type
-        if isinstance(column, DatetimeIndexType):
-            ret_typ = bodo.hiframes.pd_index_ext._dt_index_data_typ
-        if isinstance(column, SeriesType):
-            ret_typ = column.data
-        # TODO: add other types
-        return signature(ret_typ, column)
-
-@lower_builtin(fix_df_array, types.Any)  # TODO: replace Any with types
-def lower_fix_df_array(context, builder, sig, args):
-    func = fix_df_array_overload(sig.args[0])
-    res = context.compile_internal(builder, func, sig, args)
-    return impl_ret_borrowed(context, builder, sig.return_type, res)
-
-#@overload(fix_df_array)
-def fix_df_array_overload(column):
-    # convert list of numbers/bools to numpy array
-    if (isinstance(column, types.List)
-            and (isinstance(column.dtype, types.Number)
-                 or column.dtype == types.boolean)):
-        def fix_df_array_list_impl(column):  # pragma: no cover
-            return np.array(column)
-        return fix_df_array_list_impl
-
-    # convert list of strings to string array
-    if isinstance(column, types.List) and column.dtype == string_type:
-        def fix_df_array_str_impl(column):  # pragma: no cover
-            return bodo.libs.str_arr_ext.StringArray(column)
-        return fix_df_array_str_impl
-
-    if isinstance(column, DatetimeIndexType):
-        return lambda column: bodo.hiframes.api.get_index_data(column)
-
-    if isinstance(column, SeriesType):
-        return lambda column: bodo.hiframes.api.get_series_data(column)
-
-    # column is array if not list
-    assert isinstance(column, (types.Array, StringArrayType, SeriesType,
-                                types.NoneType,
-                                # TODO: use separate function for index arg
-                                bodo.hiframes.pd_index_ext.RangeIndexType))
-    def fix_df_array_impl(column):  # pragma: no cover
-        return column
-    # FIXME: np.array() for everything else?
-    return fix_df_array_impl
 
 
 @infer_global(fix_rolling_array)
