@@ -110,10 +110,8 @@ def unbox_dataframe(typ, val, c):
         # treating numerical index like Numpy arrays for now
         # TODO: proper index types
         ind_obj = c.pyapi.object_getattr_string(val, 'index')
-        arr_obj = c.pyapi.object_getattr_string(ind_obj, 'values')
-        index_val = c.pyapi.to_native_value(typ.index, arr_obj).value
+        index_val = c.pyapi.to_native_value(typ.index, ind_obj).value
         c.pyapi.decref(ind_obj)
-        c.pyapi.decref(arr_obj)
 
     # TODO: does this work for array types?
     data_nulls = [c.context.get_constant_null(t) for t in typ.data]
@@ -373,12 +371,14 @@ def box_series(typ, val, c):
 
     if typ.index is types.none:
         index = c.pyapi.make_none()
-    elif typ.index == bodo.hiframes.pd_index_ext.range_index_type:
-        index = c.pyapi.from_native_value(typ.index, series_payload.index)
-    else:
-        # TODO: index-specific boxing like RangeIndex() etc.
+    elif typ.index == string_array_type:
+        # string array doesn't have index yet. TODO: make index
         index = _box_series_data(
             typ.index.dtype, typ.index, series_payload.index, c)
+    else:
+        index = c.pyapi.from_native_value(
+            typ.index, series_payload.index, c.env_manager)
+
 
     if typ.is_named:
         name = c.pyapi.from_native_value(

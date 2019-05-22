@@ -85,7 +85,8 @@ def box_dt_index(typ, val, c):
 
     arr = c.pyapi.from_native_value(
         _dt_index_data_typ, dt_index.data, c.env_manager)
-    name = c.pyapi.from_native_value(typ.name_typ, dt_index.name)
+    name = c.pyapi.from_native_value(
+        typ.name_typ, dt_index.name, c.env_manager)
 
     # call pd.DatetimeIndex(arr, name=name)
     kws = c.pyapi.dict_pack([('name', name)])

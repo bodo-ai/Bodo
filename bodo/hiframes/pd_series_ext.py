@@ -43,7 +43,7 @@ class SeriesType(types.IterableType):
         self.data = data
         if index is None:
             index = types.none
-        self.index = index
+        self.index = index  # index should be an Index type (not Array)
         # keep is_named in type to enable boxing
         self.is_named = is_named
         super(SeriesType, self).__init__(

@@ -23,8 +23,8 @@ class DataFrameType(types.Type):  # TODO: IterableType over column names
     """Temporary type class for DataFrame objects.
     """
     def __init__(self, data=None, index=None, columns=None, has_parent=False):
-        # data is tuple of Array types
-        # index is Array type (TODO: Index obj)
+        # data is tuple of Array types (not Series)
+        # index is Index obj (not Array type)
         # columns is tuple of strings
 
         self.data = data
