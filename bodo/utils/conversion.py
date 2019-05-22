@@ -125,6 +125,7 @@ def overload_convert_to_dt64ns(data):
     """Converts data formats like int64 and arrays of strings to dt64ns
     """
     # see pd.core.arrays.datetimes.sequence_to_dt64ns for constructor types
+    # TODO: support datetime.date, datetime.datetime
     # TODO: support dayfirst, yearfirst, tz
     if data == types.Array(types.int64, 1, 'C'):
         return lambda data: data.view(bodo.utils.conversion.NS_DTYPE)

@@ -842,10 +842,17 @@ sig = types.intp(
                 )
 convert_datetimestruct_to_datetime = types.ExternalFunction("convert_datetimestruct_to_datetime", sig)
 
+
+iNaT = np.iinfo(np.int64).min
+
+
 @numba.njit(locals={'arg1': numba.int32, 'arg3': numba.int32, 'arg4': numba.int32})
-def parse_datetime_str(str):
-    arg0 = bodo.libs.str_ext.unicode_to_char_ptr(str)
-    arg1 = len(str)
+def parse_datetime_str(_str):
+    nat_strings = ('NaT', 'nat', 'NAT', 'nan', 'NaN', 'NAN')
+    if len(_str) == 0 or _str in nat_strings:
+        return integer_to_dt64(iNaT)
+    arg0 = bodo.libs.str_ext.unicode_to_char_ptr(_str)
+    arg1 = len(_str)
     arg2 = PANDAS_DATETIMESTRUCT()
     arg3 = np.int32(13)
     arg4 = np.int32(13)

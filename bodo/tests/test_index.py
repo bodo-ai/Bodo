@@ -124,6 +124,7 @@ def test_datetime_index_unbox(dti_val):
     pd.Series(np.arange(10)),
     pd.Series(np.arange(10).view(np.dtype('datetime64[ns]'))),
     ['2015-8-3', '1990-11-21'],  # TODO: other time formats
+    ['2015-8-3', 'NaT', '', '1990-11-21'],  # NaT cases
     pd.Series(['2015-8-3', '1990-11-21']),
     pd.DatetimeIndex(['2015-8-3', '1990-11-21']),
 ])
