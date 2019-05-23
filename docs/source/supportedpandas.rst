@@ -242,6 +242,8 @@ boxed/unboxed, and set as index to dataframes and series.
      Strings should be in ISO 8601 format,
      YYYY-MM-DDT[HH[:MM[:SS[.mmm[uuu]]]]][+HH:MM] (e.g. '2017-09-27').
 
+Date fields of DatetimeIndex are supported:
+
 * :attr:`DatetimeIndex.year`
 * :attr:`DatetimeIndex.month`
 * :attr:`DatetimeIndex.day`
@@ -252,8 +254,15 @@ boxed/unboxed, and set as index to dataframes and series.
 * :attr:`DatetimeIndex.nanosecond`
 * :attr:`DatetimeIndex.date`
 
+The min/max methods are supported without optional arguments
+(``NaT`` output for empty or all ``NaT`` input not supported yet):
+
 * :meth:`DatetimeIndex.min`
 * :meth:`DatetimeIndex.max`
+
+Returning underlying data array:
+
+* :attr:`DatetimeIndex.values`
 
 
 TimedeltaIndex
