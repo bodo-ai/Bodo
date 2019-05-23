@@ -134,6 +134,14 @@ def test_datetime_field(dti_val, field):
     pd.testing.assert_index_equal(bodo_func(dti_val), impl(dti_val))
 
 
+def test_datetime_date(dti_val):
+    def impl(A):
+      return A.date
+
+    bodo_func = bodo.jit(impl)
+    np.testing.assert_array_equal(bodo_func(dti_val), impl(dti_val))
+
+
 @pytest.mark.parametrize('data', [
     [100, 110],
     np.arange(10),

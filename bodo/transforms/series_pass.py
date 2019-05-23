@@ -350,11 +350,14 @@ class SeriesPass(object):
             return nodes
 
         if isinstance(rhs_type, DatetimeIndexType):
+            # TODO: test this inlining
             if rhs.attr in bodo.hiframes.pd_timestamp_ext.date_fields:
                 impl = bodo.hiframes.pd_index_ext.gen_dti_field_impl(rhs.attr)
                 return self._replace_func(impl, [rhs.value])
             if rhs.attr == 'date':
-                return self._run_DatetimeIndex_date(assign, assign.target, rhs)
+                impl = bodo.hiframes.pd_index_ext.overload_datetime_index_date(
+                    rhs_type)
+                return self._replace_func(impl, [rhs.value])
 
         if rhs_type == series_dt_methods_type:
             dt_def = guard(get_definition, self.func_ir, rhs.value)
@@ -1614,12 +1617,7 @@ class SeriesPass(object):
         """
         nodes = []
         in_typ = self.typemap[rhs.value.name]
-        if isinstance(in_typ, DatetimeIndexType):
-            arr = self._get_dt_index_data(rhs.value, nodes)
-            is_dt_index = True
-        else:
-            arr = self._get_series_data(rhs.value, nodes)
-            is_dt_index = False
+        arr = self._get_series_data(rhs.value, nodes)
 
         func_text = 'def f(dti):\n'
         func_text += '    numba.parfor.init_prange()\n'
@@ -1631,10 +1629,8 @@ class SeriesPass(object):
         func_text += '        S[i] = bodo.hiframes.pd_timestamp_ext.datetime_date_ctor(ts.year, ts.month, ts.day)\n'
         #func_text += '        S[i] = datetime.date(ts.year, ts.month, ts.day)\n'
         #func_text += '        S[i] = ts.day + (ts.month << 16) + (ts.year << 32)\n'
-        if is_dt_index:  # DatetimeIndex returns Array but Series.dt returns Series
-            func_text += '    return bodo.hiframes.datetime_date_ext.np_arr_to_array_datetime_date(S)\n'
-        else:
-            func_text += '    return bodo.hiframes.api.init_series(S)\n'
+        # DatetimeIndex returns Array but Series.dt returns Series
+        func_text += '    return bodo.hiframes.api.init_series(S)\n'
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         f = loc_vars['f']

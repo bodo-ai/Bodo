@@ -140,15 +140,29 @@ for field in bodo.hiframes.pd_timestamp_ext.date_fields:
     overload_attribute(DatetimeIndexType, field)(lambda dti: impl)
 
 
+@overload_attribute(DatetimeIndexType, 'date')
+def overload_datetime_index_date(dti):
+
+    def impl(dti):
+        numba.parfor.init_prange()
+        A = bodo.hiframes.api.get_index_data(dti)
+        n = len(A)
+        S = numba.unsafe.ndarray.empty_inferred((n,))
+        for i in numba.parfor.internal_prange(n):
+            dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])
+            ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)
+            S[i] = bodo.hiframes.pd_timestamp_ext.datetime_date_ctor(ts.year, ts.month, ts.day)
+        return bodo.hiframes.datetime_date_ext.np_arr_to_array_datetime_date(S)
+
+    return impl
+
+
 @infer_getattr
 class DatetimeIndexAttribute(AttributeTemplate):
     key = DatetimeIndexType
 
     def resolve_values(self, ary):
         return _dt_index_data_typ
-
-    def resolve_date(self, ary):
-        return array_datetime_date
 
     @bound_function("dt_index.max")
     def resolve_max(self, ary, args, kws):
