@@ -545,6 +545,12 @@ def get_series_name(S):
 def get_index_data(S):
     return lambda S: S._data
 
+
+@numba.generated_jit(nopython=True)
+def get_index_name(S):  # TODO: optimize out
+    return lambda S: S._name
+
+
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
     assert len(args) >= 1
     numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)

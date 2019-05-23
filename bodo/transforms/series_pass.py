@@ -351,7 +351,8 @@ class SeriesPass(object):
 
         if isinstance(rhs_type, DatetimeIndexType):
             if rhs.attr in bodo.hiframes.pd_timestamp_ext.date_fields:
-                return self._run_DatetimeIndex_field(assign, assign.target, rhs)
+                impl = bodo.hiframes.pd_index_ext.gen_dti_field_impl(rhs.attr)
+                return self._replace_func(impl, [rhs.value])
             if rhs.attr == 'date':
                 return self._run_DatetimeIndex_date(assign, assign.target, rhs)
 
@@ -1588,12 +1589,7 @@ class SeriesPass(object):
         """
         nodes = []
         in_typ = self.typemap[rhs.value.name]
-        if isinstance(in_typ, DatetimeIndexType):
-            arr = self._get_dt_index_data(rhs.value, nodes)
-            is_dt_index = True
-        else:
-            arr = self._get_series_data(rhs.value, nodes)
-            is_dt_index = False
+        arr = self._get_series_data(rhs.value, nodes)
         field = rhs.attr
 
         func_text = 'def f(dti):\n'
@@ -1606,10 +1602,7 @@ class SeriesPass(object):
         func_text += '        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dti[i])\n'
         func_text += '        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n'
         func_text += '        S[i] = ts.' + field + '\n'
-        if is_dt_index:  # TODO: support Int64Index
-            func_text += '    return bodo.hiframes.api.init_series(S)\n'
-        else:
-            func_text += '    return bodo.hiframes.api.init_series(S)\n'
+        func_text += '    return bodo.hiframes.api.init_series(S)\n'
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         f = loc_vars['f']

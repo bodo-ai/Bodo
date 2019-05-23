@@ -5,7 +5,7 @@ import numba
 from numba import types, cgutils
 from numba.extending import (models, register_model, lower_cast, infer_getattr,
     type_callable, infer, overload, make_attribute_wrapper, box, intrinsic,
-    typeof_impl, unbox, NativeValue)
+    typeof_impl, unbox, NativeValue, overload_attribute)
 from numba.typing.templates import (infer_global, AbstractTemplate, signature,
     AttributeTemplate, bound_function)
 from numba.targets.boxing import box_array
@@ -114,6 +114,32 @@ def unbox_datetime_index(typ, val, c):
     return NativeValue(index_val._getvalue())
 
 
+# support DatetimeIndex date fields such as I.year
+def gen_dti_field_impl(field):
+    func_text = 'def impl(dti):\n'
+    func_text += '    numba.parfor.init_prange()\n'
+    func_text += '    A = bodo.hiframes.api.get_index_data(dti)\n'
+    func_text += '    name = bodo.hiframes.api.get_index_name(dti)\n'
+    func_text += '    n = len(A)\n'
+    # all datetimeindex fields return int64 same as Timestamp fields
+    func_text += '    S = np.empty(n, np.int64)\n'
+    func_text += '    for i in numba.parfor.internal_prange(n):\n'
+    func_text += '        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])\n'
+    func_text += '        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n'
+    func_text += '        S[i] = ts.' + field + '\n'
+    func_text += '    return bodo.hiframes.pd_index_ext.init_numeric_index(S, name)\n'
+    loc_vars = {}
+    # print(func_text)
+    exec(func_text, {'numba': numba, 'np': np, 'bodo': bodo}, loc_vars)
+    impl = loc_vars['impl']
+    return impl
+
+
+for field in bodo.hiframes.pd_timestamp_ext.date_fields:
+    impl = gen_dti_field_impl(field)
+    overload_attribute(DatetimeIndexType, field)(lambda dti: impl)
+
+
 @infer_getattr
 class DatetimeIndexAttribute(AttributeTemplate):
     key = DatetimeIndexType
@@ -133,16 +159,6 @@ class DatetimeIndexAttribute(AttributeTemplate):
     def resolve_min(self, ary, args, kws):
         assert not kws
         return signature(pandas_timestamp_type, *args)
-
-
-# all datetimeindex fields return int64 same as Timestamp fields
-def resolve_date_field(self, ary):
-    # TODO: return Int64Index
-    return SeriesType(types.int64)
-
-for field in bodo.hiframes.pd_timestamp_ext.date_fields:
-    setattr(DatetimeIndexAttribute, "resolve_" + field, resolve_date_field)
-
 
 
 @overload(pd.DatetimeIndex)
@@ -469,6 +485,7 @@ def box_numeric_index(typ, val, c):
 def init_numeric_index(typingctx, data, name=None):
     """Create NumericIndex object
     """
+    name = types.none if name is None else name
 
     def codegen(context, builder, signature, args):
         assert len(args) == 2

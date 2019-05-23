@@ -106,16 +106,32 @@ def test_array_index_box(index):
     pd.testing.assert_index_equal(bodo.jit(impl)(index), impl(index))
 
 
-@pytest.mark.parametrize('dti_val', [
+@pytest.fixture(params = [
     pd.date_range(start='2018-04-24', end='2018-04-27', periods=3),
     pd.date_range(start='2018-04-24', end='2018-04-27', periods=3, name='A'),
 ])
+def dti_val(request):
+    return request.param
+
+
 def test_datetime_index_unbox(dti_val):
     def test_impl(dti):
         return dti
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_index_equal(bodo_func(dti_val), test_impl(dti_val))
+
+
+@pytest.mark.parametrize('field', bodo.hiframes.pd_timestamp_ext.date_fields)
+def test_datetime_field(dti_val, field):
+    func_text = 'def impl(A):\n'
+    func_text += '  return A.{}\n'.format(field)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars['impl']
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_index_equal(bodo_func(dti_val), impl(dti_val))
 
 
 @pytest.mark.parametrize('data', [
