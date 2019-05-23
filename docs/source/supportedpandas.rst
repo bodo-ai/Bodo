@@ -268,6 +268,10 @@ Returning underlying data array:
 Subtraction of ``Timestamp`` from ``DatetimeIndex`` and vice versa
 is supported.
 
+Comparison operators ``==``, ``!=``, ``>=``, ``>``, ``<=``, ``<`` between
+``DatetimeIndex`` and a string containing datetime in ISO 8601 format
+are supported.
+
 
 TimedeltaIndex
 ~~~~~~~~~~~~~~
