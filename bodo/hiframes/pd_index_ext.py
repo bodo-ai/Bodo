@@ -283,6 +283,47 @@ def overload_datetime_index_sub(arg1, arg2):
         return impl
 
 
+# bionp of DatetimeIndex and string
+def gen_dti_str_binop_impl(op, is_arg1_dti):
+    # is_arg1_dti: is the first argument DatetimeIndex and second argument str
+    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = 'def impl(arg1, arg2):\n'
+    if is_arg1_dti:
+        func_text += '  dt_index, _str = arg1, arg2\n'
+        comp = 'arr[i] {} other'.format(op_str)
+    else:
+        func_text += '  dt_index, _str = arg2, arg1\n'
+        comp = 'other {} arr[i]'.format(op_str)
+    func_text += '  arr = bodo.hiframes.api.get_index_data(dt_index)\n'
+    func_text += '  l = len(arr)\n'
+    func_text += '  other = bodo.hiframes.pd_timestamp_ext.parse_datetime_str(_str)\n'
+    func_text += '  S = numba.unsafe.ndarray.empty_inferred((l,))\n'
+    func_text += '  for i in numba.parfor.internal_prange(l):\n'
+    func_text += '    S[i] = {}\n'.format(comp)
+    func_text += '  return S\n'
+    # print(func_text)
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo, 'numba': numba, 'np': np}, loc_vars)
+    impl = loc_vars['impl']
+    return impl
+
+
+def overload_binop_dti_str(op):
+
+    def overload_impl(arg1, arg2):
+        if isinstance(arg1, DatetimeIndexType) and types.unliteral(arg2) == string_type:
+            return gen_dti_str_binop_impl(op, True)
+        if isinstance(arg2, DatetimeIndexType) and types.unliteral(arg1) == string_type:
+            return gen_dti_str_binop_impl(op, False)
+
+    return overload_impl
+
+
+for op in (operator.eq, operator.ne, operator.ge, operator.gt, operator.le,
+        operator.lt):
+    overload(op)(overload_binop_dti_str(op))
+
+
 # ------------------------------ Timedelta ---------------------------
 
 # similar to DatetimeIndex

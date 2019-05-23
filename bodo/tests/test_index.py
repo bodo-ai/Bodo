@@ -175,6 +175,30 @@ def test_datetime_sub(dti_val):
     pd.testing.assert_index_equal(bodo_func(dti_val, t), impl2(dti_val, t))
 
 
+@pytest.mark.parametrize('comp', ['==', '!=', '>=', '>', '<=', '<'])
+def test_datetime_str_comp(dti_val, comp):
+    # string literal
+    func_text = 'def impl(A):\n'
+    func_text += '  return A {} "2015-01-23"\n'.format(comp)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars['impl']
+
+    bodo_func = bodo.jit(impl)
+    np.testing.assert_array_equal(bodo_func(dti_val), impl(dti_val))
+
+    # string passed in
+    func_text = 'def impl(A, s):\n'
+    func_text += '  return A {} s\n'.format(comp)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars['impl']
+
+    bodo_func = bodo.jit(impl)
+    s = '2015-01-23'
+    np.testing.assert_array_equal(bodo_func(dti_val, s), impl(dti_val, s))
+
+
 @pytest.mark.parametrize('data', [
     [100, 110],
     np.arange(10),

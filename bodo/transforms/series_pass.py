@@ -411,6 +411,15 @@ class SeriesPass(object):
                 return self._replace_func(impl, [arg1, arg2])
 
 
+        # string comparison with DatetimeIndex
+        if rhs.fn in (operator.eq, operator.ne, operator.ge, operator.gt,
+                operator.le, operator.lt) and (
+                    (isinstance(typ1, DatetimeIndexType) and types.unliteral(typ2) == string_type)
+                    or (isinstance(typ2, DatetimeIndexType) and types.unliteral(typ1) == string_type)):
+            impl = bodo.hiframes.pd_index_ext.overload_binop_dti_str(rhs.fn)(typ1, typ2)
+            return self._replace_func(impl, [arg1, arg2])
+
+
         if self._is_dt_index_binop(rhs):
             return self._handle_dt_index_binop(assign, rhs)
 
@@ -1917,9 +1926,9 @@ class SeriesPass(object):
 
         if (not _is_allowed_type(types.unliteral(self.typemap[arg1.name]))
                 or not _is_allowed_type(types.unliteral(self.typemap[arg2.name]))):
-            raise ValueError("DatetimeIndex operation not supported")
+            raise ValueError("Series(dt64) operation not supported")
 
-        # string comparison with DatetimeIndex
+        # string comparison with Series(dt64)
         op_str = _binop_to_str[rhs.fn]
         typ1 = self.typemap[arg1.name]
         typ2 = self.typemap[arg2.name]
@@ -1927,20 +1936,12 @@ class SeriesPass(object):
         is_out_series = False
 
         func_text = 'def f(arg1, arg2):\n'
-        if is_dt64_series_typ(typ1) or isinstance(typ1, DatetimeIndexType):
-            if is_dt64_series_typ(typ1):
-                is_out_series = True
-                arg1 = self._get_series_data(arg1, nodes)
-            else:
-                arg1 = self._get_dt_index_data(arg1, nodes)
+        if is_dt64_series_typ(typ1):
+            arg1 = self._get_series_data(arg1, nodes)
             func_text += '  dt_index, _str = arg1, arg2\n'
             comp = 'dt_index[i] {} other'.format(op_str)
         else:
-            if is_dt64_series_typ(typ2):
-                is_out_series = True
-                arg2 = self._get_series_data(arg2, nodes)
-            else:
-                arg2 = self._get_dt_index_data(arg2, nodes)
+            arg2 = self._get_series_data(arg2, nodes)
             func_text += '  dt_index, _str = arg2, arg1\n'
             comp = 'other {} dt_index[i]'.format(op_str)
         func_text += '  l = len(dt_index)\n'
@@ -1948,10 +1949,7 @@ class SeriesPass(object):
         func_text += '  S = numba.unsafe.ndarray.empty_inferred((l,))\n'
         func_text += '  for i in numba.parfor.internal_prange(l):\n'
         func_text += '    S[i] = {}\n'.format(comp)
-        if is_out_series:  # TODO: test
-            func_text += '  return bodo.hiframes.api.init_series(S)\n'
-        else:
-            func_text += '  return S\n'
+        func_text += '  return bodo.hiframes.api.init_series(S)\n'
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         f = loc_vars['f']

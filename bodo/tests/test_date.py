@@ -166,22 +166,6 @@ class TestDate(unittest.TestCase):
         df = self._gen_str_date_df()
         np.testing.assert_array_equal(bodo_func(df), test_impl(df))
 
-    def test_datetime_index_max(self):
-        def test_impl(df):
-            return pd.DatetimeIndex(df['str_date']).max()
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        self.assertEqual(bodo_func(df), test_impl(df))
-
-    def test_datetime_index_min(self):
-        def test_impl(df):
-            return pd.DatetimeIndex(df['str_date']).min()
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        self.assertEqual(bodo_func(df), test_impl(df))
-
     def test_datetime_index_timedelta_days(self):
         def test_impl(df):
             s = pd.DatetimeIndex(df['str_date'])
