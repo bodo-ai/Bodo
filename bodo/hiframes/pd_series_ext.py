@@ -1047,10 +1047,6 @@ def type_sub(context):
         if is_dt64_series_typ(val1) and val2 == pandas_timestamp_type:
             return SeriesType(types.NPTimedelta('ns'))
 
-        from bodo.hiframes.pd_index_ext import DatetimeIndexType
-        if isinstance(val1, DatetimeIndexType) and val2 == pandas_timestamp_type:
-            from bodo.hiframes.pd_index_ext import TimedeltaIndexType
-            return TimedeltaIndexType(False)
     return typer
 
 type_callable('-')(type_sub)

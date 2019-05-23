@@ -260,16 +260,6 @@ def _column_sub_impl_datetime_series_timestamp(in_arr, ts):  # pragma: no cover
     return bodo.hiframes.api.init_series(S)
 
 
-def _column_sub_impl_datetimeindex_timestamp(in_arr, ts):  # pragma: no cover
-    numba.parfor.init_prange()
-    n = len(in_arr)
-    S = numba.unsafe.ndarray.empty_inferred((n,))
-    tsint = bodo.hiframes.pd_timestamp_ext.convert_timestamp_to_datetime64(ts)
-    for i in numba.parfor.internal_prange(n):
-        S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i]) - tsint)
-    return bodo.hiframes.api.init_timedelta_index(S)
-
-
 def _column_describe_impl(S):  # pragma: no cover
     a_count = np.float64(S.count())
     a_min = S.min()

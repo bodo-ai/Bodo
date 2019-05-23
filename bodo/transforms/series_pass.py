@@ -397,11 +397,23 @@ class SeriesPass(object):
         if res is not None:
             return res
 
+        arg1, arg2 = rhs.lhs, rhs.rhs
+        typ1, typ2 = self.typemap[arg1.name], self.typemap[arg2.name]
+
+        # inline overloaded
+        # TODO: use overload inlining when available
+        if rhs.fn == operator.sub:
+            if ((isinstance(typ1, DatetimeIndexType)
+                    and typ2 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type)
+                    or (isinstance(typ2, DatetimeIndexType)
+                        and typ1 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type)):
+                impl = bodo.hiframes.pd_index_ext.overload_datetime_index_sub(typ1, typ2)
+                return self._replace_func(impl, [arg1, arg2])
+
+
         if self._is_dt_index_binop(rhs):
             return self._handle_dt_index_binop(assign, rhs)
 
-        arg1, arg2 = rhs.lhs, rhs.rhs
-        typ1, typ2 = self.typemap[arg1.name], self.typemap[arg2.name]
         if not (isinstance(typ1, SeriesType) or isinstance(typ2, SeriesType)):
             return [assign]
 
@@ -1902,15 +1914,6 @@ class SeriesPass(object):
             return self._replace_func(
                 series_kernels._column_sub_impl_datetime_series_timestamp,
                 [arg1, arg2])
-
-        if (isinstance(self.typemap[arg1.name], DatetimeIndexType) and
-            self.typemap[arg2.name] == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type and
-            rhs.fn in ('-', operator.sub)):
-            nodes = []
-            arg1 = self._get_dt_index_data(arg1, nodes)
-            return self._replace_func(
-                series_kernels._column_sub_impl_datetimeindex_timestamp,
-                [arg1, arg2], pre_nodes=nodes)
 
         if (not _is_allowed_type(types.unliteral(self.typemap[arg1.name]))
                 or not _is_allowed_type(types.unliteral(self.typemap[arg2.name]))):

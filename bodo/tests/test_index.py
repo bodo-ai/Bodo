@@ -158,6 +158,23 @@ def test_datetime_max(dti_val):
     np.testing.assert_array_equal(bodo_func(dti_val), impl(dti_val))
 
 
+def test_datetime_sub(dti_val):
+    t = dti_val.min()  # Timestamp object
+    # DatetimeIndex - Timestamp
+    def impl(A, t):
+      return A - t
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_index_equal(bodo_func(dti_val, t), impl(dti_val, t))
+
+    # Timestamp - DatetimeIndex
+    def impl2(A, t):
+      return t - A
+
+    bodo_func = bodo.jit(impl2)
+    pd.testing.assert_index_equal(bodo_func(dti_val, t), impl2(dti_val, t))
+
+
 @pytest.mark.parametrize('data', [
     [100, 110],
     np.arange(10),

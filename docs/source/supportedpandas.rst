@@ -265,6 +265,10 @@ Returning underlying data array:
 * :attr:`DatetimeIndex.values`
 
 
+Subtraction of ``Timestamp`` from ``DatetimeIndex`` and vice versa
+is supported.
+
+
 TimedeltaIndex
 ~~~~~~~~~~~~~~
 
