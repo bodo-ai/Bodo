@@ -246,32 +246,27 @@ def pd_datetimeindex_overload(data=None, freq=None, start=None, end=None,
     return f
 
 
-
-# ----------- Timedelta
+# ------------------------------ Timedelta ---------------------------
 
 # similar to DatetimeIndex
 class TimedeltaIndexType(types.IterableType):
     """Temporary type class for TimedeltaIndex objects.
     """
-    def __init__(self, is_named=False):
-        # name_typ = types.none if name_typ is None else name_typ
+    def __init__(self, name_typ=None):
+        name_typ = types.none if name_typ is None else name_typ
         # TODO: support other properties like unit/freq?
-        self.is_named = is_named
+        self.name_typ = name_typ
         super(TimedeltaIndexType, self).__init__(
-            name="TimedeltaIndexType(is_named = {})".format(is_named))
+            name="TimedeltaIndexType(named = {})".format(name_typ))
 
     def copy(self):
         # XXX is copy necessary?
-        return TimedeltaIndexType(self.is_named)
+        return TimedeltaIndexType(self.name_typ)
 
     @property
     def key(self):
         # needed?
-        return self.is_named
-
-    def unify(self, typingctx, other):
-        # needed?
-        return super(TimedeltaIndexType, self).unify(typingctx, other)
+        return self.name_typ
 
     @property
     def iterator_type(self):
@@ -285,9 +280,55 @@ class TimedeltaIndexTypeModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
             ('data', _timedelta_index_data_typ),
-            ('name', string_type),
+            ('name', fe_type.name_typ),
         ]
         super(TimedeltaIndexTypeModel, self).__init__(dmm, fe_type, members)
+
+
+@typeof_impl.register(pd.TimedeltaIndex)
+def typeof_timedelta_index(val, c):
+    return TimedeltaIndexType(numba.typeof(val.name))
+
+
+@box(TimedeltaIndexType)
+def box_timedelta_index(typ, val, c):
+    """
+    """
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+
+    timedelta_index = numba.cgutils.create_struct_proxy(
+            typ)(c.context, c.builder, val)
+
+    arr = c.pyapi.from_native_value(
+        _timedelta_index_data_typ, timedelta_index.data, c.env_manager)
+    name = c.pyapi.from_native_value(
+        typ.name_typ, timedelta_index.name, c.env_manager)
+
+    # call pd.TimedeltaIndex(arr, name=name)
+    kws = c.pyapi.dict_pack([('name', name)])
+    const_call = c.pyapi.object_getattr_string(pd_class_obj, 'TimedeltaIndex')
+    res = c.pyapi.call(const_call, c.pyapi.tuple_pack([arr]), kws)
+    c.pyapi.decref(pd_class_obj)
+    c.pyapi.decref(const_call)
+    return res
+
+
+@unbox(TimedeltaIndexType)
+def unbox_timedelta_index(typ, val, c):
+    # get data and name attributes
+    # TODO: use to_numpy()
+    data = c.pyapi.to_native_value(
+        _timedelta_index_data_typ, c.pyapi.object_getattr_string(val, 'values')).value
+    name = c.pyapi.to_native_value(
+        typ.name_typ, c.pyapi.object_getattr_string(val, 'name')).value
+
+    # create index struct
+    index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    index_val.data = data
+    index_val.name = name
+    return NativeValue(index_val._getvalue())
+
 
 @infer_getattr
 class TimedeltaIndexAttribute(AttributeTemplate):

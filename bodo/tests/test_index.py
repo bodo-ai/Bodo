@@ -175,3 +175,20 @@ def test_datetime_index_constructor(data):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_index_equal(bodo_func(data), test_impl(data))
+
+
+@pytest.fixture(params = [
+    pd.timedelta_range(start='1D', end='3D'),
+    pd.timedelta_range(start='1D', end='3D', name='A'),
+])
+def timedelta_index_val(request):
+    return request.param
+
+
+def test_timedelta_index_unbox(timedelta_index_val):
+    def test_impl(timedelta_index):
+        return timedelta_index
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_index_equal(
+        bodo_func(timedelta_index_val), test_impl(timedelta_index_val))
