@@ -6,6 +6,8 @@ import types as pytypes  # avoid confusion with numba.types
 import copy
 import warnings
 from collections import defaultdict
+import numpy as np
+import pandas as pd
 import numba
 from numba import (ir, types, typing, config, numpy_support,
                    ir_utils, postproc)

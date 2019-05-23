@@ -563,8 +563,9 @@ class SeriesAttribute(AttributeTemplate):
     @bound_function("series.value_counts")
     def resolve_value_counts(self, ary, args, kws):
         # output is int series with original data as index
+        index_typ = bodo.hiframes.pd_index_ext.array_typ_to_index(ary.data)
         out = SeriesType(
-            types.int64, types.Array(types.int64, 1, 'C'), ary.data)
+            types.int64, types.Array(types.int64, 1, 'C'), index_typ)
         return signature(out, *args)
 
     @bound_function("series.rename")

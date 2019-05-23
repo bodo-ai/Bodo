@@ -812,7 +812,7 @@ class UntypedPass(object):
         col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
             col_args, col_args)
         func_text = "def _init_df({}):\n".format(args)
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), bodo.utils.conversion.convert_to_index({}), {})\n".format(
             data_args, index_arg, col_var)
         loc_vars = {}
         # print(func_text)

@@ -31,6 +31,7 @@ class DatetimeIndexType(types.IterableType):
     """type class for DatetimeIndex objects.
     """
     def __init__(self, name_typ=None):
+        name_typ = types.none if name_typ is None else name_typ
         # TODO: support other properties like freq/tz/dtype/yearfirst?
         self.name_typ = name_typ
         super(DatetimeIndexType, self).__init__(
@@ -176,6 +177,7 @@ class TimedeltaIndexType(types.IterableType):
     """Temporary type class for TimedeltaIndex objects.
     """
     def __init__(self, is_named=False):
+        # name_typ = types.none if name_typ is None else name_typ
         # TODO: support other properties like unit/freq?
         self.is_named = is_named
         super(TimedeltaIndexType, self).__init__(
@@ -389,7 +391,8 @@ def range_index_overload(start=None, stop=None, step=None, dtype=None,
 class NumericIndexType(types.IterableType):
     """type class for pd.Int64Index/UInt64Index/Float64Index objects.
     """
-    def __init__(self, dtype, name_typ):
+    def __init__(self, dtype, name_typ=None):
+        name_typ = types.none if name_typ is None else name_typ
         self.dtype = dtype
         self.name_typ = name_typ
         super(NumericIndexType, self).__init__(
@@ -529,7 +532,8 @@ create_numeric_constructor(pd.Float64Index, np.float64)
 class StringIndexType(types.IterableType):
     """type class for pd.Index() objects with 'string' as inferred_dtype.
     """
-    def __init__(self, name_typ):
+    def __init__(self, name_typ=None):
+        name_typ = types.none if name_typ is None else name_typ
         self.name_typ = name_typ
         super(StringIndexType, self).__init__(
             name="StringIndexType({})".format(name_typ))
@@ -615,9 +619,30 @@ def unbox_string_index(typ, val, c):
 
 @overload(operator.getitem)
 def overload_index_getitem(I, ind):
-    if isinstance(I, NumericIndexType):
+    if isinstance(I, (NumericIndexType, StringIndexType)):
         return lambda I, ind: bodo.hiframes.api.get_index_data(I)[ind]
 
 
 def _is_none(val):
     return val is None or val == types.none
+
+
+# similar to index_from_array()
+def array_typ_to_index(arr_typ):
+    if arr_typ == bodo.string_array_type:
+        return StringIndexType()
+
+    assert isinstance(arr_typ, types.Array)
+    if arr_typ.dtype == types.NPDatetime('ns'):
+        return DatetimeIndexType()
+
+    if isinstance(arr_typ.dtype, types.Integer):
+        if not arr_typ.dtype.signed:
+            return NumericIndexType(types.uint64)
+        else:
+            return NumericIndexType(types.int64)
+
+    if isinstance(arr_typ.dtype, types.Float):
+        return NumericIndexType(types.float64)
+
+    raise TypeError("invalid index type {}".format(arr_typ))

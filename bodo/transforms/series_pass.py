@@ -1018,7 +1018,7 @@ class SeriesPass(object):
             nodes.append(agg_node)
             # TODO: handle args like sort=False
             func = lambda A, B: bodo.hiframes.api.init_series(
-                A, B).sort_values(ascending=False)
+                A, bodo.utils.conversion.convert_to_index(B)).sort_values(ascending=False)
             return self._replace_func(func, [out_data_var, out_key_var], pre_nodes=nodes)
 
         # astype with string output
