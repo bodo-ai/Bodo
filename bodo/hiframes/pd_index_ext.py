@@ -5,7 +5,7 @@ import numba
 from numba import types, cgutils
 from numba.extending import (models, register_model, lower_cast, infer_getattr,
     type_callable, infer, overload, make_attribute_wrapper, box, intrinsic,
-    typeof_impl, unbox, NativeValue, overload_attribute)
+    typeof_impl, unbox, NativeValue, overload_attribute, overload_method)
 from numba.typing.templates import (infer_global, AbstractTemplate, signature,
     AttributeTemplate, bound_function)
 from numba.targets.boxing import box_array
@@ -18,10 +18,13 @@ from bodo.hiframes.pd_series_ext import (is_str_series_typ, string_array_type,
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type, datetime_date_type
 from bodo.hiframes.datetime_date_ext import array_datetime_date
 import bodo.utils.conversion
+from bodo.utils.utils import BooleanLiteral
 
 
 _dt_index_data_typ = types.Array(types.NPDatetime('ns'), 1, 'C')
 _timedelta_index_data_typ = types.Array(types.NPTimedelta('ns'), 1, 'C')
+iNaT = pd._libs.tslibs.iNaT
+NaT = types.NPDatetime('ns')('NaT')  # TODO: pd.NaT
 
 
 # -------------------------  DatetimeIndex -----------------------------
@@ -116,6 +119,7 @@ def unbox_datetime_index(typ, val, c):
 
 # support DatetimeIndex date fields such as I.year
 def gen_dti_field_impl(field):
+    # TODO: NaN
     func_text = 'def impl(dti):\n'
     func_text += '    numba.parfor.init_prange()\n'
     func_text += '    A = bodo.hiframes.api.get_index_data(dti)\n'
@@ -142,6 +146,7 @@ for field in bodo.hiframes.pd_timestamp_ext.date_fields:
 
 @overload_attribute(DatetimeIndexType, 'date')
 def overload_datetime_index_date(dti):
+    # TODO: NaN
 
     def impl(dti):
         numba.parfor.init_prange()
@@ -157,22 +162,64 @@ def overload_datetime_index_date(dti):
     return impl
 
 
+@numba.njit
+def _dti_val_finalize(s, count):  # pragma: no cover
+    if not count:
+        s = iNaT  # TODO: NaT type boxing in timestamp
+    return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(s)
+
+
+@overload_method(DatetimeIndexType, 'min')
+def overload_datetime_index_min(dti, axis=None, skipna=True):
+    # TODO skipna = False
+    if not _is_none(axis) or not _is_true(skipna):
+        raise ValueError(
+            "Index.min(): axis and skipna arguments not supported yet")
+
+    def impl(dti, axis=None, skipna=True):
+        numba.parfor.init_prange()
+        in_arr = bodo.hiframes.api.get_index_data(dti)
+        s = numba.targets.builtins.get_type_max_value(numba.types.int64)
+        count = 0
+        for i in numba.parfor.internal_prange(len(in_arr)):
+            if not bodo.hiframes.api.isna(in_arr, i):
+                val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
+                s = min(s, val)
+                count += 1
+        return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
+
+    return impl
+
+
+# TODO: refactor min/max
+@overload_method(DatetimeIndexType, 'max')
+def overload_datetime_index_max(dti, axis=None, skipna=True):
+    # TODO skipna = False
+    if not _is_none(axis) or not _is_true(skipna):
+        raise ValueError(
+            "Index.max(): axis and skipna arguments not supported yet")
+
+    def impl(dti, axis=None, skipna=True):
+        numba.parfor.init_prange()
+        in_arr = bodo.hiframes.api.get_index_data(dti)
+        s = numba.targets.builtins.get_type_min_value(numba.types.int64)
+        count = 0
+        for i in numba.parfor.internal_prange(len(in_arr)):
+            if not bodo.hiframes.api.isna(in_arr, i):
+                val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
+                s = max(s, val)
+                count += 1
+        return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
+
+    return impl
+
+
 @infer_getattr
 class DatetimeIndexAttribute(AttributeTemplate):
     key = DatetimeIndexType
 
     def resolve_values(self, ary):
         return _dt_index_data_typ
-
-    @bound_function("dt_index.max")
-    def resolve_max(self, ary, args, kws):
-        assert not kws
-        return signature(pandas_timestamp_type, *args)
-
-    @bound_function("dt_index.min")
-    def resolve_min(self, ary, args, kws):
-        assert not kws
-        return signature(pandas_timestamp_type, *args)
 
 
 @overload(pd.DatetimeIndex)
@@ -655,7 +702,13 @@ def overload_index_getitem(I, ind):
 
 
 def _is_none(val):
-    return val is None or val == types.none
+    return (val is None or val == types.none
+            or getattr(val, 'value', False) is None)
+
+
+def _is_true(val):
+    return (val == True or val == BooleanLiteral(True)
+            or getattr(val, 'value', False) is True)
 
 
 # similar to index_from_array()

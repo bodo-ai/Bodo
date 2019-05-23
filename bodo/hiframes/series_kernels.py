@@ -234,13 +234,6 @@ def _column_min_impl(in_arr):  # pragma: no cover
     res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
     return res
 
-def _column_min_impl_no_isnan(in_arr):  # pragma: no cover
-    numba.parfor.init_prange()
-    s = numba.targets.builtins.get_type_max_value(numba.types.int64)
-    for i in numba.parfor.internal_prange(len(in_arr)):
-        val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
-        s = min(s, val)
-    return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(s)
 
 # TODO: fix for dt64
 def _column_max_impl(in_arr):  # pragma: no cover
@@ -255,13 +248,6 @@ def _column_max_impl(in_arr):  # pragma: no cover
     res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
     return res
 
-def _column_max_impl_no_isnan(in_arr):  # pragma: no cover
-    numba.parfor.init_prange()
-    s = numba.targets.builtins.get_type_min_value(numba.types.int64)
-    for i in numba.parfor.internal_prange(len(in_arr)):
-        val = in_arr[i]
-        s = max(s, bodo.hiframes.pd_timestamp_ext.dt64_to_integer(val))
-    return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(s)
 
 # TODO: handle index and name
 def _column_sub_impl_datetime_series_timestamp(in_arr, ts):  # pragma: no cover
@@ -479,8 +465,8 @@ series_replace_funcs = {
     'prod': _column_prod_impl_basic,
     'count': _column_count_impl,
     'mean': _column_mean_impl,
-    'max': defaultdict(lambda: _column_max_impl, [(types.NPDatetime('ns'), _column_max_impl_no_isnan)]),
-    'min': defaultdict(lambda: _column_min_impl, [(types.NPDatetime('ns'), _column_min_impl_no_isnan)]),
+    'max': defaultdict(lambda: _column_max_impl),
+    'min': defaultdict(lambda: _column_min_impl),
     'var': _column_var_impl,
     'std': _column_std_impl,
     'nunique': lambda A: bodo.hiframes.api.nunique(A),

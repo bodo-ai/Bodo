@@ -142,6 +142,22 @@ def test_datetime_date(dti_val):
     np.testing.assert_array_equal(bodo_func(dti_val), impl(dti_val))
 
 
+def test_datetime_min(dti_val):
+    def impl(A):
+      return A.min()
+
+    bodo_func = bodo.jit(impl)
+    np.testing.assert_array_equal(bodo_func(dti_val), impl(dti_val))
+
+
+def test_datetime_max(dti_val):
+    def impl(A):
+      return A.max()
+
+    bodo_func = bodo.jit(impl)
+    np.testing.assert_array_equal(bodo_func(dti_val), impl(dti_val))
+
+
 @pytest.mark.parametrize('data', [
     [100, 110],
     np.arange(10),

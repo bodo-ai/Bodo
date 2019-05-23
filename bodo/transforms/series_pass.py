@@ -565,8 +565,21 @@ class SeriesPass(object):
         if (isinstance(func_mod, ir.Var)
                 and isinstance(
                     self.typemap[func_mod.name], DatetimeIndexType)):
-            return self._run_call_dt_index(
-                assign, assign.target, rhs, func_mod, func_name)
+            rhs.args.insert(0, func_mod)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            if func_name == 'min':
+                impl = bodo.hiframes.pd_index_ext.overload_datetime_index_min(
+                    *arg_typs, **kw_typs)
+            else:
+                assert func_name == 'max'
+                impl = bodo.hiframes.pd_index_ext.overload_datetime_index_max(
+                    *arg_typs, **kw_typs)
+            stub = (lambda dti, axis=None, skipna=True: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
 
         if (fdef == ('concat_dummy', 'bodo.hiframes.pd_dataframe_ext')
                 and isinstance(self.typemap[lhs], SeriesType)):
@@ -1636,17 +1649,6 @@ class SeriesPass(object):
         f = loc_vars['f']
 
         return self._replace_func(f, [arr], pre_nodes=nodes)
-
-    def _run_call_dt_index(self, assign, lhs, rhs, dt_index_var, func_name):
-        if func_name in ('min', 'max'):
-            if rhs.args or rhs.kws:
-                raise ValueError(
-                    "unsupported DatetimeIndex.{}() arguments".format(
-                    func_name))
-            func = series_replace_funcs[func_name][types.NPDatetime('ns')]
-            nodes = []
-            data = self._get_dt_index_data(dt_index_var, nodes)
-            return self._replace_func(func, [data], pre_nodes=nodes)
 
     def _run_Timedelta_field(self, assign, lhs, rhs):
         """transform Timedelta.<field>
