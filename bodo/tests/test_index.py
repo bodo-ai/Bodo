@@ -280,3 +280,17 @@ def test_timedelta_index_constructor(data):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_index_equal(bodo_func(data), test_impl(data))
+
+
+@pytest.mark.parametrize('field',
+    bodo.hiframes.pd_timestamp_ext.timedelta_fields)
+def test_timedelta_field(timedelta_index_val, field):
+    func_text = 'def impl(A):\n'
+    func_text += '  return A.{}\n'.format(field)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars['impl']
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_index_equal(
+        bodo_func(timedelta_index_val), impl(timedelta_index_val))

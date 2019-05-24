@@ -35,7 +35,7 @@ from bodo.hiframes.pd_series_ext import (SeriesType, is_str_series_typ,
     if_series_to_array_type, is_series_type,
     series_str_methods_type, SeriesRollingType, SeriesIatType,
     explicit_binop_funcs, series_dt_methods_type)
-from bodo.hiframes.pd_index_ext import DatetimeIndexType
+from bodo.hiframes.pd_index_ext import DatetimeIndexType, TimedeltaIndexType
 from bodo.io.pio_api import h5dataset_type
 from bodo.hiframes.rolling import get_rolling_setup_args
 from bodo.ir.aggregate import Aggregate
@@ -359,6 +359,12 @@ class SeriesPass(object):
                     rhs_type)
                 return self._replace_func(impl, [rhs.value])
 
+        if isinstance(rhs_type, TimedeltaIndexType):
+            # TODO: test this inlining
+            if rhs.attr in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
+                impl = bodo.hiframes.pd_index_ext.gen_tdi_field_impl(rhs.attr)
+                return self._replace_func(impl, [rhs.value])
+
         if rhs_type == series_dt_methods_type:
             dt_def = guard(get_definition, self.func_ir, rhs.value)
             if dt_def is None:  # TODO: check for errors
@@ -368,10 +374,6 @@ class SeriesPass(object):
                 return self._run_DatetimeIndex_field(assign, assign.target, rhs)
             if rhs.attr == 'date':
                 return self._run_DatetimeIndex_date(assign, assign.target, rhs)
-
-        if isinstance(rhs_type, bodo.hiframes.pd_index_ext.TimedeltaIndexType):
-            if rhs.attr in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
-                return self._run_Timedelta_field(assign, assign.target, rhs)
 
         if isinstance(rhs_type, SeriesType) and rhs.attr in ('size', 'shape'):
             # simply return the column
@@ -1674,36 +1676,6 @@ class SeriesPass(object):
         #func_text += '        S[i] = ts.day + (ts.month << 16) + (ts.year << 32)\n'
         # DatetimeIndex returns Array but Series.dt returns Series
         func_text += '    return bodo.hiframes.api.init_series(S)\n'
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        f = loc_vars['f']
-
-        return self._replace_func(f, [arr], pre_nodes=nodes)
-
-    def _run_Timedelta_field(self, assign, lhs, rhs):
-        """transform Timedelta.<field>
-        """
-        nodes = []
-        arr = self._get_timedelta_index_data(rhs.value, nodes)
-        field = rhs.attr
-
-        func_text = 'def f(dti):\n'
-        func_text += '    numba.parfor.init_prange()\n'
-        func_text += '    n = len(dti)\n'
-        func_text += '    S = numba.unsafe.ndarray.empty_inferred((n,))\n'
-        func_text += '    for i in numba.parfor.internal_prange(n):\n'
-        func_text += '        dt64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(dti[i])\n'
-        if field == 'nanoseconds':
-            func_text += '        S[i] = dt64 % 1000\n'
-        elif field == 'microseconds':
-            func_text += '        S[i] = dt64 // 1000 % 100000\n'
-        elif field == 'seconds':
-            func_text += '        S[i] = dt64 // (1000 * 1000000) % (60 * 60 * 24)\n'
-        elif field == 'days':
-            func_text += '        S[i] = dt64 // (1000 * 1000000 * 60 * 60 * 24)\n'
-        else:
-            assert(0)
-        func_text += '    return S\n'
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         f = loc_vars['f']

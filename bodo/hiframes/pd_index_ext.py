@@ -453,13 +453,39 @@ make_attribute_wrapper(TimedeltaIndexType, 'data', '_data')
 make_attribute_wrapper(TimedeltaIndexType, 'name', '_name')
 
 
-# all datetimeindex fields return int64 same as Timestamp fields
-def resolve_timedelta_field(self, ary):
-    # TODO: return Int64Index
-    return types.Array(types.int64, 1, 'C')
+# support TimedeltaIndex time fields such as T.days
+def gen_tdi_field_impl(field):
+    # TODO: NaN
+    func_text = 'def impl(tdi):\n'
+    func_text += '    numba.parfor.init_prange()\n'
+    func_text += '    A = bodo.hiframes.api.get_index_data(tdi)\n'
+    func_text += '    name = bodo.hiframes.api.get_index_name(tdi)\n'
+    func_text += '    n = len(A)\n'
+    # all timedeltaindex fields return int64 same as Timestamp fields
+    func_text += '    S = np.empty(n, np.int64)\n'
+    func_text += '    for i in numba.parfor.internal_prange(n):\n'
+    func_text += '        td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(A[i])\n'
+    if field == 'nanoseconds':
+        func_text += '        S[i] = td64 % 1000\n'
+    elif field == 'microseconds':
+        func_text += '        S[i] = td64 // 1000 % 100000\n'
+    elif field == 'seconds':
+        func_text += '        S[i] = td64 // (1000 * 1000000) % (60 * 60 * 24)\n'
+    elif field == 'days':
+        func_text += '        S[i] = td64 // (1000 * 1000000 * 60 * 60 * 24)\n'
+    else:
+        assert False, "invalid timedelta field"
+    func_text += '    return bodo.hiframes.pd_index_ext.init_numeric_index(S, name)\n'
+    loc_vars = {}
+    # print(func_text)
+    exec(func_text, {'numba': numba, 'np': np, 'bodo': bodo}, loc_vars)
+    impl = loc_vars['impl']
+    return impl
+
 
 for field in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
-    setattr(TimedeltaIndexAttribute, "resolve_" + field, resolve_timedelta_field)
+    impl = gen_tdi_field_impl(field)
+    overload_attribute(TimedeltaIndexType, field)(lambda tdi: impl)
 
 
 @overload(pd.TimedeltaIndex)
