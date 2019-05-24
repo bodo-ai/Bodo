@@ -41,7 +41,6 @@ class DatetimeIndexType(types.IterableType):
             name="DatetimeIndex(name = {})".format(name_typ))
 
     def copy(self):
-        # XXX is copy necessary?
         return DatetimeIndexType(self.name_typ)
 
     @property
@@ -360,7 +359,6 @@ class TimedeltaIndexType(types.IterableType):
             name="TimedeltaIndexType(named = {})".format(name_typ))
 
     def copy(self):
-        # XXX is copy necessary?
         return TimedeltaIndexType(self.name_typ)
 
     @property
@@ -522,6 +520,9 @@ class RangeIndexType(types.IterableType):
         super(RangeIndexType, self).__init__(
             name="RangeIndexType()")
 
+    def copy(self):
+        return RangeIndexType()
+
     @property
     def iterator_type(self):
         return types.iterators.RangeIteratorType(types.int64)
@@ -665,6 +666,9 @@ class NumericIndexType(types.IterableType):
         super(NumericIndexType, self).__init__(
             name="NumericIndexType({}, {})".format(dtype, name_typ))
 
+    def copy(self):
+        return NumericIndexType(self.dtype, self.name_typ)
+
     @property
     def iterator_type(self):
         # TODO: handle iterator
@@ -773,23 +777,37 @@ def unbox_numeric_index(typ, val, c):
 
 def create_numeric_constructor(func, default_dtype):
 
-    def impl(data=None, dtype=None, copy=False, name=None, fastpath=None):
-        data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
-        if copy:
-            data_arr = data_arr.copy()  # TODO: np.array() with copy
-        data_res = bodo.utils.conversion.fix_arr_dtype(
-            data_arr, np.dtype(default_dtype))
-        return init_numeric_index(data_res, name)
+    def overload_impl(data=None, dtype=None, copy=False, name=None,
+                                                                fastpath=None):
+        if _is_false(copy):
+            # if copy is False for sure, specialize to avoid branch
+            def impl(data=None, dtype=None, copy=False, name=None,
+                                                                fastpath=None):
+                data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
+                data_res = bodo.utils.conversion.fix_arr_dtype(
+                    data_arr, np.dtype(default_dtype))
+                return bodo.hiframes.pd_index_ext.init_numeric_index(
+                    data_res, name)
+        else:
+            def impl(data=None, dtype=None, copy=False, name=None,
+                                                                fastpath=None):
+                data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
+                if copy:
+                    data_arr = data_arr.copy()  # TODO: np.array() with copy
+                data_res = bodo.utils.conversion.fix_arr_dtype(
+                    data_arr, np.dtype(default_dtype))
+                return bodo.hiframes.pd_index_ext.init_numeric_index(
+                    data_res, name)
 
-    overload(func)(
-        lambda data=None, dtype=None, copy=False, name=None, fastpath=None:
-        impl)
+        return impl
+
+    return overload_impl
 
 
-create_numeric_constructor(pd.Int64Index, np.int64)
-create_numeric_constructor(pd.UInt64Index, np.uint64)
-create_numeric_constructor(pd.Float64Index, np.float64)
-
+for func, default_dtype in ((pd.Int64Index, np.int64),
+                   (pd.UInt64Index, np.uint64), (pd.Float64Index, np.float64)):
+    overload_impl = create_numeric_constructor(func, default_dtype)
+    overload(func)(overload_impl)
 
 
 # ---------------- StringIndex -------------------
@@ -805,6 +823,9 @@ class StringIndexType(types.IterableType):
         self.name_typ = name_typ
         super(StringIndexType, self).__init__(
             name="StringIndexType({})".format(name_typ))
+
+    def copy(self):
+        return StringIndexType(self.name_typ)
 
     @property
     def iterator_type(self):
@@ -901,6 +922,11 @@ def _is_true(val):
             or getattr(val, 'value', False) is True)
 
 
+def _is_false(val):
+    return (val == False or val == BooleanLiteral(False)
+            or getattr(val, 'value', True) is False)
+
+
 # similar to index_from_array()
 def array_typ_to_index(arr_typ):
     if arr_typ == bodo.string_array_type:
@@ -909,6 +935,9 @@ def array_typ_to_index(arr_typ):
     assert isinstance(arr_typ, types.Array)
     if arr_typ.dtype == types.NPDatetime('ns'):
         return DatetimeIndexType()
+
+    if arr_typ.dtype == types.NPTimedelta('ns'):
+        return TimedeltaIndexType()
 
     if isinstance(arr_typ.dtype, types.Integer):
         if not arr_typ.dtype.signed:
