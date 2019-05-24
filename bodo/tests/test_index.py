@@ -175,6 +175,38 @@ def test_datetime_sub(dti_val):
     pd.testing.assert_index_equal(bodo_func(dti_val, t), impl2(dti_val, t))
 
 
+def test_datetime_getitem(dti_val):
+    # constant integer index
+    def impl(A):
+        return A[0]
+
+    bodo_func = bodo.jit(impl)
+    assert bodo_func(dti_val) == impl(dti_val)
+
+    # non-constant integer index
+    def impl2(A, i):
+        return A[i]
+
+    i = 0
+    bodo_func = bodo.jit(impl2)
+    assert bodo_func(dti_val, i) == impl2(dti_val, i)
+
+    # constant slice
+    def impl3(A):
+        return A[:1]
+
+    bodo_func = bodo.jit(impl3)
+    pd.testing.assert_index_equal(bodo_func(dti_val), impl3(dti_val))
+
+    # non-constant slice
+    def impl4(A, i):
+        return A[:i]
+
+    i = 1
+    bodo_func = bodo.jit(impl4)
+    pd.testing.assert_index_equal(bodo_func(dti_val, i), impl4(dti_val, i))
+
+
 @pytest.mark.parametrize('comp', ['==', '!=', '>=', '>', '<=', '<'])
 def test_datetime_str_comp(dti_val, comp):
     # string literal

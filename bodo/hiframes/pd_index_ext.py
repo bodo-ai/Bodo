@@ -324,6 +324,27 @@ for op in (operator.eq, operator.ne, operator.ge, operator.gt, operator.le,
     overload(op)(overload_binop_dti_str(op))
 
 
+@overload(operator.getitem)
+def overload_datetime_index_getitem(dti, ind):
+    # TODO: other getitem cases
+    if isinstance(dti, DatetimeIndexType):
+        if isinstance(ind, types.Integer):
+            def impl(dti, ind):
+                dti_arr = bodo.hiframes.api.get_index_data(dti)
+                dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dti_arr[ind])
+                return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)
+            return impl
+        else:
+            # slice, boolean array, etc.
+            # TODO: other Index or Series objects as index?
+            def impl(dti, ind):
+                dti_arr = bodo.hiframes.api.get_index_data(dti)
+                name = bodo.hiframes.api.get_index_name(dti)
+                new_arr = dti_arr[ind]
+                return bodo.hiframes.api.init_datetime_index(new_arr, name)
+            return impl
+
+
 # ------------------------------ Timedelta ---------------------------
 
 # similar to DatetimeIndex
