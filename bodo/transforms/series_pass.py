@@ -344,7 +344,7 @@ class SeriesPass(object):
         if isinstance(rhs_type, DatetimeIndexType) and rhs.attr == 'values':
             # simply return the data array
             nodes = []
-            var = self._get_dt_index_data(rhs.value, nodes)
+            var = self._get_index_data(rhs.value, nodes)
             assign.value = var
             nodes.append(assign)
             return nodes
@@ -756,8 +756,22 @@ class SeriesPass(object):
         if func_name == 'get_index_data':
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def)
-            if call_def == ('init_datetime_index', 'bodo.hiframes.api'):
+            if call_def in (('init_datetime_index', 'bodo.hiframes.api'),
+                    ('init_timedelta_index', 'bodo.hiframes.api'),
+                    ('init_string_index', 'bodo.hiframes.pd_index_ext'),
+                    ('init_numeric_index', 'bodo.hiframes.pd_index_ext')):
                 assign.value = var_def.args[0]
+                return [assign]
+
+        if func_name == 'get_index_name':
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def)
+            if (call_def in (('init_datetime_index', 'bodo.hiframes.api'),
+                    ('init_timedelta_index', 'bodo.hiframes.api'),
+                    ('init_string_index', 'bodo.hiframes.pd_index_ext'),
+                    ('init_numeric_index', 'bodo.hiframes.pd_index_ext')) and
+                    len(var_def.args) > 1):
+                assign.value = var_def.args[1]
                 return [assign]
 
         if func_name == 'get_series_data':
@@ -2246,10 +2260,13 @@ class SeriesPass(object):
                 return tup_def.items
         raise ValueError("constant tuple expected")
 
-    def _get_dt_index_data(self, dt_var, nodes):
+    def _get_index_data(self, dt_var, nodes):
         var_def = guard(get_definition, self.func_ir, dt_var)
         call_def = guard(find_callname, self.func_ir, var_def)
-        if call_def == ('init_datetime_index', 'bodo.hiframes.api'):
+        if call_def in (('init_datetime_index', 'bodo.hiframes.api'),
+                    ('init_timedelta_index', 'bodo.hiframes.api'),
+                    ('init_string_index', 'bodo.hiframes.pd_index_ext'),
+                    ('init_numeric_index', 'bodo.hiframes.pd_index_ext')):
             return var_def.args[0]
 
         f_block = compile_to_numba_ir(
@@ -2329,24 +2346,6 @@ class SeriesPass(object):
             self.calltypes
         ).blocks.popitem()[1]
         replace_arg_nodes(f_block, [series_var])
-        nodes += f_block.body[:-2]
-        return nodes[-1].target
-
-    def _get_timedelta_index_data(self, dt_var, nodes):
-        var_def = guard(get_definition, self.func_ir, dt_var)
-        call_def = guard(find_callname, self.func_ir, var_def)
-        if call_def == ('init_timedelta_index', 'bodo.hiframes.api'):
-            return var_def.args[0]
-
-        f_block = compile_to_numba_ir(
-            lambda S: bodo.hiframes.api.get_index_data(S),
-            {'bodo': bodo},
-            self.typingctx,
-            (self.typemap[dt_var.name],),
-            self.typemap,
-            self.calltypes
-        ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [dt_var])
         nodes += f_block.body[:-2]
         return nodes[-1].target
 

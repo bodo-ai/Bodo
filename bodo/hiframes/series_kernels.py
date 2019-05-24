@@ -235,18 +235,41 @@ def _column_min_impl(in_arr):  # pragma: no cover
     return res
 
 
-# TODO: fix for dt64
 def _column_max_impl(in_arr):  # pragma: no cover
     numba.parfor.init_prange()
     count = 0
     s = numba.targets.builtins.get_type_min_value(in_arr.dtype)
     for i in numba.parfor.internal_prange(len(in_arr)):
         val = in_arr[i]
-        if not np.isnan(val):
+        if not bodo.hiframes.api.isna(in_arr, i):
             s = max(s, val)
             count += 1
     res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
     return res
+
+
+def _column_max_impl_dt64(in_arr):
+    numba.parfor.init_prange()
+    s = numba.targets.builtins.get_type_min_value(np.int64)
+    count = 0
+    for i in numba.parfor.internal_prange(len(in_arr)):
+        if not bodo.hiframes.api.isna(in_arr, i):
+            val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
+            s = max(s, val)
+            count += 1
+    return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
+
+
+def _column_min_impl_dt64(in_arr):
+    numba.parfor.init_prange()
+    s = numba.targets.builtins.get_type_max_value(np.int64)
+    count = 0
+    for i in numba.parfor.internal_prange(len(in_arr)):
+        if not bodo.hiframes.api.isna(in_arr, i):
+            val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
+            s = min(s, val)
+            count += 1
+    return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
 
 
 # TODO: handle index and name
@@ -455,8 +478,8 @@ series_replace_funcs = {
     'prod': _column_prod_impl_basic,
     'count': _column_count_impl,
     'mean': _column_mean_impl,
-    'max': defaultdict(lambda: _column_max_impl),
-    'min': defaultdict(lambda: _column_min_impl),
+    'max': defaultdict(lambda: _column_max_impl, [(types.NPDatetime('ns'), _column_max_impl_dt64)]),
+    'min': defaultdict(lambda: _column_min_impl, [(types.NPDatetime('ns'), _column_min_impl_dt64)]),
     'var': _column_var_impl,
     'std': _column_std_impl,
     'nunique': lambda A: bodo.hiframes.api.nunique(A),

@@ -568,6 +568,9 @@ if hasattr(numba.ir_utils, 'alias_func_extensions'):
     numba.ir_utils.alias_func_extensions[('get_series_data', 'bodo.hiframes.api')] = alias_ext_dummy_func
     numba.ir_utils.alias_func_extensions[('get_series_index', 'bodo.hiframes.api')] = alias_ext_dummy_func
     numba.ir_utils.alias_func_extensions[('init_datetime_index', 'bodo.hiframes.api')] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[('init_timedelta_index', 'bodo.hiframes.api')] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[('init_numeric_index', 'bodo.hiframes.pd_index_ext')] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[('init_string_index', 'bodo.hiframes.pd_index_ext')] = alias_ext_dummy_func
     numba.ir_utils.alias_func_extensions[('get_index_data', 'bodo.hiframes.api')] = alias_ext_dummy_func
     numba.ir_utils.alias_func_extensions[('dummy_unbox_series', 'bodo.hiframes.api')] = alias_ext_dummy_func
     numba.ir_utils.alias_func_extensions[('get_dataframe_data', 'bodo.hiframes.pd_dataframe_ext')] = alias_ext_dummy_func

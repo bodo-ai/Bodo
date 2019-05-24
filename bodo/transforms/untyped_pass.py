@@ -58,7 +58,13 @@ def remove_hiframes(rhs, lives, call_list):
             'concat', 'count', 'mean', 'quantile', 'var',
             'str_contains_regex', 'str_contains_noregex',
             'nunique', 'init_series', 'init_datetime_index',
+            'init_timedelta_index',
             'convert_tup_to_rec', 'convert_rec_to_tup']):
+        return True
+    if (len(call_list) == 4
+            and call_list[1:] == ['pd_index_ext', 'hiframes', bodo] and
+            call_list[0] in ('init_string_index',
+            'init_numeric_index', '_dti_val_finalize')):
         return True
     if len(call_list) == 4 and call_list[1:] == ['conversion', 'utils', bodo]:
         # all conversion functions are side effect-free

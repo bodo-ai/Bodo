@@ -91,3 +91,10 @@ Below is the high level structure of the code.
   dictionary, quantiles, timsort. It also includes helper C extensions.
 - `io` directory provides I/O support such as CSV, HDF5, Parquet and Numpy.
 - `tests` provides unittests.
+
+For each function implemented (either overloading Pandas or internal), the following has to be specified:
+
+- side effects for dead code elimination
+- aliasing (inlining if necessary)
+- distributed analysis
+- distributed transformation
