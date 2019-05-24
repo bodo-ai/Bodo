@@ -9,7 +9,8 @@ from numba import types
 from numba.extending import overload
 import bodo
 
-NS_DTYPE = np.dtype('M8[ns]')  # similar to Pandas
+NS_DTYPE = np.dtype('M8[ns]')  # similar pandas/_libs/tslibs/conversion.pyx
+TD_DTYPE = np.dtype('m8[ns]')
 
 
 # TODO: use generated_jit with IR inlining
@@ -143,6 +144,33 @@ def overload_convert_to_dt64ns(data):
                 bodo.utils.conversion.parse_datetimes_from_strings(data))
 
     raise TypeError("invalid data type {} for dt64 conversion".format(data))
+
+
+# TODO: use generated_jit with IR inlining
+def convert_to_td64ns(data):
+    return data
+
+
+@overload(convert_to_td64ns)
+def overload_convert_to_td64ns(data):
+    """Converts data formats like int64 to timedelta64ns
+    """
+    # TODO: array of strings
+    # see pd.core.arrays.timedeltas.sequence_to_td64ns for constructor types
+    # TODO: support datetime.timedelta
+    if data == types.Array(types.int64, 1, 'C'):
+        return lambda data: data.view(bodo.utils.conversion.TD_DTYPE)
+
+    if data == types.Array(types.NPTimedelta('ns'), 1, 'C'):
+        return lambda data: data
+
+    if data == bodo.string_array_type:
+        # TODO: support
+        raise ValueError(
+            "conversion to timedelta from string not supported yet")
+
+    raise TypeError("invalid data type {} for dt64 conversion".format(data))
+
 
 
 def convert_to_index(data):

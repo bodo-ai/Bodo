@@ -276,6 +276,16 @@ are supported.
 TimedeltaIndex
 ~~~~~~~~~~~~~~
 
+``TimedeltaIndex`` objects are supported. They can be constructed,
+boxed/unboxed, and set as index to dataframes and series.
+
+* :func:`pandas.TimedeltaIndex`
+
+   * Only ``data`` argument is supported, and can be array-like
+     of ``timedelta64['ns']`` or ``int64``.
+
+Time fields of TimedeltaIndex are supported:
+
 * :attr:`TimedeltaIndex.days`
 * :attr:`TimedeltaIndex.second`
 * :attr:`TimedeltaIndex.microsecond`

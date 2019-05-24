@@ -347,6 +347,7 @@ def overload_datetime_index_getitem(dti, ind):
 
 # ------------------------------ Timedelta ---------------------------
 
+
 # similar to DatetimeIndex
 class TimedeltaIndexType(types.IterableType):
     """Temporary type class for TimedeltaIndex objects.
@@ -459,6 +460,29 @@ def resolve_timedelta_field(self, ary):
 
 for field in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
     setattr(TimedeltaIndexAttribute, "resolve_" + field, resolve_timedelta_field)
+
+
+@overload(pd.TimedeltaIndex)
+def pd_timedelta_index_overload(data=None, unit=None, freq=None, start=None,
+        end=None, periods=None, closed=None, dtype=None, copy=False,
+        name=None, verify_integrity=None):
+    # TODO handle dtype=dtype('<m8[ns]') default
+    # TODO: check/handle other input
+    if _is_none(data):
+        raise ValueError("data argument in pd.TimedeltaIndex() expected")
+
+    if any(not _is_none(a) for a in (unit, freq, start, end, periods, closed,
+                                                                       dtype)):
+        raise ValueError("only data argument in pd.TimedeltaIndex() supported")
+
+    def impl(data=None, unit=None, freq=None, start=None,
+            end=None, periods=None, closed=None, dtype=None, copy=False,
+            name=None, verify_integrity=None):
+        data_arr = bodo.utils.conversion.coerce_to_array(data)
+        S = bodo.utils.conversion.convert_to_td64ns(data_arr)
+        return bodo.hiframes.api.init_timedelta_index(S, name)
+
+    return impl
 
 
 # ---------------- RangeIndex -------------------

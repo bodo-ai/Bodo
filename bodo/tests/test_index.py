@@ -265,3 +265,18 @@ def test_timedelta_index_unbox(timedelta_index_val):
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_index_equal(
         bodo_func(timedelta_index_val), test_impl(timedelta_index_val))
+
+@pytest.mark.parametrize('data', [
+    [100, 110],
+    np.arange(10),
+    np.arange(10).view(np.dtype('timedelta64[ns]')),
+    pd.Series(np.arange(10)),
+    pd.Series(np.arange(10).view(np.dtype('timedelta64[ns]'))),
+    pd.TimedeltaIndex(np.arange(10)),
+])
+def test_timedelta_index_constructor(data):
+    def test_impl(d):
+        return pd.TimedeltaIndex(d)
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_index_equal(bodo_func(data), test_impl(data))

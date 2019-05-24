@@ -554,6 +554,15 @@ class SeriesPass(object):
         if fdef == ('DatetimeIndex', 'pandas'):
             return self._run_pd_DatetimeIndex(assign, assign.target, rhs)
 
+        if fdef == ('TimedeltaIndex', 'pandas'):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                        for name, v in dict(rhs.kws).items()}
+            impl = bodo.hiframes.pd_index_ext.pd_timedelta_index_overload(
+                *arg_typs, **kw_typs)
+            return self._replace_func(impl, rhs.args,
+                            pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws))
+
         if fdef == ('Series', 'pandas'):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name:self.typemap[v.name]
