@@ -138,9 +138,13 @@ def gen_dti_field_impl(field):
     return impl
 
 
-for field in bodo.hiframes.pd_timestamp_ext.date_fields:
-    impl = gen_dti_field_impl(field)
-    overload_attribute(DatetimeIndexType, field)(lambda dti: impl)
+def _install_dti_date_fields():
+    for field in bodo.hiframes.pd_timestamp_ext.date_fields:
+        impl = gen_dti_field_impl(field)
+        overload_attribute(DatetimeIndexType, field)(lambda dti: impl)
+
+
+_install_dti_date_fields()
 
 
 @overload_attribute(DatetimeIndexType, 'date')
@@ -318,9 +322,13 @@ def overload_binop_dti_str(op):
     return overload_impl
 
 
-for op in (operator.eq, operator.ne, operator.ge, operator.gt, operator.le,
-        operator.lt):
-    overload(op)(overload_binop_dti_str(op))
+def _install_dti_str_comp_ops():
+    for op in (operator.eq, operator.ne, operator.ge, operator.gt, operator.le,
+            operator.lt):
+        overload(op)(overload_binop_dti_str(op))
+
+
+_install_dti_str_comp_ops()
 
 
 @overload(operator.getitem)
@@ -481,9 +489,13 @@ def gen_tdi_field_impl(field):
     return impl
 
 
-for field in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
-    impl = gen_tdi_field_impl(field)
-    overload_attribute(TimedeltaIndexType, field)(lambda tdi: impl)
+def _install_tdi_time_fields():
+    for field in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
+        impl = gen_tdi_field_impl(field)
+        overload_attribute(TimedeltaIndexType, field)(lambda tdi: impl)
+
+
+_install_tdi_time_fields()
 
 
 @overload(pd.TimedeltaIndex)
@@ -804,10 +816,14 @@ def create_numeric_constructor(func, default_dtype):
     return overload_impl
 
 
-for func, default_dtype in ((pd.Int64Index, np.int64),
-                   (pd.UInt64Index, np.uint64), (pd.Float64Index, np.float64)):
-    overload_impl = create_numeric_constructor(func, default_dtype)
-    overload(func)(overload_impl)
+def _install_numeric_constructors():
+    for func, default_dtype in ((pd.Int64Index, np.int64),
+                    (pd.UInt64Index, np.uint64), (pd.Float64Index, np.float64)):
+        overload_impl = create_numeric_constructor(func, default_dtype)
+        overload(func)(overload_impl)
+
+
+_install_numeric_constructors()
 
 
 # ---------------- StringIndex -------------------
