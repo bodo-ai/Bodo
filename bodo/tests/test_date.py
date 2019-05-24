@@ -166,55 +166,6 @@ class TestDate(unittest.TestCase):
         df = self._gen_str_date_df()
         np.testing.assert_array_equal(bodo_func(df), test_impl(df))
 
-    def test_datetime_index_timedelta_days(self):
-        def test_impl(df):
-            s = pd.DatetimeIndex(df['str_date'])
-            t = s - s.min()
-            return t.days
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        np.testing.assert_array_equal(bodo_func(df), test_impl(df))
-
-    def test_datetime_index_timedelta_seconds(self):
-        def test_impl(df):
-            s = pd.DatetimeIndex(df['str_date'])
-            t = s - s.min()
-            return t.seconds
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        np.testing.assert_array_equal(bodo_func(df), test_impl(df))
-
-    def test_datetime_index_timedelta_microseconds(self):
-        def test_impl(df):
-            s = pd.DatetimeIndex(df['str_date'])
-            t = s - s.min()
-            return t.microseconds
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        np.testing.assert_array_equal(bodo_func(df), test_impl(df))
-
-    def test_datetime_index_timedelta_nanoseconds(self):
-        def test_impl(df):
-            s = pd.DatetimeIndex(df['str_date'])
-            t = s - s.min()
-            return t.nanoseconds
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        np.testing.assert_array_equal(bodo_func(df), test_impl(df))
-
-    def test_datetime_index_ret(self):
-        def test_impl(df):
-            return pd.DatetimeIndex(df['str_date'])
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        pd.testing.assert_index_equal(bodo_func(df), test_impl(df),
-            check_names=False)
-
     def test_datetime_series_dt_date(self):
         def test_impl(A):
             return A.dt.date
