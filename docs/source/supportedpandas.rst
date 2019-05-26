@@ -65,6 +65,12 @@ General functions
 
    * Input list or tuple of dataframes or series is supported.
 
+* :func:`pandas.date_range`
+
+   * ``start``, ``end``, ``periods``, ``freq``, ``name`` and ``closed``
+     arguments are supported. This function is not parallelized yet.
+
+
 Series
 ~~~~~~
 

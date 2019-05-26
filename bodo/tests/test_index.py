@@ -250,6 +250,26 @@ def test_datetime_index_constructor(data):
     pd.testing.assert_index_equal(bodo_func(data), test_impl(data))
 
 
+def test_pd_date_range():
+    def impl():
+        return pd.date_range(start='2018-01-01', end='2018-01-08')
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_index_equal(bodo_func(), impl())
+
+    def impl2():
+        return pd.date_range(start='2018-01-01', periods=8)
+
+    bodo_func = bodo.jit(impl2)
+    pd.testing.assert_index_equal(bodo_func(), impl2())
+
+    def impl3():
+        return pd.date_range(start='2018-04-24', end='2018-04-27', periods=3)
+
+    bodo_func = bodo.jit(impl3)
+    pd.testing.assert_index_equal(bodo_func(), impl3())
+
+
 @pytest.fixture(params = [
     pd.timedelta_range(start='1D', end='3D'),
     pd.timedelta_range(start='1D', end='3D', name='A'),

@@ -352,6 +352,163 @@ def overload_datetime_index_getitem(dti, ind):
             return impl
 
 
+# from pandas.core.arrays.datetimelike
+@numba.njit
+def validate_endpoints(closed):
+    """
+    Check that the `closed` argument is among [None, "left", "right"]
+
+    Parameters
+    ----------
+    closed : {None, "left", "right"}
+
+    Returns
+    -------
+    left_closed : bool
+    right_closed : bool
+
+    Raises
+    ------
+    ValueError : if argument is not among valid values
+    """
+    left_closed = False
+    right_closed = False
+
+    if closed is None:
+        left_closed = True
+        right_closed = True
+    elif closed == "left":
+        left_closed = True
+    elif closed == "right":
+        right_closed = True
+    else:
+        raise ValueError("Closed has to be either 'left', 'right' or None")
+
+    return left_closed, right_closed
+
+
+@numba.njit
+def to_offset_value(freq):
+    """Converts freq (string and integer) to offset nanoseconds.
+    """
+    if freq is None:
+        return None
+
+    with numba.objmode(r='int64'):
+        r = pd.tseries.frequencies.to_offset(freq).nanos
+    return r
+
+
+@numba.generated_jit
+def _dummy_convert_none_to_int(val):
+    """Dummy function that converts None to integer, used when branch pruning
+    fails to remove None branch, causing errors. The conversion path should
+    never actually execute.
+    """
+    if _is_none(val):
+        def impl(val):
+            assert 0
+            return 0
+        return impl
+    return lambda val: val
+
+
+@overload(pd.date_range)
+def pd_date_range_overload(start=None, end=None, periods=None, freq=None,
+                             tz=None, normalize=False, name=None, closed=None):
+    # TODO: check/handle other input
+    # check unsupported, TODO: normalize, dayfirst, yearfirst, ...
+    # TODO: parallelize after Numba branch pruning issue is fixed
+    if not _is_none(tz):
+        raise ValueError("pd.date_range(): tz argument not supported yet")
+
+    if _is_none(freq) and any(_is_none(t) for t in (start, end, periods)):
+        freq = 'D'  # change just to enable check below
+
+    # exactly three parameters should
+    if sum(not _is_none(t) for t in (start, end, periods, freq)) != 3:
+        raise ValueError('Of the four parameters: start, end, periods, '
+                            'and freq, exactly three must be specified')
+
+
+    def f(start=None, end=None, periods=None, freq=None, tz=None,
+                                      normalize=False, name=None, closed=None):
+
+        if freq is None and (start is None or end is None or periods is None):
+            freq = 'D'
+
+        freq = bodo.hiframes.pd_index_ext.to_offset_value(freq)
+
+        start_t = pd.Timestamp('2018-01-01')  # dummy value for typing
+        if start is not None:
+            start_t = pd.Timestamp(start)
+
+        end_t = pd.Timestamp('2018-01-01')  # dummy value for typing
+        if end is not None:
+            end_t = pd.Timestamp(end)
+
+        if start is None and end is None and closed is not None:
+                raise ValueError("Closed has to be None if not both of start"
+                                 "and end are defined")
+        # TODO: check start and end for NaT
+        # if start is NaT or end is NaT:
+        #     raise ValueError("Neither `start` nor `end` can be NaT")
+
+        left_closed, right_closed = \
+            bodo.hiframes.pd_index_ext.validate_endpoints(closed)
+
+        if freq is not None:
+            # pandas/core/arrays/_ranges/generate_regular_range
+            # TODO: handle overflows
+            stride = freq
+            if periods is None:
+                b = start_t.value
+                e = (b + (end_t.value - b) // stride * stride +
+                    stride // 2 + 1)
+            elif start is not None:
+                b = start_t.value
+                addend = np.int64(periods) * np.int64(stride)
+                e = np.int64(b) + addend
+            elif end is not None:
+                e = end_t.value + stride
+                addend = np.int64(periods) * np.int64(- stride)
+                b = np.int64(e) + addend
+            else:
+                raise ValueError("at least 'start' or 'end' should be specified "
+                                "if a 'period' is given.")
+
+            # TODO: handle overflows
+            arr = np.arange(b, e, stride, np.int64)
+        else:
+            # TODO: fix Numba's linspace to support dtype
+            # arr = np.linspace(
+            #     0, end_t.value - start_t.value,
+            #     periods, dtype=np.int64) + start.value
+            # XXX Numba's branch pruning fails to remove period=None so use
+            # dummy function
+            # TODO: fix Numba's branch pruning pass
+            # using Numpy's linspace algorithm
+            periods = _dummy_convert_none_to_int(periods)
+            delta = end_t.value - start_t.value
+            step = delta / (periods - 1)
+            arr1 = np.arange(0, periods, 1, np.float64)
+            arr1 *= step
+            arr1 += start_t.value
+            arr = arr1.astype(np.int64)
+            arr[-1] = end_t.value
+
+        if not left_closed and len(arr) and arr[0] == start_t.value:
+            arr = arr[1:]
+        if not right_closed and len(arr) and arr[-1] == end_t.value:
+            arr = arr[:-1]
+
+        S = bodo.utils.conversion.convert_to_dt64ns(arr)
+        return bodo.hiframes.api.init_datetime_index(S, name)
+
+    return f
+
+
+
 # ------------------------------ Timedelta ---------------------------
 
 
