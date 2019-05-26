@@ -3,7 +3,8 @@ import numba
 from numba import types
 from numba.extending import (typeof_impl, type_callable, models, register_model, NativeValue,
                              make_attribute_wrapper, lower_builtin, box, unbox, lower_cast,
-                             lower_getattr, infer_getattr, overload_method, overload, intrinsic)
+                             lower_getattr, infer_getattr, overload_method, overload, intrinsic,
+                             overload_attribute)
 from numba import cgutils
 from numba.targets.arrayobj import make_array, _empty_nd_impl, store_item, basic_indexing
 from numba.targets.boxing import unbox_array, box_array
@@ -154,7 +155,7 @@ class DatetimeDateType(types.Type):
 datetime_date_type = DatetimeDateType()
 
 @typeof_impl.register(datetime.date)
-def typeof_pd_timestamp(val, c):
+def typeof_datetime_date(val, c):
     return datetime_date_type
 
 register_model(DatetimeDateType)(models.IntegerModel)
@@ -570,9 +571,9 @@ def type_timestamp(context):
 
 @type_callable(pd.Timestamp)
 def type_timestamp(context):
-    def typer(datetime_type):
-        # TODO: check types
-        return pandas_timestamp_type
+    def typer(data):
+        if data == pandas_timestamp_type:
+            return pandas_timestamp_type
     return typer
 
 @type_callable(datetime.datetime)
@@ -608,6 +609,17 @@ def impl_ctor_ts_ts(context, builder, sig, args):
     cgutils.copy_struct(ts, rhsproxy)
     return ts._getvalue()
 
+
+@overload(pd.Timestamp)
+def overload_pd_timestamp(ts_input):
+    if ts_input == bodo.string_type:
+        def impl(ts_input):
+            dt64 = bodo.hiframes.pd_timestamp_ext.parse_datetime_str(ts_input)
+            idt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dt64)
+            return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(idt64)
+        return impl
+
+
 #              , types.int64, types.int64, types.int64, types.int64, types.int64)
 @lower_builtin(datetime.datetime, types.int64, types.int64, types.int64)
 @lower_builtin(datetime.datetime, types.IntegerLiteral, types.IntegerLiteral, types.IntegerLiteral)
@@ -637,6 +649,14 @@ def impl_ctor_datetime(context, builder, sig, args):
 def dt64_to_integer(context, builder, fromty, toty, val):
     # dt64 is stored as int64 so just return value
     return val
+
+
+@overload_attribute(PandasTimestampType, 'value')
+def overload_timestamp_value(t):
+    def impl(t):
+        return convert_timestamp_to_datetime64(t)
+    return impl
+
 
 @numba.njit
 def convert_timestamp_to_datetime64(ts):
