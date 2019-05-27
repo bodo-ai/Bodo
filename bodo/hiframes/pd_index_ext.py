@@ -97,6 +97,7 @@ def box_dt_index(typ, val, c):
     res = c.pyapi.call(const_call, c.pyapi.tuple_pack([arr]), kws)
     c.pyapi.decref(pd_class_obj)
     c.pyapi.decref(const_call)
+    c.pyapi.decref(kws)
     return res
 
 
@@ -574,6 +575,7 @@ def box_timedelta_index(typ, val, c):
     res = c.pyapi.call(const_call, c.pyapi.tuple_pack([arr]), kws)
     c.pyapi.decref(pd_class_obj)
     c.pyapi.decref(const_call)
+    c.pyapi.decref(kws)
     return res
 
 
@@ -818,6 +820,92 @@ def range_index_overload(start=None, stop=None, step=None, dtype=None,
     # print(func_text)
     _pd_range_index_imp = loc_vars['_pd_range_index_imp']
     return _pd_range_index_imp
+
+
+# ---------------- PeriodIndex -------------------
+
+
+# Simple type for PeriodIndex for now, freq is saved as a constant string
+class PeriodIndexType(types.IterableType):
+    """type class for pd.PeriodIndex. Contains frequency as constant string
+    """
+    def __init__(self, freq, name_typ=None):
+        name_typ = types.none if name_typ is None else name_typ
+        self.freq = freq
+        self.name_typ = name_typ
+        super(PeriodIndexType, self).__init__(
+            name="PeriodIndexType({}, {})".format(freq, name_typ))
+
+    def copy(self):
+        return PeriodIndexType(self.freq, self.name_typ)
+
+    @property
+    def iterator_type(self):
+        # TODO: handle iterator
+        return types.iterators.ArrayIterator(types.Array(types.int64, 1, 'C'))
+
+
+@typeof_impl.register(pd.PeriodIndex)
+def typeof_pd_period_index(val, c):
+    return PeriodIndexType(val.freqstr, numba.typeof(val.name))
+
+
+# even though name attribute is mutable, we don't handle it for now
+# TODO: create refcounted payload to handle mutable name
+@register_model(PeriodIndexType)
+class PeriodIndexModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        # TODO: nullable integer array?
+        members = [
+            ('data', types.Array(types.int64, 1, 'C')),
+            ('name', fe_type.name_typ),
+        ]
+        super(PeriodIndexModel, self).__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(PeriodIndexType, 'data', '_data')
+make_attribute_wrapper(PeriodIndexType, 'name', '_name')
+
+
+@box(PeriodIndexType)
+def box_period_index(typ, val, c):
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    class_obj = c.pyapi.import_module_noblock(mod_name)
+
+    index_val = cgutils.create_struct_proxy(typ)(
+            c.context, c.builder, val)
+    data = c.pyapi.from_native_value(
+        types.Array(types.int64, 1, 'C'), index_val.data, c.env_manager)
+    name = c.pyapi.from_native_value(
+        typ.name_typ, index_val.name, c.env_manager)
+
+    freq = c.pyapi.string_from_constant_string(typ.freq)
+
+    # call pd.PeriodIndex(ordinal=data, name=name, freq=freq)
+    kws = c.pyapi.dict_pack(
+        [('ordinal', data), ('name', name), ('freq', freq)])
+    const_call = c.pyapi.object_getattr_string(class_obj, 'PeriodIndex')
+    index_obj = c.pyapi.call(const_call, c.pyapi.tuple_pack([]), kws)
+    c.pyapi.decref(class_obj)
+    c.pyapi.decref(const_call)
+    c.pyapi.decref(kws)
+    return index_obj
+
+
+@unbox(PeriodIndexType)
+def unbox_period_index(typ, val, c):
+    # get data and name attributes
+    arr_typ = types.Array(types.int64, 1, 'C')
+    data = c.pyapi.to_native_value(
+        arr_typ, c.pyapi.object_getattr_string(val, 'asi8')).value
+    name = c.pyapi.to_native_value(
+        typ.name_typ, c.pyapi.object_getattr_string(val, 'name')).value
+
+    # create index struct
+    index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    index_val.data = data
+    index_val.name = name
+    return NativeValue(index_val._getvalue())
 
 
 # ---------------- NumericIndex -------------------

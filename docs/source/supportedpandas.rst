@@ -297,6 +297,13 @@ Time fields of TimedeltaIndex are supported:
 * :attr:`TimedeltaIndex.microsecond`
 * :attr:`TimedeltaIndex.nanosecond`
 
+PeriodIndex
+~~~~~~~~~~~~~
+
+``PeriodIndex`` objects can be
+boxed/unboxed and set as index to dataframes and series.
+Operations on them will be supported in upcoming releases.
+
 
 Timestamp
 ~~~~~~~~~

@@ -315,3 +315,15 @@ def test_timedelta_field(timedelta_index_val, field):
     bodo_func = bodo.jit(impl)
     pd.testing.assert_index_equal(
         bodo_func(timedelta_index_val), impl(timedelta_index_val))
+
+
+@pytest.mark.parametrize('period_index', [
+    pd.PeriodIndex(year=[2015, 2016, 2018], quarter=[1,2,3]),
+    pd.PeriodIndex(year=[2015, 2016, 2018], month=[1,2,3], freq='M'),
+])
+def test_period_index_box(period_index):
+    def impl(A):
+        return A
+
+    pd.testing.assert_index_equal(
+        bodo.jit(impl)(period_index), impl(period_index))
