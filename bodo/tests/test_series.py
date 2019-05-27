@@ -172,6 +172,14 @@ def test_series_T(series_val):
         bodo_func(series_val), test_impl(series_val))
 
 
+def test_series_hasnans(series_val):
+    def test_impl(S):
+        return S.hasnans
+
+    bodo_func = bodo.jit(test_impl)
+    assert bodo_func(series_val) == test_impl(series_val)
+
+
 def test_create_series1():
     def test_impl():
         A = pd.Series([1,2,3])

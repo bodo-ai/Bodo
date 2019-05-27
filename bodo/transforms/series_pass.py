@@ -333,7 +333,7 @@ class SeriesPass(object):
 
         # replace attribute access with overload
         if isinstance(rhs_type, SeriesType) and rhs.attr in ('index', 'values',
-                                        'shape', 'dtype', 'ndim', 'size', 'T'):
+                             'shape', 'dtype', 'ndim', 'size', 'T', 'hasnans'):
             #
             overload_name = 'overload_series_' + rhs.attr
             overload_func = getattr(bodo.hiframes.series_impl, overload_name)

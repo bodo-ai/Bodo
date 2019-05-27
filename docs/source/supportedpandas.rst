@@ -99,6 +99,8 @@ Attributes:
 * :attr:`Series.shape`
 * :attr:`Series.ndim`
 * :attr:`Series.size`
+* :attr:`Series.T`
+* :attr:`Series.hasnans`
 
 Methods:
 

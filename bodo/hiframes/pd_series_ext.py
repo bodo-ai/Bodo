@@ -491,19 +491,6 @@ class SeriesAttribute(AttributeTemplate):
         ret_typ = if_arr_to_series_type(ret_typ)
         return signature(ret_typ, *args)
 
-    @bound_function("series.isna")
-    def resolve_isna(self, ary, args, kws):
-        assert not kws
-        assert not args
-        return signature(SeriesType(types.boolean))
-
-    # alias of isna
-    @bound_function("series.isnull")
-    def resolve_isnull(self, ary, args, kws):
-        assert not kws
-        assert not args
-        return signature(SeriesType(types.boolean))
-
     @bound_function("series.notna")
     def resolve_notna(self, ary, args, kws):
         assert not kws
@@ -818,7 +805,7 @@ for attr, func in numba.typing.arraydecl.ArrayAttribute.__dict__.items():
     if (attr.startswith('resolve_')
             and attr not in SeriesAttribute.__dict__
             and attr not in ('resolve_shape', 'resolve_dtype', 'resolve_ndim',
-                             'resolve_size', 'resolve_T')
+                             'resolve_size', 'resolve_T', 'resolve_sum')
             and attr not in _not_series_array_attrs):
         setattr(SeriesAttribute, attr, func)
 
