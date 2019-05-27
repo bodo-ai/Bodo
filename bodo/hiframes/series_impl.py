@@ -64,6 +64,11 @@ def overload_series_empty(s):
     return lambda s: len(bodo.hiframes.api.get_series_data(s)) == 0
 
 
+@overload_attribute(SeriesType, 'dtypes')
+def overload_series_dtypes(s):
+    return lambda s: s.dtype
+
+
 @overload(len)
 def overload_series_len(S):
     if isinstance(S, SeriesType):

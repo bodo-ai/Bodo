@@ -188,6 +188,21 @@ def test_series_empty(series_val):
     assert bodo_func(series_val) == test_impl(series_val)
 
 
+@pytest.mark.parametrize('data', [
+    pd.Series([1, 8, 4]),
+    pd.Series([1.1, np.nan, 4]),
+    pd.Series([1, 8, 4], dtype=np.uint8),
+    pd.Series([1, 8, 4], [3, 7, 9], name='AAC'),
+    pd.Series(pd.date_range(start='2018-04-24', end='2018-04-27', periods=3)),
+])
+def test_series_dtypes(data):
+    def test_impl(S):
+        return S.dtypes
+
+    bodo_func = bodo.jit(test_impl)
+    assert bodo_func(data) == test_impl(data)
+
+
 def test_create_series1():
     def test_impl():
         A = pd.Series([1,2,3])
