@@ -96,6 +96,18 @@ def series_val(request):
     return request.param
 
 
+# TODO: timedelta, period, tuple, etc.
+@pytest.fixture(params = [
+    pd.Series([1, 8, 4]),
+    pd.Series([1.1, np.nan, 4]),
+    pd.Series([1, 8, 4], dtype=np.uint8),
+    pd.Series([1, 8, 4], [3, 7, 9], name='AAC'),
+    pd.Series(pd.date_range(start='2018-04-24', end='2018-04-27', periods=3)),
+])
+def numeric_series_val(request):
+    return request.param
+
+
 def test_series_index(series_val):
     def test_impl(S):
         return S.index
@@ -123,20 +135,12 @@ def test_series_values(series_val):
         bodo_func(series_val), test_impl(series_val))
 
 
-# TODO: timedelta, period, tuple, etc.
-@pytest.mark.parametrize('data', [
-    pd.Series([1, 8, 4]),
-    pd.Series([1.1, np.nan, 4]),
-    pd.Series([1, 8, 4], dtype=np.uint8),
-    pd.Series([1, 8, 4], [3, 7, 9], name='AAC'),
-    pd.Series(pd.date_range(start='2018-04-24', end='2018-04-27', periods=3)),
-])
-def test_series_dtype(data):
+def test_series_dtype(numeric_series_val):
     def test_impl(S):
         return S.dtype
 
     bodo_func = bodo.jit(test_impl)
-    assert bodo_func(data) == test_impl(data)
+    assert bodo_func(numeric_series_val) == test_impl(numeric_series_val)
 
 
 def test_series_shape(series_val):
@@ -188,19 +192,12 @@ def test_series_empty(series_val):
     assert bodo_func(series_val) == test_impl(series_val)
 
 
-@pytest.mark.parametrize('data', [
-    pd.Series([1, 8, 4]),
-    pd.Series([1.1, np.nan, 4]),
-    pd.Series([1, 8, 4], dtype=np.uint8),
-    pd.Series([1, 8, 4], [3, 7, 9], name='AAC'),
-    pd.Series(pd.date_range(start='2018-04-24', end='2018-04-27', periods=3)),
-])
-def test_series_dtypes(data):
+def test_series_dtypes(numeric_series_val):
     def test_impl(S):
         return S.dtypes
 
     bodo_func = bodo.jit(test_impl)
-    assert bodo_func(data) == test_impl(data)
+    assert bodo_func(numeric_series_val) == test_impl(numeric_series_val)
 
 
 def test_series_name(series_val):
@@ -209,6 +206,16 @@ def test_series_name(series_val):
 
     bodo_func = bodo.jit(test_impl)
     assert bodo_func(series_val) == test_impl(series_val)
+
+
+def test_series_put(series_val):
+    def test_impl(S):
+        S.put(0, S.values[1])
+        return S
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val.copy()), test_impl(series_val.copy()))
 
 
 def test_create_series1():

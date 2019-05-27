@@ -41,7 +41,8 @@ Input/Output
 
 * :func:`pandas.read_parquet`
 
-   * Arguments ``path`` and ``columns`` are supported. ``columns`` should be a constant list of strings.
+   * Arguments ``path`` and ``columns`` are supported. ``columns``
+     should be a constant list of strings.
 
    * If ``path`` is constant, Bodo finds the schema from file at compilation time.
      Otherwise, schema should be provided. For example::
@@ -103,10 +104,12 @@ Attributes:
 * :attr:`Series.hasnans`
 * :attr:`Series.empty`
 * :attr:`Series.dtypes`
+* :attr:`Series.name`
 
 
 Methods:
 
+* :meth:`Series.put` (only numeric data types)
 * :meth:`Series.copy`
 
 Indexing, iteration:
