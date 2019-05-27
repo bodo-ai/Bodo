@@ -94,6 +94,8 @@ Attributes:
 
 * :attr:`Series.index`
 * :attr:`Series.values`
+* :attr:`Series.dtype` (object data types such as dtype of
+  string series not supported yet)
 * :attr:`Series.shape`
 * :attr:`Series.ndim`
 * :attr:`Series.size`

@@ -23,6 +23,15 @@ def overload_series_values(s):
     return lambda s: bodo.hiframes.api.get_series_data(s)
 
 
+@overload_attribute(SeriesType, 'dtype')
+def overload_series_dtype(s):
+    # TODO: check other dtypes like tuple, etc.
+    if s.dtype == bodo.string_type:
+        raise ValueError("Series.dtype not supported for string Series yet")
+
+    return lambda s: bodo.hiframes.api.get_series_data(s).dtype
+
+
 @overload(len)
 def overload_series_len(S):
     if isinstance(S, SeriesType):
