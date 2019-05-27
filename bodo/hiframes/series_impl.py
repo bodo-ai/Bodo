@@ -32,6 +32,11 @@ def overload_series_dtype(s):
     return lambda s: bodo.hiframes.api.get_series_data(s).dtype
 
 
+@overload_attribute(SeriesType, 'shape')
+def overload_series_shape(s):
+    return lambda s: (len(bodo.hiframes.api.get_series_data(s)),)
+
+
 @overload(len)
 def overload_series_len(S):
     if isinstance(S, SeriesType):
