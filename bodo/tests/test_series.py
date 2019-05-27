@@ -163,6 +163,15 @@ def test_series_size(series_val):
     assert bodo_func(series_val) == test_impl(series_val)
 
 
+def test_series_T(series_val):
+    def test_impl(S):
+        return S.T
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val), test_impl(series_val))
+
+
 def test_create_series1():
     def test_impl():
         A = pd.Series([1,2,3])

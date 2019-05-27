@@ -47,6 +47,11 @@ def overload_series_size(s):
     return lambda s: len(bodo.hiframes.api.get_series_data(s))
 
 
+@overload_attribute(SeriesType, 'T')
+def overload_series_T(s):
+    return lambda s: s
+
+
 @overload(len)
 def overload_series_len(S):
     if isinstance(S, SeriesType):

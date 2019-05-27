@@ -818,7 +818,7 @@ for attr, func in numba.typing.arraydecl.ArrayAttribute.__dict__.items():
     if (attr.startswith('resolve_')
             and attr not in SeriesAttribute.__dict__
             and attr not in ('resolve_shape', 'resolve_dtype', 'resolve_ndim',
-                             'resolve_size')
+                             'resolve_size', 'resolve_T')
             and attr not in _not_series_array_attrs):
         setattr(SeriesAttribute, attr, func)
 
