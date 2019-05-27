@@ -11,6 +11,23 @@ from numba.targets.imputils import lower_builtin, impl_ret_borrowed
 from bodo.utils.utils import unliteral_all
 
 
+
+def is_overload_none(val):
+    return (val is None or val == types.none
+            or getattr(val, 'value', False) is None)
+
+
+def is_overload_true(val):
+    return (val == True or val == BooleanLiteral(True)
+            or getattr(val, 'value', False) is True)
+
+
+def is_overload_false(val):
+    return (val == False or val == BooleanLiteral(False)
+            or getattr(val, 'value', True) is False)
+
+
+
 # type used to pass metadata to type inference functions
 # see untyped_pass.py and df.pivot_table()
 class MetaType(types.Type):

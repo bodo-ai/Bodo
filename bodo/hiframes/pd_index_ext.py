@@ -19,6 +19,8 @@ from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type, datetime_date_
 from bodo.hiframes.datetime_date_ext import array_datetime_date
 import bodo.utils.conversion
 from bodo.utils.utils import BooleanLiteral
+from bodo.utils.typing import (is_overload_none, is_overload_true,
+    is_overload_false)
 
 
 _dt_index_data_typ = types.Array(types.NPDatetime('ns'), 1, 'C')
@@ -176,7 +178,7 @@ def _dti_val_finalize(s, count):  # pragma: no cover
 @overload_method(DatetimeIndexType, 'min')
 def overload_datetime_index_min(dti, axis=None, skipna=True):
     # TODO skipna = False
-    if not _is_none(axis) or not _is_true(skipna):
+    if not is_overload_none(axis) or not is_overload_true(skipna):
         raise ValueError(
             "Index.min(): axis and skipna arguments not supported yet")
 
@@ -199,7 +201,7 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
 @overload_method(DatetimeIndexType, 'max')
 def overload_datetime_index_max(dti, axis=None, skipna=True):
     # TODO skipna = False
-    if not _is_none(axis) or not _is_true(skipna):
+    if not is_overload_none(axis) or not is_overload_true(skipna):
         raise ValueError(
             "Index.max(): axis and skipna arguments not supported yet")
 
@@ -232,11 +234,11 @@ def pd_datetimeindex_overload(data=None, freq=None, start=None, end=None,
         dayfirst=False, yearfirst=False, dtype=None, copy=False, name=None,
         verify_integrity=True):
     # TODO: check/handle other input
-    if _is_none(data):
+    if is_overload_none(data):
         raise ValueError("data argument in pd.DatetimeIndex() expected")
 
     # check unsupported, TODO: normalize, dayfirst, yearfirst, ...
-    if any(not _is_none(a) for a in (freq, start, end, periods, tz, closed)):
+    if any(not is_overload_none(a) for a in (freq, start, end, periods, tz, closed)):
         raise ValueError("only data argument in pd.DatetimeIndex() supported")
 
     def f(data=None, freq=None, start=None, end=None,
@@ -406,7 +408,7 @@ def _dummy_convert_none_to_int(val):
     fails to remove None branch, causing errors. The conversion path should
     never actually execute.
     """
-    if _is_none(val):
+    if is_overload_none(val):
         def impl(val):
             assert 0
             return 0
@@ -420,14 +422,14 @@ def pd_date_range_overload(start=None, end=None, periods=None, freq=None,
     # TODO: check/handle other input
     # check unsupported, TODO: normalize, dayfirst, yearfirst, ...
     # TODO: parallelize after Numba branch pruning issue is fixed
-    if not _is_none(tz):
+    if not is_overload_none(tz):
         raise ValueError("pd.date_range(): tz argument not supported yet")
 
-    if _is_none(freq) and any(_is_none(t) for t in (start, end, periods)):
+    if is_overload_none(freq) and any(is_overload_none(t) for t in (start, end, periods)):
         freq = 'D'  # change just to enable check below
 
     # exactly three parameters should
-    if sum(not _is_none(t) for t in (start, end, periods, freq)) != 3:
+    if sum(not is_overload_none(t) for t in (start, end, periods, freq)) != 3:
         raise ValueError('Of the four parameters: start, end, periods, '
                             'and freq, exactly three must be specified')
 
@@ -663,10 +665,10 @@ def pd_timedelta_index_overload(data=None, unit=None, freq=None, start=None,
         name=None, verify_integrity=None):
     # TODO handle dtype=dtype('<m8[ns]') default
     # TODO: check/handle other input
-    if _is_none(data):
+    if is_overload_none(data):
         raise ValueError("data argument in pd.TimedeltaIndex() expected")
 
-    if any(not _is_none(a) for a in (unit, freq, start, end, periods, closed,
+    if any(not is_overload_none(a) for a in (unit, freq, start, end, periods, closed,
                                                                        dtype)):
         raise ValueError("only data argument in pd.TimedeltaIndex() supported")
 
@@ -785,7 +787,7 @@ def range_index_overload(start=None, stop=None, step=None, dtype=None,
     def _ensure_int_or_none(value, field):
         msg = ("RangeIndex(...) must be called with integers,"
                 " {value} was passed for {field}")
-        if (not _is_none(value)
+        if (not is_overload_none(value)
                 and not isinstance(value, types.IntegerLiteral)
                 and not value == types.int64):
             raise TypeError(msg.format(value=value,
@@ -796,7 +798,7 @@ def range_index_overload(start=None, stop=None, step=None, dtype=None,
     _ensure_int_or_none(step, 'step')
 
     # all none error case
-    if _is_none(start) and _is_none(stop) and _is_none(step):
+    if is_overload_none(start) and is_overload_none(stop) and is_overload_none(step):
         msg = "RangeIndex(...) must be called with integers"
         raise TypeError(msg)
 
@@ -805,12 +807,12 @@ def range_index_overload(start=None, stop=None, step=None, dtype=None,
     _stop = 'stop'
     _step = 'step'
 
-    if _is_none(start):
+    if is_overload_none(start):
         _start = '0'
-    if _is_none(stop):
+    if is_overload_none(stop):
         _stop = 'start'
         _start = '0'
-    if _is_none(step):
+    if is_overload_none(step):
         _step = '1'
 
     func_text = "def _pd_range_index_imp(start=None, stop=None, step=None, dtype=None, copy=False, name=None, fastpath=None):\n"
@@ -1036,7 +1038,7 @@ def create_numeric_constructor(func, default_dtype):
 
     def overload_impl(data=None, dtype=None, copy=False, name=None,
                                                                 fastpath=None):
-        if _is_false(copy):
+        if is_overload_false(copy):
             # if copy is False for sure, specialize to avoid branch
             def impl(data=None, dtype=None, copy=False, name=None,
                                                                 fastpath=None):
@@ -1171,21 +1173,6 @@ def unbox_string_index(typ, val, c):
 def overload_index_getitem(I, ind):
     if isinstance(I, (NumericIndexType, StringIndexType)):
         return lambda I, ind: bodo.hiframes.api.get_index_data(I)[ind]
-
-
-def _is_none(val):
-    return (val is None or val == types.none
-            or getattr(val, 'value', False) is None)
-
-
-def _is_true(val):
-    return (val == True or val == BooleanLiteral(True)
-            or getattr(val, 'value', False) is True)
-
-
-def _is_false(val):
-    return (val == False or val == BooleanLiteral(False)
-            or getattr(val, 'value', True) is False)
 
 
 # similar to index_from_array()
