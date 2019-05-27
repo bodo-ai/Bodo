@@ -80,7 +80,50 @@ def test_series_constructor(data, index, name):
         bodo_func(data, index, name), impl(data, index, name))
 
 
-def test_create_series1(self):
+# TODO: other possible Series types like Categorical, dt64, td64, ...
+@pytest.fixture(params = [
+    pd.Series([1, 8, 4]),
+    pd.Series([1.1, np.nan, 4]),
+    pd.Series([1, 8, 4], dtype=np.uint8),
+    pd.Series([1, 8, 4], name='ACD'),
+    pd.Series([1, 8, 4], [3, 7, 9]),
+    pd.Series([1, 8, 4], [3, 7, 9], name='AAC'),
+    pd.Series([1, 2, 3], ['A', 'B', 'C']),
+    pd.Series(['A', 'B', 'C']),  # TODO: string with Null (np.testing fails)
+    pd.Series(['A', 'B', 'C'], [4, 7, 0]),
+])
+def series_val(request):
+    return request.param
+
+
+def test_series_index(series_val):
+    def test_impl(S):
+        return S.index
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_index_equal(
+        bodo_func(series_val), test_impl(series_val))
+
+
+def test_series_index_none():
+    def test_impl():
+        S = pd.Series([1, 4, 8])
+        return S.index
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_index_equal(bodo_func(), test_impl())
+
+
+def test_series_values(series_val):
+    def test_impl(S):
+        return S.values
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_array_equal(
+        bodo_func(series_val), test_impl(series_val))
+
+
+def test_create_series1():
     def test_impl():
         A = pd.Series([1,2,3])
         return A.values
@@ -88,7 +131,7 @@ def test_create_series1(self):
     bodo_func = bodo.jit(test_impl)
     np.testing.assert_array_equal(bodo_func(), test_impl())
 
-def test_create_series_index1(self):
+def test_create_series_index1():
     # create and box an indexed Series
     def test_impl():
         A = pd.Series([1,2,3], ['A', 'C', 'B'])
@@ -97,7 +140,7 @@ def test_create_series_index1(self):
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(bodo_func(), test_impl())
 
-def test_create_series_index2(self):
+def test_create_series_index2():
     def test_impl():
         A = pd.Series([1,2,3], index=['A', 'C', 'B'])
         return A
@@ -105,7 +148,7 @@ def test_create_series_index2(self):
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(bodo_func(), test_impl())
 
-def test_create_series_index3(self):
+def test_create_series_index3():
     def test_impl():
         A = pd.Series([1,2,3], index=['A', 'C', 'B'], name='A')
         return A
@@ -113,7 +156,7 @@ def test_create_series_index3(self):
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(bodo_func(), test_impl())
 
-def test_create_series_index4(self):
+def test_create_series_index4():
     def test_impl(name):
         A = pd.Series([1,2,3], index=['A', 'C', 'B'], name=name)
         return A

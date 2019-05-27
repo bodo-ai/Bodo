@@ -448,7 +448,7 @@ class DummyToSeriesType(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         assert len(args) == 1
-        arr = if_series_to_array_type(args[0], True)
+        arr = if_series_to_array_type(args[0])
         return signature(arr, *args)
 
 @lower_builtin(dummy_unbox_series, types.Any)

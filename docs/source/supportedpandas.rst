@@ -58,8 +58,10 @@ General functions
 
 * :func:`pandas.merge`
 
-   * Arguments ``left``, ``right``, ``as_of``, ``how``, ``on``, ``left_on`` and ``right_on`` are supported.
-   * ``on``, ``left_on`` and ``right_on`` should be constant strings or constant list of strings.
+   * Arguments ``left``, ``right``, ``as_of``, ``how``, ``on``,
+     ``left_on`` and ``right_on`` are supported.
+   * ``on``, ``left_on`` and ``right_on`` should be constant
+     strings or constant list of strings.
 
 * :func:`pandas.concat`
 
@@ -90,6 +92,7 @@ associated index values yet.
 
 Attributes:
 
+* :attr:`Series.index`
 * :attr:`Series.values`
 * :attr:`Series.shape`
 * :attr:`Series.ndim`

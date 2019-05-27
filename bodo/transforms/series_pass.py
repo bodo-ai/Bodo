@@ -38,6 +38,7 @@ from bodo.hiframes.pd_series_ext import (SeriesType, is_str_series_typ,
 from bodo.hiframes.pd_index_ext import DatetimeIndexType, TimedeltaIndexType
 from bodo.io.pio_api import h5dataset_type
 from bodo.hiframes.rolling import get_rolling_setup_args
+import bodo.hiframes.series_impl  # side effect: install Series overloads
 from bodo.ir.aggregate import Aggregate
 from bodo.hiframes import series_kernels, split_impl
 from bodo.hiframes.series_kernels import series_replace_funcs

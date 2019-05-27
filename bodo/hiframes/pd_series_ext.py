@@ -189,7 +189,7 @@ class SeriesModel(models.StructModel):
 
 
 
-def series_to_array_type(typ, replace_boxed=False):
+def series_to_array_type(typ):
     return typ.data
     # return _get_series_array_type(typ.dtype)
 
@@ -213,17 +213,17 @@ def arr_to_series_type(arr):
     return series_type
 
 
-def if_series_to_array_type(typ, replace_boxed=False):
+def if_series_to_array_type(typ):
     if isinstance(typ, SeriesType):
-        return series_to_array_type(typ, replace_boxed)
+        return series_to_array_type(typ)
 
     if isinstance(typ, (types.Tuple, types.UniTuple)):
         return types.Tuple(
-            [if_series_to_array_type(t, replace_boxed) for t in typ.types])
+            [if_series_to_array_type(t) for t in typ.types])
     if isinstance(typ, types.List):
-        return types.List(if_series_to_array_type(typ.dtype, replace_boxed))
+        return types.List(if_series_to_array_type(typ.dtype))
     if isinstance(typ, types.Set):
-        return types.Set(if_series_to_array_type(typ.dtype, replace_boxed))
+        return types.Set(if_series_to_array_type(typ.dtype))
     # TODO: other types that can have Series inside?
     return typ
 
@@ -265,9 +265,6 @@ def cast_series(context, builder, fromty, toty, val):
 @infer_getattr
 class SeriesAttribute(AttributeTemplate):
     key = SeriesType
-
-    def resolve_values(self, ary):
-        return series_to_array_type(ary, True)
 
     def resolve_shape(self, ary):
         return types.Tuple((types.int64,))
@@ -1029,11 +1026,6 @@ for func in numba.typing.npydecl.supported_ufuncs:
     if not name in _aliases:
         infer_global(func, types.Function(typing_class))
 
-@infer_global(len)
-class LenSeriesType(AbstractTemplate):
-    def generic(self, args, kws):
-        if not kws and len(args) == 1 and isinstance(args[0], SeriesType):
-            return signature(types.intp, *args)
 
 # @infer_global(np.empty_like)
 # @infer_global(np.zeros_like)
