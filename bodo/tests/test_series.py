@@ -147,6 +147,14 @@ def test_series_shape(series_val):
     assert bodo_func(series_val) == test_impl(series_val)
 
 
+def test_series_ndim(series_val):
+    def test_impl(S):
+        return S.ndim
+
+    bodo_func = bodo.jit(test_impl)
+    assert bodo_func(series_val) == test_impl(series_val)
+
+
 def test_create_series1():
     def test_impl():
         A = pd.Series([1,2,3])

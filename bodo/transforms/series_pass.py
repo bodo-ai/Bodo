@@ -317,7 +317,8 @@ class SeriesPass(object):
                 or isinstance(rhs_type, types.Array)) and isinstance(
                     rhs_type.dtype,
                     (types.NPDatetime, types.NPTimedelta))):
-            assign.value = ir.Global("numpy.datetime64", rhs_type.dtype, rhs.loc)
+            assign.value = ir.Global(
+                "numpy.datetime64", rhs_type.dtype, rhs.loc)
             return [assign]
 
         # replace arr.dtype since PA replacement inserts in the
@@ -325,8 +326,19 @@ class SeriesPass(object):
         if (rhs.attr == 'dtype' and isinstance(
                 if_series_to_array_type(rhs_type), types.Array)):
             typ_str = str(rhs_type.dtype)
-            assign.value = ir.Global("np.dtype({})".format(typ_str), np.dtype(typ_str), rhs.loc)
+            assign.value = ir.Global(
+                "np.dtype({})".format(typ_str), np.dtype(typ_str), rhs.loc)
             return [assign]
+
+
+        # replace attribute access with overload
+        if isinstance(rhs_type, SeriesType) and rhs.attr in ('index', 'values',
+                                                     'shape', 'dtype', 'ndim'):
+            #
+            overload_name = 'overload_series_' + rhs.attr
+            overload_func = getattr(bodo.hiframes.series_impl, overload_name)
+            impl = overload_func(rhs_type)
+            return self._replace_func(impl, [rhs.value])
 
         if isinstance(rhs_type, SeriesType) and rhs.attr == 'values':
             # simply return the column

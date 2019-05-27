@@ -266,9 +266,6 @@ def cast_series(context, builder, fromty, toty, val):
 class SeriesAttribute(AttributeTemplate):
     key = SeriesType
 
-    def resolve_shape(self, ary):
-        return types.Tuple((types.int64,))
-
     def resolve_str(self, ary):
         assert ary.dtype in (string_type, types.List(string_type))
         # TODO: add dtype to series_str_methods_type
@@ -820,6 +817,7 @@ _not_series_array_attrs = ['flat', 'ctypes', 'itemset', 'reshape', 'sort', 'flat
 for attr, func in numba.typing.arraydecl.ArrayAttribute.__dict__.items():
     if (attr.startswith('resolve_')
             and attr not in SeriesAttribute.__dict__
+            and attr not in ('resolve_shape', 'resolve_dtype', 'resolve_ndim')
             and attr not in _not_series_array_attrs):
         setattr(SeriesAttribute, attr, func)
 
