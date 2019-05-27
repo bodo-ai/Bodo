@@ -101,6 +101,7 @@ Attributes:
 * :attr:`Series.size`
 * :attr:`Series.T`
 * :attr:`Series.hasnans`
+* :attr:`Series.empty`
 
 Methods:
 
