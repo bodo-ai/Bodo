@@ -42,6 +42,11 @@ def overload_series_ndim(s):
     return lambda s: 1
 
 
+@overload_attribute(SeriesType, 'size')
+def overload_series_size(s):
+    return lambda s: len(bodo.hiframes.api.get_series_data(s))
+
+
 @overload(len)
 def overload_series_len(S):
     if isinstance(S, SeriesType):
