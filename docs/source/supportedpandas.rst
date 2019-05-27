@@ -92,8 +92,8 @@ Methods:
 
 Indexing, iteration:
 
-* :meth:`Series.iat`
-* :meth:`Series.iloc`
+* :attr:`Series.iat`
+* :attr:`Series.iloc`
 
 Binary operator functions:
 
@@ -184,8 +184,8 @@ Attributes and underlying data:
 Indexing, iteration:
 
 * :meth:`DataFrame.head`
-* :meth:`DataFrame.iat`
-* :meth:`DataFrame.iloc`
+* :attr:`DataFrame.iat`
+* :attr:`DataFrame.iloc`
 * :meth:`DataFrame.isin`
 
 Function application, GroupBy & Window:
@@ -207,11 +207,14 @@ Reshaping, sorting, transposing
 
 * :meth:`DataFrame.pivot_table`
 
-   * Arguments ``values``, ``index``, ``columns`` and ``aggfunc`` are supported.
+   * Arguments ``values``, ``index``, ``columns`` and ``aggfunc`` are
+     supported.
    * Annotation of pivot values is required.
-     For example, `@bodo.jit(pivots={'pt': ['small', 'large']})` declares the output pivot table `pt` will have columns called `small` and `large`.
+     For example, `@bodo.jit(pivots={'pt': ['small', 'large']})` declares
+     the output pivot table `pt` will have columns called `small` and `large`.
 
-* :meth:`DataFrame.sort_values` `by` argument should be constant string or constant list of strings.
+* :meth:`DataFrame.sort_values` `by` argument should be constant string or
+  constant list of strings.
 * :meth:`DataFrame.append`
 
 
