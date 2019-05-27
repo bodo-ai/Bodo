@@ -26,14 +26,17 @@ from bodo.hiframes.rolling import supported_rolling_funcs
 import datetime
 from bodo.hiframes.split_impl import (string_array_split_view_type,
     GetItemStringArraySplitView)
+from bodo.utils.typing import (is_overload_none, is_overload_true,
+    is_overload_false)
 
 
 class SeriesType(types.IterableType):
     """Temporary type class for Series objects.
     """
-    def __init__(self, dtype, data=None, index=None, is_named=False):
+    def __init__(self, dtype, data=None, index=None, name_typ=None):
         # keeping data array in type since operators can make changes such
         # as making array unaligned etc.
+        # data is underlying array type and can have different dtype
         data = _get_series_array_type(dtype) if data is None else data
         # convert Record to tuple (for tuple output of map)
         # TODO: handle actual Record objects in Series?
@@ -41,25 +44,24 @@ class SeriesType(types.IterableType):
                 if isinstance(dtype, types.Record) else dtype)
         self.dtype = dtype
         self.data = data
-        if index is None:
-            index = types.none
+        name_typ = types.none if name_typ is None else name_typ
+        index = types.none if index is None else index
         self.index = index  # index should be an Index type (not Array)
-        # keep is_named in type to enable boxing
-        self.is_named = is_named
+        self.name_typ = name_typ
         super(SeriesType, self).__init__(
-            name="series({}, {}, {}, {})".format(dtype, data, index, is_named))
+            name="series({}, {}, {}, {})".format(dtype, data, index, name_typ))
 
     def copy(self, dtype=None):
         # XXX is copy necessary?
         index = types.none if self.index == types.none else self.index.copy()
         dtype = dtype if dtype is not None else self.dtype
         data = _get_series_array_type(dtype)
-        return SeriesType(dtype, data, index)
+        return SeriesType(dtype, data, index, self.name_typ)
 
     @property
     def key(self):
         # needed?
-        return self.dtype, self.data, self.index, self.is_named
+        return self.dtype, self.data, self.index, self.name_typ
 
     def unify(self, typingctx, other):
         if isinstance(other, SeriesType):
@@ -81,16 +83,17 @@ class SeriesType(types.IterableType):
         # XXX: unify Series/Array as Array
         return super(SeriesType, self).unify(typingctx, other)
 
-    def can_convert_to(self, typingctx, other):
-        # same as types.Array
-        if (isinstance(other, SeriesType) and other.dtype == self.dtype):
-            # called for overload selection sometimes
-            # TODO: fix index
-            if self.index == types.none and other.index == types.none:
-                return self.data.can_convert_to(typingctx, other.data)
-            if self.index != types.none and other.index != types.none:
-                return max(self.data.can_convert_to(typingctx, other.data),
-                    self.index.can_convert_to(typingctx, other.index))
+    # XXX too dangerous, is it needed?
+    # def can_convert_to(self, typingctx, other):
+    #     # same as types.Array
+    #     if (isinstance(other, SeriesType) and other.dtype == self.dtype):
+    #         # called for overload selection sometimes
+    #         # TODO: fix index
+    #         if self.index == types.none and other.index == types.none:
+    #             return self.data.can_convert_to(typingctx, other.data)
+    #         if self.index != types.none and other.index != types.none:
+    #             return max(self.data.can_convert_to(typingctx, other.data),
+    #                 self.index.can_convert_to(typingctx, other.index))
 
     def is_precise(self):
         # same as types.Array
@@ -143,8 +146,10 @@ def is_str_series_typ(t):
 def is_dt64_series_typ(t):
     return isinstance(t, SeriesType) and t.dtype == types.NPDatetime('ns')
 
+
 def is_timedelta64_series_typ(t):
     return isinstance(t, SeriesType) and t.dtype == types.NPTimedelta('ns')
+
 
 def is_datetime_date_series_typ(t):
     return isinstance(t, SeriesType) and t.dtype == datetime_date_type
@@ -161,11 +166,10 @@ class SeriesPayloadType(types.Type):
 @register_model(SeriesPayloadType)
 class SeriesPayloadModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        name_typ = string_type if fe_type.series_type.is_named else types.none
         members = [
             ('data', fe_type.series_type.data),
             ('index', fe_type.series_type.index),
-            ('name', name_typ),
+            ('name', fe_type.series_type.name_typ),
         ]
         super(SeriesPayloadModel, self).__init__(dmm, fe_type, members)
 
@@ -192,6 +196,7 @@ def series_to_array_type(typ, replace_boxed=False):
 
 def is_series_type(typ):
     return isinstance(typ, SeriesType)
+
 
 def arr_to_series_type(arr):
     series_type = None
@@ -222,6 +227,7 @@ def if_series_to_array_type(typ, replace_boxed=False):
     # TODO: other types that can have Series inside?
     return typ
 
+
 def if_arr_to_series_type(typ):
     if isinstance(typ, types.Array) or typ in (string_array_type,
             list_string_array_type, string_array_split_view_type):
@@ -242,6 +248,7 @@ def if_arr_to_series_type(typ):
 def cast_string_series(context, builder, fromty, toty, val):
     return val
 
+
 # cast Series(int8) to Series(cat) for init_series() in test_csv_cat1
 # TODO: separate array type for Categorical data
 @lower_cast(SeriesType, types.Array)
@@ -249,6 +256,7 @@ def cast_string_series(context, builder, fromty, toty, val):
 @lower_cast(SeriesType, SeriesType)
 def cast_series(context, builder, fromty, toty, val):
     return val
+
 
 # --------------------------------------------------------------------------- #
 # --- typing similar to arrays adopted from arraydecl.py, npydecl.py -------- #
@@ -1052,17 +1060,49 @@ def type_sub(context):
 type_callable('-')(type_sub)
 type_callable(operator.sub)(type_sub)
 
+
 @overload(pd.Series)
-def pd_series_overload(data=None, index=None, dtype=None, name=None, copy=False, fastpath=False):
+def pd_series_overload(data=None, index=None, dtype=None, name=None,
+                                                   copy=False, fastpath=False):
 
-    if index is not None:
-        return (lambda data=None, index=None, dtype=None, name=None, copy=False,
-        fastpath=False: bodo.hiframes.api.init_series(
-            bodo.utils.conversion.coerce_to_array(data),
-            bodo.utils.conversion.convert_to_index(index),
-            name
-        ))
+    # TODO: support isinstance in branch pruning pass
+    # cases: dict, np.ndarray, Series, Index, arraylike (list, ...)
 
-    return (lambda data=None, index=None, dtype=None, name=None, copy=False,
-        fastpath=False: bodo.hiframes.api.init_series(
-            bodo.utils.conversion.coerce_to_array(data), index, name))
+    # TODO: None or empty data
+    if is_overload_none(data):
+        raise ValueError("pd.Series(): 'data' argument required.")
+
+    # TODO: support
+    if not is_overload_none(dtype):
+        raise ValueError("pd.Series(): 'dtype' argument not supported yet.")
+
+    # fastpath not supported
+    if not is_overload_false(fastpath):
+        raise ValueError("pd.Series(): 'fastpath' argument not supported.")
+
+
+    def impl(data=None, index=None, dtype=None, name=None, copy=False,
+                                                               fastpath=False):
+        # extract name if data is has name (Series/Index) and name is None
+        name_t = bodo.utils.conversion.extract_name_if_none(data, name)
+        index_t = bodo.utils.conversion.extract_index_if_none(data, index)
+        data_t1 = bodo.utils.conversion.coerce_to_array(data)
+
+        # TODO: support sanitize_array() of Pandas
+        # TODO: add branch pruning to inline_closure_call
+        # if dtype is not None:
+        #     data_t2 = data_t1.astype(dtype)
+        # else:
+        #     data_t2 = data_t1
+
+        # TODO: copy if index to avoid aliasing issues
+        data_t2 = data_t1
+
+        if copy:
+            data_t2 = data_t1.copy()
+
+        return bodo.hiframes.api.init_series(
+                data_t2,
+                bodo.utils.conversion.convert_to_index(index_t),
+                name_t)
+    return impl

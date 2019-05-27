@@ -8,6 +8,8 @@ import numba
 from numba import types
 from numba.extending import overload
 import bodo
+from bodo.utils.typing import is_overload_none
+
 
 NS_DTYPE = np.dtype('M8[ns]')  # similar pandas/_libs/tslibs/conversion.pyx
 TD_DTYPE = np.dtype('m8[ns]')
@@ -241,3 +243,48 @@ def overload_index_to_array(I):
 
     # other indices have data
     return lambda I: bodo.hiframes.api.get_index_data(I)
+
+
+def extract_name_if_none(data, name):
+    return name
+
+
+@overload(extract_name_if_none)
+def overload_extract_name_if_none(data, name):
+    """Extract name if `data` is has name (Series/Index) and `name` is None
+    """
+    from bodo.hiframes.pd_index_ext import (RangeIndexType, NumericIndexType,
+        DatetimeIndexType, TimedeltaIndexType, PeriodIndexType)
+    from bodo.hiframes.pd_series_ext import SeriesType
+
+    if not is_overload_none(name):
+        return lambda data, name: name
+
+    # Index type, TODO: other indices like Range?
+    if isinstance(data, (NumericIndexType, DatetimeIndexType,
+                         TimedeltaIndexType, PeriodIndexType)):
+        return lambda data, name: bodo.hiframes.api.get_index_name(data)
+
+    if isinstance(data, SeriesType):
+        return lambda data, name: bodo.hiframes.api.get_series_name(data)
+
+    return lambda data, name: name
+
+
+def extract_index_if_none(data, index):
+    return index
+
+
+@overload(extract_index_if_none)
+def overload_extract_index_if_none(data, index):
+    """Extract index if `data` is Series and `index` is None
+    """
+    from bodo.hiframes.pd_series_ext import SeriesType
+
+    if not is_overload_none(index):
+        return lambda data, index: index
+
+    if isinstance(data, SeriesType):
+        return lambda data, index: bodo.hiframes.api.get_series_index(data)
+
+    return lambda data, index: index

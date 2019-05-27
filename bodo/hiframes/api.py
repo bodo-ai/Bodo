@@ -518,10 +518,7 @@ def _get_series_name(typingctx, series_typ=None):
         return impl_ret_borrowed(
             context, builder, signature.return_type, series_payload.name)
 
-    ret_typ = string_type
-    if not series_typ.is_named:
-        ret_typ = types.none
-    sig = signature(ret_typ, series_typ)
+    sig = signature(series_typ.name_typ, series_typ)
     return sig, codegen
 
 
@@ -732,14 +729,10 @@ def init_series(typingctx, data, index=None, name=None):
 
     index = types.none if index is None else index
     name = types.none if name is None else name
-    is_named = False if name is types.none else True
 
     def codegen(context, builder, signature, args):
         data_val, index_val, name_val = args
         series_type = signature.return_type
-        if is_named and isinstance(name, types.StringLiteral):
-            name_val = numba.unicode.make_string_from_constant(
-                context, builder, string_type, name.literal_value)
 
         series_val = construct_series(
             context, builder, series_type, data_val, index_val, name_val)
@@ -748,15 +741,14 @@ def init_series(typingctx, data, index=None, name=None):
         if context.enable_nrt:
             context.nrt.incref(builder, signature.args[0], data_val)
             context.nrt.incref(builder, signature.args[1], index_val)
-            if is_named:
-                context.nrt.incref(builder, signature.args[2], name_val)
+            context.nrt.incref(builder, signature.args[2], name_val)
 
         return series_val
 
     dtype = data.dtype
     # XXX pd.DataFrame() calls init_series for even Series since it's untyped
     data = if_series_to_array_type(data)
-    ret_typ = SeriesType(dtype, data, index, is_named)
+    ret_typ = SeriesType(dtype, data, index, name)
     sig = signature(ret_typ, data, index, name)
     return sig, codegen
 

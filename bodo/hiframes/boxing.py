@@ -59,11 +59,11 @@ def typeof_pd_dataframe(val, c):
 
 # register series types for import
 @typeof_impl.register(pd.Series)
-def typeof_pd_str_series(val, c):
-    index_type = _infer_index_type(val.index)
-    is_named = val.name is not None
+def typeof_pd_series(val, c):
     return SeriesType(
-        _infer_series_dtype(val), index=index_type, is_named=is_named)
+        _infer_series_dtype(val),
+        index=numba.typeof(val.index),
+        name_typ=numba.typeof(val.name))
 
 
 @typeof_impl.register(pd.Index)
@@ -187,15 +187,6 @@ def _infer_series_list_dtype(S):
             "data type for column {} not supported".format(S.name))
 
 
-def _infer_index_type(index):
-    # TODO: support proper inference
-    if index.dtype == np.dtype('O') and len(index) > 0:
-        first_val = index[0]
-        if isinstance(first_val, str):
-            return string_array_type
-    return types.none
-
-
 @box(DataFrameType)
 def box_dataframe(typ, val, c):
     context = c.context
@@ -315,24 +306,19 @@ def unbox_dataframe_column(typingctx, df, i=None):
 def unbox_series(typ, val, c):
     arr_obj = c.pyapi.object_getattr_string(val, "values")
     data_val = _unbox_series_data(typ.dtype, typ.data, arr_obj, c).value
-    # TODO: other indices
-    if typ.index == string_array_type:
-        index_obj = c.pyapi.object_getattr_string(val, "index")
-        index_val = unbox_str_series(string_array_type, index_obj, c).value
-    else:
-        index_val = c.context.get_constant_generic(c.builder, types.none, None)
-    if typ.is_named:
-        name_obj = c.pyapi.object_getattr_string(val, "name")
-        name_val = numba.unicode.unbox_unicode_str(
-            string_type, name_obj, c).value
-    else:
-        name_val = c.context.get_constant_generic(c.builder, types.none, None)
 
-    # TODO: handle index and name
-    c.pyapi.decref(arr_obj)
+    index_obj = c.pyapi.object_getattr_string(val, "index")
+    index_val = c.pyapi.to_native_value(
+        typ.index, index_obj).value
+
+    name_obj = c.pyapi.object_getattr_string(val, "name")
+    name_val = c.pyapi.to_native_value(
+        typ.name_typ, name_obj).value
+
     series_val = bodo.hiframes.api.construct_series(
         c.context, c.builder, typ, data_val, index_val, name_val)
     # TODO: set parent pointer
+    c.pyapi.decref(arr_obj)
     return NativeValue(series_val)
 
 
@@ -368,22 +354,11 @@ def box_series(typ, val, c):
 
     arr = _box_series_data(dtype, typ.data, series_payload.data, c)
 
-    if typ.index is types.none:
-        index = c.pyapi.make_none()
-    elif typ.index == string_array_type:
-        # string array doesn't have index yet. TODO: make index
-        index = _box_series_data(
-            typ.index.dtype, typ.index, series_payload.index, c)
-    else:
-        index = c.pyapi.from_native_value(
+    index = c.pyapi.from_native_value(
             typ.index, series_payload.index, c.env_manager)
 
-
-    if typ.is_named:
-        name = c.pyapi.from_native_value(
-            string_type, series_payload.name, c.env_manager)
-    else:
-        name = c.pyapi.make_none()
+    name = c.pyapi.from_native_value(
+            typ.name_typ, series_payload.name, c.env_manager)
 
     dtype = c.pyapi.make_none()  # TODO: dtype
     res = c.pyapi.call_method(

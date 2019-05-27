@@ -402,7 +402,7 @@ def to_offset_value(freq):
     return r
 
 
-@numba.generated_jit
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def _dummy_convert_none_to_int(val):
     """Dummy function that converts None to integer, used when branch pruning
     fails to remove None branch, causing errors. The conversion path should
@@ -586,7 +586,8 @@ def unbox_timedelta_index(typ, val, c):
     # get data and name attributes
     # TODO: use to_numpy()
     data = c.pyapi.to_native_value(
-        _timedelta_index_data_typ, c.pyapi.object_getattr_string(val, 'values')).value
+        _timedelta_index_data_typ,
+        c.pyapi.object_getattr_string(val, 'values')).value
     name = c.pyapi.to_native_value(
         typ.name_typ, c.pyapi.object_getattr_string(val, 'name')).value
 

@@ -74,9 +74,18 @@ General functions
 Series
 ~~~~~~
 
+Bodo provides extensive Series support.
+However, operations between Series (+, -, /, *, **) do not
+implicitly align values based on their
+associated index values yet.
+
+
 * :func:`pandas.Series`
 
-   * Argument ``data`` can be a list or array.
+   * Arguments ``data``, ``index``, ``name`` and ``copy`` are supported.
+     ``data`` is required and can be a list, array, Series or Index.
+     If ``data`` is Series and ``index`` is provided, implicit alignment is
+     not performed yet.
 
 
 Attributes:
