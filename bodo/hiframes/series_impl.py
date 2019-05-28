@@ -178,6 +178,13 @@ def overload_series_to_list(S):
     return impl
 
 
+@overload_method(SeriesType, 'get_values')
+def overload_series_get_values(S):
+    def impl(S):
+        return S.values
+    return impl
+
+
 @overload_method(SeriesType, 'isna')
 @overload_method(SeriesType, 'isnull')
 def overload_series_isna(S):

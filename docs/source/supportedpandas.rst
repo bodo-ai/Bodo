@@ -116,6 +116,7 @@ Conversion:
   can be a Numpy numeric dtype or ``str``)
 * :meth:`Series.copy` (including ``deep`` argument)
 * :meth:`Series.to_list`
+* :meth:`Series.get_values`
 
 
 Indexing, iteration:

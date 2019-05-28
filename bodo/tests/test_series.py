@@ -278,6 +278,15 @@ def test_series_to_list(series_val):
     assert bodo_func(series_val) == test_impl(series_val)
 
 
+def test_series_get_values(series_val):
+    def test_impl(S):
+        return S.get_values()
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_array_equal(
+        bodo_func(series_val), test_impl(series_val))
+
+
 def test_series_iat_getitem(series_val):
 
     def test_impl(S):
