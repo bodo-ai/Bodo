@@ -105,11 +105,15 @@ Attributes:
 * :attr:`Series.empty`
 * :attr:`Series.dtypes`
 * :attr:`Series.name`
+* :meth:`Series.put` (only numeric data types)
 
 
 Methods:
 
-* :meth:`Series.put` (only numeric data types)
+Conversion:
+
+* :meth:`Series.astype` (only ``dtype`` argument,
+  can be a Numpy numeric dtype or ``str``)
 * :meth:`Series.copy`
 
 Indexing, iteration:

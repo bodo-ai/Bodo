@@ -1126,17 +1126,22 @@ class SeriesPass(object):
             return self._replace_func(func, [out_data_var, out_key_var], pre_nodes=nodes)
 
         # astype with string output
-        if func_name == 'astype' and is_str_series_typ(self.typemap[lhs.name]):
-            # just return input if string
-            if is_str_series_typ(self.typemap[series_var.name]):
-                return self._replace_func(lambda a: a, [series_var])
-            func = series_replace_funcs['astype_str']
+        if func_name == 'astype':
+            if is_str_series_typ(self.typemap[lhs.name]):
+                # just return input if string
+                if is_str_series_typ(self.typemap[series_var.name]):
+                    return self._replace_func(lambda a: a, [series_var])
+                func = series_replace_funcs['astype_str']
+            else:
+                func = lambda A, I, name, dtype: bodo.hiframes.api.init_series(A.astype(dtype), I, name)
+
             nodes = []
             data = self._get_series_data(series_var, nodes)
             index = self._get_series_index(series_var, nodes)
             name = self._get_series_name(series_var, nodes)
+            dtype = rhs.args[0]
             return self._replace_func(
-                func, (data, index, name), pre_nodes=nodes)
+                func, (data, index, name, dtype), pre_nodes=nodes)
 
         if func_name in explicit_binop_funcs.values():
             binop_map = {v: _binop_to_str[k] for k, v in explicit_binop_funcs.items()}
@@ -1149,7 +1154,7 @@ class SeriesPass(object):
             return self._replace_func(_binop_impl, [series_var] + rhs.args)
 
         # functions we revert to Numpy for now, otherwise warning
-        _conv_to_np_funcs = ('copy', 'cumsum', 'cumprod', 'take', 'astype')
+        _conv_to_np_funcs = ('copy', 'cumsum', 'cumprod', 'take')
         # TODO: handle series-specific cases for this funcs
         if (not func_name.startswith("values.") and func_name
                 not in _conv_to_np_funcs):

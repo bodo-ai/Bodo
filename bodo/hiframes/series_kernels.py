@@ -368,14 +368,14 @@ def _series_isna_impl(arr, index, name):
     return bodo.hiframes.api.init_series(out_arr, index, name)
 
 
-def _series_astype_str_impl(arr, index, name):
+def _series_astype_str_impl(arr, index, name, dtype):
     n = len(arr)
     num_chars = 0
     # get total chars in new array
     for i in numba.parfor.internal_prange(n):
         s = arr[i]
-        num_chars += len(str(s))  # TODO: check NA
-
+        # TODO: check NA
+        num_chars += bodo.libs.str_arr_ext.get_utf8_size(str(s))
     A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
     for i in numba.parfor.internal_prange(n):
         s = arr[i]

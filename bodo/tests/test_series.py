@@ -218,6 +218,35 @@ def test_series_put(series_val):
         bodo_func(series_val.copy()), test_impl(series_val.copy()))
 
 
+def test_series_astype_numeric(numeric_series_val):
+    # datetime can't be converted to float
+    if numeric_series_val.dtype == np.dtype('datetime64[ns]'):
+        return
+
+    def test_impl(S):
+        return S.astype(np.float64)
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(numeric_series_val), test_impl(numeric_series_val))
+
+
+def test_series_astype_str(series_val):
+    # XXX str(float) not consistent with Python yet
+    if series_val.dtype == np.float64:
+        return
+
+    def test_impl(S):
+        return S.astype(str)
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val), test_impl(series_val))
+
+
+############################### old tests ###############################
+
+
 def test_create_series1():
     def test_impl():
         A = pd.Series([1,2,3])
@@ -408,10 +437,9 @@ class TestSeries(unittest.TestCase):
         def test_impl(A):
             return A.copy()
 
-        n = 11
         S = pd.Series(['aa', 'bb', 'cc'])
         bodo_func = bodo.jit(test_impl)
-        np.testing.assert_array_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
 
     def test_series_astype_str1(self):
         def test_impl(A):
@@ -420,7 +448,7 @@ class TestSeries(unittest.TestCase):
         n = 11
         S = pd.Series(np.arange(n))
         bodo_func = bodo.jit(test_impl)
-        np.testing.assert_array_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
 
     def test_series_astype_str2(self):
         def test_impl(A):
@@ -428,7 +456,7 @@ class TestSeries(unittest.TestCase):
 
         S = pd.Series(['aa', 'bb', 'cc'])
         bodo_func = bodo.jit(test_impl)
-        np.testing.assert_array_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
 
     def test_np_call_on_series1(self):
         def test_impl(A):

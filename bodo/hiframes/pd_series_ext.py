@@ -286,17 +286,19 @@ class SeriesAttribute(AttributeTemplate):
         # TODO: support iat/iloc differences
         return SeriesIatType(ary)
 
-    @bound_function("array.astype")
+    # XXX astype cannot be moved to overload since 'str' can't be typed
+    @bound_function("series.astype")
     def resolve_astype(self, ary, args, kws):
         # TODO: handle other types like datetime etc.
         dtype, = args
         if isinstance(dtype, types.Function) and dtype.typing_key == str:
-            ret_type = SeriesType(string_type)
+            ret_type = SeriesType(string_type, None, ary.index, ary.name_typ)
             sig = signature(ret_type, *args)
         else:
             resolver = ArrayAttribute.resolve_astype.__wrapped__
             sig = resolver(self, ary.data, args, kws)
-            sig.return_type = if_arr_to_series_type(sig.return_type)
+            sig = SeriesType(
+                sig.return_type.dtype, None, ary.index, ary.name_typ)(*sig.args)
         return sig
 
     @bound_function("array.copy")

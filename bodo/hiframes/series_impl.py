@@ -89,6 +89,49 @@ def overload_series_len(S):
         return lambda S: len(bodo.hiframes.api.get_series_data(S))
 
 
+# TODO: fix 'str' typing
+# @overload_method(SeriesType, 'astype')
+# def overload_series_astype(S, dtype):
+#     # TODO: other data types like datetime, records/tuples
+#     def impl(S, dtype):
+#         arr = bodo.hiframes.api.get_series_data(S)
+#         index = bodo.hiframes.api.get_series_index(S)
+#         name = bodo.hiframes.api.get_series_name(S)
+#         out_arr = arr.astype(dtype)
+
+#         return bodo.hiframes.api.init_series(out_arr, index, name)
+
+#     return impl
+    # def _series_astype_str_impl(arr, index, name):
+    #     n = len(arr)
+    #     num_chars = 0
+    #     # get total chars in new array
+    #     for i in numba.parfor.internal_prange(n):
+    #         s = arr[i]
+    #         num_chars += len(str(s))  # TODO: check NA
+
+    #     A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
+    #     for i in numba.parfor.internal_prange(n):
+    #         s = arr[i]
+    #         A[i] = str(s)  # TODO: check NA
+
+    #     return bodo.hiframes.api.init_series(A, index, name)
+    # def impl(S):
+    #     numba.parfor.init_prange()
+    #     arr = bodo.hiframes.api.get_series_data(S)
+    #     index = bodo.hiframes.api.get_series_index(S)
+    #     name = bodo.hiframes.api.get_series_name(S)
+    #     n = len(arr)
+    #     out_arr = np.empty(n, np.bool_)
+    #     for i in numba.parfor.internal_prange(n):
+    #         out_arr[i] = bodo.hiframes.api.isna(arr, i)
+
+    #     return bodo.hiframes.api.init_series(out_arr, index, name)
+
+    # return impl
+
+
+
 @overload_method(SeriesType, 'isna')
 @overload_method(SeriesType, 'isnull')
 def overload_series_isna(S):
