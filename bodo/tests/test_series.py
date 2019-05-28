@@ -244,6 +244,26 @@ def test_series_astype_str(series_val):
         bodo_func(series_val), test_impl(series_val))
 
 
+def test_series_copy_deep(series_val):
+    # TODO: test deep/shallow cases properly
+    def test_impl(S):
+        return S.copy()
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val), test_impl(series_val))
+
+
+def test_series_copy_shallow(series_val):
+    # TODO: test deep/shallow cases properly
+    def test_impl(S):
+        return S.copy(deep=False)
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val), test_impl(series_val))
+
+
 ############################### old tests ###############################
 
 

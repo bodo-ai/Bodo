@@ -8,7 +8,7 @@ from numba.typing.templates import (infer_global, AbstractTemplate,
 from numba.typing import signature
 from numba.targets.imputils import lower_builtin, impl_ret_borrowed
 
-from bodo.utils.utils import unliteral_all
+from bodo.utils.utils import unliteral_all, BooleanLiteral
 
 
 

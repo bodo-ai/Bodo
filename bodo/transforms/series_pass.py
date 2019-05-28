@@ -1143,6 +1143,19 @@ class SeriesPass(object):
             return self._replace_func(
                 func, (data, index, name, dtype), pre_nodes=nodes)
 
+        if func_name == 'copy':
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            impl = bodo.hiframes.series_impl.overload_series_copy(
+                    *arg_typs, **kw_typs)
+            stub = (lambda S, deep=True: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
+
+
         if func_name in explicit_binop_funcs.values():
             binop_map = {v: _binop_to_str[k] for k, v in explicit_binop_funcs.items()}
             func_text = "def _binop_impl(A, B):\n"
@@ -1154,7 +1167,7 @@ class SeriesPass(object):
             return self._replace_func(_binop_impl, [series_var] + rhs.args)
 
         # functions we revert to Numpy for now, otherwise warning
-        _conv_to_np_funcs = ('copy', 'cumsum', 'cumprod', 'take')
+        _conv_to_np_funcs = ('cumsum', 'cumprod', 'take')
         # TODO: handle series-specific cases for this funcs
         if (not func_name.startswith("values.") and func_name
                 not in _conv_to_np_funcs):

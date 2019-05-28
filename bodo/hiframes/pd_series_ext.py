@@ -301,19 +301,6 @@ class SeriesAttribute(AttributeTemplate):
                 sig.return_type.dtype, None, ary.index, ary.name_typ)(*sig.args)
         return sig
 
-    @bound_function("array.copy")
-    def resolve_copy(self, ary, args, kws):
-        # TODO: copy other types like list(str)
-        dtype = ary.dtype
-        if dtype == string_type:
-            ret_type = SeriesType(string_type)
-            sig = signature(ret_type, *args)
-        else:
-            resolver = ArrayAttribute.resolve_copy.__wrapped__
-            sig = resolver(self, ary.data, args, kws)
-            sig.return_type = if_arr_to_series_type(sig.return_type)
-        return sig
-
     @bound_function("series.rolling")
     def resolve_rolling(self, ary, args, kws):
         return signature(SeriesRollingType(ary.dtype), *args)
@@ -807,7 +794,8 @@ for attr, func in numba.typing.arraydecl.ArrayAttribute.__dict__.items():
     if (attr.startswith('resolve_')
             and attr not in SeriesAttribute.__dict__
             and attr not in ('resolve_shape', 'resolve_dtype', 'resolve_ndim',
-                             'resolve_size', 'resolve_T', 'resolve_sum')
+                             'resolve_size', 'resolve_T', 'resolve_sum',
+                             'resolve_copy')
             and attr not in _not_series_array_attrs):
         setattr(SeriesAttribute, attr, func)
 

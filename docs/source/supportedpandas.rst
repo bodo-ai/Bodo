@@ -114,7 +114,7 @@ Conversion:
 
 * :meth:`Series.astype` (only ``dtype`` argument,
   can be a Numpy numeric dtype or ``str``)
-* :meth:`Series.copy`
+* :meth:`Series.copy` (including ``deep`` argument)
 
 Indexing, iteration:
 

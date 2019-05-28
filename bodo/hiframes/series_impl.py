@@ -8,6 +8,8 @@ from numba import types
 from numba.extending import overload, overload_attribute, overload_method
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.utils.typing import (is_overload_none, is_overload_true,
+    is_overload_false)
 
 
 @overload_attribute(SeriesType, 'index')
@@ -130,6 +132,36 @@ def overload_series_len(S):
 
     # return impl
 
+
+@overload_method(SeriesType, 'copy')
+def overload_series_copy(S, deep=True):
+    # TODO: test all Series data types
+    # XXX specialized kinds until branch pruning is tested and working well
+    if is_overload_true(deep):
+        def impl1(S, deep=True):
+            arr = bodo.hiframes.api.get_series_data(S)
+            index = bodo.hiframes.api.get_series_index(S)
+            name = bodo.hiframes.api.get_series_name(S)
+            return bodo.hiframes.api.init_series(arr.copy(), index, name)
+        return impl1
+
+    if is_overload_false(deep):
+        def impl2(S, deep=True):
+            arr = bodo.hiframes.api.get_series_data(S)
+            index = bodo.hiframes.api.get_series_index(S)
+            name = bodo.hiframes.api.get_series_name(S)
+            return bodo.hiframes.api.init_series(arr, index, name)
+        return impl2
+
+    def impl(S, deep=True):
+        arr = bodo.hiframes.api.get_series_data(S)
+        if deep:
+            arr = arr.copy()
+        index = bodo.hiframes.api.get_series_index(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        return bodo.hiframes.api.init_series(arr, index, name)
+
+    return impl
 
 
 @overload_method(SeriesType, 'isna')
