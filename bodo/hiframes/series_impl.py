@@ -1,6 +1,7 @@
 """
-Implementation of Series attributes and methods.
+Implementation of Series attributes and methods using overload.
 """
+import operator
 import numpy as np
 import pandas as pd
 import numba
@@ -161,6 +162,19 @@ def overload_series_copy(S, deep=True):
         name = bodo.hiframes.api.get_series_name(S)
         return bodo.hiframes.api.init_series(arr, index, name)
 
+    return impl
+
+
+@overload_method(SeriesType, 'to_list')
+@overload_method(SeriesType, 'tolist')
+def overload_series_to_list(S):
+    # TODO: test all Series data types
+    def impl(S):
+        l = list()
+        for i in range(len(S)):
+            # using iat directly on S to box Timestamp/... properly
+            l.append(S.iat[i])
+        return l
     return impl
 
 

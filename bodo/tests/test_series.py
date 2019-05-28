@@ -89,8 +89,10 @@ def test_series_constructor(data, index, name):
     pd.Series([1, 8, 4], [3, 7, 9]),
     pd.Series([1, 8, 4], [3, 7, 9], name='AAC'),
     pd.Series([1, 2, 3], ['A', 'B', 'C']),
-    pd.Series(['A', 'B', 'C']),  # TODO: string with Null (np.testing fails)
-    pd.Series(['A', 'B', 'C'], [4, 7, 0]),
+    pd.Series(['A', 'B', 'CDD']),  # TODO: string with Null (np.testing fails)
+    pd.Series(['A', 'B', 'CG'], [4, 7, 0]),
+    pd.Series(pd.date_range(start='2018-04-24', end='2018-04-27', periods=3)),
+    # TODO: timedelta
 ])
 def series_val(request):
     return request.param
@@ -262,6 +264,43 @@ def test_series_copy_shallow(series_val):
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
         bodo_func(series_val), test_impl(series_val))
+
+
+def test_series_to_list(series_val):
+    # XXX can't compare nans here, TODO: fix
+    if series_val.hasnans:
+        return
+
+    def test_impl(S):
+        return S.to_list()
+
+    bodo_func = bodo.jit(test_impl)
+    assert bodo_func(series_val) == test_impl(series_val)
+
+
+def test_series_iat_getitem(series_val):
+
+    def test_impl(S):
+        return S.iat[2]
+
+    bodo_func = bodo.jit(test_impl)
+    assert bodo_func(series_val) == test_impl(series_val)
+
+
+def test_series_iat_setitem(series_val):
+    # string setitem not supported yet
+    if isinstance(series_val.iat[0], str):
+        return
+    val = series_val.iat[0]
+
+    def test_impl(S, val):
+        S.iat[2] = val
+        # print(S) TODO: fix crash
+        return S
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val, val), test_impl(series_val, val))
 
 
 ############################### old tests ###############################

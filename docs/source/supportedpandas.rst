@@ -115,11 +115,15 @@ Conversion:
 * :meth:`Series.astype` (only ``dtype`` argument,
   can be a Numpy numeric dtype or ``str``)
 * :meth:`Series.copy` (including ``deep`` argument)
+* :meth:`Series.to_list`
+
 
 Indexing, iteration:
 
+
 * :attr:`Series.iat`
 * :attr:`Series.iloc`
+
 
 Binary operator functions:
 

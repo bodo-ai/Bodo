@@ -33,12 +33,14 @@ from bodo.libs.str_arr_ext import (string_array_type, StringArrayType,
 from bodo.hiframes.pd_series_ext import (SeriesType, is_str_series_typ,
     series_to_array_type, is_dt64_series_typ, is_bool_series_typ,
     if_series_to_array_type, is_series_type,
-    series_str_methods_type, SeriesRollingType, SeriesIatType,
+    series_str_methods_type, SeriesRollingType,
     explicit_binop_funcs, series_dt_methods_type)
 from bodo.hiframes.pd_index_ext import DatetimeIndexType, TimedeltaIndexType
 from bodo.io.pio_api import h5dataset_type
 from bodo.hiframes.rolling import get_rolling_setup_args
 import bodo.hiframes.series_impl  # side effect: install Series overloads
+import bodo.hiframes.series_indexing  # side effect: install Series overloads
+from bodo.hiframes.series_indexing import SeriesIatType
 from bodo.ir.aggregate import Aggregate
 from bodo.hiframes import series_kernels, split_impl
 from bodo.hiframes.series_kernels import series_replace_funcs
@@ -214,12 +216,13 @@ class SeriesPass(object):
                 and is_bool_series_typ(self.typemap[rhs.index.name])):
             rhs.index = self._get_series_data(rhs.index, nodes)
 
-        if isinstance(self.typemap[rhs.value.name], SeriesIatType):
-            val_def = guard(get_definition, self.func_ir, rhs.value)
-            assert (isinstance(val_def, ir.Expr) and val_def.op == 'getattr'
-                and val_def.attr in ('iat', 'iloc', 'loc'))
-            series_var = val_def.value
-            rhs.value = series_var
+        # TODO: reimplement Iat optimization
+        # if isinstance(self.typemap[rhs.value.name], SeriesIatType):
+        #     val_def = guard(get_definition, self.func_ir, rhs.value)
+        #     assert (isinstance(val_def, ir.Expr) and val_def.op == 'getattr'
+        #         and val_def.attr in ('iat', 'iloc', 'loc'))
+        #     series_var = val_def.value
+        #     rhs.value = series_var
 
         # replace getitems on dt_index/dt64 series with Timestamp function
         if is_dt64_series_typ(self.typemap[rhs.value.name]):
@@ -289,13 +292,14 @@ class SeriesPass(object):
         if target_typ == h5dataset_type:
             return self._handle_h5_write(inst.target, inst.index, inst.value)
 
-        if isinstance(target_typ, SeriesIatType):
-            val_def = guard(get_definition, self.func_ir, inst.target)
-            assert (isinstance(val_def, ir.Expr) and val_def.op == 'getattr'
-                and val_def.attr in ('iat', 'iloc', 'loc'))
-            series_var = val_def.value
-            inst.target = series_var
-            target_typ = target_typ.stype
+        # TODO: proper iat/iloc/loc optimization
+        # if isinstance(target_typ, SeriesIatType):
+        #     val_def = guard(get_definition, self.func_ir, inst.target)
+        #     assert (isinstance(val_def, ir.Expr) and val_def.op == 'getattr'
+        #         and val_def.attr in ('iat', 'iloc', 'loc'))
+        #     series_var = val_def.value
+        #     inst.target = series_var
+        #     target_typ = target_typ.stype
 
         if isinstance(target_typ, SeriesType):
             # TODO: handle index

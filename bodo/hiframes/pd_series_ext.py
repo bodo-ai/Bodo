@@ -275,8 +275,8 @@ class SeriesAttribute(AttributeTemplate):
         assert ary.dtype == types.NPDatetime('ns')
         return series_dt_methods_type
 
-    def resolve_iat(self, ary):
-        return SeriesIatType(ary)
+    # def resolve_iat(self, ary):
+    #     return SeriesIatType(ary)
 
     def resolve_iloc(self, ary):
         # TODO: support iat/iloc differences
@@ -690,20 +690,6 @@ def rolling_generic(self, args, kws):
 for fname in supported_rolling_funcs:
     install_rolling_method(fname, rolling_generic)
 
-class SeriesIatType(types.Type):
-    def __init__(self, stype):
-        self.stype = stype
-        name = "SeriesIatType({})".format(stype)
-        super(SeriesIatType, self).__init__(name)
-
-@infer_global(operator.getitem)
-class GetItemSeriesIat(AbstractTemplate):
-    key = operator.getitem
-
-    def generic(self, args, kws):
-        # iat[] is the same as regular getitem
-        if isinstance(args[0], SeriesIatType):
-            return GetItemSeries.generic(self, (args[0].stype, args[1]), kws)
 
 @infer
 @infer_global(operator.eq)
@@ -799,6 +785,7 @@ for attr, func in numba.typing.arraydecl.ArrayAttribute.__dict__.items():
             and attr not in _not_series_array_attrs):
         setattr(SeriesAttribute, attr, func)
 
+
 @infer_global(operator.getitem)
 class GetItemSeries(AbstractTemplate):
     key = operator.getitem
@@ -865,6 +852,7 @@ class GetItemSeries(AbstractTemplate):
                 sig.return_type = pandas_timestamp_type
         return sig
 
+
 @infer_global(operator.setitem)
 class SetItemSeries(SetItemBuffer):
     def generic(self, args, kws):
@@ -895,12 +883,6 @@ class SetItemSeries(SetItemBuffer):
             res.args = (new_series, idx, val)
             return res
 
-@infer_global(operator.setitem)
-class SetItemSeriesIat(SetItemSeries):
-    def generic(self, args, kws):
-        # iat[] is the same as regular setitem
-        if isinstance(args[0], SeriesIatType):
-            return SetItemSeries.generic(self, (args[0].stype, args[1], args[2]), kws)
 
 inplace_ops = [
     operator.iadd,
