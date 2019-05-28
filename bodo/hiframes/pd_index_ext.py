@@ -825,6 +825,39 @@ def range_index_overload(start=None, stop=None, step=None, dtype=None,
     return _pd_range_index_imp
 
 
+@overload(operator.getitem)
+def overload_range_index_getitem(I, idx):
+    if isinstance(I, RangeIndexType):
+        if isinstance(idx, types.Integer):
+            # TODO: test
+            # TODO: check valid
+            return lambda I, idx: (idx * I._step) - I._start
+
+        if isinstance(idx, types.SliceType):
+            # TODO: test
+            def impl(I, idx):
+                slice_idx = numba.unicode._normalize_slice(idx, len(I))
+                start = I._start + I._step * slice_idx.start
+                stop = I._start + I._step * slice_idx.stop
+                step = I._step * slice_idx.step
+                return bodo.hiframes.pd_index_ext.init_range_index(
+                    start, stop, step)
+
+            return impl
+
+        # delegate to integer index, TODO: test
+        return lambda I, idx: bodo.hiframes.pd_index_ext.init_numeric_index(
+                              np.arange(
+                                  I._start, I._stop, I._step, np.int64)[idx])
+
+
+@overload(len)
+def overload_range_len(r):
+    if isinstance(r, RangeIndexType):
+        # TODO: test
+        return lambda r: max(0, -(-(r._stop - r._start) // r._step))
+
+
 # ---------------- PeriodIndex -------------------
 
 
