@@ -701,6 +701,10 @@ class RangeIndexType(types.IterableType):
     def iterator_type(self):
         return types.iterators.RangeIteratorType(types.int64)
 
+    @property
+    def dtype(self):
+        return types.int64
+
 
 range_index_type = RangeIndexType()
 

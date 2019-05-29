@@ -724,21 +724,6 @@ class CmpOpLESeries(SeriesCompEqual):
 class CmpOpLTSeries(SeriesCompEqual):
     key = '<'
 
-# @infer_global(operator.getitem)
-# class GetItemBuffer(AbstractTemplate):
-#     key = operator.getitem
-
-#     def generic(self, args, kws):
-#         assert not kws
-#         [ary, idx] = args
-#         import pdb; pdb.set_trace()
-#         if not isinstance(ary, SeriesType):
-#             return
-#         out = get_array_index_type(ary, idx)
-#         # check result to be dt64 since it might be sliced array
-#         # replace result with Timestamp
-#         if out is not None and out.result == types.NPDatetime('ns'):
-#             return signature(pandas_timestamp_type, ary, out.index)
 
 def install_array_method(name, generic):
     # taken from arraydecl.py, Series instead of Array
@@ -749,6 +734,7 @@ def install_array_method(name, generic):
 
     setattr(SeriesAttribute, "resolve_" + name, array_attribute_attachment)
 
+
 def generic_expand_cumulative_series(self, args, kws):
     # taken from arraydecl.py, replaced Array with Series
     assert not args
@@ -756,6 +742,7 @@ def generic_expand_cumulative_series(self, args, kws):
     assert isinstance(self.this, SeriesType)
     return_type = SeriesType(_expand_integer(self.this.dtype))
     return signature(return_type, recvr=self.this)
+
 
 # replacing cumsum/cumprod since arraydecl.py definition uses types.Array
 for fname in ["cumsum", "cumprod"]:
@@ -773,73 +760,6 @@ for attr, func in numba.typing.arraydecl.ArrayAttribute.__dict__.items():
                              'resolve_copy')
             and attr not in _not_series_array_attrs):
         setattr(SeriesAttribute, attr, func)
-
-
-@infer_global(operator.getitem)
-class GetItemSeries(AbstractTemplate):
-    key = operator.getitem
-
-    def generic(self, args, kws):
-        assert not kws
-        [in_arr, in_idx] = args
-        is_arr_series = False
-        is_idx_series = False
-        is_arr_dt_index = False
-
-        if not isinstance(in_arr, SeriesType) and not isinstance(in_idx, SeriesType):
-            return None
-
-        if isinstance(in_arr, SeriesType):
-            in_arr = series_to_array_type(in_arr)
-            is_arr_series = True
-            if in_arr.dtype == types.NPDatetime('ns'):
-                is_arr_dt_index = True
-
-        if isinstance(in_idx, SeriesType):
-            in_idx = series_to_array_type(in_idx)
-            is_idx_series = True
-
-        # TODO: dt_index
-        if in_arr == string_array_type:
-            # XXX fails due in overload
-            # compile_internal version results in symbol not found!
-            # sig = self.context.resolve_function_type(
-            #     operator.getitem, (in_arr, in_idx), kws)
-            # HACK to get avoid issues for now
-            if isinstance(in_idx, (types.Integer, types.IntegerLiteral)):
-                sig = string_type(in_arr, in_idx)
-            else:
-                sig = GetItemStringArray.generic(self, (in_arr, in_idx), kws)
-        elif in_arr == list_string_array_type:
-            # TODO: split view
-            # mimic array indexing for list
-            if (isinstance(in_idx, types.Array) and in_idx.ndim == 1
-                    and isinstance(
-                        in_idx.dtype, (types.Integer, types.Boolean))):
-                sig = signature(in_arr, in_arr, in_idx)
-            else:
-                sig = numba.typing.collections.GetItemSequence.generic(
-                    self, (in_arr, in_idx), kws)
-        elif in_arr == string_array_split_view_type:
-            sig = GetItemStringArraySplitView.generic(
-                self, (in_arr, in_idx), kws)
-        else:
-            out = get_array_index_type(in_arr, in_idx)
-            sig = signature(out.result, in_arr, out.index)
-
-        if sig is not None:
-            arg1 = sig.args[0]
-            arg2 = sig.args[1]
-            if is_arr_series:
-                sig.return_type = if_arr_to_series_type(sig.return_type)
-                arg1 = if_arr_to_series_type(arg1)
-            if is_idx_series:
-                arg2 = if_arr_to_series_type(arg2)
-            sig.args = (arg1, arg2)
-            # dt_index and Series(dt64) should return Timestamp
-            if is_arr_dt_index and sig.return_type == types.NPDatetime('ns'):
-                sig.return_type = pandas_timestamp_type
-        return sig
 
 
 @infer_global(operator.setitem)

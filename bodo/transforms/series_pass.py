@@ -211,11 +211,6 @@ class SeriesPass(object):
                 assign.value = val_def.items[rhs.index]
                 return [assign]
 
-        # Series(bool) as index
-        if (rhs.op == 'getitem'
-                and is_bool_series_typ(self.typemap[rhs.index.name])):
-            rhs.index = self._get_series_data(rhs.index, nodes)
-
         # TODO: reimplement Iat optimization
         # if isinstance(self.typemap[rhs.value.name], SeriesIatType):
         #     val_def = guard(get_definition, self.func_ir, rhs.value)
@@ -223,55 +218,6 @@ class SeriesPass(object):
         #         and val_def.attr in ('iat', 'iloc', 'loc'))
         #     series_var = val_def.value
         #     rhs.value = series_var
-
-        # replace getitems on dt_index/dt64 series with Timestamp function
-        if is_dt64_series_typ(self.typemap[rhs.value.name]):
-            if rhs.op == 'getitem':
-                ind_var = rhs.index
-            else:
-                ind_var = rhs.index_var
-
-            in_arr = rhs.value
-            def f(_in_arr, _ind):
-                dt = _in_arr[_ind]
-                s = np.int64(dt)
-                return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(s)
-
-            data = self._get_series_data(in_arr, nodes)
-            assert isinstance(self.typemap[ind_var.name],
-                (types.Integer, types.IntegerLiteral))
-            f_block = compile_to_numba_ir(f, {'numba': numba, 'np': np,
-                                            'bodo': bodo}, self.typingctx,
-                                        (self.typemap[data.name], types.intp),
-                                        self.typemap, self.calltypes).blocks.popitem()[1]
-            replace_arg_nodes(f_block, [data, ind_var])
-            nodes += f_block.body[:-2]
-            nodes[-1].target = assign.target
-            return nodes
-
-        if isinstance(self.typemap[rhs.value.name], SeriesType):
-            series_var = rhs.value
-            rhs.value = self._get_series_data(series_var, nodes)
-            # TODO: index and name
-            # s_index = self._get_series_index(series_var, nodes)
-            # s_name = self._get_series_name(series_var, nodes)
-            self._convert_series_calltype(rhs)
-            lhs = assign.target
-            # convert output to Series from Array
-            if isinstance(self.typemap[lhs.name], SeriesType):
-                new_lhs = ir.Var(
-                    lhs.scope, mk_unique_var(lhs.name + '_data'), lhs.loc)
-                self.typemap[new_lhs.name] = series_to_array_type(
-                    self.typemap[lhs.name])
-                nodes.append(ir.Assign(rhs, new_lhs, lhs.loc))
-                # TODO: index and name
-                return self._replace_func(
-                    lambda A: bodo.hiframes.api.init_series(A),
-                    [new_lhs],
-                    pre_nodes=nodes)
-
-            nodes.append(assign)
-            return nodes
 
         nodes.append(assign)
         return nodes

@@ -288,3 +288,20 @@ def overload_extract_index_if_none(data, index):
         return lambda data, index: bodo.hiframes.api.get_series_index(data)
 
     return lambda data, index: index
+
+
+def box_if_dt64(val):
+    return val
+
+
+@overload(box_if_dt64)
+def overload_box_if_dt64(val):
+    """If 'val' is dt64, box it to Timestamp otherwise just return 'val'
+    """
+    if val == types.NPDatetime('ns'):
+        return lambda val: \
+            bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
+                np.int64(val))
+
+    return lambda val: val
+

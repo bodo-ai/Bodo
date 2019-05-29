@@ -396,6 +396,57 @@ def test_series_iloc_setitem_array_int(series_val):
         bodo_func(series_val, val), test_impl(series_val, val))
 
 
+
+####### getitem tests ###############
+
+
+def test_series_getitem_int(series_val):
+
+    def test_impl(S):
+        return S[2]
+
+    bodo_func = bodo.jit(test_impl)
+    # integer label-based indexing should raise error
+    if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
+        with pytest.raises(numba.TypingError):  # TODO: ValueError
+            bodo_func(series_val)
+    else:
+        assert bodo_func(series_val) == test_impl(series_val)
+
+
+def test_series_getitem_slice(series_val):
+    def test_impl(S):
+        return S[1:3]
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val), test_impl(series_val))
+
+
+def test_series_getitem_array_int(series_val):
+    def test_impl(S):
+        return S[[1,3]]
+
+    bodo_func = bodo.jit(test_impl)
+    # integer label-based indexing should raise error
+    if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
+        with pytest.raises(numba.TypingError):  # TODO: ValueError
+            bodo_func(series_val)
+    else:
+        pd.testing.assert_series_equal(
+            bodo_func(series_val), test_impl(series_val))
+
+
+def test_series_getitem_array_bool(series_val):
+    def test_impl(S):
+        return S[[True, True, False, True]]
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val), test_impl(series_val))
+
+
+
 ############################### old tests ###############################
 
 
