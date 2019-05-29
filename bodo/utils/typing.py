@@ -27,6 +27,19 @@ def is_overload_false(val):
             or getattr(val, 'value', True) is False)
 
 
+def is_list_like_index_type(t):
+    """Types that can be similar to list for indexing Arrays, Series, etc.
+    Tuples are excluded due to indexing semantics.
+    """
+    from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
+    from bodo.hiframes.pd_series_ext import SeriesType
+    # TODO: include datetimeindex/timedeltaindex?
+
+    return (isinstance(t, types.List)
+        or (isinstance(t, types.Array) and t.ndim == 1)
+        or isinstance(t, (NumericIndexType, RangeIndexType))
+        or isinstance(t, SeriesType))
+
 
 # type used to pass metadata to type inference functions
 # see untyped_pass.py and df.pivot_table()

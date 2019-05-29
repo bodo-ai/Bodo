@@ -19,6 +19,7 @@ from bodo.hiframes.pd_timestamp_ext import (pandas_timestamp_type,
     convert_datetime64_to_timestamp, convert_timestamp_to_datetime64,
     integer_to_dt64)
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
+from bodo.utils.typing import is_list_like_index_type
 
 
 ##############################  iat  ######################################
@@ -170,10 +171,10 @@ def overload_series_iloc_getitem(I, idx):
         # TODO: fix list of int getitem on Arrays in Numba
         # TODO: fix none Index
         # TODO: other list-like such as Series/Index
-        if (isinstance(idx, (types.List, types.Array))
+        if (is_list_like_index_type(idx)
                 and isinstance(idx.dtype, (types.Integer, types.Boolean))):
             def impl(I, idx):
-                idx_t = bodo.utils.conversion.coerce_to_array(idx)
+                idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
                 arr = bodo.hiframes.api.get_series_data(I._obj)[idx_t]
                 index = bodo.hiframes.api.get_series_index(I._obj)[idx_t]
                 name = bodo.hiframes.api.get_series_name(I._obj)
@@ -201,7 +202,7 @@ def overload_series_iloc_setitem(I, idx, val):
 
         def impl(I, idx, val):
             bodo.hiframes.api.get_series_data(I._obj)[idx] = \
-                bodo.utils.conversion.coerce_to_array(val)
+                bodo.utils.conversion.coerce_to_ndarray(val)
 
         # integer case same as iat
         if isinstance(idx, types.Integer):
@@ -226,7 +227,7 @@ def overload_series_iloc_setitem(I, idx, val):
         if (isinstance(idx, (types.List, types.Array))
                 and isinstance(idx.dtype, (types.Integer, types.Boolean))):
             def impl_arr(I, idx, val):
-                idx_t = bodo.utils.conversion.coerce_to_array(idx)
+                idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
                 bodo.hiframes.api.get_series_data(I._obj)[idx_t] = val
             return impl_arr
 
@@ -263,7 +264,7 @@ def overload_series_getitem(S, idx):
                 bodo.hiframes.api.get_series_data(S)[idx])
 
         # TODO: other list-like such as Series, Index
-        if (isinstance(idx, (types.List, types.Array))
+        if (is_list_like_index_type(idx)
                 and isinstance(idx.dtype, (types.Integer, types.Boolean))):
             if (isinstance(S.index, NumericIndexType)
                     and isinstance(S.index.dtype, types.Integer)
@@ -271,7 +272,7 @@ def overload_series_getitem(S, idx):
                 raise ValueError("Indexing Series with Integer index using []"
                                  " (which is label-based) not supported yet")
             def impl_arr(S, idx):
-                idx_t = bodo.utils.conversion.coerce_to_array(idx)
+                idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
                 arr = bodo.hiframes.api.get_series_data(S)[idx_t]
                 index = bodo.hiframes.api.get_series_index(S)[idx_t]
                 name = bodo.hiframes.api.get_series_name(S)
