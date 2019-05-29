@@ -275,17 +275,6 @@ class SeriesAttribute(AttributeTemplate):
         assert ary.dtype == types.NPDatetime('ns')
         return series_dt_methods_type
 
-    # def resolve_iat(self, ary):
-    #     return SeriesIatType(ary)
-
-    def resolve_iloc(self, ary):
-        # TODO: support iat/iloc differences
-        return SeriesIatType(ary)
-
-    def resolve_loc(self, ary):
-        # TODO: support iat/iloc differences
-        return SeriesIatType(ary)
-
     # XXX astype cannot be moved to overload since 'str' can't be typed
     @bound_function("series.astype")
     def resolve_astype(self, ary, args, kws):

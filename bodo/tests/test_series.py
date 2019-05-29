@@ -82,16 +82,18 @@ def test_series_constructor(data, index, name):
 
 # TODO: other possible Series types like Categorical, dt64, td64, ...
 @pytest.fixture(params = [
-    pd.Series([1, 8, 4]),
-    pd.Series([1.1, np.nan, 4]),
-    pd.Series([1, 8, 4], dtype=np.uint8),
-    pd.Series([1, 8, 4], name='ACD'),
-    pd.Series([1, 8, 4], [3, 7, 9]),
-    pd.Series([1, 8, 4], [3, 7, 9], name='AAC'),
-    pd.Series([1, 2, 3], ['A', 'B', 'C']),
-    pd.Series(['A', 'B', 'CDD']),  # TODO: string with Null (np.testing fails)
-    pd.Series(['A', 'B', 'CG'], [4, 7, 0]),
-    pd.Series(pd.date_range(start='2018-04-24', end='2018-04-27', periods=3)),
+    pd.Series([1, 8, 4, 11]),
+    pd.Series([1.1, np.nan, 4.2, 3.1]),
+    pd.Series([1, 8, 4, 0], dtype=np.uint8),
+    pd.Series([1, 8, 4, -1], name='ACD'),
+    pd.Series([1, 8, 4, 1], [3, 7, 9, 3]),
+    pd.Series([1, 8, 4, 11], [3, 7, 9, 2], name='AAC'),
+    pd.Series([1, 2, 3, -1], ['A', 'BA', '', 'DD']),
+    pd.Series(['A', 'B', 'CDD', 'AA']),  # TODO: string with Null (np.testing fails)
+    pd.Series(['A', 'B', 'CG', 'ACDE'], [4, 7, 0, 1]),
+    pd.Series(pd.date_range(start='2018-04-24', end='2018-04-28', periods=4)),
+    pd.Series([3, 5, 1, -1],
+              pd.date_range(start='2018-04-24', end='2018-04-28', periods=4)),
     # TODO: timedelta
 ])
 def series_val(request):
@@ -305,6 +307,88 @@ def test_series_iat_setitem(series_val):
     def test_impl(S, val):
         S.iat[2] = val
         # print(S) TODO: fix crash
+        return S
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val, val), test_impl(series_val, val))
+
+
+def test_series_iloc_getitem_int(series_val):
+
+    def test_impl(S):
+        return S.iloc[2]
+
+    bodo_func = bodo.jit(test_impl)
+    assert bodo_func(series_val) == test_impl(series_val)
+
+
+def test_series_iloc_getitem_slice(series_val):
+    def test_impl(S):
+        return S.iloc[1:3]
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val), test_impl(series_val))
+
+
+def test_series_iloc_getitem_array_int(series_val):
+    def test_impl(S):
+        return S.iloc[[1,3]]
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val), test_impl(series_val))
+
+
+def test_series_iloc_getitem_array_bool(series_val):
+    def test_impl(S):
+        return S.iloc[[True, True, False, True]]
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val), test_impl(series_val))
+
+
+def test_series_iloc_setitem_int(series_val):
+    # string setitem not supported yet
+    if isinstance(series_val.iat[0], str):
+        return
+    val = series_val.iat[0]
+
+    def test_impl(S, val):
+        S.iloc[2] = val
+        # print(S) TODO: fix crash
+        return S
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val, val), test_impl(series_val, val))
+
+
+def test_series_iloc_setitem_slice(series_val):
+    # string setitem not supported yet
+    if isinstance(series_val.iat[0], str):
+        return
+    val = series_val.iloc[0:2].values  # values to avoid alignment
+
+    def test_impl(S, val):
+        S.iloc[1:3] = val
+        return S
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val, val), test_impl(series_val, val))
+
+
+def test_series_iloc_setitem_array_int(series_val):
+    # string setitem not supported yet
+    if isinstance(series_val.iat[0], str):
+        return
+    val = series_val.iloc[0:2].values  # values to avoid alignment
+
+    def test_impl(S, val):
+        S.iloc[[1,3]] = val
         return S
 
     bodo_func = bodo.jit(test_impl)
