@@ -227,13 +227,6 @@ class SeriesPass(object):
         # Series as index
         # TODO: handle all possible cases
         nodes = []
-        if (isinstance(inst, ir.SetItem)
-                and isinstance(self.typemap[inst.index.name], SeriesType)):
-            inst.index = self._get_series_data(inst.index, nodes)
-
-        if (isinstance(inst, ir.SetItem)
-                and isinstance(self.typemap[inst.value.name], SeriesType)):
-            inst.value = self._get_series_data(inst.value, nodes)
 
         if target_typ == h5dataset_type:
             return self._handle_h5_write(inst.target, inst.index, inst.value)
@@ -246,14 +239,6 @@ class SeriesPass(object):
         #     series_var = val_def.value
         #     inst.target = series_var
         #     target_typ = target_typ.stype
-
-        if isinstance(target_typ, SeriesType):
-            # TODO: handle index
-            data = self._get_series_data(inst.target, nodes)
-            inst.target = data
-            nodes.append(inst)
-            self._convert_series_calltype(inst)
-            return nodes
 
         nodes.append(inst)
         return nodes

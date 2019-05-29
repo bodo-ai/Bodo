@@ -200,10 +200,6 @@ def overload_series_iloc_setitem(I, idx, val):
         if I.stype.dtype == bodo.string_type:
             raise ValueError("Series string setitem not supported yet")
 
-        def impl(I, idx, val):
-            bodo.hiframes.api.get_series_data(I._obj)[idx] = \
-                bodo.utils.conversion.coerce_to_ndarray(val)
-
         # integer case same as iat
         if isinstance(idx, types.Integer):
             # unbox dt64 from Timestamp (TODO: timedelta and other datetimelike)
@@ -214,24 +210,31 @@ def overload_series_iloc_setitem(I, idx, val):
                     bodo.hiframes.api.get_series_data(I._obj)[idx] = s
                 return impl_dt
 
+            def impl(I, idx, val):
+                bodo.hiframes.api.get_series_data(I._obj)[idx] = val
+
             return impl
 
         # all other cases just set data
         # slice
         if isinstance(idx, types.SliceType):
-            return impl
+            def impl_slice(I, idx, val):
+                bodo.hiframes.api.get_series_data(I._obj)[idx] = \
+                    bodo.utils.conversion.coerce_to_array(val)
+            return impl_slice
 
         # list of ints or array of ints
         # list of bools or array of bools
         # TODO: fix list of int getitem on Arrays in Numba
-        if (isinstance(idx, (types.List, types.Array))
+        if (is_list_like_index_type(idx)
                 and isinstance(idx.dtype, (types.Integer, types.Boolean))):
             def impl_arr(I, idx, val):
                 idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
-                bodo.hiframes.api.get_series_data(I._obj)[idx_t] = val
+                bodo.hiframes.api.get_series_data(I._obj)[idx_t] = \
+                    bodo.utils.conversion.coerce_to_array(val)
             return impl_arr
 
-        raise ValueError("iloc[] getitem using {} not supported".format(idx))
+        raise ValueError("iloc[] setitem using {} not supported".format(idx))
 
 
 ######################## __getitem__/__setitem__ ########################
@@ -292,3 +295,59 @@ def overload_series_getitem(S, idx):
             return impl_slice
 
         # TODO: handle idx as SeriesType on array
+        raise ValueError(
+            "setting Series value using {} not supported yet".format(idx))
+
+
+@overload(operator.setitem)
+def overload_series_setitem(S, idx, val):
+    if isinstance(S, SeriesType):
+        # check string setitem
+        if S.dtype == bodo.string_type:
+            raise ValueError("Series string setitem not supported yet")
+
+        # integer case same as iat
+        if isinstance(idx, types.Integer):
+            if (isinstance(S.index, NumericIndexType)
+                    and isinstance(S.index.dtype, types.Integer)):
+                raise ValueError("Indexing Series with Integer index using []"
+                                 " (which is label-based) not supported yet")
+            # unbox dt64 from Timestamp (TODO: timedelta and other datetimelike)
+            if (S.dtype == types.NPDatetime('ns')
+                    and val == pandas_timestamp_type):
+                def impl_dt(S, idx, val):
+                    s = integer_to_dt64(convert_timestamp_to_datetime64(val))
+                    bodo.hiframes.api.get_series_data(S)[idx] = s
+                return impl_dt
+
+            def impl(S, idx, val):
+                bodo.hiframes.api.get_series_data(S)[idx] = val
+
+            return impl
+
+        # all other cases just set data
+        # slice
+        if isinstance(idx, types.SliceType):
+            def impl_slice(S, idx, val):
+                bodo.hiframes.api.get_series_data(S)[idx] = \
+                    bodo.utils.conversion.coerce_to_array(val)
+            return impl_slice
+
+        # list of ints or array of ints
+        # list of bools or array of bools
+        # TODO: fix list of int getitem on Arrays in Numba
+        if (is_list_like_index_type(idx)
+                and isinstance(idx.dtype, (types.Integer, types.Boolean))):
+            if (isinstance(S.index, NumericIndexType)
+                    and isinstance(S.index.dtype, types.Integer)
+                    and isinstance(idx.dtype, types.Integer)):
+                raise ValueError("Indexing Series with Integer index using []"
+                                 " (which is label-based) not supported yet")
+            def impl_arr(S, idx, val):
+                idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
+                bodo.hiframes.api.get_series_data(S)[idx_t] = \
+                    bodo.utils.conversion.coerce_to_array(val)
+            return impl_arr
+
+        raise ValueError(
+            "Series [] setitem using {} not supported".format(idx))

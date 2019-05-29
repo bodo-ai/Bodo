@@ -396,7 +396,6 @@ def test_series_iloc_setitem_array_int(series_val):
         bodo_func(series_val, val), test_impl(series_val, val))
 
 
-
 ####### getitem tests ###############
 
 
@@ -472,6 +471,72 @@ def test_series_getitem_array_bool(series_val):
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
         bodo_func(series_val), test_impl(series_val))
+
+
+def test_series_setitem_int(series_val):
+    # string setitem not supported yet
+    if isinstance(series_val.iat[0], str):
+        return
+    val = series_val.iat[0]
+
+    def test_impl(S, val):
+        S[2] = val
+        return S
+
+    bodo_func = bodo.jit(test_impl)
+    # integer label-based indexing should raise error
+    if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
+        with pytest.raises(numba.TypingError):  # TODO: ValueError
+            bodo_func(series_val, val)
+    else:
+        pd.testing.assert_series_equal(
+            bodo_func(series_val, val), test_impl(series_val, val))
+
+
+def test_series_setitem_slice(series_val):
+    # string setitem not supported yet
+    if isinstance(series_val.iat[0], str):
+        return
+    val = series_val.iloc[0:2].values  # values to avoid alignment
+
+    def test_impl(S, val):
+        S[1:3] = val
+        return S
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val, val), test_impl(series_val, val))
+
+
+@pytest.mark.parametrize('idx', [[1, 3], np.array([1, 3]), pd.Series([1, 3])])
+@pytest.mark.parametrize('list_val_arg', [True, False])
+def test_series_setitem_list_int(series_val, idx, list_val_arg):
+    # string setitem not supported yet
+    if isinstance(series_val.iat[0], str):
+        return
+    val = series_val.iloc[0:2].values.copy()  # values to avoid alignment
+    if list_val_arg:
+        val = list(val)
+
+    def test_impl(S, val, idx):
+        S[idx] = val
+        return S
+
+    bodo_func = bodo.jit(test_impl)
+    # integer label-based indexing should raise error
+    if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
+        with pytest.raises(numba.TypingError):  # TODO: ValueError
+            bodo_func(series_val, val, idx)
+    else:
+        # Pandas coerces Series type to set values, so avoid low precision
+        # TODO: warn or error?
+        if list_val_arg and series_val.dtype in (np.int8, np.uint8, np.int16,
+                                               np.uint16, np.int32, np.uint32):
+            return
+        pd.testing.assert_series_equal(
+            bodo_func(series_val.copy(), val, idx),
+            test_impl(series_val.copy(), val, idx))
+
 
 
 ############################### old tests ###############################
