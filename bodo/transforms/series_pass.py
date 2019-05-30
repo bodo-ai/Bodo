@@ -884,8 +884,21 @@ class SeriesPass(object):
         return self._handle_df_col_calls(assign, lhs, rhs, func_name)
 
     def _run_call_series(self, assign, lhs, rhs, series_var, func_name):
+        if func_name in ('sum', 'prod', 'mean', 'var', 'std'):
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
+
         # single arg functions
-        if func_name in ('sum', 'count', 'mean', 'var', 'min', 'max', 'prod'):
+        if func_name in ('count', 'min', 'max'):
             if rhs.args or rhs.kws:
                 raise ValueError("unsupported Series.{}() arguments".format(
                     func_name))
@@ -899,7 +912,7 @@ class SeriesPass(object):
             data = self._get_series_data(series_var, nodes)
             return self._replace_func(func, [data], pre_nodes=nodes)
 
-        if func_name in ('std', 'nunique', 'describe', 'abs', 'isna',
+        if func_name in ('nunique', 'describe', 'abs', 'isna',
                          'isnull', 'median', 'idxmin', 'idxmax', 'unique'):
             if rhs.args or rhs.kws:
                 raise ValueError("unsupported Series.{}() arguments".format(

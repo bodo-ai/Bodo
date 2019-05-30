@@ -225,6 +225,67 @@ def overload_series_sum(S):
     return impl
 
 
+@overload_method(SeriesType, 'prod')
+def overload_series_prod(S):
+    def impl(S):
+        numba.parfor.init_prange()
+        A = bodo.hiframes.api.get_series_data(S)
+        numba.parfor.init_prange()
+        # TODO: fix output type
+        s = 1
+        for i in numba.parfor.internal_prange(len(A)):
+            if not bodo.hiframes.api.isna(A, i):
+                s *= A[i]
+        return s
+
+    return impl
+
+
+@overload_method(SeriesType, 'mean')
+def overload_series_mean(S):
+    def impl(S):  # pragma: no cover
+        numba.parfor.init_prange()
+        A = bodo.hiframes.api.get_series_data(S)
+        count = 0
+        s = 0
+        for i in numba.parfor.internal_prange(len(A)):
+            if not bodo.hiframes.api.isna(A, i):
+                s += A[i]
+                count += 1
+
+        res = bodo.hiframes.series_kernels._mean_handle_nan(s, count)
+        return res
+
+    return impl
+
+
+@overload_method(SeriesType, 'var')
+def overload_series_var(S):
+    def impl(S):  # pragma: no cover
+        m = S.mean()
+        numba.parfor.init_prange()
+        A = bodo.hiframes.api.get_series_data(S)
+        s = 0
+        count = 0
+        for i in numba.parfor.internal_prange(len(A)):
+            if not bodo.hiframes.api.isna(A, i):
+                s += (A[i] - m)**2
+                count += 1
+
+        res = bodo.hiframes.series_kernels._var_handle_nan(s, count)
+        return res
+
+    return impl
+
+
+@overload_method(SeriesType, 'std')
+def overload_series_std(S):
+    def impl(S):  # pragma: no cover
+        return S.var()**0.5
+
+    return impl
+
+
 ############################ binary operators #############################
 
 def create_explicit_binary_op_overload(op):

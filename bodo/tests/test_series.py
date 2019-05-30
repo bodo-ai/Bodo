@@ -1429,6 +1429,15 @@ class TestSeries(unittest.TestCase):
         S = pd.Series([np.nan, 2., 3.])
         self.assertEqual(bodo_func(S), test_impl(S))
 
+    def test_series_std1(self):
+        def test_impl(S):
+            return S.std()
+
+        bodo_func = bodo.jit(test_impl)
+        S = pd.Series([np.nan, 2., 3.])
+        self.assertEqual(bodo_func(S), test_impl(S))
+
+
     def test_series_min1(self):
         def test_impl(S):
             return S.min()

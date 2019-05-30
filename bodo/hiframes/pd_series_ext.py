@@ -582,19 +582,6 @@ class SeriesAttribute(AttributeTemplate):
         return signature(out, *args)
 
 
-# TODO: use ops logic from pandas/core/ops.py
-# # called from numba/numpy_support.py:resolve_output_type
-# # similar to SmartArray (targets/smartarray.py)
-# @type_callable('__array_wrap__')
-# def type_series_array_wrap(context):
-#     def typer(input_type, result):
-#         if isinstance(input_type, SeriesType):
-#             return input_type.copy(dtype=result.dtype,
-#                                    ndim=result.ndim,
-#                                    layout=result.layout)
-
-#     return typer
-
 str2str_methods = ('capitalize', 'lower', 'lstrip', 'rstrip',
             'strip', 'swapcase', 'title', 'upper')
 
@@ -795,17 +782,6 @@ for fname in ["cumsum", "cumprod"]:
 
 # TODO: add itemsize, strides, etc. when removed from Pandas
 _not_series_array_attrs = ['flat', 'ctypes', 'itemset', 'reshape', 'sort', 'flatten']
-
-
-# use ArrayAttribute for attributes not defined in SeriesAttribute
-for attr, func in numba.typing.arraydecl.ArrayAttribute.__dict__.items():
-    if (attr.startswith('resolve_')
-            and attr not in SeriesAttribute.__dict__
-            and attr not in ('resolve_shape', 'resolve_dtype', 'resolve_ndim',
-                             'resolve_size', 'resolve_T', 'resolve_sum',
-                             'resolve_copy')
-            and attr not in _not_series_array_attrs):
-        setattr(SeriesAttribute, attr, func)
 
 
 inplace_ops = [
