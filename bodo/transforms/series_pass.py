@@ -1448,7 +1448,7 @@ class SeriesPass(object):
         other_var = self._get_arg('combine', rhs.args, kws, 0, 'other')
         func_var = self._get_arg('combine', rhs.args, kws, 1, 'func')
         fill_var = self._get_arg('combine', rhs.args, kws, 2, 'fill_value',
-            default=None)
+            default='')
 
         func = guard(get_definition, self.func_ir, func_var)
         if func is None or not (isinstance(func, ir.Expr)
@@ -1460,7 +1460,7 @@ class SeriesPass(object):
         other_data = self._get_series_data(other_var, nodes)
 
         # Use NaN if fill_value is not provided
-        use_nan = fill_var is None or self.typemap[fill_var.name] == types.none
+        use_nan = fill_var is '' or self.typemap[fill_var.name] == types.none
 
         # prange func to inline
         if use_nan:

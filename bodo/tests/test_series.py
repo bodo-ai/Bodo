@@ -604,6 +604,29 @@ def test_series_combine(S1, S2, fill, raises):
             bodo_func(S1, S2, fill), test_impl(S1, S2, fill))
 
 
+def test_series_combine_kws():
+    def test_impl(S1, S2, fill_val):
+        return S1.combine(
+            other=S2, func=lambda a, b: 2*a + b, fill_value=fill_val)
+
+    bodo_func = bodo.jit(test_impl)
+    S1 = pd.Series([1.0, 2., 3., 4., 5.])
+    S2 = pd.Series([6.0, 21., 3.6, 5., 0.0])
+    fill = 1237.56
+    pd.testing.assert_series_equal(
+            bodo_func(S1, S2, fill), test_impl(S1, S2, fill))
+
+
+def test_series_combine_no_fill():
+    def test_impl(S1, S2):
+        return S1.combine(other=S2, func=lambda a, b: 2*a + b)
+
+    bodo_func = bodo.jit(test_impl)
+    S1 = pd.Series([1.0, 2., 3., 4., 5.])
+    S2 = pd.Series([6.0, 21., 3.6, 5., 0.0])
+    pd.testing.assert_series_equal(bodo_func(S1, S2), test_impl(S1, S2))
+
+
 ############################### old tests ###############################
 
 

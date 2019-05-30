@@ -406,7 +406,7 @@ class SeriesAttribute(AttributeTemplate):
         # handle kwargs
         kwargs = dict(kws)
         other = args[0] if len(args) > 0 else types.unliteral(kwargs['other'])
-        func = args[1] if len(args) > 1 else types.unliteral(kwargs['func'])
+        func = args[1] if len(args) > 1 else kwargs['func']
         fill_value = args[2] if len(args) > 2 else types.unliteral(
                                           kwargs.get('fill_value', types.none))
 
