@@ -1457,6 +1457,8 @@ class SeriesPass(object):
 
         nodes = []
         data = self._get_series_data(series_var, nodes)
+        index = self._get_series_index(series_var, nodes)
+        name = self._get_series_name(series_var, nodes)
         other_data = self._get_series_data(other_var, nodes)
 
         # Use NaN if fill_value is not provided
@@ -1464,9 +1466,9 @@ class SeriesPass(object):
 
         # prange func to inline
         if use_nan:
-            func_text = "def f(A, B):\n"
+            func_text = "def f(A, B, index, name):\n"
         else:
-            func_text = "def f(A, B, C):\n"
+            func_text = "def f(A, B, C, index, name):\n"
         func_text += "  n1 = len(A)\n"
         func_text += "  n2 = len(B)\n"
         func_text += "  n = max(n1, n2)\n"
@@ -1475,7 +1477,7 @@ class SeriesPass(object):
         if not isinstance(self.typemap[other_var.name].dtype, types.Float) and use_nan:
             func_text += "  assert n2 == n, 'can not use NAN for non-float series, with different length'\n"
         func_text += "  numba.parfor.init_prange()\n"
-        func_text += "  S = numba.unsafe.ndarray.empty_inferred((n,))\n"
+        func_text += "  S = np.empty(n, out_dtype)\n"
         func_text += "  for i in numba.parfor.internal_prange(n):\n"
         if use_nan and isinstance(self.typemap[series_var.name].dtype, types.Float):
             func_text += "    t1 = np.nan\n"
@@ -1500,14 +1502,17 @@ class SeriesPass(object):
             func_text += "    if i < n2:\n"
             func_text += "      t2 = B[i]\n"
         func_text += "    S[i] = map_func(t1, t2)\n"
-        func_text += "  return bodo.hiframes.api.init_series(S)\n"
+        # TODO: Pandas combine ignores name for some reason!
+        func_text += "  return bodo.hiframes.api.init_series(S, index, None)\n"
 
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         f = loc_vars['f']
 
         _globals = self.func_ir.func_id.func.__globals__
-        f_ir = compile_to_numba_ir(f, {'numba': numba, 'np': np, 'bodo': bodo})
+        f_ir = compile_to_numba_ir(
+            f, {'numba': numba, 'np': np, 'pd': pd, 'bodo': bodo,
+            'out_dtype': self.typemap[lhs.name].dtype})
 
         # fix definitions to enable finding sentinel
         f_ir._definitions = build_definitions(f_ir.blocks)
@@ -1531,8 +1536,9 @@ class SeriesPass(object):
         arg_typs = (self.typemap[data.name], self.typemap[other_data.name],)
         if not use_nan:
             arg_typs += (self.typemap[fill_var.name],)
+        arg_typs += (self.typemap[index.name], self.typemap[name.name])
         f_typemap, _f_ret_t, f_calltypes = numba.compiler.type_inference_stage(
-                self.typingctx, f_ir, arg_typs, None)
+                self.typingctx, f_ir, arg_typs, self.typemap[lhs.name])
         # remove argument entries like arg.a from typemap
         arg_names = [vname for vname in f_typemap if vname.startswith("arg.")]
         for a in arg_names:
@@ -1542,6 +1548,7 @@ class SeriesPass(object):
         func_args = [data, other_data]
         if not use_nan:
             func_args.append(fill_var)
+        func_args += [index, name]
         first_block = f_ir.blocks[topo_order[0]]
         replace_arg_nodes(first_block, func_args)
         first_block.body = nodes + first_block.body

@@ -427,7 +427,10 @@ class SeriesAttribute(AttributeTemplate):
         _, f_return_type, _ = numba.compiler.type_inference_stage(
                 self.context, f_ir, (dtype1,dtype2,), None)
 
-        sig = signature(SeriesType(f_return_type), (other, func, fill_value))
+        # TODO: output name is always None in Pandas?
+        sig = signature(SeriesType(f_return_type, index=ary.index,
+            name_typ=types.none),
+            (other, func, fill_value))
         return sig.replace(pysig=pysig)
 
     @bound_function("series.combine")

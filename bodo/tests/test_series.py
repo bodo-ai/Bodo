@@ -566,6 +566,10 @@ def test_series_explicit_binary_op_nan(fill):
     # float64 input
     (pd.Series([1.0, 2., 3., 4., 5.]), pd.Series([6.0, 21., 3.6, 5.]),
      None, False),
+     # index, name
+     (pd.Series([1.0, 2., 3., 4.], [3, 5, 0, 7], name='ABC'),
+      pd.Series([6.0, 21., 3.6, 5.], [3, 5, 0, 7]),
+     None, False),
      # combine float64/32
      (pd.Series([1, 4, 5], dtype='float64'),
       pd.Series([3, 1, 2], dtype='float32'),
