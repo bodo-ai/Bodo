@@ -1444,25 +1444,23 @@ class SeriesPass(object):
     def _handle_series_combine(self, assign, lhs, rhs, series_var):
         """translate s1.combine(s2, lambda x1,x2 :...) to prange()
         """
-        # error checking: make sure there is function input only
-        if len(rhs.args) < 2:
-            raise ValueError("not enough arguments in call to combine")
-        if len(rhs.args) > 3:
-            raise ValueError("too many arguments in call to combine")
-        func = guard(get_definition, self.func_ir, rhs.args[1])
+        kws = dict(rhs.kws)
+        other_var = self._get_arg('combine', rhs.args, kws, 0, 'other')
+        func_var = self._get_arg('combine', rhs.args, kws, 1, 'func')
+        fill_var = self._get_arg('combine', rhs.args, kws, 2, 'fill_value',
+            default=None)
+
+        func = guard(get_definition, self.func_ir, func_var)
         if func is None or not (isinstance(func, ir.Expr)
                                 and func.op == 'make_function'):
             raise ValueError("lambda for combine not found")
 
-        out_typ = self.typemap[lhs.name].dtype
-        other = rhs.args[0]
         nodes = []
         data = self._get_series_data(series_var, nodes)
-        other_data = self._get_series_data(other, nodes)
+        other_data = self._get_series_data(other_var, nodes)
 
-        # If we are called with 3 arguments, we must use 3rd arg as a fill value,
-        # instead of Nan.
-        use_nan = len(rhs.args) == 2
+        # Use NaN if fill_value is not provided
+        use_nan = fill_var is None or self.typemap[fill_var.name] == types.none
 
         # prange func to inline
         if use_nan:
@@ -1474,7 +1472,7 @@ class SeriesPass(object):
         func_text += "  n = max(n1, n2)\n"
         if not isinstance(self.typemap[series_var.name].dtype, types.Float) and use_nan:
             func_text += "  assert n1 == n, 'can not use NAN for non-float series, with different length'\n"
-        if not isinstance(self.typemap[other.name].dtype, types.Float) and use_nan:
+        if not isinstance(self.typemap[other_var.name].dtype, types.Float) and use_nan:
             func_text += "  assert n2 == n, 'can not use NAN for non-float series, with different length'\n"
         func_text += "  numba.parfor.init_prange()\n"
         func_text += "  S = numba.unsafe.ndarray.empty_inferred((n,))\n"
@@ -1491,7 +1489,7 @@ class SeriesPass(object):
             func_text += "    if i < n1:\n"
             func_text += "      t1 = A[i]\n"
         # same, but for 2nd argument
-        if use_nan and isinstance(self.typemap[other.name].dtype, types.Float):
+        if use_nan and isinstance(self.typemap[other_var.name].dtype, types.Float):
             func_text += "    t2 = np.nan\n"
             func_text += "    if i < n2:\n"
             func_text += "      t2 = B[i]\n"
@@ -1532,7 +1530,7 @@ class SeriesPass(object):
         f_ir._definitions = build_definitions(f_ir.blocks)
         arg_typs = (self.typemap[data.name], self.typemap[other_data.name],)
         if not use_nan:
-            arg_typs += (self.typemap[rhs.args[2].name],)
+            arg_typs += (self.typemap[fill_var.name],)
         f_typemap, _f_ret_t, f_calltypes = numba.compiler.type_inference_stage(
                 self.typingctx, f_ir, arg_typs, None)
         # remove argument entries like arg.a from typemap
@@ -1543,7 +1541,7 @@ class SeriesPass(object):
         self.calltypes.update(f_calltypes)
         func_args = [data, other_data]
         if not use_nan:
-            func_args.append(rhs.args[2])
+            func_args.append(fill_var)
         first_block = f_ir.blocks[topo_order[0]]
         replace_arg_nodes(first_block, func_args)
         first_block.body = nodes + first_block.body

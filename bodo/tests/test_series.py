@@ -561,6 +561,49 @@ def test_series_explicit_binary_op_nan(fill):
         bodo_func(L1, L2, fill), test_impl(L1, L2, fill))
 
 
+
+@pytest.mark.parametrize('S1,S2,fill,raises', [
+    # float64 input
+    (pd.Series([1.0, 2., 3., 4., 5.]), pd.Series([6.0, 21., 3.6, 5.]),
+     None, False),
+     # combine float64/32
+     (pd.Series([1, 4, 5], dtype='float64'),
+      pd.Series([3, 1, 2], dtype='float32'),
+     None, False),
+     # raise on size mismatch
+     (pd.Series([1, 2, 3]), pd.Series([6., 21., 3., 5.]), None, True),
+     (pd.Series([6., 21., 3., 5.]), pd.Series([1, 2, 3]), None, True),
+     # integer case
+     (pd.Series([1, 2, 3, 4, 5]), pd.Series([6, 21, 3, 5]), 16, False),
+     # different types
+     (pd.Series([6.1, 21.2, 3.3, 5.4, 6.7]), pd.Series([1, 2, 3, 4, 5]),
+      None, False),
+     # same len integer
+     (pd.Series([1, 2, 3, 4, 5]), pd.Series([6, 21, 17, -5, 4]),
+      None, False),
+     # same len
+     (pd.Series([1.0, 2., 3., 4., 5.]), pd.Series([6.0, 21., 3.6, 5., 0.0]),
+      None, False),
+    # fill value
+    (pd.Series([1.0, 2., 3., 4., 5.]), pd.Series([6.0, 21., 3.6, 5.]),
+      1237.56, False),
+    # fill value same len
+    (pd.Series([1.0, 2., 3., 4., 5.]), pd.Series([6.0, 21., 3.6, 5., 0.0]),
+      1237.56, False),
+])
+def test_series_combine(S1, S2, fill, raises):
+    def test_impl(S1, S2, fill_val):
+        return S1.combine(S2, lambda a, b: 2*a + b, fill_val)
+
+    bodo_func = bodo.jit(test_impl)
+    if raises:
+        with pytest.raises(AssertionError):
+            bodo_func(S1, S2, fill)
+    else:
+        pd.testing.assert_series_equal(
+            bodo_func(S1, S2, fill), test_impl(S1, S2, fill))
+
+
 ############################### old tests ###############################
 
 
@@ -1393,98 +1436,6 @@ class TestSeries(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         S = pd.Series([1.0, 2., 3., 4., 5.])
         pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
-
-    def test_series_combine(self):
-        def test_impl(S1, S2):
-            return S1.combine(S2, lambda a, b: 2*a + b)
-
-        bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series([1.0, 2., 3., 4., 5.])
-        S2 = pd.Series([6.0, 21., 3.6, 5.])
-        pd.testing.assert_series_equal(bodo_func(S1, S2), test_impl(S1, S2))
-
-    def test_series_combine_float3264(self):
-        def test_impl(S1, S2):
-            return S1.combine(S2, lambda a, b: 2*a + b)
-
-        bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series([np.float64(1), np.float64(2), np.float64(3), np.float64(4), np.float64(5)])
-        S2 = pd.Series([np.float32(1), np.float32(2), np.float32(3), np.float32(4), np.float32(5)])
-        pd.testing.assert_series_equal(bodo_func(S1, S2), test_impl(S1, S2))
-
-    def test_series_combine_assert1(self):
-        def test_impl(S1, S2):
-            return S1.combine(S2, lambda a, b: 2*a + b)
-
-        bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series([1, 2, 3])
-        S2 = pd.Series([6., 21., 3., 5.])
-        with self.assertRaises(AssertionError):
-            bodo_func(S1, S2)
-
-    def test_series_combine_assert2(self):
-        def test_impl(S1, S2):
-            return S1.combine(S2, lambda a, b: 2*a + b)
-
-        bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series([6., 21., 3., 5.])
-        S2 = pd.Series([1, 2, 3])
-        with self.assertRaises(AssertionError):
-            bodo_func(S1, S2)
-
-    def test_series_combine_integer(self):
-        def test_impl(S1, S2):
-            return S1.combine(S2, lambda a, b: 2*a + b, 16)
-
-        bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series([1, 2, 3, 4, 5])
-        S2 = pd.Series([6, 21, 3, 5])
-        pd.testing.assert_series_equal(bodo_func(S1, S2), test_impl(S1, S2))
-
-    def test_series_combine_different_types(self):
-        def test_impl(S1, S2):
-            return S1.combine(S2, lambda a, b: 2*a + b)
-
-        bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series([6.1, 21.2, 3.3, 5.4, 6.7])
-        S2 = pd.Series([1, 2, 3, 4, 5])
-        pd.testing.assert_series_equal(bodo_func(S1, S2), test_impl(S1, S2))
-
-    def test_series_combine_integer_samelen(self):
-        def test_impl(S1, S2):
-            return S1.combine(S2, lambda a, b: 2*a + b)
-
-        bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series([1, 2, 3, 4, 5])
-        S2 = pd.Series([6, 21, 17, -5, 4])
-        pd.testing.assert_series_equal(bodo_func(S1, S2), test_impl(S1, S2))
-
-    def test_series_combine_samelen(self):
-        def test_impl(S1, S2):
-            return S1.combine(S2, lambda a, b: 2*a + b)
-
-        bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series([1.0, 2., 3., 4., 5.])
-        S2 = pd.Series([6.0, 21., 3.6, 5., 0.0])
-        pd.testing.assert_series_equal(bodo_func(S1, S2), test_impl(S1, S2))
-
-    def test_series_combine_value(self):
-        def test_impl(S1, S2):
-            return S1.combine(S2, lambda a, b: 2*a + b, 1237.56)
-
-        bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series([1.0, 2., 3., 4., 5.])
-        S2 = pd.Series([6.0, 21., 3.6, 5.])
-        pd.testing.assert_series_equal(bodo_func(S1, S2), test_impl(S1, S2))
-
-    def test_series_combine_value_samelen(self):
-        def test_impl(S1, S2):
-            return S1.combine(S2, lambda a, b: 2*a + b, 1237.56)
-
-        bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series([1.0, 2., 3., 4., 5.])
-        S2 = pd.Series([6.0, 21., 3.6, 5., 0.0])
-        pd.testing.assert_series_equal(bodo_func(S1, S2), test_impl(S1, S2))
 
     def test_series_apply1(self):
         def test_impl(S):

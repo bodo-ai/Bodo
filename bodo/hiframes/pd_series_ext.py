@@ -403,18 +403,32 @@ class SeriesAttribute(AttributeTemplate):
         return self._resolve_map_func(ary, args, kws)
 
     def _resolve_combine_func(self, ary, args, kws):
+        # handle kwargs
+        kwargs = dict(kws)
+        other = args[0] if len(args) > 0 else types.unliteral(kwargs['other'])
+        func = args[1] if len(args) > 1 else types.unliteral(kwargs['func'])
+        fill_value = args[2] if len(args) > 2 else types.unliteral(
+                                          kwargs.get('fill_value', types.none))
+
+        def combine_stub(other, func, fill_value=None):
+            pass
+        pysig = numba.utils.pysignature(combine_stub)
+
+        # get return type
         dtype1 = ary.dtype
         # getitem returns Timestamp for dt_index and series(dt64)
         if dtype1 == types.NPDatetime('ns'):
             dtype1 = pandas_timestamp_type
-        dtype2 = args[0].dtype
+        dtype2 = other.dtype
         if dtype2 == types.NPDatetime('ns'):
             dtype2 = pandas_timestamp_type
-        code = args[1].literal_value.code
-        f_ir = numba.ir_utils.get_ir_of_code({'np': np}, code)
-        f_typemap, f_return_type, f_calltypes = numba.compiler.type_inference_stage(
+        code = func.literal_value.code
+        f_ir = numba.ir_utils.get_ir_of_code({'np': np, 'pd': pd}, code)
+        _, f_return_type, _ = numba.compiler.type_inference_stage(
                 self.context, f_ir, (dtype1,dtype2,), None)
-        return signature(SeriesType(f_return_type), *args)
+
+        sig = signature(SeriesType(f_return_type), (other, func, fill_value))
+        return sig.replace(pysig=pysig)
 
     @bound_function("series.combine")
     def resolve_combine(self, ary, args, kws):
