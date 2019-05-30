@@ -884,7 +884,8 @@ class SeriesPass(object):
         return self._handle_df_col_calls(assign, lhs, rhs, func_name)
 
     def _run_call_series(self, assign, lhs, rhs, series_var, func_name):
-        if func_name in ('sum', 'prod', 'mean', 'var', 'std'):
+        if func_name in ('sum', 'prod', 'mean', 'var', 'std', 'cumsum',
+                                                                    'cumprod'):
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name:self.typemap[v.name]
@@ -1110,7 +1111,8 @@ class SeriesPass(object):
                         kws=dict(rhs.kws))
 
         # functions we revert to Numpy for now, otherwise warning
-        _conv_to_np_funcs = ('cumsum', 'cumprod', 'take')
+        # TODO: fix distributed cumsum/cumprod
+        _conv_to_np_funcs = ('take',)
         # TODO: handle series-specific cases for this funcs
         if (not func_name.startswith("values.") and func_name
                 not in _conv_to_np_funcs):

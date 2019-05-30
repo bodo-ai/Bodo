@@ -756,34 +756,6 @@ class CmpOpLTSeries(SeriesCompEqual):
     key = '<'
 
 
-def install_array_method(name, generic):
-    # taken from arraydecl.py, Series instead of Array
-    my_attr = {"key": "array." + name, "generic": generic}
-    temp_class = type("Series_" + name, (AbstractTemplate,), my_attr)
-    def array_attribute_attachment(self, ary):
-        return types.BoundFunction(temp_class, ary)
-
-    setattr(SeriesAttribute, "resolve_" + name, array_attribute_attachment)
-
-
-def generic_expand_cumulative_series(self, args, kws):
-    # taken from arraydecl.py, replaced Array with Series
-    assert not args
-    assert not kws
-    assert isinstance(self.this, SeriesType)
-    return_type = SeriesType(_expand_integer(self.this.dtype))
-    return signature(return_type, recvr=self.this)
-
-
-# replacing cumsum/cumprod since arraydecl.py definition uses types.Array
-for fname in ["cumsum", "cumprod"]:
-    install_array_method(fname, generic_expand_cumulative_series)
-
-
-# TODO: add itemsize, strides, etc. when removed from Pandas
-_not_series_array_attrs = ['flat', 'ctypes', 'itemset', 'reshape', 'sort', 'flatten']
-
-
 inplace_ops = [
     operator.iadd,
     operator.isub,

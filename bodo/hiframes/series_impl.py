@@ -286,6 +286,28 @@ def overload_series_std(S):
     return impl
 
 
+@overload_method(SeriesType, 'cumsum')
+def overload_series_cumsum(S):
+    def impl(S):  # pragma: no cover
+        A = bodo.hiframes.api.get_series_data(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        return bodo.hiframes.api.init_series(A.cumsum(), index, name)
+
+    return impl
+
+
+@overload_method(SeriesType, 'cumprod')
+def overload_series_cumprod(S):
+    def impl(S):  # pragma: no cover
+        A = bodo.hiframes.api.get_series_data(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        return bodo.hiframes.api.init_series(A.cumprod(), index, name)
+
+    return impl
+
+
 ############################ binary operators #############################
 
 def create_explicit_binary_op_overload(op):

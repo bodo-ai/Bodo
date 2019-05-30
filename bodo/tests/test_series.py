@@ -707,6 +707,30 @@ def test_series_rolling_kw():
     pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
 
 
+@pytest.mark.parametrize('S', [pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]),
+    pd.Series([1.0, 2.2, 3.1, 4.6, 5.9], [3, 1, 0, 2, 4], name='ABC')])
+def test_series_cumsum(S):
+    # TODO: datetime64, timedelta64
+    # TODO: support skipna
+    def test_impl(S):
+        return S.cumsum()
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+
+
+@pytest.mark.parametrize('S', [pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]),
+    pd.Series([1.0, 2.2, 3.1, 4.6, 5.9], [3, 1, 0, 2, 4], name='ABC')])
+def test_series_cumprod(S):
+    # TODO: datetime64, timedelta64
+    # TODO: support skipna
+    def test_impl(S):
+        return S.cumprod()
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+
+
 ############################### old tests ###############################
 
 
