@@ -1580,8 +1580,11 @@ class SeriesPass(object):
         series_var = call_def.value
         nodes = []
         data = self._get_series_data(series_var, nodes)
+        index = self._get_series_index(series_var, nodes)
+        name = self._get_series_name(series_var, nodes)
 
-        window, center, on = get_rolling_setup_args(self.func_ir, rolling_call, False)
+        window, center, _on = get_rolling_setup_args(
+            self.func_ir, rolling_call, False)
         if not isinstance(center, ir.Var):
             center_var = ir.Var(lhs.scope, mk_unique_var("center"), lhs.loc)
             self.typemap[center_var.name] = types.bool_
@@ -1595,13 +1598,14 @@ class SeriesPass(object):
             else:
                 other = data
             if func_name == 'cov':
-                f = lambda a,b,w,c: bodo.hiframes.api.init_series(
-                        bodo.hiframes.rolling.rolling_cov(a,b,w,c))
+                f = lambda a,b,w,c,i,n: bodo.hiframes.api.init_series(
+                        bodo.hiframes.rolling.rolling_cov(a,b,w,c), i, n)
             if func_name == 'corr':
-                f = lambda a,b,w,c: bodo.hiframes.api.init_series(
-                        bodo.hiframes.rolling.rolling_corr(a,b,w,c))
-            return self._replace_func(f, [data, other, window, center],
-                                      pre_nodes=nodes)
+                f = lambda a,b,w,c,i,n: bodo.hiframes.api.init_series(
+                        bodo.hiframes.rolling.rolling_corr(a,b,w,c), i, n)
+            return self._replace_func(
+                f, [data, other, window, center, index, name],
+                pre_nodes=nodes)
         elif func_name == 'apply':
             func_node = guard(get_definition, self.func_ir, rhs.args[0])
             dtype = self.typemap[data.name].dtype
@@ -1610,11 +1614,11 @@ class SeriesPass(object):
                 func_node, dtype, out_dtype)
         else:
             func_global = func_name
-        def f(arr, w, center):  # pragma: no cover
+        def f(arr, w, center, index, name):  # pragma: no cover
             return bodo.hiframes.api.init_series(
                 bodo.hiframes.rolling.rolling_fixed(
-                    arr, w, center, False, _func))
-        args = [data, window, center]
+                    arr, w, center, False, _func), index, name)
+        args = [data, window, center, index, name]
         return self._replace_func(
             f, args, pre_nodes=nodes, extra_globals={'_func': func_global})
 

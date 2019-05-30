@@ -152,7 +152,8 @@ Function application, GroupBy & Window:
 
 * :meth:`Series.apply` (only the `func` argument)
 * :meth:`Series.map` (only the `arg` argument, which should be a function)
-* :meth:`Series.rolling`
+* :meth:`Series.rolling` (`window` and `center` arguments supported)
+
 
 Computations / Descriptive Stats:
 

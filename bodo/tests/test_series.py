@@ -688,6 +688,25 @@ def test_series_map_tup_map1():
     pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
 
 
+@pytest.mark.parametrize('S', [pd.Series([1.0, 2., 3., 4., 5.]),
+    pd.Series([1.0, 2., 3., 4., 5.], [3, 1, 0, 2, 4], name='ABC')])
+def test_series_rolling(S):
+    def test_impl(S):
+        return S.rolling(3).sum()
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+
+
+def test_series_rolling_kw():
+    def test_impl(S):
+        return S.rolling(window=3, center=True).sum()
+
+    bodo_func = bodo.jit(test_impl)
+    S = pd.Series([1.0, 2., 3., 4., 5.])
+    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+
+
 ############################### old tests ###############################
 
 
@@ -1470,14 +1489,6 @@ class TestSeries(unittest.TestCase):
         s_tup = (S, 1, S2)
         h_s_tup = (S[start:end], 1, S2[start:end])
         self.assertEqual(bodo_func(h_s_tup), test_impl(s_tup))
-
-    def test_series_rolling1(self):
-        def test_impl(S):
-            return S.rolling(3).sum()
-
-        bodo_func = bodo.jit(test_impl)
-        S = pd.Series([1.0, 2., 3., 4., 5.])
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
 
     def test_series_concat1(self):
         def test_impl(S1, S2):

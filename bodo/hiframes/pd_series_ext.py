@@ -292,7 +292,11 @@ class SeriesAttribute(AttributeTemplate):
 
     @bound_function("series.rolling")
     def resolve_rolling(self, ary, args, kws):
-        return signature(SeriesRollingType(ary.dtype), *args)
+        def rolling_stub(window, min_periods=None, center=False, win_type=None,
+                on=None, axis=0, closed=None):
+            pass
+        pysig = numba.utils.pysignature(rolling_stub)
+        return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
 
     @bound_function("array.argsort")
     def resolve_argsort(self, ary, args, kws):
@@ -674,9 +678,9 @@ for field in bodo.hiframes.pd_timestamp_ext.date_fields:
 
 
 class SeriesRollingType(types.Type):
-    def __init__(self, dtype):
-        self.dtype = dtype
-        name = "SeriesRollingType({})".format(dtype)
+    def __init__(self, stype):
+        self.stype = stype
+        name = "SeriesRollingType({})".format(stype)
         super(SeriesRollingType, self).__init__(name)
 
 
@@ -687,31 +691,37 @@ class SeriesRollingAttribute(AttributeTemplate):
     @bound_function("rolling.apply")
     def resolve_apply(self, ary, args, kws):
         # result is always float64 (see Pandas window.pyx:roll_generic)
-        return signature(SeriesType(types.float64), *args)
+        return signature(SeriesType(types.float64, index=ary.stype.index,
+            name_typ=ary.stype.name_typ), *args)
 
     @bound_function("rolling.cov")
     def resolve_cov(self, ary, args, kws):
-        return signature(SeriesType(types.float64), *args)
+        return signature(SeriesType(types.float64, index=ary.stype.index,
+            name_typ=ary.stype.name_typ), *args)
 
     @bound_function("rolling.corr")
     def resolve_corr(self, ary, args, kws):
-        return signature(SeriesType(types.float64), *args)
+        return signature(SeriesType(types.float64, index=ary.stype.index,
+            name_typ=ary.stype.name_typ), *args)
+
 
 # similar to install_array_method in arraydecl.py
-def install_rolling_method(name, generic):
-    my_attr = {"key": "rolling." + name, "generic": generic}
-    temp_class = type("Rolling_" + name, (AbstractTemplate,), my_attr)
+def install_rolling_method(name):
     def rolling_attribute_attachment(self, ary):
+        def rolling_generic(self, args, kws):
+            # output is always float64
+            return signature(SeriesType(types.float64, index=ary.stype.index,
+                name_typ=ary.stype.name_typ), *args)
+        my_attr = {"key": "rolling." + name, "generic": rolling_generic}
+        temp_class = type("Rolling_" + name, (AbstractTemplate,), my_attr)
         return types.BoundFunction(temp_class, ary)
 
-    setattr(SeriesRollingAttribute, "resolve_" + name, rolling_attribute_attachment)
+    setattr(SeriesRollingAttribute, "resolve_" + name,
+        rolling_attribute_attachment)
 
-def rolling_generic(self, args, kws):
-    # output is always float64
-    return signature(SeriesType(types.float64), *args)
 
 for fname in supported_rolling_funcs:
-    install_rolling_method(fname, rolling_generic)
+    install_rolling_method(fname)
 
 
 @infer
@@ -782,8 +792,10 @@ def generic_expand_cumulative_series(self, args, kws):
 for fname in ["cumsum", "cumprod"]:
     install_array_method(fname, generic_expand_cumulative_series)
 
+
 # TODO: add itemsize, strides, etc. when removed from Pandas
 _not_series_array_attrs = ['flat', 'ctypes', 'itemset', 'reshape', 'sort', 'flatten']
+
 
 # use ArrayAttribute for attributes not defined in SeriesAttribute
 for attr, func in numba.typing.arraydecl.ArrayAttribute.__dict__.items():
@@ -811,6 +823,7 @@ inplace_ops = [
     operator.ixor,
 ]
 
+
 def series_op_generic(cls, self, args, kws):
     # return if no Series
     if not any(isinstance(arg, SeriesType) for arg in args):
@@ -826,6 +839,7 @@ def series_op_generic(cls, self, args, kws):
             sig.return_type = if_arr_to_series_type(sig.return_type)
         sig.args = args
     return sig
+
 
 class SeriesOpUfuncs(NumpyRulesArrayOperator):
     def generic(self, args, kws):
@@ -847,14 +861,17 @@ SeriesOpUfuncs.install_operations()
 SeriesInplaceOpUfuncs.install_operations()
 SeriesUnaryOpUfuncs.install_operations()
 
+
 class Series_Numpy_rules_ufunc(Numpy_rules_ufunc):
     def generic(self, args, kws):
         return series_op_generic(Series_Numpy_rules_ufunc, self, args, kws)
+
 
 # copied from npydecl.py since deleted
 _aliases = set(["bitwise_not", "mod", "abs"])
 if np.divide == np.true_divide:
     _aliases.add("divide")
+
 
 for func in numba.typing.npydecl.supported_ufuncs:
     name = func.__name__
