@@ -34,7 +34,7 @@ from bodo.hiframes.pd_series_ext import (SeriesType, is_str_series_typ,
     series_to_array_type, is_dt64_series_typ, is_bool_series_typ,
     if_series_to_array_type, is_series_type,
     series_str_methods_type, SeriesRollingType,
-    explicit_binop_funcs, series_dt_methods_type)
+    series_dt_methods_type)
 from bodo.hiframes.pd_index_ext import DatetimeIndexType, TimedeltaIndexType
 from bodo.io.pio_api import h5dataset_type
 from bodo.hiframes.rolling import get_rolling_setup_args
@@ -1089,17 +1089,6 @@ class SeriesPass(object):
             return self._replace_func(impl, rhs.args,
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
-
-
-        if func_name in explicit_binop_funcs.values():
-            binop_map = {v: _binop_to_str[k] for k, v in explicit_binop_funcs.items()}
-            func_text = "def _binop_impl(A, B):\n"
-            func_text += "  return A {} B\n".format(binop_map[func_name])
-
-            loc_vars = {}
-            exec(func_text, {}, loc_vars)
-            _binop_impl = loc_vars['_binop_impl']
-            return self._replace_func(_binop_impl, [series_var] + rhs.args)
 
         # functions we revert to Numpy for now, otherwise warning
         _conv_to_np_funcs = ('cumsum', 'cumprod', 'take')

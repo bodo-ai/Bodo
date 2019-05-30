@@ -517,6 +517,49 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg):
             test_impl(series_val.copy(), val, idx))
 
 
+############################ binary ops #############################
+
+
+@pytest.mark.parametrize('op', ['add', 'sub', 'mul', 'truediv', 'floordiv',
+    'mod', 'pow', 'lt', 'gt', 'le', 'ge', 'ne', 'eq'])
+@pytest.mark.parametrize('fill', [None, 1.6])
+def test_series_explicit_binary_op(numeric_series_val, op, fill):
+    # dt64 not supported here
+    if numeric_series_val.dtype == np.dtype('datetime64[ns]'):
+        return
+    # XXX ne operator is buggy in Pandas and doesn't set NaNs in output
+    # when both inputs are NaNs
+    if op is 'ne' and numeric_series_val.hasnans:
+        return
+    # Numba returns float32 for truediv but Numpy returns float64
+    if op is 'truediv' and numeric_series_val.dtype == np.uint8:
+        return
+
+    func_text = "def test_impl(S, other, fill_val):\n"
+    func_text += "  return S.{}(other, fill_value=fill_val)\n".format(op)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    test_impl = loc_vars['test_impl']
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+            bodo_func(numeric_series_val, numeric_series_val, fill),
+            test_impl(numeric_series_val, numeric_series_val, fill))
+
+
+@pytest.mark.parametrize('fill', [None, 1.6])
+def test_series_explicit_binary_op_nan(fill):
+    # test nan conditions (both nan, left nan, right nan)
+    def test_impl(S, other, fill_val):
+        return S.add(other, fill_value=fill_val)
+
+
+    L1 = pd.Series([1.,np.nan,2.3, np.nan])
+    L2 = pd.Series([1., np.nan, np.nan, 1.1])
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(L1, L2, fill), test_impl(L1, L2, fill))
+
 
 ############################### old tests ###############################
 

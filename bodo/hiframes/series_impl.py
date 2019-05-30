@@ -10,7 +10,7 @@ from numba.extending import overload, overload_attribute, overload_method
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.typing import (is_overload_none, is_overload_true,
-    is_overload_false)
+    is_overload_false, is_overload_zero)
 
 
 @overload_attribute(SeriesType, 'index')
@@ -222,3 +222,110 @@ def overload_series_sum(S):
         return s
 
     return impl
+
+
+############################ binary operators #############################
+
+def create_explicit_binary_op_overload(op):
+    def overload_series_explicit_binary_op(
+                                S, other, level=None, fill_value=None, axis=0):
+        if not is_overload_none(level):
+            raise ValueError("level argument not supported")
+
+        if not is_overload_zero(axis):
+            raise ValueError("axis argument not supported")
+
+        # TODO: string array, datetimeindex/timedeltaindex
+        if not isinstance(S.dtype, types.Number):
+            raise TypeError("only numeric values supported")
+
+        typing_context = numba.targets.registry.cpu_target.typing_context
+        # scalar case
+        if isinstance(other, types.Number):
+            args = (types.Array(S.dtype, 1, 'C'), other)
+            ret_dtype = typing_context.resolve_function_type(
+                op, args, ()).return_type.dtype
+            def impl_scalar(S, other, level=None, fill_value=None, axis=0):
+                numba.parfor.init_prange()
+                arr = bodo.hiframes.api.get_series_data(S)
+                index = bodo.hiframes.api.get_series_index(S)
+                name = bodo.hiframes.api.get_series_name(S)
+                # other could be tuple, list, array, Index, or Series
+                n = len(arr)
+                out_arr = np.empty(n, ret_dtype)
+                for i in numba.parfor.internal_prange(n):
+                    left_nan = bodo.hiframes.api.isna(arr, i)
+                    if left_nan:
+                        if fill_value is None:
+                            bodo.ir.join.setitem_arr_nan(out_arr, i)
+                        else:
+                            out_arr[i] = op(fill_value, other)
+                    else:
+                        out_arr[i] = op(arr[i], other)
+
+                return bodo.hiframes.api.init_series(out_arr, index, name)
+
+            return impl_scalar
+
+        args = (types.Array(S.dtype, 1, 'C'), types.Array(other.dtype, 1, 'C'))
+        ret_dtype = typing_context.resolve_function_type(
+            op, args, ()).return_type.dtype
+        def impl(S, other, level=None, fill_value=None, axis=0):
+            numba.parfor.init_prange()
+            arr = bodo.hiframes.api.get_series_data(S)
+            index = bodo.hiframes.api.get_series_index(S)
+            name = bodo.hiframes.api.get_series_name(S)
+            # other could be tuple, list, array, Index, or Series
+            other_arr = bodo.utils.conversion.coerce_to_array(other)
+            n = len(arr)
+            out_arr = np.empty(n, ret_dtype)
+            for i in numba.parfor.internal_prange(n):
+                left_nan = bodo.hiframes.api.isna(arr, i)
+                right_nan = bodo.hiframes.api.isna(other_arr, i)
+                if left_nan and right_nan:
+                    bodo.ir.join.setitem_arr_nan(out_arr, i)
+                elif left_nan:
+                    if fill_value is None:
+                        bodo.ir.join.setitem_arr_nan(out_arr, i)
+                    else:
+                        out_arr[i] = op(fill_value, other_arr[i])
+                elif right_nan:
+                    if fill_value is None:
+                        bodo.ir.join.setitem_arr_nan(out_arr, i)
+                    else:
+                        out_arr[i] = op(arr[i], fill_value)
+                else:
+                    out_arr[i] = op(arr[i], other_arr[i])
+
+            return bodo.hiframes.api.init_series(out_arr, index, name)
+
+        return impl
+
+    return overload_series_explicit_binary_op
+
+
+explicit_binop_funcs = {
+    operator.add: 'add',
+    operator.sub: 'sub',
+    operator.mul: 'mul',
+    operator.truediv: 'div',
+    operator.truediv: 'truediv',
+    operator.floordiv: 'floordiv',
+    operator.mod: 'mod',
+    operator.pow: 'pow',
+    operator.lt: 'lt',
+    operator.gt: 'gt',
+    operator.le: 'le',
+    operator.ge: 'ge',
+    operator.ne: 'ne',
+    operator.eq: 'eq',
+}
+
+
+def _install_explicit_binary_ops():
+    for op, name in explicit_binop_funcs.items():
+        overload_impl = create_explicit_binary_op_overload(op)
+        overload_method(SeriesType, name)(overload_impl)
+
+
+_install_explicit_binary_ops()

@@ -308,8 +308,10 @@ def shift_dtype_overload(a):
     else:
         return lambda a: a
 
+
 def isna(arr, i):
     return False
+
 
 @overload(isna)
 def isna_overload(arr, i):

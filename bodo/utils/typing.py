@@ -27,6 +27,11 @@ def is_overload_false(val):
             or getattr(val, 'value', True) is False)
 
 
+def is_overload_zero(val):
+    return (val == 0 or val == types.IntegerLiteral(0)
+            or getattr(val, 'value', -1) == 0)
+
+
 def is_list_like_index_type(t):
     """Types that can be similar to list for indexing Arrays, Series, etc.
     Tuples are excluded due to indexing semantics.

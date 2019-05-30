@@ -797,45 +797,16 @@ class SeriesOpUfuncs(NumpyRulesArrayOperator):
     def generic(self, args, kws):
         return series_op_generic(SeriesOpUfuncs, self, args, kws)
 
-def install_series_method(op, name, generic):
-    # taken from arraydecl.py, Series instead of Array
-    my_attr = {"key": op, "generic": generic}
-    temp_class = type("Series_" + name, (SeriesOpUfuncs,), my_attr)
-    def array_attribute_attachment(self, ary):
-        return types.BoundFunction(temp_class, ary)
-
-    setattr(SeriesAttribute, "resolve_" + name, array_attribute_attachment)
-
-explicit_binop_funcs = {
-    operator.add: 'add',
-    operator.sub: 'sub',
-    operator.mul: 'mul',
-    operator.truediv: 'div',
-    operator.truediv: 'truediv',
-    operator.floordiv: 'floordiv',
-    operator.mod: 'mod',
-    operator.pow: 'pow',
-    operator.lt: 'lt',
-    operator.gt: 'gt',
-    operator.le: 'le',
-    operator.ge: 'ge',
-    operator.ne: 'ne',
-    operator.eq: 'eq',
-    }
-
-def ex_binop_generic(self, args, kws):
-    return SeriesOpUfuncs.generic(self, (self.this,) + args, kws)
-
-for op, fname in explicit_binop_funcs.items():
-    install_series_method(op, fname, ex_binop_generic)
 
 class SeriesInplaceOpUfuncs(NumpyRulesInplaceArrayOperator):
     def generic(self, args, kws):
         return series_op_generic(SeriesInplaceOpUfuncs, self, args, kws)
 
+
 class SeriesUnaryOpUfuncs(NumpyRulesUnaryArrayOperator):
     def generic(self, args, kws):
         return series_op_generic(SeriesUnaryOpUfuncs, self, args, kws)
+
 
 # TODO: change class name to Series in install_operations
 SeriesOpUfuncs.install_operations()
@@ -862,20 +833,6 @@ for func in numba.typing.npydecl.supported_ufuncs:
     if not name in _aliases:
         infer_global(func, types.Function(typing_class))
 
-
-# @infer_global(np.empty_like)
-# @infer_global(np.zeros_like)
-# @infer_global(np.ones_like)
-# class SeriesLikeTyper(NdConstructorLike):
-#     def generic(self):
-#         typer = super(SeriesLikeTyper, self).generic()
-#         def wrapper(*args, **kws):
-#             new_args = tuple(if_series_to_array_type(arg) for arg in args)
-#             new_kws = {n:if_series_to_array_type(t) for n,t in kws.items()}
-#             return typer(*new_args, **new_kws)
-#         return wrapper
-
-#@infer_global(np.full_like)
 
 # TODO: handle all timedelta args
 def type_sub(context):
