@@ -375,32 +375,49 @@ class SeriesAttribute(AttributeTemplate):
             out = out.copy(dtype=types.float64)
         return signature(out, *args)
 
-    def _resolve_map_func(self, ary, args, kws):
+    def _resolve_map_func(self, ary, func, pysig):
+
         dtype = ary.dtype
         # getitem returns Timestamp for dt_index and series(dt64)
         if dtype == types.NPDatetime('ns'):
             dtype = pandas_timestamp_type
-        code = args[0].literal_value.code
-        _globals = {'np': np}
+        code = func.literal_value.code
+        _globals = {'np': np, 'pd': pd}
         # XXX hack in series_pass to make globals available
-        if hasattr(args[0].literal_value, 'globals'):
+        if hasattr(func.literal_value, 'globals'):
             # TODO: use code.co_names to find globals actually used?
-            _globals = args[0].literal_value.globals
+            _globals = func.literal_value.globals
 
         f_ir = numba.ir_utils.get_ir_of_code(_globals, code)
-        f_typemap, f_return_type, f_calltypes = numba.compiler.type_inference_stage(
+        _, f_return_type, _ = numba.compiler.type_inference_stage(
                 self.context, f_ir, (dtype,), None)
 
-        return signature(SeriesType(f_return_type), *args)
+        return signature(
+            SeriesType(f_return_type, index=ary.index, name_typ=ary.name_typ),
+            (func,)).replace(pysig=pysig)
 
     @bound_function("series.map")
     def resolve_map(self, ary, args, kws):
-        return self._resolve_map_func(ary, args, kws)
+        kwargs = dict(kws)
+        func = args[0] if len(args) > 0 else kwargs['arg']
+
+        def map_stub(arg, na_action=None):
+            pass
+
+        pysig = numba.utils.pysignature(map_stub)
+        return self._resolve_map_func(ary, func, pysig)
 
     @bound_function("series.apply")
     def resolve_apply(self, ary, args, kws):
+        kwargs = dict(kws)
+        func = args[0] if len(args) > 0 else kwargs['func']
+
+        def apply_stub(func, convert_dtype=True, args=()):
+            pass
+
+        pysig = numba.utils.pysignature(apply_stub)
         # TODO: handle apply differences: extra args, np ufuncs etc.
-        return self._resolve_map_func(ary, args, kws)
+        return self._resolve_map_func(ary, func, pysig)
 
     def _resolve_combine_func(self, ary, args, kws):
         # handle kwargs

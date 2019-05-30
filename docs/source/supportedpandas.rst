@@ -150,8 +150,8 @@ The `fill_value` optional argument for binary functions below is supported.
 
 Function application, GroupBy & Window:
 
-* :meth:`Series.apply`
-* :meth:`Series.map`
+* :meth:`Series.apply` (only the `func` argument)
+* :meth:`Series.map` (only the `arg` argument, which should be a function)
 * :meth:`Series.rolling`
 
 Computations / Descriptive Stats:

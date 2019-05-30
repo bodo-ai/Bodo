@@ -1015,7 +1015,13 @@ class SeriesPass(object):
             return self._handle_series_combine(assign, lhs, rhs, series_var)
 
         if func_name in ('map', 'apply'):
-            return self._handle_series_map(assign, lhs, rhs, series_var)
+            kws = dict(rhs.kws)
+            if func_name == 'apply':
+                func_var = self._get_arg('apply', rhs.args, kws, 0, 'func')
+            else:
+                func_var = self._get_arg('map', rhs.args, kws, 0, 'arg')
+            return self._handle_series_map(
+                assign, lhs, rhs, series_var, func_var)
 
         if func_name == 'append':
             nodes = []
@@ -1276,13 +1282,10 @@ class SeriesPass(object):
                     A, None, name)
             return self._replace_func(func, [data, name], pre_nodes=nodes)
 
-    def _handle_series_map(self, assign, lhs, rhs, series_var):
+    def _handle_series_map(self, assign, lhs, rhs, series_var, func_var):
         """translate df.A.map(lambda a:...) to prange()
         """
-        # error checking: make sure there is function input only
-        if len(rhs.args) != 1:
-            raise ValueError("map expects 1 argument")
-        func = guard(get_definition, self.func_ir, rhs.args[0])
+        func = guard(get_definition, self.func_ir, func_var)
         if func is None or not (isinstance(func, ir.Expr)
                                 and func.op == 'make_function'):
             raise ValueError("lambda for map not found")
@@ -1290,14 +1293,17 @@ class SeriesPass(object):
         dtype = self.typemap[series_var.name].dtype
         nodes = []
         data = self._get_series_data(series_var, nodes)
+        index = self._get_series_index(series_var, nodes)
+        name = self._get_series_name(series_var, nodes)
         out_typ = self.typemap[lhs.name].dtype
 
         # TODO: handle non numpy alloc types like string array
         # prange func to inline
-        func_text = "def f(A):\n"
+        func_text = "def f(A, index, name):\n"
         func_text += "  numba.parfor.init_prange()\n"
         func_text += "  n = len(A)\n"
-        func_text += "  S = numba.unsafe.ndarray.empty_inferred((n,))\n"
+        # TODO: string alloc
+        func_text += "  S = np.empty(n, out_dtype)\n"
         func_text += "  for i in numba.parfor.internal_prange(n):\n"
         if dtype == types.NPDatetime('ns'):
             func_text += "    t = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(np.int64(A[i]))\n"
@@ -1311,15 +1317,21 @@ class SeriesPass(object):
         else:
             func_text += "    S[i] = v\n"
         # func_text += "    print(S[i])\n"
-        func_text += "  return bodo.hiframes.api.init_series(S)\n"
+        func_text += "  return bodo.hiframes.api.init_series(S, index, name)\n"
         #func_text += "  return ret\n"
 
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         f = loc_vars['f']
 
+        out_dtype = self.typemap[lhs.name].dtype
+        if isinstance(out_dtype, types.BaseTuple):
+            out_dtype = np.dtype(
+                ','.join(str(t) for t in out_dtype.types), align=True)
+
         _globals = self.func_ir.func_id.func.__globals__
-        f_ir = compile_to_numba_ir(f, {'numba': numba, 'np': np, 'bodo': bodo})
+        f_ir = compile_to_numba_ir(f, {'numba': numba, 'np': np, 'pd': pd,
+            'bodo': bodo, 'out_dtype': out_dtype})
 
         # fix definitions to enable finding sentinel
         f_ir._definitions = build_definitions(f_ir.blocks)
@@ -1340,16 +1352,18 @@ class SeriesPass(object):
         # remove sentinel global to avoid type inference issues
         ir_utils.remove_dead(f_ir.blocks, f_ir.arg_names, f_ir)
         f_ir._definitions = build_definitions(f_ir.blocks)
-        arg_typs = (self.typemap[data.name],)
+        arg_typs = (self.typemap[data.name],
+            self.typemap[index.name],
+            self.typemap[name.name],)
         f_typemap, _f_ret_t, f_calltypes = numba.compiler.type_inference_stage(
-                self.typingctx, f_ir, arg_typs, None)
+                self.typingctx, f_ir, arg_typs, self.typemap[lhs.name])
         # remove argument entries like arg.a from typemap
         arg_names = [vname for vname in f_typemap if vname.startswith("arg.")]
         for a in arg_names:
             f_typemap.pop(a)
         self.typemap.update(f_typemap)
         self.calltypes.update(f_calltypes)
-        replace_arg_nodes(f_ir.blocks[topo_order[0]], [data])
+        replace_arg_nodes(f_ir.blocks[topo_order[0]], [data, index, name])
         f_ir.blocks[topo_order[0]].body = nodes + f_ir.blocks[topo_order[0]].body
         return f_ir.blocks
 
