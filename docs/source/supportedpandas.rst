@@ -121,12 +121,17 @@ Conversion:
 
 Indexing, iteration:
 
+Location based indexing using `[]`, `iat`, and `iloc` is supported.
+Changing values of existing string Series using these operators
+is not supported yet.
 
 * :attr:`Series.iat`
 * :attr:`Series.iloc`
 
 
 Binary operator functions:
+
+The `fill_value` optional argument for binary functions below is supported.
 
 * :meth:`Series.add`
 * :meth:`Series.sub`

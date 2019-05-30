@@ -555,7 +555,7 @@ def test_series_explicit_binary_op_nan(fill):
 
 
     L1 = pd.Series([1.,np.nan,2.3, np.nan])
-    L2 = pd.Series([1., np.nan, np.nan, 1.1])
+    L2 = pd.Series([1., np.nan, np.nan, 1.1], name='ABC')
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
         bodo_func(L1, L2, fill), test_impl(L1, L2, fill))

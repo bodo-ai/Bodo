@@ -9,6 +9,7 @@ from numba import types
 from numba.extending import overload, overload_attribute, overload_method
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.pd_index_ext import is_pd_index_type
 from bodo.utils.typing import (is_overload_none, is_overload_true,
     is_overload_false, is_overload_zero)
 
@@ -18,7 +19,7 @@ def overload_series_index(s):
     # None should be range type
     if s.index == types.none:
         return lambda s: bodo.hiframes.pd_index_ext.init_range_index(
-            0, len(bodo.hiframes.api.get_series_data(s)), 1)
+            0, len(bodo.hiframes.api.get_series_data(s)), 1, None)
 
     return lambda s: bodo.hiframes.api.get_series_index(s)
 
@@ -304,6 +305,7 @@ def create_explicit_binary_op_overload(op):
     return overload_series_explicit_binary_op
 
 
+# TODO: radd, ...
 explicit_binop_funcs = {
     operator.add: 'add',
     operator.sub: 'sub',

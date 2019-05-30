@@ -686,16 +686,17 @@ def pd_timedelta_index_overload(data=None, unit=None, freq=None, start=None,
 # ---------------- RangeIndex -------------------
 
 
-# pd.RangeIndex(): simply keep start/stop/step
+# pd.RangeIndex(): simply keep start/stop/step/name
 class RangeIndexType(types.IterableType):
     """type class for pd.RangeIndex() objects.
     """
-    def __init__(self):
+    def __init__(self, name_typ):
+        self.name_typ = name_typ
         super(RangeIndexType, self).__init__(
-            name="RangeIndexType()")
+            name="RangeIndexType({})".format(name_typ))
 
     def copy(self):
-        return RangeIndexType()
+        return RangeIndexType(self.name_typ)
 
     @property
     def iterator_type(self):
@@ -706,12 +707,9 @@ class RangeIndexType(types.IterableType):
         return types.int64
 
 
-range_index_type = RangeIndexType()
-
-
 @typeof_impl.register(pd.RangeIndex)
 def typeof_pd_range_index(val, c):
-    return range_index_type
+    return RangeIndexType(numba.typeof(val.name))
 
 
 @register_model(RangeIndexType)
@@ -721,6 +719,7 @@ class RangeIndexModel(models.StructModel):
             ('start', types.int64),
             ('stop', types.int64),
             ('step', types.int64),
+            ('name', fe_type.name_typ),
         ]
         super(RangeIndexModel, self).__init__(dmm, fe_type, members)
 
@@ -728,13 +727,14 @@ class RangeIndexModel(models.StructModel):
 make_attribute_wrapper(RangeIndexType, 'start', '_start')
 make_attribute_wrapper(RangeIndexType, 'stop', '_stop')
 make_attribute_wrapper(RangeIndexType, 'step', '_step')
+make_attribute_wrapper(RangeIndexType, 'name', '_name')
 
 
 @box(RangeIndexType)
 def box_range_index(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     class_obj = c.pyapi.import_module_noblock(mod_name)
-    range_val = cgutils.create_struct_proxy(range_index_type)(
+    range_val = cgutils.create_struct_proxy(typ)(
             c.context, c.builder, val)
     start = c.pyapi.from_native_value(
         types.int64, range_val.start, c.env_manager)
@@ -742,27 +742,35 @@ def box_range_index(typ, val, c):
         types.int64, range_val.stop, c.env_manager)
     step = c.pyapi.from_native_value(
         types.int64, range_val.step, c.env_manager)
-    range_obj = c.pyapi.call_method(
-        class_obj, "RangeIndex", (start, stop, step))
+    name = c.pyapi.from_native_value(
+        typ.name_typ, range_val.name, c.env_manager)
+    kws = c.pyapi.dict_pack([('name', name)])
+    const_call = c.pyapi.object_getattr_string(class_obj, 'RangeIndex')
+    index_obj = c.pyapi.call(
+        const_call, c.pyapi.tuple_pack([start, stop, step]), kws)
     c.pyapi.decref(class_obj)
-    return range_obj
+    c.pyapi.decref(const_call)
+    c.pyapi.decref(kws)
+    return index_obj
 
 
 @intrinsic
-def init_range_index(typingctx, start, stop, step=None):
+def init_range_index(typingctx, start, stop, step, name=None):
     """Create RangeIndex object
     """
+    name = types.none if name is None else name
 
     def codegen(context, builder, signature, args):
-        assert len(args) == 3
-        range_val = cgutils.create_struct_proxy(range_index_type)(
+        assert len(args) == 4
+        range_val = cgutils.create_struct_proxy(signature.return_type)(
             context, builder)
         range_val.start = args[0]
         range_val.stop = args[1]
         range_val.step = args[2]
+        range_val.name = args[3]
         return range_val._getvalue()
 
-    return range_index_type(start, stop, step), codegen
+    return RangeIndexType(name)(start, stop, step, name), codegen
 
 
 @unbox(RangeIndexType)
@@ -774,13 +782,16 @@ def unbox_range_index(typ, val, c):
         types.int64, c.pyapi.object_getattr_string(val, '_stop')).value
     step = c.pyapi.to_native_value(
         types.int64, c.pyapi.object_getattr_string(val, '_step')).value
+    name = c.pyapi.to_native_value(
+        typ.name_typ, c.pyapi.object_getattr_string(val, 'name')).value
 
     # create range struct
-    range_val = cgutils.create_struct_proxy(range_index_type)(
+    range_val = cgutils.create_struct_proxy(typ)(
             c.context, c.builder)
     range_val.start = start
     range_val.stop = stop
     range_val.step = step
+    range_val.name = name
     return NativeValue(range_val._getvalue())
 
 
@@ -821,7 +832,7 @@ def range_index_overload(start=None, stop=None, step=None, dtype=None,
         _step = '1'
 
     func_text = "def _pd_range_index_imp(start=None, stop=None, step=None, dtype=None, copy=False, name=None, fastpath=None):\n"
-    func_text += "  return init_range_index({}, {}, {})\n".format(_start, _stop, _step)
+    func_text += "  return init_range_index({}, {}, {}, name)\n".format(_start, _stop, _step)
     loc_vars = {}
     exec(func_text, {'init_range_index': init_range_index}, loc_vars)
     # print(func_text)
@@ -845,7 +856,7 @@ def overload_range_index_getitem(I, idx):
                 stop = I._start + I._step * slice_idx.stop
                 step = I._step * slice_idx.step
                 return bodo.hiframes.pd_index_ext.init_range_index(
-                    start, stop, step)
+                    start, stop, step, None)
 
             return impl
 
@@ -1235,3 +1246,8 @@ def array_typ_to_index(arr_typ):
         return NumericIndexType(types.float64)
 
     raise TypeError("invalid index type {}".format(arr_typ))
+
+
+def is_pd_index_type(t):
+    return isinstance(t, (NumericIndexType, DatetimeIndexType,
+        TimedeltaIndexType, PeriodIndexType, StringIndexType, RangeIndexType))

@@ -27,7 +27,7 @@ def test_range_index_constructor():
     pd.testing.assert_index_equal(bodo.jit(impl3)(), impl3())
 
     def impl4(a):  # single arg
-        return pd.RangeIndex(a)
+        return pd.RangeIndex(a, name='ABC')
 
     pd.testing.assert_index_equal(bodo.jit(impl4)(5), impl4(5))
 
