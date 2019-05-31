@@ -576,3 +576,31 @@ def _install_inplace_binary_ops():
 
 
 _install_inplace_binary_ops()
+
+
+########################## unary operators ###############################
+
+
+def create_unary_op_overload(op):
+    def overload_series_unary_op(S):
+        if isinstance(S, SeriesType):
+            def impl(S):
+                arr = bodo.hiframes.api.get_series_data(S)
+                index = bodo.hiframes.api.get_series_index(S)
+                name = bodo.hiframes.api.get_series_name(S)
+                out_arr = op(arr)
+                return bodo.hiframes.api.init_series(out_arr, index, name)
+
+            return impl
+
+    return overload_series_unary_op
+
+
+def _install_unary_ops():
+    # install inplace binary ops such as iadd, isub, ...
+    for op in bodo.hiframes.pd_series_ext.series_unary_ops:
+        overload_impl = create_unary_op_overload(op)
+        overload(op)(overload_impl)
+
+
+_install_unary_ops()

@@ -602,6 +602,21 @@ def test_series_inplace_binary_op(op):
             test_impl(S.values.copy(), S.copy()))
 
 
+@pytest.mark.parametrize('op', bodo.hiframes.pd_series_ext.series_unary_ops)
+def test_series_unary_op(op):
+    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = "def test_impl(S):\n"
+    func_text += "  return {} S\n".format(op_str)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    test_impl = loc_vars['test_impl']
+
+    S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name='ABC')
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+
+
+
 @pytest.mark.parametrize('S1,S2,fill,raises', [
     # float64 input
     (pd.Series([1.0, 2., 3., 4., 5.]), pd.Series([6.0, 21., 3.6, 5.]),

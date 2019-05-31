@@ -424,20 +424,11 @@ class SeriesPass(object):
         typ = self.typemap[arg.name]
 
         if isinstance(typ, SeriesType):
-            nodes = []
-            arg = self._get_series_data(arg, nodes)
-            rhs.value = arg
-            self._convert_series_calltype(rhs)
-            out_data = ir.Var(
-                arg.scope, mk_unique_var(assign.target.name+'_data'), rhs.loc)
-            self.typemap[out_data.name] = self.calltypes[rhs].return_type
-            nodes.append(ir.Assign(rhs, out_data, rhs.loc))
-            # TODO: index and name
-            return self._replace_func(
-                lambda data: bodo.hiframes.api.init_series(data),
-                [out_data],
-                pre_nodes=nodes
-            )
+            assert rhs.fn in bodo.hiframes.pd_series_ext.series_unary_ops
+            overload_func = \
+                bodo.hiframes.series_impl.create_unary_op_overload(rhs.fn)
+            impl = overload_func(typ)
+            return self._replace_func(impl, [arg])
 
         return [assign]
 

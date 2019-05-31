@@ -553,6 +553,9 @@ series_inplace_binary_ops = tuple(
 )
 
 
+series_unary_ops = (operator.neg, operator.invert, operator.pos)
+
+
 str2str_methods = ('capitalize', 'lower', 'lstrip', 'rstrip',
             'strip', 'swapcase', 'title', 'upper')
 
@@ -758,27 +761,6 @@ def series_op_generic(cls, self, args, kws):
             sig.return_type = if_arr_to_series_type(sig.return_type)
         sig.args = args
     return sig
-
-
-class SeriesOpUfuncs(NumpyRulesArrayOperator):
-    def generic(self, args, kws):
-        return series_op_generic(SeriesOpUfuncs, self, args, kws)
-
-
-class SeriesInplaceOpUfuncs(NumpyRulesInplaceArrayOperator):
-    def generic(self, args, kws):
-        return series_op_generic(SeriesInplaceOpUfuncs, self, args, kws)
-
-
-class SeriesUnaryOpUfuncs(NumpyRulesUnaryArrayOperator):
-    def generic(self, args, kws):
-        return series_op_generic(SeriesUnaryOpUfuncs, self, args, kws)
-
-
-# TODO: change class name to Series in install_operations
-# SeriesOpUfuncs.install_operations()
-# SeriesInplaceOpUfuncs.install_operations()
-SeriesUnaryOpUfuncs.install_operations()
 
 
 class Series_Numpy_rules_ufunc(Numpy_rules_ufunc):
