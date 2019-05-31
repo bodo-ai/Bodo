@@ -504,8 +504,10 @@ def _install_explicit_binary_ops():
 _install_explicit_binary_ops()
 
 
+####################### binary operators ###############################
+
+
 def create_binary_op_overload(op):
-    # TODO: test
     def overload_series_binary_op(S, other):
         if isinstance(S, SeriesType):
             def impl(S, other):
@@ -543,3 +545,34 @@ def _install_binary_ops():
 
 
 _install_binary_ops()
+
+
+####################### binary inplace operators #############################
+
+
+def create_inplace_binary_op_overload(op):
+    def overload_series_inplace_binary_op(S, other):
+        if isinstance(S, SeriesType) or isinstance(other, SeriesType):
+            op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+            # TODO: use op directly when Numba's #4131 is resolved
+            func_text = "def impl(S, other):\n"
+            func_text += "  arr = bodo.utils.conversion.get_array_if_series_or_index(S)\n"
+            func_text += "  other_arr = bodo.utils.conversion.get_array_if_series_or_index(other)\n"
+            func_text += "  arr {} other_arr\n".format(op_str)
+            func_text += "  return S\n"
+            loc_vars = {}
+            exec(func_text, {'bodo': bodo}, loc_vars)
+            impl = loc_vars['impl']
+            return impl
+
+    return overload_series_inplace_binary_op
+
+
+def _install_inplace_binary_ops():
+    # install inplace binary ops such as iadd, isub, ...
+    for op in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
+        overload_impl = create_inplace_binary_op_overload(op)
+        overload(op)(overload_impl)
+
+
+_install_inplace_binary_ops()

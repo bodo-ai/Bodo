@@ -1,4 +1,5 @@
 import unittest
+import operator
 import pandas as pd
 import numpy as np
 import random
@@ -563,7 +564,6 @@ def test_series_explicit_binary_op_nan(fill):
 
 @pytest.mark.parametrize('op', bodo.hiframes.pd_series_ext.series_binary_ops)
 def test_series_binary_op(op):
-
     op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(S, other):\n"
     func_text += "  return S {} other\n".format(op_str)
@@ -574,6 +574,32 @@ def test_series_binary_op(op):
     S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name='ABC')
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(bodo_func(S, S), test_impl(S, S))
+    pd.testing.assert_series_equal(bodo_func(S, 2), test_impl(S, 2))
+    pd.testing.assert_series_equal(bodo_func(2, S), test_impl(2, S))
+
+
+@pytest.mark.parametrize('op',
+    bodo.hiframes.pd_series_ext.series_inplace_binary_ops)
+def test_series_inplace_binary_op(op):
+    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = "def test_impl(S, other):\n"
+    func_text += "  S {} other\n".format(op_str)
+    func_text += "  return S\n"
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    test_impl = loc_vars['test_impl']
+
+    S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name='ABC')
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(S.copy(), S.copy()), test_impl(S.copy(), S.copy()))
+    pd.testing.assert_series_equal(
+        bodo_func(S.copy(), 2), test_impl(S.copy(), 2))
+    # XXX: A**=S doesn't work in Pandas for some reason
+    if op != operator.ipow:
+        np.testing.assert_array_equal(
+            bodo_func(S.values.copy(), S.copy()),
+            test_impl(S.values.copy(), S.copy()))
 
 
 @pytest.mark.parametrize('S1,S2,fill,raises', [

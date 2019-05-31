@@ -544,6 +544,15 @@ series_binary_ops = tuple(
 )
 
 
+# TODO: support itruediv, Numpy doesn't support it, and output can have
+# a different type (output of integer division is float)
+series_inplace_binary_ops = tuple(
+    op for op in \
+        numba.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+    if op not in (operator.ilshift, operator.irshift, operator.itruediv)
+)
+
+
 str2str_methods = ('capitalize', 'lower', 'lstrip', 'rstrip',
             'strip', 'swapcase', 'title', 'upper')
 
@@ -768,7 +777,7 @@ class SeriesUnaryOpUfuncs(NumpyRulesUnaryArrayOperator):
 
 # TODO: change class name to Series in install_operations
 # SeriesOpUfuncs.install_operations()
-SeriesInplaceOpUfuncs.install_operations()
+# SeriesInplaceOpUfuncs.install_operations()
 SeriesUnaryOpUfuncs.install_operations()
 
 

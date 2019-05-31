@@ -378,7 +378,15 @@ class SeriesPass(object):
             return [assign]
 
         if rhs.fn in bodo.hiframes.pd_series_ext.series_binary_ops:
-            overload_func = bodo.hiframes.series_impl.create_binary_op_overload(rhs.fn)
+            overload_func = \
+                bodo.hiframes.series_impl.create_binary_op_overload(rhs.fn)
+            impl = overload_func(typ1, typ2)
+            return self._replace_func(impl, [arg1, arg2])
+
+        if rhs.fn in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
+            overload_func = \
+                bodo.hiframes.series_impl.create_inplace_binary_op_overload(
+                    rhs.fn)
             impl = overload_func(typ1, typ2)
             return self._replace_func(impl, [arg1, arg2])
 
