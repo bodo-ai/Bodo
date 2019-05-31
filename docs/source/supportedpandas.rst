@@ -162,6 +162,7 @@ Computations / Descriptive Stats:
 * :meth:`Series.count`
 * :meth:`Series.cov`
 * :meth:`Series.cumsum`
+* :meth:`Series.cumprod`
 * :meth:`Series.describe` currently returns a string instead of Series object.
 * :meth:`Series.max`
 * :meth:`Series.mean`
@@ -183,6 +184,7 @@ Reindexing / Selection / Label manipulation:
 * :meth:`Series.head`
 * :meth:`Series.idxmax`
 * :meth:`Series.idxmin`
+* :meth:`Series.rename` (only set a new name using a string value)
 * :meth:`Series.take`
 
 Missing data handling:

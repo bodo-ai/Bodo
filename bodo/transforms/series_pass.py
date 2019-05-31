@@ -898,6 +898,19 @@ class SeriesPass(object):
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
 
+        if func_name == 'rename':
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S, index=None: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
+
         # single arg functions
         if func_name in ('count', 'min', 'max'):
             if rhs.args or rhs.kws:
@@ -946,16 +959,6 @@ class SeriesPass(object):
 
         if func_name == 'dropna':
             return self._run_call_series_dropna(assign, lhs, rhs, series_var)
-
-        if func_name == 'rename':
-            nodes = []
-            data = self._get_series_data(series_var, nodes)
-            index = self._get_series_index(series_var, nodes)
-            name = rhs.args[0]
-            return self._replace_func(
-                lambda data, index, name: bodo.hiframes.api.init_series(
-                    data, index, name),
-                [data, index, name], pre_nodes=nodes)
 
         if func_name in ('shift', 'pct_change'):
             nodes = []

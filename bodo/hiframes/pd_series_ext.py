@@ -242,13 +242,6 @@ def if_arr_to_series_type(typ):
     return typ
 
 
-# TODO remove this cast?
-@lower_cast(SeriesType, string_array_type)
-@lower_cast(string_array_type, SeriesType)
-def cast_string_series(context, builder, fromty, toty, val):
-    return val
-
-
 # cast Series(int8) to Series(cat) for init_series() in test_csv_cat1
 # TODO: separate array type for Categorical data
 @lower_cast(SeriesType, types.Array)
@@ -571,14 +564,6 @@ class SeriesAttribute(AttributeTemplate):
         index_typ = bodo.hiframes.pd_index_ext.array_typ_to_index(ary.data)
         out = SeriesType(
             types.int64, types.Array(types.int64, 1, 'C'), index_typ)
-        return signature(out, *args)
-
-    @bound_function("series.rename")
-    def resolve_rename(self, ary, args, kws):
-        # TODO: support index rename, kws
-        assert len(args) == 1 and isinstance(
-            args[0], (types.UnicodeType, types.StringLiteral))
-        out = SeriesType(ary.dtype, ary.data, ary.index, True)
         return signature(out, *args)
 
 

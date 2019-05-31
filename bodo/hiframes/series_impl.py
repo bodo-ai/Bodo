@@ -288,6 +288,7 @@ def overload_series_std(S):
 
 @overload_method(SeriesType, 'cumsum')
 def overload_series_cumsum(S):
+    # TODO: support skipna
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.api.get_series_data(S)
         index = bodo.hiframes.api.get_series_index(S)
@@ -299,6 +300,7 @@ def overload_series_cumsum(S):
 
 @overload_method(SeriesType, 'cumprod')
 def overload_series_cumprod(S):
+    # TODO: support skipna
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.api.get_series_data(S)
         index = bodo.hiframes.api.get_series_index(S)
@@ -306,6 +308,22 @@ def overload_series_cumprod(S):
         return bodo.hiframes.api.init_series(A.cumprod(), index, name)
 
     return impl
+
+
+@overload_method(SeriesType, 'rename')
+def overload_series_rename(S, index=None):
+    if not (index == bodo.string_type
+            or isinstance(index, types.StringLiteral)):
+        raise ValueError("Series.rename() 'index' can only be a string")
+
+    # TODO: support index rename, kws
+    def impl(S, index=None):  # pragma: no cover
+        A = bodo.hiframes.api.get_series_data(S)
+        s_index = bodo.hiframes.api.get_series_index(S)
+        return bodo.hiframes.api.init_series(A, s_index, index)
+
+    return impl
+
 
 
 ############################ binary operators #############################

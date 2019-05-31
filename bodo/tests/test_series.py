@@ -731,6 +731,16 @@ def test_series_cumprod(S):
     pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
 
 
+def test_series_rename():
+    # TODO: renaming labels, etc.
+    def test_impl(A):
+        return A.rename('B')
+
+    S = pd.Series([1.0, 2.0, np.nan, 1.0], name='A')
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+
+
 ############################### old tests ###############################
 
 
@@ -1382,14 +1392,6 @@ class TestSeries(unittest.TestCase):
         S2 = S1.copy()
         bodo_func = bodo.jit(test_impl)
         np.testing.assert_array_equal(bodo_func(S1), test_impl(S2))
-
-    def test_series_rename1(self):
-        def test_impl(A):
-            return A.rename('B')
-
-        df = pd.DataFrame({'A': [1.0, 2.0, np.nan, 1.0]})
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(df.A), test_impl(df.A))
 
     def test_series_sum1(self):
         def test_impl(S):
