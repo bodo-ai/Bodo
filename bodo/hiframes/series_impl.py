@@ -325,6 +325,18 @@ def overload_series_rename(S, index=None):
     return impl
 
 
+@overload_method(SeriesType, 'abs')
+def overload_series_abs(S):
+    # TODO: timedelta
+    def impl(S):  # pragma: no cover
+        A = bodo.hiframes.api.get_series_data(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        return bodo.hiframes.api.init_series(np.abs(A), index, name)
+
+    return impl
+
+
 
 ############################ binary operators #############################
 

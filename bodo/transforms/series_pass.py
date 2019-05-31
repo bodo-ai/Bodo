@@ -885,7 +885,7 @@ class SeriesPass(object):
 
     def _run_call_series(self, assign, lhs, rhs, series_var, func_name):
         if func_name in ('sum', 'prod', 'mean', 'var', 'std', 'cumsum',
-                                                                    'cumprod'):
+                                                             'cumprod', 'abs'):
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name:self.typemap[v.name]
@@ -926,7 +926,7 @@ class SeriesPass(object):
             data = self._get_series_data(series_var, nodes)
             return self._replace_func(func, [data], pre_nodes=nodes)
 
-        if func_name in ('nunique', 'describe', 'abs', 'isna',
+        if func_name in ('nunique', 'describe', 'isna',
                          'isnull', 'median', 'idxmin', 'idxmax', 'unique'):
             if rhs.args or rhs.kws:
                 raise ValueError("unsupported Series.{}() arguments".format(

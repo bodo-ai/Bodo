@@ -741,6 +741,15 @@ def test_series_rename():
     pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
 
 
+def test_series_abs():
+    def test_impl(S):
+        return S.abs()
+
+    bodo_func = bodo.jit(test_impl)
+    S = pd.Series([np.nan, -2., 3.])
+    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+
+
 ############################### old tests ###############################
 
 
@@ -1533,14 +1542,6 @@ class TestSeries(unittest.TestCase):
         S1 = pd.Series([1.0, 2., 3., 4., 5.])
         S2 = pd.Series([6., 7.])
         np.testing.assert_array_equal(bodo_func(S1, S2), test_impl(S1, S2))
-
-    def test_series_abs1(self):
-        def test_impl(S):
-            return S.abs()
-
-        bodo_func = bodo.jit(test_impl)
-        S = pd.Series([np.nan, -2., 3.])
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
 
     def test_series_cov1(self):
         def test_impl(S1, S2):
