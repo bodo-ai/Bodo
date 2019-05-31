@@ -377,6 +377,12 @@ class SeriesPass(object):
         if not (isinstance(typ1, SeriesType) or isinstance(typ2, SeriesType)):
             return [assign]
 
+        if rhs.fn in bodo.hiframes.pd_series_ext.series_binary_ops:
+            overload_func = bodo.hiframes.series_impl.create_binary_op_overload(rhs.fn)
+            impl = overload_func(typ1, typ2)
+            return self._replace_func(impl, [arg1, arg2])
+
+        # TODO: remove this code
         nodes = []
         # TODO: support alignment, dt, etc.
         # S3 = S1 + S2 ->

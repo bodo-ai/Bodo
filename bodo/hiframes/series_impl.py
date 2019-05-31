@@ -535,27 +535,9 @@ def create_binary_op_overload(op):
     return overload_series_binary_op
 
 
-# TODO: other operators
-binop_funcs = {
-    operator.add: 'add',
-    operator.sub: 'sub',
-    operator.mul: 'mul',
-    operator.truediv: 'div',
-    operator.truediv: 'truediv',
-    operator.floordiv: 'floordiv',
-    operator.mod: 'mod',
-    operator.pow: 'pow',
-    operator.lt: 'lt',
-    operator.gt: 'gt',
-    operator.le: 'le',
-    operator.ge: 'ge',
-    operator.ne: 'ne',
-    operator.eq: 'eq',
-}
-
-
 def _install_binary_ops():
-    for op, _name in binop_funcs.items():
+    # install binary ops such as add, sub, pow, eq, ...
+    for op in bodo.hiframes.pd_series_ext.series_binary_ops:
         overload_impl = create_binary_op_overload(op)
         overload(op)(overload_impl)
 

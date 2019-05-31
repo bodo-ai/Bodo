@@ -157,6 +157,9 @@ Function application, GroupBy & Window:
 
 Computations / Descriptive Stats:
 
+Statistical functions below are supported without optional arguments
+unless support is explicitly mentioned.
+
 * :meth:`Series.abs`
 * :meth:`Series.corr`
 * :meth:`Series.count`

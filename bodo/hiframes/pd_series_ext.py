@@ -537,6 +537,13 @@ class SeriesAttribute(AttributeTemplate):
         return signature(out, *args)
 
 
+# pd.Series supports all operators except << and >>
+series_binary_ops = tuple(
+    op for op in numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
+    if op not in (operator.lshift, operator.rshift)
+)
+
+
 str2str_methods = ('capitalize', 'lower', 'lstrip', 'rstrip',
             'strip', 'swapcase', 'title', 'upper')
 
@@ -760,7 +767,6 @@ class SeriesUnaryOpUfuncs(NumpyRulesUnaryArrayOperator):
 
 
 # TODO: change class name to Series in install_operations
-# TODO: handle other operators in SeriesOpUfuncs
 # SeriesOpUfuncs.install_operations()
 SeriesInplaceOpUfuncs.install_operations()
 SeriesUnaryOpUfuncs.install_operations()

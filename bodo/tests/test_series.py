@@ -561,6 +561,20 @@ def test_series_explicit_binary_op_nan(fill):
         bodo_func(L1, L2, fill), test_impl(L1, L2, fill))
 
 
+@pytest.mark.parametrize('op', bodo.hiframes.pd_series_ext.series_binary_ops)
+def test_series_binary_op(op):
+
+    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = "def test_impl(S, other):\n"
+    func_text += "  return S {} other\n".format(op_str)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    test_impl = loc_vars['test_impl']
+
+    S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name='ABC')
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(bodo_func(S, S), test_impl(S, S))
+
 
 @pytest.mark.parametrize('S1,S2,fill,raises', [
     # float64 input
