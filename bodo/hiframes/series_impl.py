@@ -337,6 +337,64 @@ def overload_series_abs(S):
     return impl
 
 
+@overload_method(SeriesType, 'count')
+def overload_series_count(S):
+    # TODO: check 'level' argument
+    def impl(S):  # pragma: no cover
+        numba.parfor.init_prange()
+        A = bodo.hiframes.api.get_series_data(S)
+        count = 0
+        for i in numba.parfor.internal_prange(len(A)):
+            if not bodo.hiframes.api.isna(A, i):
+                count += 1
+
+        res = count
+        return res
+
+    return impl
+
+
+@overload_method(SeriesType, 'corr')
+def overload_series_corr(S, other, method='pearson', min_periods=None):
+    if not is_overload_none(min_periods):
+        raise ValueError("Series.corr(): 'min_periods' is not supported yet")
+
+    if method != 'pearson':
+        # TODO: check string constant value in Series pass?
+        raise ValueError("Series.corr(): 'method' is not supported yet")
+
+    def impl(S, other, method='pearson', min_periods=None):  # pragma: no cover
+        n = S.count()
+        # TODO: check lens
+        ma = S.sum()
+        mb = other.sum()
+        # TODO: check aligned nans, (S.notna() != other.notna()).any()
+        a = n * ((S*other).sum()) - ma * mb
+        b1 = n * (S**2).sum() - ma**2
+        b2 = n * (other**2).sum() - mb**2
+        # TODO: np.clip
+        # TODO: np.true_divide?
+        return a / np.sqrt(b1*b2)
+
+    return impl
+
+
+@overload_method(SeriesType, 'cov')
+def overload_series_cov(S, other, min_periods=None):
+    if not is_overload_none(min_periods):
+        raise ValueError("Series.cov(): 'min_periods' is not supported yet")
+
+    # TODO: use online algorithm, e.g. StatFunctions.scala
+    # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+    def impl(S, other, min_periods=None):  # pragma: no cover
+        # TODO: check lens
+        ma = S.mean()
+        mb = other.mean()
+        # TODO: check aligned nans, (S.notna() != other.notna()).any()
+        return ((S-ma)*(other-mb)).sum()/(S.count()-1.0)
+
+    return impl
+
 
 ############################ binary operators #############################
 
@@ -444,3 +502,62 @@ def _install_explicit_binary_ops():
 
 
 _install_explicit_binary_ops()
+
+
+def create_binary_op_overload(op):
+    # TODO: test
+    def overload_series_binary_op(S, other):
+        if isinstance(S, SeriesType):
+            def impl(S, other):
+                arr = bodo.hiframes.api.get_series_data(S)
+                index = bodo.hiframes.api.get_series_index(S)
+                name = bodo.hiframes.api.get_series_name(S)
+                other_arr = bodo.utils.conversion.get_array_if_series_or_index(
+                    other)
+                out_arr = op(arr, other_arr)
+                return bodo.hiframes.api.init_series(out_arr, index, name)
+
+            return impl
+
+        # right arg is Series
+        if isinstance(other, SeriesType):
+            def impl2(S, other):
+                arr = bodo.hiframes.api.get_series_data(other)
+                index = bodo.hiframes.api.get_series_index(other)
+                name = bodo.hiframes.api.get_series_name(other)
+                other_arr = bodo.utils.conversion.get_array_if_series_or_index(
+                    S)
+                out_arr = op(other_arr, arr)
+                return bodo.hiframes.api.init_series(out_arr, index, name)
+
+            return impl2
+
+    return overload_series_binary_op
+
+
+# TODO: other operators
+binop_funcs = {
+    operator.add: 'add',
+    operator.sub: 'sub',
+    operator.mul: 'mul',
+    operator.truediv: 'div',
+    operator.truediv: 'truediv',
+    operator.floordiv: 'floordiv',
+    operator.mod: 'mod',
+    operator.pow: 'pow',
+    operator.lt: 'lt',
+    operator.gt: 'gt',
+    operator.le: 'le',
+    operator.ge: 'ge',
+    operator.ne: 'ne',
+    operator.eq: 'eq',
+}
+
+
+def _install_binary_ops():
+    for op, _name in binop_funcs.items():
+        overload_impl = create_binary_op_overload(op)
+        overload(op)(overload_impl)
+
+
+_install_binary_ops()

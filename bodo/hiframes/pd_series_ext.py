@@ -319,10 +319,6 @@ class SeriesAttribute(AttributeTemplate):
         # TODO: fix quantile output type if not float64
         return signature(types.float64, *args)
 
-    @bound_function("series.count")
-    def resolve_count(self, ary, args, kws):
-        return signature(types.intp, *args)
-
     @bound_function("series.nunique")
     def resolve_nunique(self, ary, args, kws):
         return signature(types.intp, *args)
@@ -450,23 +446,6 @@ class SeriesAttribute(AttributeTemplate):
     @bound_function("series.combine")
     def resolve_combine(self, ary, args, kws):
         return self._resolve_combine_func(ary, args, kws)
-
-    def _resolve_cov_func(self, ary, args, kws):
-        # array is valid since series_pass calls this after type replacement
-        assert len(args) == 1 and isinstance(args[0], (SeriesType, types.Array))
-        assert isinstance(ary.dtype, types.Number)
-        assert isinstance(args[0].dtype, types.Number)
-        is_complex_op = isinstance(ary.dtype, types.Complex) or isinstance(args[0].dtype, types.Complex)
-        ret_typ = types.complex128 if is_complex_op else types.float64
-        return signature(ret_typ, *args)
-
-    @bound_function("series.cov")
-    def resolve_cov(self, ary, args, kws):
-        return self._resolve_cov_func(ary, args, kws)
-
-    @bound_function("series.corr")
-    def resolve_corr(self, ary, args, kws):
-        return self._resolve_cov_func(ary, args, kws)
 
     @bound_function("series.append")
     def resolve_append(self, ary, args, kws):
@@ -781,7 +760,8 @@ class SeriesUnaryOpUfuncs(NumpyRulesUnaryArrayOperator):
 
 
 # TODO: change class name to Series in install_operations
-SeriesOpUfuncs.install_operations()
+# TODO: handle other operators in SeriesOpUfuncs
+# SeriesOpUfuncs.install_operations()
 SeriesInplaceOpUfuncs.install_operations()
 SeriesUnaryOpUfuncs.install_operations()
 

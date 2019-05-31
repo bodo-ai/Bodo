@@ -885,7 +885,7 @@ class SeriesPass(object):
 
     def _run_call_series(self, assign, lhs, rhs, series_var, func_name):
         if func_name in ('sum', 'prod', 'mean', 'var', 'std', 'cumsum',
-                                                             'cumprod', 'abs'):
+                                                    'cumprod', 'abs', 'count'):
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name:self.typemap[v.name]
@@ -911,8 +911,34 @@ class SeriesPass(object):
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
 
+        if func_name == 'corr':
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S, other, method='pearson', min_periods=None: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
+
+        if func_name == 'cov':
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S, other, min_periods=None: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
+
         # single arg functions
-        if func_name in ('count', 'min', 'max'):
+        if func_name in ('min', 'max'):
             if rhs.args or rhs.kws:
                 raise ValueError("unsupported Series.{}() arguments".format(
                     func_name))
@@ -1013,11 +1039,6 @@ class SeriesPass(object):
                 func = series_replace_funcs['head_index']
             return self._replace_func(
                 func, (data, index, n_arg, name), pre_nodes=nodes)
-
-        if func_name in ('cov', 'corr'):
-            S2 = rhs.args[0]
-            func = series_replace_funcs[func_name]
-            return self._replace_func(func, [series_var, S2])
 
         if func_name in ('argsort', 'sort_values'):
             return self._handle_series_sort(

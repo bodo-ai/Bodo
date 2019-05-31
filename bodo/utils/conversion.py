@@ -305,3 +305,18 @@ def overload_box_if_dt64(val):
 
     return lambda val: val
 
+
+def get_array_if_series_or_index(data):
+    return data
+
+
+@overload(get_array_if_series_or_index)
+def overload_get_array_if_series_or_index(data):
+    from bodo.hiframes.pd_series_ext import SeriesType
+    if isinstance(data, SeriesType):
+        return lambda data: bodo.hiframes.api.get_series_data(data)
+
+    if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
+        return lambda data: bodo.hiframes.api.get_index_data(data)
+
+    return lambda data: data
