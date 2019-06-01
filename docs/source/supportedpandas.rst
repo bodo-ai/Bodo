@@ -187,7 +187,7 @@ unless support is explicitly mentioned.
 Reindexing / Selection / Label manipulation:
 
 
-* :meth:`Series.head`
+* :meth:`Series.head` (`n` argument is supported)
 * :meth:`Series.idxmax`
 * :meth:`Series.idxmin`
 * :meth:`Series.rename` (only set a new name using a string value)

@@ -1090,24 +1090,17 @@ class SeriesPass(object):
                                     pre_nodes=nodes)
 
         if func_name == 'head':
-            nodes = []
-            n_arg = self._get_arg('Series.head', rhs.args, dict(rhs.kws), 0,
-                'n', default=False)  # TODO: proper default handling
-            if n_arg is False:
-                n_arg = ir.Var(lhs.scope, mk_unique_var('head_n'), lhs.loc)
-                # default is 5
-                self.typemap[n_arg.name] = types.IntegerLiteral(5)
-                nodes.append(ir.Assign(
-                    ir.Const(5, lhs.loc), n_arg, lhs.loc))
-
-            data = self._get_series_data(series_var, nodes)
-            index = self._get_series_index(series_var, nodes)
-            name = self._get_series_name(series_var, nodes)
-            func = series_replace_funcs[func_name]
-            if self.typemap[index.name] != types.none:
-                func = series_replace_funcs['head_index']
-            return self._replace_func(
-                func, (data, index, n_arg, name), pre_nodes=nodes)
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S, n=5: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
 
         if func_name in ('argsort', 'sort_values'):
             return self._handle_series_sort(

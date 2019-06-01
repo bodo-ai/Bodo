@@ -514,6 +514,18 @@ def overload_series_median(S, axis=None, skipna=None, level=None,
         bodo.libs.array_kernels.median(bodo.hiframes.api.get_series_data(S)))
 
 
+@overload_method(SeriesType, 'head')
+def overload_series_head(S, n=5):
+
+    def impl(S, n=5):
+        arr = bodo.hiframes.api.get_series_data(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        return bodo.hiframes.api.init_series(arr[:n], index[:n], name)
+
+    return impl
+
+
 ############################ binary operators #############################
 
 

@@ -489,11 +489,6 @@ class SeriesAttribute(AttributeTemplate):
         out = SeriesType(ary.dtype, ary.data, None)
         return signature(out, *args)
 
-    @bound_function("series.head")
-    def resolve_head(self, ary, args, kws):
-        assert not kws
-        return signature(ary, *args)
-
     # TODO: use overload
     @bound_function("series.value_counts")
     def resolve_value_counts(self, ary, args, kws):
