@@ -854,6 +854,30 @@ def test_series_max(series_val):
     assert bodo_func(series_val) == test_impl(series_val)
 
 
+def test_series_idxmin(series_val):
+    # skip strings, TODO: handle strings
+    if isinstance(series_val.values[0], str):
+        return
+
+    def test_impl(A):
+        return A.idxmin()
+
+    bodo_func = bodo.jit(test_impl)
+    assert bodo_func(series_val) == test_impl(series_val)
+
+
+def test_series_idxmax(series_val):
+    # skip strings, TODO: handle strings
+    if isinstance(series_val.values[0], str):
+        return
+
+    def test_impl(A):
+        return A.idxmax()
+
+    bodo_func = bodo.jit(test_impl)
+    assert bodo_func(series_val) == test_impl(series_val)
+
+
 ############################### old tests ###############################
 
 

@@ -781,6 +781,7 @@ def type_int_to_dt64(context):
     return typer
 
 @lower_builtin(integer_to_dt64, types.int64)
+@lower_builtin(integer_to_dt64, types.uint64)
 @lower_builtin(integer_to_dt64, types.IntegerLiteral)
 def impl_int_to_dt64(context, builder, sig, args):
     return args[0]

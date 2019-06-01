@@ -109,10 +109,10 @@ class BodoPipeline(numba.compiler.BasePipeline):
         """
         # Ensure we have an IR and type information.
         assert self.func_ir
-        df_pass = SeriesPass(self.func_ir, self.typingctx,
+        series_pass = SeriesPass(self.func_ir, self.typingctx,
                              self.type_annotation.typemap,
                              self.type_annotation.calltypes)
-        df_pass.run()
+        series_pass.run()
 
     def stage_dataframe_pass(self):
         """

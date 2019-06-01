@@ -479,7 +479,7 @@ class SeriesPass(object):
                 return self._replace_func(
                     lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
                         numba.targets.builtins.get_type_max_value(
-                            numba.types.int64)), [])
+                            numba.types.uint64)), [])
             return self._replace_func(
                 lambda d: numba.targets.builtins.get_type_max_value(
                             d), rhs.args)
@@ -969,6 +969,19 @@ class SeriesPass(object):
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
 
+        if func_name in ('idxmin', 'idxmax'):
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S, axis=0, skipna=True: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
+
         if func_name == 'rename':
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
@@ -1009,7 +1022,7 @@ class SeriesPass(object):
                         kws=dict(rhs.kws))
 
         if func_name in ('nunique', 'describe', 'isna',
-                         'isnull', 'median', 'idxmin', 'idxmax', 'unique'):
+                         'isnull', 'median', 'unique'):
             if rhs.args or rhs.kws:
                 raise ValueError("unsupported Series.{}() arguments".format(
                     func_name))

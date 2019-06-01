@@ -181,8 +181,11 @@ unless support is explicitly mentioned.
 * :meth:`Series.var`
 * :meth:`Series.unique`
 * :meth:`Series.nunique`
+* :meth:`Series.value_counts`
+
 
 Reindexing / Selection / Label manipulation:
+
 
 * :meth:`Series.head`
 * :meth:`Series.idxmax`

@@ -471,6 +471,38 @@ def overload_series_max(S, axis=None, skipna=None, level=None,
     return impl
 
 
+@overload_method(SeriesType, 'idxmin')
+def overload_series_idxmin(S, axis=0, skipna=True):
+    if not (is_overload_none(axis) or is_overload_zero(axis)):
+        raise ValueError('Series.idxmin(): axis argument not supported')
+
+    # TODO: other types like strings
+    if S.dtype == types.none:
+        return (lambda S, axis=0, skipna=True:
+            bodo.hiframes.api.get_series_data(S).argmin())
+    else:
+        def impl(S, axis=0, skipna=True):
+            i = bodo.hiframes.api.get_series_data(S).argmin()
+            return bodo.hiframes.api.get_series_index(S)[i]
+        return impl
+
+
+@overload_method(SeriesType, 'idxmax')
+def overload_series_idxmax(S, axis=0, skipna=True):
+    if not (is_overload_none(axis) or is_overload_zero(axis)):
+        raise ValueError('Series.idxmax(): axis argument not supported')
+
+    # TODO: other types like strings
+    if S.dtype == types.none:
+        return (lambda S, axis=0, skipna=True:
+            bodo.hiframes.api.get_series_data(S).argmax())
+    else:
+        def impl(S, axis=0, skipna=True):
+            i = bodo.hiframes.api.get_series_data(S).argmax()
+            return bodo.hiframes.api.get_series_index(S)[i]
+        return impl
+
+
 ############################ binary operators #############################
 
 
