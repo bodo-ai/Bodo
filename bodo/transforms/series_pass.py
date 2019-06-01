@@ -955,6 +955,20 @@ class SeriesPass(object):
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
 
+        if func_name in ('min', 'max'):
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S, axis=None, skipna=None, level=None,
+                    numeric_only=None: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
+
         if func_name == 'rename':
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
@@ -993,21 +1007,6 @@ class SeriesPass(object):
             return self._replace_func(impl, rhs.args,
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
-
-        # single arg functions
-        if func_name in ('min', 'max'):
-            if rhs.args or rhs.kws:
-                raise ValueError("unsupported Series.{}() arguments".format(
-                    func_name))
-            # TODO: handle skipna, min_count arguments
-            series_typ = self.typemap[series_var.name]
-            series_dtype = series_typ.dtype
-            func = series_replace_funcs[func_name]
-            if isinstance(func, dict):
-                func = func[series_dtype]
-            nodes = []
-            data = self._get_series_data(series_var, nodes)
-            return self._replace_func(func, [data], pre_nodes=nodes)
 
         if func_name in ('nunique', 'describe', 'isna',
                          'isnull', 'median', 'idxmin', 'idxmax', 'unique'):

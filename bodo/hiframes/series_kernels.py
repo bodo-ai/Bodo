@@ -218,9 +218,11 @@ def _column_var_impl(A):  # pragma: no cover
     res = bodo.hiframes.series_kernels._var_handle_nan(s, count)
     return res
 
+
 def _column_std_impl(A):  # pragma: no cover
     var = bodo.hiframes.api.init_series(A).var()
     return var**0.5
+
 
 def _column_min_impl(in_arr):  # pragma: no cover
     numba.parfor.init_prange()

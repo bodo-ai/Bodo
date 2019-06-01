@@ -396,7 +396,83 @@ def overload_series_cov(S, other, min_periods=None):
     return impl
 
 
+@overload_method(SeriesType, 'min')
+def overload_series_min(S, axis=None, skipna=None, level=None,
+                                                            numeric_only=None):
+    if not (is_overload_none(axis) or is_overload_zero(axis)):
+        raise ValueError('Series.min(): axis argument not supported')
+
+    # TODO: min/max of string dtype, etc.
+    if S.dtype == types.NPDatetime('ns'):
+        def impl_dt64(S, axis=None, skipna=None, level=None, numeric_only=None):  # pragma: no cover
+            numba.parfor.init_prange()
+            in_arr = bodo.hiframes.api.get_series_data(S)
+            s = numba.targets.builtins.get_type_max_value(np.int64)
+            count = 0
+            for i in numba.parfor.internal_prange(len(in_arr)):
+                if not bodo.hiframes.api.isna(in_arr, i):
+                    val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
+                    s = min(s, val)
+                    count += 1
+            return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
+
+        return impl_dt64
+
+    def impl(S, axis=None, skipna=None, level=None, numeric_only=None):  # pragma: no cover
+        numba.parfor.init_prange()
+        in_arr = bodo.hiframes.api.get_series_data(S)
+        count = 0
+        s = bodo.hiframes.series_kernels._get_type_max_value(in_arr.dtype)
+        for i in numba.parfor.internal_prange(len(in_arr)):
+            val = in_arr[i]
+            if not bodo.hiframes.api.isna(in_arr, i):
+                s = min(s, val)
+                count += 1
+        res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
+        return res
+
+    return impl
+
+
+@overload_method(SeriesType, 'max')
+def overload_series_max(S, axis=None, skipna=None, level=None,
+                                                            numeric_only=None):
+    if not (is_overload_none(axis) or is_overload_zero(axis)):
+        raise ValueError('Series.min(): axis argument not supported')
+
+    if S.dtype == types.NPDatetime('ns'):
+        def impl_dt64(S, axis=None, skipna=None, level=None, numeric_only=None):  # pragma: no cover
+            numba.parfor.init_prange()
+            in_arr = bodo.hiframes.api.get_series_data(S)
+            s = numba.targets.builtins.get_type_min_value(np.int64)
+            count = 0
+            for i in numba.parfor.internal_prange(len(in_arr)):
+                if not bodo.hiframes.api.isna(in_arr, i):
+                    val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
+                    s = max(s, val)
+                    count += 1
+            return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
+
+        return impl_dt64
+
+    def impl(S, axis=None, skipna=None, level=None, numeric_only=None):  # pragma: no cover
+        numba.parfor.init_prange()
+        in_arr = bodo.hiframes.api.get_series_data(S)
+        count = 0
+        s = numba.targets.builtins.get_type_min_value(in_arr.dtype)
+        for i in numba.parfor.internal_prange(len(in_arr)):
+            val = in_arr[i]
+            if not bodo.hiframes.api.isna(in_arr, i):
+                s = max(s, val)
+                count += 1
+        res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
+        return res
+
+    return impl
+
+
 ############################ binary operators #############################
+
 
 def create_explicit_binary_op_overload(op):
     def overload_series_explicit_binary_op(
