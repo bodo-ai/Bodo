@@ -191,6 +191,7 @@ Reindexing / Selection / Label manipulation:
 * :meth:`Series.idxmax`
 * :meth:`Series.idxmin`
 * :meth:`Series.rename` (only set a new name using a string value)
+* :meth:`Series.tail` (`n` argument is supported)
 * :meth:`Series.take`
 
 Missing data handling:

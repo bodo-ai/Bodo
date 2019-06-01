@@ -1089,7 +1089,7 @@ class SeriesPass(object):
                                                   'lt_f': series_kernels.lt_f},
                                     pre_nodes=nodes)
 
-        if func_name == 'head':
+        if func_name in ('head', 'tail'):
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name:self.typemap[v.name]

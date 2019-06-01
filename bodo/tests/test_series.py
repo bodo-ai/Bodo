@@ -902,6 +902,15 @@ def test_series_head(series_val):
         bodo_func(series_val), test_impl(series_val))
 
 
+def test_series_tail(series_val):
+    def test_impl(S):
+        return S.tail(3)
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val), test_impl(series_val))
+
+
 ############################### old tests ###############################
 
 
