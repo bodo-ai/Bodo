@@ -955,7 +955,7 @@ class SeriesPass(object):
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
 
-        if func_name in ('min', 'max'):
+        if func_name in ('min', 'max', 'median'):
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name:self.typemap[v.name]
@@ -1022,7 +1022,7 @@ class SeriesPass(object):
                         kws=dict(rhs.kws))
 
         if func_name in ('nunique', 'describe', 'isna',
-                         'isnull', 'median', 'unique'):
+                         'isnull', 'unique'):
             if rhs.args or rhs.kws:
                 raise ValueError("unsupported Series.{}() arguments".format(
                     func_name))

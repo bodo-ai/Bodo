@@ -878,6 +878,21 @@ def test_series_idxmax(series_val):
     assert bodo_func(series_val) == test_impl(series_val)
 
 
+def test_series_median(numeric_series_val):
+    # NA not supported yet, TODO: support
+    if numeric_series_val.dtype == np.float:
+        return
+    # median not supported for dt64
+    if numeric_series_val.dtype == np.dtype('datetime64[ns]'):
+        return
+
+    def test_impl(A):
+        return A.median()
+
+    bodo_func = bodo.jit(test_impl)
+    assert bodo_func(numeric_series_val) == test_impl(numeric_series_val)
+
+
 ############################### old tests ###############################
 
 

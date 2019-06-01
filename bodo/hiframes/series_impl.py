@@ -473,7 +473,7 @@ def overload_series_max(S, axis=None, skipna=None, level=None,
 
 @overload_method(SeriesType, 'idxmin')
 def overload_series_idxmin(S, axis=0, skipna=True):
-    if not (is_overload_none(axis) or is_overload_zero(axis)):
+    if not is_overload_zero(axis):
         raise ValueError('Series.idxmin(): axis argument not supported')
 
     # TODO: other types like strings
@@ -489,7 +489,7 @@ def overload_series_idxmin(S, axis=0, skipna=True):
 
 @overload_method(SeriesType, 'idxmax')
 def overload_series_idxmax(S, axis=0, skipna=True):
-    if not (is_overload_none(axis) or is_overload_zero(axis)):
+    if not is_overload_zero(axis):
         raise ValueError('Series.idxmax(): axis argument not supported')
 
     # TODO: other types like strings
@@ -501,6 +501,17 @@ def overload_series_idxmax(S, axis=0, skipna=True):
             i = bodo.hiframes.api.get_series_data(S).argmax()
             return bodo.hiframes.api.get_series_index(S)[i]
         return impl
+
+
+@overload_method(SeriesType, 'median')
+def overload_series_median(S, axis=None, skipna=None, level=None,
+                                                            numeric_only=None):
+    if not (is_overload_none(axis) or is_overload_zero(axis)):
+        raise ValueError('Series.median(): axis argument not supported')
+
+    # TODO: support NA
+    return (lambda S, axis=None, skipna=None, level=None, numeric_only=None:
+        bodo.libs.array_kernels.median(bodo.hiframes.api.get_series_data(S)))
 
 
 ############################ binary operators #############################
