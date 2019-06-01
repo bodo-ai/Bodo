@@ -730,21 +730,8 @@ class CmpOpLTSeries(SeriesCompEqual):
     key = '<'
 
 
-inplace_ops = [
-    operator.iadd,
-    operator.isub,
-    operator.imul,
-    operator.itruediv,
-    operator.ifloordiv,
-    operator.imod,
-    operator.ipow,
-    operator.ilshift,
-    operator.irshift,
-    operator.iand,
-    operator.ior,
-    operator.ixor,
-]
-
+################## typing for ufuncs called on Series #####################
+# XXX can't overload due to Numba's #4133
 
 def series_op_generic(cls, self, args, kws):
     # return if no Series
@@ -752,13 +739,21 @@ def series_op_generic(cls, self, args, kws):
         return None
     # convert args to array
     new_args = tuple(if_series_to_array_type(arg) for arg in args)
+
+    # get index and name types
+    if is_series_type(args[0]):
+        index = args[0].index
+        name_typ = args[0].name_typ
+    else:
+        assert len(args) > 1 and is_series_type(args[1])
+        index = args[1].index
+        name_typ = args[1].name_typ
+
     sig = super(cls, self).generic(new_args, kws)
     # convert back to Series
     if sig is not None:
-        # if A += B and A is array but B is Series, the output is Array
-        # TODO: other cases?
-        if not (self.key in inplace_ops and isinstance(args[0], types.Array)):
-            sig.return_type = if_arr_to_series_type(sig.return_type)
+        sig.return_type = SeriesType(
+            sig.return_type.dtype, index=index, name_typ=name_typ)
         sig.args = args
     return sig
 

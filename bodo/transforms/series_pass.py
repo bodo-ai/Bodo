@@ -49,6 +49,9 @@ from bodo.hiframes.split_impl import (string_array_split_view_type,
     get_split_view_index, get_split_view_data_ptr)
 
 
+ufunc_names = set(f.__name__ for f in numba.typing.npydecl.supported_ufuncs)
+
+
 _dt_index_binops = ('==', '!=', '>=', '>', '<=', '<', '-',
                 operator.eq, operator.ne, operator.ge, operator.gt,
                 operator.le, operator.lt, operator.sub)
@@ -448,6 +451,13 @@ class SeriesPass(object):
         else:
             func_name, func_mod = fdef
 
+
+        # support call ufuncs on Series
+        if (func_mod == 'ufunc' and func_name in ufunc_names
+                and any(isinstance(self.typemap[a.name], SeriesType)
+                for a in rhs.args)):
+            return self._handle_ufuncs(func_name, rhs.args)
+
         if (isinstance(func_mod, ir.Var)
                 and self.typemap[func_mod.name]
                 == series_str_methods_type):
@@ -693,6 +703,48 @@ class SeriesPass(object):
         else:
             nodes.append(assign)
             return nodes
+
+    def _handle_ufuncs(self, ufunc_name, args):
+        """hanlde ufuncs with any Series in arguments.
+        Output is Series using index and name of original Series.
+        """
+        np_ufunc = getattr(np, ufunc_name)
+        if np_ufunc.nin == 1:
+            def impl(S):
+                arr = bodo.hiframes.api.get_series_data(S)
+                index = bodo.hiframes.api.get_series_index(S)
+                name = bodo.hiframes.api.get_series_name(S)
+                out_arr = _ufunc(arr)
+                return bodo.hiframes.api.init_series(out_arr, index, name)
+            return self._replace_func(impl, args,
+                extra_globals={'_ufunc': np_ufunc})
+        elif np_ufunc.nin == 2:
+            if isinstance(self.typemap[args[0].name], SeriesType):
+                def impl(S1, S2):
+                    arr = bodo.hiframes.api.get_series_data(S1)
+                    index = bodo.hiframes.api.get_series_index(S1)
+                    name = bodo.hiframes.api.get_series_name(S1)
+                    other_arr = bodo.utils.conversion.get_array_if_series_or_index(
+                        S2)
+                    out_arr = _ufunc(arr, other_arr)
+                    return bodo.hiframes.api.init_series(out_arr, index, name)
+                return self._replace_func(impl, args,
+                    extra_globals={'_ufunc': np_ufunc})
+            else:
+                assert isinstance(self.typemap[args[1].name], SeriesType)
+                def impl(S1, S2):
+                    arr = bodo.utils.conversion.get_array_if_series_or_index(
+                        S1)
+                    other_arr = bodo.hiframes.api.get_series_data(S2)
+                    index = bodo.hiframes.api.get_series_index(S2)
+                    name = bodo.hiframes.api.get_series_name(S2)
+                    out_arr = _ufunc(arr, other_arr)
+                    return bodo.hiframes.api.init_series(out_arr, index, name)
+                return self._replace_func(impl, args,
+                    extra_globals={'_ufunc': np_ufunc})
+        else:
+            raise ValueError("Unsupported numpy ufunc {}".format(ufunc_name))
+
 
     def _run_call_hiframes(self, assign, lhs, rhs, func_name):
         if func_name in ('to_arr_from_series',):

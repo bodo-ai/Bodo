@@ -604,3 +604,56 @@ def _install_unary_ops():
 
 
 _install_unary_ops()
+
+
+####################### numpy ufuncs #########################
+
+
+# XXX: overloading ufuncs doesn't work (Numba's #4133)
+# TODO: use this version when issue is resolved
+# def create_ufunc_overload(ufunc):
+#     if ufunc.nin == 1:
+#         def overload_series_ufunc_nin_1(S):
+#             if isinstance(S, SeriesType):
+#                 def impl(S):
+#                     arr = bodo.hiframes.api.get_series_data(S)
+#                     index = bodo.hiframes.api.get_series_index(S)
+#                     name = bodo.hiframes.api.get_series_name(S)
+#                     out_arr = ufunc(arr)
+#                     return bodo.hiframes.api.init_series(out_arr, index, name)
+#                 return impl
+#         return overload_series_ufunc_nin_1
+#     elif ufunc.nin == 2:
+#         def overload_series_ufunc_nin_2(S1, S2):
+#             if isinstance(S1, SeriesType):
+#                 def impl(S1, S2):
+#                     arr = bodo.hiframes.api.get_series_data(S1)
+#                     index = bodo.hiframes.api.get_series_index(S1)
+#                     name = bodo.hiframes.api.get_series_name(S1)
+#                     other_arr = bodo.utils.conversion.get_array_if_series_or_index(S2)
+#                     out_arr = ufunc(arr, other_arr)
+#                     return bodo.hiframes.api.init_series(out_arr, index, name)
+#                 return impl
+#             elif isinstance(S2, SeriesType):
+#                 def impl(S1, S2):
+#                     arr = bodo.utils.conversion.get_array_if_series_or_index(S1)
+#                     other_arr = bodo.hiframes.api.get_series_data(S2)
+#                     index = bodo.hiframes.api.get_series_index(S2)
+#                     name = bodo.hiframes.api.get_series_name(S2)
+#                     out_arr = ufunc(arr, other_arr)
+#                     return bodo.hiframes.api.init_series(out_arr, index, name)
+#                 return impl
+#         return overload_series_ufunc_nin_2
+#     else:
+#         raise RuntimeError(
+#             "Don't know how to register ufuncs from ufunc_db with arity > 2")
+
+
+# def _install_np_ufuncs():
+#     import numba.targets.ufunc_db
+#     for ufunc in numba.targets.ufunc_db.get_ufuncs():
+#         overload_impl = create_ufunc_overload(ufunc)
+#         overload(ufunc)(overload_impl)
+
+
+# _install_np_ufuncs()

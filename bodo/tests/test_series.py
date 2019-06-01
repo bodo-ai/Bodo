@@ -6,6 +6,7 @@ import random
 import string
 import pyarrow.parquet as pq
 import numba
+import numba.targets.ufunc_db
 import bodo
 from bodo.libs.str_arr_ext import StringArray
 from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
@@ -615,6 +616,30 @@ def test_series_unary_op(op):
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
 
+
+@pytest.mark.parametrize('ufunc',
+    [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 1])
+def test_series_unary_ufunc(ufunc):
+    def test_impl(S):
+        return ufunc(S)
+
+    S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name='ABC')
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+
+
+@pytest.mark.parametrize('ufunc',
+    [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 2])
+def test_series_binary_ufunc(ufunc):
+    def test_impl(S1, S2):
+        return ufunc(S1, S2)
+
+    S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name='ABC')
+    A = np.array([1, 3, 7, 11])
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(bodo_func(S, S), test_impl(S, S))
+    pd.testing.assert_series_equal(bodo_func(S, A), test_impl(S, A))
+    pd.testing.assert_series_equal(bodo_func(A, S), test_impl(A, S))
 
 
 @pytest.mark.parametrize('S1,S2,fill,raises', [
