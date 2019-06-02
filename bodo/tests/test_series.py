@@ -958,6 +958,16 @@ def test_series_nsmallest_non_index():
         bodo_func(k), test_impl(k))
 
 
+def test_series_take(series_val):
+    def test_impl(A):
+        return A.take([2,3])
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val), test_impl(series_val))
+
+
+
 ############################### old tests ###############################
 
 

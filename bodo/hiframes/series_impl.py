@@ -573,6 +573,20 @@ def overload_series_astype(S, dtype, copy=True, errors='raise'):
     return impl
 
 
+@overload_method(SeriesType, 'take')
+def overload_series_take(S, indices, axis=0, convert=None, is_copy=True):
+    # TODO: categorical, etc.
+    def impl(S, indices, axis=0, convert=None, is_copy=True):
+        indices_t = bodo.utils.conversion.coerce_to_ndarray(indices)
+        arr = bodo.hiframes.api.get_series_data(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        index_t = bodo.utils.conversion.fix_none_index(index, len(arr))
+        name = bodo.hiframes.api.get_series_name(S)
+        return bodo.hiframes.api.init_series(
+            arr[indices_t], index_t[indices_t], name)
+    return impl
+
+
 ############################ binary operators #############################
 
 

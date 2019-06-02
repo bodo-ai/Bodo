@@ -1251,3 +1251,14 @@ def array_typ_to_index(arr_typ):
 def is_pd_index_type(t):
     return isinstance(t, (NumericIndexType, DatetimeIndexType,
         TimedeltaIndexType, PeriodIndexType, StringIndexType, RangeIndexType))
+
+
+# TODO: test
+@overload_method(RangeIndexType, 'take')
+@overload_method(NumericIndexType, 'take')
+@overload_method(StringIndexType, 'take')
+@overload_method(PeriodIndexType, 'take')
+@overload_method(DatetimeIndexType, 'take')
+@overload_method(TimedeltaIndexType, 'take')
+def overload_index_take(I, indices):
+    return lambda I, indices: I[indices]

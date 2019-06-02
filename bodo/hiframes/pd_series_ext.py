@@ -292,13 +292,6 @@ class SeriesAttribute(AttributeTemplate):
         out = SeriesType(ary.dtype, ary.data, out_index)
         return signature(out, *args)
 
-    @bound_function("array.take")
-    def resolve_take(self, ary, args, kws):
-        resolver = ArrayAttribute.resolve_take.__wrapped__
-        sig = resolver(self, ary.data, args, kws)
-        sig.return_type = if_arr_to_series_type(sig.return_type)
-        return sig
-
     @bound_function("series.quantile")
     def resolve_quantile(self, ary, args, kws):
         # TODO: fix quantile output type if not float64

@@ -1194,6 +1194,21 @@ class SeriesPass(object):
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
 
+        if func_name == 'take':
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (
+                lambda S, indices, axis=0, convert=None, is_copy=True: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
+
+
         # functions we revert to Numpy for now, otherwise warning
         # TODO: fix distributed cumsum/cumprod
         _conv_to_np_funcs = ('take',)
