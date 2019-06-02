@@ -631,6 +631,27 @@ def overload_series_sort_values(S, axis=0, ascending=True, inplace=False,
 def overload_series_append(S, to_append, ignore_index=False,
                                                        verify_integrity=False):
 
+    if is_overload_true(ignore_index):
+        if isinstance(to_append, (types.BaseTuple, types.List)):
+            def impl_multi_noindex(S, to_append, ignore_index=False,
+                                                       verify_integrity=False):
+                arr = bodo.hiframes.api.get_series_data(S)
+                tup_other = bodo.utils.typing.to_const_tuple(to_append)
+                other_arrs = bodo.hiframes.api.get_series_data_tup(tup_other)
+                all_arrs = bodo.utils.typing.to_const_tuple(
+                    (arr,) + other_arrs)
+                out_arr = bodo.hiframes.api.concat(all_arrs)
+                return bodo.hiframes.api.init_series(out_arr)
+            return impl_multi_noindex
+
+        def impl_single_noindex(S, to_append, ignore_index=False,
+                                                       verify_integrity=False):
+            arr = bodo.hiframes.api.get_series_data(S)
+            other = bodo.hiframes.api.get_series_data(to_append)
+            out_arr = bodo.hiframes.api.concat((arr, other))
+            return bodo.hiframes.api.init_series(out_arr)
+        return impl_single_noindex
+
     # TODO: other containers of Series
     if isinstance(to_append, (types.BaseTuple, types.List)):
         def impl(S, to_append, ignore_index=False, verify_integrity=False):
@@ -639,7 +660,8 @@ def overload_series_append(S, to_append, ignore_index=False,
 
             tup_other = bodo.utils.typing.to_const_tuple(to_append)
             other_arrs = bodo.hiframes.api.get_series_data_tup(tup_other)
-            other_inds = bodo.utils.conversion.extract_index_array_tup(tup_other)
+            other_inds = bodo.utils.conversion.extract_index_array_tup(
+                tup_other)
             # TODO: use regular list when tuple is not required
             # all_arrs = [arr]
             # all_inds = [index_arr]

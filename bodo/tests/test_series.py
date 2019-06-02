@@ -989,21 +989,29 @@ def test_series_sort_values(series_val):
         bodo_func(series_val), test_impl(series_val))
 
 
-def test_series_append_single(series_val):
+@pytest.mark.parametrize('ignore_index', [True, False])
+def test_series_append_single(series_val, ignore_index):
 
-    def test_impl(A, B):
-        return A.append(B)
+    func_text = "def test_impl(A, B):\n"
+    func_text += "  return A.append(B, {})\n".format(ignore_index)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    test_impl = loc_vars['test_impl']
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
-        bodo_func(series_val, series_val), test_impl(series_val, series_val),
+        bodo_func(series_val, series_val),
+        test_impl(series_val, series_val),
         check_names=False)  # XXX append can't set name yet
 
 
-def test_series_append_multi(series_val):
-
-    def test_impl(A, B, C):
-        return A.append([B, C])
+@pytest.mark.parametrize('ignore_index', [True, False])
+def test_series_append_multi(series_val, ignore_index):
+    func_text = "def test_impl(A, B, C):\n"
+    func_text += "  return A.append([B, C], {})\n".format(ignore_index)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    test_impl = loc_vars['test_impl']
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(

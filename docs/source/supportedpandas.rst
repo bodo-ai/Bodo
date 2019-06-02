@@ -205,7 +205,8 @@ Reshaping, sorting:
 
 * :meth:`Series.argsort`
 * :meth:`Series.sort_values` (does not push NAs to first/last positions yet)
-* :meth:`Series.append` (setting name for output Series not supported yet)
+* :meth:`Series.append` `ignore_index` is supported.
+  setting name for output Series not supported yet)
 
 Time series-related:
 
