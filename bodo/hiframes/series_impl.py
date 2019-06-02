@@ -627,6 +627,51 @@ def overload_series_sort_values(S, axis=0, ascending=True, inplace=False,
     return impl
 
 
+@overload_method(SeriesType, 'append')
+def overload_series_append(S, to_append, ignore_index=False,
+                                                       verify_integrity=False):
+
+    # TODO: other containers of Series
+    if isinstance(to_append, (types.BaseTuple, types.List)):
+        def impl(S, to_append, ignore_index=False, verify_integrity=False):
+            arr = bodo.hiframes.api.get_series_data(S)
+            index_arr = bodo.utils.conversion.extract_index_array(S)
+
+            tup_other = bodo.utils.typing.to_const_tuple(to_append)
+            other_arrs = bodo.hiframes.api.get_series_data_tup(tup_other)
+            other_inds = bodo.utils.conversion.extract_index_array_tup(tup_other)
+            # TODO: use regular list when tuple is not required
+            # all_arrs = [arr]
+            # all_inds = [index_arr]
+            # for A in to_append:
+            #     all_arrs.append(bodo.hiframes.api.get_series_data(A))
+            #     all_inds.append(bodo.utils.conversion.extract_index_array(A))
+
+
+            all_arrs = bodo.utils.typing.to_const_tuple((arr,) + other_arrs)
+            all_inds = bodo.utils.typing.to_const_tuple(
+                (index_arr,) + other_inds)
+            out_arr = bodo.hiframes.api.concat(all_arrs)
+            out_index = bodo.hiframes.api.concat(all_inds)
+            return bodo.hiframes.api.init_series(out_arr, out_index)
+
+        return impl
+
+    def impl_single(S, to_append, ignore_index=False, verify_integrity=False):
+        arr = bodo.hiframes.api.get_series_data(S)
+        index_arr = bodo.utils.conversion.extract_index_array(S)
+        # name = bodo.hiframes.api.get_series_name(S)
+
+        other = bodo.hiframes.api.get_series_data(to_append)
+        other_index = bodo.utils.conversion.extract_index_array(to_append)
+
+        out_arr = bodo.hiframes.api.concat((arr, other))
+        out_index = bodo.hiframes.api.concat((index_arr, other_index))
+        return bodo.hiframes.api.init_series(out_arr, out_index)
+
+    return impl_single
+
+
 ############################ binary operators #############################
 
 

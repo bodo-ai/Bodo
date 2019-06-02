@@ -989,6 +989,29 @@ def test_series_sort_values(series_val):
         bodo_func(series_val), test_impl(series_val))
 
 
+def test_series_append_single(series_val):
+
+    def test_impl(A, B):
+        return A.append(B)
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val, series_val), test_impl(series_val, series_val),
+        check_names=False)  # XXX append can't set name yet
+
+
+def test_series_append_multi(series_val):
+
+    def test_impl(A, B, C):
+        return A.append([B, C])
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val, series_val, series_val),
+        test_impl(series_val, series_val, series_val),
+        check_names=False)  # XXX append can't set name yet
+
+
 ############################### old tests ###############################
 
 

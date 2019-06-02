@@ -845,6 +845,12 @@ class SeriesPass(object):
                 (out_data, out_index),
                 pre_nodes=nodes)
 
+        if func_name == 'get_series_data_tup':
+            arg = rhs.args[0]
+            impl = bodo.hiframes.api.overload_get_series_data_tup(
+                self.typemap[arg.name])
+            return self._replace_func(impl, (arg,))
+
         if func_name in ('str_contains_regex', 'str_contains_noregex'):
             return self._handle_str_contains(assign, lhs, rhs, func_name)
 
@@ -1200,20 +1206,18 @@ class SeriesPass(object):
                 assign, lhs, rhs, series_var, func_var)
 
         if func_name == 'append':
-            nodes = []
-            data = self._get_series_data(series_var, nodes)
-            index = self._get_series_index(series_var, nodes)
-            # TODO: support index in append
-            assert self.typemap[index.name] == types.none
-            # name = self._get_series_name(series_var, nodes)
-            other = rhs.args[0]
-            if isinstance(self.typemap[other.name], SeriesType):
-                func = series_replace_funcs['append_single']
-                other = self._get_series_data(other, nodes)
-            else:
-                func = series_replace_funcs['append_tuple']
-            return self._replace_func(
-                func, (data, other), pre_nodes=nodes)
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S, to_append, ignore_index=False,
+                                                  verify_integrity=False: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
 
         if func_name == 'notna':
             # TODO: make sure this is fused and optimized properly

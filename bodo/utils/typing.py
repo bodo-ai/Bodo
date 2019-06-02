@@ -85,6 +85,12 @@ class ToConstTupleTyper(AbstractTemplate):
         return signature(ret_typ, arr)
 
 
+# dummy lowerer
+@lower_builtin(to_const_tuple, types.Any)
+def lower_add_consts_to_type(context, builder, sig, args):
+    return context.get_constant_null(sig.return_type)
+
+
 # dummy function to enable series flattening, replaced in series_pass
 def flatten_to_series(A):  # pragma: no cover
     return A

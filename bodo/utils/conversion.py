@@ -335,3 +335,40 @@ def overload_fix_none_index(I, n):
         return lambda I, n: pd.RangeIndex(n)
 
     return lambda I, n: I
+
+
+def extract_index_array(A):
+    return np.arange(len(A))
+
+
+@overload(extract_index_array)
+def overload_extract_index_array(A):
+    """Returns an index array for Series or array.
+    if Series, return it's index array. Otherwise, create an index array.
+    """
+    from bodo.hiframes.pd_series_ext import SeriesType
+    if isinstance(A, SeriesType):
+        def impl(A):
+            index = bodo.hiframes.api.get_series_index(A)
+            index_t = bodo.utils.conversion.fix_none_index(index, len(A))
+            index_arr = bodo.utils.conversion.coerce_to_array(index_t)
+            return index_arr
+        return impl
+
+    return lambda A: np.arange(len(A))
+
+
+def extract_index_array_tup(series_tup):
+    return tuple(extract_index_array(s) for s in series_tup)
+
+
+@overload(extract_index_array_tup)
+def overload_extract_index_array_tup(series_tup):
+    n_series = len(series_tup.types)
+    func_text = "def f(series_tup):\n"
+    res = ",".join("bodo.utils.conversion.extract_index_array(series_tup[{}])".format(i) for i in range(n_series))
+    func_text += "  return ({}{})\n".format(res, "," if n_series==1 else "")
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo}, loc_vars)
+    impl = loc_vars['f']
+    return impl
