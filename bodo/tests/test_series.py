@@ -921,6 +921,18 @@ def test_series_nlargest(numeric_series_val, k):
         bodo_func(numeric_series_val, k), test_impl(numeric_series_val, k))
 
 
+def test_series_nlargest_non_index():
+    # test Series with None as Index
+    def test_impl(k):
+        S = pd.Series([3, 5, 6, 1, 9])
+        return S.nlargest(k)
+
+    bodo_func = bodo.jit(test_impl)
+    k = 3
+    pd.testing.assert_series_equal(
+        bodo_func(k), test_impl(k))
+
+
 @pytest.mark.parametrize('k', [0, 1, 2, 3])
 def test_series_nsmallest(numeric_series_val, k):
     def test_impl(S, k):
@@ -929,6 +941,18 @@ def test_series_nsmallest(numeric_series_val, k):
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
         bodo_func(numeric_series_val, k), test_impl(numeric_series_val, k))
+
+
+def test_series_nsmallest_non_index():
+    # test Series with None as Index
+    def test_impl(k):
+        S = pd.Series([3, 5, 6, 1, 9])
+        return S.nsmallest(k)
+
+    bodo_func = bodo.jit(test_impl)
+    k = 3
+    pd.testing.assert_series_equal(
+        bodo_func(k), test_impl(k))
 
 
 ############################### old tests ###############################

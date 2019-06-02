@@ -320,3 +320,18 @@ def overload_get_array_if_series_or_index(data):
         return lambda data: bodo.hiframes.api.get_index_data(data)
 
     return lambda data: data
+
+
+def fix_none_index(I, n):
+    return I
+
+
+@overload(fix_none_index)
+def overload_fix_none_index(I, n):
+    """Used for converting None index of Series to RangeIndex.
+    If I is None, RangeIndex is created. Otherwise, I is returned.
+    """
+    if is_overload_none(I):
+        return lambda I, n: pd.RangeIndex(n)
+
+    return lambda I, n: I
