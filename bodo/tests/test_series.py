@@ -967,6 +967,15 @@ def test_series_take(series_val):
         bodo_func(series_val), test_impl(series_val))
 
 
+def test_series_argsort(series_val):
+    def test_impl(A):
+        return A.argsort()
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val), test_impl(series_val))
+
+
 
 ############################### old tests ###############################
 

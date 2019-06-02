@@ -276,13 +276,6 @@ class SeriesAttribute(AttributeTemplate):
         pysig = numba.utils.pysignature(rolling_stub)
         return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
 
-    @bound_function("array.argsort")
-    def resolve_argsort(self, ary, args, kws):
-        resolver = ArrayAttribute.resolve_argsort.__wrapped__
-        sig = resolver(self, ary.data, args, kws)
-        sig.return_type = if_arr_to_series_type(sig.return_type)
-        return sig
-
     @bound_function("series.sort_values")
     def resolve_sort_values(self, ary, args, kws):
         # output will have permuted input index

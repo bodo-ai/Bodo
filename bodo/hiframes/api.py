@@ -338,6 +338,21 @@ def isna_overload(arr, i):
     return lambda arr, i: False
 
 
+def argsort(A):
+    return np.argsort(A)
+
+
+@overload(argsort)
+def overload_argsort(A):
+    def impl(A):
+        n = len(A)
+        l_key_arrs = bodo.libs.str_arr_ext.to_string_list((A.copy(),))
+        data = (np.arange(n),)
+        bodo.libs.timsort.sort(l_key_arrs, 0, n, data)
+        return data[0]
+    return impl
+
+
 # the same as fix_df_array but can be parallel
 @numba.generated_jit(nopython=True)
 def parallel_fix_df_array(c):  # pragma: no cover
@@ -670,6 +685,7 @@ class FixDfRollingArrayType(AbstractTemplate):
             ret_typ = types.Array(types.float64, 1, 'C')
         # TODO: add other types
         return signature(ret_typ, column)
+
 
 @lower_builtin(fix_rolling_array, types.Any)  # TODO: replace Any with types
 def lower_fix_rolling_array(context, builder, sig, args):

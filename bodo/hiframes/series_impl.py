@@ -587,6 +587,26 @@ def overload_series_take(S, indices, axis=0, convert=None, is_copy=True):
     return impl
 
 
+@overload_method(SeriesType, 'argsort')
+def overload_series_argsort(S, axis=0, kind='quicksort', order=None):
+    # TODO: categorical, etc.
+    # TODO: optimize the if path of known to be no NaNs (e.g. after fillna)
+    def impl(S, axis=0, kind='quicksort', order=None):
+        arr = bodo.hiframes.api.get_series_data(S)
+        n = len(arr)
+        index = bodo.hiframes.api.get_series_index(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        mask = S.notna().values
+        if not mask.all():
+            out_arr = np.full(n, -1, np.int64)
+            out_arr[mask] = bodo.hiframes.api.argsort(arr[mask])
+        else:
+            out_arr = bodo.hiframes.api.argsort(arr)
+        return bodo.hiframes.api.init_series(
+            out_arr, index, name)
+    return impl
+
+
 ############################ binary operators #############################
 
 

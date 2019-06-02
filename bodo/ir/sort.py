@@ -382,6 +382,7 @@ def sort_distributed_run(sort_node, array_dists, typemap, calltypes, typingctx,
 
 distributed_pass.distributed_run_extensions[Sort] = sort_distributed_run
 
+
 def _copy_array_nodes(var, nodes, typingctx, typemap, calltypes):
     def _impl(arr):
         return arr.copy()
@@ -391,6 +392,7 @@ def _copy_array_nodes(var, nodes, typingctx, typemap, calltypes):
     replace_arg_nodes(f_block, [var])
     nodes += f_block.body[:-2]
     return nodes[-1].target
+
 
 def to_string_list_typ(typ):
     if typ == string_array_type:

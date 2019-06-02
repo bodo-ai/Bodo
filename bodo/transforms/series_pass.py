@@ -787,6 +787,37 @@ class SeriesPass(object):
                 assign.value = var_def.args[0]
                 return [assign]
 
+        if func_name == 'argsort':
+            data = rhs.args[0]
+            nodes = []
+            def _get_indices(S):  # pragma: no cover
+                n = len(S)
+                return np.arange(n)
+
+            f_block = compile_to_numba_ir(
+                _get_indices, {'np': np}, self.typingctx,
+                (self.typemap[data.name],),
+                self.typemap, self.calltypes).blocks.popitem()[1]
+            replace_arg_nodes(f_block, [data])
+            nodes += f_block.body[:-2]
+            index_var = nodes[-1].target
+
+            # dummy output data arrays for results
+            out_data = ir.Var(lhs.scope, mk_unique_var(data.name + '_data'), lhs.loc)
+            self.typemap[out_data.name] = self.typemap[data.name]
+
+            in_df = {'inds': index_var}
+            out_df = {'inds': lhs}
+            in_keys = [data]
+            out_keys = [out_data]
+            ascending = True
+
+            # Sort node
+            nodes.append(bodo.ir.sort.Sort(data.name, lhs.name, in_keys,
+                out_keys, in_df, out_df, False, lhs.loc, ascending))
+
+            return nodes
+
         if func_name in ('str_contains_regex', 'str_contains_noregex'):
             return self._handle_str_contains(assign, lhs, rhs, func_name)
 
@@ -1097,7 +1128,20 @@ class SeriesPass(object):
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
 
-        if func_name in ('argsort', 'sort_values'):
+        if func_name == 'argsort':
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S, axis=0, kind='quicksort', order=None: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
+
+        if func_name == 'sort_values':
             return self._handle_series_sort(
                 lhs, rhs, series_var, func_name == 'argsort')
 
