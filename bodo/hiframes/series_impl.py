@@ -538,6 +538,47 @@ def overload_series_tail(S, n=5):
     return impl
 
 
+@overload_method(SeriesType, 'nlargest')
+def overload_series_nlargest(S, n=5, keep='first'):
+    # TODO: cache implementation
+    # TODO: strings, categoricals
+    # TODO: support and test keep semantics
+    def impl(S, n=5, keep='first'):
+        arr = bodo.hiframes.api.get_series_data(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        index_arr = bodo.utils.conversion.coerce_to_ndarray(index)
+        name = bodo.hiframes.api.get_series_name(S)
+        out_arr, out_ind_arr = bodo.libs.array_kernels.nlargest(
+            arr, index_arr, n, True, bodo.hiframes.series_kernels.gt_f)
+        out_index = bodo.utils.conversion.convert_to_index(out_ind_arr)
+        return bodo.hiframes.api.init_series(out_arr, out_index, name)
+
+    return impl
+
+
+@overload_method(SeriesType, 'nsmallest')
+def overload_series_nsmallest(S, n=5, keep='first'):
+    # TODO: cache implementation
+    def impl(S, n=5, keep='first'):
+        arr = bodo.hiframes.api.get_series_data(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        index_arr = bodo.utils.conversion.coerce_to_ndarray(index)
+        name = bodo.hiframes.api.get_series_name(S)
+        out_arr, out_ind_arr = bodo.libs.array_kernels.nlargest(
+            arr, index_arr, n, False, bodo.hiframes.series_kernels.lt_f)
+        out_index = bodo.utils.conversion.convert_to_index(out_ind_arr)
+        return bodo.hiframes.api.init_series(out_arr, out_index, name)
+
+    return impl
+
+
+@overload_method(SeriesType, 'notna')
+def overload_series_notna(S):
+    # TODO: make sure this is fused and optimized properly
+    return lambda S: S.isna() == False
+
+
+
 ############################ binary operators #############################
 
 

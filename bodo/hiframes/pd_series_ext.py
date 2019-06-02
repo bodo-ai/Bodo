@@ -470,25 +470,6 @@ class SeriesAttribute(AttributeTemplate):
         ret_typ = if_arr_to_series_type(ret_typ)
         return signature(ret_typ, *args)
 
-    @bound_function("series.notna")
-    def resolve_notna(self, ary, args, kws):
-        assert not kws
-        assert not args
-        return signature(SeriesType(types.boolean))
-
-    @bound_function("series.nlargest")
-    def resolve_nlargest(self, ary, args, kws):
-        assert not kws
-        # TODO: handle index
-        out = SeriesType(ary.dtype, ary.data, None)
-        return signature(out, *args)
-
-    @bound_function("series.nsmallest")
-    def resolve_nsmallest(self, ary, args, kws):
-        assert not kws
-        out = SeriesType(ary.dtype, ary.data, None)
-        return signature(out, *args)
-
     # TODO: use overload
     @bound_function("series.value_counts")
     def resolve_value_counts(self, ary, args, kws):

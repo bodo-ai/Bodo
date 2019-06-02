@@ -507,10 +507,6 @@ series_replace_funcs = {
     # isnull is just alias of isna
     'isnull': _series_isna_impl,
     'astype_str': _series_astype_str_impl,
-    'nlargest': lambda A, k, name: bodo.hiframes.api.init_series(bodo.libs.array_kernels.nlargest(A, k, True, gt_f), None, name),
-    'nlargest_default': lambda A, name: bodo.hiframes.api.init_series(bodo.libs.array_kernels.nlargest(A, 5, True, gt_f), None, name),
-    'nsmallest': lambda A, k, name: bodo.hiframes.api.init_series(bodo.libs.array_kernels.nlargest(A, k, False, lt_f), None, name),
-    'nsmallest_default': lambda A, name: bodo.hiframes.api.init_series(bodo.libs.array_kernels.nlargest(A, 5, False, lt_f), None, name),
     'head': lambda A, I, k, name: bodo.hiframes.api.init_series(A[:k], None, name),
     'head_index': lambda A, I, k, name: bodo.hiframes.api.init_series(A[:k], I[:k], name),
     'median': lambda A: bodo.libs.array_kernels.median(A),

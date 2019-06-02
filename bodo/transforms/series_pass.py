@@ -1072,22 +1072,17 @@ class SeriesPass(object):
             return self._replace_func(func, args, pre_nodes=nodes)
 
         if func_name in ('nlargest', 'nsmallest'):
-            # TODO: kws
-            nodes = []
-            data = self._get_series_data(series_var, nodes)
-            name = self._get_series_name(series_var, nodes)
-            if len(rhs.args) == 0 and not rhs.kws:
-                return self._replace_func(
-                    series_replace_funcs[func_name + '_default'], [data, name],
-                                    extra_globals={'gt_f': series_kernels.gt_f,
-                                                  'lt_f': series_kernels.lt_f},
-                                    pre_nodes=nodes)
-            n_arg = rhs.args[0]
-            func = series_replace_funcs[func_name]
-            return self._replace_func(func, [data, n_arg, name],
-                                    extra_globals={'gt_f': series_kernels.gt_f,
-                                                  'lt_f': series_kernels.lt_f},
-                                    pre_nodes=nodes)
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S, n=5, keep='first': None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
 
         if func_name in ('head', 'tail'):
             rhs.args.insert(0, series_var)

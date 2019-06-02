@@ -171,8 +171,8 @@ unless support is explicitly mentioned.
 * :meth:`Series.mean`
 * :meth:`Series.median`
 * :meth:`Series.min`
-* :meth:`Series.nlargest`
-* :meth:`Series.nsmallest`
+* :meth:`Series.nlargest` (non-numerics not supported yet)
+* :meth:`Series.nsmallest` (non-numerics not supported yet)
 * :meth:`Series.pct_change`
 * :meth:`Series.prod`
 * :meth:`Series.quantile`

@@ -911,6 +911,26 @@ def test_series_tail(series_val):
         bodo_func(series_val), test_impl(series_val))
 
 
+@pytest.mark.parametrize('k', [0, 1, 2, 3])
+def test_series_nlargest(numeric_series_val, k):
+    def test_impl(S, k):
+        return S.nlargest(k)
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(numeric_series_val, k), test_impl(numeric_series_val, k))
+
+
+@pytest.mark.parametrize('k', [0, 1, 2, 3])
+def test_series_nsmallest(numeric_series_val, k):
+    def test_impl(S, k):
+        return S.nsmallest(k)
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(numeric_series_val, k), test_impl(numeric_series_val, k))
+
+
 ############################### old tests ###############################
 
 

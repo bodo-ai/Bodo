@@ -1,6 +1,7 @@
 """
 Implements array kernels such as median and quantile.
 """
+import pandas as pd
 import numpy as np
 
 import numba
@@ -119,7 +120,7 @@ def lower_dist_quantile(context, builder, sig, args):
 
 
 @numba.njit
-def min_heapify(arr, n, start, cmp_f):
+def min_heapify(arr, ind_arr, n, start, cmp_f):
     min_ind = start
     left = 2 * start + 1
     right = 2 * start + 2
@@ -132,45 +133,50 @@ def min_heapify(arr, n, start, cmp_f):
 
     if min_ind != start:
         arr[start], arr[min_ind] = arr[min_ind], arr[start]  # swap
-        min_heapify(arr, n, min_ind, cmp_f)
+        ind_arr[start], ind_arr[min_ind] = ind_arr[min_ind], ind_arr[start]
+        min_heapify(arr, ind_arr, n, min_ind, cmp_f)
 
 
-def select_k_nonan(A, m, k):  # pragma: no cover
-    return A
+def select_k_nonan(A, index_arr, m, k):  # pragma: no cover
+    return A[:k]
 
 
 @overload(select_k_nonan)
-def select_k_nonan_overload(A, m, k):
+def select_k_nonan_overload(A, index_arr, m, k):
     dtype = A.dtype
+    # TODO: other types like strings and categoricals
+    # TODO: handle NA in integer
     if isinstance(dtype, types.Integer):
         # ints don't have nans
-        return lambda A,m,k: (A[:k].copy(), k)
+        return lambda A, index_arr, m, k: (
+            A[:k].copy(), index_arr[:k].copy(), k)
 
-    assert isinstance(dtype, types.Float)
 
-    def select_k_nonan_float(A, m, k):
+    def select_k_nonan_float(A, index_arr, m, k):
         # select the first k elements but ignore NANs
         min_heap_vals = np.empty(k, A.dtype)
+        min_heap_inds = np.empty(k, index_arr.dtype)
         i = 0
         ind = 0
         while i < m and ind < k:
-            val = A[i]
-            i += 1
-            if not np.isnan(val):
-                min_heap_vals[ind] = val
+            if not bodo.hiframes.api.isna(A, i):
+                min_heap_vals[ind] = A[i]
+                min_heap_inds[ind] = index_arr[i]
                 ind += 1
+            i += 1
 
         # if couldn't fill with k values
         if ind < k:
             min_heap_vals = min_heap_vals[:ind]
+            min_heap_inds = min_heap_inds[:ind]
 
-        return min_heap_vals, i
+        return min_heap_vals, min_heap_inds, i
 
     return select_k_nonan_float
 
 
 @numba.njit
-def nlargest(A, k, is_largest, cmp_f):
+def nlargest(A, index_arr, k, is_largest, cmp_f):
     # algorithm: keep a min heap of k largest values, if a value is greater
     # than the minimum (root) in heap, replace the minimum and rebuild the heap
     m = len(A)
@@ -178,28 +184,38 @@ def nlargest(A, k, is_largest, cmp_f):
     # if all of A, just sort and reverse
     if k >= m:
         B = np.sort(A)
-        B = B[~np.isnan(B)]
+        out_index = index_arr[np.argsort(A)]
+        mask = pd.Series(B).notna().values
+        B = B[mask]
+        out_index = out_index[mask]
         if is_largest:
             B = B[::-1]
-        return np.ascontiguousarray(B)
+            out_index = out_index[::-1]
+        return np.ascontiguousarray(B), np.ascontiguousarray(out_index)
 
     # create min heap but
-    min_heap_vals, start = select_k_nonan(A, m, k)
+    min_heap_vals, min_heap_inds, start = select_k_nonan(A, index_arr, m, k)
     # heapify k/2-1 to 0 instead of sort?
+    min_heap_inds = min_heap_inds[min_heap_vals.argsort()]
     min_heap_vals.sort()
     if not is_largest:
         min_heap_vals = np.ascontiguousarray(min_heap_vals[::-1])
+        min_heap_inds = np.ascontiguousarray(min_heap_inds[::-1])
 
     for i in range(start, m):
         if cmp_f(A[i], min_heap_vals[0]):  # > for nlargest
             min_heap_vals[0] = A[i]
-            min_heapify(min_heap_vals, k, 0, cmp_f)
+            min_heap_inds[0] = index_arr[i]
+            min_heapify(min_heap_vals, min_heap_inds, k, 0, cmp_f)
 
     # sort and return the heap values
+    min_heap_inds = min_heap_inds[min_heap_vals.argsort()]
     min_heap_vals.sort()
     if is_largest:
         min_heap_vals = min_heap_vals[::-1]
-    return np.ascontiguousarray(min_heap_vals)
+        min_heap_inds = min_heap_inds[::-1]
+    return (np.ascontiguousarray(min_heap_vals),
+            np.ascontiguousarray(min_heap_inds))
 
 
 @numba.njit
