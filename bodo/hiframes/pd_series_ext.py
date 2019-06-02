@@ -432,13 +432,14 @@ class SeriesAttribute(AttributeTemplate):
         ret_typ = if_arr_to_series_type(ret_typ)
         return signature(ret_typ, *args)
 
-    # TODO: use overload
+    # TODO: use overload when Series.aggregate is supported
     @bound_function("series.value_counts")
     def resolve_value_counts(self, ary, args, kws):
         # output is int series with original data as index
         index_typ = bodo.hiframes.pd_index_ext.array_typ_to_index(ary.data)
         out = SeriesType(
-            types.int64, types.Array(types.int64, 1, 'C'), index_typ)
+            types.int64, types.Array(types.int64, 1, 'C'), index_typ,
+            ary.name_typ)
         return signature(out, *args)
 
 

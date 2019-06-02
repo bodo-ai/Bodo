@@ -1223,6 +1223,7 @@ class SeriesPass(object):
         if func_name == 'value_counts':
             nodes = []
             data = self._get_series_data(series_var, nodes)
+            name = self._get_series_name(series_var, nodes)
             # reusing aggregate/count
             # TODO: write optimized implementation
             # data of input becomes both key and data for aggregate input
@@ -1238,9 +1239,9 @@ class SeriesPass(object):
                 None, lhs.loc)
             nodes.append(agg_node)
             # TODO: handle args like sort=False
-            func = lambda A, B: bodo.hiframes.api.init_series(
-                A, bodo.utils.conversion.convert_to_index(B)).sort_values(ascending=False)
-            return self._replace_func(func, [out_data_var, out_key_var], pre_nodes=nodes)
+            func = lambda A, B, name: bodo.hiframes.api.init_series(
+                A, bodo.utils.conversion.convert_to_index(B), name).sort_values(ascending=False)
+            return self._replace_func(func, [out_data_var, out_key_var, name], pre_nodes=nodes)
 
         # astype with string output
         if func_name == 'astype':
