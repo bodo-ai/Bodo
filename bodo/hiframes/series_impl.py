@@ -607,6 +607,26 @@ def overload_series_argsort(S, axis=0, kind='quicksort', order=None):
     return impl
 
 
+@overload_method(SeriesType, 'sort_values')
+def overload_series_sort_values(S, axis=0, ascending=True, inplace=False,
+                                         kind='quicksort', na_position='last'):
+    def impl(S, axis=0, ascending=True, inplace=False, kind='quicksort',
+                                                           na_position='last'):
+        arr = bodo.hiframes.api.get_series_data(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        index_t = bodo.utils.conversion.fix_none_index(index, len(arr))
+        index_arr = bodo.utils.conversion.coerce_to_array(index_t)
+        name = bodo.hiframes.api.get_series_name(S)
+
+        out_arr, out_ind_arr = bodo.hiframes.api.sort(
+            arr, index_arr, ascending, inplace)
+
+        out_index = bodo.utils.conversion.convert_to_index(out_ind_arr)
+        return bodo.hiframes.api.init_series(out_arr, out_index, name)
+
+    return impl
+
+
 ############################ binary operators #############################
 
 

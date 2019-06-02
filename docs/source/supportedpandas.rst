@@ -204,7 +204,7 @@ Missing data handling:
 Reshaping, sorting:
 
 * :meth:`Series.argsort`
-* :meth:`Series.sort_values`
+* :meth:`Series.sort_values` (does not push NAs to first/last positions yet)
 * :meth:`Series.append`
 
 Time series-related:

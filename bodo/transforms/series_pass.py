@@ -818,6 +818,33 @@ class SeriesPass(object):
 
             return nodes
 
+        if func_name == 'sort':
+            data = rhs.args[0]
+            index_arr = rhs.args[1]
+            ascending = find_const(self.func_ir, rhs.args[2])
+            inplace = find_const(self.func_ir, rhs.args[3])
+
+            nodes = []
+
+            out_data = ir.Var(lhs.scope, mk_unique_var(data.name + '_data'), lhs.loc)
+            self.typemap[out_data.name] = self.typemap[data.name]
+            out_index = ir.Var(lhs.scope, mk_unique_var(index_arr.name + '_index'), lhs.loc)
+            self.typemap[out_index.name] = self.typemap[index_arr.name]
+
+            in_df = {'inds': index_arr}
+            out_df = {'inds': out_index}
+            in_keys = [data]
+            out_keys = [out_data]
+
+            # Sort node
+            nodes.append(bodo.ir.sort.Sort(data.name, lhs.name, in_keys,
+                out_keys, in_df, out_df, inplace, lhs.loc, ascending))
+
+            return self._replace_func(
+                lambda A,B: (A,B),
+                (out_data, out_index),
+                pre_nodes=nodes)
+
         if func_name in ('str_contains_regex', 'str_contains_noregex'):
             return self._handle_str_contains(assign, lhs, rhs, func_name)
 
@@ -1142,8 +1169,18 @@ class SeriesPass(object):
                         kws=dict(rhs.kws))
 
         if func_name == 'sort_values':
-            return self._handle_series_sort(
-                lhs, rhs, series_var, func_name == 'argsort')
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S, axis=0, ascending=True, inplace=False,
+                                kind='quicksort', na_position='last': None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
 
         if func_name == 'rolling':
             # XXX: remove rolling setup call, assuming still available in definitions
@@ -1280,79 +1317,6 @@ class SeriesPass(object):
                 pre_nodes=nodes)
 
         return [assign]
-
-    def _handle_series_sort(self, lhs, rhs, series_var, is_argsort):
-        """creates an index list and passes it to a Sort node as data
-        """
-        # get data array
-        nodes = []
-        data = self._get_series_data(series_var, nodes)
-
-        # get index array
-        if self.typemap[series_var.name].index != types.none:
-            index_var = self._get_series_index(series_var, nodes)
-            f_block = compile_to_numba_ir(
-                lambda A: bodo.utils.conversion.index_to_array(A),
-                {'bodo': bodo}, self.typingctx,
-                (self.typemap[index_var.name],),
-                self.typemap, self.calltypes).blocks.popitem()[1]
-            replace_arg_nodes(f_block, [index_var])
-            nodes += f_block.body[:-2]
-            index_var = nodes[-1].target
-        else:
-            # generating the range Index, TODO: general get_index_values()
-            def _get_data(S):  # pragma: no cover
-                n = len(S)
-                return np.arange(n)
-
-            f_block = compile_to_numba_ir(
-                _get_data, {'np': np}, self.typingctx,
-                (self.typemap[data.name],),
-                self.typemap, self.calltypes).blocks.popitem()[1]
-            replace_arg_nodes(f_block, [data])
-            nodes += f_block.body[:-2]
-            index_var = nodes[-1].target
-
-        # output data arrays for results, before conversion to Series
-        out_data = ir.Var(lhs.scope, mk_unique_var(lhs.name + '_data'), lhs.loc)
-        self.typemap[out_data.name] = self.typemap[lhs.name].data
-        out_index = ir.Var(lhs.scope, mk_unique_var(lhs.name + '_index'), lhs.loc)
-        self.typemap[out_index.name] = self.typemap[index_var.name]
-
-        # indexes are input/output Sort data
-        in_df = {'inds': index_var}
-        out_df = {'inds': out_index}
-        # data arrays are Sort key
-        in_keys = [data]
-        out_keys = [out_data]
-        args = [out_data, out_index]
-
-        if is_argsort:
-            # output of argsort doesn't have new index so assign None
-            none_index = ir.Var(lhs.scope, mk_unique_var(lhs.name + '_index'), lhs.loc)
-            self.typemap[none_index.name] = types.none
-            nodes.append(ir.Assign(
-                ir.Const(None, lhs.loc), none_index, lhs.loc))
-            args = [out_index, none_index]
-            ascending = True
-        else:
-            # TODO refactor to use overload_method
-            ascending = self._get_arg(
-                'sort_values', rhs.args, dict(rhs.kws), 1, 'ascending',
-                default=True)
-            if isinstance(ascending, ir.Var):  # TODO: check error
-                ascending = find_const(self.func_ir, ascending)
-
-        # Sort node
-        nodes.append(bodo.ir.sort.Sort(data.name, lhs.name, in_keys,
-            out_keys, in_df, out_df, False, lhs.loc, ascending))
-
-        # create output Series
-        return self._replace_func(
-            lambda A, B: bodo.hiframes.api.init_series(
-                A, bodo.utils.conversion.convert_to_index(B)),
-            args,
-            pre_nodes=nodes)
 
     def _run_call_series_fillna(self, assign, lhs, rhs, series_var):
         dtype = self.typemap[series_var.name].dtype

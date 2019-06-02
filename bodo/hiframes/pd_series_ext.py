@@ -276,15 +276,6 @@ class SeriesAttribute(AttributeTemplate):
         pysig = numba.utils.pysignature(rolling_stub)
         return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
 
-    @bound_function("series.sort_values")
-    def resolve_sort_values(self, ary, args, kws):
-        # output will have permuted input index
-        out_index = ary.index
-        if out_index == types.none:
-            out_index = types.Array(types.intp, 1, 'C')
-        out = SeriesType(ary.dtype, ary.data, out_index)
-        return signature(out, *args)
-
     @bound_function("series.quantile")
     def resolve_quantile(self, ary, args, kws):
         # TODO: fix quantile output type if not float64

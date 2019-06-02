@@ -353,6 +353,31 @@ def overload_argsort(A):
     return impl
 
 
+def sort(arr, index_arr, ascending, inplace):
+    return np.sort(arr), index_arr
+
+
+@overload(sort)
+def overload_sort(arr, index_arr, ascending, inplace):
+    def impl(arr, index_arr, ascending, inplace):
+        n = len(arr)
+        key_arrs = (arr,)
+        data = (index_arr,)
+        if not inplace:
+            key_arrs = (arr.copy(),)
+            data = (index_arr.copy(),)
+
+        l_key_arrs = bodo.libs.str_arr_ext.to_string_list(key_arrs)
+        l_data = bodo.libs.str_arr_ext.to_string_list(data)
+        bodo.libs.timsort.sort(l_key_arrs, 0, n, l_data)
+        if not ascending:
+            bodo.libs.timsort.reverseRange(l_key_arrs, 0, n, l_data)
+        bodo.libs.str_arr_ext.cp_str_list_to_array(key_arrs, l_key_arrs)
+        bodo.libs.str_arr_ext.cp_str_list_to_array(data, l_data)
+        return key_arrs[0], data[0]
+    return impl
+
+
 # the same as fix_df_array but can be parallel
 @numba.generated_jit(nopython=True)
 def parallel_fix_df_array(c):  # pragma: no cover
