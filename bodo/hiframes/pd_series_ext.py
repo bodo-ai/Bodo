@@ -268,21 +268,6 @@ class SeriesAttribute(AttributeTemplate):
         assert ary.dtype == types.NPDatetime('ns')
         return series_dt_methods_type
 
-    # XXX astype cannot be moved to overload since 'str' can't be typed
-    @bound_function("series.astype")
-    def resolve_astype(self, ary, args, kws):
-        # TODO: handle other types like datetime etc.
-        dtype, = args
-        if isinstance(dtype, types.Function) and dtype.typing_key == str:
-            ret_type = SeriesType(string_type, None, ary.index, ary.name_typ)
-            sig = signature(ret_type, *args)
-        else:
-            resolver = ArrayAttribute.resolve_astype.__wrapped__
-            sig = resolver(self, ary.data, args, kws)
-            sig = SeriesType(
-                sig.return_type.dtype, None, ary.index, ary.name_typ)(*sig.args)
-        return sig
-
     @bound_function("series.rolling")
     def resolve_rolling(self, ary, args, kws):
         def rolling_stub(window, min_periods=None, center=False, win_type=None,

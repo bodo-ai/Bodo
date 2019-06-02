@@ -242,6 +242,9 @@ def test_series_astype_str(series_val):
     if series_val.dtype == np.float64:
         return
 
+    if series_val.dtype == np.dtype('datetime64[ns]'):
+        return
+
     def test_impl(S):
         return S.astype(str)
 

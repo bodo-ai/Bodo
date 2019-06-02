@@ -93,48 +93,6 @@ def overload_series_len(S):
         return lambda S: len(bodo.hiframes.api.get_series_data(S))
 
 
-# TODO: fix 'str' typing
-# @overload_method(SeriesType, 'astype')
-# def overload_series_astype(S, dtype):
-#     # TODO: other data types like datetime, records/tuples
-#     def impl(S, dtype):
-#         arr = bodo.hiframes.api.get_series_data(S)
-#         index = bodo.hiframes.api.get_series_index(S)
-#         name = bodo.hiframes.api.get_series_name(S)
-#         out_arr = arr.astype(dtype)
-
-#         return bodo.hiframes.api.init_series(out_arr, index, name)
-
-#     return impl
-    # def _series_astype_str_impl(arr, index, name):
-    #     n = len(arr)
-    #     num_chars = 0
-    #     # get total chars in new array
-    #     for i in numba.parfor.internal_prange(n):
-    #         s = arr[i]
-    #         num_chars += len(str(s))  # TODO: check NA
-
-    #     A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
-    #     for i in numba.parfor.internal_prange(n):
-    #         s = arr[i]
-    #         A[i] = str(s)  # TODO: check NA
-
-    #     return bodo.hiframes.api.init_series(A, index, name)
-    # def impl(S):
-    #     numba.parfor.init_prange()
-    #     arr = bodo.hiframes.api.get_series_data(S)
-    #     index = bodo.hiframes.api.get_series_index(S)
-    #     name = bodo.hiframes.api.get_series_name(S)
-    #     n = len(arr)
-    #     out_arr = np.empty(n, np.bool_)
-    #     for i in numba.parfor.internal_prange(n):
-    #         out_arr[i] = bodo.hiframes.api.isna(arr, i)
-
-    #     return bodo.hiframes.api.init_series(out_arr, index, name)
-
-    # return impl
-
-
 @overload_method(SeriesType, 'copy')
 def overload_series_copy(S, deep=True):
     # TODO: test all Series data types
@@ -579,6 +537,40 @@ def overload_series_notna(S):
     # TODO: make sure this is fused and optimized properly
     return lambda S: S.isna() == False
 
+
+@overload_method(SeriesType, 'astype')
+def overload_series_astype(S, dtype, copy=True, errors='raise'):
+    if isinstance(dtype, types.Function) and dtype.key[0] == str:
+        def impl_str(S, dtype, copy=True, errors='raise'):
+            numba.parfor.init_prange()
+            arr = bodo.hiframes.api.get_series_data(S)
+            index = bodo.hiframes.api.get_series_index(S)
+            name = bodo.hiframes.api.get_series_name(S)
+            n = len(arr)
+            num_chars = 0
+            # get total chars in new array
+            for i in numba.parfor.internal_prange(n):
+                s = arr[i]
+                # TODO: check NA
+                num_chars += bodo.libs.str_arr_ext.get_utf8_size(str(s))
+            A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
+            for i in numba.parfor.internal_prange(n):
+                s = arr[i]
+                A[i] = str(s)  # TODO: check NA
+
+            return bodo.hiframes.api.init_series(A, index, name)
+
+        return impl_str
+
+    # TODO: other data types like datetime, records/tuples
+    def impl(S, dtype, copy=True, errors='raise'):
+        arr = bodo.hiframes.api.get_series_data(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        out_arr = arr.astype(dtype)
+        return bodo.hiframes.api.init_series(out_arr, index, name)
+
+    return impl
 
 
 ############################ binary operators #############################

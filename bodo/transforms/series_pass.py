@@ -1163,21 +1163,24 @@ class SeriesPass(object):
 
         # astype with string output
         if func_name == 'astype':
-            if is_str_series_typ(self.typemap[lhs.name]):
-                # just return input if string
-                if is_str_series_typ(self.typemap[series_var.name]):
-                    return self._replace_func(lambda a: a, [series_var])
-                func = series_replace_funcs['astype_str']
-            else:
-                func = lambda A, I, name, dtype: bodo.hiframes.api.init_series(A.astype(dtype), I, name)
+            # just return input if both input/output are strings
+            # TODO: removing this opt causes a crash in test_series_astype_str
+            # TODO: copy if not packed string array
+            if (is_str_series_typ(self.typemap[lhs.name])
+                    and is_str_series_typ(self.typemap[series_var.name])):
+                return self._replace_func(lambda a: a, [series_var])
 
-            nodes = []
-            data = self._get_series_data(series_var, nodes)
-            index = self._get_series_index(series_var, nodes)
-            name = self._get_series_name(series_var, nodes)
-            dtype = rhs.args[0]
-            return self._replace_func(
-                func, (data, index, name, dtype), pre_nodes=nodes)
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S, dtype, copy=True, errors='raise': None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
 
         if func_name == 'copy':
             rhs.args.insert(0, series_var)
