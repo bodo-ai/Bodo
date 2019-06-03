@@ -276,10 +276,6 @@ class SeriesAttribute(AttributeTemplate):
         pysig = numba.utils.pysignature(rolling_stub)
         return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
 
-    @bound_function("series.nunique")
-    def resolve_nunique(self, ary, args, kws):
-        return signature(types.intp, *args)
-
     @bound_function("series.unique")
     def resolve_unique(self, ary, args, kws):
         # unique returns ndarray for some reason

@@ -704,6 +704,16 @@ def overload_series_quantile(S, q=0.5, interpolation='linear'):
     return impl
 
 
+@overload_method(SeriesType, 'nunique')
+def overload_series_nunique(S, dropna=True):
+    # TODO: refactor, support NA, dt64
+    def impl(S, dropna=True):
+        arr = bodo.hiframes.api.get_series_data(S)
+        return bodo.hiframes.api.nunique(arr)
+
+    return impl
+
+
 ############################ binary operators #############################
 
 

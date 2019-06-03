@@ -1033,6 +1033,21 @@ def test_series_quantile(numeric_series_val):
         bodo_func(numeric_series_val), test_impl(numeric_series_val))
 
 
+def test_series_nunique(series_val):
+    # doesn't support NAs yet, TODO: support and test
+    if series_val.hasnans:
+        return
+    # not supported for dt64 yet, TODO: support and test
+    if series_val.dtype == np.dtype('datetime64[ns]'):
+        return
+
+    def test_impl(A):
+        return A.nunique()
+
+    bodo_func = bodo.jit(test_impl)
+    assert bodo_func(series_val) == test_impl(series_val)
+
+
 ############################### old tests ###############################
 
 
