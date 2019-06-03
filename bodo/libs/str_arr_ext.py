@@ -954,11 +954,16 @@ def setitem_str_arr(context, builder, sig, args):
     return context.get_dummy_value()
 
 
-@numba.njit(no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_utf8_size(s):
-    if s._is_ascii == 1:
-        return len(s)
-    return _get_utf8_size(s._data, s._length, s._kind)
+    if isinstance(s, types.StringLiteral):
+        l = len(s.literal_value.encode())
+        return lambda s: l
+    def impl(s):
+        if s._is_ascii == 1:
+            return len(s)
+        return _get_utf8_size(s._data, s._length, s._kind)
+    return impl
 
 
 @intrinsic

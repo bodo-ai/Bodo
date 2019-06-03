@@ -1075,6 +1075,24 @@ def test_series_describe(numeric_series_val):
         bodo_func(numeric_series_val), test_impl(numeric_series_val))
 
 
+@pytest.mark.parametrize('S,value', [
+    (pd.Series([1.0, 2.0, np.nan, 1.0], [3, 4, 2, 1], name='A'), 5.0),
+    (pd.Series(['aa', 'b', None, 'ccc'], [3, 4, 2, 1], name='A'), 'dd'),
+])
+def test_series_fillna(S, value):
+    # not supported for dt64 yet, TODO: support and test
+    # if numeric_series_val.dtype == np.dtype('datetime64[ns]'):
+    #     return
+
+    def test_impl(A, val):
+        return A.fillna(val)
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(S, value), test_impl(S, value))
+
+
+
 ############################### old tests ###############################
 
 

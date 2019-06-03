@@ -276,14 +276,6 @@ class SeriesAttribute(AttributeTemplate):
         pysig = numba.utils.pysignature(rolling_stub)
         return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
 
-    @bound_function("series.fillna")
-    def resolve_fillna(self, ary, args, kws):
-        out = ary
-        # output is None for inplace case
-        if 'inplace' in kws and kws['inplace'] == types.literal(True):
-            out = types.none
-        return signature(out, *args)
-
     @bound_function("series.dropna")
     def resolve_dropna(self, ary, args, kws):
         out = ary
