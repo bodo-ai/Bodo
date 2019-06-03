@@ -1182,20 +1182,18 @@ class SeriesPass(object):
                         kws=dict(rhs.kws))
 
         if func_name in ('pct_change'):
-            nodes = []
-            data = self._get_series_data(series_var, nodes)
-            index = self._get_series_index(series_var, nodes)
-            name = self._get_series_name(series_var, nodes)
-            # TODO: support default period argument
-            if len(rhs.args) == 0:
-                args = (data, index, name)
-                func = series_replace_funcs[func_name + "_default"]
-            else:
-                assert len(rhs.args) == 1, "invalid args for " + func_name
-                shift_const = rhs.args[0]
-                args = (data, shift_const, index, name)
-                func = series_replace_funcs[func_name]
-            return self._replace_func(func, args, pre_nodes=nodes)
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S, periods=1, fill_method='pad', limit=None,
+                    freq=None: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
 
         if func_name in ('nlargest', 'nsmallest'):
             rhs.args.insert(0, series_var)

@@ -173,7 +173,8 @@ unless support is explicitly mentioned.
 * :meth:`Series.min`
 * :meth:`Series.nlargest` (non-numerics not supported yet)
 * :meth:`Series.nsmallest` (non-numerics not supported yet)
-* :meth:`Series.pct_change`
+* :meth:`Series.pct_change`(supports numeric types and
+  only the `periods` argument supported)
 * :meth:`Series.prod`
 * :meth:`Series.quantile`
 * :meth:`Series.std`

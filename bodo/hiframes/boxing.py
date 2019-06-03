@@ -100,7 +100,7 @@ def unbox_dataframe(typ, val, c):
     # TODO: support unboxing index
     if typ.index == types.none:
         index_val = c.context.get_constant(types.none, None)
-    elif typ.index == bodo.hiframes.pd_index_ext.range_index_type:
+    elif isinstance(typ.index, bodo.hiframes.pd_index_ext.RangeIndexType):
         # TODO: more Index classes
         ind_obj = c.pyapi.object_getattr_string(val, 'index')
         index_val = c.pyapi.to_native_value(typ.index, ind_obj).value
