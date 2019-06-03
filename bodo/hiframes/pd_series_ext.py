@@ -276,11 +276,6 @@ class SeriesAttribute(AttributeTemplate):
         pysig = numba.utils.pysignature(rolling_stub)
         return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
 
-    @bound_function("series.quantile")
-    def resolve_quantile(self, ary, args, kws):
-        # TODO: fix quantile output type if not float64
-        return signature(types.float64, *args)
-
     @bound_function("series.nunique")
     def resolve_nunique(self, ary, args, kws):
         return signature(types.intp, *args)

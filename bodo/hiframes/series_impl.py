@@ -694,6 +694,16 @@ def overload_series_append(S, to_append, ignore_index=False,
     return impl_single
 
 
+@overload_method(SeriesType, 'quantile')
+def overload_series_quantile(S, q=0.5, interpolation='linear'):
+    # TODO: datetime support
+    def impl(S, q=0.5, interpolation='linear'):
+        arr = bodo.hiframes.api.get_series_data(S)
+        return bodo.libs.array_kernels.quantile(arr, q)
+
+    return impl
+
+
 ############################ binary operators #############################
 
 

@@ -1105,13 +1105,17 @@ class SeriesPass(object):
             return self._replace_func(func, args, pre_nodes=nodes)
 
         if func_name == 'quantile':
-            nodes = []
-            data = self._get_series_data(series_var, nodes)
-            return self._replace_func(
-                lambda A, q: bodo.libs.array_kernels.quantile(A, q),
-                [data, rhs.args[0]],
-                pre_nodes=nodes
-            )
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S, q=0.5, interpolation='linear': None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
 
         if func_name == 'fillna':
             return self._run_call_series_fillna(assign, lhs, rhs, series_var)

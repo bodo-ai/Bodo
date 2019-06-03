@@ -1020,6 +1020,19 @@ def test_series_append_multi(series_val, ignore_index):
         check_names=False)  # XXX append can't set name yet
 
 
+def test_series_quantile(numeric_series_val):
+    # quantile not supported for dt64 yet, TODO: support and test
+    if numeric_series_val.dtype == np.dtype('datetime64[ns]'):
+        return
+
+    def test_impl(A):
+        return A.quantile(0.30)
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_almost_equal(
+        bodo_func(numeric_series_val), test_impl(numeric_series_val))
+
+
 ############################### old tests ###############################
 
 
