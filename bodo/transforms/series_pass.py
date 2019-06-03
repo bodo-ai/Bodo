@@ -1155,7 +1155,17 @@ class SeriesPass(object):
                         kws=dict(rhs.kws))
 
         if func_name == 'dropna':
-            return self._run_call_series_dropna(assign, lhs, rhs, series_var)
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S, axis=0, inplace=False: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
 
         if func_name in ('shift', 'pct_change'):
             nodes = []

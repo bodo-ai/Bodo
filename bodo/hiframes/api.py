@@ -568,6 +568,21 @@ def update_series_data(typingctx, series_typ, arr_typ=None):
 
 
 @intrinsic
+def update_series_index(typingctx, series_typ, arr_typ=None):
+
+    def codegen(context, builder, signature, args):
+        series_payload = get_series_payload(
+            context, builder, signature.args[0], args[0])
+        series_payload.index = args[1]
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[1], args[1])
+        return
+
+    sig = types.none(series_typ, arr_typ)
+    return sig, codegen
+
+
+@intrinsic
 def _get_series_index(typingctx, series_typ=None):
 
     def codegen(context, builder, signature, args):

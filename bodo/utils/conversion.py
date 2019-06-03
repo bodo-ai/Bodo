@@ -210,6 +210,23 @@ def overload_convert_to_index(data):
     return impl
 
 
+def force_convert_index(I1, I2):
+    return I2
+
+
+@overload(force_convert_index)
+def overload_force_convert_index(I1, I2):
+    """
+    Convert I1 to type of I2, with possible loss of data. TODO: remove this
+    """
+    from bodo.hiframes.pd_index_ext import RangeIndexType
+
+    if isinstance(I2, RangeIndexType):
+        return lambda I1, I2: pd.RangeIndex(len(I1._data))
+
+    return lambda I1, I2: I1
+
+
 def index_from_array(data):
     return data
 

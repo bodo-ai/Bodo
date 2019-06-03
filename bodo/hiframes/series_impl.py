@@ -837,6 +837,63 @@ def overload_series_fillna(S, value=None, method=None, axis=None,
             return fillna_impl
 
 
+@overload_method(SeriesType, 'dropna')
+def overload_series_dropna(S, axis=0, inplace=False):
+    # TODO: fix inplace index output
+    if is_overload_true(inplace):
+        if S.dtype == bodo.string_type:
+            def dropna_str_inplace_impl(S, axis=0, inplace=False):
+                in_arr = bodo.hiframes.api.get_series_data(S)
+                mask = S.notna().values
+                index_arr = bodo.utils.conversion.extract_index_array(S)
+                out_index = bodo.utils.conversion.convert_to_index(
+                    index_arr[mask])
+                out_arr = bodo.hiframes.series_kernels._series_dropna_str_alloc_impl_inner(in_arr)
+                bodo.hiframes.api.update_series_data(S, out_arr)
+                out_index_t = bodo.utils.conversion.force_convert_index(
+                    out_index, bodo.hiframes.api.get_series_index(S))
+                bodo.hiframes.api.update_series_index(S, out_index_t)
+                return
+            return dropna_str_inplace_impl
+        else:
+            def dropna_inplace_impl(S, axis=0, inplace=False):  # pragma: no cover
+                in_arr = bodo.hiframes.api.get_series_data(S)
+                index_arr = bodo.utils.conversion.extract_index_array(S)
+                mask = S.notna().values
+                out_index = bodo.utils.conversion.convert_to_index(
+                    index_arr[mask])
+                out_arr = in_arr[mask]
+                bodo.hiframes.api.update_series_data(S, out_arr)
+                out_index_t = bodo.utils.conversion.force_convert_index(
+                    out_index, bodo.hiframes.api.get_series_index(S))
+                bodo.hiframes.api.update_series_index(S, out_index_t)
+                return
+            return dropna_inplace_impl
+    else:
+        if S.dtype == bodo.string_type:
+            def dropna_str_impl(S, axis=0, inplace=False):
+                in_arr = bodo.hiframes.api.get_series_data(S)
+                name = bodo.hiframes.api.get_series_name(S)
+                mask = S.notna().values
+                index_arr = bodo.utils.conversion.extract_index_array(S)
+                out_index = bodo.utils.conversion.convert_to_index(
+                    index_arr[mask])
+                out_arr = bodo.hiframes.series_kernels._series_dropna_str_alloc_impl_inner(in_arr)
+                return bodo.hiframes.api.init_series(out_arr, out_index, name)
+            return dropna_str_impl
+        else:
+            def dropna_impl(S, axis=0, inplace=False):  # pragma: no cover
+                in_arr = bodo.hiframes.api.get_series_data(S)
+                name = bodo.hiframes.api.get_series_name(S)
+                index_arr = bodo.utils.conversion.extract_index_array(S)
+                mask = S.notna().values
+                out_index = bodo.utils.conversion.convert_to_index(
+                    index_arr[mask])
+                out_arr = in_arr[mask]
+                return bodo.hiframes.api.init_series(out_arr, out_index, name)
+            return dropna_impl
+
+
 ############################ binary operators #############################
 
 

@@ -1080,9 +1080,6 @@ def test_series_describe(numeric_series_val):
     (pd.Series(['aa', 'b', None, 'ccc'], [3, 4, 2, 1], name='A'), 'dd'),
 ])
 def test_series_fillna(S, value):
-    # not supported for dt64 yet, TODO: support and test
-    # if numeric_series_val.dtype == np.dtype('datetime64[ns]'):
-    #     return
 
     def test_impl(A, val):
         return A.fillna(val)
@@ -1091,6 +1088,19 @@ def test_series_fillna(S, value):
     pd.testing.assert_series_equal(
         bodo_func(S, value), test_impl(S, value))
 
+
+@pytest.mark.parametrize('S', [
+    pd.Series([1.0, 2.0, np.nan, 1.0], [3, 4, 2, 1], name='A'),
+    pd.Series(['aa', 'b', None, 'ccc'], [3, 4, 2, 1], name='A'),
+])
+def test_series_dropna(S):
+
+    def test_impl(A):
+        return A.dropna()
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(S), test_impl(S))
 
 
 ############################### old tests ###############################
@@ -1713,7 +1723,6 @@ class TestSeries(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         np.testing.assert_array_equal(bodo_func(S1), test_impl(S2))
 
-    @unittest.skip("TODO: fix result")
     def test_series_dropna_str_parallel1(self):
         def test_impl(A):
             B = A.dropna()
