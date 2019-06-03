@@ -276,11 +276,6 @@ class SeriesAttribute(AttributeTemplate):
         pysig = numba.utils.pysignature(rolling_stub)
         return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
 
-    @bound_function("series.describe")
-    def resolve_describe(self, ary, args, kws):
-        # TODO: return namedtuple or labeled Series
-        return signature(string_type, *args)
-
     @bound_function("series.fillna")
     def resolve_fillna(self, ary, args, kws):
         out = ary

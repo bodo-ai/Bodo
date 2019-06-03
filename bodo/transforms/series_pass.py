@@ -1098,17 +1098,28 @@ class SeriesPass(object):
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
 
-        if func_name in ('describe', 'isna', 'isnull'):
+        if func_name == 'describe':
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (
+                lambda S, percentiles=None, include=None, exclude=None: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
+
+        if func_name in ('isna', 'isnull'):
             if rhs.args or rhs.kws:
                 raise ValueError("unsupported Series.{}() arguments".format(
                     func_name))
             func = series_replace_funcs[func_name]
             # TODO: handle skipna, min_count arguments
             nodes = []
-            if func_name == 'describe':
-                data = series_var
-            else:
-                data = self._get_series_data(series_var, nodes)
+            data = self._get_series_data(series_var, nodes)
             args = (data,)
             if func_name in ('isna', 'isnull'):
                 index = self._get_series_index(series_var, nodes)

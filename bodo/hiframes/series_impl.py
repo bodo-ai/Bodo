@@ -724,6 +724,28 @@ def overload_series_unique(S):
     return impl
 
 
+@overload_method(SeriesType, 'describe')
+def overload_series_describe(S, percentiles=None, include=None, exclude=None):
+    # TODO: support categorical, dt64, ...
+    def impl(S, percentiles=None, include=None, exclude=None):
+        name = bodo.hiframes.api.get_series_name(S)
+        a_count = np.float64(S.count())
+        a_min = np.float64(S.min())
+        a_max = np.float64(S.max())
+        a_mean = np.float64(S.mean())
+        a_std = np.float64(S.std())
+        q25 = S.quantile(.25)
+        q50 = S.quantile(.5)
+        q75 = S.quantile(.75)
+        return bodo.hiframes.api.init_series(
+            np.array([a_count, a_mean, a_std, a_min, q25, q50, q75, a_max]),
+            bodo.utils.conversion.convert_to_index(
+                ['count', 'mean', 'std', 'min', '25%', '50%', '75%', 'max']),
+            name)
+
+    return impl
+
+
 ############################ binary operators #############################
 
 
