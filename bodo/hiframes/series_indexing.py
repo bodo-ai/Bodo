@@ -220,7 +220,7 @@ def overload_series_iloc_setitem(I, idx, val):
         if isinstance(idx, types.SliceType):
             def impl_slice(I, idx, val):
                 bodo.hiframes.api.get_series_data(I._obj)[idx] = \
-                    bodo.utils.conversion.coerce_to_array(val)
+                    bodo.utils.conversion.coerce_to_array(val, False)
             return impl_slice
 
         # list of ints or array of ints
@@ -231,7 +231,7 @@ def overload_series_iloc_setitem(I, idx, val):
             def impl_arr(I, idx, val):
                 idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
                 bodo.hiframes.api.get_series_data(I._obj)[idx_t] = \
-                    bodo.utils.conversion.coerce_to_array(val)
+                    bodo.utils.conversion.coerce_to_array(val, False)
             return impl_arr
 
         raise ValueError("iloc[] setitem using {} not supported".format(idx))
@@ -330,7 +330,7 @@ def overload_series_setitem(S, idx, val):
         if isinstance(idx, types.SliceType):
             def impl_slice(S, idx, val):
                 bodo.hiframes.api.get_series_data(S)[idx] = \
-                    bodo.utils.conversion.coerce_to_array(val)
+                    bodo.utils.conversion.coerce_to_array(val, False)
             return impl_slice
 
         # list of ints or array of ints
@@ -346,7 +346,7 @@ def overload_series_setitem(S, idx, val):
             def impl_arr(S, idx, val):
                 idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
                 bodo.hiframes.api.get_series_data(S)[idx_t] = \
-                    bodo.utils.conversion.coerce_to_array(val)
+                    bodo.utils.conversion.coerce_to_array(val, False)
             return impl_arr
 
         raise ValueError(

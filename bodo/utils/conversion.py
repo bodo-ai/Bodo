@@ -8,7 +8,7 @@ import numba
 from numba import types
 from numba.extending import overload
 import bodo
-from bodo.utils.typing import is_overload_none
+from bodo.utils.typing import is_overload_none, is_overload_true
 
 
 NS_DTYPE = np.dtype('M8[ns]')  # similar pandas/_libs/tslibs/conversion.pyx
@@ -16,12 +16,12 @@ TD_DTYPE = np.dtype('m8[ns]')
 
 
 # TODO: use generated_jit with IR inlining
-def coerce_to_ndarray(data):
+def coerce_to_ndarray(data, error_on_nonarray=True):
     return data
 
 
 @overload(coerce_to_ndarray)
-def overload_coerce_to_ndarray(data):
+def overload_coerce_to_ndarray(data, error_on_nonarray=True):
     # TODO: other cases handled by this function in Pandas like scalar
     """
     Coerces data to ndarray. Data should be numeric.
@@ -31,33 +31,39 @@ def overload_coerce_to_ndarray(data):
         DatetimeIndexType, TimedeltaIndexType)
 
     if isinstance(data, types.Array):
-        return lambda data: data
+        return lambda data, error_on_nonarray=True: data
 
     if isinstance(data, (types.List, types.Tuple)):
         # TODO: check homogenous for tuple
-        return lambda data: np.asarray(data)
+        return lambda data, error_on_nonarray=True: np.asarray(data)
 
     if isinstance(data, SeriesType):
-        return lambda data: bodo.hiframes.api.get_series_data(data)
+        return lambda data, error_on_nonarray=True: \
+            bodo.hiframes.api.get_series_data(data)
 
     # index types
     if isinstance(data, (NumericIndexType, DatetimeIndexType,
                          TimedeltaIndexType)):
-        return lambda data: bodo.hiframes.api.get_index_data(data)
+        return lambda data, error_on_nonarray=True: \
+            bodo.hiframes.api.get_index_data(data)
 
     if isinstance(data, RangeIndexType):
-        return lambda data: np.arange(data._start, data._stop, data._step)
+        return lambda data, error_on_nonarray=True: \
+            np.arange(data._start, data._stop, data._step)
 
-    raise TypeError("cannot coerce {} to array".format(data))
+    if is_overload_true(error_on_nonarray):
+        raise TypeError("cannot coerce {} to array".format(data))
+
+    return lambda data, error_on_nonarray=True: data
 
 
 # TODO: use generated_jit with IR inlining
-def coerce_to_array(data):
+def coerce_to_array(data, error_on_nonarray=True):
     return data
 
 
 @overload(coerce_to_array)
-def overload_coerce_to_array(data):
+def overload_coerce_to_array(data, error_on_nonarray=True):
     """
     convert data to bodo arrays.
     """
@@ -66,25 +72,30 @@ def overload_coerce_to_array(data):
 
     # string series
     if is_str_series_typ(data):
-        return lambda data: bodo.hiframes.api.get_series_data(data)
+        return lambda data, error_on_nonarray=True: \
+            bodo.hiframes.api.get_series_data(data)
 
     if isinstance(data, StringIndexType):
-        return lambda data: bodo.hiframes.api.get_index_data(data)
+        return lambda data, error_on_nonarray=True: \
+            bodo.hiframes.api.get_index_data(data)
 
     # string array
     if data == bodo.string_array_type:
-        return lambda data: data
+        return lambda data, error_on_nonarray=True: data
 
     # string list
     if isinstance(data, types.List) and data.dtype == bodo.string_type:
-        return lambda data: bodo.libs.str_arr_ext.StringArray(data)
+        return lambda data, error_on_nonarray=True: \
+            bodo.libs.str_arr_ext.StringArray(data)
 
     # string tuple
     if isinstance(data, types.UniTuple) and data.dtype == bodo.string_type:
-        return lambda data: bodo.libs.str_arr_ext.StringArray(list(data))
+        return lambda data, error_on_nonarray=True: \
+            bodo.libs.str_arr_ext.StringArray(list(data))
 
     # assuming can be ndarray
-    return lambda data: bodo.utils.conversion.coerce_to_ndarray(data)
+    return lambda data, error_on_nonarray=True: \
+        bodo.utils.conversion.coerce_to_ndarray(data, error_on_nonarray)
 
 
 # TODO: use generated_jit with IR inlining
