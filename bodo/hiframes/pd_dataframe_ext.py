@@ -185,7 +185,8 @@ class DataFrameAttribute(AttributeTemplate):
         # e.g. dt64 to timestamp in TestDate.test_ts_map_date2
         dtypes = []
         for arr_typ in df.data:
-            series_typ = SeriesType(arr_typ.dtype, arr_typ, df.index, True)
+            series_typ = SeriesType(
+                arr_typ.dtype, arr_typ, df.index, string_type)
             el_typ = self.context.resolve_function_type(
                 operator.getitem, (series_typ, types.int64), {}).return_type
             dtypes.append(el_typ)
@@ -208,7 +209,7 @@ class DataFrameAttribute(AttributeTemplate):
         if attr in df.columns:
             ind = df.columns.index(attr)
             arr_typ = df.data[ind]
-            return SeriesType(arr_typ.dtype, arr_typ, df.index, True)
+            return SeriesType(arr_typ.dtype, arr_typ, df.index, string_type)
 
 
 def construct_dataframe(context, builder, df_type, data_tup, index_val,
@@ -743,6 +744,7 @@ class StaticGetItemDataFrameIat(AbstractTemplate):
                 data_typ = df.df_type.data[col_no]
                 return signature(data_typ.dtype, *args)
 
+
 @infer_global(operator.getitem)
 class GetItemDataFrameIat(AbstractTemplate):
     key = operator.getitem
@@ -757,6 +759,7 @@ class GetItemDataFrameIat(AbstractTemplate):
                 col_no = idx.types[1].literal_value
                 data_typ = df.df_type.data[col_no]
                 return signature(data_typ.dtype, *args)
+
 
 @infer_global(operator.setitem)
 class SetItemDataFrameIat(AbstractTemplate):
