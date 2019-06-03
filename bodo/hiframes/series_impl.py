@@ -894,6 +894,19 @@ def overload_series_dropna(S, axis=0, inplace=False):
             return dropna_impl
 
 
+@overload_method(SeriesType, 'shift')
+def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
+    # TODO: handle dt64, strings
+    def impl(S, periods=1, freq=None, axis=0, fill_value=None):
+        arr = bodo.hiframes.api.get_series_data(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        out_arr = bodo.hiframes.rolling.shift(arr, periods, False)
+        return bodo.hiframes.api.init_series(out_arr, index, name)
+
+    return impl
+
+
 ############################ binary operators #############################
 
 

@@ -210,7 +210,8 @@ Reshaping, sorting:
 
 Time series-related:
 
-* :meth:`Series.shift`
+* :meth:`Series.shift` (supports numeric types and
+  only the `periods` argument supported)
 
 String handling:
 

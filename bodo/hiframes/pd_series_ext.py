@@ -276,15 +276,6 @@ class SeriesAttribute(AttributeTemplate):
         pysig = numba.utils.pysignature(rolling_stub)
         return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
 
-    @bound_function("series.shift")
-    def resolve_shift(self, ary, args, kws):
-        # TODO: support default period argument
-        out = ary
-        # integers are converted to float64 to store NaN
-        if isinstance(ary.dtype, types.Integer):
-            out = out.copy(dtype=types.float64)
-        return signature(out, *args)
-
     @bound_function("series.pct_change")
     def resolve_pct_change(self, ary, args, kws):
         # TODO: support default period argument
