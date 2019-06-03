@@ -1048,6 +1048,18 @@ def test_series_nunique(series_val):
     assert bodo_func(series_val) == test_impl(series_val)
 
 
+def test_series_unique(series_val):
+    # not supported for dt64 yet, TODO: support and test
+    if series_val.dtype == np.dtype('datetime64[ns]'):
+        return
+
+    def test_impl(A):
+        return A.unique()
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_array_equal(np.sort(bodo_func(series_val)), np.sort(test_impl(series_val)))
+
+
 ############################### old tests ###############################
 
 

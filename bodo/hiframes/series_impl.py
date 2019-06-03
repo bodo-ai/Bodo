@@ -714,6 +714,16 @@ def overload_series_nunique(S, dropna=True):
     return impl
 
 
+@overload_method(SeriesType, 'unique')
+def overload_series_unique(S):
+    # TODO: refactor, support dt64
+    def impl(S):
+        arr = bodo.hiframes.api.get_series_data(S)
+        return bodo.hiframes.api.unique(arr)
+
+    return impl
+
+
 ############################ binary operators #############################
 
 

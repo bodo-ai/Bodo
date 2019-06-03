@@ -276,12 +276,6 @@ class SeriesAttribute(AttributeTemplate):
         pysig = numba.utils.pysignature(rolling_stub)
         return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
 
-    @bound_function("series.unique")
-    def resolve_unique(self, ary, args, kws):
-        # unique returns ndarray for some reason
-        arr_typ = series_to_array_type(ary)
-        return signature(arr_typ, *args)
-
     @bound_function("series.describe")
     def resolve_describe(self, ary, args, kws):
         # TODO: return namedtuple or labeled Series
