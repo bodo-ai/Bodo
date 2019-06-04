@@ -454,6 +454,8 @@ class SeriesPass(object):
                 return [assign]
             if isinstance(func_def, ir.Global) and isinstance(func_def.value, StencilFunc):
                 return [assign]
+            if isinstance(func_def, ir.Const):
+                return self._run_const_call(assign, lhs, rhs, func_def.value)
             warnings.warn(
                 "function call couldn't be found for initial analysis")
             return [assign]
@@ -718,6 +720,33 @@ class SeriesPass(object):
         else:
             nodes.append(assign)
             return nodes
+
+    def _run_const_call(self, assign, lhs, rhs, func):
+        # replace direct calls to operators with Expr binop nodes to enable
+        # ParallelAccelerator transformtions
+        if func in bodo.hiframes.pd_series_ext.series_binary_ops:
+            return [ir.Assign(ir.Expr.binop(
+                func, rhs.args[0], rhs.args[1], rhs.loc),
+                assign.target,
+                rhs.loc)]
+
+        if func in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
+            # TODO: test
+            imm_fn = bodo.hiframes.pd_series_ext.inplace_binop_to_imm[func]
+            return [ir.Assign(ir.Expr.inplace_binop(
+                func, imm_fn, rhs.args[0], rhs.args[1], rhs.loc),
+                assign.target,
+                rhs.loc)]
+
+        # TODO: this fails test_series_unary_op with pos for some reason
+        # if func in bodo.hiframes.pd_series_ext.series_unary_ops:
+        #     return [ir.Assign(ir.Expr.unary(
+        #         func, rhs.args[0], rhs.loc),
+        #         assign.target,
+        #         rhs.loc)]
+
+        # TODO: handle other calls
+        return [assign]
 
     def _handle_ufuncs(self, ufunc_name, args):
         """hanlde ufuncs with any Series in arguments.

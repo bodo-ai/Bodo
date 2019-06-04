@@ -381,6 +381,18 @@ series_inplace_binary_ops = tuple(
     if op not in (operator.ilshift, operator.irshift, operator.itruediv)
 )
 
+inplace_binop_to_imm = {
+    operator.iadd: operator.add,
+    operator.isub: operator.sub,
+    operator.imul: operator.mul,
+    operator.ifloordiv: operator.floordiv,
+    operator.imod: operator.mod,
+    operator.ipow: operator.pow,
+    operator.iand: operator.and_,
+    operator.ior: operator.or_,
+    operator.ixor: operator.xor,
+}
+
 
 series_unary_ops = (operator.neg, operator.invert, operator.pos)
 
