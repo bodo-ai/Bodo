@@ -441,7 +441,9 @@ def overload_series_idxmin(S, axis=0, skipna=True):
     else:
         def impl(S, axis=0, skipna=True):
             i = bodo.hiframes.api.get_series_data(S).argmin()
-            return bodo.hiframes.api.get_series_index(S)[i]
+            index = bodo.hiframes.api.get_series_index(S)
+            index_t = bodo.utils.conversion.fix_none_index(index, len(S))
+            return index_t[i]
         return impl
 
 
@@ -457,7 +459,8 @@ def overload_series_idxmax(S, axis=0, skipna=True):
     else:
         def impl(S, axis=0, skipna=True):
             i = bodo.hiframes.api.get_series_data(S).argmax()
-            return bodo.hiframes.api.get_series_index(S)[i]
+            index_t = bodo.utils.conversion.fix_none_index(index, len(S))
+            return index_t[i]
         return impl
 
 
@@ -478,8 +481,9 @@ def overload_series_head(S, n=5):
     def impl(S, n=5):
         arr = bodo.hiframes.api.get_series_data(S)
         index = bodo.hiframes.api.get_series_index(S)
+        index_t = bodo.utils.conversion.fix_none_index(index, len(arr))
         name = bodo.hiframes.api.get_series_name(S)
-        return bodo.hiframes.api.init_series(arr[:n], index[:n], name)
+        return bodo.hiframes.api.init_series(arr[:n], index_t[:n], name)
 
     return impl
 
@@ -490,8 +494,9 @@ def overload_series_tail(S, n=5):
     def impl(S, n=5):
         arr = bodo.hiframes.api.get_series_data(S)
         index = bodo.hiframes.api.get_series_index(S)
+        index_t = bodo.utils.conversion.fix_none_index(index, len(arr))
         name = bodo.hiframes.api.get_series_name(S)
-        return bodo.hiframes.api.init_series(arr[-n:], index[-n:], name)
+        return bodo.hiframes.api.init_series(arr[-n:], index_t[-n:], name)
 
     return impl
 
