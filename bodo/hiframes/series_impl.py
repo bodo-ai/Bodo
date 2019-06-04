@@ -459,6 +459,7 @@ def overload_series_idxmax(S, axis=0, skipna=True):
     else:
         def impl(S, axis=0, skipna=True):
             i = bodo.hiframes.api.get_series_data(S).argmax()
+            index = bodo.hiframes.api.get_series_index(S)
             index_t = bodo.utils.conversion.fix_none_index(index, len(S))
             return index_t[i]
         return impl
