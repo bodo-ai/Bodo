@@ -197,7 +197,7 @@ class DataFrameAttribute(AttributeTemplate):
         _, f_return_type, _ = numba.compiler.type_inference_stage(
                 self.context, f_ir, (row_typ,), None)
 
-        return signature(SeriesType(f_return_type), *args)
+        return signature(SeriesType(f_return_type, index=df.index), *args)
 
     @bound_function("df.describe")
     def resolve_describe(self, df, args, kws):
@@ -801,7 +801,7 @@ class GetItemDataFrameLoc(AbstractTemplate):
                 col_no = df.df_type.columns.index(col_name)
                 data_typ = df.df_type.data[col_no]
                 # TODO: index
-                ret_typ = SeriesType(data_typ.dtype, None, True)
+                ret_typ = SeriesType(data_typ.dtype, None, bodo.string_type)
                 return signature(ret_typ, *args)
 
 
@@ -826,7 +826,7 @@ class GetItemDataFrameILoc(AbstractTemplate):
                 col_no = idx.types[1].literal_value
                 data_typ = df.df_type.data[col_no]
                 # TODO: index
-                ret_typ = SeriesType(data_typ.dtype, None, True)
+                ret_typ = SeriesType(data_typ.dtype, None, bodo.string_type)
                 return signature(ret_typ, *args)
 
 
@@ -904,8 +904,10 @@ def concat_overload(objs, axis=0, join='outer', join_axes=None,
             verify_integrity=False, sort=None, copy=True:
             bodo.hiframes.pd_dataframe_ext.concat_dummy(objs, axis))
 
+
 def concat_dummy(objs):
     return pd.concat(objs)
+
 
 @infer_global(concat_dummy)
 class ConcatDummyTyper(AbstractTemplate):
@@ -1606,6 +1608,7 @@ class ProdDummyTyper(AbstractTemplate):
         out = SeriesType(dtype, types.Array(dtype, 1, 'C'), string_array_type)
         return signature(out, *args)
 
+
 @lower_builtin(prod_dummy, types.VarArg(types.Any))
 def lower_prod_dummy(context, builder, sig, args):
     out_obj = cgutils.create_struct_proxy(
@@ -1624,6 +1627,7 @@ def count_overload(df, axis=0, level=None, numeric_only=False):
 def count_dummy(df, n):
     return df
 
+
 @infer_global(count_dummy)
 class CountDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
@@ -1631,11 +1635,13 @@ class CountDummyTyper(AbstractTemplate):
         out = SeriesType(dtype, types.Array(dtype, 1, 'C'), string_array_type)
         return signature(out, *args)
 
+
 @lower_builtin(count_dummy, types.VarArg(types.Any))
 def lower_count_dummy(context, builder, sig, args):
     out_obj = cgutils.create_struct_proxy(
         sig.return_type)(context, builder)
     return out_obj._getvalue()
+
 
 # TODO: other Pandas versions (0.24 defaults are different than 0.23)
 @overload_method(DataFrameType, 'to_csv')

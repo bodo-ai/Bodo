@@ -1443,6 +1443,7 @@ class DataFramePass(object):
         # find df['col2'] = df['col1'][arr]
         # since columns should have the same size, output is filled with NaNs
         # TODO: make sure col1 and col2 are in the same df
+        # TODO: compare df index and Series index and match them in setitem
         arr_def = guard(get_definition, self.func_ir, new_arr)
         if (isinstance(arr_def, ir.Expr)  and arr_def.op == 'getitem'
                 and is_array(self.typemap, arr_def.value.name)

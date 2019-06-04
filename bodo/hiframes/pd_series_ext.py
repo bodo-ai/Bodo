@@ -550,6 +550,7 @@ class SeriesCompEqual(AbstractTemplate):
                 or (is_dt64_series_typ(vb) and va == string_type)):
             return signature(SeriesType(types.boolean), va, vb)
 
+
 @infer
 class CmpOpNEqSeries(SeriesCompEqual):
     key = '!='

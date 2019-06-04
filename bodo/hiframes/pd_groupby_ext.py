@@ -10,8 +10,7 @@ from numba.typing.templates import (infer_global, AbstractTemplate, signature,
     AttributeTemplate, bound_function)
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 import bodo
-from bodo.hiframes.pd_series_ext import (SeriesType, _get_series_array_type,
-    arr_to_series_type)
+from bodo.hiframes.pd_series_ext import (SeriesType, _get_series_array_type)
 from bodo.libs.str_ext import string_type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.ir.aggregate import get_agg_func
@@ -146,7 +145,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
         out_res = DataFrameType(tuple(out_data), None, tuple(out_columns))
         # XXX output becomes series if single output and explicitly selected
         if len(grp.selection) == 1 and grp.explicit_select and grp.as_index:
-            out_res = arr_to_series_type(out_data[0])
+            out_res = SeriesType(out_data[0])
         return signature(out_res, *args)
 
     @bound_function("groupby.agg")

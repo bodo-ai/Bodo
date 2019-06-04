@@ -267,6 +267,7 @@ class FillNaStrType(AbstractTemplate):
         # args: in_arr, value
         return signature(SeriesType(string_type), *args)
 
+
 @infer_global(dropna)
 class DropNAType(AbstractTemplate):
     def generic(self, args, kws):
@@ -417,8 +418,10 @@ class ToNumeric(AbstractTemplate):
         dtype = args[1].dtype
         return signature(SeriesType(dtype), *unliteral_all(args))
 
+
 def series_filter_bool(arr, bool_arr):
     return arr[bool_arr]
+
 
 @infer_global(series_filter_bool)
 class SeriesFilterBoolInfer(AbstractTemplate):

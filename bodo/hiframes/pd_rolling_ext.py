@@ -10,8 +10,7 @@ from numba.typing.templates import (infer_global, AbstractTemplate, signature,
     AttributeTemplate, bound_function)
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 import bodo
-from bodo.hiframes.pd_series_ext import (SeriesType, _get_series_array_type,
-    arr_to_series_type)
+from bodo.hiframes.pd_series_ext import (SeriesType, _get_series_array_type)
 from bodo.libs.str_ext import string_type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.rolling import supported_rolling_funcs
