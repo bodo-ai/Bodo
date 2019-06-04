@@ -1015,8 +1015,9 @@ class SeriesPass(object):
                 'cumprod', 'abs', 'count', 'unique', 'get_values', 'min',
                 'max', 'median', 'idxmin', 'idxmax', 'rename', 'corr', 'cov',
                 'nunique', 'describe', 'put', 'isna', 'isnull', 'quantile',
-                'fillna', 'dropna', 'shift', 'pct_change', 'nlargest',
-                'nsmallest', 'head', 'tail', 'argsort', 'sort_values'):
+                'fillna', 'dropna', 'shift', 'pct_change', 'nlargest', 'notna',
+                'nsmallest', 'head', 'tail', 'argsort', 'sort_values', 'take',
+                'append'):
             if func_name == 'isnull':
                 func_name = 'isna'
             rhs.args.insert(0, series_var)
@@ -1046,25 +1047,6 @@ class SeriesPass(object):
                 func_var = self._get_arg('map', rhs.args, kws, 0, 'arg')
             return self._handle_series_map(
                 assign, lhs, rhs, series_var, func_var)
-
-        if func_name == 'append':
-            rhs.args.insert(0, series_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name:self.typemap[v.name]
-                    for name, v in dict(rhs.kws).items()}
-            overload_func = getattr(bodo.hiframes.series_impl,
-                'overload_series_' + func_name)
-            impl = overload_func(*arg_typs, **kw_typs)
-            stub = (lambda S, to_append, ignore_index=False,
-                                                  verify_integrity=False: None)
-            return self._replace_func(impl, rhs.args,
-                        pysig=numba.utils.pysignature(stub),
-                        kws=dict(rhs.kws))
-
-        if func_name == 'notna':
-            # TODO: make sure this is fused and optimized properly
-            return self._replace_func(
-                lambda S: S.isna()==False, [series_var])
 
         if func_name == 'value_counts':
             nodes = []
@@ -1122,27 +1104,10 @@ class SeriesPass(object):
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
 
-        if func_name == 'take':
-            rhs.args.insert(0, series_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name:self.typemap[v.name]
-                    for name, v in dict(rhs.kws).items()}
-            overload_func = getattr(bodo.hiframes.series_impl,
-                'overload_series_' + func_name)
-            impl = overload_func(*arg_typs, **kw_typs)
-            stub = (
-                lambda S, indices, axis=0, convert=None, is_copy=True: None)
-            return self._replace_func(impl, rhs.args,
-                        pysig=numba.utils.pysignature(stub),
-                        kws=dict(rhs.kws))
-
-
         # functions we revert to Numpy for now, otherwise warning
         # TODO: fix distributed cumsum/cumprod
-        _conv_to_np_funcs = ('take',)
         # TODO: handle series-specific cases for this funcs
-        if (not func_name.startswith("values.") and func_name
-                not in _conv_to_np_funcs):
+        if not func_name.startswith("values."):
             warnings.warn("unknown Series call {}, reverting to Numpy".format(
                 func_name))
 
