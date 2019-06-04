@@ -1265,3 +1265,11 @@ def is_pd_index_type(t):
 @overload_method(TimedeltaIndexType, 'take')
 def overload_index_take(I, indices):
     return lambda I, indices: I[indices]
+
+
+@overload(len)
+def overload_index_len(I):
+    if isinstance(I, (NumericIndexType, StringIndexType, PeriodIndexType,
+                                       DatetimeIndexType, TimedeltaIndexType)):
+        # TODO: test
+        return lambda I: len(bodo.hiframes.api.get_index_data(I))

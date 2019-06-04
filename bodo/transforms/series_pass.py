@@ -223,6 +223,18 @@ class SeriesPass(object):
                 self.typemap[target.name], self.typemap[idx.name])
             return self._replace_func(impl, (target, idx), pre_nodes=nodes)
 
+        # inline index getitem, TODO: test
+        if bodo.hiframes.pd_index_ext.is_pd_index_type(target_typ):
+            typ1, typ2 = self.typemap[target.name], self.typemap[idx.name]
+            if isinstance(target_typ, bodo.hiframes.pd_index_ext.RangeIndexType):
+                impl = bodo.hiframes.pd_index_ext.overload_range_index_getitem(typ1, typ2)
+            elif isinstance(target_typ, bodo.hiframes.pd_index_ext.DatetimeIndexType):
+                impl = bodo.hiframes.pd_index_ext.overload_datetime_index_getitem(typ1, typ2)
+            else:
+                # TODO: test timedelta
+                impl = bodo.hiframes.pd_index_ext.overload_index_getitem(typ1, typ2)
+            return self._replace_func(impl, (target, idx), pre_nodes=nodes)
+
         # TODO: reimplement Iat optimization
         # if isinstance(self.typemap[rhs.value.name], SeriesIatType):
         #     val_def = guard(get_definition, self.func_ir, rhs.value)
