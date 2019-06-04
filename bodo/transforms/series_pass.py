@@ -25,7 +25,7 @@ from numba.typing.templates import infer_global, AbstractTemplate, signature
 import bodo
 from bodo import hiframes
 from bodo.utils.utils import (debug_prints, inline_new_blocks, ReplaceFunc,
-    is_whole_slice, is_array)
+    is_whole_slice, is_array, get_getsetitem_index_var)
 from bodo.libs.str_ext import (string_type, unicode_to_std_str, std_str_to_unicode,
     list_string_array_type)
 from bodo.libs.str_arr_ext import (string_array_type, StringArrayType,
@@ -203,7 +203,11 @@ class SeriesPass(object):
         return [assign]
 
     def _run_getitem(self, assign, rhs):
+        target = rhs.value
+        target_typ = self.typemap[target.name]
         nodes = []
+        idx = get_getsetitem_index_var(rhs, self.typemap, nodes)
+
         # optimize out getitem on built_tuple, important for pd.DataFrame()
         # since dictionary is converted to tuple
         if (rhs.op == 'static_getitem'
@@ -213,6 +217,11 @@ class SeriesPass(object):
             if isinstance(val_def, ir.Expr) and val_def.op == 'build_tuple':
                 assign.value = val_def.items[rhs.index]
                 return [assign]
+
+        if is_series_type(target_typ):
+            impl = bodo.hiframes.series_indexing.overload_series_getitem(
+                self.typemap[target.name], self.typemap[idx.name])
+            return self._replace_func(impl, (target, idx), pre_nodes=nodes)
 
         # TODO: reimplement Iat optimization
         # if isinstance(self.typemap[rhs.value.name], SeriesIatType):
@@ -1017,7 +1026,7 @@ class SeriesPass(object):
                 'nunique', 'describe', 'put', 'isna', 'isnull', 'quantile',
                 'fillna', 'dropna', 'shift', 'pct_change', 'nlargest', 'notna',
                 'nsmallest', 'head', 'tail', 'argsort', 'sort_values', 'take',
-                'append'):
+                'append', 'copy'):
             if func_name == 'isnull':
                 func_name = 'isna'
             rhs.args.insert(0, series_var)
@@ -1030,6 +1039,21 @@ class SeriesPass(object):
             return self._replace_func(impl, rhs.args,
                         pysig=numba.utils.pysignature(impl),
                         kws=dict(rhs.kws))
+
+        # TODO: enable after including branch pruning pass in inline_closure_call (#4148)
+        # if func_name in bodo.hiframes.series_impl.explicit_binop_funcs.values():
+        #     rhs.args.insert(0, series_var)
+        #     arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+        #     kw_typs = {name:self.typemap[v.name]
+        #             for name, v in dict(rhs.kws).items()}
+        #     op = getattr(operator, func_name)
+        #     overload_func = \
+        #         bodo.hiframes.series_impl.create_explicit_binary_op_overload(
+        #             op)
+        #     impl = overload_func(*arg_typs, **kw_typs)
+        #     return self._replace_func(impl, rhs.args,
+        #                 pysig=numba.utils.pysignature(impl),
+        #                 kws=dict(rhs.kws))
 
         if func_name == 'rolling':
             # XXX: remove rolling setup call, assuming still available in definitions
@@ -1092,41 +1116,12 @@ class SeriesPass(object):
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
 
-        if func_name == 'copy':
-            rhs.args.insert(0, series_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name:self.typemap[v.name]
-                    for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.series_impl.overload_series_copy(
-                    *arg_typs, **kw_typs)
-            stub = (lambda S, deep=True: None)
-            return self._replace_func(impl, rhs.args,
-                        pysig=numba.utils.pysignature(stub),
-                        kws=dict(rhs.kws))
-
         # functions we revert to Numpy for now, otherwise warning
         # TODO: fix distributed cumsum/cumprod
         # TODO: handle series-specific cases for this funcs
         if not func_name.startswith("values."):
             warnings.warn("unknown Series call {}, reverting to Numpy".format(
                 func_name))
-
-        if func_name in _conv_to_np_funcs:
-            nodes = []
-            data = self._get_series_data(series_var, nodes)
-
-            n_args = len(rhs.args)
-            arg_names = ", ".join("arg{}".format(i) for i in range(n_args))
-            sep_comma = ", " if n_args > 0 else ""
-            func_text = "def _func_impl(A{}{}):\n".format(sep_comma, arg_names)
-            func_text += ("  return bodo.hiframes.api.init_series(A.{}({}))\n"
-                ).format(func_name, arg_names)
-
-            loc_vars = {}
-            exec(func_text, {}, loc_vars)
-            _func_impl = loc_vars['_func_impl']
-            return self._replace_func(_func_impl, [data] + rhs.args,
-                pre_nodes=nodes)
 
         return [assign]
 

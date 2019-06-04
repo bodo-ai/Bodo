@@ -478,6 +478,24 @@ def gen_getitem(out_var, in_var, ind, calltypes, nodes):
     nodes.append(ir.Assign(getitem, out_var, loc))
 
 
+def get_getsetitem_index_var(rhs, typemap, nodes):
+    index_var = (rhs.index_var if rhs.op == 'static_getitem'
+                                else rhs.index)
+    # sometimes index_var is None, so fix it
+    # TODO: get rid of static_getitem
+    if index_var is None:
+        # TODO: test this path
+        assert rhs.op == 'static_getitem'
+        index_typ = numba.typeof(rhs.index)
+        index_var = ir.Var(
+            rhs.value.scope, ir_utils.mk_unique_var('dummy_index'), rhs.loc)
+        typemap[index_var.name] = index_typ
+        # TODO: can every const index be ir.Const?
+        nodes.append(ir.Assign(
+            ir.Const(rhs.index, rhs.loc), index_var, rhs.loc))
+    return index_var
+
+
 def is_call_assign(stmt):
     return (isinstance(stmt, ir.Assign)
             and isinstance(stmt.value, ir.Expr)
