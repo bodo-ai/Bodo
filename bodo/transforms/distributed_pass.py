@@ -705,7 +705,7 @@ class DistributedPass(object):
 
         if fdef == ('nlargest', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
-            f = lambda arr, k, i, f: bodo.libs.array_kernels.nlargest_parallel(arr, k, i, f)
+            f = lambda arr, I, k, i, f: bodo.libs.array_kernels.nlargest_parallel(arr, I, k, i, f)
             return self._replace_func(f, rhs.args)
 
         if fdef == ('median', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)

@@ -219,18 +219,22 @@ def nlargest(A, index_arr, k, is_largest, cmp_f):
 
 
 @numba.njit
-def nlargest_parallel(A, k, is_largest, cmp_f):
+def nlargest_parallel(A, I, k, is_largest, cmp_f):
     # parallel algorithm: assuming k << len(A), just call nlargest on chunks
     # of A, gather the result and return the largest k
     # TODO: support cases where k is not too small
     my_rank = bodo.libs.distributed_api.get_rank()
-    local_res = nlargest(A, k, is_largest, cmp_f)
+    local_res, local_res_ind = nlargest(A, I, k, is_largest, cmp_f)
     all_largest = bodo.libs.distributed_api.gatherv(local_res)
+    all_largest_ind = bodo.libs.distributed_api.gatherv(local_res_ind)
 
     # TODO: handle len(res) < k case
     if my_rank == MPI_ROOT:
-        res = nlargest(all_largest, k, is_largest, cmp_f)
+        res, res_ind = nlargest(
+            all_largest, all_largest_ind, k, is_largest, cmp_f)
     else:
         res = np.empty(k, A.dtype)
+        res_ind = np.empty(k, I.dtype)  # TODO: string array
     bodo.libs.distributed_api.bcast(res)
-    return res
+    bodo.libs.distributed_api.bcast(res_ind)
+    return res, res_ind
