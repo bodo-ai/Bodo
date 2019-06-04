@@ -759,6 +759,7 @@ def init_range_index(typingctx, start, stop, step, name=None):
     """Create RangeIndex object
     """
     name = types.none if name is None else name
+    name = types.unliteral(name)
 
     def codegen(context, builder, signature, args):
         assert len(args) == 4
@@ -1049,6 +1050,7 @@ def init_numeric_index(typingctx, data, name=None):
     """Create NumericIndex object
     """
     name = types.none if name is None else name
+    name = types.unliteral(name)
 
     def codegen(context, builder, signature, args):
         assert len(args) == 2
@@ -1186,6 +1188,7 @@ def init_string_index(typingctx, data, name=None):
     """Create StringIndex object
     """
     name = types.none if name is None else name
+    name = types.unliteral(name)
 
     def codegen(context, builder, signature, args):
         assert len(args) == 2

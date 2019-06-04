@@ -818,6 +818,7 @@ def init_series(typingctx, data, index=None, name=None):
 
     index = types.none if index is None else index
     name = types.none if name is None else name
+    name = types.unliteral(name)
 
     def codegen(context, builder, signature, args):
         data_val, index_val, name_val = args
@@ -847,6 +848,7 @@ def init_datetime_index(typingctx, data, name=None):
     """Create a DatetimeIndex with provided data and name values.
     """
     name = types.none if name is None else name
+    name = types.unliteral(name)
 
     def codegen(context, builder, signature, args):
         data_val, name_val = args
@@ -873,7 +875,7 @@ def init_timedelta_index(typingctx, data, name=None):
     """Create a TimedeltaIndex with provided data and name values.
     """
     name = types.none if name is None else name
-    # TODO: unliteral name?
+    name = types.unliteral(name)
 
     def codegen(context, builder, signature, args):
         data_val, name_val = args
