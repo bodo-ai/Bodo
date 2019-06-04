@@ -615,6 +615,12 @@ class SeriesPass(object):
         if fdef == ('init_dataframe', 'bodo.hiframes.pd_dataframe_ext'):
             return [assign]
 
+        if (fdef == ('len', 'builtins')
+                and is_series_type(self.typemap[rhs.args[0].name])):
+            return self._replace_func(
+                lambda S: lambda S: len(bodo.hiframes.api.get_series_data(S)),
+                rhs.args)
+
         # XXX sometimes init_dataframe() can't be resolved in dataframe_pass
         # and there are get_dataframe_data() calls that could be optimized
         # example: test_sort_parallel
@@ -1006,7 +1012,7 @@ class SeriesPass(object):
 
     def _run_call_series(self, assign, lhs, rhs, series_var, func_name):
         if func_name in ('sum', 'prod', 'mean', 'var', 'std', 'cumsum',
-                                          'cumprod', 'abs', 'count', 'unique'):
+                            'cumprod', 'abs', 'count', 'unique', 'get_values'):
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name:self.typemap[v.name]
@@ -1112,20 +1118,33 @@ class SeriesPass(object):
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
 
+        if func_name == 'put':
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (
+                lambda S, indices, values: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
+
         if func_name in ('isna', 'isnull'):
-            if rhs.args or rhs.kws:
-                raise ValueError("unsupported Series.{}() arguments".format(
-                    func_name))
-            func = series_replace_funcs[func_name]
-            # TODO: handle skipna, min_count arguments
-            nodes = []
-            data = self._get_series_data(series_var, nodes)
-            args = (data,)
-            if func_name in ('isna', 'isnull'):
-                index = self._get_series_index(series_var, nodes)
-                name = self._get_series_name(series_var, nodes)
-                args = (data, index, name)
-            return self._replace_func(func, args, pre_nodes=nodes)
+            func_name = 'isna'
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.series_impl,
+                'overload_series_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            stub = (lambda S: None)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(stub),
+                        kws=dict(rhs.kws))
 
         if func_name == 'quantile':
             rhs.args.insert(0, series_var)
@@ -1148,10 +1167,8 @@ class SeriesPass(object):
             overload_func = getattr(bodo.hiframes.series_impl,
                 'overload_series_' + func_name)
             impl = overload_func(*arg_typs, **kw_typs)
-            stub = (lambda S, value=None, method=None, axis=None,
-                                inplace=False, limit=None, downcast=None: None)
             return self._replace_func(impl, rhs.args,
-                        pysig=numba.utils.pysignature(stub),
+                        pysig=numba.utils.pysignature(impl),
                         kws=dict(rhs.kws))
 
         if func_name == 'dropna':
