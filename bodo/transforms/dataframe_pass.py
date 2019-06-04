@@ -169,7 +169,7 @@ class DataFramePass(object):
             pass
 
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
-        dprint_func_ir(self.func_ir, "after series_pass")
+        dprint_func_ir(self.func_ir, "after dataframe pass")
         return
 
     def _run_assign(self, assign):

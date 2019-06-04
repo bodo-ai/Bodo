@@ -632,7 +632,7 @@ def get_index_data(S):
 
 
 @numba.generated_jit(nopython=True)
-def get_index_name(S):  # TODO: optimize out
+def get_index_name(S):
     return lambda S: S._name
 
 

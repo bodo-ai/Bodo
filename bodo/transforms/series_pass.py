@@ -163,7 +163,7 @@ class SeriesPass(object):
             pass
 
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
-        dprint_func_ir(self.func_ir, "after series_pass")
+        dprint_func_ir(self.func_ir, "after series pass")
         return
 
     def _run_assign(self, assign):
@@ -796,10 +796,31 @@ class SeriesPass(object):
                 return [assign]
 
         if func_name == 'get_series_data':
+            # TODO: make sure data is not altered using update_series_data()
+            # or other functions, using any reference to payload
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def)
             if call_def == ('init_series', 'bodo.hiframes.api'):
                 assign.value = var_def.args[0]
+                return [assign]
+
+        if func_name == 'get_series_index':
+            # TODO: make sure index is not altered using update_series_index()
+            # or other functions, using any reference to payload
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def)
+            if (call_def == ('init_series', 'bodo.hiframes.api')
+                    and len(var_def.args) > 1):
+                assign.value = var_def.args[1]
+                return [assign]
+
+        if func_name == 'get_series_name':
+            # TODO: make sure name is not altered
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def)
+            if (call_def == ('init_series', 'bodo.hiframes.api')
+                    and len(var_def.args) > 2):
+                assign.value = var_def.args[2]
                 return [assign]
 
         if func_name == 'argsort':
