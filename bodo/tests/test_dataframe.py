@@ -136,6 +136,14 @@ def test_df_get_values(numeric_df_value):
         bodo_func(numeric_df_value), impl(numeric_df_value))
 
 
+def test_df_ndim(df_value):
+    def impl(df):
+        return df.ndim
+
+    bodo_func = bodo.jit(impl)
+    assert bodo_func(df_value) == impl(df_value)
+
+
 ############################# old tests ###############################
 
 

@@ -237,6 +237,7 @@ Attributes and underlying data:
 * :attr:`DataFrame.columns`  (can access but not set new columns yet)
 * :attr:`DataFrame.values` (only for numeric dataframes)
 * :meth:`DataFrame.get_values` (only for numeric dataframes)
+* :attr:`DataFrame.ndim`
 
 Indexing, iteration:
 

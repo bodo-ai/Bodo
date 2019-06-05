@@ -56,3 +56,8 @@ def overload_dataframe_get_values(df):
     def impl(df):
         return df.values
     return impl
+
+
+@overload_attribute(DataFrameType, 'ndim')
+def overload_dataframe_ndim(df):
+    return lambda df: 2
