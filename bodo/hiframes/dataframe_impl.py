@@ -67,3 +67,9 @@ def overload_dataframe_ndim(df):
 def overload_dataframe_size(df):
     ncols = len(df.columns)
     return lambda df: ncols * len(df)
+
+
+@overload_attribute(DataFrameType, 'shape')
+def overload_dataframe_shape(df):
+    ncols = len(df.columns)
+    return lambda df: (len(df), ncols)

@@ -152,6 +152,14 @@ def test_df_size(df_value):
     assert bodo_func(df_value) == impl(df_value)
 
 
+def test_df_shape(df_value):
+    def impl(df):
+        return df.shape
+
+    bodo_func = bodo.jit(impl)
+    assert bodo_func(df_value) == impl(df_value)
+
+
 ############################# old tests ###############################
 
 

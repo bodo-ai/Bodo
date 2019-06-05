@@ -238,6 +238,8 @@ Attributes and underlying data:
 * :attr:`DataFrame.values` (only for numeric dataframes)
 * :meth:`DataFrame.get_values` (only for numeric dataframes)
 * :attr:`DataFrame.ndim`
+* :attr:`DataFrame.size`
+* :attr:`DataFrame.shape`
 
 Indexing, iteration:
 
