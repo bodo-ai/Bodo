@@ -80,3 +80,23 @@ def overload_dataframe_empty(df):
     if len(df.columns) == 0:
         return lambda df: True
     return lambda df: len(df) == 0
+
+
+@overload_method(DataFrameType, 'astype')
+def overload_dataframe_astype(df, dtype, copy=True, errors='raise'):
+    # just call astype() on all column Series
+    # TODO: support categorical, dt64, etc.
+    col_args = ", ".join("'{}'".format(c) for c in df.columns)
+    col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
+        col_args, col_args)
+    data_args = ", ".join("df['{}'].astype(dtype).values".format(c)
+        for c in df.columns)
+    func_text = "def impl(df, dtype, copy=True, errors='raise'):\n".format()
+    func_text += ("  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},)"
+        ", bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), {})\n").format(
+        data_args, col_var)
+
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
+    impl = loc_vars['impl']
+    return impl

@@ -51,7 +51,7 @@ def df_value(request):
     # uint8, float32 dtypes
     pd.DataFrame({'A': np.array([1, 8, 4, 0], dtype=np.uint8),
         'B': np.array([1.1, np.nan, 4.2, 3.1], dtype=np.float32)}),
-    # string and int columns, float index
+    # int column, float index
     pd.DataFrame({'A': [1, 8, 4, -1]},
         [1.1, -2.1, 7.1, 0.1]),
     # range index
@@ -169,6 +169,38 @@ def test_df_empty(df):
 
     bodo_func = bodo.jit(impl)
     assert bodo_func(df) == impl(df)
+
+
+def test_df_astype_num(numeric_df_value):
+    # not supported for dt64
+    if any(d == np.dtype('datetime64[ns]') for d in numeric_df_value.dtypes):
+        return
+
+    def impl(df):
+        return df.astype(np.float32)
+
+    bodo_func = bodo.jit(impl)
+    np.testing.assert_array_equal(
+        bodo_func(numeric_df_value), impl(numeric_df_value))
+
+
+def test_df_astype_str(numeric_df_value):
+    # not supported for dt64
+    if any(d == np.dtype('datetime64[ns]') for d in numeric_df_value.dtypes):
+        return
+
+    # XXX str(float) not consistent with Python yet
+    if any(d == np.dtype('float64') or d == np.dtype('float32')
+                                             for d in numeric_df_value.dtypes):
+        return
+
+    def impl(df):
+        return df.astype(str)
+
+    bodo_func = bodo.jit(impl)
+    np.testing.assert_array_equal(
+        bodo_func(numeric_df_value), impl(numeric_df_value))
+
 
 
 ############################# old tests ###############################

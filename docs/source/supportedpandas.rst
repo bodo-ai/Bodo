@@ -242,6 +242,11 @@ Attributes and underlying data:
 * :attr:`DataFrame.shape`
 * :attr:`DataFrame.empty`
 
+Conversion:
+
+* :meth:`DataFrame.astype` (only accepts a single data type of Numpy dtypes or `str`)
+
+
 Indexing, iteration:
 
 * :meth:`DataFrame.head`
