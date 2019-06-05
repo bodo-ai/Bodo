@@ -76,6 +76,13 @@ def test_df_index(df_value):
     pd.testing.assert_index_equal(bodo_func(df_value), impl(df_value))
 
 
+def test_df_columns(df_value):
+    def impl(df):
+        return df.columns
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_index_equal(bodo_func(df_value), impl(df_value))
+
 
 ############################# old tests ###############################
 

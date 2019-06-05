@@ -233,7 +233,8 @@ Bodo provides extensive DataFrame support documented below.
 Attributes and underlying data:
 
 
-* :attr:`DataFrame.index` (can access but not set new index)
+* :attr:`DataFrame.index` (can access but not set new index yet)
+* :attr:`DataFrame.columns`  (can access but not set new columns yet)
 * :attr:`DataFrame.values`
 
 Indexing, iteration:

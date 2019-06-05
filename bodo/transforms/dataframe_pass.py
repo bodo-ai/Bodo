@@ -387,7 +387,8 @@ class DataFramePass(object):
         rhs_type = self.typemap[rhs.value.name]  # get type of rhs value "df"
 
         # replace attribute access with overload
-        if isinstance(rhs_type, DataFrameType) and rhs.attr in ('index',):
+        if isinstance(rhs_type, DataFrameType) and rhs.attr in ('index',
+                'columns'):
             overload_name = 'overload_dataframe_' + rhs.attr
             overload_func = getattr(bodo.hiframes.dataframe_impl, overload_name)
             impl = overload_func(rhs_type)
