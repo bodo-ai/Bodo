@@ -43,6 +43,31 @@ def df_value(request):
     return request.param
 
 
+@pytest.fixture(params = [
+    # int
+    pd.DataFrame({'A': [1, 8, 4, 11]}),
+    # int and float columns
+    pd.DataFrame({'A': [1, 8, 4, 11], 'B': [1.1, np.nan, 4.2, 3.1]}),
+    # uint8, float32 dtypes
+    pd.DataFrame({'A': np.array([1, 8, 4, 0], dtype=np.uint8),
+        'B': np.array([1.1, np.nan, 4.2, 3.1], dtype=np.float32)}),
+    # string and int columns, float index
+    pd.DataFrame({'A': [1, 8, 4, -1]},
+        [1.1, -2.1, 7.1, 0.1]),
+    # range index
+    pd.DataFrame({'A': [1, 8, 4, 1]}, range(1, 9, 2)),
+    # datetime column
+    pd.DataFrame({'A': pd.date_range(
+        start='2018-04-24', end='2018-04-28', periods=4)}),
+    # datetime index
+    pd.DataFrame({'A': [3, 5, 1, -1]},
+              pd.date_range(start='2018-04-24', end='2018-04-28', periods=4)),
+    # TODO: timedelta
+])
+def numeric_df_value(request):
+    return request.param
+
+
 def test_unbox_df(df_value):
     # just unbox
     def impl(df_arg):
@@ -67,7 +92,6 @@ def test_unbox_df(df_value):
     pd.testing.assert_series_equal(bodo_func(df_value), impl3(df_value))
 
 
-
 def test_df_index(df_value):
     def impl(df):
         return df.index
@@ -76,12 +100,31 @@ def test_df_index(df_value):
     pd.testing.assert_index_equal(bodo_func(df_value), impl(df_value))
 
 
+def test_df_index_non():
+    # test None index created inside the function
+    def impl():
+        df = pd.DataFrame({'A': [2, 3, 1]})
+        return df.index
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_index_equal(bodo_func(), impl())
+
+
 def test_df_columns(df_value):
     def impl(df):
         return df.columns
 
     bodo_func = bodo.jit(impl)
     pd.testing.assert_index_equal(bodo_func(df_value), impl(df_value))
+
+
+def test_df_values(numeric_df_value):
+    def impl(df):
+        return df.values
+
+    bodo_func = bodo.jit(impl)
+    np.testing.assert_array_equal(
+        bodo_func(numeric_df_value), impl(numeric_df_value))
 
 
 ############################# old tests ###############################

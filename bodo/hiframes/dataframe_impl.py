@@ -34,3 +34,18 @@ def overload_dataframe_columns(df):
     # print(func_text)
     impl = loc_vars['impl']
     return impl
+
+
+@overload_attribute(DataFrameType, 'values')
+def overload_dataframe_values(df):
+    n_cols = len(df.columns)
+    data_args = ", ".join(
+        'bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})'.format(i)
+        for i in range(n_cols))
+    func_text = "def f(df):\n".format()
+    func_text += "    return np.stack(({},), 1)\n".format(data_args)
+
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
+    f = loc_vars['f']
+    return f

@@ -388,7 +388,7 @@ class DataFramePass(object):
 
         # replace attribute access with overload
         if isinstance(rhs_type, DataFrameType) and rhs.attr in ('index',
-                'columns'):
+                'columns', 'values'):
             overload_name = 'overload_dataframe_' + rhs.attr
             overload_func = getattr(bodo.hiframes.dataframe_impl, overload_name)
             impl = overload_func(rhs_type)
@@ -415,28 +415,7 @@ class DataFramePass(object):
             return self._replace_func(
                 lambda df: (len(df), n_cols), [rhs.value])
 
-        # A = df.values
-        if isinstance(rhs_type, DataFrameType) and rhs.attr == 'values':
-            return self._handle_df_values(assign.target, rhs.value)
-
         return [assign]
-
-    def _handle_df_values(self, lhs, df_var):
-        df_typ = self.typemap[df_var.name]
-        n_cols = len(df_typ.columns)
-        nodes = []
-        data_arrs = [self._get_dataframe_data(df_var, c, nodes)
-                    for c in df_typ.columns]
-        data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
-
-        func_text = "def f({}):\n".format(data_args)
-        func_text += "    return np.stack(({}), 1)\n".format(data_args)
-
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        f = loc_vars['f']
-
-        return self._replace_func(f, data_arrs, pre_nodes=nodes)
 
     def _run_binop(self, assign, rhs):
 
