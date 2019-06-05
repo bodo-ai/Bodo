@@ -110,6 +110,16 @@ def overload_dataframe_copy(df, deep=True):
     return _gen_init_df(header, df.columns, ", ".join(data_outs))
 
 
+@overload_method(DataFrameType, 'isna')
+@overload_method(DataFrameType, 'isnull')
+def overload_dataframe_isna(df):
+    # call isna() on column Series
+    data_args = ", ".join("df['{}'].isna().values".format(c)
+        for c in df.columns)
+    header = "def impl(df):\n"
+    return _gen_init_df(header, df.columns, data_args)
+
+
 def _gen_init_df(header, columns, data_args, index=None):
     if index is None:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"

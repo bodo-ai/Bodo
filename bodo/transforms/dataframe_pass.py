@@ -636,7 +636,9 @@ class DataFramePass(object):
         return [assign]
 
     def _run_call_dataframe(self, assign, lhs, rhs, df_var, func_name):
-        if func_name in ('get_values', 'astype', 'copy'):
+        if func_name in ('get_values', 'astype', 'copy', 'isna', 'isnull'):
+            if func_name == 'isnull':
+                func_name = 'isna'
             rhs.args.insert(0, df_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name:self.typemap[v.name]

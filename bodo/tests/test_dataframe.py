@@ -218,6 +218,15 @@ def test_df_copy_shallow(df_value):
     pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
 
 
+def test_df_isna(df_value):
+    # TODO: test dt64 NAT, categorical, etc.
+    def impl(df):
+        return df.isna()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+
+
 ############################# old tests ###############################
 
 
