@@ -248,6 +248,7 @@ Conversion:
   of Numpy dtypes or `str`)
 * :meth:`DataFrame.copy` (including `deep` flag)
 * :meth:`DataFrame.isna`
+* :meth:`DataFrame.notna`
 
 
 Indexing, iteration:
