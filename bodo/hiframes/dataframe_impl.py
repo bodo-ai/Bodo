@@ -86,16 +86,43 @@ def overload_dataframe_empty(df):
 def overload_dataframe_astype(df, dtype, copy=True, errors='raise'):
     # just call astype() on all column Series
     # TODO: support categorical, dt64, etc.
-    col_args = ", ".join("'{}'".format(c) for c in df.columns)
-    col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
-        col_args, col_args)
+
     data_args = ", ".join("df['{}'].astype(dtype).values".format(c)
         for c in df.columns)
-    func_text = "def impl(df, dtype, copy=True, errors='raise'):\n".format()
-    func_text += ("  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},)"
-        ", bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), {})\n").format(
-        data_args, col_var)
+    header = "def impl(df, dtype, copy=True, errors='raise'):\n"
+    return _gen_init_df(header, df.columns, data_args)
 
+
+@overload_method(DataFrameType, 'copy')
+def overload_dataframe_copy(df, deep=True):
+    # just call copy() on all arrays
+    data_outs = []
+    for i in range(len(df.columns)):
+        arr = "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(i)
+        if is_overload_true(deep):
+            data_outs.append(arr + ".copy()")
+        elif is_overload_false(deep):
+            data_outs.append(arr)
+        else:
+            data_outs.append("{arr}.copy() if deep else {arr}".format(arr=arr))
+
+    header = "def impl(df, deep=True):\n"
+    return _gen_init_df(header, df.columns, ", ".join(data_outs))
+
+
+def _gen_init_df(header, columns, data_args, index=None):
+    if index is None:
+        index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
+
+    # using add_consts_to_type with list to avoid const tuple problems
+    # TODO: fix type inference for const str
+    col_seq = ", ".join("'{}'".format(c) for c in columns)
+    col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
+        col_seq, col_seq)
+
+    func_text = "{}  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
+        header, data_args, index, col_var)
+    # print(func_text)
     loc_vars = {}
     exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
     impl = loc_vars['impl']

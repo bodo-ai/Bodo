@@ -244,7 +244,9 @@ Attributes and underlying data:
 
 Conversion:
 
-* :meth:`DataFrame.astype` (only accepts a single data type of Numpy dtypes or `str`)
+* :meth:`DataFrame.astype` (only accepts a single data type
+  of Numpy dtypes or `str`)
+* :meth:`DataFrame.copy` (including `deep` flag)
 
 
 Indexing, iteration:

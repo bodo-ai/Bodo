@@ -202,6 +202,21 @@ def test_df_astype_str(numeric_df_value):
         bodo_func(numeric_df_value), impl(numeric_df_value))
 
 
+def test_df_copy_deep(df_value):
+    def impl(df):
+        return df.copy()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+
+
+def test_df_copy_shallow(df_value):
+    def impl(df):
+        return df.copy(deep=False)
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+
 
 ############################# old tests ###############################
 
