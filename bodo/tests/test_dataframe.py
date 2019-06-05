@@ -160,6 +160,17 @@ def test_df_shape(df_value):
     assert bodo_func(df_value) == impl(df_value)
 
 
+# TODO: empty df: pd.DataFrame()
+@pytest.mark.parametrize('df', [pd.DataFrame({'A': [1, 3]}),
+    pd.DataFrame({'A': []})])
+def test_df_empty(df):
+    def impl(df):
+        return df.empty
+
+    bodo_func = bodo.jit(impl)
+    assert bodo_func(df) == impl(df)
+
+
 ############################# old tests ###############################
 
 

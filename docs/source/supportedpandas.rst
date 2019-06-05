@@ -240,6 +240,7 @@ Attributes and underlying data:
 * :attr:`DataFrame.ndim`
 * :attr:`DataFrame.size`
 * :attr:`DataFrame.shape`
+* :attr:`DataFrame.empty`
 
 Indexing, iteration:
 

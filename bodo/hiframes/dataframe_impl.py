@@ -73,3 +73,10 @@ def overload_dataframe_size(df):
 def overload_dataframe_shape(df):
     ncols = len(df.columns)
     return lambda df: (len(df), ncols)
+
+
+@overload_attribute(DataFrameType, 'empty')
+def overload_dataframe_empty(df):
+    if len(df.columns) == 0:
+        return lambda df: True
+    return lambda df: len(df) == 0
