@@ -49,3 +49,10 @@ def overload_dataframe_values(df):
     exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
     f = loc_vars['f']
     return f
+
+
+@overload_method(DataFrameType, 'get_values')
+def overload_dataframe_get_values(df):
+    def impl(df):
+        return df.values
+    return impl

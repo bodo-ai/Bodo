@@ -127,6 +127,15 @@ def test_df_values(numeric_df_value):
         bodo_func(numeric_df_value), impl(numeric_df_value))
 
 
+def test_df_get_values(numeric_df_value):
+    def impl(df):
+        return df.get_values()
+
+    bodo_func = bodo.jit(impl)
+    np.testing.assert_array_equal(
+        bodo_func(numeric_df_value), impl(numeric_df_value))
+
+
 ############################# old tests ###############################
 
 

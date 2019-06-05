@@ -636,6 +636,17 @@ class DataFramePass(object):
         return [assign]
 
     def _run_call_dataframe(self, assign, lhs, rhs, df_var, func_name):
+        if func_name == 'get_values':
+            rhs.args.insert(0, df_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            impl = bodo.hiframes.dataframe_impl.overload_dataframe_get_values(
+                *arg_typs, **kw_typs)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(impl),
+                        kws=dict(rhs.kws))
+
         if func_name == 'merge':
             rhs.args.insert(0, df_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
