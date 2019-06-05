@@ -222,12 +222,18 @@ String handling:
 DataFrame
 ~~~~~~~~~
 
+Bodo provides extensive DataFrame support documented below.
+
+
 * :func:`pandas.DataFrame`
 
-   Only ``data`` argument with a dictionary input is supported.
+   ``data`` argument can be a constant dictionary or 2d Numpy array.
+   Other arguments are also supported.
 
 Attributes and underlying data:
 
+
+* :attr:`DataFrame.index` (can access but not set new index)
 * :attr:`DataFrame.values`
 
 Indexing, iteration:

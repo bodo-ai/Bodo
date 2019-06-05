@@ -623,7 +623,8 @@ def df_len_overload(df):
 
     if len(df.columns) == 0:  # empty df
         return lambda df: 0
-    return lambda df: len(_get_dataframe_data(df)[0])
+    return lambda df: len(
+        bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 0))
 
 
 @overload(operator.getitem)  # TODO: avoid lowering?

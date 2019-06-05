@@ -27,6 +27,7 @@ from bodo.utils.utils import (debug_prints, inline_new_blocks, ReplaceFunc,
 from bodo.hiframes.pd_dataframe_ext import (DataFrameType, DataFrameLocType,
     DataFrameILocType, DataFrameIatType)
 from bodo.hiframes.pd_series_ext import SeriesType
+import bodo.hiframes.dataframe_impl  # side effect: install DataFrame overloads
 import bodo.hiframes.pd_groupby_ext
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 import bodo.hiframes.pd_rolling_ext
@@ -384,6 +385,14 @@ class DataFramePass(object):
 
     def _run_getattr(self, assign, rhs):
         rhs_type = self.typemap[rhs.value.name]  # get type of rhs value "df"
+
+        # replace attribute access with overload
+        if isinstance(rhs_type, DataFrameType) and rhs.attr in ('index',):
+            overload_name = 'overload_dataframe_' + rhs.attr
+            overload_func = getattr(bodo.hiframes.dataframe_impl, overload_name)
+            impl = overload_func(rhs_type)
+            return self._replace_func(impl, [rhs.value])
+
 
         # S = df.A (get dataframe column)
         # TODO: check invalid df.Attr?

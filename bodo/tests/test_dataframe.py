@@ -11,41 +11,74 @@ from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_start_end)
 
 
-# pytest tests
-@pytest.mark.parametrize('df', [
-    pd.DataFrame({'a': [-1, 1, 2]}),    # int
-    pd.DataFrame({'a': [-1, 1, 2]}, dtype=np.int8),  # int8
-    pd.DataFrame({'a': [-1.1, 1.1, 2.2]}),  # float
-    pd.DataFrame({'a': [-1.1, 1.1, 2.2]}, dtype=np.float32),  # float32
-    pd.DataFrame({'a': [False, True]}),  # bool
-    pd.DataFrame({'a': ['ABC', np.nan, 'C D']}),  # string
-    pd.DataFrame({'a': [-1, 1, 2]}, range(1, 4)),  # range index
-    pd.DataFrame({'a': [-1, 1, 2]}, [3, 6, 7]),  # int index
-    pd.DataFrame({'a': [-1, 1, 2]}, [1.1, -2.1, 7.1]),  # float index
-    # TODO: DatetimeIndex, CategoricalIndex, TimeDeltaIndex, PeriodIndex
+
+# TODO: other possible df types like Categorical, dt64, td64, ...
+@pytest.fixture(params = [
+    # int and float columns
+    pd.DataFrame({'A': [1, 8, 4, 11], 'B': [1.1, np.nan, 4.2, 3.1],
+        'C': [True, False, False, True]}),
+    # uint8, float32 dtypes
+    pd.DataFrame({'A': np.array([1, 8, 4, 0], dtype=np.uint8),
+        'B': np.array([1.1, np.nan, 4.2, 3.1], dtype=np.float32)}),
+    # string and int columns, float index
+    pd.DataFrame({'A': ['AA', np.nan, '', 'D'], 'B': [1, 8, 4, -1]},
+        [1.1, -2.1, 7.1, 0.1]),
+    # range index
+    pd.DataFrame({'A': [1, 8, 4, 1], 'B': ['A', 'B', 'CG', 'ACDE']},
+        range(1, 9, 2)),
+    # int index
+    pd.DataFrame({'A': [1, 8, 4, 1], 'B': ['A', 'B', 'CG', 'ACDE']},
+        [3, 7, 9, 3]),
+    # string index
+    pd.DataFrame({'A': [1, 2, 3, -1]}, ['A', 'BA', '', 'DD']),
+    # datetime column
+    pd.DataFrame({'A': pd.date_range(
+        start='2018-04-24', end='2018-04-28', periods=4)}),
+    # datetime index
+    pd.DataFrame({'A': [3, 5, 1, -1]},
+              pd.date_range(start='2018-04-24', end='2018-04-28', periods=4)),
+    # TODO: timedelta
 ])
-def test_unbox_df(df):
+def df_value(request):
+    return request.param
+
+
+def test_unbox_df(df_value):
     # just unbox
     def impl(df_arg):
         return True
 
     bodo_func = bodo.jit(impl)
-    assert bodo_func(df)
+    assert bodo_func(df_value)
 
     # unbox and box
     def impl2(df_arg):
         return df_arg
 
     bodo_func = bodo.jit(impl2)
-    pd.testing.assert_frame_equal(bodo_func(df), impl2(df))
+    pd.testing.assert_frame_equal(bodo_func(df_value), impl2(df_value))
 
     # unbox and return Series data with index
     # (previous test can box Index unintentionally)
     def impl3(df_arg):
-        return df_arg.a
+        return df_arg.A
 
     bodo_func = bodo.jit(impl3)
-    pd.testing.assert_series_equal(bodo_func(df), impl3(df))
+    pd.testing.assert_series_equal(bodo_func(df_value), impl3(df_value))
+
+
+
+def test_df_index(df_value):
+    def impl(df):
+        return df.index
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_index_equal(bodo_func(df_value), impl(df_value))
+
+
+
+############################# old tests ###############################
+
 
 
 @bodo.jit
