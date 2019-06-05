@@ -61,3 +61,9 @@ def overload_dataframe_get_values(df):
 @overload_attribute(DataFrameType, 'ndim')
 def overload_dataframe_ndim(df):
     return lambda df: 2
+
+
+@overload_attribute(DataFrameType, 'size')
+def overload_dataframe_size(df):
+    ncols = len(df.columns)
+    return lambda df: ncols * len(df)

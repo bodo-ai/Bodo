@@ -144,6 +144,14 @@ def test_df_ndim(df_value):
     assert bodo_func(df_value) == impl(df_value)
 
 
+def test_df_size(df_value):
+    def impl(df):
+        return df.size
+
+    bodo_func = bodo.jit(impl)
+    assert bodo_func(df_value) == impl(df_value)
+
+
 ############################# old tests ###############################
 
 
