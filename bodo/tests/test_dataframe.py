@@ -304,6 +304,18 @@ def test_df_corr_parallel():
     assert count_parfor_OneDs() >= 1
 
 
+def test_df_cov(df_value):
+    # empty dataframe output not supported yet
+    if len(df_value._get_numeric_data().columns) == 0:
+        return
+
+    def impl(df):
+        return df.cov()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+
+
 ############################# old tests ###############################
 
 

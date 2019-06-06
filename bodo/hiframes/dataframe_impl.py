@@ -247,6 +247,39 @@ def overload_dataframe_corr(df, method='pearson', min_periods=1):
     return _gen_init_df(header, numeric_cols, data_args, index)
 
 
+@overload_method(DataFrameType, 'cov')
+def overload_dataframe_cov(df, min_periods=None):
+    # TODO: support calling np.cov() when there is no NA
+    minpv = "1" if is_overload_none(min_periods) else "min_periods"
+
+    numeric_cols = [c for c, d in zip(df.columns, df.data)
+        if _is_numeric_dtype(d.dtype)]
+    # TODO: support empty dataframe
+    assert len(numeric_cols) != 0
+
+    # convert input matrix to float64 if necessary
+    typ_conv = ""
+    if not any(d == types.float64 for d in df.data):
+        typ_conv = ".astype(np.float64)"
+
+    arr_args = ", ".join(
+        'bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})'.format(
+        df.columns.index(c)) for c in numeric_cols)
+    mat = "np.stack(({},), 1){}".format(arr_args, typ_conv)
+
+    data_args = ", ".join(
+        'res[:,{}]'.format(i) for i in range(len(numeric_cols)))
+
+    str_arr = "bodo.utils.conversion.coerce_to_array({})".format(numeric_cols)
+    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(
+        str_arr)
+
+    header = "def impl(df, min_periods=1):\n"
+    header += "  mat = {}\n".format(mat)
+    header += "  res = bodo.libs.array_kernels.nancorr(mat, 1, {})\n".format(minpv)
+    return _gen_init_df(header, numeric_cols, data_args, index)
+
+
 def _gen_init_df(header, columns, data_args, index=None):
     if index is None:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
