@@ -253,7 +253,7 @@ Conversion:
 
 Indexing, iteration:
 
-* :meth:`DataFrame.head`
+* :meth:`DataFrame.head` (including `n` argument)
 * :attr:`DataFrame.iat`
 * :attr:`DataFrame.iloc`
 * :meth:`DataFrame.isin`

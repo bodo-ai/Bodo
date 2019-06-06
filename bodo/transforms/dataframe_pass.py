@@ -579,9 +579,6 @@ class DataFramePass(object):
         if fdef == ('itertuples_dummy', 'bodo.hiframes.pd_dataframe_ext'):
             return self._run_call_df_itertuples(assign, lhs, rhs)
 
-        if fdef == ('head_dummy', 'bodo.hiframes.pd_dataframe_ext'):
-            return self._run_call_df_head(assign, lhs, rhs)
-
         if fdef == ('fillna_dummy', 'bodo.hiframes.pd_dataframe_ext'):
             return self._run_call_df_fillna(assign, lhs, rhs)
 
@@ -637,7 +634,7 @@ class DataFramePass(object):
 
     def _run_call_dataframe(self, assign, lhs, rhs, df_var, func_name):
         if func_name in ('get_values', 'astype', 'copy', 'isna', 'isnull',
-                'notna'):
+                'notna', 'head'):
             if func_name == 'isnull':
                 func_name = 'isna'
             rhs.args.insert(0, df_var)
@@ -1158,33 +1155,6 @@ class DataFramePass(object):
         nodes = []
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
         return self._replace_func(f, col_vars, pre_nodes=nodes)
-
-    def _run_call_df_head(self, assign, lhs, rhs):
-        df_var = rhs.args[0]
-        n = rhs.args[1]
-        df_typ = self.typemap[df_var.name]
-
-        # impl: for each column, convert data to series, call S.head(n), get
-        # output data and create a new dataframe
-        n_cols = len(df_typ.columns)
-        data_args = tuple('data{}'.format(i) for i in range(n_cols))
-
-        col_args = ", ".join("'{}'".format(c) for c in df_typ.columns)
-        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
-        func_text = "def _head_impl({}, n):\n".format(", ".join(data_args))
-        for d in data_args:
-            func_text += "  {} = bodo.hiframes.api.init_series({})\n".format(d+'_S', d)
-            func_text += "  {} = bodo.hiframes.api.get_series_data({}.head(n))\n".format(d+'_O', d+'_S')
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
-            ", ".join(d+'_O' for d in data_args),
-            col_var)
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        _head_impl = loc_vars['_head_impl']
-
-        nodes = []
-        col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
-        return self._replace_func(_head_impl, col_vars + [n], pre_nodes=nodes)
 
     def _run_call_pct_change(self, assign, lhs, rhs):
         # TODO: refactor since similar to df.head() and others that call Series

@@ -129,6 +129,17 @@ def overload_dataframe_notna(df):
     return _gen_init_df(header, df.columns, data_args)
 
 
+@overload_method(DataFrameType, 'head')
+def overload_dataframe_head(df, n=5):
+    # call head() on column Series
+    data_args = ", ".join("df['{}'].head(n).values".format(c)
+        for c in df.columns)
+    header = "def impl(df, n=5):\n"
+    index = ("bodo.utils.conversion.fix_none_index("
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))[:n]")
+    return _gen_init_df(header, df.columns, data_args, index)
+
+
 def _gen_init_df(header, columns, data_args, index=None):
     if index is None:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"

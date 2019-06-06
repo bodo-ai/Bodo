@@ -236,6 +236,14 @@ def test_df_notna(df_value):
     pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
 
 
+def test_df_head(df_value):
+    def impl(df):
+        return df.head(3)
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+
+
 ############################# old tests ###############################
 
 
