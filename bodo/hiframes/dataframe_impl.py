@@ -140,6 +140,17 @@ def overload_dataframe_head(df, n=5):
     return _gen_init_df(header, df.columns, data_args, index)
 
 
+@overload_method(DataFrameType, 'tail')
+def overload_dataframe_tail(df, n=5):
+    # call tail() on column Series
+    data_args = ", ".join("df['{}'].tail(n).values".format(c)
+        for c in df.columns)
+    header = "def impl(df, n=5):\n"
+    index = ("bodo.utils.conversion.fix_none_index("
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))[-n:]")
+    return _gen_init_df(header, df.columns, data_args, index)
+
+
 @overload_method(DataFrameType, 'isin')
 def overload_dataframe_isin(df, values):
     # TODO: call isin on Series

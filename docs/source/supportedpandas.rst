@@ -256,6 +256,7 @@ Indexing, iteration:
 * :meth:`DataFrame.head` (including `n` argument)
 * :attr:`DataFrame.iat`
 * :attr:`DataFrame.iloc`
+* :meth:`DataFrame.tail` (including `n` argument)
 * :meth:`DataFrame.isin` (`values` can be a dataframe with matching index
   or a list or a set)
 

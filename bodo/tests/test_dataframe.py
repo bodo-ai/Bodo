@@ -244,6 +244,14 @@ def test_df_head(df_value):
     pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
 
 
+def test_df_tail(df_value):
+    def impl(df):
+        return df.tail(3)
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+
+
 @pytest.mark.parametrize('other', [
     pd.DataFrame({'A': np.arange(4), 'C': np.arange(4)**2}),
     [2, 3, 4]
