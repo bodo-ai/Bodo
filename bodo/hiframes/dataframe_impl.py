@@ -140,6 +140,48 @@ def overload_dataframe_head(df, n=5):
     return _gen_init_df(header, df.columns, data_args, index)
 
 
+@overload_method(DataFrameType, 'isin')
+def overload_dataframe_isin(df, values):
+    # TODO: call isin on Series
+    # TODO: make sure df indices match?
+    # TODO: dictionary case
+    other_colmap = {}
+    df_case = False
+    # dataframe case
+    if isinstance(values, DataFrameType):
+        df_case = True
+        other_colmap = {c: "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(values, {})".format(values.columns.index(c))
+                        for c in df.columns if c in values.columns}
+    else:
+        # general iterable (e.g. list, set) case
+        # TODO: handle passed in dict case (pass colname to func?)
+        other_colmap = {c: "values" for c in df.columns}
+
+    data = [
+        'bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})'.format(i)
+        for i in range(len(df.columns))]
+
+    isin_func = "bodo.hiframes.api.df_isin({}, {})"
+    isin_vals_func = "bodo.hiframes.api.df_isin_vals({}, {})"
+    bool_arr_func = "np.zeros(len(df), np.bool_)"
+    out_vars = []
+    for cname, in_var in zip(df.columns, data):
+        if cname in other_colmap:
+            if df_case:
+                func = isin_func
+            else:
+                func = isin_vals_func
+            other_col_var = other_colmap[cname]
+            func = func.format(in_var, other_col_var)
+        else:
+            func = bool_arr_func
+        out_vars.append(func)
+
+    data_args = ", ".join(out_vars)
+    header = "def impl(df, values):\n"
+    return _gen_init_df(header, df.columns, data_args)
+
+
 def _gen_init_df(header, columns, data_args, index=None):
     if index is None:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"

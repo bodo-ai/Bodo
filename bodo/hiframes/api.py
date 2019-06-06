@@ -406,6 +406,13 @@ class DfIsinCol(AbstractTemplate):
         return signature(types.Array(types.bool_, 1, 'C'), *unliteral_all(args))
 
 
+# dummy lowering functions
+@lower_builtin(df_isin, types.Any, types.Any)
+@lower_builtin(df_isin_vals, types.Any, types.Any)
+def lower_dummy_isin(context, builder, sig, args):
+    return context.get_constant_null(sig.return_type)
+
+
 def to_numeric(A, dtype):
     return A
 

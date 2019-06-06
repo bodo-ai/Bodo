@@ -244,6 +244,21 @@ def test_df_head(df_value):
     pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
 
 
+@pytest.mark.parametrize('other', [
+    pd.DataFrame({'A': np.arange(4), 'C': np.arange(4)**2}),
+    [2, 3, 4]
+])
+def test_df_isin(other):
+    # TODO: more tests, other data types
+    # TODO: Series and dictionary values cases
+    def impl(df, other):
+        return df.isin(other)
+
+    bodo_func = bodo.jit(impl)
+    df = pd.DataFrame({'A': np.arange(4), 'B': np.arange(4)**2})
+    pd.testing.assert_frame_equal(bodo_func(df, other), impl(df, other))
+
+
 ############################# old tests ###############################
 
 
