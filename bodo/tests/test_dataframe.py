@@ -267,6 +267,20 @@ def test_df_isin(other):
     pd.testing.assert_frame_equal(bodo_func(df, other), impl(df, other))
 
 
+def test_df_abs(numeric_df_value):
+    # not supported for dt64
+    if any(d == np.dtype('datetime64[ns]') for d in numeric_df_value.dtypes):
+        return
+
+    def impl(df):
+        return df.abs()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(
+        bodo_func(numeric_df_value), impl(numeric_df_value))
+
+
+
 ############################# old tests ###############################
 
 

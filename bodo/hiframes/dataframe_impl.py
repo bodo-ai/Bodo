@@ -193,6 +193,29 @@ def overload_dataframe_isin(df, values):
     return _gen_init_df(header, df.columns, data_args)
 
 
+@overload_method(DataFrameType, 'abs')
+def overload_dataframe_abs(df):
+    # only works for numerical data and Timedelta
+    # TODO: handle timedelta
+
+    # XXX: Pandas pass a single array to Numpy and therefore, casts the input
+    # columns to the same dtype! We simulate this behavior here.
+    extra = ""
+    first_col_dtype = df.data[0] if len(df.data) > 0 else None
+    if not all(c == first_col_dtype for c in df.data):
+        dtypes = [numba.numpy_support.as_dtype(d.dtype) for d in df.data]
+        out_dtype = numba.numpy_support.from_dtype(
+            np.find_common_type(dtypes, []))
+        extra = ".astype(np.{})".format(out_dtype)
+
+    n_cols = len(df.columns)
+    data_args = ", ".join(
+        'np.abs(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){})'.format(i, extra)
+        for i in range(n_cols))
+    header = "def impl(df):\n"
+    return _gen_init_df(header, df.columns, data_args)
+
+
 def _gen_init_df(header, columns, data_args, index=None):
     if index is None:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"

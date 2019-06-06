@@ -268,6 +268,7 @@ Function application, GroupBy & Window:
 
 Computations / Descriptive Stats:
 
+* :meth:`DataFrame.abs`
 * :meth:`DataFrame.describe`
 
 Missing data handling:

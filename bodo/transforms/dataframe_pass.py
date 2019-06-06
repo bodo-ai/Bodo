@@ -631,7 +631,7 @@ class DataFramePass(object):
 
     def _run_call_dataframe(self, assign, lhs, rhs, df_var, func_name):
         if func_name in ('get_values', 'astype', 'copy', 'isna', 'isnull',
-                'notna', 'head', 'tail', 'isin'):
+                'notna', 'head', 'tail', 'isin', 'abs'):
             if func_name == 'isnull':
                 func_name = 'isna'
             rhs.args.insert(0, df_var)
