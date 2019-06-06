@@ -1113,7 +1113,7 @@ def lower_string_arr_getitem_bool(context, builder, sig, args):
         n_strs = 0
         n_chars = 0
         for i in range(n):
-            if bool_arr[i] == True:
+            if bool_arr[i]:
                 # TODO: use get_cstr_and_len instead of getitem
                 _str = str_arr[i]
                 n_strs += 1
@@ -1121,9 +1121,12 @@ def lower_string_arr_getitem_bool(context, builder, sig, args):
         out_arr = pre_alloc_string_array(n_strs, n_chars)
         str_ind = 0
         for i in range(n):
-            if bool_arr[i] == True:
+            if bool_arr[i]:
                 _str = str_arr[i]
                 out_arr[str_ind] = _str
+                # set NA
+                if str_arr_is_na(str_arr, i):
+                    str_arr_set_na(out_arr, str_ind)
                 str_ind += 1
         return out_arr
     res = context.compile_internal(builder, str_arr_bool_impl, sig, args)
@@ -1148,6 +1151,9 @@ def lower_string_arr_getitem_arr(context, builder, sig, args):
         for i in range(n):
             _str = str_arr[ind_arr[i]]
             out_arr[str_ind] = _str
+            # set NA
+            if str_arr_is_na(str_arr, ind_arr[i]):
+                str_arr_set_na(out_arr, str_ind)
             str_ind += 1
         return out_arr
     res = context.compile_internal(builder, str_arr_arr_impl, sig, args)
@@ -1169,6 +1175,9 @@ def lower_string_arr_getitem_slice(context, builder, sig, args):
             # TODO: more efficient copy
             for i in range(span):
                 new_arr[i] = str_arr[slice_idx.start+i]
+                # set NA
+                if str_arr_is_na(str_arr, slice_idx.start+i):
+                    str_arr_set_na(new_arr, i)
             return new_arr
         else:  # TODO: test
             # get number of chars
@@ -1180,6 +1189,9 @@ def lower_string_arr_getitem_slice(context, builder, sig, args):
             # TODO: more efficient copy
             for i in range(span):
                 new_arr[i] = str_arr[slice_idx.start+i*slice_idx.step]
+                # set NA
+                if str_arr_is_na(str_arr, slice_idx.start+i*slice_idx.step):
+                    str_arr_set_na(new_arr, i)
             return new_arr
 
     res = context.compile_internal(builder, str_arr_slice_impl, sig, args)

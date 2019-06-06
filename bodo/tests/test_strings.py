@@ -10,6 +10,23 @@ import re
 import pyarrow.parquet as pq
 from bodo.libs.str_arr_ext import StringArray
 from bodo.libs.str_ext import unicode_to_std_str, std_str_to_unicode
+import pytest
+
+
+@pytest.mark.parametrize('ind', [
+    np.array([True, True, False, False, False, True]),
+    np.array([0, 1, 3, 4]),
+    slice(1, 5),
+])
+def test_string_array_getitem_na(ind):
+    def impl(S, index):
+        return S.iloc[index]
+
+    bodo_func = bodo.jit(impl)
+    S = pd.Series(['A', np.nan, 'CC', 'DD', np.nan, 'ABC'])
+    # ind = slice(0, 3)
+    pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind))
+    pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind))
 
 
 class TestString(unittest.TestCase):
