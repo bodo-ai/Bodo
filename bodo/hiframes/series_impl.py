@@ -11,7 +11,7 @@ import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_index_ext import is_pd_index_type
 from bodo.utils.typing import (is_overload_none, is_overload_true,
-    is_overload_false, is_overload_zero)
+    is_overload_false, is_overload_zero, is_overload_str)
 
 
 @overload_attribute(SeriesType, 'index')
@@ -317,8 +317,7 @@ def overload_series_corr(S, other, method='pearson', min_periods=None):
     if not is_overload_none(min_periods):
         raise ValueError("Series.corr(): 'min_periods' is not supported yet")
 
-    if method != 'pearson':
-        # TODO: check string constant value in Series pass?
+    if not is_overload_str(method, 'pearson'):
         raise ValueError("Series.corr(): 'method' is not supported yet")
 
     def impl(S, other, method='pearson', min_periods=None):  # pragma: no cover

@@ -3,6 +3,7 @@ Implements array kernels such as median and quantile.
 """
 import pandas as pd
 import numpy as np
+from math import sqrt
 
 import numba
 from numba.extending import overload
@@ -238,3 +239,50 @@ def nlargest_parallel(A, I, k, is_largest, cmp_f):
     bodo.libs.distributed_api.bcast(res)
     bodo.libs.distributed_api.bcast(res_ind)
     return res, res_ind
+
+
+# adapted from pandas/_libs/algos.pyx/nancorr()
+@numba.njit(no_cpython_wrapper=True, cache=True)
+def nancorr(mat, cov=0, minpv=1):
+    # TODO: parallel flag
+    N, K = mat.shape
+    result = np.empty((K, K), dtype=np.float64)
+
+    for xi in range(K):
+        for yi in range(xi + 1):
+            nobs = 0
+            sumxx = sumyy = sumx = sumy = 0.0
+            for i in range(N):
+                if np.isfinite(mat[i, xi]) and np.isfinite(mat[i, yi]):
+                    vx = mat[i, xi]
+                    vy = mat[i, yi]
+                    nobs += 1
+                    sumx += vx
+                    sumy += vy
+
+            if nobs < minpv:
+                result[xi, yi] = result[yi, xi] = np.nan
+            else:
+                meanx = sumx / nobs
+                meany = sumy / nobs
+
+                # now the cov numerator
+                sumx = 0.0
+
+                for i in range(N):
+                    if np.isfinite(mat[i, xi]) and np.isfinite(mat[i, yi]):
+                        vx = mat[i, xi] - meanx
+                        vy = mat[i, yi] - meany
+
+                        sumx += vx * vy
+                        sumxx += vx * vx
+                        sumyy += vy * vy
+
+                divisor = (nobs - 1.0) if cov else sqrt(sumxx * sumyy)
+
+                if divisor != 0.0:
+                    result[xi, yi] = result[yi, xi] = sumx / divisor
+                else:
+                    result[xi, yi] = result[yi, xi] = np.nan
+
+    return result
