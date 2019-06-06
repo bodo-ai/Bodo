@@ -269,7 +269,7 @@ Function application, GroupBy & Window:
 Computations / Descriptive Stats:
 
 * :meth:`DataFrame.abs`
-* :meth:`DataFrame.corr`
+* :meth:`DataFrame.corr` (`min_periods` argument supported)
 * :meth:`DataFrame.describe`
 
 Missing data handling:

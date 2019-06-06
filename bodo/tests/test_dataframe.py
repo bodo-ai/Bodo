@@ -292,6 +292,18 @@ def test_df_corr(df_value):
     pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
 
 
+def test_df_corr_parallel():
+    def impl(n):
+        df = pd.DataFrame({'A': np.arange(n), 'B': np.arange(n)**2})
+        return df.corr()
+
+    bodo_func = bodo.jit(impl)
+    n = 11
+    pd.testing.assert_frame_equal(bodo_func(n), impl(n))
+    assert count_array_OneDs() >= 3
+    assert count_parfor_OneDs() >= 1
+
+
 ############################# old tests ###############################
 
 

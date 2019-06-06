@@ -353,6 +353,10 @@ class DistributedAnalysis(object):
             array_dists[lhs] = Distribution.REP
             return
 
+        if fdef == ('nancorr', 'bodo.libs.array_kernels'):
+            array_dists[lhs] = Distribution.REP
+            return
+
         if fdef == ('median', 'bodo.libs.array_kernels'):
             return
 

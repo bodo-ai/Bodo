@@ -243,7 +243,7 @@ def overload_dataframe_corr(df, method='pearson', min_periods=1):
 
     header = "def impl(df, method='pearson', min_periods=1):\n"
     header += "  mat = {}\n".format(mat)
-    header += "  res = bodo.libs.array_kernels.nancorr(mat)\n"
+    header += "  res = bodo.libs.array_kernels.nancorr(mat, 0, min_periods)\n"
     return _gen_init_df(header, numeric_cols, data_args, index)
 
 

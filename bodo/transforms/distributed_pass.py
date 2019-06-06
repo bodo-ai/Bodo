@@ -708,6 +708,11 @@ class DistributedPass(object):
             f = lambda arr, I, k, i, f: bodo.libs.array_kernels.nlargest_parallel(arr, I, k, i, f)
             return self._replace_func(f, rhs.args)
 
+        if fdef == ('nancorr', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
+                                                                or self._is_1D_Var_arr(rhs.args[0].name)):
+            f = lambda mat, cov, minpv: bodo.libs.array_kernels.nancorr(mat, cov, minpv, True)
+            return self._replace_func(f, rhs.args)
+
         if fdef == ('median', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda arr: bodo.libs.array_kernels.median(arr, True)

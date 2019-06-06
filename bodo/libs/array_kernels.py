@@ -32,7 +32,7 @@ nth_parallel = types.ExternalFunction("nth_parallel",
     types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.int32))
 
 MPI_ROOT = 0
-sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
+sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
 
 
 ################################ median ####################################
@@ -243,8 +243,7 @@ def nlargest_parallel(A, I, k, is_largest, cmp_f):
 
 # adapted from pandas/_libs/algos.pyx/nancorr()
 @numba.njit(no_cpython_wrapper=True, cache=True)
-def nancorr(mat, cov=0, minpv=1):
-    # TODO: parallel flag
+def nancorr(mat, cov=0, minpv=1, parallel=False):
     N, K = mat.shape
     result = np.empty((K, K), dtype=np.float64)
 
@@ -259,6 +258,11 @@ def nancorr(mat, cov=0, minpv=1):
                     nobs += 1
                     sumx += vx
                     sumy += vy
+
+            if parallel:
+                nobs = bodo.libs.distributed_api.dist_reduce(nobs, sum_op)
+                sumx = bodo.libs.distributed_api.dist_reduce(sumx, sum_op)
+                sumy = bodo.libs.distributed_api.dist_reduce(sumy, sum_op)
 
             if nobs < minpv:
                 result[xi, yi] = result[yi, xi] = np.nan
@@ -277,6 +281,11 @@ def nancorr(mat, cov=0, minpv=1):
                         sumx += vx * vy
                         sumxx += vx * vx
                         sumyy += vy * vy
+
+                if parallel:
+                    sumx = bodo.libs.distributed_api.dist_reduce(sumx, sum_op)
+                    sumxx = bodo.libs.distributed_api.dist_reduce(sumxx, sum_op)
+                    sumyy = bodo.libs.distributed_api.dist_reduce(sumyy, sum_op)
 
                 divisor = (nobs - 1.0) if cov else sqrt(sumxx * sumyy)
 
