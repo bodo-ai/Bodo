@@ -348,7 +348,15 @@ def overload_dataframe_median(df, axis=None, skipna=None, level=None,
     return _gen_reduce_impl(df, 'median')
 
 
-def _gen_reduce_impl(df, func_name):
+@overload_method(DataFrameType, 'quantile')
+def overload_dataframe_quantile(df, q=0.5, axis=0, numeric_only=True,
+                                                       interpolation='linear'):
+    # TODO: name is str(q)
+    return _gen_reduce_impl(df, 'quantile', 'q')
+
+
+def _gen_reduce_impl(df, func_name, args=None):
+    args = '' if args is None else args
     # TODO: numeric_only=None tries its best: core/frame.py/DataFrame/_reduce
     numeric_cols = [c for c, d in zip(df.columns, df.data)
         if _is_numeric_dtype(d.dtype)]
@@ -372,7 +380,7 @@ def _gen_reduce_impl(df, func_name):
                                                        'var', 'std', 'median'):
         typ_cast = ", dtype=np.float32"
 
-    data_args = ", ".join("df['{}'].{}()".format(c, func_name)
+    data_args = ", ".join("df['{}'].{}({})".format(c, func_name, args)
                           for c in numeric_cols)
 
     str_arr = "bodo.utils.conversion.coerce_to_array({})".format(numeric_cols)
@@ -388,6 +396,8 @@ def _gen_reduce_impl(df, func_name):
         ddof = "ddof=1, "
 
     func_text = "def impl(df, axis=None, skipna=None, level=None,{} numeric_only=None{}):\n".format(ddof, minc)
+    if func_name == 'quantile':
+        func_text = "def impl(df, q=0.5, axis=0, numeric_only=True, interpolation='linear'):\n"
     func_text += "  data = np.asarray(({},){})\n".format(data_args, typ_cast)
     func_text += "  return bodo.hiframes.api.init_series(data, {})\n".format(index)
     # print(func_text)

@@ -436,6 +436,19 @@ def test_df_median(numeric_df_value):
         bodo_func(numeric_df_value), impl(numeric_df_value))
 
 
+def test_df_quantile(df_value):
+    # empty dataframe output not supported yet
+    if len(df_value._get_numeric_data().columns) == 0:
+        return
+
+    def impl(df):
+        return df.quantile(0.3)
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_series_equal(
+        bodo_func(df_value), impl(df_value), check_names=False)
+
+
 def test_df_pct_change(numeric_df_value):
     # not supported for dt64 yet, TODO: support and test
     if any(d == np.dtype('datetime64[ns]') for d in numeric_df_value.dtypes):
