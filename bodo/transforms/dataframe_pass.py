@@ -606,7 +606,8 @@ class DataFramePass(object):
         if func_name in ('get_values', 'astype', 'copy', 'isna', 'isnull',
                 'notna', 'head', 'tail', 'isin', 'abs', 'corr', 'cov',
                 'count', 'prod', 'sum', 'max', 'min', 'mean', 'var', 'std',
-                'median', 'pct_change', 'describe', 'product', 'quantile'):
+                'median', 'pct_change', 'describe', 'product', 'quantile',
+                'cumprod', 'cumsum'):
             if func_name == 'isnull':
                 func_name = 'isna'
             if func_name == 'product':

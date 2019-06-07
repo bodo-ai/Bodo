@@ -476,6 +476,41 @@ def test_df_describe(numeric_df_value):
         bodo_func(numeric_df_value), test_impl(numeric_df_value))
 
 
+def test_df_cumprod(numeric_df_value):
+    # empty dataframe output not supported yet
+    if len(numeric_df_value._get_numeric_data().columns) == 0:
+        return
+
+    # skip NAs
+    # TODO: handle NAs
+    if numeric_df_value._get_numeric_data().isna().sum().sum():
+        return
+
+    def impl(df):
+        return df.cumprod()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(
+        bodo_func(numeric_df_value), impl(numeric_df_value))
+
+
+def test_df_cumsum(numeric_df_value):
+    # empty dataframe output not supported yet
+    if len(numeric_df_value._get_numeric_data().columns) == 0:
+        return
+
+    # skip NAs
+    # TODO: handle NAs
+    if numeric_df_value._get_numeric_data().isna().sum().sum():
+        return
+
+    def impl(df):
+        return df.cumsum()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(
+        bodo_func(numeric_df_value), impl(numeric_df_value))
+
 
 ############################# old tests ###############################
 

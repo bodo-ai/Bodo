@@ -416,6 +416,23 @@ def overload_dataframe_pct_change(df, periods=1, fill_method='pad', limit=None,
     return _gen_init_df(header, df.columns, data_args)
 
 
+@overload_method(DataFrameType, 'cumprod')
+def overload_dataframe_cumprod(df, axis=None, skipna=True):
+    data_args = ", ".join("df['{}'].values.cumprod()".format(c)
+        for c in df.columns)
+    header = "def impl(df, axis=None, skipna=True):\n"
+    return _gen_init_df(header, df.columns, data_args)
+
+
+@overload_method(DataFrameType, 'cumsum')
+def overload_dataframe_cumsum(df, axis=None, skipna=True):
+    # TODO: handle NA
+    data_args = ", ".join("df['{}'].values.cumsum()".format(c)
+        for c in df.columns)
+    header = "def impl(df, axis=None, skipna=True):\n"
+    return _gen_init_df(header, df.columns, data_args)
+
+
 @overload_method(DataFrameType, 'describe')
 def overload_dataframe_describe(df, percentiles=None, include=None,
                                                                  exclude=None):
