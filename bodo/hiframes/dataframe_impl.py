@@ -311,6 +311,18 @@ def overload_dataframe_sum(df, axis=None, skipna=None, level=None,
     return _gen_reduce_impl(df, 'sum')
 
 
+@overload_method(DataFrameType, 'max')
+def overload_dataframe_max(df, axis=None, skipna=None, level=None,
+                                                            numeric_only=None):
+    return _gen_reduce_impl(df, 'max')
+
+
+@overload_method(DataFrameType, 'min')
+def overload_dataframe_min(df, axis=None, skipna=None, level=None,
+                                                            numeric_only=None):
+    return _gen_reduce_impl(df, 'min')
+
+
 def _gen_reduce_impl(df, func_name):
     # TODO: numeric_only=None tries its best: core/frame.py/DataFrame/_reduce
     numeric_cols = [c for c, d in zip(df.columns, df.data)
@@ -330,7 +342,11 @@ def _gen_reduce_impl(df, func_name):
     index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(
         str_arr)
 
-    func_text = "def impl(df, axis=None, skipna=None, level=None, numeric_only=None, min_count=0):\n"
+    minc = ""
+    if func_name in ('sum', 'prod'):
+        minc = ", min_count=0"
+
+    func_text = "def impl(df, axis=None, skipna=None, level=None, numeric_only=None{}):\n".format(minc)
     func_text += "  data = np.array([{}], dtype=np.{})\n".format(data_args, out_dtype)
     func_text += "  return bodo.hiframes.api.init_series(data, {})\n".format(index)
     # print(func_text)
