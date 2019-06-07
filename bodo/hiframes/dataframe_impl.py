@@ -390,6 +390,15 @@ def _gen_reduce_impl(df, func_name):
     return impl
 
 
+@overload_method(DataFrameType, 'pct_change')
+def overload_dataframe_pct_change(df, periods=1, fill_method='pad', limit=None,
+                                                                    freq=None):
+    data_args = ", ".join("df['{}'].pct_change(periods).values".format(c)
+        for c in df.columns)
+    header = "def impl(df, periods=1, fill_method='pad', limit=None, freq=None):\n"
+    return _gen_init_df(header, df.columns, data_args)
+
+
 def _gen_init_df(header, columns, data_args, index=None):
     if index is None:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"

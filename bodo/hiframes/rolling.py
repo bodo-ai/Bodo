@@ -839,6 +839,7 @@ def pct_change_overload(in_arr, shift, parallel):
     if not isinstance(parallel, types.Literal):
         return pct_change_impl
 
+
 def pct_change_impl(in_arr, shift, parallel):  # pragma: no cover
     N = len(in_arr)
     if parallel:
@@ -868,16 +869,86 @@ def pct_change_impl(in_arr, shift, parallel):  # pragma: no cover
 
     return output
 
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_first_non_na(arr):
+    """get first non-NA value of numeric array.
+    """
+    # just return 0 for non-floats
+    if isinstance(arr.dtype, (types.Integer, types.Boolean)):
+        zero = arr.dtype(0)
+        return lambda arr: zero if len(arr) == 0 else arr[0]
+
+    assert isinstance(arr.dtype, types.Float)
+    na_val = np.nan
+    if arr.dtype == types.float32:
+        na_val = np.float32('nan')
+
+    def impl(arr):
+        for i in range(len(arr)):
+            if not bodo.hiframes.api.isna(arr, i):
+                return arr[i]
+
+        return na_val
+    return impl
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_last_non_na(arr):
+    """get last non-NA value of numeric array.
+    """
+    # just return 0 for non-floats
+    if isinstance(arr.dtype, (types.Integer, types.Boolean)):
+        zero = arr.dtype(0)
+        return lambda arr: zero if len(arr) == 0 else arr[-1]
+
+    assert isinstance(arr.dtype, types.Float)
+    na_val = np.nan
+    if arr.dtype == types.float32:
+        na_val = np.float32('nan')
+
+    def impl(arr):
+        l = len(arr)
+        for i in range(len(arr)):
+            ind = l - i - 1
+            if not bodo.hiframes.api.isna(arr, ind):
+                return arr[ind]
+
+        return na_val
+    return impl
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_one_from_arr_dtype(arr):
+    one = arr.dtype(1)
+    return lambda arr: one
+
+
 @numba.njit
 def pct_change_seq(in_arr, shift):  # pragma: no cover
+    # TODO: parallel 'pad' fill
     N = len(in_arr)
     output = bodo.hiframes.api.alloc_shift(in_arr)
     shift = min(shift, N)
     output[:shift] = np.nan
 
+    # using 'pad' method for handling NAs, TODO: support bfill
+    fill_prev = get_first_non_na(in_arr[:shift])
+    fill = get_last_non_na(in_arr[:shift])
+    one = get_one_from_arr_dtype(output)
+
     for i in range(shift, N):
         prev = in_arr[i-shift]
-        output[i] = (in_arr[i] - prev) / prev
+        if np.isnan(prev):
+            prev = fill_prev
+        else:
+            fill_prev = prev
+        val = in_arr[i]
+        if np.isnan(val):
+            val = fill
+        else:
+            fill = val
+        output[i] = val / prev - one
 
     return output
 
@@ -1011,7 +1082,7 @@ def _handle_small_data_pct_change(in_arr, shift, rank, n_pes):  # pragma: no cov
     if rank == 0:
         all_out = pct_change_seq(all_in_arr, shift)
     else:
-        all_out = np.empty(all_N, np.float64)
+        all_out = np.empty(all_N, bodo.hiframes.api.shift_dtype(in_arr.dtype))
     bodo.libs.distributed_api.bcast(all_out)
     start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
     end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)

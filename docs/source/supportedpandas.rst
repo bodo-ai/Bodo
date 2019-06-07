@@ -276,6 +276,7 @@ Computations / Descriptive Stats:
 * :meth:`DataFrame.max`
 * :meth:`DataFrame.mean`
 * :meth:`DataFrame.min`
+* :meth:`DataFrame.pct_change`
 * :meth:`DataFrame.prod`
 * :meth:`DataFrame.sum`
 * :meth:`DataFrame.std`

@@ -418,6 +418,20 @@ def test_df_std(numeric_df_value):
         bodo_func(numeric_df_value), impl(numeric_df_value))
 
 
+def test_df_pct_change(numeric_df_value):
+    # not supported for dt64 yet, TODO: support and test
+    if any(d == np.dtype('datetime64[ns]') for d in numeric_df_value.dtypes):
+        return
+
+    def test_impl(df):
+        return df.pct_change(2)
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_frame_equal(
+        bodo_func(numeric_df_value), test_impl(numeric_df_value))
+
+
+
 ############################# old tests ###############################
 
 
