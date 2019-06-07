@@ -278,6 +278,8 @@ Computations / Descriptive Stats:
 * :meth:`DataFrame.min`
 * :meth:`DataFrame.prod`
 * :meth:`DataFrame.sum`
+* :meth:`DataFrame.std`
+* :meth:`DataFrame.var`
 
 Missing data handling:
 

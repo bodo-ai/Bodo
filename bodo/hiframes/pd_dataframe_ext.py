@@ -1332,68 +1332,6 @@ def lower_pct_change_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, 'std')
-def std_overload(df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None):
-    # TODO: kwargs
-    # TODO: avoid dummy and generate func here when inlining is possible
-    # TODO: support ddof
-    def _impl(df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None):
-        return bodo.hiframes.pd_dataframe_ext.std_dummy(df)
-
-    return _impl
-
-def std_dummy(df, n):
-    return df
-
-@infer_global(std_dummy)
-class StdDummyTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        df = args[0]
-        # TODO: ignore non-numerics
-        # output is float64 series with column names as string index
-        out = SeriesType(
-            types.float64, types.Array(types.float64, 1, 'C'),
-            string_array_type)
-        return signature(out, *args)
-
-@lower_builtin(std_dummy, types.VarArg(types.Any))
-def lower_std_dummy(context, builder, sig, args):
-    out_obj = cgutils.create_struct_proxy(
-        sig.return_type)(context, builder)
-    return out_obj._getvalue()
-
-
-@overload_method(DataFrameType, 'var')
-def var_overload(df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None):
-    # TODO: kwargs
-    # TODO: avoid dummy and generate func here when inlining is possible
-    # TODO: support ddof
-    def _impl(df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None):
-        return bodo.hiframes.pd_dataframe_ext.var_dummy(df)
-
-    return _impl
-
-def var_dummy(df, n):
-    return df
-
-@infer_global(var_dummy)
-class VarDummyTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        df = args[0]
-        # TODO: ignore non-numerics
-        # output is float64 series with column names as string index
-        out = SeriesType(
-            types.float64, types.Array(types.float64, 1, 'C'),
-            string_array_type)
-        return signature(out, *args)
-
-@lower_builtin(var_dummy, types.VarArg(types.Any))
-def lower_var_dummy(context, builder, sig, args):
-    out_obj = cgutils.create_struct_proxy(
-        sig.return_type)(context, builder)
-    return out_obj._getvalue()
-
-
 # TODO: other Pandas versions (0.24 defaults are different than 0.23)
 @overload_method(DataFrameType, 'to_csv')
 def to_csv_overload(df, path_or_buf=None, sep=',', na_rep='', float_format=None,

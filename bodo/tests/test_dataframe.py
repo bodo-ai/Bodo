@@ -392,6 +392,32 @@ def test_df_mean(numeric_df_value):
         bodo_func(numeric_df_value), impl(numeric_df_value))
 
 
+def test_df_var(numeric_df_value):
+    # empty dataframe output not supported yet
+    if len(numeric_df_value._get_numeric_data().columns) == 0:
+        return
+
+    def impl(df):
+        return df.var()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_series_equal(
+        bodo_func(numeric_df_value), impl(numeric_df_value))
+
+
+def test_df_std(numeric_df_value):
+    # empty dataframe output not supported yet
+    if len(numeric_df_value._get_numeric_data().columns) == 0:
+        return
+
+    def impl(df):
+        return df.std()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_series_equal(
+        bodo_func(numeric_df_value), impl(numeric_df_value))
+
+
 ############################# old tests ###############################
 
 

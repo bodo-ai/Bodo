@@ -329,6 +329,18 @@ def overload_dataframe_mean(df, axis=None, skipna=None, level=None,
     return _gen_reduce_impl(df, 'mean')
 
 
+@overload_method(DataFrameType, 'var')
+def overload_dataframe_var(df, axis=None, skipna=None, level=None, ddof=1,
+                                                            numeric_only=None):
+    return _gen_reduce_impl(df, 'var')
+
+
+@overload_method(DataFrameType, 'std')
+def overload_dataframe_std(df, axis=None, skipna=None, level=None, ddof=1,
+                                                            numeric_only=None):
+    return _gen_reduce_impl(df, 'std')
+
+
 def _gen_reduce_impl(df, func_name):
     # TODO: numeric_only=None tries its best: core/frame.py/DataFrame/_reduce
     numeric_cols = [c for c, d in zip(df.columns, df.data)
@@ -349,7 +361,8 @@ def _gen_reduce_impl(df, func_name):
 
     # XXX pandas combines all column values so int8/float32 results in float32
     # not float64
-    if comm_dtype == types.float32 and func_name in ('sum', 'prod', 'mean'):
+    if comm_dtype == types.float32 and func_name in ('sum', 'prod', 'mean',
+                                                                 'var', 'std'):
         typ_cast = ", dtype=np.float32"
 
     data_args = ", ".join("df['{}'].{}()".format(c, func_name)
@@ -363,7 +376,11 @@ def _gen_reduce_impl(df, func_name):
     if func_name in ('sum', 'prod'):
         minc = ", min_count=0"
 
-    func_text = "def impl(df, axis=None, skipna=None, level=None, numeric_only=None{}):\n".format(minc)
+    ddof = ""
+    if func_name in ('var', 'std'):
+        ddof = "ddof=1, "
+
+    func_text = "def impl(df, axis=None, skipna=None, level=None,{} numeric_only=None{}):\n".format(ddof, minc)
     func_text += "  data = np.asarray(({},){})\n".format(data_args, typ_cast)
     func_text += "  return bodo.hiframes.api.init_series(data, {})\n".format(index)
     # print(func_text)

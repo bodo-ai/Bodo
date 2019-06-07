@@ -603,18 +603,12 @@ class DataFramePass(object):
         if fdef == ('pct_change_dummy', 'bodo.hiframes.pd_dataframe_ext'):
             return self._run_call_pct_change(assign, lhs, rhs)
 
-        if fdef == ('std_dummy', 'bodo.hiframes.pd_dataframe_ext'):
-            return self._run_call_col_reduce(assign, lhs, rhs, 'std')
-
-        if fdef == ('var_dummy', 'bodo.hiframes.pd_dataframe_ext'):
-            return self._run_call_col_reduce(assign, lhs, rhs, 'var')
-
         return [assign]
 
     def _run_call_dataframe(self, assign, lhs, rhs, df_var, func_name):
         if func_name in ('get_values', 'astype', 'copy', 'isna', 'isnull',
                 'notna', 'head', 'tail', 'isin', 'abs', 'corr', 'cov',
-                'count', 'prod', 'sum', 'max', 'min', 'mean'):
+                'count', 'prod', 'sum', 'max', 'min', 'mean', 'var', 'std'):
             if func_name == 'isnull':
                 func_name = 'isna'
             rhs.args.insert(0, df_var)
@@ -774,32 +768,6 @@ class DataFramePass(object):
                 *arg_typs, **kw_typs)
             stub = (lambda df, periods=1, fill_method='pad', limit=None,
                     freq=None: None)
-            return self._replace_func(impl, rhs.args,
-                        pysig=numba.utils.pysignature(stub),
-                        kws=dict(rhs.kws))
-
-        if func_name == 'std':
-            rhs.args.insert(0, df_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name:self.typemap[v.name]
-                    for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.std_overload(
-                *arg_typs, **kw_typs)
-            stub = (lambda df, axis=None, skipna=None, level=None, ddof=1,
-                    numeric_only=None: None)
-            return self._replace_func(impl, rhs.args,
-                        pysig=numba.utils.pysignature(stub),
-                        kws=dict(rhs.kws))
-
-        if func_name == 'var':
-            rhs.args.insert(0, df_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name:self.typemap[v.name]
-                    for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.var_overload(
-                *arg_typs, **kw_typs)
-            stub = (lambda df, axis=None, skipna=None, level=None, ddof=1,
-                    numeric_only=None: None)
             return self._replace_func(impl, rhs.args,
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
