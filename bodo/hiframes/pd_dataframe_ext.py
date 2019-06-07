@@ -1482,42 +1482,6 @@ def lower_min_dummy(context, builder, sig, args):
         sig.return_type)(context, builder)
     return out_obj._getvalue()
 
-@overload_method(DataFrameType, 'sum')
-def sum_overload(df, axis=None, skipna=None, level=None, numeric_only=None,
-                                                                  min_count=0):
-    # TODO: kwargs
-    # TODO: avoid dummy and generate func here when inlining is possible
-    def _impl(df, axis=None, skipna=None, level=None, numeric_only=None,
-                                                                  min_count=0):
-        return bodo.hiframes.pd_dataframe_ext.sum_dummy(df)
-
-    return _impl
-
-def sum_dummy(df, n):
-    return df
-
-@infer_global(sum_dummy)
-class SumDummyTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        df = args[0]
-        # TODO: ignore non-numerics
-        # get series sum output types
-        dtypes = tuple(bodo.hiframes.pd_series_ext.SeriesAttribute.resolve_sum(
-            self, SeriesType(d.dtype)).get_call_type(self, (), {}).return_type
-            for d in df.data)
-
-        # output is series with column names as string index
-        # unify types for output series, TODO: check Pandas unify rules
-        dtype = self.context.unify_types(*dtypes)
-        out = SeriesType(dtype, types.Array(dtype, 1, 'C'), string_array_type)
-        return signature(out, *args)
-
-@lower_builtin(sum_dummy, types.VarArg(types.Any))
-def lower_sum_dummy(context, builder, sig, args):
-    out_obj = cgutils.create_struct_proxy(
-        sig.return_type)(context, builder)
-    return out_obj._getvalue()
-
 
 # TODO: other Pandas versions (0.24 defaults are different than 0.23)
 @overload_method(DataFrameType, 'to_csv')

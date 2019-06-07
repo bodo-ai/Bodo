@@ -168,12 +168,12 @@ def overload_series_isna(S):
 def overload_series_sum(S):
     # TODO: series that have different underlying data type than dtype
     # like records/tuples
+    init = S.dtype(0)
     def impl(S):
         numba.parfor.init_prange()
         A = bodo.hiframes.api.get_series_data(S)
         numba.parfor.init_prange()
-        # TODO: fix output type
-        s = 0
+        s = init
         for i in numba.parfor.internal_prange(len(A)):
             if not bodo.hiframes.api.isna(A, i):
                 s += A[i]

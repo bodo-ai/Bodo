@@ -329,6 +329,36 @@ def overload_dataframe_prod(df, axis=None, skipna=None, level=None,
     return impl
 
 
+@overload_method(DataFrameType, 'sum')
+def overload_dataframe_sum(df, axis=None, skipna=None, level=None,
+                                               numeric_only=None, min_count=0):
+    # TODO: numeric_only=None tries its best: core/frame.py/DataFrame/_reduce
+    numeric_cols = [c for c, d in zip(df.columns, df.data)
+        if _is_numeric_dtype(d.dtype)]
+    # TODO: support empty dataframe
+    assert len(numeric_cols) != 0
+
+    dtypes = [numba.numpy_support.as_dtype(df.data[df.columns.index(c)].dtype)
+              for c in numeric_cols]
+    out_dtype = numba.numpy_support.from_dtype(
+            np.find_common_type(dtypes, []))
+
+    data_args = ", ".join("df['{}'].sum()".format(c) for c in numeric_cols)
+
+    str_arr = "bodo.utils.conversion.coerce_to_array({})".format(numeric_cols)
+    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(
+        str_arr)
+
+    func_text = "def impl(df, axis=None, skipna=None, level=None, numeric_only=None, min_count=0):\n"
+    func_text += "  data = np.array([{}], dtype=np.{})\n".format(data_args, out_dtype)
+    func_text += "  return bodo.hiframes.api.init_series(data, {})\n".format(index)
+    # print(func_text)
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
+    impl = loc_vars['impl']
+    return impl
+
+
 def _gen_init_df(header, columns, data_args, index=None):
     if index is None:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"

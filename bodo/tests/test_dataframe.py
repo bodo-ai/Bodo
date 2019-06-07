@@ -338,6 +338,19 @@ def test_df_prod(df_value):
         bodo_func(df_value), impl(df_value))
 
 
+def test_df_sum(numeric_df_value):
+    # empty dataframe output not supported yet
+    if len(numeric_df_value._get_numeric_data().columns) == 0:
+        return
+
+    def impl(df):
+        return df.sum()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_series_equal(
+        bodo_func(numeric_df_value), impl(numeric_df_value))
+
+
 ############################# old tests ###############################
 
 
