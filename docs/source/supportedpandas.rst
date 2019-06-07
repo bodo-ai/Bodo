@@ -274,6 +274,7 @@ Computations / Descriptive Stats:
 * :meth:`DataFrame.cov` (`min_periods` argument supported)
 * :meth:`DataFrame.describe`
 * :meth:`DataFrame.max`
+* :meth:`DataFrame.mean`
 * :meth:`DataFrame.min`
 * :meth:`DataFrame.prod`
 * :meth:`DataFrame.sum`

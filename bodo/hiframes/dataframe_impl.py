@@ -323,6 +323,12 @@ def overload_dataframe_min(df, axis=None, skipna=None, level=None,
     return _gen_reduce_impl(df, 'min')
 
 
+@overload_method(DataFrameType, 'mean')
+def overload_dataframe_mean(df, axis=None, skipna=None, level=None,
+                                                            numeric_only=None):
+    return _gen_reduce_impl(df, 'mean')
+
+
 def _gen_reduce_impl(df, func_name):
     # TODO: numeric_only=None tries its best: core/frame.py/DataFrame/_reduce
     numeric_cols = [c for c, d in zip(df.columns, df.data)
@@ -332,8 +338,19 @@ def _gen_reduce_impl(df, func_name):
 
     dtypes = [numba.numpy_support.as_dtype(df.data[df.columns.index(c)].dtype)
               for c in numeric_cols]
-    out_dtype = numba.numpy_support.from_dtype(
+    comm_dtype = numba.numpy_support.from_dtype(
             np.find_common_type(dtypes, []))
+
+    # XXX: use common type for min/max to avoid float for ints due to NaN
+    # TODO: handle NaN for ints better
+    typ_cast = ""
+    if func_name in ('min', 'max'):
+        typ_cast = ", dtype=np.{}".format(comm_dtype)
+
+    # XXX pandas combines all column values so int8/float32 results in float32
+    # not float64
+    if comm_dtype == types.float32 and func_name in ('sum', 'prod', 'mean'):
+        typ_cast = ", dtype=np.float32"
 
     data_args = ", ".join("df['{}'].{}()".format(c, func_name)
                           for c in numeric_cols)
@@ -347,7 +364,7 @@ def _gen_reduce_impl(df, func_name):
         minc = ", min_count=0"
 
     func_text = "def impl(df, axis=None, skipna=None, level=None, numeric_only=None{}):\n".format(minc)
-    func_text += "  data = np.array([{}], dtype=np.{})\n".format(data_args, out_dtype)
+    func_text += "  data = np.asarray(({},){})\n".format(data_args, typ_cast)
     func_text += "  return bodo.hiframes.api.init_series(data, {})\n".format(index)
     # print(func_text)
     loc_vars = {}

@@ -1331,35 +1331,6 @@ def lower_pct_change_dummy(context, builder, sig, args):
         sig.return_type)(context, builder)
     return out_obj._getvalue()
 
-@overload_method(DataFrameType, 'mean')
-def mean_overload(df, axis=None, skipna=None, level=None, numeric_only=None):
-    # TODO: kwargs
-    # TODO: avoid dummy and generate func here when inlining is possible
-    def _impl(df, axis=None, skipna=None, level=None, numeric_only=None):
-        return bodo.hiframes.pd_dataframe_ext.mean_dummy(df)
-
-    return _impl
-
-def mean_dummy(df, n):
-    return df
-
-@infer_global(mean_dummy)
-class MeanDummyTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        df = args[0]
-        # TODO: ignore non-numerics
-        # output is float64 series with column names as string index
-        out = SeriesType(
-            types.float64, types.Array(types.float64, 1, 'C'),
-            string_array_type)
-        return signature(out, *args)
-
-@lower_builtin(mean_dummy, types.VarArg(types.Any))
-def lower_mean_dummy(context, builder, sig, args):
-    out_obj = cgutils.create_struct_proxy(
-        sig.return_type)(context, builder)
-    return out_obj._getvalue()
-
 
 @overload_method(DataFrameType, 'std')
 def std_overload(df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None):

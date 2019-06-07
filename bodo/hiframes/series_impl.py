@@ -168,12 +168,16 @@ def overload_series_isna(S):
 def overload_series_sum(S):
     # TODO: series that have different underlying data type than dtype
     # like records/tuples
-    init = S.dtype(0)
+    if isinstance(S.dtype, types.Integer):
+        retty = types.intp
+    else:
+        retty = S.dtype
+    zero = retty(0)
     def impl(S):
         numba.parfor.init_prange()
         A = bodo.hiframes.api.get_series_data(S)
         numba.parfor.init_prange()
-        s = init
+        s = zero
         for i in numba.parfor.internal_prange(len(A)):
             if not bodo.hiframes.api.isna(A, i):
                 s += A[i]
@@ -201,15 +205,27 @@ def overload_series_prod(S):
 
 @overload_method(SeriesType, 'mean')
 def overload_series_mean(S):
+    # see core/nanops.py/nanmean() for output types
+    # TODO: more accurate port of dtypes from pandas
+    sum_dtype = types.float64
+    count_dtype = types.float64
+    if S.dtype == types.float32:
+        sum_dtype = types.float32
+        count_dtype = types.float32
+
+    sum_init = sum_dtype(0)
+    count_init = count_dtype(0)
+    count_1 = count_dtype(1)
+
     def impl(S):  # pragma: no cover
         numba.parfor.init_prange()
         A = bodo.hiframes.api.get_series_data(S)
-        count = 0
-        s = 0
+        count = count_init
+        s = sum_init
         for i in numba.parfor.internal_prange(len(A)):
             if not bodo.hiframes.api.isna(A, i):
                 s += A[i]
-                count += 1
+                count += count_1
 
         res = bodo.hiframes.series_kernels._mean_handle_nan(s, count)
         return res

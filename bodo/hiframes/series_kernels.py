@@ -163,10 +163,19 @@ def _column_prod_impl_basic(A):  # pragma: no cover
     res = s
     return res
 
+
+@numba.generated_jit
+def get_float_nan(s):
+    nan = np.nan
+    if s == types.float32:
+        nan = np.float32('nan')
+    return lambda s: nan
+
+
 @numba.njit
 def _mean_handle_nan(s, count):  # pragma: no cover
     if not count:
-        s = np.nan
+        s = get_float_nan(s)
     else:
         s = s / count
     return s

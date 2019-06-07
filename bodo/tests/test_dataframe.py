@@ -51,6 +51,8 @@ def df_value(request):
     # uint8, float32 dtypes
     pd.DataFrame({'A': np.array([1, 8, 4, 0], dtype=np.uint8),
         'B': np.array([1.1, np.nan, 4.2, 3.1], dtype=np.float32)}),
+    # pd.DataFrame({'A': np.array([1, 8, 4, 0], dtype=np.uint8),
+    # }),
     # int column, float index
     pd.DataFrame({'A': [1, 8, 4, -1]},
         [1.1, -2.1, 7.1, 0.1]),
@@ -371,6 +373,19 @@ def test_df_max(numeric_df_value):
 
     def impl(df):
         return df.max()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_series_equal(
+        bodo_func(numeric_df_value), impl(numeric_df_value))
+
+
+def test_df_mean(numeric_df_value):
+    # empty dataframe output not supported yet
+    if len(numeric_df_value._get_numeric_data().columns) == 0:
+        return
+
+    def impl(df):
+        return df.mean()
 
     bodo_func = bodo.jit(impl)
     pd.testing.assert_series_equal(
