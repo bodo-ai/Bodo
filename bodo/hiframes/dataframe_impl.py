@@ -300,6 +300,7 @@ def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
 
 
 @overload_method(DataFrameType, 'prod')
+@overload_method(DataFrameType, 'product')
 def overload_dataframe_prod(df, axis=None, skipna=None, level=None,
                                                numeric_only=None, min_count=0):
     return _gen_reduce_impl(df, 'prod')

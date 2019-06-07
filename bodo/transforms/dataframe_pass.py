@@ -606,9 +606,11 @@ class DataFramePass(object):
         if func_name in ('get_values', 'astype', 'copy', 'isna', 'isnull',
                 'notna', 'head', 'tail', 'isin', 'abs', 'corr', 'cov',
                 'count', 'prod', 'sum', 'max', 'min', 'mean', 'var', 'std',
-                'median', 'pct_change', 'describe'):
+                'median', 'pct_change', 'describe', 'product'):
             if func_name == 'isnull':
                 func_name = 'isna'
+            if func_name == 'product':
+                func_name = 'prod'
             rhs.args.insert(0, df_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name:self.typemap[v.name]
