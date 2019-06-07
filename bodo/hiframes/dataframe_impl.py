@@ -341,6 +341,12 @@ def overload_dataframe_std(df, axis=None, skipna=None, level=None, ddof=1,
     return _gen_reduce_impl(df, 'std')
 
 
+@overload_method(DataFrameType, 'median')
+def overload_dataframe_median(df, axis=None, skipna=None, level=None,
+                                                            numeric_only=None):
+    return _gen_reduce_impl(df, 'median')
+
+
 def _gen_reduce_impl(df, func_name):
     # TODO: numeric_only=None tries its best: core/frame.py/DataFrame/_reduce
     numeric_cols = [c for c, d in zip(df.columns, df.data)
@@ -362,7 +368,7 @@ def _gen_reduce_impl(df, func_name):
     # XXX pandas combines all column values so int8/float32 results in float32
     # not float64
     if comm_dtype == types.float32 and func_name in ('sum', 'prod', 'mean',
-                                                                 'var', 'std'):
+                                                       'var', 'std', 'median'):
         typ_cast = ", dtype=np.float32"
 
     data_args = ", ".join("df['{}'].{}()".format(c, func_name)
