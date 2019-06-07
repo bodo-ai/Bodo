@@ -405,6 +405,17 @@ def overload_dataframe_pct_change(df, periods=1, fill_method='pad', limit=None,
     return _gen_init_df(header, df.columns, data_args)
 
 
+@overload_method(DataFrameType, 'describe')
+def overload_dataframe_describe(df, percentiles=None, include=None,
+                                                                 exclude=None):
+    data_args = ", ".join("df['{}'].describe().values".format(c)
+        for c in df.columns)
+    header = "def impl(df, percentiles=None, include=None, exclude=None):\n"
+    index = ("bodo.utils.conversion.convert_to_index(['count', 'mean', 'std', "
+        "'min', '25%', '50%', '75%', 'max'])")
+    return _gen_init_df(header, df.columns, data_args, index)
+
+
 def _gen_init_df(header, columns, data_args, index=None):
     if index is None:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"

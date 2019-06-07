@@ -606,7 +606,7 @@ class DataFramePass(object):
         if func_name in ('get_values', 'astype', 'copy', 'isna', 'isnull',
                 'notna', 'head', 'tail', 'isin', 'abs', 'corr', 'cov',
                 'count', 'prod', 'sum', 'max', 'min', 'mean', 'var', 'std',
-                'median', 'pct_change'):
+                'median', 'pct_change', 'describe'):
             if func_name == 'isnull':
                 func_name = 'isna'
             rhs.args.insert(0, df_var)
@@ -661,10 +661,6 @@ class DataFramePass(object):
         # df.apply(lambda a:..., axis=1)
         if func_name == 'apply':
             return self._run_call_dataframe_apply(assign, lhs, rhs, df_var)
-
-        # df.describe()
-        if func_name == 'describe':
-            return self._handle_df_describe(assign, lhs, rhs, df_var)
 
         # df.sort_values()
         if func_name == 'sort_values':
@@ -856,62 +852,6 @@ class DataFramePass(object):
             f_ir.blocks[topo_order[0]], col_vars + [df_index_var])
         f_ir.blocks[topo_order[0]].body = nodes + f_ir.blocks[topo_order[0]].body
         return f_ir.blocks
-
-    def _handle_df_describe(self, assign, lhs, rhs, df_var):
-        """translate df.describe() call with no input or just include='all'
-        """
-        df_typ = self.typemap[df_var.name]
-        # check for no arg or just include='all'
-        if not (len(rhs.args) == 0 and (len(rhs.kws) == 0 or (len(rhs.kws) == 1
-                and rhs.kws[0][0] == 'include'
-                and guard(find_const, self.func_ir, rhs.kws[0][1]) == 'all'))):
-            raise ValueError("only describe() with include='all' supported")
-
-        col_name_args = ["c"+str(i) for i in range(len(df_typ.columns))]
-        # TODO: pandas returns dataframe, maybe return namedtuple instead of
-        # string?
-
-        func_text = "def f({}):\n".format(', '.join(col_name_args))
-        # compute stat values
-        for c in col_name_args:
-            func_text += "  {} = bodo.hiframes.api.init_series({})\n".format(c, c)
-            func_text += "  {}_count = np.float64({}.count())\n".format(c, c)
-            func_text += "  {}_min = {}.min()\n".format(c, c)
-            func_text += "  {}_max = {}.max()\n".format(c, c)
-            func_text += "  {}_mean = {}.mean()\n".format(c, c)
-            func_text += "  {}_std = {}.var()**0.5\n".format(c, c)
-            func_text += "  {}_q25 = {}.quantile(.25)\n".format(c, c)
-            func_text += "  {}_q50 = {}.quantile(.5)\n".format(c, c)
-            func_text += "  {}_q75 = {}.quantile(.75)\n".format(c, c)
-
-
-        col_header = "      ".join([c for c in df_typ.columns])
-        func_text += "  return '        {}\\n' + \\\n".format(col_header)
-        count_strs = "+ '   ' + ".join(["str({}_count)".format(c) for c in col_name_args])
-        func_text += "   'count   ' + {} + '\\n' + \\\n".format(count_strs)
-        mean_strs = "+ '   ' + ".join(["str({}_mean)".format(c) for c in col_name_args])
-        func_text += "   'mean    ' + {} + '\\n' + \\\n".format(mean_strs)
-        std_strs = "+ '   ' + ".join(["str({}_std)".format(c) for c in col_name_args])
-        func_text += "   'std     ' + {} + '\\n' + \\\n".format(std_strs)
-        min_strs = "+ '   ' + ".join(["str({}_min)".format(c) for c in col_name_args])
-        func_text += "   'min     ' + {} + '\\n' + \\\n".format(min_strs)
-        q25_strs = "+ '   ' + ".join(["str({}_q25)".format(c) for c in col_name_args])
-        func_text += "   '25%     ' + {} + '\\n' + \\\n".format(q25_strs)
-        q50_strs = "+ '   ' + ".join(["str({}_q50)".format(c) for c in col_name_args])
-        func_text += "   '50%     ' + {} + '\\n' + \\\n".format(q50_strs)
-        q75_strs = "+ '   ' + ".join(["str({}_q75)".format(c) for c in col_name_args])
-        func_text += "   '75%     ' + {} + '\\n' + \\\n".format(q75_strs)
-        max_strs = "+ '   ' + ".join(["str({}_max)".format(c) for c in col_name_args])
-        func_text += "   'max     ' + {}\n".format(max_strs)
-
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        f = loc_vars['f']
-
-        nodes = []
-        col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
-        return self._replace_func(f, col_vars, pre_nodes=nodes)
-
 
     def _run_call_df_sort_values(self, assign, lhs, rhs):
         df_var, by_var, ascending_var, inplace_var = rhs.args
