@@ -273,6 +273,7 @@ Computations / Descriptive Stats:
 * :meth:`DataFrame.count`
 * :meth:`DataFrame.cov` (`min_periods` argument supported)
 * :meth:`DataFrame.describe`
+* :meth:`DataFrame.prod`
 
 Missing data handling:
 

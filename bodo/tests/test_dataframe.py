@@ -325,6 +325,19 @@ def test_df_count(df_value):
         bodo_func(df_value), impl(df_value))
 
 
+def test_df_prod(df_value):
+    # empty dataframe output not supported yet
+    if len(df_value._get_numeric_data().columns) == 0:
+        return
+
+    def impl(df):
+        return df.prod()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_series_equal(
+        bodo_func(df_value), impl(df_value))
+
+
 ############################# old tests ###############################
 
 
