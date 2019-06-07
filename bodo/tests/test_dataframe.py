@@ -512,6 +512,23 @@ def test_df_cumsum(numeric_df_value):
         bodo_func(numeric_df_value), impl(numeric_df_value))
 
 
+def test_df_nunique(df_value):
+    # not supported for dt64 yet, TODO: support and test
+    if any(d == np.dtype('datetime64[ns]') for d in df_value.dtypes):
+        return
+
+    # skip NAs
+    # TODO: handle NAs
+    if df_value.isna().sum().sum():
+        return
+
+    def impl(df):
+        return df.nunique()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_series_equal(bodo_func(df_value), impl(df_value))
+
+
 ############################# old tests ###############################
 
 

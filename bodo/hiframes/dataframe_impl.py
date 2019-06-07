@@ -299,6 +299,24 @@ def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
     return impl
 
 
+@overload_method(DataFrameType, 'nunique')
+def overload_dataframe_nunique(df, axis=0, dropna=True):
+    data_args = ", ".join("df['{}'].nunique()".format(c) for c in df.columns)
+
+    str_arr = "bodo.utils.conversion.coerce_to_array({})".format(df.columns)
+    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(
+        str_arr)
+
+    func_text = "def impl(df, axis=0, dropna=True):\n"
+    func_text += "  data = np.asarray(({},))\n".format(data_args)
+    func_text += "  return bodo.hiframes.api.init_series(data, {})\n".format(index)
+    # print(func_text)
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
+    impl = loc_vars['impl']
+    return impl
+
+
 @overload_method(DataFrameType, 'prod')
 @overload_method(DataFrameType, 'product')
 def overload_dataframe_prod(df, axis=None, skipna=None, level=None,

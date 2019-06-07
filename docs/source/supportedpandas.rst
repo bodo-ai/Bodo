@@ -285,6 +285,7 @@ Computations / Descriptive Stats:
 * :meth:`DataFrame.sum`
 * :meth:`DataFrame.std`
 * :meth:`DataFrame.var`
+* :meth:`DataFrame.nunique`
 
 Missing data handling:
 
