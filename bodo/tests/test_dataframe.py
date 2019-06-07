@@ -316,6 +316,15 @@ def test_df_cov(df_value):
     pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
 
 
+def test_df_count(df_value):
+    def impl(df):
+        return df.count()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_series_equal(
+        bodo_func(df_value), impl(df_value))
+
+
 ############################# old tests ###############################
 
 

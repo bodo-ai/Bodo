@@ -280,6 +280,25 @@ def overload_dataframe_cov(df, min_periods=None):
     return _gen_init_df(header, numeric_cols, data_args, index)
 
 
+@overload_method(DataFrameType, 'count')
+def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
+    # TODO: numeric_only flag
+    data_args = ", ".join("df['{}'].count()".format(c) for c in df.columns)
+
+    str_arr = "bodo.utils.conversion.coerce_to_array({})".format(df.columns)
+    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(
+        str_arr)
+
+    func_text = "def impl(df, axis=0, level=None, numeric_only=False):\n"
+    func_text += "  data = np.array([{}])\n".format(data_args)
+    func_text += "  return bodo.hiframes.api.init_series(data, {})\n".format(index)
+    # print(func_text)
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
+    impl = loc_vars['impl']
+    return impl
+
+
 def _gen_init_df(header, columns, data_args, index=None):
     if index is None:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
