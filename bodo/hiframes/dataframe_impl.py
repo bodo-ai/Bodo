@@ -489,6 +489,19 @@ def overload_dataframe_describe(df, percentiles=None, include=None,
     return _gen_init_df(header, df.columns, data_args, index)
 
 
+@overload_method(DataFrameType, 'take')
+def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
+    data_args = ", ".join(
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[indices_t]".format(i)
+        for i in range(len(df.columns)))
+    header = "def impl(df, indices, axis=0, convert=None, is_copy=True):\n"
+    header += "  indices_t = bodo.utils.conversion.coerce_to_ndarray(indices)\n"
+    index = ("bodo.utils.conversion.fix_none_index("
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))"
+        "[indices_t]")
+    return _gen_init_df(header, df.columns, data_args, index)
+
+
 def _gen_init_df(header, columns, data_args, index=None):
     if index is None:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"

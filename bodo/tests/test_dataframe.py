@@ -549,6 +549,15 @@ def test_df_idxmin(numeric_df_value):
         bodo_func(numeric_df_value), impl(numeric_df_value))
 
 
+def test_df_take(df_value):
+
+    def impl(df):
+        return df.take([1, 3])
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+
+
 ############################# old tests ###############################
 
 

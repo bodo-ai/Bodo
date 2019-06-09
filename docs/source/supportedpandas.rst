@@ -295,7 +295,9 @@ Reindexing / Selection / Label manipulation:
 * :meth:`DataFrame.head` (including `n` argument)
 * :meth:`DataFrame.idxmax`
 * :meth:`DataFrame.idxmin`
+* :meth:`DataFrame.reset_index` (only `drop=True` supported)
 * :meth:`DataFrame.tail` (including `n` argument)
+* :meth:`DataFrame.take`
 
 Missing data handling:
 
