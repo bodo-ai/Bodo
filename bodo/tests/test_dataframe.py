@@ -558,6 +558,32 @@ def test_df_take(df_value):
     pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
 
 
+def test_df_sort_values(df_value):
+    # skip NAs
+    # TODO: handle NA order
+    if df_value.isna().sum().sum():
+        return
+
+    def impl(df):
+        return df.sort_values(by='A')
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+
+
+def test_df_sort_index(df_value):
+    # skip NAs
+    # TODO: handle NA order
+    if df_value.isna().sum().sum():
+        return
+
+    def impl(df):
+        return df.sort_index()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+
+
 ############################# old tests ###############################
 
 

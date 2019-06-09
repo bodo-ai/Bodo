@@ -304,7 +304,7 @@ Missing data handling:
 * :meth:`DataFrame.dropna`
 * :meth:`DataFrame.fillna`
 
-Reshaping, sorting, transposing
+Reshaping, sorting, transposing:
 
 * :meth:`DataFrame.pivot_table`
 
@@ -315,7 +315,8 @@ Reshaping, sorting, transposing
      the output pivot table `pt` will have columns called `small` and `large`.
 
 * :meth:`DataFrame.sort_values` `by` argument should be constant string or
-  constant list of strings.
+  constant list of strings. `ascending` argument is supported.
+* :meth:`DataFrame.sort_index` `ascending` argument is supported.
 * :meth:`DataFrame.append`
 
 

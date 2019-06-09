@@ -264,22 +264,25 @@ def overload_index_from_array(data):
     raise TypeError("invalid index type {}".format(data))
 
 
-def index_to_array(data):
+def index_to_array(data, l):
     return data
 
 
 @overload(index_to_array)
-def overload_index_to_array(I):
+def overload_index_to_array(I, l=0):
     """
     convert Index object to data array.
     """
     from bodo.hiframes.pd_index_ext import RangeIndexType
 
+    if is_overload_none(I):
+        return lambda I, l=0: np.arange(l)
+
     if isinstance(I, RangeIndexType):
-        return lambda I: np.arange(I._start, I._stop, I._step)
+        return lambda I, l=0: np.arange(I._start, I._stop, I._step)
 
     # other indices have data
-    return lambda I: bodo.hiframes.api.get_index_data(I)
+    return lambda I, l=0: bodo.hiframes.api.get_index_data(I)
 
 
 def extract_name_if_none(data, name):

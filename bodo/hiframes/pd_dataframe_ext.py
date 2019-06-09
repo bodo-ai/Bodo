@@ -1022,7 +1022,11 @@ class SortDummyTyper(AbstractTemplate):
             # TODO: more robust fix or just check
             inplace = False
 
-        ret_typ = df.copy()
+        index = df.index
+        if index is types.none or isinstance(
+                index, bodo.hiframes.pd_index_ext.RangeIndexType):
+            index = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
+        ret_typ = df.copy(index=index, has_parent=False)
         if inplace:
             ret_typ = types.none
         return signature(ret_typ, *args)
@@ -1038,6 +1042,19 @@ def lower_sort_values_dummy(context, builder, sig, args):
     out_obj = cgutils.create_struct_proxy(
         sig.return_type)(context, builder)
     return out_obj._getvalue()
+
+
+@overload_method(DataFrameType, 'sort_index')
+def sort_index_overload(df, axis=0, level=None, ascending=True, inplace=False,
+           kind='quicksort', na_position='last', sort_remaining=True, by=None):
+
+    def _impl(df, axis=0, level=None, ascending=True, inplace=False,
+           kind='quicksort', na_position='last', sort_remaining=True, by=None):
+
+        return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
+            df, '$_bodo_index_', ascending, inplace)
+
+    return _impl
 
 
 # dummy function to change the df type to have set_parent=True

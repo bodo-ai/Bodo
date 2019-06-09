@@ -679,6 +679,18 @@ class DataFramePass(object):
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
 
+        # df.sort_index()
+        if func_name == 'sort_index':
+            rhs.args.insert(0, df_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            impl = bodo.hiframes.pd_dataframe_ext.sort_index_overload(
+                *arg_typs, **kw_typs)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(impl),
+                        kws=dict(rhs.kws))
+
         if func_name == 'itertuples':
             rhs.args.insert(0, df_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
@@ -865,18 +877,25 @@ class DataFramePass(object):
         # find key array for sort ('by' arg)
         key_names = self._get_const_or_list(by_var)
 
-        if any(k not in df_typ.columns for k in key_names):
+        if not (key_names == ('$_bodo_index_',)
+                or all(k in df_typ.columns for k in key_names)):
             raise ValueError("invalid sort keys {}".format(key_names))
 
         nodes = []
         in_vars = {c: self._get_dataframe_data(df_var, c, nodes)
                             for c in df_typ.columns}
 
+        # input index
+        arr = list(in_vars.values())[0]
+        in_index_var = self._gen_array_from_index(df_var, arr, nodes)
+        in_vars['$_bodo_index_'] = in_index_var
+
         # remove key from dfs (only data is kept)
         in_key_arrs = [in_vars.pop(c) for c in key_names]
 
         out_key_vars = in_key_arrs.copy()
         out_vars = in_vars.copy()
+        out_index_var = in_index_var
         if not inplace:
             out_key_vars = []
             out_vars = {}
@@ -885,13 +904,23 @@ class DataFramePass(object):
                 ind = df_typ.columns.index(k)
                 self.typemap[out_var.name] = df_typ.data[ind]
                 out_vars[k] = out_var
-            for k in key_names:
-                out_key_vars.append(out_vars.pop(k))
+            # index var
+            out_index_var = ir.Var(lhs.scope, mk_unique_var('_index_'), lhs.loc)
+            self.typemap[out_index_var.name] = self.typemap[in_index_var.name]
+            if key_names == ('$_bodo_index_',):
+                out_key_vars.append(out_index_var)
+            else:
+                for k in key_names:
+                    out_key_vars.append(out_vars.pop(k))
+                out_vars['$_bodo_index_'] = out_index_var
 
         nodes.append(bodo.ir.sort.Sort(df_var.name, lhs.name, in_key_arrs, out_key_vars,
                                       in_vars, out_vars, inplace, lhs.loc, ascending))
 
-        _init_df = _gen_init_df(df_typ.columns)
+        # output index
+        out_index = self._gen_index_from_array(out_index_var, nodes)
+
+        _init_df = _gen_init_df(df_typ.columns, 'index')
 
         # XXX the order of output variables passed should match out_typ.columns
         out_arrs = []
@@ -901,12 +930,46 @@ class DataFramePass(object):
                 out_arrs.append(out_key_vars[ind])
             else:
                 out_arrs.append(out_vars[c])
+        out_arrs.append(out_index)
 
         if not inplace:
             return self._replace_func(_init_df, out_arrs,
                 pre_nodes=nodes)
         else:
+            # TODO: fix index for inplace case
             return self._set_df_inplace(_init_df, out_arrs, df_var, lhs.loc, nodes)
+
+    def _gen_array_from_index(self, df_var, arr, nodes):
+        def _get_index(df, arr):
+            return bodo.utils.conversion.index_to_array(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df),
+                len(arr))
+
+        f_block = compile_to_numba_ir(_get_index,
+            {'bodo': bodo},
+            self.typingctx,
+            (self.typemap[df_var.name], self.typemap[arr.name]),
+            self.typemap,
+            self.calltypes
+        ).blocks.popitem()[1]
+        replace_arg_nodes(f_block, [df_var, arr])
+        nodes += f_block.body[:-2]
+        return nodes[-1].target
+
+    def _gen_index_from_array(self, arr_var, nodes):
+        def _get_index(arr):
+            return bodo.utils.conversion.index_from_array(arr)
+
+        f_block = compile_to_numba_ir(_get_index,
+            {'bodo': bodo},
+            self.typingctx,
+            (self.typemap[arr_var.name],),
+            self.typemap,
+            self.calltypes
+        ).blocks.popitem()[1]
+        replace_arg_nodes(f_block, [arr_var])
+        nodes += f_block.body[:-2]
+        return nodes[-1].target
 
     def _run_call_df_itertuples(self, assign, lhs, rhs):
         """pass df column names and variables to get_itertuples() to be able
@@ -1859,17 +1922,20 @@ class DataFramePass(object):
         return key_colnames
 
 
-def _gen_init_df(columns):
+def _gen_init_df(columns, index=None):
     n_cols = len(columns)
     data_args = ", ".join('data{}'.format(i) for i in range(n_cols))
+    args = data_args
+    if index is not None:
+        args += ", " + index
 
     # using add_consts_to_type with list to avoid const tuple problems
     # TODO: fix type inference for const str
     col_seq = ", ".join("'{}'".format(c) for c in columns)
     col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_seq, col_seq)
-    func_text = "def _init_df({}):\n".format(data_args)
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
-        data_args, col_var)
+    func_text = "def _init_df({}):\n".format(args)
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
+        data_args, index, col_var)
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     _init_df = loc_vars['_init_df']
