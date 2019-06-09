@@ -373,16 +373,32 @@ def overload_dataframe_quantile(df, q=0.5, axis=0, numeric_only=True,
     return _gen_reduce_impl(df, 'quantile', 'q')
 
 
+@overload_method(DataFrameType, 'idxmax')
+def overload_dataframe_idxmax(df, axis=0, skipna=True):
+    return _gen_reduce_impl(df, 'idxmax')
+
+
+@overload_method(DataFrameType, 'idxmin')
+def overload_dataframe_idxmin(df, axis=0, skipna=True):
+    return _gen_reduce_impl(df, 'idxmin')
+
+
 def _gen_reduce_impl(df, func_name, args=None):
     args = '' if args is None else args
-    # TODO: numeric_only=None tries its best: core/frame.py/DataFrame/_reduce
-    numeric_cols = [c for c, d in zip(df.columns, df.data)
-        if _is_numeric_dtype(d.dtype)]
+
+    if func_name in ('idxmax', 'idxmin'):
+        out_colnames = df.columns
+    else:
+        # TODO: numeric_only=None tries its best: core/frame.py/DataFrame/_reduce
+        numeric_cols = [c for c, d in zip(df.columns, df.data)
+            if _is_numeric_dtype(d.dtype)]
+        out_colnames = numeric_cols
+
     # TODO: support empty dataframe
-    assert len(numeric_cols) != 0
+    assert len(out_colnames) != 0
 
     dtypes = [numba.numpy_support.as_dtype(df.data[df.columns.index(c)].dtype)
-              for c in numeric_cols]
+              for c in out_colnames]
     comm_dtype = numba.numpy_support.from_dtype(
             np.find_common_type(dtypes, []))
 
@@ -399,9 +415,9 @@ def _gen_reduce_impl(df, func_name, args=None):
         typ_cast = ", dtype=np.float32"
 
     data_args = ", ".join("df['{}'].{}({})".format(c, func_name, args)
-                          for c in numeric_cols)
+                          for c in out_colnames)
 
-    str_arr = "bodo.utils.conversion.coerce_to_array({})".format(numeric_cols)
+    str_arr = "bodo.utils.conversion.coerce_to_array({})".format(out_colnames)
     index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(
         str_arr)
 
@@ -413,10 +429,21 @@ def _gen_reduce_impl(df, func_name, args=None):
     if func_name in ('var', 'std'):
         ddof = "ddof=1, "
 
+    # function signature
     func_text = "def impl(df, axis=None, skipna=None, level=None,{} numeric_only=None{}):\n".format(ddof, minc)
     if func_name == 'quantile':
         func_text = "def impl(df, q=0.5, axis=0, numeric_only=True, interpolation='linear'):\n"
-    func_text += "  data = np.asarray(({},){})\n".format(data_args, typ_cast)
+    if func_name in ('idxmax', 'idxmin'):
+        func_text = "def impl(df, axis=0, skipna=True):\n"
+
+    # data conversion
+    if func_name in ('idxmax', 'idxmin'):
+        # idxmax/idxmin don't cast type since just index value is produced
+        # but need to convert tuple of Timestamp to dt64 array
+        # see idxmax test numeric_df_value[6]
+        func_text += "  data = bodo.utils.conversion.coerce_to_array(({},))\n".format(data_args)
+    else:
+        func_text += "  data = np.asarray(({},){})\n".format(data_args, typ_cast)
     func_text += "  return bodo.hiframes.api.init_series(data, {})\n".format(index)
     # print(func_text)
     loc_vars = {}

@@ -33,8 +33,17 @@ def overload_coerce_to_ndarray(data, error_on_nonarray=True):
     if isinstance(data, types.Array):
         return lambda data, error_on_nonarray=True: data
 
-    if isinstance(data, (types.List, types.Tuple)):
-        # TODO: check homogenous for tuple
+    if isinstance(data, (types.List, types.UniTuple)):
+        # convert Timestamp() back to dt64
+        if data.dtype == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+            def impl(data, error_on_nonarray=True):
+                vals = []
+                for d in data:
+                    vals.append(
+                        bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
+                            bodo.hiframes.pd_timestamp_ext.convert_timestamp_to_datetime64(d)))
+                return np.asarray(vals)
+            return impl
         return lambda data, error_on_nonarray=True: np.asarray(data)
 
     if isinstance(data, SeriesType):

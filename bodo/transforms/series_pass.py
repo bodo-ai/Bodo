@@ -641,7 +641,7 @@ class SeriesPass(object):
         if (fdef == ('len', 'builtins')
                 and is_series_type(self.typemap[rhs.args[0].name])):
             return self._replace_func(
-                lambda S: lambda S: len(bodo.hiframes.api.get_series_data(S)),
+                lambda S: len(bodo.hiframes.api.get_series_data(S)),
                 rhs.args)
 
         # XXX sometimes init_dataframe() can't be resolved in dataframe_pass

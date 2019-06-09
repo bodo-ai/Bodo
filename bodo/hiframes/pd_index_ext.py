@@ -847,7 +847,7 @@ def overload_range_index_getitem(I, idx):
         if isinstance(idx, types.Integer):
             # TODO: test
             # TODO: check valid
-            return lambda I, idx: (idx * I._step) - I._start
+            return lambda I, idx: (idx * I._step) + I._start
 
         if isinstance(idx, types.SliceType):
             # TODO: test
