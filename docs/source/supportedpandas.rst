@@ -287,6 +287,14 @@ Computations / Descriptive Stats:
 * :meth:`DataFrame.var`
 * :meth:`DataFrame.nunique`
 
+
+Reindexing / Selection / Label manipulation:
+
+* :meth:`DataFrame.drop` (only dropping columns supported,
+  either using `columns` argument or setting `axis=1`)
+* :meth:`DataFrame.head` (including `n` argument)
+* :meth:`DataFrame.tail` (including `n` argument)
+
 Missing data handling:
 
 * :meth:`DataFrame.dropna`
