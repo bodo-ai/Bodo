@@ -70,8 +70,9 @@ def join_array_analysis(join_node, equiv_set, typemap, array_analysis):
 
     # arrays of left_df and right_df have same size in first dimension
     all_shapes = []
-    for _, col_var in (list(join_node.left_vars.items())
-                       + list(join_node.right_vars.items())):
+    in_vars = (list(join_node.left_vars.values())
+               + list(join_node.right_vars.values()))
+    for col_var in in_vars:
         typ = typemap[col_var.name]
         if typ == string_array_type:
             continue
@@ -85,7 +86,7 @@ def join_array_analysis(join_node, equiv_set, typemap, array_analysis):
     # arrays of output df have same size in first dimension
     # gen size variable for an output column
     all_shapes = []
-    for _, col_var in join_node.df_out_vars.items():
+    for col_var in join_node.df_out_vars.values():
         typ = typemap[col_var.name]
         if typ == string_array_type:
             continue
@@ -155,12 +156,22 @@ distributed_analysis.distributed_analysis_extensions[Join] = join_distributed_an
 
 
 def join_typeinfer(join_node, typeinferer):
-    # TODO: consider keys with same name, cols with suffix
-    for col_name, col_var in (list(join_node.left_vars.items())
-                              + list(join_node.right_vars.items())):
-        out_col_var = join_node.df_out_vars[col_name]
-        typeinferer.constraints.append(typeinfer.Propagate(dst=out_col_var.name,
-                                                           src=col_var.name, loc=join_node.loc))
+
+    for out_col_name, out_col_var in join_node.df_out_vars.items():
+        # left suffix
+        if out_col_name.endswith('_x'):
+            col_var = join_node.left_vars[out_col_name[:-2]]
+        # right suffix
+        elif out_col_name.endswith('_y'):
+            col_var = join_node.right_vars[out_col_name[:-2]]
+        elif out_col_name in join_node.left_vars:
+            col_var = join_node.left_vars[out_col_name]
+        else:
+            assert out_col_name in join_node.right_vars
+            col_var = join_node.right_vars[out_col_name]
+        typeinferer.constraints.append(
+            typeinfer.Propagate(
+                dst=out_col_var.name, src=col_var.name, loc=join_node.loc))
     return
 
 
@@ -208,10 +219,12 @@ def remove_dead_join(join_node, lives, arg_aliases, alias_map, func_ir, typemap)
                 dead_cols.append(col_name)
 
     for cname in dead_cols:
+        join_node.df_out_vars.pop(cname)
+        cname = (cname[:-2] if cname.endswith('_x') or cname.endswith('_y')
+                 else cname)
         assert cname in join_node.left_vars or cname in join_node.right_vars
         join_node.left_vars.pop(cname, None)
         join_node.right_vars.pop(cname, None)
-        join_node.df_out_vars.pop(cname)
 
     # remove empty join node
     if len(join_node.df_out_vars) == 0:
@@ -273,6 +286,7 @@ def apply_copies_join(join_node, var_dict, name_var_table,
 
 ir_utils.apply_copy_propagate_extensions[Join] = apply_copies_join
 
+
 def build_join_definitions(join_node, definitions=None):
     if definitions is None:
         definitions = defaultdict(list)
@@ -281,6 +295,7 @@ def build_join_definitions(join_node, definitions=None):
         definitions[col_var.name].append(join_node)
 
     return definitions
+
 
 ir_utils.build_defs_extensions[Join] = build_join_definitions
 
@@ -352,10 +367,18 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx, 
         func_text += "    bodo.ir.sort.local_sort(t1_keys, data_left)\n"
         func_text += "    bodo.ir.sort.local_sort(t2_keys, data_right)\n"
 
+    def _get_out_col_var(cname, is_left):
+        if is_left and cname + '_x' in join_node.df_out_vars:
+            return join_node.df_out_vars[cname + '_x']
+        if not is_left and cname + '_y' in join_node.df_out_vars:
+            return join_node.df_out_vars[cname + '_y']
+
+        return join_node.df_out_vars[cname]
+
     # align output variables for local merge
     # add keys first (TODO: remove dead keys)
-    out_l_key_vars = tuple(join_node.df_out_vars[c] for c in join_node.left_keys)
-    out_r_key_vars = tuple(join_node.df_out_vars[c] for c in join_node.right_keys)
+    out_l_key_vars = tuple(_get_out_col_var(c, True) for c in join_node.left_keys)
+    out_r_key_vars = tuple(_get_out_col_var(c, False) for c in join_node.right_keys)
     # create dummy variable if right key is not actually returned
     # using the same output left key causes errors for asof case
     if join_node.left_keys == join_node.right_keys:
@@ -365,9 +388,9 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx, 
             typemap[v.name] = typemap[w.name]
 
     merge_out = out_l_key_vars + out_r_key_vars
-    merge_out += tuple(join_node.df_out_vars[n] for (n, v) in sorted(join_node.left_vars.items())
+    merge_out += tuple(_get_out_col_var(n, True) for (n, v) in sorted(join_node.left_vars.items())
                   if n not in join_node.left_keys)
-    merge_out += tuple(join_node.df_out_vars[n] for (n, v) in sorted(join_node.right_vars.items())
+    merge_out += tuple(_get_out_col_var(n, False) for (n, v) in sorted(join_node.right_vars.items())
                   if n not in join_node.right_keys)
     out_names = ["t3_c" + str(i) for i in range(len(merge_out))]
 

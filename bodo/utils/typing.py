@@ -37,6 +37,17 @@ def is_overload_str(val, const):
             or getattr(val, 'value', -1) == const)
 
 
+def get_const_str_list(val):
+    # 'ommited' case
+    if getattr(val, 'value', None) is not None:
+        return [val.value]
+    # literal case
+    if hasattr(val, 'literal_value'):
+        return [val.literal_value]
+    if hasattr(val, 'consts'):
+        return val.consts
+
+
 def is_list_like_index_type(t):
     """Types that can be similar to list for indexing Arrays, Series, etc.
     Tuples are excluded due to indexing semantics.

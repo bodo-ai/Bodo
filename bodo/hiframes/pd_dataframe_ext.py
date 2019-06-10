@@ -18,7 +18,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import (is_overload_none, is_overload_true,
-    is_overload_false, is_overload_zero)
+    is_overload_false, is_overload_zero, get_const_str_list)
 
 
 class DataFrameType(types.Type):  # TODO: IterableType over column names
@@ -834,33 +834,64 @@ def merge_overload(left, right, how='inner', on=None, left_on=None,
 
     comm_cols = tuple(set(left.columns) & set(right.columns))
 
-    # merge on common columns if no key is provided
-    # TODO: use generic impl below when branch pruning is fixed
+    if not is_overload_none(on):
+        left_on = right_on = on
+
     if (is_overload_none(on) and is_overload_none(left_on)
             and is_overload_none(right_on) and is_overload_false(left_index)
             and is_overload_false(right_index)):
-        def _impl(left, right, how='inner', on=None, left_on=None,
-                right_on=None, left_index=False, right_index=False, sort=False,
-                suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):
+        left_keys = comm_cols
+        right_keys = comm_cols
+    else:
+        left_keys = get_const_str_list(left_on)
+        right_keys = get_const_str_list(right_on)
 
-            return bodo.hiframes.api.join_dummy(
-                left, right, comm_cols, comm_cols, how)
 
-        return _impl
+    left_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
+        ", ".join("'{}'".format(c) for c in left_keys))
+    right_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
+        ", ".join("'{}'".format(c) for c in right_keys))
 
-    def _impl(left, right, how='inner', on=None, left_on=None,
-            right_on=None, left_index=False, right_index=False, sort=False,
-            suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):
-        if on is not None:
-            left_on = right_on = on
+    # generating code since typers can't find constants easily
+    func_text = "def _impl(left, right, how='inner', on=None, left_on=None,\n"
+    func_text += "    right_on=None, left_index=False, right_index=False, sort=False,\n"
+    func_text += "    suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):\n"
+    func_text += "  return bodo.hiframes.api.join_dummy(left, right, {}, {}, how)\n".format(left_keys, right_keys)
 
-        # if left_on is None and right_on is None and left_index == False and right_index == False:
-        #     left_on = right_on = comm_cols
-
-        return bodo.hiframes.api.join_dummy(
-            left, right, left_on, right_on, how)
-
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo}, loc_vars)
+    # print(func_text)
+    _impl = loc_vars['_impl']
     return _impl
+
+    # TODO: use regular implementation when constants work in typers
+    # # merge on common columns if no key is provided
+    # # TODO: use generic impl below when branch pruning is fixed
+    # if (is_overload_none(on) and is_overload_none(left_on)
+    #         and is_overload_none(right_on) and is_overload_false(left_index)
+    #         and is_overload_false(right_index)):
+    #     def _impl(left, right, how='inner', on=None, left_on=None,
+    #             right_on=None, left_index=False, right_index=False, sort=False,
+    #             suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):
+
+    #         return bodo.hiframes.api.join_dummy(
+    #             left, right, comm_cols, comm_cols, how)
+
+    #     return _impl
+
+    # def _impl(left, right, how='inner', on=None, left_on=None,
+    #         right_on=None, left_index=False, right_index=False, sort=False,
+    #         suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):
+    #     if on is not None:
+    #         left_on = right_on = on
+
+    #     # if left_on is None and right_on is None and left_index == False and right_index == False:
+    #     #     left_on = right_on = comm_cols
+
+    #     return bodo.hiframes.api.join_dummy(
+    #         left, right, left_on, right_on, how)
+
+    # return _impl
 
 
 @overload(pd.merge_asof)

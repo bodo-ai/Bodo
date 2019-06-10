@@ -36,7 +36,6 @@ from bodo.ir.sort import (
 from bodo.ir.join import write_send_buff
 from bodo.hiframes.split_impl import string_array_split_view_type
 
-
 from numba.targets.arrayobj import make_array
 from bodo.utils.utils import unliteral_all
 import llvmlite.llvmpy.core as lc
@@ -937,14 +936,21 @@ class JoinTyper(AbstractTemplate):
     def generic(self, args, kws):
         from bodo.hiframes.pd_dataframe_ext import DataFrameType
         assert not kws
-        left_df, right_df, left_on, right_on, how = args
+        left_df, right_df, left_on, right_on, _how = args
 
-        columns = list(left_df.columns)
+        # columns with common name that are not common keys will get a suffix
+        comm_keys = set(left_on.consts) & set(right_on.consts)
+        comm_data = set(left_df.columns) & set(right_df.columns)
+        add_suffix = comm_data - comm_keys
+
+        columns = [(c + '_x' if c in add_suffix else c)
+                    for c in left_df.columns]
+        # common keys are added only once so avoid adding them
+        columns += [(c + '_y' if c in add_suffix else c)
+                    for c in right_df.columns if c not in comm_keys]
         data = list(left_df.data)
-        for i, c in enumerate(right_df.columns):
-            if c not in left_df.columns:
-                columns.append(c)
-                data.append(right_df.data[i])
+        data += [right_df.data[right_df.columns.index(c)]
+                for c in right_df.columns if c not in comm_keys]
 
         out_df = DataFrameType(tuple(data), None, tuple(columns))
         return signature(out_df, *args)
