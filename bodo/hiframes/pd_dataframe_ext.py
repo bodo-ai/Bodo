@@ -17,6 +17,8 @@ import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
+from bodo.utils.typing import (is_overload_none, is_overload_true,
+    is_overload_false, is_overload_zero)
 
 
 class DataFrameType(types.Type):  # TODO: IterableType over column names
@@ -825,16 +827,41 @@ def merge_overload(left, right, how='inner', on=None, left_on=None,
         right_on=None, left_index=False, right_index=False, sort=False,
         suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):
 
+    # make sure left and right are dataframes
+    if (not isinstance(left, DataFrameType)
+            or not isinstance(right, DataFrameType)):
+        raise TypeError("merge() requires dataframe inputs")
+
+    comm_cols = tuple(set(left.columns) & set(right.columns))
+
+    # merge on common columns if no key is provided
+    # TODO: use generic impl below when branch pruning is fixed
+    if (is_overload_none(on) and is_overload_none(left_on)
+            and is_overload_none(right_on) and is_overload_false(left_index)
+            and is_overload_false(right_index)):
+        def _impl(left, right, how='inner', on=None, left_on=None,
+                right_on=None, left_index=False, right_index=False, sort=False,
+                suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):
+
+            return bodo.hiframes.api.join_dummy(
+                left, right, comm_cols, comm_cols, how)
+
+        return _impl
+
     def _impl(left, right, how='inner', on=None, left_on=None,
             right_on=None, left_index=False, right_index=False, sort=False,
             suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):
         if on is not None:
             left_on = right_on = on
 
+        # if left_on is None and right_on is None and left_index == False and right_index == False:
+        #     left_on = right_on = comm_cols
+
         return bodo.hiframes.api.join_dummy(
             left, right, left_on, right_on, how)
 
     return _impl
+
 
 @overload(pd.merge_asof)
 def merge_asof_overload(left, right, on=None, left_on=None, right_on=None,
@@ -1120,8 +1147,10 @@ def fillna_overload(df, value=None, method=None, axis=None, inplace=False,
 
     return _impl
 
+
 def fillna_dummy(df, n):
     return df
+
 
 @infer_global(fillna_dummy)
 class FillnaDummyTyper(AbstractTemplate):
@@ -1142,6 +1171,7 @@ class FillnaDummyTyper(AbstractTemplate):
             return signature(out_df, *args)
         return signature(types.none, *args)
 
+
 @lower_builtin(fillna_dummy, types.VarArg(types.Any))
 def lower_fillna_dummy(context, builder, sig, args):
     out_obj = cgutils.create_struct_proxy(
@@ -1161,8 +1191,10 @@ def reset_index_overload(df, level=None, drop=False, inplace=False,
 
     return _impl
 
+
 def reset_index_dummy(df, n):
     return df
+
 
 @infer_global(reset_index_dummy)
 class ResetIndexDummyTyper(AbstractTemplate):
@@ -1182,6 +1214,7 @@ class ResetIndexDummyTyper(AbstractTemplate):
             return signature(out_df, *args)
         return signature(types.none, *args)
 
+
 @lower_builtin(reset_index_dummy, types.VarArg(types.Any))
 def lower_reset_index_dummy(context, builder, sig, args):
     out_obj = cgutils.create_struct_proxy(
@@ -1200,8 +1233,10 @@ def dropna_overload(df, axis=0, how='any', thresh=None, subset=None,
 
     return _impl
 
+
 def dropna_dummy(df, n):
     return df
+
 
 @infer_global(dropna_dummy)
 class DropnaDummyTyper(AbstractTemplate):
@@ -1222,11 +1257,13 @@ class DropnaDummyTyper(AbstractTemplate):
             return signature(out_df, *args)
         return signature(types.none, *args)
 
+
 @lower_builtin(dropna_dummy, types.VarArg(types.Any))
 def lower_dropna_dummy(context, builder, sig, args):
     out_obj = cgutils.create_struct_proxy(
         sig.return_type)(context, builder)
     return out_obj._getvalue()
+
 
 @overload_method(DataFrameType, 'drop')
 def drop_overload(df, labels=None, axis=0, index=None, columns=None,
@@ -1289,6 +1326,7 @@ class DropDummyTyper(AbstractTemplate):
 
         out_df = DataFrameType(new_data, df.index, new_cols, has_parent)
         return signature(out_df, *args)
+
 
 @lower_builtin(drop_dummy, types.VarArg(types.Any))
 def lower_drop_dummy(context, builder, sig, args):

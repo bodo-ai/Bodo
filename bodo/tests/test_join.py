@@ -1,3 +1,5 @@
+"""Test join operations like df.merge(), df.join(), pd.merge_asof() ...
+"""
 import unittest
 import pandas as pd
 import numpy as np
@@ -11,6 +13,21 @@ from bodo.libs.str_arr_ext import StringArray
 from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
                             count_parfor_OneDs, count_array_OneDs, dist_IR_contains,
                             get_start_end)
+import pytest
+
+
+@pytest.mark.parametrize('df1', [pd.DataFrame({'A': [1, 11, 3]}),
+    pd.DataFrame({'A': [1, 11, 3], 'B': [4, 5, 1]}),
+    pd.DataFrame({'A': [1, 11, 3], 'B': [4, 5, 1], 'C': [-1, 3, 4]})])
+@pytest.mark.parametrize('df2', [pd.DataFrame({'A': [-1, 1, 3]}),
+    pd.DataFrame({'A': [-1, 1, 3], 'B': [-1, 0, 1]}),
+    pd.DataFrame({'A': [-1, 1, 3], 'B': [-1, 0, 1], 'C': [-11, 0, 4]})])
+def test_merge_common_cols(df1, df2):
+    def impl(df1, df2):
+        return df1.merge(df2)
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(bodo_func(df1, df2), impl(df1, df2))
 
 
 def test_merge_asof_parallel1(datapath):

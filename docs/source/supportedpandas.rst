@@ -317,7 +317,13 @@ Reshaping, sorting, transposing:
 * :meth:`DataFrame.sort_values` `by` argument should be constant string or
   constant list of strings. `ascending` argument is supported.
 * :meth:`DataFrame.sort_index` `ascending` argument is supported.
-* :meth:`DataFrame.append`
+
+Combining / joining / merging:
+
+* :meth:`DataFrame.append` appending a dataframe or list of dataframes
+  supported. `ignore_index=True` is necessary and set by default.
+* :meth:`DataFrame.join` only dataframes.
+* :meth:`DataFrame.merge` only dataframes.
 
 
 Numeric Index
