@@ -323,7 +323,9 @@ Combining / joining / merging:
 * :meth:`DataFrame.append` appending a dataframe or list of dataframes
   supported. `ignore_index=True` is necessary and set by default.
 * :meth:`DataFrame.join` only dataframes.
-* :meth:`DataFrame.merge` only dataframes.
+* :meth:`DataFrame.merge` only dataframes. `how`, `on`, `left_on`,
+  `right_on`, `left_index`, and `right_index` are supported but
+  should be constant values.
 
 
 Numeric Index

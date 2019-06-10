@@ -862,7 +862,7 @@ def merge_overload(left, right, how='inner', on=None, left_on=None,
     func_text = "def _impl(left, right, how='inner', on=None, left_on=None,\n"
     func_text += "    right_on=None, left_index=False, right_index=False, sort=False,\n"
     func_text += "    suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):\n"
-    func_text += "  return bodo.hiframes.api.join_dummy(left, right, {}, {}, how)\n".format(left_keys, right_keys)
+    func_text += "  return bodo.hiframes.api.join_dummy(left, right, {}, {}, '{}')\n".format(left_keys, right_keys, how)
 
     loc_vars = {}
     exec(func_text, {'bodo': bodo}, loc_vars)
@@ -898,6 +898,39 @@ def merge_overload(left, right, how='inner', on=None, left_on=None,
     #         left, right, left_on, right_on, how)
 
     # return _impl
+
+
+@overload_method(DataFrameType, 'join')
+def join_overload(left, other, on=None, how='left', lsuffix='',
+                                                       rsuffix='', sort=False):
+
+    # make sure left and right are dataframes
+    if (not isinstance(left, DataFrameType)
+            or not isinstance(other, DataFrameType)):
+        raise TypeError("join() requires dataframe inputs")
+
+    if not is_overload_none(on):
+        left_keys = get_const_str_list(on)
+    else:
+        left_keys = ['$_bodo_index_']
+
+    right_keys = ['$_bodo_index_']
+
+    left_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
+        ", ".join("'{}'".format(c) for c in left_keys))
+    right_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
+        ", ".join("'{}'".format(c) for c in right_keys))
+
+    # generating code since typers can't find constants easily
+    func_text = "def _impl(left, other, on=None, how='left',\n"
+    func_text += "    lsuffix='', rsuffix='', sort=False):\n"
+    func_text += "  return bodo.hiframes.api.join_dummy(left, other, {}, {}, '{}')\n".format(left_keys, right_keys, how)
+
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo}, loc_vars)
+    # print(func_text)
+    _impl = loc_vars['_impl']
+    return _impl
 
 
 @overload(pd.merge_asof)

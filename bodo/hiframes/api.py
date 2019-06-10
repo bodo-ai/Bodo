@@ -935,8 +935,9 @@ def join_dummy(left_df, right_df, left_on, right_on, how):
 class JoinTyper(AbstractTemplate):
     def generic(self, args, kws):
         from bodo.hiframes.pd_dataframe_ext import DataFrameType
+        from bodo.utils.typing import is_overload_str
         assert not kws
-        left_df, right_df, left_on, right_on, _how = args
+        left_df, right_df, left_on, right_on, how = args
 
         # columns with common name that are not common keys will get a suffix
         comm_keys = set(left_on.consts) & set(right_on.consts)
@@ -954,9 +955,15 @@ class JoinTyper(AbstractTemplate):
 
         # TODO: unify left/right indices if necessary (e.g. RangeIndex/Int64)
         index_typ = types.none
-        if '$_bodo_index_' in left_on.consts:
+        left_index = '$_bodo_index_' in left_on.consts
+        right_index = '$_bodo_index_' in right_on.consts
+        if left_index and right_index and not is_overload_str(how, 'asof'):
             index_typ = left_df.index
-        elif '$_bodo_index_' in right_on.consts:
+            if isinstance(index_typ, bodo.hiframes.pd_index_ext.RangeIndexType):
+                index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
+        elif right_index and is_overload_str(how, 'left'):
+            index_typ = left_df.index
+        elif left_index and is_overload_str(how, 'right'):
             index_typ = right_df.index
 
         out_df = DataFrameType(tuple(data), index_typ, tuple(columns))

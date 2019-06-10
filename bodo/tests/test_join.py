@@ -61,7 +61,7 @@ def test_merge_suffix(df1, df2):
     pd.DataFrame({'A': [-1, 1, 3], 'B': [-1, 0, 1], 'C': [-11, 0, 4]},
     index=[-1, 1, 3])])
 def test_merge_index(df1, df2):
-    # test cases that have name overlaps, require adding suffix to column names
+    # test using index for join
     def impl1(df1, df2):
         return df1.merge(df2, left_index=True, right_index=True)
 
@@ -82,6 +82,28 @@ def test_merge_index(df1, df2):
 
     # bodo_func = bodo.jit(impl3)
     # pd.testing.assert_frame_equal(bodo_func(df1, df2), impl3(df1, df2))
+
+
+@pytest.mark.parametrize('df1', [
+    pd.DataFrame({'A': [1, 11, 3], 'B': [4, 5, 1]}, index=[1, 4, 3]),
+    pd.DataFrame({'A': [1, 11, 3], 'B': [4, 5, 1], 'C': [-1, 3, 4]},
+    index=[1, 4, 3])])
+@pytest.mark.parametrize('df2', [
+    pd.DataFrame({'D': [-1., 1., 3.]}, index=[-1, 1, 3]),
+    pd.DataFrame({'D': [-1., 1., 3.], 'E': [-1., 0., 1.]},
+    index=[-1, 1, 3])])
+def test_join_call(df1, df2):
+    def impl1(df1, df2):
+        return df1.join(df2)
+
+    bodo_func = bodo.jit(impl1)
+    pd.testing.assert_frame_equal(bodo_func(df1, df2), impl1(df1, df2))
+
+    def impl2(df1, df2):
+        return df1.join(df2, on='A')
+
+    bodo_func = bodo.jit(impl2)
+    pd.testing.assert_frame_equal(bodo_func(df1, df2), impl2(df1, df2))
 
 
 def test_merge_asof_parallel1(datapath):

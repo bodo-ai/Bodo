@@ -634,6 +634,17 @@ class DataFramePass(object):
                         pysig=numba.utils.pysignature(pd.merge),
                         kws=dict(rhs.kws))
 
+        if func_name == 'join':
+            rhs.args.insert(0, df_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            impl = bodo.hiframes.pd_dataframe_ext.join_overload(
+                *arg_typs, **kw_typs)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(impl),
+                        kws=dict(rhs.kws))
+
         if func_name == 'pivot_table':
             rhs.args.insert(0, df_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
@@ -1298,7 +1309,10 @@ class DataFramePass(object):
         if out_index_var is not None:
             out_index = self._gen_index_from_array(out_index_var, nodes)
             out_arrs = [v for c,v in out_data_vars.items() if c != '$_bodo_index_']
-            out_arrs.append(out_index)
+            if '$_bodo_index_' in right_on and '$_bodo_index_' not in left_on and how == 'left':
+                out_arrs.append(self._get_dataframe_index(left_df, nodes))
+            else:
+                out_arrs.append(out_index)
             _init_df = _gen_init_df(out_typ.columns, 'index')
 
         else:
