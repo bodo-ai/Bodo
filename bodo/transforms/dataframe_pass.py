@@ -1272,15 +1272,40 @@ class DataFramePass(object):
         right_arrs = {c: self._get_dataframe_data(right_df, c, nodes)
                             for c in self.typemap[right_df.name].columns}
 
+        in_index_var = None
+        out_index_var = None
+        if '$_bodo_index_' in right_on:
+            in_index_var = self._gen_array_from_index(
+                right_df, list(right_arrs.values())[0], nodes)
+            right_arrs['$_bodo_index_'] = in_index_var
+        if '$_bodo_index_' in left_on:
+            in_index_var = self._gen_array_from_index(
+                left_df, list(left_arrs.values())[0], nodes)
+            left_arrs['$_bodo_index_'] = in_index_var
+
+        if in_index_var is not None:
+            out_index_var = ir.Var(
+                lhs.scope, mk_unique_var('out_index'), lhs.loc)
+            self.typemap[out_index_var.name] = self.typemap[in_index_var.name]
+            out_data_vars['$_bodo_index_'] = out_index_var
+
         nodes.append(bodo.ir.join.Join(lhs.name, left_df.name,
                                    right_df.name,
                                    left_on, right_on, out_data_vars, left_arrs,
                                    right_arrs, how, lhs.loc))
 
-        _init_df = _gen_init_df(out_typ.columns)
+        out_arrs = list(out_data_vars.values())
+        if out_index_var is not None:
+            out_index = self._gen_index_from_array(out_index_var, nodes)
+            out_arrs = [v for c,v in out_data_vars.items() if c != '$_bodo_index_']
+            out_arrs.append(out_index)
+            _init_df = _gen_init_df(out_typ.columns, 'index')
 
-        return self._replace_func(_init_df, list(out_data_vars.values()),
-            pre_nodes=nodes)
+        else:
+            _init_df = _gen_init_df(out_typ.columns)
+
+        return self._replace_func(_init_df, out_arrs,
+                pre_nodes=nodes)
 
     def _run_call_groupby(self, assign, lhs, rhs, grp_var, func_name):
         grp_typ = self.typemap[grp_var.name]

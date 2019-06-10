@@ -952,7 +952,14 @@ class JoinTyper(AbstractTemplate):
         data += [right_df.data[right_df.columns.index(c)]
                 for c in right_df.columns if c not in comm_keys]
 
-        out_df = DataFrameType(tuple(data), None, tuple(columns))
+        # TODO: unify left/right indices if necessary (e.g. RangeIndex/Int64)
+        index_typ = types.none
+        if '$_bodo_index_' in left_on.consts:
+            index_typ = left_df.index
+        elif '$_bodo_index_' in right_on.consts:
+            index_typ = right_df.index
+
+        out_df = DataFrameType(tuple(data), index_typ, tuple(columns))
         return signature(out_df, *args)
 
 

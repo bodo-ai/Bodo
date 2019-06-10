@@ -843,8 +843,14 @@ def merge_overload(left, right, how='inner', on=None, left_on=None,
         left_keys = comm_cols
         right_keys = comm_cols
     else:
-        left_keys = get_const_str_list(left_on)
-        right_keys = get_const_str_list(right_on)
+        if is_overload_true(left_index):
+            left_keys = ['$_bodo_index_']
+        else:
+            left_keys = get_const_str_list(left_on)
+        if is_overload_true(right_index):
+            right_keys = ['$_bodo_index_']
+        else:
+            right_keys = get_const_str_list(right_on)
 
 
     left_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
