@@ -241,25 +241,25 @@ def index_from_array(data):
 
 
 @overload(index_from_array)
-def overload_index_from_array(data):
+def overload_index_from_array(data, name=None):
     """
     convert data array to Index object.
     """
     if data == bodo.string_array_type:
-        return lambda data: bodo.hiframes.pd_index_ext.init_string_index(data)
+        return lambda data, name=None: bodo.hiframes.pd_index_ext.init_string_index(data, name)
 
     assert isinstance(data, types.Array)
     if data.dtype == types.NPDatetime('ns'):
-        return lambda data: pd.DatetimeIndex(data)
+        return lambda data, name=None: pd.DatetimeIndex(data, name=name)
 
     if isinstance(data.dtype, types.Integer):
         if not data.dtype.signed:
-            return lambda data: pd.UInt64Index(data)
+            return lambda data, name=None: pd.UInt64Index(data, name=name)
         else:
-            return lambda data: pd.Int64Index(data)
+            return lambda data, name=None: pd.Int64Index(data, name=name)
 
     if isinstance(data.dtype, types.Float):
-        return lambda data: pd.Float64Index(data)
+        return lambda data, name=None: pd.Float64Index(data, name=name)
 
     raise TypeError("invalid index type {}".format(data))
 

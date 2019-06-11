@@ -597,6 +597,18 @@ def test_df_shift(numeric_df_value):
         bodo_func(numeric_df_value), impl(numeric_df_value))
 
 
+def test_df_set_index(df_value):
+    # singe column dfs become zero column which are not supported, TODO: fix
+    if len(df_value.columns) < 2:
+        return
+
+    def impl(df):
+        return df.set_index('A')
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+
+
 ############################# old tests ###############################
 
 

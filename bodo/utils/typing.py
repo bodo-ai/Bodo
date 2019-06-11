@@ -48,6 +48,20 @@ def get_const_str_list(val):
         return val.consts
 
 
+def get_overload_const_str(val):
+    if isinstance(val, str):
+        return val
+    # 'ommited' case
+    if getattr(val, 'value', None) is not None:
+        assert isinstance(val.value, str)
+        return val.value
+    # literal case
+    if isinstance(val, types.StringLiteral):
+        assert isinstance(val.literal_value, str)
+        return val.literal_value
+    raise ValueError("{} not constant string".format(val))
+
+
 def is_list_like_index_type(t):
     """Types that can be similar to list for indexing Arrays, Series, etc.
     Tuples are excluded due to indexing semantics.

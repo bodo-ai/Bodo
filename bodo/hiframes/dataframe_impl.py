@@ -10,7 +10,7 @@ from numba.extending import overload, overload_attribute, overload_method
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.utils.typing import (is_overload_none, is_overload_true,
-    is_overload_false, is_overload_zero)
+    is_overload_false, is_overload_zero, get_overload_const_str)
 
 
 @overload_attribute(DataFrameType, 'index')
@@ -510,6 +510,26 @@ def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
         for i in range(len(df.columns)))
     header = "def impl(df, periods=1, freq=None, axis=0, fill_value=None):\n"
     return _gen_init_df(header, df.columns, data_args)
+
+
+@overload_method(DataFrameType, 'set_index')
+def overload_dataframe_set_index(df, keys, drop=True, append=False,
+                                        inplace=False, verify_integrity=False):
+    if not is_overload_false(inplace):
+        raise ValueError("set_index() inplace argument not supported yet")
+
+    col_name = get_overload_const_str(keys)
+    col_ind = df.columns.index(col_name)
+
+    data_args = ", ".join(
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(i)
+        for i in range(len(df.columns)) if i != col_ind)
+    header = "def impl(df, keys, drop=True, append=False, inplace=False, verify_integrity=False):\n"
+    columns = tuple(c for c in df.columns if c != col_name)
+    index = ("bodo.utils.conversion.index_from_array("
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}), '{}')").format(
+            col_ind, col_name)
+    return _gen_init_df(header, columns, data_args, index)
 
 
 def _gen_init_df(header, columns, data_args, index=None):
