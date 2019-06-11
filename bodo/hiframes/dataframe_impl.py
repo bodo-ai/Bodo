@@ -502,6 +502,16 @@ def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
     return _gen_init_df(header, df.columns, data_args, index)
 
 
+@overload_method(DataFrameType, 'shift')
+def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
+    # TODO: handle fill_value, freq, int NA
+    data_args = ", ".join(
+        "bodo.hiframes.rolling.shift(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}), periods, False)".format(i)
+        for i in range(len(df.columns)))
+    header = "def impl(df, periods=1, freq=None, axis=0, fill_value=None):\n"
+    return _gen_init_df(header, df.columns, data_args)
+
+
 def _gen_init_df(header, columns, data_args, index=None):
     if index is None:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"

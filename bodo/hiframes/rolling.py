@@ -1068,7 +1068,7 @@ def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
     if rank == 0:
         all_out = shift_seq(all_in_arr, shift)
     else:
-        all_out = np.empty(all_N, np.float64)
+        all_out = np.empty(all_N, bodo.hiframes.api.shift_dtype(in_arr.dtype))
     bodo.libs.distributed_api.bcast(all_out)
     start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
     end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)

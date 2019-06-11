@@ -607,7 +607,8 @@ class DataFramePass(object):
                 'notna', 'head', 'tail', 'isin', 'abs', 'corr', 'cov',
                 'count', 'prod', 'sum', 'max', 'min', 'mean', 'var', 'std',
                 'median', 'pct_change', 'describe', 'product', 'quantile',
-                'cumprod', 'cumsum', 'nunique', 'idxmax', 'idxmin', 'take'):
+                'cumprod', 'cumsum', 'nunique', 'idxmax', 'idxmin', 'take',
+                'shift'):
             if func_name == 'isnull':
                 func_name = 'isna'
             if func_name == 'product':

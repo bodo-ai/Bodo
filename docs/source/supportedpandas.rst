@@ -327,6 +327,11 @@ Combining / joining / merging:
   `right_on`, `left_index`, and `right_index` are supported but
   should be constant values.
 
+Time series-related:
+
+* :meth:`DataFrame.shift` (supports numeric types and
+  only the `periods` argument supported)
+
 
 Numeric Index
 ~~~~~~~~~~~~~

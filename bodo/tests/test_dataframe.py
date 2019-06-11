@@ -584,6 +584,19 @@ def test_df_sort_index(df_value):
     pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
 
 
+def test_df_shift(numeric_df_value):
+    # not supported for dt64
+    if any(d == np.dtype('datetime64[ns]') for d in numeric_df_value.dtypes):
+        return
+
+    def impl(df):
+        return df.shift(2)
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(
+        bodo_func(numeric_df_value), impl(numeric_df_value))
+
+
 ############################# old tests ###############################
 
 
