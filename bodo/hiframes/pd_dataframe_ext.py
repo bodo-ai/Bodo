@@ -939,17 +939,65 @@ def merge_asof_overload(left, right, on=None, left_on=None, right_on=None,
         right_by=None, suffixes=('_x', '_y'), tolerance=None,
         allow_exact_matches=True, direction='backward'):
 
-    def _impl(left, right, on=None, left_on=None, right_on=None,
-            left_index=False, right_index=False, by=None, left_by=None,
-            right_by=None, suffixes=('_x', '_y'), tolerance=None,
-            allow_exact_matches=True, direction='backward'):
-        if on is not None:
-            left_on = right_on = on
+    # TODO: support 'by' argument
 
-        return bodo.hiframes.api.join_dummy(
-            left, right, left_on, right_on, 'asof')
+    # XXX copied from merge, TODO: refactor
+    # make sure left and right are dataframes
+    if (not isinstance(left, DataFrameType)
+            or not isinstance(right, DataFrameType)):
+        raise TypeError("merge_asof() requires dataframe inputs")
 
+    comm_cols = tuple(set(left.columns) & set(right.columns))
+
+    if not is_overload_none(on):
+        left_on = right_on = on
+
+    if (is_overload_none(on) and is_overload_none(left_on)
+            and is_overload_none(right_on) and is_overload_false(left_index)
+            and is_overload_false(right_index)):
+        left_keys = comm_cols
+        right_keys = comm_cols
+    else:
+        if is_overload_true(left_index):
+            left_keys = ['$_bodo_index_']
+        else:
+            left_keys = get_const_str_list(left_on)
+        if is_overload_true(right_index):
+            right_keys = ['$_bodo_index_']
+        else:
+            right_keys = get_const_str_list(right_on)
+
+
+    left_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
+        ", ".join("'{}'".format(c) for c in left_keys))
+    right_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
+        ", ".join("'{}'".format(c) for c in right_keys))
+
+    # generating code since typers can't find constants easily
+    func_text = "def _impl(left, right, on=None, left_on=None, right_on=None,\n"
+    func_text += "    left_index=False, right_index=False, by=None, left_by=None,\n"
+    func_text += "    right_by=None, suffixes=('_x', '_y'), tolerance=None,\n"
+    func_text += "    allow_exact_matches=True, direction='backward'):\n"
+    func_text += "  return bodo.hiframes.api.join_dummy(left, right, {}, {}, 'asof')\n".format(left_keys, right_keys)
+
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo}, loc_vars)
+    # print(func_text)
+    _impl = loc_vars['_impl']
     return _impl
+
+    # def _impl(left, right, on=None, left_on=None, right_on=None,
+    #         left_index=False, right_index=False, by=None, left_by=None,
+    #         right_by=None, suffixes=('_x', '_y'), tolerance=None,
+    #         allow_exact_matches=True, direction='backward'):
+    #     if on is not None:
+    #         left_on = right_on = on
+
+    #     return bodo.hiframes.api.join_dummy(
+    #         left, right, left_on, right_on, 'asof')
+
+    # return _impl
+
 
 @overload_method(DataFrameType, 'pivot_table')
 def pivot_table_overload(df, values=None, index=None, columns=None, aggfunc='mean',

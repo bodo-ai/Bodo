@@ -57,12 +57,20 @@ Input/Output
 General functions
 ~~~~~~~~~~~~~~~~~
 
+Data manipulations:
+
+* :func:`pandas.crosstab`
+   * Annotation of pivot values is required.
+     For example, `@bodo.jit(pivots={'pt': ['small', 'large']})` declares
+     the output table `pt` will have columns called `small` and `large`.
+
 * :func:`pandas.merge`
 
-   * Arguments ``left``, ``right``, ``as_of``, ``how``, ``on``,
-     ``left_on`` and ``right_on`` are supported.
-   * ``on``, ``left_on`` and ``right_on`` should be constant
-     strings or constant list of strings.
+   * Arguments ``left``, ``right`` should be dataframes.
+   * `how`, `on`, `left_on`, `right_on`, `left_index`,
+     and `right_index` are supported but should be constant values.
+
+* :func:`pandas.merge_asof` (similar arguments to `merge`)
 
 * :func:`pandas.concat`
 
