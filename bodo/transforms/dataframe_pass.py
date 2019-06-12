@@ -193,8 +193,8 @@ class DataFramePass(object):
             if rhs.op == 'inplace_binop':
                 return self._run_binop(assign, rhs)
 
-            # if rhs.op == 'unary':
-            #     return self._run_unary(assign, rhs)
+            if rhs.op == 'unary':
+                return self._run_unary(assign, rhs)
 
             # replace getitems on dataframe
             if rhs.op in ('getitem', 'static_getitem'):
@@ -447,19 +447,11 @@ class DataFramePass(object):
         typ = self.typemap[arg.name]
 
         if isinstance(typ, DataFrameType):
-            nodes = []
-            # arg = self._get_series_data(arg, nodes)
-            # rhs.value = arg
-            # self._convert_series_calltype(rhs)
-            # out_data = ir.Var(
-            #     arg.scope, mk_unique_var(assign.target.name+'_data'), rhs.loc)
-            # self.typemap[out_data.name] = self.calltypes[rhs].return_type
-            # nodes.append(ir.Assign(rhs, out_data, rhs.loc))
-            # return self._replace_func(
-            #     lambda data: bodo.hiframes.api.init_series(data),
-            #     [out_data],
-            #     pre_nodes=nodes
-            # )
+            assert rhs.fn in bodo.hiframes.pd_series_ext.series_unary_ops
+            overload_func = \
+                bodo.hiframes.dataframe_impl.create_unary_op_overload(rhs.fn)
+            impl = overload_func(typ)
+            return self._replace_func(impl, (arg,))
 
         return [assign]
 

@@ -1145,7 +1145,7 @@ def create_unary_op_overload(op):
 
 
 def _install_unary_ops():
-    # install inplace binary ops such as iadd, isub, ...
+    # install unary operators: ~, -, +
     for op in bodo.hiframes.pd_series_ext.series_unary_ops:
         overload_impl = create_unary_op_overload(op)
         overload(op)(overload_impl)

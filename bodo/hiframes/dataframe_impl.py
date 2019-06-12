@@ -660,6 +660,32 @@ def _install_inplace_binary_ops():
 _install_inplace_binary_ops()
 
 
+########################## unary operators ###############################
+
+
+def create_unary_op_overload(op):
+    def overload_dataframe_unary_op(df):
+        if isinstance(df, DataFrameType):
+            op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+            data_args = ", ".join(
+                "{1} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})".format(i, op_str)
+                for i in range(len(df.columns)))
+            header = "def impl(df):\n"
+            return _gen_init_df(header, df.columns, data_args)
+
+    return overload_dataframe_unary_op
+
+
+def _install_unary_ops():
+    # install unary operators: ~, -, +
+    for op in bodo.hiframes.pd_series_ext.series_unary_ops:
+        overload_impl = create_unary_op_overload(op)
+        overload(op)(overload_impl)
+
+
+_install_unary_ops()
+
+
 # TODO: move to other file
 ########### top level functions ###############
 
