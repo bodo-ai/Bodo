@@ -431,8 +431,7 @@ class DataFramePass(object):
             overload_func = \
                 bodo.hiframes.dataframe_impl.create_binary_op_overload(rhs.fn)
             impl = overload_func(typ1, typ2)
-            return self._replace_func(impl, [arg1, arg2],
-                extra_globals={'op': rhs.fn})
+            return self._replace_func(impl, [arg1, arg2])
 
         return [assign]  # XXX should reach here, check it properly
 
@@ -476,15 +475,15 @@ class DataFramePass(object):
         # df binary operators call builtin array operators directly,
         # convert to binop node to be parallelized by PA
         # TODO: add support to PA
-        if (func_mod == '_operator' and func_name in binary_op_names
-                and len(rhs.args) > 0
-                and (is_array(self.typemap, rhs.args[0].name)
-                    or is_array(self.typemap, rhs.args[1].name))):
-            func = getattr(operator, func_name)
-            return [ir.Assign(ir.Expr.binop(
-                func, rhs.args[0], rhs.args[1], rhs.loc),
-                assign.target,
-                rhs.loc)]
+        # if (func_mod == '_operator' and func_name in binary_op_names
+        #         and len(rhs.args) > 0
+        #         and (is_array(self.typemap, rhs.args[0].name)
+        #             or is_array(self.typemap, rhs.args[1].name))):
+        #     func = getattr(operator, func_name)
+        #     return [ir.Assign(ir.Expr.binop(
+        #         func, rhs.args[0], rhs.args[1], rhs.loc),
+        #         assign.target,
+        #         rhs.loc)]
 
         if fdef == ('DataFrame', 'pandas'):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)

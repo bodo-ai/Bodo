@@ -567,6 +567,7 @@ def _is_numeric_dtype(dtype):
 
 def create_binary_op_overload(op):
     def overload_dataframe_binary_op(left, right):
+        op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
         if isinstance(left, DataFrameType):
             # df/df case
             if isinstance(right, DataFrameType):
@@ -575,32 +576,29 @@ def create_binary_op_overload(op):
                         "Inconsistent dataframe schemas in binary operator {} ({} and {})".format(op, left, right))
 
                 data_args = ", ".join(
-                    ("op(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0}),"
-                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0}))").format(i)
+                    ("bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0}) {1}"
+                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0})").format(i, op_str)
                     for i in range(len(left.columns)))
                 header = "def impl(left, right):\n"
                 index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(left)"
-                return _gen_init_df(header, left.columns, data_args, index,
-                    extra_globals={'op': op})
+                return _gen_init_df(header, left.columns, data_args, index)
 
             # scalar case, TODO: check
             data_args = ", ".join(
-                ("op(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0}),"
-                "right)").format(i)
+                ("bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0}) {1}"
+                "right").format(i, op_str)
                 for i in range(len(left.columns)))
             header = "def impl(left, right):\n"
             index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(left)"
-            return _gen_init_df(header, left.columns, data_args, index,
-                extra_globals={'op': op})
+            return _gen_init_df(header, left.columns, data_args, index)
 
         if isinstance(right, DataFrameType):
             data_args = ", ".join(
-                "op(left, bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0}))".format(i)
+                "left {1} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0})".format(i, op_str)
                 for i in range(len(right.columns)))
             header = "def impl(left, right):\n"
             index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(right)"
-            return _gen_init_df(header, right.columns, data_args, index,
-                extra_globals={'op': op})
+            return _gen_init_df(header, right.columns, data_args, index)
 
     return overload_dataframe_binary_op
 
