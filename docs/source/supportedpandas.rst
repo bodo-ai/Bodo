@@ -73,8 +73,25 @@ Data manipulations:
 * :func:`pandas.merge_asof` (similar arguments to `merge`)
 
 * :func:`pandas.concat`
+  Input list or tuple of dataframes or series is supported.
 
-   * Input list or tuple of dataframes or series is supported.
+
+Top-level missing data:
+
+* :func:`pandas.isna`
+* :func:`pandas.isnull`
+* :func:`pandas.notna`
+* :func:`pandas.notnull`
+
+
+Top-level conversions:
+
+* :func:`pandas.to_numeric` Input can be a Series.
+  Output requires type annotation. `errors='coerce'` required.
+
+
+Top-level dealing with datetimelike:
+
 
 * :func:`pandas.date_range`
 

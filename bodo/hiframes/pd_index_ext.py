@@ -1267,6 +1267,45 @@ def overload_index_take(I, indices):
     return lambda I, indices: I[indices]
 
 
+@overload_method(RangeIndexType, 'isna')
+@overload_method(NumericIndexType, 'isna')
+@overload_method(StringIndexType, 'isna')
+@overload_method(PeriodIndexType, 'isna')
+@overload_method(DatetimeIndexType, 'isna')
+@overload_method(TimedeltaIndexType, 'isna')
+@overload_method(RangeIndexType, 'isnull')
+@overload_method(NumericIndexType, 'isnull')
+@overload_method(StringIndexType, 'isnull')
+@overload_method(PeriodIndexType, 'isnull')
+@overload_method(DatetimeIndexType, 'isnull')
+@overload_method(TimedeltaIndexType, 'isnull')
+def overload_index_isna(I):
+    if isinstance(I, RangeIndexType):
+        # TODO: parallelize np.full in PA
+        # return lambda I: np.full(len(I), False, np.bool_)
+        def impl(I):
+            numba.parfor.init_prange()
+            n = len(I)
+            out_arr = np.empty(n, np.bool_)
+            for i in numba.parfor.internal_prange(n):
+                out_arr[i] = False
+            return out_arr
+
+        return impl
+
+
+    def impl(I):
+        numba.parfor.init_prange()
+        arr = bodo.hiframes.api.get_index_data(I)
+        n = len(arr)
+        out_arr = np.empty(n, np.bool_)
+        for i in numba.parfor.internal_prange(n):
+            out_arr[i] = bodo.hiframes.api.isna(arr, i)
+        return out_arr
+
+    return impl
+
+
 @overload(len)
 def overload_index_len(I):
     if isinstance(I, (NumericIndexType, StringIndexType, PeriodIndexType,

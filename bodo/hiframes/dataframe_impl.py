@@ -9,6 +9,7 @@ from numba import types
 from numba.extending import overload, overload_attribute, overload_method
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.typing import (is_overload_none, is_overload_true,
     is_overload_false, is_overload_zero, get_overload_const_str)
 
@@ -554,3 +555,48 @@ def _gen_init_df(header, columns, data_args, index=None):
 def _is_numeric_dtype(dtype):
     # Pandas considers bool numeric as well: core/internals/blocks
     return isinstance(dtype, types.Number) or dtype == types.bool_
+
+
+# TODO: move to other file
+########### top level functions ###############
+
+
+@overload(pd.isna)
+@overload(pd.isnull)
+def overload_isna(obj):
+    # DataFrame, Series, Index
+    if (isinstance(obj, (DataFrameType, SeriesType))
+            or bodo.hiframes.pd_index_ext.is_pd_index_type(obj)):
+        return lambda obj: obj.isna()
+
+    # arrays
+    if isinstance(obj, types.Array):
+        return lambda obj: np.isnan(obj)
+
+    # array of strings
+    # TODO: other string array data structures
+    if obj == bodo.string_array_type:
+        def impl(obj):
+            numba.parfor.init_prange()
+            n = len(obj)
+            out_arr = np.empty(n, np.bool_)
+            for i in numba.parfor.internal_prange(n):
+                out_arr[i] = bodo.hiframes.api.isna(obj, i)
+            return out_arr
+        return impl
+
+    # array-like: list, tuple
+    if isinstance(obj, (types.List, types.UniTuple)):
+        return lambda obj: pd.isna(bodo.utils.conversion.coerce_to_array(obj))
+
+    # scalars
+    if obj == bodo.string_type:
+        return lambda obj: False
+    if isinstance(obj, types.Integer):
+        return lambda obj: False
+    if isinstance(obj, types.Float):
+        return lambda obj: np.isnan(obj)
+    # TODO: NaT
+
+    # TODO: catch other cases
+    return lambda obj: False

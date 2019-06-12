@@ -168,7 +168,6 @@ class TestBasic(BaseTest):
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
-    @unittest.skip("pending Numba #3946")
     def test_inline_locals(self):
         # make sure locals in inlined function works
         @bodo.jit(locals={'B': bodo.float64[:]})

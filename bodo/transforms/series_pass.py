@@ -627,6 +627,12 @@ class SeriesPass(object):
                         pysig=numba.utils.pysignature(stub),
                         kws=dict(rhs.kws))
 
+        if (isinstance(func_mod, ir.Var)
+                and bodo.hiframes.pd_index_ext.is_pd_index_type(
+                    self.typemap[func_mod.name])):
+            return self._run_call_index(
+                assign, assign.target, rhs, func_mod, func_name)
+
         if (fdef == ('concat_dummy', 'bodo.hiframes.pd_dataframe_ext')
                 and isinstance(self.typemap[lhs], SeriesType)):
             return self._run_call_concat(assign, lhs, rhs)
@@ -1357,6 +1363,21 @@ class SeriesPass(object):
         replace_arg_nodes(f_ir.blocks[topo_order[0]], [data, index, name])
         f_ir.blocks[topo_order[0]].body = nodes + f_ir.blocks[topo_order[0]].body
         return f_ir.blocks
+
+    def _run_call_index(self, assign, lhs, rhs, index_var, func_name):
+        if func_name in ('isna', 'take'):
+            if func_name == 'isnull':
+                func_name = 'isna'
+            rhs.args.insert(0, index_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.hiframes.pd_index_ext,
+                'overload_index_' + func_name)
+            impl = overload_func(*arg_typs, **kw_typs)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(impl),
+                        kws=dict(rhs.kws))
 
     def _run_call_rolling(self, assign, lhs, rhs, func_name):
         # replace input arguments with data arrays from Series

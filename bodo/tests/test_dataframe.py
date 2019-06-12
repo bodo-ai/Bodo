@@ -609,6 +609,40 @@ def test_df_set_index(df_value):
     pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
 
 
+@pytest.mark.parametrize('obj', [
+    # array-like
+    [2, 3, 5],
+    [2.1, 3.2, 5.4],
+    ['A', 'C', 'AB'],
+    np.array([2, 3, 5]),
+    pd.Series([2.1, 5.3, 6.1], [3, 5, 6], name='C'),
+    pd.Int64Index([10, 12, 14], name='A'),
+    pd.RangeIndex(4),
+    # dataframe
+    pd.DataFrame({'A': ['AA', np.nan, '', 'D'], 'B': [1, 8, 4, -1]},
+        [1.1, -2.1, 7.1, 0.1]),
+    # scalars
+    3,
+    1.3,
+    np.nan,
+    'ABC'
+])
+def test_pd_isna(obj):
+
+    def impl(obj):
+        return pd.isna(obj)
+
+    bodo_func = bodo.jit(impl)
+    if isinstance(obj, pd.DataFrame):
+        pd.testing.assert_frame_equal(bodo_func(obj), impl(obj))
+    elif isinstance(obj, pd.Series):
+        pd.testing.assert_series_equal(bodo_func(obj), impl(obj))
+    elif isinstance(obj, (list, np.ndarray, pd.Index)):
+        np.testing.assert_array_equal(bodo_func(obj), impl(obj))
+    else:
+        assert bodo_func(obj) == impl(obj)
+
+
 ############################# old tests ###############################
 
 
