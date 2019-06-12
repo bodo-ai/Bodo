@@ -609,7 +609,7 @@ def test_df_set_index(df_value):
     pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
 
 
-@pytest.mark.parametrize('obj', [
+@pytest.fixture(params = [
     # array-like
     [2, 3, 5],
     [2.1, 3.2, 5.4],
@@ -627,10 +627,32 @@ def test_df_set_index(df_value):
     np.nan,
     'ABC'
 ])
-def test_pd_isna(obj):
+def na_test_obj(request):
+    return request.param
+
+
+def test_pd_isna(na_test_obj):
+    obj = na_test_obj
 
     def impl(obj):
         return pd.isna(obj)
+
+    bodo_func = bodo.jit(impl)
+    if isinstance(obj, pd.DataFrame):
+        pd.testing.assert_frame_equal(bodo_func(obj), impl(obj))
+    elif isinstance(obj, pd.Series):
+        pd.testing.assert_series_equal(bodo_func(obj), impl(obj))
+    elif isinstance(obj, (list, np.ndarray, pd.Index)):
+        np.testing.assert_array_equal(bodo_func(obj), impl(obj))
+    else:
+        assert bodo_func(obj) == impl(obj)
+
+
+def test_pd_notna(na_test_obj):
+    obj = na_test_obj
+
+    def impl(obj):
+        return pd.notna(obj)
 
     bodo_func = bodo.jit(impl)
     if isinstance(obj, pd.DataFrame):

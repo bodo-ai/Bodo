@@ -600,3 +600,17 @@ def overload_isna(obj):
 
     # TODO: catch other cases
     return lambda obj: False
+
+
+@overload(pd.notna)
+@overload(pd.notnull)
+def overload_notna(obj):
+    # non-scalars
+    if (isinstance(obj, (DataFrameType, SeriesType, types.Array, types.List,
+                types.UniTuple))
+            or bodo.hiframes.pd_index_ext.is_pd_index_type(obj)
+            or obj == bodo.string_array_type):
+        return lambda obj: ~pd.isna(obj)
+
+    # scalars
+    return lambda obj: not pd.isna(obj)
