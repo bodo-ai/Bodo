@@ -609,6 +609,29 @@ def test_df_set_index(df_value):
     pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
 
 
+
+##################### binary ops ###############################
+
+
+@pytest.mark.parametrize('op', bodo.hiframes.pd_series_ext.series_binary_ops)
+def test_dataframe_binary_op(op):
+    # TODO: test parallelism
+    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = "def test_impl(df, other):\n"
+    func_text += "  return df {} other\n".format(op_str)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    test_impl = loc_vars['test_impl']
+
+    df = pd.DataFrame({'A': [4, 6, 7, 1]}, index=[3, 5, 0, 7])
+    bodo_func = bodo.jit(test_impl)
+    # df/df
+    pd.testing.assert_frame_equal(bodo_func(df, df), test_impl(df, df))
+    # df/scalar
+    pd.testing.assert_frame_equal(bodo_func(df, 2), test_impl(df, 2))
+    pd.testing.assert_frame_equal(bodo_func(2, df), test_impl(2, df))
+
+
 @pytest.fixture(params = [
     # array-like
     [2, 3, 5],

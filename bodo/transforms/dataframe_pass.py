@@ -35,6 +35,9 @@ from bodo.hiframes.pd_rolling_ext import RollingType
 from bodo.ir.aggregate import get_agg_func
 
 
+binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
+
+
 class DataFramePass(object):
     """Analyze and transform dataframe calls after typing"""
 
@@ -182,8 +185,8 @@ class DataFramePass(object):
             if rhs.op == 'getattr':
                 return self._run_getattr(assign, rhs)
 
-            # if rhs.op == 'binop':
-            #     return self._run_binop(assign, rhs)
+            if rhs.op == 'binop':
+                return self._run_binop(assign, rhs)
 
             # # XXX handling inplace_binop similar to binop for now
             # # TODO handle inplace alignment
@@ -424,33 +427,14 @@ class DataFramePass(object):
         if not (isinstance(typ1, DataFrameType) or isinstance(typ2, DataFrameType)):
             return [assign]
 
-        # nodes = []
-        # # TODO: support alignment, dt, etc.
-        # # S3 = S1 + S2 ->
-        # # S3_data = S1_data + S2_data; S3 = init_series(S3_data)
-        # if isinstance(typ1, SeriesType):
-        #     arg1 = self._get_series_data(arg1, nodes)
-        # if isinstance(typ2, SeriesType):
-        #     arg2 = self._get_series_data(arg2, nodes)
+        if rhs.fn in bodo.hiframes.pd_series_ext.series_binary_ops:
+            overload_func = \
+                bodo.hiframes.dataframe_impl.create_binary_op_overload(rhs.fn)
+            impl = overload_func(typ1, typ2)
+            return self._replace_func(impl, [arg1, arg2],
+                extra_globals={'op': rhs.fn})
 
-        # rhs.lhs, rhs.rhs = arg1, arg2
-        # self._convert_series_calltype(rhs)
-
-        # # output stays as Array in A += B where A is Array
-        # if isinstance(self.typemap[assign.target.name], types.Array):
-        #     assert isinstance(self.calltypes[rhs].return_type, types.Array)
-        #     nodes.append(assign)
-        #     return nodes
-
-        # out_data = ir.Var(
-        #     arg1.scope, mk_unique_var(assign.target.name+'_data'), rhs.loc)
-        # self.typemap[out_data.name] = self.calltypes[rhs].return_type
-        # nodes.append(ir.Assign(rhs, out_data, rhs.loc))
-        # return self._replace_func(
-        #     lambda data: bodo.hiframes.api.init_series(data, None, None),
-        #     [out_data],
-        #     pre_nodes=nodes
-        # )
+        return [assign]  # XXX should reach here, check it properly
 
     def _run_unary(self, assign, rhs):
         arg = rhs.value
@@ -488,6 +472,19 @@ class DataFramePass(object):
             return [assign]
         else:
             func_name, func_mod = fdef
+
+        # df binary operators call builtin array operators directly,
+        # convert to binop node to be parallelized by PA
+        # TODO: add support to PA
+        if (func_mod == '_operator' and func_name in binary_op_names
+                and len(rhs.args) > 0
+                and (is_array(self.typemap, rhs.args[0].name)
+                    or is_array(self.typemap, rhs.args[1].name))):
+            func = getattr(operator, func_name)
+            return [ir.Assign(ir.Expr.binop(
+                func, rhs.args[0], rhs.args[1], rhs.loc),
+                assign.target,
+                rhs.loc)]
 
         if fdef == ('DataFrame', 'pandas'):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)

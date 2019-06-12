@@ -533,9 +533,12 @@ def overload_dataframe_set_index(df, keys, drop=True, append=False,
     return _gen_init_df(header, columns, data_args, index)
 
 
-def _gen_init_df(header, columns, data_args, index=None):
+def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
     if index is None:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
+
+    if extra_globals is None:
+        extra_globals = {}
 
     # using add_consts_to_type with list to avoid const tuple problems
     # TODO: fix type inference for const str
@@ -547,7 +550,9 @@ def _gen_init_df(header, columns, data_args, index=None):
         header, data_args, index, col_var)
     # print(func_text)
     loc_vars = {}
-    exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
+    _global = {'bodo': bodo, 'np': np}
+    _global.update(extra_globals)
+    exec(func_text, _global, loc_vars)
     impl = loc_vars['impl']
     return impl
 
@@ -555,6 +560,59 @@ def _gen_init_df(header, columns, data_args, index=None):
 def _is_numeric_dtype(dtype):
     # Pandas considers bool numeric as well: core/internals/blocks
     return isinstance(dtype, types.Number) or dtype == types.bool_
+
+
+############################ binary operators #############################
+
+
+def create_binary_op_overload(op):
+    def overload_dataframe_binary_op(left, right):
+        if isinstance(left, DataFrameType):
+            # df/df case
+            if isinstance(right, DataFrameType):
+                if left != right:
+                    raise TypeError(
+                        "Inconsistent dataframe schemas in binary operator {} ({} and {})".format(op, left, right))
+
+                data_args = ", ".join(
+                    ("op(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0}),"
+                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0}))").format(i)
+                    for i in range(len(left.columns)))
+                header = "def impl(left, right):\n"
+                index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(left)"
+                return _gen_init_df(header, left.columns, data_args, index,
+                    extra_globals={'op': op})
+
+            # scalar case, TODO: check
+            data_args = ", ".join(
+                ("op(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0}),"
+                "right)").format(i)
+                for i in range(len(left.columns)))
+            header = "def impl(left, right):\n"
+            index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(left)"
+            return _gen_init_df(header, left.columns, data_args, index,
+                extra_globals={'op': op})
+
+        if isinstance(right, DataFrameType):
+            data_args = ", ".join(
+                "op(left, bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0}))".format(i)
+                for i in range(len(right.columns)))
+            header = "def impl(left, right):\n"
+            index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(right)"
+            return _gen_init_df(header, right.columns, data_args, index,
+                extra_globals={'op': op})
+
+    return overload_dataframe_binary_op
+
+
+def _install_binary_ops():
+    # install binary ops such as add, sub, pow, eq, ...
+    for op in bodo.hiframes.pd_series_ext.series_binary_ops:
+        overload_impl = create_binary_op_overload(op)
+        overload(op)(overload_impl)
+
+
+_install_binary_ops()
 
 
 # TODO: move to other file
