@@ -190,8 +190,8 @@ class DataFramePass(object):
 
             # # XXX handling inplace_binop similar to binop for now
             # # TODO handle inplace alignment
-            # if rhs.op == 'inplace_binop':
-            #     return self._run_binop(assign, rhs)
+            if rhs.op == 'inplace_binop':
+                return self._run_binop(assign, rhs)
 
             # if rhs.op == 'unary':
             #     return self._run_unary(assign, rhs)
@@ -430,6 +430,13 @@ class DataFramePass(object):
         if rhs.fn in bodo.hiframes.pd_series_ext.series_binary_ops:
             overload_func = \
                 bodo.hiframes.dataframe_impl.create_binary_op_overload(rhs.fn)
+            impl = overload_func(typ1, typ2)
+            return self._replace_func(impl, [arg1, arg2])
+
+        if rhs.fn in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
+            overload_func = \
+                bodo.hiframes.dataframe_impl.create_inplace_binary_op_overload(
+                    rhs.fn)
             impl = overload_func(typ1, typ2)
             return self._replace_func(impl, [arg1, arg2])
 
