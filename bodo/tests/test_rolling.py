@@ -36,6 +36,20 @@ def test_fixed_index(test_df):
     pd.testing.assert_frame_equal(bodo_func(test_df), impl(test_df))
 
 
+def test_variable_on_index():
+    def impl(df):
+        return df.rolling('2s').mean()
+
+    bodo_func = bodo.jit(impl)
+    df = pd.DataFrame({'B': [0, 1, 2, np.nan, 4],},
+                     [pd.Timestamp('20130101 09:00:00'),
+                        pd.Timestamp('20130101 09:00:02'),
+                        pd.Timestamp('20130101 09:00:03'),
+                        pd.Timestamp('20130101 09:00:05'),
+                        pd.Timestamp('20130101 09:00:06')])
+    pd.testing.assert_frame_equal(bodo_func(df), impl(df))
+
+
 class TestRolling(unittest.TestCase):
     def test_fixed1(self):
         # test sequentially with manually created dfs

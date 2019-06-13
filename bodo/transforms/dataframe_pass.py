@@ -1537,6 +1537,10 @@ class DataFramePass(object):
         on_arr = (self._get_dataframe_data(df_var, on, nodes)
                   if on is not None else None)
         out_index_var = self._get_dataframe_index(df_var, nodes)
+        on_index_arr = on_arr
+        if isinstance(window_const, str) and on_arr is None:
+            on_index_arr  = self._gen_array_from_index(
+                df_var, list(in_vars.values())[0], nodes)
 
         df_col_map = {}
         for c in rolling_typ.selection:
@@ -1564,7 +1568,7 @@ class DataFramePass(object):
                 rhs.args[0] = self._get_dataframe_data(other, cname, nodes)
             nodes += self._gen_rolling_call(
                 in_col_var, out_col_var, window, center, rhs.args, func_name,
-                on_arr)
+                on_index_arr)
 
         # in corr/cov case, Pandas makes non-common columns NaNs
         if func_name in ('cov', 'corr'):
