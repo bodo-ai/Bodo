@@ -266,7 +266,6 @@ class TestString(unittest.TestCase):
         A = np.array(['AA', 'B'])
         self.assertEqual(bodo_func(A), test_impl(A))
 
-    @unittest.skip("TODO: crashes, llvm ir is invalid?")
     def test_glob(self):
         def test_impl():
             glob.glob("*py")

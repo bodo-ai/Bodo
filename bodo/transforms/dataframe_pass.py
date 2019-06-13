@@ -48,6 +48,7 @@ class DataFramePass(object):
         self.calltypes = calltypes
 
     def run(self):
+        dprint_func_ir(self.func_ir, "starting dataframe pass")
         blocks = self.func_ir.blocks
         # topo_order necessary so DataFrame data replacement optimization can
         # be performed in one pass
