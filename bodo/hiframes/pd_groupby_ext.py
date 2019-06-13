@@ -123,6 +123,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
     def _get_agg_typ(self, grp, args, code):
         f_ir = numba.ir_utils.get_ir_of_code(
             {'np': np, 'numba': numba, 'bodo': bodo}, code)
+        index = types.none
         out_data = []
         out_columns = []
         # add key columns of not as_index
@@ -131,6 +132,16 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 out_columns.append(k)
                 ind = grp.df_type.columns.index(k)
                 out_data.append(grp.df_type.data[ind])
+        else:
+            if len(grp.keys) > 1:
+                # returning None index for MultiIndex, TODO: raise warning?
+                # TODO: support MultiIndex
+                pass  # raise TypeError("MultiIndex not supported yet. "
+                # "Please use 'as_index'=False in groupby to avoid it.")
+            else:
+                ind = grp.df_type.columns.index(grp.keys[0])
+                index = bodo.hiframes.pd_index_ext.array_typ_to_index(
+                    grp.df_type.data[ind], bodo.string_type)
 
         # get output type for each selected column
         for c in grp.selection:
@@ -142,10 +153,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
             out_arr = _get_series_array_type(out_dtype)
             out_data.append(out_arr)
 
-        out_res = DataFrameType(tuple(out_data), None, tuple(out_columns))
+        out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
         # XXX output becomes series if single output and explicitly selected
         if len(grp.selection) == 1 and grp.explicit_select and grp.as_index:
-            out_res = SeriesType(out_data[0])
+            out_res = SeriesType(
+                out_data[0].dtype, index=index, name_typ=bodo.string_type)
         return signature(out_res, *args)
 
     @bound_function("groupby.agg")

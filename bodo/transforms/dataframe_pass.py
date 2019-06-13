@@ -1346,12 +1346,12 @@ class DataFramePass(object):
                             for c in grp_typ.keys]
 
         out_key_vars = None
-        if grp_typ.as_index is False:
+        if grp_typ.as_index is False or out_typ.index != types.none:
             out_key_vars = []
             for k in grp_typ.keys:
                 out_key_var = ir.Var(lhs.scope, mk_unique_var(k), lhs.loc)
-                ind = out_typ.columns.index(k)
-                self.typemap[out_key_var.name] = out_typ.data[ind]
+                ind = df_type.columns.index(k)
+                self.typemap[out_key_var.name] = df_type.data[ind]
                 out_key_vars.append(out_key_var)
 
         df_col_map = {}
@@ -1371,22 +1371,42 @@ class DataFramePass(object):
 
         nodes.append(agg_node)
 
+
+        if out_typ.index == types.none:
+            index_var = ir.Var(lhs.scope, mk_unique_var('gp_index'), lhs.loc)
+            self.typemap[index_var.name] = types.none
+            nodes.append(
+                ir.Assign(ir.Const(None, lhs.loc), index_var, lhs.loc))
+        else:
+            index_arr = out_key_vars[0]
+            index_name = grp_typ.keys[0]
+            f_block = compile_to_numba_ir(
+                lambda A: bodo.utils.conversion.index_from_array(
+                    A, _index_name),
+                {'bodo': bodo, '_index_name': index_name},
+                self.typingctx,
+                (self.typemap[index_arr.name],),
+                self.typemap,
+                self.calltypes).blocks.popitem()[1]
+            replace_arg_nodes(f_block, [index_arr])
+            nodes += f_block.body[:-2]
+            index_var = nodes[-1].target
+
         # XXX output becomes series if single output and explicitly selected
         if isinstance(out_typ, SeriesType):
             assert (len(grp_typ.selection) == 1
                 and grp_typ.explicit_select
                 and grp_typ.as_index)
-            # TODO: proper index
             name_str = list(df_col_map.keys())[0]
             name_var = ir.Var(lhs.scope, mk_unique_var('S_name'), lhs.loc)
             self.typemap[name_var.name] = types.StringLiteral(name_str)
             nodes.append(ir.Assign(ir.Const(name_str, lhs.loc), name_var, lhs.loc))
             return self._replace_func(
-                    lambda A, name: bodo.hiframes.api.init_series(A, None, name),
-                    list(df_col_map.values())+[name_var],
+                    lambda A, I, name: bodo.hiframes.api.init_series(A, I, name),
+                    list(df_col_map.values())+[index_var, name_var],
                     pre_nodes=nodes)
 
-        _init_df = _gen_init_df(out_typ.columns)
+        _init_df = _gen_init_df(out_typ.columns, 'index')
 
         # XXX the order of output variables passed should match out_typ.columns
         out_vars = []
@@ -1398,6 +1418,7 @@ class DataFramePass(object):
             else:
                 out_vars.append(df_col_map[c])
 
+        out_vars.append(index_var)
         return self._replace_func(_init_df, out_vars,
             pre_nodes=nodes)
 

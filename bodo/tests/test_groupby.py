@@ -7,6 +7,7 @@ import bodo
 from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
                             count_parfor_OneDs, count_array_OneDs, dist_IR_contains,
                             get_start_end)
+import pytest
 
 
 _pivot_df1 = pd.DataFrame({"A": ["foo", "foo", "foo", "foo", "foo",
@@ -56,6 +57,33 @@ def test_crosstab_parallel1(datapath):
     bodo_func = bodo.jit(
         pivots={'pt': ['small', 'large']})(impl)
     assert bodo_func() == impl()
+
+
+@pytest.fixture(params = [
+pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7]})
+])
+def test_df(request):
+    return request.param
+
+
+def test_groupby_simple_df_index(test_df):
+    # check returning df with index
+    def impl(df):
+        return df.groupby('A').sum()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(
+        bodo_func(test_df).sort_index(), impl(test_df))
+
+
+def test_groupby_simple_series_index(test_df):
+    # check returning series with index
+    def impl(df):
+        return df.groupby('A').sum()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(
+        bodo_func(test_df).sort_index(), impl(test_df))
 
 
 class TestGroupBy(unittest.TestCase):

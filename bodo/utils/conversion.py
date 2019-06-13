@@ -236,7 +236,7 @@ def overload_force_convert_index(I1, I2):
     return lambda I1, I2: I1
 
 
-def index_from_array(data):
+def index_from_array(data, name=None):
     return data
 
 

@@ -1228,25 +1228,25 @@ def overload_index_getitem(I, ind):
 
 
 # similar to index_from_array()
-def array_typ_to_index(arr_typ):
+def array_typ_to_index(arr_typ, name_typ=None):
     if arr_typ == bodo.string_array_type:
-        return StringIndexType()
+        return StringIndexType(name_typ)
 
     assert isinstance(arr_typ, types.Array)
     if arr_typ.dtype == types.NPDatetime('ns'):
-        return DatetimeIndexType()
+        return DatetimeIndexType(name_typ)
 
     if arr_typ.dtype == types.NPTimedelta('ns'):
-        return TimedeltaIndexType()
+        return TimedeltaIndexType(name_typ)
 
     if isinstance(arr_typ.dtype, types.Integer):
         if not arr_typ.dtype.signed:
-            return NumericIndexType(types.uint64)
+            return NumericIndexType(types.uint64, name_typ)
         else:
-            return NumericIndexType(types.int64)
+            return NumericIndexType(types.int64, name_typ)
 
     if isinstance(arr_typ.dtype, types.Float):
-        return NumericIndexType(types.float64)
+        return NumericIndexType(types.float64, name_typ)
 
     raise TypeError("invalid index type {}".format(arr_typ))
 
