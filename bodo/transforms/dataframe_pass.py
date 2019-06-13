@@ -1589,12 +1589,15 @@ class DataFramePass(object):
 
         # XXX output becomes series if single output and explicitly selected
         if isinstance(out_typ, SeriesType):
+            # TODO: test (needs support in typing?)
             assert (len(rolling_typ.selection) == 1
                 and rolling_typ.explicit_select
                 and rolling_typ.as_index)
             return self._replace_func(
-                    lambda A: bodo.hiframes.api.init_series(A),
-                    list(df_col_map.values()), pre_nodes=nodes)
+                    lambda A, I: bodo.hiframes.api.init_series(A, I, _name),
+                    list(df_col_map.values()) + [out_index_var],
+                    pre_nodes=nodes,
+                    extra_globals={'_name': list(df_col_map.keys())[0]})
 
         _init_df = _gen_init_df(out_typ.columns, 'index')
 
