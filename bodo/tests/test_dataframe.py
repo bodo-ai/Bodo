@@ -893,14 +893,13 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
-    @unittest.skip("pending df filter support")
     def test_box3(self):
         def test_impl(df):
-            df = df[df.A != 'dd']
-            return df
+            df2 = df[df.A != 'dd']
+            return df2
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': ['aa', 'bb', 'cc']})
+        df = pd.DataFrame({'A': ['aa', 'bb', 'dd', 'cc']}, [3, 1, 2, -1])
         pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
 
     def test_box_dist_return(self):

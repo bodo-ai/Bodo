@@ -635,7 +635,7 @@ class GetItemDataFrame(AbstractTemplate):
         if (isinstance(df, DataFrameType)
                 and isinstance(idx, (SeriesType, types.Array))
                 and idx.dtype == types.bool_):
-            return signature(df, *args)
+            return signature(df.copy(has_parent=False), *args)
 
 
 @infer

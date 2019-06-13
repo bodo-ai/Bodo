@@ -355,13 +355,25 @@ class DataFramePass(object):
             in_vars[col] = in_arr
             out_vars[col] = out_arr
 
+        # add index array to filter node
+        in_index_arr = self._gen_array_from_index(
+            df_var, list(in_vars.values())[0], nodes)
+        out_index_arr = ir.Var(lhs.scope, mk_unique_var('index'), lhs.loc)
+        self.typemap[out_index_arr.name] = self.typemap[in_index_arr.name]
+        in_vars['$_bodo_index_'] = in_index_arr
+        out_vars['$_bodo_index_'] = out_index_arr
+
         nodes.append(bodo.ir.filter.Filter(
             lhs.name, df_var.name, index_var, out_vars, in_vars, lhs.loc))
 
-        _init_df = _gen_init_df(df_typ.columns)
+        df_index_var = self._gen_index_from_array(out_index_arr, nodes)
+
+        _init_df = _gen_init_df(df_typ.columns, 'index')
+        out_vars = [out_vars[col] for col in df_typ.columns]
+        out_vars.append(df_index_var)
 
         return self._replace_func(
-            _init_df, list(out_vars.values()), pre_nodes=nodes)
+            _init_df, out_vars, pre_nodes=nodes)
 
     def _run_setitem(self, inst):
         target_typ = self.typemap[inst.target.name]
