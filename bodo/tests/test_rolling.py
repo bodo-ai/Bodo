@@ -8,6 +8,8 @@ import bodo
 from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, dist_IR_contains)
 from bodo.hiframes.rolling import supported_rolling_funcs
+import pytest
+
 
 LONG_TEST = (int(os.environ['HPAT_LONG_ROLLING_TEST']) != 0
              if 'HPAT_LONG_ROLLING_TEST' in os.environ else False)
@@ -16,6 +18,22 @@ test_funcs = ('mean', 'max',)
 if LONG_TEST:
     # all functions except apply, cov, corr
     test_funcs = supported_rolling_funcs[:-3]
+
+
+@pytest.fixture(params = [
+pd.DataFrame({'B': [0, 1, 2, np.nan, 4]}, [4, 1, 3, 0, -1])
+#pd.DataFrame({'B': [0, 1, 2, -2, 4]}, [4, 1, 3, 0, -1])
+])
+def test_df(request):
+    return request.param
+
+
+def test_fixed_index(test_df):
+    def impl(df):
+        return df.rolling(2).mean()
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(bodo_func(test_df), impl(test_df))
 
 
 class TestRolling(unittest.TestCase):

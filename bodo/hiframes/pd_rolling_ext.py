@@ -10,7 +10,6 @@ from numba.typing.templates import (infer_global, AbstractTemplate, signature,
     AttributeTemplate, bound_function)
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 import bodo
-from bodo.hiframes.pd_series_ext import (SeriesType, _get_series_array_type)
 from bodo.libs.str_ext import string_type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.rolling import supported_rolling_funcs
@@ -137,7 +136,8 @@ class DataframeRollingAttribute(AttributeTemplate):
             out_ind = columns.index(rolling.on)
             in_ind = rolling.df_type.columns.index(rolling.on)
             out_data[out_ind] = rolling.df_type.data[in_ind]
-        out_typ = DataFrameType(tuple(out_data), None, columns)
+        index = rolling.df_type.index
+        out_typ = DataFrameType(tuple(out_data), index, columns)
 
         class MethodTemplate(AbstractTemplate):
             key = template_key
@@ -158,7 +158,7 @@ class DataframeRollingAttribute(AttributeTemplate):
                     # TODO: support pairwise arg
                     out_cols = tuple(sorted(set(columns) | set(other.columns)))
                     return signature(DataFrameType(
-                            (out_arr,)*len(out_cols), None, out_cols), *args)
+                            (out_arr,)*len(out_cols), index, out_cols), *args)
                 return signature(out_typ, *args)
 
         return types.BoundFunction(MethodTemplate, rolling)

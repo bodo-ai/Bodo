@@ -1515,15 +1515,16 @@ class DataFramePass(object):
             on = self.typemap[on.name].literal_value
 
         nodes = []
+        window_const = guard(find_const, self.func_ir, window)
         # convert string offset window statically to nanos
         # TODO: support dynamic conversion
         # TODO: support other offsets types (time delta, etc.)
-        if on is not None:
-            window = guard(find_const, self.func_ir, window)
-            if not isinstance(window, str):
-                raise ValueError("window argument to rolling should be constant"
-                                    "string in the offset case (variable window)")
-            window = pd.tseries.frequencies.to_offset(window).nanos
+        if on is not None and not isinstance(window_const, str):
+            raise ValueError("window argument to rolling should be constant"
+                                "string in the offset case (variable window)")
+
+        if isinstance(window_const, str):
+            window = pd.tseries.frequencies.to_offset(window_const).nanos
             window_var = ir.Var(lhs.scope, mk_unique_var("window"), lhs.loc)
             self.typemap[window_var.name] = types.int64
             nodes.append(ir.Assign(ir.Const(window, lhs.loc), window_var, lhs.loc))
@@ -1535,6 +1536,7 @@ class DataFramePass(object):
 
         on_arr = (self._get_dataframe_data(df_var, on, nodes)
                   if on is not None else None)
+        out_index_var = self._get_dataframe_index(df_var, nodes)
 
         df_col_map = {}
         for c in rolling_typ.selection:
@@ -1590,12 +1592,13 @@ class DataFramePass(object):
                     lambda A: bodo.hiframes.api.init_series(A),
                     list(df_col_map.values()), pre_nodes=nodes)
 
-        _init_df = _gen_init_df(out_typ.columns)
+        _init_df = _gen_init_df(out_typ.columns, 'index')
 
         # XXX the order of output variables passed should match out_typ.columns
         out_vars = []
         for c in out_typ.columns:
             out_vars.append(df_col_map[c])
+        out_vars.append(out_index_var)
 
         return self._replace_func(_init_df, out_vars,
             pre_nodes=nodes)

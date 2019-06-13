@@ -288,8 +288,12 @@ Indexing, iteration:
 Function application, GroupBy & Window:
 
 * :meth:`DataFrame.apply`
-* :meth:`DataFrame.groupby`
-* :meth:`DataFrame.rolling`
+* :meth:`DataFrame.groupby` `by` should be a constant column label
+  or column labels.
+  `sort=False` is set by default. `as_index` argument is supported but
+  `MultiIndex` is not supported yet (will just drop output `MultiIndex`).
+* :meth:`DataFrame.rolling` `window` argument should be integer or a time
+  offset as a constant string. `center` and `on` arguments are also supported.
 
 Computations / Descriptive Stats:
 
@@ -483,7 +487,10 @@ GroupBy
 ~~~~~~~
 
 
-* :meth:`GroupBy.apply`
+* :meth:`GroupBy.agg` `arg` should be a function, and the compiler should be
+  able to simplify it to a single parallel loop and analyze it.
+  For example, arithmetic expressions on input Series are supported.
+* :meth:`GroupBy.aggregate` same as `agg`.
 * :meth:`GroupBy.count`
 * :meth:`GroupBy.max`
 * :meth:`GroupBy.mean`
