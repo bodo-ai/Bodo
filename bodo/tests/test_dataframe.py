@@ -774,6 +774,18 @@ def test_set_column_cond3():
     pd.testing.assert_frame_equal(df1, df2)
 
 
+def test_df_filter():
+    def test_impl(df, cond):
+        df2 = df[cond]
+        return df2
+
+    bodo_func = bodo.jit(test_impl)
+    df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7],
+        'C': [2,3,-1,1,2,3,-1]})
+    cond = df.A > 1
+    pd.testing.assert_frame_equal(bodo_func(df, cond), test_impl(df, cond))
+
+
 ############################# old tests ###############################
 
 
