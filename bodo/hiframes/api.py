@@ -440,7 +440,7 @@ class SeriesFilterBoolInfer(AbstractTemplate):
         return signature(ret, *args)
 
 
-def set_df_col(df, cname, arr):
+def set_df_col(df, cname, arr, inplace):
     df[cname] = arr
 
 @infer_global(set_df_col)
@@ -448,7 +448,7 @@ class SetDfColInfer(AbstractTemplate):
     def generic(self, args, kws):
         from bodo.hiframes.pd_dataframe_ext import DataFrameType
         assert not kws
-        assert len(args) == 3
+        assert len(args) == 4
         assert isinstance(args[1], types.Literal)
         target = args[0]
         ind = args[1].literal_value

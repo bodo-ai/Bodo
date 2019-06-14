@@ -1202,6 +1202,8 @@ class DataFramePass(object):
         df_var = rhs.args[0]
         cname = guard(find_const, self.func_ir, rhs.args[1])
         new_arr = rhs.args[2]
+        #inplace = guard(find_const, self.func_ir, rhs.args[3])
+        inplace = guard(get_definition, self.func_ir, rhs.args[3]).value
         df_typ = self.typemap[df_var.name]
         nodes = []
 
@@ -1231,9 +1233,15 @@ class DataFramePass(object):
         # set unboxed df column with reflection
         if df_typ.has_parent:
             return self._replace_func(
-                lambda df, cname, arr: bodo.hiframes.pd_dataframe_ext.set_df_column_with_reflect(
-                    df, cname, bodo.utils.conversion.coerce_to_array(arr)),
-                    [df_var, rhs.args[1], new_arr], pre_nodes=nodes)
+                lambda df, cname, arr, inplace: bodo.hiframes.pd_dataframe_ext.set_df_column_with_reflect(
+                    df, cname, bodo.utils.conversion.coerce_to_array(arr), inplace),
+                    [df_var, rhs.args[1], new_arr, rhs.args[3]], pre_nodes=nodes)
+
+        if inplace:
+            return self._replace_func(
+                lambda df, arr: bodo.hiframes.pd_dataframe_ext.set_dataframe_data(
+                    df, c_ind, bodo.utils.conversion.coerce_to_array(arr)),
+                    [df_var, new_arr], pre_nodes=nodes, extra_globals={'c_ind': df_typ.columns.index(cname)})
 
         n_cols = len(df_typ.columns)
         df_index_var = self._get_dataframe_index(df_var, nodes)

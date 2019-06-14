@@ -29,6 +29,7 @@ from bodo.io.parquet_pio import ParquetHandler
 from bodo.utils.utils import (
     inline_new_blocks, ReplaceFunc, is_call, is_assign)
 import bodo.hiframes.api
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.libs.str_arr_ext import string_array_type
 import bodo.ir
 import bodo.ir.aggregate
@@ -119,6 +120,10 @@ class UntypedPass(object):
         # replace inst variables as determined previously during the pass
         # currently use to keep lhs of Arg nodes intact
         self.replace_var_dict = {}
+        # labels of nodes that create dataframes such as Arg(df_type)
+        # and pd.DataFrame()
+        # the use is conservative and doesn't assume complete info
+        self.df_labels = {}
 
         self.arrow_tables = {}
         self.reverse_copies = {}
@@ -323,6 +328,10 @@ class UntypedPass(object):
             self.locals[meta_var.name] = bodo.utils.typing.MetaType(
                 pivot_values)
 
+        if isinstance(rhs, ir.Arg):
+            if isinstance(self.args[rhs.index], DataFrameType):
+                self.df_labels[rhs] = label
+
         # handle copies lhs = f
         if isinstance(rhs, ir.Var) and rhs.name in self.arrow_tables:
             self.arrow_tables[lhs] = self.arrow_tables[rhs.name]
@@ -469,6 +478,8 @@ class UntypedPass(object):
         Enable typing for dictionary data arg to pd.DataFrame({'A': A}) call.
         Converts constant dictionary to tuple with sentinel if present.
         """
+        # TODO: handle changing labels due to IR changes
+        self.df_labels[rhs] = label
         nodes = [assign]
         kws = dict(rhs.kws)
         data_arg = self._get_arg('pd.DataFrame', rhs.args, kws, 0, 'data')
@@ -1097,8 +1108,12 @@ class UntypedPass(object):
         dataframe_pass will replace set_df_col() with regular setitem if target
         is not dataframe
         """
-        # setting column possible only when it dominates the df creation to
-        # keep schema consistent
+        # setting column possible only when:
+        #   1) it dominates the df creation, so we can create a new df variable
+        #      to replace the existing variable for the rest of the program,
+        #      which avoids inplace update and schema change possiblity
+        #      TODO: make sure there is no other reference (refcount==1)
+        #   2) setting existing column with same type (inplace)
         # invalid case:
         # df = pd.DataFrame({'A': A})
         # if cond:
@@ -1108,6 +1123,13 @@ class UntypedPass(object):
         # if label not in cfg.backbone() and label not in cfg.post_dominators()[df_label]:
         #     raise ValueError("setting dataframe columns inside conditionals and"
         #                      " loops not supported yet")
+        # see if setitem dominates creation, # TODO: handle changing labels
+        df_var = inst.target
+        df_def = guard(get_definition, self.func_ir, df_var)
+        dominates = False
+        if (df_def in self.df_labels
+                and label in cfg.post_dominators()[self.df_labels[df_def]]):
+            dominates = True
 
         # TODO: generalize to more cases
         # for example:
@@ -1123,20 +1145,28 @@ class UntypedPass(object):
         # df2 = df
         # df['B'] = C
         # return df2
-        df_var = inst.target
         # create var for string index
         cname_var = ir.Var(inst.value.scope, mk_unique_var("$cname_const"), inst.loc)
         nodes = [ir.Assign(ir.Const(inst.index, inst.loc), cname_var, inst.loc)]
+        inplace = not dominates
 
-        func = lambda df, cname, arr: bodo.hiframes.api.set_df_col(df, cname, arr)
-        f_block = compile_to_numba_ir(func, {'bodo': bodo}).blocks.popitem()[1]
+        func = lambda df, cname, arr: bodo.hiframes.api.set_df_col(df, cname, arr, _inplace)
+        f_block = compile_to_numba_ir(func, {'bodo': bodo, '_inplace': inplace}).blocks.popitem()[1]
         replace_arg_nodes(f_block, [df_var, cname_var, inst.value])
         nodes += f_block.body[:-2]
 
-        # rename the dataframe variable to keep schema static
-        new_df_var = ir.Var(df_var.scope, mk_unique_var(df_var.name), df_var.loc)
-        nodes[-1].target = new_df_var
-        self.replace_var_dict[df_var.name] = new_df_var
+        if dominates:
+            # rename the dataframe variable to keep schema static
+            new_df_var = ir.Var(
+                df_var.scope, mk_unique_var(df_var.name), df_var.loc)
+            nodes[-1].target = new_df_var
+            self.replace_var_dict[df_var.name] = new_df_var
+        else:
+            # cannot replace variable, but can set existing column with the
+            # same data type
+            # TODO: check data type and throw clear error
+            nodes[-1].target = df_var
+
         return nodes
 
     def _replace_func(self, func, args, const=False, array_typ_convert=True,

@@ -721,6 +721,59 @@ def test_pd_notna(na_test_obj):
         assert bodo_func(obj) == impl(obj)
 
 
+def test_set_column_cond1():
+    # df created inside function case
+    def test_impl(n, cond):
+        df = pd.DataFrame({'A': np.ones(n), 'B': np.arange(n)})
+        if cond:
+            df['A'] = np.arange(n) + 2.0
+        return df.A
+
+    bodo_func = bodo.jit(test_impl)
+    n = 11
+    pd.testing.assert_series_equal(bodo_func(n, True), test_impl(n, True))
+    pd.testing.assert_series_equal(bodo_func(n, False), test_impl(n, False))
+
+
+def test_set_column_cond2():
+    # df is assigned to other variable case (mutability)
+    def test_impl(n, cond):
+        df = pd.DataFrame({'A': np.ones(n), 'B': np.arange(n)})
+        df2 = df
+        if cond:
+            df['A'] = np.arange(n) + 2.0
+        return df2# df2.A, TODO: pending set_dataframe_data() analysis fix
+        # to avoid incorrect optimization
+
+    bodo_func = bodo.jit(test_impl)
+    n = 11
+    pd.testing.assert_frame_equal(bodo_func(n, True), test_impl(n, True))
+    pd.testing.assert_frame_equal(bodo_func(n, False), test_impl(n, False))
+
+
+def test_set_column_cond3():
+    # df is assigned to other variable case (mutability) and has parent
+    def test_impl(df, cond):
+        df2 = df
+        # df2['A'] = np.arange(n) + 1.0, TODO: make set column inplace
+        # when there is another reference
+        if cond:
+            df['A'] = np.arange(n) + 2.0
+        return df2 # df2.A, TODO: pending set_dataframe_data() analysis fix
+        # to avoid incorrect optimization
+
+    bodo_func = bodo.jit(test_impl)
+    n = 11
+    df1 = pd.DataFrame({'A': np.ones(n), 'B': np.arange(n)})
+    df2 = df1.copy()
+    pd.testing.assert_frame_equal(bodo_func(df1, True), test_impl(df2, True))
+    pd.testing.assert_frame_equal(df1, df2)
+    df1 = pd.DataFrame({'A': np.ones(n), 'B': np.arange(n)})
+    df2 = df1.copy()
+    pd.testing.assert_frame_equal(bodo_func(df1, False), test_impl(df2, False))
+    pd.testing.assert_frame_equal(df1, df2)
+
+
 ############################# old tests ###############################
 
 
@@ -861,7 +914,6 @@ class TestDataFrame(unittest.TestCase):
         df = pd.DataFrame({'A': np.arange(n), 'B': np.random.ranf(n)})
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df))
 
-    @unittest.skip("needs properly refcounted dataframes")
     def test_unbox2(self):
         def test_impl(df, cond):
             n = len(df)

@@ -368,6 +368,37 @@ def get_dataframe_index(df):
 
 
 @intrinsic
+def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
+    col_ind = c_ind_typ.literal_value
+
+    def codegen(context, builder, signature, args):
+        df_arg, _, arr_arg = args
+        dataframe_payload = get_dataframe_payload(
+            context, builder, df_typ, df_arg)
+        # assign array and set unboxed flag
+        dataframe_payload.data = builder.insert_value(
+            dataframe_payload.data, arr_arg, col_ind)
+        dataframe_payload.unboxed = builder.insert_value(
+            dataframe_payload.unboxed, context.get_constant(types.int8, 1), col_ind)
+
+        if context.enable_nrt:
+            context.nrt.incref(builder, arr_typ, arr_arg)
+
+        # store payload
+        dataframe = cgutils.create_struct_proxy(
+            df_typ)(context, builder, value=df_arg)
+        payload_type = DataFramePayloadType(df_typ)
+        payload_ptr = context.nrt.meminfo_data(builder, dataframe.meminfo)
+        ptrty = context.get_data_type(payload_type).as_pointer()
+        payload_ptr = builder.bitcast(payload_ptr, ptrty)
+        builder.store(dataframe_payload._getvalue(), payload_ptr)
+        return impl_ret_borrowed(context, builder, df_typ, df_arg)
+
+    sig = signature(df_typ, df_typ, c_ind_typ, arr_typ)
+    return sig, codegen
+
+
+@intrinsic
 def set_df_index(typingctx, df_t, index_t=None):
     """used in very limited cases like distributed to_csv() to create a new
     dataframe with index
@@ -405,7 +436,7 @@ def set_df_index(typingctx, df_t, index_t=None):
 
 
 @intrinsic
-def set_df_column_with_reflect(typingctx, df, cname, arr):
+def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
     """Set df column and reflect to parent Python object
     return a new df.
     """
@@ -428,7 +459,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr):
                           for i in range(n_cols))
 
     def codegen(context, builder, signature, args):
-        df_arg, _, arr_arg = args
+        df_arg, _, arr_arg, inplace_arg = args
 
         in_dataframe_payload = get_dataframe_payload(
             context, builder, df, df_arg)
@@ -474,6 +505,18 @@ def set_df_column_with_reflect(typingctx, df, cname, arr):
             for var in column_strs:
                 context.nrt.incref(builder, string_type, var)
 
+        # TODO: test this
+        # test_set_column_cond3 doesn't test it for some reason
+        with cgutils.if_likely(builder, inplace_arg):
+            # store payload
+            payload_type = DataFramePayloadType(df)
+            payload_ptr = context.nrt.meminfo_data(builder, in_dataframe.meminfo)
+            ptrty = context.get_data_type(payload_type).as_pointer()
+            payload_ptr = builder.bitcast(payload_ptr, ptrty)
+            out_dataframe_payload = get_dataframe_payload(
+                    context, builder, df, out_dataframe)
+            builder.store(out_dataframe_payload._getvalue(), payload_ptr)
+
         # set column of parent
         # get boxed array
         pyapi = context.get_python_api(builder)
@@ -503,7 +546,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr):
         return out_dataframe
 
     ret_typ = DataFrameType(data_typs, index_typ, column_names, True)
-    sig = signature(ret_typ, df, cname, arr)
+    sig = signature(ret_typ, df, cname, arr, inplace)
     return sig, codegen
 
 
