@@ -57,6 +57,7 @@ class TestDate(unittest.TestCase):
         A = pd.DatetimeIndex(df['str_date']).to_series()
         np.testing.assert_array_equal(bodo_func(A), test_impl(A))
 
+    @unittest.skip("pending proper datatime.date() support")
     def test_ts_map_date(self):
         def test_impl(A):
             return A.map(lambda x: x.date())[0]
@@ -75,6 +76,7 @@ class TestDate(unittest.TestCase):
         df['dt_ind'] = pd.DatetimeIndex(df['str_date'])
         np.testing.assert_array_equal(bodo_func(df), test_impl(df))
 
+    @unittest.skip("pending proper datatime.date() support")
     def test_ts_map_date_set(self):
         def test_impl(df):
             df['hpat_date'] = df.dt_ind.map(lambda x: x.date())
