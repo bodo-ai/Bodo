@@ -101,7 +101,9 @@ class TestDate(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         df = self._gen_str_date_df()
-        A = pd.DatetimeIndex(df['str_date']).map(lambda x: x.date())
+        # TODO: index of date values
+        A = pd.DatetimeIndex(df['str_date']).map(
+            lambda x: x.date()).to_series().reset_index(drop=True)
         self.assertEqual(bodo_func(A), test_impl(A))
 
     def test_datetime_index_set(self):

@@ -73,12 +73,7 @@ def typeof_pd_index(val, c):
 
     # catch-all for non-supported Index types
     # RangeIndex is directly supported (TODO: make sure this is not called)
-
-    # TODO: fix
-    if len(val) > 0 and isinstance(val[0], datetime.date):
-        return SeriesType(datetime_date_type)
-    else:
-        raise NotImplementedError("unsupported pd.Index type")
+    raise NotImplementedError("unsupported pd.Index type")
 
 
 @unbox(DataFrameType)
