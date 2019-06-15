@@ -133,6 +133,8 @@ class UntypedPass(object):
 
 
     def run(self):
+        # XXX: the block structure shouldn't change in this pass since labels
+        # are used in analysis (e.g. df creation points in rhs_labels)
         # FIXME: see why this breaks test_kmeans
         # remove_dels(self.func_ir.blocks)
         dprint_func_ir(self.func_ir, "starting untyped pass")
@@ -148,9 +150,8 @@ class UntypedPass(object):
             label, block = work_list.pop()
             self._get_reverse_copies(blocks[label].body)
             new_body = []
-            replaced = False
             self._working_body = new_body
-            for i, inst in enumerate(block.body):
+            for inst in block.body:
                 self._replace_vars(inst)
                 # ir_utils.replace_vars_stmt(inst, self.replace_var_dict)
                 out_nodes = [inst]
@@ -164,40 +165,20 @@ class UntypedPass(object):
                     out_nodes = self._run_df_set_column(inst, label, cfg)
                 elif isinstance(inst, ir.Assign):
                     self.func_ir._definitions[inst.target.name].remove(inst.value)
+                    self.rhs_labels[inst.value] = label
                     out_nodes = self._run_assign(inst, label)
                 elif isinstance(inst, ir.Return):
                     out_nodes = self._run_return(inst)
 
-                if isinstance(out_nodes, list):
-                    # TODO: fix scope/loc
-                    new_body.extend(out_nodes)
-                    self._update_definitions(out_nodes)
-                if isinstance(out_nodes, ReplaceFunc):
-                    rp_func = out_nodes
-                    if rp_func.pre_nodes is not None:
-                        new_body.extend(rp_func.pre_nodes)
-                        self._update_definitions(rp_func.pre_nodes)
-                    # replace inst.value to a call with target args
-                    # as expected by inline_closure_call
-                    # TODO: inst other than Assign?
-                    inst.value = ir.Expr.call(
-                        ir.Var(block.scope, "dummy", inst.loc),
-                        rp_func.args, (), inst.loc)
-                    block.body = new_body + block.body[i:]
-                    inline_closure_call(self.func_ir, rp_func.glbls,
-                        block, len(new_body), rp_func.func, work_list=work_list)
-                    replaced = True
-                    break
-                if isinstance(out_nodes, dict):
-                    block.body = new_body + block.body[i:]
-                    # TODO: insert new blocks in current spot of work_list
-                    # instead of append?
-                    # TODO: rename variables, fix scope/loc
-                    inline_new_blocks(self.func_ir, block, len(new_body), out_nodes, work_list)
-                    replaced = True
-                    break
-            if not replaced:
-                blocks[label].body = new_body
+                assert isinstance(out_nodes, list)
+                # TODO: fix scope/loc
+                new_body.extend(out_nodes)
+                self._update_definitions(out_nodes)
+                for inst in out_nodes:
+                    if is_assign(inst):
+                        self.rhs_labels[inst.value] = label
+
+            blocks[label].body = new_body
 
         self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
         # self.func_ir._definitions = build_definitions(blocks)
@@ -227,8 +208,6 @@ class UntypedPass(object):
     def _run_assign(self, assign, label):
         lhs = assign.target.name
         rhs = assign.value
-        # TODO: handle changing labels due to IR changes
-        self.rhs_labels[rhs] = label
 
         if isinstance(rhs, ir.Expr):
             if rhs.op == 'call':
@@ -301,8 +280,10 @@ class UntypedPass(object):
                     tmp_target = ir.Var(
                         target.scope, mk_unique_var(target.name), rhs.loc)
                     tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
-                    return self._replace_func(
-                        _build_f, (tmp_target,), pre_nodes=[tmp_assign])
+                    nodes = [tmp_assign]
+                    nodes += _compile_func_single_block(
+                        _build_f, (tmp_target,), assign.target)
+                    return nodes
                 except numba.ir_utils.GuardException:
                     pass
 
@@ -390,7 +371,7 @@ class UntypedPass(object):
         if func_name == 'drop' and isinstance(func_mod, ir.Var):
             # handle potential df.drop(inplace=True) here since it needs
             # variable replacement
-            return self._handle_df_drop(assign, lhs, rhs, func_mod)
+            return self._handle_df_drop(assign, lhs, rhs, func_mod, label)
 
         if config._has_h5py and fdef == ('File', 'h5py'):
             return self.h5_handler._handle_h5_File_call(assign, lhs, rhs)
@@ -414,8 +395,10 @@ class UntypedPass(object):
                 tmp_target = ir.Var(
                     target.scope, mk_unique_var(target.name), rhs.loc)
                 tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
-                return self._replace_func(
-                    _build_f, (tmp_target,), pre_nodes=[tmp_assign])
+                nodes = [tmp_assign]
+                nodes += _compile_func_single_block(
+                    _build_f, (tmp_target,), lhs)
+                return nodes
 
         # TODO: update Xenon handling code
         # if fdef == ('read_xenon', 'bodo.xenon_ext'):
@@ -427,7 +410,7 @@ class UntypedPass(object):
 
         return [assign]
 
-    def _handle_df_drop(self, assign, lhs, rhs, df_var):
+    def _handle_df_drop(self, assign, lhs, rhs, df_var, label):
         """handle possible df.drop(inplace=True)
         lhs = A.drop(inplace=True) -> A1, lhs = drop_inplace(...)
         replace A with A1
@@ -435,7 +418,13 @@ class UntypedPass(object):
         kws = dict(rhs.kws)
         inplace_var = self._get_arg('drop', rhs.args, kws, 5, 'inplace', '')
         inplace = guard(find_const, self.func_ir, inplace_var)
-        if inplace is not None and inplace == True:
+        dominates = False
+        df_def = guard(get_definition, self.func_ir, df_var)
+        cfg = compute_cfg_from_blocks(self.func_ir.blocks)
+        if (df_def in self.rhs_labels
+                and label in cfg.post_dominators()[self.rhs_labels[df_def]]):
+            dominates = True
+        if inplace is not None and inplace == True and dominates:
             # TODO: make sure call post dominates df_var definition or df_var
             # is not used in other code paths
             # replace func variable with drop_inplace
@@ -768,9 +757,10 @@ class UntypedPass(object):
                     arg_def) == ('chain', 'itertools')):
                 in_data = arg_def.vararg
                 arg_def.vararg = None  # avoid typing error
-                return self._replace_func(
+                return _compile_func_single_block(
                     lambda l: bodo.utils.typing.flatten_to_series(l),
-                    [in_data]
+                    (in_data,),
+                    lhs
                 )
 
         # pd.Series() is handled in typed pass now
@@ -791,9 +781,9 @@ class UntypedPass(object):
         dtype = numba.numpy_support.as_dtype(typ.dtype)
         arg = rhs.args[0]
 
-        return self._replace_func(
-            lambda arr: bodo.hiframes.api.to_numeric(arr, dtype),
-            [arg], extra_globals={'dtype': dtype})
+        return _compile_func_single_block(
+            lambda arr: bodo.hiframes.api.to_numeric(arr, _dtype),
+            [arg], lhs, extra_globals={'_dtype': dtype})
 
     def _handle_pq_read_table(self, assign, lhs, rhs):
         if len(rhs.args) != 1:  # pragma: no cover
@@ -831,8 +821,8 @@ class UntypedPass(object):
         # print(func_text)
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars['_init_df']
-
-        return self._replace_func(_init_df, data_arrs, pre_nodes=nodes)
+        nodes += _compile_func_single_block(_init_df, data_arrs, lhs)
+        return nodes
 
     def _handle_pd_read_parquet(self, assign, lhs, rhs):
         # get args and check values
@@ -1165,13 +1155,6 @@ class UntypedPass(object):
 
         return nodes
 
-    def _replace_func(self, func, args, const=False, array_typ_convert=True,
-                      pre_nodes=None, extra_globals=None):
-        glbls = {'numba': numba, 'np': np, 'bodo': bodo, 'pd': pd}
-        if extra_globals is not None:
-            glbls.update(extra_globals)
-        return ReplaceFunc(func, None, args, glbls, pre_nodes)
-
     def _update_definitions(self, node_list):
         loc = ir.Loc("", 0)
         dumm_block = ir.Block(ir.Scope(None, loc), loc)
@@ -1180,9 +1163,17 @@ class UntypedPass(object):
         return
 
 
-def _gen_arr_copy(in_arr, nodes):
-    f_block = compile_to_numba_ir(
-        lambda A: A.copy(), {}).blocks.popitem()[1]
-    replace_arg_nodes(f_block, [in_arr])
-    nodes += f_block.body[:-2]
-    return nodes[-1].target
+def _compile_func_single_block(func, args, ret_var, extra_globals=None):
+    """compiles functions that are just a single basic block.
+    Does not handle defaults, freevars etc.
+    """
+    glbls = {'numba': numba, 'np': np, 'bodo': bodo, 'pd': pd}
+    if extra_globals is not None:
+        glbls.update(extra_globals)
+    f_ir = compile_to_numba_ir(func, glbls)
+    assert len(f_ir.blocks) == 1
+    f_block = f_ir.blocks.popitem()[1]
+    replace_arg_nodes(f_block, args)
+    nodes = f_block.body[:-2]
+    nodes[-1].target = ret_var
+    return nodes
