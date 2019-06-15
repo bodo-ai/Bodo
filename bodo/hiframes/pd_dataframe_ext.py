@@ -440,7 +440,8 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
     """Set df column and reflect to parent Python object
     return a new df.
     """
-
+    assert isinstance(inplace, bodo.utils.utils.BooleanLiteral)
+    is_inplace = inplace.literal_value
     col_name = cname.literal_value
     n_cols = len(df.columns)
     new_n_cols = n_cols
@@ -459,7 +460,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
                           for i in range(n_cols))
 
     def codegen(context, builder, signature, args):
-        df_arg, _, arr_arg, inplace_arg = args
+        df_arg, _, arr_arg, _ = args
 
         in_dataframe_payload = get_dataframe_payload(
             context, builder, df, df_arg)
@@ -507,7 +508,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
 
         # TODO: test this
         # test_set_column_cond3 doesn't test it for some reason
-        with cgutils.if_likely(builder, inplace_arg):
+        if is_inplace:
             # store payload
             payload_type = DataFramePayloadType(df)
             payload_ptr = context.nrt.meminfo_data(builder, in_dataframe.meminfo)

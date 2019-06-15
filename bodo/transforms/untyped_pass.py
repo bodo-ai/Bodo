@@ -120,10 +120,10 @@ class UntypedPass(object):
         # replace inst variables as determined previously during the pass
         # currently use to keep lhs of Arg nodes intact
         self.replace_var_dict = {}
-        # labels of nodes that create dataframes such as Arg(df_type)
-        # and pd.DataFrame()
+        # labels of rhs of assignments to enable finding nodes that create
+        # dataframes such as Arg(df_type), pd.DataFrame(), df[['A','B']]...
         # the use is conservative and doesn't assume complete info
-        self.df_labels = {}
+        self.rhs_labels = {}
 
         self.arrow_tables = {}
         self.reverse_copies = {}
@@ -227,6 +227,8 @@ class UntypedPass(object):
     def _run_assign(self, assign, label):
         lhs = assign.target.name
         rhs = assign.value
+        # TODO: handle changing labels due to IR changes
+        self.rhs_labels[rhs] = label
 
         if isinstance(rhs, ir.Expr):
             if rhs.op == 'call':
@@ -327,10 +329,6 @@ class UntypedPass(object):
             pivot_call.kws.append(('_pivot_values', meta_var))
             self.locals[meta_var.name] = bodo.utils.typing.MetaType(
                 pivot_values)
-
-        if isinstance(rhs, ir.Arg):
-            if isinstance(self.args[rhs.index], DataFrameType):
-                self.df_labels[rhs] = label
 
         # handle copies lhs = f
         if isinstance(rhs, ir.Var) and rhs.name in self.arrow_tables:
@@ -478,8 +476,6 @@ class UntypedPass(object):
         Enable typing for dictionary data arg to pd.DataFrame({'A': A}) call.
         Converts constant dictionary to tuple with sentinel if present.
         """
-        # TODO: handle changing labels due to IR changes
-        self.df_labels[rhs] = label
         nodes = [assign]
         kws = dict(rhs.kws)
         data_arg = self._get_arg('pd.DataFrame', rhs.args, kws, 0, 'data')
@@ -1127,8 +1123,8 @@ class UntypedPass(object):
         df_var = inst.target
         df_def = guard(get_definition, self.func_ir, df_var)
         dominates = False
-        if (df_def in self.df_labels
-                and label in cfg.post_dominators()[self.df_labels[df_def]]):
+        if (df_def in self.rhs_labels
+                and label in cfg.post_dominators()[self.rhs_labels[df_def]]):
             dominates = True
 
         # TODO: generalize to more cases

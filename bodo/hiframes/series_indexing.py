@@ -176,7 +176,9 @@ def overload_series_iloc_getitem(I, idx):
             def impl(I, idx):
                 idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
                 arr = bodo.hiframes.api.get_series_data(I._obj)[idx_t]
-                index = bodo.hiframes.api.get_series_index(I._obj)[idx_t]
+                index = bodo.utils.conversion.fix_none_index(
+                    bodo.hiframes.api.get_series_index(I._obj),
+                    len(arr))[idx_t]
                 name = bodo.hiframes.api.get_series_name(I._obj)
                 return bodo.hiframes.api.init_series(arr, index, name)
             return impl
@@ -277,7 +279,9 @@ def overload_series_getitem(S, idx):
             def impl_arr(S, idx):
                 idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
                 arr = bodo.hiframes.api.get_series_data(S)[idx_t]
-                index = bodo.hiframes.api.get_series_index(S)[idx_t]
+                index = bodo.utils.conversion.fix_none_index(
+                    bodo.hiframes.api.get_series_index(S),
+                    len(arr))[idx_t]
                 name = bodo.hiframes.api.get_series_name(S)
                 return bodo.hiframes.api.init_series(arr, index, name)
             return impl_arr
