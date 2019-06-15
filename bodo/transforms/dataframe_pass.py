@@ -620,6 +620,15 @@ class DataFramePass(object):
             return self._replace_func(impl, rhs.args,
                         pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws))
 
+        if fdef == ('sort_values_inplace', 'bodo.hiframes.api'):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            impl = bodo.hiframes.api.sort_values_inplace_overload(
+                *arg_typs, **kw_typs)
+            return self._replace_func(impl, rhs.args,
+                        pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws))
+
         if fdef == ('drop_dummy', 'bodo.hiframes.pd_dataframe_ext'):
             return self._run_call_drop(assign, lhs, rhs)
 
@@ -967,10 +976,12 @@ class DataFramePass(object):
                 out_arrs.append(out_vars[c])
         out_arrs.append(out_index)
 
-        if not inplace:
+        # return dataframe if untyped pass replacement worked
+        if not inplace or isinstance(self.typemap[lhs.name], DataFrameType):
             return self._replace_func(_init_df, out_arrs,
                 pre_nodes=nodes)
         else:
+            # XXX: set inplace if untyped pass var replacement didn't work
             # TODO: fix index for inplace case
             return self._set_df_inplace(_init_df, out_arrs, df_var, lhs.loc, nodes)
 

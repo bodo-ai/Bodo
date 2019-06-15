@@ -371,7 +371,22 @@ class UntypedPass(object):
         if func_name == 'drop' and isinstance(func_mod, ir.Var):
             # handle potential df.drop(inplace=True) here since it needs
             # variable replacement
-            return self._handle_df_drop(assign, lhs, rhs, func_mod, label)
+            kws = dict(rhs.kws)
+            inplace_var = self._get_arg(
+                'drop', rhs.args, kws, 5, 'inplace', '')
+            replace_func = lambda: bodo.hiframes.api.drop_inplace
+            return self._handle_df_inplace_func(assign, lhs, rhs, func_mod,
+                inplace_var, replace_func, label)
+
+        if func_name == 'sort_values' and isinstance(func_mod, ir.Var):
+            # handle potential df.sort_values(inplace=True) here since it needs
+            # variable replacement
+            kws = dict(rhs.kws)
+            inplace_var = self._get_arg(
+                'sort_values', rhs.args, kws, 3, 'inplace', '')
+            replace_func = lambda: bodo.hiframes.api.sort_values_inplace
+            return self._handle_df_inplace_func(assign, lhs, rhs, func_mod,
+                inplace_var, replace_func, label)
 
         if config._has_h5py and fdef == ('File', 'h5py'):
             return self.h5_handler._handle_h5_File_call(assign, lhs, rhs)
@@ -410,13 +425,12 @@ class UntypedPass(object):
 
         return [assign]
 
-    def _handle_df_drop(self, assign, lhs, rhs, df_var, label):
-        """handle possible df.drop(inplace=True)
-        lhs = A.drop(inplace=True) -> A1, lhs = drop_inplace(...)
+    def _handle_df_inplace_func(self, assign, lhs, rhs, df_var, inplace_var,
+                                                          replace_func, label):
+        """handle possible df.func(inplace=True)
+        lhs = A.func(inplace=True) -> A1, lhs = func_inplace(...)
         replace A with A1
         """
-        kws = dict(rhs.kws)
-        inplace_var = self._get_arg('drop', rhs.args, kws, 5, 'inplace', '')
         inplace = guard(find_const, self.func_ir, inplace_var)
         dominates = False
         df_def = guard(get_definition, self.func_ir, df_var)
@@ -427,16 +441,16 @@ class UntypedPass(object):
         if inplace is not None and inplace == True and dominates:
             # TODO: make sure call post dominates df_var definition or df_var
             # is not used in other code paths
-            # replace func variable with drop_inplace
+            # replace func variable with replace_func
             f_block = compile_to_numba_ir(
-                lambda: bodo.hiframes.api.drop_inplace,
+                replace_func,
                 {'bodo': bodo}).blocks.popitem()[1]
             nodes = f_block.body[:-2]
             new_func_var = nodes[-1].target
             rhs.func = new_func_var
             rhs.args.insert(0, df_var)
             # new tuple return
-            ret_tup = ir.Var(lhs.scope, mk_unique_var('drop_ret'), lhs.loc)
+            ret_tup = ir.Var(lhs.scope, mk_unique_var('tuple_ret'), lhs.loc)
             assign.target = ret_tup
             nodes.append(assign)
             new_df_var = ir.Var(df_var.scope, mk_unique_var(df_var.name), df_var.loc)

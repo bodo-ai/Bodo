@@ -1222,8 +1222,10 @@ class SortDummyTyper(AbstractTemplate):
                 index, bodo.hiframes.pd_index_ext.RangeIndexType):
             index = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
         ret_typ = df.copy(index=index, has_parent=False)
-        if inplace:
-            ret_typ = types.none
+        # TODO: handle cases where untyped pass inplace replacement is not
+        # possible and none should be returned
+        # if inplace:
+        #     ret_typ = types.none
         return signature(ret_typ, *args)
 
 
@@ -1446,8 +1448,10 @@ def drop_overload(df, labels=None, axis=0, index=None, columns=None,
 
     return _impl
 
+
 def drop_dummy(df, labels, axis, columns, inplace):
     return df
+
 
 @infer_global(drop_dummy)
 class DropDummyTyper(AbstractTemplate):
