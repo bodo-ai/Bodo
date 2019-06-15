@@ -308,7 +308,7 @@ class TestHiFrames(unittest.TestCase):
         n = 1001
         bodo_func(n)
         # XXX: test actual output
-        self.assertEqual(count_array_REPs(), 0)
+        self.assertTrue(count_array_OneDs() > 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_str_contains_regex(self):
