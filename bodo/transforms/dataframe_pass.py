@@ -1205,7 +1205,7 @@ class DataFramePass(object):
         # replace with regular setitem if target is not dataframe
         # TODO: test non-df case
         if not self._is_df_var(rhs.args[0]):
-            def _impl(target, index, val):
+            def _impl(target, index, val, _inplace):
                 target[index] = val
                 return target
             return self._replace_func(_impl, rhs.args)
