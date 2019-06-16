@@ -117,7 +117,7 @@ class ToConstTupleTyper(AbstractTemplate):
 
 # dummy lowerer
 @lower_builtin(to_const_tuple, types.Any)
-def lower_add_consts_to_type(context, builder, sig, args):
+def lower_to_const_tuple(context, builder, sig, args):
     return context.get_constant_null(sig.return_type)
 
 
