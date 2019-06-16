@@ -110,7 +110,7 @@ associated index values yet.
 
 * :func:`pandas.Series`
 
-   * Arguments ``data``, ``index``, ``name`` and ``copy`` are supported.
+   * Arguments ``data``, ``index``, and ``name`` are supported.
      ``data`` is required and can be a list, array, Series or Index.
      If ``data`` is Series and ``index`` is provided, implicit alignment is
      not performed yet.

@@ -672,8 +672,9 @@ def pd_series_overload(data=None, index=None, dtype=None, name=None,
         # TODO: copy if index to avoid aliasing issues
         data_t2 = data_t1
 
-        if copy:
-            data_t2 = data_t1.copy()
+        # TODO: enable when branch pruning works for this
+        # if copy:
+        #     data_t2 = data_t1.copy()
 
         return bodo.hiframes.api.init_series(
                 data_t2,

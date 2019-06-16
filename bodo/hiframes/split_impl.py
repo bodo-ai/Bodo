@@ -363,7 +363,7 @@ def get_split_view_data_ptr(arr, data_start):
 @overload(len)
 def str_arr_split_view_len_overload(arr):
     if arr == string_array_split_view_type:
-        return lambda arr: arr._num_items
+        return lambda arr: np.int64(arr._num_items)
 
 
 # @infer_global(operator.getitem)

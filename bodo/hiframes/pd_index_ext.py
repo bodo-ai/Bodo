@@ -806,7 +806,7 @@ def range_index_overload(start=None, stop=None, step=None, dtype=None,
                 " {value} was passed for {field}")
         if (not is_overload_none(value)
                 and not isinstance(value, types.IntegerLiteral)
-                and not value == types.int64):
+                and not isinstance(value, types.Integer)):
             raise TypeError(msg.format(value=value,
                                         field=field))
 
