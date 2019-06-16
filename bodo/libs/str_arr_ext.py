@@ -993,6 +993,7 @@ def setitem_str_arr_ptr(typingctx, str_arr_t, ind_t, ptr_t, len_t=None):
 
     return types.void(str_arr_t, ind_t, ptr_t, len_t), codegen
 
+
 def lower_is_na(context, builder, bull_bitmap, ind):
     fnty = lir.FunctionType(lir.IntType(1),
                             [lir.IntType(8).as_pointer(),

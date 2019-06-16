@@ -1889,10 +1889,11 @@ class SeriesPass(object):
                     n_total_chars += length
                 numba.parfor.init_prange()
                 out_arr = pre_alloc_string_array(n, n_total_chars)
-                for i in numba.parfor.internal_prange(n):
-                    data_start, length = get_split_view_index(arr, i, ind)
+                for j in numba.parfor.internal_prange(n):
+                    data_start, length = get_split_view_index(arr, j, ind)
                     ptr = get_split_view_data_ptr(arr, data_start)
-                    bodo.libs.str_arr_ext.setitem_str_arr_ptr(out_arr, i, ptr, length)
+                    bodo.libs.str_arr_ext.setitem_str_arr_ptr(
+                        out_arr, j, ptr, length)
                 return bodo.hiframes.api.init_series(out_arr)
 
         return self._replace_func(_str_get_impl, [arr, ind_var],
