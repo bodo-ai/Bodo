@@ -54,8 +54,10 @@ numba.targets.hashing._Py_HashSecret_siphash_k1 = 0
 ## use objmode for string methods for now
 
 # string methods that just return another string
-str2str_methods = ('capitalize', 'casefold', 'lower', 'lstrip', 'rstrip',
-    'strip', 'swapcase', 'title', 'upper')
+# 'lstrip', 'rstrip', 'strip' are in Numba now
+str2str_methods = ('capitalize', 'casefold', 'lower',
+    'swapcase', 'title', 'upper')
+
 
 for method in str2str_methods:
     func_text = "def str_overload(in_str):\n"
