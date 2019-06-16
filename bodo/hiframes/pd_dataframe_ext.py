@@ -18,7 +18,8 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import (is_overload_none, is_overload_true,
-    is_overload_false, is_overload_zero, get_const_str_list)
+    is_overload_false, is_overload_zero, get_overload_const_str,
+    get_const_str_list)
 
 
 class DataFrameType(types.Type):  # TODO: IterableType over column names
@@ -880,6 +881,8 @@ def merge_overload(left, right, how='inner', on=None, left_on=None,
     if (not isinstance(left, DataFrameType)
             or not isinstance(right, DataFrameType)):
         raise TypeError("merge() requires dataframe inputs")
+
+    how = get_overload_const_str(how)
 
     comm_cols = tuple(set(left.columns) & set(right.columns))
 
