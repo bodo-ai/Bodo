@@ -1506,7 +1506,7 @@ class TestSeries(unittest.TestCase):
         S = pd.Series(np.arange(n)**2)
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(
-            bodo_func(S), test_impl(S).reset_index(drop=True))
+            bodo_func(S), test_impl(S))
 
     def test_series_op1(self):
         def test_impl(A, i):
