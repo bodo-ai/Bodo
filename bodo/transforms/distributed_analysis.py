@@ -652,10 +652,15 @@ class DistributedAnalysis(object):
         for v in in_arrs:
             in_dist = Distribution(
                 min(in_dist.value, array_dists[v.name].value))
+
         # OneD_Var since sum of block sizes might not be exactly 1D
         out_dist = Distribution.OneD_Var
+        if lhs in array_dists:
+            out_dist = Distribution(
+                min(out_dist.value, array_dists[lhs].value))
         out_dist = Distribution(min(out_dist.value, in_dist.value))
         array_dists[lhs] = out_dist
+
         # output can cause input REP
         if out_dist != Distribution.OneD_Var:
             in_dist = out_dist
