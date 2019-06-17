@@ -738,6 +738,7 @@ class DistributedPass(object):
 
         if (fdef == ('get_series_data', 'bodo.hiframes.api')
                 or fdef == ('get_series_index', 'bodo.hiframes.api')
+                or fdef == ('get_index_data', 'bodo.hiframes.api')
                 or fdef == ('get_dataframe_data', 'bodo.hiframes.pd_dataframe_ext')
                 # index can be none
                 ) and (self.typemap[assign.target.name] != types.none
