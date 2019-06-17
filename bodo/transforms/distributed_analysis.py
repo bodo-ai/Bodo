@@ -349,6 +349,9 @@ class DistributedAnalysis(object):
             return
 
         if fdef == ('nlargest', 'bodo.libs.array_kernels'):
+            # data and index arrays have the same distributions
+            self._meet_array_dists(
+                rhs.args[0].name, rhs.args[1].name, array_dists)
             # output of nlargest is REP
             array_dists[lhs] = Distribution.REP
             return
