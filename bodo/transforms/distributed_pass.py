@@ -70,13 +70,9 @@ class DistributedPass(object):
         self._g_dist_var = None
         self._set1_var = None  # variable set to 1
         self._set0_var = None  # variable set to 0
-        self._array_starts = {}
-        self._array_counts = {}
 
         # keep shape attr calls on parallel arrays like X.shape
         self._shape_attrs = {}
-        # keep array sizes of parallel arrays to handle shape attrs
-        self._array_sizes = {}
         # save output of converted 1DVar array len() variables
         # which are global sizes, in order to recover local
         # size for 1DVar allocs and parfors
@@ -146,17 +142,9 @@ class DistributedPass(object):
                     self._run_dist_pass(p_blocks)
                     unwrap_parfor_blocks(inst)
                 elif isinstance(inst, ir.Assign):
-                    lhs = inst.target.name
                     rhs = inst.value
                     if isinstance(rhs, ir.Expr):
                         out_nodes = self._run_expr(inst, namevar_table)
-                    elif isinstance(rhs, ir.Var) and (self._is_1D_arr(rhs.name)
-                           and not is_array_container(self.typemap, rhs.name)):
-                        self._array_starts[lhs] = self._array_starts[rhs.name]
-                        self._array_counts[lhs] = self._array_counts[rhs.name]
-                        self._array_sizes[lhs] = self._array_sizes[rhs.name]
-                    elif isinstance(rhs, ir.Arg):
-                        out_nodes = self._run_arg(inst)
                 elif isinstance(inst, (ir.StaticSetItem, ir.SetItem)):
                     if isinstance(inst, ir.SetItem):
                         index = inst.index
@@ -213,14 +201,6 @@ class DistributedPass(object):
         nodes = [inst]
         if rhs.op == 'call':
             return self._run_call(inst)
-        # we save array start/count for data pointer to enable
-        # file read
-        if (rhs.op == 'getattr' and rhs.attr == 'ctypes'
-                and (self._is_1D_arr(rhs.value.name))):
-            arr_name = rhs.value.name
-            self._array_starts[lhs] = self._array_starts[arr_name]
-            self._array_counts[lhs] = self._array_counts[arr_name]
-            self._array_sizes[lhs] = self._array_sizes[arr_name]
         if (rhs.op == 'getattr'
                 and (self._is_1D_arr(rhs.value.name)
                         or self._is_1D_Var_arr(rhs.value.name))
@@ -233,13 +213,11 @@ class DistributedPass(object):
             if arr not in self._T_arrs and rhs.index == 0:
                 # return parallel size
                 if self._is_1D_arr(arr):
-                    # XXX hack for array container case, TODO: handle properly
-                    if arr not in self._array_sizes:
-                        arr_var = namevar_table[arr]
-                        nodes = self._gen_1D_Var_len(arr_var)
-                        nodes[-1].target = inst.target
-                        return nodes
-                    inst.value = self._array_sizes[arr][rhs.index]
+                    arr_var = namevar_table[arr]
+                    nodes = []
+                    inst.value = self._get_dist_var_len(arr_var, nodes)
+                    nodes.append(inst)
+                    return nodes
                 else:
                     assert self._is_1D_Var_arr(arr)
                     arr_var = namevar_table[arr]
@@ -251,10 +229,16 @@ class DistributedPass(object):
                     self.oneDVar_len_vars[inst.target.name] = arr_var
                     return nodes
             # last dimension of transposed arrays is partitioned
-            if arr in self._T_arrs and rhs.index == ndims - 1:
+            # TODO: rewrite Array.shape support
+            if arr in self._T_arrs and rhs.index in (-1, ndims - 1):
                 assert not self._is_1D_Var_arr(
                     arr), "1D_Var arrays cannot transpose"
-                inst.value = self._array_sizes[arr][rhs.index]
+                nodes = []
+                arr_var = namevar_table[arr]
+                inst.value = self._get_dist_var_dim_size(
+                    arr_var, rhs.index, nodes)
+                nodes.append(inst)
+                return nodes
         if rhs.op in ['getitem', 'static_getitem']:
             if rhs.op == 'getitem':
                 index = rhs.index
@@ -267,17 +251,6 @@ class DistributedPass(object):
                 and rhs.attr == 'shape'):
             # XXX: return a new tuple using sizes here?
             self._shape_attrs[lhs] = rhs.value.name
-        if (rhs.op == 'getattr'
-                and self._is_1D_arr(rhs.value.name)
-                and rhs.attr == 'T'):
-            assert lhs in self._T_arrs
-            orig_arr = rhs.value.name
-            self._array_starts[lhs] = copy.copy(
-                self._array_starts[orig_arr]).reverse()
-            self._array_counts[lhs] = copy.copy(
-                self._array_counts[orig_arr]).reverse()
-            self._array_sizes[lhs] = copy.copy(
-                self._array_sizes[orig_arr]).reverse()
         if (rhs.op == 'exhaust_iter'
                 and rhs.value.name in self._shape_attrs):
             self._shape_attrs[lhs] = self._shape_attrs[rhs.value.name]
@@ -287,6 +260,30 @@ class DistributedPass(object):
             self._array_sizes[lhs] = self._array_sizes[rhs.lhs.name]
 
         return nodes
+
+    def _get_dist_var_dim_size(self, var, dim, nodes):
+        # XXX just call _gen_1D_var_len() for now
+        def f(A, dim, op):  # pragma: no cover
+            c = A.shape[dim]
+            res = bodo.libs.distributed_api.dist_reduce(c, op)
+        f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
+                                      (self.typemap[var.name], types.int64, types.int32),
+                                      self.typemap, self.calltypes).blocks.popitem()[1]
+        replace_arg_nodes(
+            f_block, [var, ir.Const(dim, var.loc),
+            ir.Const(Reduce_Type.Sum.value, var.loc)])
+        nodes += f_block.body[:-3]  # remove none return
+        return nodes[-1].target
+
+    def _get_dist_var_len(self, var, nodes):
+        """
+        Get global length of distributed data structure (Array, Series,
+        DataFrame) if available. Otherwise, generate reduction code to get
+        global length.
+        """
+        # XXX just call _gen_1D_var_len() for now
+        nodes += self._gen_1D_Var_len(var)
+        return nodes[-1].target
 
     def _gen_1D_Var_len(self, arr):
         def f(A, op):  # pragma: no cover
@@ -1757,43 +1754,6 @@ class DistributedPass(object):
             parfor, namevar_table)
         parfor.init_block.body += init_reduce_nodes
         out = prepend + [parfor] + reduce_nodes
-        return out
-
-    def _run_arg(self, assign):
-        rhs = assign.value
-        out = [assign]
-
-        if rhs.name not in self.metadata['distributed']:
-            return None
-
-        arr = assign.target
-        typ = self.typemap[arr.name]
-        if is_array_container(self.typemap, arr.name):
-            return None
-
-        # TODO: comprehensive support for Series vars
-        from bodo.hiframes.pd_series_ext import SeriesType
-        if isinstance(typ, (SeriesType,
-                bodo.hiframes.pd_dataframe_ext.DataFrameType)):
-            return None
-
-        # gen len() using 1D_Var reduce approach.
-        # TODO: refactor to avoid reduction
-        ndim = self.typemap[arr.name].ndim
-        out += self._gen_1D_Var_len(arr)
-        total_length = out[-1].target
-        div_nodes, start_var, count_var = self._gen_1D_div(
-            total_length, arr.scope, arr.loc, "$input", "get_node_portion",
-            distributed_api.get_node_portion)
-        out += div_nodes
-
-        # XXX: get sizes in lower dimensions
-        self._array_starts[arr.name] = [-1]*ndim
-        self._array_counts[arr.name] = [-1]*ndim
-        self._array_sizes[arr.name] = [-1]*ndim
-        self._array_starts[arr.name][0] = start_var
-        self._array_counts[arr.name][0] = count_var
-        self._array_sizes[arr.name][0] = total_length
         return out
 
     def _index_has_par_index(self, index, other_index):
