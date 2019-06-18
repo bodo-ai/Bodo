@@ -428,27 +428,39 @@ class DistributedPass(object):
                 and func_name in ('h5read', 'h5write', 'h5read_filter'))
                 and self._is_1D_arr(rhs.args[5].name)):
             # TODO: make create_dataset/create_group collective
-            arr = rhs.args[5].name
-            ndims = len(self._array_starts[arr])
+            arr = rhs.args[5]
+            ndims = self.typemap[arr.name].ndim
+            nodes = []
+            size_var = self._get_dist_var_len(arr, nodes)
+            div_nodes, start_var, end_var = self._gen_1D_div(
+                size_var, scope, loc, "$read", "get_node_portion",
+                distributed_api.get_node_portion)
+            nodes += div_nodes
             starts_var = ir.Var(scope, mk_unique_var("$h5_starts"), loc)
             self.typemap[starts_var.name] = types.UniTuple(
                 types.int64, ndims)
+            # XXX assuming starts of other dimensions are zero
+            prev_starts = guard(get_definition, self.func_ir, rhs.args[2])
+            assert isinstance(prev_starts.value, tuple) and all(
+                a == 0 for a in prev_starts.value)
             start_tuple_call = ir.Expr.build_tuple(
-                self._array_starts[arr], loc)
+               [start_var] + [self._set0_var] * (ndims - 1), loc)
             starts_assign = ir.Assign(start_tuple_call, starts_var, loc)
             rhs.args[2] = starts_var
             counts_var = ir.Var(scope, mk_unique_var("$h5_counts"), loc)
             self.typemap[counts_var.name] = types.UniTuple(
                 types.int64, ndims)
+            prev_counts = guard(get_definition, self.func_ir, rhs.args[3])
             count_tuple_call = ir.Expr.build_tuple(
-                self._array_counts[arr], loc)
+                [end_var] + prev_counts.items[1:], loc)
             counts_assign = ir.Assign(count_tuple_call, counts_var, loc)
-            out = [starts_assign, counts_assign, assign]
+            nodes += [starts_assign, counts_assign, assign]
             rhs.args[3] = counts_var
             rhs.args[4] = self._set1_var
             # set parallel arg in file open
             file_varname = rhs.args[0].name
             self._file_open_set_parallel(file_varname)
+            return nodes
 
         if bodo.config._has_h5py and (func_mod == 'bodo.io.pio_api'
                 and func_name == 'get_filter_read_indices'):
@@ -1268,11 +1280,8 @@ class DistributedPass(object):
 
         # size is single int var
         if isinstance(size_var, ir.Var) and isinstance(self.typemap[size_var.name], types.Integer):
-            self._array_sizes[lhs] = [size_var]
             out, start_var, end_var = self._gen_1D_div(size_var, scope, loc,
                                                        "$alloc", "get_node_portion", distributed_api.get_node_portion)
-            self._array_starts[lhs] = [start_var]
-            self._array_counts[lhs] = [end_var]
             new_size_var = end_var
             return out, new_size_var
 
@@ -1285,10 +1294,6 @@ class DistributedPass(object):
                                 if self._dist_analysis.array_dists[v] == Distribution.OneD)
             if (isinstance(var_def, ir.Expr) and var_def.op == 'getattr'
                     and var_def.attr == 'shape' and var_def.value.name in oned_varnames):
-                prev_arr = var_def.value.name
-                self._array_starts[lhs] = self._array_starts[prev_arr]
-                self._array_counts[lhs] = self._array_counts[prev_arr]
-                self._array_sizes[lhs] = self._array_sizes[prev_arr]
                 return out, size_var
 
             # size should be either int or tuple of ints
@@ -1302,7 +1307,6 @@ class DistributedPass(object):
             assert isinstance(size_var, (tuple, list))
             size_list = list(size_var)
 
-        self._array_sizes[lhs] = size_list
         gen_nodes, start_var, end_var = self._gen_1D_div(size_list[0], scope, loc,
                                                          "$alloc", "get_node_portion", distributed_api.get_node_portion)
         out += gen_nodes
@@ -1316,9 +1320,6 @@ class DistributedPass(object):
         tuple_assign = ir.Assign(tuple_call, tuple_var, loc)
         out.append(tuple_assign)
         self.func_ir._definitions[tuple_var.name] = [tuple_call]
-        self._array_starts[lhs] = [self._set0_var] * ndims
-        self._array_starts[lhs][0] = start_var
-        self._array_counts[lhs] = new_size_list
         new_size_var = tuple_var
         return out, new_size_var
 
