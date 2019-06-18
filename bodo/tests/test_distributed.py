@@ -36,3 +36,18 @@ def test_array_shape2():
     assert count_array_REPs() == 0
     assert dist_IR_contains('dist_reduce')
     # TODO: test Array.ctypes.shape[0] cases
+
+
+def test_array_len1():
+    # get first dimention size using array.shape for distributed arrays
+    def impl1(A):
+        return len(A)
+
+    bodo_func = bodo.jit(distributed={'A'})(impl1)
+    n = 11
+    A = np.arange(n * 3).reshape(n, 3)
+    start, end = get_start_end(n)
+    assert bodo_func(A[start:end]) == impl1(A)
+    assert count_array_REPs() == 0
+    assert dist_IR_contains('dist_reduce')
+    # TODO: tests with array created inside the function

@@ -254,10 +254,6 @@ class DistributedPass(object):
         if (rhs.op == 'exhaust_iter'
                 and rhs.value.name in self._shape_attrs):
             self._shape_attrs[lhs] = self._shape_attrs[rhs.value.name]
-        if rhs.op == 'inplace_binop' and self._is_1D_arr(rhs.lhs.name):
-            self._array_starts[lhs] = self._array_starts[rhs.lhs.name]
-            self._array_counts[lhs] = self._array_counts[rhs.lhs.name]
-            self._array_sizes[lhs] = self._array_sizes[rhs.lhs.name]
 
         return nodes
 
@@ -409,23 +405,17 @@ class DistributedPass(object):
         if isinstance(func_mod, ir.Var) and isinstance(self.typemap[func_mod.name], DataFrameType):
             return self._run_call_df(lhs, func_mod, func_name, assign, rhs.args)
 
-        # string_array.func_calls
-        if (self._is_1D_arr(lhs) and isinstance(func_mod, ir.Var)
-                and self.typemap[func_mod.name] == string_array_type):
-            if func_name == 'copy':
-                self._array_starts[lhs] = self._array_starts[func_mod.name]
-                self._array_counts[lhs] = self._array_counts[func_mod.name]
-                self._array_sizes[lhs] = self._array_sizes[func_mod.name]
-
         if fdef == ('permutation', 'numpy.random'):
             if self.typemap[rhs.args[0].name] == types.int64:
-                self._array_sizes[lhs] = [rhs.args[0]]
                 return self._run_permutation_int(assign, rhs.args)
 
         # len(A) if A is 1D
         if fdef == ('len', 'builtins') and rhs.args and self._is_1D_arr(rhs.args[0].name):
-            arr = rhs.args[0].name
-            assign.value = self._array_sizes[arr][0]
+            arr = rhs.args[0]
+            nodes = []
+            assign.value = self._get_dist_var_len(arr, nodes)
+            nodes.append(assign)
+            return nodes
 
         # len(A) if A is 1D_Var
         if fdef == ('len', 'builtins') and rhs.args and self._is_1D_Var_arr(rhs.args[0].name):
