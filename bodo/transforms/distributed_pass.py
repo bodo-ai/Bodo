@@ -35,7 +35,6 @@ from bodo.libs.str_arr_ext import string_array_type
 from bodo.transforms.distributed_analysis import (Distribution,
                                        DistributedAnalysis)
 
-# from mpi4py import MPI
 import bodo.utils.utils
 from bodo.utils.utils import (is_alloc_callname, is_whole_slice, is_array_container,
                         get_slice_step, is_array, is_np_array, find_build_tuple,

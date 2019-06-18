@@ -35,11 +35,14 @@ class Distribution(Enum):
     OneD_Var = 4
     OneD = 5
 
+
 _dist_analysis_result = namedtuple(
     'dist_analysis_result', 'array_dists,parfor_dists')
 
+
 distributed_analysis_extensions = {}
 auto_rebalance = False
+
 
 class DistributedAnalysis(object):
     """Analyze program for distributed transformation"""
@@ -1038,7 +1041,6 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
             if isinstance(inst, ir.StaticSetItem):
                 accesses.add((inst.target.name, inst.index_var.name))
             if isinstance(inst, ir.Assign):
-                lhs = inst.target.name
                 rhs = inst.value
                 if isinstance(rhs, ir.Expr) and rhs.op == 'getitem':
                     accesses.add((rhs.value.name, rhs.index.name))
