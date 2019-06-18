@@ -1461,16 +1461,30 @@ class DistributedPass(object):
             # if ndims==1:
             # multi-dimensional array could be indexed with 1D index
             if isinstance(self.typemap[index_var.name], types.Integer):
+                # TODO: avoid repeated start/end generation
+                nodes = []
+                size_var = self._get_dist_var_len(arr, nodes)
+                div_nodes, start_var, _end_var = self._gen_1D_div(
+                    size_var, scope, loc, "$index", "get_node_portion",
+                    distributed_api.get_node_portion)
+                nodes += div_nodes
                 sub_nodes = self._get_ind_sub(
-                    index_var, self._array_starts[arr.name][0])
-                out = sub_nodes
+                    index_var, start_var)
+                out = nodes + sub_nodes
                 _set_getsetitem_index(node, sub_nodes[-1].target)
             else:
                 index_list = guard(find_build_tuple, self.func_ir, index_var)
                 assert index_list is not None
+                # TODO: avoid repeated start/end generation
+                nodes = []
+                size_var = self._get_dist_var_len(arr, nodes)
+                div_nodes, start_var, _end_var = self._gen_1D_div(
+                    size_var, scope, loc, "$index", "get_node_portion",
+                    distributed_api.get_node_portion)
+                nodes += div_nodes
                 sub_nodes = self._get_ind_sub(
-                    index_list[0], self._array_starts[arr.name][0])
-                out = sub_nodes
+                    index_list[0], start_var)
+                out = nodes + sub_nodes
                 new_index_list = copy.copy(index_list)
                 new_index_list[0] = sub_nodes[-1].target
                 tuple_var = ir.Var(scope, mk_unique_var("$tuple_var"), loc)
