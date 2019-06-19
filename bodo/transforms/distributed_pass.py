@@ -257,6 +257,15 @@ class DistributedPass(object):
 
         return nodes
 
+    def _get_dist_start_var(self, arr):
+        nodes = []
+        size_var = self._get_dist_var_len(arr, nodes)
+        div_nodes, start_var, count_var = self._gen_1D_div(
+            size_var, arr.scope, arr.loc, "$index", "get_node_portion",
+            distributed_api.get_node_portion)
+        nodes += div_nodes
+        return start_var, nodes
+
     def _get_dist_var_dim_size(self, var, dim, nodes):
         # XXX just call _gen_1D_var_len() for now
         def f(A, dim, op):  # pragma: no cover
@@ -524,12 +533,7 @@ class DistributedPass(object):
                 and self._is_1D_arr(rhs.args[0].name)):
             arr = rhs.args[0]
             index_var = rhs.args[1]
-            nodes = []
-            size_var = self._get_dist_var_len(arr, nodes)
-            div_nodes, start_var, count_var = self._gen_1D_div(
-                size_var, scope, loc, "$index", "get_node_portion",
-                distributed_api.get_node_portion)
-            nodes += div_nodes
+            start_var, nodes = self._get_dist_start_var(arr)
             sub_nodes = self._get_ind_sub(
                 index_var, start_var)
             out = nodes + sub_nodes
@@ -542,16 +546,18 @@ class DistributedPass(object):
             # TODO: test parallel
             arr = rhs.args[0]
             index_var = rhs.args[1]
+            start_var, nodes = self._get_dist_start_var(arr)
             sub_nodes = self._get_ind_sub(
-                index_var, self._array_starts[arr.name][0])
-            out = sub_nodes
+                index_var, start_var)
+            out = nodes + sub_nodes
             rhs.args[1] = sub_nodes[-1].target
             # input string array
             arr = rhs.args[2]
             index_var = rhs.args[3]
+            start_var, nodes = self._get_dist_start_var(arr)
             sub_nodes = self._get_ind_sub(
-                index_var, self._array_starts[arr.name][0])
-            out += sub_nodes
+                index_var, start_var)
+            out += nodes + sub_nodes
             rhs.args[3] = sub_nodes[-1].target
             out.append(assign)
             return out
