@@ -462,60 +462,6 @@ class DistributedPass(object):
             self._file_open_set_parallel(file_varname)
             return nodes
 
-        if bodo.config._has_h5py and (func_mod == 'bodo.io.pio_api'
-                and func_name == 'get_filter_read_indices'):
-            #
-            out += self._gen_1D_Var_len(assign.target)
-            size_var = out[-1].target
-            self._array_sizes[lhs] = [size_var]
-            g_out, start_var, count_var = self._gen_1D_div(
-                size_var, scope, loc, "$alloc", "get_node_portion",
-                distributed_api.get_node_portion)
-            self._array_starts[lhs] = [start_var]
-            self._array_counts[lhs] = [count_var]
-            out += g_out
-
-        if (bodo.config._has_pyarrow
-                and fdef == ('read_parquet', 'bodo.io.parquet_pio')
-                and self._is_1D_arr(rhs.args[2].name)):
-            arr = rhs.args[2].name
-            assert len(self._array_starts[arr]) == 1, "only 1D arrs in parquet"
-            start_var = self._array_starts[arr][0]
-            count_var = self._array_counts[arr][0]
-            rhs.args += [start_var, count_var]
-
-            def f(fname, cindex, arr, out_dtype, start, count):  # pragma: no cover
-                return bodo.io.parquet_pio.read_parquet_parallel(fname, cindex,
-                                                              arr, out_dtype, start, count)
-
-            return self._replace_func(f, rhs.args)
-
-        if (bodo.config._has_pyarrow
-                and fdef == ('read_parquet_str', 'bodo.io.parquet_pio')
-                and self._is_1D_arr(lhs)):
-            arr = lhs
-            size_var = rhs.args[2]
-            assert self.typemap[size_var.name] == types.intp
-            self._array_sizes[arr] = [size_var]
-            out, start_var, count_var = self._gen_1D_div(size_var, scope, loc,
-                                                         "$alloc", "get_node_portion", distributed_api.get_node_portion)
-            self._array_starts[lhs] = [start_var]
-            self._array_counts[lhs] = [count_var]
-            rhs.args[2] = start_var
-            rhs.args.append(count_var)
-
-            def f(fname, cindex, start, count):  # pragma: no cover
-                return bodo.io.parquet_pio.read_parquet_str_parallel(fname, cindex,
-                                                                  start, count)
-
-            f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
-                                          (self.typemap[rhs.args[0].name], types.intp,
-                                           types.intp, types.intp),
-                                          self.typemap, self.calltypes).blocks.popitem()[1]
-            replace_arg_nodes(f_block, rhs.args)
-            out += f_block.body[:-2]
-            out[-1].target = assign.target
-
         # TODO: fix numba.extending
         if bodo.config._has_xenon and (fdef == ('read_xenon_col', 'numba.extending')
                 and self._is_1D_arr(rhs.args[3].name)):
