@@ -77,6 +77,7 @@ class DistributedPass(object):
         # which are global sizes, in order to recover local
         # size for 1DVar allocs and parfors
         self.oneDVar_len_vars = {}
+        self._1D_Var_parfor_starts = {}
 
     def run(self):
         remove_dels(self.func_ir.blocks)
@@ -259,6 +260,16 @@ class DistributedPass(object):
 
     def _get_dist_var_start_count(self, arr):
         nodes = []
+        if arr.name in self._1D_Var_parfor_starts:
+            start_var = self._1D_Var_parfor_starts[arr.name]
+            f_block = compile_to_numba_ir(lambda A: len(A), {}, self.typingctx,
+                                        (self.typemap[arr.name],),
+                                        self.typemap, self.calltypes).blocks.popitem()[1]
+            replace_arg_nodes(f_block, [arr])
+            nodes = f_block.body[:-3]  # remove none return
+            count_var = nodes[-1].target
+            return nodes, start_var, count_var
+
         size_var = self._get_dist_var_len(arr, nodes)
         div_nodes, start_var, count_var = self._gen_1D_div(
             size_var, arr.scope, arr.loc, "$index", "get_node_portion",
@@ -267,6 +278,9 @@ class DistributedPass(object):
         return nodes, start_var, count_var
 
     def _get_dist_start_var(self, arr):
+        if arr.name in self._1D_Var_parfor_starts:
+            return self._1D_Var_parfor_starts[arr.name], []
+
         nodes = []
         size_var = self._get_dist_var_len(arr, nodes)
         div_nodes, start_var, count_var = self._gen_1D_div(
@@ -1284,19 +1298,14 @@ class DistributedPass(object):
         loc = arr.loc
         # 1D_Var arrays need adjustment for 1D_Var parfors as well
         if ((self._is_1D_arr(arr.name) or
-                (self._is_1D_Var_arr(arr.name) and arr.name in self._array_starts))
+                (self._is_1D_Var_arr(arr.name) and arr.name in self._1D_Var_parfor_starts))
                 and (arr.name, index_var.name) in self._parallel_accesses):
             #ndims = self._get_arr_ndim(arr.name)
             # if ndims==1:
             # multi-dimensional array could be indexed with 1D index
             if isinstance(self.typemap[index_var.name], types.Integer):
                 # TODO: avoid repeated start/end generation
-                nodes = []
-                size_var = self._get_dist_var_len(arr, nodes)
-                div_nodes, start_var, _end_var = self._gen_1D_div(
-                    size_var, scope, loc, "$index", "get_node_portion",
-                    distributed_api.get_node_portion)
-                nodes += div_nodes
+                start_var, nodes = self._get_dist_start_var(arr)
                 sub_nodes = self._get_ind_sub(
                     index_var, start_var)
                 out = nodes + sub_nodes
@@ -1305,12 +1314,7 @@ class DistributedPass(object):
                 index_list = guard(find_build_tuple, self.func_ir, index_var)
                 assert index_list is not None
                 # TODO: avoid repeated start/end generation
-                nodes = []
-                size_var = self._get_dist_var_len(arr, nodes)
-                div_nodes, start_var, _end_var = self._gen_1D_div(
-                    size_var, scope, loc, "$index", "get_node_portion",
-                    distributed_api.get_node_portion)
-                nodes += div_nodes
+                start_var, nodes = self._get_dist_start_var(arr)
                 sub_nodes = self._get_ind_sub(
                     index_list[0], start_var)
                 out = nodes + sub_nodes
@@ -1339,12 +1343,7 @@ class DistributedPass(object):
 
             # TODO: support multi-dim slice setitem like X[a:b, c:d]
             assert not is_multi_dim
-            nodes = []
-            size_var = self._get_dist_var_len(arr, nodes)
-            div_nodes, start_var, count_var = self._gen_1D_div(
-                size_var, scope, loc, "$index", "get_node_portion",
-                distributed_api.get_node_portion)
-            nodes += div_nodes
+            nodes, start_var, count_var = self._get_dist_var_start_count(in_arr)
 
             if isinstance(self.typemap[index_var.name], types.Integer):
                 def f(A, val, index, chunk_start, chunk_count):  # pragma: no cover
@@ -1420,7 +1419,7 @@ class DistributedPass(object):
                 # on each processor, the slice has to start from an offset:
                 # |step-(start%step)|
                 in_arr = full_node.value.value
-                out, start_var, count_var = self._get_dist_var_start_count(in_arr)
+                start_var, out = self._get_dist_start_var(in_arr)
                 step = get_slice_step(self.typemap, self.func_ir, index_var)
 
                 def f(A, start, step):
@@ -1581,7 +1580,7 @@ class DistributedPass(object):
             array_accesses = ir_utils.get_array_accesses(parfor.loop_body)
             for (arr, index) in array_accesses:
                 if self._index_has_par_index(index, ind_varname):
-                    self._array_starts[arr] = [l_nest.start]
+                    self._1D_Var_parfor_starts[arr] = l_nest.start
 
         init_reduce_nodes, reduce_nodes = self._gen_parfor_reductions(
             parfor, namevar_table)
