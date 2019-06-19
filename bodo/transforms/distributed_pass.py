@@ -1660,37 +1660,30 @@ class DistributedPass(object):
             div_nodes.append(size_assign)
             size_var = new_size_var
 
-        # attr call: start_attr = getattr(g_dist_var, get_start)
-        start_attr_call = ir.Expr.getattr(self._g_dist_var, "get_start", loc)
-        start_attr_var = ir.Var(scope, mk_unique_var("$get_start_attr"), loc)
-        self.typemap[start_attr_var.name] = get_global_func_typ(
-            distributed_api.get_start)
-        start_attr_assign = ir.Assign(start_attr_call, start_attr_var, loc)
+        def impl(n):
+            rank = bodo.libs.distributed_api.get_rank()
+            n_pes = bodo.libs.distributed_api.get_size()
+            start = bodo.libs.distributed_api.get_start(n, n_pes, rank)
+            count = bodo.libs.distributed_api.get_node_portion(n, n_pes, rank)
+            return start, count
 
-        # start_var = get_start(size, rank, pes)
-        start_var = ir.Var(scope, mk_unique_var(prefix + "_start_var"), loc)
+        if end_call_name == 'get_end':
+            def impl(n):
+                rank = bodo.libs.distributed_api.get_rank()
+                n_pes = bodo.libs.distributed_api.get_size()
+                start = bodo.libs.distributed_api.get_start(n, n_pes, rank)
+                count = bodo.libs.distributed_api.get_end(n, n_pes, rank)
+                return start, count
+
+        div_nodes += _compile_func_single_block(impl, (size_var,), None, self)
+        tup_var = div_nodes[-1].target
+        start_var = ir.Var(scope, mk_unique_var("start_var"), loc)
         self.typemap[start_var.name] = types.int64
-        start_expr = ir.Expr.call(start_attr_var, [size_var,
-                                                   self._size_var, self._rank_var], (), loc)
-        self.calltypes[start_expr] = self.typemap[start_attr_var.name].get_call_type(
-            self.typingctx, [types.int64, types.int32, types.int32], {})
-        start_assign = ir.Assign(start_expr, start_var, loc)
-
-        # attr call: end_attr = getattr(g_dist_var, get_end)
-        end_attr_call = ir.Expr.getattr(self._g_dist_var, end_call_name, loc)
-        end_attr_var = ir.Var(scope, mk_unique_var("$get_end_attr"), loc)
-        self.typemap[end_attr_var.name] = get_global_func_typ(end_call)
-        end_attr_assign = ir.Assign(end_attr_call, end_attr_var, loc)
-
-        end_var = ir.Var(scope, mk_unique_var(prefix + "_end_var"), loc)
+        gen_getitem(start_var, tup_var, 0, self.calltypes, div_nodes)
+        end_var = ir.Var(scope, mk_unique_var("end_var"), loc)
         self.typemap[end_var.name] = types.int64
-        end_expr = ir.Expr.call(end_attr_var, [size_var,
-                                               self._size_var, self._rank_var], (), loc)
-        self.calltypes[end_expr] = self.typemap[end_attr_var.name].get_call_type(
-            self.typingctx, [types.int64, types.int32, types.int32], {})
-        end_assign = ir.Assign(end_expr, end_var, loc)
-        div_nodes += [start_attr_assign,
-                      start_assign, end_attr_assign, end_assign]
+        gen_getitem(end_var, tup_var, 1, self.calltypes, div_nodes)
+
         return div_nodes, start_var, end_var
 
     def _get_ind_sub(self, ind_var, start_var):
