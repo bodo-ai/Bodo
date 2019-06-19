@@ -480,6 +480,12 @@ def parallel_print(s):
     print(s)
 
 
+@numba.njit
+def single_print(*args):
+    if bodo.libs.distributed_api.get_rank() == 0:
+        print(*args)
+
+
 def irecv():  # pragma: no cover
     return 0
 

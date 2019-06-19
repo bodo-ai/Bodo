@@ -110,3 +110,37 @@ def test_1D_Var_parfor(A):
     B = np.arange(len(A)) % 2
     assert bodo_func(A[start:end], B[start:end]) == impl1(A, B)
     assert count_array_REPs() == 0
+
+
+def test_print1():
+    # no vararg
+    # TODO: capture stdout and make sure there is only one print
+    def impl1(a, b):
+        print(a, b)
+
+    bodo_func = bodo.jit()(impl1)
+    bodo_func(1, 2)
+    bodo_func(np.ones(3), 3)
+    bodo_func((3, 4), 2)
+
+
+def test_print2():
+    # vararg
+    # TODO: capture stdout and make sure there is only one print
+    def impl1(a):
+        print(*a)
+
+    bodo_func = bodo.jit()(impl1)
+    bodo_func((3, 4))
+    bodo_func((3, np.ones(3)))
+
+
+def test_print3():
+    # arg and vararg
+    # TODO: capture stdout and make sure there is only one print
+    def impl1(a, b):
+        print(a, *b)
+
+    bodo_func = bodo.jit()(impl1)
+    bodo_func(1, (3, 4))
+    bodo_func(np.ones(3), (3, np.ones(3)))

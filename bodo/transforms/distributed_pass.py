@@ -95,7 +95,6 @@ class DistributedPass(object):
         self._gen_dist_inits()
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
         self.func_ir.blocks = self._run_dist_pass(self.func_ir.blocks)
-        self.func_ir.blocks = self._dist_prints(self.func_ir.blocks)
         remove_dead(self.func_ir.blocks, self.func_ir.arg_names, self.func_ir, self.typemap)
         dprint_func_ir(self.func_ir, "after distributed pass")
         lower_parfor_sequential(
@@ -153,6 +152,8 @@ class DistributedPass(object):
                                                      index, inst, inst)
                 elif isinstance(inst, ir.Return):
                     out_nodes = self._gen_barrier() + [inst]
+                elif isinstance(inst, ir.Print):
+                    out_nodes = self._run_print(inst)
 
                 if out_nodes is None:
                     new_body.append(inst)
@@ -1626,6 +1627,26 @@ class DistributedPass(object):
     #                 return lhs // rhs
     #     return None
 
+    def _run_print(self, print_node):
+        args = print_node.args
+        arg_names = ", ".join('v{}'.format(i)
+                                for i in range(len(print_node.args)))
+        print_args = arg_names
+
+        # handle vararg like print(*a)
+        if print_node.vararg is not None:
+            arg_names += "{}vararg".format(", " if args else "")
+            print_args += "{}*vararg".format(", " if args else "")
+            args.append(print_node.vararg)
+
+        func_text = "def impl({}):\n".format(arg_names)
+        func_text += "  bodo.libs.distributed_api.single_print({})\n".format(
+            print_args)
+        loc_vars = {}
+        exec(func_text, {'bodo': bodo}, loc_vars)
+        impl = loc_vars['impl']
+
+        return _compile_func_single_block(impl, args, None, self)
 
     def _gen_1D_div(self, size_var, scope, loc, prefix, end_call_name, end_call):
         div_nodes = []
@@ -1705,45 +1726,6 @@ class DistributedPass(object):
         _, block = f_ir.blocks.popitem()
         replace_arg_nodes(block, args)
         return block.body[:-2]  # ignore return nodes
-
-    def _dist_prints(self, blocks):
-        new_blocks = {}
-        for (block_label, block) in blocks.items():
-            scope = block.scope
-            i = _find_first_print(block.body)
-            while i != -1:
-                inst = block.body[i]
-                loc = inst.loc
-                # split block across print
-                prev_block = ir.Block(scope, loc)
-                new_blocks[block_label] = prev_block
-                block_label = ir_utils.next_label()
-                print_label = ir_utils.next_label()
-
-                prev_block.body = block.body[:i]
-                rank_comp_var = ir.Var(scope, mk_unique_var("$rank_comp"), loc)
-                self.typemap[rank_comp_var.name] = types.boolean
-                comp_expr = ir.Expr.binop(
-                    operator.eq, self._rank_var, self._set0_var, loc)
-                expr_typ = self.typingctx.resolve_function_type(
-                    operator.eq, (types.int32, types.int64), {})
-                #expr_typ = find_op_typ(operator.eq, [types.int32, types.int64])
-                self.calltypes[comp_expr] = expr_typ
-                comp_assign = ir.Assign(comp_expr, rank_comp_var, loc)
-                prev_block.body.append(comp_assign)
-                print_branch = ir.Branch(
-                    rank_comp_var, print_label, block_label, loc)
-                prev_block.body.append(print_branch)
-
-                print_block = ir.Block(scope, loc)
-                print_block.body.append(inst)
-                print_block.body.append(ir.Jump(block_label, loc))
-                new_blocks[print_label] = print_block
-
-                block.body = block.body[i + 1:]
-                i = _find_first_print(block.body)
-            new_blocks[block_label] = block
-        return new_blocks
 
     def _file_open_set_parallel(self, file_varname):
         var = file_varname
@@ -1972,13 +1954,6 @@ class DistributedPass(object):
                 self._dist_analysis.array_dists[arr_name] == Distribution.REP)
 
 
-def _find_first_print(body):
-    for (i, inst) in enumerate(body):
-        if isinstance(inst, ir.Print):
-            return i
-    return -1
-
-
 def _set_getsetitem_index(node, new_ind):
     if ((isinstance(node, ir.Expr) and node.op == 'static_getitem')
             or isinstance(node, ir.StaticSetItem)):
@@ -2014,5 +1989,6 @@ def _compile_func_single_block(func, args, ret_var, typing_info,
     f_block = f_ir.blocks.popitem()[1]
     replace_arg_nodes(f_block, args)
     nodes = f_block.body[:-2]
-    nodes[-1].target = ret_var
+    if ret_var is not None:
+        nodes[-1].target = ret_var
     return nodes
