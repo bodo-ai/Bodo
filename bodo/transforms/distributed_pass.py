@@ -503,34 +503,6 @@ class DistributedPass(object):
             out += f_block.body[:-2]
             out[-1].target = assign.target
 
-        if (func_mod == 'bodo.hiframes.api' and func_name in (
-                'to_arr_from_series',
-                'to_date_series_type', 'init_series')
-                and self._is_1D_arr(rhs.args[0].name)):
-            # TODO: handle index
-            in_arr = rhs.args[0].name
-            self._array_starts[lhs] = self._array_starts[in_arr]
-            self._array_counts[lhs] = self._array_counts[in_arr]
-            self._array_sizes[lhs] = self._array_sizes[in_arr]
-
-        if (fdef == ('init_dataframe', 'bodo.hiframes.pd_dataframe_ext')
-                and self._is_1D_arr(rhs.args[0].name)):
-            seq_info = guard(
-                find_build_sequence, self.func_ir, rhs.args[0])
-            assert seq_info is not None
-            # TODO: dataframe with no data
-            in_arr = seq_info[0][0].name
-            self._array_starts[lhs] = self._array_starts[in_arr]
-            self._array_counts[lhs] = self._array_counts[in_arr]
-            self._array_sizes[lhs] = self._array_sizes[in_arr]
-
-        if (fdef == ('compute_split_view', 'bodo.hiframes.split_impl')
-                and self._is_1D_arr(rhs.args[0].name)):
-            in_arr = rhs.args[0].name
-            self._array_starts[lhs] = self._array_starts[in_arr]
-            self._array_counts[lhs] = self._array_counts[in_arr]
-            self._array_sizes[lhs] = self._array_sizes[in_arr]
-
         if (fdef == ('get_split_view_index', 'bodo.hiframes.split_impl')
                 and self._is_1D_arr(rhs.args[0].name)):
             arr = rhs.args[0]
