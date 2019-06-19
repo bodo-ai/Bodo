@@ -85,6 +85,7 @@ def get_dtype_size(typingctx, dtype=None):
         return context.get_constant(types.intp, num_bytes)
     return types.intp(dtype), codegen
 
+
 @overload_method(types.Array, 'tofile')
 def tofile_overload(arr_ty, fname_ty):
     # FIXME: import here since hio has hdf5 which might not be available

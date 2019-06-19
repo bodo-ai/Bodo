@@ -749,17 +749,8 @@ class DistributedPass(object):
             self._array_counts[lhs] = self._array_counts[in_arr]
             self._array_sizes[lhs] = self._array_sizes[in_arr]
 
-        # output array has same properties (starts etc.) as input array
-        if (func_name in ['cumsum', 'cumprod', 'empty_like',
-                                     'zeros_like', 'ones_like', 'full_like',
-                                     'copy', 'ravel', 'ascontiguousarray']
-                and self._is_1D_arr(args[0].name)):
-            if func_name == 'ravel':
-                assert self.typemap[args[0].name].ndim == 1, "only 1D ravel supported"
-            in_arr = args[0].name
-            self._array_starts[lhs] = self._array_starts[in_arr]
-            self._array_counts[lhs] = self._array_counts[in_arr]
-            self._array_sizes[lhs] = self._array_sizes[in_arr]
+        if func_name == 'ravel' and self._is_1D_arr(args[0].name):
+            assert self.typemap[args[0].name].ndim == 1, "only 1D ravel supported"
 
         if (func_name in ['cumsum', 'cumprod']
                 and self._is_1D_arr(args[0].name)):
@@ -833,31 +824,18 @@ class DistributedPass(object):
         if func_name == 'reshape' and self._is_1D_arr(arr.name):
             return self._run_reshape(assign, arr, args)
 
-
-        if func_name == 'transpose' and self._is_1D_arr(lhs):
-            # Currently only 1D arrays are supported
-            assert self._is_1D_arr(arr.name)
-            ndim = self.typemap[arr.name].ndim
-            self._array_starts[lhs] = [-1]*ndim
-            self._array_counts[lhs] = [-1]*ndim
-            self._array_sizes[lhs] = [-1]*ndim
-            self._array_starts[lhs][0] = self._array_starts[arr.name][0]
-            self._array_counts[lhs][0] = self._array_counts[arr.name][0]
-            self._array_sizes[lhs][0] = self._array_sizes[arr.name][0]
-
-
         # TODO: refactor
         # TODO: add unittest
         if func_name == 'tofile':
             if self._is_1D_arr(arr.name):
                 _fname = args[0]
-                _start = self._array_starts[arr.name][0]
-                _count = self._array_counts[arr.name][0]
+                nodes, start_var, count_var = self._get_dist_var_start_count(arr)
 
                 def f(fname, arr, start, count):  # pragma: no cover
                     return bodo.io.np_io.file_write_parallel(fname, arr, start, count)
 
-                return self._replace_func(f, [_fname, arr, _start, _count])
+                return self._replace_func(
+                    f, [_fname, arr, start_var, count_var], pre_nodes=nodes)
 
             if self._is_1D_Var_arr(arr.name):
                 _fname = args[0]
