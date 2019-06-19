@@ -257,6 +257,15 @@ class DistributedPass(object):
 
         return nodes
 
+    def _get_dist_var_start_count(self, arr):
+        nodes = []
+        size_var = self._get_dist_var_len(arr, nodes)
+        div_nodes, start_var, count_var = self._gen_1D_div(
+            size_var, arr.scope, arr.loc, "$index", "get_node_portion",
+            distributed_api.get_node_portion)
+        nodes += div_nodes
+        return nodes, start_var, count_var
+
     def _get_dist_start_var(self, arr):
         nodes = []
         size_var = self._get_dist_var_len(arr, nodes)
@@ -660,15 +669,17 @@ class DistributedPass(object):
         if fdef == ('rebalance_array', 'bodo.libs.distributed_api'):
             return self._run_call_rebalance_array(lhs, assign, rhs.args)
 
-        if fdef == ('file_read', 'bodo.io.np_io') and rhs.args[1].name in self._array_starts:
-            _fname = rhs.args[0]
-            _data_ptr = rhs.args[1]
-            _start = self._array_starts[_data_ptr.name][0]
-            _count = self._array_counts[_data_ptr.name][0]
+        if fdef == ('file_read', 'bodo.io.np_io') and (
+                self._is_1D_arr(rhs.args[1].name)
+                or self._is_1D_Var_arr(rhs.args[1].name)):
+            fname = rhs.args[0]
+            arr = rhs.args[1]
+            nodes, start_var, count_var = self._get_dist_var_start_count(arr)
 
-            def f(fname, data_ptr, start, count):  # pragma: no cover
+            def impl(fname, data_ptr, start, count):  # pragma: no cover
                 return bodo.io.np_io.file_read_parallel(fname, data_ptr, start, count)
-            return self._replace_func(f, [_fname, _data_ptr, _start, _count])
+            return self._replace_func(impl, [fname, arr, start_var, count_var],
+                pre_nodes=nodes)
 
         # replace get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
