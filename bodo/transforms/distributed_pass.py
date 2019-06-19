@@ -119,7 +119,6 @@ class DistributedPass(object):
 
     def _run_dist_pass(self, blocks):
         topo_order = find_topo_order(blocks)
-        namevar_table = get_name_var_table(blocks)
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
         while work_list:
             label, block = work_list.pop()
@@ -133,7 +132,7 @@ class DistributedPass(object):
                                   self.typemap, self.calltypes, self.typingctx,
                                   self.targetctx, self)
                 elif isinstance(inst, Parfor):
-                    out_nodes = self._run_parfor(inst, namevar_table)
+                    out_nodes = self._run_parfor(inst)
                     # run dist pass recursively
                     p_blocks = wrap_parfor_blocks(inst)
                     # build_definitions(p_blocks, self.func_ir._definitions)
@@ -142,7 +141,7 @@ class DistributedPass(object):
                 elif isinstance(inst, ir.Assign):
                     rhs = inst.value
                     if isinstance(rhs, ir.Expr):
-                        out_nodes = self._run_expr(inst, namevar_table)
+                        out_nodes = self._run_expr(inst)
                 elif isinstance(inst, (ir.StaticSetItem, ir.SetItem)):
                     if isinstance(inst, ir.SetItem):
                         index = inst.index
@@ -195,7 +194,7 @@ class DistributedPass(object):
 
         return blocks
 
-    def _run_expr(self, inst, namevar_table):
+    def _run_expr(self, inst):
         rhs = inst.value
         nodes = [inst]
 
@@ -1334,7 +1333,7 @@ class DistributedPass(object):
 
             # TODO: support multi-dim slice setitem like X[a:b, c:d]
             assert not is_multi_dim
-            nodes, start_var, count_var = self._get_dist_var_start_count(in_arr)
+            nodes, start_var, count_var = self._get_dist_var_start_count(arr)
 
             if isinstance(self.typemap[index_var.name], types.Integer):
                 def f(A, val, index, chunk_start, chunk_count):  # pragma: no cover
@@ -1442,7 +1441,7 @@ class DistributedPass(object):
 
         return out
 
-    def _run_parfor(self, parfor, namevar_table):
+    def _run_parfor(self, parfor):
         # stencil_accesses, neighborhood = get_stencil_accesses(
         #     parfor, self.typemap)
 
@@ -1453,7 +1452,7 @@ class DistributedPass(object):
             parfor.no_sequential_lowering = True
 
         if self._dist_analysis.parfor_dists[parfor.id] == Distribution.OneD_Var:
-            return self._run_parfor_1D_Var(parfor, namevar_table)
+            return self._run_parfor_1D_Var(parfor)
 
         if self._dist_analysis.parfor_dists[parfor.id] != Distribution.OneD:
             if debug_prints():  # pragma: no cover
@@ -1506,12 +1505,12 @@ class DistributedPass(object):
         out.append(parfor)
 
         init_reduce_nodes, reduce_nodes = self._gen_parfor_reductions(
-            parfor, namevar_table)
+            parfor)
         parfor.init_block.body += init_reduce_nodes
         out += reduce_nodes
         return out
 
-    def _run_parfor_1D_Var(self, parfor, namevar_table):
+    def _run_parfor_1D_Var(self, parfor):
         # recover range of 1DVar parfors coming from converted 1DVar array len()
         prepend = []
         for l in parfor.loop_nests:
@@ -1574,7 +1573,7 @@ class DistributedPass(object):
                     self._1D_Var_parfor_starts[arr] = l_nest.start
 
         init_reduce_nodes, reduce_nodes = self._gen_parfor_reductions(
-            parfor, namevar_table)
+            parfor)
         parfor.init_block.body += init_reduce_nodes
         out = prepend + [parfor] + reduce_nodes
         return out
@@ -1590,7 +1589,7 @@ class DistributedPass(object):
                 return True
         return False
 
-    def _gen_parfor_reductions(self, parfor, namevar_table):
+    def _gen_parfor_reductions(self, parfor):
         scope = parfor.init_block.scope
         loc = parfor.init_block.loc
         pre = []
@@ -1600,8 +1599,9 @@ class DistributedPass(object):
 
         for reduce_varname, (init_val, reduce_nodes) in reductions.items():
             reduce_op = guard(self._get_reduce_op, reduce_nodes)
+            reduce_var = reduce_nodes[-1].target
+            assert reduce_var.name == reduce_varname
             # TODO: initialize reduction vars (arrays)
-            reduce_var = namevar_table[reduce_varname]
             pre += self._gen_init_reduce(reduce_var, reduce_op)
             out += self._gen_reduce(reduce_var, reduce_op, scope, loc)
 
