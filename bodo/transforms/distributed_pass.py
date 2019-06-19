@@ -465,27 +465,28 @@ class DistributedPass(object):
         # TODO: fix numba.extending
         if bodo.config._has_xenon and (fdef == ('read_xenon_col', 'numba.extending')
                 and self._is_1D_arr(rhs.args[3].name)):
-            arr = rhs.args[3].name
-            assert len(self._array_starts[arr]) == 1, "only 1D arrs in Xenon"
-            start_var = self._array_starts[arr][0]
-            count_var = self._array_counts[arr][0]
+            arr = rhs.args[3]
+            nodes = []
+            size_var = self._get_dist_var_len(arr, nodes)
+            div_nodes, start_var, count_var = self._gen_1D_div(
+                size_var, scope, loc, "$index", "get_node_portion",
+                distributed_api.get_node_portion)
+            nodes += div_nodes
+            assert self.typemap[arr.name].ndim == 1, "only 1D arrs in Xenon"
             rhs.args += [start_var, count_var]
 
             def f(connect_tp, dset_tp, col_id_tp, column_tp, schema_arr_tp, start, count):  # pragma: no cover
                 return bodo.io.xenon_ext.read_xenon_col_parallel(connect_tp, dset_tp, col_id_tp, column_tp, schema_arr_tp, start, count)
 
-            return self._replace_func(f, rhs.args)
+            return self._replace_func(f, rhs.args, pre_nodes=nodes)
 
         if bodo.config._has_xenon and (fdef == ('read_xenon_str', 'numba.extending')
                 and self._is_1D_arr(lhs)):
             arr = lhs
             size_var = rhs.args[3]
             assert self.typemap[size_var.name] == types.intp
-            self._array_sizes[arr] = [size_var]
             out, start_var, count_var = self._gen_1D_div(size_var, scope, loc,
                                                          "$alloc", "get_node_portion", distributed_api.get_node_portion)
-            self._array_starts[lhs] = [start_var]
-            self._array_counts[lhs] = [count_var]
             rhs.args.remove(size_var)
             rhs.args.append(start_var)
             rhs.args.append(count_var)
