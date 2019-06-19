@@ -566,18 +566,14 @@ class DistributedPass(object):
             # fix index in call to isna
             arr = rhs.args[0]
             ind = rhs.args[1]
-            out = self._get_ind_sub(ind, self._array_starts[arr.name][0])
+            start_var, out = self._get_dist_start_var(arr)
+            out += self._get_ind_sub(ind, start_var)
             rhs.args[1] = out[-1].target
             out.append(assign)
 
         if fdef == ('rolling_fixed', 'bodo.hiframes.rolling') and (
                     self._is_1D_arr(rhs.args[0].name)
                     or self._is_1D_Var_arr(rhs.args[0].name)):
-            in_arr = rhs.args[0].name
-            if self._is_1D_arr(in_arr):
-                self._array_starts[lhs] = self._array_starts[in_arr]
-                self._array_counts[lhs] = self._array_counts[in_arr]
-                self._array_sizes[lhs] = self._array_sizes[in_arr]
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
             self.typemap[true_var.name] = types.boolean
@@ -587,11 +583,6 @@ class DistributedPass(object):
         if fdef == ('rolling_variable', 'bodo.hiframes.rolling') and (
                     self._is_1D_arr(rhs.args[0].name)
                     or self._is_1D_Var_arr(rhs.args[0].name)):
-            in_arr = rhs.args[0].name
-            if self._is_1D_arr(in_arr):
-                self._array_starts[lhs] = self._array_starts[in_arr]
-                self._array_counts[lhs] = self._array_counts[in_arr]
-                self._array_sizes[lhs] = self._array_sizes[in_arr]
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
             self.typemap[true_var.name] = types.boolean
@@ -602,11 +593,6 @@ class DistributedPass(object):
                     and func_name in ('shift', 'pct_change')
                     and (self._is_1D_arr(rhs.args[0].name)
                     or self._is_1D_Var_arr(rhs.args[0].name))):
-            in_arr = rhs.args[0].name
-            if self._is_1D_arr(in_arr):
-                self._array_starts[lhs] = self._array_starts[in_arr]
-                self._array_counts[lhs] = self._array_counts[in_arr]
-                self._array_sizes[lhs] = self._array_sizes[in_arr]
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
             self.typemap[true_var.name] = types.boolean
@@ -615,18 +601,14 @@ class DistributedPass(object):
 
         if fdef == ('quantile', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
-            arr = rhs.args[0].name
-            if arr in self._array_sizes:
-                assert len(self._array_sizes[arr]
-                           ) == 1, "only 1D arrs in quantile"
-                size_var = self._array_sizes[arr][0]
-            else:
-                size_var = self._set0_var
-            rhs.args += [size_var]
+            arr = rhs.args[0]
+            nodes = []
+            size_var = self._get_dist_var_len(arr, nodes)
+            rhs.args.append(size_var)
 
             f = lambda arr, q, size: bodo.libs.array_kernels.quantile_parallel(
                                                                   arr, q, size)
-            return self._replace_func(f, rhs.args)
+            return self._replace_func(f, rhs.args, pre_nodes=nodes)
 
         if fdef == ('nunique', 'bodo.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
@@ -1359,12 +1341,12 @@ class DistributedPass(object):
 
     def _run_getsetitem(self, arr, index_var, node, full_node):
         out = [full_node]
+        scope = arr.scope
+        loc = arr.loc
         # 1D_Var arrays need adjustment for 1D_Var parfors as well
         if ((self._is_1D_arr(arr.name) or
                 (self._is_1D_Var_arr(arr.name) and arr.name in self._array_starts))
                 and (arr.name, index_var.name) in self._parallel_accesses):
-            scope = index_var.scope
-            loc = index_var.loc
             #ndims = self._get_arr_ndim(arr.name)
             # if ndims==1:
             # multi-dimensional array could be indexed with 1D index
@@ -1418,8 +1400,12 @@ class DistributedPass(object):
 
             # TODO: support multi-dim slice setitem like X[a:b, c:d]
             assert not is_multi_dim
-            start = self._array_starts[arr.name][0]
-            count = self._array_counts[arr.name][0]
+            nodes = []
+            size_var = self._get_dist_var_len(arr, nodes)
+            div_nodes, start_var, count_var = self._gen_1D_div(
+                size_var, scope, loc, "$index", "get_node_portion",
+                distributed_api.get_node_portion)
+            nodes += div_nodes
 
             if isinstance(self.typemap[index_var.name], types.Integer):
                 def f(A, val, index, chunk_start, chunk_count):  # pragma: no cover
@@ -1427,7 +1413,7 @@ class DistributedPass(object):
                         A, val, index, chunk_start, chunk_count)
 
                 return self._replace_func(
-                    f, [arr, node.value, index_var, start, count])
+                    f, [arr, node.value, index_var, start_var, count_var], pre_nodes=nodes)
 
             assert isinstance(self.typemap[index_var.name],
                               types.misc.SliceType), "slice index expected"
@@ -1443,7 +1429,7 @@ class DistributedPass(object):
             slice_start = slice_call.args[0]
             slice_stop = slice_call.args[1]
             return self._replace_func(
-                f, [arr, node.value, slice_start, slice_stop, start, count])
+                f, [arr, node.value, slice_start, slice_stop, start_var, count_var], pre_nodes=nodes)
             # print_node = ir.Print([start_var, end_var], None, loc)
             # self.calltypes[print_node] = signature(types.none, types.int64, types.int64)
             # out.append(print_node)
@@ -1479,17 +1465,12 @@ class DistributedPass(object):
             if isinstance(arr_def, ir.Expr) and arr_def.op == 'call':
                 fdef = guard(find_callname, self.func_ir, arr_def, self.typemap)
                 if fdef == ('permutation', 'numpy.random'):
-                    self._array_starts[lhs.name] = self._array_starts[arr.name]
-                    self._array_counts[lhs.name] = self._array_counts[arr.name]
-                    self._array_sizes[lhs.name] = self._array_sizes[arr.name]
                     out = self._run_permutation_array_index(lhs, arr, index_var)
 
             # no need for transformation for whole slices
             if guard(is_whole_slice, self.typemap, self.func_ir, index_var):
                 # A = X[:,3]
-                self._array_starts[lhs.name] = [self._array_starts[arr.name][0]]
-                self._array_counts[lhs.name] = [self._array_counts[arr.name][0]]
-                self._array_sizes[lhs.name] = [self._array_sizes[arr.name][0]]
+                pass
 
             # strided whole slice
             # e.g. A = X[::2,5]
