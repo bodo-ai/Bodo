@@ -51,3 +51,16 @@ def test_array_len1():
     assert count_array_REPs() == 0
     assert dist_IR_contains('dist_reduce')
     # TODO: tests with array created inside the function
+
+
+@pytest.mark.parametrize('A', [np.arange(11), np.arange(33).reshape(11, 3)])
+def test_array_size1(A):
+    def impl1(A):
+        return A.size
+
+    bodo_func = bodo.jit(distributed={'A'})(impl1)
+    start, end = get_start_end(len(A))
+    assert bodo_func(A[start:end]) == impl1(A)
+    assert count_array_REPs() == 0
+    assert dist_IR_contains('dist_reduce')
+    # TODO: tests with array created inside the function

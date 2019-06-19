@@ -792,14 +792,14 @@ class DistributedAnalysis(object):
                                                 new_dist.value))
             return
 
-        # array selection with permutation array index
-        if is_np_array(self.typemap, index_var.name):
-            arr_def = guard(get_definition, self.func_ir, index_var)
-            if isinstance(arr_def, ir.Expr) and arr_def.op == 'call':
-                fdef = guard(find_callname, self.func_ir, arr_def, self.typemap)
-                if fdef == ('permutation', 'numpy.random'):
-                    self._meet_array_dists(lhs, rhs.value.name, array_dists)
-                    return
+        # # array selection with permutation array index
+        # if is_np_array(self.typemap, index_var.name):
+        #     arr_def = guard(get_definition, self.func_ir, index_var)
+        #     if isinstance(arr_def, ir.Expr) and arr_def.op == 'call':
+        #         fdef = guard(find_callname, self.func_ir, arr_def, self.typemap)
+        #         if fdef == ('permutation', 'numpy.random'):
+        #             self._meet_array_dists(lhs, rhs.value.name, array_dists)
+        #             return
 
         # whole slice or strided slice access
         # for example: A = X[:,5], A = X[::2,5]

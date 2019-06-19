@@ -977,34 +977,34 @@ class DistributedPass(object):
         self.typemap[dtype_size_var.name] = types.intp
         return ir.Assign(ir.Const(dtype_size, loc), dtype_size_var, loc)
 
-    def _run_permutation_array_index(self, lhs, rhs, idx):
-        scope, loc = lhs.scope, lhs.loc
-        dtype = self.typemap[lhs.name].dtype
-        out = mk_alloc(self.typemap, self.calltypes, lhs,
-                       (self._array_counts[lhs.name][0],
-                        *self._array_sizes[lhs.name][1:]), dtype, scope, loc)
+    # def _run_permutation_array_index(self, lhs, rhs, idx):
+    #     scope, loc = lhs.scope, lhs.loc
+    #     dtype = self.typemap[lhs.name].dtype
+    #     out = mk_alloc(self.typemap, self.calltypes, lhs,
+    #                    (self._array_counts[lhs.name][0],
+    #                     *self._array_sizes[lhs.name][1:]), dtype, scope, loc)
 
-        def f(lhs, lhs_len, dtype_size, rhs, idx, idx_len):
-            bodo.libs.distributed_lower.dist_permutation_array_index(
-                lhs, lhs_len, dtype_size, rhs, idx, idx_len)
+    #     def f(lhs, lhs_len, dtype_size, rhs, idx, idx_len):
+    #         bodo.libs.distributed_lower.dist_permutation_array_index(
+    #             lhs, lhs_len, dtype_size, rhs, idx, idx_len)
 
-        f_block = compile_to_numba_ir(f, {'bodo': bodo},
-                                      self.typingctx,
-                                      (self.typemap[lhs.name],
-                                       types.intp,
-                                       types.intp,
-                                       self.typemap[rhs.name],
-                                       self.typemap[idx.name],
-                                       types.intp),
-                                      self.typemap,
-                                      self.calltypes).blocks.popitem()[1]
-        dtype_ir = self.dtype_size_assign_ir(dtype, scope, loc)
-        out.append(dtype_ir)
-        replace_arg_nodes(f_block, [lhs, self._array_sizes[lhs.name][0],
-                                    dtype_ir.target, rhs, idx,
-                                    self._array_sizes[idx.name][0]])
-        f_block.body = out + f_block.body
-        return f_block.body[:-3]
+    #     f_block = compile_to_numba_ir(f, {'bodo': bodo},
+    #                                   self.typingctx,
+    #                                   (self.typemap[lhs.name],
+    #                                    types.intp,
+    #                                    types.intp,
+    #                                    self.typemap[rhs.name],
+    #                                    self.typemap[idx.name],
+    #                                    types.intp),
+    #                                   self.typemap,
+    #                                   self.calltypes).blocks.popitem()[1]
+    #     dtype_ir = self.dtype_size_assign_ir(dtype, scope, loc)
+    #     out.append(dtype_ir)
+    #     replace_arg_nodes(f_block, [lhs, self._array_sizes[lhs.name][0],
+    #                                 dtype_ir.target, rhs, idx,
+    #                                 self._array_sizes[idx.name][0]])
+    #     f_block.body = out + f_block.body
+    #     return f_block.body[:-3]
 
     def _run_reshape(self, assign, in_arr, args):
         lhs = assign.target
@@ -1038,8 +1038,10 @@ class DistributedPass(object):
                                    self.typemap, self.calltypes).blocks.popitem()[1]
         dtype_ir = self.dtype_size_assign_ir(dtype, scope, loc)
         out.append(dtype_ir)
-        replace_arg_nodes(f_block, [lhs, in_arr, self._array_sizes[lhs.name][0],
-                                    self._array_sizes[in_arr.name][0],
+        lhs_size = self._get_dist_var_len(lhs, out)
+        in_arr_size = self._get_dist_var_len(in_arr, out)
+        replace_arg_nodes(f_block, [lhs, in_arr, lhs_size,
+                                    in_arr_size,
                                     dtype_ir.target])
         out += f_block.body[:-3]
         return out
@@ -1053,12 +1055,7 @@ class DistributedPass(object):
     def _run_call_rebalance_array(self, lhs, assign, args):
         out = [assign]
         if not self._is_1D_Var_arr(args[0].name):
-            if self._is_1D_arr(args[0].name):
-                in_1d_arr = args[0].name
-                self._array_starts[lhs] = self._array_starts[in_1d_arr]
-                self._array_counts[lhs] = self._array_counts[in_1d_arr]
-                self._array_sizes[lhs] = self._array_sizes[in_1d_arr]
-            else:
+            if not self._is_1D_arr(args[0].name):
                 warnings.warn("array {} is not 1D_Block_Var".format(
                                 args[0].name))
             return out
@@ -1071,14 +1068,6 @@ class DistributedPass(object):
             total_length, arr.scope, arr.loc, "$rebalance", "get_node_portion",
             distributed_api.get_node_portion)
         out += div_nodes
-
-        # XXX: get sizes in lower dimensions
-        self._array_starts[lhs] = [-1]*ndim
-        self._array_counts[lhs] = [-1]*ndim
-        self._array_sizes[lhs] = [-1]*ndim
-        self._array_starts[lhs][0] = start_var
-        self._array_counts[lhs][0] = count_var
-        self._array_sizes[lhs][0] = total_length
 
         def f(arr, count):  # pragma: no cover
             b_arr = bodo.libs.distributed_api.rebalance_array_parallel(arr, count)
@@ -1107,27 +1096,6 @@ class DistributedPass(object):
             reduce_var = assign.target
             out += self._gen_reduce(reduce_var, reduce_op, reduce_var.scope,
                                     reduce_var.loc)
-
-        # assign starts/counts/sizes data structures for output array
-        if ndim0 == 2 and ndim1 == 1 and not t0 and self._is_1D_arr(arg0):
-            # special case were arg1 vector is treated as column vector
-            # samples dot weights: np.dot(X,w)
-            # output is 1D array same size as dim 0 of X
-            assert self.typemap[lhs].ndim == 1
-            assert self._is_1D_arr(lhs)
-            self._array_starts[lhs] = [self._array_starts[arg0][0]]
-            self._array_counts[lhs] = [self._array_counts[arg0][0]]
-            self._array_sizes[lhs] = [self._array_sizes[arg0][0]]
-            dprint("run dot case 1 Xw:", arg0, arg1)
-        if ndim0 == 2 and ndim1 == 2 and not t0 and not t1:
-            # samples dot weights: np.dot(X,w)
-            assert self._is_1D_arr(lhs)
-            # first dimension is same as X
-            # second dimension not needed
-            self._array_starts[lhs] = [self._array_starts[arg0][0], -1]
-            self._array_counts[lhs] = [self._array_counts[arg0][0], -1]
-            self._array_sizes[lhs] = [self._array_sizes[arg0][0], -1]
-            dprint("run dot case 4 Xw:", arg0, arg1)
 
         return out
 
@@ -1290,7 +1258,7 @@ class DistributedPass(object):
         # get total size by multiplying all dimension sizes
         nodes = []
         if self._is_1D_arr(arr.name):
-            dim1_size = self._array_sizes[arr.name][0]
+            dim1_size = self._get_dist_var_len(arr, nodes)
         else:
             assert self._is_1D_Var_arr(arr.name)
             nodes += self._gen_1D_Var_len(arr)
@@ -1432,11 +1400,11 @@ class DistributedPass(object):
                 index_var = inds[0]
                 is_multi_dim = True
 
-            arr_def = guard(get_definition, self.func_ir, index_var)
-            if isinstance(arr_def, ir.Expr) and arr_def.op == 'call':
-                fdef = guard(find_callname, self.func_ir, arr_def, self.typemap)
-                if fdef == ('permutation', 'numpy.random'):
-                    out = self._run_permutation_array_index(lhs, arr, index_var)
+            # arr_def = guard(get_definition, self.func_ir, index_var)
+            # if isinstance(arr_def, ir.Expr) and arr_def.op == 'call':
+            #     fdef = guard(find_callname, self.func_ir, arr_def, self.typemap)
+            #     if fdef == ('permutation', 'numpy.random'):
+            #         out = self._run_permutation_array_index(lhs, arr, index_var)
 
             # no need for transformation for whole slices
             if guard(is_whole_slice, self.typemap, self.func_ir, index_var):
