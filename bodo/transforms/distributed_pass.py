@@ -1420,7 +1420,7 @@ class DistributedPass(object):
                 # on each processor, the slice has to start from an offset:
                 # |step-(start%step)|
                 in_arr = full_node.value.value
-                start = self._array_starts[in_arr.name][0]
+                out, start_var, count_var = self._get_dist_var_start_count(in_arr)
                 step = get_slice_step(self.typemap, self.func_ir, index_var)
 
                 def f(A, start, step):
@@ -1430,8 +1430,8 @@ class DistributedPass(object):
                 f_block = compile_to_numba_ir(f, {}, self.typingctx,
                                               (self.typemap[in_arr.name], types.intp, types.intp),
                                               self.typemap, self.calltypes).blocks.popitem()[1]
-                replace_arg_nodes(f_block, [in_arr, start, step])
-                out = f_block.body[:-3]  # remove none return
+                replace_arg_nodes(f_block, [in_arr, start_var, step])
+                out += f_block.body[:-3]  # remove none return
                 imb_arr = out[-1].target
 
                 # call rebalance
@@ -1444,11 +1444,11 @@ class DistributedPass(object):
                 # cases like S.head()
                 # bcast if all in rank 0, otherwise gatherv
                 in_arr = full_node.value.value
-                start = self._array_starts[in_arr.name][0]
-                count = self._array_counts[in_arr.name][0]
+                nodes, start_var, count_var = self._get_dist_var_start_count(in_arr)
                 return self._replace_func(
                     lambda arr, slice_index, start, count: bodo.libs.distributed_api.const_slice_getitem(
-                        arr, slice_index, start, count), [in_arr, index_var, start, count])
+                        arr, slice_index, start, count), [in_arr, index_var, start_var, count_var],
+                        pre_nodes=nodes)
 
         return out
 
