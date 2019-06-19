@@ -741,14 +741,6 @@ class DistributedPass(object):
         #     args[1] = new_size_var
         #     out.append(assign)
 
-        if (func_name == 'array'
-                and is_array(self.typemap, args[0].name)
-                and self._is_1D_arr(args[0].name)):
-            in_arr = args[0].name
-            self._array_starts[lhs] = self._array_starts[in_arr]
-            self._array_counts[lhs] = self._array_counts[in_arr]
-            self._array_sizes[lhs] = self._array_sizes[in_arr]
-
         if func_name == 'ravel' and self._is_1D_arr(args[0].name):
             assert self.typemap[args[0].name].ndim == 1, "only 1D ravel supported"
 
@@ -759,8 +751,10 @@ class DistributedPass(object):
             lhs_var = assign.target
             # allocate output array
             # TODO: compute inplace if input array is dead
-            out = mk_alloc(self.typemap, self.calltypes, lhs_var,
-                           tuple(self._array_sizes[in_arr]),
+            out = []
+            size_var = self._get_dist_var_len(in_arr_var, out)
+            out += mk_alloc(self.typemap, self.calltypes, lhs_var,
+                           (size_var,),
                            self.typemap[in_arr].dtype, scope, loc)
             # generate distributed call
             dist_attr_var = ir.Var(scope, mk_unique_var("$dist_attr"), loc)
@@ -790,23 +784,11 @@ class DistributedPass(object):
         if func_name == 'dot':
             return self._run_call_np_dot(lhs, assign, args)
 
-        if func_name == 'stack' and self._is_1D_arr(lhs):
-            # TODO: generalize
-            in_arrs, _ = guard(find_build_sequence, self.func_ir, args[0])
-            arr0 = in_arrs[0].name
-            self._array_starts[lhs] = [self._array_starts[arr0][0], None]
-            self._array_counts[lhs] = [self._array_counts[arr0][0], None]
-            self._array_sizes[lhs] = [self._array_sizes[arr0][0], None]
-
         return out
 
     def _run_call_array(self, lhs, arr, func_name, assign, args):
         #
         out = [assign]
-        if func_name in ('astype', 'copy', 'view') and self._is_1D_arr(lhs):
-            self._array_starts[lhs] = self._array_starts[arr.name]
-            self._array_counts[lhs] = self._array_counts[arr.name]
-            self._array_sizes[lhs] = self._array_sizes[arr.name]
 
         # HACK support A.reshape(n, 1) for 1D_Var
         if func_name == 'reshape' and self._is_1D_Var_arr(arr.name):
