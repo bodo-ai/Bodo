@@ -71,8 +71,6 @@ class DistributedPass(object):
         self._set1_var = None  # variable set to 1
         self._set0_var = None  # variable set to 0
 
-        # keep shape attr calls on parallel arrays like X.shape
-        self._shape_attrs = {}
         # save output of converted 1DVar array len() variables
         # which are global sizes, in order to recover local
         # size for 1DVar allocs and parfors
@@ -197,9 +195,9 @@ class DistributedPass(object):
         return blocks
 
     def _run_expr(self, inst, namevar_table):
-        lhs = inst.target.name
         rhs = inst.value
         nodes = [inst]
+
         if rhs.op == 'call':
             return self._run_call(inst)
         if (rhs.op == 'getattr'
@@ -207,39 +205,6 @@ class DistributedPass(object):
                         or self._is_1D_Var_arr(rhs.value.name))
                 and rhs.attr == 'size'):
             return self._run_array_size(inst.target, rhs.value)
-        if (rhs.op == 'static_getitem'
-                and rhs.value.name in self._shape_attrs):
-            arr = self._shape_attrs[rhs.value.name]
-            ndims = self.typemap[arr].ndim
-            if arr not in self._T_arrs and rhs.index == 0:
-                # return parallel size
-                if self._is_1D_arr(arr):
-                    arr_var = namevar_table[arr]
-                    nodes = []
-                    inst.value = self._get_dist_var_len(arr_var, nodes)
-                    nodes.append(inst)
-                    return nodes
-                else:
-                    assert self._is_1D_Var_arr(arr)
-                    arr_var = namevar_table[arr]
-                    nodes = self._gen_1D_Var_len(arr_var)
-                    nodes[-1].target = inst.target
-                    # save output of converted 1DVar array len() variables
-                    # which are global sizes, in order to recover local
-                    # size for 1DVar allocs and parfors
-                    self.oneDVar_len_vars[inst.target.name] = arr_var
-                    return nodes
-            # last dimension of transposed arrays is partitioned
-            # TODO: rewrite Array.shape support
-            if arr in self._T_arrs and rhs.index in (-1, ndims - 1):
-                assert not self._is_1D_Var_arr(
-                    arr), "1D_Var arrays cannot transpose"
-                nodes = []
-                arr_var = namevar_table[arr]
-                inst.value = self._get_dist_var_dim_size(
-                    arr_var, rhs.index, nodes)
-                nodes.append(inst)
-                return nodes
         if rhs.op in ['getitem', 'static_getitem']:
             if rhs.op == 'getitem':
                 index = rhs.index
@@ -250,11 +215,7 @@ class DistributedPass(object):
                 and (self._is_1D_arr(rhs.value.name)
                         or self._is_1D_Var_arr(rhs.value.name))
                 and rhs.attr == 'shape'):
-            # XXX: return a new tuple using sizes here?
-            self._shape_attrs[lhs] = rhs.value.name
-        if (rhs.op == 'exhaust_iter'
-                and rhs.value.name in self._shape_attrs):
-            self._shape_attrs[lhs] = self._shape_attrs[rhs.value.name]
+            return self._run_array_shape(inst.target, rhs.value)
 
         return nodes
 
@@ -1268,6 +1229,35 @@ class DistributedPass(object):
     #     nodes[-1].target = lhs
     #     return nodes
 
+    def _run_array_shape(self, lhs, arr):
+        # non-Arrays like Series, DataFrame etc. are all 1 dim
+        ndims = self.typemap[arr.name].ndim if isinstance(
+            self.typemap[arr.name], types.Array) else 1
+
+        if arr.name not in self._T_arrs:
+            nodes = []
+            size_var = self._get_dist_var_len(arr, nodes)
+            if self._is_1D_Var_arr(arr.name):
+                # save output of converted 1DVar array len() variables
+                # which are global sizes, in order to recover local
+                # size for 1DVar allocs and parfors
+                self.oneDVar_len_vars[size_var.name] = arr
+
+            return nodes + _compile_func_single_block(
+                lambda A, size_var: (size_var,) + A.shape[1:],
+                (arr, size_var), lhs, self)
+
+        # last dimension of transposed arrays is partitioned
+        if arr.name in self._T_arrs:
+            assert not self._is_1D_Var_arr(
+                arr.name), "1D_Var arrays cannot transpose"
+            nodes = []
+            last_size_var = self._get_dist_var_dim_size(
+                arr, (ndims - 1), nodes)
+            return nodes + _compile_func_single_block(
+                lambda A, size_var: A.shape[:-1] + (size_var,),
+                (arr, last_size_var), lhs, self)
+
     def _run_array_size(self, lhs, arr):
         # get total size by multiplying all dimension sizes
         nodes = []
@@ -2004,3 +1994,25 @@ def _set_getsetitem_index(node, new_ind):
 def dprint(*s):  # pragma: no cover
     if debug_prints():
         print(*s)
+
+
+def _compile_func_single_block(func, args, ret_var, typing_info,
+                                                           extra_globals=None):
+    """compiles functions that are just a single basic block.
+    Does not handle defaults, freevars etc.
+    typing_info is a structure that has typingctx, typemap, calltypes
+    (could be the pass itself since not mutated).
+    """
+    glbls = {'numba': numba, 'np': np, 'bodo': bodo, 'pd': pd}
+    if extra_globals is not None:
+        glbls.update(extra_globals)
+    f_ir = compile_to_numba_ir(
+        func, glbls, typing_info.typingctx,
+        tuple(typing_info.typemap[arg.name] for arg in args),
+        typing_info.typemap, typing_info.calltypes)
+    assert len(f_ir.blocks) == 1
+    f_block = f_ir.blocks.popitem()[1]
+    replace_arg_nodes(f_block, args)
+    nodes = f_block.body[:-2]
+    nodes[-1].target = ret_var
+    return nodes
