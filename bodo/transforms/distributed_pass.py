@@ -103,7 +103,7 @@ class DistributedPass(object):
             # parfor params need to be updated for multithread_mode since some
             # new variables like alloc_start are introduced by distributed pass
             # and are used in later parfors
-            parfor_ids = get_parfor_params(
+            _parfor_ids = get_parfor_params(
                 self.func_ir.blocks, True, defaultdict(list))
         post_proc = postproc.PostProcessor(self.func_ir)
         post_proc.run()
@@ -200,22 +200,24 @@ class DistributedPass(object):
 
         if rhs.op == 'call':
             return self._run_call(inst)
-        if (rhs.op == 'getattr'
-                and (self._is_1D_arr(rhs.value.name)
-                        or self._is_1D_Var_arr(rhs.value.name))
-                and rhs.attr == 'size'):
-            return self._run_array_size(inst.target, rhs.value)
-        if rhs.op in ['getitem', 'static_getitem']:
+        if rhs.op in ('getitem', 'static_getitem'):
             if rhs.op == 'getitem':
                 index = rhs.index
             else:
                 index = rhs.index_var
             return self._run_getsetitem(rhs.value, index, rhs, inst)
-        if (rhs.op == 'getattr'
+
+        # array.shape
+        if (rhs.op == 'getattr' and rhs.attr == 'shape'
                 and (self._is_1D_arr(rhs.value.name)
-                        or self._is_1D_Var_arr(rhs.value.name))
-                and rhs.attr == 'shape'):
+                        or self._is_1D_Var_arr(rhs.value.name))):
             return self._run_array_shape(inst.target, rhs.value)
+
+        # array.size
+        if (rhs.op == 'getattr' and rhs.attr == 'size'
+                and (self._is_1D_arr(rhs.value.name)
+                        or self._is_1D_Var_arr(rhs.value.name))):
+            return self._run_array_size(inst.target, rhs.value)
 
         return nodes
 
