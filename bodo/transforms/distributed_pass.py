@@ -1355,18 +1355,38 @@ class DistributedPass(object):
         prepend = []
         # assuming first dimension is parallelized
         # TODO: support transposed arrays
+        index_name = parfor.loop_nests[0].index_variable.name
         stop_var = parfor.loop_nests[0].stop
-        assert stop_var.name in equiv_set.obj_to_ind, \
-            "1D_Var parfor size analysis error"
-        size_class = equiv_set.obj_to_ind[stop_var.name]
+        size_found = False
         array_accesses = _get_array_accesses(
             parfor.loop_body, self.func_ir, self.typemap)
         for (arr, index) in array_accesses:
-            if self._is_1D_Var_arr(arr) and equiv_set.get_shape_classes(arr)[0] == size_class:
+            if self._is_1D_Var_arr(arr) and index_name == index:
                 arr_var = ir.Var(stop_var.scope, arr, stop_var.loc)
                 prepend += _compile_func_single_block(
                     lambda A: len(A), (arr_var,), stop_var, self)
+                size_found = True
                 break
+        # try equivalences
+        if not size_found and stop_var.name in equiv_set.obj_to_ind:
+            # TODO: test this code path
+            size_class = equiv_set.obj_to_ind[stop_var.name]
+            for (arr, index) in array_accesses:
+                if self._is_1D_Var_arr(arr):
+                    shape_classes = None
+                    try:
+                        shape_classes = equiv_set.get_shape_classes(arr)
+                    except:
+                        pass
+                    if shape_classes and shape_classes[0] == size_class:
+                        arr_var = ir.Var(stop_var.scope, arr, stop_var.loc)
+                        prepend += _compile_func_single_block(
+                            lambda A: len(A), (arr_var,), stop_var, self)
+                        size_found = True
+                        break
+
+        # TODO: test multi-dim array sizes and complex indexing like slice
+        assert size_found, "invalid 1D_Var parfor size"
 
         for (arr, index) in array_accesses:
             assert arr not in self._T_arrs, \
