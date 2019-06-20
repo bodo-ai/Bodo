@@ -39,7 +39,7 @@ import bodo.utils.utils
 from bodo.utils.utils import (is_alloc_callname, is_whole_slice, is_array_container,
                         get_slice_step, is_array, is_np_array, find_build_tuple,
                         debug_prints, ReplaceFunc, gen_getitem, is_call,
-                        is_const_slice)
+                        is_const_slice, is_assign, is_expr)
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
@@ -708,32 +708,17 @@ class DistributedPass(object):
 
         if (func_name in ('cumsum', 'cumprod')
                 and self._is_1D_arr(args[0].name)):
-            in_arr = args[0].name
             in_arr_var = args[0]
             lhs_var = assign.target
-            # allocate output array
             # TODO: compute inplace if input array is dead
-            out = []
-            size_var = self._get_dist_var_len(in_arr_var, out, equiv_set)
-            out += mk_alloc(self.typemap, self.calltypes, lhs_var,
-                           (size_var,),
-                           self.typemap[in_arr].dtype, scope, loc)
-            # generate distributed call
-            dist_attr_var = ir.Var(scope, mk_unique_var("$dist_attr"), loc)
-            dist_func_name = "dist_" + func_name
-            dist_func = getattr(distributed_api, dist_func_name)
-            dist_attr_call = ir.Expr.getattr(
-                self._g_dist_var, dist_func_name, loc)
-            self.typemap[dist_attr_var.name] = get_global_func_typ(dist_func)
-            dist_func_assign = ir.Assign(dist_attr_call, dist_attr_var, loc)
-            err_var = ir.Var(scope, mk_unique_var("$dist_err_var"), loc)
-            self.typemap[err_var.name] = types.int32
-            dist_call = ir.Expr.call(
-                dist_attr_var, [in_arr_var, lhs_var], (), loc)
-            self.calltypes[dist_call] = self.typemap[dist_attr_var.name].get_call_type(
-                self.typingctx, [self.typemap[in_arr], self.typemap[lhs]], {})
-            dist_assign = ir.Assign(dist_call, err_var, loc)
-            return out + [dist_func_assign, dist_assign]
+            def impl(A):
+                B = np.empty_like(A)
+                _func(A, B)
+                return B
+            func = getattr(bodo.libs.distributed_api, "dist_" + func_name)
+            return _compile_func_single_block(
+                impl, [in_arr_var], lhs_var, self,
+                extra_globals={'_func': func})
 
         # sum over the first axis is distributed, A.sum(0)
         if func_name == 'sum' and len(args) == 2:
@@ -1990,5 +1975,9 @@ def _compile_func_single_block(func, args, ret_var, typing_info,
     replace_arg_nodes(f_block, args)
     nodes = f_block.body[:-2]
     if ret_var is not None:
-        nodes[-1].target = ret_var
+        loc = ret_var.loc
+        cast_assign = f_block.body[-2]
+        assert is_assign(cast_assign) and is_expr(cast_assign.value, 'cast')
+        func_ret = cast_assign.value.value
+        nodes.append(ir.Assign(func_ret, ret_var, loc))
     return nodes
