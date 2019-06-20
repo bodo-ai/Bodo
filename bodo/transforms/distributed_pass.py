@@ -33,7 +33,7 @@ from bodo.libs import (distributed_api,
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.transforms.distributed_analysis import (Distribution,
-                                       DistributedAnalysis)
+    DistributedAnalysis, _get_array_accesses)
 
 import bodo.utils.utils
 from bodo.utils.utils import (is_alloc_callname, is_whole_slice, is_array_container,
@@ -61,6 +61,8 @@ class DistributedPass(object):
         self.typemap = typemap
         self.calltypes = calltypes
         self.metadata = metadata
+        self.arr_analysis = numba.array_analysis.ArrayAnalysis(
+            self.typingctx, self.func_ir, self.typemap, self.calltypes)
 
         self._dist_analysis = None
         self._T_arrs = None  # set of transposed arrays (taken from analysis)
@@ -81,6 +83,7 @@ class DistributedPass(object):
         remove_dels(self.func_ir.blocks)
         dprint_func_ir(self.func_ir, "starting distributed pass")
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
+        self.arr_analysis.run(self.func_ir.blocks)
         dist_analysis_pass = DistributedAnalysis(
             self.func_ir, self.typemap, self.calltypes, self.typingctx,
             self.metadata)
@@ -122,8 +125,11 @@ class DistributedPass(object):
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
         while work_list:
             label, block = work_list.pop()
+            # XXX can't change the block structure due to array analysis
+            # XXX can't run transformation again on already converted code
+            # since e.g. global sizes become invalid
+            equiv_set = self.arr_analysis.get_equiv_set(label)
             new_body = []
-            replaced = False
             for i, inst in enumerate(block.body):
                 out_nodes = None
                 if type(inst) in distributed_run_extensions:
@@ -132,7 +138,7 @@ class DistributedPass(object):
                                   self.typemap, self.calltypes, self.typingctx,
                                   self.targetctx, self)
                 elif isinstance(inst, Parfor):
-                    out_nodes = self._run_parfor(inst)
+                    out_nodes = self._run_parfor(inst, equiv_set)
                     # run dist pass recursively
                     p_blocks = wrap_parfor_blocks(inst)
                     # build_definitions(p_blocks, self.func_ir._definitions)
@@ -141,14 +147,14 @@ class DistributedPass(object):
                 elif isinstance(inst, ir.Assign):
                     rhs = inst.value
                     if isinstance(rhs, ir.Expr):
-                        out_nodes = self._run_expr(inst)
+                        out_nodes = self._run_expr(inst, equiv_set)
                 elif isinstance(inst, (ir.StaticSetItem, ir.SetItem)):
                     if isinstance(inst, ir.SetItem):
                         index = inst.index
                     else:
                         index = inst.index_var
-                    out_nodes = self._run_getsetitem(inst.target,
-                                                     index, inst, inst)
+                    out_nodes = self._run_getsetitem(
+                        inst.target, index, inst, inst, equiv_set)
                 elif isinstance(inst, ir.Return):
                     out_nodes = self._gen_barrier() + [inst]
                 elif isinstance(inst, ir.Print):
@@ -158,54 +164,25 @@ class DistributedPass(object):
                     new_body.append(inst)
                 elif isinstance(out_nodes, list):
                     new_body += out_nodes
-                elif isinstance(out_nodes, ReplaceFunc):
-                    rp_func = out_nodes
-                    if rp_func.pre_nodes is not None:
-                        new_body.extend(rp_func.pre_nodes)
-                    # inline_closure_call expects a call assignment
-                    dummy_call = ir.Expr.call(
-                        ir.Var(block.scope, "dummy", inst.loc),
-                        rp_func.args, (), inst.loc)
-                    if isinstance(inst, ir.Assign):
-                        # replace inst.value to a call with target args
-                        # as expected by inline_closure_call
-                        inst.value = dummy_call
-                    else:
-                        # replace inst with dummy assignment
-                        # for cases like SetItem
-                        loc = block.loc
-                        dummy_var = ir.Var(
-                            block.scope, mk_unique_var("r_dummy"), loc)
-                        block.body[i] = ir.Assign(dummy_call, dummy_var, loc)
-                    block.body = new_body + block.body[i:]
-                    # TODO: use Parfor loop blocks when replacing funcs in
-                    # parfor loop body
-                    inline_closure_call(self.func_ir, rp_func.glbls,
-                        block, len(new_body), rp_func.func, self.typingctx,
-                        rp_func.arg_types,
-                        self.typemap, self.calltypes, work_list)
-                    replaced = True
-                    break
                 else:
                     assert False, "invalid dist pass out nodes"
 
-            if not replaced:
-                blocks[label].body = new_body
+            blocks[label].body = new_body
 
         return blocks
 
-    def _run_expr(self, inst):
+    def _run_expr(self, inst, equiv_set):
         rhs = inst.value
         nodes = [inst]
 
         if rhs.op == 'call':
-            return self._run_call(inst)
+            return self._run_call(inst, equiv_set)
         if rhs.op in ('getitem', 'static_getitem'):
             if rhs.op == 'getitem':
                 index = rhs.index
             else:
                 index = rhs.index_var
-            return self._run_getsetitem(rhs.value, index, rhs, inst)
+            return self._run_getsetitem(rhs.value, index, rhs, inst, equiv_set)
 
         # array.shape
         if (rhs.op == 'getattr' and rhs.attr == 'shape'
@@ -240,12 +217,16 @@ class DistributedPass(object):
         nodes += div_nodes
         return nodes, start_var, count_var
 
-    def _get_dist_start_var(self, arr):
+    def _get_dist_start_var(self, arr, equiv_set):
         if arr.name in self._1D_Var_parfor_starts:
             return self._1D_Var_parfor_starts[arr.name], []
 
         nodes = []
-        size_var = self._get_dist_var_len(arr, nodes)
+        shape = equiv_set.get_shape(arr)
+        if shape is not None:
+            size_var = shape[0]
+        else:
+            size_var = self._get_dist_var_len(arr, nodes)
         div_nodes, start_var, count_var = self._gen_1D_div(
             size_var, arr.scope, arr.loc, "$index", "get_node_portion",
             distributed_api.get_node_portion)
@@ -343,10 +324,9 @@ class DistributedPass(object):
         out += [size_attr_assign, size_assign]
         first_block.body = out + first_block.body
 
-    def _run_call(self, assign):
+    def _run_call(self, assign, equiv_set):
         lhs = assign.target.name
         rhs = assign.value
-        func_var = rhs.func.name
         scope = assign.target.scope
         loc = assign.target.loc
         out = [assign]
@@ -473,7 +453,8 @@ class DistributedPass(object):
             def f(connect_tp, dset_tp, col_id_tp, column_tp, schema_arr_tp, start, count):  # pragma: no cover
                 return bodo.io.xenon_ext.read_xenon_col_parallel(connect_tp, dset_tp, col_id_tp, column_tp, schema_arr_tp, start, count)
 
-            return self._replace_func(f, rhs.args, pre_nodes=nodes)
+            return nodes + _compile_func_single_block(
+                f, rhs.args, assign.target, self)
 
         if bodo.config._has_xenon and (fdef == ('read_xenon_str', 'numba.extending')
                 and self._is_1D_arr(lhs)):
@@ -519,7 +500,7 @@ class DistributedPass(object):
                 and self._is_1D_arr(rhs.args[0].name)):
             arr = rhs.args[0]
             index_var = rhs.args[1]
-            start_var, nodes = self._get_dist_start_var(arr)
+            start_var, nodes = self._get_dist_start_var(arr, equiv_set)
             sub_nodes = self._get_ind_sub(
                 index_var, start_var)
             out = nodes + sub_nodes
@@ -532,7 +513,7 @@ class DistributedPass(object):
             # TODO: test parallel
             arr = rhs.args[0]
             index_var = rhs.args[1]
-            start_var, nodes = self._get_dist_start_var(arr)
+            start_var, nodes = self._get_dist_start_var(arr, equiv_set)
             sub_nodes = self._get_ind_sub(
                 index_var, start_var)
             out = nodes + sub_nodes
@@ -540,7 +521,7 @@ class DistributedPass(object):
             # input string array
             arr = rhs.args[2]
             index_var = rhs.args[3]
-            start_var, nodes = self._get_dist_start_var(arr)
+            start_var, nodes = self._get_dist_start_var(arr, equiv_set)
             sub_nodes = self._get_ind_sub(
                 index_var, start_var)
             out += nodes + sub_nodes
@@ -552,7 +533,7 @@ class DistributedPass(object):
             # fix index in call to isna
             arr = rhs.args[0]
             ind = rhs.args[1]
-            start_var, out = self._get_dist_start_var(arr)
+            start_var, out = self._get_dist_start_var(arr, equiv_set)
             out += self._get_ind_sub(ind, start_var)
             rhs.args[1] = out[-1].target
             out.append(assign)
@@ -594,32 +575,33 @@ class DistributedPass(object):
 
             f = lambda arr, q, size: bodo.libs.array_kernels.quantile_parallel(
                                                                   arr, q, size)
-            return self._replace_func(f, rhs.args, pre_nodes=nodes)
+            return nodes + _compile_func_single_block(
+                f, rhs.args, assign.target, self)
 
         if fdef == ('nunique', 'bodo.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda arr: bodo.hiframes.api.nunique_parallel(arr)
-            return self._replace_func(f, rhs.args)
+            return _compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ('unique', 'bodo.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda arr: bodo.hiframes.api.unique_parallel(arr)
-            return self._replace_func(f, rhs.args)
+            return _compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ('nlargest', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda arr, I, k, i, f: bodo.libs.array_kernels.nlargest_parallel(arr, I, k, i, f)
-            return self._replace_func(f, rhs.args)
+            return _compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ('nancorr', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda mat, cov, minpv: bodo.libs.array_kernels.nancorr(mat, cov, minpv, True)
-            return self._replace_func(f, rhs.args)
+            return _compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ('median', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda arr: bodo.libs.array_kernels.median(arr, True)
-            return self._replace_func(f, rhs.args)
+            return _compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ('convert_rec_to_tup', 'bodo.hiframes.api'):
             # optimize Series back to back map pattern with tuples
@@ -655,8 +637,8 @@ class DistributedPass(object):
 
             def impl(fname, data_ptr, start, count):  # pragma: no cover
                 return bodo.io.np_io.file_read_parallel(fname, data_ptr, start, count)
-            return self._replace_func(impl, [fname, arr, start_var, count_var],
-                pre_nodes=nodes)
+            return nodes + _compile_func_single_block(
+                impl, [fname, arr, start_var, count_var], assign.target, self)
 
         # replace get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
@@ -793,8 +775,8 @@ class DistributedPass(object):
                 def f(fname, arr, start, count):  # pragma: no cover
                     return bodo.io.np_io.file_write_parallel(fname, arr, start, count)
 
-                return self._replace_func(
-                    f, [_fname, arr, start_var, count_var], pre_nodes=nodes)
+                return nodes + _compile_func_single_block(
+                    f, [_fname, arr, start_var, count_var], assign.target, self)
 
             if self._is_1D_Var_arr(arr.name):
                 _fname = args[0]
@@ -804,7 +786,8 @@ class DistributedPass(object):
                     start = bodo.libs.distributed_api.dist_exscan(count)
                     return bodo.io.np_io.file_write_parallel(fname, arr, start, count)
 
-                return self._replace_func(f, [_fname, arr])
+                return nodes + _compile_func_single_block(f, [_fname, arr],
+                    assign.target, self)
 
         return out
 
@@ -896,8 +879,8 @@ class DistributedPass(object):
                     fname._data, str_out._data, start, count, 1)
                 dummy_use(str_out)
 
-            return self._replace_func(
-                f, [fname, str_out], pre_nodes=nodes)
+            return nodes + _compile_func_single_block(
+                f, [fname, str_out], assign.target, self)
 
         return [assign]
 
@@ -1284,7 +1267,7 @@ class DistributedPass(object):
         nodes[-1].target = lhs
         return nodes
 
-    def _run_getsetitem(self, arr, index_var, node, full_node):
+    def _run_getsetitem(self, arr, index_var, node, full_node, equiv_set):
         out = [full_node]
         scope = arr.scope
         loc = arr.loc
@@ -1297,7 +1280,7 @@ class DistributedPass(object):
             # multi-dimensional array could be indexed with 1D index
             if isinstance(self.typemap[index_var.name], types.Integer):
                 # TODO: avoid repeated start/end generation
-                start_var, nodes = self._get_dist_start_var(arr)
+                start_var, nodes = self._get_dist_start_var(arr, equiv_set)
                 sub_nodes = self._get_ind_sub(
                     index_var, start_var)
                 out = nodes + sub_nodes
@@ -1306,7 +1289,7 @@ class DistributedPass(object):
                 index_list = guard(find_build_tuple, self.func_ir, index_var)
                 assert index_list is not None
                 # TODO: avoid repeated start/end generation
-                start_var, nodes = self._get_dist_start_var(arr)
+                start_var, nodes = self._get_dist_start_var(arr, equiv_set)
                 sub_nodes = self._get_ind_sub(
                     index_list[0], start_var)
                 out = nodes + sub_nodes
@@ -1342,8 +1325,9 @@ class DistributedPass(object):
                     bodo.libs.distributed_lower._set_if_in_range(
                         A, val, index, chunk_start, chunk_count)
 
-                return self._replace_func(
-                    f, [arr, node.value, index_var, start_var, count_var], pre_nodes=nodes)
+                return nodes + _compile_func_single_block(
+                    f, [arr, node.value, index_var, start_var, count_var],
+                    None, self)
 
             assert isinstance(self.typemap[index_var.name],
                               types.misc.SliceType), "slice index expected"
@@ -1358,8 +1342,9 @@ class DistributedPass(object):
             slice_call = get_definition(self.func_ir, index_var)
             slice_start = slice_call.args[0]
             slice_stop = slice_call.args[1]
-            return self._replace_func(
-                f, [arr, node.value, slice_start, slice_stop, start_var, count_var], pre_nodes=nodes)
+            return nodes + _compile_func_single_block(
+                f, [arr, node.value, slice_start, slice_stop, start_var, count_var],
+                None, self)
             # print_node = ir.Print([start_var, end_var], None, loc)
             # self.calltypes[print_node] = signature(types.none, types.int64, types.int64)
             # out.append(print_node)
@@ -1411,7 +1396,7 @@ class DistributedPass(object):
                 # on each processor, the slice has to start from an offset:
                 # |step-(start%step)|
                 in_arr = full_node.value.value
-                start_var, out = self._get_dist_start_var(in_arr)
+                start_var, out = self._get_dist_start_var(in_arr, equiv_set)
                 step = get_slice_step(self.typemap, self.func_ir, index_var)
 
                 def f(A, start, step):
@@ -1436,14 +1421,14 @@ class DistributedPass(object):
                 # bcast if all in rank 0, otherwise gatherv
                 in_arr = full_node.value.value
                 nodes, start_var, count_var = self._get_dist_var_start_count(in_arr)
-                return self._replace_func(
+                return nodes + _compile_func_single_block(
                     lambda arr, slice_index, start, count: bodo.libs.distributed_api.const_slice_getitem(
                         arr, slice_index, start, count), [in_arr, index_var, start_var, count_var],
-                        pre_nodes=nodes)
+                        lhs, self)
 
         return out
 
-    def _run_parfor(self, parfor):
+    def _run_parfor(self, parfor, equiv_set):
         # stencil_accesses, neighborhood = get_stencil_accesses(
         #     parfor, self.typemap)
 
@@ -1454,7 +1439,7 @@ class DistributedPass(object):
             parfor.no_sequential_lowering = True
 
         if self._dist_analysis.parfor_dists[parfor.id] == Distribution.OneD_Var:
-            return self._run_parfor_1D_Var(parfor)
+            return self._run_parfor_1D_Var(parfor, equiv_set)
 
         if self._dist_analysis.parfor_dists[parfor.id] != Distribution.OneD:
             if debug_prints():  # pragma: no cover
@@ -1512,9 +1497,32 @@ class DistributedPass(object):
         out += reduce_nodes
         return out
 
-    def _run_parfor_1D_Var(self, parfor):
-        # recover range of 1DVar parfors coming from converted 1DVar array len()
+    def _run_parfor_1D_Var(self, parfor, equiv_set):
+        # the variable for range of the parfor represents the global range,
+        # replace it with the local range, using len() on an associated array
+        # XXX: assuming 1D_Var parfors are only possible when there is at least
+        # one associated 1D_Var array
         prepend = []
+        # assuming first dimension is parallelized
+        # TODO: support transposed arrays
+        stop_var = parfor.loop_nests[0].stop
+        assert (stop_var.name in equiv_set.obj_to_ind,
+            "1D_Var parfor size analysis error")
+        size_class = equiv_set.obj_to_ind[stop_var.name]
+        array_accesses = _get_array_accesses(
+            parfor.loop_body, self.func_ir, self.typemap)
+        for (arr, index) in array_accesses:
+            if self._is_1D_Var_arr(arr) and equiv_set.get_shape_classes(arr)[0] == size_class:
+                arr_var = ir.Var(stop_var.scope, arr, stop_var.loc)
+                prepend += _compile_func_single_block(
+                    lambda A: len(A), (arr_var,), stop_var, self)
+                break
+
+        for (arr, index) in array_accesses:
+            assert (arr not in self._T_arrs,
+                "1D_Var parfor for transposed parallel array not supported")
+
+        # TODO: remove this
         for l in parfor.loop_nests:
             if l.stop.name in self.oneDVar_len_vars:
                 arr_var = self.oneDVar_len_vars[l.stop.name]
@@ -1569,7 +1577,6 @@ class DistributedPass(object):
             gen_getitem(l_nest.stop, ret_var, 1, self.calltypes, nodes)
             prepend += nodes
 
-            array_accesses = ir_utils.get_array_accesses(parfor.loop_body)
             for (arr, index) in array_accesses:
                 if self._index_has_par_index(index, ind_varname):
                     self._1D_Var_parfor_starts[arr] = l_nest.start
@@ -1909,23 +1916,6 @@ class DistributedPass(object):
                 err_msg = "{} requires '{}' argument".format(f_name, arg_name)
             raise ValueError(err_msg)
         return arg
-
-    def _replace_func(self, func, args, const=False,
-                      pre_nodes=None, extra_globals=None):
-        glbls = {'numba': numba, 'np': np, 'bodo': bodo, 'pd': pd}
-        if extra_globals is not None:
-            glbls.update(extra_globals)
-        arg_typs = tuple(self.typemap[v.name] for v in args)
-        if const:
-            new_args = []
-            for i, arg in enumerate(args):
-                val = guard(find_const, self.func_ir, arg)
-                if val:
-                    new_args.append(types.literal(val))
-                else:
-                    new_args.append(arg_typs[i])
-            arg_typs = tuple(new_args)
-        return ReplaceFunc(func, arg_typs, args, glbls, pre_nodes)
 
     def _get_arr_ndim(self, arrname):
         if self.typemap[arrname] == string_array_type:
