@@ -8,6 +8,13 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     if (m == NULL)
         return NULL;
 
+    // make sure MPI is initialized, assuming this will be called
+    // on all processes
+    int is_initialized;
+    MPI_Initialized(&is_initialized);
+    if (!is_initialized)
+        MPI_Init(NULL, NULL);
+
     PyObject_SetAttrString(m, "hpat_dist_get_rank",
                             PyLong_FromVoidPtr((void*)(&hpat_dist_get_rank)));
     PyObject_SetAttrString(m, "hpat_dist_get_size",

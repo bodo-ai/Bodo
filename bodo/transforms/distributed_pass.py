@@ -67,12 +67,6 @@ class DistributedPass(object):
         self._dist_analysis = None
         self._T_arrs = None  # set of transposed arrays (taken from analysis)
 
-        self._rank_var = None  # will be set in run
-        self._size_var = None
-        self._g_dist_var = None
-        self._set1_var = None  # variable set to 1
-        self._set0_var = None  # variable set to 0
-
         # save output of converted 1DVar array len() variables
         # which are global sizes, in order to recover local
         # size for 1DVar allocs and parfors
@@ -95,7 +89,6 @@ class DistributedPass(object):
         if debug_prints():  # pragma: no cover
             print("distributions: ", self._dist_analysis)
 
-        self._gen_dist_inits()
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
         self.func_ir.blocks = self._run_dist_pass(self.func_ir.blocks)
         remove_dead(self.func_ir.blocks, self.func_ir.arg_names, self.func_ir, self.typemap)
@@ -269,61 +262,6 @@ class DistributedPass(object):
         nodes = f_block.body[:-3]  # remove none return
         return nodes
 
-    def _gen_dist_inits(self):
-        # add initializations
-        topo_order = find_topo_order(self.func_ir.blocks)
-        first_block = self.func_ir.blocks[topo_order[0]]
-        # set scope and loc of generated code to the first variable in block
-        scope = first_block.scope
-        loc = first_block.loc
-        out = []
-        self._set1_var = ir.Var(scope, mk_unique_var("$const_parallel"), loc)
-        self.typemap[self._set1_var.name] = types.int64
-        set1_assign = ir.Assign(ir.Const(1, loc), self._set1_var, loc)
-        out.append(set1_assign)
-        self._set0_var = ir.Var(scope, mk_unique_var("$const_parallel"), loc)
-        self.typemap[self._set0_var.name] = types.int64
-        set0_assign = ir.Assign(ir.Const(0, loc), self._set0_var, loc)
-        out.append(set0_assign)
-        # g_dist_var = Global(bodo.libs.distributed_api)
-        g_dist_var = ir.Var(scope, mk_unique_var("$distributed_g_var"), loc)
-        self._g_dist_var = g_dist_var
-        self.typemap[g_dist_var.name] = types.misc.Module(bodo.libs.distributed_api)
-        g_dist = ir.Global('distributed_api', bodo.libs.distributed_api, loc)
-        g_dist_assign = ir.Assign(g_dist, g_dist_var, loc)
-        # attr call: rank_attr = getattr(g_dist_var, get_rank)
-        rank_attr_call = ir.Expr.getattr(g_dist_var, "get_rank", loc)
-        rank_attr_var = ir.Var(scope, mk_unique_var("$get_rank_attr"), loc)
-        self.typemap[rank_attr_var.name] = get_global_func_typ(
-            distributed_api.get_rank)
-        rank_attr_assign = ir.Assign(rank_attr_call, rank_attr_var, loc)
-        # rank_var = bodo.libs.distributed_api.get_rank()
-        rank_var = ir.Var(scope, mk_unique_var("$rank"), loc)
-        self.typemap[rank_var.name] = types.int32
-        rank_call = ir.Expr.call(rank_attr_var, [], (), loc)
-        self.calltypes[rank_call] = self.typemap[rank_attr_var.name].get_call_type(
-            self.typingctx, [], {})
-        rank_assign = ir.Assign(rank_call, rank_var, loc)
-        self._rank_var = rank_var
-        out += [g_dist_assign, rank_attr_assign, rank_assign]
-
-        # attr call: size_attr = getattr(g_dist_var, get_size)
-        size_attr_call = ir.Expr.getattr(g_dist_var, "get_size", loc)
-        size_attr_var = ir.Var(scope, mk_unique_var("$get_size_attr"), loc)
-        self.typemap[size_attr_var.name] = get_global_func_typ(
-            distributed_api.get_size)
-        size_attr_assign = ir.Assign(size_attr_call, size_attr_var, loc)
-        # size_var = bodo.libs.distributed_api.get_size()
-        size_var = ir.Var(scope, mk_unique_var("$dist_size"), loc)
-        self.typemap[size_var.name] = types.int32
-        size_call = ir.Expr.call(size_attr_var, [], (), loc)
-        self.calltypes[size_call] = self.typemap[size_attr_var.name].get_call_type(
-            self.typingctx, [], {})
-        size_assign = ir.Assign(size_call, size_var, loc)
-        self._size_var = size_var
-        out += [size_attr_assign, size_assign]
-        first_block.body = out + first_block.body
-
     def _run_call(self, assign, equiv_set):
         lhs = assign.target.name
         rhs = assign.value
@@ -401,6 +339,14 @@ class DistributedPass(object):
             out[-1].target = assign.target
             self.oneDVar_len_vars[assign.target.name] = arr_var
 
+        if fdef == ('File', 'h5py'):
+            # create and save a variable holding 1, in case we need to use it
+            # to parallelize this call in _file_open_set_parallel()
+            one_var = ir.Var(scope, mk_unique_var("$one"), loc)
+            self.typemap[one_var.name] = types.IntegerLiteral(1)
+            self._set1_var = one_var
+            return [ir.Assign(ir.Const(1, loc), one_var, loc), assign]
+
         if (bodo.config._has_h5py and (func_mod == 'bodo.io.pio_api'
                 and func_name in ('h5read', 'h5write', 'h5read_filter'))
                 and self._is_1D_arr(rhs.args[5].name)):
@@ -420,8 +366,14 @@ class DistributedPass(object):
             prev_starts = guard(get_definition, self.func_ir, rhs.args[2])
             assert isinstance(prev_starts.value, tuple) and all(
                 a == 0 for a in prev_starts.value)
+            zero_var = ir.Var(scope, mk_unique_var("$zero"), loc)
+            self.typemap[zero_var.name] = types.IntegerLiteral(0)
+            nodes.append(ir.Assign(ir.Const(0, loc), zero_var, loc))
+            one_var = ir.Var(scope, mk_unique_var("$one"), loc)
+            self.typemap[one_var.name] = types.IntegerLiteral(1)
+            nodes.append(ir.Assign(ir.Const(1, loc), one_var, loc))
             start_tuple_call = ir.Expr.build_tuple(
-               [start_var] + [self._set0_var] * (ndims - 1), loc)
+               [start_var] + [zero_var] * (ndims - 1), loc)
             starts_assign = ir.Assign(start_tuple_call, starts_var, loc)
             rhs.args[2] = starts_var
             counts_var = ir.Var(scope, mk_unique_var("$h5_counts"), loc)
@@ -433,7 +385,7 @@ class DistributedPass(object):
             counts_assign = ir.Assign(count_tuple_call, counts_var, loc)
             nodes += [starts_assign, counts_assign, assign]
             rhs.args[3] = counts_var
-            rhs.args[4] = self._set1_var
+            rhs.args[4] = one_var
             # set parallel arg in file open
             file_varname = rhs.args[0].name
             self._file_open_set_parallel(file_varname)
