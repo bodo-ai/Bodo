@@ -262,6 +262,7 @@ class DistributedPass(object):
             nodes.append(assign)
             return nodes
 
+        # TODO: merge with above
         # len(A) if A is 1D_Var
         if fdef == ('len', 'builtins') and rhs.args and self._is_1D_Var_arr(rhs.args[0].name):
             arr_var = rhs.args[0]
@@ -1580,7 +1581,7 @@ class DistributedPass(object):
         global length.
         """
         shape = equiv_set.get_shape(var)
-        if shape is not None:
+        if isinstance(shape, (list, tuple)) and len(shape) > 0:
             return shape[0]
         # XXX just call _gen_1D_var_len() for now
         nodes += self._gen_1D_Var_len(var)
