@@ -123,7 +123,7 @@ class DistributedPass(object):
             # since e.g. global sizes become invalid
             equiv_set = self.arr_analysis.get_equiv_set(label)
             new_body = []
-            for i, inst in enumerate(block.body):
+            for inst in block.body:
                 out_nodes = None
                 if type(inst) in distributed_run_extensions:
                     f = distributed_run_extensions[type(inst)]
@@ -170,6 +170,7 @@ class DistributedPass(object):
 
         if rhs.op == 'call':
             return self._run_call(inst, equiv_set)
+
         if rhs.op in ('getitem', 'static_getitem'):
             if rhs.op == 'getitem':
                 index = rhs.index
@@ -189,77 +190,6 @@ class DistributedPass(object):
                         or self._is_1D_Var_arr(rhs.value.name))):
             return self._run_array_size(inst.target, rhs.value, equiv_set)
 
-        return nodes
-
-    def _get_dist_var_start_count(self, arr, equiv_set):
-        nodes = []
-        if arr.name in self._1D_Var_parfor_starts:
-            start_var = self._1D_Var_parfor_starts[arr.name]
-            f_block = compile_to_numba_ir(lambda A: len(A), {}, self.typingctx,
-                                        (self.typemap[arr.name],),
-                                        self.typemap, self.calltypes).blocks.popitem()[1]
-            replace_arg_nodes(f_block, [arr])
-            nodes = f_block.body[:-3]  # remove none return
-            count_var = nodes[-1].target
-            return nodes, start_var, count_var
-
-        size_var = self._get_dist_var_len(arr, nodes, equiv_set)
-        div_nodes, start_var, count_var = self._gen_1D_div(
-            size_var, arr.scope, arr.loc, "$index", "get_node_portion",
-            distributed_api.get_node_portion)
-        nodes += div_nodes
-        return nodes, start_var, count_var
-
-    def _get_dist_start_var(self, arr, equiv_set):
-        if arr.name in self._1D_Var_parfor_starts:
-            return self._1D_Var_parfor_starts[arr.name], []
-
-        nodes = []
-        size_var = self._get_dist_var_len(arr, nodes, equiv_set)
-        div_nodes, start_var, _count_var = self._gen_1D_div(
-            size_var, arr.scope, arr.loc, "$index", "get_node_portion",
-            distributed_api.get_node_portion)
-        nodes += div_nodes
-        return start_var, nodes
-
-    def _get_dist_var_dim_size(self, var, dim, nodes):
-        # XXX just call _gen_1D_var_len() for now
-        # TODO: get value from array analysis
-        def f(A, dim, op):  # pragma: no cover
-            c = A.shape[dim]
-            res = bodo.libs.distributed_api.dist_reduce(c, op)
-        f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
-                                      (self.typemap[var.name], types.int64, types.int32),
-                                      self.typemap, self.calltypes).blocks.popitem()[1]
-        replace_arg_nodes(
-            f_block, [var, ir.Const(dim, var.loc),
-            ir.Const(Reduce_Type.Sum.value, var.loc)])
-        nodes += f_block.body[:-3]  # remove none return
-        return nodes[-1].target
-
-    def _get_dist_var_len(self, var, nodes, equiv_set):
-        """
-        Get global length of distributed data structure (Array, Series,
-        DataFrame) if available. Otherwise, generate reduction code to get
-        global length.
-        """
-        shape = equiv_set.get_shape(var)
-        if shape is not None:
-            return shape[0]
-        # XXX just call _gen_1D_var_len() for now
-        nodes += self._gen_1D_Var_len(var)
-        return nodes[-1].target
-
-    def _gen_1D_Var_len(self, arr):
-        def f(A, op):  # pragma: no cover
-            c = len(A)
-            res = bodo.libs.distributed_api.dist_reduce(c, op)
-        f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
-                                      (self.typemap[arr.name], types.int32),
-                                      self.typemap, self.calltypes).blocks.popitem()[1]
-        replace_arg_nodes(
-            f_block, [arr, ir.Const(Reduce_Type.Sum.value, arr.loc)])
-        nodes = f_block.body[:-3]  # remove none return
         return nodes
 
     def _run_call(self, assign, equiv_set):
@@ -703,7 +633,7 @@ class DistributedPass(object):
             return out
 
         if func_name == 'reshape' and self._is_1D_arr(arr.name):
-            return self._run_reshape(assign, arr, args)
+            return self._run_reshape(assign, arr, args, equiv_set)
 
         # TODO: refactor
         # TODO: add unittest
@@ -1381,8 +1311,6 @@ class DistributedPass(object):
         return out
 
     def _run_parfor(self, parfor, equiv_set):
-        # stencil_accesses, neighborhood = get_stencil_accesses(
-        #     parfor, self.typemap)
 
         # Thread and 1D parfors turn to gufunc in multithread mode
         if (bodo.multithread_mode
@@ -1402,26 +1330,6 @@ class DistributedPass(object):
         loc = parfor.init_block.loc
         range_size = parfor.loop_nests[0].stop
         out = []
-
-        # return range to original size of array
-        # if stencil_accesses:
-        #     #right_length = neighborhood[1][0]
-        #     left_length, right_length = self._get_stencil_border_length(
-        #         neighborhood)
-        #     if right_length:
-        #         new_range_size = ir.Var(
-        #             scope, mk_unique_var("new_range_size"), loc)
-        #         self.typemap[new_range_size.name] = types.intp
-        #         index_const = ir.Var(scope, mk_unique_var("index_const"), loc)
-        #         self.typemap[index_const.name] = types.intp
-        #         out.append(
-        #             ir.Assign(ir.Const(right_length, loc), index_const, loc))
-        #         calc_call = ir.Expr.binop('+', range_size, index_const, loc)
-        #         self.calltypes[calc_call] = ir_utils.find_op_typ('+',
-        #                                                          [types.intp, types.intp])
-        #         out.append(ir.Assign(calc_call, new_range_size, loc))
-        #         range_size = new_range_size
-
         div_nodes, start_var, end_var = self._gen_1D_div(range_size, scope, loc,
                                                          "$loop", "get_end", distributed_api.get_end)
         out += div_nodes
@@ -1431,16 +1339,6 @@ class DistributedPass(object):
 
         parfor.loop_nests[0].start = start_var
         parfor.loop_nests[0].stop = end_var
-
-        # if stencil_accesses:
-        #     # TODO assuming single array in stencil
-        #     arr_set = set(stencil_accesses.values())
-        #     arr = arr_set.pop()
-        #     assert not arr_set  # only one array
-        #     self._run_parfor_stencil(parfor, out, start_var, end_var,
-        #                              neighborhood, namevar_table[arr])
-        # else:
-        #     out.append(parfor)
         out.append(parfor)
 
         init_reduce_nodes, reduce_nodes = self._gen_parfor_reductions(
@@ -1558,7 +1456,7 @@ class DistributedPass(object):
         _, reductions = get_parfor_reductions(
             parfor, parfor.params, self.calltypes)
 
-        for reduce_varname, (init_val, reduce_nodes) in reductions.items():
+        for reduce_varname, (_init_val, reduce_nodes) in reductions.items():
             reduce_op = guard(self._get_reduce_op, reduce_nodes)
             reduce_var = reduce_nodes[-1].target
             assert reduce_var.name == reduce_varname
@@ -1608,6 +1506,77 @@ class DistributedPass(object):
         impl = loc_vars['impl']
 
         return _compile_func_single_block(impl, args, None, self)
+
+    def _get_dist_var_start_count(self, arr, equiv_set):
+        nodes = []
+        if arr.name in self._1D_Var_parfor_starts:
+            start_var = self._1D_Var_parfor_starts[arr.name]
+            f_block = compile_to_numba_ir(lambda A: len(A), {}, self.typingctx,
+                                        (self.typemap[arr.name],),
+                                        self.typemap, self.calltypes).blocks.popitem()[1]
+            replace_arg_nodes(f_block, [arr])
+            nodes = f_block.body[:-3]  # remove none return
+            count_var = nodes[-1].target
+            return nodes, start_var, count_var
+
+        size_var = self._get_dist_var_len(arr, nodes, equiv_set)
+        div_nodes, start_var, count_var = self._gen_1D_div(
+            size_var, arr.scope, arr.loc, "$index", "get_node_portion",
+            distributed_api.get_node_portion)
+        nodes += div_nodes
+        return nodes, start_var, count_var
+
+    def _get_dist_start_var(self, arr, equiv_set):
+        if arr.name in self._1D_Var_parfor_starts:
+            return self._1D_Var_parfor_starts[arr.name], []
+
+        nodes = []
+        size_var = self._get_dist_var_len(arr, nodes, equiv_set)
+        div_nodes, start_var, _count_var = self._gen_1D_div(
+            size_var, arr.scope, arr.loc, "$index", "get_node_portion",
+            distributed_api.get_node_portion)
+        nodes += div_nodes
+        return start_var, nodes
+
+    def _get_dist_var_dim_size(self, var, dim, nodes):
+        # XXX just call _gen_1D_var_len() for now
+        # TODO: get value from array analysis
+        def f(A, dim, op):  # pragma: no cover
+            c = A.shape[dim]
+            res = bodo.libs.distributed_api.dist_reduce(c, op)
+        f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
+                                      (self.typemap[var.name], types.int64, types.int32),
+                                      self.typemap, self.calltypes).blocks.popitem()[1]
+        replace_arg_nodes(
+            f_block, [var, ir.Const(dim, var.loc),
+            ir.Const(Reduce_Type.Sum.value, var.loc)])
+        nodes += f_block.body[:-3]  # remove none return
+        return nodes[-1].target
+
+    def _get_dist_var_len(self, var, nodes, equiv_set):
+        """
+        Get global length of distributed data structure (Array, Series,
+        DataFrame) if available. Otherwise, generate reduction code to get
+        global length.
+        """
+        shape = equiv_set.get_shape(var)
+        if shape is not None:
+            return shape[0]
+        # XXX just call _gen_1D_var_len() for now
+        nodes += self._gen_1D_Var_len(var)
+        return nodes[-1].target
+
+    def _gen_1D_Var_len(self, arr):
+        def f(A, op):  # pragma: no cover
+            c = len(A)
+            res = bodo.libs.distributed_api.dist_reduce(c, op)
+        f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
+                                      (self.typemap[arr.name], types.int32),
+                                      self.typemap, self.calltypes).blocks.popitem()[1]
+        replace_arg_nodes(
+            f_block, [arr, ir.Const(Reduce_Type.Sum.value, arr.loc)])
+        nodes = f_block.body[:-3]  # remove none return
+        return nodes
 
     def _gen_1D_div(self, size_var, scope, loc, prefix, end_call_name, end_call):
         div_nodes = []
