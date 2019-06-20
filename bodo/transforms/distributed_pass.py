@@ -188,17 +188,17 @@ class DistributedPass(object):
         if (rhs.op == 'getattr' and rhs.attr == 'shape'
                 and (self._is_1D_arr(rhs.value.name)
                         or self._is_1D_Var_arr(rhs.value.name))):
-            return self._run_array_shape(inst.target, rhs.value)
+            return self._run_array_shape(inst.target, rhs.value, equiv_set)
 
         # array.size
         if (rhs.op == 'getattr' and rhs.attr == 'size'
                 and (self._is_1D_arr(rhs.value.name)
                         or self._is_1D_Var_arr(rhs.value.name))):
-            return self._run_array_size(inst.target, rhs.value)
+            return self._run_array_size(inst.target, rhs.value, equiv_set)
 
         return nodes
 
-    def _get_dist_var_start_count(self, arr):
+    def _get_dist_var_start_count(self, arr, equiv_set):
         nodes = []
         if arr.name in self._1D_Var_parfor_starts:
             start_var = self._1D_Var_parfor_starts[arr.name]
@@ -210,7 +210,7 @@ class DistributedPass(object):
             count_var = nodes[-1].target
             return nodes, start_var, count_var
 
-        size_var = self._get_dist_var_len(arr, nodes)
+        size_var = self._get_dist_var_len(arr, nodes, equiv_set)
         div_nodes, start_var, count_var = self._gen_1D_div(
             size_var, arr.scope, arr.loc, "$index", "get_node_portion",
             distributed_api.get_node_portion)
@@ -222,12 +222,8 @@ class DistributedPass(object):
             return self._1D_Var_parfor_starts[arr.name], []
 
         nodes = []
-        shape = equiv_set.get_shape(arr)
-        if shape is not None:
-            size_var = shape[0]
-        else:
-            size_var = self._get_dist_var_len(arr, nodes)
-        div_nodes, start_var, count_var = self._gen_1D_div(
+        size_var = self._get_dist_var_len(arr, nodes, equiv_set)
+        div_nodes, start_var, _count_var = self._gen_1D_div(
             size_var, arr.scope, arr.loc, "$index", "get_node_portion",
             distributed_api.get_node_portion)
         nodes += div_nodes
@@ -235,6 +231,7 @@ class DistributedPass(object):
 
     def _get_dist_var_dim_size(self, var, dim, nodes):
         # XXX just call _gen_1D_var_len() for now
+        # TODO: get value from array analysis
         def f(A, dim, op):  # pragma: no cover
             c = A.shape[dim]
             res = bodo.libs.distributed_api.dist_reduce(c, op)
@@ -247,12 +244,15 @@ class DistributedPass(object):
         nodes += f_block.body[:-3]  # remove none return
         return nodes[-1].target
 
-    def _get_dist_var_len(self, var, nodes):
+    def _get_dist_var_len(self, var, nodes, equiv_set):
         """
         Get global length of distributed data structure (Array, Series,
         DataFrame) if available. Otherwise, generate reduction code to get
         global length.
         """
+        shape = equiv_set.get_shape(var)
+        if shape is not None:
+            return shape[0]
         # XXX just call _gen_1D_var_len() for now
         nodes += self._gen_1D_Var_len(var)
         return nodes[-1].target
@@ -370,11 +370,13 @@ class DistributedPass(object):
 
         # numpy direct functions
         if isinstance(func_mod, str) and func_mod == 'numpy':
-            return self._run_call_np(lhs, func_name, assign, rhs.args)
+            return self._run_call_np(
+                lhs, func_name, assign, rhs.args, equiv_set)
 
         # array.func calls
         if isinstance(func_mod, ir.Var) and is_np_array(self.typemap, func_mod.name):
-            return self._run_call_array(lhs, func_mod, func_name, assign, rhs.args)
+            return self._run_call_array(
+                lhs, func_mod, func_name, assign, rhs.args, equiv_set)
 
         # df.func calls
         if isinstance(func_mod, ir.Var) and isinstance(self.typemap[func_mod.name], DataFrameType):
@@ -388,7 +390,7 @@ class DistributedPass(object):
         if fdef == ('len', 'builtins') and rhs.args and self._is_1D_arr(rhs.args[0].name):
             arr = rhs.args[0]
             nodes = []
-            assign.value = self._get_dist_var_len(arr, nodes)
+            assign.value = self._get_dist_var_len(arr, nodes, equiv_set)
             nodes.append(assign)
             return nodes
 
@@ -406,7 +408,7 @@ class DistributedPass(object):
             arr = rhs.args[5]
             ndims = self.typemap[arr.name].ndim
             nodes = []
-            size_var = self._get_dist_var_len(arr, nodes)
+            size_var = self._get_dist_var_len(arr, nodes, equiv_set)
             div_nodes, start_var, end_var = self._gen_1D_div(
                 size_var, scope, loc, "$read", "get_node_portion",
                 distributed_api.get_node_portion)
@@ -442,7 +444,7 @@ class DistributedPass(object):
                 and self._is_1D_arr(rhs.args[3].name)):
             arr = rhs.args[3]
             nodes = []
-            size_var = self._get_dist_var_len(arr, nodes)
+            size_var = self._get_dist_var_len(arr, nodes, equiv_set)
             div_nodes, start_var, count_var = self._gen_1D_div(
                 size_var, scope, loc, "$index", "get_node_portion",
                 distributed_api.get_node_portion)
@@ -484,7 +486,7 @@ class DistributedPass(object):
             arr = rhs.args[0]
             index_var = rhs.args[1]
             nodes = []
-            size_var = self._get_dist_var_len(arr, nodes)
+            size_var = self._get_dist_var_len(arr, nodes, equiv_set)
             div_nodes, start_var, count_var = self._gen_1D_div(
                 size_var, scope, loc, "$index", "get_node_portion",
                 distributed_api.get_node_portion)
@@ -570,7 +572,7 @@ class DistributedPass(object):
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             arr = rhs.args[0]
             nodes = []
-            size_var = self._get_dist_var_len(arr, nodes)
+            size_var = self._get_dist_var_len(arr, nodes, equiv_set)
             rhs.args.append(size_var)
 
             f = lambda arr, q, size: bodo.libs.array_kernels.quantile_parallel(
@@ -633,7 +635,8 @@ class DistributedPass(object):
                 or self._is_1D_Var_arr(rhs.args[1].name)):
             fname = rhs.args[0]
             arr = rhs.args[1]
-            nodes, start_var, count_var = self._get_dist_var_start_count(arr)
+            nodes, start_var, count_var = self._get_dist_var_start_count(
+                arr, equiv_set)
 
             def impl(fname, data_ptr, start, count):  # pragma: no cover
                 return bodo.io.np_io.file_read_parallel(fname, data_ptr, start, count)
@@ -680,7 +683,7 @@ class DistributedPass(object):
 
         return out
 
-    def _run_call_np(self, lhs, func_name, assign, args):
+    def _run_call_np(self, lhs, func_name, assign, args, equiv_set):
         """transform np.func() calls
         """
         # allocs are handled separately
@@ -703,7 +706,7 @@ class DistributedPass(object):
         if func_name == 'ravel' and self._is_1D_arr(args[0].name):
             assert self.typemap[args[0].name].ndim == 1, "only 1D ravel supported"
 
-        if (func_name in ['cumsum', 'cumprod']
+        if (func_name in ('cumsum', 'cumprod')
                 and self._is_1D_arr(args[0].name)):
             in_arr = args[0].name
             in_arr_var = args[0]
@@ -711,7 +714,7 @@ class DistributedPass(object):
             # allocate output array
             # TODO: compute inplace if input array is dead
             out = []
-            size_var = self._get_dist_var_len(in_arr_var, out)
+            size_var = self._get_dist_var_len(in_arr_var, out, equiv_set)
             out += mk_alloc(self.typemap, self.calltypes, lhs_var,
                            (size_var,),
                            self.typemap[in_arr].dtype, scope, loc)
@@ -745,7 +748,7 @@ class DistributedPass(object):
 
         return out
 
-    def _run_call_array(self, lhs, arr, func_name, assign, args):
+    def _run_call_array(self, lhs, arr, func_name, assign, args, equiv_set):
         #
         out = [assign]
 
@@ -770,7 +773,8 @@ class DistributedPass(object):
         if func_name == 'tofile':
             if self._is_1D_arr(arr.name):
                 _fname = args[0]
-                nodes, start_var, count_var = self._get_dist_var_start_count(arr)
+                nodes, start_var, count_var = self._get_dist_var_start_count(
+                    arr, equiv_set)
 
                 def f(fname, arr, start, count):  # pragma: no cover
                     return bodo.io.np_io.file_write_parallel(fname, arr, start, count)
@@ -966,7 +970,7 @@ class DistributedPass(object):
     #     f_block.body = out + f_block.body
     #     return f_block.body[:-3]
 
-    def _run_reshape(self, assign, in_arr, args):
+    def _run_reshape(self, assign, in_arr, args, equiv_set):
         lhs = assign.target
         scope = assign.target.scope
         loc = assign.target.loc
@@ -998,8 +1002,8 @@ class DistributedPass(object):
                                    self.typemap, self.calltypes).blocks.popitem()[1]
         dtype_ir = self.dtype_size_assign_ir(dtype, scope, loc)
         out.append(dtype_ir)
-        lhs_size = self._get_dist_var_len(lhs, out)
-        in_arr_size = self._get_dist_var_len(in_arr, out)
+        lhs_size = self._get_dist_var_len(lhs, out, equiv_set)
+        in_arr_size = self._get_dist_var_len(in_arr, out, equiv_set)
         replace_arg_nodes(f_block, [lhs, in_arr, lhs_size,
                                     in_arr_size,
                                     dtype_ir.target])
@@ -1214,14 +1218,23 @@ class DistributedPass(object):
     #     nodes[-1].target = lhs
     #     return nodes
 
-    def _run_array_shape(self, lhs, arr):
+    def _run_array_shape(self, lhs, arr, equiv_set):
         # non-Arrays like Series, DataFrame etc. are all 1 dim
         ndims = self.typemap[arr.name].ndim if isinstance(
             self.typemap[arr.name], types.Array) else 1
 
         if arr.name not in self._T_arrs:
             nodes = []
-            size_var = self._get_dist_var_len(arr, nodes)
+            size_var = self._get_dist_var_len(arr, nodes, equiv_set)
+            # XXX: array.shape could be generated by array analysis to provide
+            # size_var, so size_var may not be valid yet.
+            # if size_var uses this shape variable, calculate global size
+            size_def = guard(get_definition, self.func_ir, size_var)
+            if (isinstance(size_def, ir.Expr)
+                    and size_def.op == 'static_getitem'
+                    and size_def.value.name == lhs.name):
+                nodes += self._gen_1D_Var_len(arr)
+                size_var = nodes[-1].target
             if self._is_1D_Var_arr(arr.name):
                 # save output of converted 1DVar array len() variables
                 # which are global sizes, in order to recover local
@@ -1243,11 +1256,11 @@ class DistributedPass(object):
                 lambda A, size_var: A.shape[:-1] + (size_var,),
                 (arr, last_size_var), lhs, self)
 
-    def _run_array_size(self, lhs, arr):
+    def _run_array_size(self, lhs, arr, equiv_set):
         # get total size by multiplying all dimension sizes
         nodes = []
         if self._is_1D_arr(arr.name):
-            dim1_size = self._get_dist_var_len(arr, nodes)
+            dim1_size = self._get_dist_var_len(arr, nodes, equiv_set)
         else:
             assert self._is_1D_Var_arr(arr.name)
             nodes += self._gen_1D_Var_len(arr)
@@ -1318,7 +1331,8 @@ class DistributedPass(object):
 
             # TODO: support multi-dim slice setitem like X[a:b, c:d]
             assert not is_multi_dim
-            nodes, start_var, count_var = self._get_dist_var_start_count(arr)
+            nodes, start_var, count_var = self._get_dist_var_start_count(
+                arr, equiv_set)
 
             if isinstance(self.typemap[index_var.name], types.Integer):
                 def f(A, val, index, chunk_start, chunk_count):  # pragma: no cover
@@ -1420,7 +1434,8 @@ class DistributedPass(object):
                 # cases like S.head()
                 # bcast if all in rank 0, otherwise gatherv
                 in_arr = full_node.value.value
-                nodes, start_var, count_var = self._get_dist_var_start_count(in_arr)
+                nodes, start_var, count_var = self._get_dist_var_start_count(
+                    in_arr, equiv_set)
                 return nodes + _compile_func_single_block(
                     lambda arr, slice_index, start, count: bodo.libs.distributed_api.const_slice_getitem(
                         arr, slice_index, start, count), [in_arr, index_var, start_var, count_var],
@@ -1506,8 +1521,8 @@ class DistributedPass(object):
         # assuming first dimension is parallelized
         # TODO: support transposed arrays
         stop_var = parfor.loop_nests[0].stop
-        assert (stop_var.name in equiv_set.obj_to_ind,
-            "1D_Var parfor size analysis error")
+        assert stop_var.name in equiv_set.obj_to_ind, \
+            "1D_Var parfor size analysis error"
         size_class = equiv_set.obj_to_ind[stop_var.name]
         array_accesses = _get_array_accesses(
             parfor.loop_body, self.func_ir, self.typemap)
@@ -1519,8 +1534,8 @@ class DistributedPass(object):
                 break
 
         for (arr, index) in array_accesses:
-            assert (arr not in self._T_arrs,
-                "1D_Var parfor for transposed parallel array not supported")
+            assert arr not in self._T_arrs, \
+                "1D_Var parfor for transposed parallel array not supported"
 
         # TODO: remove this
         for l in parfor.loop_nests:
