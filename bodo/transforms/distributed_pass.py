@@ -66,6 +66,7 @@ class DistributedPass(object):
 
         self._dist_analysis = None
         self._T_arrs = None  # set of transposed arrays (taken from analysis)
+        self._1D_parfor_starts = {}
 
         # save output of converted 1DVar array len() variables
         # which are global sizes, in order to recover local
@@ -367,13 +368,11 @@ class DistributedPass(object):
         if (fdef == ('get_split_view_index', 'bodo.hiframes.split_impl')
                 and self._is_1D_arr(rhs.args[0].name)):
             arr = rhs.args[0]
-            index_var = rhs.args[1]
-            nodes = []
-            size_var = self._get_dist_var_len(arr, nodes, equiv_set)
-            div_nodes, start_var, count_var = self._gen_1D_div(
-                size_var, scope, loc, "$index", "get_node_portion",
-                distributed_api.get_node_portion)
-            nodes += div_nodes
+            index_var = self._fix_index_var(rhs.args[1])
+            # XXX get_split_view_index is only used within parfors
+            assert index_var.name in self._1D_parfor_starts
+            start_var, nodes = self._get_parallel_access_start_var(
+                arr, equiv_set, index_var)
             sub_nodes = self._get_ind_sub(
                 index_var, start_var)
             out = nodes + sub_nodes
@@ -384,8 +383,11 @@ class DistributedPass(object):
         if (fdef == ('setitem_str_arr_ptr', 'bodo.libs.str_arr_ext')
                 and self._is_1D_arr(rhs.args[0].name)):
             arr = rhs.args[0]
-            index_var = rhs.args[1]
-            start_var, nodes = self._get_dist_start_var(arr, equiv_set)
+            index_var = self._fix_index_var(rhs.args[1])
+            # XXX setitem_str_arr_ptr is only used within parfors
+            assert index_var.name in self._1D_parfor_starts
+            start_var, nodes = self._get_parallel_access_start_var(
+                arr, equiv_set, index_var)
             sub_nodes = self._get_ind_sub(
                 index_var, start_var)
             out = nodes + sub_nodes
@@ -397,16 +399,22 @@ class DistributedPass(object):
                 and self._is_1D_arr(rhs.args[0].name)):
             # TODO: test parallel
             arr = rhs.args[0]
-            index_var = rhs.args[1]
-            start_var, nodes = self._get_dist_start_var(arr, equiv_set)
+            index_var = self._fix_index_var(rhs.args[1])
+            # XXX str_arr_item_to_numeric is only used within parfors
+            assert index_var.name in self._1D_parfor_starts
+            start_var, nodes = self._get_parallel_access_start_var(
+                arr, equiv_set, index_var)
             sub_nodes = self._get_ind_sub(
                 index_var, start_var)
             out = nodes + sub_nodes
             rhs.args[1] = sub_nodes[-1].target
             # input string array
             arr = rhs.args[2]
-            index_var = rhs.args[3]
-            start_var, nodes = self._get_dist_start_var(arr, equiv_set)
+            index_var = self._fix_index_var(rhs.args[3])
+            # XXX str_arr_item_to_numeric is only used within parfors
+            assert index_var.name in self._1D_parfor_starts
+            start_var, nodes = self._get_parallel_access_start_var(
+                arr, equiv_set, index_var)
             sub_nodes = self._get_ind_sub(
                 index_var, start_var)
             out += nodes + sub_nodes
@@ -417,8 +425,12 @@ class DistributedPass(object):
         if fdef == ('isna', 'bodo.hiframes.api') and self._is_1D_arr(rhs.args[0].name):
             # fix index in call to isna
             arr = rhs.args[0]
-            ind = rhs.args[1]
-            start_var, out = self._get_dist_start_var(arr, equiv_set)
+            ind = self._fix_index_var(rhs.args[1])
+            # XXX isna is only used within parfors, not standalone on parallel
+            # array
+            assert ind.name in self._1D_parfor_starts
+            start_var, out = self._get_parallel_access_start_var(
+                arr, equiv_set, ind)
             out += self._get_ind_sub(ind, start_var)
             rhs.args[1] = out[-1].target
             out.append(assign)
@@ -1152,16 +1164,17 @@ class DistributedPass(object):
         out = [full_node]
         scope = arr.scope
         loc = arr.loc
+        index_var = self._fix_index_var(index_var)
+
         # 1D_Var arrays need adjustment for 1D_Var parfors as well
         if ((self._is_1D_arr(arr.name) or
                 (self._is_1D_Var_arr(arr.name) and arr.name in self._1D_Var_parfor_starts))
                 and (arr.name, index_var.name) in self._parallel_accesses):
-            #ndims = self._get_arr_ndim(arr.name)
-            # if ndims==1:
+            start_var, nodes = self._get_parallel_access_start_var(
+                arr, equiv_set, index_var)
             # multi-dimensional array could be indexed with 1D index
             if isinstance(self.typemap[index_var.name], types.Integer):
                 # TODO: avoid repeated start/end generation
-                start_var, nodes = self._get_dist_start_var(arr, equiv_set)
                 sub_nodes = self._get_ind_sub(
                     index_var, start_var)
                 out = nodes + sub_nodes
@@ -1170,7 +1183,6 @@ class DistributedPass(object):
                 index_list = guard(find_build_tuple, self.func_ir, index_var)
                 assert index_list is not None
                 # TODO: avoid repeated start/end generation
-                start_var, nodes = self._get_dist_start_var(arr, equiv_set)
                 sub_nodes = self._get_ind_sub(
                     index_list[0], start_var)
                 out = nodes + sub_nodes
@@ -1337,6 +1349,8 @@ class DistributedPass(object):
         # print_node = ir.Print([start_var, end_var, range_size], None, loc)
         # self.calltypes[print_node] = signature(types.none, types.int64, types.int64, types.intp)
         # out.append(print_node)
+        index_var = parfor.loop_nests[0].index_variable
+        self._1D_parfor_starts[index_var.name] = start_var
 
         parfor.loop_nests[0].start = start_var
         parfor.loop_nests[0].stop = end_var
@@ -1587,6 +1601,30 @@ class DistributedPass(object):
         nodes += self._gen_1D_Var_len(var)
         return nodes[-1].target
 
+    def _get_parallel_access_start_var(self, arr, equiv_set, index_var):
+        """Same as _get_dist_start_var() but avoids generating reduction for
+        getting global size since this is an error inside a parfor loop.
+        """
+        if arr.name in self._1D_Var_parfor_starts:
+            return self._1D_Var_parfor_starts[arr.name], []
+
+        # XXX we return parfors start assuming parfor and parallel accessed
+        # array are equivalent in size and have equivalent distribution
+        # TODO: is this always the case?
+        if index_var.name in self._1D_parfor_starts:
+            return self._1D_parfor_starts[index_var.name], []
+
+        # use shape if parfor start not found (TODO shouldn't reach here?)
+        shape = equiv_set.get_shape(arr)
+        if isinstance(shape, (list, tuple)) and len(shape) > 0:
+            size_var = shape[0]
+            div_nodes, start_var, _count_var = self._gen_1D_div(
+                    size_var, arr.scope, arr.loc, "$index", "get_node_portion",
+                    distributed_api.get_node_portion)
+            return start_var, div_nodes
+
+        raise ValueError("invalid parallel access")
+
     def _gen_1D_Var_len(self, arr):
         def f(A, op):  # pragma: no cover
             c = len(A)
@@ -1810,6 +1848,17 @@ class DistributedPass(object):
         nodes = f_block.body[:-3]
         nodes[-1].target = reduce_var
         return nodes
+
+    def _fix_index_var(self, index_var):
+        if index_var is None:  # TODO: fix None index in static_getitem/setitem
+            return None
+
+        # fix index if copy propagation didn't work
+        ind_def = self.func_ir._definitions[index_var.name]
+        if len(ind_def) == 1 and isinstance(ind_def[0], ir.Var):
+            return ind_def[0]
+
+        return index_var
 
     def _get_tuple_varlist(self, tup_var, out):
         """ get the list of variables that hold values in the tuple variable.
