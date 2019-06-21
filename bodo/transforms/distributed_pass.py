@@ -761,10 +761,11 @@ class DistributedPass(object):
                 start = bodo.libs.distributed_api.dist_exscan(count)
                 bodo.io.np_io._file_write_parallel(
                     fname._data, str_out._data, start, count, 1)
-                dummy_use(str_out)
+                _dummy_use(str_out)
 
             return nodes + _compile_func_single_block(
-                f, [fname, str_out], assign.target, self)
+                f, [fname, str_out], assign.target, self,
+                extra_globals={'_dummy_use': dummy_use})
 
         return [assign]
 
