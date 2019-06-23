@@ -180,6 +180,12 @@ class TestString(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         self.assertTrue(np.array_equal(bodo_func(), ['ABC', 'BB', 'CDEF']))
 
+    def test_string_array_shape(self):
+        def test_impl():
+            return StringArray(['ABC', 'BB', 'CDEF']).shape
+        bodo_func = bodo.jit(test_impl)
+        self.assertEqual(bodo_func(), (3,))
+
     def test_string_array_comp(self):
         def test_impl():
             A = StringArray(['ABC', 'BB', 'CDEF'])

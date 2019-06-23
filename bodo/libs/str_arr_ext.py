@@ -34,10 +34,14 @@ class StringArray(object):
         return 'StringArray({})'.format(self.data)
 
 
-class StringArrayType(types.IterableType):
+class StringArrayType(types.IterableType, types.ArrayCompatible):
     def __init__(self):
         super(StringArrayType, self).__init__(
             name='StringArrayType()')
+
+    @property
+    def as_array(self):
+        return types.Array(string_type, 1, 'C')
 
     @property
     def dtype(self):
@@ -90,6 +94,7 @@ class StringArrayPayloadModel(models.StructModel):
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
+
 str_arr_model_members = [
     ('num_items', types.uint64),
     ('num_total_chars', types.uint64),
@@ -99,11 +104,13 @@ str_arr_model_members = [
     ('meminfo', types.MemInfoPointer(str_arr_payload_type)),
 ]
 
+
 @register_model(StringArrayType)
 class StringArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
 
         models.StructModel.__init__(self, dmm, fe_type, str_arr_model_members)
+
 
 # TODO: fix overload for things like 'getitem'
 # @overload(operator.getitem)
@@ -127,6 +134,7 @@ class StringArrayIterator(types.SimpleIteratorType):
         yield_type = string_type
         super(StringArrayIterator, self).__init__(name, yield_type)
 
+
 @register_model(StringArrayIterator)
 class StrArrayIteratorModel(models.StructModel):
     def __init__(self, dmm, fe_type):
@@ -135,7 +143,9 @@ class StrArrayIteratorModel(models.StructModel):
                    ('array', string_array_type)]
         super(StrArrayIteratorModel, self).__init__(dmm, fe_type, members)
 
+
 lower_builtin('getiter', string_array_type)(numba.targets.arrayobj.getiter_array)
+
 
 @lower_builtin('iternext', StringArrayIterator)
 @iternext_impl(RefType.NEW)
@@ -157,6 +167,7 @@ def iternext_str_array(context, builder, sig, args, result):
         result.yield_(value)
         nindex = cgutils.increment_index(builder, index)
         builder.store(nindex, iterobj.index)
+
 
 @intrinsic
 def num_total_chars(typingctx, str_arr_typ=None):
@@ -187,6 +198,7 @@ def get_offset_ptr(typingctx, str_arr_typ=None):
 
     return offset_ctypes_type(string_array_type), codegen
 
+
 @intrinsic
 def get_data_ptr(typingctx, str_arr_typ=None):
     assert is_str_arr_typ(str_arr_typ)
@@ -204,6 +216,7 @@ def get_data_ptr(typingctx, str_arr_typ=None):
         return impl_ret_borrowed(context, builder, data_ctypes_type, res)
 
     return data_ctypes_type(string_array_type), codegen
+
 
 @intrinsic
 def get_data_ptr_ind(typingctx, str_arr_typ, int_t=None):
@@ -223,6 +236,7 @@ def get_data_ptr_ind(typingctx, str_arr_typ, int_t=None):
 
     return data_ctypes_type(string_array_type, types.intp), codegen
 
+
 @intrinsic
 def getitem_str_offset(typingctx, str_arr_typ, ind_t=None):
     def codegen(context, builder, sig, args):
@@ -233,6 +247,7 @@ def getitem_str_offset(typingctx, str_arr_typ, ind_t=None):
         return builder.load(builder.gep(offsets, [ind]))
 
     return types.uint32(string_array_type, ind_t), codegen
+
 
 # TODO: fix this for join
 @intrinsic
@@ -246,6 +261,7 @@ def setitem_str_offset(typingctx, str_arr_typ, ind_t, val_t=None):
         return context.get_dummy_value()
 
     return types.void(string_array_type, ind_t, types.uint32), codegen
+
 
 @intrinsic
 def copy_str_arr_slice(typingctx, str_arr_typ, out_str_arr_typ, ind_t=None):
@@ -270,6 +286,7 @@ def copy_str_arr_slice(typingctx, str_arr_typ, out_str_arr_typ, ind_t=None):
         return context.get_dummy_value()
 
     return types.void(string_array_type, string_array_type, ind_t), codegen
+
 
 @intrinsic
 def copy_data(typingctx, str_arr_typ, out_str_arr_typ=None):
@@ -503,77 +520,24 @@ def is_str_arr_typ(typ):
 #             return signature(types.intp, *args)
 
 # XXX: should these be exposed?
-# make_attribute_wrapper(StringArrayType, 'num_items', 'num_items')
-# make_attribute_wrapper(StringArrayType, 'num_total_chars', 'num_total_chars')
+make_attribute_wrapper(StringArrayType, 'num_items', '_num_items')
+make_attribute_wrapper(StringArrayType, 'num_total_chars', '_num_total_chars')
 # make_attribute_wrapper(StringArrayType, 'offsets', 'offsets')
 # make_attribute_wrapper(StringArrayType, 'data', 'data')
 
 # make_attribute_wrapper(StringArrayPayloadType, 'offsets', 'offsets')
 # make_attribute_wrapper(StringArrayPayloadType, 'data', 'data')
 
-# XXX can't use this with overload_method
-@infer_getattr
-class StrArrayAttribute(AttributeTemplate):
-    key = string_array_type
 
-    def resolve_size(self, ctflags):
-        return types.intp
-
-    @bound_function("str_arr.copy")
-    def resolve_copy(self, ary, args, kws):
-        return signature(string_array_type, *args)
-
-@lower_builtin("str_arr.copy", string_array_type)
-def str_arr_copy_impl(context, builder, sig, args):
-    return context.compile_internal(builder, copy_impl, sig, args)
-
-
-def copy_impl(arr):
-    n = len(arr)
-    n_chars = num_total_chars(arr)
-    new_arr = pre_alloc_string_array(n, np.int64(n_chars))
-    copy_str_arr_slice(new_arr, arr, n)
-    return new_arr
-
-# @overload_method(StringArrayType, 'copy')
-# def string_array_copy(arr_t):
-#     return copy_impl
-
-
-# @overload_attribute(string_array_type, 'size')
-# def string_array_attr_size(arr_t):
-#     return get_str_arr_size
-
-# def get_str_arr_size(arr):  # pragma: no cover
-#     return len(arr)
-
-# @infer_global(get_str_arr_size)
-# class StrArrSizeInfer(AbstractTemplate):
-#     def generic(self, args, kws):
-#         assert not kws
-#         assert len(args) == 1 and args[0] == string_array_type
-#         return signature(types.intp, *args)
-
-# @lower_builtin(get_str_arr_size, string_array_type)
-# def str_arr_size_impl(context, builder, sig, args):
-
-@lower_getattr(string_array_type, 'size')
-def str_arr_size_impl(context, builder, typ, val):
-    string_array = context.make_helper(builder, string_array_type, val)
-
-    attrval = string_array.num_items
-    attrty = types.intp
-    return impl_ret_borrowed(context, builder, attrty, attrval)
-
-# @lower_builtin(StringArray, types.Type, types.Type)
-# def impl_string_array(context, builder, sig, args):
-#     typ = sig.return_type
-#     offsets, data = args
-#     string_array = cgutils.create_struct_proxy(typ)(context, builder)
-#     string_array.offsets = offsets
-#     string_array.data = data
-#     return string_array._getvalue()
-
+@overload_method(StringArrayType, 'copy')
+def str_arr_copy_overload(str_arr):
+    def copy_impl(arr):
+        n = len(arr)
+        n_chars = num_total_chars(arr)
+        new_arr = pre_alloc_string_array(n, np.int64(n_chars))
+        copy_str_arr_slice(new_arr, arr, n)
+        return new_arr
+    return copy_impl
 
 
 @overload(len)
@@ -582,6 +546,16 @@ def str_arr_len_overload(str_arr):
         def str_arr_len(str_arr):
             return str_arr.size
         return str_arr_len
+
+
+@overload_attribute(StringArrayType, 'size')
+def str_arr_size_overload(str_arr):
+    return lambda str_arr: np.int64(str_arr._num_items)
+
+
+@overload_attribute(StringArrayType, 'shape')
+def str_arr_shape_overload(str_arr):
+    return lambda str_arr: (str_arr.size,)
 
 
 from numba.targets.listobj import ListInstance
