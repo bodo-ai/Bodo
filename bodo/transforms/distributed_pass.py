@@ -18,7 +18,8 @@ from numba.ir_utils import (mk_unique_var, replace_vars_inner, find_topo_order,
                             compile_to_numba_ir, replace_arg_nodes,
                             guard, get_definition, require, GuardException,
                             find_callname, build_definitions,
-                            find_build_sequence, find_const, is_get_setitem)
+                            find_build_sequence, find_const, is_get_setitem,
+                            compute_cfg_from_blocks)
 from numba.inline_closurecall import inline_closure_call
 from numba.typing import signature
 from numba.parfor import (get_parfor_reductions, get_parfor_params,
@@ -68,10 +69,6 @@ class DistributedPass(object):
         self._T_arrs = None  # set of transposed arrays (taken from analysis)
         self._1D_parfor_starts = {}
 
-        # save output of converted 1DVar array len() variables
-        # which are global sizes, in order to recover local
-        # size for 1DVar allocs and parfors
-        self.oneDVar_len_vars = {}
         self._1D_Var_parfor_starts = {}
 
     def run(self):
@@ -91,7 +88,10 @@ class DistributedPass(object):
             print("distributions: ", self._dist_analysis)
 
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
+
+        #  transform
         self.func_ir.blocks = self._run_dist_pass(self.func_ir.blocks)
+
         remove_dead(self.func_ir.blocks, self.func_ir.arg_names, self.func_ir, self.typemap)
         dprint_func_ir(self.func_ir, "after distributed pass")
         lower_parfor_sequential(
@@ -114,7 +114,10 @@ class DistributedPass(object):
         fir_text = str_io.getvalue()
         str_io.close()
 
-    def _run_dist_pass(self, blocks):
+    def _run_dist_pass(self, blocks, init_avail=None):
+        # init liveness info
+        cfg = compute_cfg_from_blocks(blocks)
+        all_avail_vars = find_available_vars(blocks, cfg, init_avail)
         topo_order = find_topo_order(blocks)
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
         while work_list:
@@ -123,6 +126,7 @@ class DistributedPass(object):
             # XXX can't run transformation again on already converted code
             # since e.g. global sizes become invalid
             equiv_set = self.arr_analysis.get_equiv_set(label)
+            avail_vars = all_avail_vars[label].copy()
             new_body = []
             for inst in block.body:
                 out_nodes = None
@@ -132,16 +136,16 @@ class DistributedPass(object):
                                   self.typemap, self.calltypes, self.typingctx,
                                   self.targetctx, self)
                 elif isinstance(inst, Parfor):
-                    out_nodes = self._run_parfor(inst, equiv_set)
+                    out_nodes = self._run_parfor(inst, equiv_set, avail_vars)
                     # run dist pass recursively
                     p_blocks = wrap_parfor_blocks(inst)
-                    # build_definitions(p_blocks, self.func_ir._definitions)
-                    self._run_dist_pass(p_blocks)
+                    #
+                    self._run_dist_pass(p_blocks, avail_vars)
                     unwrap_parfor_blocks(inst)
                 elif isinstance(inst, ir.Assign):
                     rhs = inst.value
                     if isinstance(rhs, ir.Expr):
-                        out_nodes = self._run_expr(inst, equiv_set)
+                        out_nodes = self._run_expr(inst, equiv_set, avail_vars)
                 elif isinstance(inst, (ir.StaticSetItem, ir.SetItem)):
                     if isinstance(inst, ir.SetItem):
                         index = inst.index
@@ -155,22 +159,22 @@ class DistributedPass(object):
                     out_nodes = self._run_print(inst)
 
                 if out_nodes is None:
-                    new_body.append(inst)
-                elif isinstance(out_nodes, list):
-                    new_body += out_nodes
-                else:
-                    assert False, "invalid dist pass out nodes"
+                    out_nodes = [inst]
+
+                assert isinstance(out_nodes, list), "invalid dist pass out nodes"
+                self._update_avail_vars(avail_vars, out_nodes)
+                new_body += out_nodes
 
             blocks[label].body = new_body
 
         return blocks
 
-    def _run_expr(self, inst, equiv_set):
+    def _run_expr(self, inst, equiv_set, avail_vars):
         rhs = inst.value
         nodes = [inst]
 
         if rhs.op == 'call':
-            return self._run_call(inst, equiv_set)
+            return self._run_call(inst, equiv_set, avail_vars)
 
         if rhs.op in ('getitem', 'static_getitem'):
             if rhs.op == 'getitem':
@@ -193,7 +197,7 @@ class DistributedPass(object):
 
         return nodes
 
-    def _run_call(self, assign, equiv_set):
+    def _run_call(self, assign, equiv_set, avail_vars):
         lhs = assign.target.name
         rhs = assign.value
         scope = assign.target.scope
@@ -230,7 +234,7 @@ class DistributedPass(object):
         if self._is_1D_Var_arr(lhs) and is_alloc_callname(func_name, func_mod):
             size_var = rhs.args[0]
             out, new_size_var = self._fix_1D_Var_alloc(
-                size_var, lhs, scope, loc)
+                size_var, lhs, scope, loc, equiv_set, avail_vars)
             # empty_inferred is tuple for some reason
             rhs.args = list(rhs.args)
             rhs.args[0] = new_size_var
@@ -245,7 +249,8 @@ class DistributedPass(object):
         # array.func calls
         if isinstance(func_mod, ir.Var) and is_np_array(self.typemap, func_mod.name):
             return self._run_call_array(
-                lhs, func_mod, func_name, assign, rhs.args, equiv_set)
+                lhs, func_mod, func_name, assign, rhs.args, equiv_set,
+                avail_vars)
 
         # df.func calls
         if isinstance(func_mod, ir.Var) and isinstance(self.typemap[func_mod.name], DataFrameType):
@@ -269,7 +274,6 @@ class DistributedPass(object):
             arr_var = rhs.args[0]
             out = self._gen_1D_Var_len(arr_var)
             out[-1].target = assign.target
-            self.oneDVar_len_vars[assign.target.name] = arr_var
 
         if fdef == ('File', 'h5py'):
             # create and save a variable holding 1, in case we need to use it
@@ -628,17 +632,18 @@ class DistributedPass(object):
 
         return out
 
-    def _run_call_array(self, lhs, arr, func_name, assign, args, equiv_set):
+    def _run_call_array(self, lhs, arr, func_name, assign, args, equiv_set,
+                                                                   avail_vars):
         #
         out = [assign]
 
         # HACK support A.reshape(n, 1) for 1D_Var
         if func_name == 'reshape' and self._is_1D_Var_arr(arr.name):
             assert len(args) == 2 and guard(find_const, self.func_ir, args[1]) == 1
-            assert args[0].name in self.oneDVar_len_vars
             size_var = args[0]
             out, new_size_var = self._fix_1D_Var_alloc(
-                size_var, lhs, assign.target.scope, assign.loc)
+                size_var, lhs, assign.target.scope, assign.loc, equiv_set,
+                avail_vars)
             # empty_inferred is tuple for some reason
             assign.value.args = list(args)
             assign.value.args[0] = new_size_var
@@ -997,64 +1002,47 @@ class DistributedPass(object):
         new_size_var = tuple_var
         return out, new_size_var
 
-    def _fix_1D_Var_alloc(self, size_var, lhs, scope, loc):
-        """ OneD_Var allocs use sizes of other OneD_var variables,
-        so find the local size of those variables (since we transform
-        to use global size)
+    def _fix_1D_Var_alloc(self, size_var, lhs, scope, loc, equiv_set, avail_vars):
+        """ 1D_Var allocs use global sizes of other 1D_var variables,
+        so find the local size of one those variables for replacement.
+        Assuming 1D_Var alloc is resulting from an operation with another
+        1D_Var array and cannot be standalone.
         """
         out = []
         new_size_var = None
+        is_tuple = False
 
-        # size is single int var
-        if isinstance(size_var, ir.Var) and isinstance(self.typemap[size_var.name], types.Integer):
-            # array could be allocated inside 1D_Var nodes like sort
-            if size_var.name not in self.oneDVar_len_vars:
-                return [], size_var
-            # assert size_var.name in self.oneDVar_len_vars, "invalid 1DVar alloc"
-            arr_var = self.oneDVar_len_vars[size_var.name]
-
-            def f(oneD_var_arr):  # pragma: no cover
-                arr_len = len(oneD_var_arr)
-            f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
-                                          (self.typemap[arr_var.name],),
-                                          self.typemap, self.calltypes).blocks.popitem()[1]
-            replace_arg_nodes(f_block, [arr_var])
-            out = f_block.body[:-3]  # remove none return
-            new_size_var = out[-1].target
-            return out, new_size_var
+        # size is either integer or tuple
+        if not isinstance(self.typemap[size_var.name], types.Integer):
+            assert isinstance(self.typemap[size_var.name], types.BaseTuple)
+            is_tuple = True
 
         # tuple variable of ints
-        if isinstance(size_var, ir.Var):
-            # see if size_var is a 1D_Var array's shape
-            # it is already the local size, no need to transform
-            var_def = guard(get_definition, self.func_ir, size_var)
-            oned_var_varnames = set(v for v in self._dist_analysis.array_dists
-                                    if self._dist_analysis.array_dists[v] == Distribution.OneD_Var)
-            if (isinstance(var_def, ir.Expr) and var_def.op == 'getattr'
-                    and var_def.attr == 'shape' and var_def.value.name in oned_var_varnames):
-                return out, size_var
+        if is_tuple:
             # size should be either int or tuple of ints
-            #assert size_var.name in self._tuple_table
-            # self._tuple_table[size_var.name]
             size_list = self._get_tuple_varlist(size_var, out)
-            size_list = [ir_utils.convert_size_to_var(s, self.typemap, scope, loc, out)
+            size_list = [ir_utils.convert_size_to_var(
+                            s, self.typemap, scope, loc, out)
                          for s in size_list]
-        # tuple of int vars
-        else:
-            assert isinstance(size_var, (tuple, list))
-            size_list = list(size_var)
+            size_var = size_list[0]
 
-        arr_var = self.oneDVar_len_vars[size_list[0].name]
 
-        def f(oneD_var_arr):  # pragma: no cover
-            arr_len = len(oneD_var_arr)
-        f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
-                                      (self.typemap[arr_var.name],),
-                                      self.typemap, self.calltypes).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [arr_var])
-        nodes = f_block.body[:-3]  # remove none return
-        new_size_var = nodes[-1].target
-        out += nodes
+        # find another 1D_Var array this alloc is associated with
+        for v in equiv_set.get_equiv_set(size_var):
+            if '#' in v and self._is_1D_Var_arr(v.split('#')[0]):
+                arr_name = v.split('#')[0]
+                if arr_name not in avail_vars:
+                    continue
+                arr_var = ir.Var(size_var.scope, arr_name, size_var.loc)
+                out = _compile_func_single_block(
+                    lambda A: len(A), (arr_var,), None, self)
+                new_size_var = out[-1].target
+                break
+
+        assert new_size_var, "1D alloc size not found"
+
+        if not is_tuple:
+            return out, new_size_var
 
         ndims = len(size_list)
         new_size_list = copy.copy(size_list)
@@ -1116,11 +1104,6 @@ class DistributedPass(object):
                     and size_def.value.name == lhs.name):
                 nodes += self._gen_1D_Var_len(arr)
                 size_var = nodes[-1].target
-            if self._is_1D_Var_arr(arr.name):
-                # save output of converted 1DVar array len() variables
-                # which are global sizes, in order to recover local
-                # size for 1DVar allocs and parfors
-                self.oneDVar_len_vars[size_var.name] = arr
 
             return nodes + _compile_func_single_block(
                 lambda A, size_var: (size_var,) + A.shape[1:],
@@ -1324,7 +1307,7 @@ class DistributedPass(object):
 
         return out
 
-    def _run_parfor(self, parfor, equiv_set):
+    def _run_parfor(self, parfor, equiv_set, avail_vars):
 
         # Thread and 1D parfors turn to gufunc in multithread mode
         if (bodo.multithread_mode
@@ -1333,7 +1316,7 @@ class DistributedPass(object):
             parfor.no_sequential_lowering = True
 
         if self._dist_analysis.parfor_dists[parfor.id] == Distribution.OneD_Var:
-            return self._run_parfor_1D_Var(parfor, equiv_set)
+            return self._run_parfor_1D_Var(parfor, equiv_set, avail_vars)
 
         if self._dist_analysis.parfor_dists[parfor.id] != Distribution.OneD:
             if debug_prints():  # pragma: no cover
@@ -1363,7 +1346,7 @@ class DistributedPass(object):
         out += reduce_nodes
         return out
 
-    def _run_parfor_1D_Var(self, parfor, equiv_set):
+    def _run_parfor_1D_Var(self, parfor, equiv_set, avail_vars):
         # the variable for range of the parfor represents the global range,
         # replace it with the local range, using len() on an associated array
         # XXX: assuming 1D_Var parfors are only possible when there is at least
@@ -1373,22 +1356,26 @@ class DistributedPass(object):
         # TODO: support transposed arrays
         index_name = parfor.loop_nests[0].index_variable.name
         stop_var = parfor.loop_nests[0].stop
+        new_stop_var = None
         size_found = False
         array_accesses = _get_array_accesses(
             parfor.loop_body, self.func_ir, self.typemap)
         for (arr, index) in array_accesses:
-            if self._is_1D_Var_arr(arr) and index_name == index:
+            # XXX avail_vars is used since accessed array could be defined in
+            # init_block
+            if self._is_1D_Var_arr(arr) and index_name == index and arr in avail_vars:
                 arr_var = ir.Var(stop_var.scope, arr, stop_var.loc)
                 prepend += _compile_func_single_block(
-                    lambda A: len(A), (arr_var,), stop_var, self)
+                    lambda A: len(A), (arr_var,), None, self)
                 size_found = True
+                new_stop_var = prepend[-1].target
                 break
         # try equivalences
         if not size_found and stop_var.name in equiv_set.obj_to_ind:
             # TODO: test this code path
             size_class = equiv_set.obj_to_ind[stop_var.name]
             for (arr, index) in array_accesses:
-                if self._is_1D_Var_arr(arr):
+                if self._is_1D_Var_arr(arr) and arr in avail_vars:
                     shape_classes = None
                     try:
                         shape_classes = equiv_set.get_shape_classes(arr)
@@ -1397,31 +1384,18 @@ class DistributedPass(object):
                     if shape_classes and shape_classes[0] == size_class:
                         arr_var = ir.Var(stop_var.scope, arr, stop_var.loc)
                         prepend += _compile_func_single_block(
-                            lambda A: len(A), (arr_var,), stop_var, self)
+                            lambda A: len(A), (arr_var,), None, self)
+                        new_stop_var = prepend[-1].target
                         size_found = True
                         break
 
         # TODO: test multi-dim array sizes and complex indexing like slice
         assert size_found, "invalid 1D_Var parfor size"
+        parfor.loop_nests[0].stop = new_stop_var
 
         for (arr, index) in array_accesses:
             assert arr not in self._T_arrs, \
                 "1D_Var parfor for transposed parallel array not supported"
-
-        # TODO: remove this
-        for l in parfor.loop_nests:
-            if l.stop.name in self.oneDVar_len_vars:
-                arr_var = self.oneDVar_len_vars[l.stop.name]
-
-                def f(A):  # pragma: no cover
-                    arr_len = len(A)
-                f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
-                                                (self.typemap[arr_var.name],),
-                                                self.typemap, self.calltypes).blocks.popitem()[1]
-                replace_arg_nodes(f_block, [arr_var])
-                nodes = f_block.body[:-3]  # remove none return
-                l.stop = nodes[-1].target
-                prepend += nodes
 
         # see if parfor index is used in compute other than array access
         # (e.g. argmin)
@@ -1850,6 +1824,15 @@ class DistributedPass(object):
         nodes[-1].target = reduce_var
         return nodes
 
+    def _update_avail_vars(self, avail_vars, nodes):
+        for stmt in nodes:
+            if type(stmt) in numba.analysis.ir_extension_usedefs:
+                def_func = numba.analysis.ir_extension_usedefs[type(stmt)]
+                _uses, defs = def_func(stmt)
+                avail_vars |= defs
+            if is_assign(stmt):
+                avail_vars.add(stmt.target.name)
+
     def _fix_index_var(self, index_var):
         if index_var is None:  # TODO: fix None index in static_getitem/setitem
             return None
@@ -1973,3 +1956,43 @@ def _compile_func_single_block(func, args, ret_var, typing_info,
         func_ret = cast_assign.value.value
         nodes.append(ir.Assign(func_ret, ret_var, loc))
     return nodes
+
+
+def find_available_vars(blocks, cfg, init_avail=None):
+    """
+    Find available variables to use at ENTRY point of basic blocks. Similar
+    to available expressions algorithm but does not kill values on defs.
+    In_l = intersect(Out_i for i in pred)
+    Out_l = In_l | def(l)
+    `init_avail` is used to initialize first block of parfors with available vars
+    before the parfor. The label of first block is assumed to be 0.
+    """
+    # TODO: unittest
+    in_avail_vars = defaultdict(set)
+    if init_avail:
+        assert 0 in blocks
+        in_avail_vars[0] = init_avail
+
+    usedefs = numba.analysis.compute_use_defs(blocks)
+    var_def_map = usedefs.defmap
+    out_avail_vars = var_def_map.copy()
+
+    old_point = None
+    new_point = tuple(len(v) for v in in_avail_vars.values())
+
+    while old_point != new_point:
+        for label in var_def_map:
+            if label == 0:
+                continue
+            # intersect out of predecessors
+            preds = list(l for l, _ in cfg.predecessors(label))
+            in_avail_vars[label] = out_avail_vars[preds[0]] if preds else {}
+            for inc_blk in preds:
+                in_avail_vars[label] &= out_avail_vars[inc_blk]
+            # include defs
+            out_avail_vars[label] = in_avail_vars[label] | var_def_map[label]
+
+        old_point = new_point
+        new_point = tuple(len(v) for v in in_avail_vars.values())
+
+    return in_avail_vars

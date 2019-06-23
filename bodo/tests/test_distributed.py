@@ -144,3 +144,74 @@ def test_print3():
     bodo_func = bodo.jit()(impl1)
     bodo_func(1, (3, 4))
     bodo_func(np.ones(3), (3, np.ones(3)))
+
+
+# TODO: fix
+# @pytest.mark.parametrize('A', [np.arange(11), np.arange(33).reshape(11, 3)])
+# def test_1D_Var_alloc(A):
+#     #
+#     def impl1(A, B):
+#         C = A[B]
+#         return C.sum()
+
+#     bodo_func = bodo.jit(distributed={'A', 'B'})(impl1)
+#     start, end = get_start_end(len(A))
+#     B = np.arange(len(A)) % 2 != 0
+#     assert bodo_func(A[start:end], B[start:end]) == impl1(A, B)
+#     assert count_array_REPs() == 0
+
+
+def test_1D_Var_alloc1():
+    # XXX: test with different PYTHONHASHSEED values
+    def impl1(A, B):
+        C = A[B]
+        n = len(C)
+        if n < 1:
+            D = C + 1.0
+        else:
+            # using prange instead of an operator to avoid empty being inside the
+            # parfor init block, with parfor stop variable already transformed
+            D = np.empty(n)
+            for i in bodo.prange(n):
+                D[i] = C[i] + 1.
+        return D
+
+    bodo_func = bodo.jit(distributed={'A', 'B', 'D'})(impl1)
+    A = np.arange(11)
+    start, end = get_start_end(len(A))
+    B = np.arange(len(A)) % 2 != 0
+    res = bodo_func(A[start:end], B[start:end]).sum()
+    dist_sum = bodo.jit(
+            lambda a: bodo.libs.distributed_api.dist_reduce(
+                a, np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)))
+    assert dist_sum(res) == impl1(A, B).sum()
+    assert count_parfor_REPs() == 0
+
+
+def test_1D_Var_alloc2():
+    # XXX: test with different PYTHONHASHSEED values
+    # 2D case
+    def impl1(A, B):
+        m = A.shape[1]
+        C = A[B]
+        n = C.shape[0] # len(C), TODO: fix array analysis
+        if n < 1:
+            D = C + 1.0
+        else:
+            # using prange instead of an operator to avoid empty being inside the
+            # parfor init block, with parfor stop variable already transformed
+            D = np.empty((n, m))
+            for i in bodo.prange(n):
+                D[i] = C[i] + 1.
+        return D
+
+    bodo_func = bodo.jit(distributed={'A', 'B', 'D'})(impl1)
+    A = np.arange(33).reshape(11, 3)
+    start, end = get_start_end(len(A))
+    B = np.arange(len(A)) % 2 != 0
+    res = bodo_func(A[start:end], B[start:end]).sum()
+    dist_sum = bodo.jit(
+            lambda a: bodo.libs.distributed_api.dist_reduce(
+                a, np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)))
+    assert dist_sum(res) == impl1(A, B).sum()
+    assert count_parfor_REPs() == 0
