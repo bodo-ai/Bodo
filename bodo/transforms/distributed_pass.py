@@ -1722,13 +1722,9 @@ class DistributedPass(object):
         #                 rhs.args[2] = self._set1_var
 
     def _gen_barrier(self):
-        def f():  # pragma: no cover
-            return bodo.libs.distributed_api.barrier()
-
-        f_blocks = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx, {},
-                                       self.typemap, self.calltypes).blocks
-        block = f_blocks[min(f_blocks.keys())]
-        return block.body[:-2]  # remove return
+        return _compile_func_single_block(
+                lambda: _barrier(), (), None, self,
+                extra_globals={'_barrier': bodo.libs.distributed_api.barrier})
 
     def _gen_reduce(self, reduce_var, reduce_op, scope, loc):
         op_var = ir.Var(scope, mk_unique_var("$reduce_op"), loc)

@@ -1268,6 +1268,28 @@ def unbox_str_series(typ, val, c):
 # http://llvmlite.readthedocs.io/en/latest/user-guide/ir/ir-builder.html#comparisons
 
 
+# TODO: array analysis and remove call for other functions
+
+def pre_alloc_str_arr_equiv(self, scope, equiv_set, args, kws):
+    assert len(args) == 2 and not kws
+    return args[0], []
+
+
+from numba.array_analysis import ArrayAnalysis
+ArrayAnalysis._analyze_op_call_bodo_libs_str_arr_ext_pre_alloc_string_array = \
+    pre_alloc_str_arr_equiv
+
+
+def remove_str_arr(rhs, lives, call_list):
+    if call_list == ['pre_alloc_string_array', 'str_arr_ext', 'libs', bodo]:
+        return True
+    if call_list == call_list == [pre_alloc_string_array]:
+        return True
+    return False
+
+numba.ir_utils.remove_call_handlers.append(remove_str_arr)
+
+
 #### glob support #####
 
 @infer_global(glob)

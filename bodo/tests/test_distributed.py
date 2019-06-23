@@ -215,3 +215,15 @@ def test_1D_Var_alloc2():
                 a, np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)))
     assert dist_sum(res) == impl1(A, B).sum()
     assert count_parfor_REPs() == 0
+
+
+def test_str_alloc_equiv1():
+    def impl(n):
+        C = bodo.libs.str_arr_ext.pre_alloc_string_array(n, 10)
+        return len(C)
+
+    bodo_func = bodo.jit()(impl)
+    n = 11
+    assert bodo_func(n) == n
+    assert count_array_REPs() == 0
+    assert not dist_IR_contains('dist_reduce')
