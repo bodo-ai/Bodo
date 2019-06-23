@@ -292,8 +292,7 @@ class DistributedPass(object):
             nodes = []
             size_var = self._get_dist_var_len(arr, nodes, equiv_set)
             div_nodes, start_var, end_var = self._gen_1D_div(
-                size_var, scope, loc, "$read", "get_node_portion",
-                distributed_api.get_node_portion)
+                size_var, scope, loc, "get_node_portion")
             nodes += div_nodes
             starts_var = ir.Var(scope, mk_unique_var("$h5_starts"), loc)
             self.typemap[starts_var.name] = types.UniTuple(
@@ -334,8 +333,7 @@ class DistributedPass(object):
             nodes = []
             size_var = self._get_dist_var_len(arr, nodes, equiv_set)
             div_nodes, start_var, count_var = self._gen_1D_div(
-                size_var, scope, loc, "$index", "get_node_portion",
-                distributed_api.get_node_portion)
+                size_var, scope, loc, "get_node_portion")
             nodes += div_nodes
             assert self.typemap[arr.name].ndim == 1, "only 1D arrs in Xenon"
             rhs.args += [start_var, count_var]
@@ -351,8 +349,8 @@ class DistributedPass(object):
             arr = lhs
             size_var = rhs.args[3]
             assert self.typemap[size_var.name] == types.intp
-            out, start_var, count_var = self._gen_1D_div(size_var, scope, loc,
-                                                         "$alloc", "get_node_portion", distributed_api.get_node_portion)
+            out, start_var, count_var = self._gen_1D_div(
+                size_var, scope, loc, "get_node_portion")
             rhs.args.remove(size_var)
             rhs.args.append(start_var)
             rhs.args.append(count_var)
@@ -915,8 +913,7 @@ class DistributedPass(object):
         out = self._gen_1D_Var_len(arr)
         total_length = out[-1].target
         div_nodes, start_var, count_var = self._gen_1D_div(
-            total_length, arr.scope, arr.loc, "$rebalance", "get_node_portion",
-            distributed_api.get_node_portion)
+            total_length, arr.scope, arr.loc, "get_node_portion")
         out += div_nodes
 
         def f(arr, count):  # pragma: no cover
@@ -959,8 +956,8 @@ class DistributedPass(object):
 
         # size is single int var
         if isinstance(size_var, ir.Var) and isinstance(self.typemap[size_var.name], types.Integer):
-            out, start_var, end_var = self._gen_1D_div(size_var, scope, loc,
-                                                       "$alloc", "get_node_portion", distributed_api.get_node_portion)
+            out, _start_var, end_var = self._gen_1D_div(
+                size_var, scope, loc, "get_node_portion")
             new_size_var = end_var
             return out, new_size_var
 
@@ -986,8 +983,8 @@ class DistributedPass(object):
             assert isinstance(size_var, (tuple, list))
             size_list = list(size_var)
 
-        gen_nodes, start_var, end_var = self._gen_1D_div(size_list[0], scope, loc,
-                                                         "$alloc", "get_node_portion", distributed_api.get_node_portion)
+        gen_nodes, _start_var, end_var = self._gen_1D_div(
+            size_list[0], scope, loc, "get_node_portion")
         out += gen_nodes
         ndims = len(size_list)
         new_size_list = copy.copy(size_list)
@@ -1327,8 +1324,8 @@ class DistributedPass(object):
         loc = parfor.init_block.loc
         range_size = parfor.loop_nests[0].stop
         out = []
-        div_nodes, start_var, end_var = self._gen_1D_div(range_size, scope, loc,
-                                                         "$loop", "get_end", distributed_api.get_end)
+        div_nodes, start_var, end_var = self._gen_1D_div(
+            range_size, scope, loc, "get_end")
         out += div_nodes
         # print_node = ir.Print([start_var, end_var, range_size], None, loc)
         # self.calltypes[print_node] = signature(types.none, types.int64, types.int64, types.intp)
@@ -1531,8 +1528,7 @@ class DistributedPass(object):
 
         size_var = self._get_dist_var_len(arr, nodes, equiv_set)
         div_nodes, start_var, count_var = self._gen_1D_div(
-            size_var, arr.scope, arr.loc, "$index", "get_node_portion",
-            distributed_api.get_node_portion)
+            size_var, arr.scope, arr.loc, "get_node_portion")
         nodes += div_nodes
         return nodes, start_var, count_var
 
@@ -1543,8 +1539,7 @@ class DistributedPass(object):
         nodes = []
         size_var = self._get_dist_var_len(arr, nodes, equiv_set)
         div_nodes, start_var, _count_var = self._gen_1D_div(
-            size_var, arr.scope, arr.loc, "$index", "get_node_portion",
-            distributed_api.get_node_portion)
+            size_var, arr.scope, arr.loc, "get_node_portion")
         nodes += div_nodes
         return start_var, nodes
 
@@ -1594,8 +1589,7 @@ class DistributedPass(object):
         if isinstance(shape, (list, tuple)) and len(shape) > 0:
             size_var = shape[0]
             div_nodes, start_var, _count_var = self._gen_1D_div(
-                    size_var, arr.scope, arr.loc, "$index", "get_node_portion",
-                    distributed_api.get_node_portion)
+                    size_var, arr.scope, arr.loc, "get_node_portion")
             return start_var, div_nodes
 
         raise ValueError("invalid parallel access")
@@ -1612,11 +1606,11 @@ class DistributedPass(object):
         nodes = f_block.body[:-3]  # remove none return
         return nodes
 
-    def _gen_1D_div(self, size_var, scope, loc, prefix, end_call_name, end_call):
+    def _gen_1D_div(self, size_var, scope, loc, end_call_name):
         div_nodes = []
         if isinstance(size_var, int):
             new_size_var = ir.Var(
-                scope, mk_unique_var(prefix + "_size_var"), loc)
+                scope, mk_unique_var("_size_var"), loc)
             self.typemap[new_size_var.name] = types.int64
             size_assign = ir.Assign(ir.Const(size_var, loc), new_size_var, loc)
             div_nodes.append(size_assign)
