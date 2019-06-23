@@ -1617,21 +1617,28 @@ class DistributedPass(object):
             size_var = new_size_var
 
         def impl(n):
-            rank = bodo.libs.distributed_api.get_rank()
-            n_pes = bodo.libs.distributed_api.get_size()
-            start = bodo.libs.distributed_api.get_start(n, n_pes, rank)
-            count = bodo.libs.distributed_api.get_node_portion(n, n_pes, rank)
+            rank = _get_rank()
+            n_pes = _get_size()
+            start = _get_start(n, n_pes, rank)
+            count = _get_node_portion(n, n_pes, rank)
             return start, count
 
         if end_call_name == 'get_end':
             def impl(n):
-                rank = bodo.libs.distributed_api.get_rank()
-                n_pes = bodo.libs.distributed_api.get_size()
-                start = bodo.libs.distributed_api.get_start(n, n_pes, rank)
-                count = bodo.libs.distributed_api.get_end(n, n_pes, rank)
+                rank = _get_rank()
+                n_pes = _get_size()
+                start = _get_start(n, n_pes, rank)
+                count = _get_end(n, n_pes, rank)
                 return start, count
 
-        div_nodes += _compile_func_single_block(impl, (size_var,), None, self)
+        div_nodes += _compile_func_single_block(impl, (size_var,), None, self,
+            extra_globals={
+                '_get_rank': bodo.libs.distributed_api.get_rank,
+                '_get_size': bodo.libs.distributed_api.get_size,
+                '_get_start': bodo.libs.distributed_api.get_start,
+                '_get_node_portion': bodo.libs.distributed_api.get_node_portion,
+                '_get_end': bodo.libs.distributed_api.get_end,
+                })
         tup_var = div_nodes[-1].target
         start_var = ir.Var(scope, mk_unique_var("start_var"), loc)
         self.typemap[start_var.name] = types.int64
