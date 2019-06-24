@@ -49,6 +49,7 @@ class DataFramePass(object):
 
     def run(self):
         dprint_func_ir(self.func_ir, "starting dataframe pass")
+        ir_utils.remove_dels(self.func_ir.blocks)
         blocks = self.func_ir.blocks
         # topo_order necessary so DataFrame data replacement optimization can
         # be performed in one pass
