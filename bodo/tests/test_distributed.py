@@ -217,6 +217,34 @@ def test_1D_Var_alloc2():
     assert count_parfor_REPs() == 0
 
 
+def test_1D_Var_alloc3():
+    # XXX: test with different PYTHONHASHSEED values
+    # Series case
+    def impl1(A, B):
+        C = A[B]
+        n = len(C)
+        if n < 1:
+            D = C + 1.0
+        else:
+            # using prange instead of an operator to avoid empty being inside the
+            # parfor init block, with parfor stop variable already transformed
+            D = pd.Series(np.empty(n))
+            for i in bodo.prange(n):
+                D.values[i] = C.values[i] + 1.
+        return D
+
+    bodo_func = bodo.jit(distributed={'A', 'B', 'D'})(impl1)
+    A = pd.Series(np.arange(11))
+    start, end = get_start_end(len(A))
+    B = np.arange(len(A)) % 2 != 0
+    res = bodo_func(A[start:end], B[start:end]).sum()
+    dist_sum = bodo.jit(
+            lambda a: bodo.libs.distributed_api.dist_reduce(
+                a, np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)))
+    assert dist_sum(res) == impl1(A, B).sum()
+    assert count_parfor_REPs() == 0
+
+
 def test_str_alloc_equiv1():
     def impl(n):
         C = bodo.libs.str_arr_ext.pre_alloc_string_array(n, 10)
@@ -226,4 +254,21 @@ def test_str_alloc_equiv1():
     n = 11
     assert bodo_func(n) == n
     assert count_array_REPs() == 0
+    assert not dist_IR_contains('dist_reduce')
+
+
+def test_series_alloc_equiv1():
+    def impl(n):
+        if n < 10:
+            S = pd.Series(np.ones(n))
+        else:
+            S = pd.Series(np.zeros(n))
+        # B = np.full(len(S), 2)  # TODO: np.full dist handling
+        B = np.empty(len(S))
+        return B
+
+    bodo_func = bodo.jit(distributed={'B'})(impl)
+    n = 11
+    bodo_func(n)
+    assert count_parfor_REPs() == 0
     assert not dist_IR_contains('dist_reduce')

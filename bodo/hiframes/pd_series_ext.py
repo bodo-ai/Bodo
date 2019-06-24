@@ -30,7 +30,7 @@ from bodo.utils.typing import (is_overload_none, is_overload_true,
     is_overload_false)
 
 
-class SeriesType(types.IterableType):
+class SeriesType(types.IterableType, types.ArrayCompatible):
     """Temporary type class for Series objects.
     """
     def __init__(self, dtype, data=None, index=None, name_typ=None):
@@ -50,6 +50,11 @@ class SeriesType(types.IterableType):
         self.name_typ = name_typ
         super(SeriesType, self).__init__(
             name="series({}, {}, {}, {})".format(dtype, data, index, name_typ))
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, 'C')
 
     def copy(self, dtype=None, index=None):
         # XXX is copy necessary?

@@ -169,9 +169,12 @@ class DataFramePass(object):
                 blocks[label].body = new_body
 
         self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
-        while ir_utils.remove_dead(self.func_ir.blocks, self.func_ir.arg_names,
-                                   self.func_ir, self.typemap):
-            pass
+        # can't call remove dead since Series transform is not done yet and
+        # aliases like S.values are not known, see test_1D_Var_alloc3
+        # TODO: merge dist pass and series pass
+        # while ir_utils.remove_dead(self.func_ir.blocks, self.func_ir.arg_names,
+        #                            self.func_ir, self.typemap):
+        #     pass
 
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
         dprint_func_ir(self.func_ir, "after dataframe pass")

@@ -1102,9 +1102,14 @@ class DistributedPass(object):
                 nodes += self._gen_1D_Var_len(arr)
                 size_var = nodes[-1].target
 
-            return nodes + _compile_func_single_block(
-                lambda A, size_var: (size_var,) + A.shape[1:],
-                (arr, size_var), lhs, self)
+            if ndims == 1:
+                return nodes + _compile_func_single_block(
+                    lambda A, size_var: (size_var,),
+                    (arr, size_var), lhs, self)
+            else:
+                return nodes + _compile_func_single_block(
+                    lambda A, size_var: (size_var,) + A.shape[1:],
+                    (arr, size_var), lhs, self)
 
         # last dimension of transposed arrays is partitioned
         if arr.name in self._T_arrs:

@@ -60,6 +60,7 @@ def remove_hiframes(rhs, lives, call_list):
             'str_contains_regex', 'str_contains_noregex',
             'nunique', 'init_series', 'init_datetime_index',
             'init_timedelta_index',
+            'get_series_data', 'get_series_index', 'get_series_name',
             'convert_tup_to_rec', 'convert_rec_to_tup']):
         return True
     if (len(call_list) == 4
