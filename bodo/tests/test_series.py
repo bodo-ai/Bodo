@@ -1129,6 +1129,21 @@ def test_series_pct_change(numeric_series_val):
         bodo_func(numeric_series_val), test_impl(numeric_series_val))
 
 
+def test_series_index_cast():
+    # cast None index to integer index if necessary
+    def test_impl(n):
+        if n < 5:
+            S = pd.Series([3, 4], [2 ,3])
+        else:
+            S = pd.Series([3, 6])
+        return S
+
+    bodo_func = bodo.jit(test_impl)
+    n = 10
+    pd.testing.assert_series_equal(
+        bodo_func(n), test_impl(n))
+
+
 ############################### old tests ###############################
 
 
