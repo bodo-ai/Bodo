@@ -156,7 +156,6 @@ class SeriesPass(object):
                 blocks[label].body = new_body
 
 
-        # XXX remove slice() of h5 read due to Numba's #3380 bug
         self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
         while ir_utils.remove_dead(self.func_ir.blocks, self.func_ir.arg_names,
                                    self.func_ir, self.typemap):

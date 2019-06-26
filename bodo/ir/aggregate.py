@@ -62,13 +62,24 @@ def get_agg_func(func_ir, func_name, rhs):
     # error checking: make sure there is function input only
     if len(rhs.args) != 1:
         raise ValueError("agg expects 1 argument")
+
     agg_func = guard(get_definition, func_ir, rhs.args[0])
+    # multi-function case
+    if isinstance(agg_func, ir.Expr) and agg_func.op == 'build_tuple':
+        return [_get_agg_code(guard(get_definition, func_ir, v))
+                for v in agg_func.items]
+
+    return _get_agg_code(agg_func)
+
+
+def _get_agg_code(agg_func):
     if agg_func is None or not (isinstance(agg_func, ir.Expr)
                             and agg_func.op == 'make_function'):
         raise ValueError("lambda for map not found")
 
     def agg_func_wrapper(A):
         return A
+
     agg_func_wrapper.__code__ = agg_func.code
     agg_func = agg_func_wrapper
     return agg_func
@@ -263,7 +274,9 @@ def remove_dead_aggregate(aggregate_node, lives, arg_aliases, alias_map, func_ir
     for cname in dead_cols:
         aggregate_node.df_out_vars.pop(cname)
         if aggregate_node.pivot_arr is None:
-            aggregate_node.df_in_vars.pop(cname)
+            # input/output column names don't match in multi-function case
+            if cname in aggregate_node.df_in_vars:
+                aggregate_node.df_in_vars.pop(cname)
             if aggregate_node.out_typer_vars is not None:
                 aggregate_node.out_typer_vars.pop(cname)
         else:
@@ -677,7 +690,7 @@ def agg_parallel_combine_iter(key_arrs, reduce_recvs, out_dummy_tup, init_vals,
                 __combine_redvars, __eval_res, return_key, data_in, pivot_arr):  # pragma: no cover
     key_set = _build_set_tup(key_arrs)
     n_uniq_keys = len(key_set)
-    out_arrs = alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set, data_in,
+    out_arrs = alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set,
                                                                     return_key)
     # out_arrs = alloc_arr_tup(n_uniq_keys, out_dummy_tup)
     local_redvars = alloc_arr_tup(n_uniq_keys, reduce_recvs, init_vals)
@@ -711,7 +724,7 @@ def agg_seq_iter(key_arrs, redvar_dummy_tup, out_dummy_tup, data_in, init_vals,
                  __update_redvars, __eval_res, return_key, pivot_arr):  # pragma: no cover
     key_set = _build_set_tup(key_arrs)
     n_uniq_keys = len(key_set)
-    out_arrs = alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set, data_in,
+    out_arrs = alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set,
                                                                     return_key)
     # out_arrs = alloc_arr_tup(n_uniq_keys, out_dummy_tup)
     local_redvars = alloc_arr_tup(n_uniq_keys, redvar_dummy_tup, init_vals)
@@ -870,24 +883,24 @@ def get_key_set_overload(arr):
     return get_set
 
 
-def alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set, data_in, return_key):  # pragma: no cover
+def alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set, return_key):  # pragma: no cover
     return out_dummy_tup
 
 
 @overload(alloc_agg_output)
-def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set,
-                                                      data_in, return_key):
+def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set, return_key):
 
     # return key is either True or None
     if return_key == types.boolean:
         # TODO: handle pivot_table/crosstab with return key
         dtype = key_set.dtype
-        key_types = list(dtype.types) if isinstance(dtype, types.BaseTuple) else [dtype]
+        key_types = (list(dtype.types) if isinstance(dtype, types.BaseTuple)
+                     else [dtype])
         n_keys = len(key_types)
-        assert out_dummy_tup.count == data_in.count + n_keys
+        n_data = out_dummy_tup.count - n_keys
 
-        func_text = "def out_alloc_f(n_uniq_keys, out_dummy_tup, key_set, data_in, return_key):\n"
-        for i in range(data_in.count):
+        func_text = "def out_alloc_f(n_uniq_keys, out_dummy_tup, key_set, return_key):\n"
+        for i in range(n_data):
             func_text += "  c_{} = empty_like_type(n_uniq_keys, out_dummy_tup[{}])\n".format(i, i)
 
         # string special case
@@ -901,8 +914,8 @@ def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set,
                 func_text += "  out_key_{} = np.empty(n_uniq_keys, np.{})\n".format(i, key_typ)
 
         func_text += "  return ({}{}{},)\n".format(
-            ", ".join(["c_{}".format(i) for i in range(data_in.count)]),
-            "," if data_in.count != 0 else "",
+            ", ".join(["c_{}".format(i) for i in range(n_data)]),
+            "," if n_data != 0 else "",
             ", ".join(["out_key_{}".format(i) for i in range(n_keys)]))
 
         loc_vars = {}
@@ -915,7 +928,7 @@ def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set,
 
     assert return_key == types.none
 
-    def no_key_out_alloc(n_uniq_keys, out_dummy_tup, key_set, data_in, return_key):
+    def no_key_out_alloc(n_uniq_keys, out_dummy_tup, key_set, return_key):
         return alloc_arr_tup(n_uniq_keys, out_dummy_tup)
 
     return no_key_out_alloc
@@ -1103,9 +1116,15 @@ def get_agg_func_struct(agg_func, in_col_types, out_col_typs, typingctx,
         # use dummy int input type for crosstab since doesn't have input
         in_col_types = [types.Array(types.intp, 1, 'C')]
 
-    for in_col_typ in in_col_types:
+    typ_and_func = [(t, agg_func) for t in in_col_types]
+    if isinstance(agg_func, list):
+        assert len(in_col_types) == 1
+        in_typ = in_col_types[0]
+        typ_and_func = [(in_typ, f) for f in agg_func]
+
+    for in_col_typ, func in typ_and_func:
         f_ir, pm = compile_to_optimized_ir(
-            agg_func, tuple([in_col_typ]), typingctx)
+            func, tuple([in_col_typ]), typingctx)
 
         f_ir._definitions = build_definitions(f_ir.blocks)
         # TODO: support multiple top-level blocks
@@ -1300,21 +1319,17 @@ def gen_all_update_func(update_funcs, reduce_var_types, in_col_types,
         redvar_offsets, typingctx, targetctx, pivot_typ, pivot_values,
         is_crosstab):
 
-    num_cols = len(in_col_types)
+    out_num_cols = len(update_funcs)
+    in_num_cols = len(in_col_types)
     if pivot_values is not None:
-        assert num_cols == 1
-
-    reduce_arrs_tup_typ = types.Tuple([types.Array(t, 1, 'C') for t in reduce_var_types])
-    col_tup_typ = types.Tuple(in_col_types)
-    arg_typs = (reduce_arrs_tup_typ, col_tup_typ, types.intp, types.intp, pivot_typ)
+        assert in_num_cols == 1
 
     # redvar_arrs[0][w_ind], redvar_arrs[1][w_ind] = __update_redvars(
     #              redvar_arrs[0][w_ind], redvar_arrs[1][w_ind], data_in[0][i])
 
-    num_redvars = redvar_offsets[num_cols]
-
     func_text = "def update_all_f(redvar_arrs, data_in, w_ind, i, pivot_arr):\n"
     if pivot_values is not None:
+        num_redvars = redvar_offsets[in_num_cols]
         func_text += "  pv = pivot_arr[i]\n"
         for j, pv in enumerate(pivot_values):
             el = "el" if j!=0 else ""
@@ -1327,10 +1342,10 @@ def gen_all_update_func(update_funcs, reduce_var_types, in_col_types,
                 data_access = "0"
             func_text += "    {} = update_vars_0({}, {})\n".format(redvar_access, redvar_access, data_access)
     else:
-        for j in range(num_cols):
+        for j in range(out_num_cols):
             redvar_access = ", ".join(["redvar_arrs[{}][w_ind]".format(i)
                         for i in range(redvar_offsets[j], redvar_offsets[j+1])])
-            func_text += "  {} = update_vars_{}({},  data_in[{}][i])\n".format(redvar_access, j, redvar_access, j)
+            func_text += "  {} = update_vars_{}({},  data_in[{}][i])\n".format(redvar_access, j, redvar_access, 0 if in_num_cols == 1 else j)
     func_text += "  return\n"
     # print(func_text)
 

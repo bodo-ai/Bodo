@@ -1391,7 +1391,9 @@ class DataFramePass(object):
                 out_key_vars.append(out_key_var)
 
         df_col_map = {}
-        for c in grp_typ.selection:
+        out_colnames = (grp_typ.selection if isinstance(out_typ, SeriesType)
+                        else out_typ.columns)
+        for c in out_colnames:
             var = ir.Var(lhs.scope, mk_unique_var(c), lhs.loc)
             self.typemap[var.name] = (out_typ.data
                 if isinstance(out_typ, SeriesType)
