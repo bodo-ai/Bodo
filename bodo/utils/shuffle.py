@@ -57,6 +57,7 @@ ShuffleMeta = namedtuple('ShuffleMeta',
 def alloc_pre_shuffle_metadata(arr, data, n_pes, is_contig):
     return PreShuffleMeta(np.zeros(n_pes, np.int32), ())
 
+
 @overload(alloc_pre_shuffle_metadata)
 def alloc_pre_shuffle_metadata_overload(key_arrs, data, n_pes, is_contig):
 

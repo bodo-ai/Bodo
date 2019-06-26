@@ -18,8 +18,8 @@ from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.extending import overload, lower_builtin
 import bodo
-from bodo.utils.utils import (is_call_assign, is_var_assign, is_assign, debug_prints,
-        alloc_arr_tup, empty_like_type, sanitize_varname)
+from bodo.utils.utils import (is_call_assign, is_var_assign, is_assign,
+    debug_prints, alloc_arr_tup, empty_like_type, sanitize_varname)
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
@@ -516,6 +516,7 @@ class EvalDummyTyper(AbstractTemplate):
         assert not kws
         # takes the output array as first argument to know the output dtype
         return signature(args[0].dtype, *args)
+
 
 def agg_distributed_run(agg_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass):
     parallel = True
