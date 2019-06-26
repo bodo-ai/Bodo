@@ -2533,3 +2533,29 @@ def _fix_typ_undefs(new_typ, old_typ):
                                 for t, u in zip(new_typ.types, old_typ.types)])
     # TODO: fix List, Set
     return new_typ
+
+
+def get_stmt_writes(stmt):
+    # TODO: test bodo nodes
+    writes = set()
+    if isinstance(stmt, (ir.Assign, ir.SetItem, ir.StaticSetItem)):
+        writes.add(stmt.target.name)
+    if isinstance(stmt, Aggregate):
+        writes = {v.name for v in stmt.df_out_vars.values()}
+        if stmt.out_key_vars is not None:
+            writes.update({v.name for v in stmt.out_key_vars})
+    if isinstance(stmt,
+            (bodo.ir.csv_ext.CsvReader, bodo.ir.parquet_ext.ParquetReader)):
+        writes = {v.name for v in stmt.out_vars}
+    if isinstance(stmt, (bodo.ir.filter.Filter, bodo.ir.join.Join)):
+        writes = {v.name for v in stmt.df_out_vars.values()}
+    if isinstance(stmt, bodo.ir.sort.Sort):
+        if not stmt.inplace:
+            writes.update({v.name for v in stmt.out_key_arrs})
+            writes.update({v.name for v in stmt.df_out_vars.values()})
+    return writes
+
+
+# XXX override stmt write function use in parfor fusion
+# TODO: implement support for nodes properly
+ir_utils.get_stmt_writes = get_stmt_writes
