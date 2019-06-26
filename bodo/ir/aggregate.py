@@ -86,7 +86,7 @@ class TypeDt64(AbstractTemplate):
 
 
 # combine function takes the reduce vars in reverse order of their user
-@numba.njit
+@numba.njit(no_cpython_wrapper=True)
 def _var_combine(ssqdm_a, mean_a, nobs_a, ssqdm_b, mean_b, nobs_b):  # pragma: no cover
     nobs = (nobs_a + nobs_b)
     mean_x = (nobs_a * mean_a + nobs_b * mean_b) / nobs
@@ -94,16 +94,19 @@ def _var_combine(ssqdm_a, mean_a, nobs_a, ssqdm_b, mean_b, nobs_b):  # pragma: n
     M2 = ssqdm_a + ssqdm_b + delta * delta * nobs_a * nobs_b / nobs
     return M2, mean_x, nobs
 
+
 # XXX: njit doesn't work when bodo.jit() is used for agg_func in hiframes
 #@numba.njit
 def __special_combine(*args):
     return
+
 
 @infer_global(__special_combine)
 class SpecialCombineTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         return signature(types.void, *unliteral_all(args))
+
 
 @lower_builtin(__special_combine, types.VarArg(types.Any))
 def lower_special_combine(context, builder, sig, args):
@@ -599,7 +602,8 @@ def agg_distributed_run(agg_node, array_dists, typemap, calltypes, typingctx, ta
 
 distributed_pass.distributed_run_extensions[Aggregate] = agg_distributed_run
 
-@numba.njit
+
+@numba.njit(no_cpython_wrapper=True)
 def parallel_agg(key_arrs, data_redvar_dummy, out_dummy_tup, data_in, init_vals,
         __update_redvars, __combine_redvars, __eval_res, return_key, pivot_arr):  # pragma: no cover
     # alloc shuffle meta
@@ -634,7 +638,7 @@ def parallel_agg(key_arrs, data_redvar_dummy, out_dummy_tup, data_in, init_vals,
     # return (out_key,)
 
 
-@numba.njit
+@numba.njit(no_cpython_wrapper=True)
 def agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy,
                                         __update_redvars, pivot_arr):  # pragma: no cover
     # _init_val_0 = np.int64(0)
@@ -667,7 +671,7 @@ def agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy,
     return
 
 
-@numba.njit
+@numba.njit(no_cpython_wrapper=True)
 def agg_parallel_combine_iter(key_arrs, reduce_recvs, out_dummy_tup, init_vals,
                 __combine_redvars, __eval_res, return_key, data_in, pivot_arr):  # pragma: no cover
     key_set = _build_set_tup(key_arrs)
@@ -700,7 +704,8 @@ def agg_parallel_combine_iter(key_arrs, reduce_recvs, out_dummy_tup, init_vals,
     bodo.libs.dict_ext.byte_vec_free(byte_v)
     return out_arrs
 
-@numba.njit
+
+@numba.njit(no_cpython_wrapper=True)
 def agg_seq_iter(key_arrs, redvar_dummy_tup, out_dummy_tup, data_in, init_vals,
                  __update_redvars, __eval_res, return_key, pivot_arr):  # pragma: no cover
     key_set = _build_set_tup(key_arrs)
@@ -736,6 +741,7 @@ def agg_seq_iter(key_arrs, redvar_dummy_tup, out_dummy_tup, data_in, init_vals,
 def get_shuffle_data_send_buffs(sh, karrs, data):  # pragma: no cover
     return ()
 
+
 @overload(get_shuffle_data_send_buffs)
 def get_shuffle_data_send_buffs_overload(meta, key_arrs, data):
     n_keys = len(key_arrs.types)
@@ -753,8 +759,10 @@ def get_shuffle_data_send_buffs_overload(meta, key_arrs, data):
     send_buff_impl = loc_vars['send_buff_impl']
     return send_buff_impl
 
+
 def get_key_dict(arr):  # pragma: no cover
     return dict()
+
 
 @overload(get_key_dict)
 def get_key_dict_overload(arr):
@@ -782,8 +790,10 @@ def get_key_dict_overload(arr):
     k_dict_impl = loc_vars['k_dict_impl']
     return k_dict_impl
 
+
 def _getitem_keys(key_arrs, i, b_v):
     return key_arrs[i]
+
 
 @overload(_getitem_keys)
 def _getitem_keys_overload(arrs, ind, b_v):
@@ -808,6 +818,7 @@ def _getitem_keys_overload(arrs, ind, b_v):
 
 def _set_out_keys(out_arrs, w_ind, key_arrs, i, k):
     setitem_array_with_str(out_arrs[-1], w_ind, k)
+
 
 @overload(_set_out_keys)
 def _set_out_keys_overload(out_arrs, w_ind, key_arrs, i, k):
@@ -861,6 +872,7 @@ def get_key_set_overload(arr):
 def alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set, data_in, return_key):  # pragma: no cover
     return out_dummy_tup
 
+
 @overload(alloc_agg_output)
 def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set,
                                                       data_in, return_key):
@@ -907,11 +919,13 @@ def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set,
 
     return no_key_out_alloc
 
+
 # TODO: fix BaseContext.get_function() used in is_true()
 # @overload(bool)
 # def bool_none_overload(v_t):
 #     if v_t == types.none:
 #         return lambda a: False
+
 
 @infer_global(bool)
 class BoolNoneTyper(AbstractTemplate):
@@ -922,13 +936,16 @@ class BoolNoneTyper(AbstractTemplate):
         if val_t == types.none:
             return signature(types.boolean, *args)
 
+
 @lower_builtin(bool, types.none)
 def lower_column_mean_impl(context, builder, sig, args):
     res = context.compile_internal(builder, lambda a: False, sig, args)
     return res#impl_ret_untracked(context, builder, sig.return_type, res)
 
+
 def setitem_array_with_str(arr, i, v):  # pragma: no cover
     return
+
 
 @overload(setitem_array_with_str)
 def setitem_array_with_str_overload(arr, i, val):
@@ -947,10 +964,12 @@ def setitem_array_with_str_overload(arr, i, val):
 
     return setitem_impl
 
+
 def _get_np_dtype(t):
     if t == types.NPDatetime('ns'):
         return "dt64_dtype"
     return "np.{}".format(t)
+
 
 def gen_top_level_agg_func(key_names, return_key, red_var_typs, out_typs,
                                         in_col_names, out_col_names, parallel):
@@ -1163,6 +1182,7 @@ def get_agg_func_struct(agg_func, in_col_types, out_col_typs, typingctx,
     return AggFuncStruct(all_vartypes, init_func,
                          update_all_func, combine_all_func, eval_all_func)
 
+
 def _mv_read_only_init_vars(init_nodes, parfor, eval_nodes):
     """move stmts that are only used in the parfor body to the beginning of
     parfor body. For example, in test_agg_seq_str, B='aa' should be moved.
@@ -1274,6 +1294,7 @@ def gen_init_func(init_nodes, reduce_vars, var_types, typingctx, targetctx):
     imp_dis.add_overload(init_all_func)
     return imp_dis
 
+
 def gen_all_update_func(update_funcs, reduce_var_types, in_col_types,
         redvar_offsets, typingctx, targetctx, pivot_typ, pivot_values,
         is_crosstab):
@@ -1318,7 +1339,8 @@ def gen_all_update_func(update_funcs, reduce_var_types, in_col_types,
     loc_vars = {}
     exec(func_text, glbs, loc_vars)
     update_all_f = loc_vars['update_all_f']
-    return numba.njit(update_all_f)
+    return numba.njit(no_cpython_wrapper=True)(update_all_f)
+
 
 def gen_all_combine_func(combine_funcs, reduce_var_types, redvar_offsets,
                                 typingctx, targetctx, pivot_typ, pivot_values):
@@ -1382,6 +1404,7 @@ def gen_all_combine_func(combine_funcs, reduce_var_types, redvar_offsets,
     imp_dis.add_overload(combine_all_func)
     return imp_dis
 
+
 def gen_all_eval_func(eval_funcs, reduce_var_types, redvar_offsets,
         out_col_typs, typingctx, targetctx, pivot_values):
 
@@ -1418,7 +1441,7 @@ def gen_all_eval_func(eval_funcs, reduce_var_types, redvar_offsets,
     loc_vars = {}
     exec(func_text, glbs, loc_vars)
     eval_all_f = loc_vars['eval_all_f']
-    return numba.njit(eval_all_f)
+    return numba.njit(no_cpython_wrapper=True)(eval_all_f)
 
 
 def gen_eval_func(f_ir, eval_nodes, reduce_vars, var_types, pm, typingctx, targetctx):
@@ -1574,6 +1597,7 @@ def _match_reduce_def(var_def, f_ir, ind):
         if fdef == ('max', 'builtins'):
             func_text = "    v{} = max(v{}, in{})\n".format(ind, ind, ind)
     return func_text
+
 
 def gen_update_func(parfor, redvars, var_to_redvar, var_types, arr_var,
                        in_col_typ, pm, typingctx, targetctx):
@@ -1781,8 +1805,10 @@ def get_parfor_reductions(parfor, parfor_params, calltypes,
 
     return reduce_varnames, var_to_param
 
+
 def _build_set_tup(arr_tup):
     return build_set(arr_tup[0])
+
 
 @overload(_build_set_tup)
 def _build_set_tup_overload(arr_tup):
