@@ -74,8 +74,6 @@ def sort_array_analysis(sort_node, equiv_set, typemap, array_analysis):
     in_arrs = sort_node.key_arrs + list(sort_node.df_in_vars.values())
     for col_var in in_arrs:
         typ = typemap[col_var.name]
-        if typ == string_array_type:
-            continue
         col_shape = equiv_set.get_shape(col_var)
         if col_shape is not None:
             all_shapes.append(col_shape[0])
@@ -88,8 +86,6 @@ def sort_array_analysis(sort_node, equiv_set, typemap, array_analysis):
     out_arrs = sort_node.out_key_arrs + list(sort_node.df_out_vars.values())
     for col_var in out_arrs:
         typ = typemap[col_var.name]
-        if typ == string_array_type:
-            continue
         col_shape = equiv_set.get_shape(col_var)
         if col_shape is not None:
             all_shapes.append(col_shape[0])
