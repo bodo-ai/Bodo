@@ -357,10 +357,8 @@ def aggregate_array_analysis(aggregate_node, equiv_set, typemap,
             col_shape = equiv_set.get_shape(aggregate_node.pivot_arr)
             all_shapes.append(col_shape[0])
 
-    for _, col_var in aggregate_node.df_in_vars.items():
+    for col_var in aggregate_node.df_in_vars.values():
         typ = typemap[col_var.name]
-        if typ == string_array_type:
-            continue
         col_shape = equiv_set.get_shape(col_var)
         all_shapes.append(col_shape[0])
 
@@ -378,8 +376,6 @@ def aggregate_array_analysis(aggregate_node, equiv_set, typemap,
 
     for col_var in out_vars:
         typ = typemap[col_var.name]
-        if typ == string_array_type:
-            continue
         (shape, c_post) = array_analysis._gen_shape_call(
             equiv_set, col_var, typ.ndim, None)
         equiv_set.insert_equiv(col_var, shape)
@@ -399,7 +395,7 @@ numba.array_analysis.array_analysis_extensions[Aggregate] = aggregate_array_anal
 def aggregate_distributed_analysis(aggregate_node, array_dists):
     # input columns have same distribution
     in_dist = Distribution.OneD
-    for _, col_var in aggregate_node.df_in_vars.items():
+    for col_var in aggregate_node.df_in_vars.values():
         in_dist = Distribution(
             min(in_dist.value, array_dists[col_var.name].value))
 
@@ -414,14 +410,14 @@ def aggregate_distributed_analysis(aggregate_node, array_dists):
           min(in_dist.value, array_dists[aggregate_node.pivot_arr.name].value))
         array_dists[aggregate_node.pivot_arr.name] = in_dist
 
-    for _, col_var in aggregate_node.df_in_vars.items():
+    for col_var in aggregate_node.df_in_vars.values():
         array_dists[col_var.name] = in_dist
     for key_arr in aggregate_node.key_arrs:
         array_dists[key_arr.name] = in_dist
 
     # output columns have same distribution
     out_dist = Distribution.OneD_Var
-    for _, col_var in aggregate_node.df_out_vars.items():
+    for col_var in aggregate_node.df_out_vars.values():
         # output dist might not be assigned yet
         if col_var.name in array_dists:
             out_dist = Distribution(
@@ -435,7 +431,7 @@ def aggregate_distributed_analysis(aggregate_node, array_dists):
 
     # out dist should meet input dist (e.g. REP in causes REP out)
     out_dist = Distribution(min(out_dist.value, in_dist.value))
-    for _, col_var in aggregate_node.df_out_vars.items():
+    for col_var in aggregate_node.df_out_vars.values():
         array_dists[col_var.name] = out_dist
 
     if aggregate_node.out_key_vars is not None:
@@ -449,7 +445,7 @@ def aggregate_distributed_analysis(aggregate_node, array_dists):
         # pivot case
         if aggregate_node.pivot_arr is not None:
             array_dists[aggregate_node.pivot_arr.name] = out_dist
-        for _, col_var in aggregate_node.df_in_vars.items():
+        for col_var in aggregate_node.df_in_vars.values():
             array_dists[col_var.name] = out_dist
 
     return
@@ -1132,9 +1128,6 @@ def get_agg_func_struct(agg_func, in_col_types, out_col_typs, typingctx,
             var_types, arr_var, pm, typingctx, targetctx)
 
         init_nodes = _mv_read_only_init_vars(init_nodes, parfor, eval_nodes)
-        # remove len(arr) for string arrays (not handled by array analysis)
-        if pm.typemap[arr_var.name] == string_array_type:
-            init_nodes = _rm_len_str_arr(init_nodes, arr_var, f_ir)
 
         # XXX: update mutates parfor body
         update_func = gen_update_func(parfor, redvars, var_to_redvar, var_types,
@@ -1215,23 +1208,6 @@ def _mv_read_only_init_vars(init_nodes, parfor, eval_nodes):
     first_body_label = min(parfor.loop_body.keys())
     first_block = parfor.loop_body[first_body_label]
     first_block.body = const_nodes + first_block.body
-    return new_init_nodes
-
-
-def _rm_len_str_arr(init_nodes, arr_var, f_ir):
-    """remove len(arr_var) for init_nodes. len() still exists for string
-    arrays since array analysis doesn't handle them.
-    """
-    new_init_nodes = []
-
-    for stmt in reversed(init_nodes):
-        if (is_call_assign(stmt)
-                and find_callname(f_ir, stmt.value) == ('len', 'builtins')
-                and stmt.value.args[0].name == arr_var.name):
-            continue
-        new_init_nodes.append(stmt)
-
-    new_init_nodes.reverse()
     return new_init_nodes
 
 
