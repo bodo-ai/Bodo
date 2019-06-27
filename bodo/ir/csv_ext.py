@@ -54,9 +54,6 @@ def csv_array_analysis(csv_node, equiv_set, typemap, array_analysis):
     all_shapes = []
     for col_var in csv_node.out_vars:
         typ = typemap[col_var.name]
-        # TODO: string_series_type also?
-        if typ == string_array_type:
-            continue
         (shape, c_post) = array_analysis._gen_shape_call(
             equiv_set, col_var, typ.ndim, None)
         equiv_set.insert_equiv(col_var, shape)
