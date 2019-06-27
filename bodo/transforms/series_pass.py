@@ -1155,7 +1155,7 @@ class SeriesPass(object):
             agg_node = bodo.ir.aggregate.Aggregate(
                 lhs.name, 'series', ['series'], [out_key_var],
                 {'data': out_data_var}, {'data': data}, [data], agg_func,
-                None, lhs.loc)
+                lhs.loc)
             nodes.append(agg_node)
             # TODO: handle args like sort=False
             func = lambda A, B, name: bodo.hiframes.api.init_series(

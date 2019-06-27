@@ -168,7 +168,7 @@ def _column_std_impl_linear(A):  # pragma: no cover
 
 class Aggregate(ir.Stmt):
     def __init__(self, df_out, df_in, key_names, out_key_vars, df_out_vars,
-                                 df_in_vars, key_arrs, agg_func, tp_vars, loc,
+                                 df_in_vars, key_arrs, agg_func, loc,
                                  pivot_arr=None, pivot_values=None,
                                  is_crosstab=False):
         # name of output dataframe (just for printing purposes)
@@ -184,8 +184,6 @@ class Aggregate(ir.Stmt):
         self.key_arrs = key_arrs
 
         self.agg_func = agg_func
-        # XXX update tp_vars in copy propagate etc.?
-        self.out_typer_vars = tp_vars
 
         self.loc = loc
         # pivot_table handling
@@ -210,39 +208,12 @@ class Aggregate(ir.Stmt):
             df_out_str, df_in_str, key_names, key_arrnames, pivot)
 
 
-def aggregate_typeinfer(aggregate_node, typeinferer):
-    for out_name, out_var in aggregate_node.df_out_vars.items():
-        if aggregate_node.pivot_arr is not None:
-            tp_var = list(aggregate_node.out_typer_vars.values())[0]
-        else:
-            tp_var = aggregate_node.out_typer_vars[out_name]
-
-        typeinferer.constraints.append(
-            typeinfer.Propagate(
-                dst=out_var.name, src=tp_var.name, loc=aggregate_node.loc))
-
-    # return key case
-    if aggregate_node.out_key_vars is not None:
-        for in_key, out_key in zip(aggregate_node.key_arrs, aggregate_node.out_key_vars):
-            typeinferer.constraints.append(typeinfer.Propagate(
-                dst=out_key.name, src=in_key.name,
-                loc=aggregate_node.loc))
-
-    return
-
-typeinfer.typeinfer_extensions[Aggregate] = aggregate_typeinfer
-
-
 def aggregate_usedefs(aggregate_node, use_set=None, def_set=None):
     if use_set is None:
         use_set = set()
     if def_set is None:
         def_set = set()
 
-    if aggregate_node.out_typer_vars is not None:
-        # typer vars are used before typing (series_pass should set None)
-        for v in aggregate_node.out_typer_vars.values():
-            use_set.add(v.name)
     # key array and input columns are used
     use_set.update({v.name for v in aggregate_node.key_arrs})
     use_set.update({v.name for v in aggregate_node.df_in_vars.values()})
@@ -277,8 +248,6 @@ def remove_dead_aggregate(aggregate_node, lives, arg_aliases, alias_map, func_ir
             # input/output column names don't match in multi-function case
             if cname in aggregate_node.df_in_vars:
                 aggregate_node.df_in_vars.pop(cname)
-            if aggregate_node.out_typer_vars is not None:
-                aggregate_node.out_typer_vars.pop(cname)
         else:
             aggregate_node.pivot_values.remove(cname)
 

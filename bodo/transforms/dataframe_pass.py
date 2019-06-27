@@ -1405,7 +1405,7 @@ class DataFramePass(object):
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name, df_var.name, grp_typ.keys, out_key_vars, df_col_map,
             in_vars, in_key_arrs,
-            agg_func, None, lhs.loc)
+            agg_func, lhs.loc)
 
         nodes.append(agg_node)
 
@@ -1485,7 +1485,7 @@ class DataFramePass(object):
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name, df_var.name, [index], None, df_col_map,
             in_vars, [index_arr],
-            agg_func, None, lhs.loc, pivot_arr, pivot_values)
+            agg_func, lhs.loc, pivot_arr, pivot_values)
         nodes.append(agg_node)
 
         _init_df = _gen_init_df(out_typ.columns)
@@ -1524,7 +1524,7 @@ class DataFramePass(object):
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name, 'crosstab', [index.name], None, df_col_map,
             in_vars, [index],
-            _agg_len_impl, None, lhs.loc, pivot_arr, pivot_values, True)
+            _agg_len_impl, lhs.loc, pivot_arr, pivot_values, True)
         nodes = [agg_node]
 
         _init_df = _gen_init_df(out_typ.columns)
