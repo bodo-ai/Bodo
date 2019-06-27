@@ -46,10 +46,10 @@ def filter_array_analysis(filter_node, equiv_set, typemap, array_analysis):
     if isinstance(index_typ, types.Array) and index_typ.dtype == types.bool_:
         col_shape = equiv_set.get_shape(filter_node.bool_arr)
         all_shapes.append(col_shape[0])
-    for _, col_var in filter_node.df_in_vars.items():
+    for col_var in filter_node.df_in_vars.values():
         typ = typemap[col_var.name]
         # TODO handle list_string_array_type in other nodes
-        if typ in (string_array_type, list_string_array_type,
+        if typ in (list_string_array_type,
                     string_array_split_view_type):
             continue
         col_shape = equiv_set.get_shape(col_var)
@@ -62,9 +62,9 @@ def filter_array_analysis(filter_node, equiv_set, typemap, array_analysis):
     # arrays of output df have same size in first dimension
     # gen size variable for an output column
     all_shapes = []
-    for _, col_var in filter_node.df_out_vars.items():
+    for col_var in filter_node.df_out_vars.values():
         typ = typemap[col_var.name]
-        if typ in (string_array_type, list_string_array_type,
+        if typ in (list_string_array_type,
                     string_array_split_view_type):
             continue
         (shape, c_post) = array_analysis._gen_shape_call(
@@ -87,7 +87,7 @@ def filter_distributed_analysis(filter_node, array_dists):
 
     # input columns have same distribution
     in_dist = Distribution.OneD
-    for _, col_var in filter_node.df_in_vars.items():
+    for col_var in filter_node.df_in_vars.values():
         in_dist = Distribution(
             min(in_dist.value, array_dists[col_var.name].value))
 
@@ -95,14 +95,14 @@ def filter_distributed_analysis(filter_node, array_dists):
     if filter_node.bool_arr.name in array_dists:
         in_dist = Distribution(
             min(in_dist.value, array_dists[filter_node.bool_arr.name].value))
-    for _, col_var in filter_node.df_in_vars.items():
+    for col_var in filter_node.df_in_vars.values():
         array_dists[col_var.name] = in_dist
     if filter_node.bool_arr.name in array_dists:
         array_dists[filter_node.bool_arr.name] = in_dist
 
     # output columns have same distribution
     out_dist = Distribution.OneD_Var
-    for _, col_var in filter_node.df_out_vars.items():
+    for col_var in filter_node.df_out_vars.values():
         # output dist might not be assigned yet
         if col_var.name in array_dists:
             out_dist = Distribution(
@@ -110,14 +110,14 @@ def filter_distributed_analysis(filter_node, array_dists):
 
     # out dist should meet input dist (e.g. REP in causes REP out)
     out_dist = Distribution(min(out_dist.value, in_dist.value))
-    for _, col_var in filter_node.df_out_vars.items():
+    for col_var in filter_node.df_out_vars.values():
         array_dists[col_var.name] = out_dist
 
     # output can cause input REP
     if out_dist != Distribution.OneD_Var:
         if filter_node.bool_arr.name in array_dists:
             array_dists[filter_node.bool_arr.name] = out_dist
-        for _, col_var in filter_node.df_in_vars.items():
+        for col_var in filter_node.df_in_vars.values():
             array_dists[col_var.name] = out_dist
 
     return
