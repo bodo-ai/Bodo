@@ -94,9 +94,7 @@ def test_array_size1(A):
     # TODO: tests with array created inside the function
 
 
-@pytest.mark.skip(reason="TODO: fix 1D Var array and parfors")
-@pytest.mark.parametrize('A', [np.arange(11), np.arange(33).reshape(11, 3)])
-def test_1D_Var_parfor(A):
+def test_1D_Var_parfor1():
     # 1D_Var parfor where index is used in computation
     def impl1(A, B):
         C = A[B != 0]
@@ -106,6 +104,24 @@ def test_1D_Var_parfor(A):
         return s
 
     bodo_func = bodo.jit(distributed={'A', 'B'})(impl1)
+    A = np.arange(11)
+    start, end = get_start_end(len(A))
+    B = np.arange(len(A)) % 2
+    assert bodo_func(A[start:end], B[start:end]) == impl1(A, B)
+    assert count_array_REPs() == 0
+
+
+def test_1D_Var_parfor2():
+    # 1D_Var parfor where index is used in computation
+    def impl1(A, B):
+        C = A[B != 0]
+        s = 0
+        for i in bodo.prange(len(C)):
+            s += i + C[i,0]
+        return s
+
+    bodo_func = bodo.jit(distributed={'A', 'B'})(impl1)
+    A = np.arange(33).reshape(11, 3)
     start, end = get_start_end(len(A))
     B = np.arange(len(A)) % 2
     assert bodo_func(A[start:end], B[start:end]) == impl1(A, B)

@@ -1365,7 +1365,8 @@ class DistributedPass(object):
         for (arr, index) in array_accesses:
             # XXX avail_vars is used since accessed array could be defined in
             # init_block
-            if self._is_1D_Var_arr(arr) and index_name == index and arr in avail_vars:
+            if self._is_1D_Var_arr(arr) and self._index_has_par_index(
+                    index, index_name) and arr in avail_vars:
                 arr_var = ir.Var(stop_var.scope, arr, stop_var.loc)
                 prepend += _compile_func_single_block(
                     lambda A: len(A), (arr_var,), None, self)
@@ -1453,16 +1454,15 @@ class DistributedPass(object):
         out = prepend + [parfor] + reduce_nodes
         return out
 
-    def _index_has_par_index(self, index, other_index):
-        if index == other_index:
+    def _index_has_par_index(self, index, par_index):
+        """check if parfor index is used in 1st dimension of access index
+        """
+        if index == par_index:
             return True
         # multi-dim case
         tup_list = guard(find_build_tuple, self.func_ir, index)
-        if tup_list is not None:
-            index_tuple = [var.name for var in tup_list]
-            if index_tuple[0] == index:
-                return True
-        return False
+        return (tup_list is not None and len(tup_list) > 0
+                and tup_list[0].name == par_index)
 
     def _gen_parfor_reductions(self, parfor):
         scope = parfor.init_block.scope
