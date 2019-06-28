@@ -595,6 +595,13 @@ class UntypedPass(object):
         if header == 'infer':
             header = 0 if col_names == 0 else None
 
+        # TODO: support string usecols
+        usecols = None
+        if usecols_var != '':
+            err_msg = "pd.read_csv() usecols should be constant list of ints"
+            usecols = self._get_str_or_list(
+                usecols_var, err_msg=err_msg, typ=int)
+
         # if inference is required
         if dtype_var is '' or col_names == 0:
             # infer column names and types from constant filename
@@ -608,12 +615,18 @@ class UntypedPass(object):
                 header=header)
             # TODO: categorical, etc.
             dtypes = numba.typeof(df).data
-            cols = df.columns.to_list()
+
+            usecols = list(range(len(dtypes))) if usecols is None else usecols
+            # convert Pandas generated integer names if any
+            cols = [str(df.columns[i]) for i in usecols]
             # overwrite column names like Pandas if explicitly provided
             if col_names != 0:
                 cols[-len(col_names):] = col_names
             col_names = cols
-            dtype_map = {c:d for c,d in zip(col_names, dtypes)}
+            dtype_map = {c: dtypes[usecols[i]]
+                for i, c in enumerate(col_names)}
+
+        usecols = list(range(len(col_names))) if usecols is None else usecols
 
         if header is not None:
             # data starts after header
@@ -643,10 +656,6 @@ class UntypedPass(object):
         if col_names == 0:
             raise ValueError("pd.read_csv() names should be constant list")
 
-        usecols = list(range(len(col_names)))
-        if usecols_var != '':
-            err_msg = "pd.read_csv() usecols should be constant list of ints"
-            usecols = self._get_str_or_list(usecols_var, err_msg=err_msg, typ=int)
         # TODO: support other args
 
         date_cols = []
