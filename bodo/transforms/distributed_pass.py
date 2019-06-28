@@ -92,7 +92,9 @@ class DistributedPass(object):
         #  transform
         self.func_ir.blocks = self._run_dist_pass(self.func_ir.blocks)
 
-        remove_dead(self.func_ir.blocks, self.func_ir.arg_names, self.func_ir, self.typemap)
+        while remove_dead(self.func_ir.blocks, self.func_ir.arg_names,
+                                   self.func_ir, self.typemap):
+            pass
         dprint_func_ir(self.func_ir, "after distributed pass")
         lower_parfor_sequential(
             self.typingctx, self.func_ir, self.typemap, self.calltypes)

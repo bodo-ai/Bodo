@@ -393,7 +393,7 @@ def remove_dist_calls(rhs, lives, call_list):
     return False
 
 
-# numba.ir_utils.remove_call_handlers.append(remove_dist_calls)
+numba.ir_utils.remove_call_handlers.append(remove_dist_calls)
 
 
 def get_rank():  # pragma: no cover
