@@ -611,7 +611,7 @@ class UntypedPass(object):
                     "annotation using 'dtype' if filename is not constant")
             rows_to_read = 100  # TODO: tune this
             df = pd.read_csv(
-                fname_const, nrows=rows_to_read, skiprows=skiprows,
+                fname_const, sep=sep, nrows=rows_to_read, skiprows=skiprows,
                 header=header)
             # TODO: categorical, etc.
             dtypes = numba.typeof(df).data
