@@ -1406,7 +1406,11 @@ class DistributedPass(object):
         ind_used = False
         for block in parfor.loop_body.values():
             for stmt in block.body:
-                if not is_get_setitem(stmt) and ind_varname in (v.name for v in stmt.list_vars()):
+                if (not is_get_setitem(stmt)
+                        and ind_varname in (v.name for v in stmt.list_vars())
+                        # assignment of parfor tuple index for multi-D cases
+                        and not (is_assign(stmt)
+                            and stmt.target.name == parfor.index_var.name)):
                     ind_used = True
                     dprint("index of 1D_Var pafor {} used in {}".format(
                         parfor.id, stmt))

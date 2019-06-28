@@ -146,19 +146,18 @@ def test_print3():
     bodo_func(np.ones(3), (3, np.ones(3)))
 
 
-# TODO: fix
-# @pytest.mark.parametrize('A', [np.arange(11), np.arange(33).reshape(11, 3)])
-# def test_1D_Var_alloc(A):
-#     #
-#     def impl1(A, B):
-#         C = A[B]
-#         return C.sum()
+@pytest.mark.parametrize('A', [np.arange(11), np.arange(33).reshape(11, 3)])
+def test_1D_Var_alloc_simple(A):
+    # make sure 1D_Var alloc and parfor handling works for 1D/2D arrays
+    def impl1(A, B):
+        C = A[B]
+        return C.sum()
 
-#     bodo_func = bodo.jit(distributed={'A', 'B'})(impl1)
-#     start, end = get_start_end(len(A))
-#     B = np.arange(len(A)) % 2 != 0
-#     assert bodo_func(A[start:end], B[start:end]) == impl1(A, B)
-#     assert count_array_REPs() == 0
+    bodo_func = bodo.jit(distributed={'A', 'B'})(impl1)
+    start, end = get_start_end(len(A))
+    B = np.arange(len(A)) % 2 != 0
+    assert bodo_func(A[start:end], B[start:end]) == impl1(A, B)
+    assert count_array_REPs() == 0
 
 
 def test_1D_Var_alloc1():
