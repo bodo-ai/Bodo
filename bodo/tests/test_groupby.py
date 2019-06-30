@@ -86,6 +86,31 @@ def test_groupby_simple_series_index(test_df):
         bodo_func(test_df).sort_index(), impl(test_df))
 
 
+def test_agg_multi_udf1(test_df):
+    def impl(df):
+        def id1(x): return (x<=2).sum()
+        def id2(x): return (x>2).sum()
+        return df.groupby('A')['B'].agg((id1, id2))
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(
+        bodo_func(test_df).sort_index(), impl(test_df))
+
+
+def test_agg_multi_udf_parallel(test_df):
+    def impl(df):
+        def id1(x): return (x<=2).sum()
+        def id2(x): return (x>2).sum()
+        df2 = df.groupby('A')['B'].agg((id1, id2))
+        return df2.id1.sum() + df2.id2.sum()
+
+    bodo_func = bodo.jit(distributed={'df'})(impl)
+    start, end = get_start_end(len(test_df))
+    assert bodo_func(test_df[start:end]) == impl(test_df)
+    assert count_array_REPs() == 0
+    assert count_parfor_REPs() == 0
+
+
 class TestGroupBy(unittest.TestCase):
     def test_agg_seq(self):
         def test_impl(df):

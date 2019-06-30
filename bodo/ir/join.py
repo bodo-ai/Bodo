@@ -74,8 +74,6 @@ def join_array_analysis(join_node, equiv_set, typemap, array_analysis):
                + list(join_node.right_vars.values()))
     for col_var in in_vars:
         typ = typemap[col_var.name]
-        if typ == string_array_type:
-            continue
         col_shape = equiv_set.get_shape(col_var)
         all_shapes.append(col_shape[0])
 
@@ -88,8 +86,6 @@ def join_array_analysis(join_node, equiv_set, typemap, array_analysis):
     all_shapes = []
     for col_var in join_node.df_out_vars.values():
         typ = typemap[col_var.name]
-        if typ == string_array_type:
-            continue
         (shape, c_post) = array_analysis._gen_shape_call(
             equiv_set, col_var, typ.ndim, None)
         equiv_set.insert_equiv(col_var, shape)

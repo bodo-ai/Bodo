@@ -385,6 +385,17 @@ def get_start_count(n):
     return start, count
 
 
+def remove_dist_calls(rhs, lives, call_list):
+    if call_list == ['dist_reduce', 'distributed_api', 'libs', bodo]:
+        return True
+    if call_list == [dist_reduce]:
+        return True
+    return False
+
+
+numba.ir_utils.remove_call_handlers.append(remove_dist_calls)
+
+
 def get_rank():  # pragma: no cover
     """dummy function for C mpi get_rank"""
     return 0
@@ -478,6 +489,12 @@ class ThreadedRetTyper(AbstractTemplate):
 @numba.njit
 def parallel_print(s):
     print(s)
+
+
+@numba.njit
+def single_print(*args):
+    if bodo.libs.distributed_api.get_rank() == 0:
+        print(*args)
 
 
 def irecv():  # pragma: no cover

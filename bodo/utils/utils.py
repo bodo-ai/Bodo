@@ -515,6 +515,10 @@ def is_assign(inst):
     return isinstance(inst, ir.Assign)
 
 
+def is_expr(val, op):
+    return isinstance(val, ir.Expr) and val.op == op
+
+
 def sanitize_varname(varname):
     new_name = varname.replace('$', '_').replace('.', '_')
     if not new_name[0].isalpha():

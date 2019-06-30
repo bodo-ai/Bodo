@@ -18,8 +18,8 @@ from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.extending import overload, lower_builtin
 import bodo
-from bodo.utils.utils import (is_call_assign, is_var_assign, is_assign, debug_prints,
-        alloc_arr_tup, empty_like_type, sanitize_varname)
+from bodo.utils.utils import (is_call_assign, is_var_assign, is_assign,
+    debug_prints, alloc_arr_tup, empty_like_type, sanitize_varname)
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
@@ -62,13 +62,24 @@ def get_agg_func(func_ir, func_name, rhs):
     # error checking: make sure there is function input only
     if len(rhs.args) != 1:
         raise ValueError("agg expects 1 argument")
+
     agg_func = guard(get_definition, func_ir, rhs.args[0])
+    # multi-function case
+    if isinstance(agg_func, ir.Expr) and agg_func.op == 'build_tuple':
+        return [_get_agg_code(guard(get_definition, func_ir, v))
+                for v in agg_func.items]
+
+    return _get_agg_code(agg_func)
+
+
+def _get_agg_code(agg_func):
     if agg_func is None or not (isinstance(agg_func, ir.Expr)
                             and agg_func.op == 'make_function'):
         raise ValueError("lambda for map not found")
 
     def agg_func_wrapper(A):
         return A
+
     agg_func_wrapper.__code__ = agg_func.code
     agg_func = agg_func_wrapper
     return agg_func
@@ -86,7 +97,7 @@ class TypeDt64(AbstractTemplate):
 
 
 # combine function takes the reduce vars in reverse order of their user
-@numba.njit
+@numba.njit(no_cpython_wrapper=True)
 def _var_combine(ssqdm_a, mean_a, nobs_a, ssqdm_b, mean_b, nobs_b):  # pragma: no cover
     nobs = (nobs_a + nobs_b)
     mean_x = (nobs_a * mean_a + nobs_b * mean_b) / nobs
@@ -94,16 +105,19 @@ def _var_combine(ssqdm_a, mean_a, nobs_a, ssqdm_b, mean_b, nobs_b):  # pragma: n
     M2 = ssqdm_a + ssqdm_b + delta * delta * nobs_a * nobs_b / nobs
     return M2, mean_x, nobs
 
+
 # XXX: njit doesn't work when bodo.jit() is used for agg_func in hiframes
 #@numba.njit
 def __special_combine(*args):
     return
+
 
 @infer_global(__special_combine)
 class SpecialCombineTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         return signature(types.void, *unliteral_all(args))
+
 
 @lower_builtin(__special_combine, types.VarArg(types.Any))
 def lower_special_combine(context, builder, sig, args):
@@ -154,7 +168,7 @@ def _column_std_impl_linear(A):  # pragma: no cover
 
 class Aggregate(ir.Stmt):
     def __init__(self, df_out, df_in, key_names, out_key_vars, df_out_vars,
-                                 df_in_vars, key_arrs, agg_func, tp_vars, loc,
+                                 df_in_vars, key_arrs, agg_func, loc,
                                  pivot_arr=None, pivot_values=None,
                                  is_crosstab=False):
         # name of output dataframe (just for printing purposes)
@@ -170,8 +184,6 @@ class Aggregate(ir.Stmt):
         self.key_arrs = key_arrs
 
         self.agg_func = agg_func
-        # XXX update tp_vars in copy propagate etc.?
-        self.out_typer_vars = tp_vars
 
         self.loc = loc
         # pivot_table handling
@@ -196,39 +208,12 @@ class Aggregate(ir.Stmt):
             df_out_str, df_in_str, key_names, key_arrnames, pivot)
 
 
-def aggregate_typeinfer(aggregate_node, typeinferer):
-    for out_name, out_var in aggregate_node.df_out_vars.items():
-        if aggregate_node.pivot_arr is not None:
-            tp_var = list(aggregate_node.out_typer_vars.values())[0]
-        else:
-            tp_var = aggregate_node.out_typer_vars[out_name]
-
-        typeinferer.constraints.append(
-            typeinfer.Propagate(
-                dst=out_var.name, src=tp_var.name, loc=aggregate_node.loc))
-
-    # return key case
-    if aggregate_node.out_key_vars is not None:
-        for in_key, out_key in zip(aggregate_node.key_arrs, aggregate_node.out_key_vars):
-            typeinferer.constraints.append(typeinfer.Propagate(
-                dst=out_key.name, src=in_key.name,
-                loc=aggregate_node.loc))
-
-    return
-
-typeinfer.typeinfer_extensions[Aggregate] = aggregate_typeinfer
-
-
 def aggregate_usedefs(aggregate_node, use_set=None, def_set=None):
     if use_set is None:
         use_set = set()
     if def_set is None:
         def_set = set()
 
-    if aggregate_node.out_typer_vars is not None:
-        # typer vars are used before typing (series_pass should set None)
-        for v in aggregate_node.out_typer_vars.values():
-            use_set.add(v.name)
     # key array and input columns are used
     use_set.update({v.name for v in aggregate_node.key_arrs})
     use_set.update({v.name for v in aggregate_node.df_in_vars.values()})
@@ -260,9 +245,9 @@ def remove_dead_aggregate(aggregate_node, lives, arg_aliases, alias_map, func_ir
     for cname in dead_cols:
         aggregate_node.df_out_vars.pop(cname)
         if aggregate_node.pivot_arr is None:
-            aggregate_node.df_in_vars.pop(cname)
-            if aggregate_node.out_typer_vars is not None:
-                aggregate_node.out_typer_vars.pop(cname)
+            # input/output column names don't match in multi-function case
+            if cname in aggregate_node.df_in_vars:
+                aggregate_node.df_in_vars.pop(cname)
         else:
             aggregate_node.pivot_values.remove(cname)
 
@@ -372,10 +357,8 @@ def aggregate_array_analysis(aggregate_node, equiv_set, typemap,
             col_shape = equiv_set.get_shape(aggregate_node.pivot_arr)
             all_shapes.append(col_shape[0])
 
-    for _, col_var in aggregate_node.df_in_vars.items():
+    for col_var in aggregate_node.df_in_vars.values():
         typ = typemap[col_var.name]
-        if typ == string_array_type:
-            continue
         col_shape = equiv_set.get_shape(col_var)
         all_shapes.append(col_shape[0])
 
@@ -393,8 +376,6 @@ def aggregate_array_analysis(aggregate_node, equiv_set, typemap,
 
     for col_var in out_vars:
         typ = typemap[col_var.name]
-        if typ == string_array_type:
-            continue
         (shape, c_post) = array_analysis._gen_shape_call(
             equiv_set, col_var, typ.ndim, None)
         equiv_set.insert_equiv(col_var, shape)
@@ -414,7 +395,7 @@ numba.array_analysis.array_analysis_extensions[Aggregate] = aggregate_array_anal
 def aggregate_distributed_analysis(aggregate_node, array_dists):
     # input columns have same distribution
     in_dist = Distribution.OneD
-    for _, col_var in aggregate_node.df_in_vars.items():
+    for col_var in aggregate_node.df_in_vars.values():
         in_dist = Distribution(
             min(in_dist.value, array_dists[col_var.name].value))
 
@@ -429,14 +410,14 @@ def aggregate_distributed_analysis(aggregate_node, array_dists):
           min(in_dist.value, array_dists[aggregate_node.pivot_arr.name].value))
         array_dists[aggregate_node.pivot_arr.name] = in_dist
 
-    for _, col_var in aggregate_node.df_in_vars.items():
+    for col_var in aggregate_node.df_in_vars.values():
         array_dists[col_var.name] = in_dist
     for key_arr in aggregate_node.key_arrs:
         array_dists[key_arr.name] = in_dist
 
     # output columns have same distribution
     out_dist = Distribution.OneD_Var
-    for _, col_var in aggregate_node.df_out_vars.items():
+    for col_var in aggregate_node.df_out_vars.values():
         # output dist might not be assigned yet
         if col_var.name in array_dists:
             out_dist = Distribution(
@@ -450,7 +431,7 @@ def aggregate_distributed_analysis(aggregate_node, array_dists):
 
     # out dist should meet input dist (e.g. REP in causes REP out)
     out_dist = Distribution(min(out_dist.value, in_dist.value))
-    for _, col_var in aggregate_node.df_out_vars.items():
+    for col_var in aggregate_node.df_out_vars.values():
         array_dists[col_var.name] = out_dist
 
     if aggregate_node.out_key_vars is not None:
@@ -464,7 +445,7 @@ def aggregate_distributed_analysis(aggregate_node, array_dists):
         # pivot case
         if aggregate_node.pivot_arr is not None:
             array_dists[aggregate_node.pivot_arr.name] = out_dist
-        for _, col_var in aggregate_node.df_in_vars.items():
+        for col_var in aggregate_node.df_in_vars.values():
             array_dists[col_var.name] = out_dist
 
     return
@@ -513,6 +494,7 @@ class EvalDummyTyper(AbstractTemplate):
         assert not kws
         # takes the output array as first argument to know the output dtype
         return signature(args[0].dtype, *args)
+
 
 def agg_distributed_run(agg_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass):
     parallel = True
@@ -599,7 +581,8 @@ def agg_distributed_run(agg_node, array_dists, typemap, calltypes, typingctx, ta
 
 distributed_pass.distributed_run_extensions[Aggregate] = agg_distributed_run
 
-@numba.njit
+
+@numba.njit(no_cpython_wrapper=True)
 def parallel_agg(key_arrs, data_redvar_dummy, out_dummy_tup, data_in, init_vals,
         __update_redvars, __combine_redvars, __eval_res, return_key, pivot_arr):  # pragma: no cover
     # alloc shuffle meta
@@ -634,7 +617,7 @@ def parallel_agg(key_arrs, data_redvar_dummy, out_dummy_tup, data_in, init_vals,
     # return (out_key,)
 
 
-@numba.njit
+@numba.njit(no_cpython_wrapper=True)
 def agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy,
                                         __update_redvars, pivot_arr):  # pragma: no cover
     # _init_val_0 = np.int64(0)
@@ -667,12 +650,12 @@ def agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy,
     return
 
 
-@numba.njit
+@numba.njit(no_cpython_wrapper=True)
 def agg_parallel_combine_iter(key_arrs, reduce_recvs, out_dummy_tup, init_vals,
                 __combine_redvars, __eval_res, return_key, data_in, pivot_arr):  # pragma: no cover
     key_set = _build_set_tup(key_arrs)
     n_uniq_keys = len(key_set)
-    out_arrs = alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set, data_in,
+    out_arrs = alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set,
                                                                     return_key)
     # out_arrs = alloc_arr_tup(n_uniq_keys, out_dummy_tup)
     local_redvars = alloc_arr_tup(n_uniq_keys, reduce_recvs, init_vals)
@@ -700,12 +683,13 @@ def agg_parallel_combine_iter(key_arrs, reduce_recvs, out_dummy_tup, init_vals,
     bodo.libs.dict_ext.byte_vec_free(byte_v)
     return out_arrs
 
-@numba.njit
+
+@numba.njit(no_cpython_wrapper=True)
 def agg_seq_iter(key_arrs, redvar_dummy_tup, out_dummy_tup, data_in, init_vals,
                  __update_redvars, __eval_res, return_key, pivot_arr):  # pragma: no cover
     key_set = _build_set_tup(key_arrs)
     n_uniq_keys = len(key_set)
-    out_arrs = alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set, data_in,
+    out_arrs = alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set,
                                                                     return_key)
     # out_arrs = alloc_arr_tup(n_uniq_keys, out_dummy_tup)
     local_redvars = alloc_arr_tup(n_uniq_keys, redvar_dummy_tup, init_vals)
@@ -736,6 +720,7 @@ def agg_seq_iter(key_arrs, redvar_dummy_tup, out_dummy_tup, data_in, init_vals,
 def get_shuffle_data_send_buffs(sh, karrs, data):  # pragma: no cover
     return ()
 
+
 @overload(get_shuffle_data_send_buffs)
 def get_shuffle_data_send_buffs_overload(meta, key_arrs, data):
     n_keys = len(key_arrs.types)
@@ -753,8 +738,10 @@ def get_shuffle_data_send_buffs_overload(meta, key_arrs, data):
     send_buff_impl = loc_vars['send_buff_impl']
     return send_buff_impl
 
+
 def get_key_dict(arr):  # pragma: no cover
     return dict()
+
 
 @overload(get_key_dict)
 def get_key_dict_overload(arr):
@@ -782,8 +769,10 @@ def get_key_dict_overload(arr):
     k_dict_impl = loc_vars['k_dict_impl']
     return k_dict_impl
 
+
 def _getitem_keys(key_arrs, i, b_v):
     return key_arrs[i]
+
 
 @overload(_getitem_keys)
 def _getitem_keys_overload(arrs, ind, b_v):
@@ -808,6 +797,7 @@ def _getitem_keys_overload(arrs, ind, b_v):
 
 def _set_out_keys(out_arrs, w_ind, key_arrs, i, k):
     setitem_array_with_str(out_arrs[-1], w_ind, k)
+
 
 @overload(_set_out_keys)
 def _set_out_keys_overload(out_arrs, w_ind, key_arrs, i, k):
@@ -858,23 +848,24 @@ def get_key_set_overload(arr):
     return get_set
 
 
-def alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set, data_in, return_key):  # pragma: no cover
+def alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set, return_key):  # pragma: no cover
     return out_dummy_tup
 
+
 @overload(alloc_agg_output)
-def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set,
-                                                      data_in, return_key):
+def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set, return_key):
 
     # return key is either True or None
     if return_key == types.boolean:
         # TODO: handle pivot_table/crosstab with return key
         dtype = key_set.dtype
-        key_types = list(dtype.types) if isinstance(dtype, types.BaseTuple) else [dtype]
+        key_types = (list(dtype.types) if isinstance(dtype, types.BaseTuple)
+                     else [dtype])
         n_keys = len(key_types)
-        assert out_dummy_tup.count == data_in.count + n_keys
+        n_data = out_dummy_tup.count - n_keys
 
-        func_text = "def out_alloc_f(n_uniq_keys, out_dummy_tup, key_set, data_in, return_key):\n"
-        for i in range(data_in.count):
+        func_text = "def out_alloc_f(n_uniq_keys, out_dummy_tup, key_set, return_key):\n"
+        for i in range(n_data):
             func_text += "  c_{} = empty_like_type(n_uniq_keys, out_dummy_tup[{}])\n".format(i, i)
 
         # string special case
@@ -888,8 +879,8 @@ def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set,
                 func_text += "  out_key_{} = np.empty(n_uniq_keys, np.{})\n".format(i, key_typ)
 
         func_text += "  return ({}{}{},)\n".format(
-            ", ".join(["c_{}".format(i) for i in range(data_in.count)]),
-            "," if data_in.count != 0 else "",
+            ", ".join(["c_{}".format(i) for i in range(n_data)]),
+            "," if n_data != 0 else "",
             ", ".join(["out_key_{}".format(i) for i in range(n_keys)]))
 
         loc_vars = {}
@@ -902,16 +893,18 @@ def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set,
 
     assert return_key == types.none
 
-    def no_key_out_alloc(n_uniq_keys, out_dummy_tup, key_set, data_in, return_key):
+    def no_key_out_alloc(n_uniq_keys, out_dummy_tup, key_set, return_key):
         return alloc_arr_tup(n_uniq_keys, out_dummy_tup)
 
     return no_key_out_alloc
+
 
 # TODO: fix BaseContext.get_function() used in is_true()
 # @overload(bool)
 # def bool_none_overload(v_t):
 #     if v_t == types.none:
 #         return lambda a: False
+
 
 @infer_global(bool)
 class BoolNoneTyper(AbstractTemplate):
@@ -922,13 +915,16 @@ class BoolNoneTyper(AbstractTemplate):
         if val_t == types.none:
             return signature(types.boolean, *args)
 
+
 @lower_builtin(bool, types.none)
 def lower_column_mean_impl(context, builder, sig, args):
     res = context.compile_internal(builder, lambda a: False, sig, args)
     return res#impl_ret_untracked(context, builder, sig.return_type, res)
 
+
 def setitem_array_with_str(arr, i, v):  # pragma: no cover
     return
+
 
 @overload(setitem_array_with_str)
 def setitem_array_with_str_overload(arr, i, val):
@@ -947,10 +943,12 @@ def setitem_array_with_str_overload(arr, i, val):
 
     return setitem_impl
 
+
 def _get_np_dtype(t):
     if t == types.NPDatetime('ns'):
         return "dt64_dtype"
     return "np.{}".format(t)
+
 
 def gen_top_level_agg_func(key_names, return_key, red_var_typs, out_typs,
                                         in_col_names, out_col_names, parallel):
@@ -1083,9 +1081,15 @@ def get_agg_func_struct(agg_func, in_col_types, out_col_typs, typingctx,
         # use dummy int input type for crosstab since doesn't have input
         in_col_types = [types.Array(types.intp, 1, 'C')]
 
-    for in_col_typ in in_col_types:
+    typ_and_func = [(t, agg_func) for t in in_col_types]
+    if isinstance(agg_func, list):
+        assert len(in_col_types) == 1
+        in_typ = in_col_types[0]
+        typ_and_func = [(in_typ, f) for f in agg_func]
+
+    for in_col_typ, func in typ_and_func:
         f_ir, pm = compile_to_optimized_ir(
-            agg_func, tuple([in_col_typ]), typingctx)
+            func, tuple([in_col_typ]), typingctx)
 
         f_ir._definitions = build_definitions(f_ir.blocks)
         # TODO: support multiple top-level blocks
@@ -1124,9 +1128,6 @@ def get_agg_func_struct(agg_func, in_col_types, out_col_typs, typingctx,
             var_types, arr_var, pm, typingctx, targetctx)
 
         init_nodes = _mv_read_only_init_vars(init_nodes, parfor, eval_nodes)
-        # remove len(arr) for string arrays (not handled by array analysis)
-        if pm.typemap[arr_var.name] == string_array_type:
-            init_nodes = _rm_len_str_arr(init_nodes, arr_var, f_ir)
 
         # XXX: update mutates parfor body
         update_func = gen_update_func(parfor, redvars, var_to_redvar, var_types,
@@ -1162,6 +1163,7 @@ def get_agg_func_struct(agg_func, in_col_types, out_col_typs, typingctx,
 
     return AggFuncStruct(all_vartypes, init_func,
                          update_all_func, combine_all_func, eval_all_func)
+
 
 def _mv_read_only_init_vars(init_nodes, parfor, eval_nodes):
     """move stmts that are only used in the parfor body to the beginning of
@@ -1206,23 +1208,6 @@ def _mv_read_only_init_vars(init_nodes, parfor, eval_nodes):
     first_body_label = min(parfor.loop_body.keys())
     first_block = parfor.loop_body[first_body_label]
     first_block.body = const_nodes + first_block.body
-    return new_init_nodes
-
-
-def _rm_len_str_arr(init_nodes, arr_var, f_ir):
-    """remove len(arr_var) for init_nodes. len() still exists for string
-    arrays since array analysis doesn't handle them.
-    """
-    new_init_nodes = []
-
-    for stmt in reversed(init_nodes):
-        if (is_call_assign(stmt)
-                and find_callname(f_ir, stmt.value) == ('len', 'builtins')
-                and stmt.value.args[0].name == arr_var.name):
-            continue
-        new_init_nodes.append(stmt)
-
-    new_init_nodes.reverse()
     return new_init_nodes
 
 
@@ -1274,25 +1259,22 @@ def gen_init_func(init_nodes, reduce_vars, var_types, typingctx, targetctx):
     imp_dis.add_overload(init_all_func)
     return imp_dis
 
+
 def gen_all_update_func(update_funcs, reduce_var_types, in_col_types,
         redvar_offsets, typingctx, targetctx, pivot_typ, pivot_values,
         is_crosstab):
 
-    num_cols = len(in_col_types)
+    out_num_cols = len(update_funcs)
+    in_num_cols = len(in_col_types)
     if pivot_values is not None:
-        assert num_cols == 1
-
-    reduce_arrs_tup_typ = types.Tuple([types.Array(t, 1, 'C') for t in reduce_var_types])
-    col_tup_typ = types.Tuple(in_col_types)
-    arg_typs = (reduce_arrs_tup_typ, col_tup_typ, types.intp, types.intp, pivot_typ)
+        assert in_num_cols == 1
 
     # redvar_arrs[0][w_ind], redvar_arrs[1][w_ind] = __update_redvars(
     #              redvar_arrs[0][w_ind], redvar_arrs[1][w_ind], data_in[0][i])
 
-    num_redvars = redvar_offsets[num_cols]
-
     func_text = "def update_all_f(redvar_arrs, data_in, w_ind, i, pivot_arr):\n"
     if pivot_values is not None:
+        num_redvars = redvar_offsets[in_num_cols]
         func_text += "  pv = pivot_arr[i]\n"
         for j, pv in enumerate(pivot_values):
             el = "el" if j!=0 else ""
@@ -1305,10 +1287,10 @@ def gen_all_update_func(update_funcs, reduce_var_types, in_col_types,
                 data_access = "0"
             func_text += "    {} = update_vars_0({}, {})\n".format(redvar_access, redvar_access, data_access)
     else:
-        for j in range(num_cols):
+        for j in range(out_num_cols):
             redvar_access = ", ".join(["redvar_arrs[{}][w_ind]".format(i)
                         for i in range(redvar_offsets[j], redvar_offsets[j+1])])
-            func_text += "  {} = update_vars_{}({},  data_in[{}][i])\n".format(redvar_access, j, redvar_access, j)
+            func_text += "  {} = update_vars_{}({},  data_in[{}][i])\n".format(redvar_access, j, redvar_access, 0 if in_num_cols == 1 else j)
     func_text += "  return\n"
     # print(func_text)
 
@@ -1318,7 +1300,8 @@ def gen_all_update_func(update_funcs, reduce_var_types, in_col_types,
     loc_vars = {}
     exec(func_text, glbs, loc_vars)
     update_all_f = loc_vars['update_all_f']
-    return numba.njit(update_all_f)
+    return numba.njit(no_cpython_wrapper=True)(update_all_f)
+
 
 def gen_all_combine_func(combine_funcs, reduce_var_types, redvar_offsets,
                                 typingctx, targetctx, pivot_typ, pivot_values):
@@ -1382,6 +1365,7 @@ def gen_all_combine_func(combine_funcs, reduce_var_types, redvar_offsets,
     imp_dis.add_overload(combine_all_func)
     return imp_dis
 
+
 def gen_all_eval_func(eval_funcs, reduce_var_types, redvar_offsets,
         out_col_typs, typingctx, targetctx, pivot_values):
 
@@ -1418,7 +1402,7 @@ def gen_all_eval_func(eval_funcs, reduce_var_types, redvar_offsets,
     loc_vars = {}
     exec(func_text, glbs, loc_vars)
     eval_all_f = loc_vars['eval_all_f']
-    return numba.njit(eval_all_f)
+    return numba.njit(no_cpython_wrapper=True)(eval_all_f)
 
 
 def gen_eval_func(f_ir, eval_nodes, reduce_vars, var_types, pm, typingctx, targetctx):
@@ -1575,6 +1559,7 @@ def _match_reduce_def(var_def, f_ir, ind):
             func_text = "    v{} = max(v{}, in{})\n".format(ind, ind, ind)
     return func_text
 
+
 def gen_update_func(parfor, redvars, var_to_redvar, var_types, arr_var,
                        in_col_typ, pm, typingctx, targetctx):
     num_red_vars = len(redvars)
@@ -1708,11 +1693,10 @@ def _rm_arg_agg_block(block, typemap):
         if is_assign(stmt) and isinstance(stmt.value, ir.Arg):
             arr_var = stmt.target
             arr_typ = typemap[arr_var.name]
-            # string arrays don't have shape generated by array analysis
-            if arr_typ == string_array_type:
+            # array analysis generates shape only for ArrayCompatible types
+            if not isinstance(arr_typ, types.ArrayCompatible):
                 block_body += block.body[i+1:]
                 break
-            assert isinstance(arr_typ, types.Array), "array type expected"
             # XXX assuming shape/size nodes are right after arg
             shape_nd = block.body[i+1]
             assert (is_assign(shape_nd) and isinstance(shape_nd.value, ir.Expr)
@@ -1782,8 +1766,10 @@ def get_parfor_reductions(parfor, parfor_params, calltypes,
 
     return reduce_varnames, var_to_param
 
+
 def _build_set_tup(arr_tup):
     return build_set(arr_tup[0])
+
 
 @overload(_build_set_tup)
 def _build_set_tup_overload(arr_tup):

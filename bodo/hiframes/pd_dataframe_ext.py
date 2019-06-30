@@ -560,12 +560,12 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None,
         raise ValueError("pd.DataFrame(): copy argument should be constant")
 
     copy = getattr(copy, 'literal_value', copy)
-    col_args, data_args = _get_df_args(data, index, columns, dtype, copy)
+    col_args, data_args, index_arg = _get_df_args(data, index, columns, dtype, copy)
     col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
 
     func_text = "def _init_df(data=None, index=None, columns=None, dtype=None, copy=False):\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), bodo.utils.conversion.convert_to_index(index), {})\n".format(
-        data_args, col_var)
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
+        data_args, index_arg, col_var)
     loc_vars = {}
     exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
     # print(func_text)
@@ -584,6 +584,9 @@ def _get_df_args(data, index, columns, dtype, copy):
     if not (dtype is None or dtype == types.none):
         astype_str = '.astype(dtype)'
 
+
+    index_arg = 'bodo.utils.conversion.convert_to_index(index)'
+
     # data is sentinel tuple (converted from dictionary)
     if isinstance(data, types.Tuple):
         # first element is sentinel
@@ -594,6 +597,13 @@ def _get_df_args(data, index, columns, dtype, copy):
         data_arrs = ['bodo.utils.conversion.coerce_to_array(data[{}]){}'.format(
                     i, astype_str) for i in range(n_cols + 1, 2 * n_cols + 1)]
         data_dict =  dict(zip(data_keys, data_arrs))
+        # if no index provided and there are Series inputs, get index from them
+        # XXX cannot handle alignment of multiple Series
+        if is_overload_none(index):
+            for i, t in enumerate(data.types[n_cols+1:]):
+                if isinstance(t, SeriesType):
+                    index_arg = 'bodo.hiframes.api.get_series_index(data[{}])'.format(n_cols + 1 + i)
+                    break
     else:
         # ndarray case
         # checks for 2d and column args
@@ -619,7 +629,7 @@ def _get_df_args(data, index, columns, dtype, copy):
 
     data_args = ", ".join(data_dict[c] for c in col_names)
     col_args = ", ".join("'{}'".format(c) for c in col_names)
-    return col_args, data_args
+    return col_args, data_args, index_arg
 
 
 def _fill_null_arrays(data_dict, col_names, index):

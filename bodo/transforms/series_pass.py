@@ -156,7 +156,6 @@ class SeriesPass(object):
                 blocks[label].body = new_body
 
 
-        # XXX remove slice() of h5 read due to Numba's #3380 bug
         self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
         while ir_utils.remove_dead(self.func_ir.blocks, self.func_ir.arg_names,
                                    self.func_ir, self.typemap):
@@ -1156,7 +1155,7 @@ class SeriesPass(object):
             agg_node = bodo.ir.aggregate.Aggregate(
                 lhs.name, 'series', ['series'], [out_key_var],
                 {'data': out_data_var}, {'data': data}, [data], agg_func,
-                None, lhs.loc)
+                lhs.loc)
             nodes.append(agg_node)
             # TODO: handle args like sort=False
             func = lambda A, B, name: bodo.hiframes.api.init_series(
@@ -2534,3 +2533,29 @@ def _fix_typ_undefs(new_typ, old_typ):
                                 for t, u in zip(new_typ.types, old_typ.types)])
     # TODO: fix List, Set
     return new_typ
+
+
+def get_stmt_writes(stmt):
+    # TODO: test bodo nodes
+    writes = set()
+    if isinstance(stmt, (ir.Assign, ir.SetItem, ir.StaticSetItem)):
+        writes.add(stmt.target.name)
+    if isinstance(stmt, Aggregate):
+        writes = {v.name for v in stmt.df_out_vars.values()}
+        if stmt.out_key_vars is not None:
+            writes.update({v.name for v in stmt.out_key_vars})
+    if isinstance(stmt,
+            (bodo.ir.csv_ext.CsvReader, bodo.ir.parquet_ext.ParquetReader)):
+        writes = {v.name for v in stmt.out_vars}
+    if isinstance(stmt, (bodo.ir.filter.Filter, bodo.ir.join.Join)):
+        writes = {v.name for v in stmt.df_out_vars.values()}
+    if isinstance(stmt, bodo.ir.sort.Sort):
+        if not stmt.inplace:
+            writes.update({v.name for v in stmt.out_key_arrs})
+            writes.update({v.name for v in stmt.df_out_vars.values()})
+    return writes
+
+
+# XXX override stmt write function use in parfor fusion
+# TODO: implement support for nodes properly
+ir_utils.get_stmt_writes = get_stmt_writes

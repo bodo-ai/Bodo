@@ -96,5 +96,6 @@ For each function implemented (either overloading Pandas or internal), the follo
 
 - side effects for dead code elimination
 - aliasing (inlining if necessary)
+- array analysis
 - distributed analysis
 - distributed transformation

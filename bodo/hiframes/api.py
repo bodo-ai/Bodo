@@ -623,17 +623,18 @@ def _get_series_name(typingctx, series_typ=None):
     sig = signature(series_typ.name_typ, series_typ)
     return sig, codegen
 
-
 # this function should be used for getting S._data for alias analysis to work
 # no_cpython_wrapper since Array(DatetimeDate) cannot be boxed
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_series_data(S):
     return lambda S: _get_series_data(S)
 
+
 # TODO: use separate index type instead of just storing array
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_series_index(S):
     return lambda S: _get_series_index(S)
+
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_series_name(S):
@@ -648,6 +649,33 @@ def get_index_data(S):
 @numba.generated_jit(nopython=True)
 def get_index_name(S):
     return lambda S: S._name
+
+
+# array analysis extension
+def get_series_data_equiv(self, scope, equiv_set, args, kws):
+    assert len(args) == 1 and not kws
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return var, []
+    return None
+
+
+from numba.array_analysis import ArrayAnalysis
+ArrayAnalysis._analyze_op_call_bodo_hiframes_api_get_series_data = \
+    get_series_data_equiv
+
+
+def init_series_equiv(self, scope, equiv_set, args, kws):
+    assert len(args) >= 1 and not kws
+    # TODO: add shape for index
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return var, []
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_api_init_series = \
+    init_series_equiv
 
 
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):

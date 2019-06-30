@@ -786,6 +786,16 @@ def test_df_filter():
     pd.testing.assert_frame_equal(bodo_func(df, cond), test_impl(df, cond))
 
 
+def test_create_series_input1():
+    def test_impl(S):
+        df = pd.DataFrame({'A': S})
+        return df
+
+    bodo_func = bodo.jit(test_impl)
+    S = pd.Series([2, 4], [3, -1])
+    pd.testing.assert_frame_equal(bodo_func(S), test_impl(S))
+
+
 ############################# old tests ###############################
 
 

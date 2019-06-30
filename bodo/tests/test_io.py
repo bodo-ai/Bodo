@@ -550,6 +550,25 @@ class TestIO(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
+    def test_csv_usecols2(self):
+        def test_impl():
+            return pd.read_csv("bodo/tests/data/csv_data1.csv",
+                names=['B', 'C'],
+                usecols=[1, 2],
+            )
+        bodo_func = bodo.jit(test_impl)
+        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+
+    def test_csv_usecols3(self):
+        def test_impl():
+            return pd.read_csv("bodo/tests/data/csv_data2.csv",
+                sep='|',
+                names=['B', 'C'],
+                usecols=[1, 2],
+            )
+        bodo_func = bodo.jit(test_impl)
+        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+
     def test_csv_cat1(self):
         def test_impl():
             ct_dtype = CategoricalDtype(['A', 'B', 'C'])

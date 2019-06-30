@@ -490,6 +490,15 @@ GroupBy
 * :meth:`GroupBy.agg` `arg` should be a function, and the compiler should be
   able to simplify it to a single parallel loop and analyze it.
   For example, arithmetic expressions on input Series are supported.
+  A list of functions is also supported if one output column is selected
+  (which avoids MultiIndex).
+  For example::
+    @bodo.jit
+    def f(df):
+        def g1(x): return (x<=2).sum()
+        def g2(x): return (x>2).sum()
+        return df.groupby('A')['B'].agg((g1, g2))
+
 * :meth:`GroupBy.aggregate` same as `agg`.
 * :meth:`GroupBy.count`
 * :meth:`GroupBy.max`

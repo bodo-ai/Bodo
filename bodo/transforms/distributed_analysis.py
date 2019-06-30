@@ -388,6 +388,12 @@ class DistributedAnalysis(object):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if func_mod == 'bodo.hiframes.pd_index_ext' and func_name in (
+                'init_numeric_index', 'init_string_index',
+                ):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ('init_series', 'bodo.hiframes.api'):
             # lhs, in_arr, and index should have the same distribution
             new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
@@ -792,14 +798,14 @@ class DistributedAnalysis(object):
                                                 new_dist.value))
             return
 
-        # array selection with permutation array index
-        if is_np_array(self.typemap, index_var.name):
-            arr_def = guard(get_definition, self.func_ir, index_var)
-            if isinstance(arr_def, ir.Expr) and arr_def.op == 'call':
-                fdef = guard(find_callname, self.func_ir, arr_def, self.typemap)
-                if fdef == ('permutation', 'numpy.random'):
-                    self._meet_array_dists(lhs, rhs.value.name, array_dists)
-                    return
+        # # array selection with permutation array index
+        # if is_np_array(self.typemap, index_var.name):
+        #     arr_def = guard(get_definition, self.func_ir, index_var)
+        #     if isinstance(arr_def, ir.Expr) and arr_def.op == 'call':
+        #         fdef = guard(find_callname, self.func_ir, arr_def, self.typemap)
+        #         if fdef == ('permutation', 'numpy.random'):
+        #             self._meet_array_dists(lhs, rhs.value.name, array_dists)
+        #             return
 
         # whole slice or strided slice access
         # for example: A = X[:,5], A = X[::2,5]

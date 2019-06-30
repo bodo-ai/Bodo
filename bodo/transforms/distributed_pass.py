@@ -18,7 +18,8 @@ from numba.ir_utils import (mk_unique_var, replace_vars_inner, find_topo_order,
                             compile_to_numba_ir, replace_arg_nodes,
                             guard, get_definition, require, GuardException,
                             find_callname, build_definitions,
-                            find_build_sequence, find_const, is_get_setitem)
+                            find_build_sequence, find_const, is_get_setitem,
+                            compute_cfg_from_blocks)
 from numba.inline_closurecall import inline_closure_call
 from numba.typing import signature
 from numba.parfor import (get_parfor_reductions, get_parfor_params,
@@ -33,13 +34,13 @@ from bodo.libs import (distributed_api,
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.transforms.distributed_analysis import (Distribution,
-                                       DistributedAnalysis)
+    DistributedAnalysis, _get_array_accesses)
 
 import bodo.utils.utils
 from bodo.utils.utils import (is_alloc_callname, is_whole_slice, is_array_container,
                         get_slice_step, is_array, is_np_array, find_build_tuple,
                         debug_prints, ReplaceFunc, gen_getitem, is_call,
-                        is_const_slice)
+                        is_const_slice, is_assign, is_expr)
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
@@ -61,31 +62,20 @@ class DistributedPass(object):
         self.typemap = typemap
         self.calltypes = calltypes
         self.metadata = metadata
+        self.arr_analysis = numba.array_analysis.ArrayAnalysis(
+            self.typingctx, self.func_ir, self.typemap, self.calltypes)
 
         self._dist_analysis = None
         self._T_arrs = None  # set of transposed arrays (taken from analysis)
+        self._1D_parfor_starts = {}
 
-        self._rank_var = None  # will be set in run
-        self._size_var = None
-        self._g_dist_var = None
-        self._set1_var = None  # variable set to 1
-        self._set0_var = None  # variable set to 0
-        self._array_starts = {}
-        self._array_counts = {}
-
-        # keep shape attr calls on parallel arrays like X.shape
-        self._shape_attrs = {}
-        # keep array sizes of parallel arrays to handle shape attrs
-        self._array_sizes = {}
-        # save output of converted 1DVar array len() variables
-        # which are global sizes, in order to recover local
-        # size for 1DVar allocs and parfors
-        self.oneDVar_len_vars = {}
+        self._1D_Var_parfor_starts = {}
 
     def run(self):
         remove_dels(self.func_ir.blocks)
         dprint_func_ir(self.func_ir, "starting distributed pass")
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
+        self.arr_analysis.run(self.func_ir.blocks)
         dist_analysis_pass = DistributedAnalysis(
             self.func_ir, self.typemap, self.calltypes, self.typingctx,
             self.metadata)
@@ -97,11 +87,14 @@ class DistributedPass(object):
         if debug_prints():  # pragma: no cover
             print("distributions: ", self._dist_analysis)
 
-        self._gen_dist_inits()
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
+
+        #  transform
         self.func_ir.blocks = self._run_dist_pass(self.func_ir.blocks)
-        self.func_ir.blocks = self._dist_prints(self.func_ir.blocks)
-        remove_dead(self.func_ir.blocks, self.func_ir.arg_names, self.func_ir, self.typemap)
+
+        while remove_dead(self.func_ir.blocks, self.func_ir.arg_names,
+                                   self.func_ir, self.typemap):
+            pass
         dprint_func_ir(self.func_ir, "after distributed pass")
         lower_parfor_sequential(
             self.typingctx, self.func_ir, self.typemap, self.calltypes)
@@ -109,7 +102,7 @@ class DistributedPass(object):
             # parfor params need to be updated for multithread_mode since some
             # new variables like alloc_start are introduced by distributed pass
             # and are used in later parfors
-            parfor_ids = get_parfor_params(
+            _parfor_ids = get_parfor_params(
                 self.func_ir.blocks, True, defaultdict(list))
         post_proc = postproc.PostProcessor(self.func_ir)
         post_proc.run()
@@ -123,15 +116,21 @@ class DistributedPass(object):
         fir_text = str_io.getvalue()
         str_io.close()
 
-    def _run_dist_pass(self, blocks):
+    def _run_dist_pass(self, blocks, init_avail=None):
+        # init liveness info
+        cfg = compute_cfg_from_blocks(blocks)
+        all_avail_vars = find_available_vars(blocks, cfg, init_avail)
         topo_order = find_topo_order(blocks)
-        namevar_table = get_name_var_table(blocks)
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
         while work_list:
             label, block = work_list.pop()
+            # XXX can't change the block structure due to array analysis
+            # XXX can't run transformation again on already converted code
+            # since e.g. global sizes become invalid
+            equiv_set = self.arr_analysis.get_equiv_set(label)
+            avail_vars = all_avail_vars[label].copy()
             new_body = []
-            replaced = False
-            for i, inst in enumerate(block.body):
+            for inst in block.body:
                 out_nodes = None
                 if type(inst) in distributed_run_extensions:
                     f = distributed_run_extensions[type(inst)]
@@ -139,226 +138,70 @@ class DistributedPass(object):
                                   self.typemap, self.calltypes, self.typingctx,
                                   self.targetctx, self)
                 elif isinstance(inst, Parfor):
-                    out_nodes = self._run_parfor(inst, namevar_table)
+                    out_nodes = self._run_parfor(inst, equiv_set, avail_vars)
                     # run dist pass recursively
                     p_blocks = wrap_parfor_blocks(inst)
-                    # build_definitions(p_blocks, self.func_ir._definitions)
-                    self._run_dist_pass(p_blocks)
+                    #
+                    self._run_dist_pass(p_blocks, avail_vars)
                     unwrap_parfor_blocks(inst)
                 elif isinstance(inst, ir.Assign):
-                    lhs = inst.target.name
                     rhs = inst.value
                     if isinstance(rhs, ir.Expr):
-                        out_nodes = self._run_expr(inst, namevar_table)
-                    elif isinstance(rhs, ir.Var) and (self._is_1D_arr(rhs.name)
-                           and not is_array_container(self.typemap, rhs.name)):
-                        self._array_starts[lhs] = self._array_starts[rhs.name]
-                        self._array_counts[lhs] = self._array_counts[rhs.name]
-                        self._array_sizes[lhs] = self._array_sizes[rhs.name]
-                    elif isinstance(rhs, ir.Arg):
-                        out_nodes = self._run_arg(inst)
+                        out_nodes = self._run_expr(inst, equiv_set, avail_vars)
                 elif isinstance(inst, (ir.StaticSetItem, ir.SetItem)):
                     if isinstance(inst, ir.SetItem):
                         index = inst.index
                     else:
                         index = inst.index_var
-                    out_nodes = self._run_getsetitem(inst.target,
-                                                     index, inst, inst)
+                    out_nodes = self._run_getsetitem(
+                        inst.target, index, inst, inst, equiv_set)
                 elif isinstance(inst, ir.Return):
                     out_nodes = self._gen_barrier() + [inst]
+                elif isinstance(inst, ir.Print):
+                    out_nodes = self._run_print(inst)
 
                 if out_nodes is None:
-                    new_body.append(inst)
-                elif isinstance(out_nodes, list):
-                    new_body += out_nodes
-                elif isinstance(out_nodes, ReplaceFunc):
-                    rp_func = out_nodes
-                    if rp_func.pre_nodes is not None:
-                        new_body.extend(rp_func.pre_nodes)
-                    # inline_closure_call expects a call assignment
-                    dummy_call = ir.Expr.call(
-                        ir.Var(block.scope, "dummy", inst.loc),
-                        rp_func.args, (), inst.loc)
-                    if isinstance(inst, ir.Assign):
-                        # replace inst.value to a call with target args
-                        # as expected by inline_closure_call
-                        inst.value = dummy_call
-                    else:
-                        # replace inst with dummy assignment
-                        # for cases like SetItem
-                        loc = block.loc
-                        dummy_var = ir.Var(
-                            block.scope, mk_unique_var("r_dummy"), loc)
-                        block.body[i] = ir.Assign(dummy_call, dummy_var, loc)
-                    block.body = new_body + block.body[i:]
-                    # TODO: use Parfor loop blocks when replacing funcs in
-                    # parfor loop body
-                    inline_closure_call(self.func_ir, rp_func.glbls,
-                        block, len(new_body), rp_func.func, self.typingctx,
-                        rp_func.arg_types,
-                        self.typemap, self.calltypes, work_list)
-                    replaced = True
-                    break
-                else:
-                    assert False, "invalid dist pass out nodes"
+                    out_nodes = [inst]
 
-            if not replaced:
-                blocks[label].body = new_body
+                assert isinstance(out_nodes, list), "invalid dist pass out nodes"
+                self._update_avail_vars(avail_vars, out_nodes)
+                new_body += out_nodes
+
+            blocks[label].body = new_body
 
         return blocks
 
-    def _run_expr(self, inst, namevar_table):
-        lhs = inst.target.name
+    def _run_expr(self, inst, equiv_set, avail_vars):
         rhs = inst.value
         nodes = [inst]
+
         if rhs.op == 'call':
-            return self._run_call(inst)
-        # we save array start/count for data pointer to enable
-        # file read
-        if (rhs.op == 'getattr' and rhs.attr == 'ctypes'
-                and (self._is_1D_arr(rhs.value.name))):
-            arr_name = rhs.value.name
-            self._array_starts[lhs] = self._array_starts[arr_name]
-            self._array_counts[lhs] = self._array_counts[arr_name]
-            self._array_sizes[lhs] = self._array_sizes[arr_name]
-        if (rhs.op == 'getattr'
-                and (self._is_1D_arr(rhs.value.name)
-                        or self._is_1D_Var_arr(rhs.value.name))
-                and rhs.attr == 'size'):
-            return self._run_array_size(inst.target, rhs.value)
-        if (rhs.op == 'static_getitem'
-                and rhs.value.name in self._shape_attrs):
-            arr = self._shape_attrs[rhs.value.name]
-            ndims = self.typemap[arr].ndim
-            if arr not in self._T_arrs and rhs.index == 0:
-                # return parallel size
-                if self._is_1D_arr(arr):
-                    # XXX hack for array container case, TODO: handle properly
-                    if arr not in self._array_sizes:
-                        arr_var = namevar_table[arr]
-                        nodes = self._gen_1D_Var_len(arr_var)
-                        nodes[-1].target = inst.target
-                        return nodes
-                    inst.value = self._array_sizes[arr][rhs.index]
-                else:
-                    assert self._is_1D_Var_arr(arr)
-                    arr_var = namevar_table[arr]
-                    nodes = self._gen_1D_Var_len(arr_var)
-                    nodes[-1].target = inst.target
-                    # save output of converted 1DVar array len() variables
-                    # which are global sizes, in order to recover local
-                    # size for 1DVar allocs and parfors
-                    self.oneDVar_len_vars[inst.target.name] = arr_var
-                    return nodes
-            # last dimension of transposed arrays is partitioned
-            if arr in self._T_arrs and rhs.index == ndims - 1:
-                assert not self._is_1D_Var_arr(
-                    arr), "1D_Var arrays cannot transpose"
-                inst.value = self._array_sizes[arr][rhs.index]
-        if rhs.op in ['getitem', 'static_getitem']:
+            return self._run_call(inst, equiv_set, avail_vars)
+
+        if rhs.op in ('getitem', 'static_getitem'):
             if rhs.op == 'getitem':
                 index = rhs.index
             else:
                 index = rhs.index_var
-            return self._run_getsetitem(rhs.value, index, rhs, inst)
-        if (rhs.op == 'getattr'
+            return self._run_getsetitem(rhs.value, index, rhs, inst, equiv_set)
+
+        # array.shape
+        if (rhs.op == 'getattr' and rhs.attr == 'shape'
                 and (self._is_1D_arr(rhs.value.name)
-                        or self._is_1D_Var_arr(rhs.value.name))
-                and rhs.attr == 'shape'):
-            # XXX: return a new tuple using sizes here?
-            self._shape_attrs[lhs] = rhs.value.name
-        if (rhs.op == 'getattr'
-                and self._is_1D_arr(rhs.value.name)
-                and rhs.attr == 'T'):
-            assert lhs in self._T_arrs
-            orig_arr = rhs.value.name
-            self._array_starts[lhs] = copy.copy(
-                self._array_starts[orig_arr]).reverse()
-            self._array_counts[lhs] = copy.copy(
-                self._array_counts[orig_arr]).reverse()
-            self._array_sizes[lhs] = copy.copy(
-                self._array_sizes[orig_arr]).reverse()
-        if (rhs.op == 'exhaust_iter'
-                and rhs.value.name in self._shape_attrs):
-            self._shape_attrs[lhs] = self._shape_attrs[rhs.value.name]
-        if rhs.op == 'inplace_binop' and self._is_1D_arr(rhs.lhs.name):
-            self._array_starts[lhs] = self._array_starts[rhs.lhs.name]
-            self._array_counts[lhs] = self._array_counts[rhs.lhs.name]
-            self._array_sizes[lhs] = self._array_sizes[rhs.lhs.name]
+                        or self._is_1D_Var_arr(rhs.value.name))):
+            return self._run_array_shape(inst.target, rhs.value, equiv_set)
+
+        # array.size
+        if (rhs.op == 'getattr' and rhs.attr == 'size'
+                and (self._is_1D_arr(rhs.value.name)
+                        or self._is_1D_Var_arr(rhs.value.name))):
+            return self._run_array_size(inst.target, rhs.value, equiv_set)
 
         return nodes
 
-    def _gen_1D_Var_len(self, arr):
-        def f(A, op):  # pragma: no cover
-            c = len(A)
-            res = bodo.libs.distributed_api.dist_reduce(c, op)
-        f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
-                                      (self.typemap[arr.name], types.int32),
-                                      self.typemap, self.calltypes).blocks.popitem()[1]
-        replace_arg_nodes(
-            f_block, [arr, ir.Const(Reduce_Type.Sum.value, arr.loc)])
-        nodes = f_block.body[:-3]  # remove none return
-        return nodes
-
-    def _gen_dist_inits(self):
-        # add initializations
-        topo_order = find_topo_order(self.func_ir.blocks)
-        first_block = self.func_ir.blocks[topo_order[0]]
-        # set scope and loc of generated code to the first variable in block
-        scope = first_block.scope
-        loc = first_block.loc
-        out = []
-        self._set1_var = ir.Var(scope, mk_unique_var("$const_parallel"), loc)
-        self.typemap[self._set1_var.name] = types.int64
-        set1_assign = ir.Assign(ir.Const(1, loc), self._set1_var, loc)
-        out.append(set1_assign)
-        self._set0_var = ir.Var(scope, mk_unique_var("$const_parallel"), loc)
-        self.typemap[self._set0_var.name] = types.int64
-        set0_assign = ir.Assign(ir.Const(0, loc), self._set0_var, loc)
-        out.append(set0_assign)
-        # g_dist_var = Global(bodo.libs.distributed_api)
-        g_dist_var = ir.Var(scope, mk_unique_var("$distributed_g_var"), loc)
-        self._g_dist_var = g_dist_var
-        self.typemap[g_dist_var.name] = types.misc.Module(bodo.libs.distributed_api)
-        g_dist = ir.Global('distributed_api', bodo.libs.distributed_api, loc)
-        g_dist_assign = ir.Assign(g_dist, g_dist_var, loc)
-        # attr call: rank_attr = getattr(g_dist_var, get_rank)
-        rank_attr_call = ir.Expr.getattr(g_dist_var, "get_rank", loc)
-        rank_attr_var = ir.Var(scope, mk_unique_var("$get_rank_attr"), loc)
-        self.typemap[rank_attr_var.name] = get_global_func_typ(
-            distributed_api.get_rank)
-        rank_attr_assign = ir.Assign(rank_attr_call, rank_attr_var, loc)
-        # rank_var = bodo.libs.distributed_api.get_rank()
-        rank_var = ir.Var(scope, mk_unique_var("$rank"), loc)
-        self.typemap[rank_var.name] = types.int32
-        rank_call = ir.Expr.call(rank_attr_var, [], (), loc)
-        self.calltypes[rank_call] = self.typemap[rank_attr_var.name].get_call_type(
-            self.typingctx, [], {})
-        rank_assign = ir.Assign(rank_call, rank_var, loc)
-        self._rank_var = rank_var
-        out += [g_dist_assign, rank_attr_assign, rank_assign]
-
-        # attr call: size_attr = getattr(g_dist_var, get_size)
-        size_attr_call = ir.Expr.getattr(g_dist_var, "get_size", loc)
-        size_attr_var = ir.Var(scope, mk_unique_var("$get_size_attr"), loc)
-        self.typemap[size_attr_var.name] = get_global_func_typ(
-            distributed_api.get_size)
-        size_attr_assign = ir.Assign(size_attr_call, size_attr_var, loc)
-        # size_var = bodo.libs.distributed_api.get_size()
-        size_var = ir.Var(scope, mk_unique_var("$dist_size"), loc)
-        self.typemap[size_var.name] = types.int32
-        size_call = ir.Expr.call(size_attr_var, [], (), loc)
-        self.calltypes[size_call] = self.typemap[size_attr_var.name].get_call_type(
-            self.typingctx, [], {})
-        size_assign = ir.Assign(size_call, size_var, loc)
-        self._size_var = size_var
-        out += [size_attr_assign, size_assign]
-        first_block.body = out + first_block.body
-
-    def _run_call(self, assign):
+    def _run_call(self, assign, equiv_set, avail_vars):
         lhs = assign.target.name
         rhs = assign.value
-        func_var = rhs.func.name
         scope = assign.target.scope
         loc = assign.target.loc
         out = [assign]
@@ -393,7 +236,7 @@ class DistributedPass(object):
         if self._is_1D_Var_arr(lhs) and is_alloc_callname(func_name, func_mod):
             size_var = rhs.args[0]
             out, new_size_var = self._fix_1D_Var_alloc(
-                size_var, lhs, scope, loc)
+                size_var, lhs, scope, loc, equiv_set, avail_vars)
             # empty_inferred is tuple for some reason
             rhs.args = list(rhs.args)
             rhs.args[0] = new_size_var
@@ -402,145 +245,114 @@ class DistributedPass(object):
 
         # numpy direct functions
         if isinstance(func_mod, str) and func_mod == 'numpy':
-            return self._run_call_np(lhs, func_name, assign, rhs.args)
+            return self._run_call_np(
+                lhs, func_name, assign, rhs.args, equiv_set)
 
         # array.func calls
         if isinstance(func_mod, ir.Var) and is_np_array(self.typemap, func_mod.name):
-            return self._run_call_array(lhs, func_mod, func_name, assign, rhs.args)
+            return self._run_call_array(
+                lhs, func_mod, func_name, assign, rhs.args, equiv_set,
+                avail_vars)
 
         # df.func calls
         if isinstance(func_mod, ir.Var) and isinstance(self.typemap[func_mod.name], DataFrameType):
             return self._run_call_df(lhs, func_mod, func_name, assign, rhs.args)
 
-        # string_array.func_calls
-        if (self._is_1D_arr(lhs) and isinstance(func_mod, ir.Var)
-                and self.typemap[func_mod.name] == string_array_type):
-            if func_name == 'copy':
-                self._array_starts[lhs] = self._array_starts[func_mod.name]
-                self._array_counts[lhs] = self._array_counts[func_mod.name]
-                self._array_sizes[lhs] = self._array_sizes[func_mod.name]
-
         if fdef == ('permutation', 'numpy.random'):
             if self.typemap[rhs.args[0].name] == types.int64:
-                self._array_sizes[lhs] = [rhs.args[0]]
                 return self._run_permutation_int(assign, rhs.args)
 
         # len(A) if A is 1D
         if fdef == ('len', 'builtins') and rhs.args and self._is_1D_arr(rhs.args[0].name):
-            arr = rhs.args[0].name
-            assign.value = self._array_sizes[arr][0]
+            arr = rhs.args[0]
+            nodes = []
+            assign.value = self._get_dist_var_len(arr, nodes, equiv_set)
+            nodes.append(assign)
+            return nodes
 
+        # TODO: merge with above
         # len(A) if A is 1D_Var
         if fdef == ('len', 'builtins') and rhs.args and self._is_1D_Var_arr(rhs.args[0].name):
             arr_var = rhs.args[0]
             out = self._gen_1D_Var_len(arr_var)
             out[-1].target = assign.target
-            self.oneDVar_len_vars[assign.target.name] = arr_var
+
+        if fdef == ('File', 'h5py'):
+            # create and save a variable holding 1, in case we need to use it
+            # to parallelize this call in _file_open_set_parallel()
+            one_var = ir.Var(scope, mk_unique_var("$one"), loc)
+            self.typemap[one_var.name] = types.IntegerLiteral(1)
+            self._set1_var = one_var
+            return [ir.Assign(ir.Const(1, loc), one_var, loc), assign]
 
         if (bodo.config._has_h5py and (func_mod == 'bodo.io.pio_api'
                 and func_name in ('h5read', 'h5write', 'h5read_filter'))
                 and self._is_1D_arr(rhs.args[5].name)):
             # TODO: make create_dataset/create_group collective
-            arr = rhs.args[5].name
-            ndims = len(self._array_starts[arr])
+            arr = rhs.args[5]
+            ndims = self.typemap[arr.name].ndim
+            nodes = []
+            size_var = self._get_dist_var_len(arr, nodes, equiv_set)
+            div_nodes, start_var, end_var = self._gen_1D_div(
+                size_var, scope, loc, "get_node_portion")
+            nodes += div_nodes
             starts_var = ir.Var(scope, mk_unique_var("$h5_starts"), loc)
             self.typemap[starts_var.name] = types.UniTuple(
                 types.int64, ndims)
+            # XXX assuming starts of other dimensions are zero
+            prev_starts = guard(get_definition, self.func_ir, rhs.args[2])
+            assert isinstance(prev_starts.value, tuple) and all(
+                a == 0 for a in prev_starts.value)
+            zero_var = ir.Var(scope, mk_unique_var("$zero"), loc)
+            self.typemap[zero_var.name] = types.IntegerLiteral(0)
+            nodes.append(ir.Assign(ir.Const(0, loc), zero_var, loc))
+            one_var = ir.Var(scope, mk_unique_var("$one"), loc)
+            self.typemap[one_var.name] = types.IntegerLiteral(1)
+            nodes.append(ir.Assign(ir.Const(1, loc), one_var, loc))
             start_tuple_call = ir.Expr.build_tuple(
-                self._array_starts[arr], loc)
+               [start_var] + [zero_var] * (ndims - 1), loc)
             starts_assign = ir.Assign(start_tuple_call, starts_var, loc)
             rhs.args[2] = starts_var
             counts_var = ir.Var(scope, mk_unique_var("$h5_counts"), loc)
             self.typemap[counts_var.name] = types.UniTuple(
                 types.int64, ndims)
+            prev_counts = guard(get_definition, self.func_ir, rhs.args[3])
             count_tuple_call = ir.Expr.build_tuple(
-                self._array_counts[arr], loc)
+                [end_var] + prev_counts.items[1:], loc)
             counts_assign = ir.Assign(count_tuple_call, counts_var, loc)
-            out = [starts_assign, counts_assign, assign]
+            nodes += [starts_assign, counts_assign, assign]
             rhs.args[3] = counts_var
-            rhs.args[4] = self._set1_var
+            rhs.args[4] = one_var
             # set parallel arg in file open
             file_varname = rhs.args[0].name
             self._file_open_set_parallel(file_varname)
-
-        if bodo.config._has_h5py and (func_mod == 'bodo.io.pio_api'
-                and func_name == 'get_filter_read_indices'):
-            #
-            out += self._gen_1D_Var_len(assign.target)
-            size_var = out[-1].target
-            self._array_sizes[lhs] = [size_var]
-            g_out, start_var, count_var = self._gen_1D_div(
-                size_var, scope, loc, "$alloc", "get_node_portion",
-                distributed_api.get_node_portion)
-            self._array_starts[lhs] = [start_var]
-            self._array_counts[lhs] = [count_var]
-            out += g_out
-
-        if (bodo.config._has_pyarrow
-                and fdef == ('read_parquet', 'bodo.io.parquet_pio')
-                and self._is_1D_arr(rhs.args[2].name)):
-            arr = rhs.args[2].name
-            assert len(self._array_starts[arr]) == 1, "only 1D arrs in parquet"
-            start_var = self._array_starts[arr][0]
-            count_var = self._array_counts[arr][0]
-            rhs.args += [start_var, count_var]
-
-            def f(fname, cindex, arr, out_dtype, start, count):  # pragma: no cover
-                return bodo.io.parquet_pio.read_parquet_parallel(fname, cindex,
-                                                              arr, out_dtype, start, count)
-
-            return self._replace_func(f, rhs.args)
-
-        if (bodo.config._has_pyarrow
-                and fdef == ('read_parquet_str', 'bodo.io.parquet_pio')
-                and self._is_1D_arr(lhs)):
-            arr = lhs
-            size_var = rhs.args[2]
-            assert self.typemap[size_var.name] == types.intp
-            self._array_sizes[arr] = [size_var]
-            out, start_var, count_var = self._gen_1D_div(size_var, scope, loc,
-                                                         "$alloc", "get_node_portion", distributed_api.get_node_portion)
-            self._array_starts[lhs] = [start_var]
-            self._array_counts[lhs] = [count_var]
-            rhs.args[2] = start_var
-            rhs.args.append(count_var)
-
-            def f(fname, cindex, start, count):  # pragma: no cover
-                return bodo.io.parquet_pio.read_parquet_str_parallel(fname, cindex,
-                                                                  start, count)
-
-            f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
-                                          (self.typemap[rhs.args[0].name], types.intp,
-                                           types.intp, types.intp),
-                                          self.typemap, self.calltypes).blocks.popitem()[1]
-            replace_arg_nodes(f_block, rhs.args)
-            out += f_block.body[:-2]
-            out[-1].target = assign.target
+            return nodes
 
         # TODO: fix numba.extending
         if bodo.config._has_xenon and (fdef == ('read_xenon_col', 'numba.extending')
                 and self._is_1D_arr(rhs.args[3].name)):
-            arr = rhs.args[3].name
-            assert len(self._array_starts[arr]) == 1, "only 1D arrs in Xenon"
-            start_var = self._array_starts[arr][0]
-            count_var = self._array_counts[arr][0]
+            arr = rhs.args[3]
+            nodes = []
+            size_var = self._get_dist_var_len(arr, nodes, equiv_set)
+            div_nodes, start_var, count_var = self._gen_1D_div(
+                size_var, scope, loc, "get_node_portion")
+            nodes += div_nodes
+            assert self.typemap[arr.name].ndim == 1, "only 1D arrs in Xenon"
             rhs.args += [start_var, count_var]
 
             def f(connect_tp, dset_tp, col_id_tp, column_tp, schema_arr_tp, start, count):  # pragma: no cover
                 return bodo.io.xenon_ext.read_xenon_col_parallel(connect_tp, dset_tp, col_id_tp, column_tp, schema_arr_tp, start, count)
 
-            return self._replace_func(f, rhs.args)
+            return nodes + _compile_func_single_block(
+                f, rhs.args, assign.target, self)
 
         if bodo.config._has_xenon and (fdef == ('read_xenon_str', 'numba.extending')
                 and self._is_1D_arr(lhs)):
             arr = lhs
             size_var = rhs.args[3]
             assert self.typemap[size_var.name] == types.intp
-            self._array_sizes[arr] = [size_var]
-            out, start_var, count_var = self._gen_1D_div(size_var, scope, loc,
-                                                         "$alloc", "get_node_portion", distributed_api.get_node_portion)
-            self._array_starts[lhs] = [start_var]
-            self._array_counts[lhs] = [count_var]
+            out, start_var, count_var = self._gen_1D_div(
+                size_var, scope, loc, "get_node_portion")
             rhs.args.remove(size_var)
             rhs.args.append(start_var)
             rhs.args.append(count_var)
@@ -557,41 +369,17 @@ class DistributedPass(object):
             out += f_block.body[:-2]
             out[-1].target = assign.target
 
-        if (func_mod == 'bodo.hiframes.api' and func_name in (
-                'to_arr_from_series',
-                'to_date_series_type', 'init_series')
-                and self._is_1D_arr(rhs.args[0].name)):
-            # TODO: handle index
-            in_arr = rhs.args[0].name
-            self._array_starts[lhs] = self._array_starts[in_arr]
-            self._array_counts[lhs] = self._array_counts[in_arr]
-            self._array_sizes[lhs] = self._array_sizes[in_arr]
-
-        if (fdef == ('init_dataframe', 'bodo.hiframes.pd_dataframe_ext')
-                and self._is_1D_arr(rhs.args[0].name)):
-            seq_info = guard(
-                find_build_sequence, self.func_ir, rhs.args[0])
-            assert seq_info is not None
-            # TODO: dataframe with no data
-            in_arr = seq_info[0][0].name
-            self._array_starts[lhs] = self._array_starts[in_arr]
-            self._array_counts[lhs] = self._array_counts[in_arr]
-            self._array_sizes[lhs] = self._array_sizes[in_arr]
-
-        if (fdef == ('compute_split_view', 'bodo.hiframes.split_impl')
-                and self._is_1D_arr(rhs.args[0].name)):
-            in_arr = rhs.args[0].name
-            self._array_starts[lhs] = self._array_starts[in_arr]
-            self._array_counts[lhs] = self._array_counts[in_arr]
-            self._array_sizes[lhs] = self._array_sizes[in_arr]
-
         if (fdef == ('get_split_view_index', 'bodo.hiframes.split_impl')
                 and self._is_1D_arr(rhs.args[0].name)):
             arr = rhs.args[0]
-            index_var = rhs.args[1]
+            index_var = self._fix_index_var(rhs.args[1])
+            # XXX get_split_view_index is only used within parfors
+            assert index_var.name in self._1D_parfor_starts
+            start_var, nodes = self._get_parallel_access_start_var(
+                arr, equiv_set, index_var)
             sub_nodes = self._get_ind_sub(
-                index_var, self._array_starts[arr.name][0])
-            out = sub_nodes
+                index_var, start_var)
+            out = nodes + sub_nodes
             rhs.args[1] = sub_nodes[-1].target
             out.append(assign)
             return out
@@ -599,10 +387,14 @@ class DistributedPass(object):
         if (fdef == ('setitem_str_arr_ptr', 'bodo.libs.str_arr_ext')
                 and self._is_1D_arr(rhs.args[0].name)):
             arr = rhs.args[0]
-            index_var = rhs.args[1]
+            index_var = self._fix_index_var(rhs.args[1])
+            # XXX setitem_str_arr_ptr is only used within parfors
+            assert index_var.name in self._1D_parfor_starts
+            start_var, nodes = self._get_parallel_access_start_var(
+                arr, equiv_set, index_var)
             sub_nodes = self._get_ind_sub(
-                index_var, self._array_starts[arr.name][0])
-            out = sub_nodes
+                index_var, start_var)
+            out = nodes + sub_nodes
             rhs.args[1] = sub_nodes[-1].target
             out.append(assign)
             return out
@@ -611,17 +403,25 @@ class DistributedPass(object):
                 and self._is_1D_arr(rhs.args[0].name)):
             # TODO: test parallel
             arr = rhs.args[0]
-            index_var = rhs.args[1]
+            index_var = self._fix_index_var(rhs.args[1])
+            # XXX str_arr_item_to_numeric is only used within parfors
+            assert index_var.name in self._1D_parfor_starts
+            start_var, nodes = self._get_parallel_access_start_var(
+                arr, equiv_set, index_var)
             sub_nodes = self._get_ind_sub(
-                index_var, self._array_starts[arr.name][0])
-            out = sub_nodes
+                index_var, start_var)
+            out = nodes + sub_nodes
             rhs.args[1] = sub_nodes[-1].target
             # input string array
             arr = rhs.args[2]
-            index_var = rhs.args[3]
+            index_var = self._fix_index_var(rhs.args[3])
+            # XXX str_arr_item_to_numeric is only used within parfors
+            assert index_var.name in self._1D_parfor_starts
+            start_var, nodes = self._get_parallel_access_start_var(
+                arr, equiv_set, index_var)
             sub_nodes = self._get_ind_sub(
-                index_var, self._array_starts[arr.name][0])
-            out += sub_nodes
+                index_var, start_var)
+            out += nodes + sub_nodes
             rhs.args[3] = sub_nodes[-1].target
             out.append(assign)
             return out
@@ -629,19 +429,19 @@ class DistributedPass(object):
         if fdef == ('isna', 'bodo.hiframes.api') and self._is_1D_arr(rhs.args[0].name):
             # fix index in call to isna
             arr = rhs.args[0]
-            ind = rhs.args[1]
-            out = self._get_ind_sub(ind, self._array_starts[arr.name][0])
+            ind = self._fix_index_var(rhs.args[1])
+            # XXX isna is only used within parfors, not standalone on parallel
+            # array
+            assert ind.name in self._1D_parfor_starts
+            start_var, out = self._get_parallel_access_start_var(
+                arr, equiv_set, ind)
+            out += self._get_ind_sub(ind, start_var)
             rhs.args[1] = out[-1].target
             out.append(assign)
 
         if fdef == ('rolling_fixed', 'bodo.hiframes.rolling') and (
                     self._is_1D_arr(rhs.args[0].name)
                     or self._is_1D_Var_arr(rhs.args[0].name)):
-            in_arr = rhs.args[0].name
-            if self._is_1D_arr(in_arr):
-                self._array_starts[lhs] = self._array_starts[in_arr]
-                self._array_counts[lhs] = self._array_counts[in_arr]
-                self._array_sizes[lhs] = self._array_sizes[in_arr]
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
             self.typemap[true_var.name] = types.boolean
@@ -651,11 +451,6 @@ class DistributedPass(object):
         if fdef == ('rolling_variable', 'bodo.hiframes.rolling') and (
                     self._is_1D_arr(rhs.args[0].name)
                     or self._is_1D_Var_arr(rhs.args[0].name)):
-            in_arr = rhs.args[0].name
-            if self._is_1D_arr(in_arr):
-                self._array_starts[lhs] = self._array_starts[in_arr]
-                self._array_counts[lhs] = self._array_counts[in_arr]
-                self._array_sizes[lhs] = self._array_sizes[in_arr]
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
             self.typemap[true_var.name] = types.boolean
@@ -666,11 +461,6 @@ class DistributedPass(object):
                     and func_name in ('shift', 'pct_change')
                     and (self._is_1D_arr(rhs.args[0].name)
                     or self._is_1D_Var_arr(rhs.args[0].name))):
-            in_arr = rhs.args[0].name
-            if self._is_1D_arr(in_arr):
-                self._array_starts[lhs] = self._array_starts[in_arr]
-                self._array_counts[lhs] = self._array_counts[in_arr]
-                self._array_sizes[lhs] = self._array_sizes[in_arr]
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
             self.typemap[true_var.name] = types.boolean
@@ -679,43 +469,40 @@ class DistributedPass(object):
 
         if fdef == ('quantile', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
-            arr = rhs.args[0].name
-            if arr in self._array_sizes:
-                assert len(self._array_sizes[arr]
-                           ) == 1, "only 1D arrs in quantile"
-                size_var = self._array_sizes[arr][0]
-            else:
-                size_var = self._set0_var
-            rhs.args += [size_var]
+            arr = rhs.args[0]
+            nodes = []
+            size_var = self._get_dist_var_len(arr, nodes, equiv_set)
+            rhs.args.append(size_var)
 
             f = lambda arr, q, size: bodo.libs.array_kernels.quantile_parallel(
                                                                   arr, q, size)
-            return self._replace_func(f, rhs.args)
+            return nodes + _compile_func_single_block(
+                f, rhs.args, assign.target, self)
 
         if fdef == ('nunique', 'bodo.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda arr: bodo.hiframes.api.nunique_parallel(arr)
-            return self._replace_func(f, rhs.args)
+            return _compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ('unique', 'bodo.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda arr: bodo.hiframes.api.unique_parallel(arr)
-            return self._replace_func(f, rhs.args)
+            return _compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ('nlargest', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda arr, I, k, i, f: bodo.libs.array_kernels.nlargest_parallel(arr, I, k, i, f)
-            return self._replace_func(f, rhs.args)
+            return _compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ('nancorr', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda mat, cov, minpv: bodo.libs.array_kernels.nancorr(mat, cov, minpv, True)
-            return self._replace_func(f, rhs.args)
+            return _compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ('median', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda arr: bodo.libs.array_kernels.median(arr, True)
-            return self._replace_func(f, rhs.args)
+            return _compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ('convert_rec_to_tup', 'bodo.hiframes.api'):
             # optimize Series back to back map pattern with tuples
@@ -735,35 +522,6 @@ class DistributedPass(object):
             assign.value = rhs.args[0]
             return [assign]
 
-        if (fdef == ('get_series_data', 'bodo.hiframes.api')
-                or fdef == ('get_series_index', 'bodo.hiframes.api')
-                or fdef == ('get_index_data', 'bodo.hiframes.api')
-                or fdef == ('get_dataframe_data', 'bodo.hiframes.pd_dataframe_ext')
-                # index can be none
-                ) and (self.typemap[assign.target.name] != types.none
-                        and self._is_1D_arr(assign.target.name)):
-            out = [assign]
-            arr = assign.target
-            # gen len() using 1D_Var reduce approach.
-            # TODO: refactor to avoid reduction for 1D
-            # arr_typ = self.typemap[arr.name]
-            ndim = 1
-            out += self._gen_1D_Var_len(arr)
-            total_length = out[-1].target
-            div_nodes, start_var, count_var = self._gen_1D_div(
-                total_length, arr.scope, arr.loc, "$input", "get_node_portion",
-                distributed_api.get_node_portion)
-            out += div_nodes
-
-            # XXX: get sizes in lower dimensions
-            self._array_starts[lhs] = [-1]*ndim
-            self._array_counts[lhs] = [-1]*ndim
-            self._array_sizes[lhs] = [-1]*ndim
-            self._array_starts[lhs][0] = start_var
-            self._array_counts[lhs][0] = count_var
-            self._array_sizes[lhs][0] = total_length
-            return out
-
         if fdef == ('threaded_return', 'bodo.libs.distributed_api'):
             assign.value = rhs.args[0]
             return [assign]
@@ -771,15 +529,18 @@ class DistributedPass(object):
         if fdef == ('rebalance_array', 'bodo.libs.distributed_api'):
             return self._run_call_rebalance_array(lhs, assign, rhs.args)
 
-        if fdef == ('file_read', 'bodo.io.np_io') and rhs.args[1].name in self._array_starts:
-            _fname = rhs.args[0]
-            _data_ptr = rhs.args[1]
-            _start = self._array_starts[_data_ptr.name][0]
-            _count = self._array_counts[_data_ptr.name][0]
+        if fdef == ('file_read', 'bodo.io.np_io') and (
+                self._is_1D_arr(rhs.args[1].name)
+                or self._is_1D_Var_arr(rhs.args[1].name)):
+            fname = rhs.args[0]
+            arr = rhs.args[1]
+            nodes, start_var, count_var = self._get_dist_var_start_count(
+                arr, equiv_set)
 
-            def f(fname, data_ptr, start, count):  # pragma: no cover
+            def impl(fname, data_ptr, start, count):  # pragma: no cover
                 return bodo.io.np_io.file_read_parallel(fname, data_ptr, start, count)
-            return self._replace_func(f, [_fname, _data_ptr, _start, _count])
+            return nodes + _compile_func_single_block(
+                impl, [fname, arr, start_var, count_var], assign.target, self)
 
         # replace get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
@@ -821,7 +582,7 @@ class DistributedPass(object):
 
         return out
 
-    def _run_call_np(self, lhs, func_name, assign, args):
+    def _run_call_np(self, lhs, func_name, assign, args, equiv_set):
         """transform np.func() calls
         """
         # allocs are handled separately
@@ -841,52 +602,22 @@ class DistributedPass(object):
         #     args[1] = new_size_var
         #     out.append(assign)
 
-        if (func_name == 'array'
-                and is_array(self.typemap, args[0].name)
-                and self._is_1D_arr(args[0].name)):
-            in_arr = args[0].name
-            self._array_starts[lhs] = self._array_starts[in_arr]
-            self._array_counts[lhs] = self._array_counts[in_arr]
-            self._array_sizes[lhs] = self._array_sizes[in_arr]
+        if func_name == 'ravel' and self._is_1D_arr(args[0].name):
+            assert self.typemap[args[0].name].ndim == 1, "only 1D ravel supported"
 
-        # output array has same properties (starts etc.) as input array
-        if (func_name in ['cumsum', 'cumprod', 'empty_like',
-                                     'zeros_like', 'ones_like', 'full_like',
-                                     'copy', 'ravel', 'ascontiguousarray']
+        if (func_name in ('cumsum', 'cumprod')
                 and self._is_1D_arr(args[0].name)):
-            if func_name == 'ravel':
-                assert self.typemap[args[0].name].ndim == 1, "only 1D ravel supported"
-            in_arr = args[0].name
-            self._array_starts[lhs] = self._array_starts[in_arr]
-            self._array_counts[lhs] = self._array_counts[in_arr]
-            self._array_sizes[lhs] = self._array_sizes[in_arr]
-
-        if (func_name in ['cumsum', 'cumprod']
-                and self._is_1D_arr(args[0].name)):
-            in_arr = args[0].name
             in_arr_var = args[0]
             lhs_var = assign.target
-            # allocate output array
             # TODO: compute inplace if input array is dead
-            out = mk_alloc(self.typemap, self.calltypes, lhs_var,
-                           tuple(self._array_sizes[in_arr]),
-                           self.typemap[in_arr].dtype, scope, loc)
-            # generate distributed call
-            dist_attr_var = ir.Var(scope, mk_unique_var("$dist_attr"), loc)
-            dist_func_name = "dist_" + func_name
-            dist_func = getattr(distributed_api, dist_func_name)
-            dist_attr_call = ir.Expr.getattr(
-                self._g_dist_var, dist_func_name, loc)
-            self.typemap[dist_attr_var.name] = get_global_func_typ(dist_func)
-            dist_func_assign = ir.Assign(dist_attr_call, dist_attr_var, loc)
-            err_var = ir.Var(scope, mk_unique_var("$dist_err_var"), loc)
-            self.typemap[err_var.name] = types.int32
-            dist_call = ir.Expr.call(
-                dist_attr_var, [in_arr_var, lhs_var], (), loc)
-            self.calltypes[dist_call] = self.typemap[dist_attr_var.name].get_call_type(
-                self.typingctx, [self.typemap[in_arr], self.typemap[lhs]], {})
-            dist_assign = ir.Assign(dist_call, err_var, loc)
-            return out + [dist_func_assign, dist_assign]
+            def impl(A):
+                B = np.empty_like(A)
+                _func(A, B)
+                return B
+            func = getattr(bodo.libs.distributed_api, "dist_" + func_name)
+            return _compile_func_single_block(
+                impl, [in_arr_var], lhs_var, self,
+                extra_globals={'_func': func})
 
         # sum over the first axis is distributed, A.sum(0)
         if func_name == 'sum' and len(args) == 2:
@@ -899,31 +630,20 @@ class DistributedPass(object):
         if func_name == 'dot':
             return self._run_call_np_dot(lhs, assign, args)
 
-        if func_name == 'stack' and self._is_1D_arr(lhs):
-            # TODO: generalize
-            in_arrs, _ = guard(find_build_sequence, self.func_ir, args[0])
-            arr0 = in_arrs[0].name
-            self._array_starts[lhs] = [self._array_starts[arr0][0], None]
-            self._array_counts[lhs] = [self._array_counts[arr0][0], None]
-            self._array_sizes[lhs] = [self._array_sizes[arr0][0], None]
-
         return out
 
-    def _run_call_array(self, lhs, arr, func_name, assign, args):
+    def _run_call_array(self, lhs, arr, func_name, assign, args, equiv_set,
+                                                                   avail_vars):
         #
         out = [assign]
-        if func_name in ('astype', 'copy', 'view') and self._is_1D_arr(lhs):
-            self._array_starts[lhs] = self._array_starts[arr.name]
-            self._array_counts[lhs] = self._array_counts[arr.name]
-            self._array_sizes[lhs] = self._array_sizes[arr.name]
 
         # HACK support A.reshape(n, 1) for 1D_Var
         if func_name == 'reshape' and self._is_1D_Var_arr(arr.name):
             assert len(args) == 2 and guard(find_const, self.func_ir, args[1]) == 1
-            assert args[0].name in self.oneDVar_len_vars
             size_var = args[0]
             out, new_size_var = self._fix_1D_Var_alloc(
-                size_var, lhs, assign.target.scope, assign.loc)
+                size_var, lhs, assign.target.scope, assign.loc, equiv_set,
+                avail_vars)
             # empty_inferred is tuple for some reason
             assign.value.args = list(args)
             assign.value.args[0] = new_size_var
@@ -931,33 +651,21 @@ class DistributedPass(object):
             return out
 
         if func_name == 'reshape' and self._is_1D_arr(arr.name):
-            return self._run_reshape(assign, arr, args)
-
-
-        if func_name == 'transpose' and self._is_1D_arr(lhs):
-            # Currently only 1D arrays are supported
-            assert self._is_1D_arr(arr.name)
-            ndim = self.typemap[arr.name].ndim
-            self._array_starts[lhs] = [-1]*ndim
-            self._array_counts[lhs] = [-1]*ndim
-            self._array_sizes[lhs] = [-1]*ndim
-            self._array_starts[lhs][0] = self._array_starts[arr.name][0]
-            self._array_counts[lhs][0] = self._array_counts[arr.name][0]
-            self._array_sizes[lhs][0] = self._array_sizes[arr.name][0]
-
+            return self._run_reshape(assign, arr, args, equiv_set)
 
         # TODO: refactor
         # TODO: add unittest
         if func_name == 'tofile':
             if self._is_1D_arr(arr.name):
                 _fname = args[0]
-                _start = self._array_starts[arr.name][0]
-                _count = self._array_counts[arr.name][0]
+                nodes, start_var, count_var = self._get_dist_var_start_count(
+                    arr, equiv_set)
 
                 def f(fname, arr, start, count):  # pragma: no cover
                     return bodo.io.np_io.file_write_parallel(fname, arr, start, count)
 
-                return self._replace_func(f, [_fname, arr, _start, _count])
+                return nodes + _compile_func_single_block(
+                    f, [_fname, arr, start_var, count_var], assign.target, self)
 
             if self._is_1D_Var_arr(arr.name):
                 _fname = args[0]
@@ -967,7 +675,8 @@ class DistributedPass(object):
                     start = bodo.libs.distributed_api.dist_exscan(count)
                     return bodo.io.np_io.file_write_parallel(fname, arr, start, count)
 
-                return self._replace_func(f, [_fname, arr])
+                return _compile_func_single_block(f, [_fname, arr],
+                    assign.target, self)
 
         return out
 
@@ -1057,10 +766,11 @@ class DistributedPass(object):
                 start = bodo.libs.distributed_api.dist_exscan(count)
                 bodo.io.np_io._file_write_parallel(
                     fname._data, str_out._data, start, count, 1)
-                dummy_use(str_out)
+                _dummy_use(str_out)
 
-            return self._replace_func(
-                f, [fname, str_out], pre_nodes=nodes)
+            return nodes + _compile_func_single_block(
+                f, [fname, str_out], assign.target, self,
+                extra_globals={'_dummy_use': dummy_use})
 
         return [assign]
 
@@ -1117,36 +827,36 @@ class DistributedPass(object):
         self.typemap[dtype_size_var.name] = types.intp
         return ir.Assign(ir.Const(dtype_size, loc), dtype_size_var, loc)
 
-    def _run_permutation_array_index(self, lhs, rhs, idx):
-        scope, loc = lhs.scope, lhs.loc
-        dtype = self.typemap[lhs.name].dtype
-        out = mk_alloc(self.typemap, self.calltypes, lhs,
-                       (self._array_counts[lhs.name][0],
-                        *self._array_sizes[lhs.name][1:]), dtype, scope, loc)
+    # def _run_permutation_array_index(self, lhs, rhs, idx):
+    #     scope, loc = lhs.scope, lhs.loc
+    #     dtype = self.typemap[lhs.name].dtype
+    #     out = mk_alloc(self.typemap, self.calltypes, lhs,
+    #                    (self._array_counts[lhs.name][0],
+    #                     *self._array_sizes[lhs.name][1:]), dtype, scope, loc)
 
-        def f(lhs, lhs_len, dtype_size, rhs, idx, idx_len):
-            bodo.libs.distributed_lower.dist_permutation_array_index(
-                lhs, lhs_len, dtype_size, rhs, idx, idx_len)
+    #     def f(lhs, lhs_len, dtype_size, rhs, idx, idx_len):
+    #         bodo.libs.distributed_lower.dist_permutation_array_index(
+    #             lhs, lhs_len, dtype_size, rhs, idx, idx_len)
 
-        f_block = compile_to_numba_ir(f, {'bodo': bodo},
-                                      self.typingctx,
-                                      (self.typemap[lhs.name],
-                                       types.intp,
-                                       types.intp,
-                                       self.typemap[rhs.name],
-                                       self.typemap[idx.name],
-                                       types.intp),
-                                      self.typemap,
-                                      self.calltypes).blocks.popitem()[1]
-        dtype_ir = self.dtype_size_assign_ir(dtype, scope, loc)
-        out.append(dtype_ir)
-        replace_arg_nodes(f_block, [lhs, self._array_sizes[lhs.name][0],
-                                    dtype_ir.target, rhs, idx,
-                                    self._array_sizes[idx.name][0]])
-        f_block.body = out + f_block.body
-        return f_block.body[:-3]
+    #     f_block = compile_to_numba_ir(f, {'bodo': bodo},
+    #                                   self.typingctx,
+    #                                   (self.typemap[lhs.name],
+    #                                    types.intp,
+    #                                    types.intp,
+    #                                    self.typemap[rhs.name],
+    #                                    self.typemap[idx.name],
+    #                                    types.intp),
+    #                                   self.typemap,
+    #                                   self.calltypes).blocks.popitem()[1]
+    #     dtype_ir = self.dtype_size_assign_ir(dtype, scope, loc)
+    #     out.append(dtype_ir)
+    #     replace_arg_nodes(f_block, [lhs, self._array_sizes[lhs.name][0],
+    #                                 dtype_ir.target, rhs, idx,
+    #                                 self._array_sizes[idx.name][0]])
+    #     f_block.body = out + f_block.body
+    #     return f_block.body[:-3]
 
-    def _run_reshape(self, assign, in_arr, args):
+    def _run_reshape(self, assign, in_arr, args, equiv_set):
         lhs = assign.target
         scope = assign.target.scope
         loc = assign.target.loc
@@ -1178,8 +888,10 @@ class DistributedPass(object):
                                    self.typemap, self.calltypes).blocks.popitem()[1]
         dtype_ir = self.dtype_size_assign_ir(dtype, scope, loc)
         out.append(dtype_ir)
-        replace_arg_nodes(f_block, [lhs, in_arr, self._array_sizes[lhs.name][0],
-                                    self._array_sizes[in_arr.name][0],
+        lhs_size = self._get_dist_var_len(lhs, out, equiv_set)
+        in_arr_size = self._get_dist_var_len(in_arr, out, equiv_set)
+        replace_arg_nodes(f_block, [lhs, in_arr, lhs_size,
+                                    in_arr_size,
                                     dtype_ir.target])
         out += f_block.body[:-3]
         return out
@@ -1193,12 +905,7 @@ class DistributedPass(object):
     def _run_call_rebalance_array(self, lhs, assign, args):
         out = [assign]
         if not self._is_1D_Var_arr(args[0].name):
-            if self._is_1D_arr(args[0].name):
-                in_1d_arr = args[0].name
-                self._array_starts[lhs] = self._array_starts[in_1d_arr]
-                self._array_counts[lhs] = self._array_counts[in_1d_arr]
-                self._array_sizes[lhs] = self._array_sizes[in_1d_arr]
-            else:
+            if not self._is_1D_arr(args[0].name):
                 warnings.warn("array {} is not 1D_Block_Var".format(
                                 args[0].name))
             return out
@@ -1208,17 +915,8 @@ class DistributedPass(object):
         out = self._gen_1D_Var_len(arr)
         total_length = out[-1].target
         div_nodes, start_var, count_var = self._gen_1D_div(
-            total_length, arr.scope, arr.loc, "$rebalance", "get_node_portion",
-            distributed_api.get_node_portion)
+            total_length, arr.scope, arr.loc, "get_node_portion")
         out += div_nodes
-
-        # XXX: get sizes in lower dimensions
-        self._array_starts[lhs] = [-1]*ndim
-        self._array_counts[lhs] = [-1]*ndim
-        self._array_sizes[lhs] = [-1]*ndim
-        self._array_starts[lhs][0] = start_var
-        self._array_counts[lhs][0] = count_var
-        self._array_sizes[lhs][0] = total_length
 
         def f(arr, count):  # pragma: no cover
             b_arr = bodo.libs.distributed_api.rebalance_array_parallel(arr, count)
@@ -1248,27 +946,6 @@ class DistributedPass(object):
             out += self._gen_reduce(reduce_var, reduce_op, reduce_var.scope,
                                     reduce_var.loc)
 
-        # assign starts/counts/sizes data structures for output array
-        if ndim0 == 2 and ndim1 == 1 and not t0 and self._is_1D_arr(arg0):
-            # special case were arg1 vector is treated as column vector
-            # samples dot weights: np.dot(X,w)
-            # output is 1D array same size as dim 0 of X
-            assert self.typemap[lhs].ndim == 1
-            assert self._is_1D_arr(lhs)
-            self._array_starts[lhs] = [self._array_starts[arg0][0]]
-            self._array_counts[lhs] = [self._array_counts[arg0][0]]
-            self._array_sizes[lhs] = [self._array_sizes[arg0][0]]
-            dprint("run dot case 1 Xw:", arg0, arg1)
-        if ndim0 == 2 and ndim1 == 2 and not t0 and not t1:
-            # samples dot weights: np.dot(X,w)
-            assert self._is_1D_arr(lhs)
-            # first dimension is same as X
-            # second dimension not needed
-            self._array_starts[lhs] = [self._array_starts[arg0][0], -1]
-            self._array_counts[lhs] = [self._array_counts[arg0][0], -1]
-            self._array_sizes[lhs] = [self._array_sizes[arg0][0], -1]
-            dprint("run dot case 4 Xw:", arg0, arg1)
-
         return out
 
     def _run_alloc(self, size_var, lhs, scope, loc):
@@ -1281,11 +958,8 @@ class DistributedPass(object):
 
         # size is single int var
         if isinstance(size_var, ir.Var) and isinstance(self.typemap[size_var.name], types.Integer):
-            self._array_sizes[lhs] = [size_var]
-            out, start_var, end_var = self._gen_1D_div(size_var, scope, loc,
-                                                       "$alloc", "get_node_portion", distributed_api.get_node_portion)
-            self._array_starts[lhs] = [start_var]
-            self._array_counts[lhs] = [end_var]
+            out, _start_var, end_var = self._gen_1D_div(
+                size_var, scope, loc, "get_node_portion")
             new_size_var = end_var
             return out, new_size_var
 
@@ -1298,10 +972,6 @@ class DistributedPass(object):
                                 if self._dist_analysis.array_dists[v] == Distribution.OneD)
             if (isinstance(var_def, ir.Expr) and var_def.op == 'getattr'
                     and var_def.attr == 'shape' and var_def.value.name in oned_varnames):
-                prev_arr = var_def.value.name
-                self._array_starts[lhs] = self._array_starts[prev_arr]
-                self._array_counts[lhs] = self._array_counts[prev_arr]
-                self._array_sizes[lhs] = self._array_sizes[prev_arr]
                 return out, size_var
 
             # size should be either int or tuple of ints
@@ -1315,9 +985,8 @@ class DistributedPass(object):
             assert isinstance(size_var, (tuple, list))
             size_list = list(size_var)
 
-        self._array_sizes[lhs] = size_list
-        gen_nodes, start_var, end_var = self._gen_1D_div(size_list[0], scope, loc,
-                                                         "$alloc", "get_node_portion", distributed_api.get_node_portion)
+        gen_nodes, _start_var, end_var = self._gen_1D_div(
+            size_list[0], scope, loc, "get_node_portion")
         out += gen_nodes
         ndims = len(size_list)
         new_size_list = copy.copy(size_list)
@@ -1329,70 +998,50 @@ class DistributedPass(object):
         tuple_assign = ir.Assign(tuple_call, tuple_var, loc)
         out.append(tuple_assign)
         self.func_ir._definitions[tuple_var.name] = [tuple_call]
-        self._array_starts[lhs] = [self._set0_var] * ndims
-        self._array_starts[lhs][0] = start_var
-        self._array_counts[lhs] = new_size_list
         new_size_var = tuple_var
         return out, new_size_var
 
-    def _fix_1D_Var_alloc(self, size_var, lhs, scope, loc):
-        """ OneD_Var allocs use sizes of other OneD_var variables,
-        so find the local size of those variables (since we transform
-        to use global size)
+    def _fix_1D_Var_alloc(self, size_var, lhs, scope, loc, equiv_set, avail_vars):
+        """ 1D_Var allocs use global sizes of other 1D_var variables,
+        so find the local size of one those variables for replacement.
+        Assuming 1D_Var alloc is resulting from an operation with another
+        1D_Var array and cannot be standalone.
         """
         out = []
         new_size_var = None
+        is_tuple = False
 
-        # size is single int var
-        if isinstance(size_var, ir.Var) and isinstance(self.typemap[size_var.name], types.Integer):
-            # array could be allocated inside 1D_Var nodes like sort
-            if size_var.name not in self.oneDVar_len_vars:
-                return [], size_var
-            # assert size_var.name in self.oneDVar_len_vars, "invalid 1DVar alloc"
-            arr_var = self.oneDVar_len_vars[size_var.name]
-
-            def f(oneD_var_arr):  # pragma: no cover
-                arr_len = len(oneD_var_arr)
-            f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
-                                          (self.typemap[arr_var.name],),
-                                          self.typemap, self.calltypes).blocks.popitem()[1]
-            replace_arg_nodes(f_block, [arr_var])
-            out = f_block.body[:-3]  # remove none return
-            new_size_var = out[-1].target
-            return out, new_size_var
+        # size is either integer or tuple
+        if not isinstance(self.typemap[size_var.name], types.Integer):
+            assert isinstance(self.typemap[size_var.name], types.BaseTuple)
+            is_tuple = True
 
         # tuple variable of ints
-        if isinstance(size_var, ir.Var):
-            # see if size_var is a 1D_Var array's shape
-            # it is already the local size, no need to transform
-            var_def = guard(get_definition, self.func_ir, size_var)
-            oned_var_varnames = set(v for v in self._dist_analysis.array_dists
-                                    if self._dist_analysis.array_dists[v] == Distribution.OneD_Var)
-            if (isinstance(var_def, ir.Expr) and var_def.op == 'getattr'
-                    and var_def.attr == 'shape' and var_def.value.name in oned_var_varnames):
-                return out, size_var
+        if is_tuple:
             # size should be either int or tuple of ints
-            #assert size_var.name in self._tuple_table
-            # self._tuple_table[size_var.name]
             size_list = self._get_tuple_varlist(size_var, out)
-            size_list = [ir_utils.convert_size_to_var(s, self.typemap, scope, loc, out)
+            size_list = [ir_utils.convert_size_to_var(
+                            s, self.typemap, scope, loc, out)
                          for s in size_list]
-        # tuple of int vars
-        else:
-            assert isinstance(size_var, (tuple, list))
-            size_list = list(size_var)
+            size_var = size_list[0]
 
-        arr_var = self.oneDVar_len_vars[size_list[0].name]
 
-        def f(oneD_var_arr):  # pragma: no cover
-            arr_len = len(oneD_var_arr)
-        f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
-                                      (self.typemap[arr_var.name],),
-                                      self.typemap, self.calltypes).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [arr_var])
-        nodes = f_block.body[:-3]  # remove none return
-        new_size_var = nodes[-1].target
-        out += nodes
+        # find another 1D_Var array this alloc is associated with
+        for v in equiv_set.get_equiv_set(size_var):
+            if '#' in v and self._is_1D_Var_arr(v.split('#')[0]):
+                arr_name = v.split('#')[0]
+                if arr_name not in avail_vars:
+                    continue
+                arr_var = ir.Var(size_var.scope, arr_name, size_var.loc)
+                out = _compile_func_single_block(
+                    lambda A: len(A), (arr_var,), None, self)
+                new_size_var = out[-1].target
+                break
+
+        assert new_size_var, "1D alloc size not found"
+
+        if not is_tuple:
+            return out, new_size_var
 
         ndims = len(size_list)
         new_size_list = copy.copy(size_list)
@@ -1437,11 +1086,49 @@ class DistributedPass(object):
     #     nodes[-1].target = lhs
     #     return nodes
 
-    def _run_array_size(self, lhs, arr):
+    def _run_array_shape(self, lhs, arr, equiv_set):
+        # non-Arrays like Series, DataFrame etc. are all 1 dim
+        ndims = self.typemap[arr.name].ndim if isinstance(
+            self.typemap[arr.name], types.Array) else 1
+
+        if arr.name not in self._T_arrs:
+            nodes = []
+            size_var = self._get_dist_var_len(arr, nodes, equiv_set)
+            # XXX: array.shape could be generated by array analysis to provide
+            # size_var, so size_var may not be valid yet.
+            # if size_var uses this shape variable, calculate global size
+            size_def = guard(get_definition, self.func_ir, size_var)
+            if (isinstance(size_def, ir.Expr)
+                    and size_def.op == 'static_getitem'
+                    and size_def.value.name == lhs.name):
+                nodes += self._gen_1D_Var_len(arr)
+                size_var = nodes[-1].target
+
+            if ndims == 1:
+                return nodes + _compile_func_single_block(
+                    lambda A, size_var: (size_var,),
+                    (arr, size_var), lhs, self)
+            else:
+                return nodes + _compile_func_single_block(
+                    lambda A, size_var: (size_var,) + A.shape[1:],
+                    (arr, size_var), lhs, self)
+
+        # last dimension of transposed arrays is partitioned
+        if arr.name in self._T_arrs:
+            assert not self._is_1D_Var_arr(
+                arr.name), "1D_Var arrays cannot transpose"
+            nodes = []
+            last_size_var = self._get_dist_var_dim_size(
+                arr, (ndims - 1), nodes)
+            return nodes + _compile_func_single_block(
+                lambda A, size_var: A.shape[:-1] + (size_var,),
+                (arr, last_size_var), lhs, self)
+
+    def _run_array_size(self, lhs, arr, equiv_set):
         # get total size by multiplying all dimension sizes
         nodes = []
         if self._is_1D_arr(arr.name):
-            dim1_size = self._array_sizes[arr.name][0]
+            dim1_size = self._get_dist_var_len(arr, nodes, equiv_set)
         else:
             assert self._is_1D_Var_arr(arr.name)
             nodes += self._gen_1D_Var_len(arr)
@@ -1461,28 +1148,32 @@ class DistributedPass(object):
         nodes[-1].target = lhs
         return nodes
 
-    def _run_getsetitem(self, arr, index_var, node, full_node):
+    def _run_getsetitem(self, arr, index_var, node, full_node, equiv_set):
         out = [full_node]
+        scope = arr.scope
+        loc = arr.loc
+        index_var = self._fix_index_var(index_var)
+
         # 1D_Var arrays need adjustment for 1D_Var parfors as well
         if ((self._is_1D_arr(arr.name) or
-                (self._is_1D_Var_arr(arr.name) and arr.name in self._array_starts))
+                (self._is_1D_Var_arr(arr.name) and arr.name in self._1D_Var_parfor_starts))
                 and (arr.name, index_var.name) in self._parallel_accesses):
-            scope = index_var.scope
-            loc = index_var.loc
-            #ndims = self._get_arr_ndim(arr.name)
-            # if ndims==1:
+            start_var, nodes = self._get_parallel_access_start_var(
+                arr, equiv_set, index_var)
             # multi-dimensional array could be indexed with 1D index
             if isinstance(self.typemap[index_var.name], types.Integer):
+                # TODO: avoid repeated start/end generation
                 sub_nodes = self._get_ind_sub(
-                    index_var, self._array_starts[arr.name][0])
-                out = sub_nodes
+                    index_var, start_var)
+                out = nodes + sub_nodes
                 _set_getsetitem_index(node, sub_nodes[-1].target)
             else:
                 index_list = guard(find_build_tuple, self.func_ir, index_var)
                 assert index_list is not None
+                # TODO: avoid repeated start/end generation
                 sub_nodes = self._get_ind_sub(
-                    index_list[0], self._array_starts[arr.name][0])
-                out = sub_nodes
+                    index_list[0], start_var)
+                out = nodes + sub_nodes
                 new_index_list = copy.copy(index_list)
                 new_index_list[0] = sub_nodes[-1].target
                 tuple_var = ir.Var(scope, mk_unique_var("$tuple_var"), loc)
@@ -1508,16 +1199,17 @@ class DistributedPass(object):
 
             # TODO: support multi-dim slice setitem like X[a:b, c:d]
             assert not is_multi_dim
-            start = self._array_starts[arr.name][0]
-            count = self._array_counts[arr.name][0]
+            nodes, start_var, count_var = self._get_dist_var_start_count(
+                arr, equiv_set)
 
             if isinstance(self.typemap[index_var.name], types.Integer):
                 def f(A, val, index, chunk_start, chunk_count):  # pragma: no cover
                     bodo.libs.distributed_lower._set_if_in_range(
                         A, val, index, chunk_start, chunk_count)
 
-                return self._replace_func(
-                    f, [arr, node.value, index_var, start, count])
+                return nodes + _compile_func_single_block(
+                    f, [arr, node.value, index_var, start_var, count_var],
+                    None, self)
 
             assert isinstance(self.typemap[index_var.name],
                               types.misc.SliceType), "slice index expected"
@@ -1532,8 +1224,9 @@ class DistributedPass(object):
             slice_call = get_definition(self.func_ir, index_var)
             slice_start = slice_call.args[0]
             slice_stop = slice_call.args[1]
-            return self._replace_func(
-                f, [arr, node.value, slice_start, slice_stop, start, count])
+            return nodes + _compile_func_single_block(
+                f, [arr, node.value, slice_start, slice_stop, start_var, count_var],
+                None, self)
             # print_node = ir.Print([start_var, end_var], None, loc)
             # self.calltypes[print_node] = signature(types.none, types.int64, types.int64)
             # out.append(print_node)
@@ -1565,21 +1258,16 @@ class DistributedPass(object):
                 index_var = inds[0]
                 is_multi_dim = True
 
-            arr_def = guard(get_definition, self.func_ir, index_var)
-            if isinstance(arr_def, ir.Expr) and arr_def.op == 'call':
-                fdef = guard(find_callname, self.func_ir, arr_def, self.typemap)
-                if fdef == ('permutation', 'numpy.random'):
-                    self._array_starts[lhs.name] = self._array_starts[arr.name]
-                    self._array_counts[lhs.name] = self._array_counts[arr.name]
-                    self._array_sizes[lhs.name] = self._array_sizes[arr.name]
-                    out = self._run_permutation_array_index(lhs, arr, index_var)
+            # arr_def = guard(get_definition, self.func_ir, index_var)
+            # if isinstance(arr_def, ir.Expr) and arr_def.op == 'call':
+            #     fdef = guard(find_callname, self.func_ir, arr_def, self.typemap)
+            #     if fdef == ('permutation', 'numpy.random'):
+            #         out = self._run_permutation_array_index(lhs, arr, index_var)
 
             # no need for transformation for whole slices
             if guard(is_whole_slice, self.typemap, self.func_ir, index_var):
                 # A = X[:,3]
-                self._array_starts[lhs.name] = [self._array_starts[arr.name][0]]
-                self._array_counts[lhs.name] = [self._array_counts[arr.name][0]]
-                self._array_sizes[lhs.name] = [self._array_sizes[arr.name][0]]
+                pass
 
             # strided whole slice
             # e.g. A = X[::2,5]
@@ -1590,7 +1278,7 @@ class DistributedPass(object):
                 # on each processor, the slice has to start from an offset:
                 # |step-(start%step)|
                 in_arr = full_node.value.value
-                start = self._array_starts[in_arr.name][0]
+                start_var, out = self._get_dist_start_var(in_arr, equiv_set)
                 step = get_slice_step(self.typemap, self.func_ir, index_var)
 
                 def f(A, start, step):
@@ -1600,8 +1288,8 @@ class DistributedPass(object):
                 f_block = compile_to_numba_ir(f, {}, self.typingctx,
                                               (self.typemap[in_arr.name], types.intp, types.intp),
                                               self.typemap, self.calltypes).blocks.popitem()[1]
-                replace_arg_nodes(f_block, [in_arr, start, step])
-                out = f_block.body[:-3]  # remove none return
+                replace_arg_nodes(f_block, [in_arr, start_var, step])
+                out += f_block.body[:-3]  # remove none return
                 imb_arr = out[-1].target
 
                 # call rebalance
@@ -1614,17 +1302,16 @@ class DistributedPass(object):
                 # cases like S.head()
                 # bcast if all in rank 0, otherwise gatherv
                 in_arr = full_node.value.value
-                start = self._array_starts[in_arr.name][0]
-                count = self._array_counts[in_arr.name][0]
-                return self._replace_func(
+                nodes, start_var, count_var = self._get_dist_var_start_count(
+                    in_arr, equiv_set)
+                return nodes + _compile_func_single_block(
                     lambda arr, slice_index, start, count: bodo.libs.distributed_api.const_slice_getitem(
-                        arr, slice_index, start, count), [in_arr, index_var, start, count])
+                        arr, slice_index, start, count), [in_arr, index_var, start_var, count_var],
+                        lhs, self)
 
         return out
 
-    def _run_parfor(self, parfor, namevar_table):
-        # stencil_accesses, neighborhood = get_stencil_accesses(
-        #     parfor, self.typemap)
+    def _run_parfor(self, parfor, equiv_set, avail_vars):
 
         # Thread and 1D parfors turn to gufunc in multithread mode
         if (bodo.multithread_mode
@@ -1633,7 +1320,7 @@ class DistributedPass(object):
             parfor.no_sequential_lowering = True
 
         if self._dist_analysis.parfor_dists[parfor.id] == Distribution.OneD_Var:
-            return self._run_parfor_1D_Var(parfor, namevar_table)
+            return self._run_parfor_1D_Var(parfor, equiv_set, avail_vars)
 
         if self._dist_analysis.parfor_dists[parfor.id] != Distribution.OneD:
             if debug_prints():  # pragma: no cover
@@ -1644,69 +1331,76 @@ class DistributedPass(object):
         loc = parfor.init_block.loc
         range_size = parfor.loop_nests[0].stop
         out = []
-
-        # return range to original size of array
-        # if stencil_accesses:
-        #     #right_length = neighborhood[1][0]
-        #     left_length, right_length = self._get_stencil_border_length(
-        #         neighborhood)
-        #     if right_length:
-        #         new_range_size = ir.Var(
-        #             scope, mk_unique_var("new_range_size"), loc)
-        #         self.typemap[new_range_size.name] = types.intp
-        #         index_const = ir.Var(scope, mk_unique_var("index_const"), loc)
-        #         self.typemap[index_const.name] = types.intp
-        #         out.append(
-        #             ir.Assign(ir.Const(right_length, loc), index_const, loc))
-        #         calc_call = ir.Expr.binop('+', range_size, index_const, loc)
-        #         self.calltypes[calc_call] = ir_utils.find_op_typ('+',
-        #                                                          [types.intp, types.intp])
-        #         out.append(ir.Assign(calc_call, new_range_size, loc))
-        #         range_size = new_range_size
-
-        div_nodes, start_var, end_var = self._gen_1D_div(range_size, scope, loc,
-                                                         "$loop", "get_end", distributed_api.get_end)
+        div_nodes, start_var, end_var = self._gen_1D_div(
+            range_size, scope, loc, "get_end")
         out += div_nodes
         # print_node = ir.Print([start_var, end_var, range_size], None, loc)
         # self.calltypes[print_node] = signature(types.none, types.int64, types.int64, types.intp)
         # out.append(print_node)
+        index_var = parfor.loop_nests[0].index_variable
+        self._1D_parfor_starts[index_var.name] = start_var
 
         parfor.loop_nests[0].start = start_var
         parfor.loop_nests[0].stop = end_var
-
-        # if stencil_accesses:
-        #     # TODO assuming single array in stencil
-        #     arr_set = set(stencil_accesses.values())
-        #     arr = arr_set.pop()
-        #     assert not arr_set  # only one array
-        #     self._run_parfor_stencil(parfor, out, start_var, end_var,
-        #                              neighborhood, namevar_table[arr])
-        # else:
-        #     out.append(parfor)
         out.append(parfor)
 
         init_reduce_nodes, reduce_nodes = self._gen_parfor_reductions(
-            parfor, namevar_table)
+            parfor)
         parfor.init_block.body += init_reduce_nodes
         out += reduce_nodes
         return out
 
-    def _run_parfor_1D_Var(self, parfor, namevar_table):
-        # recover range of 1DVar parfors coming from converted 1DVar array len()
+    def _run_parfor_1D_Var(self, parfor, equiv_set, avail_vars):
+        # the variable for range of the parfor represents the global range,
+        # replace it with the local range, using len() on an associated array
+        # XXX: assuming 1D_Var parfors are only possible when there is at least
+        # one associated 1D_Var array
         prepend = []
-        for l in parfor.loop_nests:
-            if l.stop.name in self.oneDVar_len_vars:
-                arr_var = self.oneDVar_len_vars[l.stop.name]
+        # assuming first dimension is parallelized
+        # TODO: support transposed arrays
+        index_name = parfor.loop_nests[0].index_variable.name
+        stop_var = parfor.loop_nests[0].stop
+        new_stop_var = None
+        size_found = False
+        array_accesses = _get_array_accesses(
+            parfor.loop_body, self.func_ir, self.typemap)
+        for (arr, index) in array_accesses:
+            # XXX avail_vars is used since accessed array could be defined in
+            # init_block
+            if self._is_1D_Var_arr(arr) and self._index_has_par_index(
+                    index, index_name) and arr in avail_vars:
+                arr_var = ir.Var(stop_var.scope, arr, stop_var.loc)
+                prepend += _compile_func_single_block(
+                    lambda A: len(A), (arr_var,), None, self)
+                size_found = True
+                new_stop_var = prepend[-1].target
+                break
+        # try equivalences
+        if not size_found and stop_var.name in equiv_set.obj_to_ind:
+            # TODO: test this code path
+            size_class = equiv_set.obj_to_ind[stop_var.name]
+            for (arr, index) in array_accesses:
+                if self._is_1D_Var_arr(arr) and arr in avail_vars:
+                    shape_classes = None
+                    try:
+                        shape_classes = equiv_set.get_shape_classes(arr)
+                    except:
+                        pass
+                    if shape_classes and shape_classes[0] == size_class:
+                        arr_var = ir.Var(stop_var.scope, arr, stop_var.loc)
+                        prepend += _compile_func_single_block(
+                            lambda A: len(A), (arr_var,), None, self)
+                        new_stop_var = prepend[-1].target
+                        size_found = True
+                        break
 
-                def f(A):  # pragma: no cover
-                    arr_len = len(A)
-                f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
-                                                (self.typemap[arr_var.name],),
-                                                self.typemap, self.calltypes).blocks.popitem()[1]
-                replace_arg_nodes(f_block, [arr_var])
-                nodes = f_block.body[:-3]  # remove none return
-                l.stop = nodes[-1].target
-                prepend += nodes
+        # TODO: test multi-dim array sizes and complex indexing like slice
+        assert size_found, "invalid 1D_Var parfor size"
+        parfor.loop_nests[0].stop = new_stop_var
+
+        for (arr, index) in array_accesses:
+            assert arr not in self._T_arrs, \
+                "1D_Var parfor for transposed parallel array not supported"
 
         # see if parfor index is used in compute other than array access
         # (e.g. argmin)
@@ -1715,7 +1409,11 @@ class DistributedPass(object):
         ind_used = False
         for block in parfor.loop_body.values():
             for stmt in block.body:
-                if not is_get_setitem(stmt) and ind_varname in (v.name for v in stmt.list_vars()):
+                if (not is_get_setitem(stmt)
+                        and ind_varname in (v.name for v in stmt.list_vars())
+                        # assignment of parfor tuple index for multi-D cases
+                        and not (is_assign(stmt)
+                            and stmt.target.name == parfor.index_var.name)):
                     ind_used = True
                     dprint("index of 1D_Var pafor {} used in {}".format(
                         parfor.id, stmt))
@@ -1748,66 +1446,27 @@ class DistributedPass(object):
             gen_getitem(l_nest.stop, ret_var, 1, self.calltypes, nodes)
             prepend += nodes
 
-            array_accesses = ir_utils.get_array_accesses(parfor.loop_body)
             for (arr, index) in array_accesses:
                 if self._index_has_par_index(index, ind_varname):
-                    self._array_starts[arr] = [l_nest.start]
+                    self._1D_Var_parfor_starts[arr] = l_nest.start
 
         init_reduce_nodes, reduce_nodes = self._gen_parfor_reductions(
-            parfor, namevar_table)
+            parfor)
         parfor.init_block.body += init_reduce_nodes
         out = prepend + [parfor] + reduce_nodes
         return out
 
-    def _run_arg(self, assign):
-        rhs = assign.value
-        out = [assign]
-
-        if rhs.name not in self.metadata['distributed']:
-            return None
-
-        arr = assign.target
-        typ = self.typemap[arr.name]
-        if is_array_container(self.typemap, arr.name):
-            return None
-
-        # TODO: comprehensive support for Series vars
-        from bodo.hiframes.pd_series_ext import SeriesType
-        if isinstance(typ, (SeriesType,
-                bodo.hiframes.pd_dataframe_ext.DataFrameType)):
-            return None
-
-        # gen len() using 1D_Var reduce approach.
-        # TODO: refactor to avoid reduction
-        ndim = self.typemap[arr.name].ndim
-        out += self._gen_1D_Var_len(arr)
-        total_length = out[-1].target
-        div_nodes, start_var, count_var = self._gen_1D_div(
-            total_length, arr.scope, arr.loc, "$input", "get_node_portion",
-            distributed_api.get_node_portion)
-        out += div_nodes
-
-        # XXX: get sizes in lower dimensions
-        self._array_starts[arr.name] = [-1]*ndim
-        self._array_counts[arr.name] = [-1]*ndim
-        self._array_sizes[arr.name] = [-1]*ndim
-        self._array_starts[arr.name][0] = start_var
-        self._array_counts[arr.name][0] = count_var
-        self._array_sizes[arr.name][0] = total_length
-        return out
-
-    def _index_has_par_index(self, index, other_index):
-        if index == other_index:
+    def _index_has_par_index(self, index, par_index):
+        """check if parfor index is used in 1st dimension of access index
+        """
+        if index == par_index:
             return True
         # multi-dim case
         tup_list = guard(find_build_tuple, self.func_ir, index)
-        if tup_list is not None:
-            index_tuple = [var.name for var in tup_list]
-            if index_tuple[0] == index:
-                return True
-        return False
+        return (tup_list is not None and len(tup_list) > 0
+                and tup_list[0].name == par_index)
 
-    def _gen_parfor_reductions(self, parfor, namevar_table):
+    def _gen_parfor_reductions(self, parfor):
         scope = parfor.init_block.scope
         loc = parfor.init_block.loc
         pre = []
@@ -1815,10 +1474,11 @@ class DistributedPass(object):
         _, reductions = get_parfor_reductions(
             parfor, parfor.params, self.calltypes)
 
-        for reduce_varname, (init_val, reduce_nodes) in reductions.items():
+        for reduce_varname, (_init_val, reduce_nodes) in reductions.items():
             reduce_op = guard(self._get_reduce_op, reduce_nodes)
+            reduce_var = reduce_nodes[-1].target
+            assert reduce_var.name == reduce_varname
             # TODO: initialize reduction vars (arrays)
-            reduce_var = namevar_table[reduce_varname]
             pre += self._gen_init_reduce(reduce_var, reduce_op)
             out += self._gen_reduce(reduce_var, reduce_op, scope, loc)
 
@@ -1844,48 +1504,160 @@ class DistributedPass(object):
     #                 return lhs // rhs
     #     return None
 
+    def _run_print(self, print_node):
+        args = print_node.args
+        arg_names = ", ".join('v{}'.format(i)
+                                for i in range(len(print_node.args)))
+        print_args = arg_names
 
-    def _gen_1D_div(self, size_var, scope, loc, prefix, end_call_name, end_call):
+        # handle vararg like print(*a)
+        if print_node.vararg is not None:
+            arg_names += "{}vararg".format(", " if args else "")
+            print_args += "{}*vararg".format(", " if args else "")
+            args.append(print_node.vararg)
+
+        func_text = "def impl({}):\n".format(arg_names)
+        func_text += "  bodo.libs.distributed_api.single_print({})\n".format(
+            print_args)
+        loc_vars = {}
+        exec(func_text, {'bodo': bodo}, loc_vars)
+        impl = loc_vars['impl']
+
+        return _compile_func_single_block(impl, args, None, self)
+
+    def _get_dist_var_start_count(self, arr, equiv_set):
+        nodes = []
+        if arr.name in self._1D_Var_parfor_starts:
+            start_var = self._1D_Var_parfor_starts[arr.name]
+            f_block = compile_to_numba_ir(lambda A: len(A), {}, self.typingctx,
+                                        (self.typemap[arr.name],),
+                                        self.typemap, self.calltypes).blocks.popitem()[1]
+            replace_arg_nodes(f_block, [arr])
+            nodes = f_block.body[:-3]  # remove none return
+            count_var = nodes[-1].target
+            return nodes, start_var, count_var
+
+        size_var = self._get_dist_var_len(arr, nodes, equiv_set)
+        div_nodes, start_var, count_var = self._gen_1D_div(
+            size_var, arr.scope, arr.loc, "get_node_portion")
+        nodes += div_nodes
+        return nodes, start_var, count_var
+
+    def _get_dist_start_var(self, arr, equiv_set):
+        if arr.name in self._1D_Var_parfor_starts:
+            return self._1D_Var_parfor_starts[arr.name], []
+
+        nodes = []
+        size_var = self._get_dist_var_len(arr, nodes, equiv_set)
+        div_nodes, start_var, _count_var = self._gen_1D_div(
+            size_var, arr.scope, arr.loc, "get_node_portion")
+        nodes += div_nodes
+        return start_var, nodes
+
+    def _get_dist_var_dim_size(self, var, dim, nodes):
+        # XXX just call _gen_1D_var_len() for now
+        # TODO: get value from array analysis
+        def f(A, dim, op):  # pragma: no cover
+            c = A.shape[dim]
+            res = bodo.libs.distributed_api.dist_reduce(c, op)
+        f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
+                                      (self.typemap[var.name], types.int64, types.int32),
+                                      self.typemap, self.calltypes).blocks.popitem()[1]
+        replace_arg_nodes(
+            f_block, [var, ir.Const(dim, var.loc),
+            ir.Const(Reduce_Type.Sum.value, var.loc)])
+        nodes += f_block.body[:-3]  # remove none return
+        return nodes[-1].target
+
+    def _get_dist_var_len(self, var, nodes, equiv_set):
+        """
+        Get global length of distributed data structure (Array, Series,
+        DataFrame) if available. Otherwise, generate reduction code to get
+        global length.
+        """
+        shape = equiv_set.get_shape(var)
+        if isinstance(shape, (list, tuple)) and len(shape) > 0:
+            return shape[0]
+        # XXX just call _gen_1D_var_len() for now
+        nodes += self._gen_1D_Var_len(var)
+        return nodes[-1].target
+
+    def _get_parallel_access_start_var(self, arr, equiv_set, index_var):
+        """Same as _get_dist_start_var() but avoids generating reduction for
+        getting global size since this is an error inside a parfor loop.
+        """
+        if arr.name in self._1D_Var_parfor_starts:
+            return self._1D_Var_parfor_starts[arr.name], []
+
+        # XXX we return parfors start assuming parfor and parallel accessed
+        # array are equivalent in size and have equivalent distribution
+        # TODO: is this always the case?
+        if index_var.name in self._1D_parfor_starts:
+            return self._1D_parfor_starts[index_var.name], []
+
+        # use shape if parfor start not found (TODO shouldn't reach here?)
+        shape = equiv_set.get_shape(arr)
+        if isinstance(shape, (list, tuple)) and len(shape) > 0:
+            size_var = shape[0]
+            div_nodes, start_var, _count_var = self._gen_1D_div(
+                    size_var, arr.scope, arr.loc, "get_node_portion")
+            return start_var, div_nodes
+
+        raise ValueError("invalid parallel access")
+
+    def _gen_1D_Var_len(self, arr):
+        def f(A, op):  # pragma: no cover
+            c = len(A)
+            res = bodo.libs.distributed_api.dist_reduce(c, op)
+        f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
+                                      (self.typemap[arr.name], types.int32),
+                                      self.typemap, self.calltypes).blocks.popitem()[1]
+        replace_arg_nodes(
+            f_block, [arr, ir.Const(Reduce_Type.Sum.value, arr.loc)])
+        nodes = f_block.body[:-3]  # remove none return
+        return nodes
+
+    def _gen_1D_div(self, size_var, scope, loc, end_call_name):
         div_nodes = []
         if isinstance(size_var, int):
             new_size_var = ir.Var(
-                scope, mk_unique_var(prefix + "_size_var"), loc)
+                scope, mk_unique_var("_size_var"), loc)
             self.typemap[new_size_var.name] = types.int64
             size_assign = ir.Assign(ir.Const(size_var, loc), new_size_var, loc)
             div_nodes.append(size_assign)
             size_var = new_size_var
 
-        # attr call: start_attr = getattr(g_dist_var, get_start)
-        start_attr_call = ir.Expr.getattr(self._g_dist_var, "get_start", loc)
-        start_attr_var = ir.Var(scope, mk_unique_var("$get_start_attr"), loc)
-        self.typemap[start_attr_var.name] = get_global_func_typ(
-            distributed_api.get_start)
-        start_attr_assign = ir.Assign(start_attr_call, start_attr_var, loc)
+        def impl(n):
+            rank = _get_rank()
+            n_pes = _get_size()
+            start = _get_start(n, n_pes, rank)
+            count = _get_node_portion(n, n_pes, rank)
+            return start, count
 
-        # start_var = get_start(size, rank, pes)
-        start_var = ir.Var(scope, mk_unique_var(prefix + "_start_var"), loc)
+        if end_call_name == 'get_end':
+            def impl(n):
+                rank = _get_rank()
+                n_pes = _get_size()
+                start = _get_start(n, n_pes, rank)
+                count = _get_end(n, n_pes, rank)
+                return start, count
+
+        div_nodes += _compile_func_single_block(impl, (size_var,), None, self,
+            extra_globals={
+                '_get_rank': bodo.libs.distributed_api.get_rank,
+                '_get_size': bodo.libs.distributed_api.get_size,
+                '_get_start': bodo.libs.distributed_api.get_start,
+                '_get_node_portion': bodo.libs.distributed_api.get_node_portion,
+                '_get_end': bodo.libs.distributed_api.get_end,
+                })
+        tup_var = div_nodes[-1].target
+        start_var = ir.Var(scope, mk_unique_var("start_var"), loc)
         self.typemap[start_var.name] = types.int64
-        start_expr = ir.Expr.call(start_attr_var, [size_var,
-                                                   self._size_var, self._rank_var], (), loc)
-        self.calltypes[start_expr] = self.typemap[start_attr_var.name].get_call_type(
-            self.typingctx, [types.int64, types.int32, types.int32], {})
-        start_assign = ir.Assign(start_expr, start_var, loc)
-
-        # attr call: end_attr = getattr(g_dist_var, get_end)
-        end_attr_call = ir.Expr.getattr(self._g_dist_var, end_call_name, loc)
-        end_attr_var = ir.Var(scope, mk_unique_var("$get_end_attr"), loc)
-        self.typemap[end_attr_var.name] = get_global_func_typ(end_call)
-        end_attr_assign = ir.Assign(end_attr_call, end_attr_var, loc)
-
-        end_var = ir.Var(scope, mk_unique_var(prefix + "_end_var"), loc)
+        gen_getitem(start_var, tup_var, 0, self.calltypes, div_nodes)
+        end_var = ir.Var(scope, mk_unique_var("end_var"), loc)
         self.typemap[end_var.name] = types.int64
-        end_expr = ir.Expr.call(end_attr_var, [size_var,
-                                               self._size_var, self._rank_var], (), loc)
-        self.calltypes[end_expr] = self.typemap[end_attr_var.name].get_call_type(
-            self.typingctx, [types.int64, types.int32, types.int32], {})
-        end_assign = ir.Assign(end_expr, end_var, loc)
-        div_nodes += [start_attr_assign,
-                      start_assign, end_attr_assign, end_assign]
+        gen_getitem(end_var, tup_var, 1, self.calltypes, div_nodes)
+
         return div_nodes, start_var, end_var
 
     def _get_ind_sub(self, ind_var, start_var):
@@ -1924,45 +1696,6 @@ class DistributedPass(object):
         replace_arg_nodes(block, args)
         return block.body[:-2]  # ignore return nodes
 
-    def _dist_prints(self, blocks):
-        new_blocks = {}
-        for (block_label, block) in blocks.items():
-            scope = block.scope
-            i = _find_first_print(block.body)
-            while i != -1:
-                inst = block.body[i]
-                loc = inst.loc
-                # split block across print
-                prev_block = ir.Block(scope, loc)
-                new_blocks[block_label] = prev_block
-                block_label = ir_utils.next_label()
-                print_label = ir_utils.next_label()
-
-                prev_block.body = block.body[:i]
-                rank_comp_var = ir.Var(scope, mk_unique_var("$rank_comp"), loc)
-                self.typemap[rank_comp_var.name] = types.boolean
-                comp_expr = ir.Expr.binop(
-                    operator.eq, self._rank_var, self._set0_var, loc)
-                expr_typ = self.typingctx.resolve_function_type(
-                    operator.eq, (types.int32, types.int64), {})
-                #expr_typ = find_op_typ(operator.eq, [types.int32, types.int64])
-                self.calltypes[comp_expr] = expr_typ
-                comp_assign = ir.Assign(comp_expr, rank_comp_var, loc)
-                prev_block.body.append(comp_assign)
-                print_branch = ir.Branch(
-                    rank_comp_var, print_label, block_label, loc)
-                prev_block.body.append(print_branch)
-
-                print_block = ir.Block(scope, loc)
-                print_block.body.append(inst)
-                print_block.body.append(ir.Jump(block_label, loc))
-                new_blocks[print_label] = print_block
-
-                block.body = block.body[i + 1:]
-                i = _find_first_print(block.body)
-            new_blocks[block_label] = block
-        return new_blocks
-
     def _file_open_set_parallel(self, file_varname):
         var = file_varname
         while True:
@@ -2000,13 +1733,9 @@ class DistributedPass(object):
         #                 rhs.args[2] = self._set1_var
 
     def _gen_barrier(self):
-        def f():  # pragma: no cover
-            return bodo.libs.distributed_api.barrier()
-
-        f_blocks = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx, {},
-                                       self.typemap, self.calltypes).blocks
-        block = f_blocks[min(f_blocks.keys())]
-        return block.body[:-2]  # remove return
+        return _compile_func_single_block(
+                lambda: _barrier(), (), None, self,
+                extra_globals={'_barrier': bodo.libs.distributed_api.barrier})
 
     def _gen_reduce(self, reduce_var, reduce_op, scope, loc):
         op_var = ir.Var(scope, mk_unique_var("$reduce_op"), loc)
@@ -2103,6 +1832,26 @@ class DistributedPass(object):
         nodes[-1].target = reduce_var
         return nodes
 
+    def _update_avail_vars(self, avail_vars, nodes):
+        for stmt in nodes:
+            if type(stmt) in numba.analysis.ir_extension_usedefs:
+                def_func = numba.analysis.ir_extension_usedefs[type(stmt)]
+                _uses, defs = def_func(stmt)
+                avail_vars |= defs
+            if is_assign(stmt):
+                avail_vars.add(stmt.target.name)
+
+    def _fix_index_var(self, index_var):
+        if index_var is None:  # TODO: fix None index in static_getitem/setitem
+            return None
+
+        # fix index if copy propagation didn't work
+        ind_def = self.func_ir._definitions[index_var.name]
+        if len(ind_def) == 1 and isinstance(ind_def[0], ir.Var):
+            return ind_def[0]
+
+        return index_var
+
     def _get_tuple_varlist(self, tup_var, out):
         """ get the list of variables that hold values in the tuple variable.
         add node to out if code generation needed.
@@ -2151,23 +1900,6 @@ class DistributedPass(object):
             raise ValueError(err_msg)
         return arg
 
-    def _replace_func(self, func, args, const=False,
-                      pre_nodes=None, extra_globals=None):
-        glbls = {'numba': numba, 'np': np, 'bodo': bodo, 'pd': pd}
-        if extra_globals is not None:
-            glbls.update(extra_globals)
-        arg_typs = tuple(self.typemap[v.name] for v in args)
-        if const:
-            new_args = []
-            for i, arg in enumerate(args):
-                val = guard(find_const, self.func_ir, arg)
-                if val:
-                    new_args.append(types.literal(val))
-                else:
-                    new_args.append(arg_typs[i])
-            arg_typs = tuple(new_args)
-        return ReplaceFunc(func, arg_typs, args, glbls, pre_nodes)
-
     def _get_arr_ndim(self, arrname):
         if self.typemap[arrname] == string_array_type:
             return 1
@@ -2190,13 +1922,6 @@ class DistributedPass(object):
                 self._dist_analysis.array_dists[arr_name] == Distribution.REP)
 
 
-def _find_first_print(body):
-    for (i, inst) in enumerate(body):
-        if isinstance(inst, ir.Print):
-            return i
-    return -1
-
-
 def _set_getsetitem_index(node, new_ind):
     if ((isinstance(node, ir.Expr) and node.op == 'static_getitem')
             or isinstance(node, ir.StaticSetItem)):
@@ -2212,3 +1937,70 @@ def _set_getsetitem_index(node, new_ind):
 def dprint(*s):  # pragma: no cover
     if debug_prints():
         print(*s)
+
+
+def _compile_func_single_block(func, args, ret_var, typing_info,
+                                                           extra_globals=None):
+    """compiles functions that are just a single basic block.
+    Does not handle defaults, freevars etc.
+    typing_info is a structure that has typingctx, typemap, calltypes
+    (could be the pass itself since not mutated).
+    """
+    glbls = {'numba': numba, 'np': np, 'bodo': bodo, 'pd': pd}
+    if extra_globals is not None:
+        glbls.update(extra_globals)
+    f_ir = compile_to_numba_ir(
+        func, glbls, typing_info.typingctx,
+        tuple(typing_info.typemap[arg.name] for arg in args),
+        typing_info.typemap, typing_info.calltypes)
+    assert len(f_ir.blocks) == 1
+    f_block = f_ir.blocks.popitem()[1]
+    replace_arg_nodes(f_block, args)
+    nodes = f_block.body[:-2]
+    if ret_var is not None:
+        loc = ret_var.loc
+        cast_assign = f_block.body[-2]
+        assert is_assign(cast_assign) and is_expr(cast_assign.value, 'cast')
+        func_ret = cast_assign.value.value
+        nodes.append(ir.Assign(func_ret, ret_var, loc))
+    return nodes
+
+
+def find_available_vars(blocks, cfg, init_avail=None):
+    """
+    Find available variables to use at ENTRY point of basic blocks. Similar
+    to available expressions algorithm but does not kill values on defs.
+    In_l = intersect(Out_i for i in pred)
+    Out_l = In_l | def(l)
+    `init_avail` is used to initialize first block of parfors with available vars
+    before the parfor. The label of first block is assumed to be 0.
+    """
+    # TODO: unittest
+    in_avail_vars = defaultdict(set)
+    if init_avail:
+        assert 0 in blocks
+        in_avail_vars[0] = init_avail
+
+    usedefs = numba.analysis.compute_use_defs(blocks)
+    var_def_map = usedefs.defmap
+    out_avail_vars = var_def_map.copy()
+
+    old_point = None
+    new_point = tuple(len(v) for v in in_avail_vars.values())
+
+    while old_point != new_point:
+        for label in var_def_map:
+            if label == 0:
+                continue
+            # intersect out of predecessors
+            preds = list(l for l, _ in cfg.predecessors(label))
+            in_avail_vars[label] = out_avail_vars[preds[0]] if preds else {}
+            for inc_blk in preds:
+                in_avail_vars[label] &= out_avail_vars[inc_blk]
+            # include defs
+            out_avail_vars[label] = in_avail_vars[label] | var_def_map[label]
+
+        old_point = new_point
+        new_point = tuple(len(v) for v in in_avail_vars.values())
+
+    return in_avail_vars

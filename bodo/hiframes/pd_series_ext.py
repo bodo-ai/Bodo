@@ -30,7 +30,7 @@ from bodo.utils.typing import (is_overload_none, is_overload_true,
     is_overload_false)
 
 
-class SeriesType(types.IterableType):
+class SeriesType(types.IterableType, types.ArrayCompatible):
     """Temporary type class for Series objects.
     """
     def __init__(self, dtype, data=None, index=None, name_typ=None):
@@ -51,9 +51,15 @@ class SeriesType(types.IterableType):
         super(SeriesType, self).__init__(
             name="series({}, {}, {}, {})".format(dtype, data, index, name_typ))
 
-    def copy(self, dtype=None):
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, 'C')
+
+    def copy(self, dtype=None, index=None):
         # XXX is copy necessary?
-        index = types.none if self.index == types.none else self.index.copy()
+        if index is None:
+            index = types.none if self.index == types.none else self.index.copy()
         dtype = dtype if dtype is not None else self.dtype
         data = _get_series_array_type(dtype)
         return SeriesType(dtype, data, index, self.name_typ)
@@ -220,7 +226,7 @@ def if_series_to_array_type(typ):
     if isinstance(typ, (types.Tuple, types.UniTuple)):
         return types.Tuple(
             [if_series_to_array_type(t) for t in typ.types])
-    if isinstance(typ, types.List):
+    if isinstance(typ, types.List) and isinstance(typ.dtype, SeriesType):
         return types.List(if_series_to_array_type(typ.dtype))
     if isinstance(typ, types.Set):
         return types.Set(if_series_to_array_type(typ.dtype))
@@ -242,12 +248,33 @@ def if_arr_to_series_type(typ):
     return typ
 
 
+@numba.njit
+def convert_index_to_int64(S):
+    # convert Series with none index to numeric index
+    data = bodo.hiframes.api.get_series_data(S)
+    index_arr = np.arange(len(data))
+    name = bodo.hiframes.api.get_series_name(S)
+    return bodo.hiframes.api.init_series(
+        data,
+        bodo.utils.conversion.convert_to_index(index_arr),
+        name)
+
+
 # cast Series(int8) to Series(cat) for init_series() in test_csv_cat1
 # TODO: separate array type for Categorical data
-@lower_cast(SeriesType, types.Array)
-@lower_cast(types.Array, SeriesType)
 @lower_cast(SeriesType, SeriesType)
 def cast_series(context, builder, fromty, toty, val):
+    # convert None index to Integer index if everything else is same
+    if (fromty.copy(index=toty.index) == toty and fromty.index == types.none
+            and toty.index == bodo.hiframes.pd_index_ext.NumericIndexType(
+                types.int64, types.none)):
+        cn_typ = context.typing_context.resolve_value_type(
+            convert_index_to_int64)
+        cn_sig = cn_typ.get_call_type(
+            context.typing_context, (fromty,), {})
+        cn_impl = context.get_function(cn_typ, cn_sig)
+        return cn_impl(builder, (val,))
+
     return val
 
 

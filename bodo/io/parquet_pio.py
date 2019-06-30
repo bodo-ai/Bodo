@@ -151,18 +151,6 @@ def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx,
     for i in range(n_cols):
         nodes[2 * (i - n_cols)].target = pq_node.out_vars[i]
 
-    size_vars = [nodes[2 * (i - n_cols) + 1].target for i in range(n_cols)]
-
-    # set global array sizes in dist_pass
-    for arr, size_var in zip(pq_node.out_vars, size_vars):
-        dist_pass._array_sizes[arr.name] = [size_var]
-        out, start_var, end_var = dist_pass._gen_1D_div(
-            size_var, arr.scope, pq_node.loc, "$alloc", "get_node_portion",
-            bodo.libs.distributed_api.get_node_portion)
-        dist_pass._array_starts[arr.name] = [start_var]
-        dist_pass._array_counts[arr.name] = [end_var]
-        nodes += out
-
     return nodes
 
 

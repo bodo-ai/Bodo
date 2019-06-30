@@ -49,6 +49,7 @@ class DataFramePass(object):
 
     def run(self):
         dprint_func_ir(self.func_ir, "starting dataframe pass")
+        ir_utils.remove_dels(self.func_ir.blocks)
         blocks = self.func_ir.blocks
         # topo_order necessary so DataFrame data replacement optimization can
         # be performed in one pass
@@ -169,9 +170,12 @@ class DataFramePass(object):
                 blocks[label].body = new_body
 
         self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
-        while ir_utils.remove_dead(self.func_ir.blocks, self.func_ir.arg_names,
-                                   self.func_ir, self.typemap):
-            pass
+        # can't call remove dead since Series transform is not done yet and
+        # aliases like S.values are not known, see test_1D_Var_alloc3
+        # TODO: merge dist pass and series pass
+        # while ir_utils.remove_dead(self.func_ir.blocks, self.func_ir.arg_names,
+        #                            self.func_ir, self.typemap):
+        #     pass
 
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
         dprint_func_ir(self.func_ir, "after dataframe pass")
@@ -356,6 +360,8 @@ class DataFramePass(object):
             out_vars[col] = out_arr
 
         # add index array to filter node
+        in_df_index = self._get_dataframe_index(df_var, nodes)
+        in_df_index_name = self._get_index_name(in_df_index, nodes)
         in_index_arr = self._gen_array_from_index(
             df_var, list(in_vars.values())[0], nodes)
         out_index_arr = ir.Var(lhs.scope, mk_unique_var('index'), lhs.loc)
@@ -366,7 +372,8 @@ class DataFramePass(object):
         nodes.append(bodo.ir.filter.Filter(
             lhs.name, df_var.name, index_var, out_vars, in_vars, lhs.loc))
 
-        df_index_var = self._gen_index_from_array(out_index_arr, nodes)
+        df_index_var = self._gen_index_from_array(
+            out_index_arr, in_df_index_name, nodes)
 
         _init_df = _gen_init_df(df_typ.columns, 'index')
         out_vars = [out_vars[col] for col in df_typ.columns]
@@ -930,6 +937,8 @@ class DataFramePass(object):
                             for c in df_typ.columns}
 
         # input index
+        in_df_index = self._get_dataframe_index(df_var, nodes)
+        in_df_index_name = self._get_index_name(in_df_index, nodes)
         arr = list(in_vars.values())[0]
         in_index_var = self._gen_array_from_index(df_var, arr, nodes)
         in_vars['$_bodo_index_'] = in_index_var
@@ -962,7 +971,8 @@ class DataFramePass(object):
                                       in_vars, out_vars, inplace, lhs.loc, ascending))
 
         # output index
-        out_index = self._gen_index_from_array(out_index_var, nodes)
+        out_index = self._gen_index_from_array(
+            out_index_var, in_df_index_name, nodes)
 
         _init_df = _gen_init_df(df_typ.columns, 'index')
 
@@ -1002,18 +1012,18 @@ class DataFramePass(object):
         nodes += f_block.body[:-2]
         return nodes[-1].target
 
-    def _gen_index_from_array(self, arr_var, nodes):
-        def _get_index(arr):
-            return bodo.utils.conversion.index_from_array(arr)
+    def _gen_index_from_array(self, arr_var, name_var, nodes):
+        def _get_index(arr, name):
+            return bodo.utils.conversion.index_from_array(arr, name)
 
         f_block = compile_to_numba_ir(_get_index,
             {'bodo': bodo},
             self.typingctx,
-            (self.typemap[arr_var.name],),
+            (self.typemap[arr_var.name], self.typemap[name_var.name]),
             self.typemap,
             self.calltypes
         ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [arr_var])
+        replace_arg_nodes(f_block, [arr_var, name_var])
         nodes += f_block.body[:-2]
         return nodes[-1].target
 
@@ -1328,11 +1338,16 @@ class DataFramePass(object):
 
         in_index_var = None
         out_index_var = None
+        in_df_index_name = None
         if '$_bodo_index_' in right_on:
+            in_df_index = self._get_dataframe_index(right_df, nodes)
+            in_df_index_name = self._get_index_name(in_df_index, nodes)
             in_index_var = self._gen_array_from_index(
                 right_df, list(right_arrs.values())[0], nodes)
             right_arrs['$_bodo_index_'] = in_index_var
         if '$_bodo_index_' in left_on:
+            in_df_index = self._get_dataframe_index(left_df, nodes)
+            in_df_index_name = self._get_index_name(in_df_index, nodes)
             in_index_var = self._gen_array_from_index(
                 left_df, list(left_arrs.values())[0], nodes)
             left_arrs['$_bodo_index_'] = in_index_var
@@ -1350,7 +1365,8 @@ class DataFramePass(object):
 
         out_arrs = list(out_data_vars.values())
         if out_index_var is not None:
-            out_index = self._gen_index_from_array(out_index_var, nodes)
+            out_index = self._gen_index_from_array(
+                out_index_var, in_df_index_name, nodes)
             out_arrs = [v for c,v in out_data_vars.items() if c != '$_bodo_index_']
             if '$_bodo_index_' in right_on and '$_bodo_index_' not in left_on and how == 'left':
                 out_arrs.append(self._get_dataframe_index(left_df, nodes))
@@ -1387,7 +1403,9 @@ class DataFramePass(object):
                 out_key_vars.append(out_key_var)
 
         df_col_map = {}
-        for c in grp_typ.selection:
+        out_colnames = (grp_typ.selection if isinstance(out_typ, SeriesType)
+                        else out_typ.columns)
+        for c in out_colnames:
             var = ir.Var(lhs.scope, mk_unique_var(c), lhs.loc)
             self.typemap[var.name] = (out_typ.data
                 if isinstance(out_typ, SeriesType)
@@ -1399,10 +1417,9 @@ class DataFramePass(object):
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name, df_var.name, grp_typ.keys, out_key_vars, df_col_map,
             in_vars, in_key_arrs,
-            agg_func, None, lhs.loc)
+            agg_func, lhs.loc)
 
         nodes.append(agg_node)
-
 
         if out_typ.index == types.none:
             index_var = ir.Var(lhs.scope, mk_unique_var('gp_index'), lhs.loc)
@@ -1479,7 +1496,7 @@ class DataFramePass(object):
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name, df_var.name, [index], None, df_col_map,
             in_vars, [index_arr],
-            agg_func, None, lhs.loc, pivot_arr, pivot_values)
+            agg_func, lhs.loc, pivot_arr, pivot_values)
         nodes.append(agg_node)
 
         _init_df = _gen_init_df(out_typ.columns)
@@ -1518,7 +1535,7 @@ class DataFramePass(object):
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name, 'crosstab', [index.name], None, df_col_map,
             in_vars, [index],
-            _agg_len_impl, None, lhs.loc, pivot_arr, pivot_values, True)
+            _agg_len_impl, lhs.loc, pivot_arr, pivot_values, True)
         nodes = [agg_node]
 
         _init_df = _gen_init_df(out_typ.columns)
@@ -1901,6 +1918,32 @@ class DataFramePass(object):
             self.calltypes
         ).blocks.popitem()[1]
         replace_arg_nodes(f_block, [df_var])
+        nodes += f_block.body[:-2]
+        return nodes[-1].target
+
+    def _get_index_name(self, dt_var, nodes):
+        var_def = guard(get_definition, self.func_ir, dt_var)
+        call_def = guard(find_callname, self.func_ir, var_def)
+        if (call_def in (('init_datetime_index', 'bodo.hiframes.api'),
+                    ('init_timedelta_index', 'bodo.hiframes.api'),
+                    ('init_string_index', 'bodo.hiframes.pd_index_ext'),
+                    ('init_numeric_index', 'bodo.hiframes.pd_index_ext'))
+                and len(var_def.args) == 2):
+            return var_def.args[1]
+
+        f = lambda S: bodo.hiframes.api.get_index_name(S)
+        if self.typemap[dt_var.name] == types.none:
+            f = lambda S: None
+
+        f_block = compile_to_numba_ir(
+            f,
+            {'bodo': bodo},
+            self.typingctx,
+            (self.typemap[dt_var.name],),
+            self.typemap,
+            self.calltypes
+        ).blocks.popitem()[1]
+        replace_arg_nodes(f_block, [dt_var])
         nodes += f_block.body[:-2]
         return nodes[-1].target
 

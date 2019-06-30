@@ -162,6 +162,21 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.agg")
     def resolve_agg(self, grp, args, kws):
+        # multi-function case
+        if isinstance(args[0], types.BaseTuple):
+            assert len(grp.selection) == 1 and grp.explicit_select
+            assert len(args[0]) > 0
+            out_data = []
+            out_columns = []
+            for f in args[0].types:
+                code = f.literal_value.code
+                out_columns.append(code.co_name)
+                out_tp = self._get_agg_typ(grp, args, code).return_type
+                out_data.append(out_tp.data)
+            index = out_tp.index
+            out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
+            return signature(out_res, *args)
+
         code = args[0].literal_value.code
         return self._get_agg_typ(grp, args, code)
 

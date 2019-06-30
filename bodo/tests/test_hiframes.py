@@ -511,6 +511,20 @@ class TestHiFrames(unittest.TestCase):
         pd.testing.assert_series_equal(
             bodo_func(df), test_impl(df), check_names=False)
 
+    @unittest.skip("fix distributed -n 3")
+    def test_to_numeric_parallel(self):
+        def test_impl(S):
+            B = pd.to_numeric(S, errors='coerce')
+            return B.sum()
+
+        S = pd.Series(['123.1', '331.2', '1.3', '5.1', '55.2'], name='A')
+        bodo_func = bodo.jit(
+            locals={'B': bodo.float64[:]}, distributed=['S'])(test_impl)
+        start, end = get_start_end(len(S))
+        self.assertEqual(bodo_func(S[start:end]), test_impl(S))
+        self.assertEqual(count_array_REPs(), 0)
+        self.assertEqual(count_parfor_REPs(), 0)
+
     def test_1D_Var_len(self):
         def test_impl(n):
             df = pd.DataFrame({'A': np.arange(n), 'B': np.arange(n)+1.0})
