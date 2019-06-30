@@ -60,7 +60,6 @@ Building from Source on Windows
 Building Bodo on Windows requires Build Tools for Visual Studio 2017 (14.0) and Intel MPI:
 
 * Install `Build Tools for Visual Studio 2017 (14.0) <https://www.visualstudio.com/downloads/#build-tools-for-visual-studio-2017>`_.
-* Install `Intel MPI <https://software.intel.com/en-us/intel-mpi-library>`_.
 * Install `Miniconda for Windows <https://repo.continuum.io/miniconda/Miniconda3-latest-Windows-x86_64.exe>`_.
 * Start 'Anaconda prompt'
 * Setup the Conda environment in Anaconda Prompt::
@@ -68,11 +67,9 @@ Building Bodo on Windows requires Build Tools for Visual Studio 2017 (14.0) and 
     conda create -n Bodo -c ehsantn -c numba/label/dev -c anaconda -c conda-forge python=3.7 pandas pyarrow h5py numba scipy boost libboost tbb-devel mkl-devel
     activate Bodo
     conda install vc vs2015_runtime vs2015_win-64
+    conda install -c intel impi_rt impi-devel
     git clone https://github.com/IntelLabs/bodo.git
     cd bodo
-    set INCLUDE=%INCLUDE%;%CONDA_PREFIX%\Library\include
-    set LIB=%LIB%;%CONDA_PREFIX%\Library\lib
-    "%I_MPI_ROOT%"\intel64\bin\mpivars.bat
     set HDF5_DIR=%CONDA_PREFIX%\Library
     python setup.py develop
 

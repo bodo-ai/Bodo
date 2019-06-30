@@ -828,14 +828,15 @@ static void oneD_reshape_shuffle(char* output,
 
 // fix for tensorflows MKL support that overwrites Intel mallocs,
 // which causes Intel MPI to crash.
-#ifdef I_MPI_VERSION
+// #ifdef I_MPI_VERSION
+#if false
 #include "i_malloc.h"
 static void fix_i_malloc()
 {
-    i_malloc = malloc;
-    i_calloc = calloc;
-    i_realloc = realloc;
-    i_free = free;
+    i_malloc_dll = malloc;
+    i_calloc_dll = calloc;
+    i_realloc_dll = realloc;
+    i_free_dll = free;
 }
 #else
 static void fix_i_malloc() {}
