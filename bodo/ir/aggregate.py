@@ -452,6 +452,7 @@ def aggregate_distributed_analysis(aggregate_node, array_dists):
 
 distributed_analysis.distributed_analysis_extensions[Aggregate] = aggregate_distributed_analysis
 
+
 def build_agg_definitions(agg_node, definitions=None):
     if definitions is None:
         definitions = defaultdict(list)
@@ -464,6 +465,7 @@ def build_agg_definitions(agg_node, definitions=None):
             definitions[cvar.name].append(agg_node)
 
     return definitions
+
 
 ir_utils.build_defs_extensions[Aggregate] = build_agg_definitions
 
@@ -1285,12 +1287,14 @@ def gen_all_update_func(update_funcs, reduce_var_types, in_col_types,
             data_access = "data_in[0][i]"
             if is_crosstab:  # TODO: crosstab with values arg
                 data_access = "0"
-            func_text += "    {} = update_vars_0({}, {})\n".format(redvar_access, redvar_access, data_access)
+            func_text += "    {} = update_vars_0({}, {})\n".format(
+                redvar_access, redvar_access, data_access)
     else:
         for j in range(out_num_cols):
             redvar_access = ", ".join(["redvar_arrs[{}][w_ind]".format(i)
                         for i in range(redvar_offsets[j], redvar_offsets[j+1])])
-            func_text += "  {} = update_vars_{}({},  data_in[{}][i])\n".format(redvar_access, j, redvar_access, 0 if in_num_cols == 1 else j)
+            func_text += "  {} = update_vars_{}({},  data_in[{}][i])\n".format(
+                redvar_access, j, redvar_access, 0 if in_num_cols == 1 else j)
     func_text += "  return\n"
     # print(func_text)
 
@@ -1371,7 +1375,6 @@ def gen_all_eval_func(eval_funcs, reduce_var_types, redvar_offsets,
 
     reduce_arrs_tup_typ = types.Tuple([types.Array(t, 1, 'C') for t in reduce_var_types])
     out_col_typs = types.Tuple(out_col_typs)
-    arg_typs = (reduce_arrs_tup_typ, out_col_typs, types.intp)
 
     num_cols = len(redvar_offsets) - 1
 
@@ -1422,9 +1425,11 @@ def gen_eval_func(f_ir, eval_nodes, reduce_vars, var_types, pm, typingctx, targe
     agg_eval = loc_vars['agg_eval']
 
     arg_typs = tuple(var_types)
-    f_ir = compile_to_numba_ir(agg_eval, {'numba': numba, 'bodo':bodo, 'np': np, '_zero': zero},  # TODO: add outside globals
-                                  typingctx, arg_typs,
-                                  pm.typemap, pm.calltypes)
+    f_ir = compile_to_numba_ir(agg_eval,
+        # TODO: add outside globals
+        {'numba': numba, 'bodo':bodo, 'np': np, '_zero': zero},
+        typingctx, arg_typs,
+        pm.typemap, pm.calltypes)
 
     # TODO: support multi block eval funcs
     block = list(f_ir.blocks.values())[0]
@@ -1613,7 +1618,9 @@ def gen_update_func(parfor, redvars, var_to_redvar, var_types, arr_var,
     # XXX input column type can be different than reduction variable type
     arg_typs = tuple(var_types + [in_col_typ.dtype]*num_in_vars)
 
-    f_ir = compile_to_numba_ir(agg_update, {'__update_redvars': __update_redvars},  # TODO: add outside globals
+    f_ir = compile_to_numba_ir(agg_update,
+        # TODO: add outside globals
+        {'__update_redvars': __update_redvars},
                                   typingctx, arg_typs,
                                   pm.typemap, pm.calltypes)
 
