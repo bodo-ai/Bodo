@@ -37,6 +37,7 @@ from bodo.transforms.distributed_analysis import (Distribution,
     DistributedAnalysis, _get_array_accesses)
 
 import bodo.utils.utils
+from bodo.utils.transform import compile_func_single_block
 from bodo.utils.utils import (is_alloc_callname, is_whole_slice, is_array_container,
                         get_slice_step, is_array, is_np_array, find_build_tuple,
                         debug_prints, ReplaceFunc, gen_getitem, is_call,
@@ -343,7 +344,7 @@ class DistributedPass(object):
             def f(connect_tp, dset_tp, col_id_tp, column_tp, schema_arr_tp, start, count):  # pragma: no cover
                 return bodo.io.xenon_ext.read_xenon_col_parallel(connect_tp, dset_tp, col_id_tp, column_tp, schema_arr_tp, start, count)
 
-            return nodes + _compile_func_single_block(
+            return nodes + compile_func_single_block(
                 f, rhs.args, assign.target, self)
 
         if bodo.config._has_xenon and (fdef == ('read_xenon_str', 'numba.extending')
@@ -476,33 +477,33 @@ class DistributedPass(object):
 
             f = lambda arr, q, size: bodo.libs.array_kernels.quantile_parallel(
                                                                   arr, q, size)
-            return nodes + _compile_func_single_block(
+            return nodes + compile_func_single_block(
                 f, rhs.args, assign.target, self)
 
         if fdef == ('nunique', 'bodo.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda arr: bodo.hiframes.api.nunique_parallel(arr)
-            return _compile_func_single_block(f, rhs.args, assign.target, self)
+            return compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ('unique', 'bodo.hiframes.api') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda arr: bodo.hiframes.api.unique_parallel(arr)
-            return _compile_func_single_block(f, rhs.args, assign.target, self)
+            return compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ('nlargest', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda arr, I, k, i, f: bodo.libs.array_kernels.nlargest_parallel(arr, I, k, i, f)
-            return _compile_func_single_block(f, rhs.args, assign.target, self)
+            return compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ('nancorr', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda mat, cov, minpv: bodo.libs.array_kernels.nancorr(mat, cov, minpv, True)
-            return _compile_func_single_block(f, rhs.args, assign.target, self)
+            return compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ('median', 'bodo.libs.array_kernels') and (self._is_1D_arr(rhs.args[0].name)
                                                                 or self._is_1D_Var_arr(rhs.args[0].name)):
             f = lambda arr: bodo.libs.array_kernels.median(arr, True)
-            return _compile_func_single_block(f, rhs.args, assign.target, self)
+            return compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ('convert_rec_to_tup', 'bodo.hiframes.api'):
             # optimize Series back to back map pattern with tuples
@@ -539,7 +540,7 @@ class DistributedPass(object):
 
             def impl(fname, data_ptr, start, count):  # pragma: no cover
                 return bodo.io.np_io.file_read_parallel(fname, data_ptr, start, count)
-            return nodes + _compile_func_single_block(
+            return nodes + compile_func_single_block(
                 impl, [fname, arr, start_var, count_var], assign.target, self)
 
         # replace get_type_max_value(arr.dtype) since parfors
@@ -615,7 +616,7 @@ class DistributedPass(object):
                 _func(A, B)
                 return B
             func = getattr(bodo.libs.distributed_api, "dist_" + func_name)
-            return _compile_func_single_block(
+            return compile_func_single_block(
                 impl, [in_arr_var], lhs_var, self,
                 extra_globals={'_func': func})
 
@@ -664,7 +665,7 @@ class DistributedPass(object):
                 def f(fname, arr, start, count):  # pragma: no cover
                     return bodo.io.np_io.file_write_parallel(fname, arr, start, count)
 
-                return nodes + _compile_func_single_block(
+                return nodes + compile_func_single_block(
                     f, [_fname, arr, start_var, count_var], assign.target, self)
 
             if self._is_1D_Var_arr(arr.name):
@@ -675,7 +676,7 @@ class DistributedPass(object):
                     start = bodo.libs.distributed_api.dist_exscan(count)
                     return bodo.io.np_io.file_write_parallel(fname, arr, start, count)
 
-                return _compile_func_single_block(f, [_fname, arr],
+                return compile_func_single_block(f, [_fname, arr],
                     assign.target, self)
 
         return out
@@ -768,7 +769,7 @@ class DistributedPass(object):
                     fname._data, str_out._data, start, count, 1)
                 _dummy_use(str_out)
 
-            return nodes + _compile_func_single_block(
+            return nodes + compile_func_single_block(
                 f, [fname, str_out], assign.target, self,
                 extra_globals={'_dummy_use': dummy_use})
 
@@ -1033,7 +1034,7 @@ class DistributedPass(object):
                 if arr_name not in avail_vars:
                     continue
                 arr_var = ir.Var(size_var.scope, arr_name, size_var.loc)
-                out = _compile_func_single_block(
+                out = compile_func_single_block(
                     lambda A: len(A), (arr_var,), None, self)
                 new_size_var = out[-1].target
                 break
@@ -1105,11 +1106,11 @@ class DistributedPass(object):
                 size_var = nodes[-1].target
 
             if ndims == 1:
-                return nodes + _compile_func_single_block(
+                return nodes + compile_func_single_block(
                     lambda A, size_var: (size_var,),
                     (arr, size_var), lhs, self)
             else:
-                return nodes + _compile_func_single_block(
+                return nodes + compile_func_single_block(
                     lambda A, size_var: (size_var,) + A.shape[1:],
                     (arr, size_var), lhs, self)
 
@@ -1120,7 +1121,7 @@ class DistributedPass(object):
             nodes = []
             last_size_var = self._get_dist_var_dim_size(
                 arr, (ndims - 1), nodes)
-            return nodes + _compile_func_single_block(
+            return nodes + compile_func_single_block(
                 lambda A, size_var: A.shape[:-1] + (size_var,),
                 (arr, last_size_var), lhs, self)
 
@@ -1207,7 +1208,7 @@ class DistributedPass(object):
                     bodo.libs.distributed_lower._set_if_in_range(
                         A, val, index, chunk_start, chunk_count)
 
-                return nodes + _compile_func_single_block(
+                return nodes + compile_func_single_block(
                     f, [arr, node.value, index_var, start_var, count_var],
                     None, self)
 
@@ -1224,7 +1225,7 @@ class DistributedPass(object):
             slice_call = get_definition(self.func_ir, index_var)
             slice_start = slice_call.args[0]
             slice_stop = slice_call.args[1]
-            return nodes + _compile_func_single_block(
+            return nodes + compile_func_single_block(
                 f, [arr, node.value, slice_start, slice_stop, start_var, count_var],
                 None, self)
             # print_node = ir.Print([start_var, end_var], None, loc)
@@ -1304,7 +1305,7 @@ class DistributedPass(object):
                 in_arr = full_node.value.value
                 nodes, start_var, count_var = self._get_dist_var_start_count(
                     in_arr, equiv_set)
-                return nodes + _compile_func_single_block(
+                return nodes + compile_func_single_block(
                     lambda arr, slice_index, start, count: bodo.libs.distributed_api.const_slice_getitem(
                         arr, slice_index, start, count), [in_arr, index_var, start_var, count_var],
                         lhs, self)
@@ -1370,7 +1371,7 @@ class DistributedPass(object):
             if self._is_1D_Var_arr(arr) and self._index_has_par_index(
                     index, index_name) and arr in avail_vars:
                 arr_var = ir.Var(stop_var.scope, arr, stop_var.loc)
-                prepend += _compile_func_single_block(
+                prepend += compile_func_single_block(
                     lambda A: len(A), (arr_var,), None, self)
                 size_found = True
                 new_stop_var = prepend[-1].target
@@ -1388,7 +1389,7 @@ class DistributedPass(object):
                         pass
                     if shape_classes and shape_classes[0] == size_class:
                         arr_var = ir.Var(stop_var.scope, arr, stop_var.loc)
-                        prepend += _compile_func_single_block(
+                        prepend += compile_func_single_block(
                             lambda A: len(A), (arr_var,), None, self)
                         new_stop_var = prepend[-1].target
                         size_found = True
@@ -1523,7 +1524,7 @@ class DistributedPass(object):
         exec(func_text, {'bodo': bodo}, loc_vars)
         impl = loc_vars['impl']
 
-        return _compile_func_single_block(impl, args, None, self)
+        return compile_func_single_block(impl, args, None, self)
 
     def _get_dist_var_start_count(self, arr, equiv_set):
         nodes = []
@@ -1642,7 +1643,7 @@ class DistributedPass(object):
                 count = _get_end(n, n_pes, rank)
                 return start, count
 
-        div_nodes += _compile_func_single_block(impl, (size_var,), None, self,
+        div_nodes += compile_func_single_block(impl, (size_var,), None, self,
             extra_globals={
                 '_get_rank': bodo.libs.distributed_api.get_rank,
                 '_get_size': bodo.libs.distributed_api.get_size,
@@ -1733,7 +1734,7 @@ class DistributedPass(object):
         #                 rhs.args[2] = self._set1_var
 
     def _gen_barrier(self):
-        return _compile_func_single_block(
+        return compile_func_single_block(
                 lambda: _barrier(), (), None, self,
                 extra_globals={'_barrier': bodo.libs.distributed_api.barrier})
 
@@ -1937,33 +1938,6 @@ def _set_getsetitem_index(node, new_ind):
 def dprint(*s):  # pragma: no cover
     if debug_prints():
         print(*s)
-
-
-def _compile_func_single_block(func, args, ret_var, typing_info,
-                                                           extra_globals=None):
-    """compiles functions that are just a single basic block.
-    Does not handle defaults, freevars etc.
-    typing_info is a structure that has typingctx, typemap, calltypes
-    (could be the pass itself since not mutated).
-    """
-    glbls = {'numba': numba, 'np': np, 'bodo': bodo, 'pd': pd}
-    if extra_globals is not None:
-        glbls.update(extra_globals)
-    f_ir = compile_to_numba_ir(
-        func, glbls, typing_info.typingctx,
-        tuple(typing_info.typemap[arg.name] for arg in args),
-        typing_info.typemap, typing_info.calltypes)
-    assert len(f_ir.blocks) == 1
-    f_block = f_ir.blocks.popitem()[1]
-    replace_arg_nodes(f_block, args)
-    nodes = f_block.body[:-2]
-    if ret_var is not None:
-        loc = ret_var.loc
-        cast_assign = f_block.body[-2]
-        assert is_assign(cast_assign) and is_expr(cast_assign.value, 'cast')
-        func_ret = cast_assign.value.value
-        nodes.append(ir.Assign(func_ret, ret_var, loc))
-    return nodes
 
 
 def find_available_vars(blocks, cfg, init_avail=None):
