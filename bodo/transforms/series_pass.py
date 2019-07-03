@@ -47,6 +47,7 @@ from bodo.hiframes.series_kernels import series_replace_funcs
 from bodo.hiframes.split_impl import (string_array_split_view_type,
     StringArraySplitViewType, getitem_c_arr, get_array_ctypes_ptr,
     get_split_view_index, get_split_view_data_ptr)
+from bodo.utils.transform import compile_func_single_block
 
 
 ufunc_names = set(f.__name__ for f in numba.typing.npydecl.supported_ufuncs)
@@ -876,12 +877,8 @@ class SeriesPass(object):
                 n = len(S)
                 return np.arange(n)
 
-            f_block = compile_to_numba_ir(
-                _get_indices, {'np': np}, self.typingctx,
-                (self.typemap[data.name],),
-                self.typemap, self.calltypes).blocks.popitem()[1]
-            replace_arg_nodes(f_block, [data])
-            nodes += f_block.body[:-2]
+            nodes += compile_func_single_block(
+                _get_indices, (data,), None, self)
             index_var = nodes[-1].target
 
             # dummy output data arrays for results
