@@ -11,10 +11,6 @@ easily. On Linux/Mac/Windows::
 .. used if master of Numba is needed for latest bodo package
 .. conda create -n Bodo -c ehsantn -c numba/label/dev -c anaconda -c conda-forge bodo
 
-Windows installaton requires
-`Intel MPI <https://software.intel.com/en-us/intel-mpi-library>`_ to be
-installed.
-
 Building Bodo from Source
 -------------------------
 
@@ -57,7 +53,7 @@ to check the channel of ``hdf5`` package.
 Building from Source on Windows
 -------------------------------
 
-Building Bodo on Windows requires Build Tools for Visual Studio 2017 (14.0) and Intel MPI:
+Building Bodo on Windows requires Build Tools for Visual Studio 2017 (14.0):
 
 * Install `Build Tools for Visual Studio 2017 (14.0) <https://www.visualstudio.com/downloads/#build-tools-for-visual-studio-2017>`_.
 * Install `Miniconda for Windows <https://repo.continuum.io/miniconda/Miniconda3-latest-Windows-x86_64.exe>`_.

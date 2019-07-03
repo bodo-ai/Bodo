@@ -25,6 +25,8 @@ requirements:
     - hdf5
     - h5py
     - mpich # [not win]
+    - impi-devel # [win]
+    - impi_rt # [win]
 
   run:
     - python
@@ -35,6 +37,7 @@ requirements:
     - boost
     - numba 0.44.*
     - mpich # [not win]
+    - impi_rt # [win]
 
 test:
   requires:
