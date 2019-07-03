@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import unittest
+import os
 import bodo
 import numpy as np
 import pandas as pd
@@ -215,8 +216,9 @@ class TestString(unittest.TestCase):
         self.assertEqual(bodo_func(), True)
 
     def test_string_NA_box(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'example.parquet')
         def test_impl():
-            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
+            df = pq.read_table(fname).to_pandas()
             return df.five
         bodo_func = bodo.jit(test_impl)
         # XXX just checking isna() since Pandas uses None in this case

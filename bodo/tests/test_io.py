@@ -1,4 +1,5 @@
 import unittest
+import os
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 import numpy as np
@@ -316,8 +317,9 @@ class TestIO(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_pq_str(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'example.parquet')
         def test_impl():
-            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
+            df = pq.read_table(fname).to_pandas()
             A = df.two.values=='foo'
             return A.sum()
 
@@ -327,16 +329,18 @@ class TestIO(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_pq_columns(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'example.parquet')
         def test_impl():
-            return pd.read_parquet('bodo/tests/data/example.parquet',
+            return pd.read_parquet(fname,
                                    columns=['three', 'five'])
 
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_pq_str_with_nan_seq(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'example.parquet')
         def test_impl():
-            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
+            df = pq.read_table(fname).to_pandas()
             A = df.five.values=='foo'
             return A
 
@@ -344,8 +348,9 @@ class TestIO(unittest.TestCase):
         np.testing.assert_almost_equal(bodo_func(), test_impl())
 
     def test_pq_str_with_nan_par(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'example.parquet')
         def test_impl():
-            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
+            df = pq.read_table(fname).to_pandas()
             A = df.five.values=='foo'
             return A.sum()
 
@@ -355,8 +360,9 @@ class TestIO(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_pq_str_with_nan_par_multigroup(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'example2.parquet')
         def test_impl():
-            df = pq.read_table('bodo/tests/data/example2.parquet').to_pandas()
+            df = pq.read_table(fname).to_pandas()
             A = df.five.values=='foo'
             return A.sum()
 
@@ -366,8 +372,9 @@ class TestIO(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_pq_bool(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'example.parquet')
         def test_impl():
-            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
+            df = pq.read_table(fname).to_pandas()
             return df.three.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -376,8 +383,9 @@ class TestIO(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_pq_nan(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'example.parquet')
         def test_impl():
-            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
+            df = pq.read_table(fname).to_pandas()
             return df.one.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -386,8 +394,9 @@ class TestIO(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_pq_float_no_nan(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'example.parquet')
         def test_impl():
-            df = pq.read_table('bodo/tests/data/example.parquet').to_pandas()
+            df = pq.read_table(fname).to_pandas()
             return df.four.sum()
 
         bodo_func = bodo.jit(test_impl)
