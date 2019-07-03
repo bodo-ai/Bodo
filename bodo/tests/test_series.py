@@ -1,4 +1,5 @@
 import unittest
+import os
 import operator
 import pandas as pd
 import numpy as np
@@ -2064,8 +2065,9 @@ class TestSeries(unittest.TestCase):
         np.testing.assert_array_equal(bodo_func(S).values, test_impl(S).values)
 
     def test_series_nlargest_parallel1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'kde.parquet')
         def test_impl():
-            df = pq.read_table('bodo/tests/data/kde.parquet').to_pandas()
+            df = pq.read_table(fname).to_pandas()
             S = df.points
             return S.nlargest(4)
 
@@ -2101,8 +2103,9 @@ class TestSeries(unittest.TestCase):
         np.testing.assert_array_equal(bodo_func(S).values, test_impl(S).values)
 
     def test_series_nsmallest_parallel1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'kde.parquet')
         def test_impl():
-            df = pq.read_table('bodo/tests/data/kde.parquet').to_pandas()
+            df = pq.read_table(fname).to_pandas()
             S = df.points
             return S.nsmallest(4)
 
@@ -2174,8 +2177,9 @@ class TestSeries(unittest.TestCase):
         self.assertEqual(bodo_func(S), test_impl(S))
 
     def test_series_median_parallel1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'kde.parquet')
         def test_impl():
-            df = pq.read_table('bodo/tests/data/kde.parquet').to_pandas()
+            df = pq.read_table(fname).to_pandas()
             S = df.points
             return S.median()
 
@@ -2183,8 +2187,9 @@ class TestSeries(unittest.TestCase):
         self.assertEqual(bodo_func(), test_impl())
 
     def test_series_argsort_parallel(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'kde.parquet')
         def test_impl():
-            df = pq.read_table('bodo/tests/data/kde.parquet').to_pandas()
+            df = pq.read_table(fname).to_pandas()
             S = df.points
             return S.argsort().values
 
@@ -2236,8 +2241,9 @@ class TestSeries(unittest.TestCase):
         pd.testing.assert_series_equal(bodo_func(A, B), test_impl(A, B))
 
     def test_series_sort_values_parallel1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'kde.parquet')
         def test_impl():
-            df = pq.read_table('bodo/tests/data/kde.parquet').to_pandas()
+            df = pq.read_table(fname).to_pandas()
             S = df.points
             return S.sort_values()
 
