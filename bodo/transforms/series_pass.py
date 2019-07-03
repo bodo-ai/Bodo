@@ -1433,16 +1433,10 @@ class SeriesPass(object):
             imp_dis = self._handle_rolling_apply_func(
                 func_node, dtype, out_dtype)
             def f(arr, on_arr, w, center):  # pragma: no cover
-                df_arr = bodo.hiframes.rolling.rolling_variable(
-                                                arr, on_arr, w, center, False, _func)
-            f_block = compile_to_numba_ir(f, {'bodo': bodo, '_func': imp_dis},
-                        self.typingctx,
-                        tuple(self.typemap[v.name] for v in rhs.args[:-2]),
-                        self.typemap, self.calltypes).blocks.popitem()[1]
-            replace_arg_nodes(f_block, rhs.args[:-2])
-            nodes += f_block.body[:-3]  # remove none return
-            nodes[-1].target = lhs
-            return nodes
+                return bodo.hiframes.rolling.rolling_variable(
+                    arr, on_arr, w, center, False, _func)
+            return nodes + compile_func_single_block(
+                f, rhs.args[:-2], lhs, self, extra_globals={'_func': imp_dis})
 
         nodes.append(assign)
         return nodes
