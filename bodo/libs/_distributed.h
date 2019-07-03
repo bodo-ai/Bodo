@@ -81,7 +81,6 @@ static void permutation_int(int64_t* output, int n) __UNUSED__;
 static void permutation_array_index(unsigned char *lhs, int64_t len, int64_t elem_size,
                                     unsigned char *rhs, int64_t *p, int64_t p_len) __UNUSED__;
 static int hpat_finalize() __UNUSED__;
-static void fix_i_malloc() __UNUSED__;
 static int hpat_dummy_ptr[64] __UNUSED__;
 
 /* *********************************************************************
@@ -825,21 +824,5 @@ static void oneD_reshape_shuffle(char* output,
     delete[] send_disp;
     delete[] recv_disp;
 }
-
-// fix for tensorflows MKL support that overwrites Intel mallocs,
-// which causes Intel MPI to crash.
-// #ifdef I_MPI_VERSION
-#if false
-#include "i_malloc.h"
-static void fix_i_malloc()
-{
-    i_malloc_dll = malloc;
-    i_calloc_dll = calloc;
-    i_realloc_dll = realloc;
-    i_free_dll = free;
-}
-#else
-static void fix_i_malloc() {}
-#endif
 
 #endif // _DISTRIBUTED_H_INCLUDED

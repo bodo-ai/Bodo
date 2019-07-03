@@ -554,12 +554,6 @@ def dist_permutation_array_index(lhs, lhs_len, dtype_size, rhs, p, p_len):
                             p.ctypes, p_len)
 
 
-ll.add_symbol('fix_i_malloc', hdist.fix_i_malloc)
-_fix_i_malloc = types.ExternalFunction("fix_i_malloc",  types.void())
-@numba.njit
-def fix_i_malloc():
-    _fix_i_malloc()
-
 ########### finalize MPI when exiting ####################
 
 def hpat_finalize():
