@@ -2265,16 +2265,9 @@ class SeriesPass(object):
 
         # XXX use get_series_index() for getting data instead of S._index
         # to enable alias analysis
-        f_block = compile_to_numba_ir(
+        nodes += compile_func_single_block(
             lambda S: bodo.hiframes.api.get_series_index(S),
-            {'bodo': bodo},
-            self.typingctx,
-            (self.typemap[series_var.name],),
-            self.typemap,
-            self.calltypes
-        ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [series_var])
-        nodes += f_block.body[:-2]
+            (series_var,), None, self)
         return nodes[-1].target
 
     def _get_series_name(self, series_var, nodes):
@@ -2284,16 +2277,9 @@ class SeriesPass(object):
                 and len(var_def.args) == 3):
             return var_def.args[2]
 
-        f_block = compile_to_numba_ir(
+        nodes += compile_func_single_block(
             lambda S: bodo.hiframes.api.get_series_name(S),
-            {'bodo': bodo},
-            self.typingctx,
-            (self.typemap[series_var.name],),
-            self.typemap,
-            self.calltypes
-        ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [series_var])
-        nodes += f_block.body[:-2]
+            (series_var,), None, self)
         return nodes[-1].target
 
     def _replace_func(self, func, args, const=False,
