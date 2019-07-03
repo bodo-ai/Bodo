@@ -2178,13 +2178,8 @@ class SeriesPass(object):
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _h5_write_impl = loc_vars['_h5_write_impl']
-        f_block = compile_to_numba_ir(_h5_write_impl, {'np': np,
-                                        'bodo': bodo}, self.typingctx,
-                                    (self.typemap[dset.name], self.typemap[arr.name]),
-                                    self.typemap, self.calltypes).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [dset, arr])
-        nodes = f_block.body[:-3]  # remove none return
-        return nodes
+        return compile_func_single_block(
+            _h5_write_impl, (dset, arr), None, self)
 
     def _handle_sorted_by_key(self, rhs):
         """generate a sort function with the given key lambda
@@ -2235,16 +2230,9 @@ class SeriesPass(object):
                     ('init_numeric_index', 'bodo.hiframes.pd_index_ext')):
             return var_def.args[0]
 
-        f_block = compile_to_numba_ir(
+        nodes += compile_func_single_block(
             lambda S: bodo.hiframes.api.get_index_data(S),
-            {'bodo': bodo},
-            self.typingctx,
-            (self.typemap[dt_var.name],),
-            self.typemap,
-            self.calltypes
-        ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [dt_var])
-        nodes += f_block.body[:-2]
+            (dt_var,), None, self)
         return nodes[-1].target
 
     def _get_series_data(self, series_var, nodes):
@@ -2260,16 +2248,9 @@ class SeriesPass(object):
 
         # XXX use get_series_data() for getting data instead of S._data
         # to enable alias analysis
-        f_block = compile_to_numba_ir(
+        nodes += compile_func_single_block(
             lambda S: bodo.hiframes.api.get_series_data(S),
-            {'bodo': bodo},
-            self.typingctx,
-            (self.typemap[series_var.name],),
-            self.typemap,
-            self.calltypes
-        ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [series_var])
-        nodes += f_block.body[:-2]
+            (series_var,), None, self)
         return nodes[-1].target
 
     def _get_series_index(self, series_var, nodes):
