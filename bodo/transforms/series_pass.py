@@ -919,16 +919,14 @@ class SeriesPass(object):
             nodes.append(bodo.ir.sort.Sort(data.name, lhs.name, in_keys,
                 out_keys, in_df, out_df, inplace, lhs.loc, ascending))
 
-            return self._replace_func(
-                lambda A,B: (A,B),
-                (out_data, out_index),
-                pre_nodes=nodes)
+            return nodes + compile_func_single_block(
+                lambda A, B: (A, B), (out_data, out_index), lhs, self)
 
         if func_name == 'get_series_data_tup':
             arg = rhs.args[0]
             impl = bodo.hiframes.api.overload_get_series_data_tup(
                 self.typemap[arg.name])
-            return self._replace_func(impl, (arg,))
+            return compile_func_single_block(impl, (arg,), lhs, self)
 
         if func_name in ('str_contains_regex', 'str_contains_noregex'):
             return self._handle_str_contains(assign, lhs, rhs, func_name)
@@ -940,16 +938,8 @@ class SeriesPass(object):
                 assign.value = rhs.args[0]
                 return [assign]
             else:
-                def f(column):  # pragma: no cover
-                    a = column.astype(np.float64)
-                f_block = compile_to_numba_ir(f,
-                                              {'bodo': bodo, 'np': np}, self.typingctx,
-                                              (if_series_to_array_type(self.typemap[in_arr.name]),),
-                                              self.typemap, self.calltypes).blocks.popitem()[1]
-                replace_arg_nodes(f_block, [in_arr])
-                nodes = f_block.body[:-3]
-                nodes[-1].target = assign.target
-                return nodes
+                return compile_func_single_block(
+                    lambda A: A.astype(np.float64), (in_arr,), lhs, self)
 
         if func_name == 'series_filter_bool':
             return self._handle_df_col_filter(assign, lhs, rhs)
