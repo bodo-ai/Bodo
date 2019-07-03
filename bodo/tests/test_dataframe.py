@@ -1,4 +1,5 @@
 import unittest
+import os
 import random
 import string
 import pandas as pd
@@ -1407,8 +1408,9 @@ class TestDataFrame(unittest.TestCase):
 
     def test_sort_parallel_single_col(self):
         # TODO: better parallel sort test
+        fname = os.path.join('bodo', 'tests', 'data', 'kde.parquet')
         def test_impl():
-            df = pd.read_parquet('bodo/tests/data/kde.parquet')
+            df = pd.read_parquet(fname)
             df.sort_values('points', inplace=True)
             res = df.points.values
             return res
@@ -1425,8 +1427,9 @@ class TestDataFrame(unittest.TestCase):
 
     def test_sort_parallel(self):
         # TODO: better parallel sort test
+        fname = os.path.join('bodo', 'tests', 'data', 'kde.parquet')
         def test_impl():
-            df = pd.read_parquet('bodo/tests/data/kde.parquet')
+            df = pd.read_parquet(fname)
             df['A'] = df.points.astype(np.float64)
             df.sort_values('points', inplace=True)
             res = df.A.values
