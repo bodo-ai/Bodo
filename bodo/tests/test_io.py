@@ -12,7 +12,7 @@ from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
     get_start_end)
 
 
-kde_file = 'bodo/tests/data/kde.parquet'
+kde_file = os.path.join('bodo', 'tests', 'data', 'kde.parquet')
 
 
 def test_pq_pandas_date(datapath):
@@ -271,8 +271,9 @@ class TestIO(unittest.TestCase):
         np.testing.assert_almost_equal(X, arr)
 
     def test_pq_read(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'kde.parquet')
         def test_impl():
-            t = pq.read_table('bodo/tests/data/kde.parquet')
+            t = pq.read_table(fname)
             df = t.to_pandas()
             X = df['points']
             return X.sum()
@@ -294,7 +295,7 @@ class TestIO(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_pq_read_freevar_str1(self):
-        kde_file2 = 'bodo/tests/data/kde.parquet'
+        kde_file2 = os.path.join('bodo', 'tests', 'data', 'kde.parquet')
         def test_impl():
             df = pd.read_parquet(kde_file2)
             X = df['points']
@@ -306,8 +307,9 @@ class TestIO(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_pd_read_parquet(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'kde.parquet')
         def test_impl():
-            df = pd.read_parquet('bodo/tests/data/kde.parquet')
+            df = pd.read_parquet(fname)
             X = df['points']
             return X.sum()
 

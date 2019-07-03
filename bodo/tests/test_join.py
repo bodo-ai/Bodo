@@ -1,6 +1,7 @@
 """Test join operations like df.merge(), df.join(), pd.merge_asof() ...
 """
 import unittest
+import os
 import pandas as pd
 import numpy as np
 import random
@@ -399,10 +400,11 @@ class TestJoin(unittest.TestCase):
         pd.testing.assert_frame_equal(bodo_func(df1, df2, df3, df4)[1], test_impl(df1, df2, df3, df4)[1])
 
     def test_join_cat1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_cat1.csv')
         def test_impl():
             ct_dtype = CategoricalDtype(['A', 'B', 'C'])
             dtypes = {'C1':np.int, 'C2': ct_dtype, 'C3':str}
-            df1 = pd.read_csv("bodo/tests/data/csv_data_cat1.csv",
+            df1 = pd.read_csv(fname,
                 names=['C1', 'C2', 'C3'],
                 dtype=dtypes,
             )
