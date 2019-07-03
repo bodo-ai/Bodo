@@ -418,10 +418,11 @@ class TestJoin(unittest.TestCase):
 
     def test_join_cat2(self):
         # test setting NaN in categorical array
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_cat1.csv')
         def test_impl():
             ct_dtype = CategoricalDtype(['A', 'B', 'C'])
             dtypes = {'C1':np.int, 'C2': ct_dtype, 'C3':str}
-            df1 = pd.read_csv("bodo/tests/data/csv_data_cat1.csv",
+            df1 = pd.read_csv(fname,
                 names=['C1', 'C2', 'C3'],
                 dtype=dtypes,
             )
@@ -437,10 +438,11 @@ class TestJoin(unittest.TestCase):
 
     def test_join_cat_parallel1(self):
         # TODO: cat as keys
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_cat1.csv')
         def test_impl():
             ct_dtype = CategoricalDtype(['A', 'B', 'C'])
             dtypes = {'C1':np.int, 'C2': ct_dtype, 'C3':str}
-            df1 = pd.read_csv("bodo/tests/data/csv_data_cat1.csv",
+            df1 = pd.read_csv(fname,
                 names=['C1', 'C2', 'C3'],
                 dtype=dtypes,
             )

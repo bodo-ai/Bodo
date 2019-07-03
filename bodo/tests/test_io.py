@@ -407,8 +407,9 @@ class TestIO(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_csv1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data1.csv')
         def test_impl():
-            return pd.read_csv("bodo/tests/data/csv_data1.csv",
+            return pd.read_csv(fname,
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':np.float, 'D':np.int},
             )
@@ -416,9 +417,10 @@ class TestIO(unittest.TestCase):
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv_keys1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data1.csv')
         def test_impl():
             dtype = {'A':np.int, 'B':np.float, 'C':np.float, 'D':np.int}
-            return pd.read_csv("bodo/tests/data/csv_data1.csv",
+            return pd.read_csv(fname,
                 names=dtype.keys(),
                 dtype=dtype,
             )
@@ -426,9 +428,10 @@ class TestIO(unittest.TestCase):
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv_const_dtype1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data1.csv')
         def test_impl():
             dtype = {'A': 'int', 'B': 'float64', 'C': 'float', 'D': 'int64'}
-            return pd.read_csv("bodo/tests/data/csv_data1.csv",
+            return pd.read_csv(fname,
                 names=dtype.keys(),
                 dtype=dtype,
             )
@@ -436,31 +439,35 @@ class TestIO(unittest.TestCase):
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv_infer1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_infer1.csv')
         def test_impl():
-            return pd.read_csv("bodo/tests/data/csv_data_infer1.csv")
+            return pd.read_csv(fname)
 
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv_infer_parallel1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_infer1.csv')
         def test_impl():
-            df = pd.read_csv("bodo/tests/data/csv_data_infer1.csv")
+            df = pd.read_csv(fname)
             return df.A.sum(), df.B.sum(), df.C.sum(), df.D.sum()
 
         bodo_func = bodo.jit(test_impl)
         self.assertEqual(bodo_func(), test_impl())
 
     def test_csv_infer_str1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_cat1.csv')
         def test_impl():
-            df = pd.read_csv("bodo/tests/data/csv_data_cat1.csv")
+            df = pd.read_csv(fname)
             return df
 
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv_skip1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data1.csv')
         def test_impl():
-            return pd.read_csv("bodo/tests/data/csv_data1.csv",
+            return pd.read_csv(fname,
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':np.float, 'D':np.int},
                 skiprows=2,
@@ -469,15 +476,17 @@ class TestIO(unittest.TestCase):
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv_infer_skip1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_infer1.csv')
         def test_impl():
-            return pd.read_csv("bodo/tests/data/csv_data_infer1.csv", skiprows=2)
+            return pd.read_csv(fname, skiprows=2)
 
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv_infer_skip_parallel1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_infer1.csv')
         def test_impl():
-            df = pd.read_csv("bodo/tests/data/csv_data_infer1.csv", skiprows=2,
+            df = pd.read_csv(fname, skiprows=2,
                 names=['A', 'B', 'C', 'D'])
             return df.A.sum(), df.B.sum(), df.C.sum(), df.D.sum()
 
@@ -485,8 +494,9 @@ class TestIO(unittest.TestCase):
         self.assertEqual(bodo_func(), test_impl())
 
     def test_csv_rm_dead1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data1.csv')
         def test_impl():
-            df = pd.read_csv("bodo/tests/data/csv_data1.csv",
+            df = pd.read_csv(fname,
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':np.float, 'D':np.int},)
             return df.B.values
@@ -494,8 +504,9 @@ class TestIO(unittest.TestCase):
         np.testing.assert_array_equal(bodo_func(), test_impl())
 
     def test_csv_date1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_date1.csv')
         def test_impl():
-            return pd.read_csv("bodo/tests/data/csv_data_date1.csv",
+            return pd.read_csv(fname,
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':str, 'D':np.int},
                 parse_dates=[2])
@@ -503,16 +514,18 @@ class TestIO(unittest.TestCase):
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv_str1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_date1.csv')
         def test_impl():
-            return pd.read_csv("bodo/tests/data/csv_data_date1.csv",
+            return pd.read_csv(fname,
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':str, 'D':np.int})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv_index_name1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_date1.csv')
         def test_impl():
-            return pd.read_csv("bodo/tests/data/csv_data_date1.csv",
+            return pd.read_csv(fname,
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':str, 'D':np.int},
                 index_col='A')
@@ -522,8 +535,9 @@ class TestIO(unittest.TestCase):
         pd.testing.assert_frame_equal(bodo_func(), pd_expected)
 
     def test_csv_index_ind1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_date1.csv')
         def test_impl():
-            return pd.read_csv("bodo/tests/data/csv_data_date1.csv",
+            return pd.read_csv(fname,
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':str, 'D':np.int},
                 index_col=1)
@@ -533,8 +547,9 @@ class TestIO(unittest.TestCase):
         pd.testing.assert_frame_equal(bodo_func(), pd_expected)
 
     def test_csv_parallel1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data1.csv')
         def test_impl():
-            df = pd.read_csv("bodo/tests/data/csv_data1.csv",
+            df = pd.read_csv(fname,
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':np.float, 'D':np.int})
             return (df.A.sum(), df.B.sum(), df.C.sum(), df.D.sum())
@@ -542,8 +557,9 @@ class TestIO(unittest.TestCase):
         self.assertEqual(bodo_func(), test_impl())
 
     def test_csv_str_parallel1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_date1.csv')
         def test_impl():
-            df = pd.read_csv("bodo/tests/data/csv_data_date1.csv",
+            df = pd.read_csv(fname,
                 names=['A', 'B', 'C', 'D'],
                 dtype={'A':np.int, 'B':np.float, 'C':str, 'D':np.int})
             return (df.A.sum(), df.B.sum(), (df.C == '1966-11-13').sum(),
@@ -552,8 +568,9 @@ class TestIO(unittest.TestCase):
         self.assertEqual(bodo_func(), test_impl())
 
     def test_csv_usecols1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data1.csv')
         def test_impl():
-            return pd.read_csv("bodo/tests/data/csv_data1.csv",
+            return pd.read_csv(fname,
                 names=['C'],
                 dtype={'C':np.float},
                 usecols=[2],
@@ -562,8 +579,9 @@ class TestIO(unittest.TestCase):
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv_usecols2(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data1.csv')
         def test_impl():
-            return pd.read_csv("bodo/tests/data/csv_data1.csv",
+            return pd.read_csv(fname,
                 names=['B', 'C'],
                 usecols=[1, 2],
             )
@@ -571,8 +589,9 @@ class TestIO(unittest.TestCase):
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv_usecols3(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data2.csv')
         def test_impl():
-            return pd.read_csv("bodo/tests/data/csv_data2.csv",
+            return pd.read_csv(fname,
                 sep='|',
                 names=['B', 'C'],
                 usecols=[1, 2],
@@ -581,10 +600,11 @@ class TestIO(unittest.TestCase):
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv_cat1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_cat1.csv')
         def test_impl():
             ct_dtype = CategoricalDtype(['A', 'B', 'C'])
             dtypes = {'C1':np.int, 'C2': ct_dtype, 'C3':str}
-            df = pd.read_csv("bodo/tests/data/csv_data_cat1.csv",
+            df = pd.read_csv(fname,
                 names=['C1', 'C2', 'C3'],
                 dtype=dtypes,
             )
@@ -594,9 +614,10 @@ class TestIO(unittest.TestCase):
             bodo_func(), test_impl(), check_names=False)
 
     def test_csv_cat2(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_cat1.csv')
         def test_impl():
             ct_dtype = CategoricalDtype(['A', 'B', 'C', 'D'])
-            df = pd.read_csv("bodo/tests/data/csv_data_cat1.csv",
+            df = pd.read_csv(fname,
                 names=['C1', 'C2', 'C3'],
                 dtype={'C1':np.int, 'C2': ct_dtype, 'C3':str},
             )
@@ -605,8 +626,9 @@ class TestIO(unittest.TestCase):
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_csv_single_dtype1(self):
+        fname = os.path.join('bodo', 'tests', 'data', 'csv_data_dtype1.csv')
         def test_impl():
-            df = pd.read_csv("bodo/tests/data/csv_data_dtype1.csv",
+            df = pd.read_csv(fname,
                 names=['C1', 'C2'],
                 dtype=np.float64,
             )
