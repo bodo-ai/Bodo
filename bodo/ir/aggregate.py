@@ -584,9 +584,8 @@ def agg_distributed_run(agg_node, array_dists, typemap, calltypes, typingctx, ta
 distributed_pass.distributed_run_extensions[Aggregate] = agg_distributed_run
 
 
-@numba.njit(no_cpython_wrapper=True)
-def parallel_agg(key_arrs, data_redvar_dummy, out_dummy_tup, data_in, init_vals,
-        __update_redvars, __combine_redvars, __eval_res, return_key, pivot_arr):  # pragma: no cover
+@numba.njit(no_cpython_wrapper=True, cache=True)
+def par_agg_get_shuffle_meta(key_arrs, data_redvar_dummy, init_vals):
     # alloc shuffle meta
     n_pes = bodo.libs.distributed_api.get_size()
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data_redvar_dummy, n_pes, False)
@@ -602,6 +601,15 @@ def parallel_agg(key_arrs, data_redvar_dummy, out_dummy_tup, data_in, init_vals,
             update_shuffle_meta(pre_shuffle_meta, node_id, i, val_to_tup(val), (), False)
 
     shuffle_meta = finalize_shuffle_meta(key_arrs, data_redvar_dummy, pre_shuffle_meta, n_pes, False, init_vals)
+    return shuffle_meta
+
+
+@numba.njit(no_cpython_wrapper=True)
+def parallel_agg(key_arrs, data_redvar_dummy, out_dummy_tup, data_in, init_vals,
+        __update_redvars, __combine_redvars, __eval_res, return_key, pivot_arr):  # pragma: no cover
+
+    shuffle_meta = par_agg_get_shuffle_meta(
+        key_arrs, data_redvar_dummy, init_vals)
 
     agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy, __update_redvars, pivot_arr)
 
