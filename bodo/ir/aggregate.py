@@ -862,7 +862,7 @@ def alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set, return_key):  # pragma
     return out_dummy_tup
 
 
-@overload(alloc_agg_output)
+@overload(alloc_agg_output, jit_options={'cache': True})
 def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set, return_key):
 
     # return key is either True or None
@@ -1786,7 +1786,7 @@ def _build_set_tup(arr_tup):
     return build_set(arr_tup[0])
 
 
-@overload(_build_set_tup)
+@overload(_build_set_tup, jit_options={'cache': True})
 def _build_set_tup_overload(arr_tup):
     # TODO: support string in tuple set
     if isinstance(arr_tup, types.BaseTuple) and len(arr_tup.types) != 1:
