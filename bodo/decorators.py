@@ -5,6 +5,30 @@ import numba
 import bodo
 
 
+# adapted from parallel_diagnostics()
+def distributed_diagnostics(self, signature=None, level=1):
+    """
+    Print distributed diagnostic information for the given signature. If no
+    signature is present it is printed for all known signatures. level is
+    used to adjust the verbosity, level=1 (default) is minimal verbosity,
+    and 2, 3, and 4 provide increasing levels of verbosity.
+    """
+    def dump(sig):
+        ol = self.overloads[sig]
+        pfdiag = ol.metadata.get('distributed_diagnostics', None)
+        if pfdiag is None:
+            msg = "No distributed diagnostic available"
+            raise ValueError(msg)
+        pfdiag.dump(level)
+    if signature is not None:
+        dump(signature)
+    else:
+        [dump(sig) for sig in self.signatures]
+
+
+numba.dispatcher.Dispatcher.distributed_diagnostics = distributed_diagnostics
+
+
 def jit(signature_or_function=None, **options):
     # set nopython by default
     if 'nopython' not in options:
@@ -43,4 +67,7 @@ def jit(signature_or_function=None, **options):
                            'fusion':        True,
                            }
 
-    return numba.jit(signature_or_function, pipeline_class=bodo.compiler.BodoPipeline, **options)
+    return numba.jit(
+        signature_or_function,
+        pipeline_class=bodo.compiler.BodoPipeline,
+        **options)

@@ -2,9 +2,10 @@
 analyzes the IR to decide parallelism of arrays and parfors
 for distributed transformation.
 """
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 import copy
 import warnings
+import inspect
 from enum import Enum
 import numpy as np
 
@@ -35,6 +36,11 @@ class Distribution(Enum):
     OneD_Var = 4
     OneD = 5
 
+    def __str__(self):
+        name_map = {'OneD': '1D_Block', 'OneD_Var': '1D_Block_Var',
+            'TwoD': '2D_Block', 'Thread': 'Multi-thread', 'REP': 'REP'}
+        return name_map[self.name]
+
 
 _dist_analysis_result = namedtuple(
     'dist_analysis_result', 'array_dists,parfor_dists')
@@ -42,6 +48,88 @@ _dist_analysis_result = namedtuple(
 
 distributed_analysis_extensions = {}
 auto_rebalance = False
+
+
+class DistributedDiagnostics:
+    """Gather and print distributed diagnostics information
+    """
+    def __init__(self, parfor_locs, array_locs, array_dists, parfor_dists,
+                                                                      func_ir):
+        self.parfor_locs = parfor_locs
+        self.array_locs = array_locs
+        self.array_dists = array_dists
+        self.parfor_dists = parfor_dists
+        self.func_ir = func_ir
+
+    def _print_dists(self):
+        print("Array distributions:")
+        arrname_width = max(len(a) for a in self.array_dists.keys())
+        arrname_width = max(arrname_width + 3, 20)
+        for arr, dist in self.array_dists.items():
+            print("   {0:{1}} {2}".format(arr, arrname_width, dist))
+
+        print("\nParfor distributions:")
+        for p, dist in self.parfor_dists.items():
+            print("   {0:<20} {1}".format(p, dist))
+        return
+
+    def dump(self, level=1):
+        name = self.func_ir.func_id.func_qualname
+        line = self.func_ir.loc
+
+        print('Distributed diagnostics for function {}, {}\n'.format(
+            name, line))
+        self._print_dists()
+
+        # similar to ParforDiagnostics.dump()
+        func_name = self.func_ir.func_id.func
+        try:
+            lines = inspect.getsource(func_name).splitlines()
+        except OSError:  # generated function
+            lines = None
+
+        if not lines:
+            print("No source available")
+            return
+
+        print('\nDistributed listing for function {}, {}'.format(name, line))
+        self._print_src_dists(lines)
+
+    def _print_src_dists(self, lines):
+        filename = self.func_ir.loc.filename
+        src_width = max(len(x) for x in lines)
+
+        map_line_to_info = defaultdict(list)  # parfors can alias lines
+        for p_id, p_dist in self.parfor_dists.items():
+            # TODO: fix parfor locs
+            loc = self.parfor_locs[p_id]
+            if loc.filename == filename:
+                l_no = max(0, loc.line - 1)
+                map_line_to_info[l_no].append("#{}: {}".format(p_id, p_dist))
+
+        for arr, a_dist in self.array_dists.items():
+            assert arr in self.array_locs
+            loc = self.array_locs[arr]
+            if loc.filename == filename:
+                l_no = max(0, loc.line - 1)
+                map_line_to_info[l_no].append("{}: {}".format(arr, a_dist))
+
+        width = src_width + 4
+        newlines = []
+        newlines.append(width * '-' + '| parfor_id/variable: distribution')
+        fmt = '{0:{1}}| {2}'
+        lstart = max(0, self.func_ir.loc.line - 1)
+        for no, line in enumerate(lines, lstart):
+            l_info = map_line_to_info[no]
+            info_str = ', '.join(l_info)
+            stripped = line.strip('\n')
+            srclen = len(stripped)
+            if l_info:
+                l = fmt.format(width * '-', width, info_str)
+            else:
+                l = fmt.format(width * ' ', width, info_str)
+            newlines.append(stripped + l[srclen:])
+        print('\n'.join(newlines))
 
 
 class DistributedAnalysis(object):
@@ -64,6 +152,8 @@ class DistributedAnalysis(object):
         self.calltypes = calltypes
         self.typingctx = typingctx
         self.metadata = metadata
+        self.parfor_locs = {}
+        self.array_locs = {}
 
     def _init_run(self):
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
@@ -89,7 +179,10 @@ class DistributedAnalysis(object):
             if changed:
                 return self.run()
 
-        return _dist_analysis_result(array_dists=array_dists, parfor_dists=parfor_dists)
+        self.metadata['distributed_diagnostics'] = DistributedDiagnostics(
+            self.parfor_locs, self.array_locs, array_dists, parfor_dists,
+            self.func_ir)
+        return _dist_analysis_result(array_dists, parfor_dists)
 
     def _run_analysis(self, blocks, topo_order, array_dists, parfor_dists):
         save_array_dists = {}
@@ -121,6 +214,8 @@ class DistributedAnalysis(object):
     def _analyze_assign(self, inst, array_dists, parfor_dists):
         lhs = inst.target.name
         rhs = inst.value
+        self.array_locs[lhs] = inst.target.loc
+
         # treat return casts like assignments
         if isinstance(rhs, ir.Expr) and rhs.op == 'cast':
             rhs = rhs.value
@@ -194,6 +289,19 @@ class DistributedAnalysis(object):
     def _analyze_parfor(self, parfor, array_dists, parfor_dists):
         if parfor.id not in parfor_dists:
             parfor_dists[parfor.id] = Distribution.OneD
+            # save parfor loc for diagnostics
+            loc = parfor.loc
+            # fix loc using pattern if possible
+            # TODO: fix parfor loc in transforms
+            for pattern in parfor.patterns:
+                if (isinstance(pattern, tuple) and pattern[0] == 'prange'
+                        and pattern[1] == 'internal'
+                        and isinstance(pattern[2][1], ir.Loc)
+                        and pattern[2][1].filename
+                                == self.func_ir.loc.filename):
+                    loc = pattern[2][1]
+                    break
+            self.parfor_locs[parfor.id] = loc
 
         # analyze init block first to see array definitions
         self._analyze_block(parfor.init_block, array_dists, parfor_dists)

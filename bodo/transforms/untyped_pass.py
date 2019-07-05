@@ -1100,7 +1100,7 @@ class UntypedPass(object):
     def _gen_replace_dist_return(self, var, flag):
         if flag == 'distributed':
             def f(_dist_arr):  # pragma: no cover
-                _d_arr = bodo.libs.distributed_api.dist_return(_dist_arr)
+                dist_return = bodo.libs.distributed_api.dist_return(_dist_arr)
         elif flag == 'threaded':
             def f(_threaded_arr):  # pragma: no cover
                 _th_arr = bodo.libs.distributed_api.threaded_return(_threaded_arr)

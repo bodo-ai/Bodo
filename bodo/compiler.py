@@ -1,6 +1,7 @@
 """
 Defines Bodo's compiler pipeline.
 """
+import os
 import bodo
 import bodo.transforms
 import bodo.transforms.untyped_pass
@@ -62,6 +63,8 @@ class BodoPipeline(numba.compiler.BasePipeline):
         pm.add_stage(self.stage_ir_legalization,
                      "ensure IR is legal prior to lowering")
         self.add_lowering_stage(pm)
+        pm.add_stage(
+            self.stage_dump_diagnostics, "dump distributed diagnostics")
         self.add_cleanup_stage(pm)
 
     def stage_inline_pass(self):
@@ -124,6 +127,21 @@ class BodoPipeline(numba.compiler.BasePipeline):
                                 self.type_annotation.typemap,
                                 self.type_annotation.calltypes)
         df_pass.run()
+
+    def stage_dump_diagnostics(self):
+        """
+        Print distributed diagnostics information if environment variable is
+        set.
+        """
+        diag_level = 0
+        env_name = 'BODO_PARALLEL_DIAGNOSTICS'
+        try:
+            diag_level = int(os.environ[env_name])
+        except:
+            pass
+
+        if diag_level > 0:
+            self.metadata['distributed_diagnostics'].dump(diag_level)
 
 
 class BodoPipelineSeq(BodoPipeline):
