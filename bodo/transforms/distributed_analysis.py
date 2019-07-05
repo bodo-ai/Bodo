@@ -25,7 +25,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.utils import (get_constant, is_alloc_callname,
                         is_whole_slice, is_array, is_array_container,
                         is_np_array, find_build_tuple, debug_prints,
-                        is_const_slice)
+                        is_const_slice, is_expr)
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
 
@@ -54,11 +54,12 @@ class DistributedDiagnostics:
     """Gather and print distributed diagnostics information
     """
     def __init__(self, parfor_locs, array_locs, array_dists, parfor_dists,
-                                                                      func_ir):
+                                                           diag_info, func_ir):
         self.parfor_locs = parfor_locs
         self.array_locs = array_locs
         self.array_dists = array_dists
         self.parfor_dists = parfor_dists
+        self.diag_info = diag_info
         self.func_ir = func_ir
 
     def _print_dists(self):
@@ -94,6 +95,12 @@ class DistributedDiagnostics:
 
         print('\nDistributed listing for function {}, {}'.format(name, line))
         self._print_src_dists(lines)
+
+        # trace diag info
+        print()
+        for l in self.diag_info:
+            print(l)
+        print()
 
     def _print_src_dists(self, lines):
         filename = self.func_ir.loc.filename
@@ -154,6 +161,7 @@ class DistributedAnalysis(object):
         self.metadata = metadata
         self.parfor_locs = {}
         self.array_locs = {}
+        self.diag_info = []
 
     def _init_run(self):
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
@@ -181,7 +189,7 @@ class DistributedAnalysis(object):
 
         self.metadata['distributed_diagnostics'] = DistributedDiagnostics(
             self.parfor_locs, self.array_locs, array_dists, parfor_dists,
-            self.func_ir)
+            self.diag_info, self.func_ir)
         return _dist_analysis_result(array_dists, parfor_dists)
 
     def _run_analysis(self, blocks, topo_order, array_dists, parfor_dists):
@@ -208,6 +216,8 @@ class DistributedAnalysis(object):
                 # let external calls handle stmt if type matches
                 f = distributed_analysis_extensions[type(inst)]
                 f(inst, array_dists)
+            elif isinstance(inst, ir.Return):
+                self._analyze_return(inst.value, array_dists)
             else:
                 self._set_REP(inst.list_vars(), array_dists)
 
@@ -281,6 +291,12 @@ class DistributedAnalysis(object):
                     array_dists[lhs] = Distribution.Thread
             else:
                 dprint("replicated input ", rhs.name, lhs)
+                info = ("Distributed analysis replicated input {0} (variable "
+                "{1}). Set distributed flag for {0} if distributed partitions "
+                "are passed (e.g. @bodo.jit(distributed=['{0}'])).").format(
+                    rhs.name, lhs)
+                if info not in self.diag_info:
+                    self.diag_info.append(info)
                 self._set_REP([inst.target], array_dists)
         else:
             self._set_REP(inst.list_vars(), array_dists)
@@ -843,17 +859,32 @@ class DistributedAnalysis(object):
         self._analyze_call_set_REP(lhs, args, array_dists, 'np.dot')
 
     def _analyze_call_set_REP(self, lhs, args, array_dists, fdef=None):
+        arrs = []
         for v in args:
             if (is_array(self.typemap, v.name)
                     or is_array_container(self.typemap, v.name)
                     or isinstance(self.typemap[v.name], DataFrameType)):
                 dprint("dist setting call arg REP {} in {}".format(v.name, fdef))
                 array_dists[v.name] = Distribution.REP
+                arrs.append(v.name)
         if (is_array(self.typemap, lhs)
                 or is_array_container(self.typemap, lhs)
                 or isinstance(self.typemap[lhs], DataFrameType)):
             dprint("dist setting call out REP {} in {}".format(lhs, fdef))
             array_dists[lhs] = Distribution.REP
+            arrs.append(lhs)
+        # save diagnostic info for faild analysis
+        fname = fdef
+        if isinstance(fdef, tuple) and len(fdef) == 2:
+            name, mod = fdef
+            if isinstance(mod, ir.Var):
+                mod = self.typemap[mod.name]
+            fname = mod + '.' + name
+        info = ("Distributed analysis set {} as replicated due "
+            "to call to function '{}' (unsupported function or usage)").format(
+            ", ".join(arrs), fname)
+        if info not in self.diag_info:
+            self.diag_info.append(info)
 
     def _analyze_getitem(self, inst, lhs, rhs, array_dists):
         # selecting an array from a tuple
@@ -954,6 +985,29 @@ class DistributedAnalysis(object):
             return
 
         self._set_REP([inst.value], array_dists)
+
+    def _analyze_return(self, var, array_dists):
+        if self._is_dist_return_var(var):
+            return
+
+        info = ("Distributed analysis replicated output variable "
+        "{}. Set distributed flag for the original variable if distributed "
+        "partitions should be returned.").format(
+            var.name)
+        if info not in self.diag_info:
+            self.diag_info.append(info)
+
+    def _is_dist_return_var(self, var):
+        try:
+            vdef = get_definition(self.func_ir, var)
+            require(is_expr(vdef, 'cast'))
+            dcall = get_definition(self.func_ir, vdef.value)
+            require(is_expr(dcall, 'call'))
+            require(find_callname(self.func_ir, dcall) == ('dist_return',
+                'bodo.libs.distributed_api'))
+            return True
+        except:
+            return False
 
     def _meet_array_dists(self, arr1, arr2, array_dists, top_dist=None):
         if top_dist is None:
