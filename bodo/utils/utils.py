@@ -323,10 +323,15 @@ def is_np_array_typ(var_typ):
 
 def is_array_container_typ(var_typ):
     return (isinstance(var_typ, (types.List, types.Set))
-                and (isinstance(var_typ.dtype, types.Array)
-                or var_typ.dtype == string_array_type
-                or isinstance(var_typ.dtype,
-                bodo.hiframes.pd_series_ext.SeriesType)))
+                and is_array_typ(var_typ.dtype))
+
+
+# TODO: fix tuple, dataframe distribution
+def is_distributable_typ(var_typ):
+    return (is_array_typ(var_typ)
+        or isinstance(var_typ, bodo.hiframes.pd_dataframe_ext.DataFrameType)
+        or (isinstance(var_typ, (types.List, types.Set))
+            and is_distributable_typ(var_typ.dtype)))
 
 
 # converts an iterable to array, similar to np.array, but can support

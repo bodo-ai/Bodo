@@ -25,7 +25,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.utils import (get_constant, is_alloc_callname,
                         is_whole_slice, is_array_typ, is_array_container_typ,
                         is_np_array_typ, find_build_tuple, debug_prints,
-                        is_const_slice, is_expr)
+                        is_const_slice, is_expr, is_distributable_typ)
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
 
@@ -297,12 +297,13 @@ class DistributedAnalysis(object):
                     array_dists[lhs] = Distribution.Thread
             else:
                 dprint("replicated input ", rhs.name, lhs)
-                info = ("Distributed analysis replicated input {0} (variable "
-                "{1}). Set distributed flag for {0} if distributed partitions "
-                "are passed (e.g. @bodo.jit(distributed=['{0}'])).").format(
-                    rhs.name, lhs)
-                if info not in self.diag_info:
-                    self.diag_info.append(info)
+                if is_distributable_typ(self.typemap[lhs]):
+                    info = ("Distributed analysis replicated input {0} (variable "
+                    "{1}). Set distributed flag for {0} if distributed partitions "
+                    "are passed (e.g. @bodo.jit(distributed=['{0}'])).").format(
+                        rhs.name, lhs)
+                    if info not in self.diag_info:
+                        self.diag_info.append(info)
                 self._set_REP([inst.target], array_dists)
         else:
             self._set_REP(inst.list_vars(), array_dists)
@@ -887,11 +888,12 @@ class DistributedAnalysis(object):
             if isinstance(mod, ir.Var):
                 mod = self.typemap[mod.name]
             fname = mod + '.' + name
-        info = ("Distributed analysis set {} as replicated due "
-            "to call to function '{}' (unsupported function or usage)").format(
-            ", ".join(arrs), fname)
-        if info not in self.diag_info:
-            self.diag_info.append(info)
+        if len(arrs) > 0:
+            info = ("Distributed analysis set {} as replicated due "
+                "to call to function '{}' (unsupported function or usage)").format(
+                ", ".join(arrs), fname)
+            if info not in self.diag_info:
+                self.diag_info.append(info)
 
     def _analyze_getitem(self, inst, lhs, rhs, array_dists):
         # selecting an array from a tuple
@@ -997,12 +999,13 @@ class DistributedAnalysis(object):
         if self._is_dist_return_var(var):
             return
 
-        info = ("Distributed analysis replicated output variable "
-        "{}. Set distributed flag for the original variable if distributed "
-        "partitions should be returned.").format(
-            var.name)
-        if info not in self.diag_info:
-            self.diag_info.append(info)
+        if is_distributable_typ(self.typemap[var.name]):
+            info = ("Distributed analysis replicated output variable "
+            "{}. Set distributed flag for the original variable if distributed "
+            "partitions should be returned.").format(
+                var.name)
+            if info not in self.diag_info:
+                self.diag_info.append(info)
         self._set_REP([var], array_dists)
 
     def _is_dist_return_var(self, var):
