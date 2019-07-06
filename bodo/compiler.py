@@ -134,7 +134,7 @@ class BodoPipeline(numba.compiler.BasePipeline):
         set.
         """
         diag_level = 0
-        env_name = 'BODO_PARALLEL_DIAGNOSTICS'
+        env_name = 'BODO_DISTRIBUTED_DIAGNOSTICS'
         try:
             diag_level = int(os.environ[env_name])
         except:

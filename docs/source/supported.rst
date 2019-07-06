@@ -23,7 +23,7 @@ determine whether each array should be distributed or not. This analysis uses
 the semantics of array operations as the program below demonstrates::
 
     @bodo.jit
-    def example_1D(n):
+    def example_1D():
         f = h5py.File("data.h5", "r")
         A = f['A'][:]
         return np.sum(A)
@@ -92,18 +92,40 @@ the Bodo scope. For example, the data can come from other jitted functions::
 Distribution Report
 ~~~~~~~~~~~~~~~~~~~
 
-The distributions found by Bodo can be printed using the
-`bodo.distribution_report()` function. The distribution report for the above
-example code is as follows::
+The distributions found by Bodo can be printed either by setting
+`BODO_DISTRIBUTED_DIAGNOSTICS=1` or calling `distributed_diagnostics()`
+on the compiled function. For example, consider example code below::
 
-    Array distributions:
-        $A.23                1D_Block
+    @bodo.jit
+    def example_1D():
+        f = h5py.File("data.h5", "r")
+        A = f['A'][:]
+        return A.sum()
+
+    example_1D()
+    example_1D.distributed_diagnostics()
+
+Here is the diagnostics output::
+
+    Distributed diagnostics for function example_1D, ../s.py (7)
+
+    Data distributions:
+    $A.39.101            1D_Block
 
     Parfor distributions:
-        0                    1D_Block
+    0                    1D_Block
+
+    Distributed listing for function example_1D, ../s.py (7)
+    -----------------------------------------------------| parfor_id/variable: distribution
+    @bodo.jit                                            |
+    def example_1D():                                    |
+        f = h5py.File("bodo/tests/data/lr.hdf5", "r")    |
+        A = f['responses'][:]                            |
+        return A.sum()-----------------------------------| #0: 1D_Block
+
 
 This report suggests that the function has an array that is distributed in
-1D_Block fashion. The variable name is renamed from `A` to `$A.23` through
+1D_Block fashion. The variable name is renamed from `A` to `$A.39.101` through
 the optimization passes. The report also suggests that there is a `parfor`
 (data-parallel for loop) that is 1D_Block distributed.
 
