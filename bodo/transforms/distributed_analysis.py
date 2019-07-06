@@ -63,15 +63,21 @@ class DistributedDiagnostics:
         self.func_ir = func_ir
 
     def _print_dists(self):
-        print("Array distributions:")
-        arrname_width = max(len(a) for a in self.array_dists.keys())
-        arrname_width = max(arrname_width + 3, 20)
-        for arr, dist in self.array_dists.items():
-            print("   {0:{1}} {2}".format(arr, arrname_width, dist))
+        print("Data distributions:")
+        if len(self.array_dists) > 0:
+            arrname_width = max(len(a) for a in self.array_dists.keys())
+            arrname_width = max(arrname_width + 3, 20)
+            for arr, dist in self.array_dists.items():
+                print("   {0:{1}} {2}".format(arr, arrname_width, dist))
+        else:
+            print("No distributable data structures to distribute.")
 
         print("\nParfor distributions:")
-        for p, dist in self.parfor_dists.items():
-            print("   {0:<20} {1}".format(p, dist))
+        if len(self.parfor_dists) > 0:
+            for p, dist in self.parfor_dists.items():
+                print("   {0:<20} {1}".format(p, dist))
+        else:
+            print("No parfors to distribute.")
         return
 
     def dump(self, level=1):
@@ -996,6 +1002,7 @@ class DistributedAnalysis(object):
             var.name)
         if info not in self.diag_info:
             self.diag_info.append(info)
+        self._set_REP([var], array_dists)
 
     def _is_dist_return_var(self, var):
         try:

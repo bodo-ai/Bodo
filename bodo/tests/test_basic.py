@@ -260,7 +260,7 @@ class TestBasic(BaseTest):
     def test_array_reduce(self):
         binops = ['+=', '*=', '+=', '*=', '|=', '|=']
         dtypes = ['np.float32', 'np.float32', 'np.float64', 'np.float64', 'np.int32', 'np.int64']
-        for (op,typ) in zip(binops,dtypes):
+        for (op, typ) in zip(binops, dtypes):
             func_text = """def f(n):
                   A = np.arange(0, 10, 1, {})
                   B = np.arange(0 +  3, 10 + 3, 1, {})
@@ -291,7 +291,7 @@ class TestBasic(BaseTest):
         dist_sum(1)  # run to compile
         np.testing.assert_allclose(
             dist_sum(bodo_func(n).sum()), test_impl(n).sum())
-        self.assertEqual(count_array_OneDs(), 1)
+        self.assertTrue(count_array_OneDs() >= 1)
         self.assertEqual(count_parfor_OneDs(), 1)
 
     def test_dist_return_tuple(self):
