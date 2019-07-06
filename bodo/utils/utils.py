@@ -308,23 +308,24 @@ def get_slice_step(typemap, func_ir, var):
     assert len(call_expr.args) == 3
     return call_expr.args[2]
 
-def is_array(typemap, varname):
-    return (varname in typemap
-        and (is_np_array(typemap, varname)
-        or typemap[varname] in (string_array_type, list_string_array_type,
+
+def is_array_typ(var_typ):
+    # TODO: make sure all Bodo arrays are here
+    return (is_np_array_typ(var_typ)
+        or var_typ in (string_array_type, list_string_array_type,
             bodo.hiframes.split_impl.string_array_split_view_type)
-        or isinstance(typemap[varname], bodo.hiframes.pd_series_ext.SeriesType)))
+        or isinstance(var_typ, bodo.hiframes.pd_series_ext.SeriesType))
 
-def is_np_array(typemap, varname):
-    return (varname in typemap
-            and isinstance(typemap[varname], types.Array))
 
-def is_array_container(typemap, varname):
-    return (varname in typemap
-            and isinstance(typemap[varname], (types.List, types.Set))
-                and (isinstance(typemap[varname].dtype, types.Array)
-                or typemap[varname].dtype == string_array_type
-                or isinstance(typemap[varname].dtype,
+def is_np_array_typ(var_typ):
+    return isinstance(var_typ, types.Array)
+
+
+def is_array_container_typ(var_typ):
+    return (isinstance(var_typ, (types.List, types.Set))
+                and (isinstance(var_typ.dtype, types.Array)
+                or var_typ.dtype == string_array_type
+                or isinstance(var_typ.dtype,
                 bodo.hiframes.pd_series_ext.SeriesType)))
 
 

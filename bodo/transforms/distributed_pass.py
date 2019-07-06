@@ -38,8 +38,8 @@ from bodo.transforms.distributed_analysis import (Distribution,
 
 import bodo.utils.utils
 from bodo.utils.transform import compile_func_single_block
-from bodo.utils.utils import (is_alloc_callname, is_whole_slice, is_array_container,
-                        get_slice_step, is_array, is_np_array, find_build_tuple,
+from bodo.utils.utils import (is_alloc_callname, is_whole_slice,
+                        get_slice_step, is_np_array_typ, find_build_tuple,
                         debug_prints, ReplaceFunc, gen_getitem, is_call,
                         is_const_slice, is_assign, is_expr)
 from bodo.libs.distributed_api import Reduce_Type
@@ -250,7 +250,8 @@ class DistributedPass(object):
                 lhs, func_name, assign, rhs.args, equiv_set)
 
         # array.func calls
-        if isinstance(func_mod, ir.Var) and is_np_array(self.typemap, func_mod.name):
+        if isinstance(func_mod, ir.Var) and is_np_array_typ(
+                self.typemap[func_mod.name]):
             return self._run_call_array(
                 lhs, func_mod, func_name, assign, rhs.args, equiv_set,
                 avail_vars)
@@ -1794,7 +1795,7 @@ class DistributedPass(object):
         """
         red_var_typ = self.typemap[reduce_var.name]
         el_typ = red_var_typ
-        if is_np_array(self.typemap, reduce_var.name):
+        if is_np_array_typ(self.typemap[reduce_var.name]):
             el_typ = red_var_typ.dtype
         init_val = None
         pre_init_val = ""
@@ -1816,7 +1817,7 @@ class DistributedPass(object):
 
         assert init_val is not None
 
-        if is_np_array(self.typemap, reduce_var.name):
+        if is_np_array_typ(self.typemap[reduce_var.name]):
             pre_init_val = "v = np.full_like(s, {}, s.dtype)".format(init_val)
             init_val = "v"
 

@@ -23,8 +23,8 @@ import bodo.io
 import bodo.io.np_io
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.utils import (get_constant, is_alloc_callname,
-                        is_whole_slice, is_array, is_array_container,
-                        is_np_array, find_build_tuple, debug_prints,
+                        is_whole_slice, is_array_typ, is_array_container_typ,
+                        is_np_array_typ, find_build_tuple, debug_prints,
                         is_const_slice, is_expr)
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
@@ -236,12 +236,12 @@ class DistributedAnalysis(object):
         if isinstance(rhs, ir.Expr) and rhs.op == 'cast':
             rhs = rhs.value
 
-        if isinstance(rhs, ir.Var) and (is_array(self.typemap, lhs)
+        if isinstance(rhs, ir.Var) and (is_array_typ(self.typemap[lhs])
                 or isinstance(self.typemap[lhs], (SeriesType, DataFrameType))
-                                     or is_array_container(self.typemap, lhs)):
+                                     or is_array_container_typ(self.typemap[lhs])):
             self._meet_array_dists(lhs, rhs.name, array_dists)
             return
-        elif (is_array(self.typemap, lhs)
+        elif (is_array_typ(self.typemap[lhs])
                 and isinstance(rhs, ir.Expr)
                 and rhs.op == 'inplace_binop'):
             # distributions of all 3 variables should meet (lhs, arg1, arg2)
@@ -259,7 +259,7 @@ class DistributedAnalysis(object):
             # e.g. boolean array index in test_getitem_multidim
             return
         elif (isinstance(rhs, ir.Expr) and rhs.op == 'getattr' and rhs.attr == 'T'
-              and is_array(self.typemap, lhs)):
+              and is_array_typ(self.typemap[lhs])):
             # array and its transpose have same distributions
             arr = rhs.value.name
             self._meet_array_dists(lhs, arr, array_dists)
@@ -280,7 +280,7 @@ class DistributedAnalysis(object):
         # handle for A in arr_container: ...
         # A = pair_first(iternext(getiter(arr_container)))
         # TODO: support getitem of container
-        elif isinstance(rhs, ir.Expr) and rhs.op == 'pair_first' and is_array(self.typemap, lhs):
+        elif isinstance(rhs, ir.Expr) and rhs.op == 'pair_first' and is_array_typ(self.typemap[lhs]):
             arr_container = guard(_get_pair_first_container, self.func_ir, rhs)
             if arr_container is not None:
                 self._meet_array_dists(lhs, arr_container.name, array_dists)
@@ -415,7 +415,8 @@ class DistributedAnalysis(object):
             return
 
         # handle array.func calls
-        if isinstance(func_mod, ir.Var) and is_array(self.typemap, func_mod.name):
+        if isinstance(func_mod, ir.Var) and is_array_typ(
+                self.typemap[func_mod.name]):
             self._analyze_call_array(lhs, func_mod, func_name, args, array_dists)
             return
 
@@ -654,7 +655,7 @@ class DistributedAnalysis(object):
             self._analyze_call_np_concatenate(lhs, args, array_dists)
             return
 
-        if func_name == 'array' and is_array(self.typemap, args[0].name):
+        if func_name == 'array' and is_array_typ(self.typemap[args[0].name]):
             self._meet_array_dists(lhs, args[0].name, array_dists)
             return
 
@@ -867,14 +868,14 @@ class DistributedAnalysis(object):
     def _analyze_call_set_REP(self, lhs, args, array_dists, fdef=None):
         arrs = []
         for v in args:
-            if (is_array(self.typemap, v.name)
-                    or is_array_container(self.typemap, v.name)
+            if (is_array_typ(self.typemap[v.name])
+                    or is_array_container_typ(self.typemap[v.name])
                     or isinstance(self.typemap[v.name], DataFrameType)):
                 dprint("dist setting call arg REP {} in {}".format(v.name, fdef))
                 array_dists[v.name] = Distribution.REP
                 arrs.append(v.name)
-        if (is_array(self.typemap, lhs)
-                or is_array_container(self.typemap, lhs)
+        if (is_array_typ(self.typemap[lhs])
+                or is_array_container_typ(self.typemap[lhs])
                 or isinstance(self.typemap[lhs], DataFrameType)):
             dprint("dist setting call out REP {} in {}".format(lhs, fdef))
             array_dists[lhs] = Distribution.REP
@@ -934,7 +935,7 @@ class DistributedAnalysis(object):
         assert isinstance(index_var, ir.Var)
 
         # array selection with boolean index
-        if (is_np_array(self.typemap, index_var.name)
+        if (is_np_array_typ(self.typemap[index_var.name])
                 and self.typemap[index_var.name].dtype == types.boolean):
             # input array and bool index have the same distribution
             new_dist = self._meet_array_dists(index_var.name, rhs.value.name,
@@ -944,7 +945,7 @@ class DistributedAnalysis(object):
             return
 
         # # array selection with permutation array index
-        # if is_np_array(self.typemap, index_var.name):
+        # if is_np_array_typ(self.typemap[index_var.name]:
         #     arr_def = guard(get_definition, self.func_ir, index_var)
         #     if isinstance(arr_def, ir.Expr) and arr_def.op == 'call':
         #         fdef = guard(find_callname, self.func_ir, arr_def, self.typemap)
@@ -1036,8 +1037,8 @@ class DistributedAnalysis(object):
             varname = var.name
             # Handle SeriesType since it comes from Arg node and it could
             # have user-defined distribution
-            if (is_array(self.typemap, varname)
-                    or is_array_container(self.typemap, varname)
+            if (is_array_typ(self.typemap[varname])
+                    or is_array_container_typ(self.typemap[varname])
                     or isinstance(
                         self.typemap[varname], (SeriesType, DataFrameType))):
                 dprint("dist setting REP {}".format(varname))
@@ -1164,7 +1165,7 @@ def _arrays_written(arrs, blocks):
 #             if isinstance(stmt, ir.Assign) and isinstance(stmt.value, ir.Expr):
 #                 lhs = stmt.target.name
 #                 rhs = stmt.value
-#                 if (rhs.op == 'getitem' and is_array(typemap, rhs.value.name)
+#                 if (rhs.op == 'getitem' and is_array_typ(typemap[rhs.value.name])
 #                         and vars_dependent(body_defs, rhs.index, par_index_var)):
 #                     stencil_accesses[rhs.index.name] = rhs.value.name
 

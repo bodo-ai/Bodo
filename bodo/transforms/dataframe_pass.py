@@ -23,7 +23,7 @@ from numba.typing.templates import signature
 import bodo
 from bodo import hiframes
 from bodo.utils.utils import (debug_prints, inline_new_blocks, ReplaceFunc,
-    is_whole_slice, is_array, is_assign, sanitize_varname)
+    is_whole_slice, is_array_typ, is_assign, sanitize_varname)
 from bodo.hiframes.pd_dataframe_ext import (DataFrameType, DataFrameLocType,
     DataFrameILocType, DataFrameIatType)
 from bodo.hiframes.pd_series_ext import SeriesType
@@ -496,8 +496,8 @@ class DataFramePass(object):
         # TODO: add support to PA
         # if (func_mod == '_operator' and func_name in binary_op_names
         #         and len(rhs.args) > 0
-        #         and (is_array(self.typemap, rhs.args[0].name)
-        #             or is_array(self.typemap, rhs.args[1].name))):
+        #         and (is_array_typ(self.typemap[rhs.args[0].name])
+        #             or is_array_typ(self.typemap[rhs.args[1].name]))):
         #     func = getattr(operator, func_name)
         #     return [ir.Assign(ir.Expr.binop(
         #         func, rhs.args[0], rhs.args[1], rhs.loc),
@@ -1234,7 +1234,7 @@ class DataFramePass(object):
         # TODO: compare df index and Series index and match them in setitem
         arr_def = guard(get_definition, self.func_ir, new_arr)
         if (isinstance(arr_def, ir.Expr)  and arr_def.op == 'getitem'
-                and is_array(self.typemap, arr_def.value.name)
+                and is_array_typ(self.typemap[arr_def.value.name])
                 and self.is_bool_arr(arr_def.index.name)):
             orig_arr = arr_def.value
             bool_arr = arr_def.index
