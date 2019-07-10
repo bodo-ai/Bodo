@@ -17,3 +17,4 @@ Bodo documentation
    source/install
    source/development
    source/aws
+   source/jupyter
