@@ -121,7 +121,8 @@ class DistributedDiagnostics:
                 map_line_to_info[l_no].append("#{}: {}".format(p_id, p_dist))
 
         for arr, a_dist in self.array_dists.items():
-            assert arr in self.array_locs
+            if not arr in self.array_locs:
+                continue
             loc = self.array_locs[arr]
             if loc.filename == filename:
                 l_no = max(0, loc.line - 1)
@@ -210,6 +211,9 @@ class DistributedAnalysis(object):
 
     def _analyze_block(self, block, array_dists, parfor_dists):
         for inst in block.body:
+            inst_writes = ir_utils.get_stmt_writes(inst)
+            for a in inst_writes:
+                self.array_locs[a] = inst.loc
             if isinstance(inst, ir.Assign):
                 self._analyze_assign(inst, array_dists, parfor_dists)
             elif isinstance(inst, Parfor):
@@ -230,7 +234,6 @@ class DistributedAnalysis(object):
     def _analyze_assign(self, inst, array_dists, parfor_dists):
         lhs = inst.target.name
         rhs = inst.value
-        self.array_locs[lhs] = inst.target.loc
 
         # treat return casts like assignments
         if isinstance(rhs, ir.Expr) and rhs.op == 'cast':
@@ -886,7 +889,7 @@ class DistributedAnalysis(object):
         if isinstance(fdef, tuple) and len(fdef) == 2:
             name, mod = fdef
             if isinstance(mod, ir.Var):
-                mod = self.typemap[mod.name]
+                mod = str(self.typemap[mod.name])
             fname = mod + '.' + name
         if len(arrs) > 0:
             info = ("Distributed analysis set {} as replicated due "
