@@ -1208,7 +1208,9 @@ class DataFramePass(object):
         # data is copied if not inplace
         if not inplace:
             data = [self._gen_arr_copy(v, nodes) for v in data]
-        _init_df = _gen_init_df(out_typ.columns)
+        _init_df = _gen_init_df(out_typ.columns, 'index')
+        df_index = self._get_dataframe_index(df_var, nodes)
+        data.append(df_index)
         return self._replace_func(_init_df, data, pre_nodes=nodes)
 
     def _run_call_set_df_column(self, assign, lhs, rhs):
