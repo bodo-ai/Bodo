@@ -99,3 +99,6 @@ For each function implemented (either overloading Pandas or internal), the follo
 - array analysis
 - distributed analysis
 - distributed transformation
+
+Building conda package::
+  conda-build . -c defaults -c numba/label/dev -c conda-forge

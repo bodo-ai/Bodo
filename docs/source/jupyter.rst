@@ -16,7 +16,8 @@ and add the following line::
 
 Start the Jupyter notebook and go to `IPython Clusters` tab. Select the
 number of engines (i.e., cores) you'd like to use and click `Start` next to the
-`mpi` profile.
+`mpi` profile. Alternatively, you can use `ipcluster start -n 4 --profile=mpi`
+in a terminal to start the engines (this can take several seconds).
 
 Now start a new notebook and run this code in a cell to setup the environment::
 

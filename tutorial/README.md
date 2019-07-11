@@ -1,25 +1,28 @@
-# HPAT_tutorial
+# Bodo Getting Started Tutorial
 
 ## Setting up your environment
-This Bodo tutorial makes use of bodo (latest), numpy, pandas, daal4py (latest) and their dependences.
+The easiest and most reliable way to setup Bodo is to create a python environment using conda:
 
-The easiest and most reliable way is to create a python environment using conda:
+#* Linux: `conda create -n bodo_tut -c ehsantn -c numba/label/dev -c defaults -c intel -c conda-forge bodo daal4py pandas=0.23 blas=*=mkl jupyter notebook`
+#* Windows: `conda create -n bodo_tut -c ehsantn -c numba/label/dev -c defaults -c intel bodo daal4py pandas=0.23 blas=*=mkl jupyter notebook`
+* Linux: `conda create -n bodo_tut -c defaults -c conda-forge -c file:///path/to/bodo/pkg bodo pandas=0.24 jupyter ipyparallel`
+* Windows: `conda create -n bodo_tut -c defaults -c intel -c file:///path/to/bodo/pkg bodo pandas=0.24 jupyter ipyparallel`
 
-* Linux: `conda create -n hpattut -c ehsantn -c numba/label/dev -c defaults -c intel -c conda-forge bodo daal4py pandas=0.23 blas=*=mkl jupyter notebook`
-* Windows: `conda create -n hpattut -c ehsantn -c numba/label/dev -c defaults -c intel bodo daal4py pandas=0.23 blas=*=mkl jupyter notebook`
 
-Then activate the environment
+Then activate the environment:
 
-`conda activate hpattut`
+`conda activate bodo_tut`
 
-and you are ready to start the tutorial!
+The main material is provided as Juypter notebooks and requires
+# TODO: add link
+`ipyparallel` MPI setup according to Bodo's Jupyter documentation.
 
-## The Tutorial
+## Tutorial Notebook
 
-The main material is provided as juypter notebooks. To get started simply type
+Start Jupyter:
 
 `jupyter notebook`
 
-The main Bodo tutorial is in the notebook `bodo.ipynb`.
-An example of an advanced analytics code is provided in `intraday_mean.py`.
-A more complete notebook about using daal4py with Bodo can be found in `	daal4py_data_science.ipynb`.
+go to `IPython Clusters` tab. Select the
+number of engines (i.e., cores) you'd like to use and click `Start` next to the
+`mpi` profile. Open the `bodo_getting_started.ipynb` notebook.
