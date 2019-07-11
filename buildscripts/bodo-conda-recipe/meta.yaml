@@ -18,8 +18,8 @@ requirements:
     - setuptools
     - numba 0.44.*
     - numpy
-    - pandas >=0.23
-    - pyarrow >=0.9
+    - pandas >=0.24
+    - pyarrow >=0.11
     - arrow-cpp
     - boost
     - hdf5
@@ -31,8 +31,8 @@ requirements:
   run:
     - python
     - {{ pin_compatible('numpy') }}
-    - pandas >=0.23
-    - pyarrow >=0.9
+    - pandas >=0.24
+    - pyarrow >=0.11
     - arrow-cpp
     - boost
     - numba 0.44.*
@@ -42,14 +42,14 @@ requirements:
 test:
   requires:
     - h5py
-    - pyspark
     - scipy
+    - pytest
   imports:
     - bodo
 
 
 about:
-  home: https://github.com/IntelLabs/bodo
-  license: BSD
+  home: https://www.bodo-inc.com/
+  license: Proprietary
   license_file: LICENSE.md
-  summary: A compiler-based big data framework in Python
+  summary: Bodo Core Engine for analytics
