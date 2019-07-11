@@ -3,10 +3,11 @@ Collection of utility functions. Needs to be refactored in separate files.
 """
 from collections import namedtuple
 import operator
+import keyword
 import numba
 from numba import ir_utils, ir, types, cgutils
 from numba.ir_utils import (guard, get_definition, find_callname, require,
-    add_offset_to_labels, find_topo_order, find_const)
+    add_offset_to_labels, find_topo_order, find_const, mk_unique_var)
 from numba.parfor import wrap_parfor_blocks, unwrap_parfor_blocks
 from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
@@ -526,9 +527,12 @@ def is_expr(val, op):
 
 
 def sanitize_varname(varname):
-    new_name = varname.replace('$', '_').replace('.', '_')
+    new_name = varname.replace('$', '_').replace('.', '_').replace(
+        ':', '_').replace(' ', '_')
     if not new_name[0].isalpha():
         new_name = '_' + new_name
+    if not new_name.isidentifier() or keyword.iskeyword(new_name):
+        new_name = mk_unique_var('new_name').replace('.', '_')
     return new_name
 
 

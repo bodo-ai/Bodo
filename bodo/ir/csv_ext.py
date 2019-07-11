@@ -290,10 +290,11 @@ compiled_funcs = []
 def _gen_csv_reader_py(col_names, col_typs, usecols, sep, typingctx, targetctx,
                        parallel, skiprows):
     # TODO: support non-numpy types like strings
+    sanitized_cnames = [sanitize_varname(c) for c in col_names]
     date_inds = ", ".join(str(i) for i, t in enumerate(col_typs)
                            if t.dtype == types.NPDatetime('ns'))
-    typ_strs = ", ".join(["{}='{}'".format(sanitize_varname(cname), _get_dtype_str(t))
-                          for cname, t in zip(col_names, col_typs)])
+    typ_strs = ", ".join(["{}='{}'".format(s_cname, _get_dtype_str(t))
+                          for s_cname, t in zip(sanitized_cnames, col_typs)])
     pd_dtype_strs = ", ".join(["'{}':{}".format(cname, _get_pd_dtype_str(t))
                           for cname, t in zip(col_names, col_typs)])
 
@@ -306,10 +307,10 @@ def _gen_csv_reader_py(col_names, col_typs, usecols, sep, typingctx, targetctx,
     func_text += "       parse_dates=[{}],\n".format(date_inds)
     func_text += "       dtype={{{}}},\n".format(pd_dtype_strs)
     func_text += "       usecols={}, sep='{}')\n".format(usecols, sep)
-    for cname in col_names:
-        func_text += "    {} = df['{}'].values\n".format(sanitize_varname(cname), cname)
+    for s_cname, cname in zip(sanitized_cnames, col_names):
+        func_text += "    {} = df['{}'].values\n".format(s_cname, cname)
         # func_text += "    print({})\n".format(cname)
-    func_text += "  return ({},)\n".format(", ".join(sanitize_varname(c) for c in col_names))
+    func_text += "  return ({},)\n".format(", ".join(sc for sc in sanitized_cnames))
 
     # print(func_text)
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
