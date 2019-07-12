@@ -360,14 +360,21 @@ def slice_getitem(arr, slice_index, arr_start, total_len):
 
 
 @overload(slice_getitem)
-def slice_getitem_overload(arr, slice_index, arr_start, total_len):
-    def getitem_impl(arr, slice_index, arr_start, total_len):
+def slice_getitem_overload(arr, slice_index, arr_start, total_len, is_1D):
+    def getitem_impl(arr, slice_index, arr_start, total_len, is_1D):
         # normalize slice
         slice_index = numba.unicode._normalize_slice(
             slice_index, total_len)
         start = slice_index.start
         step = slice_index.step
-        # span = numba.unicode._slice_span(slice_idx)
+
+        # just broadcast from rank 0 in the common case A[:k] (for S.head())
+        n_pes = bodo.libs.distributed_api.get_size()
+        rank_0_portion = bodo.libs.distributed_api.get_node_portion(
+            total_len, n_pes, np.int32(0))
+        if (start == 0 and step == 1 and is_1D
+                and rank_0_portion >= slice_index.stop):
+            return slice_getitem_from_start(arr, slice_index)
 
         offset = 0 if step == 1 or start > arr_start else (
             abs(step - (arr_start % step)) % step)
@@ -380,33 +387,22 @@ def slice_getitem_overload(arr, slice_index, arr_start, total_len):
 
 
 # assuming start and step are None
-def const_slice_getitem(arr, slice_index, start, count):
+def slice_getitem_from_start(arr, slice_index):
     return arr[slice_index]
 
 
-@overload(const_slice_getitem)
-def const_slice_getitem_overload(arr, slice_index, start, count):
+@overload(slice_getitem_from_start)
+def slice_getitem_from_start_overload(arr, slice_index):
     if arr == string_array_type:
-        reduce_op = Reduce_Type.Sum.value
-        def getitem_str_impl(arr, slice_index, start, count):
+        def getitem_str_impl(arr, slice_index):
             rank = bodo.libs.distributed_api.get_rank()
             k = slice_index.stop
             # get total characters for allocation
             n_chars = np.uint64(0)
-            if k > count:
-                my_end = min(count, max(k-start, 0))
-                my_arr = arr[:my_end]
-                my_arr = bodo.libs.distributed_api.gatherv(my_arr)
-                n_chars = bodo.libs.distributed_api.dist_reduce(
-                    num_total_chars(my_arr), np.int32(reduce_op))
-                if rank == 0:
-                    out_arr = my_arr
-            else:
-                if rank == 0:
-                    my_arr = arr[:k]
-                    n_chars = num_total_chars(my_arr)
-                    out_arr = my_arr
-                n_chars = bcast_scalar(n_chars)
+            if rank == 0:
+                out_arr = arr[:k]
+                n_chars = num_total_chars(out_arr)
+            n_chars = bcast_scalar(n_chars)
             if rank != 0:
                 out_arr = pre_alloc_string_array(k, n_chars)
 
@@ -416,19 +412,12 @@ def const_slice_getitem_overload(arr, slice_index, start, count):
 
         return getitem_str_impl
 
-    def getitem_impl(arr, slice_index, start, count):
+    def getitem_impl(arr, slice_index):
         rank = bodo.libs.distributed_api.get_rank()
         k = slice_index.stop
         out_arr = np.empty(k, arr.dtype)
-        if k > count:
-            my_end = min(count, max(k-start, 0))
-            my_arr = arr[:my_end]
-            my_arr = bodo.libs.distributed_api.gatherv(my_arr)
-            if rank == 0:
-                out_arr = my_arr
-        else:
-            if rank == 0:
-                out_arr = arr[:k]
+        if rank == 0:
+            out_arr = arr[:k]
         bodo.libs.distributed_api.bcast(out_arr)
         return out_arr
 

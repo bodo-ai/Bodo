@@ -1268,11 +1268,12 @@ class DistributedPass(object):
                 in_arr = full_node.value.value
                 start_var, nodes = self._get_dist_start_var(in_arr, equiv_set)
                 size_var = self._get_dist_var_len(in_arr, nodes, equiv_set)
+                is_1D = self._is_1D_arr(arr.name)
                 return nodes + compile_func_single_block(
                     lambda arr, slice_index, start, tot_len: bodo.libs.distributed_api.slice_getitem(
-                        arr, slice_index, start, tot_len),
+                        arr, slice_index, start, tot_len, _is_1D),
                         [in_arr, index_var, start_var, size_var],
-                        lhs, self)
+                        lhs, self, extra_globals={'_is_1D': is_1D})
 
         return out
 
