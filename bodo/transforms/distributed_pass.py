@@ -264,20 +264,15 @@ class DistributedPass(object):
             if self.typemap[rhs.args[0].name] == types.int64:
                 return self._run_permutation_int(assign, rhs.args)
 
-        # len(A) if A is 1D
-        if fdef == ('len', 'builtins') and rhs.args and self._is_1D_arr(rhs.args[0].name):
+        # len(A) if A is 1D or 1D_Var
+        if (fdef == ('len', 'builtins') and rhs.args
+                and (self._is_1D_arr(rhs.args[0].name)
+                    or self._is_1D_Var_arr(rhs.args[0].name))):
             arr = rhs.args[0]
             nodes = []
             assign.value = self._get_dist_var_len(arr, nodes, equiv_set)
             nodes.append(assign)
             return nodes
-
-        # TODO: merge with above
-        # len(A) if A is 1D_Var
-        if fdef == ('len', 'builtins') and rhs.args and self._is_1D_Var_arr(rhs.args[0].name):
-            arr_var = rhs.args[0]
-            out = self._gen_1D_Var_len(arr_var)
-            out[-1].target = assign.target
 
         if fdef == ('File', 'h5py'):
             # create and save a variable holding 1, in case we need to use it
