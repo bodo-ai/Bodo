@@ -33,6 +33,7 @@ from bodo.libs.timsort import getitem_arr_tup
 from bodo.utils.shuffle import (getitem_arr_tup_single, val_to_tup, alltoallv,
     alltoallv_tup, finalize_shuffle_meta, update_shuffle_meta,
     alloc_pre_shuffle_metadata, _get_keys_tup, _get_data_tup)
+from bodo.utils.typing import is_overload_true
 
 
 AggFuncStruct = namedtuple('AggFuncStruct',
@@ -862,11 +863,11 @@ def alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set, return_key):  # pragma
     return out_dummy_tup
 
 
-@overload(alloc_agg_output, jit_options={'cache': True})
+@overload(alloc_agg_output)
 def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set, return_key):
 
     # return key is either True or None
-    if return_key == types.boolean:
+    if is_overload_true(return_key) or return_key == types.boolean:
         # TODO: handle pivot_table/crosstab with return key
         dtype = key_set.dtype
         key_types = (list(dtype.types) if isinstance(dtype, types.BaseTuple)
