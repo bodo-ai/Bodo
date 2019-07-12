@@ -59,6 +59,7 @@ static void hpat_dist_waitall(int size, MPI_Request *req) __UNUSED__;
 
 static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum) __UNUSED__;
 static void c_gatherv(void* send_data, int sendcount, void* recv_data, int* recv_counts, int* displs, int typ_enum) __UNUSED__;
+static void c_allgatherv(void* send_data, int sendcount, void* recv_data, int* recv_counts, int* displs, int typ_enum) __UNUSED__;
 static void c_bcast(void* send_data, int sendcount, int typ_enum) __UNUSED__;
 
 static void c_alltoallv(void* send_data, void* recv_data, int* send_counts,
@@ -448,6 +449,16 @@ static void c_gatherv(void* send_data, int sendcount, void* recv_data, int* recv
            MPI_COMM_WORLD);
     return;
 }
+
+
+static void c_allgatherv(void* send_data, int sendcount, void* recv_data, int* recv_counts, int* displs, int typ_enum)
+{
+    MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
+    MPI_Allgatherv(send_data, sendcount, mpi_typ, recv_data, recv_counts, displs, mpi_typ,
+           MPI_COMM_WORLD);
+    return;
+}
+
 
 static void c_bcast(void* send_data, int sendcount, int typ_enum)
 {

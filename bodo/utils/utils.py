@@ -352,8 +352,10 @@ def to_array_overload(A):
     except:
         pass  # should be handled elsewhere (e.g. Set)
 
+
 def empty_like_type(n, arr):
     return np.empty(n, arr.dtype)
+
 
 @overload(empty_like_type)
 def empty_like_type_overload(n, arr):

@@ -913,6 +913,9 @@ class DistributedAnalysis(object):
                 return
 
         index_var = rhs.index_var if is_static_getsetitem(rhs) else rhs.index
+        if index_var is None:
+            self._set_REP(inst.list_vars(), array_dists)
+            return
 
         if (rhs.value.name, index_var.name) in self._parallel_accesses:
             # XXX: is this always valid? should be done second pass?
@@ -932,10 +935,11 @@ class DistributedAnalysis(object):
             self._set_REP(inst.list_vars(), array_dists)
             return
         assert isinstance(index_var, ir.Var)
+        index_typ = self.typemap[index_var.name]
 
         # array selection with boolean index
-        if (is_np_array_typ(self.typemap[index_var.name])
-                and self.typemap[index_var.name].dtype == types.boolean):
+        if (is_np_array_typ(index_typ)
+                and index_typ.dtype == types.boolean):
             # input array and bool index have the same distribution
             new_dist = self._meet_array_dists(index_var.name, rhs.value.name,
                                               array_dists)
@@ -952,7 +956,9 @@ class DistributedAnalysis(object):
 
         # output of operations like S.head() is REP since it's a "small" slice
         # input can remain 1D
-        if guard(is_const_slice, self.typemap, self.func_ir, index_var):
+        if isinstance(index_typ, types.SliceType):
+            # TODO: since array and its slice alias, make sure array or its
+            # slice or their aliases are not written to
             array_dists[lhs] = Distribution.REP
             return
 
@@ -962,6 +968,10 @@ class DistributedAnalysis(object):
     def _analyze_setitem(self, inst, array_dists):
         index_var = (inst.index_var if is_static_getsetitem(inst)
                      else inst.index)
+
+        if index_var is None:
+            self._set_REP(inst.list_vars(), array_dists)
+            return
 
         if ((inst.target.name, index_var.name) in self._parallel_accesses):
             # no parallel to parallel array set (TODO)

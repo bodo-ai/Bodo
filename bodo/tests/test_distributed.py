@@ -287,3 +287,19 @@ def test_series_alloc_equiv1():
     bodo_func(n)
     assert count_parfor_REPs() == 0
     assert not dist_IR_contains('dist_reduce')
+
+
+# TODO: test other array types
+@pytest.mark.parametrize('A', [np.arange(11), np.arange(33).reshape(11, 3),
+    pd.Series(['aa', 'bb', 'c']*4)])
+@pytest.mark.parametrize('s', [slice(3), slice(1, 9), slice(7, None),
+    slice(4, 6)])
+def test_getitem_slice_1D(A, s):
+    # get a slice of 1D array
+    def impl1(A, s):
+        return A[s]
+
+    bodo_func = bodo.jit(distributed={'A'})(impl1)
+    start, end = get_start_end(len(A))
+    np.testing.assert_array_equal(bodo_func(A[start:end], s), impl1(A, s))
+    assert count_array_OneDs() > 0

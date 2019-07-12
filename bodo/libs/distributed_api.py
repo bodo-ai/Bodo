@@ -22,6 +22,7 @@ import llvmlite.binding as ll
 ll.add_symbol('c_alltoall', hdist.c_alltoall)
 ll.add_symbol('c_gather_scalar', hdist.c_gather_scalar)
 ll.add_symbol('c_gatherv', hdist.c_gatherv)
+ll.add_symbol('c_allgatherv', hdist.c_allgatherv)
 ll.add_symbol('c_bcast', hdist.c_bcast)
 ll.add_symbol('c_recv', hdist.hpat_dist_recv)
 ll.add_symbol('c_send', hdist.hpat_dist_send)
@@ -116,9 +117,16 @@ def gather_scalar_overload(val):
 def gatherv(data):  # pragma: no cover
     return data
 
+def allgatherv(data):  # pragma: no cover
+    return data
+
+
 # sendbuf, sendcount, recvbuf, recv_counts, displs, dtype
 c_gatherv = types.ExternalFunction("c_gatherv",
     types.void(types.voidptr, types.int32, types.voidptr, types.voidptr, types.voidptr, types.int32))
+c_allgatherv = types.ExternalFunction("c_allgatherv",
+    types.void(types.voidptr, types.int32, types.voidptr, types.voidptr, types.voidptr, types.int32))
+
 
 @overload(gatherv)
 def gatherv_overload(data):
@@ -185,6 +193,73 @@ def gatherv_overload(data):
 
         return gatherv_str_arr_impl
 
+
+@overload(allgatherv)
+def allgatherv_overload(data):
+    if isinstance(data, types.Array):
+        # TODO: other types like boolean
+        typ_val = _numba_to_c_type_map[data.dtype]
+
+        def allgatherv_impl(data):
+            n_pes = bodo.libs.distributed_api.get_size()
+            data = np.ascontiguousarray(data)
+            # use size to handle multi-dim case
+            n_loc = data.size
+            recv_counts = np.empty(n_pes, np.int32)
+            bodo.libs.distributed_api.allgather(recv_counts, np.int32(n_loc))
+            n_total = recv_counts.sum()
+            all_data = empty_like_type(n_total, data)
+            # displacements
+            displs = bodo.ir.join.calc_disp(recv_counts)
+            c_allgatherv(data.ctypes, np.int32(n_loc), all_data.ctypes,
+                recv_counts.ctypes, displs.ctypes, np.int32(typ_val))
+            # handle multi-dim case
+            return all_data.reshape((-1,) + data.shape[1:])
+
+        return allgatherv_impl
+
+    if data == string_array_type:
+        int32_typ_enum = np.int32(_numba_to_c_type_map[types.int32])
+        char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
+
+        def allgatherv_str_arr_impl(data):
+            n_pes = bodo.libs.distributed_api.get_size()
+            n_loc = len(data)
+            n_all_chars = num_total_chars(data)
+
+            # allocate send lens arrays
+            send_arr_lens = np.empty(n_loc, np.uint32)  # XXX offset type is uint32
+            send_data_ptr = get_data_ptr(data)
+
+            for i in range(n_loc):
+                _str = data[i]
+                send_arr_lens[i] = len(_str)
+
+            recv_counts = np.empty(n_pes, np.int32)
+            bodo.libs.distributed_api.allgather(recv_counts, np.int32(n_loc))
+
+            recv_counts_char = np.empty(n_pes, np.int32)
+            bodo.libs.distributed_api.allgather(recv_counts_char, np.int32(n_all_chars))
+
+            n_total = recv_counts.sum()
+            n_total_char = recv_counts_char.sum()
+
+            # displacements
+            all_data = pre_alloc_string_array(n_total, n_total_char)
+            displs = bodo.ir.join.calc_disp(recv_counts)
+            displs_char = bodo.ir.join.calc_disp(recv_counts_char)
+
+            #  print(rank, n_loc, n_total, recv_counts, displs)
+            offset_ptr = get_offset_ptr(all_data)
+            data_ptr = get_data_ptr(all_data)
+            c_allgatherv(send_arr_lens.ctypes, np.int32(n_loc), offset_ptr,
+                recv_counts.ctypes, displs.ctypes, int32_typ_enum)
+            c_allgatherv(send_data_ptr, np.int32(n_all_chars), data_ptr,
+                recv_counts_char.ctypes, displs_char.ctypes, char_typ_enum)
+            convert_len_arr_to_offset(offset_ptr, n_total)
+            return all_data
+
+        return allgatherv_str_arr_impl
 
 
 # TODO: test
@@ -280,6 +355,31 @@ def prealloc_str_for_bcast_overload(arr):
 
 
 # assuming start and step are None
+def slice_getitem(arr, slice_index, arr_start, total_len):
+    return arr[slice_index]
+
+
+@overload(slice_getitem)
+def slice_getitem_overload(arr, slice_index, arr_start, total_len):
+    def getitem_impl(arr, slice_index, arr_start, total_len):
+        # normalize slice
+        slice_index = numba.unicode._normalize_slice(
+            slice_index, total_len)
+        start = slice_index.start
+        step = slice_index.step
+        # span = numba.unicode._slice_span(slice_idx)
+
+        offset = 0 if step == 1 or start > arr_start else (
+            abs(step - (arr_start % step)) % step)
+        new_start = max(arr_start, slice_index.start) - arr_start + offset
+        new_stop = max(slice_index.stop - arr_start, 0)
+        my_arr = arr[new_start:new_stop:step]
+        return bodo.libs.distributed_api.allgatherv(my_arr)
+
+    return getitem_impl
+
+
+# assuming start and step are None
 def const_slice_getitem(arr, slice_index, start, count):
     return arr[slice_index]
 
@@ -325,7 +425,6 @@ def const_slice_getitem_overload(arr, slice_index, start, count):
             my_arr = arr[:my_end]
             my_arr = bodo.libs.distributed_api.gatherv(my_arr)
             if rank == 0:
-                print(my_arr)
                 out_arr = my_arr
         else:
             if rank == 0:

@@ -64,6 +64,8 @@ PyMODINIT_FUNC PyInit_hdist(void) {
                             PyLong_FromVoidPtr((void*)(&c_gather_scalar)));
     PyObject_SetAttrString(m, "c_gatherv",
                             PyLong_FromVoidPtr((void*)(&c_gatherv)));
+    PyObject_SetAttrString(m, "c_allgatherv",
+                            PyLong_FromVoidPtr((void*)(&c_allgatherv)));
     PyObject_SetAttrString(m, "c_bcast",
                             PyLong_FromVoidPtr((void*)(&c_bcast)));
     PyObject_SetAttrString(m, "c_alltoallv",

@@ -1227,6 +1227,7 @@ class DistributedPass(object):
                 index_var = inds[0]
                 is_multi_dim = True
 
+            index_typ = self.typemap[index_var.name]
             # no need for transformation for whole slices
             if guard(is_whole_slice, self.typemap, self.func_ir, index_var):
                 # A = X[:,3]
@@ -1257,16 +1258,18 @@ class DistributedPass(object):
                 out += self._run_call_rebalance_array(lhs.name, full_node, [imb_arr])
                 out[-1].target = lhs
 
-            elif self._is_REP(lhs.name) and guard(
-                    is_const_slice, self.typemap, self.func_ir, index_var):
+            # general slice access like A[3:7]
+            elif self._is_REP(lhs.name) and isinstance(
+                                                   index_typ, types.SliceType):
                 # cases like S.head()
                 # bcast if all in rank 0, otherwise gatherv
                 in_arr = full_node.value.value
-                nodes, start_var, count_var = self._get_dist_var_start_count(
-                    in_arr, equiv_set)
+                start_var, nodes = self._get_dist_start_var(in_arr, equiv_set)
+                size_var = self._get_dist_var_len(in_arr, nodes, equiv_set)
                 return nodes + compile_func_single_block(
-                    lambda arr, slice_index, start, count: bodo.libs.distributed_api.const_slice_getitem(
-                        arr, slice_index, start, count), [in_arr, index_var, start_var, count_var],
+                    lambda arr, slice_index, start, tot_len: bodo.libs.distributed_api.slice_getitem(
+                        arr, slice_index, start, tot_len),
+                        [in_arr, index_var, start_var, size_var],
                         lhs, self)
 
         return out
