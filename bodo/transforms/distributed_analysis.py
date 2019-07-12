@@ -254,7 +254,8 @@ class DistributedAnalysis(object):
             dist = self._meet_array_dists(arg1, lhs, array_dists, dist)
             self._meet_array_dists(arg1, arg2, array_dists, dist)
             return
-        elif isinstance(rhs, ir.Expr) and rhs.op in ['getitem', 'static_getitem']:
+        elif isinstance(rhs, ir.Expr) and rhs.op in ('getitem',
+                                                             'static_getitem'):
             self._analyze_getitem(inst, lhs, rhs, array_dists)
             return
         elif isinstance(rhs, ir.Expr) and rhs.op == 'build_tuple':

@@ -151,12 +151,11 @@ class DistributedPass(object):
                     if isinstance(rhs, ir.Expr):
                         out_nodes = self._run_expr(inst, equiv_set, avail_vars)
                 elif isinstance(inst, (ir.StaticSetItem, ir.SetItem)):
-                    if isinstance(inst, ir.SetItem):
-                        index = inst.index
-                    else:
-                        index = inst.index_var
-                    out_nodes = self._run_getsetitem(
-                        inst.target, index, inst, inst, equiv_set)
+                    out_nodes = []
+                    index_var = get_getsetitem_index_var(
+                        inst, self.typemap, out_nodes)
+                    out_nodes += self._run_getsetitem(
+                        inst.target, index_var, inst, inst, equiv_set)
                 elif isinstance(inst, ir.Return):
                     out_nodes = self._gen_barrier() + [inst]
                 elif isinstance(inst, ir.Print):
