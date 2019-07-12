@@ -1246,13 +1246,10 @@ class DistributedPass(object):
 
                 def f(A, start, step):
                     offset = abs(step - (start % step)) % step
-                    B = A[offset::step]
+                    return A[offset::step]
 
-                f_block = compile_to_numba_ir(f, {}, self.typingctx,
-                                              (self.typemap[in_arr.name], types.intp, types.intp),
-                                              self.typemap, self.calltypes).blocks.popitem()[1]
-                replace_arg_nodes(f_block, [in_arr, start_var, step])
-                out += f_block.body[:-3]  # remove none return
+                out += compile_func_single_block(
+                    f, [in_arr, start_var, step], None, self)
                 imb_arr = out[-1].target
 
                 # call rebalance

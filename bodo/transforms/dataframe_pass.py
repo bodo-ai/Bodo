@@ -23,7 +23,8 @@ from numba.typing.templates import signature
 import bodo
 from bodo import hiframes
 from bodo.utils.utils import (debug_prints, inline_new_blocks, ReplaceFunc,
-    is_whole_slice, is_array_typ, is_assign, sanitize_varname)
+    is_whole_slice, is_array_typ, is_assign, sanitize_varname,
+    get_getsetitem_index_var)
 from bodo.hiframes.pd_dataframe_ext import (DataFrameType, DataFrameLocType,
     DataFrameILocType, DataFrameIatType)
 from bodo.hiframes.pd_series_ext import SeriesType
@@ -213,17 +214,8 @@ class DataFramePass(object):
     def _run_getitem(self, assign, rhs):
         lhs = assign.target
         nodes = []
-        index_var = (rhs.index_var if rhs.op == 'static_getitem'
-                                    else rhs.index)
-        # sometimes index_var is None, so fix it
-        # TODO: get rid of static_getitem
-        if index_var is None:
-            assert rhs.op == 'static_getitem'
-            index_typ = numba.typeof(rhs.index)
-            index_var = ir.Var(lhs.scope, mk_unique_var('dummy_index'), lhs.loc)
-            self.typemap[index_var.name] = index_typ
-        else:
-            index_typ = self.typemap[index_var.name]
+        index_var = get_getsetitem_index_var(rhs, self.typemap, nodes)
+        index_typ = self.typemap[index_var.name]
 
         # A = df['column'] or df[['C1', 'C2']]
         if rhs.op == 'static_getitem' and self._is_df_var(rhs.value):
@@ -385,8 +377,7 @@ class DataFramePass(object):
     def _run_setitem(self, inst):
         target_typ = self.typemap[inst.target.name]
         nodes = []
-        index_var = (inst.index_var if isinstance(inst, ir.StaticSetItem)
-                                    else inst.index)
+        index_var = get_getsetitem_index_var(rhs, self.typemap, nodes)
         index_typ = self.typemap[index_var.name]
 
         if self._is_df_iat_var(inst.target):
@@ -404,7 +395,7 @@ class DataFramePass(object):
                     A[row_ind] = val
                 return self._replace_func(_impl,
                     [in_arr, row_ind, val], pre_nodes=nodes)
-        return [inst]
+        return nodes + [inst]
 
     def _run_getattr(self, assign, rhs):
         rhs_type = self.typemap[rhs.value.name]  # get type of rhs value "df"

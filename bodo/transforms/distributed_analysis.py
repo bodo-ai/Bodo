@@ -25,7 +25,8 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.utils import (get_constant, is_alloc_callname,
                         is_whole_slice, is_array_typ, is_array_container_typ,
                         is_np_array_typ, find_build_tuple, debug_prints,
-                        is_const_slice, is_expr, is_distributable_typ)
+                        is_const_slice, is_expr, is_distributable_typ,
+                        is_static_getsetitem)
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
 
@@ -911,15 +912,7 @@ class DistributedAnalysis(object):
                 self._meet_array_dists(lhs, arr.name, array_dists)
                 return
 
-        if rhs.op == 'static_getitem':
-            if rhs.index_var is None:
-                # TODO: things like A[0] need broadcast
-                self._set_REP(inst.list_vars(), array_dists)
-                return
-            index_var = rhs.index_var
-        else:
-            assert rhs.op == 'getitem'
-            index_var = rhs.index
+        index_var = rhs.index_var if is_static_getsetitem(rhs) else rhs.index
 
         if (rhs.value.name, index_var.name) in self._parallel_accesses:
             # XXX: is this always valid? should be done second pass?
@@ -950,15 +943,6 @@ class DistributedAnalysis(object):
                                                 new_dist.value))
             return
 
-        # # array selection with permutation array index
-        # if is_np_array_typ(self.typemap[index_var.name]:
-        #     arr_def = guard(get_definition, self.func_ir, index_var)
-        #     if isinstance(arr_def, ir.Expr) and arr_def.op == 'call':
-        #         fdef = guard(find_callname, self.func_ir, arr_def, self.typemap)
-        #         if fdef == ('permutation', 'numpy.random'):
-        #             self._meet_array_dists(lhs, rhs.value.name, array_dists)
-        #             return
-
         # whole slice or strided slice access
         # for example: A = X[:,5], A = X[::2,5]
         if guard(is_whole_slice, self.typemap, self.func_ir, index_var,
@@ -976,10 +960,8 @@ class DistributedAnalysis(object):
         return
 
     def _analyze_setitem(self, inst, array_dists):
-        if isinstance(inst, ir.SetItem):
-            index_var = inst.index
-        else:
-            index_var = inst.index_var
+        index_var = (inst.index_var if is_static_getsetitem(inst)
+                     else inst.index)
 
         if ((inst.target.name, index_var.name) in self._parallel_accesses):
             # no parallel to parallel array set (TODO)
