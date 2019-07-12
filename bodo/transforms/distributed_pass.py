@@ -41,7 +41,8 @@ from bodo.utils.transform import compile_func_single_block
 from bodo.utils.utils import (is_alloc_callname, is_whole_slice,
                         get_slice_step, is_np_array_typ, find_build_tuple,
                         debug_prints, ReplaceFunc, gen_getitem, is_call,
-                        is_const_slice, is_assign, is_expr)
+                        is_const_slice, is_assign, is_expr,
+                        get_getsetitem_index_var)
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
@@ -174,17 +175,15 @@ class DistributedPass(object):
 
     def _run_expr(self, inst, equiv_set, avail_vars):
         rhs = inst.value
-        nodes = [inst]
 
         if rhs.op == 'call':
             return self._run_call(inst, equiv_set, avail_vars)
 
         if rhs.op in ('getitem', 'static_getitem'):
-            if rhs.op == 'getitem':
-                index = rhs.index
-            else:
-                index = rhs.index_var
-            return self._run_getsetitem(rhs.value, index, rhs, inst, equiv_set)
+            nodes = []
+            index_var = get_getsetitem_index_var(rhs, self.typemap, nodes)
+            return nodes + self._run_getsetitem(
+                rhs.value, index_var, rhs, inst, equiv_set)
 
         # array.shape
         if (rhs.op == 'getattr' and rhs.attr == 'shape'
@@ -198,7 +197,7 @@ class DistributedPass(object):
                         or self._is_1D_Var_arr(rhs.value.name))):
             return self._run_array_size(inst.target, rhs.value, equiv_set)
 
-        return nodes
+        return [inst]
 
     def _run_call(self, assign, equiv_set, avail_vars):
         lhs = assign.target.name
@@ -1147,41 +1146,15 @@ class DistributedPass(object):
 
     def _run_getsetitem(self, arr, index_var, node, full_node, equiv_set):
         out = [full_node]
-        scope = arr.scope
-        loc = arr.loc
         index_var = self._fix_index_var(index_var)
 
-        # 1D_Var arrays need adjustment for 1D_Var parfors as well
+        # adjust parallel access indices (in parfors)
+        # 1D_Var arrays need adjustment if 1D_Var parfor has start adjusted
         if ((self._is_1D_arr(arr.name) or
                 (self._is_1D_Var_arr(arr.name) and arr.name in self._1D_Var_parfor_starts))
                 and (arr.name, index_var.name) in self._parallel_accesses):
-            start_var, nodes = self._get_parallel_access_start_var(
-                arr, equiv_set, index_var)
-            # multi-dimensional array could be indexed with 1D index
-            if isinstance(self.typemap[index_var.name], types.Integer):
-                # TODO: avoid repeated start/end generation
-                sub_nodes = self._get_ind_sub(
-                    index_var, start_var)
-                out = nodes + sub_nodes
-                _set_getsetitem_index(node, sub_nodes[-1].target)
-            else:
-                index_list = guard(find_build_tuple, self.func_ir, index_var)
-                assert index_list is not None
-                # TODO: avoid repeated start/end generation
-                sub_nodes = self._get_ind_sub(
-                    index_list[0], start_var)
-                out = nodes + sub_nodes
-                new_index_list = copy.copy(index_list)
-                new_index_list[0] = sub_nodes[-1].target
-                tuple_var = ir.Var(scope, mk_unique_var("$tuple_var"), loc)
-                self.typemap[tuple_var.name] = self.typemap[index_var.name]
-                tuple_call = ir.Expr.build_tuple(new_index_list, loc)
-                tuple_assign = ir.Assign(tuple_call, tuple_var, loc)
-                out.append(tuple_assign)
-                _set_getsetitem_index(node, tuple_var)
-
-            out.append(full_node)
-
+            return self._run_parallel_access_getsetitem(
+                arr, index_var, node, full_node, equiv_set)
         elif self._is_1D_arr(arr.name) and isinstance(node, (ir.StaticSetItem, ir.SetItem)):
             is_multi_dim = False
             # we only consider 1st dimension for multi-dim arrays
@@ -1245,7 +1218,7 @@ class DistributedPass(object):
             # setitem_assign = ir.Assign(setitem_call, err_var, loc)
             # out.append(setitem_assign)
 
-        elif self._is_1D_arr(arr.name) and node.op in ['getitem', 'static_getitem']:
+        elif self._is_1D_arr(arr.name) and node.op in ('getitem', 'static_getitem'):
             is_multi_dim = False
             lhs = full_node.target
 
@@ -1254,12 +1227,6 @@ class DistributedPass(object):
             if inds is not None:
                 index_var = inds[0]
                 is_multi_dim = True
-
-            # arr_def = guard(get_definition, self.func_ir, index_var)
-            # if isinstance(arr_def, ir.Expr) and arr_def.op == 'call':
-            #     fdef = guard(find_callname, self.func_ir, arr_def, self.typemap)
-            #     if fdef == ('permutation', 'numpy.random'):
-            #         out = self._run_permutation_array_index(lhs, arr, index_var)
 
             # no need for transformation for whole slices
             if guard(is_whole_slice, self.typemap, self.func_ir, index_var):
@@ -1306,6 +1273,38 @@ class DistributedPass(object):
                         arr, slice_index, start, count), [in_arr, index_var, start_var, count_var],
                         lhs, self)
 
+        return out
+
+    def _run_parallel_access_getsetitem(self, arr, index_var, node, full_node,
+                                                                    equiv_set):
+        """adjust index of getitem/setitem using parfor index on dist arrays
+        """
+        start_var, nodes = self._get_parallel_access_start_var(
+            arr, equiv_set, index_var)
+        # multi-dimensional array could be indexed with 1D index
+        if isinstance(self.typemap[index_var.name], types.Integer):
+            # TODO: avoid repeated start/end generation
+            sub_nodes = self._get_ind_sub(
+                index_var, start_var)
+            out = nodes + sub_nodes
+            _set_getsetitem_index(node, sub_nodes[-1].target)
+        else:
+            index_list = guard(find_build_tuple, self.func_ir, index_var)
+            assert index_list is not None
+            # TODO: avoid repeated start/end generation
+            sub_nodes = self._get_ind_sub(
+                index_list[0], start_var)
+            out = nodes + sub_nodes
+            new_index_list = copy.copy(index_list)
+            new_index_list[0] = sub_nodes[-1].target
+            tuple_var = ir.Var(arr.scope, mk_unique_var("$tuple_var"), arr.loc)
+            self.typemap[tuple_var.name] = self.typemap[index_var.name]
+            tuple_call = ir.Expr.build_tuple(new_index_list, arr.loc)
+            tuple_assign = ir.Assign(tuple_call, tuple_var, arr.loc)
+            out.append(tuple_assign)
+            _set_getsetitem_index(node, tuple_var)
+
+        out.append(full_node)
         return out
 
     def _run_parfor(self, parfor, equiv_set, avail_vars):
