@@ -6,8 +6,7 @@ export NUMBA_DEVELOPER_MODE=1
 export NUMBA_DISABLE_ERROR_MESSAGE_HIGHLIGHTING=1
 export PYTHONFAULTHANDLER=1
 
-python -m bodo.tests.gen_test_data
 
-python -u -m bodo.runtests -v
-mpiexec -n 2 python -u -m bodo.runtests -v
-mpiexec -n 3 python -u -m bodo.runtests -v
+#pytest -s -v -W ignore --pyargs bodo
+#mpiexec -n 2 pytest -s -v -W ignore --pyargs bodo
+#mpiexec -n 3 pytest -s -v -W ignore --pyargs bodo

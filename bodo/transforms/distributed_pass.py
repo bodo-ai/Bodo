@@ -1217,7 +1217,9 @@ class DistributedPass(object):
             # setitem_assign = ir.Assign(setitem_call, err_var, loc)
             # out.append(setitem_assign)
 
-        elif self._is_1D_arr(arr.name) and node.op in ('getitem', 'static_getitem'):
+        elif ((self._is_1D_arr(arr.name) or self._is_1D_Var_arr(arr.name))
+                and (is_expr(node, 'getitem')
+                    or is_expr(node, 'static_getitem'))):
             is_multi_dim = False
             lhs = full_node.target
 
@@ -1542,11 +1544,18 @@ class DistributedPass(object):
         if arr.name in self._1D_Var_parfor_starts:
             return self._1D_Var_parfor_starts[arr.name], []
 
-        nodes = []
-        size_var = self._get_dist_var_len(arr, nodes, equiv_set)
-        div_nodes, start_var, _count_var = self._gen_1D_div(
-            size_var, arr.scope, arr.loc, "get_node_portion")
-        nodes += div_nodes
+        if self._is_1D_arr(arr.name):
+            nodes = []
+            size_var = self._get_dist_var_len(arr, nodes, equiv_set)
+            div_nodes, start_var, _count_var = self._gen_1D_div(
+                size_var, arr.scope, arr.loc, "get_node_portion")
+            nodes += div_nodes
+        else:
+            assert self._is_1D_Var_arr(arr.name)
+            nodes = compile_func_single_block(
+                lambda arr: bodo.libs.distributed_api.dist_exscan(len(arr)),
+                [arr], None, self)
+            start_var = nodes[-1].target
         return start_var, nodes
 
     def _get_dist_var_dim_size(self, var, dim, nodes):

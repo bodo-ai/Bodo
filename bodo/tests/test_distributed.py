@@ -5,7 +5,8 @@ import pytest
 import numba
 import bodo
 from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
-    count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_start_end)
+    count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_start_end,
+    count_array_OneD_Vars)
 
 
 @pytest.mark.parametrize('A', [np.arange(11), np.arange(33).reshape(11, 3)])
@@ -303,3 +304,21 @@ def test_getitem_slice_1D(A, s):
     start, end = get_start_end(len(A))
     np.testing.assert_array_equal(bodo_func(A[start:end], s), impl1(A, s))
     assert count_array_OneDs() > 0
+
+
+@pytest.mark.parametrize('A', [np.arange(11), np.arange(33).reshape(11, 3),
+    pd.Series(['aa', 'bb', 'c']*4)])
+@pytest.mark.parametrize('s', [slice(3), slice(1, 9), slice(7, None),
+    slice(4, 6)])
+def test_getitem_slice_1D_Var(A, s):
+    # get a slice of 1D array
+    def impl1(A, B, s):
+        C = A[B]
+        return C[s]
+
+    bodo_func = bodo.jit(distributed={'A', 'B'})(impl1)
+    start, end = get_start_end(len(A))
+    B = np.arange(len(A)) % 2 != 0
+    np.testing.assert_array_equal(
+        bodo_func(A[start:end], B[start:end], s), impl1(A, B, s))
+    assert count_array_OneD_Vars() > 0
