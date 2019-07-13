@@ -95,5 +95,7 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     // add actual int value to module
     PyObject_SetAttrString(m, "mpi_req_num_bytes",
                             PyLong_FromSize_t(get_mpi_req_num_bytes()));
+    PyObject_SetAttrString(m, "ANY_SOURCE",
+                            PyLong_FromLong((long)MPI_ANY_SOURCE));
     return m;
 }

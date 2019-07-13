@@ -32,6 +32,8 @@ ll.add_symbol('c_send', hdist.hpat_dist_send)
 mpi_req_numba_type = getattr(types, "int"+str(8 * hdist.mpi_req_num_bytes))
 
 MPI_ROOT = 0
+ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
+
 
 class Reduce_Type(Enum):
     Sum = 0
@@ -354,8 +356,7 @@ def prealloc_str_for_bcast_overload(arr):
     return lambda arr: arr
 
 
-# assuming start and step are None
-def slice_getitem(arr, slice_index, arr_start, total_len):
+def slice_getitem(arr, slice_index, arr_start, total_len, is_1D):
     return arr[slice_index]
 
 
@@ -420,6 +421,47 @@ def slice_getitem_from_start_overload(arr, slice_index):
             out_arr = arr[:k]
         bodo.libs.distributed_api.bcast(out_arr)
         return out_arr
+
+    return getitem_impl
+
+
+dummy_use = numba.njit(lambda a: None)
+
+
+def int_getitem(arr, ind, arr_start, total_len, is_1D):
+    return arr[ind]
+
+
+@overload(int_getitem)
+def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
+    def getitem_impl(arr, ind, arr_start, total_len, is_1D):
+        # TODO: multi-dim array support
+
+        if ind >= total_len:
+            raise IndexError("index out of bounds")
+
+        # normalize negative slice
+        ind = ind % total_len
+        # TODO: avoid sending to root in case of 1D since position can be
+        # calculated
+
+        # send data to rank 0 and broadcast
+        root = np.int32(0)
+        tag = np.int32(11)
+        send_arr = np.zeros(1, arr.dtype)
+        if arr_start <= ind < (arr_start + len(arr)):
+            data = arr[ind-arr_start]
+            send_arr = np.full(1, data)
+            isend(send_arr, np.int32(1), root, tag, True)
+
+        rank = bodo.libs.distributed_api.get_rank()
+        val = np.zeros(1, arr.dtype)[0]  # TODO: better way to get zero of type
+        if rank == root:
+            val = recv(arr.dtype, ANY_SOURCE, tag)
+
+        dummy_use(send_arr)
+        val = bcast_scalar(val)
+        return val
 
     return getitem_impl
 

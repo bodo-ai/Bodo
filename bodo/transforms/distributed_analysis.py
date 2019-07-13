@@ -901,9 +901,10 @@ class DistributedAnalysis(object):
                 self.diag_info.append(info)
 
     def _analyze_getitem(self, inst, lhs, rhs, array_dists):
+        in_typ = self.typemap[rhs.value.name]
         # selecting an array from a tuple
         if (rhs.op == 'static_getitem'
-                and isinstance(self.typemap[rhs.value.name], types.BaseTuple)
+                and isinstance(in_typ, types.BaseTuple)
                 and isinstance(rhs.index, int)):
             seq_info = guard(find_build_sequence, self.func_ir, rhs.value)
             if seq_info is not None:
@@ -960,6 +961,15 @@ class DistributedAnalysis(object):
             # TODO: since array and its slice alias, make sure array or its
             # slice or their aliases are not written to
             array_dists[lhs] = Distribution.REP
+            return
+
+        # int index of dist array
+        if isinstance(index_typ, types.Integer):
+            # multi-dim not supported yet, TODO: support
+            if is_np_array_typ(in_typ) and in_typ.ndim > 1:
+                self._set_REP(inst.list_vars(), array_dists)
+            if is_distributable_typ(self.typemap[lhs]):
+                array_dists[lhs] = Distribution.REP
             return
 
         self._set_REP(inst.list_vars(), array_dists)

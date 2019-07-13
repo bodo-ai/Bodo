@@ -322,3 +322,42 @@ def test_getitem_slice_1D_Var(A, s):
     np.testing.assert_array_equal(
         bodo_func(A[start:end], B[start:end], s), impl1(A, B, s))
     assert count_array_OneD_Vars() > 0
+
+
+# TODO: np.arange(33).reshape(11, 3)
+#     pd.Series(['aa', 'bb', 'c'] * 4)])
+@pytest.mark.parametrize('A', [np.arange(11)])
+@pytest.mark.parametrize('s', [0, 1, 3, 7, 10, -1, -2])
+def test_getitem_int_1D(A, s):
+    # get a single value of 1D_Block array
+    def impl1(A, s):
+        return A[s]
+
+    bodo_func = bodo.jit(distributed={'A'})(impl1)
+    start, end = get_start_end(len(A))
+    if A.ndim == 1:
+        assert bodo_func(A[start:end], s) == impl1(A, s)
+    else:
+        np.testing.assert_array_equal(bodo_func(A[start:end], s), impl1(A, s))
+    assert count_array_OneDs() > 0
+
+
+# TODO: np.arange(33).reshape(11, 3)
+@pytest.mark.parametrize('A', [np.arange(11)])
+#    pd.Series(['aa', 'bb', 'c']*4)])
+@pytest.mark.parametrize('s', [0, 1, 3, -1, -2])
+def test_getitem_int_1D_Var(A, s):
+    # get a single value of 1D_Block array
+    def impl1(A, B, s):
+        C = A[B]
+        return C[s]
+
+    bodo_func = bodo.jit(distributed={'A', 'B'})(impl1)
+    start, end = get_start_end(len(A))
+    B = np.arange(len(A)) % 2 != 0
+    if A.ndim == 1:
+        assert bodo_func(A[start:end], B[start:end], s) == impl1(A, B, s)
+    else:
+        np.testing.assert_array_equal(
+            bodo_func(A[start:end], B[start:end], s), impl1(A, B, s))
+    assert count_array_OneD_Vars() > 0
