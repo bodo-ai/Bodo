@@ -256,9 +256,9 @@ def lower_dist_irecv(context, builder, sig, args):
     return builder.call(fn, call_args)
 
 # array, size, pe, tag, cond
-@lower_builtin(distributed_api.isend, types.npytypes.Array, types.int32,
+@lower_builtin(distributed_api.isend, types.Array, types.int32,
                 types.int32, types.int32)
-@lower_builtin(distributed_api.isend, types.npytypes.Array, types.int32,
+@lower_builtin(distributed_api.isend, types.Array, types.int32,
                types.int32, types.int32, types.boolean)
 def lower_dist_isend(context, builder, sig, args):
     # store an int to specify data type
@@ -272,6 +272,33 @@ def lower_dist_isend(context, builder, sig, args):
         cond_arg = args[4]
 
     call_args = [builder.bitcast(out.data, lir.IntType(8).as_pointer()),
+                 args[1], typ_arg,
+                 args[2], args[3], cond_arg]
+
+    # array, size, extra arg type for type enum
+    # pe, tag, cond
+    arg_typs = [lir.IntType(8).as_pointer(),
+                lir.IntType(32), lir.IntType(
+                    32), lir.IntType(32), lir.IntType(32),
+                lir.IntType(1)]
+    fnty = lir.FunctionType(mpi_req_llvm_type, arg_typs)
+    fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_isend")
+    return builder.call(fn, call_args)
+
+
+@lower_builtin(distributed_api.isend, types.voidptr, types.int32,
+               types.int32, types.int32, types.boolean)
+def lower_dist_isend_void(context, builder, sig, args):
+    # store an int to specify data type
+    typ_enum = _numba_to_c_type_map[types.int64]
+    typ_arg = context.get_constant(types.int32, typ_enum)
+
+    if len(args) == 4:
+        cond_arg = context.get_constant(types.boolean, True)
+    else:
+        cond_arg = args[4]
+
+    call_args = [args[0],
                  args[1], typ_arg,
                  args[2], args[3], cond_arg]
 

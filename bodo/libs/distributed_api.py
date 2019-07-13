@@ -434,6 +434,52 @@ def int_getitem(arr, ind, arr_start, total_len, is_1D):
 
 @overload(int_getitem)
 def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
+    if arr == string_array_type:
+        # TODO: fix and test. It fails with weird error on mpich 3.2.1:
+        # MPIDI_CH3U_Buffer_copy(64): Message truncated; 4 bytes received but
+        # buffer size is 4
+        # TODO: other kinds, unicode
+        kind = numba.unicode.PY_UNICODE_1BYTE_KIND
+        char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
+        def str_getitem_impl(arr, ind, arr_start, total_len, is_1D):
+            if ind >= total_len:
+                raise IndexError("index out of bounds")
+
+            # normalize negative slice
+            ind = ind % total_len
+            # TODO: avoid sending to root in case of 1D since position can be
+            # calculated
+
+            # send data to rank 0 and broadcast
+            root = np.int32(0)
+            size_tag = np.int32(10)
+            tag = np.int32(11)
+            send_size = np.zeros(1, np.int64)
+            send_val = ''
+            if arr_start <= ind < (arr_start + len(arr)):
+                send_val = arr[ind-arr_start]
+                send_size[0] = len(send_val)
+                isend(send_size, np.int32(1), root, size_tag, True)
+                isend(send_val._data, np.int32(len(send_val)), root, tag, True)
+
+            rank = bodo.libs.distributed_api.get_rank()
+            val = ''
+            l = 0
+            if rank == root:
+                l = recv(np.int64, ANY_SOURCE, size_tag)
+                val = numba.unicode._empty_string(kind, l, 1)
+                _recv(val._data, np.int32(l), char_typ_enum, ANY_SOURCE, tag)
+
+            dummy_use(send_size)
+            dummy_use(send_val)
+            l = bcast_scalar(l)
+            if rank != root:
+                val = numba.unicode._empty_string(kind, l, 1)
+            c_bcast(val._data, np.int32(l), char_typ_enum)
+            return val
+
+        return str_getitem_impl
+
     def getitem_impl(arr, ind, arr_start, total_len, is_1D):
         # TODO: multi-dim array support
 

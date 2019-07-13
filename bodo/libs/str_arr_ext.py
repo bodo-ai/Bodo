@@ -30,8 +30,17 @@ class StringArray(object):
         self.offsets = str_list
         self.data = str_list
 
+    ndim = 1
     def __repr__(self):
         return 'StringArray({})'.format(self.data)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self.data[key]
+        return StringArray(self.data[key])
 
 
 class StringArrayType(types.IterableType, types.ArrayCompatible):
