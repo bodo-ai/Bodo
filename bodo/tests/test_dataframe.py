@@ -985,7 +985,7 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(distributed={'df'})(test_impl)
         n = 11
         hres, res = bodo_func(n), test_impl(n)
-        self.assertEqual(count_array_OneDs(), 3)
+        self.assertTrue(count_array_OneDs() >= 3)
         self.assertEqual(count_parfor_OneDs(), 2)
         dist_sum = bodo.jit(
             lambda a: bodo.libs.distributed_api.dist_reduce(
