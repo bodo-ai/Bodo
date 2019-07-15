@@ -560,6 +560,10 @@ class DistributedAnalysis(object):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ('get_dataframe_index', 'bodo.hiframes.pd_dataframe_ext'):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ('compute_split_view', 'bodo.hiframes.split_impl'):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
