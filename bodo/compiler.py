@@ -2,6 +2,7 @@
 Defines Bodo's compiler pipeline.
 """
 import os
+import warnings
 import bodo
 import bodo.transforms
 import bodo.transforms.untyped_pass
@@ -27,6 +28,10 @@ if config._has_h5py:
 # workaround for Numba #3876 issue with large labels in mortgage benchmark
 from llvmlite import binding
 binding.set_option("tmp", "-non-global-value-max-name-size=2048")
+
+
+from numba.errors import NumbaPerformanceWarning
+warnings.simplefilter('ignore', category=NumbaPerformanceWarning)
 
 
 class BodoPipeline(numba.compiler.BasePipeline):
