@@ -377,7 +377,7 @@ class DataFramePass(object):
     def _run_setitem(self, inst):
         target_typ = self.typemap[inst.target.name]
         nodes = []
-        index_var = get_getsetitem_index_var(rhs, self.typemap, nodes)
+        index_var = get_getsetitem_index_var(inst, self.typemap, nodes)
         index_typ = self.typemap[index_var.name]
 
         if self._is_df_iat_var(inst.target):
