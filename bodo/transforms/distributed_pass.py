@@ -1275,7 +1275,9 @@ class DistributedPass(object):
                         [in_arr, index_var, start_var, size_var],
                         lhs, self, extra_globals={'_is_1D': is_1D})
             # int index like A[11]
-            elif isinstance(index_typ, types.Integer):
+            elif (isinstance(index_typ, types.Integer)
+                    and (arr.name, index_var.name) not in
+                        self._parallel_accesses):
                 in_arr = full_node.value.value
                 start_var, nodes = self._get_dist_start_var(in_arr, equiv_set)
                 size_var = self._get_dist_var_len(in_arr, nodes, equiv_set)

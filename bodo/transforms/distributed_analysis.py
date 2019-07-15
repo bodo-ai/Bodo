@@ -341,7 +341,7 @@ class DistributedAnalysis(object):
         array_accesses = _get_array_accesses(
             parfor.loop_body, self.func_ir, self.typemap)
         par_index_var = parfor.loop_nests[0].index_variable.name
-        #stencil_accesses, _ = get_stencil_accesses(parfor, self.typemap)
+
         for (arr, index) in array_accesses:
             # XXX sometimes copy propagation doesn't work for parfor indices
             # so see if the index has a single variable definition and use it
@@ -349,7 +349,7 @@ class DistributedAnalysis(object):
             ind_def = self.func_ir._definitions[index]
             if len(ind_def) == 1 and isinstance(ind_def[0], ir.Var):
                 index = ind_def[0].name
-            if index == par_index_var: #or index in stencil_accesses:
+            if index == par_index_var:
                 parfor_arrs.add(arr)
                 self._parallel_accesses.add((arr, index))
 

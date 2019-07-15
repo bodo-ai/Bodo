@@ -270,12 +270,13 @@ def allgatherv_overload(data):
 def bcast(data):  # pragma: no cover
     return
 
+
 @overload(bcast)
 def bcast_overload(data):
     if isinstance(data, types.Array):
         def bcast_impl(data):
             typ_enum = get_type_enum(data)
-            count = len(data)
+            count = data.size
             assert count < INT_MAX
             c_bcast(data.ctypes, np.int32(count), typ_enum)
             return
@@ -416,7 +417,7 @@ def slice_getitem_from_start_overload(arr, slice_index):
     def getitem_impl(arr, slice_index):
         rank = bodo.libs.distributed_api.get_rank()
         k = slice_index.stop
-        out_arr = np.empty(k, arr.dtype)
+        out_arr = np.empty((k,) + arr.shape[1:], arr.dtype)
         if rank == 0:
             out_arr = arr[:k]
         bodo.libs.distributed_api.bcast(out_arr)
