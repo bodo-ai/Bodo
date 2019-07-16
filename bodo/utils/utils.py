@@ -315,7 +315,8 @@ def is_array_typ(var_typ):
     return (is_np_array_typ(var_typ)
         or var_typ in (string_array_type, list_string_array_type,
             bodo.hiframes.split_impl.string_array_split_view_type)
-        or isinstance(var_typ, bodo.hiframes.pd_series_ext.SeriesType))
+        or isinstance(var_typ, bodo.hiframes.pd_series_ext.SeriesType)
+        or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ))
 
 
 def is_np_array_typ(var_typ):
