@@ -466,5 +466,24 @@ class TestBasic(BaseTest):
             A, B, _ = hpat_func3(arr_len)
             np.testing.assert_allclose(A, B)
 
+    def test_np_dot(self):
+        def test_impl(n, k):
+            A = np.ones((n, k))
+            g = np.arange(k).astype(np.float64)
+            B = np.dot(A, g)
+            return B.sum()
+
+        bodo_func = bodo.jit(test_impl)
+        n = 128
+        k = 3
+        np.testing.assert_allclose(bodo_func(n, k), test_impl(n, k))
+        # make sure g is replicated but A and B stay distributed
+        # dist analysis of getitem for g inside the parfor should return REP
+        self.assertTrue(count_array_REPs() >= 1)
+        self.assertTrue(count_parfor_REPs() >= 1)
+        self.assertTrue(count_array_OneDs() >= 1)
+        self.assertTrue(count_parfor_OneDs() >= 1)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -820,7 +820,6 @@ class DistributedAnalysis(object):
         return
 
     def _analyze_call_np_dot(self, lhs, args, array_dists):
-
         arg0 = args[0].name
         arg1 = args[1].name
         ndim0 = self.typemap[arg0].ndim
@@ -957,6 +956,12 @@ class DistributedAnalysis(object):
         if guard(is_whole_slice, self.typemap, self.func_ir, index_var,
                     accept_stride=True):
             self._meet_array_dists(lhs, rhs.value.name, array_dists)
+            return
+
+        # avoid parallel slice/scalar getitem when inside a parfor
+        # examples: test_np_dot, logistic_regression_rand
+        if self.in_parallel_parfor:
+            self._set_REP(inst.list_vars(), array_dists)
             return
 
         # output of operations like S.head() is REP since it's a "small" slice
