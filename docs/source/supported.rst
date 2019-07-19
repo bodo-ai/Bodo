@@ -131,110 +131,16 @@ This report suggests that the function has an array that is distributed in
 the optimization passes. The report also suggests that there is a `parfor`
 (data-parallel for loop) that is 1D_Block distributed.
 
-Numpy dot() Parallelization
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The `np.dot` function has different distribution rules based on the number of
-dimensions and the distributions of its input arrays. The example below
-demonstrates two cases::
-
-    @bodo.jit
-    def example_dot(N, D):
-        X = np.random.ranf((N, D))
-        Y = np.random.ranf(N)
-        w = np.dot(Y, X)
-        z = np.dot(X, w)
-        return z.sum()
-
-    example_dot(1024, 10)
-    bodo.distribution_report()
-
-Here is the output of `bodo.distribution_report()`::
-
-    Array distributions:
-       $X.43                1D_Block
-       $Y.45                1D_Block
-       $w.44                REP
-
-    Parfor distributions:
-       0                    1D_Block
-       1                    1D_Block
-       2                    1D_Block
-
-The first `dot` has a 1D array with `1D_Block` distribution as first input
-(`Y`), while the second input is a 2D array with `1D_Block` distribution (`X`).
-Hence, `dot` is a sum reduction across distributed datasets and therefore,
-the output (`w`) is on the `reduce` side and is assiged `REP` distribution.
-
-The second `dot` has a 2D array with `1D_Block` distribution (`X`) as first
-input, while the second input is a REP array (`w`). Hence, the computation is
-data-parallel across rows of `X`, which implies a `1D_Block` distibution for
-output (`z`).
-
-Variable `z` does not exist in the distribution report since
-the compiler optimizations were able to eliminate it. Its values are generated
-and consumed on-the-fly, without memory load/store overheads.
-
-Supported Numpy Operations
---------------------------
-
-Below is the list of the data-parallel Numpy operators that Bodo can optimize
-and parallelize.
-
-1. Numpy `element-wise` array operations:
-
-    * Unary operators: ``+`` ``-`` ``~``
-    * Binary operators: ``+`` ``-`` ``*`` ``/`` ``/?`` ``%`` ``|`` ``>>`` ``^``
-      ``<<`` ``&`` ``**`` ``//``
-    * Comparison operators: ``==`` ``!=`` ``<`` ``<=`` ``>`` ``>=``
-    * data-parallel math operations: ``add``, ``subtract``, ``multiply``,
-      ``divide``, ``logaddexp``, ``logaddexp2``, ``true_divide``,
-      ``floor_divide``, ``negative``, ``power``, ``remainder``,
-      ``mod``, ``fmod``, ``abs``, ``absolute``, ``fabs``, ``rint``, ``sign``,
-      ``conj``, ``exp``, ``exp2``, ``log``, ``log2``, ``log10``, ``expm1``,
-      ``log1p``, ``sqrt``, ``square``, ``reciprocal``, ``conjugate``
-    * Trigonometric functions: ``sin``, ``cos``, ``tan``, ``arcsin``,
-      ``arccos``, ``arctan``, ``arctan2``, ``hypot``, ``sinh``, ``cosh``,
-      ``tanh``, ``arcsinh``, ``arccosh``, ``arctanh``, ``deg2rad``,
-      ``rad2deg``, ``degrees``, ``radians``
-    * Bit manipulation functions: ``bitwise_and``, ``bitwise_or``,
-      ``bitwise_xor``, ``bitwise_not``, ``invert``, ``left_shift``,
-      ``right_shift``
-
-2. Numpy reduction functions ``sum``, ``prod``, ``min``, ``max``, ``argmin``
-   and ``argmax``. Currently, `int64` data type is not supported for
-   ``argmin`` and ``argmax``.
-
-3. Numpy array creation functions ``empty``, ``zeros``, ``ones``,
-   ``empty_like``, ``zeros_like``, ``ones_like``, ``full_like``, ``copy``,
-   ``arange`` and ``linspace``.
-
-4. Random number generator functions: ``rand``, ``randn``,
-   ``ranf``, ``random_sample``, ``sample``, ``random``,
-   ``standard_normal``, ``chisquare``, ``weibull``, ``power``, ``geometric``,
-   ``exponential``, ``poisson``, ``rayleigh``, ``normal``, ``uniform``,
-   ``beta``, ``binomial``, ``f``, ``gamma``, ``lognormal``, ``laplace``,
-   ``randint``, ``triangular``.
-
-4. Numpy ``dot`` function between a matrix and a vector, or two vectors.
-
-5. Numpy array comprehensions, such as::
-
-    A = np.array([i**2 for i in range(N)])
-
-Optional arguments are not supported unless if explicitly mentioned here.
-For operations on multi-dimensional arrays, automatic broadcast of
-dimensions of size 1 is not supported.
-
 
 Explicit Parallel Loops
 -----------------------
 
-Sometimes explicit parallel loops are required since a program cannot be written
-in terms of data-parallel operators easily.
+Sometimes explicit parallel loops are required since a program cannot be
+written in terms of data-parallel operators easily.
 In this case, one can use Bodo's ``prange`` in place of ``range`` to specify
 that a loop can be parallelized. The user is required to make sure the
-loop does not have cross iteration dependencies except for supported reductions.
+loop does not have cross iteration dependencies except for supported
+reductions.
 
 The example below demonstrates a parallel loop with a reduction::
 
@@ -254,23 +160,33 @@ supported.
 File I/O
 --------
 
-Currently, Bodo supports I/O for CSV, `HDF5 <http://www.h5py.org/>`_ and
-`Parquet <http://parquet.apache.org/>`_ formats.
+Currently, Bodo supports I/O for `Parquet <http://parquet.apache.org/>`_,
+CSV, Numpy binaries and `HDF5 <http://www.h5py.org/>`_ formats.
+
+For Parquet and CSV, the syntax is the same as Pandas::
+
+    @bodo.jit
+    def example_pq():
+        df = pd.read_parquet('example.pq')
+
+
 For HDF5, the syntax is the same as the `h5py <http://www.h5py.org/>`_ package.
 For example::
 
     @bodo.jit
-    def example():
-        f = h5py.File("lr.hdf5", "r")
+    def example_h5():
+        f = h5py.File("data.hdf5", "r")
         X = f['points'][:]
         Y = f['responses'][:]
 
-For Parquet, the syntax is the same as Pandas::
+Numpy's `fromfile` and `tofile` are supported as below::
 
     @bodo.jit
-    def kde():
-        df = pd.read_parquet('kde.parquet')
-        X = df['points'].values
+    def example_np_io():
+        A = np.fromfile("myfile.dat", np.float64)
+        ...
+        A.tofile("newfile.dat")
+
 
 Bodo automatically parallelizes I/O of different nodes in a distributed setting
 without any code changes.
@@ -282,8 +198,18 @@ Otherwise, the user is responsile for providing the types similar to
 <http://numba.pydata.org/numba-doc/latest/reference/types.html>`_. For
 example::
 
+    @bodo.jit(locals={'df':{'one': bodo.float64[:],
+                      'two': bodo.string_array_type,
+                      'three': bodo.bool_[:],
+                      'four': bodo.float64[:],
+                      'five': bodo.string_array_type,
+                      }})
+    def example_df_schema(file_name):
+        df = pd.read_parquet(file_name)
+
+
      @bodo.jit(locals={'X': bodo.float64[:,:], 'Y': bodo.float64[:]})
-     def example(file_name):
+     def example_h5(file_name):
          f = h5py.File(file_name, "r")
          X = f['points'][:]
          Y = f['responses'][:]
@@ -291,39 +217,9 @@ example::
 Print
 -----
 
-Using ``print`` function is only supported for `REP` values. Print is called on
-one processor only since all processors have the same copy.
-
-
-Strings
--------
-
-Currently, Bodo provides basic ASCII string support. Constant strings, equality
-comparison of strings (``==`` and ``!=``), ``split`` function, extracting
-characters (e.g. ``s[1]``), concatination, and convertion to `int` and `float`
-are supported. Here are some examples::
-
-    s = 'test_str'
-    flag = (s == 'test_str')
-    flag = (s != 'test_str')
-    s_list = s.split('_')
-    c = s[1]
-    s = s+'_test'
-    a = int('12')
-    b = float('1.2')
-
-Dictionaries
-------------
-
-Bodo supports basic integer dictionaries currently. ``DictIntInt`` is the type
-for dictionaries with 64-bit integer keys and values, while ``DictInt32Int32``
-is for 32-bit integer ones. Getting and setting values, ``pop`` and ``get``
-operators, as well as ``min`` and ``max`` of keys is supported. For example::
-
-    d = DictIntInt()
-    d[2] = 3
-    a = d[2]
-    b = d.get(3, 0)
-    d.pop(2)
-    d[3] = 4
-    a = min(d.keys())
+Bodo assigns `REP` to distributable arguments of ``print`` functions
+(to make sure values are identical on all processors) and prints values
+only once instead of one print per process. The intention is to avoid
+unexpected behavior, especially when running on large number of processors.
+Programmers can use `bodo.parallel_print` for printing distributed chunks of
+data or parallel prints of other values.

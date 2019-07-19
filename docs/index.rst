@@ -13,6 +13,7 @@ Bodo documentation
    source/overview
    source/supported
    source/supportedpandas
+   source/numpy_supported
    source/notsupported
    source/aws
    source/jupyter
