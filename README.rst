@@ -15,7 +15,7 @@ Bodo
 A compiler-based framework for big data in Python
 #################################################
 
-High Performance Analytics Toolkit (Bodo) scales analytics/ML codes in Python
+Bodo scales analytics/ML codes in Python
 to bare-metal cluster/cloud performance automatically.
 It compiles a subset of Python (Pandas/Numpy) to efficient parallel binaries
 with MPI, requiring only minimal code changes.

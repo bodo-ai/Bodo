@@ -3,24 +3,22 @@
 User Guide
 ==========
 
-Bodo automatically parallelizes a subset of Python that is commonly used for
+Bodo supports a subset of Python that is commonly used for
 data analytics and machine learning. This section describes this subset
-and how parallelization is performed.
+and explains how parallelization is performed.
+The supported data structures for parallel/distributed datasets
+are `Numpy <http://www.numpy.org/>`_ arrays, and
+`Pandas <http://pandas.pydata.org/>`_ Dataframe, Series and Index objects.
 
-Bodo compiles and parallelizes the functions annotated with the `@bodo.jit`
-decorator. The decorated functions are replaced with generated parallel
-binaries that run on bare metal.
-The supported data structures for large datasets
-are `Numpy <http://www.numpy.org/>`_ arrays and
-`Pandas <http://pandas.pydata.org/>`_ dataframes.
 
 Automatic Parallelization
 -------------------------
 
 Bodo parallelizes programs automatically based on the `map-reduce` parallel
 pattern. Put simply, this means the compiler analyzes the program to
-determine whether each array should be distributed or not. This analysis uses
-the semantics of array operations as the program below demonstrates::
+determine whether each parallelizable data structure and operation should
+be distributed or not. This analysis uses the semantics of operations as
+the program below demonstrates::
 
     @bodo.jit
     def example_1D():
@@ -37,24 +35,28 @@ In `map-reduce` terminology, `A` is output of a `map` operator and is input
 to a `reduce` operator. Hence,
 Bodo distributes `A` and all operations associated with `A`
 (i.e. I/O and `np.sum`) and generates a parallel binary.
-This binary replaces the `example_1D` function in the Python program.
+This binary replaces the `example_1D` function in the Python program
+automatically.
 
 Bodo can only analyze and parallelize the supported data-parallel operations of
-Numpy and Pandas (listed below). Hence, only the supported operations can be
+Numpy and Pandas (listed in this manual).
+Hence, only the supported operations can be
 used for distributed datasets and computations.
-The sequential computation on small data can be any code that
+The sequential computation on other data structures can be any code that
 `Numba supports <http://numba.pydata.org/numba-doc/latest/index.html>`_.
 
-Array Distribution
+Data Distribution
 ~~~~~~~~~~~~~~~~~~
 
-Arrays are distributed in one-dimensional block (`1D_Block`) manner
-among processors. This means that processors own equal chunks of each
-distributed array, except possibly the last processor.
-Multi-dimensional arrays are distributed along their first dimension by default.
-For example, chunks of rows are distributed for a 2D matrix.
-The figure below
-illustrates the distribution of a 9-element one-dimensional Numpy array, as well
+Data is distributed in one-dimensional block (`1D_Block`) manner
+among processors by default. This means that processors own equal
+chunks of each distributed array, DataFrame or Series,
+except possibly the last processor.
+Dataframes and multi-dimensional arrays are distributed along their
+first dimension.
+For example, chunks of rows are distributed for dataframes and 2D matrices.
+The figure below illustrates the distribution of a 9-element
+one-dimensional Numpy array, as well
 as a 9 by 2 array, on three processors:
 
 .. image:: ../figs/dist.jpg
