@@ -26,6 +26,8 @@ bodo/utils/__pycache__
 build/
 docs/_build/
 docs/gh-pages/
+docs/development/_build/
+docs/development/gh-pages/
 *.DS_Store
 
 # VS Code config

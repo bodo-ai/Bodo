@@ -14,7 +14,5 @@ Bodo documentation
    source/supported
    source/supportedpandas
    source/notsupported
-   source/install
-   source/development
    source/aws
    source/jupyter
