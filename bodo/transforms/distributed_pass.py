@@ -91,7 +91,8 @@ class DistributedPass(object):
 
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
 
-        #  transform
+        # transform
+        self._gen_init_code(self.func_ir.blocks)
         self.func_ir.blocks = self._run_dist_pass(self.func_ir.blocks)
 
         while remove_dead(self.func_ir.blocks, self.func_ir.arg_names,
@@ -1648,25 +1649,20 @@ class DistributedPass(object):
             div_nodes.append(size_assign)
             size_var = new_size_var
 
-        def impl(n):
-            rank = _get_rank()
-            n_pes = _get_size()
+        def impl(n, rank, n_pes):
             start = _get_start(n, n_pes, rank)
             count = _get_node_portion(n, n_pes, rank)
             return start, count
 
         if end_call_name == 'get_end':
-            def impl(n):
-                rank = _get_rank()
-                n_pes = _get_size()
+            def impl(n, rank, n_pes):
                 start = _get_start(n, n_pes, rank)
                 count = _get_end(n, n_pes, rank)
                 return start, count
 
-        div_nodes += compile_func_single_block(impl, (size_var,), None, self,
+        div_nodes += compile_func_single_block(
+            impl, (size_var, self.rank_var, self.n_pes_var), None, self,
             extra_globals={
-                '_get_rank': bodo.libs.distributed_api.get_rank,
-                '_get_size': bodo.libs.distributed_api.get_size,
                 '_get_start': bodo.libs.distributed_api.get_start,
                 '_get_node_portion': bodo.libs.distributed_api.get_node_portion,
                 '_get_end': bodo.libs.distributed_api.get_end,
@@ -1852,6 +1848,38 @@ class DistributedPass(object):
         nodes = f_block.body[:-3]
         nodes[-1].target = reduce_var
         return nodes
+
+    def _gen_init_code(self, blocks):
+        """generate get_rank() and get_size() calls and store the variables
+        to avoid repeated generation.
+        """
+        # get rank variable
+        nodes = compile_func_single_block(
+            lambda: _get_rank(),
+            (), None, self, extra_globals={
+                '_get_rank': bodo.libs.distributed_api.get_rank})
+        rank_var = nodes[-1].target
+        # rename rank variable for readability
+        rank_var.name = mk_unique_var('rank_var')
+        self.typemap[rank_var.name] = types.int32
+        self.rank_var = rank_var
+
+        # get n_pes variable
+        nodes += compile_func_single_block(
+            lambda: _get_size(),
+            (), None, self, extra_globals={
+                '_get_size': bodo.libs.distributed_api.get_size})
+        n_pes_var = nodes[-1].target
+        # rename n_pes variable for readability
+        n_pes_var.name = mk_unique_var('n_pes_var')
+        self.typemap[n_pes_var.name] = types.int32
+        self.n_pes_var = n_pes_var
+
+        # add nodes to first block
+        topo_order = find_topo_order(blocks)
+        first_block = blocks[topo_order[0]]
+        first_block.body = nodes + first_block.body
+        return
 
     def _update_avail_vars(self, avail_vars, nodes):
         for stmt in nodes:
