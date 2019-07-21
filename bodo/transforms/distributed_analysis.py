@@ -26,7 +26,7 @@ from bodo.utils.utils import (get_constant, is_alloc_callname,
                         is_whole_slice, is_array_typ, is_array_container_typ,
                         is_np_array_typ, find_build_tuple, debug_prints,
                         is_const_slice, is_expr, is_distributable_typ,
-                        is_static_getsetitem)
+                        is_static_getsetitem, get_getsetitem_index_var)
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
 
@@ -916,10 +916,8 @@ class DistributedAnalysis(object):
                 self._meet_array_dists(lhs, arr.name, array_dists)
                 return
 
-        index_var = rhs.index_var if is_static_getsetitem(rhs) else rhs.index
-        if index_var is None:
-            self._set_REP(inst.list_vars(), array_dists)
-            return
+        # get index_var without changing IR since we are in analysis
+        index_var = get_getsetitem_index_var(rhs, self.typemap, [])
 
         if (rhs.value.name, index_var.name) in self._parallel_accesses:
             # XXX: is this always valid? should be done second pass?
@@ -960,7 +958,7 @@ class DistributedAnalysis(object):
 
         # avoid parallel slice/scalar getitem when inside a parfor
         # examples: test_np_dot, logistic_regression_rand
-        if self.in_parallel_parfor:
+        if self.in_parallel_parfor != -1:
             self._set_REP(inst.list_vars(), array_dists)
             return
 
