@@ -329,9 +329,8 @@ class DistributedPass(object):
             arr = rhs.args[3]
             nodes = []
             size_var = self._get_dist_var_len(arr, nodes, equiv_set)
-            div_nodes, start_var, count_var = self._gen_1D_div(
-                size_var, scope, loc, "get_node_portion")
-            nodes += div_nodes
+            start_var = self._get_1D_start(size_var, nodes)
+            count_var = self._get_1D_count(size_var, nodes)
             assert self.typemap[arr.name].ndim == 1, "only 1D arrs in Xenon"
             rhs.args += [start_var, count_var]
 
@@ -346,8 +345,9 @@ class DistributedPass(object):
             arr = lhs
             size_var = rhs.args[3]
             assert self.typemap[size_var.name] == types.intp
-            out, start_var, count_var = self._gen_1D_div(
-                size_var, scope, loc, "get_node_portion")
+            out = []
+            start_var = self._get_1D_start(size_var, out)
+            count_var = self._get_1D_count(size_var, out)
             rhs.args.remove(size_var)
             rhs.args.append(start_var)
             rhs.args.append(count_var)
@@ -906,12 +906,9 @@ class DistributedPass(object):
             return out
 
         arr = args[0]
-        ndim = self.typemap[arr.name].ndim
         out = self._gen_1D_Var_len(arr)
         total_length = out[-1].target
-        div_nodes, start_var, count_var = self._gen_1D_div(
-            total_length, arr.scope, arr.loc, "get_node_portion")
-        out += div_nodes
+        count_var = self._get_1D_count(total_length, out)
 
         def f(arr, count):  # pragma: no cover
             b_arr = bodo.libs.distributed_api.rebalance_array_parallel(arr, count)
@@ -952,10 +949,10 @@ class DistributedPass(object):
         new_size_var = None
 
         # size is single int var
-        if isinstance(size_var, ir.Var) and isinstance(self.typemap[size_var.name], types.Integer):
-            out, _start_var, end_var = self._gen_1D_div(
-                size_var, scope, loc, "get_node_portion")
-            new_size_var = end_var
+        if isinstance(size_var, ir.Var) and isinstance(
+                                   self.typemap[size_var.name], types.Integer):
+            count_var = self._get_1D_count(size_var, out)
+            new_size_var = count_var
             return out, new_size_var
 
         # tuple variable of ints
@@ -980,12 +977,10 @@ class DistributedPass(object):
             assert isinstance(size_var, (tuple, list))
             size_list = list(size_var)
 
-        gen_nodes, _start_var, end_var = self._gen_1D_div(
-            size_list[0], scope, loc, "get_node_portion")
-        out += gen_nodes
+        count_var = self._get_1D_count(size_list[0], out)
         ndims = len(size_list)
         new_size_list = copy.copy(size_list)
-        new_size_list[0] = end_var
+        new_size_list[0] = count_var
         tuple_var = ir.Var(scope, mk_unique_var("$tuple_var"), loc)
         self.typemap[tuple_var.name] = types.containers.UniTuple(
             types.intp, ndims)
@@ -1345,9 +1340,8 @@ class DistributedPass(object):
         loc = parfor.init_block.loc
         range_size = parfor.loop_nests[0].stop
         out = []
-        div_nodes, start_var, end_var = self._gen_1D_div(
-            range_size, scope, loc, "get_end")
-        out += div_nodes
+        start_var = self._get_1D_start(range_size, out)
+        end_var = self._get_1D_end(range_size, out)
         # print_node = ir.Print([start_var, end_var, range_size], None, loc)
         # self.calltypes[print_node] = signature(types.none, types.int64, types.int64, types.intp)
         # out.append(print_node)
@@ -1552,9 +1546,8 @@ class DistributedPass(object):
             return nodes, start_var, count_var
 
         size_var = self._get_dist_var_len(arr, nodes, equiv_set)
-        div_nodes, start_var, count_var = self._gen_1D_div(
-            size_var, arr.scope, arr.loc, "get_node_portion")
-        nodes += div_nodes
+        start_var = self._get_1D_start(size_var, nodes)
+        count_var = self._get_1D_count(size_var, nodes)
         return nodes, start_var, count_var
 
     def _get_dist_start_var(self, arr, equiv_set):
@@ -1564,9 +1557,7 @@ class DistributedPass(object):
         if self._is_1D_arr(arr.name):
             nodes = []
             size_var = self._get_dist_var_len(arr, nodes, equiv_set)
-            div_nodes, start_var, _count_var = self._gen_1D_div(
-                size_var, arr.scope, arr.loc, "get_node_portion")
-            nodes += div_nodes
+            start_var = self._get_1D_start(size_var, nodes)
         else:
             assert self._is_1D_Var_arr(arr.name)
             nodes = compile_func_single_block(
@@ -1620,9 +1611,9 @@ class DistributedPass(object):
         shape = equiv_set.get_shape(arr)
         if isinstance(shape, (list, tuple)) and len(shape) > 0:
             size_var = shape[0]
-            div_nodes, start_var, _count_var = self._gen_1D_div(
-                    size_var, arr.scope, arr.loc, "get_node_portion")
-            return start_var, div_nodes
+            nodes = []
+            start_var = self._get_1D_start(size_var, nodes)
+            return start_var, nodes
 
         raise ValueError("invalid parallel access")
 
@@ -1637,44 +1628,6 @@ class DistributedPass(object):
             f_block, [arr, ir.Const(Reduce_Type.Sum.value, arr.loc)])
         nodes = f_block.body[:-3]  # remove none return
         return nodes
-
-    def _gen_1D_div(self, size_var, scope, loc, end_call_name):
-        div_nodes = []
-        if isinstance(size_var, int):
-            new_size_var = ir.Var(
-                scope, mk_unique_var("_size_var"), loc)
-            self.typemap[new_size_var.name] = types.int64
-            size_assign = ir.Assign(ir.Const(size_var, loc), new_size_var, loc)
-            div_nodes.append(size_assign)
-            size_var = new_size_var
-
-        def impl(n, rank, n_pes):
-            start = _get_start(n, n_pes, rank)
-            count = _get_node_portion(n, n_pes, rank)
-            return start, count
-
-        if end_call_name == 'get_end':
-            def impl(n, rank, n_pes):
-                start = _get_start(n, n_pes, rank)
-                count = _get_end(n, n_pes, rank)
-                return start, count
-
-        div_nodes += compile_func_single_block(
-            impl, (size_var, self.rank_var, self.n_pes_var), None, self,
-            extra_globals={
-                '_get_start': bodo.libs.distributed_api.get_start,
-                '_get_node_portion': bodo.libs.distributed_api.get_node_portion,
-                '_get_end': bodo.libs.distributed_api.get_end,
-                })
-        tup_var = div_nodes[-1].target
-        start_var = ir.Var(scope, mk_unique_var("start_var"), loc)
-        self.typemap[start_var.name] = types.int64
-        gen_getitem(start_var, tup_var, 0, self.calltypes, div_nodes)
-        end_var = ir.Var(scope, mk_unique_var("end_var"), loc)
-        self.typemap[end_var.name] = types.int64
-        gen_getitem(end_var, tup_var, 1, self.calltypes, div_nodes)
-
-        return div_nodes, start_var, end_var
 
     def _get_1D_start(self, size_var, nodes):
         """get start index of size_var in 1D_Block distribution
