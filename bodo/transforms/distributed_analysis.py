@@ -240,9 +240,7 @@ class DistributedAnalysis(object):
         if isinstance(rhs, ir.Expr) and rhs.op == 'cast':
             rhs = rhs.value
 
-        if isinstance(rhs, ir.Var) and (is_array_typ(self.typemap[lhs])
-                or isinstance(self.typemap[lhs], (SeriesType, DataFrameType))
-                                     or is_array_container_typ(self.typemap[lhs])):
+        if isinstance(rhs, ir.Var) and is_distributable_typ(self.typemap[lhs]):
             self._meet_array_dists(lhs, rhs.name, array_dists)
             return
         elif (is_array_typ(self.typemap[lhs])
@@ -877,15 +875,11 @@ class DistributedAnalysis(object):
     def _analyze_call_set_REP(self, lhs, args, array_dists, fdef=None):
         arrs = []
         for v in args:
-            if (is_array_typ(self.typemap[v.name])
-                    or is_array_container_typ(self.typemap[v.name])
-                    or isinstance(self.typemap[v.name], DataFrameType)):
+            if is_distributable_typ(self.typemap[v.name]):
                 dprint("dist setting call arg REP {} in {}".format(v.name, fdef))
                 array_dists[v.name] = Distribution.REP
                 arrs.append(v.name)
-        if (is_array_typ(self.typemap[lhs])
-                or is_array_container_typ(self.typemap[lhs])
-                or isinstance(self.typemap[lhs], DataFrameType)):
+        if is_distributable_typ(self.typemap[lhs]):
             dprint("dist setting call out REP {} in {}".format(lhs, fdef))
             array_dists[lhs] = Distribution.REP
             arrs.append(lhs)
@@ -1053,10 +1047,7 @@ class DistributedAnalysis(object):
             varname = var.name
             # Handle SeriesType since it comes from Arg node and it could
             # have user-defined distribution
-            if (is_array_typ(self.typemap[varname])
-                    or is_array_container_typ(self.typemap[varname])
-                    or isinstance(
-                        self.typemap[varname], (SeriesType, DataFrameType))):
+            if is_distributable_typ(self.typemap[varname]):
                 dprint("dist setting REP {}".format(varname))
                 array_dists[varname] = Distribution.REP
             # handle tuples of arrays
