@@ -1,5 +1,6 @@
 import operator
 from enum import Enum
+import math
 import time
 import numpy as np
 
@@ -600,9 +601,11 @@ def remove_dist_calls(rhs, lives, call_list):
 numba.ir_utils.remove_call_handlers.append(remove_dist_calls)
 
 
-def get_start(total_size, pes, rank):  # pragma: no cover
-    """get end point of range for parfor division"""
-    return 0
+@numba.njit
+def get_start(total_size, pes, rank):
+    """get start index in 1D distribution"""
+    chunk = math.ceil(total_size/pes)
+    return min(total_size, rank * chunk)
 
 
 def get_end(total_size, pes, rank):  # pragma: no cover
@@ -714,14 +717,6 @@ class DistRebalanceParallel(AbstractTemplate):
         assert not kws
         assert len(args) == 2  # array and count
         return signature(args[0], *unliteral_all(args))
-
-
-@infer_global(get_start)
-class DistStart(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 3
-        return signature(types.int64, *unliteral_all(args))
 
 
 @infer_global(get_end)

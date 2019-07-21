@@ -6,6 +6,7 @@ import types as pytypes  # avoid confusion with numba.types
 import copy
 import warnings
 from collections import defaultdict
+import math
 import numpy as np
 import pandas as pd
 import numba
@@ -1633,9 +1634,8 @@ class DistributedPass(object):
         """get start index of size_var in 1D_Block distribution
         """
         nodes += compile_func_single_block(
-            lambda n, rank, n_pes: _get_start(n, n_pes, rank),
-            (size_var, self.rank_var, self.n_pes_var), None, self,
-            extra_globals={'_get_start': bodo.libs.distributed_api.get_start})
+            lambda n, rank, n_pes: min(n, rank * math.ceil(n / n_pes)),
+            (size_var, self.rank_var, self.n_pes_var), None, self)
         start_var = nodes[-1].target
         # rename for readability
         start_var.name = mk_unique_var('start_var')

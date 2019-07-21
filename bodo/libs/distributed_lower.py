@@ -19,7 +19,6 @@ from bodo.libs.distributed_api import mpi_req_numba_type, ReqArrayType, req_arra
 from llvmlite import ir as lir
 from bodo.libs import hdist
 import llvmlite.binding as ll
-ll.add_symbol('hpat_dist_get_start', hdist.hpat_dist_get_start)
 ll.add_symbol('hpat_dist_get_end', hdist.hpat_dist_get_end)
 ll.add_symbol('hpat_dist_get_node_portion', hdist.hpat_dist_get_node_portion)
 ll.add_symbol('hpat_dist_get_time', hdist.hpat_dist_get_time)
@@ -46,15 +45,6 @@ ll.add_symbol('permutation_array_index', hdist.permutation_array_index)
 
 # get size dynamically from C code
 mpi_req_llvm_type = lir.IntType(8 * hdist.mpi_req_num_bytes)
-
-
-@lower_builtin(distributed_api.get_start, types.int64, types.int32, types.int32)
-def dist_get_start(context, builder, sig, args):
-    fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(64),
-                                              lir.IntType(32), lir.IntType(32)])
-    fn = builder.module.get_or_insert_function(
-        fnty, name="hpat_dist_get_start")
-    return builder.call(fn, [args[0], args[1], args[2]])
 
 
 @lower_builtin(distributed_api.get_end, types.int64, types.int32, types.int32)

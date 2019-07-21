@@ -3,6 +3,7 @@ Helper functions for transformations.
 """
 import pandas as pd
 import numpy as np
+import math
 import numba
 from numba import ir, ir_utils, types
 from numba.ir_utils import compile_to_numba_ir, replace_arg_nodes
@@ -17,7 +18,7 @@ def compile_func_single_block(func, args, ret_var, typing_info,
     typing_info is a structure that has typingctx, typemap, calltypes
     (could be the pass itself since not mutated).
     """
-    glbls = {'numba': numba, 'np': np, 'bodo': bodo, 'pd': pd}
+    glbls = {'numba': numba, 'np': np, 'bodo': bodo, 'pd': pd, 'math': math}
     if extra_globals is not None:
         glbls.update(extra_globals)
     f_ir = compile_to_numba_ir(
