@@ -10,8 +10,8 @@ import bodo.libs.dict_ext
 import bodo.libs.set_ext
 from bodo.libs.set_ext import init_set_string
 import bodo.libs.distributed_api
-from bodo.libs.distributed_api import dist_time
-from bodo.libs.distributed_api import parallel_print
+from bodo.libs.distributed_api import (dist_time, parallel_print, get_rank,
+    get_size, barrier)
 # legacy for STAC A3, TODO: remove
 from bodo.libs.dict_ext import (DictIntInt, DictInt32Int32, dict_int_int_type,
     dict_int32_int32_type)
