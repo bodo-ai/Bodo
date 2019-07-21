@@ -19,13 +19,11 @@ from bodo.libs.distributed_api import mpi_req_numba_type, ReqArrayType, req_arra
 from llvmlite import ir as lir
 from bodo.libs import hdist
 import llvmlite.binding as ll
-ll.add_symbol('hpat_dist_get_size', hdist.hpat_dist_get_size)
 ll.add_symbol('hpat_dist_get_start', hdist.hpat_dist_get_start)
 ll.add_symbol('hpat_dist_get_end', hdist.hpat_dist_get_end)
 ll.add_symbol('hpat_dist_get_node_portion', hdist.hpat_dist_get_node_portion)
 ll.add_symbol('hpat_dist_get_time', hdist.hpat_dist_get_time)
 ll.add_symbol('hpat_get_time', hdist.hpat_get_time)
-ll.add_symbol('hpat_barrier', hdist.hpat_barrier)
 ll.add_symbol('hpat_dist_reduce', hdist.hpat_dist_reduce)
 ll.add_symbol('hpat_dist_arr_reduce', hdist.hpat_dist_arr_reduce)
 ll.add_symbol('hpat_dist_exscan_i4', hdist.hpat_dist_exscan_i4)
@@ -48,14 +46,6 @@ ll.add_symbol('permutation_array_index', hdist.permutation_array_index)
 
 # get size dynamically from C code
 mpi_req_llvm_type = lir.IntType(8 * hdist.mpi_req_num_bytes)
-
-
-
-@lower_builtin(distributed_api.get_size)
-def dist_get_size(context, builder, sig, args):
-    fnty = lir.FunctionType(lir.IntType(32), [])
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_get_size")
-    return builder.call(fn, [])
 
 
 @lower_builtin(distributed_api.get_start, types.int64, types.int32, types.int32)
@@ -171,13 +161,6 @@ def dist_get_time(context, builder, sig, args):
 def dist_get_dist_time(context, builder, sig, args):
     fnty = lir.FunctionType(lir.DoubleType(), [])
     fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_get_time")
-    return builder.call(fn, [])
-
-
-@lower_builtin(distributed_api.barrier)
-def dist_barrier(context, builder, sig, args):
-    fnty = lir.FunctionType(lir.IntType(32), [])
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_barrier")
     return builder.call(fn, [])
 
 
