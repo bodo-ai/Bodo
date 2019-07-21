@@ -289,9 +289,8 @@ class DistributedPass(object):
             ndims = self.typemap[arr.name].ndim
             nodes = []
             size_var = self._get_dist_var_len(arr, nodes, equiv_set)
-            div_nodes, start_var, end_var = self._gen_1D_div(
-                size_var, scope, loc, "get_node_portion")
-            nodes += div_nodes
+            start_var = self._get_1D_start(size_var, nodes)
+            count_var = self._get_1D_count(size_var, nodes)
             starts_var = ir.Var(scope, mk_unique_var("$h5_starts"), loc)
             self.typemap[starts_var.name] = types.UniTuple(
                 types.int64, ndims)
@@ -314,7 +313,7 @@ class DistributedPass(object):
                 types.int64, ndims)
             prev_counts = guard(get_definition, self.func_ir, rhs.args[3])
             count_tuple_call = ir.Expr.build_tuple(
-                [end_var] + prev_counts.items[1:], loc)
+                [count_var] + prev_counts.items[1:], loc)
             counts_assign = ir.Assign(count_tuple_call, counts_var, loc)
             nodes += [starts_assign, counts_assign, assign]
             rhs.args[3] = counts_var
@@ -1676,6 +1675,47 @@ class DistributedPass(object):
         gen_getitem(end_var, tup_var, 1, self.calltypes, div_nodes)
 
         return div_nodes, start_var, end_var
+
+    def _get_1D_start(self, size_var, nodes):
+        """get start index of size_var in 1D_Block distribution
+        """
+        nodes += compile_func_single_block(
+            lambda n, rank, n_pes: _get_start(n, n_pes, rank),
+            (size_var, self.rank_var, self.n_pes_var), None, self,
+            extra_globals={'_get_start': bodo.libs.distributed_api.get_start})
+        start_var = nodes[-1].target
+        # rename for readability
+        start_var.name = mk_unique_var('start_var')
+        self.typemap[start_var.name] = types.int64
+        return start_var
+
+    def _get_1D_count(self, size_var, nodes):
+        """get chunk size for size_var in 1D_Block distribution
+        """
+        nodes += compile_func_single_block(
+            lambda n, rank, n_pes: _get_node_portion(n, n_pes, rank),
+            (size_var, self.rank_var, self.n_pes_var), None, self,
+            extra_globals={
+            '_get_node_portion': bodo.libs.distributed_api.get_node_portion})
+        count_var = nodes[-1].target
+        # rename for readability
+        count_var.name = mk_unique_var('count_var')
+        self.typemap[count_var.name] = types.int64
+        return count_var
+
+    def _get_1D_end(self, size_var, nodes):
+        """get end index of size_var in 1D_Block distribution
+        """
+        nodes += compile_func_single_block(
+            lambda n, rank, n_pes: _get_end(n, n_pes, rank),
+            (size_var, self.rank_var, self.n_pes_var), None, self,
+            extra_globals={
+            '_get_end': bodo.libs.distributed_api.get_end})
+        end_var = nodes[-1].target
+        # rename for readability
+        end_var.name = mk_unique_var('end_var')
+        self.typemap[end_var.name] = types.int64
+        return end_var
 
     def _get_ind_sub(self, ind_var, start_var):
         if (isinstance(ind_var, slice)
