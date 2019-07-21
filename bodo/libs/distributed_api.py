@@ -604,18 +604,22 @@ numba.ir_utils.remove_call_handlers.append(remove_dist_calls)
 @numba.njit
 def get_start(total_size, pes, rank):
     """get start index in 1D distribution"""
-    chunk = math.ceil(total_size/pes)
+    chunk = math.ceil(total_size / pes)
     return min(total_size, rank * chunk)
 
 
-def get_end(total_size, pes, rank):  # pragma: no cover
+@numba.njit
+def get_end(total_size, pes, rank):
     """get end point of range for parfor division"""
-    return 0
+    chunk = math.ceil(total_size / pes)
+    return min(total_size, (rank + 1) * chunk)
 
 
-def get_node_portion(total_size, pes, rank):  # pragma: no cover
+@numba.njit
+def get_node_portion(total_size, pes, rank):
     """get portion of size for alloc division"""
-    return 0
+    chunk = math.ceil(total_size / pes)
+    return min(total_size, (rank + 1) * chunk) - min(total_size, rank * chunk)
 
 
 def dist_reduce(value, op):  # pragma: no cover
@@ -711,28 +715,13 @@ class DistAllgather(AbstractTemplate):
         assert len(args) == 2  # array and val
         return signature(types.none, *unliteral_all(args))
 
+
 @infer_global(rebalance_array_parallel)
 class DistRebalanceParallel(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         assert len(args) == 2  # array and count
         return signature(args[0], *unliteral_all(args))
-
-
-@infer_global(get_end)
-class DistEnd(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 3
-        return signature(types.int64, *unliteral_all(args))
-
-
-@infer_global(get_node_portion)
-class DistPortion(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 3
-        return signature(types.int64, *unliteral_all(args))
 
 
 @infer_global(dist_reduce)

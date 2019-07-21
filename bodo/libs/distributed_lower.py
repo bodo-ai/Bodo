@@ -19,8 +19,6 @@ from bodo.libs.distributed_api import mpi_req_numba_type, ReqArrayType, req_arra
 from llvmlite import ir as lir
 from bodo.libs import hdist
 import llvmlite.binding as ll
-ll.add_symbol('hpat_dist_get_end', hdist.hpat_dist_get_end)
-ll.add_symbol('hpat_dist_get_node_portion', hdist.hpat_dist_get_node_portion)
 ll.add_symbol('hpat_dist_get_time', hdist.hpat_dist_get_time)
 ll.add_symbol('hpat_get_time', hdist.hpat_get_time)
 ll.add_symbol('hpat_dist_reduce', hdist.hpat_dist_reduce)
@@ -46,22 +44,6 @@ ll.add_symbol('permutation_array_index', hdist.permutation_array_index)
 # get size dynamically from C code
 mpi_req_llvm_type = lir.IntType(8 * hdist.mpi_req_num_bytes)
 
-
-@lower_builtin(distributed_api.get_end, types.int64, types.int32, types.int32)
-def dist_get_end(context, builder, sig, args):
-    fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(64),
-                                              lir.IntType(32), lir.IntType(32)])
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_get_end")
-    return builder.call(fn, [args[0], args[1], args[2]])
-
-
-@lower_builtin(distributed_api.get_node_portion, types.int64, types.int32, types.int32)
-def dist_get_portion(context, builder, sig, args):
-    fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(64),
-                                              lir.IntType(32), lir.IntType(32)])
-    fn = builder.module.get_or_insert_function(
-        fnty, name="hpat_dist_get_node_portion")
-    return builder.call(fn, [args[0], args[1], args[2]])
 
 @lower_builtin(distributed_api.dist_reduce, types.int8, types.int32)
 @lower_builtin(distributed_api.dist_reduce, types.uint8, types.int32)

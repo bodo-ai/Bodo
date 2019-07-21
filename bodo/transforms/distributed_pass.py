@@ -1645,11 +1645,12 @@ class DistributedPass(object):
     def _get_1D_count(self, size_var, nodes):
         """get chunk size for size_var in 1D_Block distribution
         """
+        def impl(n, rank, n_pes):
+            chunk = math.ceil(n / n_pes)
+            return min(n, (rank + 1) * chunk) - min(n, rank * chunk)
+
         nodes += compile_func_single_block(
-            lambda n, rank, n_pes: _get_node_portion(n, n_pes, rank),
-            (size_var, self.rank_var, self.n_pes_var), None, self,
-            extra_globals={
-            '_get_node_portion': bodo.libs.distributed_api.get_node_portion})
+            impl, (size_var, self.rank_var, self.n_pes_var), None, self)
         count_var = nodes[-1].target
         # rename for readability
         count_var.name = mk_unique_var('count_var')
@@ -1660,10 +1661,8 @@ class DistributedPass(object):
         """get end index of size_var in 1D_Block distribution
         """
         nodes += compile_func_single_block(
-            lambda n, rank, n_pes: _get_end(n, n_pes, rank),
-            (size_var, self.rank_var, self.n_pes_var), None, self,
-            extra_globals={
-            '_get_end': bodo.libs.distributed_api.get_end})
+            lambda n, rank, n_pes: min(n, (rank + 1) * math.ceil(n / n_pes)),
+            (size_var, self.rank_var, self.n_pes_var), None, self)
         end_var = nodes[-1].target
         # rename for readability
         end_var.name = mk_unique_var('end_var')
