@@ -19,6 +19,8 @@ from llvmlite import ir as lir
 from bodo.libs import hdist
 
 import llvmlite.binding as ll
+
+ll.add_symbol('c_get_rank', hdist.hpat_dist_get_rank)
 ll.add_symbol('c_alltoall', hdist.c_alltoall)
 ll.add_symbol('c_gather_scalar', hdist.c_gather_scalar)
 ll.add_symbol('c_gatherv', hdist.c_gatherv)
@@ -43,6 +45,15 @@ class Reduce_Type(Enum):
     Argmin = 4
     Argmax = 5
     Or = 6
+
+
+_get_rank = types.ExternalFunction("c_get_rank", types.int32())
+
+
+@numba.njit
+def get_rank():
+    """wrapper for getting process rank (MPI rank currently)"""
+    return _get_rank()
 
 
 def get_type_enum(arr):
@@ -573,10 +584,6 @@ def remove_dist_calls(rhs, lives, call_list):
 numba.ir_utils.remove_call_handlers.append(remove_dist_calls)
 
 
-def get_rank():  # pragma: no cover
-    """dummy function for C mpi get_rank"""
-    return 0
-
 
 def barrier():  # pragma: no cover
     return 0
@@ -701,14 +708,6 @@ class DistRebalanceParallel(AbstractTemplate):
         assert not kws
         assert len(args) == 2  # array and count
         return signature(args[0], *unliteral_all(args))
-
-
-@infer_global(get_rank)
-class DistRank(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 0
-        return signature(types.int32, *unliteral_all(args))
 
 
 @infer_global(get_size)
