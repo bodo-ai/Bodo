@@ -278,6 +278,11 @@ class DistributedAnalysis(object):
                                  'itemsize', 'astype', 'reshape', 'ctypes',
                                  'transpose', 'tofile', 'copy', 'view']):
             pass  # X.shape doesn't affect X distribution
+        elif (isinstance(rhs, ir.Expr) and rhs.op == 'getattr'
+                and isinstance(self.typemap[rhs.value.name],
+                    bodo.hiframes.pd_index_ext.RangeIndexType)
+                and rhs.attr in ('_start', '_stop', '_step', '_name')):
+            return
         elif isinstance(rhs, ir.Expr) and rhs.op == 'call':
             self._analyze_call(lhs, rhs, rhs.func.name, rhs.args, array_dists)
         # handle for A in arr_container: ...
@@ -527,6 +532,11 @@ class DistributedAnalysis(object):
                 'init_numeric_index', 'init_string_index',
                 ):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        # RangeIndexType is technically a distributable type even though the
+        # object doesn't require communication
+        if fdef == ('init_range_index', 'bodo.hiframes.pd_index_ext'):
             return
 
         if fdef == ('init_series', 'bodo.hiframes.api'):
