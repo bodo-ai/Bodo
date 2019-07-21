@@ -71,8 +71,9 @@ class DistributedPass(object):
         self._dist_analysis = None
         self._T_arrs = None  # set of transposed arrays (taken from analysis)
         self._1D_parfor_starts = {}
-
         self._1D_Var_parfor_starts = {}
+        # keep start vars for 1D dist to reuse in parfor loop array accesses
+        self._start_vars = {}
 
     def run(self):
         remove_dels(self.func_ir.blocks)
@@ -157,7 +158,8 @@ class DistributedPass(object):
                     index_var = get_getsetitem_index_var(
                         inst, self.typemap, out_nodes)
                     out_nodes += self._run_getsetitem(
-                        inst.target, index_var, inst, inst, equiv_set)
+                        inst.target, index_var, inst, inst, equiv_set,
+                        avail_vars)
                 elif isinstance(inst, ir.Return):
                     out_nodes = self._gen_barrier() + [inst]
                 elif isinstance(inst, ir.Print):
@@ -184,7 +186,7 @@ class DistributedPass(object):
             nodes = []
             index_var = get_getsetitem_index_var(rhs, self.typemap, nodes)
             return nodes + self._run_getsetitem(
-                rhs.value, index_var, rhs, inst, equiv_set)
+                rhs.value, index_var, rhs, inst, equiv_set, avail_vars)
 
         # array.shape
         if (rhs.op == 'getattr' and rhs.attr == 'shape'
@@ -290,7 +292,7 @@ class DistributedPass(object):
             ndims = self.typemap[arr.name].ndim
             nodes = []
             size_var = self._get_dist_var_len(arr, nodes, equiv_set)
-            start_var = self._get_1D_start(size_var, nodes)
+            start_var = self._get_1D_start(size_var, avail_vars, nodes)
             count_var = self._get_1D_count(size_var, nodes)
             starts_var = ir.Var(scope, mk_unique_var("$h5_starts"), loc)
             self.typemap[starts_var.name] = types.UniTuple(
@@ -330,7 +332,7 @@ class DistributedPass(object):
             arr = rhs.args[3]
             nodes = []
             size_var = self._get_dist_var_len(arr, nodes, equiv_set)
-            start_var = self._get_1D_start(size_var, nodes)
+            start_var = self._get_1D_start(size_var, avail_vars, nodes)
             count_var = self._get_1D_count(size_var, nodes)
             assert self.typemap[arr.name].ndim == 1, "only 1D arrs in Xenon"
             rhs.args += [start_var, count_var]
@@ -347,7 +349,7 @@ class DistributedPass(object):
             size_var = rhs.args[3]
             assert self.typemap[size_var.name] == types.intp
             out = []
-            start_var = self._get_1D_start(size_var, out)
+            start_var = self._get_1D_start(size_var, avail_vars, out)
             count_var = self._get_1D_count(size_var, out)
             rhs.args.remove(size_var)
             rhs.args.append(start_var)
@@ -372,7 +374,7 @@ class DistributedPass(object):
             # XXX get_split_view_index is only used within parfors
             assert index_var.name in self._1D_parfor_starts
             start_var, nodes = self._get_parallel_access_start_var(
-                arr, equiv_set, index_var)
+                arr, equiv_set, index_var, avail_vars)
             sub_nodes = self._get_ind_sub(
                 index_var, start_var)
             out = nodes + sub_nodes
@@ -387,7 +389,7 @@ class DistributedPass(object):
             # XXX setitem_str_arr_ptr is only used within parfors
             assert index_var.name in self._1D_parfor_starts
             start_var, nodes = self._get_parallel_access_start_var(
-                arr, equiv_set, index_var)
+                arr, equiv_set, index_var, avail_vars)
             sub_nodes = self._get_ind_sub(
                 index_var, start_var)
             out = nodes + sub_nodes
@@ -403,7 +405,7 @@ class DistributedPass(object):
             # XXX str_arr_item_to_numeric is only used within parfors
             assert index_var.name in self._1D_parfor_starts
             start_var, nodes = self._get_parallel_access_start_var(
-                arr, equiv_set, index_var)
+                arr, equiv_set, index_var, avail_vars)
             sub_nodes = self._get_ind_sub(
                 index_var, start_var)
             out = nodes + sub_nodes
@@ -414,7 +416,7 @@ class DistributedPass(object):
             # XXX str_arr_item_to_numeric is only used within parfors
             assert index_var.name in self._1D_parfor_starts
             start_var, nodes = self._get_parallel_access_start_var(
-                arr, equiv_set, index_var)
+                arr, equiv_set, index_var, avail_vars)
             sub_nodes = self._get_ind_sub(
                 index_var, start_var)
             out += nodes + sub_nodes
@@ -430,7 +432,7 @@ class DistributedPass(object):
             # array
             assert ind.name in self._1D_parfor_starts
             start_var, out = self._get_parallel_access_start_var(
-                arr, equiv_set, ind)
+                arr, equiv_set, ind, avail_vars)
             out += self._get_ind_sub(ind, start_var)
             rhs.args[1] = out[-1].target
             out.append(assign)
@@ -531,7 +533,7 @@ class DistributedPass(object):
             fname = rhs.args[0]
             arr = rhs.args[1]
             nodes, start_var, count_var = self._get_dist_var_start_count(
-                arr, equiv_set)
+                arr, equiv_set, avail_vars)
 
             def impl(fname, data_ptr, start, count):  # pragma: no cover
                 return bodo.io.np_io.file_read_parallel(fname, data_ptr, start, count)
@@ -655,7 +657,7 @@ class DistributedPass(object):
             if self._is_1D_arr(arr.name):
                 _fname = args[0]
                 nodes, start_var, count_var = self._get_dist_var_start_count(
-                    arr, equiv_set)
+                    arr, equiv_set, avail_vars)
 
                 def f(fname, arr, start, count):  # pragma: no cover
                     return bodo.io.np_io.file_write_parallel(fname, arr, start, count)
@@ -1139,7 +1141,8 @@ class DistributedPass(object):
         nodes[-1].target = lhs
         return nodes
 
-    def _run_getsetitem(self, arr, index_var, node, full_node, equiv_set):
+    def _run_getsetitem(self, arr, index_var, node, full_node, equiv_set,
+                                                                   avail_vars):
         out = [full_node]
         index_var = self._fix_index_var(index_var)
 
@@ -1149,7 +1152,7 @@ class DistributedPass(object):
                 (self._is_1D_Var_arr(arr.name) and arr.name in self._1D_Var_parfor_starts))
                 and (arr.name, index_var.name) in self._parallel_accesses):
             return self._run_parallel_access_getsetitem(
-                arr, index_var, node, full_node, equiv_set)
+                arr, index_var, node, full_node, equiv_set, avail_vars)
         elif self._is_1D_arr(arr.name) and isinstance(node, (ir.StaticSetItem, ir.SetItem)):
             is_multi_dim = False
             # we only consider 1st dimension for multi-dim arrays
@@ -1165,7 +1168,7 @@ class DistributedPass(object):
             # TODO: support multi-dim slice setitem like X[a:b, c:d]
             assert not is_multi_dim
             nodes, start_var, count_var = self._get_dist_var_start_count(
-                arr, equiv_set)
+                arr, equiv_set, avail_vars)
 
             if isinstance(self.typemap[index_var.name], types.Integer):
                 def f(A, val, index, chunk_start, chunk_count):  # pragma: no cover
@@ -1241,7 +1244,8 @@ class DistributedPass(object):
                 # on each processor, the slice has to start from an offset:
                 # |step-(start%step)|
                 in_arr = full_node.value.value
-                start_var, out = self._get_dist_start_var(in_arr, equiv_set)
+                start_var, out = self._get_dist_start_var(
+                    in_arr, equiv_set, avail_vars)
                 step = get_slice_step(self.typemap, self.func_ir, index_var)
 
                 def f(A, start, step):
@@ -1264,7 +1268,8 @@ class DistributedPass(object):
                 # cases like S.head()
                 # bcast if all in rank 0, otherwise gatherv
                 in_arr = full_node.value.value
-                start_var, nodes = self._get_dist_start_var(in_arr, equiv_set)
+                start_var, nodes = self._get_dist_start_var(in_arr, equiv_set,
+                                                                    avail_vars)
                 size_var = self._get_dist_var_len(in_arr, nodes, equiv_set)
                 is_1D = self._is_1D_arr(arr.name)
                 return nodes + compile_func_single_block(
@@ -1278,7 +1283,8 @@ class DistributedPass(object):
                         self._parallel_accesses):
                 # TODO: handle multi-dim cases like A[0,:]
                 in_arr = full_node.value.value
-                start_var, nodes = self._get_dist_start_var(in_arr, equiv_set)
+                start_var, nodes = self._get_dist_start_var(in_arr, equiv_set,
+                                                                    avail_vars)
                 size_var = self._get_dist_var_len(in_arr, nodes, equiv_set)
                 is_1D = self._is_1D_arr(arr.name)
                 return nodes + compile_func_single_block(
@@ -1290,11 +1296,11 @@ class DistributedPass(object):
         return out
 
     def _run_parallel_access_getsetitem(self, arr, index_var, node, full_node,
-                                                                    equiv_set):
+                                                        equiv_set, avail_vars):
         """adjust index of getitem/setitem using parfor index on dist arrays
         """
         start_var, nodes = self._get_parallel_access_start_var(
-            arr, equiv_set, index_var)
+            arr, equiv_set, index_var, avail_vars)
         # multi-dimensional array could be indexed with 1D index
         if isinstance(self.typemap[index_var.name], types.Integer):
             # TODO: avoid repeated start/end generation
@@ -1337,12 +1343,12 @@ class DistributedPass(object):
                 print("parfor " + str(parfor.id) + " not parallelized.")
             return [parfor]
 
-        scope = parfor.init_block.scope
-        loc = parfor.init_block.loc
         range_size = parfor.loop_nests[0].stop
         out = []
-        start_var = self._get_1D_start(range_size, out)
+        start_var = self._get_1D_start(range_size, avail_vars, out)
         end_var = self._get_1D_end(range_size, out)
+        # update available vars to make start_var available for 1D accesses
+        self._update_avail_vars(avail_vars, out)
         # print_node = ir.Print([start_var, end_var, range_size], None, loc)
         # self.calltypes[print_node] = signature(types.none, types.int64, types.int64, types.intp)
         # out.append(print_node)
@@ -1534,7 +1540,7 @@ class DistributedPass(object):
 
         return compile_func_single_block(impl, args, None, self)
 
-    def _get_dist_var_start_count(self, arr, equiv_set):
+    def _get_dist_var_start_count(self, arr, equiv_set, avail_vars):
         nodes = []
         if arr.name in self._1D_Var_parfor_starts:
             start_var = self._1D_Var_parfor_starts[arr.name]
@@ -1547,18 +1553,18 @@ class DistributedPass(object):
             return nodes, start_var, count_var
 
         size_var = self._get_dist_var_len(arr, nodes, equiv_set)
-        start_var = self._get_1D_start(size_var, nodes)
+        start_var = self._get_1D_start(size_var, avail_vars, nodes)
         count_var = self._get_1D_count(size_var, nodes)
         return nodes, start_var, count_var
 
-    def _get_dist_start_var(self, arr, equiv_set):
+    def _get_dist_start_var(self, arr, equiv_set, avail_vars):
         if arr.name in self._1D_Var_parfor_starts:
             return self._1D_Var_parfor_starts[arr.name], []
 
         if self._is_1D_arr(arr.name):
             nodes = []
             size_var = self._get_dist_var_len(arr, nodes, equiv_set)
-            start_var = self._get_1D_start(size_var, nodes)
+            start_var = self._get_1D_start(size_var, avail_vars, nodes)
         else:
             assert self._is_1D_Var_arr(arr.name)
             nodes = compile_func_single_block(
@@ -1595,7 +1601,8 @@ class DistributedPass(object):
         nodes += self._gen_1D_Var_len(var)
         return nodes[-1].target
 
-    def _get_parallel_access_start_var(self, arr, equiv_set, index_var):
+    def _get_parallel_access_start_var(self, arr, equiv_set, index_var,
+                                                                   avail_vars):
         """Same as _get_dist_start_var() but avoids generating reduction for
         getting global size since this is an error inside a parfor loop.
         """
@@ -1613,7 +1620,7 @@ class DistributedPass(object):
         if isinstance(shape, (list, tuple)) and len(shape) > 0:
             size_var = shape[0]
             nodes = []
-            start_var = self._get_1D_start(size_var, nodes)
+            start_var = self._get_1D_start(size_var, avail_vars, nodes)
             return start_var, nodes
 
         raise ValueError("invalid parallel access")
@@ -1630,9 +1637,13 @@ class DistributedPass(object):
         nodes = f_block.body[:-3]  # remove none return
         return nodes
 
-    def _get_1D_start(self, size_var, nodes):
+    def _get_1D_start(self, size_var, avail_vars, nodes):
         """get start index of size_var in 1D_Block distribution
         """
+        # reuse start var if available
+        if (size_var.name in self._start_vars
+                and self._start_vars[size_var.name].name in avail_vars):
+            return self._start_vars[size_var.name]
         nodes += compile_func_single_block(
             lambda n, rank, n_pes: min(n, rank * math.ceil(n / n_pes)),
             (size_var, self.rank_var, self.n_pes_var), None, self)
@@ -1640,6 +1651,7 @@ class DistributedPass(object):
         # rename for readability
         start_var.name = mk_unique_var('start_var')
         self.typemap[start_var.name] = types.int64
+        self._start_vars[size_var.name] = start_var
         return start_var
 
     def _get_1D_count(self, size_var, nodes):
@@ -1991,13 +2003,15 @@ def find_available_vars(blocks, cfg, init_avail=None):
     """
     # TODO: unittest
     in_avail_vars = defaultdict(set)
-    if init_avail:
-        assert 0 in blocks
-        in_avail_vars[0] = init_avail
-
     usedefs = numba.analysis.compute_use_defs(blocks)
     var_def_map = usedefs.defmap
     out_avail_vars = var_def_map.copy()
+
+    if init_avail:
+        assert 0 in blocks
+        for label in var_def_map:
+            in_avail_vars[label] = init_avail
+            out_avail_vars[label] |= init_avail
 
     old_point = None
     new_point = tuple(len(v) for v in in_avail_vars.values())
