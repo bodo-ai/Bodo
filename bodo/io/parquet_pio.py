@@ -70,8 +70,8 @@ class ParquetHandler(object):
         self.reverse_copies = _reverse_copies
 
     def gen_parquet_read(self, file_name, lhs, columns):
-        scope = file_name.scope
-        loc = file_name.loc
+        scope = lhs.scope
+        loc = lhs.loc
 
         table_types = None
         # lhs is temporary and will possibly be assigned to user variable

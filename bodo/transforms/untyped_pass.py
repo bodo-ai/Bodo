@@ -41,6 +41,7 @@ from bodo.ir import csv_ext
 from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype, CategoricalArray)
 import bodo.hiframes.pd_dataframe_ext
+from bodo.utils.transform import update_locs
 
 
 def remove_hiframes(rhs, lives, call_list):
@@ -697,11 +698,7 @@ class UntypedPass(object):
         # print(func_text)
         _init_df = loc_vars['_init_df']
 
-        f_block = compile_to_numba_ir(
-            _init_df, {'bodo': bodo}).blocks.popitem()[1]
-        replace_arg_nodes(f_block, data_arrs)
-        nodes += f_block.body[:-2]
-        nodes[-1].target = lhs
+        nodes += _compile_func_single_block(_init_df, data_arrs, lhs)
         return nodes
 
     def _get_csv_col_info(self, dtype_map, date_cols, col_names, lhs):
@@ -887,32 +884,6 @@ class UntypedPass(object):
             raise ValueError("No objects to concatenate")
 
         return [assign]
-
-    def _fix_df_arrays(self, items_list):
-        nodes = []
-        new_list = []
-        for item in items_list:
-            col_varname = item[0]
-            col_arr = item[1]
-            # fix list(multi-dim arrays) (packing images)
-            # FIXME: does this break for list(other things)?
-            col_arr = self._fix_df_list_of_array(col_arr)
-
-            def f(arr):  # pragma: no cover
-                df_arr = bodo.utils.conversion.coerce_to_array(arr)
-            f_block = compile_to_numba_ir(
-                f, {'bodo': bodo}).blocks.popitem()[1]
-            replace_arg_nodes(f_block, [col_arr])
-            nodes += f_block.body[:-3]  # remove none return
-            new_col_arr = nodes[-1].target
-            new_list.append((col_varname, new_col_arr))
-        return nodes, new_list
-
-    def _fix_df_list_of_array(self, col_arr):
-        list_call = guard(get_definition, self.func_ir, col_arr)
-        if guard(find_callname, self.func_ir, list_call) == ('list', 'builtins'):
-            return list_call.args[0]
-        return col_arr
 
     def _get_str_arg(self, f_name, args, kws, arg_no, arg_name, default=None,
                                                                  err_msg=None):
@@ -1199,5 +1170,11 @@ def _compile_func_single_block(func, args, ret_var, extra_globals=None):
     f_block = f_ir.blocks.popitem()[1]
     replace_arg_nodes(f_block, args)
     nodes = f_block.body[:-2]
+
+    # update Loc objects, avoid changing input arg vars
+    update_locs(nodes[len(args):], ret_var.loc)
+    for stmt in nodes[:len(args)]:
+        stmt.target.loc = ret_var.loc
+
     nodes[-1].target = ret_var
     return nodes
