@@ -47,7 +47,7 @@ from bodo.hiframes.series_kernels import series_replace_funcs
 from bodo.hiframes.split_impl import (string_array_split_view_type,
     StringArraySplitViewType, getitem_c_arr, get_array_ctypes_ptr,
     get_split_view_index, get_split_view_data_ptr)
-from bodo.utils.transform import compile_func_single_block
+from bodo.utils.transform import compile_func_single_block, update_locs
 
 
 ufunc_names = set(f.__name__ for f in numba.typing.npydecl.supported_ufuncs)
@@ -144,10 +144,15 @@ class SeriesPass(object):
                         ir.Var(block.scope, "dummy", inst.loc),
                         rp_func.args, (), inst.loc)
                     block.body = new_body + block.body[i:]
-                    inline_closure_call(self.func_ir, rp_func.glbls,
+                    callee_blocks, _ = inline_closure_call(
+                        self.func_ir, rp_func.glbls,
                         block, len(new_body), rp_func.func, self.typingctx,
                         rp_func.arg_types,
                         self.typemap, self.calltypes, work_list)
+                    # update Loc objects
+                    for c_block in callee_blocks.values():
+                        c_block.loc = self.curr_loc
+                        update_locs(c_block.body, self.curr_loc)
                     replaced = True
                     break
                 if isinstance(out_nodes, dict):
