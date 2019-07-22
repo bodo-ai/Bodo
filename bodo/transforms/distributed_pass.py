@@ -64,6 +64,8 @@ class DistributedPass(object):
         self.targetctx = targetctx
         self.typemap = typemap
         self.calltypes = calltypes
+        # Loc object of current location being translated
+        self.curr_loc = self.func_ir.loc
         self.metadata = metadata
         self.arr_analysis = numba.array_analysis.ArrayAnalysis(
             self.typingctx, self.func_ir, self.typemap, self.calltypes)
@@ -136,6 +138,7 @@ class DistributedPass(object):
             avail_vars = all_avail_vars[label].copy()
             new_body = []
             for inst in block.body:
+                self.curr_loc = inst.loc
                 out_nodes = None
                 if type(inst) in distributed_run_extensions:
                     f = distributed_run_extensions[type(inst)]

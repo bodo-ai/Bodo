@@ -99,6 +99,8 @@ class SeriesPass(object):
         self.typingctx = typingctx
         self.typemap = typemap
         self.calltypes = calltypes
+        # Loc object of current location being translated
+        self.curr_loc = self.func_ir.loc
         # keep track of tuple variables change by to_const_tuple
         self._type_changed_vars = []
 
@@ -114,6 +116,7 @@ class SeriesPass(object):
             replaced = False
             for i, inst in enumerate(block.body):
                 out_nodes = [inst]
+                self.curr_loc = inst.loc
 
                 if isinstance(inst, ir.Assign):
                     self.func_ir._definitions[inst.target.name].remove(inst.value)

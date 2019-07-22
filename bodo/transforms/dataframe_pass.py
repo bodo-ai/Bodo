@@ -34,6 +34,7 @@ from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 import bodo.hiframes.pd_rolling_ext
 from bodo.hiframes.pd_rolling_ext import RollingType
 from bodo.ir.aggregate import get_agg_func
+from bodo.utils.transform import compile_func_single_block
 
 
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
@@ -47,6 +48,8 @@ class DataFramePass(object):
         self.typingctx = typingctx
         self.typemap = typemap
         self.calltypes = calltypes
+        # Loc object of current location being translated
+        self.curr_loc = self.func_ir.loc
 
     def run(self):
         dprint_func_ir(self.func_ir, "starting dataframe pass")
@@ -112,6 +115,7 @@ class DataFramePass(object):
             replaced = False
             for i, inst in enumerate(block.body):
                 out_nodes = [inst]
+                self.curr_loc = inst.loc
 
                 if isinstance(inst, ir.Assign):
                     self.func_ir._definitions[inst.target.name].remove(inst.value)
@@ -134,13 +138,11 @@ class DataFramePass(object):
                         ir.Var(block.scope, "dummy", inst.loc),
                         rp_func.args, (), inst.loc)
                     block.body = new_body + block.body[i:]
-                    callee_blocks = inline_closure_call(self.func_ir, rp_func.glbls,
+                    callee_blocks, _ = inline_closure_call(
+                        self.func_ir, rp_func.glbls,
                         block, len(new_body), rp_func.func, self.typingctx,
                         rp_func.arg_types,
                         self.typemap, self.calltypes)
-                    # TODO: remove after Numba #3946 is merged
-                    if isinstance(callee_blocks, tuple):
-                        callee_blocks = callee_blocks[0]
                     # add blocks in reversed topo order to enable dead branch
                     # pruning (merge example)
                     # TODO: fix inline_closure_call()
@@ -236,11 +238,10 @@ class DataFramePass(object):
                 name_var = ir.Var(lhs.scope, mk_unique_var('S_name'), lhs.loc)
                 self.typemap[name_var.name] = types.StringLiteral(name_str)
                 nodes.append(ir.Assign(ir.Const(name_str, lhs.loc), name_var, lhs.loc))
-                return  self._replace_func(
+                return  nodes + compile_func_single_block(
                     lambda A, df_index, name: bodo.hiframes.api.init_series(
                         A, df_index, name),
-                    (arr, df_index, name_var),
-                    pre_nodes=nodes)
+                    (arr, df_index, name_var), lhs, self)
 
             # df[['C1', 'C2']]
             if isinstance(index, list) and all(isinstance(c, str)
@@ -1880,17 +1881,10 @@ class DataFramePass(object):
         nodes.append(ir.Assign(ir.Const(ind, loc), ind_var, loc))
         # XXX use get_series_data() for getting data instead of S._data
         # to enable alias analysis
-        f_block = compile_to_numba_ir(
+        nodes += compile_func_single_block(
             lambda df, c_ind: bodo.hiframes.pd_dataframe_ext.get_dataframe_data(
                 df, c_ind),
-            {'bodo': bodo},
-            self.typingctx,
-            (df_typ, self.typemap[ind_var.name]),
-            self.typemap,
-            self.calltypes
-        ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [df_var, ind_var])
-        nodes += f_block.body[:-2]
+            (df_var, ind_var), None, self)
         return nodes[-1].target
 
     def _get_dataframe_index(self, df_var, nodes):
