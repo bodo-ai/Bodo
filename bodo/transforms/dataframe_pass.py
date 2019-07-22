@@ -1633,59 +1633,50 @@ class DataFramePass(object):
             if on_arr is not None:
                 if func_name == 'cov':
                     def f(arr, other, on_arr, w, center):  # pragma: no cover
-                        df_arr = bodo.hiframes.rolling.rolling_cov(
+                        return bodo.hiframes.rolling.rolling_cov(
                                 arr, other, on_arr, w, center)
                 if func_name == 'corr':
                     def f(arr, other, on_arr, w, center):  # pragma: no cover
-                        df_arr = bodo.hiframes.rolling.rolling_corr(
+                        return bodo.hiframes.rolling.rolling_corr(
                                 arr, other, on_arr, w, center)
                 args = [in_col_var, other, on_arr, window, center]
             else:
                 if func_name == 'cov':
                     def f(arr, other, w, center):  # pragma: no cover
-                        df_arr = bodo.hiframes.rolling.rolling_cov(
+                        return bodo.hiframes.rolling.rolling_cov(
                                 arr, other, w, center)
                 if func_name == 'corr':
                     def f(arr, other, w, center):  # pragma: no cover
-                        df_arr = bodo.hiframes.rolling.rolling_corr(
+                        return bodo.hiframes.rolling.rolling_corr(
                                 arr, other, w, center)
                 args = [in_col_var, other, window, center]
         # variable window case
         elif on_arr is not None:
             if func_name == 'apply':
                 def f(arr, on_arr, w, center, func):  # pragma: no cover
-                    df_arr = bodo.hiframes.rolling.rolling_variable(
+                    return bodo.hiframes.rolling.rolling_variable(
                             arr, on_arr, w, center, False, func)
                 args = [in_col_var, on_arr, window, center, args[0]]
             else:
                 def f(arr, on_arr, w, center):  # pragma: no cover
-                    df_arr = bodo.hiframes.rolling.rolling_variable(
+                    return bodo.hiframes.rolling.rolling_variable(
                             arr, on_arr, w, center, False, _func_name)
                 args = [in_col_var, on_arr, window, center]
         else:  # fixed window
             # apply case takes the passed function instead of just name
             if func_name == 'apply':
                 def f(arr, w, center, func):  # pragma: no cover
-                    df_arr = bodo.hiframes.rolling.rolling_fixed(
+                    return bodo.hiframes.rolling.rolling_fixed(
                             arr, w, center, False, func)
                 args = [in_col_var, window, center, args[0]]
             else:
                 def f(arr, w, center):  # pragma: no cover
-                    df_arr = bodo.hiframes.rolling.rolling_fixed(
+                    return bodo.hiframes.rolling.rolling_fixed(
                             arr, w, center, False, _func_name)
                 args = [in_col_var, window, center]
 
-        arg_typs = tuple(self.typemap[v.name] for v in args)
-        f_block = compile_to_numba_ir(f,
-            {'bodo': bodo, '_func_name': func_name},
-            self.typingctx,
-            arg_typs,
-            self.typemap,
-            self.calltypes).blocks.popitem()[1]
-        replace_arg_nodes(f_block, args)
-        nodes += f_block.body[:-3]  # remove none return
-        nodes[-1].target = out_col_var
-        return nodes
+        return nodes + compile_func_single_block(f, args, out_col_var, self,
+            extra_globals={'_func_name': func_name})
 
     def _run_call_concat(self, assign, lhs, rhs):
         # TODO: handle non-numerical (e.g. string, datetime) columns

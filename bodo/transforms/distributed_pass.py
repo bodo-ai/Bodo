@@ -358,17 +358,15 @@ class DistributedPass(object):
             rhs.args.append(start_var)
             rhs.args.append(count_var)
 
-            def f(connect_tp, dset_tp, col_id_tp, schema_arr_tp, start_tp, count_tp):  # pragma: no cover
-                return bodo.io.xenon_ext.read_xenon_str_parallel(connect_tp, dset_tp, col_id_tp, schema_arr_tp, start_tp, count_tp)
+            def f(connect_tp, dset_tp, col_id_tp, schema_arr_tp, start_tp,
+                                                count_tp):  # pragma: no cover
+                return bodo.io.xenon_ext.read_xenon_str_parallel(
+                    connect_tp, dset_tp, col_id_tp, schema_arr_tp, start_tp,
+                    count_tp)
 
 
-            f_block = compile_to_numba_ir(f, {'bodo': bodo}, self.typingctx,
-                                          (bodo.io.xenon_ext.xe_connect_type, bodo.io.xenon_ext.xe_dset_type, types.intp,
-                                           self.typemap[rhs.args[3].name], types.intp, types.intp),
-                                          self.typemap, self.calltypes).blocks.popitem()[1]
-            replace_arg_nodes(f_block, rhs.args)
-            out += f_block.body[:-2]
-            out[-1].target = assign.target
+            out += compile_func_single_block(f, rhs.args, assign.target, self)
+            return out
 
         if (fdef == ('get_split_view_index', 'bodo.hiframes.split_impl')
                 and self._is_1D_arr(rhs.args[0].name)):
