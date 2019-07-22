@@ -993,30 +993,16 @@ class DataFramePass(object):
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df),
                 len(arr))
 
-        f_block = compile_to_numba_ir(_get_index,
-            {'bodo': bodo},
-            self.typingctx,
-            (self.typemap[df_var.name], self.typemap[arr.name]),
-            self.typemap,
-            self.calltypes
-        ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [df_var, arr])
-        nodes += f_block.body[:-2]
+        nodes += compile_func_single_block(_get_index,
+            (df_var, arr), None, self)
         return nodes[-1].target
 
     def _gen_index_from_array(self, arr_var, name_var, nodes):
         def _get_index(arr, name):
             return bodo.utils.conversion.index_from_array(arr, name)
 
-        f_block = compile_to_numba_ir(_get_index,
-            {'bodo': bodo},
-            self.typingctx,
-            (self.typemap[arr_var.name], self.typemap[name_var.name]),
-            self.typemap,
-            self.calltypes
-        ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [arr_var, name_var])
-        nodes += f_block.body[:-2]
+        nodes += compile_func_single_block(_get_index,
+            (arr_var, name_var), None, self)
         return nodes[-1].target
 
     def _run_call_df_itertuples(self, assign, lhs, rhs):
@@ -1232,18 +1218,10 @@ class DataFramePass(object):
                 and self.is_bool_arr(arr_def.index.name)):
             orig_arr = arr_def.value
             bool_arr = arr_def.index
-            f_block = compile_to_numba_ir(
+            nodes += compile_func_single_block(
                 lambda arr, bool_arr: bodo.hiframes.api.series_filter_bool(arr, bool_arr),
-                {'bodo': bodo},
-                self.typingctx,
-                (self.typemap[orig_arr.name], self.typemap[bool_arr.name]),
-                self.typemap,
-                self.calltypes
-            ).blocks.popitem()[1]
-            replace_arg_nodes(f_block, [orig_arr, bool_arr])
-            nodes += f_block.body[:-2]
+                (orig_arr, bool_arr), None, self)
             new_arr = nodes[-1].target
-
 
         # set unboxed df column with reflection
         if df_typ.has_parent:
@@ -1423,16 +1401,11 @@ class DataFramePass(object):
         else:
             index_arr = out_key_vars[0]
             index_name = grp_typ.keys[0]
-            f_block = compile_to_numba_ir(
+            nodes += compile_func_single_block(
                 lambda A: bodo.utils.conversion.index_from_array(
                     A, _index_name),
-                {'bodo': bodo, '_index_name': index_name},
-                self.typingctx,
-                (self.typemap[index_arr.name],),
-                self.typemap,
-                self.calltypes).blocks.popitem()[1]
-            replace_arg_nodes(f_block, [index_arr])
-            nodes += f_block.body[:-2]
+                (index_arr,), None, self,
+                extra_globals={'_index_name': index_name})
             index_var = nodes[-1].target
 
         # XXX output becomes series if single output and explicitly selected
@@ -1896,16 +1869,9 @@ class DataFramePass(object):
 
         # XXX use get_series_data() for getting data instead of S._data
         # to enable alias analysis
-        f_block = compile_to_numba_ir(
+        nodes += compile_func_single_block(
             lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df),
-            {'bodo': bodo},
-            self.typingctx,
-            (df_typ,),
-            self.typemap,
-            self.calltypes
-        ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [df_var])
-        nodes += f_block.body[:-2]
+            (df_var,), None, self)
         return nodes[-1].target
 
     def _get_index_name(self, dt_var, nodes):
@@ -1922,16 +1888,7 @@ class DataFramePass(object):
         if self.typemap[dt_var.name] == types.none:
             f = lambda S: None
 
-        f_block = compile_to_numba_ir(
-            f,
-            {'bodo': bodo},
-            self.typingctx,
-            (self.typemap[dt_var.name],),
-            self.typemap,
-            self.calltypes
-        ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [dt_var])
-        nodes += f_block.body[:-2]
+        nodes += compile_func_single_block(f, (dt_var,), None, self)
         return nodes[-1].target
 
     def _replace_func(self, func, args, const=False,
@@ -2024,12 +1981,8 @@ class DataFramePass(object):
         return arg
 
     def _gen_arr_copy(self, in_arr, nodes):
-        f_block = compile_to_numba_ir(
-            lambda A: A.copy(), {}, self.typingctx,
-            (self.typemap[in_arr.name],), self.typemap, self.calltypes
-            ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [in_arr])
-        nodes += f_block.body[:-2]
+        nodes += compile_func_single_block(
+            lambda A: A.copy(), (in_arr,), None, self)
         return nodes[-1].target
 
     def _get_const_or_list(self, by_arg, list_only=False, default=None, err_msg=None, typ=None):
