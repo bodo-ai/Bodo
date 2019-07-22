@@ -1690,29 +1690,16 @@ class DataFramePass(object):
                 df_typ = self.typemap[df.name]
                 # generate full NaN column
                 if cname not in df_typ.columns:
-                    f_block = compile_to_numba_ir(gen_nan_func,
-                            {'bodo': bodo, 'np': np},
-                            self.typingctx,
-                            (df_typ.data[0],),
-                            self.typemap,
-                            self.calltypes).blocks.popitem()[1]
-                    arr = self._get_dataframe_data(df, df_typ.columns[0], nodes)
-                    replace_arg_nodes(f_block, [arr])
-                    nodes += f_block.body[:-2]
+                    arr = self._get_dataframe_data(
+                        df, df_typ.columns[0], nodes)
+                    nodes += compile_func_single_block(
+                        gen_nan_func, (arr,), None, self)
                     args.append(nodes[-1].target)
                 else:
                     arr = self._get_dataframe_data(df, cname, nodes)
                     args.append(arr)
 
-            arg_typs = tuple(self.typemap[v.name] for v in args)
-            f_block = compile_to_numba_ir(_concat_imp,
-                        {'bodo': bodo, 'np': np},
-                        self.typingctx,
-                        arg_typs,
-                        self.typemap,
-                        self.calltypes).blocks.popitem()[1]
-            replace_arg_nodes(f_block, args)
-            nodes += f_block.body[:-2]
+            nodes += compile_func_single_block(_concat_imp, args, None, self)
             out_vars.append(nodes[-1].target)
 
         _init_df = _gen_init_df(out_typ.columns)
@@ -1723,15 +1710,9 @@ class DataFramePass(object):
         nodes = []
         out_vars = []
         for obj in objs:
-            f_block = compile_to_numba_ir(
-                        lambda S: bodo.hiframes.api.get_series_data(S),
-                        {'bodo': bodo},
-                        self.typingctx,
-                        (self.typemap[obj.name],),
-                        self.typemap,
-                        self.calltypes).blocks.popitem()[1]
-            replace_arg_nodes(f_block, (obj,))
-            nodes += f_block.body[:-2]
+            nodes += compile_func_single_block(
+                lambda S: bodo.hiframes.api.get_series_data(S), (obj,), None,
+                self)
             out_vars.append(nodes[-1].target)
 
         _init_df = _gen_init_df(out_typ.columns)
@@ -1772,28 +1753,14 @@ class DataFramePass(object):
         # HACK assign output df back to input df variables
         # TODO CFG backbone?
         df_typ = self.typemap[df_var.name]
-        arg_typs = tuple(self.typemap[v.name] for v in out_arrs)
-        f_block = compile_to_numba_ir(_init_df,
-            {'bodo': bodo},
-            self.typingctx,
-            arg_typs,
-            self.typemap,
-            self.calltypes).blocks.popitem()[1]
-        replace_arg_nodes(f_block, out_arrs)
-        nodes += f_block.body[:-2]
+        nodes += compile_func_single_block(_init_df, out_arrs, None, self)
         new_df = nodes[-1].target
 
         if df_typ.has_parent:
             # XXX fix the output type using dummy call to set_parent=True
-            f_block = compile_to_numba_ir(
+            nodes += compile_func_single_block(
                 lambda df: bodo.hiframes.pd_dataframe_ext.set_parent_dummy(df),
-                {'bodo': bodo},
-                self.typingctx,
-                (self.typemap[new_df.name],),
-                self.typemap,
-                self.calltypes).blocks.popitem()[1]
-            replace_arg_nodes(f_block, [new_df])
-            nodes += f_block.body[:-2]
+                (new_df,), None, self)
             new_df = nodes[-1].target
 
         for other_df_var in self.func_ir._definitions[df_var.name]:
