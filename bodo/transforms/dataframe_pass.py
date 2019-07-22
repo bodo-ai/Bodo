@@ -252,9 +252,8 @@ class DataFramePass(object):
                 out_arrs = [self._gen_arr_copy(A, nodes) for A in in_arrs]
                 #
                 _init_df = _gen_init_df(index)
-                return self._replace_func(_init_df, out_arrs, pre_nodes=nodes)
-                # raise ValueError("unsupported dataframe access {}[{}]".format(
-                #                  rhs.value.name, index))
+                return nodes + compile_func_single_block(
+                    _init_df, out_arrs, lhs, self)
 
         # df1 = df[df.A > .5]
         if self.is_bool_arr(index_var.name) and self._is_df_var(rhs.value):
@@ -372,8 +371,8 @@ class DataFramePass(object):
         out_vars = [out_vars[col] for col in df_typ.columns]
         out_vars.append(df_index_var)
 
-        return self._replace_func(
-            _init_df, out_vars, pre_nodes=nodes)
+        return nodes + compile_func_single_block(
+            _init_df, out_vars, lhs, self)
 
     def _run_setitem(self, inst):
         target_typ = self.typemap[inst.target.name]
@@ -980,8 +979,8 @@ class DataFramePass(object):
 
         # return dataframe if untyped pass replacement worked
         if not inplace or isinstance(self.typemap[lhs.name], DataFrameType):
-            return self._replace_func(_init_df, out_arrs,
-                pre_nodes=nodes)
+            return nodes + compile_func_single_block(_init_df, out_arrs,
+                lhs, self)
         else:
             # XXX: set inplace if untyped pass var replacement didn't work
             # TODO: fix index for inplace case
@@ -1116,15 +1115,9 @@ class DataFramePass(object):
         exec(func_text, {}, loc_vars)
         _dropna_imp = loc_vars['_dropna_imp']
 
-        f_block = compile_to_numba_ir(_dropna_imp,
-            {'bodo': bodo},
-            self.typingctx,
-            df_typ.data + (self.typemap[inplace_var.name],),
-            self.typemap,
-            self.calltypes
-        ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, col_vars + [inplace_var])
-        nodes += f_block.body[:-3]
+        nodes += compile_func_single_block(
+            _dropna_imp, col_vars + [inplace_var], None, self)
+        nodes.pop()  # remove None value for return
 
 
         # extract column vars from output
@@ -1135,7 +1128,8 @@ class DataFramePass(object):
         _init_df = _gen_init_df(df_typ.columns)
 
         if not inplace:
-            return self._replace_func(_init_df, out_cols, pre_nodes=nodes)
+            return nodes + compile_func_single_block(
+                _init_df, out_cols, lhs, self)
         else:
             return self._set_df_inplace(
                 _init_df, out_cols, df_var, lhs.loc, nodes)
@@ -1189,7 +1183,7 @@ class DataFramePass(object):
         _init_df = _gen_init_df(out_typ.columns, 'index')
         df_index = self._get_dataframe_index(df_var, nodes)
         data.append(df_index)
-        return self._replace_func(_init_df, data, pre_nodes=nodes)
+        return nodes + compile_func_single_block(_init_df, data, lhs, self)
 
     def _run_call_set_df_column(self, assign, lhs, rhs):
         # replace with regular setitem if target is not dataframe
@@ -1349,8 +1343,7 @@ class DataFramePass(object):
         else:
             _init_df = _gen_init_df(out_typ.columns)
 
-        return self._replace_func(_init_df, out_arrs,
-                pre_nodes=nodes)
+        return nodes + compile_func_single_block(_init_df, out_arrs, lhs, self)
 
     def _run_call_groupby(self, assign, lhs, rhs, grp_var, func_name):
         grp_typ = self.typemap[grp_var.name]
@@ -1435,8 +1428,7 @@ class DataFramePass(object):
                 out_vars.append(df_col_map[c])
 
         out_vars.append(index_var)
-        return self._replace_func(_init_df, out_vars,
-            pre_nodes=nodes)
+        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
     def _run_call_pivot_table(self, assign, lhs, rhs):
         df_var, values, index, columns, aggfunc, _pivot_values = rhs.args
@@ -1473,8 +1465,7 @@ class DataFramePass(object):
         for c in out_typ.columns:
             out_vars.append(df_col_map[c])
 
-        return self._replace_func(_init_df, out_vars,
-            pre_nodes=nodes)
+        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
     def _run_call_crosstab(self, assign, lhs, rhs):
         index, columns, _pivot_values = rhs.args
@@ -1512,8 +1503,7 @@ class DataFramePass(object):
         for c in out_typ.columns:
             out_vars.append(df_col_map[c])
 
-        return self._replace_func(_init_df, out_vars,
-            pre_nodes=nodes)
+        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
     def _run_call_rolling(self, assign, lhs, rhs, rolling_var, func_name):
         rolling_typ = self.typemap[rolling_var.name]
@@ -1591,15 +1581,8 @@ class DataFramePass(object):
             len_arr = list(in_vars.values())[0]
             for cname in nan_cols:
                 def f(arr):
-                    nan_arr = np.full(len(arr), np.nan)
-                f_block = compile_to_numba_ir(f,
-                    {'np': np},
-                    self.typingctx,
-                    (self.typemap[len_arr.name],),
-                    self.typemap,
-                    self.calltypes).blocks.popitem()[1]
-                replace_arg_nodes(f_block, [len_arr])
-                nodes += f_block.body[:-3]  # remove none return
+                    return np.full(len(arr), np.nan)
+                nodes += compile_func_single_block(f, [len_arr], None, self)
                 df_col_map[cname] = nodes[-1].target
 
         # XXX output becomes series if single output and explicitly selected
@@ -1622,8 +1605,7 @@ class DataFramePass(object):
             out_vars.append(df_col_map[c])
         out_vars.append(out_index_var)
 
-        return self._replace_func(_init_df, out_vars,
-            pre_nodes=nodes)
+        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
     def _gen_rolling_call(self, in_col_var, out_col_var, window, center, args,
                                                             func_name, on_arr):
@@ -1685,7 +1667,7 @@ class DataFramePass(object):
         df_list = self._get_const_tup(rhs.args[0])
         axis = guard(find_const, self.func_ir, rhs.args[1])
         if axis == 1:
-            return self._run_call_concat_columns(df_list, out_typ)
+            return self._run_call_concat_columns(df_list, out_typ, lhs)
 
         # generate a concat call for each output column
         # TODO: support non-numericals like string
@@ -1735,10 +1717,9 @@ class DataFramePass(object):
 
         _init_df = _gen_init_df(out_typ.columns)
 
-        return self._replace_func(_init_df, out_vars,
-            pre_nodes=nodes)
+        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
-    def _run_call_concat_columns(self, objs, out_typ):
+    def _run_call_concat_columns(self, objs, out_typ, lhs):
         nodes = []
         out_vars = []
         for obj in objs:
@@ -1755,8 +1736,7 @@ class DataFramePass(object):
 
         _init_df = _gen_init_df(out_typ.columns)
 
-        return self._replace_func(_init_df, out_vars,
-            pre_nodes=nodes)
+        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
     def _get_df_obj_select(self, obj_var, obj_name):
         """get df object for groupby() or rolling()

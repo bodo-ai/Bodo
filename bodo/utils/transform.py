@@ -18,6 +18,7 @@ def compile_func_single_block(func, args, ret_var, typing_info,
     typing_info is a structure that has typingctx, typemap, calltypes
     (could be the pass itself since not mutated).
     """
+    # TODO: support recursive processing of compile function if necessary
     glbls = {'numba': numba, 'np': np, 'bodo': bodo, 'pd': pd, 'math': math}
     if extra_globals is not None:
         glbls.update(extra_globals)
