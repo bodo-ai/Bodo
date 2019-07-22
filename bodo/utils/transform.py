@@ -53,3 +53,15 @@ def update_locs(node_list, loc):
             v.loc = loc
         if is_assign(stmt):
             stmt.value.loc = loc
+
+
+def get_stmt_defs(stmt):
+    if is_assign(stmt):
+        return set([stmt.target.name])
+
+    if type(stmt) in numba.analysis.ir_extension_usedefs:
+        def_func = numba.analysis.ir_extension_usedefs[type(stmt)]
+        _uses, defs = def_func(stmt)
+        return defs
+
+    return set()

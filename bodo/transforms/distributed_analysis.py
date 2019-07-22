@@ -28,6 +28,7 @@ from bodo.utils.utils import (get_constant, is_alloc_callname,
                         is_const_slice, is_expr, is_distributable_typ,
                         is_static_getsetitem, get_getsetitem_index_var)
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.utils.transform import get_stmt_defs
 
 
 class Distribution(Enum):
@@ -212,8 +213,8 @@ class DistributedAnalysis(object):
 
     def _analyze_block(self, block, array_dists, parfor_dists):
         for inst in block.body:
-            inst_writes = ir_utils.get_stmt_writes(inst)
-            for a in inst_writes:
+            inst_defs = get_stmt_defs(inst)
+            for a in inst_defs:
                 self.array_locs[a] = inst.loc
             if isinstance(inst, ir.Assign):
                 self._analyze_assign(inst, array_dists, parfor_dists)
