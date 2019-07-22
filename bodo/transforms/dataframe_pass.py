@@ -34,7 +34,7 @@ from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 import bodo.hiframes.pd_rolling_ext
 from bodo.hiframes.pd_rolling_ext import RollingType
 from bodo.ir.aggregate import get_agg_func
-from bodo.utils.transform import compile_func_single_block
+from bodo.utils.transform import compile_func_single_block, update_locs
 
 
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
@@ -150,6 +150,9 @@ class DataFramePass(object):
                     for c_label in reversed(topo_order):
                         if c_label in callee_blocks:
                             c_block = callee_blocks[c_label]
+                            # update loc info
+                            c_block.loc = self.curr_loc
+                            update_locs(c_block.body, self.curr_loc)
                             # include the new block created after callee used
                             # to split the original block
                             # find it using jumps out of callee (returns
