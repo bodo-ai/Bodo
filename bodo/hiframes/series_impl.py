@@ -563,10 +563,12 @@ def overload_series_notna(S):
 def overload_series_astype(S, dtype, copy=True, errors='raise'):
     if isinstance(dtype, types.Function) and dtype.key[0] == str:
         def impl_str(S, dtype, copy=True, errors='raise'):
-            numba.parfor.init_prange()
             arr = bodo.hiframes.api.get_series_data(S)
             index = bodo.hiframes.api.get_series_index(S)
             name = bodo.hiframes.api.get_series_name(S)
+            # XXX: init_prange() after get data calls to have array available
+            # for length calculation before 1D_Var parfor
+            numba.parfor.init_prange()
             n = len(arr)
             num_chars = 0
             # get total chars in new array

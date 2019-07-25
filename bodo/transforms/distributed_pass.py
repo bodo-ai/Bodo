@@ -1394,6 +1394,8 @@ class DistributedPass(object):
         # try equivalences
         if not size_found and stop_var.name in equiv_set.obj_to_ind:
             # TODO: test this code path
+            # TODO: try equivalent arrs/series/dfs to arr since they may be in
+            # avail_vars
             size_class = equiv_set.obj_to_ind[stop_var.name]
             for (arr, index) in array_accesses:
                 if self._is_1D_Var_arr(arr) and arr in avail_vars:

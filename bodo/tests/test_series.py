@@ -248,9 +248,7 @@ def test_series_astype_str(series_val):
     def test_impl(S):
         return S.astype(str)
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val))
+    test_func(test_impl, (series_val,))
 
 
 def test_series_copy_deep(series_val):

@@ -441,6 +441,9 @@ class DistributedAnalysis(object):
             self._analyze_call_df(lhs, func_mod, func_name, args, array_dists)
             return
 
+        if fdef == ('parallel_print', 'bodo'):
+            return
+
         # bodo.libs.distributed_api functions
         if isinstance(func_mod, str) and func_mod == 'bodo.libs.distributed_api':
             self._analyze_call_hpat_dist(lhs, func_name, args, array_dists)

@@ -24,8 +24,10 @@ data_ctypes_type = types.ArrayCTypes(types.Array(char_typ, 1, 'C'))
 offset_ctypes_type = types.ArrayCTypes(types.Array(offset_typ, 1, 'C'))
 
 class StringArray(object):
-    def __init__(self, str_list):
+    def __init__(self, str_list=None):
         # dummy constructor
+        if str_list is None:
+            str_list = []
         self.num_strings = len(str_list)
         self.offsets = str_list
         self.data = str_list
@@ -655,13 +657,13 @@ def construct_string_array(context, builder):
 @lower_builtin(StringArray, types.List)
 @lower_builtin(StringArray, types.UniTuple)
 def impl_string_array_single(context, builder, sig, args):
-    if isinstance(args[0], types.UniTuple):
-        assert args[0].dtype == string_type
-
     if not sig.args:  # return empty string array if no args
         res = context.compile_internal(
             builder, lambda: pre_alloc_string_array(0, 0), sig, args)
         return res
+
+    if isinstance(args[0], types.UniTuple):
+        assert args[0].dtype == string_type
 
     def str_arr_from_list(in_list):
         n_strs = len(in_list)

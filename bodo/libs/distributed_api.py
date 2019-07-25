@@ -202,7 +202,7 @@ def gatherv(data):
 
 
             # displacements
-            all_data = StringArray([''])  # dummy arrays on non-root PEs
+            all_data = StringArray()  # dummy arrays on non-root PEs
             displs = np.empty(1, np.int32)
             displs_char = np.empty(1, np.int32)
 
