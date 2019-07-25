@@ -976,6 +976,14 @@ class UntypedPass(object):
         if 'threaded' not in self.metadata:
             self.metadata['threaded'] = self.locals.pop('##threaded', set())
 
+        if 'all_args_distributed' not in self.metadata:
+            self.metadata['all_args_distributed'] = self.locals.pop(
+                '##all_args_distributed', False)
+
+        if 'all_returns_distributed' not in self.metadata:
+            self.metadata['all_returns_distributed'] = self.locals.pop(
+                '##all_returns_distributed', False)
+
         # handle old input flags
         # e.g. {"A:input": "distributed"} -> "A"
         dist_inputs = { var_name.split(":")[0]
@@ -1018,6 +1026,7 @@ class UntypedPass(object):
         # TODO: handle distributed analysis, requires handling variable name
         # change in simplify() and replace_var_names()
         flagged_vars = self.metadata['distributed'] | self.metadata['threaded']
+        all_returns_distributed = self.metadata['all_returns_distributed']
         nodes = [ret_node]
         cast = guard(get_definition, self.func_ir, ret_node.value)
         assert cast is not None, "return cast not found"
@@ -1027,9 +1036,9 @@ class UntypedPass(object):
         # XXX: using split('.') since the variable might be renamed (e.g. A.2)
         ret_name = cast.value.name.split('.')[0]
 
-        if ret_name in flagged_vars:
-            flag = ('distributed' if ret_name in self.metadata['distributed']
-                        else 'threaded')
+        if ret_name in flagged_vars or all_returns_distributed:
+            flag = ('distributed' if (ret_name in self.metadata['distributed']
+                        or all_returns_distributed) else 'threaded')
             nodes = self._gen_replace_dist_return(cast.value, flag)
             new_arr = nodes[-1].target
             new_cast = ir.Expr.cast(new_arr, loc)
@@ -1039,10 +1048,6 @@ class UntypedPass(object):
             nodes.append(ret_node)
             return nodes
 
-        # shortcut if no dist return
-        if len(flagged_vars) == 0:
-            return nodes
-
         cast_def = guard(get_definition, self.func_ir, cast.value)
         if (cast_def is not None and isinstance(cast_def, ir.Expr)
                 and cast_def.op == 'build_tuple'):
@@ -1050,9 +1055,10 @@ class UntypedPass(object):
             new_var_list = []
             for v in cast_def.items:
                 vname = v.name.split('.')[0]
-                if vname in flagged_vars:
-                    flag = ('distributed' if vname in self.metadata['distributed']
-                        else 'threaded')
+                if vname in flagged_vars or all_returns_distributed:
+                    flag = ('distributed' if (
+                            vname in self.metadata['distributed']
+                            or all_returns_distributed) else 'threaded')
                     nodes += self._gen_replace_dist_return(v, flag)
                     new_var_list.append(nodes[-1].target)
                 else:

@@ -725,6 +725,10 @@ class SeriesPass(object):
             return self._replace_func(impl, rhs.args,
                             pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws))
 
+        if func_mod == 'bodo.libs.distributed_api' and func_name in (
+                'dist_return', 'threaded_return'):
+            return [assign]
+
         # convert Series to Array for unhandled calls
         # TODO check all the functions that get here and handle if necessary
         nodes = []

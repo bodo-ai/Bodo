@@ -11,7 +11,8 @@ import numba.targets.ufunc_db
 import bodo
 from bodo.libs.str_arr_ext import StringArray
 from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
-    count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_start_end)
+    count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_start_end,
+    test_func)
 import pytest
 
 
@@ -233,9 +234,7 @@ def test_series_astype_numeric(numeric_series_val):
     def test_impl(S):
         return S.astype(np.float64)
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(numeric_series_val), test_impl(numeric_series_val))
+    test_func(test_impl, (numeric_series_val,))
 
 
 def test_series_astype_str(series_val):

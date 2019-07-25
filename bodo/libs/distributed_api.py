@@ -143,10 +143,8 @@ def gather_scalar_overload(val):
     gather_impl = loc_vars['gather_scalar_impl']
     return gather_impl
 
-# TODO: test
-def gatherv(data):  # pragma: no cover
-    return data
 
+# TODO: test
 def allgatherv(data):  # pragma: no cover
     return data
 
@@ -158,8 +156,8 @@ c_allgatherv = types.ExternalFunction("c_allgatherv",
     types.void(types.voidptr, types.int32, types.voidptr, types.voidptr, types.voidptr, types.int32))
 
 
-@overload(gatherv)
-def gatherv_overload(data):
+@numba.generated_jit(nopython=True)
+def gatherv(data):
     if isinstance(data, types.Array):
         # TODO: other types like boolean
         typ_val = _numba_to_c_type_map[data.dtype]
@@ -223,6 +221,22 @@ def gatherv_overload(data):
 
         return gatherv_str_arr_impl
 
+    if isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
+        def impl(data):
+            # get data and index arrays
+            arr = bodo.hiframes.api.get_series_data(data)
+            index = bodo.hiframes.api.get_series_index(data)
+            name = bodo.hiframes.api.get_series_name(data)
+            index_t = bodo.utils.conversion.fix_none_index(index, len(arr))
+            index_arr = bodo.utils.conversion.coerce_to_array(index_t)
+            # gather data
+            out_arr = bodo.libs.distributed_api.gatherv(arr)
+            out_ind_arr = bodo.libs.distributed_api.gatherv(index_arr)
+            # create output Series
+            out_index = bodo.utils.conversion.convert_to_index(out_ind_arr)
+            return bodo.hiframes.api.init_series(out_arr, out_index, name)
+
+        return impl
 
 @overload(allgatherv)
 def allgatherv_overload(data):

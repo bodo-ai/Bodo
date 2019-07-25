@@ -298,7 +298,8 @@ class DistributedAnalysis(object):
             # analyze array container access in pair_first
             return
         elif isinstance(rhs, ir.Arg):
-            if rhs.name in self.metadata['distributed']:
+            if (rhs.name in self.metadata['distributed']
+                    or self.metadata['all_args_distributed']):
                 if lhs not in array_dists:
                     array_dists[lhs] = Distribution.OneD
             elif rhs.name in self.metadata['threaded']:

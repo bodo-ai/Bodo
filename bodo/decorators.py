@@ -52,6 +52,14 @@ def jit(signature_or_function=None, **options):
     assert isinstance(distributed, (set, list))
     _locals["##distributed"] = distributed
 
+    all_args_distributed = options.pop('all_args_distributed', False)
+    assert isinstance(all_args_distributed, bool)
+    _locals["##all_args_distributed"] = all_args_distributed
+
+    all_returns_distributed = options.pop('all_returns_distributed', False)
+    assert isinstance(all_returns_distributed, bool)
+    _locals["##all_returns_distributed"] = all_returns_distributed
+
     threaded = set(options.pop('threaded', set()))
     assert isinstance(threaded, (set, list))
     _locals["##threaded"] = threaded
