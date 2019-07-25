@@ -150,10 +150,10 @@ def overload_series_isna(S):
     # TODO: series that have different underlying data type than dtype
     # like records/tuples
     def impl(S):
-        numba.parfor.init_prange()
         arr = bodo.hiframes.api.get_series_data(S)
         index = bodo.hiframes.api.get_series_index(S)
         name = bodo.hiframes.api.get_series_name(S)
+        numba.parfor.init_prange()
         n = len(arr)
         out_arr = np.empty(n, np.bool_)
         for i in numba.parfor.internal_prange(n):
@@ -174,7 +174,6 @@ def overload_series_sum(S):
         retty = S.dtype
     zero = retty(0)
     def impl(S):
-        numba.parfor.init_prange()
         A = bodo.hiframes.api.get_series_data(S)
         numba.parfor.init_prange()
         s = zero
@@ -191,7 +190,6 @@ def overload_series_sum(S):
 def overload_series_prod(S):
     init = S.dtype(1)
     def impl(S):
-        numba.parfor.init_prange()
         A = bodo.hiframes.api.get_series_data(S)
         numba.parfor.init_prange()
         s = init
@@ -218,8 +216,8 @@ def overload_series_mean(S):
     count_1 = count_dtype(1)
 
     def impl(S):  # pragma: no cover
-        numba.parfor.init_prange()
         A = bodo.hiframes.api.get_series_data(S)
+        numba.parfor.init_prange()
         count = count_init
         s = sum_init
         for i in numba.parfor.internal_prange(len(A)):
@@ -237,8 +235,8 @@ def overload_series_mean(S):
 def overload_series_var(S):
     def impl(S):  # pragma: no cover
         m = S.mean()
-        numba.parfor.init_prange()
         A = bodo.hiframes.api.get_series_data(S)
+        numba.parfor.init_prange()
         s = 0
         count = 0
         for i in numba.parfor.internal_prange(len(A)):
@@ -315,8 +313,8 @@ def overload_series_abs(S):
 def overload_series_count(S):
     # TODO: check 'level' argument
     def impl(S):  # pragma: no cover
-        numba.parfor.init_prange()
         A = bodo.hiframes.api.get_series_data(S)
+        numba.parfor.init_prange()
         count = 0
         for i in numba.parfor.internal_prange(len(A)):
             if not bodo.hiframes.api.isna(A, i):
@@ -378,8 +376,8 @@ def overload_series_min(S, axis=None, skipna=None, level=None,
     # TODO: min/max of string dtype, etc.
     if S.dtype == types.NPDatetime('ns'):
         def impl_dt64(S, axis=None, skipna=None, level=None, numeric_only=None):  # pragma: no cover
-            numba.parfor.init_prange()
             in_arr = bodo.hiframes.api.get_series_data(S)
+            numba.parfor.init_prange()
             s = numba.targets.builtins.get_type_max_value(np.int64)
             count = 0
             for i in numba.parfor.internal_prange(len(in_arr)):
@@ -392,8 +390,8 @@ def overload_series_min(S, axis=None, skipna=None, level=None,
         return impl_dt64
 
     def impl(S, axis=None, skipna=None, level=None, numeric_only=None):  # pragma: no cover
-        numba.parfor.init_prange()
         in_arr = bodo.hiframes.api.get_series_data(S)
+        numba.parfor.init_prange()
         count = 0
         s = bodo.hiframes.series_kernels._get_type_max_value(in_arr.dtype)
         for i in numba.parfor.internal_prange(len(in_arr)):
@@ -415,8 +413,8 @@ def overload_series_max(S, axis=None, skipna=None, level=None,
 
     if S.dtype == types.NPDatetime('ns'):
         def impl_dt64(S, axis=None, skipna=None, level=None, numeric_only=None):  # pragma: no cover
-            numba.parfor.init_prange()
             in_arr = bodo.hiframes.api.get_series_data(S)
+            numba.parfor.init_prange()
             s = numba.targets.builtins.get_type_min_value(np.int64)
             count = 0
             for i in numba.parfor.internal_prange(len(in_arr)):
@@ -429,8 +427,8 @@ def overload_series_max(S, axis=None, skipna=None, level=None,
         return impl_dt64
 
     def impl(S, axis=None, skipna=None, level=None, numeric_only=None):  # pragma: no cover
-        numba.parfor.init_prange()
         in_arr = bodo.hiframes.api.get_series_data(S)
+        numba.parfor.init_prange()
         count = 0
         s = numba.targets.builtins.get_type_min_value(in_arr.dtype)
         for i in numba.parfor.internal_prange(len(in_arr)):
@@ -968,10 +966,10 @@ def create_explicit_binary_op_overload(op):
             ret_dtype = typing_context.resolve_function_type(
                 op, args, ()).return_type.dtype
             def impl_scalar(S, other, level=None, fill_value=None, axis=0):
-                numba.parfor.init_prange()
                 arr = bodo.hiframes.api.get_series_data(S)
                 index = bodo.hiframes.api.get_series_index(S)
                 name = bodo.hiframes.api.get_series_name(S)
+                numba.parfor.init_prange()
                 # other could be tuple, list, array, Index, or Series
                 n = len(arr)
                 out_arr = np.empty(n, ret_dtype)
@@ -993,12 +991,12 @@ def create_explicit_binary_op_overload(op):
         ret_dtype = typing_context.resolve_function_type(
             op, args, ()).return_type.dtype
         def impl(S, other, level=None, fill_value=None, axis=0):
-            numba.parfor.init_prange()
             arr = bodo.hiframes.api.get_series_data(S)
             index = bodo.hiframes.api.get_series_index(S)
             name = bodo.hiframes.api.get_series_name(S)
             # other could be tuple, list, array, Index, or Series
             other_arr = bodo.utils.conversion.coerce_to_array(other)
+            numba.parfor.init_prange()
             n = len(arr)
             out_arr = np.empty(n, ret_dtype)
             for i in numba.parfor.internal_prange(n):
