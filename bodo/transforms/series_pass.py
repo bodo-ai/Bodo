@@ -762,17 +762,16 @@ class SeriesPass(object):
         if func in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
             # TODO: test
             imm_fn = bodo.hiframes.pd_series_ext.inplace_binop_to_imm[func]
-            return [ir.Assign(ir.Expr.inplace_binop(
-                func, imm_fn, rhs.args[0], rhs.args[1], rhs.loc),
-                assign.target,
-                rhs.loc)]
+            expr = ir.Expr.inplace_binop(
+                func, imm_fn, rhs.args[0], rhs.args[1], rhs.loc)
+            self.calltypes[expr] = self.calltypes[rhs]
+            return [ir.Assign(expr, assign.target, rhs.loc)]
 
         # TODO: this fails test_series_unary_op with pos for some reason
-        # if func in bodo.hiframes.pd_series_ext.series_unary_ops:
-        #     return [ir.Assign(ir.Expr.unary(
-        #         func, rhs.args[0], rhs.loc),
-        #         assign.target,
-        #         rhs.loc)]
+        if func in bodo.hiframes.pd_series_ext.series_unary_ops:
+            expr = ir.Expr.unary(func, rhs.args[0], rhs.loc)
+            self.calltypes[expr] = self.calltypes[rhs]
+            return [ir.Assign(expr, assign.target, rhs.loc)]
 
         # TODO: handle other calls
         return [assign]
