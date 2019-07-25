@@ -302,6 +302,10 @@ class DistributedAnalysis(object):
                     or self.metadata['all_args_distributed']):
                 if lhs not in array_dists:
                     array_dists[lhs] = Distribution.OneD
+            elif (rhs.name in self.metadata['distributed_varlength']
+                    or self.metadata['all_args_distributed_varlength']):
+                if lhs not in array_dists:
+                    array_dists[lhs] = Distribution.OneD_Var
             elif rhs.name in self.metadata['threaded']:
                 if lhs not in array_dists:
                     array_dists[lhs] = Distribution.Thread
@@ -768,8 +772,7 @@ class DistributedAnalysis(object):
         """analyze distributions of bodo distributed functions
         (bodo.libs.distributed_api.func_name)
         """
-        if func_name == 'local_len':
-            return
+
         if func_name == 'parallel_print':
             return
 

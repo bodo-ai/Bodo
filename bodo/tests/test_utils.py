@@ -75,6 +75,16 @@ def test_func(func, args):
     if bodo.get_rank() == 0:
         pd.testing.assert_series_equal(bodo_output, py_output)
 
+    # 1D distributed variable length
+    bodo_func = bodo.jit(
+        all_args_distributed_varlength=True,
+        all_returns_distributed=True)(func)
+    dist_args = tuple(_get_dist_arg(a) for a in args)
+    bodo_output = bodo_func(*dist_args)
+    bodo_output = bodo.gatherv(bodo_output)
+    if bodo.get_rank() == 0:
+        pd.testing.assert_series_equal(bodo_output, py_output)
+
 
 def _get_dist_arg(a):
     if not bodo.utils.utils.is_distributable_typ(bodo.typeof(a)):

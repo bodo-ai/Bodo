@@ -52,9 +52,19 @@ def jit(signature_or_function=None, **options):
     assert isinstance(distributed, (set, list))
     _locals["##distributed"] = distributed
 
+    distributed_varlength = set(options.pop('distributed_varlength', set()))
+    assert isinstance(distributed_varlength, (set, list))
+    _locals["##distributed_varlength"] = distributed_varlength
+
     all_args_distributed = options.pop('all_args_distributed', False)
     assert isinstance(all_args_distributed, bool)
     _locals["##all_args_distributed"] = all_args_distributed
+
+    all_args_distributed_varlength = options.pop(
+        'all_args_distributed_varlength', False)
+    assert isinstance(all_args_distributed_varlength, bool)
+    _locals["##all_args_distributed_varlength"] = \
+        all_args_distributed_varlength
 
     all_returns_distributed = options.pop('all_returns_distributed', False)
     assert isinstance(all_returns_distributed, bool)

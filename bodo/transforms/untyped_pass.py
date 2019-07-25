@@ -973,12 +973,20 @@ class UntypedPass(object):
             self.metadata['distributed'] = self.locals.pop(
                 '##distributed', set())
 
+        if 'distributed_varlength' not in self.metadata:
+            self.metadata['distributed_varlength'] = self.locals.pop(
+                '##distributed_varlength', set())
+
         if 'threaded' not in self.metadata:
             self.metadata['threaded'] = self.locals.pop('##threaded', set())
 
         if 'all_args_distributed' not in self.metadata:
             self.metadata['all_args_distributed'] = self.locals.pop(
                 '##all_args_distributed', False)
+
+        if 'all_args_distributed_varlength' not in self.metadata:
+            self.metadata['all_args_distributed_varlength'] = self.locals.pop(
+                '##all_args_distributed_varlength', False)
 
         if 'all_returns_distributed' not in self.metadata:
             self.metadata['all_returns_distributed'] = self.locals.pop(
@@ -1025,6 +1033,7 @@ class UntypedPass(object):
     def _run_return(self, ret_node):
         # TODO: handle distributed analysis, requires handling variable name
         # change in simplify() and replace_var_names()
+        # TODO: include distributed_varlength?
         flagged_vars = self.metadata['distributed'] | self.metadata['threaded']
         all_returns_distributed = self.metadata['all_returns_distributed']
         nodes = [ret_node]

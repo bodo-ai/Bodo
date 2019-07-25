@@ -555,10 +555,6 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
     return getitem_impl
 
 
-@numba.njit
-def local_len(A):
-    return len(A)
-
 # send_data, recv_data, send_counts, recv_counts, send_disp, recv_disp, typ_enum
 c_alltoallv = types.ExternalFunction("c_alltoallv", types.void(types.voidptr,
     types.voidptr, types.voidptr, types.voidptr, types.voidptr, types.voidptr, types.int32))
