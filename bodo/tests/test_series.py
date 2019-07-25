@@ -565,10 +565,9 @@ def test_series_binary_op(op):
     test_impl = loc_vars['test_impl']
 
     S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name='ABC')
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(S, S), test_impl(S, S))
-    pd.testing.assert_series_equal(bodo_func(S, 2), test_impl(S, 2))
-    pd.testing.assert_series_equal(bodo_func(2, S), test_impl(2, S))
+    test_func(test_impl, (S, S))
+    test_func(test_impl, (S, 2))
+    test_func(test_impl, (2, S))
 
 
 @pytest.mark.parametrize('op',
