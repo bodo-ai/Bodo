@@ -755,10 +755,9 @@ class SeriesPass(object):
         # replace direct calls to operators with Expr binop nodes to enable
         # ParallelAccelerator transformtions
         if func in bodo.hiframes.pd_series_ext.series_binary_ops:
-            return [ir.Assign(ir.Expr.binop(
-                func, rhs.args[0], rhs.args[1], rhs.loc),
-                assign.target,
-                rhs.loc)]
+            expr = ir.Expr.binop(func, rhs.args[0], rhs.args[1], rhs.loc)
+            self.calltypes[expr] = self.calltypes[rhs]
+            return [ir.Assign(expr, assign.target, rhs.loc)]
 
         if func in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
             # TODO: test
@@ -1106,20 +1105,19 @@ class SeriesPass(object):
                         pysig=numba.utils.pysignature(impl),
                         kws=dict(rhs.kws))
 
-        # TODO: enable after including branch pruning pass in inline_closure_call (#4148)
-        # if func_name in bodo.hiframes.series_impl.explicit_binop_funcs.values():
-        #     rhs.args.insert(0, series_var)
-        #     arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-        #     kw_typs = {name:self.typemap[v.name]
-        #             for name, v in dict(rhs.kws).items()}
-        #     op = getattr(operator, func_name)
-        #     overload_func = \
-        #         bodo.hiframes.series_impl.create_explicit_binary_op_overload(
-        #             op)
-        #     impl = overload_func(*arg_typs, **kw_typs)
-        #     return self._replace_func(impl, rhs.args,
-        #                 pysig=numba.utils.pysignature(impl),
-        #                 kws=dict(rhs.kws))
+        if func_name in bodo.hiframes.series_impl.explicit_binop_funcs.values():
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+            op = getattr(operator, func_name)
+            overload_func = \
+                bodo.hiframes.series_impl.create_explicit_binary_op_overload(
+                    op)
+            impl = overload_func(*arg_typs, **kw_typs)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(impl),
+                        kws=dict(rhs.kws))
 
         if func_name == 'rolling':
             # XXX: remove rolling setup call, assuming still available in definitions

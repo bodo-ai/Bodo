@@ -369,11 +369,9 @@ class DistributedPass(object):
             return out
 
         if (fdef == ('get_split_view_index', 'bodo.hiframes.split_impl')
-                and self._is_1D_arr(rhs.args[0].name)):
+                and self._dist_arr_needs_adjust(rhs.args[0].name)):
             arr = rhs.args[0]
             index_var = self._fix_index_var(rhs.args[1])
-            # XXX get_split_view_index is only used within parfors
-            assert index_var.name in self._1D_parfor_starts
             start_var, nodes = self._get_parallel_access_start_var(
                 arr, equiv_set, index_var, avail_vars)
             sub_nodes = self._get_ind_sub(
@@ -384,11 +382,9 @@ class DistributedPass(object):
             return out
 
         if (fdef == ('setitem_str_arr_ptr', 'bodo.libs.str_arr_ext')
-                and self._is_1D_arr(rhs.args[0].name)):
+                and self._dist_arr_needs_adjust(rhs.args[0].name)):
             arr = rhs.args[0]
             index_var = self._fix_index_var(rhs.args[1])
-            # XXX setitem_str_arr_ptr is only used within parfors
-            assert index_var.name in self._1D_parfor_starts
             start_var, nodes = self._get_parallel_access_start_var(
                 arr, equiv_set, index_var, avail_vars)
             sub_nodes = self._get_ind_sub(
@@ -399,12 +395,10 @@ class DistributedPass(object):
             return out
 
         if (fdef == ('str_arr_item_to_numeric', 'bodo.libs.str_arr_ext')
-                and self._is_1D_arr(rhs.args[0].name)):
+                and self._dist_arr_needs_adjust(rhs.args[0].name)):
             # TODO: test parallel
             arr = rhs.args[0]
             index_var = self._fix_index_var(rhs.args[1])
-            # XXX str_arr_item_to_numeric is only used within parfors
-            assert index_var.name in self._1D_parfor_starts
             start_var, nodes = self._get_parallel_access_start_var(
                 arr, equiv_set, index_var, avail_vars)
             sub_nodes = self._get_ind_sub(
@@ -414,8 +408,6 @@ class DistributedPass(object):
             # input string array
             arr = rhs.args[2]
             index_var = self._fix_index_var(rhs.args[3])
-            # XXX str_arr_item_to_numeric is only used within parfors
-            assert index_var.name in self._1D_parfor_starts
             start_var, nodes = self._get_parallel_access_start_var(
                 arr, equiv_set, index_var, avail_vars)
             sub_nodes = self._get_ind_sub(
@@ -425,7 +417,21 @@ class DistributedPass(object):
             out.append(assign)
             return out
 
-        if fdef == ('isna', 'bodo.hiframes.api') and self._is_1D_arr(rhs.args[0].name):
+        if (fdef == ('setitem_arr_nan', 'bodo.ir.join')
+                and self._dist_arr_needs_adjust(rhs.args[0].name)):
+            arr = rhs.args[0]
+            index_var = self._fix_index_var(rhs.args[1])
+            start_var, nodes = self._get_parallel_access_start_var(
+                arr, equiv_set, index_var, avail_vars)
+            sub_nodes = self._get_ind_sub(
+                index_var, start_var)
+            out = nodes + sub_nodes
+            rhs.args[1] = sub_nodes[-1].target
+            out.append(assign)
+            return out
+
+        if (fdef == ('isna', 'bodo.hiframes.api')
+                and self._dist_arr_needs_adjust(rhs.args[0].name)):
             # fix index in call to isna
             arr = rhs.args[0]
             ind = self._fix_index_var(rhs.args[1])
@@ -1425,6 +1431,8 @@ class DistributedPass(object):
         l_nest = parfor.loop_nests[0]
         ind_varname = l_nest.index_variable.name
         ind_used = False
+        # TODO: handle access calls like setitem_arr_nan() in
+        # bodo/tests/test_series.py::test_series_explicit_binary_op_nan[None]
         for block in parfor.loop_body.values():
             for stmt in block.body:
                 if (not is_get_setitem(stmt)
@@ -1603,6 +1611,11 @@ class DistributedPass(object):
         # XXX just call _gen_1D_var_len() for now
         nodes += self._gen_1D_Var_len(var)
         return nodes[-1].target
+
+    def _dist_arr_needs_adjust(self, varname):
+        return (self._is_1D_arr(varname)
+                or (self._is_1D_Var_arr(varname)
+                    and varname in self._1D_Var_parfor_starts))
 
     def _get_parallel_access_start_var(self, arr, equiv_set, index_var,
                                                                    avail_vars):

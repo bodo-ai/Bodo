@@ -179,9 +179,7 @@ def test_series_T(series_val):
     def test_impl(S):
         return S.T
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val))
+    test_func(test_impl, (series_val,))
 
 
 def test_series_hasnans(series_val):
@@ -256,9 +254,7 @@ def test_series_copy_deep(series_val):
     def test_impl(S):
         return S.copy()
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val))
+    test_func(test_impl, (series_val,))
 
 
 def test_series_copy_shallow(series_val):
@@ -266,9 +262,7 @@ def test_series_copy_shallow(series_val):
     def test_impl(S):
         return S.copy(deep=False)
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val))
+    test_func(test_impl, (series_val,))
 
 
 def test_series_to_list(series_val):
@@ -525,7 +519,7 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg):
 
 @pytest.mark.parametrize('op', ['add', 'sub', 'mul', 'truediv', 'floordiv',
     'mod', 'pow', 'lt', 'gt', 'le', 'ge', 'ne', 'eq'])
-@pytest.mark.parametrize('fill', [None, 1.6])
+@pytest.mark.parametrize('fill', [None, True])
 def test_series_explicit_binary_op(numeric_series_val, op, fill):
     # dt64 not supported here
     if numeric_series_val.dtype == np.dtype('datetime64[ns]'):
@@ -544,10 +538,9 @@ def test_series_explicit_binary_op(numeric_series_val, op, fill):
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars['test_impl']
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-            bodo_func(numeric_series_val, numeric_series_val, fill),
-            test_impl(numeric_series_val, numeric_series_val, fill))
+    if fill is not None:
+        fill = numeric_series_val.iloc[0]
+    test_func(test_impl, (numeric_series_val, numeric_series_val, fill))
 
 
 @pytest.mark.parametrize('fill', [None, 1.6])
@@ -557,11 +550,9 @@ def test_series_explicit_binary_op_nan(fill):
         return S.add(other, fill_value=fill_val)
 
 
-    L1 = pd.Series([1.,np.nan,2.3, np.nan])
+    L1 = pd.Series([1., np.nan, 2.3, np.nan])
     L2 = pd.Series([1., np.nan, np.nan, 1.1], name='ABC')
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(L1, L2, fill), test_impl(L1, L2, fill))
+    test_func(test_impl, (L1, L2, fill))
 
 
 @pytest.mark.parametrize('op', bodo.hiframes.pd_series_ext.series_binary_ops)

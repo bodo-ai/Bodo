@@ -444,6 +444,9 @@ class DistributedAnalysis(object):
         if fdef == ('parallel_print', 'bodo'):
             return
 
+        if fdef == ('setitem_arr_nan', 'bodo.ir.join'):
+            return
+
         # bodo.libs.distributed_api functions
         if isinstance(func_mod, str) and func_mod == 'bodo.libs.distributed_api':
             self._analyze_call_hpat_dist(lhs, func_name, args, array_dists)
@@ -1257,6 +1260,8 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
                         if fdef == ('get_split_view_index', 'bodo.hiframes.split_impl'):
                             accesses.add((rhs.args[0].name, rhs.args[1].name))
                         if fdef == ('setitem_str_arr_ptr', 'bodo.libs.str_arr_ext'):
+                            accesses.add((rhs.args[0].name, rhs.args[1].name))
+                        if fdef == ('setitem_arr_nan', 'bodo.ir.join'):
                             accesses.add((rhs.args[0].name, rhs.args[1].name))
                         if fdef == ('str_arr_item_to_numeric', 'bodo.libs.str_arr_ext'):
                             accesses.add((rhs.args[0].name, rhs.args[1].name))
