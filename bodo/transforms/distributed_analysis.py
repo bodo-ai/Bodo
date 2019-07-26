@@ -261,9 +261,19 @@ class DistributedAnalysis(object):
                                                              'static_getitem'):
             self._analyze_getitem(inst, lhs, rhs, array_dists)
             return
-        elif isinstance(rhs, ir.Expr) and rhs.op == 'build_tuple':
+        elif (isinstance(rhs, ir.Expr) and rhs.op == 'build_tuple'
+                and is_distributable_tuple_typ(lhs_typ)):
             # parallel arrays can be packed and unpacked from tuples
             # e.g. boolean array index in test_getitem_multidim
+            l_dist = self._get_var_dist(lhs, array_dists)
+            new_dist = []
+            for d, v in zip(l_dist, rhs.items):
+                new_d = Distribution(min(d.value,
+                    self._get_var_dist(v.name, array_dists).value))
+                self._set_var_dist(v.name, array_dists, new_d)
+                new_dist.append(new_d)
+
+            array_dists[lhs] = new_dist
             return
         elif (isinstance(rhs, ir.Expr) and rhs.op == 'exhaust_iter'
                 and is_distributable_tuple_typ(lhs_typ)):
@@ -1108,12 +1118,11 @@ class DistributedAnalysis(object):
             if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
                 dprint("dist setting REP {}".format(varname))
                 self._set_var_dist(varname, array_dists, Distribution.REP)
-            # handle tuples of arrays
-            var_def = guard(get_definition, self.func_ir, var)
-            if (var_def is not None and isinstance(var_def, ir.Expr)
-                    and var_def.op == 'build_tuple'):
-                tuple_vars = var_def.items
-                self._set_REP(tuple_vars, array_dists)
+
+    def _get_var_dist(self, varname, array_dists):
+        if varname not in array_dists:
+            self._set_var_dist(varname, array_dists, Distribution.OneD)
+        return array_dists[varname]
 
     def _set_var_dist(self, varname, array_dists, dist):
         typ = self.typemap[varname]

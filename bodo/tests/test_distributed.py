@@ -375,3 +375,22 @@ def test_dist_tuple1():
     bodo_func = bodo.jit(distributed={'A'})(impl1)
     assert bodo_func(A_par) == impl1(A)
     assert count_array_OneDs() > 0
+
+
+def test_dist_tuple2():
+    # TODO: tuple getitem with variable index
+    def impl1(A, B):
+        C = (A, B)
+        return C
+
+    n = 11
+    A = np.arange(n)
+    B = np.ones(n)
+    start, end = get_start_end(n)
+    bodo_func = bodo.jit(distributed={'A', 'B', 'C'})(impl1)
+
+    py_out = impl1(A, B)
+    bodo_out = bodo_func(A[start:end], B[start:end])
+    np.testing.assert_array_equal(bodo_out[0], py_out[0][start:end])
+    np.testing.assert_array_equal(bodo_out[1], py_out[1][start:end])
+    assert count_array_OneDs() > 0
