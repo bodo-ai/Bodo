@@ -686,22 +686,19 @@ def test_series_combine_kws():
         return S1.combine(
             other=S2, func=lambda a, b: 2*a + b, fill_value=fill_val)
 
-    bodo_func = bodo.jit(test_impl)
     S1 = pd.Series([1.0, 2., 3., 4., 5.])
     S2 = pd.Series([6.0, 21., 3.6, 5., 0.0])
     fill = 1237.56
-    pd.testing.assert_series_equal(
-            bodo_func(S1, S2, fill), test_impl(S1, S2, fill))
+    test_func(test_impl, (S1, S2, fill))
 
 
 def test_series_combine_no_fill():
     def test_impl(S1, S2):
         return S1.combine(other=S2, func=lambda a, b: 2*a + b)
 
-    bodo_func = bodo.jit(test_impl)
     S1 = pd.Series([1.0, 2., 3., 4., 5.])
     S2 = pd.Series([6.0, 21., 3.6, 5., 0.0])
-    pd.testing.assert_series_equal(bodo_func(S1, S2), test_impl(S1, S2))
+    test_func(test_impl, (S1, S2))
 
 
 @pytest.mark.parametrize('S', [pd.Series([1.0, 2., 3., 4., 5.]),
@@ -710,17 +707,15 @@ def test_series_apply(S):
     def test_impl(S):
         return S.apply(lambda a: 2*a)
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+    test_func(test_impl, (S,))
 
 
 def test_series_apply_kw():
     def test_impl(S):
         return S.apply(func=lambda a: 2*a)
 
-    bodo_func = bodo.jit(test_impl)
     S = pd.Series([1.0, 2., 3., 4., 5.])
-    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+    test_func(test_impl, (S,))
 
 
 @pytest.mark.parametrize('S', [pd.Series([1.0, 2., 3., 4., 5.]),
@@ -729,26 +724,26 @@ def test_series_map(S):
     def test_impl(S):
         return S.map(lambda a: 2*a)
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+    test_func(test_impl, (S,))
 
 
 def test_series_map_global1():
     def test_impl(S):
         return S.map(arg=lambda a: a + GLOBAL_VAL)
 
-    bodo_func = bodo.jit(test_impl)
     S = pd.Series([1.0, 2., 3., 4., 5.])
-    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+    test_func(test_impl, (S,))
 
 
 def test_series_map_tup1():
     def test_impl(S):
         return S.map(lambda a: (a, 2*a))
 
-    bodo_func = bodo.jit(test_impl)
     S = pd.Series([1.0, 2., 3., 4., 5.])
+    bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+    # TODO: support unbox for column of tuples
+    # test_func(test_impl, (S,))
 
 
 def test_series_map_tup_map1():
@@ -756,9 +751,8 @@ def test_series_map_tup_map1():
         A = S.map(lambda a: (a, 2*a))
         return A.map(lambda a: a[1])
 
-    bodo_func = bodo.jit(test_impl)
     S = pd.Series([1.0, 2., 3., 4., 5.])
-    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+    test_func(test_impl, (S,))
 
 
 @pytest.mark.parametrize('S', [pd.Series([1.0, 2., 3., 4., 5.]),
