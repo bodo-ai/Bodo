@@ -26,6 +26,7 @@ from bodo.utils.utils import (get_constant, is_alloc_callname,
                         is_whole_slice, is_array_typ, is_array_container_typ,
                         is_np_array_typ, find_build_tuple, debug_prints,
                         is_const_slice, is_expr, is_distributable_typ,
+                        is_distributable_tuple_typ,
                         is_static_getsetitem, get_getsetitem_index_var)
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.utils.transform import get_stmt_defs
@@ -236,15 +237,17 @@ class DistributedAnalysis(object):
     def _analyze_assign(self, inst, array_dists, parfor_dists):
         lhs = inst.target.name
         rhs = inst.value
+        lhs_typ = self.typemap[lhs]
 
         # treat return casts like assignments
         if isinstance(rhs, ir.Expr) and rhs.op == 'cast':
             rhs = rhs.value
 
-        if isinstance(rhs, ir.Var) and is_distributable_typ(self.typemap[lhs]):
+        if (isinstance(rhs, ir.Var) and (is_distributable_typ(lhs_typ)
+                or is_distributable_tuple_typ(lhs_typ))):
             self._meet_array_dists(lhs, rhs.name, array_dists)
             return
-        elif (is_array_typ(self.typemap[lhs])
+        elif (is_array_typ(lhs_typ)
                 and isinstance(rhs, ir.Expr)
                 and rhs.op == 'inplace_binop'):
             # distributions of all 3 variables should meet (lhs, arg1, arg2)
@@ -262,8 +265,11 @@ class DistributedAnalysis(object):
             # parallel arrays can be packed and unpacked from tuples
             # e.g. boolean array index in test_getitem_multidim
             return
-        elif (isinstance(rhs, ir.Expr) and rhs.op == 'getattr' and rhs.attr == 'T'
-              and is_array_typ(self.typemap[lhs])):
+        elif (isinstance(rhs, ir.Expr) and rhs.op == 'exhaust_iter'
+                and is_distributable_tuple_typ(lhs_typ)):
+            self._meet_array_dists(lhs, rhs.value.name, array_dists)
+        elif (isinstance(rhs, ir.Expr) and rhs.op == 'getattr'
+                and rhs.attr == 'T' and is_array_typ(lhs_typ)):
             # array and its transpose have same distributions
             arr = rhs.value.name
             self._meet_array_dists(lhs, arr, array_dists)
@@ -289,7 +295,8 @@ class DistributedAnalysis(object):
         # handle for A in arr_container: ...
         # A = pair_first(iternext(getiter(arr_container)))
         # TODO: support getitem of container
-        elif isinstance(rhs, ir.Expr) and rhs.op == 'pair_first' and is_array_typ(self.typemap[lhs]):
+        elif (isinstance(rhs, ir.Expr) and rhs.op == 'pair_first'
+                and is_distributable_typ(lhs_typ)):
             arr_container = guard(_get_pair_first_container, self.func_ir, rhs)
             if arr_container is not None:
                 self._meet_array_dists(lhs, arr_container.name, array_dists)
@@ -298,27 +305,8 @@ class DistributedAnalysis(object):
             # analyze array container access in pair_first
             return
         elif isinstance(rhs, ir.Arg):
-            if (rhs.name in self.metadata['distributed']
-                    or self.metadata['all_args_distributed']):
-                if lhs not in array_dists:
-                    array_dists[lhs] = Distribution.OneD
-            elif (rhs.name in self.metadata['distributed_varlength']
-                    or self.metadata['all_args_distributed_varlength']):
-                if lhs not in array_dists:
-                    array_dists[lhs] = Distribution.OneD_Var
-            elif rhs.name in self.metadata['threaded']:
-                if lhs not in array_dists:
-                    array_dists[lhs] = Distribution.Thread
-            else:
-                dprint("replicated input ", rhs.name, lhs)
-                if is_distributable_typ(self.typemap[lhs]):
-                    info = ("Distributed analysis replicated input {0} (variable "
-                    "{1}). Set distributed flag for {0} if distributed partitions "
-                    "are passed (e.g. @bodo.jit(distributed=['{0}'])).").format(
-                        rhs.name, lhs)
-                    if info not in self.diag_info:
-                        self.diag_info.append(info)
-                self._set_REP([inst.target], array_dists)
+            self._analyze_arg(lhs, rhs, array_dists)
+            return
         else:
             self._set_REP(inst.list_vars(), array_dists)
         return
@@ -896,13 +884,15 @@ class DistributedAnalysis(object):
     def _analyze_call_set_REP(self, lhs, args, array_dists, fdef=None):
         arrs = []
         for v in args:
-            if is_distributable_typ(self.typemap[v.name]):
+            typ = self.typemap[v.name]
+            if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
                 dprint("dist setting call arg REP {} in {}".format(v.name, fdef))
-                array_dists[v.name] = Distribution.REP
+                self._set_var_dist(v.name, array_dists, Distribution.REP)
                 arrs.append(v.name)
-        if is_distributable_typ(self.typemap[lhs]):
+        typ = self.typemap[lhs]
+        if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
             dprint("dist setting call out REP {} in {}".format(lhs, fdef))
-            array_dists[lhs] = Distribution.REP
+            self._set_var_dist(lhs, array_dists, Distribution.REP)
             arrs.append(lhs)
         # save diagnostic info for faild analysis
         fname = fdef
@@ -923,13 +913,19 @@ class DistributedAnalysis(object):
         # selecting an array from a tuple
         if (rhs.op == 'static_getitem'
                 and isinstance(in_typ, types.BaseTuple)
-                and isinstance(rhs.index, int)):
-            seq_info = guard(find_build_sequence, self.func_ir, rhs.value)
-            if seq_info is not None:
-                in_arrs, _ = seq_info
-                arr = in_arrs[rhs.index]
-                self._meet_array_dists(lhs, arr.name, array_dists)
-                return
+                and isinstance(rhs.index, int)
+                and is_distributable_typ(self.typemap[lhs])):
+            # meet distributions
+            tup = rhs.value.name
+            if tup not in array_dists:
+                self._set_var_dist(tup, array_dists, Distribution.OneD)
+            if lhs not in array_dists:
+                array_dists[lhs] = Distribution.OneD
+            new_dist = Distribution(min(array_dists[tup][rhs.index].value,
+                                    array_dists[lhs].value))
+            array_dists[tup][rhs.index] = new_dist
+            array_dists[lhs] = new_dist
+            return
 
         # get index_var without changing IR since we are in analysis
         index_var = get_getsetitem_index_var(rhs, self.typemap, [])
@@ -1023,6 +1019,30 @@ class DistributedAnalysis(object):
 
         self._set_REP([inst.value], array_dists)
 
+    def _analyze_arg(self, lhs, rhs, array_dists):
+        if (rhs.name in self.metadata['distributed']
+                or self.metadata['all_args_distributed']):
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+        elif (rhs.name in self.metadata['distributed_varlength']
+                or self.metadata['all_args_distributed_varlength']):
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+        elif rhs.name in self.metadata['threaded']:
+            if lhs not in array_dists:
+                array_dists[lhs] = Distribution.Thread
+        else:
+            dprint("replicated input ", rhs.name, lhs)
+            typ = self.typemap[lhs]
+            if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
+                info = ("Distributed analysis replicated input {0} (variable "
+                "{1}). Set distributed flag for {0} if distributed partitions "
+                "are passed (e.g. @bodo.jit(distributed=['{0}'])).").format(
+                    rhs.name, lhs)
+                if info not in self.diag_info:
+                    self.diag_info.append(info)
+                self._set_var_dist(lhs, array_dists, Distribution.REP)
+
     def _analyze_return(self, var, array_dists):
         if self._is_dist_return_var(var):
             return
@@ -1049,12 +1069,28 @@ class DistributedAnalysis(object):
             return False
 
     def _meet_array_dists(self, arr1, arr2, array_dists, top_dist=None):
+        typ1 = self.typemap[arr1]
+        typ2 = self.typemap[arr2]
+
         if top_dist is None:
             top_dist = Distribution.OneD
         if arr1 not in array_dists:
-            array_dists[arr1] = top_dist
+            self._set_var_dist(arr1, array_dists, top_dist)
         if arr2 not in array_dists:
-            array_dists[arr2] = top_dist
+            self._set_var_dist(arr2, array_dists, top_dist)
+
+        if is_distributable_tuple_typ(typ1):
+            assert typ1 == typ2
+            dist1 = array_dists[arr1]
+            dist2 = array_dists[arr2]
+            n = len(typ1)
+            new_dist = [Distribution(min(dist1[i].value, dist2[i].value))
+                        for i in range(n)]
+            new_dist = [Distribution(min(new_dist[i].value, top_dist.value))
+                        for i in range(n)]
+            array_dists[arr1] = new_dist
+            array_dists[arr2] = new_dist
+            return new_dist
 
         new_dist = Distribution(min(array_dists[arr1].value,
                                     array_dists[arr2].value))
@@ -1068,9 +1104,10 @@ class DistributedAnalysis(object):
             varname = var.name
             # Handle SeriesType since it comes from Arg node and it could
             # have user-defined distribution
-            if is_distributable_typ(self.typemap[varname]):
+            typ = self.typemap[varname]
+            if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
                 dprint("dist setting REP {}".format(varname))
-                array_dists[varname] = Distribution.REP
+                self._set_var_dist(varname, array_dists, Distribution.REP)
             # handle tuples of arrays
             var_def = guard(get_definition, self.func_ir, var)
             if (var_def is not None and isinstance(var_def, ir.Expr)
@@ -1078,6 +1115,14 @@ class DistributedAnalysis(object):
                 tuple_vars = var_def.items
                 self._set_REP(tuple_vars, array_dists)
 
+    def _set_var_dist(self, varname, array_dists, dist):
+        typ = self.typemap[varname]
+        if is_distributable_tuple_typ(typ):
+            t_dist = [dist if is_distributable_typ(v) else None
+                      for v in typ.types]
+            array_dists[varname] = t_dist
+        elif is_distributable_typ(typ):
+            array_dists[varname] = dist
 
     def _rebalance_arrs(self, array_dists, parfor_dists):
         # rebalance an array if it is accessed in a parfor that has output

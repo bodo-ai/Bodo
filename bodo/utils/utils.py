@@ -336,6 +336,11 @@ def is_distributable_typ(var_typ):
             and is_distributable_typ(var_typ.dtype)))
 
 
+def is_distributable_tuple_typ(var_typ):
+    return (isinstance(var_typ, types.BaseTuple)
+            and any(is_distributable_typ(t) for t in var_typ.types))
+
+
 # converts an iterable to array, similar to np.array, but can support
 # other things like StringArray
 # TODO: other types like datetime?

@@ -967,9 +967,7 @@ def test_series_sort_values(series_val):
     def test_impl(A):
         return A.sort_values()
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val))
+    test_func(test_impl, (series_val,))
 
 
 @pytest.mark.parametrize('ignore_index', [True, False])

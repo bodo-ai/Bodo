@@ -361,3 +361,17 @@ def test_getitem_int_1D_Var(A, s):
         np.testing.assert_array_equal(
             bodo_func(A[start:end], B[start:end], s), impl1(A, B, s))
     assert count_array_OneD_Vars() > 0
+
+
+def test_dist_tuple1():
+    def impl1(A):
+        B1, B2 = A
+        return (B1 + B2).sum()
+
+    n = 11
+    A = (np.arange(n), np.ones(n))
+    start, end = get_start_end(n)
+    A_par = (A[0][start:end], A[1][start:end])
+    bodo_func = bodo.jit(distributed={'A'})(impl1)
+    assert bodo_func(A_par) == impl1(A)
+    assert count_array_OneDs() > 0
