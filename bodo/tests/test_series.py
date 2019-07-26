@@ -618,8 +618,7 @@ def test_series_unary_ufunc(ufunc):
         return ufunc(S)
 
     S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name='ABC')
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+    test_func(test_impl, (S,))
 
 
 @pytest.mark.parametrize('ufunc',
@@ -630,10 +629,9 @@ def test_series_binary_ufunc(ufunc):
 
     S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name='ABC')
     A = np.array([1, 3, 7, 11])
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(S, S), test_impl(S, S))
-    pd.testing.assert_series_equal(bodo_func(S, A), test_impl(S, A))
-    pd.testing.assert_series_equal(bodo_func(A, S), test_impl(A, S))
+    test_func(test_impl, (S, S))
+    test_func(test_impl, (S, A))
+    test_func(test_impl, (A, S))
 
 
 @pytest.mark.parametrize('S1,S2,fill,raises', [
@@ -678,6 +676,7 @@ def test_series_combine(S1, S2, fill, raises):
         with pytest.raises(AssertionError):
             bodo_func(S1, S2, fill)
     else:
+        # TODO: fix 1D_Var chunk size mismatch on inputs with different sizes
         pd.testing.assert_series_equal(
             bodo_func(S1, S2, fill), test_impl(S1, S2, fill))
 

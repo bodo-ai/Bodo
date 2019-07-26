@@ -1008,7 +1008,6 @@ class DistributedPass(object):
         1D_Var array and cannot be standalone.
         """
         out = []
-        new_size_var = None
         is_tuple = False
 
         # size is either integer or tuple
@@ -1025,20 +1024,9 @@ class DistributedPass(object):
                          for s in size_list]
             size_var = size_list[0]
 
-
         # find another 1D_Var array this alloc is associated with
-        for v in equiv_set.get_equiv_set(size_var):
-            if '#' in v and self._is_1D_Var_arr(v.split('#')[0]):
-                arr_name = v.split('#')[0]
-                if arr_name not in avail_vars:
-                    continue
-                arr_var = ir.Var(size_var.scope, arr_name, size_var.loc)
-                out = compile_func_single_block(
-                    lambda A: len(A), (arr_var,), None, self)
-                new_size_var = out[-1].target
-                break
-
-        assert new_size_var, "1D alloc size not found"
+        new_size_var = self._get_1D_Var_size(
+            size_var, equiv_set, avail_vars, out)
 
         if not is_tuple:
             return out, new_size_var
@@ -1085,6 +1073,35 @@ class DistributedPass(object):
     #     nodes += f_block.body[:-3]
     #     nodes[-1].target = lhs
     #     return nodes
+
+    def _get_1D_Var_size(self, size_var, equiv_set, avail_vars, out):
+        new_size_var = None
+        for v in equiv_set.get_equiv_set(size_var):
+            if '#' in v and self._is_1D_Var_arr(v.split('#')[0]):
+                arr_name = v.split('#')[0]
+                if arr_name not in avail_vars:
+                    continue
+                arr_var = ir.Var(size_var.scope, arr_name, size_var.loc)
+                out += compile_func_single_block(
+                    lambda A: len(A), (arr_var,), None, self)
+                new_size_var = out[-1].target
+                break
+
+        if new_size_var is None:
+            # Series.combine() uses max(s1, s2) to get output size
+            size_def = guard(get_definition, self.func_ir, size_var)
+            calc_call = guard(find_callname, self.func_ir, size_def)
+            if calc_call == ('max', 'builtins'):
+                s1 = self._get_1D_Var_size(
+                    size_def.args[0], equiv_set, avail_vars, out)
+                s2 = self._get_1D_Var_size(
+                    size_def.args[1], equiv_set, avail_vars, out)
+                out += compile_func_single_block(
+                    lambda a1, a2: max(a1, a2), (s1, s2), None, self)
+                new_size_var = out[-1].target
+
+        assert new_size_var, "1D Var size not found"
+        return new_size_var
 
     def _run_array_shape(self, lhs, arr, equiv_set):
         # non-Arrays like Series, DataFrame etc. are all 1 dim
