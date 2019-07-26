@@ -611,7 +611,8 @@ class DistributedPass(object):
             assert self.typemap[args[0].name].ndim == 1, "only 1D ravel supported"
 
         if (func_name in ('cumsum', 'cumprod')
-                and self._is_1D_arr(args[0].name)):
+                and (self._is_1D_arr(args[0].name)
+                    or self._is_1D_Var_arr(args[0].name))):
             in_arr_var = args[0]
             lhs_var = assign.target
             # TODO: compute inplace if input array is dead

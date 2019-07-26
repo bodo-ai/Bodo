@@ -136,7 +136,7 @@ def dist_get_dist_time(context, builder, sig, args):
     return builder.call(fn, [])
 
 
-@lower_builtin(distributed_api.dist_cumsum, types.npytypes.Array, types.npytypes.Array)
+@lower_builtin(distributed_api.dist_cumsum, types.Array, types.Array)
 def lower_dist_cumsum(context, builder, sig, args):
 
     dtype = sig.args[0].dtype

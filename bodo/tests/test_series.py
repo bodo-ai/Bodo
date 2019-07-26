@@ -761,17 +761,15 @@ def test_series_rolling(S):
     def test_impl(S):
         return S.rolling(3).sum()
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+    test_func(test_impl, (S,))
 
 
 def test_series_rolling_kw():
     def test_impl(S):
         return S.rolling(window=3, center=True).sum()
 
-    bodo_func = bodo.jit(test_impl)
     S = pd.Series([1.0, 2., 3., 4., 5.])
-    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+    test_func(test_impl, (S,))
 
 
 @pytest.mark.parametrize('S', [pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]),
@@ -782,8 +780,7 @@ def test_series_cumsum(S):
     def test_impl(S):
         return S.cumsum()
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+    test_func(test_impl, (S,))
 
 
 @pytest.mark.parametrize('S', [pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]),
@@ -796,6 +793,8 @@ def test_series_cumprod(S):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+    # TODO: implement distributed cumprod
+    # test_func(test_impl, (S,))
 
 
 def test_series_rename():
@@ -804,17 +803,15 @@ def test_series_rename():
         return A.rename('B')
 
     S = pd.Series([1.0, 2.0, np.nan, 1.0], name='A')
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+    test_func(test_impl, (S,))
 
 
 def test_series_abs():
     def test_impl(S):
         return S.abs()
 
-    bodo_func = bodo.jit(test_impl)
     S = pd.Series([np.nan, -2., 3.])
-    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+    test_func(test_impl, (S,))
 
 
 def test_series_min(series_val):
@@ -958,6 +955,8 @@ def test_series_argsort(series_val):
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
         bodo_func(series_val), test_impl(series_val))
+    # TODO: support distributed argsort()
+    # test_func(test_impl, (series_val,))
 
 
 def test_series_sort_values(series_val):
