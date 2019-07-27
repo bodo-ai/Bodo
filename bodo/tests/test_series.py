@@ -1077,9 +1077,7 @@ def test_series_dropna(S):
     def test_impl(A):
         return A.dropna()
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(S), test_impl(S))
+    test_func(test_impl, (S,))
 
 
 def test_series_shift(numeric_series_val):

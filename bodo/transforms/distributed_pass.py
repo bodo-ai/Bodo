@@ -1437,29 +1437,13 @@ class DistributedPass(object):
                 size_found = True
                 new_stop_var = prepend[-1].target
                 break
+
         # try equivalences
-        if not size_found and stop_var.name in equiv_set.obj_to_ind:
-            # TODO: test this code path
-            # TODO: try equivalent arrs/series/dfs to arr since they may be in
-            # avail_vars
-            size_class = equiv_set.obj_to_ind[stop_var.name]
-            for (arr, index) in array_accesses:
-                if self._is_1D_Var_arr(arr) and arr in avail_vars:
-                    shape_classes = None
-                    try:
-                        shape_classes = equiv_set.get_shape_classes(arr)
-                    except:
-                        pass
-                    if shape_classes and shape_classes[0] == size_class:
-                        arr_var = ir.Var(stop_var.scope, arr, stop_var.loc)
-                        prepend += compile_func_single_block(
-                            lambda A: len(A), (arr_var,), None, self)
-                        new_stop_var = prepend[-1].target
-                        size_found = True
-                        break
+        if not size_found:
+            new_stop_var = self._get_1D_Var_size(
+                stop_var, equiv_set, avail_vars, prepend)
 
         # TODO: test multi-dim array sizes and complex indexing like slice
-        assert size_found, "invalid 1D_Var parfor size"
         parfor.loop_nests[0].stop = new_stop_var
 
         for (arr, index) in array_accesses:
@@ -1525,6 +1509,9 @@ class DistributedPass(object):
     def _index_has_par_index(self, index, par_index):
         """check if parfor index is used in 1st dimension of access index
         """
+        ind_def = self.func_ir._definitions[index]
+        if len(ind_def) == 1 and isinstance(ind_def[0], ir.Var):
+            index = ind_def[0].name
         if index == par_index:
             return True
         # multi-dim case
