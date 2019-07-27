@@ -460,9 +460,6 @@ class DistributedPass(object):
             # fix index in call to isna
             arr = rhs.args[0]
             ind = self._fix_index_var(rhs.args[1])
-            # XXX isna is only used within parfors, not standalone on parallel
-            # array
-            assert ind.name in self._1D_parfor_starts
             start_var, out = self._get_parallel_access_start_var(
                 arr, equiv_set, ind, avail_vars)
             out += self._get_ind_sub(ind, start_var)

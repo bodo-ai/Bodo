@@ -1734,8 +1734,8 @@ class SeriesPass(object):
                 func_text += '    for i in numba.parfor.internal_prange(n):\n'
                 func_text += '        num_chars += get_utf8_size(str_arr[i].{}())\n'.format(func_name)
             func_text += '    S = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)\n'
-            func_text += '    for i in numba.parfor.internal_prange(n):\n'
-            func_text += '        S[i] = str_arr[i].{}()\n'.format(func_name)
+            func_text += '    for j in numba.parfor.internal_prange(n):\n'
+            func_text += '        S[j] = str_arr[j].{}()\n'.format(func_name)
             func_text += '    return bodo.hiframes.api.init_series(S, index, name)\n'
             loc_vars = {}
             # print(func_text)
@@ -1856,9 +1856,9 @@ class SeriesPass(object):
                 n_total_chars += get_utf8_size(out_str)
             numba.parfor.init_prange()
             out_arr = pre_alloc_string_array(n, n_total_chars)
-            for i in numba.parfor.internal_prange(n):
-                _str = str_list[i]
-                out_arr[i] = _str
+            for j in numba.parfor.internal_prange(n):
+                _str = str_list[j]
+                out_arr[j] = _str
             return bodo.hiframes.api.init_series(out_arr)
 
         if arr_typ == string_array_split_view_type:

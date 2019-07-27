@@ -575,9 +575,9 @@ def overload_series_astype(S, dtype, copy=True, errors='raise'):
                 # TODO: check NA
                 num_chars += bodo.libs.str_arr_ext.get_utf8_size(str(s))
             A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
-            for i in numba.parfor.internal_prange(n):
-                s = arr[i]
-                A[i] = str(s)  # TODO: check NA
+            for j in numba.parfor.internal_prange(n):
+                s = arr[j]
+                A[j] = str(s)  # TODO: check NA
 
             return bodo.hiframes.api.init_series(A, index, name)
 
@@ -793,16 +793,17 @@ def overload_series_fillna(S, value=None, method=None, axis=None,
                 for i in numba.parfor.internal_prange(n):
                     s = in_arr[i]
                     if bodo.hiframes.api.isna(in_arr, i):
-                        num_chars += bodo.libs.str_arr_ext.get_utf8_size(value)
+                        l += bodo.libs.str_arr_ext.get_utf8_size(value)
                     else:
-                        num_chars += bodo.libs.str_arr_ext.get_utf8_size(s)
+                        l += bodo.libs.str_arr_ext.get_utf8_size(s)
+                    num_chars += l
                 out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(
                     n, num_chars)
-                for i in numba.parfor.internal_prange(n):
-                    s = in_arr[i]
-                    if bodo.hiframes.api.isna(in_arr, i):
+                for j in numba.parfor.internal_prange(n):
+                    s = in_arr[j]
+                    if bodo.hiframes.api.isna(in_arr, j):
                         s = value
-                    out_arr[i] = s
+                    out_arr[j] = s
                 bodo.hiframes.api.update_series_data(S, out_arr)
                 return
             return str_fillna_inplace_impl
@@ -828,17 +829,21 @@ def overload_series_fillna(S, value=None, method=None, axis=None,
                 # get total chars in new array
                 for i in numba.parfor.internal_prange(n):
                     s = in_arr[i]
+                    # TODO: fix dist reduce when "num_chars += ..." is in
+                    # both branches
                     if bodo.hiframes.api.isna(in_arr, i):
-                        num_chars += bodo.libs.str_arr_ext.get_utf8_size(value)
+                        l = bodo.libs.str_arr_ext.get_utf8_size(value)
                     else:
-                        num_chars += bodo.libs.str_arr_ext.get_utf8_size(s)
+                        l = bodo.libs.str_arr_ext.get_utf8_size(s)
+                    num_chars += l
                 out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(
                     n, num_chars)
-                for i in numba.parfor.internal_prange(n):
-                    s = in_arr[i]
-                    if bodo.hiframes.api.isna(in_arr, i):
+                # TODO: fix SSA for loop variables
+                for j in numba.parfor.internal_prange(n):
+                    s = in_arr[j]
+                    if bodo.hiframes.api.isna(in_arr, j):
                         s = value
-                    out_arr[i] = s
+                    out_arr[j] = s
                 return bodo.hiframes.api.init_series(out_arr, index, name)
             return str_fillna_alloc_impl
         else:

@@ -1065,9 +1065,7 @@ def test_series_fillna(S, value):
     def test_impl(A, val):
         return A.fillna(val)
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(S, value), test_impl(S, value))
+    test_func(test_impl, (S, value))
 
 
 @pytest.mark.parametrize('S', [
