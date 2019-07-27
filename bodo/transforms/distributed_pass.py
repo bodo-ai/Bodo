@@ -203,6 +203,31 @@ class DistributedPass(object):
                         or self._is_1D_Var_arr(rhs.value.name))):
             return self._run_array_size(inst.target, rhs.value, equiv_set)
 
+        # RangeIndex._stop, get global value
+        if (rhs.op == 'getattr' and rhs.attr == '_stop'
+                and isinstance(self.typemap[rhs.value.name],
+                    bodo.hiframes.pd_index_ext.RangeIndexType)
+                and (self._is_1D_arr(rhs.value.name)
+                        or self._is_1D_Var_arr(rhs.value.name))):
+            return [inst] + compile_func_single_block(
+                lambda r: bodo.libs.distributed_api.dist_reduce(
+                    r._stop - r._start, _op),
+                (rhs.value,), inst.target, self,
+                extra_globals={'_op': np.int32(Reduce_Type.Sum.value)})
+
+        # RangeIndex._start, get global value
+        # XXX: assuming global start is 0
+        # TODO: support all RangeIndex inputs
+        if (rhs.op == 'getattr' and rhs.attr == '_start'
+                and isinstance(self.typemap[rhs.value.name],
+                    bodo.hiframes.pd_index_ext.RangeIndexType)
+                and (self._is_1D_arr(rhs.value.name)
+                        or self._is_1D_Var_arr(rhs.value.name))):
+            return [inst] + compile_func_single_block(
+                lambda r: 0,
+                (rhs.value,), inst.target, self,
+                extra_globals={'_op': np.int32(Reduce_Type.Sum.value)})
+
         return [inst]
 
     def _run_call(self, assign, equiv_set, avail_vars):

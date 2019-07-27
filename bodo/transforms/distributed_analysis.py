@@ -533,6 +533,7 @@ class DistributedAnalysis(object):
                 'get_index_data',
                 'to_arr_from_series',
                 'to_date_series_type', 'dummy_unbox_series',
+                'init_datetime_index', 'init_timedelta_index'
                 'parallel_fix_df_array'):
             # TODO: support Series type similar to Array
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
