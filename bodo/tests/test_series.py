@@ -1088,9 +1088,7 @@ def test_series_shift(numeric_series_val):
     def test_impl(A):
         return A.shift(2)
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(numeric_series_val), test_impl(numeric_series_val))
+    test_func(test_impl, (numeric_series_val,))
 
 
 def test_series_pct_change(numeric_series_val):
@@ -1101,9 +1099,7 @@ def test_series_pct_change(numeric_series_val):
     def test_impl(A):
         return A.pct_change(2)
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(numeric_series_val), test_impl(numeric_series_val))
+    test_func(test_impl, (numeric_series_val,))
 
 
 def test_series_index_cast():
