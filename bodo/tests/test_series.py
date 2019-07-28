@@ -138,9 +138,7 @@ def test_series_values(series_val):
     def test_impl(S):
         return S.values
 
-    bodo_func = bodo.jit(test_impl)
-    np.testing.assert_array_equal(
-        bodo_func(series_val), test_impl(series_val))
+    test_func(test_impl, (series_val,))
 
 
 def test_series_dtype(numeric_series_val):

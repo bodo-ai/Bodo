@@ -1220,6 +1220,37 @@ def _str_arr_item_to_numeric(typingctx, out_ptr_t, str_arr_t, ind_t,
         out_ptr_t,  string_array_type, types.int64, out_dtype_t), codegen
 
 
+# XXX: this is overwriting Numba's array type registration, make sure it is
+# robust
+# TODO: support other array types like datetime.date
+@typeof_impl.register(np.ndarray)
+def _typeof_ndarray(val, c):
+    try:
+        dtype = numba.numpy_support.from_dtype(val.dtype)
+    except NotImplementedError:
+        if _is_str_ndarray(val):
+            return string_array_type
+        raise ValueError("Unsupported array dtype: %s" % (val.dtype,))
+    layout = numba.numpy_support.map_layout(val)
+    readonly = not val.flags.writeable
+    return types.Array(dtype, val.ndim, layout, readonly=readonly)
+
+
+def _is_str_ndarray(val):
+    # XXX assuming the whole array is strings if 1st val is string
+    i = 0
+    while i < len(val) and (val[i] is np.nan or val[i] is None):
+        i += 1
+    if i == len(val):
+        return False
+
+    first_val = val[i]
+    if isinstance(first_val, str):
+        return True
+
+    return False
+
+
 # TODO: support array of strings
 # @typeof_impl.register(np.ndarray)
 # def typeof_np_string(val, c):
