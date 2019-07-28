@@ -261,6 +261,7 @@ def overload_index_from_array(data, name=None):
     if isinstance(data.dtype, types.Float):
         return lambda data, name=None: pd.Float64Index(data, name=name)
 
+    # TODO: timedelta, period
     raise TypeError("invalid index type {}".format(data))
 
 

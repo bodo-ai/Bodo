@@ -64,7 +64,7 @@ def test_func(func, args):
     py_output = func(*args)
     # sequential
     bodo_func = bodo.jit(func)
-    pd.testing.assert_series_equal(bodo_func(*args), py_output)
+    _test_equal(bodo_func(*args), py_output)
 
     # 1D distributed
     bodo_func = bodo.jit(
@@ -73,7 +73,7 @@ def test_func(func, args):
     bodo_output = bodo_func(*dist_args)
     bodo_output = bodo.gatherv(bodo_output)
     if bodo.get_rank() == 0:
-        pd.testing.assert_series_equal(bodo_output, py_output)
+        _test_equal(bodo_output, py_output)
 
     # 1D distributed variable length
     bodo_func = bodo.jit(
@@ -83,7 +83,7 @@ def test_func(func, args):
     bodo_output = bodo_func(*dist_args)
     bodo_output = bodo.gatherv(bodo_output)
     if bodo.get_rank() == 0:
-        pd.testing.assert_series_equal(bodo_output, py_output)
+        _test_equal(bodo_output, py_output)
 
 
 def _get_dist_arg(a):
@@ -92,3 +92,16 @@ def _get_dist_arg(a):
 
     start, end = get_start_end(len(a))
     return a[start:end]
+
+
+def _test_equal(bodo_out, py_out):
+    if isinstance(py_out, pd.Series):
+        pd.testing.assert_series_equal(bodo_out, py_out)
+    elif isinstance(py_out, pd.Index):
+        pd.testing.assert_index_equal(bodo_out, py_out)
+    elif isinstance(py_out, pd.DataFrame):
+        pd.testing.assert_frame_equal(bodo_out, py_out)
+    elif isinstance(py_out, np.ndarray):
+        np.testing.assert_array_equal(bodo_out, py_out)
+    else:
+        assert bodo_out == py_out

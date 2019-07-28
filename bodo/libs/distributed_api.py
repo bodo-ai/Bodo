@@ -238,6 +238,23 @@ def gatherv(data):
 
         return impl
 
+    if isinstance(data, bodo.hiframes.pd_index_ext.RangeIndexType):
+        def impl_range_index(data):
+            # XXX: assuming global range starts from zero
+            # and each process has a chunk, and step is 1
+            local_n = data._stop - data._start
+            n = bodo.libs.distributed_api.dist_reduce(
+                local_n, np.int32(Reduce_Type.Sum.value))
+            return bodo.hiframes.pd_index_ext.init_range_index(0, n, 1)
+        return impl_range_index
+
+    if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
+        def impl_pd_index(data):
+            arr = bodo.libs.distributed_api.gatherv(data._data)
+            return bodo.utils.conversion.index_from_array(arr, data._name)
+        return impl_pd_index
+
+
 @overload(allgatherv)
 def allgatherv_overload(data):
     if isinstance(data, types.Array):
