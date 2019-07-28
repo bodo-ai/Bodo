@@ -66,22 +66,28 @@ def test_func(func, args):
     bodo_func = bodo.jit(func)
     _test_equal(bodo_func(*args), py_output)
 
+    is_out_distributed = isinstance(py_output,
+            (pd.Series, pd.Index, pd.DataFrame, np.ndarray))
+
     # 1D distributed
     bodo_func = bodo.jit(
-        all_args_distributed=True, all_returns_distributed=True)(func)
+        all_args_distributed=True,
+        all_returns_distributed=is_out_distributed)(func)
     dist_args = tuple(_get_dist_arg(a) for a in args)
     bodo_output = bodo_func(*dist_args)
-    bodo_output = bodo.gatherv(bodo_output)
+    if is_out_distributed:
+        bodo_output = bodo.gatherv(bodo_output)
     if bodo.get_rank() == 0:
         _test_equal(bodo_output, py_output)
 
     # 1D distributed variable length
     bodo_func = bodo.jit(
         all_args_distributed_varlength=True,
-        all_returns_distributed=True)(func)
+        all_returns_distributed=is_out_distributed)(func)
     dist_args = tuple(_get_dist_arg(a) for a in args)
     bodo_output = bodo_func(*dist_args)
-    bodo_output = bodo.gatherv(bodo_output)
+    if is_out_distributed:
+        bodo_output = bodo.gatherv(bodo_output)
     if bodo.get_rank() == 0:
         _test_equal(bodo_output, py_output)
 

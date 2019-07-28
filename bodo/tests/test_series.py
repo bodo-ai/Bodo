@@ -145,32 +145,28 @@ def test_series_dtype(numeric_series_val):
     def test_impl(S):
         return S.dtype
 
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(numeric_series_val) == test_impl(numeric_series_val)
+    test_func(test_impl, (numeric_series_val,))
 
 
 def test_series_shape(series_val):
     def test_impl(S):
         return S.shape
 
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(series_val) == test_impl(series_val)
+    test_func(test_impl, (series_val,))
 
 
 def test_series_ndim(series_val):
     def test_impl(S):
         return S.ndim
 
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(series_val) == test_impl(series_val)
+    test_func(test_impl, (series_val,))
 
 
 def test_series_size(series_val):
     def test_impl(S):
         return S.size
 
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(series_val) == test_impl(series_val)
+    test_func(test_impl, (series_val,))
 
 
 def test_series_T(series_val):
@@ -184,32 +180,28 @@ def test_series_hasnans(series_val):
     def test_impl(S):
         return S.hasnans
 
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(series_val) == test_impl(series_val)
+    test_func(test_impl, (series_val,))
 
 
 def test_series_empty(series_val):
     def test_impl(S):
         return S.empty
 
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(series_val) == test_impl(series_val)
+    test_func(test_impl, (series_val,))
 
 
 def test_series_dtypes(numeric_series_val):
     def test_impl(S):
         return S.dtypes
 
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(numeric_series_val) == test_impl(numeric_series_val)
+    test_func(test_impl, (numeric_series_val,))
 
 
 def test_series_name(series_val):
     def test_impl(S):
         return S.name
 
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(series_val) == test_impl(series_val)
+    test_func(test_impl, (series_val,))
 
 
 def test_series_put(series_val):
