@@ -57,7 +57,7 @@ def get_start_end(n):
     return start, end
 
 
-def test_func(func, args):
+def test_func(func, args, is_out_distributed=None):
     """test bodo compilation of function 'func' on arguments using REP and 1D
     inputs/outputs
     """
@@ -66,7 +66,9 @@ def test_func(func, args):
     bodo_func = bodo.jit(func)
     _test_equal(bodo_func(*args), py_output)
 
-    is_out_distributed = isinstance(py_output,
+    if is_out_distributed is None:
+        # assume all distributable output is distributed if not specified
+        is_out_distributed = isinstance(py_output,
             (pd.Series, pd.Index, pd.DataFrame, np.ndarray))
 
     # 1D distributed

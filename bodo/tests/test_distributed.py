@@ -294,7 +294,7 @@ def test_series_alloc_equiv1():
 @pytest.mark.parametrize('A', [np.arange(11), np.arange(33).reshape(11, 3),
     pd.Series(['aa', 'bb', 'c']*4)])
 @pytest.mark.parametrize('s', [slice(3), slice(1, 9), slice(7, None),
-    slice(4, 6)])
+    slice(4, 6), slice(-3, None)])
 def test_getitem_slice_1D(A, s):
     # get a slice of 1D array
     def impl1(A, s):

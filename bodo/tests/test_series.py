@@ -840,6 +840,7 @@ def test_series_idxmin(series_val):
 
     bodo_func = bodo.jit(test_impl)
     assert bodo_func(series_val) == test_impl(series_val)
+    # TODO: support more distribtued types and test
 
 
 def test_series_idxmax(series_val):
@@ -852,6 +853,7 @@ def test_series_idxmax(series_val):
 
     bodo_func = bodo.jit(test_impl)
     assert bodo_func(series_val) == test_impl(series_val)
+    # TODO: support more distribtued types and test
 
 
 def test_series_median(numeric_series_val):
@@ -865,26 +867,21 @@ def test_series_median(numeric_series_val):
     def test_impl(A):
         return A.median()
 
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(numeric_series_val) == test_impl(numeric_series_val)
+    test_func(test_impl, (numeric_series_val,))
 
 
 def test_series_head(series_val):
     def test_impl(S):
         return S.head(3)
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val))
+    test_func(test_impl, (series_val,), False)
 
 
 def test_series_tail(series_val):
     def test_impl(S):
         return S.tail(3)
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val))
+    test_func(test_impl, (series_val,), False)
 
 
 @pytest.mark.parametrize('k', [0, 1, 2, 3])
