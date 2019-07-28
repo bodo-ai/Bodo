@@ -1,15 +1,5 @@
 .. _install:
 
-Installing Bodo
-===============
-
-Bodo can be installed in `Anaconda <https://www.anaconda.com/download/>`_ environment
-easily. On Linux/Mac/Windows::
-
-    conda create -n Bodo -c ehsantn -c anaconda -c conda-forge bodo
-
-.. used if master of Numba is needed for latest bodo package
-.. conda create -n Bodo -c ehsantn -c numba/label/dev -c anaconda -c conda-forge bodo
 
 Building Bodo from Source
 -------------------------
@@ -22,14 +12,16 @@ such as Numba on Ubuntu Linux::
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
-    conda create -n Bodo -q -y numpy scipy pandas boost cmake
-    source activate Bodo
-    conda install -c numba/label/dev numba
-    conda install mpich mpi -c conda-forge
-    conda install pyarrow
-    conda install h5py -c ehsantn
+    conda create -n DEV numpy scipy pandas boost cmake h5py pyarrow mpich mpi
+    source activate DEV
     conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64
-    git clone https://github.com/IntelLabs/bodo
+    # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64
+    conda install -c numba/label/dev llvmlite
+    git clone https://github.com/numba/numba.git
+    cd numba
+    python setup.py develop
+    cd ..
+    git clone https://github.com/ehsantn/bodo.git
     cd bodo
     # build Bodo
     HDF5_DIR=$CONDA_PREFIX python setup.py develop
@@ -41,14 +33,11 @@ A command line for running the Pi example on 4 cores::
 
 Running unit tests::
 
-    conda install pyspark
-    python bodo/tests/gen_test_data.py
-    python -m unittest
+    conda install pytest
+    pytest -x -s -v
 
 In case of issues, reinstalling in a new conda environment is recommended.
-Also, a common issue is ``hdf5`` package reverting to default instead of the
-parallel version installed from ``ehsantn`` channel. Use ``conda list``
-to check the channel of ``hdf5`` package.
+
 
 Building from Source on Windows
 -------------------------------
