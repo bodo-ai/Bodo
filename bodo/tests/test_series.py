@@ -271,9 +271,7 @@ def test_series_get_values(series_val):
     def test_impl(S):
         return S.get_values()
 
-    bodo_func = bodo.jit(test_impl)
-    np.testing.assert_array_equal(
-        bodo_func(series_val), test_impl(series_val))
+    test_func(test_impl, (series_val,))
 
 
 def test_series_iat_getitem(series_val):
@@ -283,6 +281,8 @@ def test_series_iat_getitem(series_val):
 
     bodo_func = bodo.jit(test_impl)
     assert bodo_func(series_val) == test_impl(series_val)
+    # fix distributed
+    # test_func(test_impl, (series_val,))
 
 
 def test_series_iat_setitem(series_val):
@@ -308,6 +308,8 @@ def test_series_iloc_getitem_int(series_val):
 
     bodo_func = bodo.jit(test_impl)
     assert bodo_func(series_val) == test_impl(series_val)
+    # fix distributed
+    # test_func(test_impl, (series_val,))
 
 
 def test_series_iloc_getitem_slice(series_val):
@@ -317,6 +319,8 @@ def test_series_iloc_getitem_slice(series_val):
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
         bodo_func(series_val), test_impl(series_val))
+    # fix distributed
+    # test_func(test_impl, (series_val,))
 
 
 def test_series_iloc_getitem_array_int(series_val):
@@ -812,8 +816,7 @@ def test_series_min(series_val):
     def test_impl(A):
         return A.min()
 
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(series_val) == test_impl(series_val)
+    test_func(test_impl, (series_val,))
 
 
 def test_series_max(series_val):
@@ -824,8 +827,7 @@ def test_series_max(series_val):
     def test_impl(A):
         return A.max()
 
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(series_val) == test_impl(series_val)
+    test_func(test_impl, (series_val,))
 
 
 def test_series_idxmin(series_val):
