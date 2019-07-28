@@ -84,20 +84,22 @@ def test_series_constructor(data, index, name):
         bodo_func(data, index, name), impl(data, index, name))
 
 
+# using length of 5 arrays to enable testing on 3 ranks (2, 2, 1 distribution)
+# zero length chunks on any rank can cause issues, TODO: fix
 # TODO: other possible Series types like Categorical, dt64, td64, ...
 @pytest.fixture(params = [
-    pd.Series([1, 8, 4, 11]),
-    pd.Series([1.1, np.nan, 4.2, 3.1]),
-    pd.Series([1, 8, 4, 0], dtype=np.uint8),
-    pd.Series([1, 8, 4, -1], name='ACD'),
-    pd.Series([1, 8, 4, 1], [3, 7, 9, 3]),
-    pd.Series([1, 8, 4, 11], [3, 7, 9, 2], name='AAC'),
-    pd.Series([1, 2, 3, -1], ['A', 'BA', '', 'DD']),
-    pd.Series(['A', 'B', 'CDD', 'AA']),  # TODO: string with Null (np.testing fails)
-    pd.Series(['A', 'B', 'CG', 'ACDE'], [4, 7, 0, 1]),
-    pd.Series(pd.date_range(start='2018-04-24', end='2018-04-28', periods=4)),
-    pd.Series([3, 5, 1, -1],
-              pd.date_range(start='2018-04-24', end='2018-04-28', periods=4)),
+    pd.Series([1, 8, 4, 11, -3]),
+    pd.Series([1.1, np.nan, 4.2, 3.1, -3.5]),
+    pd.Series([1, 8, 4, 0, 3], dtype=np.uint8),
+    pd.Series([1, 8, 4, -1, 2], name='ACD'),
+    pd.Series([1, 8, 4, 1, -3], [3, 7, 9, 2, 1]),
+    pd.Series([1, 8, 4, 11, -3], [3, 7, 9, 2, 1], name='AAC'),
+    pd.Series([1, 2, 3, -1, 6], ['A', 'BA', '', 'DD', 'GGG']),
+    pd.Series(['A', 'B', 'CDD', 'AA', 'GGG']),  # TODO: string with Null (np.testing fails)
+    pd.Series(['A', 'B', 'CG', 'ACDE', 'C'], [4, 7, 0, 1, -2]),
+    pd.Series(pd.date_range(start='2018-04-24', end='2018-04-29', periods=5)),
+    pd.Series([3, 5, 1, -1, 2],
+              pd.date_range(start='2018-04-24', end='2018-04-29', periods=5)),
     # TODO: timedelta
 ])
 def series_val(request):
@@ -106,11 +108,11 @@ def series_val(request):
 
 # TODO: timedelta, period, tuple, etc.
 @pytest.fixture(params = [
-    pd.Series([1, 8, 4]),
-    pd.Series([1.1, np.nan, 4]),
-    pd.Series([1, 8, 4], dtype=np.uint8),
-    pd.Series([1, 8, 4], [3, 7, 9], name='AAC'),
-    pd.Series(pd.date_range(start='2018-04-24', end='2018-04-27', periods=3)),
+    pd.Series([1, 8, 4, 11, -3]),
+    pd.Series([1.1, np.nan, 4.1, 1.4, -2.1]),
+    pd.Series([1, 8, 4, 0, 3], dtype=np.uint8),
+    pd.Series([1, 8, 4, -1, 2], [3, 7, 9, 2, 1], name='AAC'),
+    pd.Series(pd.date_range(start='2018-04-24', end='2018-04-29', periods=5)),
 ])
 def numeric_series_val(request):
     return request.param
@@ -331,7 +333,7 @@ def test_series_iloc_getitem_slice(series_val):
 
 def test_series_iloc_getitem_array_int(series_val):
     def test_impl(S):
-        return S.iloc[[1,3]]
+        return S.iloc[[1, 3]]
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
@@ -340,7 +342,7 @@ def test_series_iloc_getitem_array_int(series_val):
 
 def test_series_iloc_getitem_array_bool(series_val):
     def test_impl(S):
-        return S.iloc[[True, True, False, True]]
+        return S.iloc[[True, True, False, True, False]]
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
@@ -438,7 +440,7 @@ def test_series_getitem_list_int(series_val, idx):
 
 def test_series_getitem_array_bool(series_val):
     def test_impl(S):
-        return S[[True, True, False, True]]
+        return S[[True, True, False, True, False]]
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
