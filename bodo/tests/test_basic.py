@@ -194,7 +194,7 @@ class TestBasic(BaseTest):
                 return A.{}()
             """.format(dtype, func)
             loc_vars = {}
-            exec(func_text, {'np': np}, loc_vars)
+            exec(func_text, {'np': np, 'bodo': bodo}, loc_vars)
             test_impl = loc_vars['f']
 
             bodo_func = bodo.jit(test_impl)
@@ -269,7 +269,7 @@ class TestBasic(BaseTest):
                   return A
             """.format(typ, typ, op)
             loc_vars = {}
-            exec(func_text, {'np': np, 'numba': numba}, loc_vars)
+            exec(func_text, {'np': np, 'numba': numba, 'bodo': bodo}, loc_vars)
             test_impl = loc_vars['f']
 
             bodo_func = bodo.jit(test_impl)

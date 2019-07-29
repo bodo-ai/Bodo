@@ -268,6 +268,10 @@ class DistributedAnalysis(object):
             l_dist = self._get_var_dist(lhs, array_dists)
             new_dist = []
             for d, v in zip(l_dist, rhs.items):
+                # some elements might not be distributable
+                if d is None:
+                    new_dist.append(None)
+                    continue
                 new_d = Distribution(min(d.value,
                     self._get_var_dist(v.name, array_dists).value))
                 self._set_var_dist(v.name, array_dists, new_d)
@@ -1099,8 +1103,10 @@ class DistributedAnalysis(object):
             dist2 = array_dists[arr2]
             n = len(typ1)
             new_dist = [Distribution(min(dist1[i].value, dist2[i].value))
+                        if dist1[i] is not None else None
                         for i in range(n)]
             new_dist = [Distribution(min(new_dist[i].value, top_dist.value))
+                        if dist1[i] is not None else None
                         for i in range(n)]
             array_dists[arr1] = new_dist
             array_dists[arr2] = new_dist
