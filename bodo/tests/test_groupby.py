@@ -4,7 +4,7 @@ import numpy as np
 import pyarrow.parquet as pq
 import numba
 import bodo
-from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
+from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
                             count_parfor_OneDs, count_array_OneDs, dist_IR_contains,
                             get_start_end)
 import pytest

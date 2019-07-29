@@ -7,7 +7,7 @@ import h5py
 import pyarrow.parquet as pq
 import bodo
 from bodo.utils.testing import ensure_clean
-from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
+from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_rank,
     get_start_end)
 

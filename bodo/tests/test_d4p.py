@@ -9,7 +9,7 @@ else:
     from math import sqrt
     import numba
     import bodo
-    from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
+    from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
                                        count_parfor_OneDs, count_array_OneDs,
                                        count_parfor_OneD_Vars, count_array_OneD_Vars,
                                        dist_IR_contains)

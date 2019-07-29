@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import numba
 import bodo
-from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
+from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, dist_IR_contains)
 from bodo.hiframes.rolling import supported_rolling_funcs
 import pytest

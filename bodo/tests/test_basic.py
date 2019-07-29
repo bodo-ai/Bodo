@@ -5,7 +5,7 @@ import itertools
 import numba
 import bodo
 import random
-from bodo.tests.test_utils import (count_array_REPs, count_parfor_REPs,
+from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, count_array_OneD_Vars,
     dist_IR_contains, get_rank, get_start_end)
 
