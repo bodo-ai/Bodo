@@ -57,14 +57,14 @@ def get_start_end(n):
     return start, end
 
 
-def test_func(func, args, is_out_distributed=None):
+def test_func(func, args, is_out_distributed=None, sort_output=False):
     """test bodo compilation of function 'func' on arguments using REP and 1D
     inputs/outputs
     """
     py_output = func(*args)
     # sequential
     bodo_func = bodo.jit(func)
-    _test_equal(bodo_func(*args), py_output)
+    _test_equal(bodo_func(*args), py_output, sort_output)
 
     if is_out_distributed is None:
         # assume all distributable output is distributed if not specified
@@ -80,7 +80,7 @@ def test_func(func, args, is_out_distributed=None):
     if is_out_distributed:
         bodo_output = bodo.gatherv(bodo_output)
     if bodo.get_rank() == 0:
-        _test_equal(bodo_output, py_output)
+        _test_equal(bodo_output, py_output, sort_output)
 
     # 1D distributed variable length
     bodo_func = bodo.jit(
@@ -91,7 +91,7 @@ def test_func(func, args, is_out_distributed=None):
     if is_out_distributed:
         bodo_output = bodo.gatherv(bodo_output)
     if bodo.get_rank() == 0:
-        _test_equal(bodo_output, py_output)
+        _test_equal(bodo_output, py_output, sort_output)
 
 
 def _get_dist_arg(a):
@@ -102,7 +102,11 @@ def _get_dist_arg(a):
     return a[start:end]
 
 
-def _test_equal(bodo_out, py_out):
+def _test_equal(bodo_out, py_out, sort_output):
+    if sort_output:
+        bodo_out = np.sort(bodo_out)
+        py_out = np.sort(py_out)
+
     if isinstance(py_out, pd.Series):
         pd.testing.assert_series_equal(bodo_out, py_out)
     elif isinstance(py_out, pd.Index):

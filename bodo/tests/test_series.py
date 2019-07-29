@@ -931,6 +931,7 @@ def test_series_take(series_val):
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
         bodo_func(series_val), test_impl(series_val))
+    # TODO: dist support for selection with index list
 
 
 def test_series_argsort(series_val):
@@ -994,9 +995,8 @@ def test_series_quantile(numeric_series_val):
     def test_impl(A):
         return A.quantile(0.30)
 
-    bodo_func = bodo.jit(test_impl)
-    np.testing.assert_almost_equal(
-        bodo_func(numeric_series_val), test_impl(numeric_series_val))
+    # TODO: needs np.testing.assert_almost_equal?
+    test_func(test_impl, (numeric_series_val,))
 
 
 def test_series_nunique(series_val):
@@ -1010,8 +1010,7 @@ def test_series_nunique(series_val):
     def test_impl(A):
         return A.nunique()
 
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(series_val) == test_impl(series_val)
+    test_func(test_impl, (series_val,))
 
 
 def test_series_unique(series_val):
@@ -1022,10 +1021,8 @@ def test_series_unique(series_val):
     def test_impl(A):
         return A.unique()
 
-    bodo_func = bodo.jit(test_impl)
     # sorting since output order is not consistent
-    np.testing.assert_array_equal(
-        np.sort(bodo_func(series_val)), np.sort(test_impl(series_val)))
+    test_func(test_impl, (series_val,), sort_output=True)
 
 
 def test_series_describe(numeric_series_val):
