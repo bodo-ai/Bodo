@@ -1140,7 +1140,9 @@ class DistributedAnalysis(object):
             t_dist = [dist if is_distributable_typ(v) else None
                       for v in typ.types]
             array_dists[varname] = t_dist
-        elif is_distributable_typ(typ):
+        # XXX: Index values can be None so they should have distribution
+        # TODO: use proper "FullRangeIndex" type
+        elif is_distributable_typ(typ) or typ is types.none:
             array_dists[varname] = dist
 
     def _rebalance_arrs(self, array_dists, parfor_dists):
