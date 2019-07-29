@@ -1123,6 +1123,35 @@ class DistributedPass(object):
                     lambda a1, a2: max(a1, a2), (s1, s2), None, self)
                 new_size_var = out[-1].target
 
+            # index_to_array() uses np.arange(I._start, I._stop, I._step)
+            # on RangeIndex.
+            # Get the local size of range
+            if calc_call == ('calc_nitems', 'bodo.libs.array_kernels'):
+                start_def = guard(
+                    get_definition, self.func_ir, size_def.args[0])
+                if (is_expr(start_def, 'getattr')
+                        and start_def.attr == '_start'
+                        and isinstance(
+                            self.typemap[start_def.value.name],
+                            bodo.hiframes.pd_index_ext.RangeIndexType)
+                        and self._is_1D_Var_arr(start_def.value.name)):
+                    range_val = start_def.value
+                    stop_def = guard(
+                        get_definition, self.func_ir, size_def.args[1])
+                    step_def = guard(
+                        get_definition, self.func_ir, size_def.args[2])
+                    if (is_expr(stop_def, 'getattr')
+                            and stop_def.attr == '_stop'
+                            and stop_def.value.name == range_val.name
+                            and is_expr(step_def, 'getattr')
+                            and step_def.attr == '_step'
+                            and step_def.value.name == range_val.name):
+                        out += compile_func_single_block(
+                            lambda I: bodo.libs.array_kernels.calc_nitems(
+                                I._start, I._stop, I._step),
+                            (range_val,), None, self)
+                        new_size_var = out[-1].target
+
         assert new_size_var, "1D Var size not found"
         return new_size_var
 

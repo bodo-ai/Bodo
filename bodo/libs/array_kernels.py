@@ -3,6 +3,7 @@ Implements array kernels such as median and quantile.
 """
 import pandas as pd
 import numpy as np
+import math
 from math import sqrt
 
 import numba
@@ -12,6 +13,7 @@ from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.targets.imputils import lower_builtin, impl_ret_untracked
 from numba.targets.arrayobj import make_array
+from numba.numpy_support import as_dtype
 
 import bodo
 from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
@@ -319,3 +321,60 @@ def nancorr(mat, cov=0, minpv=1, parallel=False):
                     result[xi, yi] = result[yi, xi] = np.nan
 
     return result
+
+
+# np.arange implementation is copied from parfor.py and range length
+# calculation is replaced with explicit call for easier matching
+# (e.g. for handling 1D_Var RangeIndex)
+# TODO: move this to upstream Numba
+@numba.njit
+def calc_nitems(start, stop, step):
+    nitems_r = math.ceil((stop - start) / step)
+    return int(max(nitems_r, 0))
+
+
+def arange_parallel_impl(return_type, *args):
+    dtype = as_dtype(return_type.dtype)
+
+    def arange_1(stop):
+        return np.arange(0, stop, 1, dtype)
+
+    def arange_2(start, stop):
+        return np.arange(start, stop, 1, dtype)
+
+    def arange_3(start, stop, step):
+        return np.arange(start, stop, step, dtype)
+
+    if any(isinstance(a, types.Complex) for a in args):
+        def arange_4(start, stop, step, dtype):
+            numba.parfor.init_prange()
+            nitems_c = (stop - start) / step
+            nitems_r = math.ceil(nitems_c.real)
+            nitems_i = math.ceil(nitems_c.imag)
+            nitems = int(max(min(nitems_i, nitems_r), 0))
+            arr = np.empty(nitems, dtype)
+            for i in numba.parfor.internal_prange(nitems):
+                arr[i] = start + i * step
+            return arr
+    else:
+        def arange_4(start, stop, step, dtype):
+            numba.parfor.init_prange()
+            nitems = bodo.libs.array_kernels.calc_nitems(start, stop, step)
+            arr = np.empty(nitems, dtype)
+            for i in numba.parfor.internal_prange(nitems):
+                arr[i] = start + i * step
+            return arr
+
+    if len(args) == 1:
+        return arange_1
+    elif len(args) == 2:
+        return arange_2
+    elif len(args) == 3:
+        return arange_3
+    elif len(args) == 4:
+        return arange_4
+    else:
+        raise ValueError("parallel arange with types {}".format(args))
+
+
+numba.parfor.replace_functions_map[('arange', 'numpy')] = arange_parallel_impl

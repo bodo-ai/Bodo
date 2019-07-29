@@ -889,9 +889,7 @@ def test_series_nlargest(numeric_series_val, k):
     def test_impl(S, k):
         return S.nlargest(k)
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(numeric_series_val, k), test_impl(numeric_series_val, k))
+    test_func(test_impl, (numeric_series_val, k), False)
 
 
 def test_series_nlargest_non_index():
@@ -911,9 +909,7 @@ def test_series_nsmallest(numeric_series_val, k):
     def test_impl(S, k):
         return S.nsmallest(k)
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(numeric_series_val, k), test_impl(numeric_series_val, k))
+    test_func(test_impl, (numeric_series_val, k), False)
 
 
 def test_series_nsmallest_non_index():
@@ -930,7 +926,7 @@ def test_series_nsmallest_non_index():
 
 def test_series_take(series_val):
     def test_impl(A):
-        return A.take([2,3])
+        return A.take([2, 3])
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(

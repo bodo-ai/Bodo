@@ -506,7 +506,7 @@ class DistributedAnalysis(object):
             self._meet_array_dists(
                 rhs.args[0].name, rhs.args[1].name, array_dists)
             # output of nlargest is REP
-            array_dists[lhs] = Distribution.REP
+            self._set_var_dist(lhs, array_dists, Distribution.REP)
             return
 
         if fdef == ('nancorr', 'bodo.libs.array_kernels'):
