@@ -731,11 +731,22 @@ class SeriesPass(object):
 
         # convert Series to Array for unhandled calls
         # TODO check all the functions that get here and handle if necessary
+        # e.g. np.sum, prod, min, max, argmin, argmax, mean, var, and std
+        if any(isinstance(self.typemap[arg.name], SeriesType)
+                for arg in rhs.args):
+            return self._fix_unhandled_calls(assign, lhs, rhs)
+
+        return [assign]
+
+    def _fix_unhandled_calls(self, assign, lhs, rhs):
+        # TODO: test
         nodes = []
         new_args = []
+        series_arg = None
         for arg in rhs.args:
             if isinstance(self.typemap[arg.name], SeriesType):
                 new_args.append(self._get_series_data(arg, nodes))
+                series_arg = arg
             else:
                 new_args.append(arg)
 
@@ -746,7 +757,13 @@ class SeriesPass(object):
             new_lhs = ir.Var(scope, mk_unique_var(lhs+'_data'), rhs.loc)
             self.typemap[new_lhs.name] = self.calltypes[rhs].return_type
             nodes.append(ir.Assign(rhs, new_lhs, rhs.loc))
-            return self._replace_func(lambda A: bodo.hiframes.api.init_series(A), [new_lhs], pre_nodes=nodes)
+            index = self._get_series_index(series_arg, nodes)
+            name = self._get_series_name(series_arg, nodes)
+            return self._replace_func(
+                lambda A, index, name: bodo.hiframes.api.init_series(
+                    A, index, name),
+                (new_lhs, index, name),
+                pre_nodes=nodes)
         else:
             nodes.append(assign)
             return nodes
