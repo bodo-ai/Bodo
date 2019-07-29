@@ -1033,9 +1033,7 @@ def test_series_describe(numeric_series_val):
     def test_impl(A):
         return A.describe()
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(numeric_series_val), test_impl(numeric_series_val))
+    test_func(test_impl, (numeric_series_val,), False)
 
 
 @pytest.mark.parametrize('S,value', [
