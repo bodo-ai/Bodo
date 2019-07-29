@@ -3,9 +3,10 @@
 Jupyter Notebook Setup
 ######################
 
-To use Bodo with Jupyter Notebook, install `jupyter` and `ipyparallel`::
+To use Bodo with Jupyter Notebook, install `jupyter`, `ipyparallel`, and 'mpi4py'::
 
     conda install jupyter ipyparallel
+    conda install mpi4py -c conda-forge --no-deps
 
 Create an MPI profile for ipython::
 
