@@ -251,11 +251,19 @@ class DistributedAnalysis(object):
                 and isinstance(rhs, ir.Expr)
                 and rhs.op == 'inplace_binop'):
             # distributions of all 3 variables should meet (lhs, arg1, arg2)
+            # XXX: arg1 or arg2 (but not both) can be non-array like scalar
             arg1 = rhs.lhs.name
             arg2 = rhs.rhs.name
-            dist = self._meet_array_dists(arg1, arg2, array_dists)
-            dist = self._meet_array_dists(arg1, lhs, array_dists, dist)
-            self._meet_array_dists(arg1, arg2, array_dists, dist)
+            arg1_typ = self.typemap[arg1]
+            arg2_typ = self.typemap[arg2]
+            if is_distributable_typ(arg1_typ):
+                dist = self._meet_array_dists(lhs, arg1, array_dists)
+            if is_distributable_typ(arg2_typ):
+                dist = self._meet_array_dists(lhs, arg2, array_dists, dist)
+            if is_distributable_typ(arg1_typ):
+                dist = self._meet_array_dists(lhs, arg1, array_dists, dist)
+            if is_distributable_typ(arg2_typ):
+                self._meet_array_dists(lhs, arg2, array_dists, dist)
             return
         elif isinstance(rhs, ir.Expr) and rhs.op in ('getitem',
                                                              'static_getitem'):
