@@ -95,10 +95,13 @@ def test_func(func, args, is_out_distributed=None, sort_output=False):
 
 
 def _get_dist_arg(a):
-    if not bodo.utils.utils.is_distributable_typ(bodo.typeof(a)):
+    arg_typ = bodo.typeof(a)
+    if not bodo.utils.utils.is_distributable_typ(arg_typ):
         return a
 
     start, end = get_start_end(len(a))
+    if isinstance(a, (pd.Series, pd.DataFrame)):
+        return a.iloc[start:end]
     return a[start:end]
 
 
