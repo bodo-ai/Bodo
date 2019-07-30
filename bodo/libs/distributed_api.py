@@ -11,11 +11,12 @@ from numba.typing import signature
 from numba.extending import models, register_model, intrinsic, overload
 
 import bodo
-from bodo.libs.str_arr_ext import (string_array_type, num_total_chars, StringArray,
-                              pre_alloc_string_array, get_offset_ptr,
-                              get_data_ptr, convert_len_arr_to_offset)
-from bodo.utils.utils import (debug_prints, empty_like_type, _numba_to_c_type_map,
-    unliteral_all)
+from bodo.libs.str_arr_ext import (string_array_type, num_total_chars,
+    StringArray, pre_alloc_string_array, get_offset_ptr, get_null_bitmap_ptr,
+    get_data_ptr, convert_len_arr_to_offset, getitem_str_bitmap,
+    setitem_str_bitmap)
+from bodo.utils.utils import (debug_prints, empty_like_type,
+    _numba_to_c_type_map, unliteral_all)
 from llvmlite import ir as lir
 from bodo.libs import hdist
 
@@ -156,6 +157,41 @@ c_allgatherv = types.ExternalFunction("c_allgatherv",
     types.void(types.voidptr, types.int32, types.voidptr, types.voidptr, types.voidptr, types.int32))
 
 
+# from GetBit() in Arrow
+@numba.njit
+def get_bit(bits, i):
+    return (bits[i >> 3] >> (i & 0x07)) & 1
+
+
+kBitmask = np.array([1, 2, 4, 8, 16, 32, 64, 128], dtype=np.uint8)
+
+
+@numba.njit
+def set_bit_to(bits, i, bit_is_set):
+    b_ind = i // 8
+    byte = getitem_str_bitmap(bits, b_ind)
+    byte ^= np.uint8(-np.uint8(bit_is_set) ^ byte) & kBitmask[i % 8]
+    setitem_str_bitmap(bits, b_ind, byte)
+
+
+@numba.njit
+def copy_gathered_null_bytes(null_bitmap_ptr, tmp_null_bytes,
+                                               recv_counts_nulls, recv_counts):
+    curr_tmp_byte = 0  # current location in buffer with all data
+    curr_str = 0  # current string in output bitmap
+    # for each chunk
+    for i in range(len(recv_counts)):
+        n_strs = recv_counts[i]
+        n_bytes = recv_counts_nulls[i]
+        chunk_bytes = tmp_null_bytes[curr_tmp_byte:curr_tmp_byte+n_bytes]
+        # for each string in chunk
+        for j in range(n_strs):
+            set_bit_to(null_bitmap_ptr, curr_str, get_bit(chunk_bytes, j))
+            curr_str += 1
+
+        curr_tmp_byte += n_bytes
+
+
 @numba.generated_jit(nopython=True)
 def gatherv(data):
     if isinstance(data, types.Array):
@@ -190,6 +226,8 @@ def gatherv(data):
             # allocate send lens arrays
             send_arr_lens = np.empty(n_loc, np.uint32)  # XXX offset type is uint32
             send_data_ptr = get_data_ptr(data)
+            send_null_bitmap_ptr = get_null_bitmap_ptr(data)
+            n_bytes = (n_loc + 7) >> 3
 
             for i in range(n_loc):
                 _str = data[i]
@@ -204,18 +242,35 @@ def gatherv(data):
             all_data = StringArray()  # dummy arrays on non-root PEs
             displs = np.empty(1, np.int32)
             displs_char = np.empty(1, np.int32)
+            recv_counts_nulls = np.empty(1, np.int32)
+            displs_nulls = np.empty(1, np.int32)
+            tmp_null_bytes = np.empty(1, np.uint8)
 
             if rank == MPI_ROOT:
                 all_data = pre_alloc_string_array(n_total, n_total_char)
                 displs = bodo.ir.join.calc_disp(recv_counts)
                 displs_char = bodo.ir.join.calc_disp(recv_counts_char)
+                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
+                for i in range(len(recv_counts)):
+                    recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
+                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
+                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
 
             #  print(rank, n_loc, n_total, recv_counts, displs)
             offset_ptr = get_offset_ptr(all_data)
             data_ptr = get_data_ptr(all_data)
+            null_bitmap_ptr = get_null_bitmap_ptr(all_data)
+
             c_gatherv(send_arr_lens.ctypes, np.int32(n_loc), offset_ptr, recv_counts.ctypes, displs.ctypes, int32_typ_enum)
             c_gatherv(send_data_ptr, np.int32(n_all_chars), data_ptr, recv_counts_char.ctypes, displs_char.ctypes, char_typ_enum)
+            c_gatherv(send_null_bitmap_ptr, np.int32(n_bytes),
+                tmp_null_bytes.ctypes, recv_counts_nulls.ctypes,
+                displs_nulls.ctypes, char_typ_enum)
+
             convert_len_arr_to_offset(offset_ptr, n_total)
+            copy_gathered_null_bytes(
+                null_bitmap_ptr, tmp_null_bytes, recv_counts_nulls,
+                recv_counts)
             return all_data
 
         return gatherv_str_arr_impl
@@ -276,6 +331,7 @@ def gatherv(data):
         return lambda data: None
 
     raise NotImplementedError("gatherv() not available for {}".format(data))
+
 
 @overload(allgatherv)
 def allgatherv_overload(data):

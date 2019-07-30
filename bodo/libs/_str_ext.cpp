@@ -699,7 +699,8 @@ void string_array_from_sequence(PyObject * obj, int64_t * no_strings, uint32_t *
     }
 
     // allocate null bitmap
-    int64_t n_bytes = (n+sizeof(uint8_t)-1)/sizeof(uint8_t);
+    // same formula as BytesForBits in Arrow
+    int64_t n_bytes = (n + 7) >> 3;
     *null_bitmap = new uint8_t[n_bytes];
     memset(*null_bitmap, 0, n_bytes);
 

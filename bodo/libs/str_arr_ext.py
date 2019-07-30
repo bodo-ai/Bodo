@@ -249,6 +249,22 @@ def get_data_ptr_ind(typingctx, str_arr_typ, int_t=None):
 
 
 @intrinsic
+def get_null_bitmap_ptr(typingctx, str_arr_typ=None):
+    assert is_str_arr_typ(str_arr_typ)
+    def codegen(context, builder, sig, args):
+        in_str_arr, = args
+        string_array = context.make_helper(
+            builder, string_array_type, in_str_arr)
+        ctinfo = context.make_helper(builder, data_ctypes_type)
+        ctinfo.data = string_array.null_bitmap
+        ctinfo.meminfo = string_array.meminfo
+        res = ctinfo._getvalue()
+        return impl_ret_borrowed(context, builder, data_ctypes_type, res)
+
+    return data_ctypes_type(string_array_type), codegen
+
+
+@intrinsic
 def getitem_str_offset(typingctx, str_arr_typ, ind_t=None):
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
@@ -272,6 +288,29 @@ def setitem_str_offset(typingctx, str_arr_typ, ind_t, val_t=None):
         return context.get_dummy_value()
 
     return types.void(string_array_type, ind_t, types.uint32), codegen
+
+
+@intrinsic
+def getitem_str_bitmap(typingctx, in_bitmap_typ, ind_t=None):
+    def codegen(context, builder, sig, args):
+        in_bitmap, ind = args
+        ctinfo = context.make_helper(builder, data_ctypes_type, in_bitmap)
+        in_bitmap = ctinfo.data
+        return builder.load(builder.gep(in_bitmap, [ind]))
+
+    return char_typ(data_ctypes_type, ind_t), codegen
+
+
+@intrinsic
+def setitem_str_bitmap(typingctx, in_bitmap_typ, ind_t, val_t=None):
+    def codegen(context, builder, sig, args):
+        in_bitmap, ind, val = args
+        ctinfo = context.make_helper(builder, data_ctypes_type, in_bitmap)
+        in_bitmap = ctinfo.data
+        builder.store(val, builder.gep(in_bitmap, [ind]))
+        return context.get_dummy_value()
+
+    return types.void(data_ctypes_type, ind_t, char_typ), codegen
 
 
 @intrinsic
