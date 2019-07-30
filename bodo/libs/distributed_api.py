@@ -166,6 +166,7 @@ def get_bit(bits, i):
 kBitmask = np.array([1, 2, 4, 8, 16, 32, 64, 128], dtype=np.uint8)
 
 
+# from SetBitTo() in Arrow
 @numba.njit
 def set_bit_to(bits, i, bit_is_set):
     b_ind = i // 8
@@ -209,7 +210,8 @@ def gatherv(data):
             if rank == MPI_ROOT:
                 displs = bodo.ir.join.calc_disp(recv_counts)
             #  print(rank, n_loc, n_total, recv_counts, displs)
-            c_gatherv(data.ctypes, np.int32(n_loc), all_data.ctypes, recv_counts.ctypes, displs.ctypes, np.int32(typ_val))
+            c_gatherv(data.ctypes, np.int32(n_loc), all_data.ctypes,
+                recv_counts.ctypes, displs.ctypes, np.int32(typ_val))
             return all_data
 
         return gatherv_impl
@@ -299,6 +301,10 @@ def gatherv(data):
             local_n = data._stop - data._start
             n = bodo.libs.distributed_api.dist_reduce(
                 local_n, np.int32(Reduce_Type.Sum.value))
+            # gatherv() of dataframe returns 0-length arrays so index should
+            # be 0-length to match
+            if bodo.get_rank() != 0:
+                n = 0
             return bodo.hiframes.pd_index_ext.init_range_index(0, n, 1)
         return impl_range_index
 

@@ -43,15 +43,7 @@ def typeof_pd_dataframe(val, c):
     col_names = tuple(val.columns.tolist())
     # TODO: support other types like string and timestamp
     col_types = get_hiframes_dtypes(val)
-
-    # special case: using None for Range(0, size) to enable optimization
-    # TODO: use proper size inference for RangeIndex and remove this
-    if (isinstance(val.index, pd.RangeIndex)
-            and val.index._start == 0
-            and val.index._step == 1):
-        index_typ = types.none
-    else:
-        index_typ = numba.typeof(val.index)
+    index_typ = numba.typeof(val.index)
 
     return DataFrameType(col_types, index_typ, col_names, True)
 

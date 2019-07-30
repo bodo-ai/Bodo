@@ -9,28 +9,30 @@ import pytest
 import numba
 import bodo
 from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
-    count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_start_end)
+    count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_start_end,
+    test_func)
 
 
 
 # TODO: other possible df types like Categorical, dt64, td64, ...
 @pytest.fixture(params = [
     # int and float columns
-    pd.DataFrame({'A': [1, 8, 4, 11, -3], 'B': [1.1, np.nan, 4.2, 3.1, -1.3],
+    pd.DataFrame({'A': [1, 8, 4, 11, -3],
+        'B': [1.1, np.nan, 4.2, 3.1, -1.3],
         'C': [True, False, False, True, True]}),
     # uint8, float32 dtypes
     pd.DataFrame({'A': np.array([1, 8, 4, 0, 3], dtype=np.uint8),
         'B': np.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype=np.float32)}),
     # string and int columns, float index
     pd.DataFrame({'A': ['AA', np.nan, '', 'D', 'GG'], 'B': [1, 8, 4, -1, 2]},
-        [1.1, -2.1, 7.1, 0.1, -1.1]),
+        [-2.1, 0.1, 1.1, 7.1, 9.0]),
     # range index
     pd.DataFrame({'A': [1, 8, 4, 1, -2], 'B': ['A', 'B', 'CG', 'ACDE', 'C']},
         range(0, 5, 1)),
     # TODO: parallel range index with start != 0 and stop != 1
     # int index
     pd.DataFrame({'A': [1, 8, 4, 1, -3], 'B': ['A', 'B', 'CG', 'ACDE', 'C']},
-        [3, 7, 9, 3, -2]),
+        [-2, 1, 3, 5, 9]),
     # string index
     pd.DataFrame({'A': [1, 2, 3, -1, 4]}, ['A', 'BA', '', 'DD', 'C']),
     # datetime column
@@ -57,7 +59,7 @@ def df_value(request):
     # }),
     # int column, float index
     pd.DataFrame({'A': [1, 8, 4, -1, 3]},
-        [1.1, -2.1, 7.1, 0.1, -2.9]),
+        [-2.1, 0.1, 1.1, 7.1, 9.0]),
     # range index
     pd.DataFrame({'A': [1, 8, 4, 1, -2]}, range(0, 5, 1)),
     # datetime column
@@ -77,31 +79,27 @@ def test_unbox_df(df_value):
     def impl(df_arg):
         return True
 
-    bodo_func = bodo.jit(impl)
-    assert bodo_func(df_value)
+    test_func(impl, (df_value,))
 
     # unbox and box
     def impl2(df_arg):
         return df_arg
 
-    bodo_func = bodo.jit(impl2)
-    pd.testing.assert_frame_equal(bodo_func(df_value), impl2(df_value))
+    test_func(impl2, (df_value,))
 
     # unbox and return Series data with index
     # (previous test can box Index unintentionally)
     def impl3(df_arg):
         return df_arg.A
 
-    bodo_func = bodo.jit(impl3)
-    pd.testing.assert_series_equal(bodo_func(df_value), impl3(df_value))
+    test_func(impl3, (df_value,))
 
 
 def test_df_index(df_value):
     def impl(df):
         return df.index
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_index_equal(bodo_func(df_value), impl(df_value))
+    test_func(impl, (df_value,))
 
 
 def test_df_index_non():
