@@ -200,7 +200,6 @@ def gatherv(data):
             n_total = recv_counts.sum()
             n_total_char = recv_counts_char.sum()
 
-
             # displacements
             all_data = StringArray()  # dummy arrays on non-root PEs
             displs = np.empty(1, np.int32)
@@ -254,6 +253,29 @@ def gatherv(data):
             return bodo.utils.conversion.index_from_array(arr, data._name)
         return impl_pd_index
 
+    if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
+        n_cols = len(data.columns)
+        data_args = ", ".join('g_data_{}'.format(i) for i in range(n_cols))
+        col_var = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
+            ", ".join("'{}'".format(c) for c in data.columns))
+
+        func_text = "def impl_df(data):\n"
+        for i in range(n_cols):
+            func_text += "  data_{} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {})\n".format(i, i)
+            func_text += "  g_data_{} = bodo.gatherv(data_{})\n".format(i, i)
+        func_text += "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)\n"
+        func_text += "  g_index = bodo.gatherv(index)\n"
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), g_index, {})\n".format(
+            data_args, col_var)
+        loc_vars = {}
+        exec(func_text, {'bodo': bodo}, loc_vars)
+        impl_df = loc_vars['impl_df']
+        return impl_df
+
+    if data is types.none:
+        return lambda data: None
+
+    raise NotImplementedError("gatherv() not available for {}".format(data))
 
 @overload(allgatherv)
 def allgatherv_overload(data):
