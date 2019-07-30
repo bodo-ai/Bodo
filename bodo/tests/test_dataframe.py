@@ -130,33 +130,28 @@ def test_df_get_values(numeric_df_value):
     def impl(df):
         return df.get_values()
 
-    bodo_func = bodo.jit(impl)
-    np.testing.assert_array_equal(
-        bodo_func(numeric_df_value), impl(numeric_df_value))
+    test_func(impl, (numeric_df_value,))
 
 
 def test_df_ndim(df_value):
     def impl(df):
         return df.ndim
 
-    bodo_func = bodo.jit(impl)
-    assert bodo_func(df_value) == impl(df_value)
+    test_func(impl, (df_value,))
 
 
 def test_df_size(df_value):
     def impl(df):
         return df.size
 
-    bodo_func = bodo.jit(impl)
-    assert bodo_func(df_value) == impl(df_value)
+    test_func(impl, (df_value,))
 
 
 def test_df_shape(df_value):
     def impl(df):
         return df.shape
 
-    bodo_func = bodo.jit(impl)
-    assert bodo_func(df_value) == impl(df_value)
+    test_func(impl, (df_value,))
 
 
 # TODO: empty df: pd.DataFrame()
@@ -178,9 +173,7 @@ def test_df_astype_num(numeric_df_value):
     def impl(df):
         return df.astype(np.float32)
 
-    bodo_func = bodo.jit(impl)
-    np.testing.assert_array_equal(
-        bodo_func(numeric_df_value), impl(numeric_df_value))
+    test_func(impl, (numeric_df_value,))
 
 
 def test_df_astype_str(numeric_df_value):
@@ -196,9 +189,7 @@ def test_df_astype_str(numeric_df_value):
     def impl(df):
         return df.astype(str)
 
-    bodo_func = bodo.jit(impl)
-    np.testing.assert_array_equal(
-        bodo_func(numeric_df_value), impl(numeric_df_value))
+    test_func(impl, (numeric_df_value,))
 
 
 def test_df_copy_deep(df_value):
