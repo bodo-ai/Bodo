@@ -16,28 +16,29 @@ from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
 # TODO: other possible df types like Categorical, dt64, td64, ...
 @pytest.fixture(params = [
     # int and float columns
-    pd.DataFrame({'A': [1, 8, 4, 11], 'B': [1.1, np.nan, 4.2, 3.1],
-        'C': [True, False, False, True]}),
+    pd.DataFrame({'A': [1, 8, 4, 11, -3], 'B': [1.1, np.nan, 4.2, 3.1, -1.3],
+        'C': [True, False, False, True, True]}),
     # uint8, float32 dtypes
-    pd.DataFrame({'A': np.array([1, 8, 4, 0], dtype=np.uint8),
-        'B': np.array([1.1, np.nan, 4.2, 3.1], dtype=np.float32)}),
+    pd.DataFrame({'A': np.array([1, 8, 4, 0, 3], dtype=np.uint8),
+        'B': np.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype=np.float32)}),
     # string and int columns, float index
-    pd.DataFrame({'A': ['AA', np.nan, '', 'D'], 'B': [1, 8, 4, -1]},
-        [1.1, -2.1, 7.1, 0.1]),
+    pd.DataFrame({'A': ['AA', np.nan, '', 'D', 'GG'], 'B': [1, 8, 4, -1, 2]},
+        [1.1, -2.1, 7.1, 0.1, -1.1]),
     # range index
-    pd.DataFrame({'A': [1, 8, 4, 1], 'B': ['A', 'B', 'CG', 'ACDE']},
-        range(1, 9, 2)),
+    pd.DataFrame({'A': [1, 8, 4, 1, -2], 'B': ['A', 'B', 'CG', 'ACDE', 'C']},
+        range(0, 5, 1)),
+    # TODO: parallel range index with start != 0 and stop != 1
     # int index
-    pd.DataFrame({'A': [1, 8, 4, 1], 'B': ['A', 'B', 'CG', 'ACDE']},
-        [3, 7, 9, 3]),
+    pd.DataFrame({'A': [1, 8, 4, 1, -3], 'B': ['A', 'B', 'CG', 'ACDE', 'C']},
+        [3, 7, 9, 3, -2]),
     # string index
-    pd.DataFrame({'A': [1, 2, 3, -1]}, ['A', 'BA', '', 'DD']),
+    pd.DataFrame({'A': [1, 2, 3, -1, 4]}, ['A', 'BA', '', 'DD', 'C']),
     # datetime column
     pd.DataFrame({'A': pd.date_range(
-        start='2018-04-24', end='2018-04-28', periods=4)}),
+        start='2018-04-24', end='2018-04-29', periods=5)}),
     # datetime index
-    pd.DataFrame({'A': [3, 5, 1, -1]},
-              pd.date_range(start='2018-04-24', end='2018-04-28', periods=4)),
+    pd.DataFrame({'A': [3, 5, 1, -1, 4]},
+              pd.date_range(start='2018-04-24', end='2018-04-29', periods=5)),
     # TODO: timedelta
 ])
 def df_value(request):
@@ -46,25 +47,25 @@ def df_value(request):
 
 @pytest.fixture(params = [
     # int
-    pd.DataFrame({'A': [1, 8, 4, 11]}),
+    pd.DataFrame({'A': [1, 8, 4, 11, -3]}),
     # int and float columns
-    pd.DataFrame({'A': [1, 8, 4, 11], 'B': [1.1, np.nan, 4.2, 3.1]}),
+    pd.DataFrame({'A': [1, 8, 4, 11, -3], 'B': [1.1, np.nan, 4.2, 3.1, -1.1]}),
     # uint8, float32 dtypes
-    pd.DataFrame({'A': np.array([1, 8, 4, 0], dtype=np.uint8),
-        'B': np.array([1.1, np.nan, 4.2, 3.1], dtype=np.float32)}),
+    pd.DataFrame({'A': np.array([1, 8, 4, 0, 2], dtype=np.uint8),
+        'B': np.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype=np.float32)}),
     # pd.DataFrame({'A': np.array([1, 8, 4, 0], dtype=np.uint8),
     # }),
     # int column, float index
-    pd.DataFrame({'A': [1, 8, 4, -1]},
-        [1.1, -2.1, 7.1, 0.1]),
+    pd.DataFrame({'A': [1, 8, 4, -1, 3]},
+        [1.1, -2.1, 7.1, 0.1, -2.9]),
     # range index
-    pd.DataFrame({'A': [1, 8, 4, 1]}, range(1, 9, 2)),
+    pd.DataFrame({'A': [1, 8, 4, 1, -2]}, range(0, 5, 1)),
     # datetime column
     pd.DataFrame({'A': pd.date_range(
-        start='2018-04-24', end='2018-04-28', periods=4)}),
+        start='2018-04-24', end='2018-04-29', periods=5)}),
     # datetime index
-    pd.DataFrame({'A': [3, 5, 1, -1]},
-              pd.date_range(start='2018-04-24', end='2018-04-28', periods=4)),
+    pd.DataFrame({'A': [3, 5, 1, -1, 2]},
+              pd.date_range(start='2018-04-24', end='2018-04-29', periods=5)),
     # TODO: timedelta
 ])
 def numeric_df_value(request):
