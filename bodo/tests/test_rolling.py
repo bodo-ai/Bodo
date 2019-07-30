@@ -268,7 +268,7 @@ class TestRolling(unittest.TestCase):
             func_text += "  res = df.rolling('{}', on='time').{}()\n".format(w, func_name)
             func_text += "  return res.B.sum()\n"
             loc_vars = {}
-            exec(func_text, {'pd': pd, 'np': np}, loc_vars)
+            exec(func_text, {'pd': pd, 'np': np, 'bodo': bodo}, loc_vars)
             test_impl = loc_vars['test_impl']
             bodo_func = bodo.jit(test_impl)
             for n in sizes:
@@ -291,7 +291,7 @@ class TestRolling(unittest.TestCase):
             func_text += "  res = df.rolling('{}', on='time').apply(lambda a: a.sum())\n".format(w)
             func_text += "  return res.B.sum()\n"
             loc_vars = {}
-            exec(func_text, {'pd': pd, 'np': np}, loc_vars)
+            exec(func_text, {'pd': pd, 'np': np, 'bodo': bodo}, loc_vars)
             test_impl = loc_vars['test_impl']
             bodo_func = bodo.jit(test_impl)
             for n in sizes:
