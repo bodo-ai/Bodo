@@ -116,17 +116,14 @@ def test_df_columns(df_value):
     def impl(df):
         return df.columns
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_index_equal(bodo_func(df_value), impl(df_value))
+    test_func(impl, (df_value,), False)
 
 
 def test_df_values(numeric_df_value):
     def impl(df):
         return df.values
 
-    bodo_func = bodo.jit(impl)
-    np.testing.assert_array_equal(
-        bodo_func(numeric_df_value), impl(numeric_df_value))
+    test_func(impl, (numeric_df_value,))
 
 
 def test_df_get_values(numeric_df_value):

@@ -201,7 +201,8 @@ def gatherv(data):
 
         def gatherv_impl(data):
             rank = bodo.libs.distributed_api.get_rank()
-            n_loc = len(data)
+            # size to handle multi-dim arrays
+            n_loc = data.size
             recv_counts = gather_scalar(np.int32(n_loc))
             n_total = recv_counts.sum()
             all_data = empty_like_type(n_total, data)
@@ -212,7 +213,8 @@ def gatherv(data):
             #  print(rank, n_loc, n_total, recv_counts, displs)
             c_gatherv(data.ctypes, np.int32(n_loc), all_data.ctypes,
                 recv_counts.ctypes, displs.ctypes, np.int32(typ_val))
-            return all_data
+            # handle multi-dim case
+            return all_data.reshape((-1,) + data.shape[1:])
 
         return gatherv_impl
 
@@ -263,8 +265,10 @@ def gatherv(data):
             data_ptr = get_data_ptr(all_data)
             null_bitmap_ptr = get_null_bitmap_ptr(all_data)
 
-            c_gatherv(send_arr_lens.ctypes, np.int32(n_loc), offset_ptr, recv_counts.ctypes, displs.ctypes, int32_typ_enum)
-            c_gatherv(send_data_ptr, np.int32(n_all_chars), data_ptr, recv_counts_char.ctypes, displs_char.ctypes, char_typ_enum)
+            c_gatherv(send_arr_lens.ctypes, np.int32(n_loc), offset_ptr,
+                recv_counts.ctypes, displs.ctypes, int32_typ_enum)
+            c_gatherv(send_data_ptr, np.int32(n_all_chars), data_ptr,
+                recv_counts_char.ctypes, displs_char.ctypes, char_typ_enum)
             c_gatherv(send_null_bitmap_ptr, np.int32(n_bytes),
                 tmp_null_bytes.ctypes, recv_counts_nulls.ctypes,
                 displs_nulls.ctypes, char_typ_enum)
