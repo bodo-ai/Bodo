@@ -548,10 +548,15 @@ class DistributedAnalysis(object):
                 'get_index_data',
                 'to_arr_from_series',
                 'to_date_series_type', 'dummy_unbox_series',
-                'init_datetime_index', 'init_timedelta_index'
-                'parallel_fix_df_array'):
-            # TODO: support Series type similar to Array
+                'init_datetime_index', 'init_timedelta_index'):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        # from flat map pattern: pd.Series(list(itertools.chain(*A)))
+        # TODO: associate input/output distributions
+        if fdef == ('parallel_fix_df_array', 'bodo.hiframes.api'):
+            if lhs not in array_dists:
+                array_dists[lhs] = Distribution.OneD
             return
 
         if func_mod == 'bodo.hiframes.pd_index_ext' and func_name in (
