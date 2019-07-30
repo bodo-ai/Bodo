@@ -568,6 +568,8 @@ class DistributedAnalysis(object):
         # RangeIndexType is technically a distributable type even though the
         # object doesn't require communication
         if fdef == ('init_range_index', 'bodo.hiframes.pd_index_ext'):
+            if lhs not in array_dists:
+                array_dists[lhs] = Distribution.OneD
             return
 
         if fdef == ('init_series', 'bodo.hiframes.api'):
