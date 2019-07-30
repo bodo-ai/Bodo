@@ -529,7 +529,7 @@ def test_series_explicit_binary_op(numeric_series_val, op, fill):
     func_text = "def test_impl(S, other, fill_val):\n"
     func_text += "  return S.{}(other, fill_value=fill_val)\n".format(op)
     loc_vars = {}
-    exec(func_text, {}, loc_vars)
+    exec(func_text, {'bodo': bodo}, loc_vars)
     test_impl = loc_vars['test_impl']
 
     if fill is not None:
@@ -962,7 +962,7 @@ def test_series_append_single(series_val, ignore_index):
     func_text = "def test_impl(A, B):\n"
     func_text += "  return A.append(B, {})\n".format(ignore_index)
     loc_vars = {}
-    exec(func_text, {}, loc_vars)
+    exec(func_text, {'bodo': bodo}, loc_vars)
     test_impl = loc_vars['test_impl']
 
     bodo_func = bodo.jit(test_impl)
@@ -977,7 +977,7 @@ def test_series_append_multi(series_val, ignore_index):
     func_text = "def test_impl(A, B, C):\n"
     func_text += "  return A.append([B, C], {})\n".format(ignore_index)
     loc_vars = {}
-    exec(func_text, {}, loc_vars)
+    exec(func_text, {'bodo': bodo}, loc_vars)
     test_impl = loc_vars['test_impl']
 
     bodo_func = bodo.jit(test_impl)
@@ -1924,7 +1924,7 @@ class TestSeries(unittest.TestCase):
             func_text = "def test_impl(S):\n"
             func_text += "  return S.str.{}()\n".format(method)
             loc_vars = {}
-            exec(func_text, {}, loc_vars)
+            exec(func_text, {'bodo': bodo}, loc_vars)
             test_impl = loc_vars['test_impl']
             bodo_func = bodo.jit(test_impl)
             # XXX: \t support pending Numba #4188

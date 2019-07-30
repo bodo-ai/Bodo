@@ -1106,9 +1106,9 @@ class DistributedAnalysis(object):
         if top_dist is None:
             top_dist = Distribution.OneD
         if arr1 not in array_dists:
-            self._set_var_dist(arr1, array_dists, top_dist)
+            self._set_var_dist(arr1, array_dists, top_dist, False)
         if arr2 not in array_dists:
-            self._set_var_dist(arr2, array_dists, top_dist)
+            self._set_var_dist(arr2, array_dists, top_dist, False)
 
         if is_distributable_tuple_typ(typ1):
             assert typ1 == typ2
@@ -1144,10 +1144,12 @@ class DistributedAnalysis(object):
 
     def _get_var_dist(self, varname, array_dists):
         if varname not in array_dists:
-            self._set_var_dist(varname, array_dists, Distribution.OneD)
+            self._set_var_dist(varname, array_dists, Distribution.OneD, False)
         return array_dists[varname]
 
-    def _set_var_dist(self, varname, array_dists, dist):
+    def _set_var_dist(self, varname, array_dists, dist, check_type=True):
+        # some non-distributable types could need to be assigned distribution
+        # sometimes, e.g. SeriesILocType. check_type=False handles these cases.
         typ = self.typemap[varname]
         if is_distributable_tuple_typ(typ):
             t_dist = [dist if is_distributable_typ(v) else None
@@ -1155,7 +1157,8 @@ class DistributedAnalysis(object):
             array_dists[varname] = t_dist
         # XXX: Index values can be None so they should have distribution
         # TODO: use proper "FullRangeIndex" type
-        elif is_distributable_typ(typ) or typ is types.none:
+        elif not check_type or (
+                is_distributable_typ(typ) or typ is types.none):
             array_dists[varname] = dist
 
     def _rebalance_arrs(self, array_dists, parfor_dists):

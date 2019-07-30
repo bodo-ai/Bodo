@@ -793,9 +793,9 @@ def overload_series_fillna(S, value=None, method=None, axis=None,
                 for i in numba.parfor.internal_prange(n):
                     s = in_arr[i]
                     if bodo.hiframes.api.isna(in_arr, i):
-                        l += bodo.libs.str_arr_ext.get_utf8_size(value)
+                        l = bodo.libs.str_arr_ext.get_utf8_size(value)
                     else:
-                        l += bodo.libs.str_arr_ext.get_utf8_size(s)
+                        l = bodo.libs.str_arr_ext.get_utf8_size(s)
                     num_chars += l
                 out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(
                     n, num_chars)
