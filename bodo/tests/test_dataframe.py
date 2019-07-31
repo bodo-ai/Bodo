@@ -542,8 +542,7 @@ def test_df_sort_index(df_value):
     def impl(df):
         return df.sort_index()
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+    test_func(impl, (df_value,))
 
 
 def test_df_shift(numeric_df_value):
@@ -554,9 +553,7 @@ def test_df_shift(numeric_df_value):
     def impl(df):
         return df.shift(2)
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(numeric_df_value), impl(numeric_df_value))
+    test_func(impl, (numeric_df_value,))
 
 
 def test_df_set_index(df_value):
@@ -567,8 +564,7 @@ def test_df_set_index(df_value):
     def impl(df):
         return df.set_index('A')
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+    test_func(impl, (df_value,))
 
 
 

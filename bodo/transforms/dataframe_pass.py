@@ -641,7 +641,7 @@ class DataFramePass(object):
                 'count', 'prod', 'sum', 'max', 'min', 'mean', 'var', 'std',
                 'median', 'pct_change', 'describe', 'product', 'quantile',
                 'cumprod', 'cumsum', 'nunique', 'idxmax', 'idxmin', 'take',
-                'shift'):
+                'shift', 'set_index'):
             if func_name == 'isnull':
                 func_name = 'isna'
             if func_name == 'product':

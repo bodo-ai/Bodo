@@ -59,7 +59,10 @@ def typeof_pd_series(val, c):
 
 @typeof_impl.register(pd.Index)
 def typeof_pd_index(val, c):
-    if val.inferred_type == 'string':
+    if (val.inferred_type == 'string'
+            or pd._libs.lib.infer_dtype(val, True) == 'string'):
+        # Index.inferred_type doesn't skip NAs so we call infer_dtype with
+        # skipna=True
         return bodo.hiframes.pd_index_ext.StringIndexType(
             numba.typeof(val.name))
 
