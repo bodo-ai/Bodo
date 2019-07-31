@@ -57,14 +57,15 @@ def get_start_end(n):
     return start, end
 
 
-def test_func(func, args, is_out_distributed=None, sort_output=False):
+def test_func(func, args, is_out_distributed=None, sort_output=False,
+                                                             check_names=True):
     """test bodo compilation of function 'func' on arguments using REP and 1D
     inputs/outputs
     """
     py_output = func(*args)
     # sequential
     bodo_func = bodo.jit(func)
-    _test_equal(bodo_func(*args), py_output, sort_output)
+    _test_equal(bodo_func(*args), py_output, sort_output, check_names)
 
     if is_out_distributed is None:
         # assume all distributable output is distributed if not specified
@@ -81,7 +82,7 @@ def test_func(func, args, is_out_distributed=None, sort_output=False):
         bodo_output = bodo.gatherv(bodo_output)
     # only rank 0 should check if gatherv() called on output
     if not is_out_distributed or bodo.get_rank() == 0:
-        _test_equal(bodo_output, py_output, sort_output)
+        _test_equal(bodo_output, py_output, sort_output, check_names)
 
     # 1D distributed variable length
     bodo_func = bodo.jit(
@@ -92,7 +93,7 @@ def test_func(func, args, is_out_distributed=None, sort_output=False):
     if is_out_distributed:
         bodo_output = bodo.gatherv(bodo_output)
     if not is_out_distributed or bodo.get_rank() == 0:
-        _test_equal(bodo_output, py_output, sort_output)
+        _test_equal(bodo_output, py_output, sort_output, check_names)
 
 
 def _get_dist_arg(a):
@@ -106,17 +107,20 @@ def _get_dist_arg(a):
     return a[start:end]
 
 
-def _test_equal(bodo_out, py_out, sort_output):
+def _test_equal(bodo_out, py_out, sort_output, check_names=True):
     if sort_output:
         bodo_out = np.sort(bodo_out)
         py_out = np.sort(py_out)
 
     if isinstance(py_out, pd.Series):
-        pd.testing.assert_series_equal(bodo_out, py_out)
+        pd.testing.assert_series_equal(
+            bodo_out, py_out, check_names=check_names)
     elif isinstance(py_out, pd.Index):
-        pd.testing.assert_index_equal(bodo_out, py_out)
+        pd.testing.assert_index_equal(
+            bodo_out, py_out, check_names=check_names)
     elif isinstance(py_out, pd.DataFrame):
-        pd.testing.assert_frame_equal(bodo_out, py_out)
+        pd.testing.assert_frame_equal(
+            bodo_out, py_out, check_names=check_names)
     elif isinstance(py_out, np.ndarray):
         np.testing.assert_array_equal(bodo_out, py_out)
     else:

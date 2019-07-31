@@ -392,9 +392,7 @@ def test_df_median(numeric_df_value):
     def impl(df):
         return df.median()
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_series_equal(
-        bodo_func(numeric_df_value), impl(numeric_df_value))
+    test_func(impl, (numeric_df_value,), False)
 
 
 def test_df_quantile(df_value):
@@ -405,9 +403,7 @@ def test_df_quantile(df_value):
     def impl(df):
         return df.quantile(0.3)
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_series_equal(
-        bodo_func(df_value), impl(df_value), check_names=False)
+    test_func(impl, (df_value,), False, check_names=False)
 
 
 def test_df_pct_change(numeric_df_value):
