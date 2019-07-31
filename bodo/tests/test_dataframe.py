@@ -1,5 +1,6 @@
 import unittest
 import os
+import sys
 import random
 import string
 import pandas as pd
@@ -414,9 +415,7 @@ def test_df_pct_change(numeric_df_value):
     def test_impl(df):
         return df.pct_change(2)
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(numeric_df_value), test_impl(numeric_df_value))
+    test_func(test_impl, (numeric_df_value,))
 
 
 
@@ -428,11 +427,10 @@ def test_df_describe(numeric_df_value):
     def test_impl(df):
         return df.describe()
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(numeric_df_value), test_impl(numeric_df_value))
+    test_func(test_impl, (numeric_df_value,), False)
 
 
+@pytest.mark.skip(reason="distributed cumprod not available yet")
 def test_df_cumprod(numeric_df_value):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:
@@ -446,9 +444,7 @@ def test_df_cumprod(numeric_df_value):
     def impl(df):
         return df.cumprod()
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(numeric_df_value), impl(numeric_df_value))
+    test_func(impl, (numeric_df_value,),)
 
 
 def test_df_cumsum(numeric_df_value):
@@ -464,9 +460,7 @@ def test_df_cumsum(numeric_df_value):
     def impl(df):
         return df.cumsum()
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(numeric_df_value), impl(numeric_df_value))
+    test_func(impl, (numeric_df_value,),)
 
 
 def test_df_nunique(df_value):
@@ -482,28 +476,40 @@ def test_df_nunique(df_value):
     def impl(df):
         return df.nunique()
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_series_equal(bodo_func(df_value), impl(df_value))
+    # TODO: make sure output is REP
+    test_func(impl, (df_value,), False)
+
+
+def _is_supported_argminmax_typ(d):
+    # distributed argmax types, see distributed_lower.py
+    supported_typs = [np.int32, np.float32, np.float64]
+    if not sys.platform.startswith('win'):
+        # long is 4 byte on Windows
+        supported_typs.append(np.int64)
+        supported_typs.append(np.dtype('datetime64[ns]'))
+    return d in supported_typs
 
 
 def test_df_idxmax(numeric_df_value):
+    if any(not _is_supported_argminmax_typ(d)
+           for d in numeric_df_value.dtypes):
+        return
 
     def impl(df):
         return df.idxmax()
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_series_equal(
-        bodo_func(numeric_df_value), impl(numeric_df_value))
+    test_func(impl, (numeric_df_value,), False)
 
 
 def test_df_idxmin(numeric_df_value):
+    if any(not _is_supported_argminmax_typ(d)
+           for d in numeric_df_value.dtypes):
+        return
 
     def impl(df):
         return df.idxmin()
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_series_equal(
-        bodo_func(numeric_df_value), impl(numeric_df_value))
+    test_func(impl, (numeric_df_value,), False)
 
 
 def test_df_take(df_value):

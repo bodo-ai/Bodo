@@ -65,6 +65,7 @@ def lower_dist_reduce(context, builder, sig, args):
         if not sys.platform.startswith('win'):
             # long is 4 byte on Windows
             supported_typs.append(types.int64)
+            supported_typs.append(types.NPDatetime('ns'))
         if target_typ not in supported_typs:  # pragma: no cover
             raise TypeError("argmin/argmax not supported for type {}".format(
                 target_typ))
