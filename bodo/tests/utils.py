@@ -58,14 +58,16 @@ def get_start_end(n):
 
 
 def test_func(func, args, is_out_distributed=None, sort_output=False,
-                                                             check_names=True):
+                                           check_names=True, copy_input=False):
     """test bodo compilation of function 'func' on arguments using REP and 1D
     inputs/outputs
     """
-    py_output = func(*args)
+    call_args = tuple(_get_arg(a, copy_input) for a in args)
+    py_output = func(*call_args)
     # sequential
     bodo_func = bodo.jit(func)
-    _test_equal(bodo_func(*args), py_output, sort_output, check_names)
+    call_args = tuple(_get_arg(a, copy_input) for a in args)
+    _test_equal(bodo_func(*call_args), py_output, sort_output, check_names)
 
     if is_out_distributed is None:
         # assume all distributable output is distributed if not specified
@@ -76,7 +78,7 @@ def test_func(func, args, is_out_distributed=None, sort_output=False,
     bodo_func = bodo.jit(
         all_args_distributed=True,
         all_returns_distributed=is_out_distributed)(func)
-    dist_args = tuple(_get_dist_arg(a) for a in args)
+    dist_args = tuple(_get_dist_arg(a, copy_input) for a in args)
     bodo_output = bodo_func(*dist_args)
     if is_out_distributed:
         bodo_output = bodo.gatherv(bodo_output)
@@ -88,7 +90,7 @@ def test_func(func, args, is_out_distributed=None, sort_output=False,
     bodo_func = bodo.jit(
         all_args_distributed_varlength=True,
         all_returns_distributed=is_out_distributed)(func)
-    dist_args = tuple(_get_dist_arg(a) for a in args)
+    dist_args = tuple(_get_dist_arg(a, copy_input) for a in args)
     bodo_output = bodo_func(*dist_args)
     if is_out_distributed:
         bodo_output = bodo.gatherv(bodo_output)
@@ -96,7 +98,16 @@ def test_func(func, args, is_out_distributed=None, sort_output=False,
         _test_equal(bodo_output, py_output, sort_output, check_names)
 
 
-def _get_dist_arg(a):
+def _get_arg(a, copy=False):
+    if copy and hasattr(a, 'copy'):
+        return a.copy()
+    return a
+
+
+def _get_dist_arg(a, copy=False):
+    if copy and hasattr(a, 'copy'):
+        a = a.copy()
+
     arg_typ = bodo.typeof(a)
     if not bodo.utils.utils.is_distributable_typ(arg_typ):
         return a
