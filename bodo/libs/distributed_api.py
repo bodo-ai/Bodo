@@ -458,6 +458,8 @@ def bcast_overload(data):
 
             offset_ptr = get_offset_ptr(data)
             data_ptr = get_data_ptr(data)
+            null_bitmap_ptr = get_null_bitmap_ptr(data)
+            n_bytes = (n_loc + 7) >> 3
 
             if rank == MPI_ROOT:
                 send_arr_lens = np.empty(n_loc, np.uint32)  # XXX offset type is uint32
@@ -470,6 +472,7 @@ def bcast_overload(data):
                 c_bcast(offset_ptr, np.int32(n_loc), int32_typ_enum)
 
             c_bcast(data_ptr, np.int32(n_all_chars), char_typ_enum)
+            c_bcast(null_bitmap_ptr, np.int32(n_bytes), char_typ_enum)
             if rank != MPI_ROOT:
                 convert_len_arr_to_offset(offset_ptr, n_loc)
 

@@ -196,16 +196,14 @@ def test_df_copy_deep(df_value):
     def impl(df):
         return df.copy()
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+    test_func(impl, (df_value,))
 
 
 def test_df_copy_shallow(df_value):
     def impl(df):
         return df.copy(deep=False)
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+    test_func(impl, (df_value,))
 
 
 def test_df_isna(df_value):
@@ -213,8 +211,7 @@ def test_df_isna(df_value):
     def impl(df):
         return df.isna()
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+    test_func(impl, (df_value,))
 
 
 def test_df_notna(df_value):
@@ -222,24 +219,21 @@ def test_df_notna(df_value):
     def impl(df):
         return df.notna()
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+    test_func(impl, (df_value,))
 
 
 def test_df_head(df_value):
     def impl(df):
         return df.head(3)
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+    test_func(impl, (df_value,), False)
 
 
 def test_df_tail(df_value):
     def impl(df):
         return df.tail(3)
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+    test_func(impl, (df_value,), False)
 
 
 @pytest.mark.parametrize('other', [

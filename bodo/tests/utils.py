@@ -79,7 +79,8 @@ def test_func(func, args, is_out_distributed=None, sort_output=False):
     bodo_output = bodo_func(*dist_args)
     if is_out_distributed:
         bodo_output = bodo.gatherv(bodo_output)
-    if bodo.get_rank() == 0:
+    # only rank 0 should check if gatherv() called on output
+    if not is_out_distributed or bodo.get_rank() == 0:
         _test_equal(bodo_output, py_output, sort_output)
 
     # 1D distributed variable length
@@ -90,7 +91,7 @@ def test_func(func, args, is_out_distributed=None, sort_output=False):
     bodo_output = bodo_func(*dist_args)
     if is_out_distributed:
         bodo_output = bodo.gatherv(bodo_output)
-    if bodo.get_rank() == 0:
+    if not is_out_distributed or bodo.get_rank() == 0:
         _test_equal(bodo_output, py_output, sort_output)
 
 
