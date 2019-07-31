@@ -488,18 +488,22 @@ def bcast_scalar(val):  # pragma: no cover
 # TODO: test
 @overload(bcast_scalar)
 def bcast_scalar_overload(val):
-    assert isinstance(val, (types.Integer, types.Float))
+    assert (isinstance(val, (types.Integer, types.Float))
+        or val == types.NPDatetime('ns'))
     # TODO: other types like boolean
     typ_val = _numba_to_c_type_map[val]
     # TODO: fix np.full and refactor
     func_text = (
     "def bcast_scalar_impl(val):\n"
-    "  send = np.full(1, val, np.{})\n"
+    "  send = np.empty(1, dtype)\n"
+    "  send[0] = val\n"
     "  c_bcast(send.ctypes, np.int32(1), np.int32({}))\n"
-    "  return send[0]\n").format(val, typ_val)
+    "  return send[0]\n").format(typ_val)
 
+    dtype = numba.numpy_support.as_dtype(val)
     loc_vars = {}
-    exec(func_text, {'bodo': bodo, 'np': np, 'c_bcast': c_bcast}, loc_vars)
+    exec(func_text,
+        {'bodo': bodo, 'np': np, 'c_bcast': c_bcast, 'dtype': dtype}, loc_vars)
     bcast_scalar_impl = loc_vars['bcast_scalar_impl']
     return bcast_scalar_impl
 
