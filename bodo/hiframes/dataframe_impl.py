@@ -735,7 +735,11 @@ def overload_isna(obj):
 @overload(pd.notnull)
 def overload_notna(obj):
     # non-scalars
-    if (isinstance(obj, (DataFrameType, SeriesType, types.Array, types.List,
+    # TODO: ~pd.isna(obj) implementation fails for some reason in
+    # test_dataframe.py::test_pd_notna[na_test_obj7] with 1D_Var input
+    if isinstance(obj, DataFrameType):
+        return lambda obj: obj.notna()
+    if (isinstance(obj, (SeriesType, types.Array, types.List,
                 types.UniTuple))
             or bodo.hiframes.pd_index_ext.is_pd_index_type(obj)
             or obj == bodo.string_array_type):

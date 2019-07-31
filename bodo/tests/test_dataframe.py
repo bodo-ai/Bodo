@@ -628,13 +628,13 @@ def test_dataframe_unary_op(op):
     [2, 3, 5],
     [2.1, 3.2, 5.4],
     ['A', 'C', 'AB'],
-    np.array([2, 3, 5]),
-    pd.Series([2.1, 5.3, 6.1], [3, 5, 6], name='C'),
-    pd.Int64Index([10, 12, 14], name='A'),
-    pd.RangeIndex(4),
+    np.array([2, 3, 5, -1, -4]),
+    pd.Series([2.1, 5.3, 6.1, -1.0, -3.7], [3, 5, 6, -2, 4], name='C'),
+    pd.Int64Index([10, 12, 14, 17, 19], name='A'),
+    pd.RangeIndex(5),
     # dataframe
-    pd.DataFrame({'A': ['AA', np.nan, '', 'D'], 'B': [1, 8, 4, -1]},
-        [1.1, -2.1, 7.1, 0.1]),
+    pd.DataFrame({'A': ['AA', np.nan, '', 'D', 'GG'], 'B': [1, 8, 4, -1, 2]},
+        [1.1, -2.1, 7.1, 0.1, 3.1]),
     # scalars
     3,
     1.3,
@@ -651,15 +651,9 @@ def test_pd_isna(na_test_obj):
     def impl(obj):
         return pd.isna(obj)
 
-    bodo_func = bodo.jit(impl)
-    if isinstance(obj, pd.DataFrame):
-        pd.testing.assert_frame_equal(bodo_func(obj), impl(obj))
-    elif isinstance(obj, pd.Series):
-        pd.testing.assert_series_equal(bodo_func(obj), impl(obj))
-    elif isinstance(obj, (list, np.ndarray, pd.Index)):
-        np.testing.assert_array_equal(bodo_func(obj), impl(obj))
-    else:
-        assert bodo_func(obj) == impl(obj)
+    is_out_distributed = bodo.utils.utils.is_distributable_typ(
+        bodo.typeof(obj))
+    test_func(impl, (obj,), is_out_distributed)
 
 
 def test_pd_notna(na_test_obj):
@@ -668,15 +662,9 @@ def test_pd_notna(na_test_obj):
     def impl(obj):
         return pd.notna(obj)
 
-    bodo_func = bodo.jit(impl)
-    if isinstance(obj, pd.DataFrame):
-        pd.testing.assert_frame_equal(bodo_func(obj), impl(obj))
-    elif isinstance(obj, pd.Series):
-        pd.testing.assert_series_equal(bodo_func(obj), impl(obj))
-    elif isinstance(obj, (list, np.ndarray, pd.Index)):
-        np.testing.assert_array_equal(bodo_func(obj), impl(obj))
-    else:
-        assert bodo_func(obj) == impl(obj)
+    is_out_distributed = bodo.utils.utils.is_distributable_typ(
+        bodo.typeof(obj))
+    test_func(impl, (obj,), is_out_distributed)
 
 
 def test_set_column_cond1():
