@@ -1957,10 +1957,9 @@ class TestSeries(unittest.TestCase):
         def test_impl(S):
             return S.isna()
 
-        bodo_func = bodo.jit(test_impl)
         # column with NA
         S = pd.Series([np.nan, 2., 3.])
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        test_func(test_impl, (S,))
 
     def test_series_isnull1(self):
         def test_impl(S):
@@ -1985,8 +1984,7 @@ class TestSeries(unittest.TestCase):
             return S.isna()
 
         S = pd.Series(['aa', None, 'c', 'cccd'])
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        test_func(test_impl, (S,))
 
     def test_series_nlargest1(self):
         def test_impl(S):

@@ -42,7 +42,7 @@ from bodo.utils.transform import compile_func_single_block
 from bodo.utils.utils import (is_alloc_callname, is_whole_slice,
                         get_slice_step, is_np_array_typ, find_build_tuple,
                         debug_prints, ReplaceFunc, gen_getitem, is_call,
-                        is_const_slice, is_assign, is_expr,
+                        is_const_slice, is_assign, is_expr, is_call_assign,
                         get_getsetitem_index_var)
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
@@ -1483,20 +1483,28 @@ class DistributedPass(object):
         # (e.g. argmin)
         l_nest = parfor.loop_nests[0]
         ind_varname = l_nest.index_variable.name
+        ind_varnames = set((ind_varname,))
         ind_used = False
-        # TODO: handle access calls like setitem_arr_nan() in
-        # bodo/tests/test_series.py::test_series_explicit_binary_op_nan[None]
+
         for block in parfor.loop_body.values():
             for stmt in block.body:
-                if (not is_get_setitem(stmt)
-                        and ind_varname in (v.name for v in stmt.list_vars())
-                        # assignment of parfor tuple index for multi-D cases
-                        and not (is_assign(stmt)
-                            and stmt.target.name == parfor.index_var.name)):
+                # assignment of parfor tuple index for multi-dim cases
+                if (is_assign(stmt)
+                        and stmt.target.name == parfor.index_var.name):
+                    continue
+                # parfor index is assigned to other variables here due to
+                # copy propagation limitations, e.g. test_series_str_isna1
+                if (is_assign(stmt) and isinstance(stmt.value, ir.Var)
+                        and stmt.value.name in ind_varnames):
+                    ind_varnames.add(stmt.target.name)
+                    continue
+                if (not self._is_array_access_stmt(stmt)
+                        and ind_varnames & set(
+                                            v.name for v in stmt.list_vars())):
                     ind_used = True
                     dprint("index of 1D_Var pafor {} used in {}".format(
                         parfor.id, stmt))
-                break
+                    break
 
         # fix parfor start and stop bounds using ex_scan on ranges
         if ind_used:
@@ -1965,6 +1973,22 @@ class DistributedPass(object):
                 avail_vars |= defs
             if is_assign(stmt):
                 avail_vars.add(stmt.target.name)
+
+    def _is_array_access_stmt(self, stmt):
+        if is_get_setitem(stmt):
+            return True
+
+        if is_call_assign(stmt):
+            rhs = stmt.value
+            fdef = guard(find_callname, self.func_ir, rhs, self.typemap)
+            if fdef in (('isna', 'bodo.hiframes.api'),
+                    ('setitem_arr_nan', 'bodo.ir.join'),
+                    ('str_arr_item_to_numeric', 'bodo.libs.str_arr_ext'),
+                    ('setitem_str_arr_ptr', 'bodo.libs.str_arr_ext'),
+                    ('get_split_view_index', 'bodo.hiframes.split_impl')):
+                return True
+
+        return False
 
     def _fix_index_var(self, index_var):
         if index_var is None:  # TODO: fix None index in static_getitem/setitem
