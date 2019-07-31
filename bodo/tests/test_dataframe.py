@@ -530,8 +530,7 @@ def test_df_sort_values(df_value):
     def impl(df):
         return df.sort_values(by='A')
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+    test_func(impl, (df_value,))
 
 
 def test_df_sort_index(df_value):

@@ -63,6 +63,11 @@ def typeof_pd_index(val, c):
         return bodo.hiframes.pd_index_ext.StringIndexType(
             numba.typeof(val.name))
 
+    # XXX: assume string data type for empty Index with object dtype
+    if val.equals(pd.Index([])):
+        return bodo.hiframes.pd_index_ext.StringIndexType(
+            numba.typeof(val.name))
+
     # catch-all for non-supported Index types
     # RangeIndex is directly supported (TODO: make sure this is not called)
     raise NotImplementedError("unsupported pd.Index type")
@@ -127,6 +132,11 @@ def get_hiframes_dtypes(df):
 
 def _infer_series_dtype(S):
     if S.dtype == np.dtype('O'):
+        # XXX: assume empty series/column is string since it's the most common
+        # TODO: checks for distributed case with list/datetime.date/...
+        # e.g. one rank's data is empty but other ranks have other types
+        if len(S) == 0:
+            return string_type
         # XXX assuming the whole column is strings if 1st val is string
         # TODO: handle NA as 1st value
         i = 0
