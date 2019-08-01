@@ -571,13 +571,19 @@ def overload_series_astype(S, dtype, copy=True, errors='raise'):
             num_chars = 0
             # get total chars in new array
             for i in numba.parfor.internal_prange(n):
-                s = arr[i]
-                # TODO: check NA
-                num_chars += bodo.libs.str_arr_ext.get_utf8_size(str(s))
+                if bodo.hiframes.api.isna(arr, i):
+                    l = 3  # Pandas assigns 'nan' to nulls
+                else:
+                    s = arr[i]
+                    l = bodo.libs.str_arr_ext.get_utf8_size(str(s))
+                num_chars += l
             A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
             for j in numba.parfor.internal_prange(n):
-                s = arr[j]
-                A[j] = str(s)  # TODO: check NA
+                if bodo.hiframes.api.isna(arr, j):
+                    A[j] = 'nan'
+                else:
+                    s = arr[j]
+                    A[j] = str(s)
 
             return bodo.hiframes.api.init_series(A, index, name)
 
