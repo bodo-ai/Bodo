@@ -379,22 +379,6 @@ def _series_isna_impl(arr, index, name):
     return bodo.hiframes.api.init_series(out_arr, index, name)
 
 
-def _series_astype_str_impl(arr, index, name, dtype):
-    n = len(arr)
-    num_chars = 0
-    # get total chars in new array
-    for i in numba.parfor.internal_prange(n):
-        s = arr[i]
-        # TODO: check NA
-        num_chars += bodo.libs.str_arr_ext.get_utf8_size(str(s))
-    A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
-    for i in numba.parfor.internal_prange(n):
-        s = arr[i]
-        A[i] = str(s)  # TODO: check NA
-
-    return bodo.hiframes.api.init_series(A, index, name)
-
-
 # def _str_replace_regex_impl(str_arr, pat, val):
 #     numba.parfor.init_prange()
 #     e = bodo.libs.str_ext.compile_regex(unicode_to_std_str(pat))
@@ -515,7 +499,6 @@ series_replace_funcs = {
     'isna': _series_isna_impl,
     # isnull is just alias of isna
     'isnull': _series_isna_impl,
-    'astype_str': _series_astype_str_impl,
     'head': lambda A, I, k, name: bodo.hiframes.api.init_series(A[:k], None, name),
     'head_index': lambda A, I, k, name: bodo.hiframes.api.init_series(A[:k], I[:k], name),
     'median': lambda A: bodo.libs.array_kernels.median(A),
