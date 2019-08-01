@@ -1926,11 +1926,10 @@ class TestSeries(unittest.TestCase):
             loc_vars = {}
             exec(func_text, {'bodo': bodo}, loc_vars)
             test_impl = loc_vars['test_impl']
-            bodo_func = bodo.jit(test_impl)
             # XXX: \t support pending Numba #4188
             # S = pd.Series([' \tbbCD\t ', 'ABC', ' mCDm\t', 'abc'])
-            S = pd.Series([' bbCD ', 'ABC', ' mCDm ', 'abc'])
-            pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+            S = pd.Series([' bbCD ', 'ABC', ' mCDm ', np.nan, 'abc'])
+            test_func(test_impl, (S,))
 
     def test_series_append1(self):
         def test_impl(S, other):

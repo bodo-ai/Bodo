@@ -287,13 +287,10 @@ def gatherv(data):
             arr = bodo.hiframes.api.get_series_data(data)
             index = bodo.hiframes.api.get_series_index(data)
             name = bodo.hiframes.api.get_series_name(data)
-            index_t = bodo.utils.conversion.fix_none_index(index, len(arr))
-            index_arr = bodo.utils.conversion.coerce_to_array(index_t)
             # gather data
             out_arr = bodo.libs.distributed_api.gatherv(arr)
-            out_ind_arr = bodo.libs.distributed_api.gatherv(index_arr)
+            out_index = bodo.gatherv(index)
             # create output Series
-            out_index = bodo.utils.conversion.convert_to_index(out_ind_arr)
             return bodo.hiframes.api.init_series(out_arr, out_index, name)
 
         return impl

@@ -12,8 +12,6 @@ from bodo.transforms.distributed_analysis import Distribution
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
                               cp_str_list_to_array, str_list_to_array,
-                              get_offset_ptr, get_data_ptr,
-                              pre_alloc_string_array, num_total_chars,
                               getitem_str_offset, copy_str_arr_slice)
 from bodo.libs.timsort import copyElement_tup, getitem_arr_tup
 from bodo.utils.utils import _numba_to_c_type_map, sanitize_varname

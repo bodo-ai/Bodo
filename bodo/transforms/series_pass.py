@@ -1749,10 +1749,18 @@ class SeriesPass(object):
             else:
                 func_text += '    num_chars = 0\n'
                 func_text += '    for i in numba.parfor.internal_prange(n):\n'
-                func_text += '        num_chars += get_utf8_size(str_arr[i].{}())\n'.format(func_name)
+                func_text += '        if bodo.hiframes.api.isna(str_arr, i):\n'
+                func_text += '            l = 0\n'
+                func_text += '        else:\n'
+                func_text += '            l = get_utf8_size(str_arr[i].{}())\n'.format(func_name)
+                func_text += '        num_chars += l\n'
             func_text += '    S = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)\n'
             func_text += '    for j in numba.parfor.internal_prange(n):\n'
-            func_text += '        S[j] = str_arr[j].{}()\n'.format(func_name)
+            func_text += '        if bodo.hiframes.api.isna(str_arr, j):\n'
+            func_text += '            S[j] = ""\n'
+            func_text += '            bodo.ir.join.setitem_arr_nan(S, j)\n'
+            func_text += '        else:\n'
+            func_text += '            S[j] = str_arr[j].{}()\n'.format(func_name)
             func_text += '    return bodo.hiframes.api.init_series(S, index, name)\n'
             loc_vars = {}
             # print(func_text)
