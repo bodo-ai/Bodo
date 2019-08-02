@@ -938,14 +938,16 @@ def box_str_arr(typ, val, c):
     """
     string_array = c.context.make_helper(c.builder, string_array_type, val)
 
-    fnty = lir.FunctionType(c.context.get_argument_type(types.pyobject), #lir.IntType(8).as_pointer(),
+    fnty = lir.FunctionType(c.context.get_argument_type(types.pyobject),
                             [lir.IntType(64),
                              lir.IntType(32).as_pointer(),
                              lir.IntType(8).as_pointer(),
                              lir.IntType(8).as_pointer(),
                             ])
-    fn_get = c.builder.module.get_or_insert_function(fnty, name="np_array_from_string_array")
-    arr = c.builder.call(fn_get, [string_array.num_items, string_array.offsets, string_array.data, string_array.null_bitmap])
+    fn_get = c.builder.module.get_or_insert_function(
+        fnty, name="np_array_from_string_array")
+    arr = c.builder.call(fn_get, [string_array.num_items, string_array.offsets,
+        string_array.data, string_array.null_bitmap])
 
     # TODO: double check refcounting here
     # c.context.nrt.decref(c.builder, typ, val)
@@ -1004,11 +1006,14 @@ def set_null_bits(typingctx, str_arr_typ=None):
         in_str_arr, = args
         string_array = context.make_helper(builder, string_array_type, in_str_arr)
         # n_bytes = (num_strings+sizeof(uint8_t)-1)/sizeof(uint8_t);
-        n_bytes = builder.udiv(builder.add(string_array.num_items, lir.Constant(lir.IntType(64), 7)), lir.Constant(lir.IntType(64), 8))
+        n_bytes = builder.udiv(builder.add(string_array.num_items,
+            lir.Constant(lir.IntType(64), 7)),
+            lir.Constant(lir.IntType(64), 8))
         cgutils.memset(builder, string_array.null_bitmap, n_bytes, -1)
         return context.get_dummy_value()
 
     return types.none(string_array_type), codegen
+
 
 # XXX: setitem works only if value is same size as the previous value
 @lower_builtin(operator.setitem, StringArrayType, types.Integer, string_type)
@@ -1097,7 +1102,6 @@ def _memcpy(typingctx, dest_t, src_t, count_t, item_size_t=None):
     return types.void(types.voidptr, types.voidptr, types.intp, types.intp), codegen
 
 
-# TODO: use overload
 @overload(operator.getitem)
 def str_arr_getitem_int(A, i):
     if A == string_array_type and isinstance(i, types.Integer):
@@ -1307,6 +1311,7 @@ def _str_arr_item_to_numeric(typingctx, out_ptr_t, str_arr_t, ind_t,
             fname = 'str_arr_to_float64'
         else:
             assert sig.args[3].dtype == types.int64
+        # TODO: handle NA for float64 (use np.nan)
         fn_to_numeric = builder.module.get_or_insert_function(fnty, fname)
         return builder.call(
             fn_to_numeric,
@@ -1375,7 +1380,8 @@ def unbox_str_series(typ, val, c):
                              lir.IntType(8).as_pointer().as_pointer(),
                              lir.IntType(8).as_pointer().as_pointer(),
                              ])
-    fn = c.builder.module.get_or_insert_function(fnty, name="string_array_from_sequence")
+    fn = c.builder.module.get_or_insert_function(
+        fnty, name="string_array_from_sequence")
     c.builder.call(fn, [val,
                         string_array._get_ptr_by_name('num_items'),
                         payload._get_ptr_by_name('offsets'),
@@ -1399,11 +1405,6 @@ def unbox_str_series(typ, val, c):
     # FIXME how to check that the returned size is > 0?
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(string_array._getvalue(), is_error=is_error)
-
-# zero = context.get_constant(types.intp, 0)
-# cond = builder.icmp_signed('>=', size, zero)
-# with cgutils.if_unlikely(builder, cond):
-# http://llvmlite.readthedocs.io/en/latest/user-guide/ir/ir-builder.html#comparisons
 
 
 # TODO: array analysis and remove call for other functions
