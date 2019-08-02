@@ -1889,6 +1889,17 @@ class TestSeries(unittest.TestCase):
         S2 = pd.Series([6., 7.])
         np.testing.assert_array_equal(bodo_func(S1, S2), test_impl(S1, S2))
 
+    def test_series_concat_str1(self):
+        def test_impl(S1, S2):
+            return pd.concat([S1, S2])
+
+        bodo_func = bodo.jit(test_impl)
+        S1 = pd.Series(['aa', 'bb', np.nan, '', 'GGG'])
+        S2 = pd.Series(['1', '12', '', np.nan, 'A'])
+        # TODO: handle index in concat
+        pd.testing.assert_series_equal(
+            bodo_func(S1, S2), test_impl(S1, S2).reset_index(drop=True))
+
     def test_series_cov1(self):
         def test_impl(S1, S2):
             return S1.cov(S2)

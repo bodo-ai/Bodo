@@ -849,6 +849,34 @@ def pre_alloc_string_array(typingctx, num_strs_typ, num_total_chars_typ=None):
     return string_array_type(types.intp, types.intp), codegen
 
 
+
+kBitmask = np.array([1, 2, 4, 8, 16, 32, 64, 128], dtype=np.uint8)
+
+
+# from SetBitTo() in Arrow
+@numba.njit
+def set_bit_to(bits, i, bit_is_set):
+    b_ind = i // 8
+    byte = getitem_str_bitmap(bits, b_ind)
+    byte ^= np.uint8(-np.uint8(bit_is_set) ^ byte) & kBitmask[i % 8]
+    setitem_str_bitmap(bits, b_ind, byte)
+
+
+@numba.njit
+def get_bit_bitmap(bits, i):
+    return (getitem_str_bitmap(bits, i >> 3) >> (i & 0x07)) & 1
+
+
+@numba.njit
+def copy_nulls_range(out_str_arr, in_str_arr, out_start):
+    out_null_bitmap_ptr = get_null_bitmap_ptr(out_str_arr)
+    in_null_bitmap_ptr = get_null_bitmap_ptr(in_str_arr)
+
+    for j in range(len(in_str_arr)):
+        bit = get_bit_bitmap(in_null_bitmap_ptr, j)
+        set_bit_to(out_null_bitmap_ptr, out_start + j, bit)
+
+
 @intrinsic
 def set_string_array_range(typingctx, out_typ, in_typ, curr_str_typ,
                                                           curr_chars_typ=None):
@@ -887,6 +915,14 @@ def set_string_array_range(typingctx, out_typ, in_typ, curr_str_typ,
                                 in_string_array.num_items,
                                 in_string_array.num_total_chars,
                                 ])
+
+        # copy nulls
+        bt_typ = context.typing_context.resolve_value_type(copy_nulls_range)
+        bt_sig = bt_typ.get_call_type(
+            context.typing_context, (string_array_type, string_array_type,
+                types.int64), {})
+        bt_impl = context.get_function(bt_typ, bt_sig)
+        bt_impl(builder, (out_arr, in_arr, curr_str_ind))
 
         return context.get_dummy_value()
 

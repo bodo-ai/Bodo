@@ -14,7 +14,7 @@ import bodo
 from bodo.libs.str_arr_ext import (string_array_type, num_total_chars,
     StringArray, pre_alloc_string_array, get_offset_ptr, get_null_bitmap_ptr,
     get_data_ptr, convert_len_arr_to_offset, getitem_str_bitmap,
-    setitem_str_bitmap)
+    setitem_str_bitmap, set_bit_to)
 from bodo.utils.utils import (debug_prints, empty_like_type,
     _numba_to_c_type_map, unliteral_all)
 from llvmlite import ir as lir
@@ -161,18 +161,6 @@ c_allgatherv = types.ExternalFunction("c_allgatherv",
 @numba.njit
 def get_bit(bits, i):
     return (bits[i >> 3] >> (i & 0x07)) & 1
-
-
-kBitmask = np.array([1, 2, 4, 8, 16, 32, 64, 128], dtype=np.uint8)
-
-
-# from SetBitTo() in Arrow
-@numba.njit
-def set_bit_to(bits, i, bit_is_set):
-    b_ind = i // 8
-    byte = getitem_str_bitmap(bits, b_ind)
-    byte ^= np.uint8(-np.uint8(bit_is_set) ^ byte) & kBitmask[i % 8]
-    setitem_str_bitmap(bits, b_ind, byte)
 
 
 @numba.njit
