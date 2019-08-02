@@ -10,9 +10,7 @@ from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.utils.utils import debug_prints, alloc_arr_tup
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.libs.str_ext import string_type
-from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
-                              cp_str_list_to_array, str_list_to_array,
-                              getitem_str_offset, copy_str_arr_slice)
+from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.timsort import copyElement_tup, getitem_arr_tup
 from bodo.utils.utils import _numba_to_c_type_map
 from bodo import objmode

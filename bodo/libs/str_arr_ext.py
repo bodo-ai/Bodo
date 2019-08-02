@@ -314,13 +314,18 @@ def setitem_str_bitmap(typingctx, in_bitmap_typ, ind_t, val_t=None):
 
 
 @intrinsic
-def copy_str_arr_slice(typingctx, str_arr_typ, out_str_arr_typ, ind_t=None):
+def copy_str_arr_slice(typingctx, out_str_arr_typ, in_str_arr_typ, ind_t=None):
+    """
+    Copy a slice of input array (from the beginning) to output array.
+    Precondition: output is allocated with enough room for data.
+    """
     def codegen(context, builder, sig, args):
         out_str_arr, in_str_arr, ind = args
 
-        in_string_array = context.make_helper(builder, string_array_type, in_str_arr)
-
-        out_string_array = context.make_helper(builder, string_array_type, out_str_arr)
+        in_string_array = context.make_helper(
+            builder, string_array_type, in_str_arr)
+        out_string_array = context.make_helper(
+            builder, string_array_type, out_str_arr)
 
         in_offsets = builder.bitcast(in_string_array.offsets, lir.IntType(32).as_pointer())
         out_offsets = builder.bitcast(out_string_array.offsets, lir.IntType(32).as_pointer())
@@ -413,8 +418,11 @@ def str_copy_ptr(typingctx, ptr_typ, ind_typ, str_typ, len_typ=None):
 def to_string_list(arr):
     return arr
 
+
 @overload(to_string_list)
 def to_string_list_overload(data):
+    # TODO: support NA
+    # TODO: create a StringRandomWriteArray
     if is_str_arr_typ(data):
         def to_string_impl(data):
             n = len(data)
@@ -472,6 +480,7 @@ def cp_str_list_to_array_overload(str_arr, list_data):
 def str_list_to_array(str_list):
     return str_list
 
+
 @overload(str_list_to_array)
 def str_list_to_array_overload(str_list):
     if str_list == types.List(string_type):
@@ -490,6 +499,7 @@ def str_list_to_array_overload(str_list):
         return str_list_impl
 
     return lambda str_list: str_list
+
 
 @infer_global(operator.getitem)
 class GetItemStringArray(AbstractTemplate):
@@ -543,31 +553,31 @@ class CmpOpEqStringArray(AbstractTemplate):
 class CmpOpNEqStringArray(CmpOpEqStringArray):
     key = '!='
 
+
 @infer
 class CmpOpGEStringArray(CmpOpEqStringArray):
     key = '>='
+
 
 @infer
 class CmpOpGTStringArray(CmpOpEqStringArray):
     key = '>'
 
+
 @infer
 class CmpOpLEStringArray(CmpOpEqStringArray):
     key = '<='
+
 
 @infer
 class CmpOpLTStringArray(CmpOpEqStringArray):
     key = '<'
 
+
 def is_str_arr_typ(typ):
     from bodo.hiframes.pd_series_ext import is_str_series_typ
     return typ == string_array_type or is_str_series_typ(typ)
 
-# @infer_global(len)
-# class LenStringArray(AbstractTemplate):
-#     def generic(self, args, kws):
-#         if not kws and len(args)==1 and args[0]==string_array_type:
-#             return signature(types.intp, *args)
 
 # XXX: should these be exposed?
 make_attribute_wrapper(StringArrayType, 'num_items', '_num_items')
@@ -630,7 +640,8 @@ ll.add_symbol('c_glob', hstr_ext.c_glob)
 ll.add_symbol('decode_utf8', hstr_ext.decode_utf8)
 ll.add_symbol('get_utf8_size', hstr_ext.get_utf8_size)
 
-convert_len_arr_to_offset = types.ExternalFunction("convert_len_arr_to_offset", types.void(types.voidptr, types.intp))
+convert_len_arr_to_offset = types.ExternalFunction(
+    "convert_len_arr_to_offset", types.void(types.voidptr, types.intp))
 
 
 setitem_string_array = types.ExternalFunction("setitem_string_array",
@@ -839,15 +850,22 @@ def pre_alloc_string_array(typingctx, num_strs_typ, num_total_chars_typ=None):
 
 
 @intrinsic
-def set_string_array_range(typingctx, out_typ, in_typ, curr_str_typ, curr_chars_typ=None):
+def set_string_array_range(typingctx, out_typ, in_typ, curr_str_typ,
+                                                          curr_chars_typ=None):
+    """
+    Copy input string array to a range of output string array starting from
+    curr_str_ind string index and curr_chars_ind character index.
+    """
     assert is_str_arr_typ(out_typ) and is_str_arr_typ(in_typ)
     assert curr_str_typ == types.intp and curr_chars_typ == types.intp
     def codegen(context, builder, sig, args):
         out_arr, in_arr, curr_str_ind, curr_chars_ind = args
 
         # get input/output struct
-        out_string_array = context.make_helper(builder, string_array_type, out_arr)
-        in_string_array = context.make_helper(builder, string_array_type, in_arr)
+        out_string_array = context.make_helper(
+            builder, string_array_type, out_arr)
+        in_string_array = context.make_helper(
+            builder, string_array_type, in_arr)
 
         fnty = lir.FunctionType(lir.VoidType(),
                                 [lir.IntType(32).as_pointer(),
@@ -858,8 +876,8 @@ def set_string_array_range(typingctx, out_typ, in_typ, curr_str_typ, curr_chars_
                                  lir.IntType(64),
                                  lir.IntType(64),
                                  lir.IntType(64),])
-        fn_alloc = builder.module.get_or_insert_function(fnty,
-                                                         name="set_string_array_range")
+        fn_alloc = builder.module.get_or_insert_function(
+            fnty, name="set_string_array_range")
         builder.call(fn_alloc, [out_string_array.offsets,
                                 out_string_array.data,
                                 in_string_array.offsets,
@@ -872,14 +890,16 @@ def set_string_array_range(typingctx, out_typ, in_typ, curr_str_typ, curr_chars_
 
         return context.get_dummy_value()
 
-    return types.void(string_array_type, string_array_type, types.intp, types.intp), codegen
+    sig = types.void(
+        string_array_type, string_array_type, types.intp, types.intp)
+    return sig, codegen
+
 
 # box series calls this too
 @box(StringArrayType)
 def box_str_arr(typ, val, c):
     """
     """
-
     string_array = c.context.make_helper(c.builder, string_array_type, val)
 
     fnty = lir.FunctionType(c.context.get_argument_type(types.pyobject), #lir.IntType(8).as_pointer(),
@@ -894,6 +914,7 @@ def box_str_arr(typ, val, c):
     # TODO: double check refcounting here
     # c.context.nrt.decref(c.builder, typ, val)
     return arr #c.builder.load(arr)
+
 
 @intrinsic
 def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
