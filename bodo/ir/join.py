@@ -14,12 +14,10 @@ from bodo.utils.utils import debug_prints, alloc_arr_tup
 from bodo.transforms.distributed_analysis import Distribution
 
 from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
-                              cp_str_list_to_array, str_list_to_array,
-                              get_offset_ptr, get_data_ptr,
-                              pre_alloc_string_array, num_total_chars,
-                              getitem_str_offset, copy_str_arr_slice,
-                              str_copy_ptr, get_utf8_size,
-                              setitem_str_offset, str_arr_set_na)
+    cp_str_list_to_array, str_list_to_array, get_bit_bitmap, num_total_chars,
+    get_offset_ptr, get_data_ptr, get_null_bitmap_ptr, pre_alloc_string_array,
+    getitem_str_offset, copy_str_arr_slice, str_copy_ptr, get_utf8_size,
+    setitem_str_offset, str_arr_set_na, set_bit_to)
 from bodo.libs.str_ext import string_type
 from bodo.libs.timsort import copyElement_tup, getitem_arr_tup, setitem_arr_tup
 from bodo.utils.shuffle import (getitem_arr_tup_single, val_to_tup, alltoallv,
@@ -296,7 +294,8 @@ def build_join_definitions(join_node, definitions=None):
 ir_utils.build_defs_extensions[Join] = build_join_definitions
 
 
-def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass):
+def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx,
+                                                         targetctx, dist_pass):
 
     left_parallel, right_parallel = _get_table_parallel_flags(
         join_node, array_dists)
@@ -483,7 +482,6 @@ def parallel_join_impl(key_arrs, data):
     n_pes = bodo.libs.distributed_api.get_size()
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, False)
 
-
     # calc send/recv counts
     for i in range(len(key_arrs[0])):
         val = getitem_arr_tup_single(key_arrs, i)
@@ -513,6 +511,7 @@ def parallel_join_impl(key_arrs, data):
 @generated_jit(nopython=True, cache=True)
 def parallel_join(key_arrs, data):
     return parallel_join_impl
+
 
 @numba.njit
 def parallel_asof_comm(left_key_arrs, right_key_arrs, right_data):
@@ -585,6 +584,7 @@ def _count_overlap(r_key_arr, start, end):
 
 def write_send_buff(shuffle_meta, node_id, i, val, data):
     return i
+
 
 @overload(write_send_buff)
 def write_data_buff_overload(meta, node_id, i, val, data):
@@ -710,6 +710,7 @@ def ensure_capacity(arr, new_size):
         new_arr[:curr_len] = arr
     return new_arr
 
+
 @overload(ensure_capacity)
 def ensure_capacity_overload(arr, new_size):
     if isinstance(arr, types.Array):
@@ -751,6 +752,7 @@ def ensure_capacity_str(arr, new_size, n_chars):
 def trim_arr_tup(data, new_size):  # pragma: no cover
     return data
 
+
 @overload(trim_arr_tup)
 def trim_arr_tup_overload(data, new_size):
     assert isinstance(data, (types.Tuple, types.UniTuple))
@@ -779,10 +781,12 @@ def trim_arr_tup_overload(data, new_size):
 #     copyElement_tup(data_right, right_ind, out_data_right, out_ind)
 #     return out_left_key, out_data_left, out_data_right
 
+
 def copy_elem_buff(arr, ind, val):  # pragma: no cover
     new_arr = ensure_capacity(arr, ind+1)
     new_arr[ind] = val
     return new_arr
+
 
 @overload(copy_elem_buff)
 def copy_elem_buff_overload(arr, ind, val):
@@ -797,8 +801,10 @@ def copy_elem_buff_overload(arr, ind, val):
 
     return copy_elem_buff_str
 
+
 def copy_elem_buff_tup(arr, ind, val):  # pragma: no cover
     return arr
+
 
 @overload(copy_elem_buff_tup)
 def copy_elem_buff_tup_overload(data, ind, val):
@@ -817,8 +823,10 @@ def copy_elem_buff_tup_overload(data, ind, val):
     cp_impl = loc_vars['f']
     return cp_impl
 
+
 def trim_arr(arr, size):  # pragma: no cover
     return bodo.hiframes.pd_categorical_ext.fix_cat_array_type(arr[:size])
+
 
 @overload(trim_arr)
 def trim_arr_overload(arr, size):
@@ -834,10 +842,12 @@ def trim_arr_overload(arr, size):
 
     return trim_arr_str
 
+
 def setnan_elem_buff(arr, ind):  # pragma: no cover
     new_arr = ensure_capacity(arr, ind+1)
     setitem_arr_nan(new_arr, ind)
     return new_arr
+
 
 @overload(setnan_elem_buff)
 def setnan_elem_buff_overload(arr, ind):
@@ -856,8 +866,10 @@ def setnan_elem_buff_overload(arr, ind):
 
     return setnan_elem_buff_str
 
+
 def setnan_elem_buff_tup(arr, ind):  # pragma: no cover
     return arr
+
 
 @overload(setnan_elem_buff_tup)
 def setnan_elem_buff_tup_overload(data, ind):
@@ -909,6 +921,7 @@ def local_hash_join_impl(left_keys, right_keys, data_left, data_right, is_left=F
     for i in range(l_len):
         l_key = getitem_arr_tup(left_keys, i)
         l_data_val = getitem_arr_tup(data_left, i)
+        l_data_nan_bits = get_nan_bits_tup(data_left, i)
         k = _hash_if_tup(l_key)
         bodo.libs.dict_ext.multimap_int64_equal_range_inplace(m, k, r)
         num_matched = 0
@@ -921,13 +934,17 @@ def local_hash_join_impl(left_keys, right_keys, data_left, data_right, is_left=F
                 r_matched[r_ind] = True
             out_left_key = copy_elem_buff_tup(out_left_key, out_ind, l_key)
             r_data_val = getitem_arr_tup(data_right, r_ind)
+            r_data_nan_bits = get_nan_bits_tup(data_right, r_ind)
             out_data_right = copy_elem_buff_tup(out_data_right, out_ind, r_data_val)
+            set_nan_bits_tup(out_data_right, out_ind, r_data_nan_bits)
             out_data_left = copy_elem_buff_tup(out_data_left, out_ind, l_data_val)
+            set_nan_bits_tup(out_data_left, out_ind, l_data_nan_bits)
             out_ind += 1
             num_matched += 1
         if is_left and num_matched == 0:
             out_left_key = copy_elem_buff_tup(out_left_key, out_ind, l_key)
             out_data_left = copy_elem_buff_tup(out_data_left, out_ind, l_data_val)
+            set_nan_bits_tup(out_data_left, out_ind, l_data_nan_bits)
             out_data_right = setnan_elem_buff_tup(out_data_right, out_ind)
             out_ind += 1
 
@@ -939,8 +956,10 @@ def local_hash_join_impl(left_keys, right_keys, data_left, data_right, is_left=F
             if not r_matched[i]:
                 r_key = getitem_arr_tup(right_keys, i)
                 r_data_val = getitem_arr_tup(data_right, i)
+                r_data_nan_bits = get_nan_bits_tup(data_right, i)
                 out_left_key = copy_elem_buff_tup(out_left_key, out_ind, r_key)
                 out_data_right = copy_elem_buff_tup(out_data_right, out_ind, r_data_val)
+                set_nan_bits_tup(out_data_right, out_ind, r_data_nan_bits)
                 out_data_left = setnan_elem_buff_tup(out_data_left, out_ind)
                 out_ind += 1
 
@@ -952,10 +971,12 @@ def local_hash_join_impl(left_keys, right_keys, data_left, data_right, is_left=F
 
     return out_left_key, out_right_key, out_data_left, out_data_right
 
+
 @generated_jit(nopython=True, cache=True, no_cpython_wrapper=True)
 def local_hash_join(left_keys, right_keys, data_left, data_right, is_left=False,
                                                                is_right=False):
     return local_hash_join_impl
+
 
 @generated_jit(nopython=True, cache=True)
 def _hash_if_tup(val):
@@ -1103,6 +1124,7 @@ def local_merge_asof(left_keys, right_keys, data_left, data_right):
 def setitem_arr_nan(arr, ind):
     arr[ind] = np.nan
 
+
 @overload(setitem_arr_nan)
 def setitem_arr_nan_overload(arr, ind):
     if isinstance(arr.dtype, types.Float):
@@ -1138,9 +1160,11 @@ def setitem_arr_nan_overload(arr, ind):
         return setitem_arr_nan_int
     return lambda arr, ind: None
 
+
 def setitem_arr_tup_nan(arr_tup, ind):  # pragma: no cover
     for arr in arr_tup:
         arr[ind] = np.nan
+
 
 @overload(setitem_arr_tup_nan)
 def setitem_arr_tup_nan_overload(arr_tup, ind):
@@ -1156,8 +1180,10 @@ def setitem_arr_tup_nan_overload(arr_tup, ind):
     impl = loc_vars['f']
     return impl
 
+
 def copy_arr_tup(arrs):
     return tuple(a.copy() for a in arrs)
+
 
 @overload(copy_arr_tup)
 def copy_arr_tup_overload(arrs):
@@ -1167,5 +1193,80 @@ def copy_arr_tup_overload(arrs):
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
+    impl = loc_vars['f']
+    return impl
+
+
+def get_nan_bits(arr, ind):  # pragma: no cover
+    return 0
+
+
+@overload(get_nan_bits)
+def overload_get_nan_bits(arr, ind):
+    """Get nan bit for types that have null bitmap, currently just string array
+    """
+    if arr == string_array_type:
+        def impl(arr, ind):
+            in_null_bitmap_ptr = get_null_bitmap_ptr(arr)
+            return get_bit_bitmap(in_null_bitmap_ptr, ind)
+        return impl
+    
+    # TODO: other arrays that should have bitmap like Bool array
+    return lambda arr, ind: False
+
+
+def get_nan_bits_tup(arr_tup, ind):  # pragma: no cover
+    return tuple(get_nan_bits(arr, ind) for arr in arr_tup)
+
+
+@overload(get_nan_bits_tup)
+def overload_get_nan_bits_tup(arr_tup, ind):
+    count = arr_tup.count
+
+    func_text = "def f(arr_tup, ind):\n"
+    func_text += "  return ({}{})\n".format(
+        ','.join(["get_nan_bits(arr_tup[{}], ind)".format(i)
+                for i in range(count)]),
+        "," if count == 1 else "")  # single value needs comma to become tuple
+
+    loc_vars = {}
+    exec(func_text, {'get_nan_bits': get_nan_bits}, loc_vars)
+    impl = loc_vars['f']
+    return impl
+
+
+def set_nan_bits(arr, ind, na_val):  # pragma: no cover
+    return 0
+
+
+@overload(set_nan_bits)
+def overload_set_nan_bits(arr, ind, na_val):
+    """Set nan bit for types that have null bitmap, currently just string array
+    """
+    if arr == string_array_type:
+        def impl(arr, ind, na_val):
+            in_null_bitmap_ptr = get_null_bitmap_ptr(arr)
+            set_bit_to(in_null_bitmap_ptr, ind, na_val)
+        return impl
+    
+    # TODO: other arrays that should have bitmap like Bool array
+    return lambda arr, ind, na_val: None
+
+
+def set_nan_bits_tup(arr_tup, ind, na_val):  # pragma: no cover
+    return tuple(set_nan_bits(arr, ind, na_val) for arr in arr_tup)
+
+
+@overload(set_nan_bits_tup)
+def overload_set_nan_bits_tup(arr_tup, ind, na_val):
+    count = arr_tup.count
+
+    func_text = "def f(arr_tup, ind, na_val):\n"
+    for i in range(count):
+        func_text += "  set_nan_bits(arr_tup[{}], ind, na_val[{}])\n".format(i, i)
+    func_text += "  return\n"
+
+    loc_vars = {}
+    exec(func_text, {'set_nan_bits': set_nan_bits}, loc_vars)
     impl = loc_vars['f']
     return impl

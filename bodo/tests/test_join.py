@@ -120,6 +120,17 @@ def test_merge_asof_parallel1(datapath):
     assert bodo_func() == impl()
 
 
+def test_merge_str_nan():
+    def test_impl(df1, df2):
+        return pd.merge(df1, df2, left_on='key1', right_on='key2')
+
+    df1 = pd.DataFrame({'key1': ['foo', 'bar', 'baz', 'baz'], 'A': ['b', '', np.nan, 'ss']})
+    df2 = pd.DataFrame({'key2': ['baz', 'bar', 'baz', 'foo'], 'B': ['b', np.nan, '', 'AA']})
+    bodo_func = bodo.jit(test_impl)
+    assert set(bodo_func(df1, df2).A) == set(test_impl(df1, df2).A)
+    assert set(bodo_func(df1, df2).B) == set(test_impl(df1, df2).B)
+
+
 class TestJoin(unittest.TestCase):
     def test_join1(self):
         def test_impl(n):
