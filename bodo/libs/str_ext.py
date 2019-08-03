@@ -1,5 +1,7 @@
 import operator
 import re
+from collections import namedtuple
+import ctypes
 import numpy as np
 import numba
 from numba.extending import (box, unbox, typeof_impl, register_model, models,
@@ -45,10 +47,27 @@ string_type = types.unicode_type
 
 # _rm_hash_str_overload()
 
+# HACK: copied from Numba and modified, TODO: use a better solution
 import numba.targets.hashing
-numba.targets.hashing._Py_HashSecret_djbx33a_suffix = 0
-numba.targets.hashing._Py_HashSecret_siphash_k0 = 0
-numba.targets.hashing._Py_HashSecret_siphash_k1 = 0
+_hashsecret_entry = namedtuple('_hashsecret_entry', ['symbol', 'value'])
+
+def _build_hashsecret():
+    info = {}
+
+    def inject(name, val):
+        symbol_name = "_numba_hashsecret2_{}".format(name)
+        val = ctypes.c_uint64(val)
+        addr = ctypes.addressof(val)
+        ll.add_symbol(symbol_name, addr)
+        info[name] = _hashsecret_entry(symbol=symbol_name, value=val)
+
+    inject('djbx33a_suffix', 11094168454019993442)
+    inject('siphash_k0', 14115454492144758974)
+    inject('siphash_k1', 1895071979704503752)
+    return info
+
+
+numba.targets.hashing._hashsecret = _build_hashsecret()
 
 
 ## use objmode for string methods for now
