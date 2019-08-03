@@ -146,8 +146,8 @@ def _infer_series_dtype(S):
         while i < len(S) and (S.iloc[i] is np.nan or S.iloc[i] is None):
             i += 1
         if i == len(S):
-            raise ValueError(
-                "object dtype infer out of bounds for {}".format(S.name))
+            # assume all NA object column is string
+            return string_type
 
         first_val = S.iloc[i]
         if isinstance(first_val, list):
