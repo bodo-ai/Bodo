@@ -119,20 +119,33 @@ def _get_dist_arg(a, copy=False):
 
 
 def _test_equal(bodo_out, py_out, sort_output, check_names=True):
-    if sort_output:
-        bodo_out = np.sort(bodo_out)
-        py_out = np.sort(py_out)
 
     if isinstance(py_out, pd.Series):
+        if sort_output:
+            py_out.sort_values(inplace=True)
+            py_out.reset_index(inplace=True, drop=True)
+            bodo_out.sort_values(inplace=True)
+            bodo_out.reset_index(inplace=True, drop=True)
         pd.testing.assert_series_equal(
             bodo_out, py_out, check_names=check_names)
     elif isinstance(py_out, pd.Index):
+        if sort_output:
+            py_out = py_out.sort_values()
+            bodo_out = bodo_out.sort_values()
         pd.testing.assert_index_equal(
             bodo_out, py_out, check_names=check_names)
     elif isinstance(py_out, pd.DataFrame):
+        if sort_output:
+            py_out.sort_values(py_out.columns.to_list(), inplace=True)
+            py_out.reset_index(inplace=True, drop=True)
+            bodo_out.sort_values(bodo_out.columns.to_list(), inplace=True)
+            bodo_out.reset_index(inplace=True, drop=True)
         pd.testing.assert_frame_equal(
             bodo_out, py_out, check_names=check_names)
     elif isinstance(py_out, np.ndarray):
+        if sort_output:
+            py_out.sort()
+            bodo_out.sort()
         np.testing.assert_array_equal(bodo_out, py_out)
     else:
         assert bodo_out == py_out
