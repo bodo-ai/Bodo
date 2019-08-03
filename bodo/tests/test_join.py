@@ -11,9 +11,8 @@ from pandas.api.types import CategoricalDtype
 import numba
 import bodo
 from bodo.libs.str_arr_ext import StringArray
-from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
-                            count_parfor_OneDs, count_array_OneDs, dist_IR_contains,
-                            get_start_end)
+from bodo.tests.utils import (count_array_REPs, count_parfor_REPs, test_func,
+    count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_start_end)
 import pytest
 
 
@@ -126,9 +125,38 @@ def test_merge_str_nan():
 
     df1 = pd.DataFrame({'key1': ['foo', 'bar', 'baz', 'baz'], 'A': ['b', '', np.nan, 'ss']})
     df2 = pd.DataFrame({'key2': ['baz', 'bar', 'baz', 'foo'], 'B': ['b', np.nan, '', 'AA']})
-    bodo_func = bodo.jit(test_impl)
-    assert set(bodo_func(df1, df2).A) == set(test_impl(df1, df2).A)
-    assert set(bodo_func(df1, df2).B) == set(test_impl(df1, df2).B)
+    test_func(test_impl, (df1, df2), sort_output=True)
+
+
+def _gen_df_str(n):
+    str_vals = []
+    for _ in range(n):
+        # store NA with 30% chance
+        if random.random() < .3:
+            str_vals.append(np.nan)
+            continue
+
+        k = random.randint(1, 10)
+        val = ''.join(random.choices(
+            string.ascii_uppercase + string.digits, k=k))
+        str_vals.append(val)
+
+    A = np.random.randint(0, 100, n)
+    df = pd.DataFrame({'A': A, 'B': str_vals})
+    return df
+
+
+def test_merge_str_nan2():
+    def test_impl(df1, df2):
+        return df1.merge(df2, on='A')
+
+    # seeds should be the same on different processors for consistent input
+    random.seed(2)
+    np.random.seed(3)
+    n = 1211
+    df1 = _gen_df_str(n)
+    df2 = _gen_df_str(n)
+    test_func(test_impl, (df1, df2), sort_output=True)
 
 
 class TestJoin(unittest.TestCase):

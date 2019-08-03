@@ -20,7 +20,7 @@ from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
     setitem_str_offset, str_arr_set_na, set_bit_to)
 from bodo.libs.str_ext import string_type
 from bodo.libs.timsort import copyElement_tup, getitem_arr_tup, setitem_arr_tup
-from bodo.utils.shuffle import (getitem_arr_tup_single, val_to_tup, alltoallv,
+from bodo.utils.shuffle import (getitem_arr_tup_single, val_to_tup,
     alltoallv_tup, finalize_shuffle_meta,
     update_shuffle_meta,  alloc_pre_shuffle_metadata,
     _get_keys_tup, _get_data_tup)
@@ -487,7 +487,7 @@ def parallel_join_impl(key_arrs, data):
         val = getitem_arr_tup_single(key_arrs, i)
         node_id = hash(val) % n_pes
         update_shuffle_meta(pre_shuffle_meta, node_id, i, val_to_tup(val),
-            getitem_arr_tup(data, i), False)
+            data, False)
 
     shuffle_meta = finalize_shuffle_meta(key_arrs, data, pre_shuffle_meta,
                                           n_pes, False)
@@ -601,6 +601,10 @@ def write_data_buff_overload(meta, node_id, i, val, data):
         else:
             func_text += "  n_chars_{} = get_utf8_size(val_{})\n".format(i, i)
             func_text += "  meta.send_arr_lens_tup[{}][w_ind] = n_chars_{}\n".format(n_str, i)
+            if i >= n_keys:
+                func_text += "  out_bitmap = meta.send_arr_nulls_tup[{}][meta.send_disp_nulls[node_id]:].ctypes\n".format(n_str)
+                func_text += "  bit_val = get_bit_bitmap(get_null_bitmap_ptr(data[{}]), i)\n".format(i - n_keys)
+                func_text += "  set_bit_to(out_bitmap, meta.tmp_offset[node_id], bit_val)\n"
             func_text += "  indc_{} = meta.send_disp_char_tup[{}][node_id] + meta.tmp_offset_char_tup[{}][node_id]\n".format(i, n_str, n_str)
             func_text += "  str_copy_ptr(meta.send_arr_chars_tup[{}], indc_{}, val_{}._data, n_chars_{})\n".format(n_str, i, i, i)
             func_text += "  meta.tmp_offset_char_tup[{}][node_id] += n_chars_{}\n".format(n_str, i)
@@ -612,7 +616,10 @@ def write_data_buff_overload(meta, node_id, i, val, data):
 
     loc_vars = {}
     exec(func_text, {'str_copy_ptr': str_copy_ptr,
-        'get_utf8_size': get_utf8_size}, loc_vars)
+        'get_utf8_size': get_utf8_size,
+        'get_null_bitmap_ptr': get_null_bitmap_ptr,
+        'get_bit_bitmap': get_bit_bitmap,
+        'set_bit_to': set_bit_to}, loc_vars)
     write_impl = loc_vars['f']
     return write_impl
 

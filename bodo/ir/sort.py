@@ -18,7 +18,7 @@ from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.utils import (debug_prints, empty_like_type, get_ctypes_ptr,
     gen_getitem)
 
-from bodo.utils.shuffle import (alltoallv, alltoallv_tup,
+from bodo.utils.shuffle import (alltoallv_tup,
     finalize_shuffle_meta, update_shuffle_meta,  alloc_pre_shuffle_metadata,
     _get_keys_tup, _get_data_tup)
 
@@ -420,7 +420,8 @@ def local_sort(key_arrs, data, ascending=True):
 @numba.njit(no_cpython_wrapper=True, cache=True)
 def parallel_sort(key_arrs, data, ascending=True):
     n_local = len(key_arrs[0])
-    n_total = bodo.libs.distributed_api.dist_reduce(n_local, np.int32(Reduce_Type.Sum.value))
+    n_total = bodo.libs.distributed_api.dist_reduce(
+        n_local, np.int32(Reduce_Type.Sum.value))
 
     n_pes = bodo.libs.distributed_api.get_size()
     my_rank = bodo.libs.distributed_api.get_rank()
@@ -455,14 +456,15 @@ def parallel_sort(key_arrs, data, ascending=True):
     # calc send/recv counts
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, True)
     node_id = 0
+    padded_bits = 0
     for i in range(n_local):
         val = key_arrs[0][i]
         # TODO: refactor
         if node_id < (n_pes - 1) and (ascending and val >= bounds[node_id]
                                 or (not ascending) and val <= bounds[node_id]):
             node_id += 1
-        update_shuffle_meta(pre_shuffle_meta, node_id, i, (val,),
-            getitem_arr_tup(data, i), True)
+            padded_bits += (-(padded_bits + i) % 8)
+        update_shuffle_meta(pre_shuffle_meta, node_id, i, (val,), data, True, padded_bits)
 
     shuffle_meta = finalize_shuffle_meta(key_arrs, data, pre_shuffle_meta,
                                           n_pes, True)

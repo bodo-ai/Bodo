@@ -567,6 +567,36 @@ def test_df_set_index(df_value):
     test_func(impl, (df_value,))
 
 
+# TODO: enable test after sort str nan issues resolved
+# def _gen_df_str(n):
+#     str_vals = []
+#     for _ in range(n):
+#         # store NA with 30% chance
+#         if random.random() < .3:
+#             str_vals.append(np.nan)
+#             continue
+
+#         k = random.randint(1, 10)
+#         val = ''.join(random.choices(
+#             string.ascii_uppercase + string.digits, k=k))
+#         str_vals.append(val)
+
+#     A = np.random.randint(0, 1000, n)
+#     df = pd.DataFrame({'A': A, 'B': str_vals}).drop_duplicates('A')
+#     return df
+
+
+# def test_sort_values_str():
+#     def test_impl(df):
+#         return df.sort_values(by='A')
+
+#     # seeds should be the same on different processors for consistent input
+#     random.seed(2)
+#     np.random.seed(3)
+#     n = 17 # 1211
+#     df = _gen_df_str(n)
+#     test_func(test_impl, (df,))
+
 
 ##################### binary ops ###############################
 
@@ -1337,7 +1367,7 @@ class TestDataFrame(unittest.TestCase):
         str_vals = []
         str_vals2 = []
 
-        for i in range(n):
+        for _ in range(n):
             k = random.randint(1, 30)
             val = ''.join(random.choices(string.ascii_uppercase + string.digits, k=k))
             str_vals.append(val)

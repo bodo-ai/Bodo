@@ -5,6 +5,7 @@ helper data structures and functions for shuffle (alltoall).
 from collections import namedtuple
 import numpy as np
 
+import numba
 from numba import types
 from numba.extending import overload
 
@@ -13,8 +14,9 @@ from bodo.utils.utils import get_ctypes_ptr, _numba_to_c_type_map
 from bodo.libs.timsort import getitem_arr_tup
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
-    get_offset_ptr, get_data_ptr, convert_len_arr_to_offset,
-    pre_alloc_string_array, num_total_chars)
+    get_offset_ptr, get_data_ptr, convert_len_arr_to_offset, set_bit_to,
+    pre_alloc_string_array, num_total_chars, get_null_bitmap_ptr,
+    get_bit_bitmap)
 
 
 
@@ -25,13 +27,18 @@ from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
 # out_arr
 # n_send  -> single
 # n_out  -> single
+# padded_bits -> single, the number of bits padded to output so far in
+#                        continuous update case
 # send_disp -> single
 # recv_disp -> single
+# send_disp_nulls -> single
+# recv_disp_nulls -> single
 # tmp_offset -> single
 ############### string arrays
 # send_counts_char -> pre
 # recv_counts_char
 # send_arr_lens -> pre
+# send_arr_nulls -> pre
 # send_arr_chars
 # send_disp_char
 # recv_disp_char
@@ -42,18 +49,20 @@ from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
 
 
 PreShuffleMeta = namedtuple('PreShuffleMeta',
-    'send_counts, send_counts_char_tup, send_arr_lens_tup')
+    ('send_counts, send_counts_char_tup, send_arr_lens_tup, send_arr_nulls_tup, '
+    'padded_bits'))
+
 
 ShuffleMeta = namedtuple('ShuffleMeta',
     ('send_counts, recv_counts, n_send, n_out, send_disp, recv_disp, '
-    'tmp_offset, send_buff_tup, out_arr_tup, send_counts_char_tup, '
-    'recv_counts_char_tup, send_arr_lens_tup, send_arr_chars_tup, '
-    'send_disp_char_tup, recv_disp_char_tup, tmp_offset_char_tup, '
-    'send_arr_chars_arr_tup'))
+    'send_disp_nulls, recv_disp_nulls, tmp_offset, send_buff_tup, out_arr_tup, '
+    'send_counts_char_tup, recv_counts_char_tup, send_arr_lens_tup, '
+    'send_arr_nulls_tup, send_arr_chars_tup, send_disp_char_tup, '
+    'recv_disp_char_tup, tmp_offset_char_tup, send_arr_chars_arr_tup'))
 
 
 # before shuffle, 'send_counts' is needed as well as
-# 'send_counts_char' and 'send_arr_lens' for every string type
+# 'send_counts_char', 'send_arr_lens' and 'send_arr_nulls' for every string
 def alloc_pre_shuffle_metadata(arr, data, n_pes, is_contig):
     return PreShuffleMeta(np.zeros(n_pes, np.int32), ())
 
@@ -74,58 +83,80 @@ def alloc_pre_shuffle_metadata_overload(key_arrs, data, n_pes, is_contig):
                 else "  arr = data[{}]\n".format(i - n_keys))
             func_text += "  send_counts_char_{} = np.zeros(n_pes, np.int32)\n".format(n_str)
             func_text += "  send_arr_lens_{} = np.empty(1, np.uint32)\n".format(n_str)
+            func_text += "  send_arr_nulls_{} = np.empty(1, np.uint8)\n".format(n_str)
             # needs allocation since written in update before finalize
             func_text += "  if is_contig:\n"
             func_text += "    send_arr_lens_{} = np.empty(len(arr), np.uint32)\n".format(n_str)
+            # allocate null bytes, 2 * n_pes extra space since bits are
+            # unpacked around processor border
+            func_text += "    n_bytes = (len(arr) + 7) >> 3\n"
+            func_text += "    send_arr_nulls_{} = np.empty(n_bytes + 2 * n_pes, np.uint8)\n".format(n_str)
             n_str += 1
 
     count_char_tup = ", ".join("send_counts_char_{}".format(i)
                                                         for i in range(n_str))
     lens_tup = ", ".join("send_arr_lens_{}".format(i) for i in range(n_str))
+    nulls_tup = ", ".join("send_arr_nulls_{}".format(i) for i in range(n_str))
     extra_comma = "," if n_str == 1 else ""
-    func_text += "  return PreShuffleMeta(send_counts, ({}{}), ({}{}))\n".format(
-        count_char_tup, extra_comma, lens_tup, extra_comma)
+    func_text += "  return PreShuffleMeta(send_counts, ({}{}), ({}{}), ({}{}), 0)\n".format(
+        count_char_tup, extra_comma, lens_tup, extra_comma, nulls_tup,
+        extra_comma)
 
     # print(func_text)
-
     loc_vars = {}
-    exec(func_text, {'np':np, 'PreShuffleMeta': PreShuffleMeta}, loc_vars)
+    exec(func_text, {'np': np, 'PreShuffleMeta': PreShuffleMeta}, loc_vars)
     alloc_impl = loc_vars['f']
     return alloc_impl
 
 
-
 # 'send_counts' is updated, and 'send_counts_char' and 'send_arr_lens'
 # for every string type
-def update_shuffle_meta(pre_shuffle_meta, node_id, ind, val, data, is_contig=True):
+def update_shuffle_meta(pre_shuffle_meta, node_id, ind, val, data, is_contig=True, padded_bits=0):
     pre_shuffle_meta.send_counts[node_id] += 1
 
+
 @overload(update_shuffle_meta)
-def update_shuffle_meta_overload(pre_shuffle_meta, node_id, ind, val, data, is_contig=True):
-    func_text = "def f(pre_shuffle_meta, node_id, ind, val, data, is_contig=True):\n"
+def update_shuffle_meta_overload(pre_shuffle_meta, node_id, ind, val, data, is_contig=True, padded_bits=0):
+    func_text = "def f(pre_shuffle_meta, node_id, ind, val, data, is_contig=True, padded_bits=0):\n"
     func_text += "  pre_shuffle_meta.send_counts[node_id] += 1\n"
     n_keys = len(val.types)
     n_str = 0
     for i, typ in enumerate(val.types + data.types):
         if typ in (string_type, string_array_type):
-            val_or_data = 'val[{}]'.format(i) if i < n_keys else 'data[{}]'.format(i - n_keys)
+            val_or_data = 'val[{}]'.format(i) if i < n_keys else 'getitem_arr_tup(data, ind)[{}]'.format(i - n_keys)
             func_text += "  n_chars = len({})\n".format(val_or_data)
             func_text += "  pre_shuffle_meta.send_counts_char_tup[{}][node_id] += n_chars\n".format(n_str)
             func_text += "  if is_contig:\n"
             func_text += "    pre_shuffle_meta.send_arr_lens_tup[{}][ind] = n_chars\n".format(n_str)
+            if i >= n_keys:
+                func_text += "    out_bitmap = pre_shuffle_meta.send_arr_nulls_tup[{}].ctypes\n".format(n_str)
+                func_text += "    bit_val = get_bit_bitmap(get_null_bitmap_ptr(data[{}]), ind)\n".format(i - n_keys)
+                func_text += "    set_bit_to(out_bitmap, padded_bits + ind, bit_val)\n"
             n_str += 1
 
     # print(func_text)
-
     loc_vars = {}
-    exec(func_text, {}, loc_vars)
+    exec(func_text, {'set_bit_to': set_bit_to,
+        'get_bit_bitmap': get_bit_bitmap,
+        'get_null_bitmap_ptr': get_null_bitmap_ptr,
+        'getitem_arr_tup': getitem_arr_tup}, loc_vars)
     update_impl = loc_vars['f']
     return update_impl
 
 
+@numba.njit
+def calc_disp_nulls(arr):
+    disp = np.empty_like(arr)
+    disp[0] = 0
+    for i in range(1, len(arr)):
+        l = (arr[i-1] + 7) >> 3
+        disp[i] = disp[i-1] + l
+    return disp
+
 
 def finalize_shuffle_meta(arrs, data, pre_shuffle_meta, n_pes, is_contig, init_vals=()):
     return ShuffleMeta()
+
 
 @overload(finalize_shuffle_meta)
 def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_contig, init_vals=()):
@@ -140,6 +171,8 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
     func_text += "  n_send = send_counts.sum()\n"
     func_text += "  send_disp = bodo.ir.join.calc_disp(send_counts)\n"
     func_text += "  recv_disp = bodo.ir.join.calc_disp(recv_counts)\n"
+    func_text += "  send_disp_nulls = calc_disp_nulls(send_counts)\n"
+    func_text += "  recv_disp_nulls = calc_disp_nulls(recv_counts)\n"
 
     n_keys = len(key_arrs.types)
     n_all = len(key_arrs.types + data.types)
@@ -177,12 +210,15 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
             # tmp_offset_char, send_arr_lens
             func_text += "  tmp_offset_char_{} = np.zeros(n_pes, np.int32)\n".format(n_str)
             func_text += "  send_arr_lens_{} = pre_shuffle_meta.send_arr_lens_tup[{}]\n".format(n_str, n_str)
+            func_text += "  send_arr_nulls_{} = pre_shuffle_meta.send_arr_nulls_tup[{}]\n".format(n_str, n_str)
             # send char arr
             # TODO: arr refcount if arr is not stored somewhere?
             func_text += "  send_arr_chars_arr_{} = np.empty(1, np.uint8)\n".format(n_str)
             func_text += "  send_arr_chars_{} = get_ctypes_ptr(get_data_ptr(arr))\n".format(n_str)
             func_text += "  if not is_contig:\n"
             func_text += "    send_arr_lens_{} = np.empty(n_send, np.uint32)\n".format(n_str)
+            func_text += "    n_bytes = (n_send + 7) >> 3\n"
+            func_text += "    send_arr_nulls_{} = np.empty(n_bytes + 2 * n_pes, np.uint8)\n".format(n_str)
             func_text += "    s_n_all_chars = send_counts_char_{}.sum()\n".format(n_str)
             func_text += "    send_arr_chars_arr_{} = np.empty(s_n_all_chars, np.uint8)\n".format(n_str)
             func_text += "    send_arr_chars_{} = get_ctypes_ptr(send_arr_chars_arr_{}.ctypes)\n".format(n_str, n_str)
@@ -194,6 +230,7 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
     send_counts_chars = ", ".join("send_counts_char_{}".format(i) for i in range(n_str))
     recv_counts_chars = ", ".join("recv_counts_char_{}".format(i) for i in range(n_str))
     send_arr_lens = ", ".join("send_arr_lens_{}".format(i) for i in range(n_str))
+    send_arr_nulls = ", ".join("send_arr_nulls_{}".format(i) for i in range(n_str))
     send_arr_chars = ", ".join("send_arr_chars_{}".format(i) for i in range(n_str))
     send_disp_chars = ", ".join("send_disp_char_{}".format(i) for i in range(n_str))
     recv_disp_chars = ", ".join("recv_disp_char_{}".format(i) for i in range(n_str))
@@ -203,9 +240,14 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
 
 
     func_text += ('  return ShuffleMeta(send_counts, recv_counts, n_send, '
-        'n_out, send_disp, recv_disp, tmp_offset, ({}{}), ({}{}), ({}{}), ({}{}), ({}{}), ({}{}), ({}{}), ({}{}), ({}{}), ({}{}), )\n').format(
-            send_buffs, all_comma, out_arrs, all_comma, send_counts_chars, str_comma, recv_counts_chars, str_comma,
-            send_arr_lens, str_comma, send_arr_chars, str_comma, send_disp_chars, str_comma, recv_disp_chars, str_comma,
+        'n_out, send_disp, recv_disp, send_disp_nulls, recv_disp_nulls, '
+        'tmp_offset, ({}{}), ({}{}), ({}{}), ({}{}), ({}{}), ({}{}), ({}{}), '
+        '({}{}), ({}{}), ({}{}), ({}{}), )\n').format(
+            send_buffs, all_comma, out_arrs, all_comma, send_counts_chars,
+            str_comma, recv_counts_chars, str_comma,
+            send_arr_lens, str_comma, send_arr_nulls, str_comma,
+            send_arr_chars, str_comma, send_disp_chars, str_comma,
+            recv_disp_chars, str_comma,
             tmp_offset_chars, str_comma, send_arr_chars_arrs, str_comma
         )
 
@@ -219,43 +261,15 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
          'ShuffleMeta': ShuffleMeta,
          'get_ctypes_ptr': get_ctypes_ptr,
          'fix_cat_array_type':
-         bodo.hiframes.pd_categorical_ext.fix_cat_array_type}, loc_vars)
+         bodo.hiframes.pd_categorical_ext.fix_cat_array_type,
+         'calc_disp_nulls': calc_disp_nulls}, loc_vars)
     finalize_impl = loc_vars['f']
     return finalize_impl
 
 
-
-def alltoallv(arr, m):
-    return
-
-@overload(alltoallv)
-def alltoallv_impl(arr, metadata):
-    if isinstance(arr, types.Array):
-        def a2av_impl(arr, metadata):
-            bodo.libs.distributed_api.alltoallv(
-                metadata.send_buff, metadata.out_arr, metadata.send_counts,
-                metadata.recv_counts, metadata.send_disp, metadata.recv_disp)
-        return a2av_impl
-
-    assert arr == string_array_type
-    int32_typ_enum = np.int32(_numba_to_c_type_map[types.int32])
-    char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
-    def a2av_str_impl(arr, metadata):
-        # TODO: increate refcount?
-        offset_ptr = get_offset_ptr(metadata.out_arr)
-        bodo.libs.distributed_api.c_alltoallv(
-            metadata.send_arr_lens.ctypes, offset_ptr, metadata.send_counts.ctypes,
-            metadata.recv_counts.ctypes, metadata.send_disp.ctypes, metadata.recv_disp.ctypes, int32_typ_enum)
-        bodo.libs.distributed_api.c_alltoallv(
-            metadata.send_arr_chars, get_data_ptr(metadata.out_arr), metadata.send_counts_char.ctypes,
-            metadata.recv_counts_char.ctypes, metadata.send_disp_char.ctypes, metadata.recv_disp_char.ctypes, char_typ_enum)
-        convert_len_arr_to_offset(offset_ptr, metadata.n_out)
-    return a2av_str_impl
-
-
-
 def alltoallv_tup(arrs, shuffle_meta):
     return arrs
+
 
 @overload(alltoallv_tup)
 def alltoallv_tup_overload(arrs, meta):
@@ -280,26 +294,48 @@ def alltoallv_tup_overload(arrs, meta):
                 "meta.recv_counts_char_tup[{}].ctypes, meta.send_disp_char_tup[{}].ctypes,"
                 "meta.recv_disp_char_tup[{}].ctypes, char_typ_enum)\n").format(n_str, i, n_str, n_str, n_str, n_str)
 
+            func_text += "  null_bitmap_ptr_{} = get_null_bitmap_ptr(meta.out_arr_tup[{}])\n".format(i, i)
+            # null bitmap counts are send counts divided by 8
+            if n_str == 0:
+                func_text += "  send_counts_nulls = np.empty(len(meta.send_counts), np.int32)\n"
+                func_text += "  for i in range(len(meta.send_counts)):\n"
+                func_text += "    send_counts_nulls[i] = (meta.send_counts[i] + 7) >> 3\n"
+                func_text += "  recv_counts_nulls = np.empty(len(meta.recv_counts), np.int32)\n"
+                func_text += "  for i in range(len(meta.recv_counts)):\n"
+                func_text += "    recv_counts_nulls[i] = (meta.recv_counts[i] + 7) >> 3\n"
+                func_text += "  tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)\n"
+
+            func_text += ("  bodo.libs.distributed_api.c_alltoallv("
+                "meta.send_arr_nulls_tup[{}].ctypes, tmp_null_bytes.ctypes, send_counts_nulls.ctypes, "
+                "recv_counts_nulls.ctypes, meta.send_disp_nulls.ctypes, "
+                "meta.recv_disp_nulls.ctypes, char_typ_enum)\n").format(n_str)
+
+            func_text += "  copy_gathered_null_bytes(null_bitmap_ptr_{}, tmp_null_bytes, recv_counts_nulls, meta.recv_counts)\n".format(i)
             func_text += "  convert_len_arr_to_offset(offset_ptr_{}, meta.n_out)\n".format(i)
             n_str += 1
 
     func_text += "  return ({}{})\n".format(
         ','.join(['meta.out_arr_tup[{}]'.format(i) for i in range(arrs.count)]),
         "," if arrs.count == 1 else "")
+    # print(func_text)
 
     int32_typ_enum = np.int32(_numba_to_c_type_map[types.int32])
     char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
     loc_vars = {}
-    exec(func_text, {'bodo': bodo, 'get_offset_ptr': get_offset_ptr,
+    exec(func_text, {'np': np, 'bodo': bodo, 'get_offset_ptr': get_offset_ptr,
          'get_data_ptr': get_data_ptr, 'int32_typ_enum': int32_typ_enum,
          'char_typ_enum': char_typ_enum,
-         'convert_len_arr_to_offset': convert_len_arr_to_offset}, loc_vars)
+         'convert_len_arr_to_offset': convert_len_arr_to_offset,
+         'copy_gathered_null_bytes':
+            bodo.libs.distributed_api.copy_gathered_null_bytes,
+         'get_null_bitmap_ptr': get_null_bitmap_ptr}, loc_vars)
     a2a_impl = loc_vars['f']
     return a2a_impl
 
 
 def _get_keys_tup(recvs, key_arrs):
     return recvs[:len(key_arrs)]
+
 
 @overload(_get_keys_tup)
 def _get_keys_tup_overload(recvs, key_arrs):
@@ -316,6 +352,7 @@ def _get_keys_tup_overload(recvs, key_arrs):
 def _get_data_tup(recvs, key_arrs):
     return recvs[len(key_arrs):]
 
+
 @overload(_get_data_tup)
 def _get_data_tup_overload(recvs, key_arrs):
     n_keys = len(key_arrs.types)
@@ -330,10 +367,10 @@ def _get_data_tup_overload(recvs, key_arrs):
     return impl
 
 
-
 # returns scalar instead of tuple if only one array
 def getitem_arr_tup_single(arrs, i):
     return arrs[0][i]
+
 
 @overload(getitem_arr_tup_single)
 def getitem_arr_tup_single_overload(arrs, i):
@@ -341,8 +378,10 @@ def getitem_arr_tup_single_overload(arrs, i):
         return lambda arrs, i: arrs[0][i]
     return lambda arrs, i: getitem_arr_tup(arrs, i)
 
+
 def val_to_tup(val):
     return (val,)
+
 
 @overload(val_to_tup)
 def val_to_tup_overload(val):

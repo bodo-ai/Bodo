@@ -30,7 +30,7 @@ from bodo.libs.str_arr_ext import (string_array_type, pre_alloc_string_array,
 
 from bodo.ir.join import write_send_buff
 from bodo.libs.timsort import getitem_arr_tup
-from bodo.utils.shuffle import (getitem_arr_tup_single, val_to_tup, alltoallv,
+from bodo.utils.shuffle import (getitem_arr_tup_single, val_to_tup,
     alltoallv_tup, finalize_shuffle_meta, update_shuffle_meta,
     alloc_pre_shuffle_metadata, _get_keys_tup, _get_data_tup)
 from bodo.utils.typing import is_overload_true
