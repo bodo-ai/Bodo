@@ -501,7 +501,7 @@ def parallel_join_impl(key_arrs, data):
         shuffle_meta.tmp_offset[node_id] += 1
 
     # shuffle
-    recvs = alltoallv_tup(key_arrs + data, shuffle_meta)
+    recvs = alltoallv_tup(key_arrs + data, shuffle_meta, key_arrs)
     out_keys = _get_keys_tup(recvs, key_arrs)
     out_data = _get_data_tup(recvs, key_arrs)
 

@@ -614,7 +614,7 @@ def parallel_agg(key_arrs, data_redvar_dummy, out_dummy_tup, data_in, init_vals,
 
     agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy, __update_redvars, pivot_arr)
 
-    recvs = alltoallv_tup(key_arrs + data_redvar_dummy, shuffle_meta)
+    recvs = alltoallv_tup(key_arrs + data_redvar_dummy, shuffle_meta, key_arrs)
     #print(data_shuffle_meta[0].out_arr)
     key_arrs = _get_keys_tup(recvs, key_arrs)
     reduce_recvs = _get_data_tup(recvs, key_arrs)

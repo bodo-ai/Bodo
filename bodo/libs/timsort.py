@@ -234,13 +234,10 @@ def countRunAndMakeAscending(key_arrs, lo, hi, data):  # pragma: no cover
 def reverseRange(key_arrs, lo, hi, data):  # pragma: no cover
     hi -= 1
     while lo < hi:
-        # swap, TODO: copy data
-        tmp = getitem_arr_tup(key_arrs, lo)
-        setitem_arr_tup(key_arrs, lo, getitem_arr_tup(key_arrs, hi))
-        setitem_arr_tup(key_arrs, hi, tmp)
-
-        # TODO: add support for map and use it
+        # swap
+        swap_arrs(key_arrs, lo, hi)
         swap_arrs(data, lo, hi)
+        # TODO: add support for map and use it
         # for arr in data:
         #     tmp_v = arr[lo]
         #     arr[lo] = arr[hi]
@@ -979,6 +976,7 @@ def swap_arrs(data, lo, hi):  # pragma: no cover
         arr[lo] = arr[hi]
         arr[hi] = tmp_v
 
+
 @overload(swap_arrs)
 def swap_arrs_overload(arr_tup, lo, hi):
     count = arr_tup.count
@@ -1000,9 +998,11 @@ def swap_arrs_overload(arr_tup, lo, hi):
 def copyRange(src_arr, src_pos, dst_arr, dst_pos, n):  # pragma: no cover
     dst_arr[dst_pos:dst_pos+n] = src_arr[src_pos:src_pos+n]
 
+
 def copyRange_tup(src_arr_tup, src_pos, dst_arr_tup, dst_pos, n):  # pragma: no cover
     for src_arr, dst_arr in zip(src_arr_tup, dst_arr_tup):
         dst_arr[dst_pos:dst_pos+n] = src_arr[src_pos:src_pos+n]
+
 
 @overload(copyRange_tup)
 def copyRange_tup_overload(src_arr_tup, src_pos, dst_arr_tup, dst_pos, n):
@@ -1019,13 +1019,16 @@ def copyRange_tup_overload(src_arr_tup, src_pos, dst_arr_tup, dst_pos, n):
     copy_impl = loc_vars['f']
     return copy_impl
 
+
 @numba.njit(no_cpython_wrapper=True, cache=True)
 def copyElement(src_arr, src_pos, dst_arr, dst_pos):  # pragma: no cover
     dst_arr[dst_pos] = src_arr[src_pos]
 
+
 def copyElement_tup(src_arr_tup, src_pos, dst_arr_tup, dst_pos):  # pragma: no cover
     for src_arr, dst_arr in zip(src_arr_tup, dst_arr_tup):
         dst_arr[dst_pos] = src_arr[src_pos]
+
 
 @overload(copyElement_tup)
 def copyElement_tup_overload(src_arr_tup, src_pos, dst_arr_tup, dst_pos):
@@ -1042,9 +1045,11 @@ def copyElement_tup_overload(src_arr_tup, src_pos, dst_arr_tup, dst_pos):
     copy_impl = loc_vars['f']
     return copy_impl
 
+
 def getitem_arr_tup(arr_tup, ind):  # pragma: no cover
     l = [arr[ind] for arr in arr_tup]
     return tuple(l)
+
 
 @overload(getitem_arr_tup)
 def getitem_arr_tup_overload(arr_tup, ind):
@@ -1060,9 +1065,11 @@ def getitem_arr_tup_overload(arr_tup, ind):
     impl = loc_vars['f']
     return impl
 
+
 def setitem_arr_tup(arr_tup, ind, val_tup):  # pragma: no cover
     for arr, val in zip(arr_tup, val_tup):
         arr[ind] = val
+
 
 @overload(setitem_arr_tup)
 def setitem_arr_tup_overload(arr_tup, ind, val_tup):

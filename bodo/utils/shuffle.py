@@ -125,6 +125,7 @@ def update_shuffle_meta_overload(pre_shuffle_meta, node_id, ind, val, data, is_c
             func_text += "  pre_shuffle_meta.send_counts_char_tup[{}][node_id] += n_chars\n".format(n_str)
             func_text += "  if is_contig:\n"
             func_text += "    pre_shuffle_meta.send_arr_lens_tup[{}][ind] = n_chars\n".format(n_str)
+            # XXX: handling null bits is only supported for data arrays now
             if i >= n_keys:
                 func_text += "    out_bitmap = pre_shuffle_meta.send_arr_nulls_tup[{}].ctypes\n".format(n_str)
                 func_text += "    bit_val = get_bit_bitmap(get_null_bitmap_ptr(data[{}]), ind)\n".format(i - n_keys)
@@ -264,13 +265,14 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
     return finalize_impl
 
 
-def alltoallv_tup(arrs, shuffle_meta):
+def alltoallv_tup(arrs, shuffle_meta, key_arrs):
     return arrs
 
 
 @overload(alltoallv_tup)
-def alltoallv_tup_overload(arrs, meta):
-    func_text = "def f(arrs, meta):\n"
+def alltoallv_tup_overload(arrs, meta, key_arrs):
+    n_keys = len(key_arrs.types)
+    func_text = "def f(arrs, meta, key_arrs):\n"
     n_str = 0
     for i, typ in enumerate(arrs.types):
         if isinstance(typ, types.Array):
@@ -302,12 +304,14 @@ def alltoallv_tup_overload(arrs, meta):
                 func_text += "    recv_counts_nulls[i] = (meta.recv_counts[i] + 7) >> 3\n"
                 func_text += "  tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)\n"
 
-            func_text += ("  bodo.libs.distributed_api.c_alltoallv("
-                "meta.send_arr_nulls_tup[{}].ctypes, tmp_null_bytes.ctypes, send_counts_nulls.ctypes, "
-                "recv_counts_nulls.ctypes, meta.send_disp_nulls.ctypes, "
-                "meta.recv_disp_nulls.ctypes, char_typ_enum)\n").format(n_str)
+            # XXX: handling null bits is only supported for data arrays now
+            if i >= n_keys:
+                func_text += ("  bodo.libs.distributed_api.c_alltoallv("
+                    "meta.send_arr_nulls_tup[{}].ctypes, tmp_null_bytes.ctypes, send_counts_nulls.ctypes, "
+                    "recv_counts_nulls.ctypes, meta.send_disp_nulls.ctypes, "
+                    "meta.recv_disp_nulls.ctypes, char_typ_enum)\n").format(n_str)
 
-            func_text += "  copy_gathered_null_bytes(null_bitmap_ptr_{}, tmp_null_bytes, recv_counts_nulls, meta.recv_counts)\n".format(i)
+                func_text += "  copy_gathered_null_bytes(null_bitmap_ptr_{}, tmp_null_bytes, recv_counts_nulls, meta.recv_counts)\n".format(i)
             func_text += "  convert_len_arr_to_offset(offset_ptr_{}, meta.n_out)\n".format(i)
             n_str += 1
 

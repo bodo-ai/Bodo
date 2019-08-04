@@ -243,7 +243,7 @@ def unique_overload_parallel(arr_typ):
             shuffle_meta.tmp_offset[node_id] += 1
 
         # shuffle
-        out_arr, = alltoallv_tup(key_arrs, shuffle_meta)
+        out_arr, = alltoallv_tup(key_arrs, shuffle_meta, ())
 
         return bodo.utils.utils.to_array(build_set(out_arr))
 
