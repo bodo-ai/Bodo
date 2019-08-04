@@ -27,8 +27,6 @@ from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
 # out_arr
 # n_send  -> single
 # n_out  -> single
-# padded_bits -> single, the number of bits padded to output so far in
-#                        continuous update case
 # send_disp -> single
 # recv_disp -> single
 # send_disp_nulls -> single
@@ -49,8 +47,7 @@ from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
 
 
 PreShuffleMeta = namedtuple('PreShuffleMeta',
-    ('send_counts, send_counts_char_tup, send_arr_lens_tup, send_arr_nulls_tup, '
-    'padded_bits'))
+    'send_counts, send_counts_char_tup, send_arr_lens_tup, send_arr_nulls_tup')
 
 
 ShuffleMeta = namedtuple('ShuffleMeta',
@@ -98,7 +95,7 @@ def alloc_pre_shuffle_metadata_overload(key_arrs, data, n_pes, is_contig):
     lens_tup = ", ".join("send_arr_lens_{}".format(i) for i in range(n_str))
     nulls_tup = ", ".join("send_arr_nulls_{}".format(i) for i in range(n_str))
     extra_comma = "," if n_str == 1 else ""
-    func_text += "  return PreShuffleMeta(send_counts, ({}{}), ({}{}), ({}{}), 0)\n".format(
+    func_text += "  return PreShuffleMeta(send_counts, ({}{}), ({}{}), ({}{}))\n".format(
         count_char_tup, extra_comma, lens_tup, extra_comma, nulls_tup,
         extra_comma)
 
