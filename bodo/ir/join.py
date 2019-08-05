@@ -14,7 +14,7 @@ from bodo.utils.utils import debug_prints, alloc_arr_tup
 from bodo.transforms.distributed_analysis import Distribution
 
 from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
-    cp_str_list_to_array, str_list_to_array, get_bit_bitmap, num_total_chars,
+    cp_str_list_to_array, get_bit_bitmap, num_total_chars,
     get_offset_ptr, get_data_ptr, get_null_bitmap_ptr, pre_alloc_string_array,
     getitem_str_offset, copy_str_arr_slice, str_copy_ptr, get_utf8_size,
     setitem_str_offset, str_arr_set_na, set_bit_to)

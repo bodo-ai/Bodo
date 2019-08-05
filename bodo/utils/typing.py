@@ -7,9 +7,7 @@ from numba.typing.templates import (infer_global, AbstractTemplate,
     CallableTemplate)
 from numba.typing import signature
 from numba.targets.imputils import lower_builtin, impl_ret_borrowed
-
-from bodo.utils.utils import unliteral_all, BooleanLiteral
-
+import bodo
 
 
 def is_overload_none(val):
@@ -18,12 +16,12 @@ def is_overload_none(val):
 
 
 def is_overload_true(val):
-    return (val == True or val == BooleanLiteral(True)
+    return (val == True or val == bodo.utils.utils.BooleanLiteral(True)
             or getattr(val, 'value', False) is True)
 
 
 def is_overload_false(val):
-    return (val == False or val == BooleanLiteral(False)
+    return (val == False or val == bodo.utils.utils.BooleanLiteral(False)
             or getattr(val, 'value', True) is False)
 
 
@@ -137,7 +135,8 @@ class FlattenTyp(AbstractTemplate):
         l_dtype = args[0].dtype
         assert isinstance(l_dtype, types.List)
         dtype = l_dtype.dtype
-        return signature(SeriesType(dtype), *unliteral_all(args))
+        return signature(
+            SeriesType(dtype), *bodo.utils.utils.unliteral_all(args))
 
 
 # Type used to add constant values to constant lists to enable typing

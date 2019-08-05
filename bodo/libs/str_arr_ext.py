@@ -16,6 +16,7 @@ from numba.targets.imputils import (impl_ret_new_ref, impl_ret_borrowed,
 from numba.targets.hashing import _Py_hash_t
 import llvmlite.llvmpy.core as lc
 from glob import glob
+from bodo.utils.typing import is_overload_true, is_overload_none
 
 char_typ = types.uint8
 offset_typ = types.uint32
@@ -413,18 +414,29 @@ def str_copy_ptr(typingctx, ptr_typ, ind_typ, str_typ, len_typ=None):
     return types.void(types.voidptr, types.intp, types.voidptr, types.intp), codegen
 
 
+@numba.njit(no_cpython_wrapper=True)
+def get_str_null_bools(str_arr):
+    n = len(str_arr)
+    null_bools = np.empty(n, np.bool_)
+    for i in range(n):
+        null_bools[i] = bodo.hiframes.api.isna(str_arr, i)
+    return null_bools
+
+
 # convert array to list of strings if it is StringArray
 # just return it otherwise
-def to_string_list(arr):
+def to_string_list(arr, str_null_bools=None):
     return arr
 
 
 @overload(to_string_list)
-def to_string_list_overload(data):
-    # TODO: support NA
+def to_string_list_overload(data, str_null_bools=None):
+    """if str_null_bools is True and data is tuple, output tuple contains
+    an array of bools as null mask for each string array
+    """
     # TODO: create a StringRandomWriteArray
     if is_str_arr_typ(data):
-        def to_string_impl(data):
+        def to_string_impl(data, str_null_bools=None):
             n = len(data)
             l_str = []
             for i in range(n):
@@ -434,47 +446,77 @@ def to_string_list_overload(data):
 
     if isinstance(data, (types.Tuple, types.UniTuple)):
         count = data.count
+        out = ["to_string_list(data[{}])".format(i) for i in range(count)]
+        if is_overload_true(str_null_bools):
+            out += ["get_str_null_bools(data[{}])".format(i)
+                    for i in range(count) if is_str_arr_typ(data.types[i])]
 
-        func_text = "def f(data):\n"
-        func_text += "  return ({}{})\n".format(','.join(["to_string_list(data[{}])".format(
-            i) for i in range(count)]),
+        func_text = "def f(data, str_null_bools=None):\n"
+        func_text += "  return ({}{})\n".format(', '.join(out),
             "," if count == 1 else "")  # single value needs comma to become tuple
 
         loc_vars = {}
-        exec(func_text, {'to_string_list': to_string_list}, loc_vars)
+        # print(func_text)
+        exec(func_text, {'to_string_list': to_string_list,
+            'get_str_null_bools': get_str_null_bools, 'bodo': bodo}, loc_vars)
         to_str_impl = loc_vars['f']
         return to_str_impl
 
-    return lambda data: data
+    return lambda data, str_null_bools=None: data
 
-def cp_str_list_to_array(str_arr, str_list):
+
+def cp_str_list_to_array(str_arr, str_list, str_null_bools=None):
     return
 
-@overload(cp_str_list_to_array)
-def cp_str_list_to_array_overload(str_arr, list_data):
-    if is_str_arr_typ(str_arr):
-        def cp_str_list_impl(str_arr, list_data):
-            n = len(list_data)
-            for i in range(n):
-                _str = list_data[i]
-                str_arr[i] = _str
 
-        return cp_str_list_impl
+@overload(cp_str_list_to_array)
+def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
+    """when str_arr is tuple, str_null_bools is a flag indicating whether
+    list_data includes an extra bool array for each string array's null masks.
+    When data is string array, str_null_bools is the null masks to apply.
+    """
+    if is_str_arr_typ(str_arr):
+        if is_overload_none(str_null_bools):
+            def cp_str_list_impl(str_arr, list_data, str_null_bools=None):
+                n = len(list_data)
+                for i in range(n):
+                    _str = list_data[i]
+                    str_arr[i] = _str
+            return cp_str_list_impl
+        else:
+            def cp_str_list_impl_null(str_arr, list_data, str_null_bools=None):
+                n = len(list_data)
+                for i in range(n):
+                    _str = list_data[i]
+                    str_arr[i] = _str
+                    if str_null_bools[i]:
+                        str_arr_set_na(str_arr, i)
+                    else:
+                        str_arr_set_not_na(str_arr, i)
+
+            return cp_str_list_impl_null
 
     if isinstance(str_arr, (types.Tuple, types.UniTuple)):
         count = str_arr.count
 
-        func_text = "def f(str_arr, list_data):\n"
+        str_ind = 0
+        func_text = "def f(str_arr, list_data, str_null_bools=None):\n"
         for i in range(count):
-            func_text += "  cp_str_list_to_array(str_arr[{}], list_data[{}])\n".format(i, i)
+            if (is_overload_true(str_null_bools)
+                    and is_str_arr_typ(str_arr.types[i])):
+                func_text += "  cp_str_list_to_array(str_arr[{}], list_data[{}], list_data[{}])\n".format(i, i, count + str_ind)
+                str_ind += 1
+            else:
+                func_text += "  cp_str_list_to_array(str_arr[{}], list_data[{}])\n".format(i, i)
         func_text += "  return\n"
 
         loc_vars = {}
+        # print(func_text)
         exec(func_text, {'cp_str_list_to_array': cp_str_list_to_array}, loc_vars)
         cp_str_impl = loc_vars['f']
         return cp_str_impl
 
-    return lambda str_arr, list_data: None
+    return lambda str_arr, list_data, str_null_bools=None: None
 
 
 def str_list_to_array(str_list):
@@ -483,6 +525,8 @@ def str_list_to_array(str_list):
 
 @overload(str_list_to_array)
 def str_list_to_array_overload(str_list):
+    """same as cp_str_list_to_array, except this call allocates output
+    """
     if str_list == types.List(string_type):
         def str_list_impl(str_list):
             n = len(str_list)
@@ -994,6 +1038,29 @@ def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
         mask = builder.xor(mask, lir.Constant(lir.IntType(8), -1))
         # unset masked bit
         builder.store(builder.and_(byte, mask), byte_ptr)
+        return context.get_dummy_value()
+
+    return types.void(string_array_type, types.intp), codegen
+
+
+@intrinsic
+def str_arr_set_not_na(typingctx, str_arr_typ, ind_typ=None):
+    # None default to make IntelliSense happy
+    assert is_str_arr_typ(str_arr_typ)
+    def codegen(context, builder, sig, args):
+        in_str_arr, ind = args
+        string_array = context.make_helper(builder, string_array_type, in_str_arr)
+
+        # bits[i / 8] |= kBitmask[i % 8];
+        byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
+        bit_ind = builder.urem(ind, lir.Constant(lir.IntType(64), 8))
+        byte_ptr = builder.gep(string_array.null_bitmap, [byte_ind], inbounds=True)
+        byte = builder.load(byte_ptr)
+        ll_typ_mask = lir.ArrayType(lir.IntType(8), 8)
+        mask_tup = cgutils.alloca_once_value(builder, lir.Constant(ll_typ_mask, (1, 2, 4, 8, 16, 32, 64, 128)))
+        mask = builder.load(builder.gep(mask_tup, [lir.Constant(lir.IntType(64), 0), bit_ind], inbounds=True))
+        # set masked bit
+        builder.store(builder.or_(byte, mask), byte_ptr)
         return context.get_dummy_value()
 
     return types.void(string_array_type, types.intp), codegen

@@ -368,12 +368,12 @@ def overload_sort(arr, index_arr, ascending, inplace):
             data = (index_arr.copy(),)
 
         l_key_arrs = bodo.libs.str_arr_ext.to_string_list(key_arrs)
-        l_data = bodo.libs.str_arr_ext.to_string_list(data)
+        l_data = bodo.libs.str_arr_ext.to_string_list(data, True)
         bodo.libs.timsort.sort(l_key_arrs, 0, n, l_data)
         if not ascending:
             bodo.libs.timsort.reverseRange(l_key_arrs, 0, n, l_data)
         bodo.libs.str_arr_ext.cp_str_list_to_array(key_arrs, l_key_arrs)
-        bodo.libs.str_arr_ext.cp_str_list_to_array(data, l_data)
+        bodo.libs.str_arr_ext.cp_str_list_to_array(data, l_data, True)
         return key_arrs[0], data[0]
     return impl
 

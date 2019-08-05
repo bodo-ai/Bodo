@@ -408,13 +408,13 @@ def to_string_list_typ(typ):
 def local_sort(key_arrs, data, ascending=True):
     # convert StringArray to list(string) to enable swapping in sort
     l_key_arrs = to_string_list(key_arrs)
-    l_data = to_string_list(data)
+    l_data = to_string_list(data, True)
     n_out = len(key_arrs[0])
     bodo.libs.timsort.sort(l_key_arrs, 0, n_out, l_data)
     if not ascending:
         bodo.libs.timsort.reverseRange(l_key_arrs, 0, n_out, l_data)
     cp_str_list_to_array(key_arrs, l_key_arrs)
-    cp_str_list_to_array(data, l_data)
+    cp_str_list_to_array(data, l_data, True)
 
 
 @numba.njit(no_cpython_wrapper=True, cache=True)

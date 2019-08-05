@@ -393,6 +393,7 @@ def alloc_arr_tup(n, arr_tup, init_vals=()):
         arrs.append(np.empty(n, in_arr.dtype))
     return tuple(arrs)
 
+
 @overload(alloc_arr_tup)
 def alloc_arr_tup_overload(n, data, init_vals=()):
     count = data.count
