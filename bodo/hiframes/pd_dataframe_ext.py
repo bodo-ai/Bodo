@@ -1437,7 +1437,8 @@ class DropnaDummyTyper(AbstractTemplate):
 
         if not inplace:
             # copy type to set has_parent False
-            out_df = DataFrameType(df.data, df.index, df.columns)
+            # TODO: support Index
+            out_df = DataFrameType(df.data, types.none, df.columns)
             return signature(out_df, *args)
         return signature(types.none, *args)
 

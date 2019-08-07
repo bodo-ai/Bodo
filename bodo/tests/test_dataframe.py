@@ -1633,6 +1633,7 @@ class TestDataFrame(unittest.TestCase):
         h_out = bodo_func(df)
         pd.testing.assert_frame_equal(out, h_out)
 
+    @unittest.skip("pending index support in dropna()")
     def test_df_dropna_inplace1(self):
         # TODO: fix error when no df is returned
         def test_impl(df):
