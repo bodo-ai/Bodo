@@ -253,8 +253,9 @@ class DataFramePass(object):
                 in_arrs = [self._get_dataframe_data(df_var, c, nodes)
                             for c in index]
                 out_arrs = [self._gen_arr_copy(A, nodes) for A in in_arrs]
-                #
-                _init_df = _gen_init_df(index)
+                df_index = self._get_dataframe_index(df_var, nodes)
+                out_arrs.append(df_index)
+                _init_df = _gen_init_df(index, 'index')
                 return nodes + compile_func_single_block(
                     _init_df, out_arrs, lhs, self)
 
@@ -1727,7 +1728,8 @@ class DataFramePass(object):
         e.g. groupby('A')['B'], groupby('A')['B', 'C'], groupby('A')
         """
         select_def = guard(get_definition, self.func_ir, obj_var)
-        if isinstance(select_def, ir.Expr) and select_def.op in ('getitem', 'static_getitem'):
+        if isinstance(select_def, ir.Expr) and select_def.op in ('getitem',
+                                                             'static_getitem'):
             obj_var = select_def.value
 
         obj_call = guard(get_definition, self.func_ir, obj_var)
