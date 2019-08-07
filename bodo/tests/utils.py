@@ -57,7 +57,7 @@ def get_start_end(n):
     return start, end
 
 
-def test_func(func, args, is_out_distributed=None, sort_output=False,
+def check_func(func, args, is_out_distributed=None, sort_output=False,
                                            check_names=True, copy_input=False):
     """test bodo compilation of function 'func' on arguments using REP and 1D
     inputs/outputs

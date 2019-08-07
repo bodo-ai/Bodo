@@ -11,7 +11,7 @@ import numba
 import bodo
 from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_start_end,
-    test_func)
+    check_func)
 
 
 
@@ -80,27 +80,27 @@ def test_unbox_df(df_value):
     def impl(df_arg):
         return True
 
-    test_func(impl, (df_value,))
+    check_func(impl, (df_value,))
 
     # unbox and box
     def impl2(df_arg):
         return df_arg
 
-    test_func(impl2, (df_value,))
+    check_func(impl2, (df_value,))
 
     # unbox and return Series data with index
     # (previous test can box Index unintentionally)
     def impl3(df_arg):
         return df_arg.A
 
-    test_func(impl3, (df_value,))
+    check_func(impl3, (df_value,))
 
 
 def test_df_index(df_value):
     def impl(df):
         return df.index
 
-    test_func(impl, (df_value,))
+    check_func(impl, (df_value,))
 
 
 def test_df_index_non():
@@ -117,42 +117,42 @@ def test_df_columns(df_value):
     def impl(df):
         return df.columns
 
-    test_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), False)
 
 
 def test_df_values(numeric_df_value):
     def impl(df):
         return df.values
 
-    test_func(impl, (numeric_df_value,))
+    check_func(impl, (numeric_df_value,))
 
 
 def test_df_get_values(numeric_df_value):
     def impl(df):
         return df.get_values()
 
-    test_func(impl, (numeric_df_value,))
+    check_func(impl, (numeric_df_value,))
 
 
 def test_df_ndim(df_value):
     def impl(df):
         return df.ndim
 
-    test_func(impl, (df_value,))
+    check_func(impl, (df_value,))
 
 
 def test_df_size(df_value):
     def impl(df):
         return df.size
 
-    test_func(impl, (df_value,))
+    check_func(impl, (df_value,))
 
 
 def test_df_shape(df_value):
     def impl(df):
         return df.shape
 
-    test_func(impl, (df_value,))
+    check_func(impl, (df_value,))
 
 
 # TODO: empty df: pd.DataFrame()
@@ -174,7 +174,7 @@ def test_df_astype_num(numeric_df_value):
     def impl(df):
         return df.astype(np.float32)
 
-    test_func(impl, (numeric_df_value,))
+    check_func(impl, (numeric_df_value,))
 
 
 def test_df_astype_str(numeric_df_value):
@@ -190,21 +190,21 @@ def test_df_astype_str(numeric_df_value):
     def impl(df):
         return df.astype(str)
 
-    test_func(impl, (numeric_df_value,))
+    check_func(impl, (numeric_df_value,))
 
 
 def test_df_copy_deep(df_value):
     def impl(df):
         return df.copy()
 
-    test_func(impl, (df_value,))
+    check_func(impl, (df_value,))
 
 
 def test_df_copy_shallow(df_value):
     def impl(df):
         return df.copy(deep=False)
 
-    test_func(impl, (df_value,))
+    check_func(impl, (df_value,))
 
 
 def test_df_isna(df_value):
@@ -212,7 +212,7 @@ def test_df_isna(df_value):
     def impl(df):
         return df.isna()
 
-    test_func(impl, (df_value,))
+    check_func(impl, (df_value,))
 
 
 def test_df_notna(df_value):
@@ -220,21 +220,21 @@ def test_df_notna(df_value):
     def impl(df):
         return df.notna()
 
-    test_func(impl, (df_value,))
+    check_func(impl, (df_value,))
 
 
 def test_df_head(df_value):
     def impl(df):
         return df.head(3)
 
-    test_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), False)
 
 
 def test_df_tail(df_value):
     def impl(df):
         return df.tail(3)
 
-    test_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), False)
 
 
 @pytest.mark.parametrize('other', [
@@ -248,7 +248,7 @@ def test_df_isin(other):
         return df.isin(other)
 
     df = pd.DataFrame({'A': np.arange(5), 'B': np.arange(5)**2})
-    test_func(impl, (df, other))
+    check_func(impl, (df, other))
 
 
 def test_df_abs(numeric_df_value):
@@ -259,7 +259,7 @@ def test_df_abs(numeric_df_value):
     def impl(df):
         return df.abs()
 
-    test_func(impl, (numeric_df_value,))
+    check_func(impl, (numeric_df_value,))
 
 
 def test_df_corr(df_value):
@@ -270,7 +270,7 @@ def test_df_corr(df_value):
     def impl(df):
         return df.corr()
 
-    test_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), False)
 
 
 def test_df_corr_parallel():
@@ -293,14 +293,14 @@ def test_df_cov(df_value):
     def impl(df):
         return df.cov()
 
-    test_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), False)
 
 
 def test_df_count(df_value):
     def impl(df):
         return df.count()
 
-    test_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), False)
 
 
 def test_df_prod(df_value):
@@ -311,7 +311,7 @@ def test_df_prod(df_value):
     def impl(df):
         return df.prod()
 
-    test_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), False)
 
 
 def test_df_sum(numeric_df_value):
@@ -322,7 +322,7 @@ def test_df_sum(numeric_df_value):
     def impl(df):
         return df.sum()
 
-    test_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), False)
 
 
 def test_df_min(numeric_df_value):
@@ -333,7 +333,7 @@ def test_df_min(numeric_df_value):
     def impl(df):
         return df.min()
 
-    test_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), False)
 
 
 def test_df_max(numeric_df_value):
@@ -344,7 +344,7 @@ def test_df_max(numeric_df_value):
     def impl(df):
         return df.max()
 
-    test_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), False)
 
 
 def test_df_mean(numeric_df_value):
@@ -355,7 +355,7 @@ def test_df_mean(numeric_df_value):
     def impl(df):
         return df.mean()
 
-    test_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), False)
 
 
 def test_df_var(numeric_df_value):
@@ -366,7 +366,7 @@ def test_df_var(numeric_df_value):
     def impl(df):
         return df.var()
 
-    test_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), False)
 
 
 def test_df_std(numeric_df_value):
@@ -377,7 +377,7 @@ def test_df_std(numeric_df_value):
     def impl(df):
         return df.std()
 
-    test_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), False)
 
 
 def test_df_median(numeric_df_value):
@@ -393,7 +393,7 @@ def test_df_median(numeric_df_value):
     def impl(df):
         return df.median()
 
-    test_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), False)
 
 
 def test_df_quantile(df_value):
@@ -404,7 +404,7 @@ def test_df_quantile(df_value):
     def impl(df):
         return df.quantile(0.3)
 
-    test_func(impl, (df_value,), False, check_names=False)
+    check_func(impl, (df_value,), False, check_names=False)
 
 
 def test_df_pct_change(numeric_df_value):
@@ -415,7 +415,7 @@ def test_df_pct_change(numeric_df_value):
     def test_impl(df):
         return df.pct_change(2)
 
-    test_func(test_impl, (numeric_df_value,))
+    check_func(test_impl, (numeric_df_value,))
 
 
 
@@ -427,7 +427,7 @@ def test_df_describe(numeric_df_value):
     def test_impl(df):
         return df.describe()
 
-    test_func(test_impl, (numeric_df_value,), False)
+    check_func(test_impl, (numeric_df_value,), False)
 
 
 @pytest.mark.skip(reason="distributed cumprod not available yet")
@@ -444,7 +444,7 @@ def test_df_cumprod(numeric_df_value):
     def impl(df):
         return df.cumprod()
 
-    test_func(impl, (numeric_df_value,),)
+    check_func(impl, (numeric_df_value,),)
 
 
 def test_df_cumsum(numeric_df_value):
@@ -460,7 +460,7 @@ def test_df_cumsum(numeric_df_value):
     def impl(df):
         return df.cumsum()
 
-    test_func(impl, (numeric_df_value,),)
+    check_func(impl, (numeric_df_value,),)
 
 
 def test_df_nunique(df_value):
@@ -477,7 +477,7 @@ def test_df_nunique(df_value):
         return df.nunique()
 
     # TODO: make sure output is REP
-    test_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), False)
 
 
 def _is_supported_argminmax_typ(d):
@@ -498,7 +498,7 @@ def test_df_idxmax(numeric_df_value):
     def impl(df):
         return df.idxmax()
 
-    test_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), False)
 
 
 def test_df_idxmin(numeric_df_value):
@@ -509,7 +509,7 @@ def test_df_idxmin(numeric_df_value):
     def impl(df):
         return df.idxmin()
 
-    test_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), False)
 
 
 def test_df_take(df_value):
@@ -530,7 +530,7 @@ def test_df_sort_values(df_value):
     def impl(df):
         return df.sort_values(by='A')
 
-    test_func(impl, (df_value,))
+    check_func(impl, (df_value,))
 
 
 def test_df_sort_index(df_value):
@@ -542,7 +542,7 @@ def test_df_sort_index(df_value):
     def impl(df):
         return df.sort_index()
 
-    test_func(impl, (df_value,))
+    check_func(impl, (df_value,))
 
 
 def test_df_shift(numeric_df_value):
@@ -553,7 +553,7 @@ def test_df_shift(numeric_df_value):
     def impl(df):
         return df.shift(2)
 
-    test_func(impl, (numeric_df_value,))
+    check_func(impl, (numeric_df_value,))
 
 
 def test_df_set_index(df_value):
@@ -564,7 +564,7 @@ def test_df_set_index(df_value):
     def impl(df):
         return df.set_index('A')
 
-    test_func(impl, (df_value,))
+    check_func(impl, (df_value,))
 
 
 def _gen_df_str(n):
@@ -594,7 +594,7 @@ def test_sort_values_str():
     np.random.seed(3)
     n = 17 # 1211
     df = _gen_df_str(n)
-    test_func(test_impl, (df,))
+    check_func(test_impl, (df,))
 
 
 ##################### binary ops ###############################
@@ -612,10 +612,10 @@ def test_dataframe_binary_op(op):
 
     df = pd.DataFrame({'A': [4, 6, 7, 1, 3]}, index=[3, 5, 0, 7, 2])
     # df/df
-    test_func(test_impl, (df, df))
+    check_func(test_impl, (df, df))
     # df/scalar
-    test_func(test_impl, (df, 2))
-    test_func(test_impl, (2, df))
+    check_func(test_impl, (df, 2))
+    check_func(test_impl, (2, df))
 
 
 @pytest.mark.parametrize('op',
@@ -630,8 +630,8 @@ def test_dataframe_inplace_binary_op(op):
     test_impl = loc_vars['test_impl']
 
     df = pd.DataFrame({'A': [4, 6, 7, 1, 3]}, index=[3, 5, 0, 7, 2])
-    test_func(test_impl, (df, df), copy_input=True)
-    test_func(test_impl, (df, 2), copy_input=True)
+    check_func(test_impl, (df, df), copy_input=True)
+    check_func(test_impl, (df, 2), copy_input=True)
 
 
 @pytest.mark.parametrize('op', bodo.hiframes.pd_series_ext.series_unary_ops)
@@ -649,7 +649,7 @@ def test_dataframe_unary_op(op):
     test_impl = loc_vars['test_impl']
 
     df = pd.DataFrame({'A': [4, 6, 7, 1, -3]}, index=[3, 5, 0, 7, 2])
-    test_func(test_impl, (df,))
+    check_func(test_impl, (df,))
 
 
 @pytest.fixture(params = [
@@ -682,7 +682,7 @@ def test_pd_isna(na_test_obj):
 
     is_out_distributed = bodo.utils.utils.is_distributable_typ(
         bodo.typeof(obj))
-    test_func(impl, (obj,), is_out_distributed)
+    check_func(impl, (obj,), is_out_distributed)
 
 
 def test_pd_notna(na_test_obj):
@@ -693,7 +693,7 @@ def test_pd_notna(na_test_obj):
 
     is_out_distributed = bodo.utils.utils.is_distributable_typ(
         bodo.typeof(obj))
-    test_func(impl, (obj,), is_out_distributed)
+    check_func(impl, (obj,), is_out_distributed)
 
 
 def test_set_column_cond1():
@@ -757,7 +757,7 @@ def test_df_filter():
     df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7],
         'C': [2,3,-1,1,2,3,-1]})
     cond = df.A > 1
-    test_func(test_impl, (df, cond))
+    check_func(test_impl, (df, cond))
 
 
 def test_create_series_input1():

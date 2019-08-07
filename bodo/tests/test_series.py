@@ -12,7 +12,7 @@ import bodo
 from bodo.libs.str_arr_ext import StringArray
 from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_start_end,
-    test_func)
+    check_func)
 import pytest
 
 
@@ -122,7 +122,7 @@ def test_series_index(series_val):
     def test_impl(S):
         return S.index
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_index_none():
@@ -138,70 +138,70 @@ def test_series_values(series_val):
     def test_impl(S):
         return S.values
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_dtype(numeric_series_val):
     def test_impl(S):
         return S.dtype
 
-    test_func(test_impl, (numeric_series_val,))
+    check_func(test_impl, (numeric_series_val,))
 
 
 def test_series_shape(series_val):
     def test_impl(S):
         return S.shape
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_ndim(series_val):
     def test_impl(S):
         return S.ndim
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_size(series_val):
     def test_impl(S):
         return S.size
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_T(series_val):
     def test_impl(S):
         return S.T
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_hasnans(series_val):
     def test_impl(S):
         return S.hasnans
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_empty(series_val):
     def test_impl(S):
         return S.empty
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_dtypes(numeric_series_val):
     def test_impl(S):
         return S.dtypes
 
-    test_func(test_impl, (numeric_series_val,))
+    check_func(test_impl, (numeric_series_val,))
 
 
 def test_series_name(series_val):
     def test_impl(S):
         return S.name
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_put(series_val):
@@ -222,7 +222,7 @@ def test_series_astype_numeric(numeric_series_val):
     def test_impl(S):
         return S.astype(np.float64)
 
-    test_func(test_impl, (numeric_series_val,))
+    check_func(test_impl, (numeric_series_val,))
 
 
 def test_series_astype_str(series_val):
@@ -236,7 +236,7 @@ def test_series_astype_str(series_val):
     def test_impl(S):
         return S.astype(str)
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_copy_deep(series_val):
@@ -244,7 +244,7 @@ def test_series_copy_deep(series_val):
     def test_impl(S):
         return S.copy()
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_copy_shallow(series_val):
@@ -252,7 +252,7 @@ def test_series_copy_shallow(series_val):
     def test_impl(S):
         return S.copy(deep=False)
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_to_list(series_val):
@@ -271,7 +271,7 @@ def test_series_get_values(series_val):
     def test_impl(S):
         return S.get_values()
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_iat_getitem(series_val):
@@ -282,7 +282,7 @@ def test_series_iat_getitem(series_val):
     bodo_func = bodo.jit(test_impl)
     assert bodo_func(series_val) == test_impl(series_val)
     # fix distributed
-    # test_func(test_impl, (series_val,))
+    # check_func(test_impl, (series_val,))
 
 
 def test_series_iat_setitem(series_val):
@@ -309,7 +309,7 @@ def test_series_iloc_getitem_int(series_val):
     bodo_func = bodo.jit(test_impl)
     assert bodo_func(series_val) == test_impl(series_val)
     # fix distributed
-    # test_func(test_impl, (series_val,))
+    # check_func(test_impl, (series_val,))
 
 
 def test_series_iloc_getitem_slice(series_val):
@@ -320,7 +320,7 @@ def test_series_iloc_getitem_slice(series_val):
     pd.testing.assert_series_equal(
         bodo_func(series_val), test_impl(series_val))
     # fix distributed
-    # test_func(test_impl, (series_val,))
+    # check_func(test_impl, (series_val,))
 
 
 def test_series_iloc_getitem_array_int(series_val):
@@ -538,7 +538,7 @@ def test_series_explicit_binary_op(numeric_series_val, op, fill):
 
     if fill is not None:
         fill = numeric_series_val.iloc[0]
-    test_func(test_impl, (numeric_series_val, numeric_series_val, fill))
+    check_func(test_impl, (numeric_series_val, numeric_series_val, fill))
 
 
 @pytest.mark.parametrize('fill', [None, 1.6])
@@ -550,7 +550,7 @@ def test_series_explicit_binary_op_nan(fill):
 
     L1 = pd.Series([1., np.nan, 2.3, np.nan])
     L2 = pd.Series([1., np.nan, np.nan, 1.1], name='ABC')
-    test_func(test_impl, (L1, L2, fill))
+    check_func(test_impl, (L1, L2, fill))
 
 
 @pytest.mark.parametrize('op', bodo.hiframes.pd_series_ext.series_binary_ops)
@@ -563,9 +563,9 @@ def test_series_binary_op(op):
     test_impl = loc_vars['test_impl']
 
     S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name='ABC')
-    test_func(test_impl, (S, S))
-    test_func(test_impl, (S, 2))
-    test_func(test_impl, (2, S))
+    check_func(test_impl, (S, S))
+    check_func(test_impl, (S, 2))
+    check_func(test_impl, (2, S))
 
 
 @pytest.mark.parametrize('op',
@@ -606,7 +606,7 @@ def test_series_unary_op(op):
     test_impl = loc_vars['test_impl']
 
     S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name='ABC')
-    test_func(test_impl, (S,))
+    check_func(test_impl, (S,))
 
 
 @pytest.mark.parametrize('ufunc',
@@ -616,7 +616,7 @@ def test_series_unary_ufunc(ufunc):
         return ufunc(S)
 
     S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name='ABC')
-    test_func(test_impl, (S,))
+    check_func(test_impl, (S,))
 
 
 @pytest.mark.parametrize('ufunc',
@@ -627,9 +627,9 @@ def test_series_binary_ufunc(ufunc):
 
     S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name='ABC')
     A = np.array([1, 3, 7, 11])
-    test_func(test_impl, (S, S))
-    test_func(test_impl, (S, A))
-    test_func(test_impl, (A, S))
+    check_func(test_impl, (S, S))
+    check_func(test_impl, (S, A))
+    check_func(test_impl, (A, S))
 
 
 @pytest.mark.parametrize('S1,S2,fill,raises', [
@@ -687,7 +687,7 @@ def test_series_combine_kws():
     S1 = pd.Series([1.0, 2., 3., 4., 5.])
     S2 = pd.Series([6.0, 21., 3.6, 5., 0.0])
     fill = 1237.56
-    test_func(test_impl, (S1, S2, fill))
+    check_func(test_impl, (S1, S2, fill))
 
 
 def test_series_combine_no_fill():
@@ -696,7 +696,7 @@ def test_series_combine_no_fill():
 
     S1 = pd.Series([1.0, 2., 3., 4., 5.])
     S2 = pd.Series([6.0, 21., 3.6, 5., 0.0])
-    test_func(test_impl, (S1, S2))
+    check_func(test_impl, (S1, S2))
 
 
 @pytest.mark.parametrize('S', [pd.Series([1.0, 2., 3., 4., 5.]),
@@ -705,7 +705,7 @@ def test_series_apply(S):
     def test_impl(S):
         return S.apply(lambda a: 2*a)
 
-    test_func(test_impl, (S,))
+    check_func(test_impl, (S,))
 
 
 def test_series_apply_kw():
@@ -713,7 +713,7 @@ def test_series_apply_kw():
         return S.apply(func=lambda a: 2*a)
 
     S = pd.Series([1.0, 2., 3., 4., 5.])
-    test_func(test_impl, (S,))
+    check_func(test_impl, (S,))
 
 
 @pytest.mark.parametrize('S', [pd.Series([1.0, 2., 3., 4., 5.]),
@@ -722,7 +722,7 @@ def test_series_map(S):
     def test_impl(S):
         return S.map(lambda a: 2*a)
 
-    test_func(test_impl, (S,))
+    check_func(test_impl, (S,))
 
 
 def test_series_map_global1():
@@ -730,7 +730,7 @@ def test_series_map_global1():
         return S.map(arg=lambda a: a + GLOBAL_VAL)
 
     S = pd.Series([1.0, 2., 3., 4., 5.])
-    test_func(test_impl, (S,))
+    check_func(test_impl, (S,))
 
 
 def test_series_map_tup1():
@@ -741,7 +741,7 @@ def test_series_map_tup1():
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
     # TODO: support unbox for column of tuples
-    # test_func(test_impl, (S,))
+    # check_func(test_impl, (S,))
 
 
 def test_series_map_tup_map1():
@@ -750,7 +750,7 @@ def test_series_map_tup_map1():
         return A.map(lambda a: a[1])
 
     S = pd.Series([1.0, 2., 3., 4., 5.])
-    test_func(test_impl, (S,))
+    check_func(test_impl, (S,))
 
 
 @pytest.mark.parametrize('S', [pd.Series([1.0, 2., 3., 4., 5.]),
@@ -759,7 +759,7 @@ def test_series_rolling(S):
     def test_impl(S):
         return S.rolling(3).sum()
 
-    test_func(test_impl, (S,))
+    check_func(test_impl, (S,))
 
 
 def test_series_rolling_kw():
@@ -767,7 +767,7 @@ def test_series_rolling_kw():
         return S.rolling(window=3, center=True).sum()
 
     S = pd.Series([1.0, 2., 3., 4., 5.])
-    test_func(test_impl, (S,))
+    check_func(test_impl, (S,))
 
 
 @pytest.mark.parametrize('S', [pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]),
@@ -778,7 +778,7 @@ def test_series_cumsum(S):
     def test_impl(S):
         return S.cumsum()
 
-    test_func(test_impl, (S,))
+    check_func(test_impl, (S,))
 
 
 @pytest.mark.parametrize('S', [pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]),
@@ -792,7 +792,7 @@ def test_series_cumprod(S):
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
     # TODO: implement distributed cumprod
-    # test_func(test_impl, (S,))
+    # check_func(test_impl, (S,))
 
 
 def test_series_rename():
@@ -801,7 +801,7 @@ def test_series_rename():
         return A.rename('B')
 
     S = pd.Series([1.0, 2.0, np.nan, 1.0], name='A')
-    test_func(test_impl, (S,))
+    check_func(test_impl, (S,))
 
 
 def test_series_abs():
@@ -809,7 +809,7 @@ def test_series_abs():
         return S.abs()
 
     S = pd.Series([np.nan, -2., 3.])
-    test_func(test_impl, (S,))
+    check_func(test_impl, (S,))
 
 
 def test_series_min(series_val):
@@ -820,7 +820,7 @@ def test_series_min(series_val):
     def test_impl(A):
         return A.min()
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_max(series_val):
@@ -831,7 +831,7 @@ def test_series_max(series_val):
     def test_impl(A):
         return A.max()
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_idxmin(series_val):
@@ -871,21 +871,21 @@ def test_series_median(numeric_series_val):
     def test_impl(A):
         return A.median()
 
-    test_func(test_impl, (numeric_series_val,))
+    check_func(test_impl, (numeric_series_val,))
 
 
 def test_series_head(series_val):
     def test_impl(S):
         return S.head(3)
 
-    test_func(test_impl, (series_val,), False)
+    check_func(test_impl, (series_val,), False)
 
 
 def test_series_tail(series_val):
     def test_impl(S):
         return S.tail(3)
 
-    test_func(test_impl, (series_val,), False)
+    check_func(test_impl, (series_val,), False)
 
 
 @pytest.mark.parametrize('k', [0, 1, 2, 3])
@@ -893,7 +893,7 @@ def test_series_nlargest(numeric_series_val, k):
     def test_impl(S, k):
         return S.nlargest(k)
 
-    test_func(test_impl, (numeric_series_val, k), False)
+    check_func(test_impl, (numeric_series_val, k), False)
 
 
 def test_series_nlargest_non_index():
@@ -913,7 +913,7 @@ def test_series_nsmallest(numeric_series_val, k):
     def test_impl(S, k):
         return S.nsmallest(k)
 
-    test_func(test_impl, (numeric_series_val, k), False)
+    check_func(test_impl, (numeric_series_val, k), False)
 
 
 def test_series_nsmallest_non_index():
@@ -946,7 +946,7 @@ def test_series_argsort(series_val):
     pd.testing.assert_series_equal(
         bodo_func(series_val), test_impl(series_val))
     # TODO: support distributed argsort()
-    # test_func(test_impl, (series_val,))
+    # check_func(test_impl, (series_val,))
 
 
 def test_series_sort_values(series_val):
@@ -957,7 +957,7 @@ def test_series_sort_values(series_val):
     def test_impl(A):
         return A.sort_values()
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 @pytest.mark.parametrize('ignore_index', [True, False])
@@ -1000,7 +1000,7 @@ def test_series_quantile(numeric_series_val):
         return A.quantile(0.30)
 
     # TODO: needs np.testing.assert_almost_equal?
-    test_func(test_impl, (numeric_series_val,))
+    check_func(test_impl, (numeric_series_val,))
 
 
 def test_series_nunique(series_val):
@@ -1014,7 +1014,7 @@ def test_series_nunique(series_val):
     def test_impl(A):
         return A.nunique()
 
-    test_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_unique(series_val):
@@ -1026,7 +1026,7 @@ def test_series_unique(series_val):
         return A.unique()
 
     # sorting since output order is not consistent
-    test_func(test_impl, (series_val,), sort_output=True)
+    check_func(test_impl, (series_val,), sort_output=True)
 
 
 def test_series_describe(numeric_series_val):
@@ -1037,7 +1037,7 @@ def test_series_describe(numeric_series_val):
     def test_impl(A):
         return A.describe()
 
-    test_func(test_impl, (numeric_series_val,), False)
+    check_func(test_impl, (numeric_series_val,), False)
 
 
 @pytest.mark.parametrize('S,value', [
@@ -1049,7 +1049,7 @@ def test_series_fillna(S, value):
     def test_impl(A, val):
         return A.fillna(val)
 
-    test_func(test_impl, (S, value))
+    check_func(test_impl, (S, value))
 
 
 @pytest.mark.parametrize('S', [
@@ -1061,7 +1061,7 @@ def test_series_dropna(S):
     def test_impl(A):
         return A.dropna()
 
-    test_func(test_impl, (S,))
+    check_func(test_impl, (S,))
 
 
 def test_series_shift(numeric_series_val):
@@ -1072,7 +1072,7 @@ def test_series_shift(numeric_series_val):
     def test_impl(A):
         return A.shift(2)
 
-    test_func(test_impl, (numeric_series_val,))
+    check_func(test_impl, (numeric_series_val,))
 
 
 def test_series_pct_change(numeric_series_val):
@@ -1083,7 +1083,7 @@ def test_series_pct_change(numeric_series_val):
     def test_impl(A):
         return A.pct_change(2)
 
-    test_func(test_impl, (numeric_series_val,))
+    check_func(test_impl, (numeric_series_val,))
 
 
 def test_series_index_cast():
@@ -1944,7 +1944,7 @@ class TestSeries(unittest.TestCase):
             # XXX: \t support pending Numba #4188
             # S = pd.Series([' \tbbCD\t ', 'ABC', ' mCDm\t', 'abc'])
             S = pd.Series([' bbCD ', 'ABC', ' mCDm ', np.nan, 'abc'])
-            test_func(test_impl, (S,))
+            check_func(test_impl, (S,))
 
     def test_series_append1(self):
         def test_impl(S, other):
@@ -1973,7 +1973,7 @@ class TestSeries(unittest.TestCase):
 
         # column with NA
         S = pd.Series([np.nan, 2., 3.])
-        test_func(test_impl, (S,))
+        check_func(test_impl, (S,))
 
     def test_series_isnull1(self):
         def test_impl(S):
@@ -1998,7 +1998,7 @@ class TestSeries(unittest.TestCase):
             return S.isna()
 
         S = pd.Series(['aa', None, 'c', 'cccd'])
-        test_func(test_impl, (S,))
+        check_func(test_impl, (S,))
 
     def test_series_nlargest1(self):
         def test_impl(S):

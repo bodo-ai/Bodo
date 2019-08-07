@@ -11,7 +11,7 @@ from pandas.api.types import CategoricalDtype
 import numba
 import bodo
 from bodo.libs.str_arr_ext import StringArray
-from bodo.tests.utils import (count_array_REPs, count_parfor_REPs, test_func,
+from bodo.tests.utils import (count_array_REPs, count_parfor_REPs, check_func,
     count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_start_end)
 import pytest
 
@@ -125,7 +125,7 @@ def test_merge_str_nan():
 
     df1 = pd.DataFrame({'key1': ['foo', 'bar', 'baz', 'baz'], 'A': ['b', '', np.nan, 'ss']})
     df2 = pd.DataFrame({'key2': ['baz', 'bar', 'baz', 'foo'], 'B': ['b', np.nan, '', 'AA']})
-    test_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True)
 
 
 def _gen_df_str(n):
@@ -156,7 +156,7 @@ def test_merge_str_nan2():
     n = 1211
     df1 = _gen_df_str(n)
     df2 = _gen_df_str(n)
-    test_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True)
 
 
 class TestJoin(unittest.TestCase):
