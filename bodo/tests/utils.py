@@ -90,7 +90,7 @@ def check_func(func, args, is_out_distributed=None, sort_output=False,
     bodo_func = bodo.jit(
         all_args_distributed_varlength=True,
         all_returns_distributed=is_out_distributed)(func)
-    dist_args = tuple(_get_dist_arg(a, copy_input) for a in args)
+    dist_args = tuple(_get_dist_arg(a, copy_input, True) for a in args)
     bodo_output = bodo_func(*dist_args)
     if is_out_distributed:
         bodo_output = bodo.gatherv(bodo_output)
@@ -104,7 +104,7 @@ def _get_arg(a, copy=False):
     return a
 
 
-def _get_dist_arg(a, copy=False):
+def _get_dist_arg(a, copy=False, var_length=False):
     if copy and hasattr(a, 'copy'):
         a = a.copy()
 
@@ -113,6 +113,13 @@ def _get_dist_arg(a, copy=False):
         return a
 
     start, end = get_start_end(len(a))
+    # for var length case to be different than regular 1D in chunk sizes, add
+    # one extra element to last processor
+    if var_length and bodo.get_size() >= 2:
+        if bodo.get_rank() == bodo.get_size() - 2:
+            end -= 1
+        if bodo.get_rank() == bodo.get_size() - 1:
+            start -= 1
     if isinstance(a, (pd.Series, pd.DataFrame)):
         return a.iloc[start:end]
     return a[start:end]
