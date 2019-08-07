@@ -1119,9 +1119,10 @@ class ConcatDummyTyper(AbstractTemplate):
         if isinstance(objs, types.List):
             assert axis == 0
             assert isinstance(objs.dtype, (SeriesType, DataFrameType))
-            ret_typ = objs.dtype.copy()
+            # TODO: support Index in append/concat
+            ret_typ = objs.dtype.copy(index=types.none)
             if isinstance(ret_typ, DataFrameType):
-                ret_typ = ret_typ.copy(has_parent=False)
+                ret_typ = ret_typ.copy(has_parent=False, index=types.none)
             return signature(ret_typ, *args)
 
         if not isinstance(objs, types.BaseTuple):
