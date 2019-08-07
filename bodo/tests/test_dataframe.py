@@ -610,7 +610,7 @@ def test_dataframe_binary_op(op):
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars['test_impl']
 
-    df = pd.DataFrame({'A': [4, 6, 7, 1, -3]}, index=[3, 5, 0, 7, 2])
+    df = pd.DataFrame({'A': [4, 6, 7, 1, 3]}, index=[3, 5, 0, 7, 2])
     # df/df
     test_func(test_impl, (df, df))
     # df/scalar
