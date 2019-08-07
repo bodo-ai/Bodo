@@ -110,7 +110,7 @@ def series_val(request):
 @pytest.fixture(params = [
     pd.Series([1, 8, 4, 11, -3]),
     pd.Series([1.1, np.nan, 4.1, 1.4, -2.1]),
-    pd.Series([1, 8, 4, 0, 3], dtype=np.uint8),
+    pd.Series([1, 8, 4, 10, 3], dtype=np.uint8),
     pd.Series([1, 8, 4, -1, 2], [3, 7, 9, 2, 1], name='AAC'),
     pd.Series(pd.date_range(start='2018-04-24', end='2018-04-29', periods=5)),
 ])
@@ -525,6 +525,10 @@ def test_series_explicit_binary_op(numeric_series_val, op, fill):
     # Numba returns float32 for truediv but Numpy returns float64
     if op is 'truediv' and numeric_series_val.dtype == np.uint8:
         return
+    if op is 'pow' and numeric_series_val.dtype in (np.int8, np.int16,
+                                                           np.int32, np.int64):
+        # negative numbers not supported in integer pow
+        numeric_series_val = numeric_series_val.abs()
 
     func_text = "def test_impl(S, other, fill_val):\n"
     func_text += "  return S.{}(other, fill_value=fill_val)\n".format(op)
