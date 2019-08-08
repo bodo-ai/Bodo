@@ -6,7 +6,6 @@ import types as pytypes  # avoid confusion with numba.types
 import numba
 from numba import ir, analysis, types, config, numpy_support
 from numba.ir_utils import (mk_unique_var, replace_vars_inner, find_topo_order,
-                            dprint_func_ir, remove_dead, mk_alloc,
                             find_callname, guard, require, get_definition,
                             build_definitions, find_const, compile_to_numba_ir,
                             replace_arg_nodes)

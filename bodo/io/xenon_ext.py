@@ -1,7 +1,6 @@
 import numba
 from numba import ir, ir_utils, types
 from numba.ir_utils import (mk_unique_var, replace_vars_inner, find_topo_order,
-                            dprint_func_ir, remove_dead, mk_alloc, remove_dels,
                             get_name_var_table, replace_var_names,
                             add_offset_to_labels, get_ir_of_code,
                             compile_to_numba_ir, replace_arg_nodes,

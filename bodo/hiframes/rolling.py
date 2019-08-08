@@ -1015,6 +1015,7 @@ def _border_send_wait(r_send_req, l_send_req, rank, n_pes, center):  # pragma: n
     if center and rank != 0:
         bodo.libs.distributed_api.wait(l_send_req, True)
 
+
 @numba.njit
 def _is_small_for_parallel(N, halo_size):  # pragma: no cover
     # gather data on one processor and compute sequentially if data of any
@@ -1028,10 +1029,12 @@ def _is_small_for_parallel(N, halo_size):  # pragma: no cover
         int(N<=2*halo_size+1), np.int32(Reduce_Type.Sum.value))
     return num_small != 0
 
+
 # TODO: refactor small data functions
 @numba.njit
 def _handle_small_data(in_arr, win, center, rank, n_pes, init_data, add_obs,
                                                          remove_obs, calc_out):  # pragma: no cover
+    N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(
         len(in_arr), np.int32(Reduce_Type.Sum.value))
     all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
@@ -1041,12 +1044,17 @@ def _handle_small_data(in_arr, win, center, rank, n_pes, init_data, add_obs,
     else:
         all_out = np.empty(all_N, np.float64)
     bodo.libs.distributed_api.bcast(all_out)
-    start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
-    end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
+    # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
+    start = bodo.libs.distributed_api.dist_exscan(N)
+    end = start + N
+    # start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
+    # end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
     return all_out[start:end]
+
 
 @numba.njit
 def _handle_small_data_apply(in_arr, win, center, rank, n_pes, kernel_func):  # pragma: no cover
+    N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(
         len(in_arr), np.int32(Reduce_Type.Sum.value))
     all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
@@ -1056,12 +1064,17 @@ def _handle_small_data_apply(in_arr, win, center, rank, n_pes, kernel_func):  # 
     else:
         all_out = np.empty(all_N, np.float64)
     bodo.libs.distributed_api.bcast(all_out)
-    start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
-    end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
+    # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
+    start = bodo.libs.distributed_api.dist_exscan(N)
+    end = start + N
+    # start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
+    # end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
     return all_out[start:end]
+
 
 @numba.njit
 def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
+    N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(
         len(in_arr), np.int32(Reduce_Type.Sum.value))
     all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
@@ -1070,26 +1083,36 @@ def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
     else:
         all_out = np.empty(all_N, bodo.hiframes.api.shift_dtype(in_arr.dtype))
     bodo.libs.distributed_api.bcast(all_out)
-    start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
-    end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
+    # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
+    start = bodo.libs.distributed_api.dist_exscan(N)
+    end = start + N
+    # start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
+    # end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
     return all_out[start:end]
+
 
 @numba.njit
 def _handle_small_data_pct_change(in_arr, shift, rank, n_pes):  # pragma: no cover
+    N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(
-        len(in_arr), np.int32(Reduce_Type.Sum.value))
+        N, np.int32(Reduce_Type.Sum.value))
     all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
     if rank == 0:
         all_out = pct_change_seq(all_in_arr, shift)
     else:
         all_out = np.empty(all_N, bodo.hiframes.api.shift_dtype(in_arr.dtype))
     bodo.libs.distributed_api.bcast(all_out)
-    start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
-    end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
+    # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
+    start = bodo.libs.distributed_api.dist_exscan(N)
+    end = start + N
+    # start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
+    # end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
     return all_out[start:end]
+
 
 def cast_dt64_arr_to_int(arr):  # pragma: no cover
     return arr
+
 
 @infer_global(cast_dt64_arr_to_int)
 class DtArrToIntType(AbstractTemplate):
@@ -1125,8 +1148,9 @@ def _is_small_for_parallel_variable(on_arr, win_size):  # pragma: no cover
 @numba.njit
 def _handle_small_data_variable(in_arr, on_arr, win, rank, n_pes, init_data,
                                                 add_obs, remove_obs, calc_out):  # pragma: no cover
+    N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(
-        len(in_arr), np.int32(Reduce_Type.Sum.value))
+        N, np.int32(Reduce_Type.Sum.value))
     all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
     all_on_arr = bodo.libs.distributed_api.gatherv(on_arr)
     if rank == 0:
@@ -1136,15 +1160,19 @@ def _handle_small_data_variable(in_arr, on_arr, win, rank, n_pes, init_data,
     else:
         all_out = np.empty(all_N, np.float64)
     bodo.libs.distributed_api.bcast(all_out)
-    start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
-    end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
+    # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
+    start = bodo.libs.distributed_api.dist_exscan(N)
+    end = start + N
+    # start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
+    # end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
     return all_out[start:end]
 
 @numba.njit
 def _handle_small_data_variable_apply(in_arr, on_arr, win, rank, n_pes,
                                         kernel_func):  # pragma: no cover
+    N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(
-        len(in_arr), np.int32(Reduce_Type.Sum.value))
+        N, np.int32(Reduce_Type.Sum.value))
     all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
     all_on_arr = bodo.libs.distributed_api.gatherv(on_arr)
     if rank == 0:
@@ -1154,8 +1182,11 @@ def _handle_small_data_variable_apply(in_arr, on_arr, win, rank, n_pes,
     else:
         all_out = np.empty(all_N, np.float64)
     bodo.libs.distributed_api.bcast(all_out)
-    start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
-    end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
+    # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
+    start = bodo.libs.distributed_api.dist_exscan(N)
+    end = start + N
+    # start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
+    # end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
     return all_out[start:end]
 
 @numba.njit

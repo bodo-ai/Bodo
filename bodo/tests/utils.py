@@ -120,6 +120,7 @@ def _get_dist_arg(a, copy=False, var_length=False):
             end -= 1
         if bodo.get_rank() == bodo.get_size() - 1:
             start -= 1
+
     if isinstance(a, (pd.Series, pd.DataFrame)):
         return a.iloc[start:end]
     return a[start:end]
