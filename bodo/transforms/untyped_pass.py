@@ -46,7 +46,7 @@ from bodo.utils.transform import update_locs
 
 def remove_hiframes(rhs, lives, call_list):
     # used in stencil generation of rolling
-    if len(call_list) == 1 and call_list[0] in [int, min, max, abs]:
+    if len(call_list) == 1 and call_list[0] in (int, min, max, abs, len):
         return True
     # used in stencil generation of rolling
     if (len(call_list) == 1 and isinstance(call_list[0], CPUDispatcher)
