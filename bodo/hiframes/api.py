@@ -99,7 +99,7 @@ def concat_overload(arr_list):
             num_strs = 0
             num_chars = 0
             for A in in_arrs:
-                arr = dummy_unbox_series(A)
+                arr = A
                 num_strs += len(arr)
                 num_chars += bodo.libs.str_arr_ext.num_total_chars(arr)
             out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(num_strs, num_chars)
@@ -107,7 +107,7 @@ def concat_overload(arr_list):
             curr_str_ind = 0
             curr_chars_ind = 0
             for A in in_arrs:
-                arr = dummy_unbox_series(A)
+                arr = A
                 bodo.libs.str_arr_ext.set_string_array_range(
                     out_arr, arr, curr_str_ind, curr_chars_ind)
                 curr_str_ind += len(arr)
@@ -119,7 +119,7 @@ def concat_overload(arr_list):
         if not isinstance(typ, types.Array):
             raise ValueError("concat supports only numerical and string arrays")
     # numerical input
-    return lambda a: np.concatenate(dummy_unbox_series(a))
+    return lambda a: np.concatenate(a)
 
 
 def nunique(A):  # pragma: no cover
@@ -470,24 +470,6 @@ def to_arr_from_series_dummy_impl(context, builder, sig, args):
     return impl_ret_borrowed(context, builder, sig.return_type, args[0])
 
 
-# dummy func to convert input series to array type
-def dummy_unbox_series(arr):
-    return arr
-
-
-@infer_global(dummy_unbox_series)
-class DummyToSeriesType(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        arr = if_series_to_array_type(args[0])
-        return signature(arr, *args)
-
-@lower_builtin(dummy_unbox_series, types.Any)
-def dummy_unbox_series_impl(context, builder, sig, args):
-    return impl_ret_borrowed(context, builder, sig.return_type, args[0])
-
-
 def get_series_data_tup(series_tup):
     return tuple(get_series_data(s) for s in series_tup)
 
@@ -675,7 +657,6 @@ if hasattr(numba.ir_utils, 'alias_func_extensions'):
     numba.ir_utils.alias_func_extensions[('init_numeric_index', 'bodo.hiframes.pd_index_ext')] = alias_ext_dummy_func
     numba.ir_utils.alias_func_extensions[('init_string_index', 'bodo.hiframes.pd_index_ext')] = alias_ext_dummy_func
     numba.ir_utils.alias_func_extensions[('get_index_data', 'bodo.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('dummy_unbox_series', 'bodo.hiframes.api')] = alias_ext_dummy_func
     numba.ir_utils.alias_func_extensions[('get_dataframe_data', 'bodo.hiframes.pd_dataframe_ext')] = alias_ext_dummy_func
     # TODO: init_dataframe
     numba.ir_utils.alias_func_extensions[('to_arr_from_series', 'bodo.hiframes.api')] = alias_ext_dummy_func
