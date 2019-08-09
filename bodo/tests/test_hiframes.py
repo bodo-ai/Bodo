@@ -351,7 +351,7 @@ class TestHiFrames(unittest.TestCase):
         def test_impl(df):
             return df.A.str.replace('AB', 'EE', regex=False)
 
-        df = pd.DataFrame({'A': ['ABCC', 'CABBD']})
+        df = pd.DataFrame({'A': ['ABCC', 'CABBD', np.nan, 'AA']})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(
             bodo_func(df), test_impl(df), check_names=False)
