@@ -1405,12 +1405,17 @@ def _typeof_ndarray(val, c):
 
 
 def _is_str_ndarray(val):
+    # strings only have object dtype, TODO: support fixed size np strings
+    if not val.dtype == np.dtype('O'):
+        return False
+
     # XXX assuming the whole array is strings if 1st val is string
     i = 0
     while i < len(val) and (val[i] is np.nan or val[i] is None):
         i += 1
     if i == len(val):
-        return False
+        # empty or all NA object arrays are assumed to be strings
+        return True
 
     first_val = val[i]
     if isinstance(first_val, str):

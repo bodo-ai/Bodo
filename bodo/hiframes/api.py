@@ -184,40 +184,16 @@ def unique_parallel(A):  # pragma: no cover
     return np.array([a for a in set(A)]).astype(A.dtype)
 
 
-@infer_global(unique)
-@infer_global(unique_parallel)
-class uniqueType(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        arr = args[0]
-        return signature(arr, arr)
-
-
-@lower_builtin(unique, types.Any)  # TODO: replace Any with types
-def lower_unique(context, builder, sig, args):
-    func = unique_overload(sig.args[0])
-    res = context.compile_internal(builder, func, sig, args)
-    return impl_ret_untracked(context, builder, sig.return_type, res)
-
-
-# @overload(unique)
-def unique_overload(arr_typ):
+@overload(unique)
+def unique_overload(A):
     # TODO: extend to other types like datetime?
     def unique_seq(A):
         return bodo.utils.utils.to_array(build_set(A))
     return unique_seq
 
 
-@lower_builtin(unique_parallel, types.Any)  # TODO: replace Any with types
-def lower_unique_parallel(context, builder, sig, args):
-    func = unique_overload_parallel(sig.args[0])
-    res = context.compile_internal(builder, func, sig, args)
-    return impl_ret_untracked(context, builder, sig.return_type, res)
-
-
-# @overload(unique_parallel)
-def unique_overload_parallel(arr_typ):
+@overload(unique_parallel)
+def unique_overload_parallel(A):
 
     def unique_par(A):
         uniq_A = bodo.utils.utils.to_array(build_set(A))

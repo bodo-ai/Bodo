@@ -89,11 +89,10 @@ def build_set(A):
 
 
 def _build_str_set_impl(A):
-    str_arr = bodo.hiframes.api.dummy_unbox_series(A)
     str_set = init_set_string()
-    n = len(str_arr)
+    n = len(A)
     for i in range(n):
-        _str = str_arr[i]
+        _str = A[i]
         str_set.add(_str)
     return str_set
 
