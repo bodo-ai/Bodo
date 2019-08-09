@@ -342,7 +342,7 @@ class TestHiFrames(unittest.TestCase):
         def test_impl(df):
             return df.A.str.replace('AB*', 'EE', regex=True)
 
-        df = pd.DataFrame({'A': ['ABCC', 'CABBD']})
+        df = pd.DataFrame({'A': ['ABCC', 'CABBD', np.nan, 'CCD']})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(
             bodo_func(df), test_impl(df), check_names=False)
@@ -361,10 +361,10 @@ class TestHiFrames(unittest.TestCase):
             B = df.A.str.replace('AB*', 'EE', regex=True)
             return B
 
-        n = 5
-        A = ['ABCC', 'CABBD', 'CCD', 'CCDAABB', 'ED']
-        start, end = get_start_end(n)
-        df = pd.DataFrame({'A': A[start:end]})
+        A = ['ABCC', 'CABBD', 'CCD', 'CCDAABB', np.nan, 'ED']
+        start, end = get_start_end(len(A))
+        # TODO: support Index
+        df = pd.DataFrame({'A': A}).iloc[start:end].reset_index(drop=True)
         bodo_func = bodo.jit(distributed={'df', 'B'})(test_impl)
         pd.testing.assert_series_equal(
             bodo_func(df), test_impl(df), check_names=False)

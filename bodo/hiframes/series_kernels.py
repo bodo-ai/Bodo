@@ -408,14 +408,20 @@ def _str_replace_regex_impl(str_arr, pat, val, index, name):
     n_total_chars = 0
     str_list = bodo.libs.str_ext.alloc_str_list(n)
     for i in numba.parfor.internal_prange(n):
+        if bodo.hiframes.api.isna(str_arr, i):
+            continue
         out_str = e.sub(val, str_arr[i])
         str_list[i] = out_str
         n_total_chars += get_utf8_size(out_str)
     numba.parfor.init_prange()
     out_arr = pre_alloc_string_array(n, n_total_chars)
-    for i in numba.parfor.internal_prange(n):
-        _str = str_list[i]
-        out_arr[i] = _str
+    for j in numba.parfor.internal_prange(n):
+        if bodo.hiframes.api.isna(str_arr, j):
+            out_arr[j] = ''
+            bodo.ir.join.setitem_arr_nan(out_arr, j)
+            continue
+        _str = str_list[j]
+        out_arr[j] = _str
     return bodo.hiframes.api.init_series(out_arr, index, name)
 
 
