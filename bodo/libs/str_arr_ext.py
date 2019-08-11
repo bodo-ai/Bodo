@@ -6,9 +6,10 @@ from numba import types
 from numba.typing.templates import (infer_global, AbstractTemplate, infer,
     signature, AttributeTemplate, infer_getattr, bound_function)
 import numba.typing.typeof
-from numba.extending import (typeof_impl, type_callable, models, register_model, NativeValue,
-                             make_attribute_wrapper, lower_builtin, box, unbox,
-                             lower_getattr, intrinsic, overload_method, overload, overload_attribute)
+from numba.extending import (typeof_impl, type_callable, models,
+    register_model, NativeValue, make_attribute_wrapper, lower_builtin, box,
+    unbox, lower_getattr, intrinsic, overload_method, overload,
+    overload_attribute)
 from numba import cgutils
 from bodo.libs.str_ext import string_type
 from numba.targets.imputils import (impl_ret_new_ref, impl_ret_borrowed,
@@ -23,6 +24,7 @@ offset_typ = types.uint32
 
 data_ctypes_type = types.ArrayCTypes(types.Array(char_typ, 1, 'C'))
 offset_ctypes_type = types.ArrayCTypes(types.Array(offset_typ, 1, 'C'))
+
 
 class StringArray(object):
     def __init__(self, str_list=None):
@@ -358,6 +360,7 @@ def copy_data(typingctx, str_arr_typ, out_str_arr_typ=None):
         return context.get_dummy_value()
 
     return types.void(string_array_type, string_array_type), codegen
+
 
 @intrinsic
 def copy_non_null_offsets(typingctx, str_arr_typ, out_str_arr_typ=None):
@@ -852,6 +855,7 @@ def impl_string_array_single(context, builder, sig, args):
 #     #context.nrt.decref(builder, ty, ret)
 
 #     return impl_ret_new_ref(context, builder, typ, ret)
+
 
 @intrinsic
 def pre_alloc_string_array(typingctx, num_strs_typ, num_total_chars_typ=None):
