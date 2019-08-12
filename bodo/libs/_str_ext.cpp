@@ -102,6 +102,7 @@ void c_glob(uint32_t **offsets, char **data, uint8_t **null_bitmap, int64_t* num
 npy_intp array_size(PyArrayObject* arr);
 void* array_getptr1(PyArrayObject* arr, npy_intp ind);
 void array_setitem(PyArrayObject* arr, char* p, PyObject *s);
+void mask_arr_to_bitmap(uint8_t *bitmap_arr, uint8_t *mask_arr, int64_t n);
 
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
@@ -217,6 +218,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                             PyLong_FromVoidPtr((void*)(&decode_utf8)));
     PyObject_SetAttrString(m, "get_utf8_size",
                             PyLong_FromVoidPtr((void*)(&get_utf8_size)));
+    PyObject_SetAttrString(m, "mask_arr_to_bitmap",
+                            PyLong_FromVoidPtr((void*)(&mask_arr_to_bitmap)));
     return m;
 }
 
@@ -816,6 +819,13 @@ void array_setitem(PyArrayObject* arr, char* p, PyObject *s)
     return;
 #undef CHECK
 }
+
+void mask_arr_to_bitmap(uint8_t *bitmap_arr, uint8_t *mask_arr, int64_t n)
+{
+    for(int i=0; i<n; i++)
+        bitmap_arr[i / 8] ^= static_cast<uint8_t>(-static_cast<uint8_t>(mask_arr[i]) ^ bitmap_arr[i / 8]) & kBitmask[i % 8];
+}
+
 
 // glob support
 void c_glob(uint32_t **offsets, char **data, uint8_t **null_bitmap, int64_t* num_strings, char* path)

@@ -14,6 +14,9 @@ from numba.extending import (typeof_impl, type_callable, models,
     overload_attribute)
 from bodo.libs.str_arr_ext import kBitmask
 from llvmlite import ir as lir
+import llvmlite.binding as ll
+from bodo.libs import hstr_ext
+ll.add_symbol('mask_arr_to_bitmap', hstr_ext.mask_arr_to_bitmap)
 
 
 class IntegerArrayType(types.ArrayCompatible):
@@ -83,11 +86,29 @@ def unbox_int_array(typ, obj, c):
     mask_arr = c.pyapi.to_native_value(
         types.Array(types.bool_, 1, 'C'), mask_arr_obj).value
 
-    bt_typ = c.context.typing_context.resolve_value_type(mask_arr_to_bitmap)
-    bt_sig = bt_typ.get_call_type(
-        c.context.typing_context, (types.Array(types.bool_, 1, 'C'),), {})
-    bt_impl = c.context.get_function(bt_typ, bt_sig)
-    int_arr.null_bitmap = bt_impl(c.builder, (mask_arr,))
+    # TODO: use this when Numba's #4435 is resolved
+    # bt_typ = c.context.typing_context.resolve_value_type(mask_arr_to_bitmap)
+    # bt_sig = bt_typ.get_call_type(
+    #     c.context.typing_context, (types.Array(types.bool_, 1, 'C'),), {})
+    # bt_impl = c.context.get_function(bt_typ, bt_sig)
+    # int_arr.null_bitmap = bt_impl(c.builder, (mask_arr,))
+
+    n = c.pyapi.long_as_longlong(c.pyapi.call_method(obj, '__len__', ()))
+    n_bytes = c.builder.udiv(c.builder.add(n,
+            lir.Constant(lir.IntType(64), 7)),
+            lir.Constant(lir.IntType(64), 8))
+    mask_arr_struct = c.context.make_array(types.Array(types.bool_, 1, 'C'))(
+        c.context, c.builder, mask_arr)
+    bitmap_arr_struct = numba.targets.arrayobj._empty_nd_impl(
+        c.context, c.builder, types.Array(types.bool_, 1, 'C'), [n_bytes])
+
+    fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer(),
+        lir.IntType(8).as_pointer(), lir.IntType(64)])
+    fn = c.builder.module.get_or_insert_function(
+        fnty, name="mask_arr_to_bitmap")
+    c.builder.call(fn, [bitmap_arr_struct.data, mask_arr_struct.data, n])
+
+    int_arr.null_bitmap = bitmap_arr_struct._getvalue()
 
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(int_arr._getvalue(), is_error=is_error)
