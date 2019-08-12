@@ -191,3 +191,66 @@ def box_int_arr(typ, val, c):
     c.pyapi.decref(mask_arr_data)
     c.pyapi.decref(arr_mod_obj)
     return res
+
+
+@intrinsic
+def init_integer_array(typingctx, data, null_bitmap=None):
+    """Create a IntegerArray with provided data and null bitmap values.
+    """
+    assert isinstance(data, types.Array)
+    assert null_bitmap == types.Array(types.uint8, 1, 'C')
+
+    def codegen(context, builder, signature, args):
+        data_val, bitmap_val = args
+        # create int_arr struct and store values
+        int_arr = cgutils.create_struct_proxy(
+            signature.return_type)(context, builder)
+        int_arr.data = data_val
+        int_arr.null_bitmap = bitmap_val
+
+        # increase refcount of stored values
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[0], data_val)
+            context.nrt.incref(builder, signature.args[1], bitmap_val)
+
+        return int_arr._getvalue()
+
+    ret_typ = IntegerArrayType(data.dtype)
+    sig = ret_typ(data, null_bitmap)
+    return sig, codegen
+
+
+@numba.extending.register_jitable
+def set_bit_to_arr(bits, i, bit_is_set):
+    bits[i // 8] ^= np.uint8(-np.uint8(bit_is_set) ^ bits[i // 8]) & kBitmask[i % 8]
+
+
+@numba.extending.register_jitable
+def get_bit_bitmap_arr(bits, i):
+    return (bits[i >> 3] >> (i & 0x07)) & 1
+
+
+@overload(operator.getitem)
+def int_arr_getitem(A, ind):
+    if not isinstance(A, IntegerArrayType):
+        return
+
+    if isinstance(ind, types.Integer):
+        # XXX: cannot handle NA for scalar getitem since not type stable
+        return lambda A, ind: A._data[ind]
+
+    if ind == types.Array(types.bool_, 1, 'C'):
+        def impl(A, ind):
+            old_mask = A._null_bitmap
+            new_data = A._data[ind]
+            n = len(new_data)
+            n_bytes = (n + 7) >> 3
+            new_mask = np.empty(n_bytes, np.uint8)
+            curr_bit = 0
+            for i in numba.parfor.internal_prange(len(ind)):
+                if ind[i]:
+                    bit = get_bit_bitmap_arr(old_mask, i)
+                    set_bit_to_arr(new_mask, curr_bit, bit)
+                    curr_bit += 1
+            return init_integer_array(new_data, new_mask)
+        return impl

@@ -42,3 +42,28 @@ def test_unbox(int_arr_value):
         return arr_arg
 
     check_func(impl2, (int_arr_value,))
+
+
+def test_getitem_int(int_arr_value):
+
+    def test_impl(A, i):
+        return A[i]
+
+    bodo_func = bodo.jit(test_impl)
+    i = 1
+    # make sure the element is not NA
+    int_arr_value._mask[i] = False
+    assert bodo_func(int_arr_value, i) == test_impl(int_arr_value, i)
+
+
+def test_getitem_bool(int_arr_value):
+
+    def test_impl(A, ind):
+        return A[ind]
+
+    bodo_func = bodo.jit(test_impl)
+    np.random.seed(0)
+    ind = np.random.ranf(len(int_arr_value)) < .2
+    # TODO: parallel test
+    pd.util.testing.assert_extension_array_equal(
+        bodo_func(int_arr_value, ind), test_impl(int_arr_value, ind))
