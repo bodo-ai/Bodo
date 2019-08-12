@@ -67,3 +67,15 @@ def test_getitem_bool(int_arr_value):
     # TODO: parallel test
     pd.util.testing.assert_extension_array_equal(
         bodo_func(int_arr_value, ind), test_impl(int_arr_value, ind))
+
+
+def test_getitem_slice(int_arr_value):
+
+    def test_impl(A, ind):
+        return A[ind]
+
+    bodo_func = bodo.jit(test_impl)
+    ind = slice(1, 4)
+    # TODO: parallel test
+    pd.util.testing.assert_extension_array_equal(
+        bodo_func(int_arr_value, ind), test_impl(int_arr_value, ind))

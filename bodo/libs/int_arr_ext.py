@@ -254,3 +254,20 @@ def int_arr_getitem(A, ind):
                     curr_bit += 1
             return init_integer_array(new_data, new_mask)
         return impl
+
+    if isinstance(ind, types.SliceType):
+        def impl(A, ind):
+            n = len(A._data)
+            old_mask = A._null_bitmap
+            new_data = A._data[ind]
+            slice_idx = numba.unicode._normalize_slice(ind, n)
+            span = numba.unicode._slice_span(slice_idx)
+            n_bytes = (span + 7) >> 3
+            new_mask = np.empty(n_bytes, np.uint8)
+            curr_bit = 0
+            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                bit = get_bit_bitmap_arr(old_mask, i)
+                set_bit_to_arr(new_mask, curr_bit, bit)
+                curr_bit += 1
+            return init_integer_array(new_data, new_mask)
+        return impl
