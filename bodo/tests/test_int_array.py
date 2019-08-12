@@ -79,3 +79,35 @@ def test_getitem_slice(int_arr_value):
     # TODO: parallel test
     pd.util.testing.assert_extension_array_equal(
         bodo_func(int_arr_value, ind), test_impl(int_arr_value, ind))
+
+
+def test_setitem_int(int_arr_value):
+
+    def test_impl(A, val):
+        A[2] = val
+        return A
+
+    # get a non-null value
+    int_arr_value._mask[0] = False
+    val = int_arr_value[0]
+    bodo_func = bodo.jit(test_impl)
+    pd.util.testing.assert_extension_array_equal(
+        bodo_func(int_arr_value, val), test_impl(int_arr_value, val))
+
+
+def test_setitem_arr_int(int_arr_value):
+
+    def test_impl(A, idx, val):
+        A[idx] = val
+        return A
+
+    np.random.seed(0)
+    idx = np.random.randint(0, len(int_arr_value), 11)
+    val = np.random.randint(0, 50, 11, int_arr_value._data.dtype)
+    bodo_func = bodo.jit(test_impl)
+    pd.util.testing.assert_extension_array_equal(
+        bodo_func(int_arr_value, idx, val), test_impl(int_arr_value, idx, val))
+    # IntegerArray as value
+    val = pd.arrays.IntegerArray(val, np.random.ranf(len(val)) < .2)
+    pd.util.testing.assert_extension_array_equal(
+        bodo_func(int_arr_value, idx, val), test_impl(int_arr_value, idx, val))

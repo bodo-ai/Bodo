@@ -271,3 +271,35 @@ def int_arr_getitem(A, ind):
                 curr_bit += 1
             return init_integer_array(new_data, new_mask)
         return impl
+
+
+@overload(operator.setitem)
+def int_arr_setitem(A, idx, val):
+    if not isinstance(A, IntegerArrayType):
+        return
+
+    # scalar case
+    if isinstance(idx, types.Integer):
+        assert isinstance(val, types.Integer)
+        def impl_scalar(A, idx, val):
+            A._data[idx] = val
+            set_bit_to_arr(A._null_bitmap, idx, 1)
+        return impl_scalar
+
+    # array of int indices
+    if isinstance(idx, types.Array) and isinstance(idx.dtype, types.Integer):
+        # value is IntegerArray
+        if isinstance(val, IntegerArrayType):
+            def impl_arr_ind_mask(A, idx, val):
+                n = len(val._data)
+                for i in range(n):
+                    A._data[idx[i]] = val._data[i]
+                    bit = get_bit_bitmap_arr(val._null_bitmap, i)
+                    set_bit_to_arr(A._null_bitmap, idx[i], bit)
+            return impl_arr_ind_mask
+        # value is Array/List
+        def impl_arr_ind(A, idx, val):
+            for i in range(len(val)):
+                A._data[idx[i]] = val[i]
+                set_bit_to_arr(A._null_bitmap, idx[i], 1)
+        return impl_arr_ind
