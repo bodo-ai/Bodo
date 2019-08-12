@@ -303,3 +303,28 @@ def int_arr_setitem(A, idx, val):
                 A._data[idx[i]] = val[i]
                 set_bit_to_arr(A._null_bitmap, idx[i], 1)
         return impl_arr_ind
+
+    # bool array
+    if idx == types.Array(types.bool_, 1, 'C'):
+        # value is IntegerArray
+        if isinstance(val, IntegerArrayType):
+            def impl_bool_ind_mask(A, idx, val):
+                n = len(idx)
+                val_ind = 0
+                for i in range(n):
+                    if idx[i]:
+                        A._data[i] = val[val_ind]
+                        bit = get_bit_bitmap_arr(val._null_bitmap, val_ind)
+                        set_bit_to_arr(A._null_bitmap, i, bit)
+                        val_ind += 1
+            return impl_bool_ind_mask
+        # value is Array/List
+        def impl_bool_ind(A, idx, val):
+            n = len(idx)
+            val_ind = 0
+            for i in range(n):
+                if idx[i]:
+                    A._data[i] = val[val_ind]
+                    set_bit_to_arr(A._null_bitmap, i, 1)
+                    val_ind += 1
+        return impl_bool_ind

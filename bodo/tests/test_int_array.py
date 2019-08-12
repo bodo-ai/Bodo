@@ -95,7 +95,7 @@ def test_setitem_int(int_arr_value):
         bodo_func(int_arr_value, val), test_impl(int_arr_value, val))
 
 
-def test_setitem_arr_int(int_arr_value):
+def test_setitem_arr(int_arr_value):
 
     def test_impl(A, idx, val):
         A[idx] = val
@@ -111,3 +111,14 @@ def test_setitem_arr_int(int_arr_value):
     val = pd.arrays.IntegerArray(val, np.random.ranf(len(val)) < .2)
     pd.util.testing.assert_extension_array_equal(
         bodo_func(int_arr_value, idx, val), test_impl(int_arr_value, idx, val))
+
+    idx_bool = np.random.ranf(len(int_arr_value)) < .2
+    val = np.random.randint(0, 50, idx_bool.sum(), int_arr_value._data.dtype)
+    pd.util.testing.assert_extension_array_equal(
+        bodo_func(int_arr_value, idx_bool, val),
+        test_impl(int_arr_value, idx_bool, val))
+    # IntegerArray as value
+    val = pd.arrays.IntegerArray(val, np.random.ranf(len(val)) < .2)
+    pd.util.testing.assert_extension_array_equal(
+        bodo_func(int_arr_value, idx_bool, val),
+        test_impl(int_arr_value, idx_bool, val))
