@@ -122,3 +122,14 @@ def test_setitem_arr(int_arr_value):
     pd.util.testing.assert_extension_array_equal(
         bodo_func(int_arr_value, idx_bool, val),
         test_impl(int_arr_value, idx_bool, val))
+
+    idx = slice(1, 4)
+    val = np.random.randint(0, 50, 3, int_arr_value._data.dtype)
+    pd.util.testing.assert_extension_array_equal(
+        bodo_func(int_arr_value, idx, val),
+        test_impl(int_arr_value, idx, val))
+    # IntegerArray as value
+    val = pd.arrays.IntegerArray(val, np.random.ranf(len(val)) < .2)
+    pd.util.testing.assert_extension_array_equal(
+        bodo_func(int_arr_value, idx, val),
+        test_impl(int_arr_value, idx, val))

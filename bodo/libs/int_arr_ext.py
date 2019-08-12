@@ -255,8 +255,9 @@ def int_arr_getitem(A, ind):
             return init_integer_array(new_data, new_mask)
         return impl
 
+    # slice case
     if isinstance(ind, types.SliceType):
-        def impl(A, ind):
+        def impl_slice(A, ind):
             n = len(A._data)
             old_mask = A._null_bitmap
             new_data = A._data[ind]
@@ -270,7 +271,7 @@ def int_arr_getitem(A, ind):
                 set_bit_to_arr(new_mask, curr_bit, bit)
                 curr_bit += 1
             return init_integer_array(new_data, new_mask)
-        return impl
+        return impl_slice
 
 
 @overload(operator.setitem)
@@ -328,3 +329,27 @@ def int_arr_setitem(A, idx, val):
                     set_bit_to_arr(A._null_bitmap, i, 1)
                     val_ind += 1
         return impl_bool_ind
+
+    # slice case
+    if isinstance(idx, types.SliceType):
+        # value is IntegerArray
+        if isinstance(val, IntegerArrayType):
+            def impl_slice_mask(A, idx, val):
+                n = len(A._data)
+                slice_idx = numba.unicode._normalize_slice(idx, n)
+                val_ind = 0
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    A._data[i] = val._data[val_ind]
+                    bit = get_bit_bitmap_arr(val._null_bitmap, val_ind)
+                    set_bit_to_arr(A._null_bitmap, i, bit)
+                    val_ind += 1
+            return impl_slice_mask
+        def impl_slice(A, idx, val):
+            n = len(A._data)
+            slice_idx = numba.unicode._normalize_slice(idx, n)
+            val_ind = 0
+            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                A._data[i] = val[val_ind]
+                set_bit_to_arr(A._null_bitmap, i, 1)
+                val_ind += 1
+        return impl_slice
