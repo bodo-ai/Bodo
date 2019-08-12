@@ -76,6 +76,7 @@ def unbox_int_array(typ, obj, c):
     """
     Convert a pd.arrays.IntegerArray object to a native IntegerArray structure.
     """
+    # TODO: handle or disallow reflection
     int_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
 
     data_obj = c.pyapi.object_getattr_string(obj, "_data")
@@ -92,6 +93,26 @@ def unbox_int_array(typ, obj, c):
     #     c.context.typing_context, (types.Array(types.bool_, 1, 'C'),), {})
     # bt_impl = c.context.get_function(bt_typ, bt_sig)
     # int_arr.null_bitmap = bt_impl(c.builder, (mask_arr,))
+
+    # XXX: workaround wrapper can be used
+    # fnty = c.context.call_conv.get_function_type(bt_sig.return_type, bt_sig.args)
+    # mod = c.builder.module
+    # fn = lir.Function(
+    #     mod, fnty, name=mod.get_unique_name('.mask_arr_conv'),
+    # )
+    # fn.linkage = 'internal'
+    # inner_builder = lir.IRBuilder(fn.append_basic_block())
+    # [inner_item] = c.context.call_conv.decode_arguments(
+    #     inner_builder, bt_sig.args, fn,
+    # )
+    # h = bt_impl(inner_builder, (inner_item,))
+    # c.context.call_conv.return_value(inner_builder, h)
+
+    # status, retval = c.context.call_conv.call_function(
+    #     c.builder, fn, bt_sig.return_type, bt_sig.args, [mask_arr],
+    # )
+
+    # int_arr.null_bitmap = retval
 
     n = c.pyapi.long_as_longlong(c.pyapi.call_method(obj, '__len__', ()))
     n_bytes = c.builder.udiv(c.builder.add(n,
@@ -112,3 +133,61 @@ def unbox_int_array(typ, obj, c):
 
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(int_arr._getvalue(), is_error=is_error)
+
+
+@box(IntegerArrayType)
+def box_int_arr(typ, val, c):
+    """Box int array into pandas IntegerArray object. Null bitmap is converted
+    to mask array.
+    """
+    # box integer array's data and bitmap
+    int_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    data =  c.pyapi.from_native_value(
+        types.Array(typ.dtype, 1, 'C'), int_arr.data, c.env_manager)
+    bitmap_arr_data = c.context.make_array(types.Array(types.uint8, 1, 'C'))(
+        c.context, c.builder, int_arr.null_bitmap).data
+
+    # allocate mask array
+    n_obj = c.pyapi.call_method(data, '__len__', ())
+    n = c.pyapi.long_as_longlong(n_obj)
+    mod_name = c.context.insert_const_string(c.builder.module, "numpy")
+    np_class_obj = c.pyapi.import_module_noblock(mod_name)
+    bool_dtype = c.pyapi.object_getattr_string(np_class_obj, 'bool_')
+    mask_arr = c.pyapi.call_method(np_class_obj, 'empty', (n_obj, bool_dtype))
+    mask_arr_ctypes = c.pyapi.object_getattr_string(mask_arr, 'ctypes')
+    mask_arr_data = c.pyapi.object_getattr_string(mask_arr_ctypes, 'data')
+    mask_arr_ptr = c.builder.inttoptr(
+        c.pyapi.long_as_longlong(mask_arr_data), lir.IntType(8).as_pointer())
+
+    # fill mask array
+    with cgutils.for_range(c.builder, n) as loop:
+        # (bits[i >> 3] >> (i & 0x07)) & 1
+        i = loop.index
+        byte_ind = c.builder.lshr(i, lir.Constant(lir.IntType(64), 3))
+        byte = c.builder.load(
+            cgutils.gep(c.builder, bitmap_arr_data, byte_ind))
+        mask = c.builder.trunc(
+            c.builder.and_(i, lir.Constant(lir.IntType(64), 7)),
+            lir.IntType(8))
+        val = c.builder.and_(
+            c.builder.lshr(byte, mask), lir.Constant(lir.IntType(8), 1))
+        # flip value since bitmap uses opposite convention
+        val = c.builder.xor(val, lir.Constant(lir.IntType(8), 1))
+        ptr = cgutils.gep(c.builder, mask_arr_ptr, i)
+        c.builder.store(val, ptr)
+
+    # create IntegerArray
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    arr_mod_obj = c.pyapi.object_getattr_string(pd_class_obj, 'arrays')
+    res = c.pyapi.call_method(arr_mod_obj, 'IntegerArray', (data, mask_arr))
+
+    # clean up references (TODO: check for potential refcount issues)
+    c.pyapi.decref(pd_class_obj)
+    c.pyapi.decref(n_obj)
+    c.pyapi.decref(np_class_obj)
+    c.pyapi.decref(bool_dtype)
+    c.pyapi.decref(mask_arr_ctypes)
+    c.pyapi.decref(mask_arr_data)
+    c.pyapi.decref(arr_mod_obj)
+    return res

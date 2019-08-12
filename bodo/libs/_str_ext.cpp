@@ -823,7 +823,7 @@ void array_setitem(PyArrayObject* arr, char* p, PyObject *s)
 void mask_arr_to_bitmap(uint8_t *bitmap_arr, uint8_t *mask_arr, int64_t n)
 {
     for(int i=0; i<n; i++)
-        bitmap_arr[i / 8] ^= static_cast<uint8_t>(-static_cast<uint8_t>(mask_arr[i]) ^ bitmap_arr[i / 8]) & kBitmask[i % 8];
+        bitmap_arr[i / 8] ^= static_cast<uint8_t>(-static_cast<uint8_t>(mask_arr[i] == 0) ^ bitmap_arr[i / 8]) & kBitmask[i % 8];
 }
 
 

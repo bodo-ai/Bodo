@@ -155,5 +155,7 @@ def _test_equal(bodo_out, py_out, sort_output, check_names=True):
             py_out.sort()
             bodo_out.sort()
         np.testing.assert_array_equal(bodo_out, py_out)
+    elif isinstance(py_out, pd.arrays.IntegerArray):
+        pd.util.testing.assert_extension_array_equal(bodo_out, py_out)
     else:
         assert bodo_out == py_out

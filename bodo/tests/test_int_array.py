@@ -36,3 +36,9 @@ def test_unbox(int_arr_value):
         return True
 
     check_func(impl, (int_arr_value,))
+
+    # unbox and box
+    def impl2(arr_arg):
+        return arr_arg
+
+    check_func(impl2, (int_arr_value,))
