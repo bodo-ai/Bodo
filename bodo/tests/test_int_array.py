@@ -133,3 +133,23 @@ def test_setitem_arr(int_arr_value):
     pd.util.testing.assert_extension_array_equal(
         bodo_func(int_arr_value, idx, val),
         test_impl(int_arr_value, idx, val))
+
+
+def test_len():
+    def test_impl(A):
+        return len(A)
+
+    A = pd.arrays.IntegerArray(np.array([1, -3, 2, 3, 10], np.int8),
+                               np.array([False, True, True, False, False]))
+    bodo_func = bodo.jit(test_impl)
+    assert bodo_func(A) == test_impl(A)
+
+
+def test_shape():
+    def test_impl(A):
+        return A.shape
+
+    A = pd.arrays.IntegerArray(np.array([1, -3, 2, 3, 10], np.int8),
+                                np.array([False, True, True, False, False]))
+    bodo_func = bodo.jit(test_impl)
+    assert bodo_func(A) == test_impl(A)

@@ -353,3 +353,14 @@ def int_arr_setitem(A, idx, val):
                 set_bit_to_arr(A._null_bitmap, i, 1)
                 val_ind += 1
         return impl_slice
+
+
+@overload(len)
+def overload_int_arr_len(A):
+    if isinstance(A, IntegerArrayType):
+        return lambda A: len(A._data)
+
+
+@overload_attribute(IntegerArrayType, 'shape')
+def overload_int_arr_shape(A):
+    return lambda A: (len(A._data),)
