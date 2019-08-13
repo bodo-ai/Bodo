@@ -495,6 +495,25 @@ class SeriesPass(object):
                 for a in rhs.args)):
             return self._handle_ufuncs_int_arr(func_name, rhs.args)
 
+        if fdef == ('apply_null_mask', 'bodo.libs.int_arr_ext'):
+            in_typs = tuple(self.typemap[a.name] for a in rhs.args)
+            impl = bodo.libs.int_arr_ext.apply_null_mask.py_func(*in_typs)
+            return self._replace_func(impl, rhs.args)
+
+        if fdef == ('get_int_arr_data', 'bodo.libs.int_arr_ext'):
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def)
+            if call_def == ('init_integer_array', 'bodo.libs.int_arr_ext'):
+                assign.value = var_def.args[0]
+                return [assign]
+
+        if fdef == ('get_int_arr_bitmap', 'bodo.libs.int_arr_ext'):
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def)
+            if call_def == ('init_integer_array', 'bodo.libs.int_arr_ext'):
+                assign.value = var_def.args[1]
+                return [assign]
+
         if (isinstance(func_mod, ir.Var)
                 and self.typemap[func_mod.name]
                 == series_str_methods_type):

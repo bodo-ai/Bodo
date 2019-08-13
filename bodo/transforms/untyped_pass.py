@@ -69,6 +69,10 @@ def remove_hiframes(rhs, lives, call_list):
             call_list[0] in ('init_string_index',
             'init_numeric_index', '_dti_val_finalize')):
         return True
+    if (len(call_list) == 4 and call_list[1:] == ['int_arr_ext', 'libs', bodo] and
+            call_list[0] in ['get_int_arr_data',
+            'get_int_arr_bitmap', 'init_integer_array']):
+        return True
     if len(call_list) == 4 and call_list[1:] == ['conversion', 'utils', bodo]:
         # all conversion functions are side effect-free
         return True
@@ -100,6 +104,9 @@ def remove_hiframes(rhs, lives, call_list):
     if call_list == ['empty_inferred', 'ndarray', 'unsafe', numba]:
         return True
     if call_list == ['chain', itertools]:
+        return True
+    # TODO: handle copy properly, copy of some types can have side effects?
+    if call_list == ['copy']:
         return True
     return False
 

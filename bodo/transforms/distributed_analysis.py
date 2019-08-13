@@ -552,6 +552,11 @@ class DistributedAnalysis(object):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if func_mod == 'bodo.hiframes.api' and func_name in (
+                'get_int_arr_data', 'get_int_arr_bitmap'):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         # from flat map pattern: pd.Series(list(itertools.chain(*A)))
         # TODO: associate input/output distributions
         if fdef == ('parallel_fix_df_array', 'bodo.hiframes.api'):
@@ -595,6 +600,13 @@ class DistributedAnalysis(object):
                     lhs, rhs.args[1].name, array_dists, new_dist)
             for arr in seq_info[0]:
                 array_dists[arr.name] = new_dist
+            return
+
+        if fdef == ('init_integer_array', 'bodo.libs.int_arr_ext'):
+            # lhs, data, and bitmap should have the same distribution
+            new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            new_dist = self._meet_array_dists(lhs, rhs.args[1].name, array_dists, new_dist)
+            array_dists[rhs.args[0].name] = new_dist
             return
 
         if fdef == ('get_dataframe_data', 'bodo.hiframes.pd_dataframe_ext'):
