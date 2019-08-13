@@ -416,8 +416,64 @@ def apply_null_mask(arr, bitmap):
     return lambda arr, bitmap: arr
 
 
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def merge_bitmaps(B1, B2, n):
+    assert B1 == types.Array(types.uint8, 1, 'C')
+    assert B2 == types.Array(types.uint8, 1, 'C')
+
+    def impl(B1, B2, n):
+        B = B1.copy()
+        # looping over bits individually to hopefully enable more fusion
+        # TODO: evaluate and improve
+        for i in numba.parfor.internal_prange(n):
+            bit1 = get_bit_bitmap_arr(B, i)
+            bit2 = get_bit_bitmap_arr(B2, i)
+            bit = bit1 & bit2
+            set_bit_to_arr(B, i, bit)
+        return B
+    return impl
+
+
+# ufunc_special = {
+#     "add",
+#     "sub",
+#     "mul",
+#     "pow",
+#     "mod",
+#     "floordiv",
+#     "truediv",
+#     "divmod",
+#     "eq",
+#     "ne",
+#     "lt",
+#     "gt",
+#     "le",
+#     "ge",
+#     "remainder",
+#     "matmul",
+# }
+# ufunc_aliases = {
+#     "subtract": "sub",
+#     "multiply": "mul",
+#     "floor_divide": "floordiv",
+#     "true_divide": "truediv",
+#     "power": "pow",
+#     "remainder": "mod",
+#     "divide": "div",
+#     "equal": "eq",
+#     "not_equal": "ne",
+#     "less": "lt",
+#     "less_equal": "le",
+#     "greater": "gt",
+#     "greater_equal": "ge",
+# }
+
+
 def create_ufunc_overload(ufunc):
     # see __array_ufunc__() of pd.arrays.IntegerArray
+    # op_name = ufunc.__name__
+    # op_name = ufunc_aliases.get(op_name, op_name)
+    # TODO: handle special ufuncs properly
     if ufunc.nin == 1:
         def overload_int_arr_ufunc_nin_1(A):
             if isinstance(A, IntegerArrayType):
@@ -430,7 +486,40 @@ def create_ufunc_overload(ufunc):
                 return impl
         return overload_int_arr_ufunc_nin_1
     elif ufunc.nin == 2:
-        pass  # TODO
+        def overload_series_ufunc_nin_2(A1, A2):
+            # both are IntegerArray
+            if isinstance(A1, IntegerArrayType) and isinstance(
+                                                         A2, IntegerArrayType):
+                def impl_both(A1, A2):
+                    arr1 = bodo.libs.int_arr_ext.get_int_arr_data(A1)
+                    bitmap1 = bodo.libs.int_arr_ext.get_int_arr_bitmap(A1)
+                    arr2 = bodo.libs.int_arr_ext.get_int_arr_data(A2)
+                    bitmap2 = bodo.libs.int_arr_ext.get_int_arr_bitmap(A2)
+                    out_arr = ufunc(arr1, arr2)
+                    bitmap = bodo.libs.int_arr_ext.merge_bitmaps(
+                                                   bitmap1, bitmap2, len(arr1))
+                    return bodo.libs.int_arr_ext.apply_null_mask(
+                                                               out_arr, bitmap)
+                return impl_both
+            # left arg is IntegerArray
+            if isinstance(A1, IntegerArrayType):
+                def impl_left(A1, A2):
+                    arr1 = bodo.libs.int_arr_ext.get_int_arr_data(A1)
+                    bitmap = bodo.libs.int_arr_ext.get_int_arr_bitmap(A1)
+                    out_arr = ufunc(arr1, A2)
+                    return bodo.libs.int_arr_ext.apply_null_mask(
+                                        out_arr, bitmap)
+                return impl_left
+            # right arg is IntegerArray
+            if isinstance(A2, IntegerArrayType):
+                def impl_right(A1, A2):
+                    arr2 = bodo.libs.int_arr_ext.get_int_arr_data(A2)
+                    bitmap = bodo.libs.int_arr_ext.get_int_arr_bitmap(A2)
+                    out_arr = ufunc(A1, arr2)
+                    return bodo.libs.int_arr_ext.apply_null_mask(
+                                        out_arr, bitmap)
+                return impl_right
+        return overload_series_ufunc_nin_2
     else:
         raise RuntimeError(
             "Don't know how to register ufuncs from ufunc_db with arity > 2")

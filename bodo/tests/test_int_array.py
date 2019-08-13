@@ -171,3 +171,23 @@ def test_unary_ufunc_explicit_np():
     A = pd.arrays.IntegerArray(np.array([1, 1, 1, -3, 10], np.int32),
                                 np.array([False, True, True, False, False]))
     check_func(test_impl, (A,), is_out_distributed=False)
+
+
+@pytest.mark.parametrize('ufunc',
+[f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 2])
+def test_binary_ufunc(ufunc):
+    # TODO: support comparison operators properly
+    if ufunc.__name__ in ('greater', 'greater_equal', 'less', 'less_equal',
+            'not_equal', 'equal'):
+        return
+    def test_impl(A1, A2):
+        return ufunc(A1, A2)
+
+    A1 = pd.arrays.IntegerArray(np.array([1, 1, 1, 2, 10], np.int32),
+        np.array([False, True, True, False, False]))
+    A2 = pd.arrays.IntegerArray(np.array([4, 2, 1, 1, 12], np.int32),
+        np.array([False, False, True, True, False]))
+    arr = np.array([1, 3, 7, 11, 2])
+    check_func(test_impl, (A1, A2), is_out_distributed=False)
+    check_func(test_impl, (A1, arr), is_out_distributed=False)
+    check_func(test_impl, (arr, A2), is_out_distributed=False)
