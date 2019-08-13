@@ -141,8 +141,7 @@ def test_len():
 
     A = pd.arrays.IntegerArray(np.array([1, -3, 2, 3, 10], np.int8),
                                np.array([False, True, True, False, False]))
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(A) == test_impl(A)
+    check_func(test_impl, (A,))
 
 
 def test_shape():
@@ -151,5 +150,24 @@ def test_shape():
 
     A = pd.arrays.IntegerArray(np.array([1, -3, 2, 3, 10], np.int8),
                                 np.array([False, True, True, False, False]))
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(A) == test_impl(A)
+    check_func(test_impl, (A,))
+
+
+@pytest.mark.parametrize('ufunc',
+[f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 1])
+def test_unary_ufunc(ufunc):
+    def test_impl(A):
+        return ufunc(A)
+
+    A = pd.arrays.IntegerArray(np.array([1, 1, 1, -3, 10], np.int32),
+                                np.array([False, True, True, False, False]))
+    check_func(test_impl, (A,), is_out_distributed=False)
+
+
+def test_unary_ufunc_explicit_np():
+    def test_impl(A):
+        return np.negative(A)
+
+    A = pd.arrays.IntegerArray(np.array([1, 1, 1, -3, 10], np.int32),
+                                np.array([False, True, True, False, False]))
+    check_func(test_impl, (A,), is_out_distributed=False)

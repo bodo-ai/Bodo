@@ -27,7 +27,8 @@ class IntegerArrayType(types.ArrayCompatible):
 
     @property
     def as_array(self):
-        return types.Array(self.dtype, 1, 'C')
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, 'C')
 
     def copy(self):
         return IntegerArrayType(self.dtype)
@@ -220,6 +221,17 @@ def init_integer_array(typingctx, data, null_bitmap=None):
     return sig, codegen
 
 
+# using a function for getting data to enable extending various analysis
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_int_arr_data(A):
+    return lambda A: A._data
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_int_arr_bitmap(A):
+    return lambda A: A._null_bitmap
+
+
 @numba.extending.register_jitable
 def set_bit_to_arr(bits, i, bit_is_set):
     bits[i // 8] ^= np.uint8(-np.uint8(bit_is_set) ^ bits[i // 8]) & kBitmask[i % 8]
@@ -364,3 +376,71 @@ def overload_int_arr_len(A):
 @overload_attribute(IntegerArrayType, 'shape')
 def overload_int_arr_shape(A):
     return lambda A: (len(A._data),)
+
+
+############################### numpy ufuncs #################################
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def apply_null_mask(arr, bitmap):
+    assert isinstance(arr, types.Array)
+
+    # Integer output becomes IntegerArray
+    if isinstance(arr.dtype, types.Integer):
+        return lambda arr, bitmap: bodo.libs.int_arr_ext.init_integer_array(
+                                                            arr, bitmap.copy())
+
+    # NAs are applied to Float output
+    if isinstance(arr.dtype, types.Float):
+        def impl(arr, bitmap):
+            n = len(arr)
+            for i in numba.parfor.internal_prange(n):
+                if not get_bit_bitmap_arr(bitmap, i):
+                    arr[i] = np.nan
+            return arr
+        return impl
+
+    # XXX: pandas assigns np.nan to NA positions which translates to True
+    # for bool output
+    # TODO: use nullable Bool type
+    # https://github.com/pandas-dev/pandas/blob/5de4e55d60bf8487a2ce64a440b6d5d92345a4bc/pandas/core/arrays/integer.py#L408
+    if arr.dtype == types.bool_:
+        def impl_bool(arr, bitmap):
+            n = len(arr)
+            for i in numba.parfor.internal_prange(n):
+                if not get_bit_bitmap_arr(bitmap, i):
+                    arr[i] = True
+            return arr
+        return impl_bool
+    # TODO: handle other possible types
+    return lambda arr, bitmap: arr
+
+
+def create_ufunc_overload(ufunc):
+    # see __array_ufunc__() of pd.arrays.IntegerArray
+    if ufunc.nin == 1:
+        def overload_int_arr_ufunc_nin_1(A):
+            if isinstance(A, IntegerArrayType):
+                def impl(A):
+                    arr = bodo.libs.int_arr_ext.get_int_arr_data(A)
+                    bitmap = bodo.libs.int_arr_ext.get_int_arr_bitmap(A)
+                    out_arr = ufunc(arr)
+                    return bodo.libs.int_arr_ext.apply_null_mask(
+                                                               out_arr, bitmap)
+                return impl
+        return overload_int_arr_ufunc_nin_1
+    elif ufunc.nin == 2:
+        pass  # TODO
+    else:
+        raise RuntimeError(
+            "Don't know how to register ufuncs from ufunc_db with arity > 2")
+
+
+def _install_np_ufuncs():
+    import numba.targets.ufunc_db
+    for ufunc in numba.targets.ufunc_db.get_ufuncs():
+        overload_impl = create_ufunc_overload(ufunc)
+        overload(ufunc)(overload_impl)
+
+
+_install_np_ufuncs()

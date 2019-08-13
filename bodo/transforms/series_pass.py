@@ -30,6 +30,7 @@ from bodo.libs.str_ext import (string_type, unicode_to_std_str, std_str_to_unico
     list_string_array_type)
 from bodo.libs.str_arr_ext import (string_array_type, StringArrayType,
     is_str_arr_typ, pre_alloc_string_array, get_utf8_size)
+from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.hiframes.pd_series_ext import (SeriesType, is_str_series_typ,
     series_to_array_type, is_dt64_series_typ, is_bool_series_typ,
     if_series_to_array_type, is_series_type,
@@ -482,12 +483,17 @@ class SeriesPass(object):
         else:
             func_name, func_mod = fdef
 
-
         # support call ufuncs on Series
-        if (func_mod == 'ufunc' and func_name in ufunc_names
+        if (func_mod in ('numpy', 'ufunc') and func_name in ufunc_names
                 and any(isinstance(self.typemap[a.name], SeriesType)
                 for a in rhs.args)):
             return self._handle_ufuncs(func_name, rhs.args)
+
+        # inline ufuncs on IntegerArray
+        if (func_mod in ('numpy', 'ufunc') and func_name in ufunc_names
+                and any(isinstance(self.typemap[a.name], IntegerArrayType)
+                for a in rhs.args)):
+            return self._handle_ufuncs_int_arr(func_name, rhs.args)
 
         if (isinstance(func_mod, ir.Var)
                 and self.typemap[func_mod.name]
@@ -834,6 +840,13 @@ class SeriesPass(object):
         else:
             raise ValueError("Unsupported numpy ufunc {}".format(ufunc_name))
 
+    def _handle_ufuncs_int_arr(self, ufunc_name, args):
+        np_ufunc = getattr(np, ufunc_name)
+        overload_func = \
+            bodo.libs.int_arr_ext.create_ufunc_overload(np_ufunc)
+        in_typs = tuple(self.typemap[a.name] for a in args)
+        impl = overload_func(*in_typs)
+        return self._replace_func(impl, args)
 
     def _run_call_hiframes(self, assign, lhs, rhs, func_name):
         if func_name in ('to_arr_from_series',):

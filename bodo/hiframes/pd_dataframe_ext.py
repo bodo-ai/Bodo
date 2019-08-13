@@ -80,7 +80,6 @@ class DataFrameType(types.Type):  # TODO: IterableType over column names
         # if (isinstance(other, DataFrameType)
         #         and len(other.data) == len(self.data)
         #         and other.columns == self.columns):
-        #     import pdb; pdb.set_trace()
         #     data_convert = max(a.can_convert_to(typingctx, b)
         #                         for a,b in zip(self.data, other.data))
         #     if self.index == types.none and other.index == types.none:

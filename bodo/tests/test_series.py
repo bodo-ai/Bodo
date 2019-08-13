@@ -619,6 +619,16 @@ def test_series_unary_ufunc(ufunc):
     check_func(test_impl, (S,))
 
 
+def test_series_unary_ufunc_np_call():
+    # a ufunc called explicitly, since the above test sets module name as
+    # 'ufunc' instead of 'numpy'
+    def test_impl(S):
+        return np.negative(S)
+
+    S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name='ABC')
+    check_func(test_impl, (S,))
+
+
 @pytest.mark.parametrize('ufunc',
     [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 2])
 def test_series_binary_ufunc(ufunc):

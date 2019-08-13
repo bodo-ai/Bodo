@@ -13,8 +13,7 @@ from numba.typing.templates import (infer_global, AbstractTemplate, signature,
 from numba.typing.arraydecl import (get_array_index_type, _expand_integer,
     ArrayAttribute, SetItemBuffer)
 from numba.typing.npydecl import (Numpy_rules_ufunc, NumpyRulesArrayOperator,
-    NumpyRulesInplaceArrayOperator, NumpyRulesUnaryArrayOperator,
-    NdConstructorLike)
+    NumpyRulesInplaceArrayOperator)
 import bodo
 from bodo.libs.str_ext import string_type, list_string_array_type
 from bodo.libs.str_arr_ext import (string_array_type, offset_typ, char_typ,

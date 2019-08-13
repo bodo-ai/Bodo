@@ -129,7 +129,6 @@ class StringArrayModel(models.StructModel):
 # TODO: fix overload for things like 'getitem'
 # @overload(operator.getitem)
 # def str_arr_getitem_bool_overload(str_arr_tp, bool_arr_tp):
-#     import pdb; pdb.set_trace()
 #     if str_arr_tp == string_array_type and bool_arr_tp == types.Array(types.bool_, 1, 'C'):
 #         def str_arr_bool_impl(str_arr, bool_arr):
 #             n = len(str_arr)
