@@ -261,8 +261,9 @@ def int_arr_getitem(A, ind):
             curr_bit = 0
             for i in numba.parfor.internal_prange(len(ind)):
                 if ind[i]:
-                    bit = get_bit_bitmap_arr(old_mask, i)
-                    set_bit_to_arr(new_mask, curr_bit, bit)
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        new_mask, curr_bit, bit)
                     curr_bit += 1
             return init_integer_array(new_data, new_mask)
         return impl
@@ -279,8 +280,8 @@ def int_arr_getitem(A, ind):
             new_mask = np.empty(n_bytes, np.uint8)
             curr_bit = 0
             for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                bit = get_bit_bitmap_arr(old_mask, i)
-                set_bit_to_arr(new_mask, curr_bit, bit)
+                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
+                bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
                 curr_bit += 1
             return init_integer_array(new_data, new_mask)
         return impl_slice
@@ -296,7 +297,7 @@ def int_arr_setitem(A, idx, val):
         assert isinstance(val, types.Integer)
         def impl_scalar(A, idx, val):
             A._data[idx] = val
-            set_bit_to_arr(A._null_bitmap, idx, 1)
+            bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
         return impl_scalar
 
     # array of int indices
@@ -307,14 +308,16 @@ def int_arr_setitem(A, idx, val):
                 n = len(val._data)
                 for i in range(n):
                     A._data[idx[i]] = val._data[i]
-                    bit = get_bit_bitmap_arr(val._null_bitmap, i)
-                    set_bit_to_arr(A._null_bitmap, idx[i], bit)
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                        val._null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        A._null_bitmap, idx[i], bit)
             return impl_arr_ind_mask
         # value is Array/List
         def impl_arr_ind(A, idx, val):
             for i in range(len(val)):
                 A._data[idx[i]] = val[i]
-                set_bit_to_arr(A._null_bitmap, idx[i], 1)
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], 1)
         return impl_arr_ind
 
     # bool array
@@ -327,8 +330,10 @@ def int_arr_setitem(A, idx, val):
                 for i in range(n):
                     if idx[i]:
                         A._data[i] = val[val_ind]
-                        bit = get_bit_bitmap_arr(val._null_bitmap, val_ind)
-                        set_bit_to_arr(A._null_bitmap, i, bit)
+                        bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                            val._null_bitmap, val_ind)
+                        bodo.libs.int_arr_ext.set_bit_to_arr(
+                            A._null_bitmap, i, bit)
                         val_ind += 1
             return impl_bool_ind_mask
         # value is Array/List
@@ -338,7 +343,7 @@ def int_arr_setitem(A, idx, val):
             for i in range(n):
                 if idx[i]:
                     A._data[i] = val[val_ind]
-                    set_bit_to_arr(A._null_bitmap, i, 1)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
                     val_ind += 1
         return impl_bool_ind
 
@@ -352,8 +357,10 @@ def int_arr_setitem(A, idx, val):
                 val_ind = 0
                 for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
                     A._data[i] = val._data[val_ind]
-                    bit = get_bit_bitmap_arr(val._null_bitmap, val_ind)
-                    set_bit_to_arr(A._null_bitmap, i, bit)
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                        val._null_bitmap, val_ind)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        A._null_bitmap, i, bit)
                     val_ind += 1
             return impl_slice_mask
         def impl_slice(A, idx, val):
@@ -362,7 +369,7 @@ def int_arr_setitem(A, idx, val):
             val_ind = 0
             for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
                 A._data[i] = val[val_ind]
-                set_bit_to_arr(A._null_bitmap, i, 1)
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
                 val_ind += 1
         return impl_slice
 
@@ -395,7 +402,7 @@ def apply_null_mask(arr, bitmap):
         def impl(arr, bitmap):
             n = len(arr)
             for i in numba.parfor.internal_prange(n):
-                if not get_bit_bitmap_arr(bitmap, i):
+                if not bodo.libs.int_arr_ext.get_bit_bitmap_arr(bitmap, i):
                     arr[i] = np.nan
             return arr
         return impl
@@ -408,7 +415,7 @@ def apply_null_mask(arr, bitmap):
         def impl_bool(arr, bitmap):
             n = len(arr)
             for i in numba.parfor.internal_prange(n):
-                if not get_bit_bitmap_arr(bitmap, i):
+                if not bodo.libs.int_arr_ext.get_bit_bitmap_arr(bitmap, i):
                     arr[i] = True
             return arr
         return impl_bool
@@ -426,10 +433,10 @@ def merge_bitmaps(B1, B2, n):
         # looping over bits individually to hopefully enable more fusion
         # TODO: evaluate and improve
         for i in numba.parfor.internal_prange(n):
-            bit1 = get_bit_bitmap_arr(B, i)
-            bit2 = get_bit_bitmap_arr(B2, i)
+            bit1 = bodo.libs.int_arr_ext.get_bit_bitmap_arr(B, i)
+            bit2 = bodo.libs.int_arr_ext.get_bit_bitmap_arr(B2, i)
             bit = bit1 & bit2
-            set_bit_to_arr(B, i, bit)
+            bodo.libs.int_arr_ext.set_bit_to_arr(B, i, bit)
         return B
     return impl
 
