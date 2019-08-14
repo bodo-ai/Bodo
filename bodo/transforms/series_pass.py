@@ -414,6 +414,13 @@ class SeriesPass(object):
             impl = overload_func(typ1, typ2)
             return self._replace_func(impl, [arg1, arg2])
 
+        if rhs.fn in numba.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys() and any(
+                isinstance(t, IntegerArrayType) for t in (typ1, typ2)):
+            overload_func = \
+                bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 2)
+            impl = overload_func(typ1, typ2)
+            return self._replace_func(impl, [arg1, arg2])
+
         if not (isinstance(typ1, SeriesType) or isinstance(typ2, SeriesType)):
             return [assign]
 

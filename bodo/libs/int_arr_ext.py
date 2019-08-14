@@ -18,6 +18,7 @@ from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import hstr_ext
 ll.add_symbol('mask_arr_to_bitmap', hstr_ext.mask_arr_to_bitmap)
+from bodo.utils.typing import is_overload_none
 
 
 class IntegerArrayType(types.ArrayCompatible):
@@ -415,17 +416,21 @@ def overload_int_arr_shape(A):
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def apply_null_mask(arr, bitmap, mask_fill):
+def apply_null_mask(arr, bitmap, mask_fill, inplace):
     assert isinstance(arr, types.Array)
 
     # Integer output becomes IntegerArray
     if isinstance(arr.dtype, types.Integer):
-        return lambda arr, bitmap, mask_fill: \
-            bodo.libs.int_arr_ext.init_integer_array(arr, bitmap.copy())
+        if is_overload_none(inplace):
+            return lambda arr, bitmap, mask_fill, inplace: \
+                bodo.libs.int_arr_ext.init_integer_array(arr, bitmap.copy())
+        else:
+            return lambda arr, bitmap, mask_fill, inplace: \
+                bodo.libs.int_arr_ext.init_integer_array(arr, bitmap)
 
     # NAs are applied to Float output
     if isinstance(arr.dtype, types.Float):
-        def impl(arr, bitmap, mask_fill):
+        def impl(arr, bitmap, mask_fill, inplace):
             n = len(arr)
             for i in numba.parfor.internal_prange(n):
                 if not bodo.libs.int_arr_ext.get_bit_bitmap_arr(bitmap, i):
@@ -434,7 +439,7 @@ def apply_null_mask(arr, bitmap, mask_fill):
         return impl
 
     if arr.dtype == types.bool_:
-        def impl_bool(arr, bitmap, mask_fill):
+        def impl_bool(arr, bitmap, mask_fill, inplace):
             n = len(arr)
             for i in numba.parfor.internal_prange(n):
                 if not bodo.libs.int_arr_ext.get_bit_bitmap_arr(bitmap, i):
@@ -442,15 +447,27 @@ def apply_null_mask(arr, bitmap, mask_fill):
             return arr
         return impl_bool
     # TODO: handle other possible types
-    return lambda arr, bitmap, mask_fill: arr
+    return lambda arr, bitmap, mask_fill, inplace: arr
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def merge_bitmaps(B1, B2, n):
+def merge_bitmaps(B1, B2, n, inplace):
     assert B1 == types.Array(types.uint8, 1, 'C')
     assert B2 == types.Array(types.uint8, 1, 'C')
 
-    def impl(B1, B2, n):
+    if not is_overload_none(inplace):
+        def impl_inplace(B1, B2, n, inplace):
+            # looping over bits individually to hopefully enable more fusion
+            # TODO: evaluate and improve
+            for i in numba.parfor.internal_prange(n):
+                bit1 = bodo.libs.int_arr_ext.get_bit_bitmap_arr(B1, i)
+                bit2 = bodo.libs.int_arr_ext.get_bit_bitmap_arr(B2, i)
+                bit = bit1 & bit2
+                bodo.libs.int_arr_ext.set_bit_to_arr(B1, i, bit)
+            return B1
+        return impl_inplace
+
+    def impl(B1, B2, n, inplace):
         numba.parfor.init_prange()
         n_bytes = (n + 7) >> 3
         B = np.empty(n_bytes, np.uint8)
@@ -494,6 +511,10 @@ def create_op_overload(op, n_inputs):
     # comparison operators assign False except 'ne'
     # https://github.com/pandas-dev/pandas/blob/5de4e55d60bf8487a2ce64a440b6d5d92345a4bc/pandas/core/arrays/integer.py#L631
     mask_fill = op_name not in ("eq", "lt", "gt", "le", "ge")
+    # TODO: 1 ** np.nan is 1. So we have to unmask those.
+    inplace = None
+    if op in numba.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys():
+        inplace = True
 
     if n_inputs == 1:
         def overload_int_arr_op_nin_1(A):
@@ -503,7 +524,7 @@ def create_op_overload(op, n_inputs):
                     bitmap = bodo.libs.int_arr_ext.get_int_arr_bitmap(A)
                     out_arr = op(arr)
                     return bodo.libs.int_arr_ext.apply_null_mask(
-                                                    out_arr, bitmap, mask_fill)
+                                           out_arr, bitmap, mask_fill, inplace)
                 return impl
         return overload_int_arr_op_nin_1
     elif n_inputs == 2:
@@ -518,9 +539,9 @@ def create_op_overload(op, n_inputs):
                     bitmap2 = bodo.libs.int_arr_ext.get_int_arr_bitmap(A2)
                     out_arr = op(arr1, arr2)
                     bitmap = bodo.libs.int_arr_ext.merge_bitmaps(
-                                                   bitmap1, bitmap2, len(arr1))
+                                          bitmap1, bitmap2, len(arr1), inplace)
                     return bodo.libs.int_arr_ext.apply_null_mask(
-                                                    out_arr, bitmap, mask_fill)
+                                           out_arr, bitmap, mask_fill, inplace)
                 return impl_both
             # left arg is IntegerArray
             if isinstance(A1, IntegerArrayType):
@@ -529,7 +550,7 @@ def create_op_overload(op, n_inputs):
                     bitmap = bodo.libs.int_arr_ext.get_int_arr_bitmap(A1)
                     out_arr = op(arr1, A2)
                     return bodo.libs.int_arr_ext.apply_null_mask(
-                                        out_arr, bitmap, mask_fill)
+                                        out_arr, bitmap, mask_fill, inplace)
                 return impl_left
             # right arg is IntegerArray
             if isinstance(A2, IntegerArrayType):
@@ -538,7 +559,7 @@ def create_op_overload(op, n_inputs):
                     bitmap = bodo.libs.int_arr_ext.get_int_arr_bitmap(A2)
                     out_arr = op(A1, arr2)
                     return bodo.libs.int_arr_ext.apply_null_mask(
-                                        out_arr, bitmap, mask_fill)
+                                        out_arr, bitmap, mask_fill, inplace)
                 return impl_right
         return overload_series_op_nin_2
     else:
@@ -567,3 +588,16 @@ def _install_binary_ops():
 
 
 _install_binary_ops()
+
+
+####################### binary inplace operators #############################
+
+
+def _install_inplace_binary_ops():
+    # install inplace binary ops such as iadd, isub, ...
+    for op in numba.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys():
+        overload_impl = create_op_overload(op, 2)
+        overload(op)(overload_impl)
+
+
+_install_inplace_binary_ops()
