@@ -1,3 +1,4 @@
+import operator
 import pandas as pd
 import numpy as np
 import pytest
@@ -177,10 +178,6 @@ def test_unary_ufunc_explicit_np():
 @pytest.mark.parametrize('ufunc',
 [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 2])
 def test_binary_ufunc(ufunc):
-    # TODO: support comparison operators properly
-    if ufunc.__name__ in ('greater', 'greater_equal', 'less', 'less_equal',
-            'not_equal', 'equal'):
-        return
     def test_impl(A1, A2):
         return ufunc(A1, A2)
 
@@ -192,3 +189,28 @@ def test_binary_ufunc(ufunc):
     check_func(test_impl, (A1, A2))
     check_func(test_impl, (A1, arr))
     check_func(test_impl, (arr, A2))
+
+
+@pytest.mark.parametrize('op',
+    numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys())
+def test_binary_op(op):
+    # Pandas doesn't support these operators yet, but Bodo does to be able to
+    # replace all numpy arrays
+    if op in (operator.lshift, operator.rshift, operator.and_, operator.or_,
+              operator.xor):
+        return
+    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = "def test_impl(A, other):\n"
+    func_text += "  return A {} other\n".format(op_str)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    test_impl = loc_vars['test_impl']
+
+    # TODO: use int32 when Numba #4449 is resolved
+    A1 = pd.arrays.IntegerArray(np.array([1, 1, 1, 2, 10], np.int64),
+        np.array([False, True, True, False, False]))
+    A2 = pd.arrays.IntegerArray(np.array([4, 2, 1, 1, 12], np.int64),
+        np.array([False, False, True, True, False]))
+    check_func(test_impl, (A1, A2))
+    check_func(test_impl, (A1, 2))
+    check_func(test_impl, (2, A2))

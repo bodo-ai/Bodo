@@ -407,6 +407,13 @@ class SeriesPass(object):
         if self._is_dt_index_binop(rhs):
             return self._handle_dt_index_binop(assign, rhs)
 
+        if rhs.fn in numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys() and any(
+                isinstance(t, IntegerArrayType) for t in (typ1, typ2)):
+            overload_func = \
+                bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 2)
+            impl = overload_func(typ1, typ2)
+            return self._replace_func(impl, [arg1, arg2])
+
         if not (isinstance(typ1, SeriesType) or isinstance(typ2, SeriesType)):
             return [assign]
 
@@ -867,7 +874,7 @@ class SeriesPass(object):
     def _handle_ufuncs_int_arr(self, ufunc_name, args):
         np_ufunc = getattr(np, ufunc_name)
         overload_func = \
-            bodo.libs.int_arr_ext.create_ufunc_overload(np_ufunc)
+            bodo.libs.int_arr_ext.create_op_overload(np_ufunc, np_ufunc.nin)
         in_typs = tuple(self.typemap[a.name] for a in args)
         impl = overload_func(*in_typs)
         return self._replace_func(impl, args)

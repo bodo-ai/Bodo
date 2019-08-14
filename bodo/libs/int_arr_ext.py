@@ -415,17 +415,17 @@ def overload_int_arr_shape(A):
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def apply_null_mask(arr, bitmap):
+def apply_null_mask(arr, bitmap, mask_fill):
     assert isinstance(arr, types.Array)
 
     # Integer output becomes IntegerArray
     if isinstance(arr.dtype, types.Integer):
-        return lambda arr, bitmap: bodo.libs.int_arr_ext.init_integer_array(
-                                                            arr, bitmap.copy())
+        return lambda arr, bitmap, mask_fill: \
+            bodo.libs.int_arr_ext.init_integer_array(arr, bitmap.copy())
 
     # NAs are applied to Float output
     if isinstance(arr.dtype, types.Float):
-        def impl(arr, bitmap):
+        def impl(arr, bitmap, mask_fill):
             n = len(arr)
             for i in numba.parfor.internal_prange(n):
                 if not bodo.libs.int_arr_ext.get_bit_bitmap_arr(bitmap, i):
@@ -433,20 +433,16 @@ def apply_null_mask(arr, bitmap):
             return arr
         return impl
 
-    # XXX: pandas assigns np.nan to NA positions which translates to True
-    # for bool output
-    # TODO: use nullable Bool type
-    # https://github.com/pandas-dev/pandas/blob/5de4e55d60bf8487a2ce64a440b6d5d92345a4bc/pandas/core/arrays/integer.py#L408
     if arr.dtype == types.bool_:
-        def impl_bool(arr, bitmap):
+        def impl_bool(arr, bitmap, mask_fill):
             n = len(arr)
             for i in numba.parfor.internal_prange(n):
                 if not bodo.libs.int_arr_ext.get_bit_bitmap_arr(bitmap, i):
-                    arr[i] = True
+                    arr[i] = mask_fill
             return arr
         return impl_bool
     # TODO: handle other possible types
-    return lambda arr, bitmap: arr
+    return lambda arr, bitmap, mask_fill: arr
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
@@ -469,59 +465,49 @@ def merge_bitmaps(B1, B2, n):
     return impl
 
 
-# ufunc_special = {
-#     "add",
-#     "sub",
-#     "mul",
-#     "pow",
-#     "mod",
-#     "floordiv",
-#     "truediv",
-#     "divmod",
-#     "eq",
-#     "ne",
-#     "lt",
-#     "gt",
-#     "le",
-#     "ge",
-#     "remainder",
-#     "matmul",
-# }
-# ufunc_aliases = {
-#     "subtract": "sub",
-#     "multiply": "mul",
-#     "floor_divide": "floordiv",
-#     "true_divide": "truediv",
-#     "power": "pow",
-#     "remainder": "mod",
-#     "divide": "div",
-#     "equal": "eq",
-#     "not_equal": "ne",
-#     "less": "lt",
-#     "less_equal": "le",
-#     "greater": "gt",
-#     "greater_equal": "ge",
-# }
+ufunc_aliases = {
+    "subtract": "sub",
+    "multiply": "mul",
+    "floor_divide": "floordiv",
+    "true_divide": "truediv",
+    "power": "pow",
+    "remainder": "mod",
+    "divide": "div",
+    "equal": "eq",
+    "not_equal": "ne",
+    "less": "lt",
+    "less_equal": "le",
+    "greater": "gt",
+    "greater_equal": "ge",
+}
 
 
-def create_ufunc_overload(ufunc):
+def create_op_overload(op, n_inputs):
     # see __array_ufunc__() of pd.arrays.IntegerArray
-    # op_name = ufunc.__name__
-    # op_name = ufunc_aliases.get(op_name, op_name)
-    # TODO: handle special ufuncs properly
-    if ufunc.nin == 1:
-        def overload_int_arr_ufunc_nin_1(A):
+    # XXX: pandas assigns np.nan to NA positions which translates to True
+    # for bool output of ufuncs, except the ones that are mapped to comparison
+    # operators
+    # TODO: use nullable Bool type
+    # https://github.com/pandas-dev/pandas/blob/5de4e55d60bf8487a2ce64a440b6d5d92345a4bc/pandas/core/arrays/integer.py#L408
+    op_name = op.__name__
+    op_name = ufunc_aliases.get(op_name, op_name)
+    # comparison operators assign False except 'ne'
+    # https://github.com/pandas-dev/pandas/blob/5de4e55d60bf8487a2ce64a440b6d5d92345a4bc/pandas/core/arrays/integer.py#L631
+    mask_fill = op_name not in ("eq", "lt", "gt", "le", "ge")
+
+    if n_inputs == 1:
+        def overload_int_arr_op_nin_1(A):
             if isinstance(A, IntegerArrayType):
                 def impl(A):
                     arr = bodo.libs.int_arr_ext.get_int_arr_data(A)
                     bitmap = bodo.libs.int_arr_ext.get_int_arr_bitmap(A)
-                    out_arr = ufunc(arr)
+                    out_arr = op(arr)
                     return bodo.libs.int_arr_ext.apply_null_mask(
-                                                               out_arr, bitmap)
+                                                    out_arr, bitmap, mask_fill)
                 return impl
-        return overload_int_arr_ufunc_nin_1
-    elif ufunc.nin == 2:
-        def overload_series_ufunc_nin_2(A1, A2):
+        return overload_int_arr_op_nin_1
+    elif n_inputs == 2:
+        def overload_series_op_nin_2(A1, A2):
             # both are IntegerArray
             if isinstance(A1, IntegerArrayType) and isinstance(
                                                          A2, IntegerArrayType):
@@ -530,31 +516,31 @@ def create_ufunc_overload(ufunc):
                     bitmap1 = bodo.libs.int_arr_ext.get_int_arr_bitmap(A1)
                     arr2 = bodo.libs.int_arr_ext.get_int_arr_data(A2)
                     bitmap2 = bodo.libs.int_arr_ext.get_int_arr_bitmap(A2)
-                    out_arr = ufunc(arr1, arr2)
+                    out_arr = op(arr1, arr2)
                     bitmap = bodo.libs.int_arr_ext.merge_bitmaps(
                                                    bitmap1, bitmap2, len(arr1))
                     return bodo.libs.int_arr_ext.apply_null_mask(
-                                                               out_arr, bitmap)
+                                                    out_arr, bitmap, mask_fill)
                 return impl_both
             # left arg is IntegerArray
             if isinstance(A1, IntegerArrayType):
                 def impl_left(A1, A2):
                     arr1 = bodo.libs.int_arr_ext.get_int_arr_data(A1)
                     bitmap = bodo.libs.int_arr_ext.get_int_arr_bitmap(A1)
-                    out_arr = ufunc(arr1, A2)
+                    out_arr = op(arr1, A2)
                     return bodo.libs.int_arr_ext.apply_null_mask(
-                                        out_arr, bitmap)
+                                        out_arr, bitmap, mask_fill)
                 return impl_left
             # right arg is IntegerArray
             if isinstance(A2, IntegerArrayType):
                 def impl_right(A1, A2):
                     arr2 = bodo.libs.int_arr_ext.get_int_arr_data(A2)
                     bitmap = bodo.libs.int_arr_ext.get_int_arr_bitmap(A2)
-                    out_arr = ufunc(A1, arr2)
+                    out_arr = op(A1, arr2)
                     return bodo.libs.int_arr_ext.apply_null_mask(
-                                        out_arr, bitmap)
+                                        out_arr, bitmap, mask_fill)
                 return impl_right
-        return overload_series_ufunc_nin_2
+        return overload_series_op_nin_2
     else:
         raise RuntimeError(
             "Don't know how to register ufuncs from ufunc_db with arity > 2")
@@ -563,8 +549,21 @@ def create_ufunc_overload(ufunc):
 def _install_np_ufuncs():
     import numba.targets.ufunc_db
     for ufunc in numba.targets.ufunc_db.get_ufuncs():
-        overload_impl = create_ufunc_overload(ufunc)
+        overload_impl = create_op_overload(ufunc, ufunc.nin)
         overload(ufunc)(overload_impl)
 
 
 _install_np_ufuncs()
+
+
+####################### binary operators ###############################
+
+
+def _install_binary_ops():
+    # install binary ops such as add, sub, pow, eq, ...
+    for op in numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys():
+        overload_impl = create_op_overload(op, 2)
+        overload(op)(overload_impl)
+
+
+_install_binary_ops()
