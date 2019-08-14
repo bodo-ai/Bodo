@@ -361,7 +361,7 @@ class DistributedAnalysis(object):
             parfor.loop_body, self.func_ir, self.typemap)
         par_index_var = parfor.loop_nests[0].index_variable.name
 
-        for (arr, index) in array_accesses:
+        for (arr, index, _) in array_accesses:
             # XXX sometimes copy propagation doesn't work for parfor indices
             # so see if the index has a single variable definition and use it
             # e.g. test_to_numeric
@@ -552,9 +552,15 @@ class DistributedAnalysis(object):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
-        if func_mod == 'bodo.hiframes.api' and func_name in (
+        if func_mod == 'bodo.libs.int_arr_ext' and func_name in (
                 'get_int_arr_data', 'get_int_arr_bitmap'):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        if fdef == ('get_bit_bitmap_arr', 'bodo.libs.int_arr_ext'):
+            return
+
+        if fdef == ('set_bit_to_arr', 'bodo.libs.int_arr_ext'):
             return
 
         # from flat map pattern: pd.Series(list(itertools.chain(*A)))
@@ -1194,7 +1200,7 @@ class DistributedAnalysis(object):
                         and parfor_dists[inst.id] == Distribution.OneD_Var):
                     array_accesses = _get_array_accesses(
                         inst.loop_body, self.func_ir, self.typemap)
-                    onedv_arrs = set(arr for (arr, ind) in array_accesses
+                    onedv_arrs = set(arr for (arr, ind, _) in array_accesses
                                  if arr in array_dists and array_dists[arr] == Distribution.OneD_Var)
                     if (label in loop_bodies
                             or _arrays_written(onedv_arrs, inst.loop_body)):
@@ -1337,33 +1343,37 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
     for block in blocks.values():
         for inst in block.body:
             if isinstance(inst, ir.SetItem):
-                accesses.add((inst.target.name, inst.index.name))
+                accesses.add((inst.target.name, inst.index.name, False))
             if isinstance(inst, ir.StaticSetItem):
-                accesses.add((inst.target.name, inst.index_var.name))
+                accesses.add((inst.target.name, inst.index_var.name, False))
             if isinstance(inst, ir.Assign):
                 rhs = inst.value
                 if isinstance(rhs, ir.Expr) and rhs.op == 'getitem':
-                    accesses.add((rhs.value.name, rhs.index.name))
+                    accesses.add((rhs.value.name, rhs.index.name, False))
                 if isinstance(rhs, ir.Expr) and rhs.op == 'static_getitem':
                     index = rhs.index
                     # slice is unhashable, so just keep the variable
                     if index is None or ir_utils.is_slice_index(index):
                         index = rhs.index_var.name
-                    accesses.add((rhs.value.name, index))
+                    accesses.add((rhs.value.name, index, False))
                 if isinstance(rhs, ir.Expr) and rhs.op == 'call':
                     fdef = guard(find_callname, func_ir, rhs, typemap)
                     if fdef is not None:
                         if fdef == ('isna', 'bodo.hiframes.api'):
-                            accesses.add((rhs.args[0].name, rhs.args[1].name))
+                            accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ('get_split_view_index', 'bodo.hiframes.split_impl'):
-                            accesses.add((rhs.args[0].name, rhs.args[1].name))
+                            accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ('setitem_str_arr_ptr', 'bodo.libs.str_arr_ext'):
-                            accesses.add((rhs.args[0].name, rhs.args[1].name))
+                            accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ('setitem_arr_nan', 'bodo.ir.join'):
-                            accesses.add((rhs.args[0].name, rhs.args[1].name))
+                            accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ('str_arr_item_to_numeric', 'bodo.libs.str_arr_ext'):
-                            accesses.add((rhs.args[0].name, rhs.args[1].name))
-                            accesses.add((rhs.args[2].name, rhs.args[3].name))
+                            accesses.add((rhs.args[0].name, rhs.args[1].name, False))
+                            accesses.add((rhs.args[2].name, rhs.args[3].name, False))
+                        if fdef == ('get_bit_bitmap_arr', 'bodo.libs.int_arr_ext'):
+                            accesses.add((rhs.args[0].name, rhs.args[1].name, True))
+                        if fdef == ('set_bit_to_arr', 'bodo.libs.int_arr_ext'):
+                            accesses.add((rhs.args[0].name, rhs.args[1].name, True))
             for T, f in array_accesses_extensions.items():
                 if isinstance(inst, T):
                     f(inst, func_ir, typemap, accesses)

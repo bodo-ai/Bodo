@@ -12,6 +12,7 @@ from numba.extending import (typeof_impl, type_callable, models,
     register_model, NativeValue, make_attribute_wrapper, lower_builtin, box,
     unbox, lower_getattr, intrinsic, overload_method, overload,
     overload_attribute)
+from numba.array_analysis import ArrayAnalysis
 from bodo.libs.str_arr_ext import kBitmask
 from llvmlite import ir as lir
 import llvmlite.binding as ll
@@ -232,6 +233,31 @@ def get_int_arr_bitmap(A):
     return lambda A: A._null_bitmap
 
 
+# array analysis extension
+def get_int_arr_data_equiv(self, scope, equiv_set, args, kws):
+    assert len(args) == 1 and not kws
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return var, []
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_int_arr_ext_get_int_arr_data = \
+    get_int_arr_data_equiv
+
+
+def init_integer_array_equiv(self, scope, equiv_set, args, kws):
+    assert len(args) == 2 and not kws
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return var, []
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_int_arr_ext_init_integer_array = \
+    init_integer_array_equiv
+
+
 @numba.extending.register_jitable
 def set_bit_to_arr(bits, i, bit_is_set):
     bits[i // 8] ^= np.uint8(-np.uint8(bit_is_set) ^ bits[i // 8]) & kBitmask[i % 8]
@@ -429,11 +455,13 @@ def merge_bitmaps(B1, B2, n):
     assert B2 == types.Array(types.uint8, 1, 'C')
 
     def impl(B1, B2, n):
-        B = B1.copy()
+        numba.parfor.init_prange()
+        n_bytes = (n + 7) >> 3
+        B = np.empty(n_bytes, np.uint8)
         # looping over bits individually to hopefully enable more fusion
         # TODO: evaluate and improve
         for i in numba.parfor.internal_prange(n):
-            bit1 = bodo.libs.int_arr_ext.get_bit_bitmap_arr(B, i)
+            bit1 = bodo.libs.int_arr_ext.get_bit_bitmap_arr(B1, i)
             bit2 = bodo.libs.int_arr_ext.get_bit_bitmap_arr(B2, i)
             bit = bit1 & bit2
             bodo.libs.int_arr_ext.set_bit_to_arr(B, i, bit)

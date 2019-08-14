@@ -29,7 +29,6 @@ from bodo.io.parquet_pio import ParquetHandler
 from bodo.utils.utils import (
     inline_new_blocks, ReplaceFunc, is_call, is_assign)
 import bodo.hiframes.api
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.libs.str_arr_ext import string_array_type
 import bodo.ir
 import bodo.ir.aggregate

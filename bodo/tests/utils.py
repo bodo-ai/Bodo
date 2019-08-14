@@ -72,7 +72,8 @@ def check_func(func, args, is_out_distributed=None, sort_output=False,
     if is_out_distributed is None:
         # assume all distributable output is distributed if not specified
         is_out_distributed = isinstance(py_output,
-            (pd.Series, pd.Index, pd.DataFrame, np.ndarray))
+            (pd.Series, pd.Index, pd.DataFrame, np.ndarray,
+            pd.arrays.IntegerArray))
 
     # 1D distributed
     bodo_func = bodo.jit(

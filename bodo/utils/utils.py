@@ -316,7 +316,8 @@ def is_array_typ(var_typ):
         or var_typ in (string_array_type, list_string_array_type,
             bodo.hiframes.split_impl.string_array_split_view_type)
         or isinstance(var_typ, bodo.hiframes.pd_series_ext.SeriesType)
-        or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ))
+        or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
+        or isinstance(var_typ, bodo.libs.int_arr_ext.IntegerArrayType))
 
 
 def is_np_array_typ(var_typ):
@@ -374,6 +375,14 @@ def empty_like_type_overload(n, arr):
         def empty_like_type_str_list(n, arr):
             return [''] * n
         return empty_like_type_str_list
+
+    if isinstance(arr, bodo.libs.int_arr_ext.IntegerArrayType):
+        _dtype = arr.dtype
+        def empty_like_type_int_arr(n, arr):
+            n_bytes = (n + 7) >> 3
+            return bodo.libs.int_arr_ext.init_integer_array(
+                np.empty(n, _dtype), np.empty(n_bytes, np.uint8))
+        return empty_like_type_int_arr
 
     # string array buffer for join
     assert arr == string_array_type

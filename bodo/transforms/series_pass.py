@@ -500,6 +500,11 @@ class SeriesPass(object):
             impl = bodo.libs.int_arr_ext.apply_null_mask.py_func(*in_typs)
             return self._replace_func(impl, rhs.args)
 
+        if fdef == ('merge_bitmaps', 'bodo.libs.int_arr_ext'):
+            in_typs = tuple(self.typemap[a.name] for a in rhs.args)
+            impl = bodo.libs.int_arr_ext.merge_bitmaps.py_func(*in_typs)
+            return self._replace_func(impl, rhs.args)
+
         if fdef == ('get_int_arr_data', 'bodo.libs.int_arr_ext'):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def)

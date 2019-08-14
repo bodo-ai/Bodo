@@ -455,7 +455,9 @@ class DistributedPass(object):
             out.append(assign)
             return out
 
-        if (fdef == ('isna', 'bodo.hiframes.api')
+        if (fdef in (('isna', 'bodo.hiframes.api'),
+                    ('get_bit_bitmap_arr', 'bodo.libs.int_arr_ext'),
+                    ('set_bit_to_arr', 'bodo.libs.int_arr_ext'))
                 and self._dist_arr_needs_adjust(rhs.args[0].name)):
             # fix index in call to isna
             arr = rhs.args[0]
@@ -1152,6 +1154,20 @@ class DistributedPass(object):
                             (range_val,), None, self)
                         new_size_var = out[-1].target
 
+            # n_bytes = (n + 7) >> 3 pattern is used for calculating bitmap
+            # size in int_arr_ext
+            if (is_expr(size_def, 'binop') and size_def.fn == operator.rshift
+                    and find_const(self.func_ir, size_def.rhs) == 3):
+                lhs_def = guard(get_definition, self.func_ir, size_def.lhs)
+                if (is_expr(lhs_def, 'binop') and lhs_def.fn == operator.add
+                        and find_const(self.func_ir, lhs_def.rhs) == 7):
+                    size = self._get_1D_Var_size(
+                        lhs_def.lhs, equiv_set, avail_vars, out)
+                    out += compile_func_single_block(
+                        lambda n: (n + 7) >> 3,
+                        (size,), None, self)
+                    new_size_var = out[-1].target
+
         assert new_size_var, "1D Var size not found"
         return new_size_var
 
@@ -1455,11 +1471,14 @@ class DistributedPass(object):
         size_found = False
         array_accesses = _get_array_accesses(
             parfor.loop_body, self.func_ir, self.typemap)
-        for (arr, index) in array_accesses:
+        for (arr, index, is_bitwise) in array_accesses:
             # XXX avail_vars is used since accessed array could be defined in
             # init_block
-            if self._is_1D_Var_arr(arr) and self._index_has_par_index(
-                    index, index_name) and arr in avail_vars:
+            # arrays that are access bitwise don't have the same size
+            # e.g. IntegerArray mask
+            if (not is_bitwise and self._is_1D_Var_arr(arr)
+                    and self._index_has_par_index(index, index_name)
+                    and arr in avail_vars):
                 arr_var = ir.Var(stop_var.scope, arr, stop_var.loc)
                 prepend += compile_func_single_block(
                     lambda A: len(A), (arr_var,), None, self)
@@ -1475,7 +1494,7 @@ class DistributedPass(object):
         # TODO: test multi-dim array sizes and complex indexing like slice
         parfor.loop_nests[0].stop = new_stop_var
 
-        for (arr, index) in array_accesses:
+        for (arr, index, _) in array_accesses:
             assert arr not in self._T_arrs, \
                 "1D_Var parfor for transposed parallel array not supported"
 
@@ -1533,7 +1552,7 @@ class DistributedPass(object):
             gen_getitem(l_nest.stop, ret_var, 1, self.calltypes, nodes)
             prepend += nodes
 
-            for (arr, index) in array_accesses:
+            for (arr, index, _) in array_accesses:
                 if self._index_has_par_index(index, ind_varname):
                     self._1D_Var_parfor_starts[arr] = l_nest.start
 
@@ -1985,7 +2004,10 @@ class DistributedPass(object):
                     ('setitem_arr_nan', 'bodo.ir.join'),
                     ('str_arr_item_to_numeric', 'bodo.libs.str_arr_ext'),
                     ('setitem_str_arr_ptr', 'bodo.libs.str_arr_ext'),
-                    ('get_split_view_index', 'bodo.hiframes.split_impl')):
+                    ('get_split_view_index', 'bodo.hiframes.split_impl'),
+                    ('get_bit_bitmap_arr', 'bodo.libs.int_arr_ext'),
+                    ('set_bit_to_arr', 'bodo.libs.int_arr_ext')
+                    ):
                 return True
 
         return False
