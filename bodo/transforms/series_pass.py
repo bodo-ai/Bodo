@@ -477,6 +477,13 @@ class SeriesPass(object):
             impl = overload_func(typ)
             return self._replace_func(impl, [arg])
 
+        if isinstance(typ, IntegerArrayType):
+            assert rhs.fn in (operator.neg, operator.invert, operator.pos)
+            overload_func = \
+                bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 1)
+            impl = overload_func(typ)
+            return self._replace_func(impl, [arg])
+
         return [assign]
 
     def _run_call(self, assign, lhs, rhs):

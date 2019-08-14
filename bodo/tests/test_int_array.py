@@ -239,3 +239,22 @@ def test_inplace_binary_op(op):
     # TODO: test inplace change properly
     check_func(test_impl, (A1, A2), copy_input=True)
     check_func(test_impl, (A1, 2), copy_input=True)
+
+
+@pytest.mark.skip(reason="pd.arrays.IntegerArray doesn't support unary op")
+@pytest.mark.parametrize('op', (operator.neg, operator.invert, operator.pos))
+def test_unary_op(op):
+    # TODO: fix operator.pos
+    if op == operator.pos:
+        return
+
+    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = "def test_impl(A):\n"
+    func_text += "  return {} A\n".format(op_str)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    test_impl = loc_vars['test_impl']
+
+    A = pd.arrays.IntegerArray(np.array([1, 1, 1, 2, 10], np.int64),
+        np.array([False, True, True, False, False]))
+    check_func(test_impl, (A,))

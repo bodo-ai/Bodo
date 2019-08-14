@@ -601,3 +601,16 @@ def _install_inplace_binary_ops():
 
 
 _install_inplace_binary_ops()
+
+
+########################## unary operators ###############################
+
+
+def _install_unary_ops():
+    # install unary operators: ~, -, +
+    for op in (operator.neg, operator.invert, operator.pos):
+        overload_impl = create_op_overload(op, 1)
+        overload(op)(overload_impl)
+
+
+_install_unary_ops()
