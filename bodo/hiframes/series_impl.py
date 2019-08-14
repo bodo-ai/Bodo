@@ -1112,16 +1112,11 @@ _install_binary_ops()
 def create_inplace_binary_op_overload(op):
     def overload_series_inplace_binary_op(S, other):
         if isinstance(S, SeriesType) or isinstance(other, SeriesType):
-            op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
-            # TODO: use op directly when Numba's #4131 is resolved
-            func_text = "def impl(S, other):\n"
-            func_text += "  arr = bodo.utils.conversion.get_array_if_series_or_index(S)\n"
-            func_text += "  other_arr = bodo.utils.conversion.get_array_if_series_or_index(other)\n"
-            func_text += "  arr {} other_arr\n".format(op_str)
-            func_text += "  return S\n"
-            loc_vars = {}
-            exec(func_text, {'bodo': bodo}, loc_vars)
-            impl = loc_vars['impl']
+            def impl(S, other):
+                arr = bodo.utils.conversion.get_array_if_series_or_index(S)
+                other_arr = bodo.utils.conversion.get_array_if_series_or_index(other)
+                op(arr, other_arr)
+                return S
             return impl
 
     return overload_series_inplace_binary_op
