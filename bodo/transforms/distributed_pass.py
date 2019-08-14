@@ -986,6 +986,26 @@ class DistributedPass(object):
         # size is single int var
         if isinstance(size_var, ir.Var) and isinstance(
                                    self.typemap[size_var.name], types.Integer):
+            # n_bytes = (n + 7) >> 3 is used in bitmap arrays like
+            # IntegerArray's mask
+            # use the total number of elements for 1D calculation
+            # XXX: bitmasks can be only 1D arrays
+            # TODO: is n_bytes calculation ever used in other parallel sizes
+            # like parfors?
+            size_def = guard(get_definition, self.func_ir, size_var)
+            if (is_expr(size_def, 'binop') and size_def.fn == operator.rshift
+                    and find_const(self.func_ir, size_def.rhs) == 3):
+                lhs_def = guard(get_definition, self.func_ir, size_def.lhs)
+                if (is_expr(lhs_def, 'binop') and lhs_def.fn == operator.add
+                        and find_const(self.func_ir, lhs_def.rhs) == 7):
+                    num_elems = lhs_def.lhs
+                    count_var = self._get_1D_count(num_elems, out)
+                    out += compile_func_single_block(
+                        lambda n: (n + 7) >> 3,
+                        (count_var,), None, self)
+                    new_size_var = out[-1].target
+                    return out, new_size_var
+
             count_var = self._get_1D_count(size_var, out)
             new_size_var = count_var
             return out, new_size_var
