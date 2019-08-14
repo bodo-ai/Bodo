@@ -248,7 +248,6 @@ def gatherv(data):
                 displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
                 tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
 
-            #  print(rank, n_loc, n_total, recv_counts, displs)
             offset_ptr = get_offset_ptr(all_data)
             data_ptr = get_data_ptr(all_data)
             null_bitmap_ptr = get_null_bitmap_ptr(all_data)
@@ -268,6 +267,43 @@ def gatherv(data):
             return all_data
 
         return gatherv_str_arr_impl
+
+    if isinstance(data, bodo.libs.int_arr_ext.IntegerArrayType):
+        typ_val = _numba_to_c_type_map[data.dtype]
+        char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
+
+        def gatherv_impl_int_arr(data):
+            rank = bodo.libs.distributed_api.get_rank()
+            n_loc = len(data)
+            n_bytes = (n_loc + 7) >> 3
+            recv_counts = gather_scalar(np.int32(n_loc))
+            n_total = recv_counts.sum()
+            all_data = empty_like_type(n_total, data)
+            # displacements
+            displs = np.empty(1, np.int32)
+            recv_counts_nulls = np.empty(1, np.int32)
+            displs_nulls = np.empty(1, np.int32)
+            tmp_null_bytes = np.empty(1, np.uint8)
+            if rank == MPI_ROOT:
+                displs = bodo.ir.join.calc_disp(recv_counts)
+                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
+                for i in range(len(recv_counts)):
+                    recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
+                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
+                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
+            #  print(rank, n_loc, n_total, recv_counts, displs)
+            c_gatherv(data._data.ctypes, np.int32(n_loc),
+                all_data._data.ctypes, recv_counts.ctypes, displs.ctypes,
+                np.int32(typ_val))
+            c_gatherv(data._null_bitmap.ctypes, np.int32(n_bytes),
+                tmp_null_bytes.ctypes, recv_counts_nulls.ctypes,
+                displs_nulls.ctypes, char_typ_enum)
+            copy_gathered_null_bytes(
+                all_data._null_bitmap.ctypes, tmp_null_bytes, recv_counts_nulls,
+                recv_counts)
+            return all_data
+
+        return gatherv_impl_int_arr
 
     if isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
         def impl(data):
