@@ -8,7 +8,6 @@ from numba.extending import (models, register_model, lower_cast, infer_getattr,
     typeof_impl, unbox, NativeValue, overload_attribute, overload_method)
 from numba.typing.templates import (infer_global, AbstractTemplate, signature,
     AttributeTemplate, bound_function)
-from numba.targets.boxing import box_array
 
 import bodo
 from bodo.libs.str_ext import string_type

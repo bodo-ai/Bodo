@@ -7,7 +7,6 @@ from numba.extending import (typeof_impl, type_callable, models, register_model,
                              overload_attribute)
 from numba import cgutils
 from numba.targets.arrayobj import make_array, _empty_nd_impl, store_item, basic_indexing
-from numba.targets.boxing import unbox_array, box_array
 from numba.typing.templates import (infer_getattr, AttributeTemplate,
     bound_function, signature, infer_global, AbstractTemplate,
     ConcreteTemplate)
@@ -233,7 +232,8 @@ def int_array_to_datetime_date(ia):
     return np.vectorize(int_to_datetime_date_python)(ia)
 
 def box_datetime_date_array(typ, val, c):
-    ary = box_array(types.Array(types.int64, 1, 'C'), val, c)
+    ary = c.pyapi.from_native_value(
+        types.Array(types.int64, 1, 'C'), val, c.env_manager)
     hpat_name = c.context.insert_const_string(c.builder.module, 'bodo')
     hpat_mod = c.pyapi.import_module_noblock(hpat_name)
     hi_mod = c.pyapi.object_getattr_string(hpat_mod, 'hiframes')
