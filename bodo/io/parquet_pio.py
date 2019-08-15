@@ -96,7 +96,7 @@ class ParquetHandler(object):
                 file_name_str)
         else:
             col_names = list(table_types.keys())
-            col_types = [t.dtype for t in table_types.values()]
+            col_types = [t for t in table_types.values()]
             index_col = 'index' if 'index' in col_names else None
 
         col_indices = list(range(len(col_names)))
@@ -109,7 +109,7 @@ class ParquetHandler(object):
         # HACK convert types using decorator for int columns with NaN
         for i, c in enumerate(col_names):
             if c in convert_types:
-                col_types[i] = convert_types[c].dtype
+                col_types[i] = convert_types[c]
 
         data_arrs = [ir.Var(scope, mk_unique_var(c), loc) for c in col_names]
         nodes = [bodo.ir.parquet_ext.ParquetReader(
@@ -164,7 +164,7 @@ def _gen_pq_reader_py(col_names, col_indices, out_types, typingctx, targetctx,
     func_text = "def pq_reader_py(fname):\n"
     func_text += "  arrow_readers = get_arrow_readers(unicode_to_char_ptr(fname))\n"
     for c, ind, t in zip(col_names, col_indices, out_types):
-        func_text = gen_column_read(func_text, c, ind, t, c in parallel)
+        func_text = gen_column_read(func_text, c, ind, t.dtype, c in parallel)
     func_text += "  del_arrow_readers(arrow_readers)\n"
     func_text += "  return ({},)\n".format(", ".join("{0}, {0}_size".format(
         sanitize_varname(c)) for c in col_names))
@@ -270,7 +270,10 @@ def _get_numba_typ_from_pa_typ(pa_typ):
     }
     if pa_typ not in _typ_map:
         raise ValueError("Arrow data type {} not supported yet".format(pa_typ))
-    return _typ_map[pa_typ]
+    dtype = _typ_map[pa_typ]
+    arr_typ = (string_array_type if dtype == string_type
+                  else types.Array(dtype, 1, 'C'))
+    return arr_typ
 
 
 def parquet_file_schema(file_name):

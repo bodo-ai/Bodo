@@ -79,10 +79,7 @@ distributed_analysis.distributed_analysis_extensions[ParquetReader] = pq_distrib
 
 def pq_typeinfer(pq_node, typeinferer):
     for col_var, typ in zip(pq_node.out_vars, pq_node.out_types):
-        # TODO: store array types in node
-        arr_typ = (string_array_type if typ == string_type
-                  else types.Array(typ, 1, 'C'))
-        typeinferer.lock_type(col_var.name, arr_typ, loc=pq_node.loc)
+        typeinferer.lock_type(col_var.name, typ, loc=pq_node.loc)
     return
 
 
