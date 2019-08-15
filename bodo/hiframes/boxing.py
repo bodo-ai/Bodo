@@ -228,21 +228,7 @@ def box_dataframe(typ, val, c):
                 pyapi.object_setitem(df_obj, cname_obj, arr_obj)
 
             with orelse:
-                if dtype == string_type:
-                    arr_obj = box_str_arr(arr_typ, arr, c)
-                elif isinstance(dtype, PDCategoricalDtype):
-                    arr_obj = box_categorical_array(arr_typ, arr, c)
-                    # context.nrt.incref(builder, arr_typ, arr)
-                elif arr_typ == string_array_split_view_type:
-                    arr_obj = box_str_arr_split_view(arr_typ, arr, c)
-                elif dtype == types.List(string_type):
-                    arr_obj = box_list(list_string_array_type, arr, c)
-                    # context.nrt.incref(builder, arr_typ, arr)  # TODO required?
-                    # pyapi.print_object(arr_obj)
-                else:
-                    arr_obj = box_array(arr_typ, arr, c)
-                    # TODO: is incref required?
-                    # context.nrt.incref(builder, arr_typ, arr)
+                arr_obj = pyapi.from_native_value(arr_typ, arr, c.env_manager)
                 pyapi.object_setitem(df_obj, cname_obj, arr_obj)
 
         # pyapi.decref(arr_obj)
