@@ -11,7 +11,6 @@ from numba.extending import (typeof_impl, unbox, register_model, models,
 from numba import numpy_support, types, cgutils
 from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate, CallableTemplate
-from numba.targets.boxing import box_array, unbox_array, box_list
 from numba.targets.imputils import lower_builtin
 from numba.targets.boxing import _NumbaTypeHelper
 from numba.targets import listobj
@@ -308,9 +307,7 @@ def unbox_series(typ, val, c):
 
 
 def _unbox_series_data(dtype, data_typ, arr_obj, c):
-    if data_typ == string_array_type:
-        return unbox_str_series(string_array_type, arr_obj, c)
-    elif dtype == datetime_date_type:
+    if dtype == datetime_date_type:
         return unbox_datetime_date_array(data_typ, arr_obj, c)
     elif data_typ == list_string_array_type:
         return _unbox_array_list_str(arr_obj, c)
@@ -318,11 +315,8 @@ def _unbox_series_data(dtype, data_typ, arr_obj, c):
         # XXX dummy unboxing to avoid errors in _get_dataframe_data()
         out_view = c.context.make_helper(c.builder, string_array_split_view_type)
         return NativeValue(out_view._getvalue())
-    elif isinstance(dtype, PDCategoricalDtype):
-        return unbox_categorical_array(data_typ, arr_obj, c)
 
-    # TODO: error handling like Numba callwrappers.py
-    return unbox_array(data_typ, arr_obj, c)
+    return c.pyapi.to_native_value(data_typ, arr_obj)
 
 
 @box(SeriesType)
@@ -360,18 +354,12 @@ def _box_series_data(dtype, data_typ, val, c):
             ','.join(str(t) for t in dtype.types), align=True)
         dtype = numba.numpy_support.from_dtype(np_dtype)
 
-    if dtype == string_type:
-        arr = box_str_arr(string_array_type, val, c)
-    elif dtype == datetime_date_type:
+    # TODO: make proper array for datetime.date()
+    if dtype == datetime_date_type:
         arr = box_datetime_date_array(data_typ, val, c)
-    elif isinstance(dtype, PDCategoricalDtype):
-        arr = box_categorical_array(data_typ, val, c)
-    elif data_typ == string_array_split_view_type:
-        arr = box_str_arr_split_view(data_typ, val, c)
-    elif dtype == types.List(string_type):
-        arr = box_list(list_string_array_type, val, c)
     else:
-        arr = box_array(data_typ, val, c)
+        arr = c.pyapi.from_native_value(data_typ, val, c.env_manager)
+
 
     if isinstance(dtype, types.Record):
         o_str = c.context.insert_const_string(c.builder.module, "O")
