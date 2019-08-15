@@ -1543,7 +1543,7 @@ def append_overload(df, other, ignore_index=False, verify_integrity=False,
 def to_csv_overload(df, path_or_buf=None, sep=',', na_rep='', float_format=None,
         columns=None, header=True, index=True, index_label=None, mode='w',
         encoding=None, compression='infer', quoting=None, quotechar='"',
-        line_terminator=None, chunksize=None, tupleize_cols=None,
+        line_terminator=None, chunksize=None,
         date_format=None, doublequote=True, escapechar=None, decimal='.'):
 
     # TODO: refactor when objmode() can understand global string constant
@@ -1553,13 +1553,13 @@ def to_csv_overload(df, path_or_buf=None, sep=',', na_rep='', float_format=None,
                 columns=None, header=True, index=True, index_label=None,
                 mode='w', encoding=None, compression='infer', quoting=None,
                 quotechar='"', line_terminator=None, chunksize=None,
-                tupleize_cols=None, date_format=None, doublequote=True,
+                date_format=None, doublequote=True,
                 escapechar=None, decimal='.'):
             with numba.objmode(D='unicode_type'):
                 D = df.to_csv(path_or_buf, sep, na_rep, float_format,
                     columns, header, index, index_label, mode,
                     encoding, compression, quoting, quotechar,
-                    line_terminator, chunksize, tupleize_cols,
+                    line_terminator, chunksize,
                     date_format, doublequote, escapechar, decimal)
             return D
 
@@ -1568,13 +1568,13 @@ def to_csv_overload(df, path_or_buf=None, sep=',', na_rep='', float_format=None,
     def _impl(df, path_or_buf=None, sep=',', na_rep='', float_format=None,
             columns=None, header=True, index=True, index_label=None, mode='w',
             encoding=None, compression='infer', quoting=None, quotechar='"',
-            line_terminator=None, chunksize=None, tupleize_cols=None,
+            line_terminator=None, chunksize=None,
             date_format=None, doublequote=True, escapechar=None, decimal='.'):
         with numba.objmode:
             df.to_csv(path_or_buf, sep, na_rep, float_format,
                 columns, header, index, index_label, mode,
                 encoding, compression, quoting, quotechar,
-                line_terminator, chunksize, tupleize_cols,
+                line_terminator, chunksize,
                 date_format, doublequote, escapechar, decimal)
 
     return _impl
