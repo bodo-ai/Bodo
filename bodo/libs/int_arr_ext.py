@@ -473,6 +473,18 @@ def overload_int_arr_dtype(A):
     return lambda A: dtype_class()
 
 
+@overload_attribute(IntegerArrayType, 'ndim')
+def overload_int_arr_ndim(A):
+    return lambda A: 1
+
+
+@overload_method(IntegerArrayType, 'copy')
+def overload_int_arr_copy(A):
+    return lambda A: bodo.libs.int_arr_ext.init_integer_array(
+        bodo.libs.int_arr_ext.get_int_arr_data(A).copy(),
+        bodo.libs.int_arr_ext.get_int_arr_bitmap(A).copy())
+
+
 ############################### numpy ufuncs #################################
 
 
