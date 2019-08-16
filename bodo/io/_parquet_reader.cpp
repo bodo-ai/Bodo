@@ -36,6 +36,32 @@ void append_bits_to_vec(std::vector<bool> *null_vec, const uint8_t* null_buff, i
 #define PQ_DT64_TYPE 3 // using INT96 value as dt64, TODO: refactor
 #define kNanosecondsInDay 86400000000000LL // TODO: reuse from type_traits.h
 
+
+// TODO: use arrow's call
+static inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
+  bits[i / 8] ^= static_cast<uint8_t>(-static_cast<uint8_t>(bit_is_set) ^ bits[i / 8]) &
+                 ::arrow::BitUtil::kBitmask[i % 8];
+}
+
+
+inline void copy_nulls(uint8_t* out_nulls, const uint8_t* null_bitmap_buff, int64_t num_values, int64_t null_offset)
+{
+    if (out_nulls != nullptr) {
+        if (null_bitmap_buff == nullptr) {
+            for(size_t i=0; i<num_values; i++) {
+                ::arrow::BitUtil::SetBit(out_nulls, null_offset+i);
+            }
+        } else {
+            for(size_t i=0; i<num_values; i++) {
+                auto bit = ::arrow::BitUtil::GetBit(null_bitmap_buff, i);
+                SetBitTo(out_nulls, null_offset+i, bit);
+            }
+        }
+    }
+}
+
+
+
 int64_t pq_get_size_single_file(std::shared_ptr<FileReader> arrow_reader, int64_t column_idx)
 {
 
@@ -45,9 +71,8 @@ int64_t pq_get_size_single_file(std::shared_ptr<FileReader> arrow_reader, int64_
 }
 
 int64_t pq_read_single_file(std::shared_ptr<FileReader> arrow_reader, int64_t column_idx,
-                uint8_t *out_data, int out_dtype)
+                uint8_t *out_data, int out_dtype, uint8_t *out_nulls, int64_t null_offset)
 {
-
 
     std::shared_ptr< ::arrow::Array > arr;
     arrow_reader->ReadColumn(column_idx, &arr);
@@ -57,7 +82,6 @@ int64_t pq_read_single_file(std::shared_ptr<FileReader> arrow_reader, int64_t co
     int64_t num_values = arr->length();
     // std::cout << "arr: " << arr->ToString() << std::endl;
     std::shared_ptr<arrow::DataType> arrow_type = get_arrow_type(arrow_reader, column_idx);
-    int dtype_size = pq_type_sizes[out_dtype];
     // printf("out_dtype %d dtype_size %d\n", out_dtype, dtype_size);
     // std::cout << arrow_type->name() << "\n";
 
@@ -71,8 +95,10 @@ int64_t pq_read_single_file(std::shared_ptr<FileReader> arrow_reader, int64_t co
     const uint8_t* null_bitmap_buff = arr->null_count() == 0 ? nullptr : arr->null_bitmap_data();
 
     copy_data(out_data, buff, 0, num_values, arrow_type, null_bitmap_buff, out_dtype);
+    copy_nulls(out_nulls, null_bitmap_buff, num_values, null_offset);
+
     // memcpy(out_data, buffers[1]->data(), buff_size);
-    return num_values*dtype_size;
+    return num_values;
 }
 
 int pq_read_parallel_single_file(std::shared_ptr<FileReader> arrow_reader, int64_t column_idx,

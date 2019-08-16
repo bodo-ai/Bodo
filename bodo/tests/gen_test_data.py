@@ -1,3 +1,4 @@
+import random
 import h5py
 import numpy as np
 import pyarrow.parquet as pq
@@ -85,12 +86,23 @@ df = pd.DataFrame({'DT64': dt1, 'DATE': dt1.copy()})
 df.to_parquet('pandas_dt.pq')
 
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, DateType, TimestampType
+from pyspark.sql.types import (StructType, StructField, DateType,
+    TimestampType, LongType, Row)
 
 spark = SparkSession.builder.appName("GenSparkData").getOrCreate()
 schema = StructType([StructField('DT64', DateType(), True), StructField('DATE', TimestampType(), True)])
 sdf = spark.createDataFrame(df, schema)
 sdf.write.parquet('sdf_dt.pq', 'overwrite')
+
+
+schema = StructType([StructField('A', LongType(), True)])
+A = np.random.randint(0, 100, 1211)
+data = [Row(int(a)) if random.random() < .8 else Row(None) for a in A]
+sdf = spark.createDataFrame(data, schema)
+sdf.write.parquet('int_nulls_multi.pq', 'overwrite')
+sdf = sdf.repartition(1)
+sdf.write.parquet('int_nulls_single.pq', 'overwrite')
+# copy data file from int_nulls_single.pq directory to make single file
 
 spark.stop()
 

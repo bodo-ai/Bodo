@@ -26,7 +26,7 @@ void del_arrow_readers(FileReaderVec *readers);
 PyObject* str_list_to_vec(PyObject* self, PyObject* str_list);
 int64_t pq_get_size(FileReaderVec *readers, int64_t column_idx);
 int64_t pq_read(FileReaderVec *readers, int64_t column_idx,
-                uint8_t *out_data, int out_dtype);
+                uint8_t *out_data, int out_dtype, uint8_t *out_nulls=nullptr);
 int pq_read_parallel(FileReaderVec *readers, int64_t column_idx,
                 uint8_t* out_data, int out_dtype, int64_t start, int64_t count);
 int pq_read_string(FileReaderVec *readers, int64_t column_idx,
@@ -195,7 +195,7 @@ int64_t pq_get_size(FileReaderVec *readers, int64_t column_idx)
 }
 
 int64_t pq_read(FileReaderVec *readers, int64_t column_idx,
-                uint8_t *out_data, int out_dtype)
+                uint8_t *out_data, int out_dtype, uint8_t *out_nulls)
 {
     if (readers->size() == 0) {
         printf("empty parquet dataset\n");
@@ -205,19 +205,20 @@ int64_t pq_read(FileReaderVec *readers, int64_t column_idx,
     if (readers->size() > 1)
     {
         // std::cout << "pq path is dir" << '\n';
+        int dtype_size = pq_type_sizes[out_dtype];
 
-        int64_t byte_offset = 0;
+        int64_t num_vals = 0;  // number of values read so for
         for (size_t i=0; i<readers->size(); i++)
         {
-            byte_offset += pq_read_single_file(readers->at(i), column_idx, out_data+byte_offset, out_dtype);
+            num_vals += pq_read_single_file(readers->at(i), column_idx, out_data+num_vals*dtype_size, out_dtype, out_nulls, num_vals);
         }
 
-        // std::cout << "total pq dir size: " << byte_offset << '\n';
-        return byte_offset;
+        // std::cout << "total pq dir size: " << num_vals << '\n';
+        return num_vals;
     }
     else
     {
-        return pq_read_single_file(readers->at(0), column_idx, out_data, out_dtype);
+        return pq_read_single_file(readers->at(0), column_idx, out_data, out_dtype, out_nulls, 0);
     }
     return 0;
 }
@@ -270,7 +271,6 @@ int pq_read_parallel(FileReaderVec *readers, int64_t column_idx,
                 file_size = pq_get_size_single_file(readers->at(file_ind), column_idx);
         }
         return 0;
-        // std::cout << "total pq dir size: " << byte_offset << '\n';
     }
     else
     {

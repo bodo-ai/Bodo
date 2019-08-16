@@ -52,6 +52,34 @@ def test_pq_index(datapath):
     pd.testing.assert_frame_equal(bodo_func(), test_impl2())
 
 
+def test_pq_nullable_int_single(datapath):
+    # single piece parquet
+    fname = datapath('int_nulls_single.pq')
+    def test_impl():
+        return pd.read_parquet(fname)
+
+    try:
+        bodo.io.parquet_pio.use_nullable_int_arr = True
+        bodo_func = bodo.jit(test_impl)
+        pd.testing.assert_frame_equal(bodo_func(), test_impl().astype('Int64'))
+    finally:
+        bodo.io.parquet_pio.use_nullable_int_arr = False
+
+
+def test_pq_nullable_int_multi(datapath):
+    # multi piece parquet
+    fname = datapath('int_nulls_multi.pq')
+    def test_impl():
+        return pd.read_parquet(fname)
+
+    try:
+        bodo.io.parquet_pio.use_nullable_int_arr = True
+        bodo_func = bodo.jit(test_impl)
+        pd.testing.assert_frame_equal(bodo_func(), test_impl().astype('Int64'))
+    finally:
+        bodo.io.parquet_pio.use_nullable_int_arr = False
+
+
 def test_pq_schema(datapath):
     fname = datapath('example.parquet')
     def impl(f):

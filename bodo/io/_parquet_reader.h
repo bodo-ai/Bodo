@@ -15,7 +15,7 @@ static int pq_type_sizes[] = {1, 4, 8, 8, 4, 8, 1};
 void pq_init_reader(const char* file_name, std::shared_ptr<FileReader> *a_reader);
 int64_t pq_get_size_single_file(std::shared_ptr<FileReader>, int64_t column_idx);
 int64_t pq_read_single_file(std::shared_ptr<FileReader>, int64_t column_idx, uint8_t *out,
-                int out_dtype);
+                int out_dtype, uint8_t *out_nulls=nullptr, int64_t null_offset=0);
 int pq_read_parallel_single_file(std::shared_ptr<FileReader>, int64_t column_idx,
                 uint8_t* out_data, int out_dtype, int64_t start, int64_t count);
 int64_t pq_read_string_single_file(std::shared_ptr<FileReader>, int64_t column_idx,
