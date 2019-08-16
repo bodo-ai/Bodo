@@ -92,19 +92,27 @@ def unbox_intdtype(typ, val, c):
     return NativeValue(c.context.get_dummy_value())
 
 
-@typeof_impl.register(pd.Int8Dtype)
-@typeof_impl.register(pd.Int16Dtype)
-@typeof_impl.register(pd.Int32Dtype)
-@typeof_impl.register(pd.Int64Dtype)
-@typeof_impl.register(pd.UInt8Dtype)
-@typeof_impl.register(pd.UInt16Dtype)
-@typeof_impl.register(pd.UInt32Dtype)
-@typeof_impl.register(pd.UInt64Dtype)
 def typeof_pd_int_dtype(val, c):
     bitwidth = 8 * val.itemsize
     kind = '' if val.kind == 'i' else 'u'
     dtype = getattr(types, '{}int{}'.format(kind, bitwidth))
     return IntDType(dtype)
+
+
+def _register_int_dtype(t):
+    typeof_impl.register(t)(typeof_pd_int_dtype)
+    int_dtype = typeof_pd_int_dtype(t(), None)
+    type_callable(t)(lambda c: lambda: int_dtype)
+    lower_builtin(t)(lambda c, b, s, a: c.get_dummy_value())
+
+
+pd_int_dtype_classes = (pd.Int8Dtype, pd.Int16Dtype, pd.Int32Dtype,
+    pd.Int64Dtype, pd.UInt8Dtype, pd.UInt16Dtype, pd.UInt32Dtype,
+    pd.UInt64Dtype)
+
+
+for t in pd_int_dtype_classes:
+    _register_int_dtype(t)
 
 
 @numba.extending.register_jitable

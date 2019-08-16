@@ -55,6 +55,17 @@ def test_int_dtype():
     check_func(impl, (pd.Int8Dtype(),))
     check_func(impl, (pd.UInt32Dtype(),))
 
+    # constructors
+    def impl2():
+        return pd.Int8Dtype()
+
+    check_func(impl2, ())
+
+    def impl3():
+        return pd.UInt32Dtype()
+
+    check_func(impl3, ())
+
 
 def test_getitem_int(int_arr_value):
 
