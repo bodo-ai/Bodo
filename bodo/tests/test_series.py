@@ -84,6 +84,34 @@ def test_series_constructor(data, index, name):
         bodo_func(data, index, name), impl(data, index, name))
 
 
+def test_series_constructor_dtype1():
+
+    def impl(d):
+        return pd.Series(d, dtype=np.int32)
+
+    check_func(impl, ([3, 4, 1, -3, 0],), is_out_distributed=False)
+    check_func(impl, (np.array([3, 4, 1, -3, 0]),))
+
+
+def test_series_constructor_dtype2():
+
+    def impl(d):
+        return pd.Series(d, dtype='int32')
+
+    check_func(impl, ([3, 4, 1, -3, 0],), is_out_distributed=False)
+    check_func(impl, (np.array([3, 4, 1, -3, 0]),))
+
+
+def test_series_constructor_int_arr():
+
+    def impl(d):
+        return pd.Series(d, dtype='Int32')
+
+    check_func(impl, ([3, 4, 1, -3, 0],), is_out_distributed=False)
+    check_func(impl, (np.array([3, 4, 1, -3, 0]),))
+    check_func(impl, (np.array([1, 4, 1, np.nan, 0], dtype=np.float32),))
+
+
 # using length of 5 arrays to enable testing on 3 ranks (2, 2, 1 distribution)
 # zero length chunks on any rank can cause issues, TODO: fix
 # TODO: other possible Series types like Categorical, dt64, td64, ...

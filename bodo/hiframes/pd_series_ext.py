@@ -676,10 +676,6 @@ def pd_series_overload(data=None, index=None, dtype=None, name=None,
     if is_overload_none(data):
         raise ValueError("pd.Series(): 'data' argument required.")
 
-    # TODO: support
-    if not is_overload_none(dtype):
-        raise ValueError("pd.Series(): 'dtype' argument not supported yet.")
-
     # fastpath not supported
     if not is_overload_false(fastpath):
         raise ValueError("pd.Series(): 'fastpath' argument not supported.")
@@ -700,7 +696,8 @@ def pd_series_overload(data=None, index=None, dtype=None, name=None,
         #     data_t2 = data_t1
 
         # TODO: copy if index to avoid aliasing issues
-        data_t2 = data_t1
+        # data_t2 = data_t1
+        data_t2 = bodo.utils.conversion.fix_arr_dtype(data_t1, dtype)
 
         # TODO: enable when branch pruning works for this
         # if copy:

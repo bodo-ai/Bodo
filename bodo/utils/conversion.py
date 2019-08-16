@@ -114,11 +114,42 @@ def fix_arr_dtype(data, new_dtype):
 
 @overload(fix_arr_dtype)
 def overload_fix_arr_dtype(data, new_dtype):
-    assert isinstance(data, types.Array)
-    assert isinstance(new_dtype, types.DType)
 
-    if data.dtype != new_dtype.dtype:
-        return lambda data, new_dtype: data.astype(new_dtype)
+    if is_overload_none(new_dtype):
+        return lambda data, new_dtype: data
+
+    nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
+
+    # nullable int array case
+    if isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype):
+        _dtype = nb_dtype.dtype
+        if isinstance(data.dtype, types.Float):
+            def impl_float(data, new_dtype):
+                n = len(data)
+                n_bytes = (n + 7) >> 3
+                arr = np.empty(n, _dtype)
+                bitmap = np.empty(n_bytes, np.uint8)
+                for i in numba.parfor.internal_prange(n):
+                    arr[i] = data[i]
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        bitmap, i, not np.isnan(data[i]))
+                return bodo.libs.int_arr_ext.init_integer_array(arr, bitmap)
+            return impl_float
+        else:
+            def impl(data, new_dtype):
+                n = len(data)
+                n_bytes = (n + 7) >> 3
+                bitmap = np.empty(n_bytes, np.uint8)
+                for i in numba.parfor.internal_prange(n):
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        bitmap, i, 1)
+                return bodo.libs.int_arr_ext.init_integer_array(
+                    data.astype(_dtype), bitmap)
+            return impl
+
+    # Array case
+    if data.dtype != nb_dtype:
+        return lambda data, new_dtype: data.astype(nb_dtype)
 
     return lambda data, new_dtype: data
 

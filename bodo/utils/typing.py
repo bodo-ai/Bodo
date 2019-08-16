@@ -2,6 +2,7 @@
 Helper functions to enable typing.
 """
 import numpy as np
+import pandas as pd
 import numba
 from numba import types
 from numba.extending import register_model, models, overload
@@ -66,8 +67,12 @@ def get_overload_const_str(val):
 def parse_dtype(dtype):
     if isinstance(dtype, types.DTypeSpec):
         return dtype.dtype
+
     try:
         d_str = get_overload_const_str(dtype)
+        if d_str.startswith('Int') or d_str.startswith('UInt'):
+            return bodo.libs.int_arr_ext.typeof_pd_int_dtype(
+                pd.api.types.pandas_dtype(d_str), None)
         return numba.numpy_support.from_dtype(np.dtype(d_str))
     except:
         pass
