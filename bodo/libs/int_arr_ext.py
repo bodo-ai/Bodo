@@ -466,6 +466,13 @@ def overload_int_arr_shape(A):
     return lambda A: (len(A._data),)
 
 
+@overload_attribute(IntegerArrayType, 'dtype')
+def overload_int_arr_dtype(A):
+    dtype_class = getattr(pd, "{}Int{}Dtype".format(
+            '' if A.dtype.signed else 'U', A.dtype.bitwidth))
+    return lambda A: dtype_class()
+
+
 ############################### numpy ufuncs #################################
 
 

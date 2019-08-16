@@ -279,3 +279,11 @@ def test_unary_op(op):
     A = pd.arrays.IntegerArray(np.array([1, 1, 1, 2, 10], np.int64),
         np.array([False, True, True, False, False]))
     check_func(test_impl, (A,))
+
+
+def test_dtype(int_arr_value):
+
+    def test_impl(A):
+        return A.dtype
+
+    check_func(test_impl, (int_arr_value,))
