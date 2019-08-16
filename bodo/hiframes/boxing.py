@@ -127,9 +127,19 @@ def get_hiframes_dtypes(df):
     """get hiframe data types for a pandas dataframe
     """
     col_names = df.columns.tolist()
-    hi_typs = [_get_series_array_type(_infer_series_dtype(df[cname]))
+    # TODO: remove pd int dtype hack
+    hi_typs = [_get_int_arr_typ(df[cname].dtype) if isinstance(
+                df[cname].dtype, pd.core.arrays.integer._IntegerDtype) else
+                _get_series_array_type(_infer_series_dtype(df[cname]))
                 for cname in col_names]
     return tuple(hi_typs)
+
+
+def _get_int_arr_typ(dtype):
+    bitwidth = 8 * dtype.itemsize
+    kind = '' if dtype.kind == 'i' else 'u'
+    t_dtype = getattr(types, '{}int{}'.format(kind, bitwidth))
+    return bodo.libs.int_arr_ext.IntegerArrayType(t_dtype)
 
 
 def _infer_series_dtype(S):

@@ -28,7 +28,7 @@ int64_t pq_get_size(FileReaderVec *readers, int64_t column_idx);
 int64_t pq_read(FileReaderVec *readers, int64_t column_idx,
                 uint8_t *out_data, int out_dtype, uint8_t *out_nulls=nullptr);
 int pq_read_parallel(FileReaderVec *readers, int64_t column_idx,
-                uint8_t* out_data, int out_dtype, int64_t start, int64_t count);
+                uint8_t* out_data, int out_dtype, int64_t start, int64_t count, uint8_t *out_nulls=nullptr);
 int pq_read_string(FileReaderVec *readers, int64_t column_idx,
                                     uint32_t **out_offsets, uint8_t **out_data, uint8_t **out_nulls);
 int pq_read_string_parallel(FileReaderVec *readers, int64_t column_idx,
@@ -224,7 +224,7 @@ int64_t pq_read(FileReaderVec *readers, int64_t column_idx,
 }
 
 int pq_read_parallel(FileReaderVec *readers, int64_t column_idx,
-                uint8_t* out_data, int out_dtype, int64_t start, int64_t count)
+                uint8_t* out_data, int out_dtype, int64_t start, int64_t count, uint8_t *out_nulls)
 {
     // printf("read parquet parallel column: %lld start: %lld count: %lld\n",
     //                                                 column_idx, start, count);
@@ -257,12 +257,12 @@ int pq_read_parallel(FileReaderVec *readers, int64_t column_idx,
         // std::cout << "dtype_size: " << dtype_size << '\n';
 
         // read data
-        int64_t read_rows = 0;
+        int64_t read_rows = 0;  // rows read so far
         while (read_rows<count)
         {
             int64_t rows_to_read = std::min(count-read_rows, file_size-start);
             pq_read_parallel_single_file(readers->at(file_ind), column_idx,
-                out_data+read_rows*dtype_size, out_dtype, start, rows_to_read);
+                out_data+read_rows*dtype_size, out_dtype, start, rows_to_read, out_nulls, read_rows);
             read_rows += rows_to_read;
             start = 0;  // start becomes 0 after reading non-empty first chunk
             file_ind++;
@@ -275,7 +275,7 @@ int pq_read_parallel(FileReaderVec *readers, int64_t column_idx,
     else
     {
         return pq_read_parallel_single_file(readers->at(0), column_idx,
-                                        out_data, out_dtype, start, count);
+                                        out_data, out_dtype, start, count, out_nulls, 0);
     }
     return 0;
 }

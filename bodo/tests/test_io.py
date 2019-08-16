@@ -9,7 +9,7 @@ import bodo
 from bodo.utils.testing import ensure_clean
 from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_rank,
-    get_start_end)
+    get_start_end, check_func)
 
 
 kde_file = os.path.join('bodo', 'tests', 'data', 'kde.parquet')
@@ -60,8 +60,7 @@ def test_pq_nullable_int_single(datapath):
 
     try:
         bodo.io.parquet_pio.use_nullable_int_arr = True
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl().astype('Int64'))
+        check_func(test_impl, (), check_dtype=False)
     finally:
         bodo.io.parquet_pio.use_nullable_int_arr = False
 
@@ -74,8 +73,7 @@ def test_pq_nullable_int_multi(datapath):
 
     try:
         bodo.io.parquet_pio.use_nullable_int_arr = True
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl().astype('Int64'))
+        check_func(test_impl, (), check_dtype=False)
     finally:
         bodo.io.parquet_pio.use_nullable_int_arr = False
 

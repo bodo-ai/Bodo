@@ -58,7 +58,7 @@ def get_start_end(n):
 
 
 def check_func(func, args, is_out_distributed=None, sort_output=False,
-                                           check_names=True, copy_input=False):
+                         check_names=True, copy_input=False, check_dtype=True):
     """test bodo compilation of function 'func' on arguments using REP and 1D
     inputs/outputs
     """
@@ -67,7 +67,8 @@ def check_func(func, args, is_out_distributed=None, sort_output=False,
     # sequential
     bodo_func = bodo.jit(func)
     call_args = tuple(_get_arg(a, copy_input) for a in args)
-    _test_equal(bodo_func(*call_args), py_output, sort_output, check_names)
+    _test_equal(bodo_func(*call_args), py_output, sort_output, check_names,
+                                                                   check_dtype)
 
     if is_out_distributed is None:
         # assume all distributable output is distributed if not specified
@@ -85,7 +86,8 @@ def check_func(func, args, is_out_distributed=None, sort_output=False,
         bodo_output = bodo.gatherv(bodo_output)
     # only rank 0 should check if gatherv() called on output
     if not is_out_distributed or bodo.get_rank() == 0:
-        _test_equal(bodo_output, py_output, sort_output, check_names)
+        _test_equal(bodo_output, py_output, sort_output, check_names,
+                                                                 check_dtype)
 
     # 1D distributed variable length
     bodo_func = bodo.jit(
@@ -96,7 +98,8 @@ def check_func(func, args, is_out_distributed=None, sort_output=False,
     if is_out_distributed:
         bodo_output = bodo.gatherv(bodo_output)
     if not is_out_distributed or bodo.get_rank() == 0:
-        _test_equal(bodo_output, py_output, sort_output, check_names)
+        _test_equal(bodo_output, py_output, sort_output, check_names,
+                                                                 check_dtype)
 
 
 def _get_arg(a, copy=False):
@@ -127,7 +130,8 @@ def _get_dist_arg(a, copy=False, var_length=False):
     return a[start:end]
 
 
-def _test_equal(bodo_out, py_out, sort_output, check_names=True):
+def _test_equal(bodo_out, py_out, sort_output, check_names=True,
+                                                             check_dtype=True):
 
     if isinstance(py_out, pd.Series):
         if sort_output:
@@ -136,7 +140,7 @@ def _test_equal(bodo_out, py_out, sort_output, check_names=True):
             bodo_out.sort_values(inplace=True)
             bodo_out.reset_index(inplace=True, drop=True)
         pd.testing.assert_series_equal(
-            bodo_out, py_out, check_names=check_names)
+            bodo_out, py_out, check_names=check_names, check_dtype=check_dtype)
     elif isinstance(py_out, pd.Index):
         if sort_output:
             py_out = py_out.sort_values()
@@ -150,7 +154,7 @@ def _test_equal(bodo_out, py_out, sort_output, check_names=True):
             bodo_out.sort_values(bodo_out.columns.to_list(), inplace=True)
             bodo_out.reset_index(inplace=True, drop=True)
         pd.testing.assert_frame_equal(
-            bodo_out, py_out, check_names=check_names)
+            bodo_out, py_out, check_names=check_names, check_dtype=check_dtype)
     elif isinstance(py_out, np.ndarray):
         if sort_output:
             py_out.sort()

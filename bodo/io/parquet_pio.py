@@ -408,19 +408,22 @@ def pq_read_lower(context, builder, sig, args):
                              args[3], zero_ptr])
 
 
-@lower_builtin(read_parquet_parallel, types.Opaque('arrow_reader'), types.intp, types.Array, types.int32, types.intp, types.intp)
+@lower_builtin(read_parquet_parallel, types.Opaque('arrow_reader'), types.intp,
+    types.Array, types.int32, types.intp, types.intp)
 def pq_read_parallel_lower(context, builder, sig, args):
     fnty = lir.FunctionType(lir.IntType(32),
                             [lir.IntType(8).as_pointer(), lir.IntType(64),
                              lir.IntType(8).as_pointer(),
-                             lir.IntType(32), lir.IntType(64), lir.IntType(64)])
+                             lir.IntType(32), lir.IntType(64), lir.IntType(64),
+                             lir.IntType(8).as_pointer()])
     out_array = make_array(sig.args[2])(context, builder, args[2])
+    zero_ptr = context.get_constant_null(types.voidptr)
 
     fn = builder.module.get_or_insert_function(fnty, name="pq_read_parallel")
     return builder.call(fn, [args[0], args[1],
                              builder.bitcast(
                                  out_array.data, lir.IntType(8).as_pointer()),
-                             args[3], args[4], args[5]])
+                             args[3], args[4], args[5], zero_ptr])
 
 
 ########################## read nullable int array ###########################
@@ -451,6 +454,31 @@ def pq_read_int_arr_lower(context, builder, sig, args):
                              builder.bitcast(
                                 bitmap.data, lir.IntType(8).as_pointer())])
 
+
+@lower_builtin(read_parquet_parallel, types.Opaque('arrow_reader'),
+    types.intp, IntegerArrayType, types.int32, types.intp, types.intp)
+def pq_read_parallel_int_arr_lower(context, builder, sig, args):
+    fnty = lir.FunctionType(lir.IntType(32),
+                            [lir.IntType(8).as_pointer(), lir.IntType(64),
+                             lir.IntType(8).as_pointer(),
+                             lir.IntType(32), lir.IntType(64), lir.IntType(64),
+                             lir.IntType(8).as_pointer()])
+    int_arr_typ = sig.args[2]
+    int_arr = cgutils.create_struct_proxy(int_arr_typ)(
+        context, builder, args[2])
+    data_typ = types.Array(int_arr_typ.dtype, 1, 'C')
+    data_array = make_array(data_typ)(context, builder, int_arr.data)
+    null_arr_typ = types.Array(types.uint8, 1, 'C')
+    bitmap = make_array(null_arr_typ)(
+        context, builder, int_arr.null_bitmap)
+
+    fn = builder.module.get_or_insert_function(fnty, name="pq_read_parallel")
+    return builder.call(fn, [args[0], args[1],
+                             builder.bitcast(
+                                 data_array.data, lir.IntType(8).as_pointer()),
+                             args[3], args[4], args[5],
+                             builder.bitcast(
+                                bitmap.data, lir.IntType(8).as_pointer())])
 
 
 ############################## read strings ###############################

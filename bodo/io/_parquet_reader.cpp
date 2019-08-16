@@ -44,7 +44,7 @@ static inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
 }
 
 
-inline void copy_nulls(uint8_t* out_nulls, const uint8_t* null_bitmap_buff, int64_t num_values, int64_t null_offset)
+inline void copy_nulls(uint8_t* out_nulls, const uint8_t* null_bitmap_buff, int64_t skip, int64_t num_values, int64_t null_offset)
 {
     if (out_nulls != nullptr) {
         if (null_bitmap_buff == nullptr) {
@@ -53,7 +53,7 @@ inline void copy_nulls(uint8_t* out_nulls, const uint8_t* null_bitmap_buff, int6
             }
         } else {
             for(size_t i=0; i<num_values; i++) {
-                auto bit = ::arrow::BitUtil::GetBit(null_bitmap_buff, i);
+                auto bit = ::arrow::BitUtil::GetBit(null_bitmap_buff, skip + i);
                 SetBitTo(out_nulls, null_offset+i, bit);
             }
         }
@@ -95,14 +95,14 @@ int64_t pq_read_single_file(std::shared_ptr<FileReader> arrow_reader, int64_t co
     const uint8_t* null_bitmap_buff = arr->null_count() == 0 ? nullptr : arr->null_bitmap_data();
 
     copy_data(out_data, buff, 0, num_values, arrow_type, null_bitmap_buff, out_dtype);
-    copy_nulls(out_nulls, null_bitmap_buff, num_values, null_offset);
+    copy_nulls(out_nulls, null_bitmap_buff, 0, num_values, null_offset);
 
     // memcpy(out_data, buffers[1]->data(), buff_size);
     return num_values;
 }
 
 int pq_read_parallel_single_file(std::shared_ptr<FileReader> arrow_reader, int64_t column_idx,
-                uint8_t* out_data, int out_dtype, int64_t start, int64_t count)
+                uint8_t* out_data, int out_dtype, int64_t start, int64_t count, uint8_t *out_nulls, int64_t null_offset)
 {
 
     if (count==0) {
@@ -114,8 +114,8 @@ int pq_read_parallel_single_file(std::shared_ptr<FileReader> arrow_reader, int64
     column_indices.push_back(column_idx);
 
     int row_group_index = 0;
-    int64_t skipped_rows = 0;
-    int64_t read_rows = 0;
+    int64_t skipped_rows = 0; // number of rows skipped so far (start-skipped_rows is rows left to skip to reach starting point)
+    int64_t read_rows = 0; // number of rows read so far
 
 
     auto rg_metadata = arrow_reader->parquet_reader()->metadata()->RowGroup(row_group_index);
@@ -161,6 +161,7 @@ int pq_read_parallel_single_file(std::shared_ptr<FileReader> arrow_reader, int64
         // printf("rows_to_skip: %ld rows_to_read: %ld\n", rows_to_skip, rows_to_read);
 
         copy_data(out_data+read_rows*dtype_size, buff, rows_to_skip, rows_to_read, arrow_type, null_bitmap_buff, out_dtype);
+        copy_nulls(out_nulls, null_bitmap_buff, rows_to_skip, rows_to_read, read_rows + null_offset);
         // memcpy(out_data+read_rows*dtype_size, buff+rows_to_skip*dtype_size, rows_to_read*dtype_size);
 
         skipped_rows += rows_to_skip;
