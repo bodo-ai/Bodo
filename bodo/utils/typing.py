@@ -1,6 +1,8 @@
 """
 Helper functions to enable typing.
 """
+import numpy as np
+import numba
 from numba import types
 from numba.extending import register_model, models, overload
 from numba.typing.templates import (infer_global, AbstractTemplate,
@@ -58,6 +60,18 @@ def get_overload_const_str(val):
         assert isinstance(val.literal_value, str)
         return val.literal_value
     raise ValueError("{} not constant string".format(val))
+
+
+# TODO: move to Numba
+def parse_dtype(dtype):
+    if isinstance(dtype, types.DTypeSpec):
+        return dtype.dtype
+    try:
+        d_str = get_overload_const_str(dtype)
+        return numba.numpy_support.from_dtype(np.dtype(d_str))
+    except:
+        pass
+    raise ValueError("invalid dtype {}".format(dtype))
 
 
 def is_list_like_index_type(t):

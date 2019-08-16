@@ -543,7 +543,7 @@ class SeriesPass(object):
         # inline IntegerArrayType.copy()
         if (isinstance(func_mod, ir.Var)
                 and isinstance(self.typemap[func_mod.name], IntegerArrayType)
-                and func_name == 'copy'):
+                and func_name in ('copy', 'astype')):
             rhs.args.insert(0, func_mod)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name:self.typemap[v.name]

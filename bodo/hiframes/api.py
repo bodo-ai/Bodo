@@ -21,6 +21,7 @@ import bodo
 from bodo.libs.str_ext import string_type, list_string_array_type
 from bodo.libs.str_arr_ext import (StringArrayType, string_array_type,
     is_str_arr_typ)
+from bodo.libs.int_arr_ext import IntegerArrayType
 
 from bodo.libs.set_ext import build_set
 from numba.targets.imputils import lower_builtin, impl_ret_untracked
@@ -291,13 +292,22 @@ def isna(arr, i):
 
 @overload(isna)
 def isna_overload(arr, i):
+    # String array
     if arr == string_array_type:
         return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
+
+    # Integer array
+    if isinstance(arr, IntegerArrayType):
+        return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+            arr._null_bitmap, i)
+
     # TODO: support NaN in list(list(str))
     if arr == list_string_array_type:
         return lambda arr, i: False
+
     if arr == string_array_split_view_type:
         return lambda arr, i: False
+
     # TODO: extend to other types
     assert isinstance(arr, types.Array)
     dtype = arr.dtype

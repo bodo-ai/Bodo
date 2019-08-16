@@ -305,3 +305,21 @@ def test_copy(int_arr_value):
         return A.copy()
 
     check_func(test_impl, (int_arr_value,))
+
+
+@pytest.mark.parametrize('dtype',
+    [pd.Int8Dtype(), np.float64])
+def test_astype(int_arr_value, dtype):
+
+    def test_impl(A, dtype):
+        return A.astype(dtype)
+
+    check_func(test_impl, (int_arr_value, dtype))
+
+
+def test_astype_str(int_arr_value):
+
+    def test_impl(A):
+        return A.astype('float64')
+
+    check_func(test_impl, (int_arr_value,))

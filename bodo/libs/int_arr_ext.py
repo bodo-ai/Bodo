@@ -18,7 +18,8 @@ from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import hstr_ext
 ll.add_symbol('mask_arr_to_bitmap', hstr_ext.mask_arr_to_bitmap)
-from bodo.utils.typing import is_overload_none
+from bodo.utils.typing import (is_overload_none, is_overload_true,
+    is_overload_false, parse_dtype)
 
 
 class IntegerArrayType(types.ArrayCompatible):
@@ -62,7 +63,7 @@ def _typeof_pd_int_array(val, c):
 
 
 # dtype object for pd.Int64Dtype() etc.
-class IntDType(types.Type):
+class IntDtype(types.Type):
     """
     Type class associated with pandas Integer dtypes (e.g. pd.Int64Dtype,
     pd.UInt64Dtype).
@@ -72,13 +73,13 @@ class IntDType(types.Type):
         self.dtype = dtype
         name = "{}Int{}Dtype()".format(
             '' if dtype.signed else 'U', dtype.bitwidth)
-        super(IntDType, self).__init__(name)
+        super(IntDtype, self).__init__(name)
 
 
-register_model(IntDType)(models.OpaqueModel)
+register_model(IntDtype)(models.OpaqueModel)
 
 
-@box(IntDType)
+@box(IntDtype)
 def box_intdtype(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
@@ -87,7 +88,7 @@ def box_intdtype(typ, val, c):
     return res
 
 
-@unbox(IntDType)
+@unbox(IntDtype)
 def unbox_intdtype(typ, val, c):
     return NativeValue(c.context.get_dummy_value())
 
@@ -96,7 +97,7 @@ def typeof_pd_int_dtype(val, c):
     bitwidth = 8 * val.itemsize
     kind = '' if val.kind == 'i' else 'u'
     dtype = getattr(types, '{}int{}'.format(kind, bitwidth))
-    return IntDType(dtype)
+    return IntDtype(dtype)
 
 
 def _register_int_dtype(t):
@@ -483,6 +484,52 @@ def overload_int_arr_copy(A):
     return lambda A: bodo.libs.int_arr_ext.init_integer_array(
         bodo.libs.int_arr_ext.get_int_arr_data(A).copy(),
         bodo.libs.int_arr_ext.get_int_arr_bitmap(A).copy())
+
+
+@overload_method(IntegerArrayType, 'astype')
+def overload_int_arr_astype(A, dtype, copy=True):
+    # same dtype case
+    if isinstance(dtype, IntDtype) and A.dtype == dtype.dtype:
+        # copy=False
+        if is_overload_false(copy):
+            return lambda A, dtype, copy=True: A
+        # copy=True
+        elif is_overload_true(copy):
+            return lambda A, dtype, copy=True: A.copy()
+        # copy value is dynamic
+        else:
+            def impl(A, dtype, copy=True):
+                if copy:
+                    return A.copy()
+                else:
+                    return A
+            return impl
+
+    # other IntDtype value, needs copy (TODO: copy mask?)
+    if isinstance(dtype, IntDtype):
+        np_dtype = dtype.dtype
+        return lambda A, dtype, copy=True: bodo.libs.int_arr_ext.init_integer_array(
+            bodo.libs.int_arr_ext.get_int_arr_data(A).astype(np_dtype),
+            bodo.libs.int_arr_ext.get_int_arr_bitmap(A).copy())
+
+    # numpy dtypes
+    nb_dtype = parse_dtype(dtype)
+    # NA positions are assigned np.nan for float output
+    if isinstance(nb_dtype, types.Float):
+        def impl_float(A, dtype, copy=True):
+            data = bodo.libs.int_arr_ext.get_int_arr_data(A)
+            n = len(data)
+            B = np.empty(n, nb_dtype)
+            for i in numba.parfor.internal_prange(n):
+                B[i] = data[i]
+                if bodo.hiframes.api.isna(A, i):
+                    B[i] = np.nan
+            return B
+        return impl_float
+
+    # TODO: raise error like Pandas when NAs are assigned to integers
+    return lambda A, dtype, copy=True: \
+            bodo.libs.int_arr_ext.get_int_arr_data(A).astype(nb_dtype)
 
 
 ############################### numpy ufuncs #################################
