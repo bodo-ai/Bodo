@@ -18,6 +18,7 @@ import bodo
 from bodo.libs.str_ext import string_type, list_string_array_type
 from bodo.libs.str_arr_ext import (string_array_type, offset_typ, char_typ,
     str_arr_payload_type, StringArrayType, GetItemStringArray)
+from bodo.libs.int_arr_ext import IntegerArrayType, IntDType
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type, datetime_date_type
 from bodo.hiframes.pd_categorical_ext import (PDCategoricalDtype,
     CategoricalArray)
@@ -125,6 +126,9 @@ def _get_series_array_type(dtype):
     # categorical
     if isinstance(dtype, PDCategoricalDtype):
         return CategoricalArray(dtype)
+
+    if isinstance(dtype, IntDType):
+        return IntegerArrayType(dtype.dtype)
 
     # use recarray data layout for series of tuples
     if isinstance(dtype, types.BaseTuple):

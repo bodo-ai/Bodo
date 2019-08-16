@@ -46,6 +46,16 @@ def test_unbox(int_arr_value):
     check_func(impl2, (int_arr_value,))
 
 
+def test_int_dtype():
+    # unbox and box
+    def impl(d):
+        return d
+
+    check_func(impl, (pd.Int32Dtype(),))
+    check_func(impl, (pd.Int8Dtype(),))
+    check_func(impl, (pd.UInt32Dtype(),))
+
+
 def test_getitem_int(int_arr_value):
 
     def test_impl(A, i):

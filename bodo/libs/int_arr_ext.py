@@ -61,6 +61,52 @@ def _typeof_pd_int_array(val, c):
     return IntegerArrayType(dtype)
 
 
+# dtype object for pd.Int64Dtype() etc.
+class IntDType(types.Type):
+    """
+    Type class associated with pandas Integer dtypes (e.g. pd.Int64Dtype,
+    pd.UInt64Dtype).
+    """
+    def __init__(self, dtype):
+        assert isinstance(dtype, types.Integer)
+        self.dtype = dtype
+        name = "{}Int{}Dtype()".format(
+            '' if dtype.signed else 'U', dtype.bitwidth)
+        super(IntDType, self).__init__(name)
+
+
+register_model(IntDType)(models.OpaqueModel)
+
+
+@box(IntDType)
+def box_intdtype(typ, val, c):
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    res = c.pyapi.call_method(pd_class_obj, str(typ)[:-2], ())
+    c.pyapi.decref(pd_class_obj)
+    return res
+
+
+@unbox(IntDType)
+def unbox_intdtype(typ, val, c):
+    return NativeValue(c.context.get_dummy_value())
+
+
+@typeof_impl.register(pd.Int8Dtype)
+@typeof_impl.register(pd.Int16Dtype)
+@typeof_impl.register(pd.Int32Dtype)
+@typeof_impl.register(pd.Int64Dtype)
+@typeof_impl.register(pd.UInt8Dtype)
+@typeof_impl.register(pd.UInt16Dtype)
+@typeof_impl.register(pd.UInt32Dtype)
+@typeof_impl.register(pd.UInt64Dtype)
+def typeof_pd_int_dtype(val, c):
+    bitwidth = 8 * val.itemsize
+    kind = '' if val.kind == 'i' else 'u'
+    dtype = getattr(types, '{}int{}'.format(kind, bitwidth))
+    return IntDType(dtype)
+
+
 @numba.extending.register_jitable
 def mask_arr_to_bitmap(mask_arr):
     n = len(mask_arr)

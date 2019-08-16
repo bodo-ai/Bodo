@@ -22,6 +22,7 @@ from bodo.hiframes.pd_timestamp_ext import (datetime_date_type,
     unbox_datetime_date_array, box_datetime_date_array)
 from bodo.libs.str_ext import string_type, list_string_array_type
 from bodo.libs.str_arr_ext import (string_array_type, unbox_str_series, box_str_arr)
+from bodo.libs.int_arr_ext import IntegerArrayType, typeof_pd_int_dtype
 from bodo.hiframes.pd_categorical_ext import (PDCategoricalDtype,
     box_categorical_array, unbox_categorical_array)
 from bodo.hiframes.pd_series_ext import (SeriesType, _get_series_array_type)
@@ -128,18 +129,9 @@ def get_hiframes_dtypes(df):
     """
     col_names = df.columns.tolist()
     # TODO: remove pd int dtype hack
-    hi_typs = [_get_int_arr_typ(df[cname].dtype) if isinstance(
-                df[cname].dtype, pd.core.arrays.integer._IntegerDtype) else
-                _get_series_array_type(_infer_series_dtype(df[cname]))
+    hi_typs = [_get_series_array_type(_infer_series_dtype(df[cname]))
                 for cname in col_names]
     return tuple(hi_typs)
-
-
-def _get_int_arr_typ(dtype):
-    bitwidth = 8 * dtype.itemsize
-    kind = '' if dtype.kind == 'i' else 'u'
-    t_dtype = getattr(types, '{}int{}'.format(kind, bitwidth))
-    return bodo.libs.int_arr_ext.IntegerArrayType(t_dtype)
 
 
 def _infer_series_dtype(S):
@@ -170,6 +162,10 @@ def _infer_series_dtype(S):
         else:
             raise ValueError(
                 "object dtype infer: data type for column {} not supported".format(S.name))
+
+    # nullable int dtype
+    if isinstance(S.dtype, pd.core.arrays.integer._IntegerDtype):
+        return typeof_pd_int_dtype(S.dtype, None)
 
     # regular numpy types
     try:
