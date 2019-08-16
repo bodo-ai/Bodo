@@ -267,6 +267,17 @@ def test_series_astype_str(series_val):
     check_func(test_impl, (series_val,))
 
 
+def test_series_astype_int_arr(numeric_series_val):
+    # only integers can be converted safely
+    if not pd.api.types.is_integer_dtype(numeric_series_val):
+        return
+
+    def test_impl(S):
+        return S.astype('Int64')
+
+    check_func(test_impl, (numeric_series_val,))
+
+
 def test_series_copy_deep(series_val):
     # TODO: test deep/shallow cases properly
     def test_impl(S):

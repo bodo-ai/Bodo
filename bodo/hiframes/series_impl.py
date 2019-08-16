@@ -594,7 +594,7 @@ def overload_series_astype(S, dtype, copy=True, errors='raise'):
         arr = bodo.hiframes.api.get_series_data(S)
         index = bodo.hiframes.api.get_series_index(S)
         name = bodo.hiframes.api.get_series_name(S)
-        out_arr = arr.astype(dtype)
+        out_arr = bodo.utils.conversion.fix_arr_dtype(arr, dtype, copy)
         return bodo.hiframes.api.init_series(out_arr, index, name)
 
     return impl

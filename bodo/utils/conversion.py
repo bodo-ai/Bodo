@@ -108,15 +108,21 @@ def overload_coerce_to_array(data, error_on_nonarray=True):
 
 
 # TODO: use generated_jit with IR inlining
-def fix_arr_dtype(data, new_dtype):
+def fix_arr_dtype(data, new_dtype, copy=None):
     return data
 
 
 @overload(fix_arr_dtype)
-def overload_fix_arr_dtype(data, new_dtype):
+def overload_fix_arr_dtype(data, new_dtype, copy=None):
+    """convert data to new_dtype, copy if copy parameter is not None
+    """
+    # TODO: support copy=True and copy=False when literals are passed reliably
+    do_copy = not is_overload_none(copy)
 
     if is_overload_none(new_dtype):
-        return lambda data, new_dtype: data
+        if do_copy:
+            return lambda data, new_dtype, copy=None: data.copy()
+        return lambda data, new_dtype, copy=None: data
 
     nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
 
@@ -124,7 +130,7 @@ def overload_fix_arr_dtype(data, new_dtype):
     if isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype):
         _dtype = nb_dtype.dtype
         if isinstance(data.dtype, types.Float):
-            def impl_float(data, new_dtype):
+            def impl_float(data, new_dtype, copy=None):
                 n = len(data)
                 n_bytes = (n + 7) >> 3
                 arr = np.empty(n, _dtype)
@@ -136,11 +142,12 @@ def overload_fix_arr_dtype(data, new_dtype):
                 return bodo.libs.int_arr_ext.init_integer_array(arr, bitmap)
             return impl_float
         else:
-            def impl(data, new_dtype):
+            def impl(data, new_dtype, copy=None):
                 n = len(data)
                 n_bytes = (n + 7) >> 3
                 bitmap = np.empty(n_bytes, np.uint8)
                 for i in numba.parfor.internal_prange(n):
+                    # TODO: use simple set_bit
                     bodo.libs.int_arr_ext.set_bit_to_arr(
                         bitmap, i, 1)
                 return bodo.libs.int_arr_ext.init_integer_array(
@@ -148,10 +155,10 @@ def overload_fix_arr_dtype(data, new_dtype):
             return impl
 
     # Array case
-    if data.dtype != nb_dtype:
-        return lambda data, new_dtype: data.astype(nb_dtype)
+    if do_copy or data.dtype != nb_dtype:
+        return lambda data, new_dtype, copy=None: data.astype(nb_dtype)
 
-    return lambda data, new_dtype: data
+    return lambda data, new_dtype, copy=None: data
 
 
 # TODO: use generated_jit with IR inlining
