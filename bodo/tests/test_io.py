@@ -94,6 +94,17 @@ def test_pq_schema(datapath):
     pd.testing.assert_frame_equal(bodo_func(fname), impl(fname))
 
 
+def test_csv_bool1(datapath):
+    fname = datapath('csv_data_bool1.csv')
+    def test_impl():
+        dtype = {'A': 'int', 'B': 'bool', 'C': 'float'}
+        return pd.read_csv(fname,
+            names=dtype.keys(),
+            dtype=dtype,
+        )
+    check_func(test_impl, ())
+
+
 def test_h5_read_seq(datapath):
     fname = datapath("lr.hdf5")
     def test_impl():

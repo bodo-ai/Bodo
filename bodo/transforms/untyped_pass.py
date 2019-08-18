@@ -621,6 +621,7 @@ class UntypedPass(object):
                 fname_const, sep=sep, nrows=rows_to_read, skiprows=skiprows,
                 header=header)
             # TODO: categorical, etc.
+            # TODO: Integer NA case: sample data might not include NA
             dtypes = numba.typeof(df).data
 
             usecols = list(range(len(dtypes))) if usecols is None else usecols
@@ -737,6 +738,7 @@ class UntypedPass(object):
                 return string_array_type
             typ_name = 'int64' if typ_name == 'int' else typ_name
             typ_name = 'float64' if typ_name == 'float' else typ_name
+            typ_name = 'bool_' if typ_name == 'bool' else typ_name
             typ = getattr(types, typ_name)
             typ = types.Array(typ, 1, 'C')
             return typ

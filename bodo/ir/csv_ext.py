@@ -35,8 +35,9 @@ class CsvReader(ir.Stmt):
         self.skiprows = skiprows
 
     def __repr__(self):  # pragma: no cover
-        # TODO
-        return "{} = ReadCsv()".format(self.df_out)
+        return "{} = ReadCsv(file={}, col_names={}, types={}, vars={})".format(
+            self.df_out, self.file_name, self.df_colnames, self.out_types,
+            self.out_vars)
 
 
 def csv_array_analysis(csv_node, equiv_set, typemap, array_analysis):
@@ -262,6 +263,10 @@ def _get_dtype_str(t):
         # FIXME: fix after Numba #3372 is resolved
         types.string_array_type = string_array_type
         return 'string_array_type'
+
+    if dtype == types.bool_:
+        dtype = 'bool_'
+
     return '{}[::1]'.format(dtype)
 
 
