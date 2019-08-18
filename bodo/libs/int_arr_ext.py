@@ -14,6 +14,8 @@ from numba.extending import (typeof_impl, type_callable, models,
     overload_attribute)
 from numba.array_analysis import ArrayAnalysis
 from bodo.libs.str_arr_ext import kBitmask
+from bodo.utils.typing import is_list_like_index_type
+
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import hstr_ext
@@ -333,8 +335,10 @@ def int_arr_getitem(A, ind):
         # XXX: cannot handle NA for scalar getitem since not type stable
         return lambda A, ind: A._data[ind]
 
-    if ind == types.Array(types.bool_, 1, 'C'):
-        def impl(A, ind):
+    # bool arr indexing
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+        def impl_bool(A, ind):
+            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
             old_mask = A._null_bitmap
             new_data = A._data[ind]
             n = len(new_data)
@@ -347,6 +351,25 @@ def int_arr_getitem(A, ind):
                     bodo.libs.int_arr_ext.set_bit_to_arr(
                         new_mask, curr_bit, bit)
                     curr_bit += 1
+            return init_integer_array(new_data, new_mask)
+        return impl_bool
+
+    # int arr indexing
+    if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
+        def impl(A, ind):
+            ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
+            old_mask = A._null_bitmap
+            new_data = A._data[ind_t]
+            n = len(new_data)
+            n_bytes = (n + 7) >> 3
+            new_mask = np.empty(n_bytes, np.uint8)
+            curr_bit = 0
+            for i in range(len(ind)):
+                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                    old_mask, ind_t[i])
+                bodo.libs.int_arr_ext.set_bit_to_arr(
+                    new_mask, curr_bit, bit)
+                curr_bit += 1
             return init_integer_array(new_data, new_mask)
         return impl
 
