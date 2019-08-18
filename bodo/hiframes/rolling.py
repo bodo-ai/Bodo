@@ -880,6 +880,8 @@ def get_first_non_na(arr):
         return lambda arr: zero if len(arr) == 0 else arr[0]
 
     assert isinstance(arr.dtype, types.Float)
+    # TODO: int array
+
     na_val = np.nan
     if arr.dtype == types.float32:
         na_val = np.float32('nan')
@@ -903,6 +905,8 @@ def get_last_non_na(arr):
         return lambda arr: zero if len(arr) == 0 else arr[-1]
 
     assert isinstance(arr.dtype, types.Float)
+    # TODO: int array
+
     na_val = np.nan
     if arr.dtype == types.float32:
         na_val = np.float32('nan')

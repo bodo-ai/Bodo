@@ -7,7 +7,7 @@ from numba.ir_utils import (visit_vars_inner, replace_vars_inner,
                             compile_to_numba_ir, replace_arg_nodes)
 import bodo
 from bodo.transforms import distributed_pass, distributed_analysis
-from bodo.utils.utils import debug_prints, alloc_arr_tup
+from bodo.utils.utils import debug_prints
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type

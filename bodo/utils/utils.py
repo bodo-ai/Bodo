@@ -366,16 +366,20 @@ def empty_like_type(n, arr):
 
 @overload(empty_like_type)
 def empty_like_type_overload(n, arr):
+    # categorical
     if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArray):
         from bodo.hiframes.pd_categorical_ext import fix_cat_array_type
         return lambda n, arr: fix_cat_array_type(np.empty(n, arr.dtype))
+
     if isinstance(arr, types.Array):
         return lambda n, arr: np.empty(n, arr.dtype)
+
     if isinstance(arr, types.List) and arr.dtype == string_type:
         def empty_like_type_str_list(n, arr):
             return [''] * n
         return empty_like_type_str_list
 
+    # nullable int arr
     if isinstance(arr, bodo.libs.int_arr_ext.IntegerArrayType):
         _dtype = arr.dtype
         def empty_like_type_int_arr(n, arr):
@@ -423,6 +427,24 @@ def alloc_arr_tup_overload(n, data, init_vals=()):
     exec(func_text, {'empty_like_type': empty_like_type, 'np': np}, loc_vars)
     alloc_impl = loc_vars['f']
     return alloc_impl
+
+
+
+def alloc_type(n, t):
+    return np.empty(n, t.dtype)
+
+
+@overload(alloc_type)
+def overload_alloc_type(n, t):
+    typ = t.instance_type
+    dtype = numba.numpy_support.as_dtype(typ.dtype)
+
+    # nullable int array
+    if isinstance(typ, bodo.libs.int_arr_ext.IntegerArrayType):
+        return lambda n, t: bodo.libs.int_arr_ext.init_integer_array(
+                np.empty(n, dtype), np.empty((n + 7) >> 3, np.uint8))
+
+    return lambda n, t: np.empty(n, dtype)
 
 
 @intrinsic

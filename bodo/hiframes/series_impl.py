@@ -973,9 +973,9 @@ def create_explicit_binary_op_overload(op):
         typing_context = numba.targets.registry.cpu_target.typing_context
         # scalar case
         if isinstance(other, types.Number):
-            args = (types.Array(S.dtype, 1, 'C'), other)
+            args = (S.data, other)
             ret_dtype = typing_context.resolve_function_type(
-                op, args, ()).return_type.dtype
+                op, args, {}).return_type
             def impl_scalar(S, other, level=None, fill_value=None, axis=0):
                 arr = bodo.hiframes.api.get_series_data(S)
                 index = bodo.hiframes.api.get_series_index(S)
@@ -983,7 +983,7 @@ def create_explicit_binary_op_overload(op):
                 numba.parfor.init_prange()
                 # other could be tuple, list, array, Index, or Series
                 n = len(arr)
-                out_arr = np.empty(n, ret_dtype)
+                out_arr = bodo.utils.utils.alloc_type(n, ret_dtype)
                 for i in numba.parfor.internal_prange(n):
                     left_nan = bodo.hiframes.api.isna(arr, i)
                     if left_nan:
@@ -998,9 +998,9 @@ def create_explicit_binary_op_overload(op):
 
             return impl_scalar
 
-        args = (types.Array(S.dtype, 1, 'C'), types.Array(other.dtype, 1, 'C'))
+        args = (S.data, types.Array(other.dtype, 1, 'C'))
         ret_dtype = typing_context.resolve_function_type(
-            op, args, ()).return_type.dtype
+            op, args, {}).return_type
         def impl(S, other, level=None, fill_value=None, axis=0):
             arr = bodo.hiframes.api.get_series_data(S)
             index = bodo.hiframes.api.get_series_index(S)
@@ -1009,7 +1009,7 @@ def create_explicit_binary_op_overload(op):
             other_arr = bodo.utils.conversion.coerce_to_array(other)
             numba.parfor.init_prange()
             n = len(arr)
-            out_arr = np.empty(n, ret_dtype)
+            out_arr = bodo.utils.utils.alloc_type(n, ret_dtype)
             for i in numba.parfor.internal_prange(n):
                 left_nan = bodo.hiframes.api.isna(arr, i)
                 right_nan = bodo.hiframes.api.isna(other_arr, i)

@@ -38,6 +38,8 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         # as making array unaligned etc.
         # data is underlying array type and can have different dtype
         data = _get_series_array_type(dtype) if data is None else data
+        # store regular dtype instead of IntDtype to avoid errors
+        dtype = dtype.dtype if isinstance(dtype, IntDtype) else dtype
         # convert Record to tuple (for tuple output of map)
         # TODO: handle actual Record objects in Series?
         dtype = (types.Tuple(list(dict(dtype.members).values()))

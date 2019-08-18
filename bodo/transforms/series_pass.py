@@ -672,6 +672,17 @@ class SeriesPass(object):
         if fdef == ('empty_like', 'numpy'):
             return self._handle_empty_like(assign, lhs, rhs)
 
+        if fdef == ('alloc_type', 'bodo.utils.utils'):
+            typ = self.typemap[rhs.args[1].name].instance_type
+            if isinstance(typ, IntegerArrayType):
+                impl = lambda n, t: bodo.libs.int_arr_ext.init_integer_array(
+                    np.empty(n, _dtype), np.empty((n + 7) >> 3, np.uint8))
+            else:
+                impl = lambda n, t: np.empty(n, _dtype)
+            return compile_func_single_block(
+                impl, rhs.args, assign.target, self,
+                extra_globals={'_dtype': typ.dtype})
+
         if (isinstance(func_mod, ir.Var)
                 and is_series_type(self.typemap[func_mod.name])):
             return self._run_call_series(

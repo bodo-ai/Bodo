@@ -65,7 +65,7 @@ def _typeof_pd_int_array(val, c):
 
 
 # dtype object for pd.Int64Dtype() etc.
-class IntDtype(types.Type):
+class IntDtype(types.Number):
     """
     Type class associated with pandas Integer dtypes (e.g. pd.Int64Dtype,
     pd.UInt64Dtype).
