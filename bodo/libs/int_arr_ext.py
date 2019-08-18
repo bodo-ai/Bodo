@@ -406,7 +406,7 @@ def int_arr_setitem(A, idx, val):
         return impl_scalar
 
     # array of int indices
-    if isinstance(idx, types.Array) and isinstance(idx.dtype, types.Integer):
+    if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
         # value is IntegerArray
         if isinstance(val, IntegerArrayType):
             def impl_arr_ind_mask(A, idx, val):
@@ -426,7 +426,7 @@ def int_arr_setitem(A, idx, val):
         return impl_arr_ind
 
     # bool array
-    if idx == types.Array(types.bool_, 1, 'C'):
+    if is_list_like_index_type(idx) and idx.dtype == types.bool_:
         # value is IntegerArray
         if isinstance(val, IntegerArrayType):
             def impl_bool_ind_mask(A, idx, val):
