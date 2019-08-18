@@ -1,7 +1,6 @@
 import unittest
 import os
 import pandas as pd
-from pandas.api.types import CategoricalDtype
 import numpy as np
 import h5py
 import pyarrow.parquet as pq
@@ -98,6 +97,28 @@ def test_csv_bool1(datapath):
     fname = datapath('csv_data_bool1.csv')
     def test_impl():
         dtype = {'A': 'int', 'B': 'bool', 'C': 'float'}
+        return pd.read_csv(fname,
+            names=dtype.keys(),
+            dtype=dtype,
+        )
+    check_func(test_impl, ())
+
+
+def test_csv_int_na1(datapath):
+    fname = datapath('csv_data_int_na1.csv')
+    def test_impl():
+        dtype = {'A': 'int', 'B': 'Int32'}
+        return pd.read_csv(fname,
+            names=dtype.keys(),
+            dtype=dtype,
+        )
+    check_func(test_impl, ())
+
+
+def test_csv_int_na2(datapath):
+    fname = datapath('csv_data_int_na1.csv')
+    def test_impl():
+        dtype = {'A': 'int', 'B': pd.Int32Dtype()}
         return pd.read_csv(fname,
             names=dtype.keys(),
             dtype=dtype,
@@ -639,7 +660,7 @@ class TestIO(unittest.TestCase):
     def test_csv_cat1(self):
         fname = os.path.join('bodo', 'tests', 'data', 'csv_data_cat1.csv')
         def test_impl():
-            ct_dtype = CategoricalDtype(['A', 'B', 'C'])
+            ct_dtype = pd.CategoricalDtype(['A', 'B', 'C'])
             dtypes = {'C1':np.int, 'C2': ct_dtype, 'C3':str}
             df = pd.read_csv(fname,
                 names=['C1', 'C2', 'C3'],
@@ -653,7 +674,7 @@ class TestIO(unittest.TestCase):
     def test_csv_cat2(self):
         fname = os.path.join('bodo', 'tests', 'data', 'csv_data_cat1.csv')
         def test_impl():
-            ct_dtype = CategoricalDtype(['A', 'B', 'C', 'D'])
+            ct_dtype = pd.CategoricalDtype(['A', 'B', 'C', 'D'])
             df = pd.read_csv(fname,
                 names=['C1', 'C2', 'C3'],
                 dtype={'C1':np.int, 'C2': ct_dtype, 'C3':str},

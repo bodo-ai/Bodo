@@ -30,6 +30,7 @@ from bodo.utils.utils import (
     inline_new_blocks, ReplaceFunc, is_call, is_assign)
 import bodo.hiframes.api
 from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.int_arr_ext import IntegerArrayType
 import bodo.ir
 import bodo.ir.aggregate
 import bodo.ir.filter
@@ -736,6 +737,12 @@ class UntypedPass(object):
             typ_name = dtype_def.value
             if typ_name == 'str':
                 return string_array_type
+
+            if typ_name.startswith('Int') or typ_name.startswith('UInt'):
+                dtype = bodo.libs.int_arr_ext.typeof_pd_int_dtype(
+                    pd.api.types.pandas_dtype(typ_name), None)
+                return IntegerArrayType(dtype.dtype)
+
             typ_name = 'int64' if typ_name == 'int' else typ_name
             typ_name = 'float64' if typ_name == 'float' else typ_name
             typ_name = 'bool_' if typ_name == 'bool' else typ_name
@@ -746,18 +753,28 @@ class UntypedPass(object):
         # str case
         if isinstance(dtype_def, ir.Global) and dtype_def.value == str:
             return string_array_type
+
         # categorical case
         if isinstance(dtype_def, ir.Expr) and dtype_def.op == 'call':
-            if (not guard(find_callname, self.func_ir, dtype_def)
-                    == ('category', 'pandas.core.dtypes.dtypes')):
+            fdef = guard(find_callname, self.func_ir, dtype_def)
+            if (fdef is not None and len(fdef) == 2 and fdef[1] == 'pandas'
+                    and (fdef[0].startswith('Int')
+                        or fdef[0].startswith('UInt'))):
+                pd_dtype = getattr(pd, fdef[0])()
+                dtype = bodo.libs.int_arr_ext.typeof_pd_int_dtype(
+                    pd_dtype, None)
+                return IntegerArrayType(dtype.dtype)
+
+            if not fdef == ('CategoricalDtype', 'pandas'):
                 raise ValueError("pd.read_csv() invalid dtype "
-                    "(built using a call but not Categorical)")
+                    "(built using a call but not Int or Categorical)")
             cats_var = self._get_arg('CategoricalDtype', dtype_def.args,
                 dict(dtype_def.kws), 0, 'categories')
             err_msg = "categories should be constant list"
             cats = self._get_str_or_list(cats_var, list_only=True, err_msg=err_msg)
             typ = PDCategoricalDtype(cats)
             return CategoricalArray(typ)
+
         if not isinstance(dtype_def, ir.Expr) or dtype_def.op != 'getattr':
             raise ValueError("pd.read_csv() invalid dtype")
         glob_def = guard(get_definition, self.func_ir, dtype_def.value)

@@ -11,6 +11,7 @@ from bodo.utils.utils import debug_prints, alloc_arr_tup
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.timsort import copyElement_tup, getitem_arr_tup
 from bodo.utils.utils import _numba_to_c_type_map, sanitize_varname
 from bodo import objmode
@@ -258,11 +259,18 @@ def _get_dtype_str(t):
 
     if dtype == types.NPDatetime('ns'):
         dtype = 'NPDatetime("ns")'
+
     if t == string_array_type:
         # HACK: add string_array_type to numba.types
         # FIXME: fix after Numba #3372 is resolved
         types.string_array_type = string_array_type
         return 'string_array_type'
+
+    if isinstance(t, IntegerArrayType):
+        # HACK: same issue as above
+        t_name = 'int_arr_{}'.format(dtype)
+        setattr(types, t_name, t)
+        return t_name
 
     if dtype == types.bool_:
         dtype = 'bool_'
@@ -272,12 +280,20 @@ def _get_dtype_str(t):
 
 def _get_pd_dtype_str(t):
     dtype = t.dtype
+
     if isinstance(dtype, PDCategoricalDtype):
         return 'pd.api.types.CategoricalDtype({})'.format(dtype.categories)
+
     if dtype == types.NPDatetime('ns'):
         dtype = 'str'
+
     if t == string_array_type:
         return 'str'
+
+    # nullable int array
+    if isinstance(t, IntegerArrayType):
+        return '"{}Int{}"'.format('' if dtype.signed else 'U', dtype.bitwidth)
+
     return 'np.{}'.format(dtype)
 
 
