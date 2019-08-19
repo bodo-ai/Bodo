@@ -74,6 +74,10 @@ class ConcatType(AbstractTemplate):
         if (isinstance(arr_list, types.UniTuple)
                 and is_str_arr_typ(arr_list.dtype)):
             ret_typ = string_array_type
+        elif (isinstance(arr_list, types.UniTuple)
+                and isinstance(arr_list.dtype, IntegerArrayType)):
+            ret_typ = arr_list.dtype
+            # TODO: support concat with different dtypes or with regular numpy
         else:
             # use typer of np.concatenate
             arr_list_to_arr = if_series_to_array_type(arr_list)
@@ -116,6 +120,13 @@ def concat_overload(arr_list):
             return out_arr
 
         return string_concat_impl
+
+    if (isinstance(arr_list, types.UniTuple)
+            and isinstance(arr_list.dtype, IntegerArrayType)):
+        return lambda arr_list: bodo.libs.int_arr_ext.init_integer_array(
+            np.concatenate(bodo.libs.int_arr_ext.get_int_arr_data_tup(arr_list)),
+            bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list))
+
     for typ in arr_list:
         if not isinstance(typ, types.Array):
             raise ValueError("concat supports only numerical and string arrays")

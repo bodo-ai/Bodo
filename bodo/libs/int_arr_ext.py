@@ -762,3 +762,40 @@ def _install_unary_ops():
 
 
 _install_unary_ops()
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_int_arr_data_tup(arrs):
+    n_arrs = len(arrs.types)
+    func_text = "def f(arrs):\n"
+    res = ", ".join("arrs[{}]._data".format(i) for i in range(n_arrs))
+    func_text += "  return ({}{})\n".format(res, "," if n_arrs == 1 else "")
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars['f']
+    return impl
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def concat_bitmap_tup(arrs):
+    n_arrs = len(arrs.types)
+    total_size = "+".join(
+        "len(arrs[{}]._data)".format(i) for i in range(n_arrs))
+
+    func_text = "def f(arrs):\n"
+    func_text += "  n = {}\n".format(total_size)
+    func_text += "  n_bytes = (n + 7) >> 3\n"
+    func_text += "  new_mask = np.empty(n_bytes, np.uint8)\n"
+    func_text += "  curr_bit = 0\n"
+    for i in range(n_arrs):
+        func_text += "  old_mask = arrs[{}]._null_bitmap\n".format(i)
+        func_text += "  for j in range(len(arrs[{}])):\n".format(i)
+        func_text += "    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, j)\n"
+        func_text += "    bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)\n"
+        func_text += "    curr_bit += 1\n"
+    func_text += "  return new_mask\n"
+    # print(func_text)
+    loc_vars = {}
+    exec(func_text, {'np': np, 'bodo': bodo}, loc_vars)
+    impl = loc_vars['f']
+    return impl
