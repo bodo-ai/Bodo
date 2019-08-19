@@ -121,45 +121,41 @@ def alltoall(send_arr, recv_arr, count):
     type_enum = get_type_enum(send_arr)
     _alltoall(send_arr.ctypes, recv_arr.ctypes, np.int32(count), type_enum)
 
-def gather_scalar(data):  # pragma: no cover
+def gather_scalar(data, allgather=False):  # pragma: no cover
     return np.ones(1)
 
 
-c_gather_scalar = types.ExternalFunction("c_gather_scalar", types.void(types.voidptr, types.voidptr, types.int32))
+c_gather_scalar = types.ExternalFunction("c_gather_scalar",
+    types.void(types.voidptr, types.voidptr, types.int32, types.bool_))
 
 
 # TODO: test
 @overload(gather_scalar)
-def gather_scalar_overload(val):
+def gather_scalar_overload(val, allgather=False):
     assert isinstance(val, (types.Integer, types.Float))
     # TODO: other types like boolean
     typ_val = _numba_to_c_type_map[val]
     func_text = (
-    "def gather_scalar_impl(val):\n"
+    "def gather_scalar_impl(val, allgather=False):\n"
     "  n_pes = bodo.libs.distributed_api.get_size()\n"
     "  rank = bodo.libs.distributed_api.get_rank()\n"
     "  send = np.full(1, val, np.{})\n"
-    "  res_size = n_pes if rank == {} else 0\n"
+    "  res_size = n_pes if (rank == {} or allgather) else 0\n"
     "  res = np.empty(res_size, np.{})\n"
-    "  c_gather_scalar(send.ctypes, res.ctypes, np.int32({}))\n"
+    "  c_gather_scalar(send.ctypes, res.ctypes, np.int32({}), allgather)\n"
     "  return res\n").format(val, MPI_ROOT, val, typ_val)
 
     loc_vars = {}
-    exec(func_text, {'bodo': bodo, 'np': np, 'c_gather_scalar': c_gather_scalar}, loc_vars)
+    exec(func_text, {'bodo': bodo, 'np': np,
+        'c_gather_scalar': c_gather_scalar}, loc_vars)
     gather_impl = loc_vars['gather_scalar_impl']
     return gather_impl
 
 
-# TODO: test
-def allgatherv(data):  # pragma: no cover
-    return data
-
-
 # sendbuf, sendcount, recvbuf, recv_counts, displs, dtype
 c_gatherv = types.ExternalFunction("c_gatherv",
-    types.void(types.voidptr, types.int32, types.voidptr, types.voidptr, types.voidptr, types.int32))
-c_allgatherv = types.ExternalFunction("c_allgatherv",
-    types.void(types.voidptr, types.int32, types.voidptr, types.voidptr, types.voidptr, types.int32))
+    types.void(types.voidptr, types.int32, types.voidptr, types.voidptr,
+    types.voidptr, types.int32, types.bool_))
 
 
 # from GetBit() in Arrow
@@ -187,25 +183,26 @@ def copy_gathered_null_bytes(null_bitmap_ptr, tmp_null_bytes,
 
 
 @numba.generated_jit(nopython=True)
-def gatherv(data):
+def gatherv(data, allgather=False):
     if isinstance(data, types.Array):
-        # TODO: other types like boolean
         typ_val = _numba_to_c_type_map[data.dtype]
 
-        def gatherv_impl(data):
+        def gatherv_impl(data, allgather=False):
+            data = np.ascontiguousarray(data)
             rank = bodo.libs.distributed_api.get_rank()
             # size to handle multi-dim arrays
             n_loc = data.size
-            recv_counts = gather_scalar(np.int32(n_loc))
+            recv_counts = gather_scalar(np.int32(n_loc), allgather)
             n_total = recv_counts.sum()
             all_data = empty_like_type(n_total, data)
             # displacements
             displs = np.empty(1, np.int32)
-            if rank == MPI_ROOT:
+            if rank == MPI_ROOT or allgather:
                 displs = bodo.ir.join.calc_disp(recv_counts)
             #  print(rank, n_loc, n_total, recv_counts, displs)
             c_gatherv(data.ctypes, np.int32(n_loc), all_data.ctypes,
-                recv_counts.ctypes, displs.ctypes, np.int32(typ_val))
+                recv_counts.ctypes, displs.ctypes, np.int32(typ_val),
+                allgather)
             # handle multi-dim case
             return all_data.reshape((-1,) + data.shape[1:])
 
@@ -215,7 +212,7 @@ def gatherv(data):
         int32_typ_enum = np.int32(_numba_to_c_type_map[types.int32])
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
 
-        def gatherv_str_arr_impl(data):
+        def gatherv_str_arr_impl(data, allgather=False):
             rank = bodo.libs.distributed_api.get_rank()
             n_loc = len(data)
             n_all_chars = num_total_chars(data)
@@ -230,8 +227,8 @@ def gatherv(data):
                 _str = data[i]
                 send_arr_lens[i] = len(_str)
 
-            recv_counts = gather_scalar(np.int32(n_loc))
-            recv_counts_char = gather_scalar(np.int32(n_all_chars))
+            recv_counts = gather_scalar(np.int32(n_loc), allgather)
+            recv_counts_char = gather_scalar(np.int32(n_all_chars), allgather)
             n_total = recv_counts.sum()
             n_total_char = recv_counts_char.sum()
 
@@ -243,7 +240,7 @@ def gatherv(data):
             displs_nulls = np.empty(1, np.int32)
             tmp_null_bytes = np.empty(1, np.uint8)
 
-            if rank == MPI_ROOT:
+            if rank == MPI_ROOT or allgather:
                 all_data = pre_alloc_string_array(n_total, n_total_char)
                 displs = bodo.ir.join.calc_disp(recv_counts)
                 displs_char = bodo.ir.join.calc_disp(recv_counts_char)
@@ -258,12 +255,13 @@ def gatherv(data):
             null_bitmap_ptr = get_null_bitmap_ptr(all_data)
 
             c_gatherv(send_arr_lens.ctypes, np.int32(n_loc), offset_ptr,
-                recv_counts.ctypes, displs.ctypes, int32_typ_enum)
+                recv_counts.ctypes, displs.ctypes, int32_typ_enum, allgather)
             c_gatherv(send_data_ptr, np.int32(n_all_chars), data_ptr,
-                recv_counts_char.ctypes, displs_char.ctypes, char_typ_enum)
+                recv_counts_char.ctypes, displs_char.ctypes, char_typ_enum,
+                allgather)
             c_gatherv(send_null_bitmap_ptr, np.int32(n_bytes),
                 tmp_null_bytes.ctypes, recv_counts_nulls.ctypes,
-                displs_nulls.ctypes, char_typ_enum)
+                displs_nulls.ctypes, char_typ_enum, allgather)
 
             convert_len_arr_to_offset(offset_ptr, n_total)
             copy_gathered_null_bytes(
@@ -277,11 +275,11 @@ def gatherv(data):
         typ_val = _numba_to_c_type_map[data.dtype]
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
 
-        def gatherv_impl_int_arr(data):
+        def gatherv_impl_int_arr(data, allgather=False):
             rank = bodo.libs.distributed_api.get_rank()
             n_loc = len(data)
             n_bytes = (n_loc + 7) >> 3
-            recv_counts = gather_scalar(np.int32(n_loc))
+            recv_counts = gather_scalar(np.int32(n_loc), allgather)
             n_total = recv_counts.sum()
             all_data = empty_like_type(n_total, data)
             # displacements
@@ -289,7 +287,7 @@ def gatherv(data):
             recv_counts_nulls = np.empty(1, np.int32)
             displs_nulls = np.empty(1, np.int32)
             tmp_null_bytes = np.empty(1, np.uint8)
-            if rank == MPI_ROOT:
+            if rank == MPI_ROOT or allgather:
                 displs = bodo.ir.join.calc_disp(recv_counts)
                 recv_counts_nulls = np.empty(len(recv_counts), np.int32)
                 for i in range(len(recv_counts)):
@@ -299,10 +297,10 @@ def gatherv(data):
             #  print(rank, n_loc, n_total, recv_counts, displs)
             c_gatherv(data._data.ctypes, np.int32(n_loc),
                 all_data._data.ctypes, recv_counts.ctypes, displs.ctypes,
-                np.int32(typ_val))
+                np.int32(typ_val), allgather)
             c_gatherv(data._null_bitmap.ctypes, np.int32(n_bytes),
                 tmp_null_bytes.ctypes, recv_counts_nulls.ctypes,
-                displs_nulls.ctypes, char_typ_enum)
+                displs_nulls.ctypes, char_typ_enum, allgather)
             copy_gathered_null_bytes(
                 all_data._null_bitmap.ctypes, tmp_null_bytes, recv_counts_nulls,
                 recv_counts)
@@ -311,21 +309,21 @@ def gatherv(data):
         return gatherv_impl_int_arr
 
     if isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
-        def impl(data):
+        def impl(data, allgather=False):
             # get data and index arrays
             arr = bodo.hiframes.api.get_series_data(data)
             index = bodo.hiframes.api.get_series_index(data)
             name = bodo.hiframes.api.get_series_name(data)
             # gather data
-            out_arr = bodo.libs.distributed_api.gatherv(arr)
-            out_index = bodo.gatherv(index)
+            out_arr = bodo.libs.distributed_api.gatherv(arr, allgather)
+            out_index = bodo.gatherv(index, allgather)
             # create output Series
             return bodo.hiframes.api.init_series(out_arr, out_index, name)
 
         return impl
 
     if isinstance(data, bodo.hiframes.pd_index_ext.RangeIndexType):
-        def impl_range_index(data):
+        def impl_range_index(data, allgather=False):
             # XXX: assuming global range starts from zero
             # and each process has a chunk, and step is 1
             local_n = data._stop - data._start
@@ -333,14 +331,14 @@ def gatherv(data):
                 local_n, np.int32(Reduce_Type.Sum.value))
             # gatherv() of dataframe returns 0-length arrays so index should
             # be 0-length to match
-            if bodo.get_rank() != 0:
+            if bodo.get_rank() != 0 and not allgather:
                 n = 0
             return bodo.hiframes.pd_index_ext.init_range_index(0, n, 1)
         return impl_range_index
 
     if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
-        def impl_pd_index(data):
-            arr = bodo.libs.distributed_api.gatherv(data._data)
+        def impl_pd_index(data, allgather=False):
+            arr = bodo.libs.distributed_api.gatherv(data._data, allgather)
             return bodo.utils.conversion.index_from_array(arr, data._name)
         return impl_pd_index
 
@@ -350,12 +348,12 @@ def gatherv(data):
         col_var = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
             ", ".join("'{}'".format(c) for c in data.columns))
 
-        func_text = "def impl_df(data):\n"
+        func_text = "def impl_df(data, allgather=False):\n"
         for i in range(n_cols):
             func_text += "  data_{} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {})\n".format(i, i)
-            func_text += "  g_data_{} = bodo.gatherv(data_{})\n".format(i, i)
+            func_text += "  g_data_{} = bodo.gatherv(data_{}, allgather)\n".format(i, i)
         func_text += "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)\n"
-        func_text += "  g_index = bodo.gatherv(index)\n"
+        func_text += "  g_index = bodo.gatherv(index, allgather)\n"
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), g_index, {})\n".format(
             data_args, col_var)
         loc_vars = {}
@@ -369,88 +367,9 @@ def gatherv(data):
     raise NotImplementedError("gatherv() not available for {}".format(data))
 
 
-@overload(allgatherv)
-def allgatherv_overload(data):
-    if isinstance(data, types.Array):
-        # TODO: other types like boolean
-        typ_val = _numba_to_c_type_map[data.dtype]
-
-        def allgatherv_impl(data):
-            n_pes = bodo.libs.distributed_api.get_size()
-            data = np.ascontiguousarray(data)
-            # use size to handle multi-dim case
-            n_loc = data.size
-            recv_counts = np.empty(n_pes, np.int32)
-            bodo.libs.distributed_api.allgather(recv_counts, np.int32(n_loc))
-            n_total = recv_counts.sum()
-            all_data = empty_like_type(n_total, data)
-            # displacements
-            displs = bodo.ir.join.calc_disp(recv_counts)
-            c_allgatherv(data.ctypes, np.int32(n_loc), all_data.ctypes,
-                recv_counts.ctypes, displs.ctypes, np.int32(typ_val))
-            # handle multi-dim case
-            return all_data.reshape((-1,) + data.shape[1:])
-
-        return allgatherv_impl
-
-    if data == string_array_type:
-        int32_typ_enum = np.int32(_numba_to_c_type_map[types.int32])
-        char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
-
-        def allgatherv_str_arr_impl(data):
-            n_pes = bodo.libs.distributed_api.get_size()
-            n_loc = len(data)
-            n_all_chars = num_total_chars(data)
-
-            # allocate send lens arrays
-            send_arr_lens = np.empty(n_loc, np.uint32)  # XXX offset type is uint32
-            send_data_ptr = get_data_ptr(data)
-            send_null_bitmap_ptr = get_null_bitmap_ptr(data)
-            n_bytes = (n_loc + 7) >> 3
-
-            for i in range(n_loc):
-                _str = data[i]
-                send_arr_lens[i] = len(_str)
-
-            recv_counts = np.empty(n_pes, np.int32)
-            bodo.libs.distributed_api.allgather(recv_counts, np.int32(n_loc))
-
-            recv_counts_char = np.empty(n_pes, np.int32)
-            bodo.libs.distributed_api.allgather(recv_counts_char, np.int32(n_all_chars))
-
-            n_total = recv_counts.sum()
-            n_total_char = recv_counts_char.sum()
-
-            # displacements
-            all_data = pre_alloc_string_array(n_total, n_total_char)
-            displs = bodo.ir.join.calc_disp(recv_counts)
-            displs_char = bodo.ir.join.calc_disp(recv_counts_char)
-
-            recv_counts_nulls = np.empty(n_pes, np.int32)
-            for i in range(n_pes):
-                recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
-            displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
-            tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
-
-            #  print(rank, n_loc, n_total, recv_counts, displs)
-            offset_ptr = get_offset_ptr(all_data)
-            data_ptr = get_data_ptr(all_data)
-            null_bitmap_ptr = get_null_bitmap_ptr(all_data)
-
-            c_allgatherv(send_arr_lens.ctypes, np.int32(n_loc), offset_ptr,
-                recv_counts.ctypes, displs.ctypes, int32_typ_enum)
-            c_allgatherv(send_data_ptr, np.int32(n_all_chars), data_ptr,
-                recv_counts_char.ctypes, displs_char.ctypes, char_typ_enum)
-            c_allgatherv(send_null_bitmap_ptr, np.int32(n_bytes),
-                tmp_null_bytes.ctypes, recv_counts_nulls.ctypes,
-                displs_nulls.ctypes, char_typ_enum)
-            convert_len_arr_to_offset(offset_ptr, n_total)
-            copy_gathered_null_bytes(
-                null_bitmap_ptr, tmp_null_bytes, recv_counts_nulls,
-                recv_counts)
-            return all_data
-
-        return allgatherv_str_arr_impl
+@numba.generated_jit(nopython=True)
+def allgatherv(data):
+    return lambda data: gatherv(data, True)
 
 
 # TODO: test

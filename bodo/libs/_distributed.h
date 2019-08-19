@@ -57,8 +57,8 @@ static void hpat_dist_send(void* out, int size, int type_enum, int pe, int tag) 
 static int hpat_dist_wait(MPI_Request req, bool cond) __UNUSED__;
 static void hpat_dist_waitall(int size, MPI_Request *req) __UNUSED__;
 
-static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum) __UNUSED__;
-static void c_gatherv(void* send_data, int sendcount, void* recv_data, int* recv_counts, int* displs, int typ_enum) __UNUSED__;
+static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum, bool allgather) __UNUSED__;
+static void c_gatherv(void* send_data, int sendcount, void* recv_data, int* recv_counts, int* displs, int typ_enum, bool allgather) __UNUSED__;
 static void c_allgatherv(void* send_data, int sendcount, void* recv_data, int* recv_counts, int* displs, int typ_enum) __UNUSED__;
 static void c_bcast(void* send_data, int sendcount, int typ_enum) __UNUSED__;
 
@@ -434,18 +434,26 @@ static int64_t hpat_dist_get_item_pointer(int64_t ind, int64_t start, int64_t co
     return -1;
 }
 
-static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum)
+static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum, bool allgather)
 {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
-    MPI_Gather(send_data, 1, mpi_typ, recv_data, 1, mpi_typ, ROOT_PE,
+    if (allgather)
+        MPI_Allgather(send_data, 1, mpi_typ, recv_data, 1, mpi_typ,
+           MPI_COMM_WORLD);
+    else
+        MPI_Gather(send_data, 1, mpi_typ, recv_data, 1, mpi_typ, ROOT_PE,
            MPI_COMM_WORLD);
     return;
 }
 
-static void c_gatherv(void* send_data, int sendcount, void* recv_data, int* recv_counts, int* displs, int typ_enum)
+static void c_gatherv(void* send_data, int sendcount, void* recv_data, int* recv_counts, int* displs, int typ_enum, bool allgather)
 {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
-    MPI_Gatherv(send_data, sendcount, mpi_typ, recv_data, recv_counts, displs, mpi_typ, ROOT_PE,
+    if (allgather)
+        MPI_Allgatherv(send_data, sendcount, mpi_typ, recv_data, recv_counts, displs, mpi_typ,
+           MPI_COMM_WORLD);
+    else
+        MPI_Gatherv(send_data, sendcount, mpi_typ, recv_data, recv_counts, displs, mpi_typ, ROOT_PE,
            MPI_COMM_WORLD);
     return;
 }
