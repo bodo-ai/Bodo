@@ -27,6 +27,7 @@ from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
                               get_offset_ptr, get_data_ptr,
                               pre_alloc_string_array, num_total_chars)
 from bodo.libs.str_ext import string_type
+from bodo.libs.int_arr_ext import IntegerArrayType
 
 
 MIN_SAMPLES = 1000000
@@ -440,7 +441,7 @@ def parallel_sort(key_arrs, data, ascending=True):
     bounds = empty_like_type(n_pes-1, all_samples)
 
     if my_rank == MPI_ROOT:
-        all_samples.sort()
+        sort_array(all_samples)
         if not ascending:
             all_samples = all_samples[::-1]
         n_samples = len(all_samples)
@@ -475,3 +476,12 @@ def parallel_sort(key_arrs, data, ascending=True):
     out_data = _get_data_tup(recvs, key_arrs)
 
     return out_key, out_data
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def sort_array(A):
+    # TODO: handle NAs
+    if isinstance(A, IntegerArrayType):
+        return lambda A: A._data.sort()
+
+    return lambda A: A.sort()
