@@ -458,22 +458,27 @@ def int_arr_setitem(A, idx, val):
         if isinstance(val, IntegerArrayType):
             def impl_slice_mask(A, idx, val):
                 n = len(A._data)
+                # using setitem directly instead of copying in loop since
+                # Array setitem checks for memory overlap and copies source
+                A._data[idx] = val._data
+                # XXX: conservative copy of bitmap in case there is overlap
+                # TODO: check for overlap and copy only if necessary
+                src_bitmap = val._null_bitmap.copy()
                 slice_idx = numba.unicode._normalize_slice(idx, n)
                 val_ind = 0
                 for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                    A._data[i] = val._data[val_ind]
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
-                        val._null_bitmap, val_ind)
+                        src_bitmap, val_ind)
                     bodo.libs.int_arr_ext.set_bit_to_arr(
                         A._null_bitmap, i, bit)
                     val_ind += 1
             return impl_slice_mask
         def impl_slice(A, idx, val):
             n = len(A._data)
+            A._data[idx] = val
             slice_idx = numba.unicode._normalize_slice(idx, n)
             val_ind = 0
             for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                A._data[i] = val[val_ind]
                 bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
                 val_ind += 1
         return impl_slice
