@@ -78,6 +78,7 @@ def barrier():
 def get_type_enum(arr):
     return np.int32(-1)
 
+
 @overload(get_type_enum)
 def get_type_enum_overload(arr):
     dtype = arr.dtype
@@ -112,6 +113,7 @@ def recv(dtype, rank, tag):
 
 _alltoall = types.ExternalFunction("c_alltoall", types.void(types.voidptr, types.voidptr, types.int32, types.int32))
 
+
 @numba.njit
 def alltoall(send_arr, recv_arr, count):
     # TODO: handle int64 counts
@@ -122,7 +124,9 @@ def alltoall(send_arr, recv_arr, count):
 def gather_scalar(data):  # pragma: no cover
     return np.ones(1)
 
+
 c_gather_scalar = types.ExternalFunction("c_gather_scalar", types.void(types.voidptr, types.voidptr, types.int32))
+
 
 # TODO: test
 @overload(gather_scalar)
@@ -467,6 +471,13 @@ def bcast_overload(data):
             return
         return bcast_impl
 
+    if isinstance(data, IntegerArrayType):
+        def bcast_impl_int_arr(data):
+            bcast(data._data)
+            bcast(data._null_bitmap)
+            return
+        return bcast_impl_int_arr
+
     if data == string_array_type:
         int32_typ_enum = np.int32(_numba_to_c_type_map[types.int32])
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
@@ -606,10 +617,11 @@ def slice_getitem_from_start_overload(arr, slice_index):
 
         return getitem_str_impl
 
+    arr_type = arr
     def getitem_impl(arr, slice_index):
         rank = bodo.libs.distributed_api.get_rank()
         k = slice_index.stop
-        out_arr = np.empty((k,) + arr.shape[1:], arr.dtype)
+        out_arr = bodo.utils.utils.alloc_type((k,) + arr.shape[1:], arr_type)
         if rank == 0:
             out_arr = arr[:k]
         bodo.libs.distributed_api.bcast(out_arr)

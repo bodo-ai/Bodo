@@ -429,6 +429,12 @@ def alloc_arr_tup_overload(n, data, init_vals=()):
     return alloc_impl
 
 
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def tuple_to_scalar(n):
+    if isinstance(n, types.BaseTuple):
+        return lambda n: n[0]
+    return lambda n: n
+
 
 def alloc_type(n, t):
     return np.empty(n, t.dtype)
@@ -442,7 +448,7 @@ def overload_alloc_type(n, t):
     # nullable int array
     if isinstance(typ, bodo.libs.int_arr_ext.IntegerArrayType):
         return lambda n, t: bodo.libs.int_arr_ext.init_integer_array(
-                np.empty(n, dtype), np.empty((n + 7) >> 3, np.uint8))
+                np.empty(n, dtype), np.empty((tuple_to_scalar(n) + 7) >> 3, np.uint8))
 
     return lambda n, t: np.empty(n, dtype)
 
