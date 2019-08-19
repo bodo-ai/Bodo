@@ -11,6 +11,7 @@ import bodo
 from bodo.libs.str_ext import string_type, unicode_to_std_str, std_str_to_unicode
 from bodo.libs.str_arr_ext import (string_array_type, StringArrayType,
     is_str_arr_typ, pre_alloc_string_array, get_utf8_size)
+from bodo.libs.int_arr_ext import IntDtype
 
 
 # TODO: series index and name
@@ -100,6 +101,7 @@ def _series_dropna_str_alloc_impl(B, name):  # pragma: no cover
 def _get_nan(val):
     return np.nan
 
+
 @overload(_get_nan)
 def _get_nan_overload(val):
     if isinstance(val, (types.NPDatetime, types.NPTimedelta)):
@@ -108,15 +110,43 @@ def _get_nan_overload(val):
     # TODO: other types
     return lambda val: np.nan
 
+
 def _get_type_max_value(dtype):
     return 0
 
+
 @overload(_get_type_max_value)
 def _get_type_max_value_overload(dtype):
+    # pd.Int64Dtype(), etc.
+    if isinstance(dtype, IntDtype):
+        _dtype = dtype.dtype
+        return lambda dtype: numba.targets.builtins.get_type_max_value(_dtype)
+
+    # dt64/td64
     if isinstance(dtype.dtype, (types.NPDatetime, types.NPTimedelta)):
         return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
             numba.targets.builtins.get_type_max_value(numba.types.int64))
+
     return lambda dtype: numba.targets.builtins.get_type_max_value(dtype)
+
+
+def _get_type_min_value(dtype):
+    return 0
+
+
+@overload(_get_type_min_value)
+def _get_type_min_value_overload(dtype):
+    # pd.Int64Dtype(), etc.
+    if isinstance(dtype, IntDtype):
+        _dtype = dtype.dtype
+        return lambda dtype: numba.targets.builtins.get_type_min_value(_dtype)
+
+    # dt64/td64
+    if isinstance(dtype.dtype, (types.NPDatetime, types.NPTimedelta)):
+        return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
+            numba.targets.builtins.get_type_min_value(numba.types.int64))
+
+    return lambda dtype: numba.targets.builtins.get_type_min_value(dtype)
 
 
 @numba.njit

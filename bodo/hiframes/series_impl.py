@@ -430,7 +430,7 @@ def overload_series_max(S, axis=None, skipna=None, level=None,
         in_arr = bodo.hiframes.api.get_series_data(S)
         numba.parfor.init_prange()
         count = 0
-        s = numba.targets.builtins.get_type_min_value(in_arr.dtype)
+        s = bodo.hiframes.series_kernels._get_type_min_value(in_arr.dtype)
         for i in numba.parfor.internal_prange(len(in_arr)):
             val = in_arr[i]
             if not bodo.hiframes.api.isna(in_arr, i):
