@@ -126,6 +126,14 @@ class StringArrayModel(models.StructModel):
         models.StructModel.__init__(self, dmm, fe_type, str_arr_model_members)
 
 
+# XXX: should these be exposed?
+make_attribute_wrapper(StringArrayType, 'num_items', '_num_items')
+make_attribute_wrapper(StringArrayType, 'num_total_chars', '_num_total_chars')
+make_attribute_wrapper(StringArrayType, 'null_bitmap', '_null_bitmap')
+# make_attribute_wrapper(StringArrayType, 'offsets', 'offsets')
+# make_attribute_wrapper(StringArrayType, 'data', 'data')
+
+
 # TODO: fix overload for things like 'getitem'
 # @overload(operator.getitem)
 # def str_arr_getitem_bool_overload(str_arr_tp, bool_arr_tp):
@@ -623,16 +631,6 @@ class CmpOpLTStringArray(CmpOpEqStringArray):
 def is_str_arr_typ(typ):
     from bodo.hiframes.pd_series_ext import is_str_series_typ
     return typ == string_array_type or is_str_series_typ(typ)
-
-
-# XXX: should these be exposed?
-make_attribute_wrapper(StringArrayType, 'num_items', '_num_items')
-make_attribute_wrapper(StringArrayType, 'num_total_chars', '_num_total_chars')
-# make_attribute_wrapper(StringArrayType, 'offsets', 'offsets')
-# make_attribute_wrapper(StringArrayType, 'data', 'data')
-
-# make_attribute_wrapper(StringArrayPayloadType, 'offsets', 'offsets')
-# make_attribute_wrapper(StringArrayPayloadType, 'data', 'data')
 
 
 @overload_method(StringArrayType, 'copy')

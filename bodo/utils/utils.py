@@ -449,7 +449,8 @@ def overload_alloc_type(n, t):
     if isinstance(typ, bodo.libs.int_arr_ext.IntegerArrayType):
         return lambda n, t: bodo.libs.int_arr_ext.init_integer_array(
                 np.empty(n, dtype),
-                np.empty((tuple_to_scalar(n) + 7) >> 3, np.uint8))
+                # XXX using full since nulls are not supported in shuffle keys
+                np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8))
 
     # TODO: categorical needs fixing?
     # fix_cat_array_type(np.empty(n_out, arr.dtype))

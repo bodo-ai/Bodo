@@ -75,12 +75,9 @@ def barrier():
     return _barrier()
 
 
+@numba.generated_jit(nopython=True)
 def get_type_enum(arr):
-    return np.int32(-1)
-
-
-@overload(get_type_enum)
-def get_type_enum_overload(arr):
+    arr = arr.instance_type if isinstance(arr, types.TypeRef) else arr
     dtype = arr.dtype
     if isinstance(dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
         dtype = bodo.hiframes.pd_categorical_ext.get_categories_int_type(dtype)
@@ -642,18 +639,25 @@ c_alltoallv = types.ExternalFunction("c_alltoallv", types.void(types.voidptr,
 
 # TODO: test
 # TODO: big alltoallv
-@numba.njit
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def alltoallv(send_data, out_data, send_counts, recv_counts, send_disp, recv_disp):  # pragma: no cover
     typ_enum = get_type_enum(send_data)
     typ_enum_o = get_type_enum(out_data)
     assert typ_enum == typ_enum_o
 
-    c_alltoallv(send_data.ctypes, out_data.ctypes, send_counts.ctypes,
+    if isinstance(send_data, IntegerArrayType):
+        return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: \
+        c_alltoallv(send_data._data.ctypes, out_data._data.ctypes, send_counts.ctypes,
               recv_counts.ctypes, send_disp.ctypes, recv_disp.ctypes, typ_enum)
-    return
+
+    return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: \
+        c_alltoallv(send_data.ctypes, out_data.ctypes, send_counts.ctypes,
+              recv_counts.ctypes, send_disp.ctypes, recv_disp.ctypes, typ_enum)
+
 
 def alltoallv_tup(send_data, out_data, send_counts, recv_counts, send_disp, recv_disp):  # pragma: no cover
     return
+
 
 @overload(alltoallv_tup)
 def alltoallv_tup_overload(send_data, out_data, send_counts, recv_counts, send_disp, recv_disp):

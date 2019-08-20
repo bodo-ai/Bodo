@@ -208,15 +208,12 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
             # tmp_offset_char, send_arr_lens
             func_text += "  tmp_offset_char_{} = np.zeros(n_pes, np.int32)\n".format(i)
             func_text += "  send_arr_lens_{} = pre_shuffle_meta.send_arr_lens_tup[{}]\n".format(i, i)
-            func_text += "  send_arr_nulls_{} = pre_shuffle_meta.send_arr_nulls_tup[{}]\n".format(i, i)
             # send char arr
             # TODO: arr refcount if arr is not stored somewhere?
             func_text += "  send_arr_chars_arr_{} = np.empty(1, np.uint8)\n".format(i)
             func_text += "  send_arr_chars_{} = get_ctypes_ptr(get_data_ptr(arr))\n".format(i)
             func_text += "  if not is_contig:\n"
             func_text += "    send_arr_lens_{} = np.empty(n_send, np.uint32)\n".format(i)
-            func_text += "    n_bytes = (n_send + 7) >> 3\n"
-            func_text += "    send_arr_nulls_{} = np.empty(n_bytes + 2 * n_pes, np.uint8)\n".format(i)
             func_text += "    s_n_all_chars = send_counts_char_{}.sum()\n".format(i)
             func_text += "    send_arr_chars_arr_{} = np.empty(s_n_all_chars, np.uint8)\n".format(i)
             func_text += "    send_arr_chars_{} = get_ctypes_ptr(send_arr_chars_arr_{}.ctypes)\n".format(i, i)
@@ -233,12 +230,19 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
             func_text += "  send_counts_char_{} = None\n".format(i)
             func_text += "  recv_counts_char_{} = None\n".format(i)
             func_text += "  send_arr_lens_{} = None\n".format(i)
-            func_text += "  send_arr_nulls_{} = None\n".format(i)
             func_text += "  send_arr_chars_{} = None\n".format(i)
             func_text += "  send_disp_char_{} = None\n".format(i)
             func_text += "  recv_disp_char_{} = None\n".format(i)
             func_text += "  tmp_offset_char_{} = None\n".format(i)
             func_text += "  send_arr_chars_arr_{} = None\n".format(i)
+
+        if is_null_masked_type(typ):
+            func_text += "  send_arr_nulls_{} = pre_shuffle_meta.send_arr_nulls_tup[{}]\n".format(i, i)
+            func_text += "  if not is_contig:\n"
+            func_text += "    n_bytes = (n_send + 7) >> 3\n"
+            func_text += "    send_arr_nulls_{} = np.empty(n_bytes + 2 * n_pes, np.uint8)\n".format(i)
+        else:
+            func_text += "  send_arr_nulls_{} = None\n".format(i)
 
     send_buffs = ", ".join("send_buff_{}".format(i) for i in range(n_all))
     out_arrs = ", ".join("out_arr_{}".format(i) for i in range(n_all))
@@ -292,7 +296,7 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
     func_text = "def f(arrs, meta, key_arrs):\n"
 
     # null bitmap counts are send counts divided by 8
-    if string_array_type in arrs.types:
+    if any(is_null_masked_type(t) for t in arrs.types):
         func_text += "  send_counts_nulls = np.empty(len(meta.send_counts), np.int32)\n"
         func_text += "  for i in range(len(meta.send_counts)):\n"
         func_text += "    send_counts_nulls[i] = (meta.send_counts[i] + 7) >> 3\n"
@@ -302,7 +306,7 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
         func_text += "  tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)\n"
 
     for i, typ in enumerate(arrs.types):
-        if isinstance(typ, types.Array):
+        if isinstance(typ, (types.Array, IntegerArrayType)):
             func_text += ("  bodo.libs.distributed_api.alltoallv("
                 "meta.send_buff_tup[{}], meta.out_arr_tup[{}], meta.send_counts,"
                 "meta.recv_counts, meta.send_disp, meta.recv_disp)\n").format(i, i)
@@ -320,17 +324,17 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
                 "meta.recv_counts_char_tup[{}].ctypes, meta.send_disp_char_tup[{}].ctypes,"
                 "meta.recv_disp_char_tup[{}].ctypes, char_typ_enum)\n").format(i, i, i, i, i, i)
 
-            func_text += "  null_bitmap_ptr_{} = get_null_bitmap_ptr(meta.out_arr_tup[{}])\n".format(i, i)
-
-            # XXX: handling null bits is only supported for data arrays now
-            if i >= n_keys:
-                func_text += ("  bodo.libs.distributed_api.c_alltoallv("
-                    "meta.send_arr_nulls_tup[{}].ctypes, tmp_null_bytes.ctypes, send_counts_nulls.ctypes, "
-                    "recv_counts_nulls.ctypes, meta.send_disp_nulls.ctypes, "
-                    "meta.recv_disp_nulls.ctypes, char_typ_enum)\n").format(i)
-
-                func_text += "  copy_gathered_null_bytes(null_bitmap_ptr_{}, tmp_null_bytes, recv_counts_nulls, meta.recv_counts)\n".format(i)
             func_text += "  convert_len_arr_to_offset(offset_ptr_{}, meta.n_out)\n".format(i)
+
+        # XXX: handling null bits is only supported for data arrays now
+        if i >= n_keys and is_null_masked_type(typ):
+            func_text += "  null_bitmap_ptr_{} = get_arr_null_ptr(meta.out_arr_tup[{}])\n".format(i, i)
+            func_text += ("  bodo.libs.distributed_api.c_alltoallv("
+                "meta.send_arr_nulls_tup[{}].ctypes, tmp_null_bytes.ctypes, send_counts_nulls.ctypes, "
+                "recv_counts_nulls.ctypes, meta.send_disp_nulls.ctypes, "
+                "meta.recv_disp_nulls.ctypes, char_typ_enum)\n").format(i)
+
+            func_text += "  copy_gathered_null_bytes(null_bitmap_ptr_{}, tmp_null_bytes, recv_counts_nulls, meta.recv_counts)\n".format(i)
 
     func_text += "  return ({}{})\n".format(
         ','.join(['meta.out_arr_tup[{}]'.format(i) for i in range(arrs.count)]),
@@ -346,7 +350,7 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
          'convert_len_arr_to_offset': convert_len_arr_to_offset,
          'copy_gathered_null_bytes':
             bodo.libs.distributed_api.copy_gathered_null_bytes,
-         'get_null_bitmap_ptr': get_null_bitmap_ptr}, loc_vars)
+         'get_arr_null_ptr': get_arr_null_ptr}, loc_vars)
     a2a_impl = loc_vars['f']
     return a2a_impl
 
@@ -420,3 +424,12 @@ def get_mask_bit(arr, i):
     assert isinstance(arr, IntegerArrayType)
     return lambda arr, i: bodo.libs.int_arr_ext.get_bit_bitmap_arr(
             arr._null_bitmap, i)
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_arr_null_ptr(arr):
+    if arr == string_array_type:
+        return lambda arr: get_null_bitmap_ptr(arr)
+
+    assert isinstance(arr, IntegerArrayType)
+    return lambda arr: arr._null_bitmap.ctypes

@@ -378,7 +378,7 @@ static MPI_Datatype get_MPI_typ(int typ_enum)
         case HPAT_CTypes::UINT16:
             return MPI_UNSIGNED_SHORT;
         default:
-            std::cerr << "Invalid MPI_Type" << "\n";
+            std::cerr << "Invalid MPI_Type " << typ_enum << "\n";
     }
     // dummy value in case of error
     // TODO: raise error properly
