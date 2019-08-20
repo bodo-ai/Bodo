@@ -17,6 +17,7 @@ from numba.numpy_support import as_dtype
 
 import bodo
 from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
+from bodo.libs.int_arr_ext import IntegerArrayType
 
 import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
@@ -91,15 +92,24 @@ class QuantileType(AbstractTemplate):
 
 
 @lower_builtin(quantile, types.Array, types.float64)
+@lower_builtin(quantile, IntegerArrayType, types.float64)
 def lower_dist_quantile_seq(context, builder, sig, args):
 
     # store an int to specify data type
     typ_enum = _numba_to_c_type_map[sig.args[0].dtype]
     typ_arg = cgutils.alloca_once_value(
         builder, lir.Constant(lir.IntType(32), typ_enum))
-    assert sig.args[0].ndim == 1
 
-    arr = make_array(sig.args[0])(context, builder, args[0])
+    arr_val = args[0]
+    arr_typ = sig.args[0]
+    if isinstance(arr_typ, IntegerArrayType):
+        arr_val = cgutils.create_struct_proxy(arr_typ)(
+            context, builder, arr_val).data
+        arr_typ = types.Array(arr_typ.dtype, 1, 'C')
+
+    assert arr_typ.ndim == 1
+
+    arr = make_array(arr_typ)(context, builder, arr_val)
     local_size = builder.extract_value(arr.shape, 0)
 
     call_args = [builder.bitcast(arr.data, lir.IntType(8).as_pointer()),
@@ -115,15 +125,24 @@ def lower_dist_quantile_seq(context, builder, sig, args):
 
 
 @lower_builtin(quantile_parallel, types.Array, types.float64, types.intp)
+@lower_builtin(quantile_parallel, IntegerArrayType, types.float64, types.intp)
 def lower_dist_quantile_parallel(context, builder, sig, args):
 
     # store an int to specify data type
     typ_enum = _numba_to_c_type_map[sig.args[0].dtype]
     typ_arg = cgutils.alloca_once_value(
         builder, lir.Constant(lir.IntType(32), typ_enum))
-    assert sig.args[0].ndim == 1
 
-    arr = make_array(sig.args[0])(context, builder, args[0])
+    arr_val = args[0]
+    arr_typ = sig.args[0]
+    if isinstance(arr_typ, IntegerArrayType):
+        arr_val = cgutils.create_struct_proxy(arr_typ)(
+            context, builder, arr_val).data
+        arr_typ = types.Array(arr_typ.dtype, 1, 'C')
+
+    assert arr_typ.ndim == 1
+
+    arr = make_array(arr_typ)(context, builder, arr_val)
     local_size = builder.extract_value(arr.shape, 0)
 
     if len(args) == 3:
