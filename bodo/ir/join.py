@@ -591,7 +591,6 @@ def write_data_buff_overload(meta, node_id, i, val, data):
     func_text = "def f(meta, node_id, i, val, data):\n"
     func_text += "  w_ind = meta.send_disp[node_id] + meta.tmp_offset[node_id]\n"
     n_keys = len(val.types)
-    n_str = 0
     for i, typ in enumerate(val.types + data.types):
         val = ("val[{}]".format(i) if i < n_keys
                else "data[{}][i]".format(i - n_keys))
@@ -600,15 +599,14 @@ def write_data_buff_overload(meta, node_id, i, val, data):
             func_text += "  meta.send_buff_tup[{}][w_ind] = val_{}\n".format(i, i)
         else:
             func_text += "  n_chars_{} = get_utf8_size(val_{})\n".format(i, i)
-            func_text += "  meta.send_arr_lens_tup[{}][w_ind] = n_chars_{}\n".format(n_str, i)
+            func_text += "  meta.send_arr_lens_tup[{}][w_ind] = n_chars_{}\n".format(i, i)
             if i >= n_keys:
-                func_text += "  out_bitmap = meta.send_arr_nulls_tup[{}][meta.send_disp_nulls[node_id]:].ctypes\n".format(n_str)
+                func_text += "  out_bitmap = meta.send_arr_nulls_tup[{}][meta.send_disp_nulls[node_id]:].ctypes\n".format(i)
                 func_text += "  bit_val = get_bit_bitmap(get_null_bitmap_ptr(data[{}]), i)\n".format(i - n_keys)
                 func_text += "  set_bit_to(out_bitmap, meta.tmp_offset[node_id], bit_val)\n"
-            func_text += "  indc_{} = meta.send_disp_char_tup[{}][node_id] + meta.tmp_offset_char_tup[{}][node_id]\n".format(i, n_str, n_str)
-            func_text += "  str_copy_ptr(meta.send_arr_chars_tup[{}], indc_{}, val_{}._data, n_chars_{})\n".format(n_str, i, i, i)
-            func_text += "  meta.tmp_offset_char_tup[{}][node_id] += n_chars_{}\n".format(n_str, i)
-            n_str += 1
+            func_text += "  indc_{} = meta.send_disp_char_tup[{}][node_id] + meta.tmp_offset_char_tup[{}][node_id]\n".format(i, i, i)
+            func_text += "  str_copy_ptr(meta.send_arr_chars_tup[{}], indc_{}, val_{}._data, n_chars_{})\n".format(i, i, i, i)
+            func_text += "  meta.tmp_offset_char_tup[{}][node_id] += n_chars_{}\n".format(i, i)
 
     func_text += "  return w_ind\n"
 

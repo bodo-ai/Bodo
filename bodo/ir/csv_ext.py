@@ -282,7 +282,7 @@ def _get_pd_dtype_str(t):
     dtype = t.dtype
 
     if isinstance(dtype, PDCategoricalDtype):
-        return 'pd.api.types.CategoricalDtype({})'.format(dtype.categories)
+        return 'pd.CategoricalDtype({})'.format(dtype.categories)
 
     if dtype == types.NPDatetime('ns'):
         dtype = 'str'

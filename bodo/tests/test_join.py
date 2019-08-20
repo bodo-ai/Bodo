@@ -7,7 +7,6 @@ import numpy as np
 import random
 import string
 import pyarrow.parquet as pq
-from pandas.api.types import CategoricalDtype
 import numba
 import bodo
 from bodo.libs.str_arr_ext import StringArray
@@ -441,7 +440,7 @@ class TestJoin(unittest.TestCase):
     def test_join_cat1(self):
         fname = os.path.join('bodo', 'tests', 'data', 'csv_data_cat1.csv')
         def test_impl():
-            ct_dtype = CategoricalDtype(['A', 'B', 'C'])
+            ct_dtype = pd.CategoricalDtype(['A', 'B', 'C'])
             dtypes = {'C1':np.int, 'C2': ct_dtype, 'C3':str}
             df1 = pd.read_csv(fname,
                 names=['C1', 'C2', 'C3'],
@@ -459,7 +458,7 @@ class TestJoin(unittest.TestCase):
         # test setting NaN in categorical array
         fname = os.path.join('bodo', 'tests', 'data', 'csv_data_cat1.csv')
         def test_impl():
-            ct_dtype = CategoricalDtype(['A', 'B', 'C'])
+            ct_dtype = pd.CategoricalDtype(['A', 'B', 'C'])
             dtypes = {'C1':np.int, 'C2': ct_dtype, 'C3':str}
             df1 = pd.read_csv(fname,
                 names=['C1', 'C2', 'C3'],
@@ -479,7 +478,7 @@ class TestJoin(unittest.TestCase):
         # TODO: cat as keys
         fname = os.path.join('bodo', 'tests', 'data', 'csv_data_cat1.csv')
         def test_impl():
-            ct_dtype = CategoricalDtype(['A', 'B', 'C'])
+            ct_dtype = pd.CategoricalDtype(['A', 'B', 'C'])
             dtypes = {'C1':np.int, 'C2': ct_dtype, 'C3':str}
             df1 = pd.read_csv(fname,
                 names=['C1', 'C2', 'C3'],

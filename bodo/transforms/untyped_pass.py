@@ -98,7 +98,7 @@ def remove_hiframes(rhs, lives, call_list):
         return True
     if call_list == ['rolling']:
         return True
-    if call_list == [pd.api.types.CategoricalDtype]:
+    if call_list == [pd.CategoricalDtype]:
         return True
     # TODO: move to Numba
     if call_list == ['empty_inferred', 'ndarray', 'unsafe', numba]:
