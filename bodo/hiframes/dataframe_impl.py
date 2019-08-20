@@ -12,6 +12,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.typing import (is_overload_none, is_overload_true,
     is_overload_false, is_overload_zero, get_overload_const_str)
+from bodo.libs.int_arr_ext import IntegerArrayType
 
 
 @overload_attribute(DataFrameType, 'index')
@@ -231,8 +232,10 @@ def overload_dataframe_corr(df, method='pearson', min_periods=1):
         typ_conv = ".astype(np.float64)"
 
     arr_args = ", ".join(
-        'bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})'.format(
-        df.columns.index(c)) for c in numeric_cols)
+        'bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}'.format(
+        df.columns.index(c), '.astype(np.float64)'
+        if isinstance(df.data[df.columns.index(c)], IntegerArrayType) else '')
+        for c in numeric_cols)
     mat = "np.stack(({},), 1){}".format(arr_args, typ_conv)
 
     data_args = ", ".join(
@@ -264,8 +267,10 @@ def overload_dataframe_cov(df, min_periods=None):
         typ_conv = ".astype(np.float64)"
 
     arr_args = ", ".join(
-        'bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})'.format(
-        df.columns.index(c)) for c in numeric_cols)
+        'bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}'.format(
+        df.columns.index(c), '.astype(np.float64)'
+        if isinstance(df.data[df.columns.index(c)], IntegerArrayType) else '')
+        for c in numeric_cols)
     mat = "np.stack(({},), 1){}".format(arr_args, typ_conv)
 
     data_args = ", ".join(
