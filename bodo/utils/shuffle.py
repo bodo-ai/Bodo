@@ -94,7 +94,8 @@ def alloc_pre_shuffle_metadata_overload(key_arrs, data, n_pes, is_contig):
             # unpacked around processor border
             func_text += "  if is_contig:\n"
             func_text += "    n_bytes = (len(arr) + 7) >> 3\n"
-            func_text += "    send_arr_nulls_{} = np.empty(n_bytes + 2 * n_pes, np.uint8)\n".format(i)
+            # using full since NA in keys is not updated
+            func_text += "    send_arr_nulls_{} = np.full(n_bytes + 2 * n_pes, 255, np.uint8)\n".format(i)
         else:
             func_text += "  send_arr_nulls_{} = None\n".format(i)
 
@@ -240,7 +241,7 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
             func_text += "  send_arr_nulls_{} = pre_shuffle_meta.send_arr_nulls_tup[{}]\n".format(i, i)
             func_text += "  if not is_contig:\n"
             func_text += "    n_bytes = (n_send + 7) >> 3\n"
-            func_text += "    send_arr_nulls_{} = np.empty(n_bytes + 2 * n_pes, np.uint8)\n".format(i)
+            func_text += "    send_arr_nulls_{} = np.full(n_bytes + 2 * n_pes, 255, np.uint8)\n".format(i)
         else:
             func_text += "  send_arr_nulls_{} = None\n".format(i)
 

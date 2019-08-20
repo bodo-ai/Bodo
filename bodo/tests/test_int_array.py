@@ -323,3 +323,11 @@ def test_astype_str(int_arr_value):
         return A.astype('float64')
 
     check_func(test_impl, (int_arr_value,))
+
+
+def test_unique(int_arr_value):
+
+    def test_impl(A):
+        return A.unique()
+
+    check_func(test_impl, (int_arr_value,), False)

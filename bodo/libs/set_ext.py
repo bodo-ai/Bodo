@@ -28,6 +28,7 @@ from bodo.libs.str_ext import string_type, gen_get_unicode_chars
 from bodo.libs.str_arr_ext import (StringArray, StringArrayType, string_array_type,
                               pre_alloc_string_array, StringArrayPayloadType,
                               is_str_arr_typ)
+from bodo.libs.int_arr_ext import IntegerArrayType
 
 
 # similar to types.Container.Set
@@ -84,6 +85,16 @@ num_total_chars_set_string = types.ExternalFunction("num_total_chars_set_string"
 def build_set(A):
     if is_str_arr_typ(A):
         return _build_str_set_impl
+    elif isinstance(A, IntegerArrayType):
+        #return lambda A: set(A._data)
+        def impl_int_arr(A):
+            s = set()
+            for i in range(len(A)):
+                if not bodo.hiframes.api.isna(A, i):
+                    s.add(A[i])
+            return s
+
+        return impl_int_arr
     else:
         return lambda A: set(A)
 

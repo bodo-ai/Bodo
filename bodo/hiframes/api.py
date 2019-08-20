@@ -200,7 +200,7 @@ def unique_parallel(A):  # pragma: no cover
 def unique_overload(A):
     # TODO: extend to other types like datetime?
     def unique_seq(A):
-        return bodo.utils.utils.to_array(build_set(A))
+        return bodo.utils.utils.unique(A)
     return unique_seq
 
 
@@ -208,7 +208,7 @@ def unique_overload(A):
 def unique_overload_parallel(A):
 
     def unique_par(A):
-        uniq_A = bodo.utils.utils.to_array(build_set(A))
+        uniq_A = bodo.utils.utils.unique(A)
         key_arrs = (uniq_A,)
 
         n_pes = bodo.libs.distributed_api.get_size()
@@ -233,7 +233,7 @@ def unique_overload_parallel(A):
         # shuffle
         out_arr, = alltoallv_tup(key_arrs, shuffle_meta, ())
 
-        return bodo.utils.utils.to_array(build_set(out_arr))
+        return bodo.utils.utils.unique(out_arr)
 
     return unique_par
 

@@ -18,6 +18,7 @@ import numpy as np
 import bodo
 from bodo.libs.str_ext import string_type, list_string_array_type
 from bodo.libs.str_arr_ext import string_array_type, num_total_chars, pre_alloc_string_array
+from bodo.libs.int_arr_ext import IntegerArrayType
 from enum import Enum
 
 
@@ -348,6 +349,7 @@ def is_distributable_tuple_typ(var_typ):
 def to_array(A):
     return np.array(A)
 
+
 @overload(to_array)
 def to_array_overload(A):
     # try regular np.array and return it if it works
@@ -358,6 +360,15 @@ def to_array_overload(A):
         return to_array_impl
     except:
         pass  # should be handled elsewhere (e.g. Set)
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def unique(A):
+    if isinstance(A, IntegerArrayType):
+        return lambda A: A.unique()
+
+    # TODO: preserve order
+    return lambda A: to_array(bodo.libs.set_ext.build_set(A))
 
 
 def empty_like_type(n, arr):

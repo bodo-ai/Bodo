@@ -799,3 +799,34 @@ def concat_bitmap_tup(arrs):
     exec(func_text, {'np': np, 'bodo': bodo}, loc_vars)
     impl = loc_vars['f']
     return impl
+
+
+@overload_method(IntegerArrayType, 'unique')
+def overload_unique(A):
+    dtype = A.dtype
+    def impl_int_arr(A):
+        # preserve order
+        data = []
+        mask = []
+        na_found = False  # write NA only once
+        s = set()
+        for i in range(len(A)):
+            val = A[i]
+            if bodo.hiframes.api.isna(A, i):
+                if not na_found:
+                    data.append(dtype(1))
+                    mask.append(False)
+                    na_found = True
+                continue
+            if val not in s:
+                s.add(val)
+                data.append(val)
+                mask.append(True)
+        new_data = np.array(data)
+        n = len(new_data)
+        n_bytes = (n + 7) >> 3
+        new_mask = np.empty(n_bytes, np.uint8)
+        for j in range(n):
+            set_bit_to_arr(new_mask, j, mask[j])
+        return init_integer_array(new_data, new_mask)
+    return impl_int_arr
