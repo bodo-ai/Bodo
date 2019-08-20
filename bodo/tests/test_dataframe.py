@@ -21,6 +21,8 @@ from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
     pd.DataFrame({'A': [1, 8, 4, 11, -3],
         'B': [1.1, np.nan, 4.2, 3.1, -1.3],
         'C': [True, False, False, True, True]}),
+    pd.DataFrame({'A': pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
+        'B': [1.1, np.nan, 4.2, 3.1, -1.3]}),
     # uint8, float32 dtypes
     pd.DataFrame({'A': np.array([1, 8, 4, 0, 3], dtype=np.uint8),
         'B': np.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype=np.float32)}),
@@ -559,6 +561,10 @@ def test_df_shift(numeric_df_value):
 def test_df_set_index(df_value):
     # singe column dfs become zero column which are not supported, TODO: fix
     if len(df_value.columns) < 2:
+        return
+
+    # TODO: fix nullable int
+    if isinstance(df_value.A.dtype, pd.core.arrays.integer._IntegerDtype):
         return
 
     def impl(df):

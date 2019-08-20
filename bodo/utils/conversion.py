@@ -30,6 +30,11 @@ def overload_coerce_to_ndarray(data, error_on_nonarray=True):
     from bodo.hiframes.pd_index_ext import (RangeIndexType, NumericIndexType,
         DatetimeIndexType, TimedeltaIndexType)
 
+    # TODO: handle NAs?
+    if isinstance(data, bodo.libs.int_arr_ext.IntegerArrayType):
+        return lambda data, error_on_nonarray=True: \
+            bodo.libs.int_arr_ext.get_int_arr_data(data)
+
     if isinstance(data, types.Array):
         return lambda data, error_on_nonarray=True: data
 
@@ -286,7 +291,9 @@ def overload_index_from_array(data, name=None):
     if data == bodo.string_array_type:
         return lambda data, name=None: bodo.hiframes.pd_index_ext.init_string_index(data, name)
 
-    assert isinstance(data, types.Array)
+    assert isinstance(
+        data, (types.Array, bodo.libs.int_arr_ext.IntegerArrayType))
+
     if data.dtype == types.NPDatetime('ns'):
         return lambda data, name=None: pd.DatetimeIndex(data, name=name)
 
