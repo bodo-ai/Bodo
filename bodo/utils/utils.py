@@ -442,15 +442,40 @@ def alloc_type(n, t):
 
 @overload(alloc_type)
 def overload_alloc_type(n, t):
-    typ = t.instance_type
+    typ = t.instance_type if isinstance(t, types.TypeRef) else t
     dtype = numba.numpy_support.as_dtype(typ.dtype)
 
     # nullable int array
     if isinstance(typ, bodo.libs.int_arr_ext.IntegerArrayType):
         return lambda n, t: bodo.libs.int_arr_ext.init_integer_array(
-                np.empty(n, dtype), np.empty((tuple_to_scalar(n) + 7) >> 3, np.uint8))
+                np.empty(n, dtype),
+                np.empty((tuple_to_scalar(n) + 7) >> 3, np.uint8))
+
+    # TODO: categorical needs fixing?
+    # fix_cat_array_type(np.empty(n_out, arr.dtype))
 
     return lambda n, t: np.empty(n, dtype)
+
+
+def full_type(n, val, t):
+    return np.full(n, val, t.dtype)
+
+
+@overload(full_type)
+def overload_full_type(n, val, t):
+    typ = t.instance_type if isinstance(t, types.TypeRef) else t
+    dtype = numba.numpy_support.as_dtype(typ.dtype)
+
+    # nullable int array
+    if isinstance(typ, bodo.libs.int_arr_ext.IntegerArrayType):
+        return lambda n, val, t: bodo.libs.int_arr_ext.init_integer_array(
+                np.full(n, val, dtype),
+                np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8))
+
+    # TODO: categorical needs fixing?
+    # fix_cat_array_type(np.full(n_send, val, arr.dtype))
+
+    return lambda n, val, t: np.full(n, val, dtype)
 
 
 @intrinsic

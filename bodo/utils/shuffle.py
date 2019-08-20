@@ -222,13 +222,13 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
             func_text += "    send_arr_chars_{} = get_ctypes_ptr(send_arr_chars_arr_{}.ctypes)\n".format(i, i)
         else:
             assert isinstance(typ, (types.Array, IntegerArrayType))
-            func_text += "  out_arr_{} = fix_cat_array_type(np.empty(n_out, arr.dtype))\n".format(i)
+            func_text += "  out_arr_{} = bodo.utils.utils.alloc_type(n_out, arr)\n".format(i)
             func_text += "  send_buff_{} = arr\n".format(i)
             func_text += "  if not is_contig:\n"
             if i >= n_keys and init_vals != ():
-                func_text += "    send_buff_{} = fix_cat_array_type(np.full(n_send, init_vals[{}], arr.dtype))\n".format(i, i - n_keys)
+                func_text += "    send_buff_{} = bodo.utils.utils.full_type(n_send, init_vals[{}], arr)\n".format(i, i - n_keys)
             else:
-                func_text += "    send_buff_{} = fix_cat_array_type(np.empty(n_send, arr.dtype))\n".format(i)
+                func_text += "    send_buff_{} = bodo.utils.utils.alloc_type(n_send, arr)\n".format(i)
             # string buffers are None
             func_text += "  send_counts_char_{} = None\n".format(i)
             func_text += "  recv_counts_char_{} = None\n".format(i)
