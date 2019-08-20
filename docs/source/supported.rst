@@ -223,3 +223,19 @@ only once instead of one print per process. The intention is to avoid
 unexpected behavior, especially when running on large number of processors.
 Programmers can use `bodo.parallel_print` for printing distributed chunks of
 data or parallel prints of other values.
+
+
+Parallel APIs
+-------------
+
+Bodo provides a limited number of parallel APIs to
+support advanced cases that may need them.
+
+* :func:`bodo.get_rank` Get the rank of the process (same as `MPI_Comm_rank`).
+* :func:`bodo.get_size` Get the number of processes (same as `MPI_Comm_size`).
+* :func:`bodo.barrier` Blocks until all processes have reached this call
+  (same as `MPI_Barrier`).
+* :func:`bodo.gatherv` Gathers all data chunks into process 0
+  (same as `MPI_Gatherv`).
+* :func:`bodo.allgatherv` Gathers all data chunks and delivers to all processes
+  (same as `MPI_Allgatherv`).
