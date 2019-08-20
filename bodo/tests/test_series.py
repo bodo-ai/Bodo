@@ -119,6 +119,7 @@ def test_series_constructor_int_arr():
     pd.Series([1, 8, 4, 11, -3]),
     pd.Series([1.1, np.nan, 4.2, 3.1, -3.5]),
     pd.Series([1, 8, 4, 0, 3], dtype=np.uint8),
+    pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
     pd.Series([1, 8, 4, -1, 2], name='ACD'),
     pd.Series([1, 8, 4, 1, -3], [3, 7, 9, 2, 1]),
     pd.Series([1, 8, 4, 11, -3], [3, 7, 9, 2, 1], name='AAC'),
@@ -139,6 +140,7 @@ def series_val(request):
     pd.Series([1, 8, 4, 11, -3]),
     pd.Series([1.1, np.nan, 4.1, 1.4, -2.1]),
     pd.Series([1, 8, 4, 10, 3], dtype=np.uint8),
+    pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
     pd.Series([1, 8, 4, -1, 2], [3, 7, 9, 2, 1], name='AAC'),
     pd.Series(pd.date_range(start='2018-04-24', end='2018-04-29', periods=5)),
 ])
@@ -233,6 +235,10 @@ def test_series_name(series_val):
 
 
 def test_series_put(series_val):
+    # IntegerArray doesn't have put
+    if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        return
+
     def test_impl(S):
         S.put(0, S.values[1])
         return S
@@ -884,6 +890,10 @@ def test_series_max(series_val):
 
 
 def test_series_idxmin(series_val):
+    # IntegerArray doesn't have argmin yet, TODO: implement
+    if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        return
+
     # skip strings, TODO: handle strings
     if isinstance(series_val.values[0], str):
         return
@@ -897,6 +907,10 @@ def test_series_idxmin(series_val):
 
 
 def test_series_idxmax(series_val):
+    # IntegerArray doesn't have argmin yet, TODO: implement
+    if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        return
+
     # skip strings, TODO: handle strings
     if isinstance(series_val.values[0], str):
         return
@@ -913,6 +927,12 @@ def test_series_median(numeric_series_val):
     # NA not supported yet, TODO: support
     if numeric_series_val.dtype == np.float:
         return
+
+    # TODO: support nullable int
+    if isinstance(
+            numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        return
+
     # median not supported for dt64
     if numeric_series_val.dtype == np.dtype('datetime64[ns]'):
         return
@@ -939,6 +959,11 @@ def test_series_tail(series_val):
 
 @pytest.mark.parametrize('k', [0, 1, 2, 3])
 def test_series_nlargest(numeric_series_val, k):
+    # TODO: support nullable int
+    if isinstance(
+            numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        return
+
     def test_impl(S, k):
         return S.nlargest(k)
 
@@ -959,6 +984,11 @@ def test_series_nlargest_non_index():
 
 @pytest.mark.parametrize('k', [0, 1, 2, 3])
 def test_series_nsmallest(numeric_series_val, k):
+    # TODO: support nullable int
+    if isinstance(
+            numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        return
+
     def test_impl(S, k):
         return S.nsmallest(k)
 
@@ -1118,6 +1148,11 @@ def test_series_shift(numeric_series_val):
     if numeric_series_val.dtype == np.dtype('datetime64[ns]'):
         return
 
+    # TODO: support nullable int
+    if isinstance(
+            numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        return
+
     def test_impl(A):
         return A.shift(2)
 
@@ -1127,6 +1162,11 @@ def test_series_shift(numeric_series_val):
 def test_series_pct_change(numeric_series_val):
     # not supported for dt64 yet, TODO: support and test
     if numeric_series_val.dtype == np.dtype('datetime64[ns]'):
+        return
+
+    # TODO: support nullable int
+    if isinstance(
+            numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
         return
 
     def test_impl(A):
