@@ -403,6 +403,10 @@ def test_df_quantile(df_value):
     if len(df_value._get_numeric_data().columns) == 0:
         return
 
+    # pandas returns object Series for some reason when input has IntegerArray
+    if isinstance(df_value.A.dtype, pd.core.arrays.integer._IntegerDtype):
+        return
+
     def impl(df):
         return df.quantile(0.3)
 
