@@ -16,36 +16,26 @@ In addition:
   (e.g. ``df[df.A > .5]``).
 
 
-Integer NaN Issue
-~~~~~~~~~~~~~~~~~
-
-DataFrame columns with integer data need special care. Pandas dynamically
-converts integer columns to floating point when NaN values are needed.
-This is because Numpy does not support NaN values for integers.
-Bodo does not perform this conversion unless enough information is
-available at compilation time. Hence, the user is responsible for manual
-conversion of integer data to floating point data if needed.
-
 Input/Output
 ~~~~~~~~~~~~
 
 * :func:`pandas.read_csv`
 
-   * Arguments ``filepath_or_buffer``, ``sep``, ``delimiter``, ``header``, ``names``,
-     ``index_col``, ``usecols``, ``dtype``, ``skiprows`` and ``parse_dates`` are supported.
-   * ``filepath_or_buffer`` should be a string and is required.
-   * Either ``names`` and ``dtype`` arguments should be provided to enable type inference,
-     or ``filepath_or_buffer`` should be a constant string for Bodo to infer types by looking at the file at compile time.
-   * ``names``, ``usecols``, ``parse_dates`` should be constant lists.
-   * ``dtype`` should be a constant dictionary of strings and types.
+  * Arguments ``filepath_or_buffer``, ``sep``, ``delimiter``, ``header``, ``names``,
+    ``index_col``, ``usecols``, ``dtype``, ``skiprows`` and ``parse_dates`` are supported.
+  * ``filepath_or_buffer`` should be a string and is required.
+  * Either ``names`` and ``dtype`` arguments should be provided to enable type inference,
+    or ``filepath_or_buffer`` should be a constant string for Bodo to infer types by looking at the file at compile time.
+  * ``names``, ``usecols``, ``parse_dates`` should be constant lists.
+  * ``dtype`` should be a constant dictionary of strings and types.
 
 * :func:`pandas.read_parquet`
 
-   * Arguments ``path`` and ``columns`` are supported. ``columns``
-     should be a constant list of strings.
+  * Arguments ``path`` and ``columns`` are supported. ``columns``
+    should be a constant list of strings.
 
-   * If ``path`` is constant, Bodo finds the schema from file at compilation time.
-     Otherwise, schema should be provided. For example::
+  * If ``path`` is constant, Bodo finds the schema from file at compilation time.
+    Otherwise, schema should be provided. For example::
 
       @bodo.jit(locals={'df':{'A': bodo.float64[:],
                               'B': bodo.string_array_type}})
@@ -60,15 +50,16 @@ General functions
 Data manipulations:
 
 * :func:`pandas.crosstab`
-   * Annotation of pivot values is required.
-     For example, `@bodo.jit(pivots={'pt': ['small', 'large']})` declares
-     the output table `pt` will have columns called `small` and `large`.
+
+  * Annotation of pivot values is required.
+    For example, `@bodo.jit(pivots={'pt': ['small', 'large']})` declares
+    the output table `pt` will have columns called `small` and `large`.
 
 * :func:`pandas.merge`
 
-   * Arguments ``left``, ``right`` should be dataframes.
-   * `how`, `on`, `left_on`, `right_on`, `left_index`,
-     and `right_index` are supported but should be constant values.
+  * Arguments ``left``, ``right`` should be dataframes.
+  * `how`, `on`, `left_on`, `right_on`, `left_index`,
+    and `right_index` are supported but should be constant values.
 
 * :func:`pandas.merge_asof` (similar arguments to `merge`)
 
@@ -95,8 +86,8 @@ Top-level dealing with datetimelike:
 
 * :func:`pandas.date_range`
 
-   * ``start``, ``end``, ``periods``, ``freq``, ``name`` and ``closed``
-     arguments are supported. This function is not parallelized yet.
+  * ``start``, ``end``, ``periods``, ``freq``, ``name`` and ``closed``
+    arguments are supported. This function is not parallelized yet.
 
 
 Series
@@ -110,10 +101,10 @@ associated index values yet.
 
 * :func:`pandas.Series`
 
-   * Arguments ``data``, ``index``, and ``name`` are supported.
-     ``data`` is required and can be a list, array, Series or Index.
-     If ``data`` is Series and ``index`` is provided, implicit alignment is
-     not performed yet.
+  * Arguments ``data``, ``index``, and ``name`` are supported.
+    ``data`` is required and can be a list, array, Series or Index.
+    If ``data`` is Series and ``index`` is provided, implicit alignment is
+    not performed yet.
 
 
 Attributes:
@@ -252,8 +243,8 @@ Bodo provides extensive DataFrame support documented below.
 
 * :func:`pandas.DataFrame`
 
-   ``data`` argument can be a constant dictionary or 2d Numpy array.
-   Other arguments are also supported.
+  ``data`` argument can be a constant dictionary or 2d Numpy array.
+  Other arguments are also supported.
 
 Attributes and underlying data:
 
@@ -339,11 +330,11 @@ Reshaping, sorting, transposing:
 
 * :meth:`DataFrame.pivot_table`
 
-   * Arguments ``values``, ``index``, ``columns`` and ``aggfunc`` are
-     supported.
-   * Annotation of pivot values is required.
-     For example, `@bodo.jit(pivots={'pt': ['small', 'large']})` declares
-     the output pivot table `pt` will have columns called `small` and `large`.
+  * Arguments ``values``, ``index``, ``columns`` and ``aggfunc`` are
+    supported.
+  * Annotation of pivot values is required.
+    For example, `@bodo.jit(pivots={'pt': ['small', 'large']})` declares
+    the output pivot table `pt` will have columns called `small` and `large`.
 
 * :meth:`DataFrame.sort_values` `by` argument should be constant string or
   constant list of strings. `ascending` argument is supported.
@@ -374,7 +365,7 @@ and returning them from Bodo functions (boxing) are also supported.
 
 * :func:`pandas.RangeIndex`
 
-   * ``start``, ``stop`` and ``step`` arguments are supported.
+  * ``start``, ``stop`` and ``step`` arguments are supported.
 
 * :func:`pandas.Int64Index`
 * :func:`pandas.UInt64Index`
@@ -392,10 +383,10 @@ boxed/unboxed, and set as index to dataframes and series.
 
 * :func:`pandas.DatetimeIndex`
 
-   * Only ``data`` argument is supported, and can be array-like
-     of ``datetime64['ns']``, ``int64`` or strings.
-     Strings should be in ISO 8601 format,
-     YYYY-MM-DDT[HH[:MM[:SS[.mmm[uuu]]]]][+HH:MM] (e.g. '2017-09-27').
+  * Only ``data`` argument is supported, and can be array-like
+    of ``datetime64['ns']``, ``int64`` or strings.
+    Strings should be in ISO 8601 format,
+    YYYY-MM-DDT[HH[:MM[:SS[.mmm[uuu]]]]][+HH:MM] (e.g. '2017-09-27').
 
 Date fields of DatetimeIndex are supported:
 
@@ -436,8 +427,8 @@ boxed/unboxed, and set as index to dataframes and series.
 
 * :func:`pandas.TimedeltaIndex`
 
-   * Only ``data`` argument is supported, and can be array-like
-     of ``timedelta64['ns']`` or ``int64``.
+  * Only ``data`` argument is supported, and can be array-like
+    of ``timedelta64['ns']`` or ``int64``.
 
 Time fields of TimedeltaIndex are supported:
 
@@ -493,6 +484,7 @@ GroupBy
   A list of functions is also supported if one output column is selected
   (which avoids MultiIndex).
   For example::
+
     @bodo.jit
     def f(df):
         def g1(x): return (x<=2).sum()
@@ -509,3 +501,41 @@ GroupBy
 * :meth:`GroupBy.std`
 * :meth:`GroupBy.sum`
 * :meth:`GroupBy.var`
+
+
+Integer NA issue in Pandas
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+DataFrame and Series objects with integer data need special care
+due to `integer NA issues in Pandas <https://pandas.pydata.org/pandas-docs/stable/user_guide/gotchas.html#nan-integer-na-values-and-na-type-promotions>`_.
+By default, Pandas dynamically converts integer columns to
+floating point when missing values (NAs) are needed
+(which can result in loss of precision).
+This is because Pandas uses the NaN floating point value as NA,
+and Numpy does not support NaN values for integers.
+Bodo does not perform this conversion unless enough information is
+available at compilation time.
+
+Pandas introduced a new `nullable integer data type <https://pandas.pydata.org/pandas-docs/stable/user_guide/integer_na.html#integer-na>`_
+that can solve this issue, which is also supported by Bodo.
+For example, this code reads column `A` into a nullable integer array
+(the capital "I" denotes nullable integer type)::
+
+  @bodo.jit
+  def example(fname):
+    dtype = {'A': 'Int64', 'B': 'float64'}
+    df = pd.read_csv(fname,
+        names=dtype.keys(),
+        dtype=dtype,
+    )
+    ...
+
+Bodo can use nullable integer arrays when reading Parquent files if
+the `bodo.io.parquet_pio.use_nullable_int_arr` flag is set by the user.
+For example::
+
+  bodo.io.parquet_pio.use_nullable_int_arr = True
+  @bodo.jit
+  def example(fname):
+    df = pd.read_parquet(fname)
+    ...
