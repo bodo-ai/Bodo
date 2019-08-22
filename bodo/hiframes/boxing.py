@@ -156,6 +156,8 @@ def _infer_series_dtype(S):
             return _infer_series_list_dtype(S)
         elif isinstance(first_val, str):
             return string_type
+        elif isinstance(first_val, bool):
+            return types.bool_  # will become BooleanArray in Series and DF
         elif isinstance(S.values[0], datetime.date):
             # XXX: using .values to check date type since DatetimeIndex returns
             # Timestamp which is subtype of datetime.date

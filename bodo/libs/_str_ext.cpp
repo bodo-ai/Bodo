@@ -107,7 +107,8 @@ npy_intp array_size(PyArrayObject* arr);
 void* array_getptr1(PyArrayObject* arr, npy_intp ind);
 void array_setitem(PyArrayObject* arr, char* p, PyObject *s);
 void mask_arr_to_bitmap(uint8_t *bitmap_arr, uint8_t *mask_arr, int64_t n);
-PyArrayObject*  set_nulls_bool_array(PyArrayObject* bool_arr, uint8_t *bitmap_arr);
+PyArrayObject* set_nulls_bool_array(PyArrayObject* bool_arr, uint8_t *bitmap_arr);
+int is_bool_array(PyArrayObject* arr);
 
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
@@ -227,6 +228,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                             PyLong_FromVoidPtr((void*)(&mask_arr_to_bitmap)));
     PyObject_SetAttrString(m, "set_nulls_bool_array",
                             PyLong_FromVoidPtr((void*)(&set_nulls_bool_array)));
+    PyObject_SetAttrString(m, "is_bool_array",
+                            PyLong_FromVoidPtr((void*)(&is_bool_array)));
     return m;
 }
 
@@ -834,7 +837,7 @@ void mask_arr_to_bitmap(uint8_t *bitmap_arr, uint8_t *mask_arr, int64_t n)
 }
 
 
-PyArrayObject*  set_nulls_bool_array(PyArrayObject* bool_arr, uint8_t *bitmap_arr)
+PyArrayObject* set_nulls_bool_array(PyArrayObject* bool_arr, uint8_t *bitmap_arr)
 {
 #define CHECK(expr, msg) if(!(expr)){std::cerr << msg << std::endl; PyGILState_Release(gilstate); return NULL;}
     auto gilstate = PyGILState_Ensure();
@@ -876,6 +879,22 @@ PyArrayObject*  set_nulls_bool_array(PyArrayObject* bool_arr, uint8_t *bitmap_ar
     Py_DECREF(nan_obj);
     PyGILState_Release(gilstate);
     return new_arr;
+#undef CHECK
+}
+
+
+int is_bool_array(PyArrayObject* arr)
+{
+#define CHECK(expr, msg) if(!(expr)){std::cerr << msg << std::endl; PyGILState_Release(gilstate); return NULL;}
+    auto gilstate = PyGILState_Ensure();
+
+    PyArray_Descr *dtype = PyArray_DTYPE(arr);
+    CHECK(dtype, "getting dtype failed");
+    // printf("dtype kind %c type %c\n", dtype->kind, dtype->type);
+
+    // returning int instead of bool to avoid potential bool call convention issues
+    return dtype->kind == 'b';
+
 #undef CHECK
 }
 

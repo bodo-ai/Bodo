@@ -21,6 +21,7 @@ from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import hstr_ext
 ll.add_symbol('set_nulls_bool_array', hstr_ext.set_nulls_bool_array)
+ll.add_symbol('is_bool_array', hstr_ext.is_bool_array)
 from bodo.utils.typing import (is_overload_none, is_overload_true,
     is_overload_false, parse_dtype)
 
@@ -61,6 +62,71 @@ class BooleanArrayModel(models.StructModel):
 
 make_attribute_wrapper(BooleanArrayType, 'data', '_data')
 make_attribute_wrapper(BooleanArrayType, 'null_bitmap', '_null_bitmap')
+
+
+@numba.njit
+def gen_full_bitmap(data_arr):
+    n = len(data_arr)
+    n_bytes = (n + 7) >> 3
+    return np.full(n_bytes, 255, np.uint8)
+
+
+def call_func_in_unbox(func, args, arg_typs, c):
+    func_typ = c.context.typing_context.resolve_value_type(func)
+    func_sig = func_typ.get_call_type(
+        c.context.typing_context, arg_typs, {})
+    func_impl = c.context.get_function(func_typ, func_sig)
+
+    # XXX: workaround wrapper must be used due to call convention changes
+    fnty = c.context.call_conv.get_function_type(
+        func_sig.return_type, func_sig.args)
+    mod = c.builder.module
+    fn = lir.Function(
+        mod, fnty, name=mod.get_unique_name('.func_conv'),
+    )
+    fn.linkage = 'internal'
+    inner_builder = lir.IRBuilder(fn.append_basic_block())
+    inner_args = c.context.call_conv.decode_arguments(
+        inner_builder, func_sig.args, fn,
+    )
+    h = func_impl(inner_builder, inner_args)
+    c.context.call_conv.return_value(inner_builder, h)
+
+    status, retval = c.context.call_conv.call_function(
+        c.builder, fn, func_sig.return_type, func_sig.args, args,
+    )
+    # TODO: check status?
+    return retval
+
+
+@unbox(BooleanArrayType)
+def unbox_bool_array(typ, obj, c):
+    """
+    Convert a Numpy array object to a native BooleanArray structure.
+    The array's dtype can be bool or object, depending on the presense of nans.
+    """
+    fnty = lir.FunctionType(lir.IntType(32), [lir.IntType(8).as_pointer()])
+    fn = c.builder.module.get_or_insert_function(
+        fnty, name="is_bool_array")
+    is_bool_dtype = c.builder.call(fn, [obj])
+    # cgutils.printf(c.builder, 'is bool %d\n', is_bool_dtype)
+
+    bool_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+
+    cond = c.builder.icmp_unsigned('!=', is_bool_dtype, is_bool_dtype.type(0))
+    with c.builder.if_else(cond) as (then, otherwise):
+        with then:
+            # array is bool
+            bool_arr.data = c.pyapi.to_native_value(
+                types.Array(types.bool_, 1, 'C'), obj).value
+            bool_arr.null_bitmap = call_func_in_unbox(
+                gen_full_bitmap, (bool_arr.data,),
+                (types.Array(types.bool_, 1, 'C'),), c)
+        with otherwise:
+            # array is object
+            pass
+
+    return NativeValue(bool_arr._getvalue())
 
 
 @box(BooleanArrayType)
@@ -142,3 +208,9 @@ def init_bool_array_equiv(self, scope, equiv_set, args, kws):
 
 ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_init_bool_array = \
     init_bool_array_equiv
+
+
+@overload(len)
+def overload_bool_arr_len(A):
+    if A == boolean_array:
+        return lambda A: len(A._data)
