@@ -41,12 +41,14 @@ _cov_corr_series = [(pd.Series(x), pd.Series(y)) for x, y in [
 
 GLOBAL_VAL = 2
 
+# box/unbox
 
 # TODO: integer Null and other Nulls
 # TODO: list of datetime.datetime, categorical, timedelta, ...
 @pytest.mark.parametrize('data', [
     [2, 3, 5],
     [2.1, 3.2, 5.4],
+    [True, False, True],
     ['A', 'C', 'AB'],
     np.array([2, 3, 5]),
     pd.Series([2, 5, 6]),

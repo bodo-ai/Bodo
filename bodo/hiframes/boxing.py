@@ -23,6 +23,7 @@ from bodo.hiframes.pd_timestamp_ext import (datetime_date_type,
 from bodo.libs.str_ext import string_type, list_string_array_type
 from bodo.libs.str_arr_ext import (string_array_type, unbox_str_series, box_str_arr)
 from bodo.libs.int_arr_ext import IntegerArrayType, typeof_pd_int_dtype
+from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_categorical_ext import (PDCategoricalDtype,
     box_categorical_array, unbox_categorical_array)
 from bodo.hiframes.pd_series_ext import (SeriesType, _get_series_array_type)

@@ -16,12 +16,13 @@ TD_DTYPE = np.dtype('m8[ns]')
 
 
 # TODO: use generated_jit with IR inlining
-def coerce_to_ndarray(data, error_on_nonarray=True):
+def coerce_to_ndarray(data, error_on_nonarray=True, bool_arr_convert=None):
     return data
 
 
 @overload(coerce_to_ndarray)
-def overload_coerce_to_ndarray(data, error_on_nonarray=True):
+def overload_coerce_to_ndarray(data, error_on_nonarray=True,
+                                                        bool_arr_convert=None):
     # TODO: other cases handled by this function in Pandas like scalar
     """
     Coerces data to ndarray. Data should be numeric.
@@ -32,16 +33,21 @@ def overload_coerce_to_ndarray(data, error_on_nonarray=True):
 
     # TODO: handle NAs?
     if isinstance(data, bodo.libs.int_arr_ext.IntegerArrayType):
-        return lambda data, error_on_nonarray=True: \
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
             bodo.libs.int_arr_ext.get_int_arr_data(data)
 
     if isinstance(data, types.Array):
-        return lambda data, error_on_nonarray=True: data
+        if (not is_overload_none(bool_arr_convert)
+                and data.dtype == types.bool_):
+            return (lambda data, error_on_nonarray=True, bool_arr_convert=None:
+                bodo.libs.bool_arr_ext.init_bool_array(
+                    data, np.full((len(data) + 7) >> 3, 255, np.uint8)))
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: data
 
     if isinstance(data, (types.List, types.UniTuple)):
         # convert Timestamp() back to dt64
         if data.dtype == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
-            def impl(data, error_on_nonarray=True):
+            def impl(data, error_on_nonarray=True, bool_arr_convert=None):
                 vals = []
                 for d in data:
                     vals.append(
@@ -49,67 +55,78 @@ def overload_coerce_to_ndarray(data, error_on_nonarray=True):
                             bodo.hiframes.pd_timestamp_ext.convert_timestamp_to_datetime64(d)))
                 return np.asarray(vals)
             return impl
-        return lambda data, error_on_nonarray=True: np.asarray(data)
+        if (not is_overload_none(bool_arr_convert)
+                and data.dtype == types.bool_):
+            return (lambda data, error_on_nonarray=True, bool_arr_convert=None:
+                bodo.libs.bool_arr_ext.init_bool_array(
+                    np.asarray(data),
+                    np.full((len(data) + 7) >> 3, 255, np.uint8)))
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
+            np.asarray(data)
 
     if isinstance(data, SeriesType):
-        return lambda data, error_on_nonarray=True: \
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
             bodo.hiframes.api.get_series_data(data)
 
     # index types
     if isinstance(data, (NumericIndexType, DatetimeIndexType,
                          TimedeltaIndexType)):
-        return lambda data, error_on_nonarray=True: \
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
             bodo.hiframes.api.get_index_data(data)
 
     if isinstance(data, RangeIndexType):
-        return lambda data, error_on_nonarray=True: \
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
             np.arange(data._start, data._stop, data._step)
 
     if is_overload_true(error_on_nonarray):
         raise TypeError("cannot coerce {} to array".format(data))
 
-    return lambda data, error_on_nonarray=True: data
+    return lambda data, error_on_nonarray=True, bool_arr_convert=None: data
 
 
 # TODO: use generated_jit with IR inlining
-def coerce_to_array(data, error_on_nonarray=True):
+def coerce_to_array(data, error_on_nonarray=True, bool_arr_convert=None):
     return data
 
 
 @overload(coerce_to_array)
-def overload_coerce_to_array(data, error_on_nonarray=True):
+def overload_coerce_to_array(data, error_on_nonarray=True,
+                                                        bool_arr_convert=None):
     """
     convert data to bodo arrays.
+    bool_arr_convert=True converts boolean arrays to nullable BooleanArray
+    instead of Numpy arrays.
     """
     from bodo.hiframes.pd_series_ext import is_str_series_typ
     from bodo.hiframes.pd_index_ext import StringIndexType
 
     # string series
     if is_str_series_typ(data):
-        return lambda data, error_on_nonarray=True: \
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
             bodo.hiframes.api.get_series_data(data)
 
     if isinstance(data, StringIndexType):
-        return lambda data, error_on_nonarray=True: \
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
             bodo.hiframes.api.get_index_data(data)
 
     # string array
     if data == bodo.string_array_type:
-        return lambda data, error_on_nonarray=True: data
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: data
 
     # string list
     if isinstance(data, types.List) and data.dtype == bodo.string_type:
-        return lambda data, error_on_nonarray=True: \
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
             bodo.libs.str_arr_ext.StringArray(data)
 
     # string tuple
     if isinstance(data, types.UniTuple) and data.dtype == bodo.string_type:
-        return lambda data, error_on_nonarray=True: \
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
             bodo.libs.str_arr_ext.StringArray(list(data))
 
     # assuming can be ndarray
-    return lambda data, error_on_nonarray=True: \
-        bodo.utils.conversion.coerce_to_ndarray(data, error_on_nonarray)
+    return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
+        bodo.utils.conversion.coerce_to_ndarray(
+            data, error_on_nonarray, bool_arr_convert)
 
 
 # TODO: use generated_jit with IR inlining

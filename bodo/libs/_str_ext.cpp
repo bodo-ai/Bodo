@@ -42,6 +42,10 @@ struct str_arr_split_view_payload {
 
 // taken from Arrow bin-util.h
 static constexpr uint8_t kBitmask[] = {1, 2, 4, 8, 16, 32, 64, 128};
+static inline bool GetBit(const uint8_t* bits, uint64_t i) {
+  return (bits[i >> 3] >> (i & 0x07)) & 1;
+}
+
 
 void* init_string(char*, int64_t);
 void* init_string_const(char* in_str, int64_t size);
@@ -103,6 +107,7 @@ npy_intp array_size(PyArrayObject* arr);
 void* array_getptr1(PyArrayObject* arr, npy_intp ind);
 void array_setitem(PyArrayObject* arr, char* p, PyObject *s);
 void mask_arr_to_bitmap(uint8_t *bitmap_arr, uint8_t *mask_arr, int64_t n);
+PyArrayObject*  set_nulls_bool_array(PyArrayObject* bool_arr, uint8_t *bitmap_arr);
 
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
@@ -220,6 +225,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                             PyLong_FromVoidPtr((void*)(&get_utf8_size)));
     PyObject_SetAttrString(m, "mask_arr_to_bitmap",
                             PyLong_FromVoidPtr((void*)(&mask_arr_to_bitmap)));
+    PyObject_SetAttrString(m, "set_nulls_bool_array",
+                            PyLong_FromVoidPtr((void*)(&set_nulls_bool_array)));
     return m;
 }
 
@@ -824,6 +831,52 @@ void mask_arr_to_bitmap(uint8_t *bitmap_arr, uint8_t *mask_arr, int64_t n)
 {
     for(int i=0; i<n; i++)
         bitmap_arr[i / 8] ^= static_cast<uint8_t>(-static_cast<uint8_t>(mask_arr[i] == 0) ^ bitmap_arr[i / 8]) & kBitmask[i % 8];
+}
+
+
+PyArrayObject*  set_nulls_bool_array(PyArrayObject* bool_arr, uint8_t *bitmap_arr)
+{
+#define CHECK(expr, msg) if(!(expr)){std::cerr << msg << std::endl; PyGILState_Release(gilstate); return NULL;}
+    auto gilstate = PyGILState_Ensure();
+
+    // if there are no NAs, just return bool array untouched
+    int64_t n = PyArray_SIZE(bool_arr);
+    CHECK(n>=0, "invalid array size");
+
+    bool has_na = false;
+    for(int i=0; i<n; i++)
+        if (!GetBit(bitmap_arr, i)) {
+            has_na = true;
+            break;
+        }
+
+    if (!has_na) {
+        // no conversion needed
+        PyGILState_Release(gilstate);
+        return bool_arr;
+    }
+
+
+    PyObject* np_mod = PyImport_ImportModule("numpy");
+    CHECK(np_mod, "importing numpy module failed");
+    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
+    CHECK(nan_obj, "getting np.nan failed");
+
+    PyArrayObject* new_arr = (PyArrayObject*) PyObject_CallMethod((PyObject*)bool_arr, "astype", "s", "O");
+    for(int i=0; i<n; i++)
+        if (!GetBit(bitmap_arr, i)) {
+            auto p = PyArray_GETPTR1((PyArrayObject*)new_arr, i);
+            CHECK(p, "getting offset in numpy array failed");
+            int err = PyArray_SETITEM((PyArrayObject*)new_arr, (char*)p, nan_obj);
+            CHECK(err==0, "setting item in numpy array failed");
+        }
+
+    Py_DECREF(bool_arr);
+    Py_DECREF(np_mod);
+    Py_DECREF(nan_obj);
+    PyGILState_Release(gilstate);
+    return new_arr;
+#undef CHECK
 }
 
 

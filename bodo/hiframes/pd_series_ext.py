@@ -19,6 +19,7 @@ from bodo.libs.str_ext import string_type, list_string_array_type
 from bodo.libs.str_arr_ext import (string_array_type, offset_typ, char_typ,
     str_arr_payload_type, StringArrayType, GetItemStringArray)
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
+from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type, datetime_date_type
 from bodo.hiframes.pd_categorical_ext import (PDCategoricalDtype,
     CategoricalArray)
@@ -131,6 +132,9 @@ def _get_series_array_type(dtype):
 
     if isinstance(dtype, IntDtype):
         return IntegerArrayType(dtype.dtype)
+
+    if dtype == types.bool_:
+        return boolean_array
 
     # use recarray data layout for series of tuples
     if isinstance(dtype, types.BaseTuple):
@@ -688,7 +692,7 @@ def pd_series_overload(data=None, index=None, dtype=None, name=None,
         # extract name if data is has name (Series/Index) and name is None
         name_t = bodo.utils.conversion.extract_name_if_none(data, name)
         index_t = bodo.utils.conversion.extract_index_if_none(data, index)
-        data_t1 = bodo.utils.conversion.coerce_to_array(data)
+        data_t1 = bodo.utils.conversion.coerce_to_array(data, True, True)
 
         # TODO: support sanitize_array() of Pandas
         # TODO: add branch pruning to inline_closure_call
