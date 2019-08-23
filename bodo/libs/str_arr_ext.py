@@ -1397,15 +1397,18 @@ def _typeof_ndarray(val, c):
     try:
         dtype = numba.numpy_support.from_dtype(val.dtype)
     except NotImplementedError:
-        if _is_str_ndarray(val):
+        dtype = _infer_ndarray_obj_dtype(val)
+        if dtype == string_type:
             return string_array_type
+        if dtype == types.bool_:
+            return bodo.libs.bool_arr_ext.boolean_array
         raise ValueError("Unsupported array dtype: %s" % (val.dtype,))
     layout = numba.numpy_support.map_layout(val)
     readonly = not val.flags.writeable
     return types.Array(dtype, val.ndim, layout, readonly=readonly)
 
 
-def _is_str_ndarray(val):
+def _infer_ndarray_obj_dtype(val):
     # strings only have object dtype, TODO: support fixed size np strings
     if not val.dtype == np.dtype('O'):
         return False
@@ -1416,13 +1419,13 @@ def _is_str_ndarray(val):
         i += 1
     if i == len(val):
         # empty or all NA object arrays are assumed to be strings
-        return True
+        return string_type
 
     first_val = val[i]
     if isinstance(first_val, str):
-        return True
-
-    return False
+        return string_type
+    elif isinstance(first_val, bool):
+        return types.bool_
 
 
 # TODO: support array of strings

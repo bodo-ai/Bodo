@@ -233,12 +233,6 @@ ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_init_bool_array = \
     init_bool_array_equiv
 
 
-@overload(len)
-def overload_bool_arr_len(A):
-    if A == boolean_array:
-        return lambda A: len(A._data)
-
-
 @overload(operator.getitem)
 def bool_arr_getitem(A, ind):
     if A != boolean_array:
@@ -306,3 +300,109 @@ def bool_arr_getitem(A, ind):
                 curr_bit += 1
             return init_bool_array(new_data, new_mask)
         return impl_slice
+
+
+@overload(operator.setitem)
+def bool_arr_setitem(A, idx, val):
+    if A != boolean_array:
+        return
+
+    # TODO: refactor with int arr since almost same code
+
+    # scalar case
+    if isinstance(idx, types.Integer):
+        assert val == types.bool_
+        def impl_scalar(A, idx, val):
+            A._data[idx] = val
+            bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
+        return impl_scalar
+
+    # array of int indices
+    if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
+        # value is BooleanArray
+        if val == boolean_array:
+            def impl_arr_ind_mask(A, idx, val):
+                n = len(val._data)
+                for i in range(n):
+                    A._data[idx[i]] = val._data[i]
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                        val._null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        A._null_bitmap, idx[i], bit)
+            return impl_arr_ind_mask
+        # value is Array/List
+        def impl_arr_ind(A, idx, val):
+            for i in range(len(val)):
+                A._data[idx[i]] = val[i]
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], 1)
+        return impl_arr_ind
+
+    # bool array
+    if is_list_like_index_type(idx) and idx.dtype == types.bool_:
+        # value is BooleanArray
+        if val == boolean_array:
+            def impl_bool_ind_mask(A, idx, val):
+                n = len(idx)
+                val_ind = 0
+                for i in range(n):
+                    if idx[i]:
+                        A._data[i] = val[val_ind]
+                        bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                            val._null_bitmap, val_ind)
+                        bodo.libs.int_arr_ext.set_bit_to_arr(
+                            A._null_bitmap, i, bit)
+                        val_ind += 1
+            return impl_bool_ind_mask
+        # value is Array/List
+        def impl_bool_ind(A, idx, val):
+            n = len(idx)
+            val_ind = 0
+            for i in range(n):
+                if idx[i]:
+                    A._data[i] = val[val_ind]
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+                    val_ind += 1
+        return impl_bool_ind
+
+    # slice case
+    if isinstance(idx, types.SliceType):
+        # value is BooleanArray
+        if val == boolean_array:
+            def impl_slice_mask(A, idx, val):
+                n = len(A._data)
+                # using setitem directly instead of copying in loop since
+                # Array setitem checks for memory overlap and copies source
+                A._data[idx] = val._data
+                # XXX: conservative copy of bitmap in case there is overlap
+                # TODO: check for overlap and copy only if necessary
+                src_bitmap = val._null_bitmap.copy()
+                slice_idx = numba.unicode._normalize_slice(idx, n)
+                val_ind = 0
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                        src_bitmap, val_ind)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        A._null_bitmap, i, bit)
+                    val_ind += 1
+            return impl_slice_mask
+        def impl_slice(A, idx, val):
+            n = len(A._data)
+            A._data[idx] = val
+            slice_idx = numba.unicode._normalize_slice(idx, n)
+            val_ind = 0
+            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+                val_ind += 1
+        return impl_slice
+
+
+
+@overload(len)
+def overload_bool_arr_len(A):
+    if A == boolean_array:
+        return lambda A: len(A._data)
+
+
+@overload_attribute(BooleanArrayType, 'shape')
+def overload_bool_arr_shape(A):
+    return lambda A: (len(A._data),)
