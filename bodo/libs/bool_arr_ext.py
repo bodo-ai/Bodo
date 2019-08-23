@@ -22,6 +22,7 @@ import llvmlite.binding as ll
 from bodo.libs import hstr_ext
 ll.add_symbol('set_nulls_bool_array', hstr_ext.set_nulls_bool_array)
 ll.add_symbol('is_bool_array', hstr_ext.is_bool_array)
+ll.add_symbol('unbox_bool_array_obj', hstr_ext.unbox_bool_array_obj)
 from bodo.utils.typing import (is_overload_none, is_overload_true,
     is_overload_false, parse_dtype)
 
@@ -65,8 +66,7 @@ make_attribute_wrapper(BooleanArrayType, 'null_bitmap', '_null_bitmap')
 
 
 @numba.njit
-def gen_full_bitmap(data_arr):
-    n = len(data_arr)
+def gen_full_bitmap(n):
     n_bytes = (n + 7) >> 3
     return np.full(n_bytes, 255, np.uint8)
 
@@ -105,6 +105,7 @@ def unbox_bool_array(typ, obj, c):
     Convert a Numpy array object to a native BooleanArray structure.
     The array's dtype can be bool or object, depending on the presense of nans.
     """
+    n = c.pyapi.long_as_longlong(c.pyapi.call_method(obj, '__len__', ()))
     fnty = lir.FunctionType(lir.IntType(32), [lir.IntType(8).as_pointer()])
     fn = c.builder.module.get_or_insert_function(
         fnty, name="is_bool_array")
@@ -120,11 +121,33 @@ def unbox_bool_array(typ, obj, c):
             bool_arr.data = c.pyapi.to_native_value(
                 types.Array(types.bool_, 1, 'C'), obj).value
             bool_arr.null_bitmap = call_func_in_unbox(
-                gen_full_bitmap, (bool_arr.data,),
-                (types.Array(types.bool_, 1, 'C'),), c)
+                gen_full_bitmap, (n,),
+                (types.int64,), c)
         with otherwise:
             # array is object
-            pass
+            # allocate data
+            bool_arr.data = numba.targets.arrayobj._empty_nd_impl(
+                c.context, c.builder, types.Array(types.bool_, 1, 'C'),
+                [n])._getvalue()
+            # allocate bitmap
+            n_bytes = c.builder.udiv(c.builder.add(n,
+                lir.Constant(lir.IntType(64), 7)),
+                lir.Constant(lir.IntType(64), 8))
+            bool_arr.null_bitmap = numba.targets.arrayobj._empty_nd_impl(
+                c.context, c.builder, types.Array(types.uint8, 1, 'C'),
+                [n_bytes])._getvalue()
+            # get array pointers for data and bitmap
+            data_ptr = c.context.make_array(types.Array(types.bool_, 1, 'C'))(
+                c.context, c.builder, bool_arr.data).data
+            bitmap_ptr = c.context.make_array(
+                types.Array(types.uint8, 1, 'C'))(
+                c.context, c.builder, bool_arr.null_bitmap).data
+            fnty = lir.FunctionType(lir.VoidType(),
+                [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(), lir.IntType(64)])
+            fn = c.builder.module.get_or_insert_function(
+                fnty, name="unbox_bool_array_obj")
+            c.builder.call(fn, [obj, data_ptr, bitmap_ptr, n])
 
     return NativeValue(bool_arr._getvalue())
 

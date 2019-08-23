@@ -42,9 +42,17 @@ struct str_arr_split_view_payload {
 
 // taken from Arrow bin-util.h
 static constexpr uint8_t kBitmask[] = {1, 2, 4, 8, 16, 32, 64, 128};
+// the bitwise complement version of kBitmask
+static constexpr uint8_t kFlippedBitmask[] = {254, 253, 251, 247, 239, 223, 191, 127};
+
 static inline bool GetBit(const uint8_t* bits, uint64_t i) {
   return (bits[i >> 3] >> (i & 0x07)) & 1;
 }
+static inline void ClearBit(uint8_t* bits, int64_t i) {
+  bits[i / 8] &= kFlippedBitmask[i % 8];
+}
+
+static inline void SetBit(uint8_t* bits, int64_t i) { bits[i / 8] |= kBitmask[i % 8]; }
 
 
 void* init_string(char*, int64_t);
@@ -109,6 +117,7 @@ void array_setitem(PyArrayObject* arr, char* p, PyObject *s);
 void mask_arr_to_bitmap(uint8_t *bitmap_arr, uint8_t *mask_arr, int64_t n);
 PyArrayObject* set_nulls_bool_array(PyArrayObject* bool_arr, uint8_t *bitmap_arr);
 int is_bool_array(PyArrayObject* arr);
+void unbox_bool_array_obj(PyArrayObject* arr, uint8_t *data, uint8_t *bitmap, int64_t n);
 
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
@@ -230,6 +239,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                             PyLong_FromVoidPtr((void*)(&set_nulls_bool_array)));
     PyObject_SetAttrString(m, "is_bool_array",
                             PyLong_FromVoidPtr((void*)(&is_bool_array)));
+    PyObject_SetAttrString(m, "unbox_bool_array_obj",
+                            PyLong_FromVoidPtr((void*)(&unbox_bool_array_obj)));
     return m;
 }
 
@@ -894,6 +905,38 @@ int is_bool_array(PyArrayObject* arr)
 
     // returning int instead of bool to avoid potential bool call convention issues
     return dtype->kind == 'b';
+
+#undef CHECK
+}
+
+
+void unbox_bool_array_obj(PyArrayObject* arr, uint8_t *data, uint8_t *bitmap, int64_t n)
+{
+#define CHECK(expr, msg) if(!(expr)){std::cerr << msg << std::endl; PyGILState_Release(gilstate); return;}
+    auto gilstate = PyGILState_Ensure();
+    //
+
+    for(uint64_t i = 0; i < n; ++i) {
+        auto p = PyArray_GETPTR1((PyArrayObject*)arr, i);
+        CHECK(p, "getting offset in numpy array failed");
+        PyObject *s = PyArray_GETITEM(arr, (const char *)p);
+        CHECK(s, "getting element failed");
+        // Pandas stores NA as either None or nan
+        if (s == Py_None || (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))))
+        {
+            // null bit
+            ClearBit(bitmap, i);
+            data[i] = 0;
+        }
+        else
+        {
+            SetBit(bitmap, i);
+            int is_true = PyObject_IsTrue(s);
+            CHECK(is_true != -1, "invalid bool element");
+            data[i] = (uint8_t)is_true;
+        }
+        Py_DECREF(s);
+    }
 
 #undef CHECK
 }
