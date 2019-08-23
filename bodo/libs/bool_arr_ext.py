@@ -237,3 +237,72 @@ ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_init_bool_array = \
 def overload_bool_arr_len(A):
     if A == boolean_array:
         return lambda A: len(A._data)
+
+
+@overload(operator.getitem)
+def bool_arr_getitem(A, ind):
+    if A != boolean_array:
+        return
+
+    # TODO: refactor with int arr since almost same code
+
+    if isinstance(ind, types.Integer):
+        # XXX: cannot handle NA for scalar getitem since not type stable
+        return lambda A, ind: A._data[ind]
+
+    # bool arr indexing
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+        def impl_bool(A, ind):
+            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
+            old_mask = A._null_bitmap
+            new_data = A._data[ind]
+            n = len(new_data)
+            n_bytes = (n + 7) >> 3
+            new_mask = np.empty(n_bytes, np.uint8)
+            curr_bit = 0
+            for i in numba.parfor.internal_prange(len(ind)):
+                if ind[i]:
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                        old_mask, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        new_mask, curr_bit, bit)
+                    curr_bit += 1
+            return init_bool_array(new_data, new_mask)
+        return impl_bool
+
+    # int arr indexing
+    if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
+        def impl(A, ind):
+            ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
+            old_mask = A._null_bitmap
+            new_data = A._data[ind_t]
+            n = len(new_data)
+            n_bytes = (n + 7) >> 3
+            new_mask = np.empty(n_bytes, np.uint8)
+            curr_bit = 0
+            for i in range(len(ind)):
+                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                    old_mask, ind_t[i])
+                bodo.libs.int_arr_ext.set_bit_to_arr(
+                    new_mask, curr_bit, bit)
+                curr_bit += 1
+            return init_bool_array(new_data, new_mask)
+        return impl
+
+    # slice case
+    if isinstance(ind, types.SliceType):
+        def impl_slice(A, ind):
+            n = len(A._data)
+            old_mask = A._null_bitmap
+            new_data = A._data[ind]
+            slice_idx = numba.unicode._normalize_slice(ind, n)
+            span = numba.unicode._slice_span(slice_idx)
+            n_bytes = (span + 7) >> 3
+            new_mask = np.empty(n_bytes, np.uint8)
+            curr_bit = 0
+            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
+                bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
+                curr_bit += 1
+            return init_bool_array(new_data, new_mask)
+        return impl_slice
