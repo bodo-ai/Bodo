@@ -19,6 +19,7 @@ import bodo
 from bodo.libs.str_ext import string_type, list_string_array_type
 from bodo.libs.str_arr_ext import string_array_type, num_total_chars, pre_alloc_string_array
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.bool_arr_ext import boolean_array
 from enum import Enum
 
 
@@ -364,7 +365,7 @@ def to_array_overload(A):
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def unique(A):
-    if isinstance(A, IntegerArrayType):
+    if isinstance(A, IntegerArrayType) or A == boolean_array:
         return lambda A: A.unique()
 
     # TODO: preserve order

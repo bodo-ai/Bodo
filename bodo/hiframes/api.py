@@ -164,6 +164,8 @@ def lower_nunique(context, builder, sig, args):
 
 # @overload(nunique)
 def nunique_overload(arr_typ):
+    if arr_typ == boolean_array:
+        return lambda A: len(A.unique())
     # TODO: extend to other types like datetime?
     def nunique_seq(A):
         return len(build_set(A))

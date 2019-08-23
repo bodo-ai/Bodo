@@ -472,3 +472,136 @@ def overload_str_bool(val):
                 return 'True'
             return 'False'
         return impl
+
+
+# XXX: register all operators just in case they are supported on bool
+# TODO: apply null masks if needed
+############################### numpy ufuncs #################################
+
+
+def create_op_overload(op, n_inputs):
+
+    if n_inputs == 1:
+        def overload_bool_arr_op_nin_1(A):
+            if isinstance(A, BooleanArrayType):
+                def impl(A):
+                    arr = bodo.libs.bool_arr_ext.get_bool_arr_data(A)
+                    out_arr = op(arr)
+                    return out_arr
+                return impl
+        return overload_bool_arr_op_nin_1
+    elif n_inputs == 2:
+        def overload_series_op_nin_2(A1, A2):
+            # both are BooleanArray
+            if A1 == boolean_array and A2 == boolean_array:
+                def impl_both(A1, A2):
+                    arr1 = bodo.libs.bool_arr_ext.get_bool_arr_data(A1)
+                    arr2 = bodo.libs.bool_arr_ext.get_bool_arr_data(A2)
+                    out_arr = op(arr1, arr2)
+                    return out_arr
+                return impl_both
+            # left arg is BooleanArray
+            if A1 == boolean_array:
+                def impl_left(A1, A2):
+                    arr1 = bodo.libs.bool_arr_ext.get_bool_arr_data(A1)
+                    out_arr = op(arr1, A2)
+                    return out_arr
+                return impl_left
+            # right arg is BooleanArray
+            if A2 == boolean_array:
+                def impl_right(A1, A2):
+                    arr2 = bodo.libs.bool_arr_ext.get_bool_arr_data(A2)
+                    out_arr = op(A1, arr2)
+                    return out_arr
+                return impl_right
+        return overload_series_op_nin_2
+    else:
+        raise RuntimeError(
+            "Don't know how to register ufuncs from ufunc_db with arity > 2")
+
+
+def _install_np_ufuncs():
+    import numba.targets.ufunc_db
+    for ufunc in numba.targets.ufunc_db.get_ufuncs():
+        overload_impl = create_op_overload(ufunc, ufunc.nin)
+        overload(ufunc)(overload_impl)
+
+
+_install_np_ufuncs()
+
+
+####################### binary operators ###############################
+
+
+def _install_binary_ops():
+    # install binary ops such as add, sub, pow, eq, ...
+    for op in numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys():
+        overload_impl = create_op_overload(op, 2)
+        overload(op)(overload_impl)
+
+
+_install_binary_ops()
+
+
+####################### binary inplace operators #############################
+
+
+def _install_inplace_binary_ops():
+    # install inplace binary ops such as iadd, isub, ...
+    for op in numba.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys():
+        overload_impl = create_op_overload(op, 2)
+        overload(op)(overload_impl)
+
+
+_install_inplace_binary_ops()
+
+
+########################## unary operators ###############################
+
+
+def _install_unary_ops():
+    # install unary operators: ~, -, +
+    for op in (operator.neg, operator.invert, operator.pos):
+        overload_impl = create_op_overload(op, 1)
+        overload(op)(overload_impl)
+
+
+_install_unary_ops()
+
+
+@overload_method(BooleanArrayType, 'unique')
+def overload_unique(A):
+    def impl_bool_arr(A):
+        # preserve order
+        data = []
+        mask = []
+        na_found = False  # write NA only once
+        true_found = False
+        false_found = False
+        for i in range(len(A)):
+            if bodo.hiframes.api.isna(A, i):
+                if not na_found:
+                    data.append(False)
+                    mask.append(False)
+                    na_found = True
+                continue
+            val = A[i]
+            if val and not true_found:
+                data.append(True)
+                mask.append(True)
+                true_found = True
+            if not val and not false_found:
+                data.append(False)
+                mask.append(True)
+                false_found = True
+            if na_found and true_found and false_found:
+                break
+
+        new_data = np.array(data)
+        n = len(new_data)
+        n_bytes = 1
+        new_mask = np.empty(n_bytes, np.uint8)
+        for j in range(n):
+            bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, j, mask[j])
+        return init_bool_array(new_data, new_mask)
+    return impl_bool_arr
