@@ -406,3 +406,69 @@ def overload_bool_arr_len(A):
 @overload_attribute(BooleanArrayType, 'shape')
 def overload_bool_arr_shape(A):
     return lambda A: (len(A._data),)
+
+
+@overload_attribute(BooleanArrayType, 'dtype')
+def overload_bool_arr_dtype(A):
+    return lambda A: np.bool_
+
+
+@overload_attribute(BooleanArrayType, 'ndim')
+def overload_bool_arr_ndim(A):
+    return lambda A: 1
+
+
+@overload_method(BooleanArrayType, 'copy')
+def overload_bool_arr_copy(A):
+    return lambda A: bodo.libs.bool_arr_ext.init_bool_array(
+        bodo.libs.bool_arr_ext.get_bool_arr_data(A).copy(),
+        bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A).copy())
+
+
+@overload_method(BooleanArrayType, 'astype')
+def overload_bool_arr_astype(A, dtype, copy=True):
+    # same dtype case
+    if dtype == types.bool_:
+        # copy=False
+        if is_overload_false(copy):
+            return lambda A, dtype, copy=True: A
+        # copy=True
+        elif is_overload_true(copy):
+            return lambda A, dtype, copy=True: A.copy()
+        # copy value is dynamic
+        else:
+            def impl(A, dtype, copy=True):
+                if copy:
+                    return A.copy()
+                else:
+                    return A
+            return impl
+
+    # numpy dtypes
+    nb_dtype = parse_dtype(dtype)
+    # NA positions are assigned np.nan for float output
+    if isinstance(nb_dtype, types.Float):
+        def impl_float(A, dtype, copy=True):
+            data = bodo.libs.bool_arr_ext.get_bool_arr_data(A)
+            n = len(data)
+            B = np.empty(n, nb_dtype)
+            for i in numba.parfor.internal_prange(n):
+                B[i] = data[i]
+                if bodo.hiframes.api.isna(A, i):
+                    B[i] = np.nan
+            return B
+        return impl_float
+
+    # TODO: raise error like Pandas when NAs are assigned to integers
+    return lambda A, dtype, copy=True: \
+            bodo.libs.bool_arr_ext.get_bool_arr_data(A).astype(nb_dtype)
+
+
+@overload(str)
+def overload_str_bool(val):
+    if val == types.bool_:
+        def impl(val):
+            if val:
+                return 'True'
+            return 'False'
+        return impl

@@ -22,6 +22,7 @@ from bodo.libs.str_ext import string_type, list_string_array_type
 from bodo.libs.str_arr_ext import (StringArrayType, string_array_type,
     is_str_arr_typ)
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.bool_arr_ext import boolean_array
 
 from bodo.libs.set_ext import build_set
 from numba.targets.imputils import lower_builtin, impl_ret_untracked
@@ -307,8 +308,8 @@ def isna_overload(arr, i):
     if arr == string_array_type:
         return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
 
-    # Integer array
-    if isinstance(arr, IntegerArrayType):
+    # masked Integer array, boolean array
+    if isinstance(arr, IntegerArrayType) or arr == boolean_array:
         return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
             arr._null_bitmap, i)
 
