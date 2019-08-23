@@ -76,7 +76,8 @@ class ConcatType(AbstractTemplate):
                 and is_str_arr_typ(arr_list.dtype)):
             ret_typ = string_array_type
         elif (isinstance(arr_list, types.UniTuple)
-                and isinstance(arr_list.dtype, IntegerArrayType)):
+                and (isinstance(arr_list.dtype, IntegerArrayType)
+                     or arr_list.dtype == boolean_array)):
             ret_typ = arr_list.dtype
             # TODO: support concat with different dtypes or with regular numpy
         else:
@@ -125,6 +126,14 @@ def concat_overload(arr_list):
     if (isinstance(arr_list, types.UniTuple)
             and isinstance(arr_list.dtype, IntegerArrayType)):
         return lambda arr_list: bodo.libs.int_arr_ext.init_integer_array(
+            np.concatenate(bodo.libs.int_arr_ext.get_int_arr_data_tup(arr_list)),
+            bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list))
+
+    if (isinstance(arr_list, types.UniTuple)
+            and arr_list.dtype == boolean_array):
+        # reusing int arr concat functions
+        # TODO: test
+        return lambda arr_list: bodo.libs.bool_arr_ext.init_bool_array(
             np.concatenate(bodo.libs.int_arr_ext.get_int_arr_data_tup(arr_list)),
             bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list))
 

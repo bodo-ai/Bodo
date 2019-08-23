@@ -319,7 +319,8 @@ def is_array_typ(var_typ):
             bodo.hiframes.split_impl.string_array_split_view_type)
         or isinstance(var_typ, bodo.hiframes.pd_series_ext.SeriesType)
         or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
-        or isinstance(var_typ, bodo.libs.int_arr_ext.IntegerArrayType))
+        or isinstance(var_typ, IntegerArrayType)
+        or var_typ == boolean_array)
 
 
 def is_np_array_typ(var_typ):
@@ -392,13 +393,20 @@ def empty_like_type_overload(n, arr):
         return empty_like_type_str_list
 
     # nullable int arr
-    if isinstance(arr, bodo.libs.int_arr_ext.IntegerArrayType):
+    if isinstance(arr, IntegerArrayType):
         _dtype = arr.dtype
         def empty_like_type_int_arr(n, arr):
             n_bytes = (n + 7) >> 3
             return bodo.libs.int_arr_ext.init_integer_array(
                 np.empty(n, _dtype), np.empty(n_bytes, np.uint8))
         return empty_like_type_int_arr
+
+    if arr == boolean_array:
+        def empty_like_type_bool_arr(n, arr):
+            n_bytes = (n + 7) >> 3
+            return bodo.libs.bool_arr_ext.init_bool_array(
+                np.empty(n, np.bool_), np.empty(n_bytes, np.uint8))
+        return empty_like_type_bool_arr
 
     # string array buffer for join
     assert arr == string_array_type
@@ -458,9 +466,16 @@ def overload_alloc_type(n, t):
     dtype = numba.numpy_support.as_dtype(typ.dtype)
 
     # nullable int array
-    if isinstance(typ, bodo.libs.int_arr_ext.IntegerArrayType):
+    if isinstance(typ, IntegerArrayType):
         return lambda n, t: bodo.libs.int_arr_ext.init_integer_array(
                 np.empty(n, dtype),
+                # XXX using full since nulls are not supported in shuffle keys
+                np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8))
+
+    # nullable bool array
+    if typ == boolean_array:
+        return lambda n, t: bodo.libs.bool_arr_ext.init_bool_array(
+                np.empty(n, np.bool_),
                 # XXX using full since nulls are not supported in shuffle keys
                 np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8))
 
@@ -480,9 +495,15 @@ def overload_full_type(n, val, t):
     dtype = numba.numpy_support.as_dtype(typ.dtype)
 
     # nullable int array
-    if isinstance(typ, bodo.libs.int_arr_ext.IntegerArrayType):
+    if isinstance(typ, IntegerArrayType):
         return lambda n, val, t: bodo.libs.int_arr_ext.init_integer_array(
                 np.full(n, val, dtype),
+                np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8))
+
+    # nullable bool array
+    if typ == boolean_array:
+        return lambda n, val, t: bodo.libs.bool_arr_ext.init_bool_array(
+                np.full(n, val, np.bool_),
                 np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8))
 
     # TODO: categorical needs fixing?
