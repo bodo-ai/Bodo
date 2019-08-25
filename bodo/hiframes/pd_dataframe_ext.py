@@ -850,7 +850,8 @@ class GetItemDataFrameLoc(AbstractTemplate):
                 col_no = df.df_type.columns.index(col_name)
                 data_typ = df.df_type.data[col_no]
                 # TODO: index
-                ret_typ = SeriesType(data_typ.dtype, None, bodo.string_type)
+                ret_typ = SeriesType(data_typ.dtype, data_typ, None,
+                                                              bodo.string_type)
                 return signature(ret_typ, *args)
 
 
@@ -875,7 +876,8 @@ class GetItemDataFrameILoc(AbstractTemplate):
                 col_no = idx.types[1].literal_value
                 data_typ = df.df_type.data[col_no]
                 # TODO: index
-                ret_typ = SeriesType(data_typ.dtype, None, bodo.string_type)
+                ret_typ = SeriesType(data_typ.dtype, data_typ, None,
+                                                              bodo.string_type)
                 return signature(ret_typ, *args)
 
 
@@ -1183,7 +1185,8 @@ class ConcatDummyTyper(AbstractTemplate):
             arr_args = [S.data for S in objs.types]
             concat_typ = bodo.hiframes.api.ConcatType(
                     self.context).generic((types.Tuple(arr_args),), {})
-            ret_typ = SeriesType(concat_typ.return_type.dtype)
+            ret_typ = SeriesType(concat_typ.return_type.dtype,
+                                 concat_typ.return_type)
             return signature(ret_typ, *args)
         # TODO: handle other iterables like arrays, lists, ...
 

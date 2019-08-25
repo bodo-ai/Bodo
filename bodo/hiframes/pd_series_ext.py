@@ -580,11 +580,11 @@ class SeriesCompEqual(AbstractTemplate):
             # inputs should be either string array or string
             assert is_str_arr_typ(va) or va == string_type
             assert is_str_arr_typ(vb) or vb == string_type
-            return signature(SeriesType(types.boolean), va, vb)
+            return signature(SeriesType(types.boolean, boolean_array), va, vb)
 
         if ((is_dt64_series_typ(va) and vb == string_type)
                 or (is_dt64_series_typ(vb) and va == string_type)):
-            return signature(SeriesType(types.boolean), va, vb)
+            return signature(SeriesType(types.boolean, boolean_array), va, vb)
 
 
 @infer
