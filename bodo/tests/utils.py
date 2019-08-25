@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import numba
 import bodo
 
 
@@ -159,7 +160,20 @@ def _test_equal(bodo_out, py_out, sort_output, check_names=True,
         if sort_output:
             py_out.sort()
             bodo_out.sort()
-        np.testing.assert_array_equal(bodo_out, py_out)
+        # assert_array_equal throws Zero Division error for bool arrays with NA
+        # using custom code instead
+        if (py_out.dtype == np.dtype('O')
+                and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(py_out)
+                    == numba.types.bool_):
+            assert (bodo_out.dtype == np.dtype('O')
+                and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(bodo_out)
+                    == numba.types.bool_)
+            assert len(py_out) == len(bodo_out)
+            for i in range(len(py_out)):
+                assert ((np.isnan(py_out[i]) and np.isnan(bodo_out[i]))
+                    or py_out[i] == bodo_out[i])
+        else:
+            np.testing.assert_array_equal(bodo_out, py_out)
     elif isinstance(py_out, pd.arrays.IntegerArray):
         pd.util.testing.assert_extension_array_equal(bodo_out, py_out)
     else:
