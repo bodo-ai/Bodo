@@ -28,6 +28,7 @@ from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
                               pre_alloc_string_array, num_total_chars)
 from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.bool_arr_ext import boolean_array
 
 
 MIN_SAMPLES = 1000000
@@ -481,7 +482,7 @@ def parallel_sort(key_arrs, data, ascending=True):
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def sort_array(A):
     # TODO: handle NAs
-    if isinstance(A, IntegerArrayType):
+    if isinstance(A, IntegerArrayType) or A == boolean_array:
         return lambda A: A._data.sort()
 
     return lambda A: A.sort()
