@@ -288,7 +288,7 @@ def bool_arr_getitem(A, ind):
         def impl_slice(A, ind):
             n = len(A._data)
             old_mask = A._null_bitmap
-            new_data = A._data[ind]
+            new_data = np.ascontiguousarray(A._data[ind])
             slice_idx = numba.unicode._normalize_slice(ind, n)
             span = numba.unicode._slice_span(slice_idx)
             n_bytes = (span + 7) >> 3
