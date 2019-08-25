@@ -18,6 +18,7 @@ from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
     pre_alloc_string_array, num_total_chars, get_null_bitmap_ptr,
     get_bit_bitmap)
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 
 
 ########## metadata required for shuffle
@@ -219,7 +220,7 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
             func_text += "    send_arr_chars_arr_{} = np.empty(s_n_all_chars, np.uint8)\n".format(i)
             func_text += "    send_arr_chars_{} = get_ctypes_ptr(send_arr_chars_arr_{}.ctypes)\n".format(i, i)
         else:
-            assert isinstance(typ, (types.Array, IntegerArrayType))
+            assert isinstance(typ, (types.Array, IntegerArrayType, BooleanArrayType))
             func_text += "  out_arr_{} = bodo.utils.utils.alloc_type(n_out, arr)\n".format(i)
             func_text += "  send_buff_{} = arr\n".format(i)
             func_text += "  if not is_contig:\n"
@@ -307,7 +308,7 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
         func_text += "  tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)\n"
 
     for i, typ in enumerate(arrs.types):
-        if isinstance(typ, (types.Array, IntegerArrayType)):
+        if isinstance(typ, (types.Array, IntegerArrayType, BooleanArrayType)):
             func_text += ("  bodo.libs.distributed_api.alltoallv("
                 "meta.send_buff_tup[{}], meta.out_arr_tup[{}], meta.send_counts,"
                 "meta.recv_counts, meta.send_disp, meta.recv_disp)\n").format(i, i)
@@ -414,7 +415,8 @@ def val_to_tup_overload(val):
 
 
 def is_null_masked_type(t):
-    return t in (string_type, string_array_type) or isinstance(t, IntegerArrayType)
+    return (t in (string_type, string_array_type)
+        or isinstance(t, IntegerArrayType) or t == boolean_array)
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
@@ -422,7 +424,7 @@ def get_mask_bit(arr, i):
     if arr == string_array_type:
         return lambda arr, i: get_bit_bitmap(get_null_bitmap_ptr(arr), i)
 
-    assert isinstance(arr, IntegerArrayType)
+    assert isinstance(arr, IntegerArrayType) or arr == boolean_array
     return lambda arr, i: bodo.libs.int_arr_ext.get_bit_bitmap_arr(
             arr._null_bitmap, i)
 
@@ -432,5 +434,5 @@ def get_arr_null_ptr(arr):
     if arr == string_array_type:
         return lambda arr: get_null_bitmap_ptr(arr)
 
-    assert isinstance(arr, IntegerArrayType)
+    assert isinstance(arr, IntegerArrayType) or arr == boolean_array
     return lambda arr: arr._null_bitmap.ctypes

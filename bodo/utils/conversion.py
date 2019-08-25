@@ -36,6 +36,10 @@ def overload_coerce_to_ndarray(data, error_on_nonarray=True,
         return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
             bodo.libs.int_arr_ext.get_int_arr_data(data)
 
+    if data == bodo.libs.bool_arr_ext.boolean_array:
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
+            bodo.libs.bool_arr_ext.get_bool_arr_data(data)
+
     if isinstance(data, types.Array):
         if (not is_overload_none(bool_arr_convert)
                 and data.dtype == types.bool_):
