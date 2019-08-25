@@ -2172,9 +2172,11 @@ class SeriesPass(object):
         func_text = 'def f(str_arr, pat):\n'
         func_text += '  l = len(str_arr)\n'
         func_text += '  S = np.empty(l, dtype=np.bool_)\n'
+        func_text += '  nulls = np.empty((l + 7) >> 3, dtype=np.uint8)\n'
         func_text += '  for i in numba.parfor.internal_prange(l):\n'
         func_text += '    S[i] = {}(str_arr[i], pat)\n'.format(comp_func)
-        func_text += '  return bodo.hiframes.api.init_series(S)\n'
+        func_text += '    bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)\n'
+        func_text += '  return bodo.hiframes.api.init_series(bodo.libs.bool_arr_ext.init_bool_array(S, nulls))\n'
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         f = loc_vars['f']
