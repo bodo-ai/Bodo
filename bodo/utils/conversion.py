@@ -475,3 +475,19 @@ def overload_extract_index_array_tup(series_tup):
     exec(func_text, {'bodo': bodo}, loc_vars)
     impl = loc_vars['f']
     return impl
+
+
+# def to_bool_array_if_np_bool(A):
+#     return A
+
+
+# @overload(to_bool_array_if_np_bool)
+# def overload_to_bool_array_if_np_bool(A):
+#     """Returns a nullable BooleanArray if input is bool ndarray. Otherwise,
+#     just returns the input.
+#     """
+#     if A == types.Array(types.bool_, 1, 'C'):
+#         return lambda A: bodo.libs.bool_arr_ext.init_bool_array(
+#                          A, np.full((len(A) + 7) >> 3, 255, np.uint8))
+
+#     return lambda A: A

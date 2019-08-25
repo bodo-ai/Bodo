@@ -608,57 +608,6 @@ class CmpOpLTSeries(SeriesCompEqual):
     key = '<'
 
 
-################## typing for ufuncs called on Series #####################
-# XXX can't overload due to Numba's #4133
-
-def series_op_generic(cls, self, args, kws):
-    # return if no Series
-    if not any(isinstance(arg, SeriesType) for arg in args):
-        return None
-    # convert args to array
-    new_args = tuple(if_series_to_array_type(arg) for arg in args)
-
-    # get index and name types
-    if is_series_type(args[0]):
-        index = args[0].index
-        name_typ = args[0].name_typ
-    else:
-        assert len(args) > 1 and is_series_type(args[1])
-        index = args[1].index
-        name_typ = args[1].name_typ
-
-    sig = super(cls, self).generic(new_args, kws)
-    # convert back to Series
-    if sig is not None:
-        sig.return_type = SeriesType(
-            sig.return_type.dtype, index=index, name_typ=name_typ)
-        sig.args = args
-    return sig
-
-
-class Series_Numpy_rules_ufunc(Numpy_rules_ufunc):
-    def generic(self, args, kws):
-        return series_op_generic(Series_Numpy_rules_ufunc, self, args, kws)
-
-
-# copied from npydecl.py since deleted
-_aliases = set(["bitwise_not", "mod", "abs"])
-if np.divide == np.true_divide:
-    _aliases.add("divide")
-
-
-for func in numba.typing.npydecl.supported_ufuncs:
-    name = func.__name__
-    #_numpy_ufunc(func)
-    class typing_class(Series_Numpy_rules_ufunc):
-        key = func
-
-    typing_class.__name__ = "resolve_series_{0}".format(name)
-
-    if not name in _aliases:
-        infer_global(func, types.Function(typing_class))
-
-
 # TODO: handle all timedelta args
 def type_sub(context):
     def typer(val1, val2):
