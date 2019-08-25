@@ -396,7 +396,6 @@ def bool_arr_setitem(A, idx, val):
         return impl_slice
 
 
-
 @overload(len)
 def overload_bool_arr_len(A):
     if A == boolean_array:

@@ -16,6 +16,7 @@ from bodo.libs.str_arr_ext import (string_array_type, num_total_chars,
     get_data_ptr, convert_len_arr_to_offset, getitem_str_bitmap,
     setitem_str_bitmap, set_bit_to)
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.bool_arr_ext import boolean_array
 from bodo.utils.utils import (debug_prints, empty_like_type,
     _numba_to_c_type_map, unliteral_all)
 from llvmlite import ir as lir
@@ -268,7 +269,7 @@ def gatherv(data, allgather=False):
 
         return gatherv_str_arr_impl
 
-    if isinstance(data, IntegerArrayType):
+    if isinstance(data, IntegerArrayType) or data == boolean_array:
         typ_val = _numba_to_c_type_map[data.dtype]
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
 
@@ -387,7 +388,7 @@ def bcast_overload(data):
             return
         return bcast_impl
 
-    if isinstance(data, IntegerArrayType):
+    if isinstance(data, IntegerArrayType) or data == boolean_array:
         def bcast_impl_int_arr(data):
             bcast(data._data)
             bcast(data._null_bitmap)
@@ -645,7 +646,7 @@ def alltoallv(send_data, out_data, send_counts, recv_counts, send_disp, recv_dis
     typ_enum_o = get_type_enum(out_data)
     assert typ_enum == typ_enum_o
 
-    if isinstance(send_data, IntegerArrayType):
+    if isinstance(send_data, IntegerArrayType) or send_data == boolean_array:
         return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: \
         c_alltoallv(send_data._data.ctypes, out_data._data.ctypes, send_counts.ctypes,
               recv_counts.ctypes, send_disp.ctypes, recv_disp.ctypes, typ_enum)

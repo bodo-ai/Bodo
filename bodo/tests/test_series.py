@@ -41,7 +41,6 @@ _cov_corr_series = [(pd.Series(x), pd.Series(y)) for x, y in [
 
 GLOBAL_VAL = 2
 
-# box/unbox
 
 # TODO: integer Null and other Nulls
 # TODO: list of datetime.datetime, categorical, timedelta, ...
@@ -120,6 +119,8 @@ def test_series_constructor_int_arr():
 @pytest.fixture(params = [
     pd.Series([1, 8, 4, 11, -3]),
     pd.Series([1.1, np.nan, 4.2, 3.1, -3.5]),
+    pd.Series([True, False, False, True, True]),  # bool array without NA
+    pd.Series([True, False, False, np.nan, True]),  # bool array with NA
     pd.Series([1, 8, 4, 0, 3], dtype=np.uint8),
     pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
     pd.Series([1, 8, 4, -1, 2], name='ACD'),
@@ -148,6 +149,14 @@ def series_val(request):
 ])
 def numeric_series_val(request):
     return request.param
+
+
+def test_box(series_val):
+    # unbox and box
+    def impl(S):
+        return S
+
+    check_func(impl, (series_val,))
 
 
 def test_series_index(series_val):
@@ -286,6 +295,18 @@ def test_series_astype_int_arr(numeric_series_val):
     check_func(test_impl, (numeric_series_val,))
 
 
+@pytest.mark.parametrize('S', [
+    pd.Series([True, False, False, True, True]),
+    pd.Series([True, False, False, np.nan, True])])
+def test_series_astype_bool_arr(S):
+    # TODO: int, Int
+
+    def test_impl(S):
+        return S.astype('float32')
+
+    check_func(test_impl, (S,))
+
+
 def test_series_copy_deep(series_val):
     # TODO: test deep/shallow cases properly
     def test_impl(S):
@@ -361,7 +382,7 @@ def test_series_iloc_getitem_int(series_val):
 
 def test_series_iloc_getitem_slice(series_val):
     def test_impl(S):
-        return S.iloc[1:3]
+        return S.iloc[1:4]
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
@@ -408,10 +429,13 @@ def test_series_iloc_setitem_slice(series_val):
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
         return
-    val = series_val.iloc[0:2].values  # values to avoid alignment
+
+    val = series_val.iloc[0:3].values.copy()  # values to avoid alignment
+    if series_val.hasnans:
+        val[0] = np.nan  # extra NA to keep dtype nullable like bool arr
 
     def test_impl(S, val):
-        S.iloc[1:3] = val
+        S.iloc[1:4] = val
         return S
 
     bodo_func = bodo.jit(test_impl)
@@ -424,7 +448,10 @@ def test_series_iloc_setitem_list_int(series_val, idx):
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
         return
-    val = series_val.iloc[0:2].values  # values to avoid alignment
+
+    val = series_val.iloc[0:2].values.copy()  # values to avoid alignment
+    if series_val.hasnans:
+        val[0] = np.nan  # extra NA to keep dtype nullable like bool arr
 
     def test_impl(S, val, idx):
         S.iloc[idx] = val
@@ -455,7 +482,7 @@ def test_series_getitem_int(series_val):
 
 def test_series_getitem_slice(series_val):
     def test_impl(S):
-        return S[1:3]
+        return S[1:4]
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
@@ -514,10 +541,13 @@ def test_series_setitem_slice(series_val):
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
         return
-    val = series_val.iloc[0:2].values  # values to avoid alignment
+
+    val = series_val.iloc[0:3].values.copy()  # values to avoid alignment
+    if series_val.hasnans:
+        val[0] = np.nan  # extra NA to keep dtype nullable like bool arr
 
     def test_impl(S, val):
-        S[1:3] = val
+        S[1:4] = val
         return S
 
     bodo_func = bodo.jit(test_impl)
@@ -525,7 +555,7 @@ def test_series_setitem_slice(series_val):
         bodo_func(series_val.copy(), val), test_impl(series_val.copy(), val))
 
 
-@pytest.mark.parametrize('idx', [[1, 3], np.array([1, 3]), pd.Series([1, 3])])
+@pytest.mark.parametrize('idx', [[1, 4], np.array([1, 4]), pd.Series([1, 4])])
 @pytest.mark.parametrize('list_val_arg', [True, False])
 def test_series_setitem_list_int(series_val, idx, list_val_arg):
     # string setitem not supported yet
@@ -1101,6 +1131,11 @@ def test_series_nunique(series_val):
 def test_series_unique(series_val):
     # not supported for dt64 yet, TODO: support and test
     if series_val.dtype == np.dtype('datetime64[ns]'):
+        return
+
+    # np.testing.assert_array_equal() throws division by zero for bool arrays
+    # with nans for some reason
+    if series_val.dtype == np.dtype('O') and series_val.hasnans:
         return
 
     def test_impl(A):
