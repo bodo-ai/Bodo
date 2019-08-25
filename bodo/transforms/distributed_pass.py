@@ -1943,11 +1943,17 @@ class DistributedPass(object):
         if reduce_op == Reduce_Type.Prod:
             init_val = str(el_typ(1))
         if reduce_op == Reduce_Type.Min:
-            init_val = "numba.targets.builtins.get_type_max_value(np.ones(1,dtype=np.{}).dtype)".format(
-                el_typ)
+            if el_typ == types.bool_:
+                init_val = 'True'
+            else:
+                init_val = "numba.targets.builtins.get_type_max_value(np.ones(1,dtype=np.{}).dtype)".format(
+                    el_typ)
         if reduce_op == Reduce_Type.Max:
-            init_val = "numba.targets.builtins.get_type_min_value(np.ones(1,dtype=np.{}).dtype)".format(
-                el_typ)
+            if el_typ == types.bool_:
+                init_val = 'False'
+            else:
+                init_val = "numba.targets.builtins.get_type_min_value(np.ones(1,dtype=np.{}).dtype)".format(
+                    el_typ)
         if reduce_op in [Reduce_Type.Argmin, Reduce_Type.Argmax]:
             # don't generate initialization for argmin/argmax since they are not
             # initialized by user and correct initialization is already there

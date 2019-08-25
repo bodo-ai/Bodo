@@ -127,6 +127,9 @@ def _get_type_max_value_overload(dtype):
         return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
             numba.targets.builtins.get_type_max_value(numba.types.int64))
 
+    if dtype.dtype == types.bool_:
+        return lambda dtype: True
+
     return lambda dtype: numba.targets.builtins.get_type_max_value(dtype)
 
 
@@ -146,7 +149,30 @@ def _get_type_min_value_overload(dtype):
         return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
             numba.targets.builtins.get_type_min_value(numba.types.int64))
 
+    if dtype.dtype == types.bool_:
+        return lambda dtype: False
+
     return lambda dtype: numba.targets.builtins.get_type_min_value(dtype)
+
+
+@overload(min)
+def indval_min(a1, a2):
+    if a1 == types.bool_ and a2 == types.bool_:
+        def min_impl(a1, a2):
+            if a1 > a2:
+                return a2
+            return a1
+        return min_impl
+
+
+@overload(max)
+def indval_max(a1, a2):
+    if a1 == types.bool_ and a2 == types.bool_:
+        def max_impl(a1, a2):
+            if a2 > a1:
+                return a2
+            return a1
+        return max_impl
 
 
 @numba.njit

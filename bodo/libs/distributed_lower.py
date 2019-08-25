@@ -53,6 +53,7 @@ mpi_req_llvm_type = lir.IntType(8 * hdist.mpi_req_num_bytes)
 @lower_builtin(distributed_api.dist_reduce, types.float64, types.int32)
 @lower_builtin(distributed_api.dist_reduce, IndexValueType, types.int32)
 @lower_builtin(distributed_api.dist_reduce, types.uint64, types.int32)
+@lower_builtin(distributed_api.dist_reduce, types.bool_, types.int32)
 def lower_dist_reduce(context, builder, sig, args):
     val_typ = args[0].type
     op_typ = args[1].type
