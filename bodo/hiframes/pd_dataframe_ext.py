@@ -592,7 +592,7 @@ def _get_df_args(data, index, columns, dtype, copy):
             raise ValueError("pd.DataFrame tuple input data not supported yet")
         n_cols = (len(data.types) - 1) // 2
         data_keys = [t.literal_value for t in data.types[1:n_cols+1]]
-        data_arrs = ['bodo.utils.conversion.coerce_to_array(data[{}]){}'.format(
+        data_arrs = ['bodo.utils.conversion.coerce_to_array(data[{}], True, True){}'.format(
                     i, astype_str) for i in range(n_cols + 1, 2 * n_cols + 1)]
         data_dict =  dict(zip(data_keys, data_arrs))
         # if no index provided and there are Series inputs, get index from them
