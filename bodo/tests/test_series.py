@@ -12,7 +12,7 @@ import bodo
 from bodo.libs.str_arr_ext import StringArray
 from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_start_end,
-    check_func)
+    check_func, is_bool_object_series)
 import pytest
 
 
@@ -930,6 +930,10 @@ def test_series_idxmin(series_val):
     if isinstance(series_val.values[0], str):
         return
 
+    # argmin() not supported for bools in Pandas
+    if series_val.dtype == np.bool_ or is_bool_object_series(series_val):
+        return
+
     def test_impl(A):
         return A.idxmin()
 
@@ -945,6 +949,10 @@ def test_series_idxmax(series_val):
 
     # skip strings, TODO: handle strings
     if isinstance(series_val.values[0], str):
+        return
+
+    # argmax() not supported for bools in Pandas
+    if series_val.dtype == np.bool_ or is_bool_object_series(series_val):
         return
 
     def test_impl(A):

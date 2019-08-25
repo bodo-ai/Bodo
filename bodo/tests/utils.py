@@ -162,12 +162,8 @@ def _test_equal(bodo_out, py_out, sort_output, check_names=True,
             bodo_out.sort()
         # assert_array_equal throws Zero Division error for bool arrays with NA
         # using custom code instead
-        if (py_out.dtype == np.dtype('O')
-                and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(py_out)
-                    == numba.types.bool_):
-            assert (bodo_out.dtype == np.dtype('O')
-                and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(bodo_out)
-                    == numba.types.bool_)
+        if is_bool_object_series(py_out):
+            assert is_bool_object_series(bodo_out)
             assert len(py_out) == len(bodo_out)
             for i in range(len(py_out)):
                 assert ((np.isnan(py_out[i]) and np.isnan(bodo_out[i]))
@@ -178,3 +174,9 @@ def _test_equal(bodo_out, py_out, sort_output, check_names=True,
         pd.util.testing.assert_extension_array_equal(bodo_out, py_out)
     else:
         assert bodo_out == py_out
+
+
+def is_bool_object_series(S):
+    return (S.dtype == np.dtype('O')
+            and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(S)
+                == numba.types.bool_)
