@@ -14,7 +14,8 @@ from numba.extending import (typeof_impl, type_callable, models,
     unbox, lower_getattr, intrinsic, overload_method, overload,
     overload_attribute)
 from numba.array_analysis import ArrayAnalysis
-from bodo.libs.str_arr_ext import kBitmask
+from bodo.libs.str_ext import list_string_array_type
+from bodo.libs.str_arr_ext import kBitmask, string_array_type
 from bodo.utils.typing import is_list_like_index_type
 
 from llvmlite import ir as lir
@@ -657,7 +658,11 @@ def overload_unique(A):
 @overload(operator.getitem)
 def bool_arr_ind_getitem(A, ind):
     # getitem for array indexed by BooleanArray
-    # TODO: types other than array for A?
-    if ind == boolean_array and isinstance(A, types.Array):
+    # TODO: other array types for A?
+    if ind == boolean_array and (isinstance(A, (types.Array,
+                bodo.libs.int_arr_ext.IntegerArrayType))
+            or A in (string_array_type, list_string_array_type,
+            bodo.hiframes.split_impl.string_array_split_view_type,
+            boolean_array)):
         # XXX assuming data value for NAs is False
         return lambda A, ind: A[ind._data]
