@@ -134,6 +134,21 @@ def test_csv_int_na2(datapath):
     check_func(test_impl, ())
 
 
+def test_csv_bool_na(datapath):
+    fname = datapath('bool_nulls.csv')
+    def test_impl():
+        # TODO: support column 1 which is bool with NAs when possible with
+        # Pandas dtypes
+        # see Pandas GH20591
+        dtype = {'ind': 'int32', 'B': 'bool'}
+        return pd.read_csv(fname,
+            names=dtype.keys(),
+            dtype=dtype,
+            usecols=[0, 2]
+        )
+    check_func(test_impl, ())
+
+
 def test_h5_read_seq(datapath):
     fname = datapath("lr.hdf5")
     def test_impl():

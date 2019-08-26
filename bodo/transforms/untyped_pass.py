@@ -31,6 +31,7 @@ from bodo.utils.utils import (
 import bodo.hiframes.api
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.bool_arr_ext import boolean_array
 import bodo.ir
 import bodo.ir.aggregate
 import bodo.ir.filter
@@ -750,6 +751,12 @@ class UntypedPass(object):
             typ_name = 'int64' if typ_name == 'int' else typ_name
             typ_name = 'float64' if typ_name == 'float' else typ_name
             typ_name = 'bool_' if typ_name == 'bool' else typ_name
+            # XXX: bool with NA needs to be object, TODO: fix somehow? doc.
+            typ_name = 'bool_' if typ_name == 'O' else typ_name
+
+            if typ_name == 'bool_':
+                return boolean_array
+
             typ = getattr(types, typ_name)
             typ = types.Array(typ, 1, 'C')
             return typ

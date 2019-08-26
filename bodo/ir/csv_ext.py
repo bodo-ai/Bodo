@@ -12,6 +12,7 @@ from bodo.transforms.distributed_analysis import Distribution
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.timsort import copyElement_tup, getitem_arr_tup
 from bodo.utils.utils import _numba_to_c_type_map, sanitize_varname
 from bodo import objmode
@@ -272,6 +273,10 @@ def _get_dtype_str(t):
         setattr(types, t_name, t)
         return t_name
 
+    if t == boolean_array:
+        types.boolean_array = boolean_array
+        return 'boolean_array'
+
     if dtype == types.bool_:
         dtype = 'bool_'
 
@@ -293,6 +298,9 @@ def _get_pd_dtype_str(t):
     # nullable int array
     if isinstance(t, IntegerArrayType):
         return '"{}Int{}"'.format('' if dtype.signed else 'U', dtype.bitwidth)
+
+    if t == boolean_array:
+        return 'np.bool_'
 
     return 'np.{}'.format(dtype)
 
@@ -326,7 +334,7 @@ def _gen_csv_reader_py(col_names, col_typs, usecols, sep, typingctx, targetctx,
     func_text += "       usecols={}, sep='{}')\n".format(usecols, sep)
     for s_cname, cname in zip(sanitized_cnames, col_names):
         func_text += "    {} = df['{}'].values\n".format(s_cname, cname)
-        # func_text += "    print({})\n".format(cname)
+        # func_text += "    print({})\n".format(s_cname)
     func_text += "  return ({},)\n".format(", ".join(sc for sc in sanitized_cnames))
 
     # print(func_text)
