@@ -18,6 +18,7 @@ from numba.numpy_support import as_dtype
 import bodo
 from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.bool_arr_ext import BooleanArrayType
 
 import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
@@ -93,6 +94,7 @@ class QuantileType(AbstractTemplate):
 
 @lower_builtin(quantile, types.Array, types.float64)
 @lower_builtin(quantile, IntegerArrayType, types.float64)
+@lower_builtin(quantile, BooleanArrayType, types.float64)
 def lower_dist_quantile_seq(context, builder, sig, args):
 
     # store an int to specify data type
@@ -102,7 +104,7 @@ def lower_dist_quantile_seq(context, builder, sig, args):
 
     arr_val = args[0]
     arr_typ = sig.args[0]
-    if isinstance(arr_typ, IntegerArrayType):
+    if isinstance(arr_typ, (IntegerArrayType, BooleanArrayType)):
         arr_val = cgutils.create_struct_proxy(arr_typ)(
             context, builder, arr_val).data
         arr_typ = types.Array(arr_typ.dtype, 1, 'C')
@@ -126,6 +128,7 @@ def lower_dist_quantile_seq(context, builder, sig, args):
 
 @lower_builtin(quantile_parallel, types.Array, types.float64, types.intp)
 @lower_builtin(quantile_parallel, IntegerArrayType, types.float64, types.intp)
+@lower_builtin(quantile_parallel, BooleanArrayType, types.float64, types.intp)
 def lower_dist_quantile_parallel(context, builder, sig, args):
 
     # store an int to specify data type
@@ -135,7 +138,7 @@ def lower_dist_quantile_parallel(context, builder, sig, args):
 
     arr_val = args[0]
     arr_typ = sig.args[0]
-    if isinstance(arr_typ, IntegerArrayType):
+    if isinstance(arr_typ, (IntegerArrayType, BooleanArrayType)):
         arr_val = cgutils.create_struct_proxy(arr_typ)(
             context, builder, arr_val).data
         arr_typ = types.Array(arr_typ.dtype, 1, 'C')
