@@ -652,3 +652,12 @@ def overload_unique(A):
             bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, j, mask[j])
         return init_bool_array(new_data, new_mask)
     return impl_bool_arr
+
+
+@overload(operator.getitem)
+def bool_arr_ind_getitem(A, ind):
+    # getitem for array indexed by BooleanArray
+    # TODO: types other than array for A?
+    if ind == boolean_array and isinstance(A, types.Array):
+        # XXX assuming data value for NAs is False
+        return lambda A, ind: A[ind._data]
