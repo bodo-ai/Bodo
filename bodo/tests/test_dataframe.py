@@ -11,7 +11,7 @@ import numba
 import bodo
 from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
     count_parfor_OneDs, count_array_OneDs, dist_IR_contains, get_start_end,
-    check_func)
+    check_func, is_bool_object_series)
 
 
 
@@ -22,7 +22,8 @@ from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
         'B': [1.1, np.nan, 4.2, 3.1, -1.3],
         'C': [True, False, False, True, True]}),
     pd.DataFrame({'A': pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
-        'B': [1.1, np.nan, 4.2, 3.1, -1.3]}),
+        'B': [1.1, np.nan, 4.2, 3.1, -1.3],
+        'C': [True, False, False, np.nan, True]}),
     # uint8, float32 dtypes
     pd.DataFrame({'A': np.array([1, 8, 4, 0, 3], dtype=np.uint8),
         'B': np.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype=np.float32)}),
@@ -269,6 +270,11 @@ def test_df_corr(df_value):
     if len(df_value._get_numeric_data().columns) == 0:
         return
 
+    # XXX pandas excludes bool columns with NAs, which we can't do dynamically
+    for c in df_value.columns:
+        if is_bool_object_series(df_value[c]) and df_value[c].hasnans:
+            return
+
     def impl(df):
         return df.corr()
 
@@ -291,6 +297,11 @@ def test_df_cov(df_value):
     # empty dataframe output not supported yet
     if len(df_value._get_numeric_data().columns) == 0:
         return
+
+    # XXX pandas excludes bool columns with NAs, which we can't do dynamically
+    for c in df_value.columns:
+        if is_bool_object_series(df_value[c]) and df_value[c].hasnans:
+            return
 
     def impl(df):
         return df.cov()
@@ -778,6 +789,16 @@ def test_create_series_input1():
     bodo_func = bodo.jit(test_impl)
     S = pd.Series([2, 4], [3, -1])
     pd.testing.assert_frame_equal(bodo_func(S), test_impl(S))
+
+
+def test_df_apply_bool():
+    # check bool output of UDF for BooleanArray use
+    def test_impl(df):
+        return df.apply(lambda r: r.A == 2, axis=1)
+
+    n = 121
+    df = pd.DataFrame({'A': np.arange(n)})
+    check_func(test_impl, (df,))
 
 
 ############################# old tests ###############################

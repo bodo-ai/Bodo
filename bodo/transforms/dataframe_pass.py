@@ -868,7 +868,7 @@ class DataFramePass(object):
             func_text += "  c{} = bodo.hiframes.api.init_series(c{})\n".format(i, i)
         func_text += "  numba.parfor.init_prange()\n"
         func_text += "  n = len(c0)\n"
-        func_text += "  S = numba.unsafe.ndarray.empty_inferred((n,))\n"
+        func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ)\n"
         func_text += "  for i in numba.parfor.internal_prange(n):\n"
         func_text += "     row = Row({})\n".format(row_args)
         func_text += "     S[i] = map_func(row)\n"
@@ -878,8 +878,10 @@ class DataFramePass(object):
         exec(func_text, {}, loc_vars)
         f = loc_vars['f']
 
+        arr_typ = self.typemap[lhs.name].data
         f_ir = compile_to_numba_ir(
-            f, {'numba': numba, 'np': np, 'Row': Row, 'bodo': bodo})
+            f, {'numba': numba, 'np': np, 'Row': Row, 'bodo': bodo,
+            '_arr_typ': arr_typ})
         # fix definitions to enable finding sentinel
         f_ir._definitions = build_definitions(f_ir.blocks)
         topo_order = find_topo_order(f_ir.blocks)

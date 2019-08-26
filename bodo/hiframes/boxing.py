@@ -21,7 +21,6 @@ from bodo.hiframes.pd_dataframe_ext import (DataFrameType, construct_dataframe,
 from bodo.hiframes.pd_timestamp_ext import (datetime_date_type,
     unbox_datetime_date_array, box_datetime_date_array)
 from bodo.libs.str_ext import string_type, list_string_array_type
-from bodo.libs.str_arr_ext import (string_array_type, unbox_str_series, box_str_arr)
 from bodo.libs.int_arr_ext import typeof_pd_int_dtype
 from bodo.hiframes.pd_categorical_ext import (PDCategoricalDtype,
     box_categorical_array, unbox_categorical_array)
@@ -219,7 +218,7 @@ def box_dataframe(typ, val, c):
     class_obj = pyapi.import_module_noblock(mod_name)
     df_obj = pyapi.call_method(class_obj, "DataFrame", ())
 
-    for i, cname, arr, arr_typ, dtype in zip(range(n_cols), col_names, col_arrs, arr_typs, dtypes):
+    for i, cname, arr, arr_typ in zip(range(n_cols), col_names, col_arrs, arr_typs):
         # df['cname'] = boxed_arr
         # TODO: datetime.date, DatetimeIndex?
         name_str = context.insert_const_string(c.builder.module, cname)

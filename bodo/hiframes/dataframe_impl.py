@@ -13,6 +13,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.typing import (is_overload_none, is_overload_true,
     is_overload_false, is_overload_zero, get_overload_const_str)
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.bool_arr_ext import boolean_array
 
 
 @overload_attribute(DataFrameType, 'index')
@@ -234,7 +235,8 @@ def overload_dataframe_corr(df, method='pearson', min_periods=1):
     arr_args = ", ".join(
         'bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}'.format(
         df.columns.index(c), '.astype(np.float64)'
-        if isinstance(df.data[df.columns.index(c)], IntegerArrayType) else '')
+        if (isinstance(df.data[df.columns.index(c)], IntegerArrayType)
+            or df.data[df.columns.index(c)] == boolean_array) else '')
         for c in numeric_cols)
     mat = "np.stack(({},), 1){}".format(arr_args, typ_conv)
 
@@ -269,7 +271,8 @@ def overload_dataframe_cov(df, min_periods=None):
     arr_args = ", ".join(
         'bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}'.format(
         df.columns.index(c), '.astype(np.float64)'
-        if isinstance(df.data[df.columns.index(c)], IntegerArrayType) else '')
+        if (isinstance(df.data[df.columns.index(c)], IntegerArrayType)
+            or df.data[df.columns.index(c)] == boolean_array) else '')
         for c in numeric_cols)
     mat = "np.stack(({},), 1){}".format(arr_args, typ_conv)
 
