@@ -19,6 +19,8 @@ from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
     getitem_str_offset, copy_str_arr_slice, str_copy_ptr, get_utf8_size,
     setitem_str_offset, str_arr_set_na, set_bit_to)
 from bodo.libs.str_ext import string_type
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.timsort import copyElement_tup, getitem_arr_tup, setitem_arr_tup
 from bodo.utils.shuffle import (getitem_arr_tup_single, val_to_tup,
     alltoallv_tup, finalize_shuffle_meta,
@@ -662,7 +664,8 @@ def write_data_send_buff_overload(meta_tup, node_id, ind, data, key_meta):
     for i, typ in enumerate(data.types):
         func_text += "  val_{} = data[{}][ind]\n".format(i, i)
         func_text += "  ind_{} = key_meta.send_disp[node_id] + key_meta.tmp_offset[node_id]\n".format(i)
-        if isinstance(typ, types.Array):
+        # TODO: support bool NA
+        if isinstance(typ, types.Array) or typ == boolean_array:
             func_text += "  meta_tup[{}].send_buff[ind_{}] = val_{}\n".format(i, i, i)
         else:
             # TODO: fix
@@ -711,14 +714,14 @@ def ensure_capacity(arr, new_size):
     if curr_len < new_size:
         new_len = 2 * curr_len
         new_arr = bodo.hiframes.pd_categorical_ext.fix_cat_array_type(
-            np.empty(new_len, arr.dtype))
+            bodo.utils.utils.alloc_type(new_len, arr))
         new_arr[:curr_len] = arr
     return new_arr
 
 
 @overload(ensure_capacity)
 def ensure_capacity_overload(arr, new_size):
-    if isinstance(arr, types.Array):
+    if isinstance(arr, types.Array) or arr == boolean_array:
         return ensure_capacity
     assert isinstance(arr, (types.Tuple, types.UniTuple))
     count = arr.count
@@ -795,7 +798,7 @@ def copy_elem_buff(arr, ind, val):  # pragma: no cover
 
 @overload(copy_elem_buff)
 def copy_elem_buff_overload(arr, ind, val):
-    if isinstance(arr, types.Array):
+    if isinstance(arr, types.Array) or arr == boolean_array:
         return copy_elem_buff
 
     assert arr == string_array_type
@@ -835,7 +838,7 @@ def trim_arr(arr, size):  # pragma: no cover
 
 @overload(trim_arr)
 def trim_arr_overload(arr, size):
-    if isinstance(arr, types.Array):
+    if isinstance(arr, types.Array) or arr == boolean_array:
         return trim_arr
 
     assert arr == string_array_type
@@ -856,7 +859,7 @@ def setnan_elem_buff(arr, ind):  # pragma: no cover
 
 @overload(setnan_elem_buff)
 def setnan_elem_buff_overload(arr, ind):
-    if isinstance(arr, types.Array):
+    if isinstance(arr, types.Array) or arr == boolean_array:
         return setnan_elem_buff
 
     assert arr == string_array_type
@@ -1143,6 +1146,11 @@ def setitem_arr_nan_overload(arr, ind):
 
     if arr == string_array_type:
         return lambda arr, ind: str_arr_set_na(arr, ind)
+
+    if isinstance(arr, IntegerArrayType) or arr == boolean_array:
+        lambda arr, ind: bodo.libs.int_arr_ext.set_bit_to_arr(
+                        arr._null_bitmap, ind, 0)
+
     # TODO: support strings, bools, etc.
     # XXX: set NA values in bool arrays to False
     # FIXME: replace with proper NaN
@@ -1163,6 +1171,7 @@ def setitem_arr_nan_overload(arr, ind):
         def setitem_arr_nan_int(arr, ind):
             arr[ind] = 0
         return setitem_arr_nan_int
+
     return lambda arr, ind: None
 
 

@@ -158,6 +158,21 @@ def test_merge_str_nan2():
     check_func(test_impl, (df1, df2), sort_output=True)
 
 
+def test_join_bool():
+    def test_impl(df1, df2):
+        return df1.merge(df2, on=['A', 'B'])
+
+    # TODO: bool NA in input
+    df1 = pd.DataFrame({'A': [3,1,1,3,4],
+                        'B': [1,2,3,2,3],
+                        'C': [True, False, True, False, True]})
+
+    df2 = pd.DataFrame({'A': [2,1,4,4,3],
+                        'B': [1,3,2,3,2],
+                        'D': [False, True, True, False, False]})
+    check_func(test_impl, (df1, df2), sort_output=True)
+
+
 class TestJoin(unittest.TestCase):
     def test_join1(self):
         def test_impl(n):
