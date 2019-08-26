@@ -12,6 +12,7 @@ from bodo.libs.str_ext import string_type, unicode_to_char_ptr
 from bodo.libs.str_arr_ext import StringArrayPayloadType, construct_string_array
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
 from bodo.utils.utils import unliteral_all, sanitize_varname
 import bodo.ir.parquet_ext
 from bodo.transforms import distributed_pass
@@ -231,6 +232,9 @@ def _gen_alloc(c_type, cname, alloc_size, el_type):
     if isinstance(c_type, IntegerArrayType):
         return '  {0} = bodo.libs.int_arr_ext.init_integer_array(np.empty({1}, {2}), np.empty(({1} + 7) >> 3, np.uint8))\n'.format(
             cname, alloc_size, el_type)
+    if c_type == boolean_array:
+        return '  {0} = bodo.libs.bool_arr_ext.init_bool_array(np.empty({1}, {2}), np.empty(({1} + 7) >> 3, np.uint8))\n'.format(
+            cname, alloc_size, el_type)
     return '  {} = np.empty({}, dtype={})\n'.format(
             cname, alloc_size, el_type)
 
@@ -284,6 +288,10 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index):
 
     arr_typ = (string_array_type if dtype == string_type
                   else types.Array(dtype, 1, 'C'))
+
+    if dtype == types.bool_:
+        arr_typ = boolean_array
+
     # TODO: support nullable int for indices
     if (use_nullable_int_arr and not is_index
             and isinstance(dtype, types.Integer) and pa_typ.nullable):
@@ -432,6 +440,8 @@ def pq_read_parallel_lower(context, builder, sig, args):
 
 @lower_builtin(read_parquet, types.Opaque('arrow_reader'), types.intp,
     IntegerArrayType, types.int32)
+@lower_builtin(read_parquet, types.Opaque('arrow_reader'), types.intp,
+    BooleanArrayType, types.int32)
 def pq_read_int_arr_lower(context, builder, sig, args):
     fnty = lir.FunctionType(lir.IntType(64),
                             [lir.IntType(8).as_pointer(), lir.IntType(64),
@@ -457,6 +467,8 @@ def pq_read_int_arr_lower(context, builder, sig, args):
 
 @lower_builtin(read_parquet_parallel, types.Opaque('arrow_reader'),
     types.intp, IntegerArrayType, types.int32, types.intp, types.intp)
+@lower_builtin(read_parquet_parallel, types.Opaque('arrow_reader'),
+    types.intp, BooleanArrayType, types.int32, types.intp, types.intp)
 def pq_read_parallel_int_arr_lower(context, builder, sig, args):
     fnty = lir.FunctionType(lir.IntType(32),
                             [lir.IntType(8).as_pointer(), lir.IntType(64),

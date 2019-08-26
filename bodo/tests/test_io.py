@@ -77,6 +77,14 @@ def test_pq_nullable_int_multi(datapath):
         bodo.io.parquet_pio.use_nullable_int_arr = False
 
 
+def test_pq_bool_with_nulls(datapath):
+    fname = datapath('bool_nulls.pq')
+    def test_impl():
+        return pd.read_parquet(fname)
+
+    check_func(test_impl, ())
+
+
 def test_pq_schema(datapath):
     fname = datapath('example.parquet')
     def impl(f):

@@ -106,6 +106,10 @@ sdf.write.parquet('int_nulls_single.pq', 'overwrite')
 
 spark.stop()
 
+df = pd.DataFrame({'A': [True, False, False, np.nan, True]})
+df.to_parquet('bool_nulls.pq')
+
+
 # CSV reader test
 data = ("0,2.3,4.6,47736\n"
         "1,2.3,4.6,47736\n"
