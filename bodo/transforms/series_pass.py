@@ -31,6 +31,7 @@ from bodo.libs.str_ext import (string_type, unicode_to_std_str, std_str_to_unico
 from bodo.libs.str_arr_ext import (string_array_type, StringArrayType,
     is_str_arr_typ, pre_alloc_string_array, get_utf8_size)
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_series_ext import (SeriesType, is_str_series_typ,
     series_to_array_type, is_dt64_series_typ, is_bool_series_typ,
     if_series_to_array_type, is_series_type,
@@ -421,6 +422,20 @@ class SeriesPass(object):
             impl = overload_func(typ1, typ2)
             return self._replace_func(impl, [arg1, arg2])
 
+        if rhs.fn in numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys() and any(
+                t == boolean_array for t in (typ1, typ2)):
+            overload_func = \
+                bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 2)
+            impl = overload_func(typ1, typ2)
+            return self._replace_func(impl, [arg1, arg2])
+
+        if rhs.fn in numba.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys() and any(
+                t == boolean_array for t in (typ1, typ2)):
+            overload_func = \
+                bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 2)
+            impl = overload_func(typ1, typ2)
+            return self._replace_func(impl, [arg1, arg2])
+
         if not (isinstance(typ1, SeriesType) or isinstance(typ2, SeriesType)):
             return [assign]
 
@@ -484,6 +499,13 @@ class SeriesPass(object):
             impl = overload_func(typ)
             return self._replace_func(impl, [arg])
 
+        if typ == boolean_array:
+            assert rhs.fn in (operator.neg, operator.invert, operator.pos)
+            overload_func = \
+                bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 1)
+            impl = overload_func(typ)
+            return self._replace_func(impl, [arg])
+
         return [assign]
 
     def _run_call(self, assign, lhs, rhs):
@@ -515,6 +537,12 @@ class SeriesPass(object):
                 and any(isinstance(self.typemap[a.name], IntegerArrayType)
                 for a in rhs.args)):
             return self._handle_ufuncs_int_arr(func_name, rhs.args)
+
+        # inline ufuncs on BooleanArray
+        if (func_mod in ('numpy', 'ufunc') and func_name in ufunc_names
+                and any(self.typemap[a.name] == boolean_array
+                for a in rhs.args)):
+            return self._handle_ufuncs_bool_arr(func_name, rhs.args)
 
         if fdef == ('apply_null_mask', 'bodo.libs.int_arr_ext'):
             in_typs = tuple(self.typemap[a.name] for a in rhs.args)
@@ -848,6 +876,16 @@ class SeriesPass(object):
     def _run_const_call(self, assign, lhs, rhs, func):
         # replace direct calls to operators with Expr binop nodes to enable
         # ParallelAccelerator transformtions
+
+        # inline bool arr operators
+        if any(self.typemap[a.name] == boolean_array for a in rhs.args):
+            n_args = len(rhs.args)
+            overload_func = \
+                bodo.libs.bool_arr_ext.create_op_overload(func, n_args)
+            impl = overload_func(*tuple(
+                self.typemap[a.name] for a in rhs.args))
+            return self._replace_func(impl, rhs.args)
+
         if func in bodo.hiframes.pd_series_ext.series_binary_ops:
             expr = ir.Expr.binop(func, rhs.args[0], rhs.args[1], rhs.loc)
             self.calltypes[expr] = self.calltypes[rhs]
@@ -915,6 +953,14 @@ class SeriesPass(object):
         np_ufunc = getattr(np, ufunc_name)
         overload_func = \
             bodo.libs.int_arr_ext.create_op_overload(np_ufunc, np_ufunc.nin)
+        in_typs = tuple(self.typemap[a.name] for a in args)
+        impl = overload_func(*in_typs)
+        return self._replace_func(impl, args)
+
+    def _handle_ufuncs_bool_arr(self, ufunc_name, args):
+        np_ufunc = getattr(np, ufunc_name)
+        overload_func = \
+            bodo.libs.bool_arr_ext.create_op_overload(np_ufunc, np_ufunc.nin)
         in_typs = tuple(self.typemap[a.name] for a in args)
         impl = overload_func(*in_typs)
         return self._replace_func(impl, args)

@@ -478,7 +478,43 @@ def overload_str_bool(val):
 ############################### numpy ufuncs #################################
 
 
+def set_cmp_out_for_nan(out_arr, bitmap, handle_na, na_val):
+    pass
+
+
+@overload(set_cmp_out_for_nan)
+def overload_set_cmp_out_for_nan(out_arr, bitmap, handle_na, na_val):
+    if out_arr != types.Array(types.bool_, 1, 'C') or is_overload_false(handle_na):
+        return lambda out_arr, bitmap, handle_na, na_val: None
+
+    def impl(out_arr, bitmap, handle_na, na_val):
+        n = len(out_arr)
+        for i in numba.parfor.internal_prange(n):
+            if not bodo.libs.int_arr_ext.get_bit_bitmap_arr(bitmap, i):
+                out_arr[i] = na_val
+
+    return impl
+
+
+ufunc_aliases = {
+    "equal": "eq",
+    "not_equal": "ne",
+    "less": "lt",
+    "less_equal": "le",
+    "greater": "gt",
+    "greater_equal": "ge",
+}
+
+
 def create_op_overload(op, n_inputs):
+    # the result of comparison with np.nan is always False, except for
+    # not equal which is always True
+    op_name = op.__name__
+    op_name = ufunc_aliases.get(op_name, op_name)
+    handle_na = op_name in ("eq", "lt", "gt", "le", "ge", "ne")
+    na_val = False
+    if op_name == 'ne':
+        na_val = True
 
     if n_inputs == 1:
         def overload_bool_arr_op_nin_1(A):
@@ -495,22 +531,34 @@ def create_op_overload(op, n_inputs):
             if A1 == boolean_array and A2 == boolean_array:
                 def impl_both(A1, A2):
                     arr1 = bodo.libs.bool_arr_ext.get_bool_arr_data(A1)
+                    bitmap1 = bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A1)
                     arr2 = bodo.libs.bool_arr_ext.get_bool_arr_data(A2)
+                    bitmap2 = bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A2)
                     out_arr = op(arr1, arr2)
+                    bodo.libs.bool_arr_ext.set_cmp_out_for_nan(
+                        out_arr, bitmap1, handle_na, na_val)
+                    bodo.libs.bool_arr_ext.set_cmp_out_for_nan(
+                        out_arr, bitmap2, handle_na, na_val)
                     return out_arr
                 return impl_both
             # left arg is BooleanArray
             if A1 == boolean_array:
                 def impl_left(A1, A2):
                     arr1 = bodo.libs.bool_arr_ext.get_bool_arr_data(A1)
+                    bitmap1 = bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A1)
                     out_arr = op(arr1, A2)
+                    bodo.libs.bool_arr_ext.set_cmp_out_for_nan(
+                        out_arr, bitmap1, handle_na, na_val)
                     return out_arr
                 return impl_left
             # right arg is BooleanArray
             if A2 == boolean_array:
                 def impl_right(A1, A2):
                     arr2 = bodo.libs.bool_arr_ext.get_bool_arr_data(A2)
+                    bitmap2 = bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A2)
                     out_arr = op(A1, arr2)
+                    bodo.libs.bool_arr_ext.set_cmp_out_for_nan(
+                        out_arr, bitmap2, handle_na, na_val)
                     return out_arr
                 return impl_right
         return overload_series_op_nin_2

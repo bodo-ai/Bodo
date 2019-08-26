@@ -719,6 +719,42 @@ def test_series_binary_ufunc(ufunc):
     check_func(test_impl, (A, S))
 
 
+@pytest.mark.parametrize('op',
+    [operator.eq, operator.ne, operator.ge, operator.gt, operator.le,
+    operator.lt])
+@pytest.mark.parametrize('S',
+    [pd.Series([True, False, False, True, True]),
+    pd.Series([True, False, np.nan, True, True])])
+def test_series_bool_cmp_op(S, op):
+    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = "def test_impl(S, other):\n"
+    func_text += "  return S {} other\n".format(op_str)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    test_impl = loc_vars['test_impl']
+
+    check_func(test_impl, (S, S), False)  # TODO: test parallel
+    check_func(test_impl, (S, True), False)
+    check_func(test_impl, (True, S), False)
+
+
+@pytest.mark.parametrize('op',
+    [operator.eq, operator.ne, operator.ge, operator.gt, operator.le,
+    operator.lt])
+@pytest.mark.parametrize('S',
+    [pd.Series([True, False, False, True, True]),
+    pd.Series([True, False, np.nan, True, True])])
+def test_series_bool_vals_cmp_op(S, op):
+    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = "def test_impl(S, other):\n"
+    func_text += "  return S.values {} other.values\n".format(op_str)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    test_impl = loc_vars['test_impl']
+
+    check_func(test_impl, (S, S), False)
+
+
 @pytest.mark.parametrize('S1,S2,fill,raises', [
     # float64 input
     (pd.Series([1.0, 2., 3., 4., 5.]), pd.Series([6.0, 21., 3.6, 5.]),
