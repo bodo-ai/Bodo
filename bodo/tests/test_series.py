@@ -733,9 +733,9 @@ def test_series_bool_cmp_op(S, op):
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars['test_impl']
 
-    check_func(test_impl, (S, S), False)  # TODO: test parallel
-    check_func(test_impl, (S, True), False)
-    check_func(test_impl, (True, S), False)
+    check_func(test_impl, (S, S))
+    check_func(test_impl, (S, True))
+    check_func(test_impl, (True, S))
 
 
 @pytest.mark.parametrize('op',
@@ -752,7 +752,7 @@ def test_series_bool_vals_cmp_op(S, op):
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars['test_impl']
 
-    check_func(test_impl, (S, S), False)
+    check_func(test_impl, (S, S))
 
 
 @pytest.mark.parametrize('S1,S2,fill,raises', [

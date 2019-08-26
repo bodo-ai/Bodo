@@ -73,6 +73,10 @@ def remove_hiframes(rhs, lives, call_list):
             call_list[0] in ['get_int_arr_data',
             'get_int_arr_bitmap', 'init_integer_array']):
         return True
+    if (len(call_list) == 4 and call_list[1:] == ['bool_arr_ext', 'libs', bodo] and
+            call_list[0] in ['get_bool_arr_data',
+            'get_bool_arr_bitmap', 'init_bool_array']):
+        return True
     if len(call_list) == 4 and call_list[1:] == ['conversion', 'utils', bodo]:
         # all conversion functions are side effect-free
         return True

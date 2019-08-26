@@ -703,6 +703,9 @@ if hasattr(numba.ir_utils, 'alias_func_extensions'):
     numba.ir_utils.alias_func_extensions[('init_integer_array', 'bodo.libs.int_arr_ext')] = alias_ext_init_integer_array
     numba.ir_utils.alias_func_extensions[('get_int_arr_data', 'bodo.libs.int_arr_ext')] = alias_ext_dummy_func
     numba.ir_utils.alias_func_extensions[('get_int_arr_bitmap', 'bodo.libs.int_arr_ext')] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[('init_bool_array', 'bodo.libs.bool_arr_ext')] = alias_ext_init_integer_array
+    numba.ir_utils.alias_func_extensions[('get_bool_arr_data', 'bodo.libs.bool_arr_ext')] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[('get_bool_arr_bitmap', 'bodo.libs.bool_arr_ext')] = alias_ext_dummy_func
 
 
 def convert_tup_to_rec(val):

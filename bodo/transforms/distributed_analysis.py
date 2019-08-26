@@ -557,6 +557,11 @@ class DistributedAnalysis(object):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if func_mod == 'bodo.libs.bool_arr_ext' and func_name in (
+                'get_bool_arr_data', 'get_bool_arr_bitmap'):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ('get_bit_bitmap_arr', 'bodo.libs.int_arr_ext'):
             return
 
@@ -609,6 +614,13 @@ class DistributedAnalysis(object):
             return
 
         if fdef == ('init_integer_array', 'bodo.libs.int_arr_ext'):
+            # lhs, data, and bitmap should have the same distribution
+            new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            new_dist = self._meet_array_dists(lhs, rhs.args[1].name, array_dists, new_dist)
+            array_dists[rhs.args[0].name] = new_dist
+            return
+
+        if fdef == ('init_bool_array', 'bodo.libs.bool_arr_ext'):
             # lhs, data, and bitmap should have the same distribution
             new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             new_dist = self._meet_array_dists(lhs, rhs.args[1].name, array_dists, new_dist)

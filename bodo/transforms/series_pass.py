@@ -554,6 +554,11 @@ class SeriesPass(object):
             impl = bodo.libs.int_arr_ext.merge_bitmaps.py_func(*in_typs)
             return self._replace_func(impl, rhs.args)
 
+        if fdef == ('set_cmp_out_for_nan', 'bodo.libs.bool_arr_ext'):
+            in_typs = tuple(self.typemap[a.name] for a in rhs.args)
+            impl = bodo.libs.bool_arr_ext.overload_set_cmp_out_for_nan(*in_typs)
+            return self._replace_func(impl, rhs.args)
+
         if fdef == ('get_int_arr_data', 'bodo.libs.int_arr_ext'):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def)
@@ -568,6 +573,20 @@ class SeriesPass(object):
                 assign.value = var_def.args[1]
                 return [assign]
 
+        if fdef == ('get_bool_arr_data', 'bodo.libs.bool_arr_ext'):
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def)
+            if call_def == ('init_bool_array', 'bodo.libs.bool_arr_ext'):
+                assign.value = var_def.args[0]
+                return [assign]
+
+        if fdef == ('get_bool_arr_bitmap', 'bodo.libs.bool_arr_ext'):
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def)
+            if call_def == ('init_bool_array', 'bodo.libs.bool_arr_ext'):
+                assign.value = var_def.args[1]
+                return [assign]
+
         # inline IntegerArrayType.copy()
         if (isinstance(func_mod, ir.Var)
                 and isinstance(self.typemap[func_mod.name], IntegerArrayType)
@@ -579,6 +598,21 @@ class SeriesPass(object):
 
             impl = getattr(bodo.libs.int_arr_ext,
                 'overload_int_arr_' + func_name)(*arg_typs, **kw_typs)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(impl),
+                        kws=dict(rhs.kws))
+
+        # inline BooleanArray.copy()
+        if (isinstance(func_mod, ir.Var)
+                and self.typemap[func_mod.name] == boolean_array
+                and func_name in ('copy', 'astype')):
+            rhs.args.insert(0, func_mod)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
+
+            impl = getattr(bodo.libs.bool_arr_ext,
+                'overload_bool_arr_' + func_name)(*arg_typs, **kw_typs)
             return self._replace_func(impl, rhs.args,
                         pysig=numba.utils.pysignature(impl),
                         kws=dict(rhs.kws))
@@ -704,6 +738,9 @@ class SeriesPass(object):
             typ = self.typemap[rhs.args[1].name].instance_type
             if isinstance(typ, IntegerArrayType):
                 impl = lambda n, t: bodo.libs.int_arr_ext.init_integer_array(
+                    np.empty(n, _dtype), np.empty((n + 7) >> 3, np.uint8))
+            elif typ == boolean_array:
+                impl = lambda n, t: bodo.libs.bool_arr_ext.init_bool_array(
                     np.empty(n, _dtype), np.empty((n + 7) >> 3, np.uint8))
             else:
                 impl = lambda n, t: np.empty(n, _dtype)
