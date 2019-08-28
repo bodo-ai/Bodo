@@ -32,3 +32,6 @@ docs/development/gh-pages/
 
 # VS Code config
 .vscode
+
+# Jupyter checkpoints
+*.ipynb_checkpoints/
