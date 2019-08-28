@@ -5,12 +5,12 @@ import h5py
 
 def main():
     stocks = pd.read_csv('all_syms.csv')
-    file_name = "stock_data_all_google.hdf5"
+    file_name = "stock_data_all_yahoo.hdf5"
     f = h5py.File(file_name, "w")
 
     for symbol in stocks.Symbol:
         try:
-            df = data.DataReader(symbol, 'google', start='1/1/2000')
+            df = data.DataReader(symbol, 'yahoo', start='1/1/1950')
         except:
             continue
         N = len(df)
@@ -26,3 +26,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
