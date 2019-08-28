@@ -50,6 +50,8 @@ class BodoPipeline(numba.compiler.BasePipeline):
         # TODO: still needed?
         pm.add_stage(self.stage_repeat_inline_closure, "repeat inline closure")
         self.add_typing_stage(pm)
+        # TODO: uncomment when available
+        # pm.add_stage(self.stage_inline_overloads_pass, "inline overloads")
         # breakup optimization stage since df_typed needs to run before
         # rewrites
         # e.g. need to handle string array exprs before nopython rewrites

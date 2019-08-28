@@ -957,6 +957,7 @@ class SeriesPass(object):
                 name = bodo.hiframes.api.get_series_name(S)
                 out_arr = _ufunc(arr)
                 return bodo.hiframes.api.init_series(out_arr, index, name)
+            # impl.__globals__['_ufunc'] = np_ufunc
             return self._replace_func(impl, args,
                 extra_globals={'_ufunc': np_ufunc})
         elif np_ufunc.nin == 2:

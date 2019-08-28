@@ -27,7 +27,7 @@ import bodo.io
 from bodo.io import pio, parquet_pio
 from bodo.io.parquet_pio import ParquetHandler
 from bodo.utils.utils import (
-    inline_new_blocks, ReplaceFunc, is_call, is_assign)
+    inline_new_blocks, ReplaceFunc, is_call, is_assign, is_expr)
 import bodo.hiframes.api
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -347,9 +347,18 @@ class UntypedPass(object):
             func_def = guard(get_definition, self.func_ir, rhs.func)
             if isinstance(func_def, ir.Expr) and func_def.op == 'make_function':
                 return [assign]
-            warnings.warn(
-                "function call couldn't be found for initial analysis")
-            return [assign]
+            # since typemap is not available in untyped pass, var.func() is not
+            # recognized if var has multiple definitions (e.g. intraday
+            # example). find_callname() assumes var could be a module, which
+            # isn't an issue since we only match and transform 'drop' and
+            # 'sort_values' here for variable in a safe way (TODO test more).
+            if is_expr(func_def, 'getattr'):
+                func_mod = func_def.value
+                func_name = func_def.attr
+            else:
+                warnings.warn(
+                    "function call couldn't be found for initial analysis")
+                return [assign]
         else:
             func_name, func_mod = fdef
 
@@ -446,13 +455,10 @@ class UntypedPass(object):
         replace A with A1
         """
         inplace = guard(find_const, self.func_ir, inplace_var)
-        dominates = False
-        df_def = guard(get_definition, self.func_ir, df_var)
-        cfg = compute_cfg_from_blocks(self.func_ir.blocks)
-        if (df_def in self.rhs_labels
-                and label in cfg.post_dominators()[self.rhs_labels[df_def]]):
-            dominates = True
-        if inplace is not None and inplace == True and dominates:
+        if not inplace:
+            return [assign]
+
+        if self._label_dominates_var_defs(label, df_var):
             # TODO: make sure call post dominates df_var definition or df_var
             # is not used in other code paths
             # replace func variable with replace_func
@@ -481,6 +487,20 @@ class UntypedPass(object):
             return nodes
 
         return [assign]
+
+    def _label_dominates_var_defs(self, label, df_var):
+        """See if label dominates all labels of df_var's definitions
+        """
+        cfg = compute_cfg_from_blocks(self.func_ir.blocks)
+        # there could be multiple definitions but all dominated by label
+        # TODO: support multiple levels of branching?
+        all_defs = self.func_ir._definitions[df_var.name]
+        for var in all_defs:
+            df_def = guard(get_definition, self.func_ir, var)
+            if not (df_def in self.rhs_labels and label in
+                    cfg.post_dominators()[self.rhs_labels[df_def]]):
+                return False
+        return True
 
     def _get_reverse_copies(self, body):
         for inst in body:

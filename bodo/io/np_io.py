@@ -6,8 +6,7 @@ from numba.targets.arrayobj import make_array
 from numba.extending import overload, intrinsic, overload_method
 from bodo.libs.str_ext import string_type
 
-from numba.ir_utils import (compile_to_numba_ir, replace_arg_nodes,
-                            find_callname, guard)
+from numba.ir_utils import compile_to_numba_ir, replace_arg_nodes
 
 _get_file_size = types.ExternalFunction("get_file_size", types.int64(types.voidptr))
 _file_read = types.ExternalFunction("file_read",

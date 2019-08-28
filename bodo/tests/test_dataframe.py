@@ -801,6 +801,18 @@ def test_df_apply_bool():
     check_func(test_impl, (df,))
 
 
+def test_df_drop_inplace_branch():
+    def test_impl(cond):
+        if cond:
+            df = pd.DataFrame({'A': [2, 3, 4], 'B': [1, 2, 6]})
+        else:
+            df = pd.DataFrame({'A': [5, 6, 7], 'B': [1, 0, -6]})
+        df.drop('B', axis=1, inplace=True)
+        return df
+
+    check_func(test_impl, (True,), False)
+
+
 ############################# old tests ###############################
 
 
