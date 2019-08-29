@@ -145,6 +145,9 @@ def _get_series_array_type(dtype):
             ','.join(str(t) for t in dtype.types), align=True)
         dtype = numba.numpy_support.from_dtype(np_dtype)
 
+    if dtype == datetime_date_type:
+        return bodo.hiframes.datetime_date_ext.array_datetime_date
+
     # TODO: other types?
     # regular numpy array
     return types.Array(dtype, 1, 'C')

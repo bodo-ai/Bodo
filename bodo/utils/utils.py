@@ -463,6 +463,12 @@ def alloc_type(n, t):
 @overload(alloc_type)
 def overload_alloc_type(n, t):
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
+
+    if typ.dtype == bodo.hiframes.pd_timestamp_ext.datetime_date_type:
+        return lambda n, t: \
+            bodo.hiframes.datetime_date_ext.np_arr_to_array_datetime_date(
+                np.empty(n, np.int64))
+
     dtype = numba.numpy_support.as_dtype(typ.dtype)
 
     # nullable int array

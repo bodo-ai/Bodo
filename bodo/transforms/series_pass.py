@@ -736,7 +736,11 @@ class SeriesPass(object):
 
         if fdef == ('alloc_type', 'bodo.utils.utils'):
             typ = self.typemap[rhs.args[1].name].instance_type
-            if isinstance(typ, IntegerArrayType):
+            if typ.dtype == bodo.hiframes.pd_timestamp_ext.datetime_date_type:
+                impl = lambda n, t: \
+                    bodo.hiframes.datetime_date_ext.np_arr_to_array_datetime_date(
+                        np.empty(n, np.int64))
+            elif isinstance(typ, IntegerArrayType):
                 impl = lambda n, t: bodo.libs.int_arr_ext.init_integer_array(
                     np.empty(n, _dtype), np.empty((n + 7) >> 3, np.uint8))
             elif typ == boolean_array:
@@ -2123,7 +2127,6 @@ class SeriesPass(object):
         typ1 = self.typemap[arg1.name]
         typ2 = self.typemap[arg2.name]
         nodes = []
-        is_out_series = False
 
         func_text = 'def f(arg1, arg2):\n'
         if is_dt64_series_typ(typ1):
@@ -2136,10 +2139,12 @@ class SeriesPass(object):
             comp = 'other {} dt_index[i]'.format(op_str)
         func_text += '  l = len(dt_index)\n'
         func_text += '  other = bodo.hiframes.pd_timestamp_ext.parse_datetime_str(_str)\n'
-        func_text += '  S = numba.unsafe.ndarray.empty_inferred((l,))\n'
+        func_text += '  S = np.empty(l, dtype=np.bool_)\n'
+        func_text += '  nulls = np.empty((l + 7) >> 3, dtype=np.uint8)\n'
         func_text += '  for i in numba.parfor.internal_prange(l):\n'
         func_text += '    S[i] = {}\n'.format(comp)
-        func_text += '  return bodo.hiframes.api.init_series(S)\n'
+        func_text += '    bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)\n'
+        func_text += '  return bodo.hiframes.api.init_series(bodo.libs.bool_arr_ext.init_bool_array(S, nulls))\n'
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         f = loc_vars['f']
