@@ -127,6 +127,9 @@ def overload_coerce_to_array(data, error_on_nonarray=True,
         return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
             bodo.libs.str_arr_ext.StringArray(list(data))
 
+    if data == bodo.libs.bool_arr_ext.boolean_array:
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: data
+
     # assuming can be ndarray
     return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
         bodo.utils.conversion.coerce_to_ndarray(
