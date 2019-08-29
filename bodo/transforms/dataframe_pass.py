@@ -222,29 +222,34 @@ class DataFramePass(object):
         index_var = get_getsetitem_index_var(rhs, self.typemap, nodes)
         index_typ = self.typemap[index_var.name]
 
-        # A = df['column'] or df[['C1', 'C2']]
+        # A = df['column']
+        if self._is_df_var(rhs.value) and isinstance(
+                                               index_typ, types.StringLiteral):
+            df_var = rhs.value
+            df_typ = self.typemap[df_var.name]
+            index = index_typ.literal_value
+            if index not in df_typ.columns:
+                raise ValueError(
+                    "dataframe {} does not include column {}".format(
+                        df_var.name, index))
+
+            arr = self._get_dataframe_data(df_var, index, nodes)
+            df_index = self._get_dataframe_index(df_var, nodes)
+            name_str = index
+            name_var = ir.Var(lhs.scope, mk_unique_var('S_name'), lhs.loc)
+            self.typemap[name_var.name] = types.StringLiteral(name_str)
+            nodes.append(ir.Assign(ir.Const(name_str, lhs.loc), name_var, lhs.loc))
+            return  nodes + compile_func_single_block(
+                lambda A, df_index, name: bodo.hiframes.api.init_series(
+                    A, df_index, name),
+                (arr, df_index, name_var), lhs, self)
+
+        # A = df[['C1', 'C2']]
         if rhs.op == 'static_getitem' and self._is_df_var(rhs.value):
+            # TODO: avoid 'static_getitem' check since not reliable
             df_var = rhs.value
             df_typ = self.typemap[df_var.name]
             index = rhs.index
-
-            # A = df['column']
-            if isinstance(index, str):
-                if index not in df_typ.columns:
-                    raise ValueError(
-                        "dataframe {} does not include column {}".format(
-                            df_var.name, index))
-
-                arr = self._get_dataframe_data(df_var, index, nodes)
-                df_index = self._get_dataframe_index(df_var, nodes)
-                name_str = index
-                name_var = ir.Var(lhs.scope, mk_unique_var('S_name'), lhs.loc)
-                self.typemap[name_var.name] = types.StringLiteral(name_str)
-                nodes.append(ir.Assign(ir.Const(name_str, lhs.loc), name_var, lhs.loc))
-                return  nodes + compile_func_single_block(
-                    lambda A, df_index, name: bodo.hiframes.api.init_series(
-                        A, df_index, name),
-                    (arr, df_index, name_var), lhs, self)
 
             # df[['C1', 'C2']]
             if isinstance(index, list) and all(isinstance(c, str)
