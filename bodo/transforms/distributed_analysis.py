@@ -973,25 +973,26 @@ class DistributedAnalysis(object):
 
     def _analyze_getitem(self, inst, lhs, rhs, array_dists):
         in_typ = self.typemap[rhs.value.name]
+        # get index_var without changing IR since we are in analysis
+        index_var = get_getsetitem_index_var(rhs, self.typemap, [])
+        index_typ = self.typemap[index_var.name]
+
         # selecting an array from a tuple
-        if (rhs.op == 'static_getitem'
-                and isinstance(in_typ, types.BaseTuple)
-                and isinstance(rhs.index, int)
+        if (isinstance(in_typ, types.BaseTuple)
+                and isinstance(index_typ, types.IntegerLiteral)
                 and is_distributable_typ(self.typemap[lhs])):
             # meet distributions
+            ind_val = index_typ.literal_value
             tup = rhs.value.name
             if tup not in array_dists:
                 self._set_var_dist(tup, array_dists, Distribution.OneD)
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
-            new_dist = Distribution(min(array_dists[tup][rhs.index].value,
+            new_dist = Distribution(min(array_dists[tup][ind_val].value,
                                     array_dists[lhs].value))
-            array_dists[tup][rhs.index] = new_dist
+            array_dists[tup][ind_val] = new_dist
             array_dists[lhs] = new_dist
             return
-
-        # get index_var without changing IR since we are in analysis
-        index_var = get_getsetitem_index_var(rhs, self.typemap, [])
 
         if (rhs.value.name, index_var.name) in self._parallel_accesses:
             # XXX: is this always valid? should be done second pass?

@@ -610,7 +610,11 @@ def get_getsetitem_index_var(node, typemap, nodes):
     if index_var is None:
         # TODO: test this path
         assert is_static_getsetitem(node)
-        index_typ = numba.typeof(node.index)
+        # literal type is preferred for uniform/easier getitem index match
+        try:
+            index_typ = types.literal(node.index)
+        except:
+            index_typ = numba.typeof(node.index)
         index_var = ir.Var(
             node.value.scope, ir_utils.mk_unique_var('dummy_index'), node.loc)
         typemap[index_var.name] = index_typ
