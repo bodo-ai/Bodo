@@ -464,6 +464,10 @@ def alloc_type(n, t):
 def overload_alloc_type(n, t):
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
 
+    if isinstance(typ, bodo.hiframes.pd_categorical_ext.CategoricalArray):
+        from bodo.hiframes.pd_categorical_ext import fix_cat_array_type
+        return lambda n, t: fix_cat_array_type(np.empty(n, t.dtype))
+
     if typ.dtype == bodo.hiframes.pd_timestamp_ext.datetime_date_type:
         return lambda n, t: \
             bodo.hiframes.datetime_date_ext.np_arr_to_array_datetime_date(
