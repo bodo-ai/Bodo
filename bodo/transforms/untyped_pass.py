@@ -97,6 +97,8 @@ def remove_hiframes(rhs, lives, call_list):
     #     return True
     if call_list == ['rolling_dummy', 'pd_rolling_ext', 'hiframes', bodo]:
         return True
+    if call_list == ['calc_nitems', 'array_kernels', 'libs', bodo]:
+        return True
     if call_list == [list]:
         return True
     if call_list == ['groupby']:
