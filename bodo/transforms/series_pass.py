@@ -2193,8 +2193,8 @@ class SeriesPass(object):
             func_text += '    S[i] = {} {} {}\n'.format(arg1_access, op_str,
                                                         arg2_access)
             # TODO: proper NAs
-            func_text += '    bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)\n'
             if is_series:
+                func_text += '    bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)\n'
                 func_text += '  return bodo.hiframes.api.init_series(bodo.libs.bool_arr_ext.init_bool_array(S, nulls))\n'
             else:
                 func_text += '  return S\n'

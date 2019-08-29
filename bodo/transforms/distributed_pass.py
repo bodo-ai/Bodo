@@ -21,7 +21,6 @@ from numba.ir_utils import (mk_unique_var, replace_vars_inner, find_topo_order,
                             find_callname, build_definitions,
                             find_build_sequence, find_const, is_get_setitem,
                             compute_cfg_from_blocks)
-from numba.inline_closurecall import inline_closure_call
 from numba.typing import signature
 from numba.parfor import (get_parfor_reductions, get_parfor_params,
                           wrap_parfor_blocks, unwrap_parfor_blocks)
