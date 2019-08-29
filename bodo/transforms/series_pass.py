@@ -217,15 +217,15 @@ class SeriesPass(object):
         target_typ = self.typemap[target.name]
         nodes = []
         idx = get_getsetitem_index_var(rhs, self.typemap, nodes)
+        idx_typ = self.typemap[idx.name]
 
         # optimize out getitem on built_tuple, important for pd.DataFrame()
         # since dictionary is converted to tuple
-        if (rhs.op == 'static_getitem'
-                and isinstance(self.typemap[rhs.value.name], types.BaseTuple)
-                and isinstance(rhs.index, int)):
+        if (isinstance(target_typ, types.BaseTuple)
+                and isinstance(idx_typ, types.IntegerLiteral)):
             val_def = guard(get_definition, self.func_ir, rhs.value)
             if isinstance(val_def, ir.Expr) and val_def.op == 'build_tuple':
-                assign.value = val_def.items[rhs.index]
+                assign.value = val_def.items[idx_typ.literal_value]
                 return [assign]
 
         if is_series_type(target_typ):
