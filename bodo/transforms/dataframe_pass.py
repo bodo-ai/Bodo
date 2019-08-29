@@ -1841,6 +1841,7 @@ class DataFramePass(object):
         glbls = {'numba': numba, 'np': np, 'bodo': bodo, 'pd': pd}
         if extra_globals is not None:
             glbls.update(extra_globals)
+        func.__globals__.update(glbls)
 
         # create explicit arg variables for defaults if func has any
         # XXX: inine_closure_call() can't handle defaults properly
