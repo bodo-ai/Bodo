@@ -141,7 +141,7 @@ def _test_equal(bodo_out, py_out, sort_output, check_names=True,
             bodo_out.sort_values(inplace=True)
             bodo_out.reset_index(inplace=True, drop=True)
         # fix dtype for bool Series with no NA
-        if py_out.dtype == np.dtype('O') and not py_out.hasnans:
+        if is_bool_object_series(py_out) and not py_out.hasnans:
             py_out = py_out.astype('bool')
         pd.testing.assert_series_equal(
             bodo_out, py_out, check_names=check_names, check_dtype=check_dtype)
@@ -184,6 +184,8 @@ def _test_equal(bodo_out, py_out, sort_output, check_names=True,
 
 
 def is_bool_object_series(S):
+    if isinstance(S, pd.Series):
+        S = S.values
     return (S.dtype == np.dtype('O')
-            and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(S.values)
+            and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(S)
                 == numba.types.bool_)
