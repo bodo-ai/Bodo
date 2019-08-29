@@ -107,8 +107,8 @@ class TestML(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         n = 11
         np.testing.assert_allclose(bodo_func(1, 1, n, 2), test_impl(1, 1, n, 2))
-        self.assertEqual(count_array_OneDs(), 4)
-        self.assertEqual(count_array_OneD_Vars(), 1)
+        self.assertTrue(count_array_OneDs() >= 4)
+        self.assertTrue(count_array_OneD_Vars() >= 1)
         self.assertEqual(count_parfor_OneDs(), 5)
         self.assertEqual(count_parfor_OneD_Vars(), 1)
 
