@@ -14,17 +14,17 @@ such as Numba on Ubuntu Linux::
     export PATH=$HOME/miniconda3/bin:$PATH
     conda create -n DEV numpy scipy pandas boost cmake h5py pyarrow mpich mpi
     source activate DEV
-    conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64
+    # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64
     conda install -c numba/label/dev llvmlite
     git clone https://github.com/numba/numba.git
     cd numba
-    python setup.py develop
+    python setup.py build_ext --inplace
     cd ..
-    git clone https://github.com/ehsantn/bodo.git
+    git clone https://github.com/bodo-inc/bodo.git
     cd bodo
     # build Bodo
-    HDF5_DIR=$CONDA_PREFIX python setup.py develop
+    HDF5_DIR=$CONDA_PREFIX python setup.py build_ext --inplace
 
 
 A command line for running the Pi example on 4 cores::
@@ -34,9 +34,34 @@ A command line for running the Pi example on 4 cores::
 Running unit tests::
 
     conda install pytest
-    pytest -x -s -v
+    pytest -x -s -v -W ignore
 
 In case of issues, reinstalling in a new conda environment is recommended.
+
+
+Test Suite
+----------
+
+
+We use `pytest` for testing and run the test suite on different
+number of processors::
+
+    pytest -s -v -W ignore
+    mpiexec -n 2 pytest -s -v -W ignore
+    mpiexec -n 3 pytest -s -v -W ignore
+
+
+Building Documentation
+----------------------
+
+The documentation is under the `docs` directory of the repository and uses
+the reStructuredText format.
+It is built with `Sphinx <http://www.sphinx-doc.org>`_ and the bootstrap theme::
+
+    conda install sphinx
+    pip install sphinx_bootstrap_theme
+
+After updating documentation, run `make html` in the `docs` folder to build.
 
 
 Building from Source on Windows
