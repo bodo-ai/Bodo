@@ -19,12 +19,12 @@ such as Numba on Ubuntu Linux::
     conda install -c numba/label/dev llvmlite
     git clone https://github.com/numba/numba.git
     cd numba
-    python setup.py build_ext --inplace
+    python setup.py develop
     cd ..
     git clone https://github.com/bodo-inc/bodo.git
     cd bodo
     # build Bodo
-    HDF5_DIR=$CONDA_PREFIX python setup.py build_ext --inplace
+    HDF5_DIR=$CONDA_PREFIX python setup.py develop
 
 
 A command line for running the Pi example on 4 cores::
@@ -38,6 +38,10 @@ Running unit tests::
 
 In case of issues, reinstalling in a new conda environment is recommended.
 
+
+Other useful packages for development::
+    conda install pytest sphinx pylint jupyter
+    conda install daal4py -c defaults -c intel
 
 Test Suite
 ----------
