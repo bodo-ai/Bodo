@@ -1,19 +1,10 @@
-*****
-Bodo
-*****
+****************
+Bodo Core Engine
+****************
 
-.. image:: https://badges.gitter.im/IntelLabs/bodo.svg
-   :alt: Join the chat at https://gitter.im/IntelLabs/bodo
-   :target: https://gitter.im/IntelLabs/bodo?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
 
-.. image:: https://travis-ci.org/IntelLabs/bodo.svg?branch=master
-    :target: https://travis-ci.org/IntelLabs/bodo
-
-.. image:: https://coveralls.io/repos/github/IntelLabs/bodo/badge.svg?branch=master
-    :target: https://coveralls.io/github/IntelLabs/bodo?branch=master
-
-A compiler-based framework for big data in Python
-#################################################
+The Most Efficient Data Science Engine
+######################################
 
 Bodo scales analytics/ML codes in Python
 to bare-metal cluster/cloud performance automatically.
@@ -22,95 +13,6 @@ with MPI, requiring only minimal code changes.
 Bodo is orders of magnitude faster than
 alternatives like `Apache Spark <http://spark.apache.org/>`_.
 
-Bodo's documentation can be found `here <https://intellabs.github.io/bodo-doc/>`_.
 
-Installation
-############
-
-Bodo can be installed in `Anaconda <https://www.anaconda.com/download/>`_
-environment easily (Linux/Mac/Windows)::
-
-    conda create -n Bodo -c ehsantn -c anaconda -c conda-forge bodo
-
-.. used if master of Numba is needed for latest bodo package
-.. conda create -n Bodo -c ehsantn -c numba/label/dev -c anaconda -c conda-forge bodo
-
-Windows installaton requires
-`Intel MPI <https://software.intel.com/en-us/intel-mpi-library>`_ to be
-installed.
-
-Docker Container
-----------------
-
-An Bodo docker image is also available for running containers. For example::
-
-    docker run -it ehsantn/bodo bash
-
-Example
-#######
-
-Here is a Pi calculation example in Bodo:
-
-.. code:: python
-
-    import bodo
-    import numpy as np
-    import time
-
-    @bodo.jit
-    def calc_pi(n):
-        t1 = time.time()
-        x = 2 * np.random.ranf(n) - 1
-        y = 2 * np.random.ranf(n) - 1
-        pi = 4 * np.sum(x**2 + y**2 < 1) / n
-        print("Execution time:", time.time()-t1, "\nresult:", pi)
-        return pi
-
-    calc_pi(2 * 10**8)
-
-Save this in a file named `pi.py` and run (on 8 cores)::
-
-    mpiexec -n 8 python pi.py
-
-This should demonstrate about 100x speedup compared to regular Python version
-without `@bodo.jit` and `mpiexec`.
-
-Jupyter Notebook
-################
-
-To use Bodo with Jupyter Notebook, install jupyter, ipython, and ipyparallel.
-Then, create a mpi profile for ipython::
-
-    ipython profile create --parallel --profile=mpi
-
-Next, edit the ipcluster_config.py file.  This file will be in your ipython
-directory in the profile_mpi directory.  Your ipython directory is in your
-IPYTHONDIR environment variable if you have one defined and ~/.ipython if you
-don't have this variable defined.  To the ipcluster_config.py file, add the
-following line::
-
-    c.IPClusterEngines.engine_launcher_class = 'MPIEngineSetLauncher'
-
-Then, start the Jupyter notebook and click on IPython Clusters, select the
-number of engines (i.e., cores) you'd like to use and click Start next to the
-mpi profile.  You can now run an Bodo function and the work will be distributed
-across the number of cores you selected on the current node.
-
-If you wish to run across multiple nodes, you can add the following to
-ipcluster_config.py::
-
-    c.MPILauncher.mpi_args = ["-machinefile", "path_to_file/machinefile"]
-
-This machinefile option is forwarded to mpi and the specified machine file in
-the second argument contains a list of machine names across which to distribute work.
-More information about the -machinefile option can be found
-`here <https://www.open-mpi.org/faq/?category=running#mpirun-hostfile>`_.
-
-References
-##########
-
-These academic papers describe the underlying methods in Bodo:
-
-- `Bodo paper at ICS'17 <http://dl.acm.org/citation.cfm?id=3079099>`_
-- `Bodo at HotOS'17 <http://dl.acm.org/citation.cfm?id=3103004>`_
-- `HiFrames on arxiv <https://arxiv.org/abs/1704.02341>`_
+Development guide: https://github.com/Bodo-inc/Bodo/blob/master/docs/development/development.rst
+Install from source: https://github.com/Bodo-inc/Bodo/blob/master/docs/development/install.rst

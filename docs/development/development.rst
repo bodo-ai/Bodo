@@ -68,16 +68,16 @@ Below is the high level structure of the code.
 - `compiler.py` defines the compiler pipeline for this decorator.
 - `transforms` directory defines Bodo specific analysis and transformation passes.
 
-    - `untyped_pass.py`: transforms the IR to remove features that Numba's type inference cannot support
-      such as non-uniform dictionary input of `pd.DataFrame({})`.
-    - `dataframe_pass.py`: converts data frame operations to Series and Array operations
-      as much as possible to provide implementation and enable optimization.
-      Creates specialized IR nodes for complex operations like Join.
-    - `series_pass.py`: converts Series operations to array operations as much as possible
-      to provide implementation and enable optimization.
-    - `distributed_analysis.py`: analyzes the IR to decide parallelism of arrays and parfors
-      for distributed transformation.
-    - `distributed_pass.py`: parallelizes the IR for distributed execution and inserts MPI calls.
+  - `untyped_pass.py`: transforms the IR to remove features that Numba's type inference cannot support
+    such as non-uniform dictionary input of `pd.DataFrame({})`.
+  - `dataframe_pass.py`: converts data frame operations to Series and Array operations
+    as much as possible to provide implementation and enable optimization.
+    Creates specialized IR nodes for complex operations like Join.
+  - `series_pass.py`: converts Series operations to array operations as much as possible
+    to provide implementation and enable optimization.
+  - `distributed_analysis.py`: analyzes the IR to decide parallelism of arrays and parfors
+    for distributed transformation.
+  - `distributed_pass.py`: parallelizes the IR for distributed execution and inserts MPI calls.
 
 - `hiframes` directory provides Pandas functionality such as DataFrame, Series and Index.
 - `ir` directory defines and implements Bodo specific IR nodes such as Sort and Join.
