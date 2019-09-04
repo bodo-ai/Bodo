@@ -59,7 +59,7 @@ _dt_index_binops = ('==', '!=', '>=', '>', '<=', '<', '-',
                 operator.eq, operator.ne, operator.ge, operator.gt,
                 operator.le, operator.lt, operator.sub)
 
-_string_array_comp_ops = ('==', '!=', '>=', '>', '<=', '<',
+_string_array_comp_ops = (
                 operator.eq, operator.ne, operator.ge, operator.gt,
                 operator.le, operator.lt)
 
@@ -2166,6 +2166,13 @@ class SeriesPass(object):
             if is_str_series_typ(self.typemap[arg2.name]):
                 arg2 = self._get_series_data(arg2, nodes)
                 is_series = True
+
+            if not is_series:
+                # just inline string array ops
+                # TODO: remove when binop inlining is supported
+                f = bodo.libs.str_arr_ext.create_binary_op_overload(rhs.fn)(
+                    self.typemap[rhs.lhs.name], self.typemap[rhs.rhs.name])
+                return self._replace_func(f, [arg1, arg2], pre_nodes=nodes)
 
             arg1_access = 'A'
             arg2_access = 'B'

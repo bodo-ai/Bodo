@@ -76,12 +76,6 @@ string_array_type = StringArrayType()
 def typeof_string_array(val, c):
     return string_array_type
 
-# @type_callable(StringArray)
-# def type_string_array_call(context):
-#     def typer(offset, data):
-#         return string_array_type
-#     return typer
-
 
 @type_callable(StringArray)
 def type_string_array_call2(context):
@@ -96,6 +90,7 @@ class StringArrayPayloadType(types.Type):
             name='StringArrayPayloadType()')
 
 str_arr_payload_type = StringArrayPayloadType()
+
 
 # XXX: C equivalent in _str_ext.cpp
 @register_model(StringArrayPayloadType)
@@ -132,6 +127,69 @@ make_attribute_wrapper(StringArrayType, 'num_total_chars', '_num_total_chars')
 make_attribute_wrapper(StringArrayType, 'null_bitmap', '_null_bitmap')
 # make_attribute_wrapper(StringArrayType, 'offsets', 'offsets')
 # make_attribute_wrapper(StringArrayType, 'data', 'data')
+
+
+def create_binary_op_overload(op):
+    na_fill = op == operator.ne
+    def overload_string_array_binary_op(A, B):
+        # both string array
+        if A == string_array_type and B == string_array_type:
+            def impl_both(A, B):
+                numba.parfor.init_prange()
+                n = len(A)
+                out_arr = np.empty(n, np.bool_)
+                for i in numba.parfor.internal_prange(n):
+                    if bodo.hiframes.api.isna(A, i) or bodo.hiframes.api.isna(B, i):
+                        out_arr[i] = na_fill
+                    else:
+                        out_arr[i] = op(A[i], B[i])
+
+                return out_arr
+
+            return impl_both
+
+        # left arg is string array
+        if A == string_array_type and types.unliteral(B) == string_type:
+            def impl_left(A, B):
+                numba.parfor.init_prange()
+                n = len(A)
+                out_arr = np.empty(n, np.bool_)
+                for i in numba.parfor.internal_prange(n):
+                    if bodo.hiframes.api.isna(A, i):
+                        out_arr[i] = na_fill
+                    else:
+                        out_arr[i] = op(A[i], B)
+
+                return out_arr
+            return impl_left
+
+        # right arg is string array
+        if types.unliteral(A) == string_type and B == string_array_type:
+            def impl_right(A, B):
+                numba.parfor.init_prange()
+                n = len(B)
+                out_arr = np.empty(n, np.bool_)
+                for i in numba.parfor.internal_prange(n):
+                    if bodo.hiframes.api.isna(B, i):
+                        out_arr[i] = na_fill
+                    else:
+                        out_arr[i] = op(A, B[i])
+
+                return out_arr
+            return impl_right
+
+    return overload_string_array_binary_op
+
+
+def _install_binary_ops():
+    # install comparison binary ops
+    for op in (operator.eq, operator.ne, operator.ge, operator.gt,
+                operator.le, operator.lt):
+        overload_impl = create_binary_op_overload(op)
+        overload(op, inline='always')(overload_impl)
+
+
+_install_binary_ops()
 
 
 # TODO: fix overload for things like 'getitem'
@@ -580,52 +638,6 @@ class SetItemStringArray(AbstractTemplate):
         if (ary == string_array_type and isinstance(idx, types.Integer)
                 and val == string_type):
             return signature(types.none, *args)
-
-
-@infer
-@infer_global(operator.eq)
-@infer_global(operator.ne)
-@infer_global(operator.ge)
-@infer_global(operator.gt)
-@infer_global(operator.le)
-@infer_global(operator.lt)
-class CmpOpEqStringArray(AbstractTemplate):
-    key = '=='
-
-    def generic(self, args, kws):
-        assert not kws
-        [va, vb] = args
-        # if one of the inputs is string array
-        if va == string_array_type or vb == string_array_type:
-            # inputs should be either string array or string
-            assert is_str_arr_typ(va) or va == string_type
-            assert is_str_arr_typ(vb) or vb == string_type
-            return signature(types.Array(types.boolean, 1, 'C'), va, vb)
-
-
-@infer
-class CmpOpNEqStringArray(CmpOpEqStringArray):
-    key = '!='
-
-
-@infer
-class CmpOpGEStringArray(CmpOpEqStringArray):
-    key = '>='
-
-
-@infer
-class CmpOpGTStringArray(CmpOpEqStringArray):
-    key = '>'
-
-
-@infer
-class CmpOpLEStringArray(CmpOpEqStringArray):
-    key = '<='
-
-
-@infer
-class CmpOpLTStringArray(CmpOpEqStringArray):
-    key = '<'
 
 
 def is_str_arr_typ(typ):

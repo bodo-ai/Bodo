@@ -2,6 +2,8 @@
 
 import unittest
 import os
+import numba
+import operator
 import bodo
 import numpy as np
 import pandas as pd
@@ -11,7 +13,33 @@ import re
 import pyarrow.parquet as pq
 from bodo.libs.str_arr_ext import StringArray
 from bodo.libs.str_ext import unicode_to_std_str, std_str_to_unicode
+from bodo.tests.utils import check_func
 import pytest
+
+
+@pytest.mark.parametrize('op', (operator.eq, operator.ne, operator.ge,
+                                        operator.gt, operator.le, operator.lt))
+def test_cmp_binary_op(op):
+    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = "def test_impl(A, other):\n"
+    func_text += "  return A {} other\n".format(op_str)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    test_impl = loc_vars['test_impl']
+
+    A1 = np.array(['A', np.nan, 'CC', 'DD', np.nan, 'ABC'], dtype='O')
+    A2 = np.array(['A', np.nan, 'CCD', 'AADD', 'DAA', 'ABCE'], dtype='O')
+
+    # # >, >=, <, <= not supported in numpy between np.nan and str
+    if op_str not in ('==', '!=='):
+        A1[4] = 'AF'
+
+    check_func(test_impl, (A1, A2))
+
+    # >, >=, <, <= not supported in numpy between array and str
+    if op_str in ('==', '!=='):
+        check_func(test_impl, (A1, 'DD'))
+        check_func(test_impl, ('CCD', A2))
 
 
 @pytest.mark.parametrize('ind', [
