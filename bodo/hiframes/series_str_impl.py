@@ -265,3 +265,58 @@ def overload_str_method_replace(pat, repl, n=-1, case=None, flags=0,
             out_arr[j] = _str
         return bodo.hiframes.api.init_series(out_arr, index, name)
     return _str_replace_noregex_impl
+
+
+@overload_method(SeriesStrMethodType, 'contains')
+def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, regex=True):
+    # TODO: support other arguments
+    # TODO: support dynamic values for regex
+    if is_overload_true(regex):
+        def _str_contains_regex_impl(S_str, pat, case=True, flags=0, na=np.nan,
+                                               regex=True):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.api.get_series_data(S)
+            index = bodo.hiframes.api.get_series_index(S)
+            name = bodo.hiframes.api.get_series_name(S)
+            numba.parfor.init_prange()
+            e = bodo.libs.str_ext.compile_regex(pat)
+            l = len(arr)
+            out_arr = np.empty(l, dtype=np.bool_)
+            nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
+            for i in numba.parfor.internal_prange(l):
+                if bodo.hiframes.api.isna(arr, i):
+                    out_arr[i] = False
+                    bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 0)
+                else:
+                    out_arr[i] = bodo.libs.str_ext.contains_regex(arr[i], e)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
+            return bodo.hiframes.api.init_series(
+                bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls),
+                index, name)
+        return _str_contains_regex_impl
+
+    if not is_overload_false(regex):
+        raise ValueError(
+            "regex argument for Series.str.replace should be constant")
+
+    def _str_contains_noregex_impl(S_str, pat, case=True, flags=0, na=np.nan,
+                                            regex=True):  # pragma: no cover
+        S = S_str._obj
+        arr = bodo.hiframes.api.get_series_data(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        numba.parfor.init_prange()
+        l = len(arr)
+        out_arr = np.empty(l, dtype=np.bool_)
+        nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
+        for i in numba.parfor.internal_prange(l):
+            if bodo.hiframes.api.isna(arr, i):
+                out_arr[i] = False
+                bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 0)
+            else:
+                out_arr[i] = bodo.libs.str_ext.contains_noregex(arr[i], pat)
+                bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
+        return bodo.hiframes.api.init_series(
+            bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls),
+            index, name)
+    return _str_contains_noregex_impl

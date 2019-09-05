@@ -57,3 +57,21 @@ def test_replace_noregex():
     S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
         [4, 3, 5, 1, 0], name='A')
     check_func(test_impl, (S,))
+
+
+def test_contains_regex():
+    def test_impl(S):
+        return S.str.contains('AB*', regex=True)
+
+    S = pd.Series(['ABCC', 'CABBD', np.nan, 'CCD', 'C,ABB,D'],
+        [4, 3, 5, 1, 0], name='A')
+    check_func(test_impl, (S,))
+
+
+def test_contains_noregex():
+    def test_impl(S):
+        return S.str.contains('AB', regex=False)
+
+    S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
+        [4, 3, 5, 1, 0], name='A')
+    check_func(test_impl, (S,))
