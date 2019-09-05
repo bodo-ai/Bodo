@@ -18,6 +18,12 @@ from bodo.hiframes.pd_timestamp_ext import (pandas_timestamp_type,
     integer_to_dt64)
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
 from bodo.utils.typing import is_list_like_index_type
+from bodo.libs.str_ext import string_type
+from bodo.libs.str_arr_ext import (string_array_type, pre_alloc_string_array,
+    get_utf8_size)
+from bodo.hiframes.split_impl import (string_array_split_view_type,
+    getitem_c_arr, get_array_ctypes_ptr,
+    get_split_view_index, get_split_view_data_ptr)
 
 
 str2str_methods = ('capitalize', 'lower', 'lstrip', 'rstrip',
@@ -97,3 +103,95 @@ def overload_str_method_len(S_str):
             index, name)
 
     return impl
+
+
+@overload_method(SeriesStrMethodType, 'split')
+def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
+    # TODO: support or just check n and expand arguments
+    # TODO: support distributed
+
+    # use split view if sep is a string of length 1
+    if isinstance(pat, types.StringLiteral) and len(pat.literal_value) == 1:
+        def _str_split_view_impl(S_str, pat=None, n=-1, expand=False):
+            S = S_str._obj
+            arr = bodo.hiframes.api.get_series_data(S)
+            index = bodo.hiframes.api.get_series_index(S)
+            name = bodo.hiframes.api.get_series_name(S)
+            out_arr = bodo.hiframes.split_impl.compute_split_view(arr, pat)
+            return bodo.hiframes.api.init_series(out_arr, index, name)
+
+        return _str_split_view_impl
+
+    def _str_split_impl(S_str, pat=None, n=-1, expand=False):
+        S = S_str._obj
+        arr = bodo.hiframes.api.get_series_data(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        numba.parfor.init_prange()
+        n = len(arr)
+        out_arr = bodo.libs.str_ext.alloc_list_list_str(n)
+        for i in numba.parfor.internal_prange(n):
+            in_str = arr[i]
+            out_arr[i] = in_str.split(pat)
+
+        return bodo.hiframes.api.init_series(out_arr, index, name)
+
+    return _str_split_impl
+
+
+@overload_method(SeriesStrMethodType, 'get')
+def overload_str_method_get(S_str, i):
+    arr_typ = S_str.stype.data
+    # XXX only supports get for list(list(str)) input and split view
+    assert (arr_typ == types.List(types.List(string_type))
+        or arr_typ == string_array_split_view_type)
+
+    # TODO: support and test NA
+    # TODO: support distributed
+
+    if arr_typ == string_array_split_view_type:
+        # TODO: refactor and enable distributed
+        def _str_get_split_impl(S_str, i):
+            S = S_str._obj
+            arr = bodo.hiframes.api.get_series_data(S)
+            index = bodo.hiframes.api.get_series_index(S)
+            name = bodo.hiframes.api.get_series_name(S)
+            numba.parfor.init_prange()
+            n = len(arr)
+            n_total_chars = 0
+            for k in numba.parfor.internal_prange(n):
+                data_start, length = get_split_view_index(arr, k, i)
+                n_total_chars += length
+            numba.parfor.init_prange()
+            out_arr = pre_alloc_string_array(n, n_total_chars)
+            for j in numba.parfor.internal_prange(n):
+                data_start, length = get_split_view_index(arr, j, i)
+                ptr = get_split_view_data_ptr(arr, data_start)
+                bodo.libs.str_arr_ext.setitem_str_arr_ptr(
+                    out_arr, j, ptr, length)
+            return bodo.hiframes.api.init_series(out_arr, index, name)
+        return _str_get_split_impl
+
+    def _str_get_impl(S_str, i):
+        S = S_str._obj
+        arr = bodo.hiframes.api.get_series_data(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        numba.parfor.init_prange()
+        n = len(arr)
+        n_total_chars = 0
+        str_list = bodo.libs.str_ext.alloc_str_list(n)
+        for k in numba.parfor.internal_prange(n):
+            # TODO: support NAN
+            in_list_str = arr[k]
+            out_str = in_list_str[i]
+            str_list[k] = out_str
+            n_total_chars += get_utf8_size(out_str)
+        numba.parfor.init_prange()
+        out_arr = pre_alloc_string_array(n, n_total_chars)
+        for j in numba.parfor.internal_prange(n):
+            _str = str_list[j]
+            out_arr[j] = _str
+        return bodo.hiframes.api.init_series(out_arr, index, name)
+
+    return _str_get_impl
