@@ -298,11 +298,6 @@ def cast_series(context, builder, fromty, toty, val):
 class SeriesAttribute(AttributeTemplate):
     key = SeriesType
 
-    def resolve_str(self, ary):
-        assert ary.dtype in (string_type, types.List(string_type))
-        # TODO: add dtype to series_str_methods_type
-        return series_str_methods_type
-
     def resolve_dt(self, ary):
         assert ary.dtype == types.NPDatetime('ns')
         return series_dt_methods_type
@@ -438,60 +433,6 @@ series_unary_ops = (operator.neg, operator.invert, operator.pos)
 
 str2str_methods = ('capitalize', 'lower', 'lstrip', 'rstrip',
             'strip', 'swapcase', 'title', 'upper')
-
-
-class SeriesStrMethodType(types.Type):
-    def __init__(self):
-        name = "SeriesStrMethodType"
-        super(SeriesStrMethodType, self).__init__(name)
-
-series_str_methods_type = SeriesStrMethodType()
-
-
-@infer_getattr
-class SeriesStrMethodAttribute(AttributeTemplate):
-    key = SeriesStrMethodType
-
-    @bound_function("strmethod.contains")
-    def resolve_contains(self, ary, args, kws):
-        return signature(SeriesType(types.bool_), *args)
-
-    @bound_function("strmethod.len")
-    def resolve_len(self, ary, args, kws):
-        return signature(SeriesType(types.int64), *args)
-
-    @bound_function("strmethod.replace")
-    def resolve_replace(self, ary, args, kws):
-        return signature(SeriesType(string_type), *args)
-
-    @bound_function("strmethod.split")
-    def resolve_split(self, ary, args, kws):
-        out = SeriesType(types.List(string_type))
-        if (len(args) == 1 and isinstance(args[0], types.StringLiteral)
-                and len(args[0].literal_value) == 1):
-            out = SeriesType(types.List(string_type), string_array_split_view_type)
-        return signature(out, *args)
-
-    @bound_function("strmethod.get")
-    def resolve_get(self, ary, args, kws):
-        # XXX only list(list(str)) supported
-        return signature(SeriesType(string_type), *args)
-
-    def generic_resolve(self, s_str, func_name):
-        if func_name not in str2str_methods:
-            raise ValueError("Series.str.{} is not supported yet".format(
-                func_name))
-
-        template_key = 'strmethod.' + func_name
-        out_typ = SeriesType(string_type)
-
-        class MethodTemplate(AbstractTemplate):
-            key = template_key
-
-            def generic(self, args, kws):
-                return signature(out_typ, *args)
-
-        return types.BoundFunction(MethodTemplate, s_str)
 
 
 class SeriesDtMethodType(types.Type):

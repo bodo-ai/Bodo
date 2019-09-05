@@ -25,7 +25,7 @@ from numba.typing.templates import infer_global, AbstractTemplate, signature
 import bodo
 from bodo import hiframes
 from bodo.utils.utils import (debug_prints, inline_new_blocks, ReplaceFunc,
-    is_whole_slice, get_getsetitem_index_var)
+    is_whole_slice, get_getsetitem_index_var, is_expr)
 from bodo.libs.str_ext import (string_type, unicode_to_std_str, std_str_to_unicode,
     list_string_array_type)
 from bodo.libs.str_arr_ext import (string_array_type, StringArrayType,
@@ -35,13 +35,15 @@ from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_series_ext import (SeriesType, is_str_series_typ,
     series_to_array_type, is_dt64_series_typ, is_bool_series_typ,
     if_series_to_array_type, is_series_type,
-    series_str_methods_type, SeriesRollingType,
+    SeriesRollingType,
     series_dt_methods_type)
 from bodo.hiframes.pd_index_ext import DatetimeIndexType, TimedeltaIndexType
 from bodo.io.pio_api import h5dataset_type
 from bodo.hiframes.rolling import get_rolling_setup_args
 import bodo.hiframes.series_impl  # side effect: install Series overloads
 import bodo.hiframes.series_indexing  # side effect: install Series overloads
+import bodo.hiframes.series_str_impl  # side effect: install Series overloads
+from bodo.hiframes.series_str_impl import SeriesStrMethodType
 from bodo.hiframes.series_indexing import SeriesIatType
 from bodo.ir.aggregate import Aggregate
 from bodo.hiframes import series_kernels, split_impl
@@ -279,6 +281,22 @@ class SeriesPass(object):
 
     def _run_getattr(self, assign, rhs):
         rhs_type = self.typemap[rhs.value.name]  # get type of rhs value "S"
+
+        if isinstance(rhs_type, SeriesStrMethodType) and rhs.attr == '_obj':
+            rhs_def = guard(get_definition, self.func_ir, rhs.value)
+            # conditional on S.str is not supported since aliasing, ... can't
+            # be handled for getattr. This is probably a rare case.
+            # TODO: handle, example:
+            # if flag:
+            #    S_str = S1.str
+            # else:
+            #    S_str = S2.str
+            if rhs_def is None:
+                raise ValueError(
+                    "Invalid Series.str, cannot handle conditional yet")
+            assert is_expr(rhs_def, 'getattr')
+            assign.value = rhs_def.value
+            return [assign]
 
         # replace arr.dtype for dt64 since PA replaces with
         # np.datetime64[ns] which invalid, TODO: fix PA
@@ -618,17 +636,32 @@ class SeriesPass(object):
                         kws=dict(rhs.kws))
 
         if (isinstance(func_mod, ir.Var)
-                and self.typemap[func_mod.name]
-                == series_str_methods_type):
-            f_def = guard(get_definition, self.func_ir, rhs.func)
-            str_def = guard(get_definition, self.func_ir, f_def.value)
-            if str_def is None:  # TODO: check for errors
-                raise ValueError("invalid series.str")
+                and isinstance(
+                    self.typemap[func_mod.name], SeriesStrMethodType)):
+            rhs.args.insert(0, func_mod)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name:self.typemap[v.name]
+                    for name, v in dict(rhs.kws).items()}
 
-            series_var = str_def.value
+            impl = getattr(bodo.hiframes.series_str_impl,
+                'overload_str_method_' + func_name)(*arg_typs, **kw_typs)
+            return self._replace_func(impl, rhs.args,
+                        pysig=numba.utils.pysignature(impl),
+                        kws=dict(rhs.kws))
 
-            return self._run_series_str_method(
-                assign, assign.target, series_var, func_name, rhs)
+
+        # if (isinstance(func_mod, ir.Var)
+        #         and self.typemap[func_mod.name]
+        #         == series_str_methods_type):
+        #     f_def = guard(get_definition, self.func_ir, rhs.func)
+        #     str_def = guard(get_definition, self.func_ir, f_def.value)
+        #     if str_def is None:  # TODO: check for errors
+        #         raise ValueError("invalid series.str")
+
+        #     series_var = str_def.value
+
+        #     return self._run_series_str_method(
+        #         assign, assign.target, series_var, func_name, rhs)
 
         # replace _get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
