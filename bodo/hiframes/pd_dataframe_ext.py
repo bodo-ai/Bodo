@@ -550,14 +550,22 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
     return sig, codegen
 
 
+# TODO: fix default/kws arg handling in inline_closurecall
+# e.g. bodo/tests/test_dataframe.py::TestDataFrame::test_create_dtype1
+# @overload(pd.DataFrame, inline='always')
 @overload(pd.DataFrame)
 def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None,
                                                                    copy=False):
     # TODO: support other input combinations
-    if not isinstance(copy, (bool, bodo.utils.utils.BooleanLiteral)):
+    if not isinstance(copy, (bool, bodo.utils.utils.BooleanLiteral,
+                                                               types.Omitted)):
         raise ValueError("pd.DataFrame(): copy argument should be constant")
 
-    copy = getattr(copy, 'literal_value', copy)
+    # get value of copy
+    copy = getattr(copy, 'literal_value', copy)  # literal type
+    copy = getattr(copy, 'value', copy)  # ommited type
+    assert isinstance(copy, bool)
+
     col_args, data_args, index_arg = _get_df_args(data, index, columns, dtype, copy)
     col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_args, col_args)
 
@@ -579,7 +587,7 @@ def _get_df_args(data, index, columns, dtype, copy):
     """
     # dtype argument
     astype_str = ''
-    if not (dtype is None or dtype == types.none):
+    if not is_overload_none(dtype):
         astype_str = '.astype(dtype)'
 
 
@@ -608,7 +616,7 @@ def _get_df_args(data, index, columns, dtype, copy):
         if not (isinstance(data, types.Array) and data.ndim == 2):
             raise ValueError("pd.DataFrame() supports constant dictionary and"
                              "ndarray input")
-        if columns is None or columns == types.none:
+        if is_overload_none(columns):
             raise ValueError("pd.DataFrame() column argument is required when"
                              "ndarray is passed as data")
         if copy:
@@ -618,7 +626,7 @@ def _get_df_args(data, index, columns, dtype, copy):
                      i, astype_str) for i in range(n_cols)]
         data_dict = dict(zip(columns.consts, data_arrs))
 
-    if columns is None or columns == types.none:
+    if is_overload_none(columns):
         col_names = data_dict.keys()
     else:
         col_names = columns.consts
@@ -645,7 +653,7 @@ def _fill_null_arrays(data_dict, col_names, index):
             df_len = "len({})".format(data_dict[c])
             break
 
-    if df_len is None and index is not None and index != types.none:
+    if df_len is None and not is_overload_none(index):
         df_len = 'len(index)'  # TODO: test
 
     assert df_len is not None, "empty dataframe with null arrays"  # TODO
