@@ -39,3 +39,21 @@ def test_get():
         [4, 3, 5, 1, 0], name='A')
     # TODO: support distributed
     check_func(test_impl, (S,), False)
+
+
+def test_replace_regex():
+    def test_impl(S):
+        return S.str.replace('AB*', 'EE', regex=True)
+
+    S = pd.Series(['ABCC', 'CABBD', np.nan, 'CCD', 'C,ABB,D'],
+        [4, 3, 5, 1, 0], name='A')
+    check_func(test_impl, (S,))
+
+
+def test_replace_noregex():
+    def test_impl(S):
+        return S.str.replace('AB', 'EE', regex=False)
+
+    S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
+        [4, 3, 5, 1, 0], name='A')
+    check_func(test_impl, (S,))

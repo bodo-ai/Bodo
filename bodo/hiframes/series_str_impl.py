@@ -4,6 +4,7 @@ Support for Series.str methods
 import operator
 import numpy as np
 import pandas as pd
+import re
 import numba
 from numba import types, cgutils
 from numba.extending import (models, register_model, infer_getattr,
@@ -17,7 +18,8 @@ from bodo.hiframes.pd_timestamp_ext import (pandas_timestamp_type,
     convert_datetime64_to_timestamp, convert_timestamp_to_datetime64,
     integer_to_dt64)
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
-from bodo.utils.typing import is_list_like_index_type
+from bodo.utils.typing import (is_list_like_index_type, is_overload_false,
+    is_overload_true)
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import (string_array_type, pre_alloc_string_array,
     get_utf8_size)
@@ -128,9 +130,9 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
         index = bodo.hiframes.api.get_series_index(S)
         name = bodo.hiframes.api.get_series_name(S)
         numba.parfor.init_prange()
-        n = len(arr)
-        out_arr = bodo.libs.str_ext.alloc_list_list_str(n)
-        for i in numba.parfor.internal_prange(n):
+        l = len(arr)
+        out_arr = bodo.libs.str_ext.alloc_list_list_str(l)
+        for i in numba.parfor.internal_prange(l):
             in_str = arr[i]
             out_arr[i] = in_str.split(pat)
 
@@ -195,3 +197,71 @@ def overload_str_method_get(S_str, i):
         return bodo.hiframes.api.init_series(out_arr, index, name)
 
     return _str_get_impl
+
+
+@overload_method(SeriesStrMethodType, 'replace')
+def overload_str_method_replace(pat, repl, n=-1, case=None, flags=0,
+                                                                   regex=True):
+    # TODO: support other arguments
+    # TODO: support dynamic values for regex
+    if is_overload_true(regex):
+        def _str_replace_regex_impl(S_str, pat, repl, n=-1, case=None, flags=0,
+                                                                   regex=True):
+            S = S_str._obj
+            arr = bodo.hiframes.api.get_series_data(S)
+            index = bodo.hiframes.api.get_series_index(S)
+            name = bodo.hiframes.api.get_series_name(S)
+            numba.parfor.init_prange()
+            e = re.compile(pat)
+            l = len(arr)
+            n_total_chars = 0
+            str_list = bodo.libs.str_ext.alloc_str_list(l)
+            for i in numba.parfor.internal_prange(l):
+                if bodo.hiframes.api.isna(arr, i):
+                    continue
+                out_str = e.sub(repl, arr[i])
+                str_list[i] = out_str
+                n_total_chars += get_utf8_size(out_str)
+            numba.parfor.init_prange()
+            out_arr = pre_alloc_string_array(l, n_total_chars)
+            for j in numba.parfor.internal_prange(l):
+                if bodo.hiframes.api.isna(arr, j):
+                    out_arr[j] = ''
+                    bodo.ir.join.setitem_arr_nan(out_arr, j)
+                    continue
+                _str = str_list[j]
+                out_arr[j] = _str
+            return bodo.hiframes.api.init_series(out_arr, index, name)
+        return _str_replace_regex_impl
+
+    if not is_overload_false(regex):
+        raise ValueError(
+            "regex argument for Series.str.replace should be constant")
+
+    def _str_replace_noregex_impl(S_str, pat, repl, n=-1, case=None, flags=0,
+                                                                   regex=True):
+        S = S_str._obj
+        arr = bodo.hiframes.api.get_series_data(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        numba.parfor.init_prange()
+        l = len(arr)
+        n_total_chars = 0
+        str_list = bodo.libs.str_ext.alloc_str_list(l)
+        for i in numba.parfor.internal_prange(l):
+            if bodo.hiframes.api.isna(arr, i):
+                continue
+            out_str = arr[i].replace(pat, repl)
+            str_list[i] = out_str
+            n_total_chars += get_utf8_size(out_str)
+        numba.parfor.init_prange()
+        out_arr = pre_alloc_string_array(l, n_total_chars)
+        for j in numba.parfor.internal_prange(l):
+            if bodo.hiframes.api.isna(arr, j):
+                out_arr[j] = ''
+                bodo.ir.join.setitem_arr_nan(out_arr, j)
+                continue
+            _str = str_list[j]
+            out_arr[j] = _str
+        return bodo.hiframes.api.init_series(out_arr, index, name)
+    return _str_replace_noregex_impl
