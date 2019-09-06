@@ -320,3 +320,52 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
             bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls),
             index, name)
     return _str_contains_noregex_impl
+
+
+def create_str2str_methods_overload(func_name):
+    def overload_str2str_methods(S_str):
+        func_text = 'def f(S_str):\n'
+        func_text += '    S = S_str._obj\n'
+        func_text += '    str_arr = bodo.hiframes.api.get_series_data(S)\n'
+        func_text += '    index = bodo.hiframes.api.get_series_index(S)\n'
+        func_text += '    name = bodo.hiframes.api.get_series_name(S)\n'
+        func_text += '    numba.parfor.init_prange()\n'
+        func_text += '    n = len(str_arr)\n'
+        # functions that don't change the number of characters
+        if func_name in ('capitalize', 'lower', 'swapcase', 'title', 'upper'):
+            func_text += '    num_chars = num_total_chars(str_arr)\n'
+        else:
+            func_text += '    num_chars = 0\n'
+            func_text += '    for i in numba.parfor.internal_prange(n):\n'
+            func_text += '        if bodo.hiframes.api.isna(str_arr, i):\n'
+            func_text += '            l = 0\n'
+            func_text += '        else:\n'
+            func_text += '            l = get_utf8_size(str_arr[i].{}())\n'.format(func_name)
+            func_text += '        num_chars += l\n'
+        func_text += '    out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)\n'
+        func_text += '    for j in numba.parfor.internal_prange(n):\n'
+        func_text += '        if bodo.hiframes.api.isna(str_arr, j):\n'
+        func_text += '            out_arr[j] = ""\n'
+        func_text += '            bodo.ir.join.setitem_arr_nan(out_arr, j)\n'
+        func_text += '        else:\n'
+        func_text += '            out_arr[j] = str_arr[j].{}()\n'.format(func_name)
+        func_text += '    return bodo.hiframes.api.init_series(out_arr, index, name)\n'
+        loc_vars = {}
+        # print(func_text)
+        exec(func_text, {'bodo': bodo, 'numba': numba,
+            'num_total_chars': bodo.libs.str_arr_ext.num_total_chars,
+            'get_utf8_size': bodo.libs.str_arr_ext.get_utf8_size}, loc_vars)
+        f = loc_vars['f']
+        return f
+
+    return overload_str2str_methods
+
+
+def _install_str2str_methods():
+    # install methods that just transform the string into another string
+    for op in bodo.hiframes.pd_series_ext.str2str_methods:
+        overload_impl = create_str2str_methods_overload(op)
+        overload_method(SeriesStrMethodType, op)(overload_impl)
+
+
+_install_str2str_methods()

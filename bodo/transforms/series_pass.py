@@ -643,8 +643,12 @@ class SeriesPass(object):
             kw_typs = {name:self.typemap[v.name]
                     for name, v in dict(rhs.kws).items()}
 
-            impl = getattr(bodo.hiframes.series_str_impl,
-                'overload_str_method_' + func_name)(*arg_typs, **kw_typs)
+            if func_name in bodo.hiframes.pd_series_ext.str2str_methods:
+                impl = bodo.hiframes.series_str_impl.create_str2str_methods_overload(
+                    func_name)(self.typemap[func_mod.name])
+            else:
+                impl = getattr(bodo.hiframes.series_str_impl,
+                    'overload_str_method_' + func_name)(*arg_typs, **kw_typs)
             return self._replace_func(impl, rhs.args,
                         pysig=numba.utils.pysignature(impl),
                         kws=dict(rhs.kws))
