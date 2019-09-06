@@ -379,15 +379,6 @@ def _column_fillna_alloc_impl(S, val, index, name):  # pragma: no cover
     return bodo.hiframes.api.init_series(B, index, name)
 
 
-def _str_contains_regex_impl(str_arr, pat):  # pragma: no cover
-    e = bodo.libs.str_ext.compile_regex(pat)
-    return bodo.hiframes.api.str_contains_regex(str_arr, e)
-
-def _str_contains_noregex_impl(str_arr, pat):  # pragma: no cover
-    return bodo.hiframes.api.str_contains_noregex(str_arr, pat)
-
-
-
 # TODO: use online algorithm, e.g. StatFunctions.scala
 # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
 def _column_cov_impl(S1, S2):  # pragma: no cover
@@ -557,8 +548,6 @@ series_replace_funcs = {
     'shift_default': lambda A, index, name: bodo.hiframes.api.init_series(bodo.hiframes.rolling.shift(A, 1, False), index, name),
     'pct_change': lambda A, shift, index, name: bodo.hiframes.api.init_series(bodo.hiframes.rolling.pct_change(A, shift, False), index, name),
     'pct_change_default': lambda A, index, name: bodo.hiframes.api.init_series(bodo.hiframes.rolling.pct_change(A, 1, False), index, name),
-    'str_contains_regex': _str_contains_regex_impl,
-    'str_contains_noregex': _str_contains_noregex_impl,
     'abs': lambda A, index, name: bodo.hiframes.api.init_series(np.abs(A), index, name),  # TODO: timedelta
     'cov': _column_cov_impl,
     'corr': _column_corr_impl,

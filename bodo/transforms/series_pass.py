@@ -654,19 +654,6 @@ class SeriesPass(object):
                         kws=dict(rhs.kws))
 
 
-        # if (isinstance(func_mod, ir.Var)
-        #         and self.typemap[func_mod.name]
-        #         == series_str_methods_type):
-        #     f_def = guard(get_definition, self.func_ir, rhs.func)
-        #     str_def = guard(get_definition, self.func_ir, f_def.value)
-        #     if str_def is None:  # TODO: check for errors
-        #         raise ValueError("invalid series.str")
-
-        #     series_var = str_def.value
-
-        #     return self._run_series_str_method(
-        #         assign, assign.target, series_var, func_name, rhs)
-
         # replace _get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
         # TODO: min
@@ -1163,9 +1150,6 @@ class SeriesPass(object):
             impl = bodo.hiframes.api.overload_get_series_data_tup(
                 self.typemap[arg.name])
             return compile_func_single_block(impl, (arg,), lhs, self)
-
-        if func_name in ('str_contains_regex', 'str_contains_noregex'):
-            return self._handle_str_contains(assign, lhs, rhs, func_name)
 
         # arr = fix_rolling_array(col) -> arr=col if col is float array
         if func_name == 'fix_rolling_array':
@@ -1934,194 +1918,6 @@ class SeriesPass(object):
         return self._replace_func(impl, rhs.args,
                         pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws))
 
-    def _run_series_str_method(self, assign, lhs, series_var, func_name, rhs):
-
-        supported_methods = (bodo.hiframes.pd_series_ext.str2str_methods
-            + ('len', 'replace', 'split', 'get', 'contains'))
-        if func_name not in supported_methods:
-            raise NotImplementedError(
-                "Series.str.{} not supported yet".format(func_name))
-
-        nodes = []
-        arr = self._get_series_data(series_var, nodes)
-        index = self._get_series_index(series_var, nodes)
-        name = self._get_series_name(series_var, nodes)
-
-        # string 2 string methods
-        if func_name in bodo.hiframes.pd_series_ext.str2str_methods:
-            func_text = 'def f(str_arr, index, name):\n'
-            func_text += '    numba.parfor.init_prange()\n'
-            func_text += '    n = len(str_arr)\n'
-            # functions that don't change the number of characters
-            if func_name in ('capitalize', 'lower', 'swapcase', 'title', 'upper'):
-                func_text += '    num_chars = num_total_chars(str_arr)\n'
-            else:
-                func_text += '    num_chars = 0\n'
-                func_text += '    for i in numba.parfor.internal_prange(n):\n'
-                func_text += '        if bodo.hiframes.api.isna(str_arr, i):\n'
-                func_text += '            l = 0\n'
-                func_text += '        else:\n'
-                func_text += '            l = get_utf8_size(str_arr[i].{}())\n'.format(func_name)
-                func_text += '        num_chars += l\n'
-            func_text += '    S = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)\n'
-            func_text += '    for j in numba.parfor.internal_prange(n):\n'
-            func_text += '        if bodo.hiframes.api.isna(str_arr, j):\n'
-            func_text += '            S[j] = ""\n'
-            func_text += '            bodo.ir.join.setitem_arr_nan(S, j)\n'
-            func_text += '        else:\n'
-            func_text += '            S[j] = str_arr[j].{}()\n'.format(func_name)
-            func_text += '    return bodo.hiframes.api.init_series(S, index, name)\n'
-            loc_vars = {}
-            # print(func_text)
-            exec(func_text, {}, loc_vars)
-            f = loc_vars['f']
-            return self._replace_func(f, (arr, index, name), pre_nodes=nodes,
-                extra_globals={
-                    'num_total_chars': bodo.libs.str_arr_ext.num_total_chars,
-                    'get_utf8_size': bodo.libs.str_arr_ext.get_utf8_size,
-                })
-
-        if func_name == 'contains':
-            return self._run_series_str_contains(rhs, arr, nodes)
-
-        if func_name == 'replace':
-            return self._run_series_str_replace(
-                assign, lhs, arr, index, name, rhs, nodes)
-
-        if func_name == 'split':
-            return self._run_series_str_split(assign, lhs, arr, rhs, nodes)
-
-        if func_name == 'get':
-            return self._run_series_str_get(assign, lhs, arr, rhs, nodes)
-
-        if func_name == 'len':
-            out_typ = 'np.int64'
-
-        func_text = 'def f(str_arr):\n'
-        func_text += '    numba.parfor.init_prange()\n'
-        func_text += '    n = len(str_arr)\n'
-        #func_text += '    S = numba.unsafe.ndarray.empty_inferred((n,))\n'
-        # TODO: use empty_inferred after it is fixed
-        func_text += '    S = np.empty(n, {})\n'.format(out_typ)
-        func_text += '    for i in numba.parfor.internal_prange(n):\n'
-        func_text += '        val = str_arr[i]\n'
-        func_text += '        S[i] = len(val)\n'
-        func_text += '    return bodo.hiframes.api.init_series(S)\n'
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        f = loc_vars['f']
-
-        return self._replace_func(f, [arr], pre_nodes=nodes)
-
-    def _run_series_str_replace(self, assign, lhs, arr, index, name, rhs,
-                                                                        nodes):
-        regex = True
-        # TODO: refactor arg parsing
-        kws = dict(rhs.kws)
-        if 'regex' in kws:
-            regex = guard(find_const, self.func_ir, kws['regex'])
-            if regex is None:
-                raise ValueError(
-                    "str.replace regex argument should be constant")
-
-        impl = (series_kernels._str_replace_regex_impl if regex
-                else series_kernels._str_replace_noregex_impl)
-
-        return self._replace_func(
-            impl,
-            (arr, rhs.args[0], rhs.args[1], index, name),
-            pre_nodes=nodes,
-            extra_globals={'unicode_to_std_str': unicode_to_std_str,
-                            'std_str_to_unicode': std_str_to_unicode,
-                            'pre_alloc_string_array': pre_alloc_string_array,
-                            'get_utf8_size': get_utf8_size,
-                            're': re}
-        )
-
-
-    def _run_series_str_split(self, assign, lhs, arr, rhs, nodes):
-        sep = self._get_arg('str.split', rhs.args, dict(rhs.kws), 0, 'pat',
-                default=False)  # TODO: proper default handling
-        if sep is False:
-            sep = ir.Var(lhs.scope, mk_unique_var('split_sep'), lhs.loc)
-            sep_typ = types.none
-            self.typemap[sep.name] = types.none
-            nodes.append(ir.Assign(
-                ir.Const(None, lhs.loc), sep, lhs.loc))
-        else:
-            sep_typ = self.typemap[sep.name]
-
-        def _str_split_impl(str_arr, sep):
-            numba.parfor.init_prange()
-            n = len(str_arr)
-            out_arr = bodo.libs.str_ext.alloc_list_list_str(n)
-            for i in numba.parfor.internal_prange(n):
-                in_str = str_arr[i]
-                out_arr[i] = in_str.split(sep)
-
-            return bodo.hiframes.api.init_series(out_arr)
-
-
-        if isinstance(sep_typ, types.StringLiteral) and len(sep_typ.literal_value) == 1:
-            def _str_split_impl(str_arr, sep):
-                out_arr = bodo.hiframes.split_impl.compute_split_view(
-                    str_arr, sep)
-                return bodo.hiframes.api.init_series(out_arr)
-
-        return self._replace_func(_str_split_impl, [arr, sep], pre_nodes=nodes)
-
-    def _run_series_str_get(self, assign, lhs, arr, rhs, nodes):
-        arr_typ = self.typemap[arr.name]
-        # XXX only supports get for list(list(str)) input and split view
-        assert (arr_typ == types.List(types.List(string_type))
-            or arr_typ == string_array_split_view_type)
-        ind_var = rhs.args[0]
-
-        def _str_get_impl(str_arr, ind):
-            numba.parfor.init_prange()
-            n = len(str_arr)
-            n_total_chars = 0
-            str_list = bodo.libs.str_ext.alloc_str_list(n)
-            for i in numba.parfor.internal_prange(n):
-                # TODO: support NAN
-                in_list_str = str_arr[i]
-                out_str = in_list_str[ind]
-                str_list[i] = out_str
-                n_total_chars += get_utf8_size(out_str)
-            numba.parfor.init_prange()
-            out_arr = pre_alloc_string_array(n, n_total_chars)
-            for j in numba.parfor.internal_prange(n):
-                _str = str_list[j]
-                out_arr[j] = _str
-            return bodo.hiframes.api.init_series(out_arr)
-
-        if arr_typ == string_array_split_view_type:
-            # TODO: refactor and enable distributed
-            def _str_get_impl(arr, ind):
-                numba.parfor.init_prange()
-                n = len(arr)
-                n_total_chars = 0
-                for i in numba.parfor.internal_prange(n):
-                    data_start, length = get_split_view_index(arr, i, ind)
-                    n_total_chars += length
-                numba.parfor.init_prange()
-                out_arr = pre_alloc_string_array(n, n_total_chars)
-                for j in numba.parfor.internal_prange(n):
-                    data_start, length = get_split_view_index(arr, j, ind)
-                    ptr = get_split_view_data_ptr(arr, data_start)
-                    bodo.libs.str_arr_ext.setitem_str_arr_ptr(
-                        out_arr, j, ptr, length)
-                return bodo.hiframes.api.init_series(out_arr)
-
-        return self._replace_func(_str_get_impl, [arr, ind_var],
-            pre_nodes=nodes,
-            extra_globals={'pre_alloc_string_array': pre_alloc_string_array,
-                'get_array_ctypes_ptr': get_array_ctypes_ptr,
-                'getitem_c_arr': getitem_c_arr,
-                'get_split_view_index': get_split_view_index,
-                'get_split_view_data_ptr': get_split_view_data_ptr,
-                'get_utf8_size': get_utf8_size})
-
     def _is_dt_index_binop(self, rhs):
         if rhs.op != 'binop':
             return False
@@ -2250,27 +2046,6 @@ class SeriesPass(object):
 
         return None
 
-    def _run_series_str_contains(self, rhs, series_var, nodes):
-        """
-        Handle string contains like:
-          B = df.column.str.contains('oo*', regex=True)
-        """
-        kws = dict(rhs.kws)
-        pat = rhs.args[0]
-        regex = True  # default regex arg is True
-        if 'regex' in kws:
-            regex = guard(find_const, self.func_ir, kws['regex'])
-            if regex is None:
-                raise ValueError("str.contains expects constant regex argument")
-        if regex:
-            fname = "str_contains_regex"
-        else:
-            fname = "str_contains_noregex"
-
-        return self._replace_func(
-            series_replace_funcs[fname], [series_var, pat], pre_nodes=nodes)
-
-
     def _handle_empty_like(self, assign, lhs, rhs):
         # B = empty_like(A) -> B = empty(len(A), dtype)
         in_arr = rhs.args[0]
@@ -2291,29 +2066,6 @@ class SeriesPass(object):
         nodes = f_block.body[:-3]  # remove none return
         nodes[-1].target = assign.target
         return nodes
-
-    def _handle_str_contains(self, assign, lhs, rhs, fname):
-
-        if fname == 'str_contains_regex':
-            comp_func = 'bodo.libs.str_ext.contains_regex'
-        elif fname == 'str_contains_noregex':
-            comp_func = 'bodo.libs.str_ext.contains_noregex'
-        else:
-            assert False
-
-        # TODO: index and name
-        func_text = 'def f(str_arr, pat):\n'
-        func_text += '  l = len(str_arr)\n'
-        func_text += '  S = np.empty(l, dtype=np.bool_)\n'
-        func_text += '  nulls = np.empty((l + 7) >> 3, dtype=np.uint8)\n'
-        func_text += '  for i in numba.parfor.internal_prange(l):\n'
-        func_text += '    S[i] = {}(str_arr[i], pat)\n'.format(comp_func)
-        func_text += '    bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)\n'
-        func_text += '  return bodo.hiframes.api.init_series(bodo.libs.bool_arr_ext.init_bool_array(S, nulls))\n'
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        f = loc_vars['f']
-        return self._replace_func(f, rhs.args)
 
     def _handle_df_col_filter(self, assign, lhs, rhs):
         nodes = []
