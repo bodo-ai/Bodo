@@ -1036,7 +1036,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
         f_ir, typingctx, arg_typs, {}, {})
     df_pass.run()
     remove_dead(f_ir.blocks, f_ir.arg_names, f_ir)
-    typemap, return_type, calltypes = compiler.type_inference_stage(
+    typemap, return_type, calltypes = numba.typed_passes.type_inference_stage(
                 typingctx, f_ir, arg_typs, None)
 
     options = numba.targets.cpu.ParallelOptions(True)

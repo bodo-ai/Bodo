@@ -87,5 +87,5 @@ def jit(signature_or_function=None, **options):
 
     return numba.jit(
         signature_or_function,
-        pipeline_class=bodo.compiler.BodoPipeline,
+        pipeline_class=bodo.compiler.BodoCompiler,
         **options)

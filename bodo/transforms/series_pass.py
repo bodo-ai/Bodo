@@ -1536,7 +1536,7 @@ class SeriesPass(object):
         arg_typs = (self.typemap[data.name],
             self.typemap[index.name],
             self.typemap[name.name],)
-        f_typemap, _f_ret_t, f_calltypes = numba.compiler.type_inference_stage(
+        f_typemap, _f_ret_t, f_calltypes = numba.typed_passes.type_inference_stage(
                 self.typingctx, f_ir, arg_typs, self.typemap[lhs.name])
         # remove argument entries like arg.a from typemap
         arg_names = [vname for vname in f_typemap if vname.startswith("arg.")]
@@ -1735,7 +1735,7 @@ class SeriesPass(object):
         if not use_nan:
             arg_typs += (self.typemap[fill_var.name],)
         arg_typs += (self.typemap[index.name], self.typemap[name.name])
-        f_typemap, _f_ret_t, f_calltypes = numba.compiler.type_inference_stage(
+        f_typemap, _f_ret_t, f_calltypes = numba.typed_passes.type_inference_stage(
                 self.typingctx, f_ir, arg_typs, self.typemap[lhs.name])
         # remove argument entries like arg.a from typemap
         arg_names = [vname for vname in f_typemap if vname.startswith("arg.")]
@@ -1829,7 +1829,7 @@ class SeriesPass(object):
         # XXX seq pipeline used since dist pass causes a hang
         m = numba.ir_utils._max_label
         impl_disp = numba.njit(
-            kernel_func, pipeline_class=bodo.compiler.BodoPipelineSeq)
+            kernel_func, pipeline_class=bodo.compiler.BodoCompilerSeq)
         # precompile to avoid REP counting conflict in testing
         sig = out_dtype(types.Array(dtype, 1, 'C'))
         impl_disp.compile(sig)
