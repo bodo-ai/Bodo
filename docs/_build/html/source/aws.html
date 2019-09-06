@@ -1,0 +1,269 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>AWS Setup &mdash; Bodo 0+untagged.2811.ga20080c.dirty documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script type="text/javascript" src="../_static/jquery.js"></script>
+        <script type="text/javascript" src="../_static/underscore.js"></script>
+        <script type="text/javascript" src="../_static/doctools.js"></script>
+        <script type="text/javascript" src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Jupyter Notebook Setup" href="jupyter.html" />
+    <link rel="prev" title="Not Supported Python Programs" href="notsupported.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> Bodo
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0+untagged.2811
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="supported.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="supportedpandas.html">Supported Pandas Operations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="numpy_supported.html">Supported Numpy Operations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="notsupported.html">Not Supported Python Programs</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">AWS Setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="jupyter.html">Jupyter Notebook Setup</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Bodo</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+      <li>AWS Setup</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/source/aws.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="aws-setup">
+<span id="aws"></span><h1>AWS Setup<a class="headerlink" href="#aws-setup" title="Permalink to this headline">¶</a></h1>
+<p>This page describes a simple setup process for Bodo on Amazon EC2 instances. You need to have an account on Amazon Web Services (AWS)
+and be familiar with the general AWS EC2 instance launch interface. The process below is for demonstration purposes only and is not
+recommended for production usage due to security, performance and other considerations.</p>
+<ol class="arabic">
+<li><dl class="simple">
+<dt>Launch instances</dt><dd><ol class="loweralpha simple">
+<li><p>Select a Linux instance type (e.g. Ubuntu Server 18.04, c5n types for high network bandwidth).</p></li>
+<li><p>Select number of instances (e.g. 4).</p></li>
+<li><p>Select placement group option for better network performance (check “add instance to placement group”).</p></li>
+<li><p>Enable all ports in security group configuration to simplify MPI setup (add a new rule with “All traffic” Type and “Anywhere” Source).</p></li>
+</ol>
+</dd>
+</dl>
+</li>
+<li><dl>
+<dt>Setup password-less ssh between instances</dt><dd><p>a. Copy your key from your client to all instances. For example, on a Linux clients run this for
+all instances (find public host names from AWS portal):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">scp</span> <span class="o">-</span><span class="n">i</span> <span class="s2">&quot;user.pem&quot;</span> <span class="n">user</span><span class="o">.</span><span class="n">pem</span> <span class="n">ubuntu</span><span class="nd">@ec2</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">111</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mf">111.</span><span class="n">us</span><span class="o">-</span><span class="n">east</span><span class="o">-</span><span class="mf">2.</span><span class="n">compute</span><span class="o">.</span><span class="n">amazonaws</span><span class="o">.</span><span class="n">com</span><span class="p">:</span><span class="o">~/.</span><span class="n">ssh</span><span class="o">/</span><span class="n">id_rsa</span>
+</pre></div>
+</div>
+<ol class="loweralpha" start="2">
+<li><p>Disable ssh host key check by running this command on all instances:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">echo</span> <span class="o">-</span><span class="n">e</span> <span class="s2">&quot;Host *</span><span class="se">\n</span><span class="s2">    StrictHostKeyChecking no&quot;</span> <span class="o">&gt;</span> <span class="o">.</span><span class="n">ssh</span><span class="o">/</span><span class="n">config</span>
+</pre></div>
+</div>
+</li>
+<li><p>Create a host file with list of private hostnames of instances on home directory of all instances:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">echo</span> <span class="o">-</span><span class="n">e</span> <span class="s2">&quot;ip-11-11-11-11.us-east-2.compute.internal</span><span class="se">\n</span><span class="s2">ip-11-11-11-12.us-east-2.compute.internal</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">&gt;</span> <span class="n">hosts</span>
+</pre></div>
+</div>
+</li>
+</ol>
+</dd>
+</dl>
+</li>
+<li><p>Install Anaconda Python distribution and Bodo on all instances:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+chmod +x miniconda.sh
+./miniconda.sh -b
+export PATH=$HOME/miniconda3/bin:$PATH
+conda create -n Bodo -c ehsantn -c anaconda -c conda-forge bodo
+source activate Bodo
+</pre></div>
+</div>
+</li>
+</ol>
+<p>4. Copy the <a class="reference external" href="https://github.com/IntelLabs/bodo#example">Pi example</a> to a file called pi.py in the home directory of
+all instances and run it with and without MPI and see execution times.
+You should see speed up when running on more cores (“-n 2” and “-n 4” cases):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="n">pi</span><span class="o">.</span><span class="n">py</span>  <span class="c1"># Execution time: 2.119</span>
+<span class="n">mpiexec</span> <span class="o">-</span><span class="n">f</span> <span class="n">hosts</span> <span class="o">-</span><span class="n">n</span> <span class="mi">2</span> <span class="n">python</span> <span class="n">pi</span><span class="o">.</span><span class="n">py</span>  <span class="c1"># Execution time: 1.0569</span>
+<span class="n">mpiexec</span> <span class="o">-</span><span class="n">f</span> <span class="n">hosts</span> <span class="o">-</span><span class="n">n</span> <span class="mi">4</span> <span class="n">python</span> <span class="n">pi</span><span class="o">.</span><span class="n">py</span>  <span class="c1"># Execution time: 0.5286</span>
+</pre></div>
+</div>
+<p>Possible next experiments from here are running a more complex example like the
+<a class="reference external" href="https://github.com/IntelLabs/bodo/blob/master/examples/logistic_regression_rand.py">logistic regression example</a>.
+Furthermore, attaching a shared EFS storage volume and experimenting with parallel I/O in Bodo is recommended.</p>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="jupyter.html" class="btn btn-neutral float-right" title="Jupyter Notebook Setup" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="notsupported.html" class="btn btn-neutral float-left" title="Not Supported Python Programs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019, Bodo, Inc.
+
+    </p>
+  </div> 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

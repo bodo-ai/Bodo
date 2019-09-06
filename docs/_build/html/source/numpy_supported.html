@@ -1,0 +1,306 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Supported Numpy Operations &mdash; Bodo 0+untagged.2811.ga20080c.dirty documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script type="text/javascript" src="../_static/jquery.js"></script>
+        <script type="text/javascript" src="../_static/underscore.js"></script>
+        <script type="text/javascript" src="../_static/doctools.js"></script>
+        <script type="text/javascript" src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Not Supported Python Programs" href="notsupported.html" />
+    <link rel="prev" title="Supported Pandas Operations" href="supportedpandas.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> Bodo
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0+untagged.2811
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="supported.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="supportedpandas.html">Supported Pandas Operations</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Supported Numpy Operations</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#numpy-dot-parallelization">Numpy dot() Parallelization</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="notsupported.html">Not Supported Python Programs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="aws.html">AWS Setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="jupyter.html">Jupyter Notebook Setup</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Bodo</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+      <li>Supported Numpy Operations</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/source/numpy_supported.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="supported-numpy-operations">
+<h1>Supported Numpy Operations<a class="headerlink" href="#supported-numpy-operations" title="Permalink to this headline">¶</a></h1>
+<p>Below is the list of the data-parallel Numpy operators that Bodo can optimize
+and parallelize.</p>
+<ol class="arabic">
+<li><p>Numpy <cite>element-wise</cite> array operations:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Unary operators: <code class="docutils literal notranslate"><span class="pre">+</span></code> <code class="docutils literal notranslate"><span class="pre">-</span></code> <code class="docutils literal notranslate"><span class="pre">~</span></code></p></li>
+<li><p>Binary operators: <code class="docutils literal notranslate"><span class="pre">+</span></code> <code class="docutils literal notranslate"><span class="pre">-</span></code> <code class="docutils literal notranslate"><span class="pre">*</span></code> <code class="docutils literal notranslate"><span class="pre">/</span></code> <code class="docutils literal notranslate"><span class="pre">/?</span></code> <code class="docutils literal notranslate"><span class="pre">%</span></code> <code class="docutils literal notranslate"><span class="pre">|</span></code> <code class="docutils literal notranslate"><span class="pre">&gt;&gt;</span></code> <code class="docutils literal notranslate"><span class="pre">^</span></code>
+<code class="docutils literal notranslate"><span class="pre">&lt;&lt;</span></code> <code class="docutils literal notranslate"><span class="pre">&amp;</span></code> <code class="docutils literal notranslate"><span class="pre">**</span></code> <code class="docutils literal notranslate"><span class="pre">//</span></code></p></li>
+<li><p>Comparison operators: <code class="docutils literal notranslate"><span class="pre">==</span></code> <code class="docutils literal notranslate"><span class="pre">!=</span></code> <code class="docutils literal notranslate"><span class="pre">&lt;</span></code> <code class="docutils literal notranslate"><span class="pre">&lt;=</span></code> <code class="docutils literal notranslate"><span class="pre">&gt;</span></code> <code class="docutils literal notranslate"><span class="pre">&gt;=</span></code></p></li>
+<li><p>data-parallel math operations: <code class="docutils literal notranslate"><span class="pre">add</span></code>, <code class="docutils literal notranslate"><span class="pre">subtract</span></code>, <code class="docutils literal notranslate"><span class="pre">multiply</span></code>,
+<code class="docutils literal notranslate"><span class="pre">divide</span></code>, <code class="docutils literal notranslate"><span class="pre">logaddexp</span></code>, <code class="docutils literal notranslate"><span class="pre">logaddexp2</span></code>, <code class="docutils literal notranslate"><span class="pre">true_divide</span></code>,
+<code class="docutils literal notranslate"><span class="pre">floor_divide</span></code>, <code class="docutils literal notranslate"><span class="pre">negative</span></code>, <code class="docutils literal notranslate"><span class="pre">power</span></code>, <code class="docutils literal notranslate"><span class="pre">remainder</span></code>,
+<code class="docutils literal notranslate"><span class="pre">mod</span></code>, <code class="docutils literal notranslate"><span class="pre">fmod</span></code>, <code class="docutils literal notranslate"><span class="pre">abs</span></code>, <code class="docutils literal notranslate"><span class="pre">absolute</span></code>, <code class="docutils literal notranslate"><span class="pre">fabs</span></code>, <code class="docutils literal notranslate"><span class="pre">rint</span></code>, <code class="docutils literal notranslate"><span class="pre">sign</span></code>,
+<code class="docutils literal notranslate"><span class="pre">conj</span></code>, <code class="docutils literal notranslate"><span class="pre">exp</span></code>, <code class="docutils literal notranslate"><span class="pre">exp2</span></code>, <code class="docutils literal notranslate"><span class="pre">log</span></code>, <code class="docutils literal notranslate"><span class="pre">log2</span></code>, <code class="docutils literal notranslate"><span class="pre">log10</span></code>, <code class="docutils literal notranslate"><span class="pre">expm1</span></code>,
+<code class="docutils literal notranslate"><span class="pre">log1p</span></code>, <code class="docutils literal notranslate"><span class="pre">sqrt</span></code>, <code class="docutils literal notranslate"><span class="pre">square</span></code>, <code class="docutils literal notranslate"><span class="pre">reciprocal</span></code>, <code class="docutils literal notranslate"><span class="pre">conjugate</span></code></p></li>
+<li><p>Trigonometric functions: <code class="docutils literal notranslate"><span class="pre">sin</span></code>, <code class="docutils literal notranslate"><span class="pre">cos</span></code>, <code class="docutils literal notranslate"><span class="pre">tan</span></code>, <code class="docutils literal notranslate"><span class="pre">arcsin</span></code>,
+<code class="docutils literal notranslate"><span class="pre">arccos</span></code>, <code class="docutils literal notranslate"><span class="pre">arctan</span></code>, <code class="docutils literal notranslate"><span class="pre">arctan2</span></code>, <code class="docutils literal notranslate"><span class="pre">hypot</span></code>, <code class="docutils literal notranslate"><span class="pre">sinh</span></code>, <code class="docutils literal notranslate"><span class="pre">cosh</span></code>,
+<code class="docutils literal notranslate"><span class="pre">tanh</span></code>, <code class="docutils literal notranslate"><span class="pre">arcsinh</span></code>, <code class="docutils literal notranslate"><span class="pre">arccosh</span></code>, <code class="docutils literal notranslate"><span class="pre">arctanh</span></code>, <code class="docutils literal notranslate"><span class="pre">deg2rad</span></code>,
+<code class="docutils literal notranslate"><span class="pre">rad2deg</span></code>, <code class="docutils literal notranslate"><span class="pre">degrees</span></code>, <code class="docutils literal notranslate"><span class="pre">radians</span></code></p></li>
+<li><p>Bit manipulation functions: <code class="docutils literal notranslate"><span class="pre">bitwise_and</span></code>, <code class="docutils literal notranslate"><span class="pre">bitwise_or</span></code>,
+<code class="docutils literal notranslate"><span class="pre">bitwise_xor</span></code>, <code class="docutils literal notranslate"><span class="pre">bitwise_not</span></code>, <code class="docutils literal notranslate"><span class="pre">invert</span></code>, <code class="docutils literal notranslate"><span class="pre">left_shift</span></code>,
+<code class="docutils literal notranslate"><span class="pre">right_shift</span></code></p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p>Numpy reduction functions <code class="docutils literal notranslate"><span class="pre">sum</span></code>, <code class="docutils literal notranslate"><span class="pre">prod</span></code>, <code class="docutils literal notranslate"><span class="pre">min</span></code>, <code class="docutils literal notranslate"><span class="pre">max</span></code>, <code class="docutils literal notranslate"><span class="pre">argmin</span></code>
+and <code class="docutils literal notranslate"><span class="pre">argmax</span></code>. Currently, <cite>int64</cite> data type is not supported for
+<code class="docutils literal notranslate"><span class="pre">argmin</span></code> and <code class="docutils literal notranslate"><span class="pre">argmax</span></code>.</p></li>
+<li><p>Numpy array creation functions <code class="docutils literal notranslate"><span class="pre">empty</span></code>, <code class="docutils literal notranslate"><span class="pre">zeros</span></code>, <code class="docutils literal notranslate"><span class="pre">ones</span></code>,
+<code class="docutils literal notranslate"><span class="pre">empty_like</span></code>, <code class="docutils literal notranslate"><span class="pre">zeros_like</span></code>, <code class="docutils literal notranslate"><span class="pre">ones_like</span></code>, <code class="docutils literal notranslate"><span class="pre">full_like</span></code>, <code class="docutils literal notranslate"><span class="pre">copy</span></code>,
+<code class="docutils literal notranslate"><span class="pre">arange</span></code> and <code class="docutils literal notranslate"><span class="pre">linspace</span></code>.</p></li>
+<li><p>Random number generator functions: <code class="docutils literal notranslate"><span class="pre">rand</span></code>, <code class="docutils literal notranslate"><span class="pre">randn</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ranf</span></code>, <code class="docutils literal notranslate"><span class="pre">random_sample</span></code>, <code class="docutils literal notranslate"><span class="pre">sample</span></code>, <code class="docutils literal notranslate"><span class="pre">random</span></code>,
+<code class="docutils literal notranslate"><span class="pre">standard_normal</span></code>, <code class="docutils literal notranslate"><span class="pre">chisquare</span></code>, <code class="docutils literal notranslate"><span class="pre">weibull</span></code>, <code class="docutils literal notranslate"><span class="pre">power</span></code>, <code class="docutils literal notranslate"><span class="pre">geometric</span></code>,
+<code class="docutils literal notranslate"><span class="pre">exponential</span></code>, <code class="docutils literal notranslate"><span class="pre">poisson</span></code>, <code class="docutils literal notranslate"><span class="pre">rayleigh</span></code>, <code class="docutils literal notranslate"><span class="pre">normal</span></code>, <code class="docutils literal notranslate"><span class="pre">uniform</span></code>,
+<code class="docutils literal notranslate"><span class="pre">beta</span></code>, <code class="docutils literal notranslate"><span class="pre">binomial</span></code>, <code class="docutils literal notranslate"><span class="pre">f</span></code>, <code class="docutils literal notranslate"><span class="pre">gamma</span></code>, <code class="docutils literal notranslate"><span class="pre">lognormal</span></code>, <code class="docutils literal notranslate"><span class="pre">laplace</span></code>,
+<code class="docutils literal notranslate"><span class="pre">randint</span></code>, <code class="docutils literal notranslate"><span class="pre">triangular</span></code>.</p></li>
+</ol>
+<ol class="arabic" start="4">
+<li><p>Numpy <code class="docutils literal notranslate"><span class="pre">dot</span></code> function between a matrix and a vector, or two vectors.</p></li>
+<li><p>Numpy array comprehensions, such as:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">A</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">i</span><span class="o">**</span><span class="mi">2</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="p">)])</span>
+</pre></div>
+</div>
+</li>
+</ol>
+<p>Optional arguments are not supported unless if explicitly mentioned here.
+For operations on multi-dimensional arrays, automatic broadcast of
+dimensions of size 1 is not supported.</p>
+<div class="section" id="numpy-dot-parallelization">
+<h2>Numpy dot() Parallelization<a class="headerlink" href="#numpy-dot-parallelization" title="Permalink to this headline">¶</a></h2>
+<p>The <cite>np.dot</cite> function has different distribution rules based on the number of
+dimensions and the distributions of its input arrays. The example below
+demonstrates two cases:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
+<span class="k">def</span> <span class="nf">example_dot</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">D</span><span class="p">):</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">ranf</span><span class="p">((</span><span class="n">N</span><span class="p">,</span> <span class="n">D</span><span class="p">))</span>
+    <span class="n">Y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">ranf</span><span class="p">(</span><span class="n">N</span><span class="p">)</span>
+    <span class="n">w</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">X</span><span class="p">)</span>
+    <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">z</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+
+<span class="n">example_dot</span><span class="p">(</span><span class="mi">1024</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+<span class="n">bodo</span><span class="o">.</span><span class="n">distribution_report</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Here is the output of <cite>bodo.distribution_report()</cite>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Array distributions:
+   $X.43                1D_Block
+   $Y.45                1D_Block
+   $w.44                REP
+
+Parfor distributions:
+   0                    1D_Block
+   1                    1D_Block
+   2                    1D_Block
+</pre></div>
+</div>
+<p>The first <cite>dot</cite> has a 1D array with <cite>1D_Block</cite> distribution as first input
+(<cite>Y</cite>), while the second input is a 2D array with <cite>1D_Block</cite> distribution (<cite>X</cite>).
+Hence, <cite>dot</cite> is a sum reduction across distributed datasets and therefore,
+the output (<cite>w</cite>) is on the <cite>reduce</cite> side and is assiged <cite>REP</cite> distribution.</p>
+<p>The second <cite>dot</cite> has a 2D array with <cite>1D_Block</cite> distribution (<cite>X</cite>) as first
+input, while the second input is a REP array (<cite>w</cite>). Hence, the computation is
+data-parallel across rows of <cite>X</cite>, which implies a <cite>1D_Block</cite> distibution for
+output (<cite>z</cite>).</p>
+<p>Variable <cite>z</cite> does not exist in the distribution report since
+the compiler optimizations were able to eliminate it. Its values are generated
+and consumed on-the-fly, without memory load/store overheads.</p>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="notsupported.html" class="btn btn-neutral float-right" title="Not Supported Python Programs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="supportedpandas.html" class="btn btn-neutral float-left" title="Supported Pandas Operations" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019, Bodo, Inc.
+
+    </p>
+  </div> 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

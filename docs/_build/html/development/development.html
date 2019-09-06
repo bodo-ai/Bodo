@@ -1,0 +1,323 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Bodo Development &mdash; Bodo 0+untagged.2811.ga20080c.dirty documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script type="text/javascript" src="../_static/jquery.js"></script>
+        <script type="text/javascript" src="../_static/underscore.js"></script>
+        <script type="text/javascript" src="../_static/doctools.js"></script>
+        <script type="text/javascript" src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> Bodo
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0+untagged.2811
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../source/overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../source/supported.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../source/supportedpandas.html">Supported Pandas Operations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../source/numpy_supported.html">Supported Numpy Operations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../source/notsupported.html">Not Supported Python Programs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../source/aws.html">AWS Setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../source/jupyter.html">Jupyter Notebook Setup</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Bodo</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+      <li>Bodo Development</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/development/development.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="bodo-development">
+<span id="development"></span><h1>Bodo Development<a class="headerlink" href="#bodo-development" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="technology-overview-and-architecture">
+<h2>Technology Overview and Architecture<a class="headerlink" href="#technology-overview-and-architecture" title="Permalink to this headline">¶</a></h2>
+<p>This <a class="reference external" href="https://drive.google.com/file/d/1mHrbjAEfP6p-o-bWJOVdtmKNEA7lreDt/view?usp=sharing">slide deck</a>
+provides an overview of Bodo technology and software architecture.</p>
+</div>
+<div class="section" id="numba-development">
+<h2>Numba Development<a class="headerlink" href="#numba-development" title="Permalink to this headline">¶</a></h2>
+<p>Bodo sits on top of Numba and is heavily tied to many of its features.
+Therefore, understanding Numba’s internal details and being able to
+develop Numba extensions is necessary.</p>
+<ul>
+<li><p>Start with <a class="reference external" href="http://numba.pydata.org/numba-doc/latest/user/5minguide.html">basic overview of Numba use</a> and try the examples.</p></li>
+<li><p><a class="reference external" href="http://numba.pydata.org/numba-doc/latest/user/index.html">User documentation</a> is generally helpful for overview of features.</p></li>
+<li><div class="line-block">
+<div class="line"><a class="reference external" href="http://numba.pydata.org/numba-doc/latest/user/parallel.html">ParallelAccelerator documentation</a>
+provides overview of parallel analysis and transformations in Numba
+(also used in Bodo).</div>
+</div>
+</li>
+<li><p><a class="reference external" href="http://numba.pydata.org/numba-doc/latest/developer/contributing.html">Setting up Numba for development</a></p></li>
+<li><div class="line-block">
+<div class="line"><a class="reference external" href="http://numba.pydata.org/numba-doc/latest/developer/architecture.html">Numba architecture page</a>
+is a good starting point for understanding the internals.</div>
+</div>
+</li>
+<li><div class="line-block">
+<div class="line">Learning Numba IR is crucial for understanding transformations.
+See the <a class="reference external" href="https://github.com/numba/numba/blob/master/numba/ir.py">IR classes</a>.
+Setting <cite>NUMBA_DEBUG_ARRAY_OPT=1</cite> shows the IR at different stages
+of ParallelAccelerator and Bodo transformations. Run <a class="reference external" href="http://numba.pydata.org/numba-doc/latest/user/parallel.html#explicit-parallel-loops">a simple parallel
+example</a>
+and make sure you understad the IR at different stages.</div>
+</div>
+</li>
+<li><div class="line-block">
+<div class="line"><a class="reference external" href="http://numba.pydata.org/numba-doc/latest/extending/index.html">Exending Numba page</a>
+provides details on how to provide native implementations for data types and functions.
+The low-level API should be avoided as much as possible for ease of development and
+code readability. The <a class="reference external" href="https://github.com/numba/numba/blob/master/numba/unicode.py">unicode support</a>
+in Numba is an example of a modern extension for Numba (documentation planned).</div>
+</div>
+</li>
+<li><div class="line-block">
+<div class="line">A more complex extension is <a class="reference external" href="https://github.com/numba/numba/blob/master/numba/dictobject.py">the new dictionary implementation in
+Numba</a> (documentation planned).
+It has examples of calling into C code which is implemented as
+<a class="reference external" href="https://github.com/numba/numba/blob/master/numba/_dictobject.c">a C extension library</a>.
+For a simpler example of calling into C library, see Bodo’s I/O features like
+<a class="reference external" href="https://github.com/IntelLabs/bodo/blob/master/bodo/io.py#L12">get_file_size</a>.</div>
+</div>
+</li>
+<li><div class="line-block">
+<div class="line"><a class="reference external" href="http://numba.pydata.org/numba-doc/latest/developer/index.html">Developer reference manual</a>
+provides more details if necessary.</div>
+</div>
+</li>
+</ul>
+</div>
+<div class="section" id="id1">
+<h2>Bodo Development<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<p>Bodo implements Pandas and Numpy API as a DSL.
+Data structures are implemented as Numba extensions, and
+compiler stages are responsible for different levels of abstraction.
+For example, <a class="reference external" href="https://github.com/IntelLabs/bodo/blob/master/bodo/hiframes/pd_series_ext.py">Series data type support</a>
+and <a class="reference external" href="https://github.com/IntelLabs/bodo/blob/master/bodo/transforms/series_pass.py">Series transformations</a>
+implement the <a class="reference external" href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.html">Pandas Series API</a>.
+Follow the pipeline for a simple function like <cite>Series.sum()</cite>
+for initial understanding of the transformations.</p>
+</div>
+<div class="section" id="code-structures">
+<h2>Code Structures<a class="headerlink" href="#code-structures" title="Permalink to this headline">¶</a></h2>
+<p>Below is the high level structure of the code.</p>
+<ul class="simple">
+<li><p><cite>decorators.py</cite> is the starting point, which defines decorators of Bodo.
+Currently just <cite>&#64;jit</cite> is provided but more is expected.</p></li>
+<li><p><cite>compiler.py</cite> defines the compiler pipeline for this decorator.</p></li>
+<li><p><cite>transforms</cite> directory defines Bodo specific analysis and transformation passes.</p>
+<ul>
+<li><p><cite>untyped_pass.py</cite>: transforms the IR to remove features that Numba’s type inference cannot support
+such as non-uniform dictionary input of <cite>pd.DataFrame({})</cite>.</p></li>
+<li><p><cite>dataframe_pass.py</cite>: converts data frame operations to Series and Array operations
+as much as possible to provide implementation and enable optimization.
+Creates specialized IR nodes for complex operations like Join.</p></li>
+<li><p><cite>series_pass.py</cite>: converts Series operations to array operations as much as possible
+to provide implementation and enable optimization.</p></li>
+<li><p><cite>distributed_analysis.py</cite>: analyzes the IR to decide parallelism of arrays and parfors
+for distributed transformation.</p></li>
+<li><p><cite>distributed_pass.py</cite>: parallelizes the IR for distributed execution and inserts MPI calls.</p></li>
+</ul>
+</li>
+<li><p><cite>hiframes</cite> directory provides Pandas functionality such as DataFrame, Series and Index.</p></li>
+<li><p><cite>ir</cite> directory defines and implements Bodo specific IR nodes such as Sort and Join.</p></li>
+<li><p><cite>libs</cite> directory provides supporting data structures and libraries such as strings,
+dictionary, quantiles, timsort. It also includes helper C extensions.</p></li>
+<li><p><cite>io</cite> directory provides I/O support such as CSV, HDF5, Parquet and Numpy.</p></li>
+<li><p><cite>tests</cite> provides unittests.</p></li>
+</ul>
+<p>For each function implemented (either overloading Pandas or internal),
+the following has to be specified:</p>
+<ul class="simple">
+<li><p>side effects for dead code elimination</p></li>
+<li><p>aliasing (inlining if necessary)</p></li>
+<li><p>array analysis</p></li>
+<li><p>distributed analysis (including array access analysis)</p></li>
+<li><p>distributed transformation</p></li>
+</ul>
+<dl class="simple">
+<dt>Building conda package::</dt><dd><p>conda-build . -c defaults -c numba/label/dev -c conda-forge</p>
+</dd>
+</dl>
+</div>
+<div class="section" id="papers">
+<h2>Papers<a class="headerlink" href="#papers" title="Permalink to this headline">¶</a></h2>
+<p>These papers provide deeper dive in technical ideas
+(may not be necessary for many developers):</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://dl.acm.org/citation.cfm?id=3079099">Bodo paper on automatic parallelization for distributed memory</a></p></li>
+<li><p><a class="reference external" href="http://dl.acm.org/citation.cfm?id=3103004">Bodo paper on system architecture versus Spark</a></p></li>
+<li><p><a class="reference external" href="https://arxiv.org/abs/1704.02341">Bodo Dataframe DSL approach</a></p></li>
+<li><p><a class="reference external" href="https://users.soe.ucsc.edu/~lkuper/papers/parallelaccelerator-ecoop17.pdf">ParallelAccelerator DSL approach</a></p></li>
+</ul>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019, Bodo, Inc.
+
+    </p>
+  </div> 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
