@@ -24,7 +24,6 @@ bodo/utils/__pycache__
 *.so
 
 build/
-docs/_build/
 docs/gh-pages/
 docs/development/_build/
 docs/development/gh-pages/
