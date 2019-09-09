@@ -26,6 +26,9 @@ develop Numba extensions is necessary.
 - `Setting up Numba for development <http://numba.pydata.org/numba-doc/latest/developer/contributing.html>`_
 - | `Numba architecture page <http://numba.pydata.org/numba-doc/latest/developer/architecture.html>`_
     is a good starting point for understanding the internals.
+- | The `overload guide page of Numba <http://numba.pydata.org/numba-doc/latest/extending/overloading-guide.html>`_
+    is useful for understanding the process of implementing
+    new functionality and specializing to data types.
 - | Learning Numba IR is crucial for understanding transformations.
     See the `IR classes <https://github.com/numba/numba/blob/master/numba/ir.py>`_.
     Setting `NUMBA_DEBUG_ARRAY_OPT=1` shows the IR at different stages
