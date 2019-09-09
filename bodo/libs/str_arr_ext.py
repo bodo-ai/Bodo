@@ -186,7 +186,7 @@ def _install_binary_ops():
     for op in (operator.eq, operator.ne, operator.ge, operator.gt,
                 operator.le, operator.lt):
         overload_impl = create_binary_op_overload(op)
-        overload(op, inline='always')(overload_impl)
+        overload(op)(overload_impl)
 
 
 _install_binary_ops()
