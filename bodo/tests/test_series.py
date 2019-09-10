@@ -2112,7 +2112,8 @@ class TestSeries(unittest.TestCase):
 
         S = pd.Series(['aa', 'abc', 'c', 'cccd'])
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(
+            bodo_func(S), test_impl(S), check_dtype=False)
 
     def test_series_str2str(self):
         str2str_methods = ('capitalize', 'lower', 'lstrip', 'rstrip',

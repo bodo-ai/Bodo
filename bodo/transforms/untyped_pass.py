@@ -59,7 +59,6 @@ def remove_hiframes(rhs, lives, call_list):
     if (len(call_list) == 4 and call_list[1:] == ['api', 'hiframes', bodo] and
             call_list[0] in ['fix_rolling_array',
             'concat', 'count', 'mean', 'quantile', 'var',
-            'str_contains_regex', 'str_contains_noregex',
             'nunique', 'init_series', 'init_datetime_index',
             'init_timedelta_index',
             'get_series_data', 'get_series_index', 'get_series_name',

@@ -232,8 +232,20 @@ Time series-related:
 
 String handling:
 
-* :meth:`Series.str.contains`
+* :meth:`Series.str.capitalize`
+* :meth:`Series.str.contains` regex argument supported.
+* :meth:`Series.str.get`
 * :meth:`Series.str.len`
+* :meth:`Series.str.lower`
+* :meth:`Series.str.lstrip`
+* :meth:`Series.str.replace` regex argument supported.
+* :meth:`Series.str.rstrip`
+* :meth:`Series.str.split`
+* :meth:`Series.str.strip`
+* :meth:`Series.str.swapcase`
+* :meth:`Series.str.title`
+* :meth:`Series.str.upper`
+
 
 DataFrame
 ~~~~~~~~~

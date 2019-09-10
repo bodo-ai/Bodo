@@ -53,15 +53,6 @@ def dropna(A):  # pragma: no cover
     return 0
 
 
-
-def str_contains_regex(str_arr, pat):  # pragma: no cover
-    return 0
-
-
-def str_contains_noregex(str_arr, pat):  # pragma: no cover
-    return 0
-
-
 def concat(arr_list):
     return pd.concat(arr_list)
 
@@ -279,15 +270,6 @@ class DropNAType(AbstractTemplate):
             ret = if_arr_to_series_type(ret)
         return signature(ret, *args)
 
-
-@infer_global(str_contains_regex)
-@infer_global(str_contains_noregex)
-class ContainsType(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2
-        # args: str_arr, pat
-        return signature(types.Array(types.boolean, 1, 'C'), *unliteral_all(args))
 
 def alloc_shift(A):
     return np.empty_like(A)
