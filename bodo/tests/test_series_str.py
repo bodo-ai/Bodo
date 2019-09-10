@@ -75,3 +75,11 @@ def test_contains_noregex():
     S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
         [4, 3, 5, 1, 0], name='A')
     check_func(test_impl, (S,))
+
+def test_startswith():
+    def test_impl(S):
+        return S.str.startswith("AB")
+
+    S = pd.Series(['ABCC', 'ABBD', 'AA', 'C,ABB, D'],
+        [3, 5, 1, 0], name='A')
+    check_func(test_impl, (S,))
