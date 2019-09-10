@@ -27,6 +27,50 @@
 #include "structmember.h"
 
 
+
+#define CHECK(expr, msg) if(!(expr)){std::cerr << "Error in csv_read: " << msg << std::endl;}
+
+// File reader abstraction to enable pluging in multiple data sources and file formats
+class FileReader
+{
+public:
+    const char *fname;
+    FileReader(const char *_fname) : fname(_fname) {}
+    uint64_t getSize() {
+        return boost::filesystem::file_size(fname);
+    }
+    virtual bool seek(int64_t pos) = 0;
+    virtual bool ok() = 0;
+    virtual bool read(char *s, int64_t size) = 0;
+};
+
+// read local files
+// currently using ifstream, TODO: benchmark Arrow's LocalFS
+class LocalFileReader : public FileReader
+{
+public:
+    std::ifstream * fstream;
+    LocalFileReader(const char *_fname) : FileReader(_fname) {
+        this->fstream = new std::ifstream(fname);
+        CHECK(fstream->good() && !fstream->eof() && fstream->is_open(), "could not open file.");
+    }
+    bool seek(int64_t pos) {
+        this->fstream->seekg(pos, std::ios_base::beg);
+        return this->ok();
+    }
+    bool ok() {
+        return (this->fstream->good() and !this->fstream->eof());
+    }
+    bool read(char *s, int64_t size) {
+        this->fstream->read(s, size);
+        return this->ok();
+    }
+};
+
+#undef CHECK
+
+
+
 // ***********************************************************************************
 // Our file-like object for reading chunks in a std::istream
 // ***********************************************************************************
@@ -34,7 +78,7 @@
 typedef struct {
     PyObject_HEAD
     /* Your internal buffer, size and pos */
-    std::istream * ifs;    // input stream
+    FileReader * ifs;    // input stream
     size_t chunk_start;    // start of our chunk
     size_t chunk_size;     // size of our chunk
     size_t chunk_pos;      // current position in our chunk
@@ -71,23 +115,23 @@ static PyObject * stream_reader_new(PyTypeObject *type, PyObject *args, PyObject
 // users are not supposed to use this
 static int stream_reader_pyinit(PyObject *self, PyObject *args, PyObject *kwds)
 {
-    char* str = NULL;
-    Py_ssize_t count = 0;
+    // char* str = NULL;
+    // Py_ssize_t count = 0;
 
-    if(!PyArg_ParseTuple(args, "|z#", &str, &count) || str == NULL) {
-        if(PyErr_Occurred()) PyErr_Print();
-        return 0;
-    }
+    // if(!PyArg_ParseTuple(args, "|z#", &str, &count) || str == NULL) {
+    //     if(PyErr_Occurred()) PyErr_Print();
+    //     return 0;
+    // }
 
-    ((stream_reader*)self)->chunk_start = 0;
-    ((stream_reader*)self)->chunk_pos = 0;
-    ((stream_reader*)self)->ifs = new std::istringstream(str);
-    if(!((stream_reader*)self)->ifs->good()) {
-        std::cerr << "Could not create istrstream from string.\n";
-        ((stream_reader*)self)->chunk_size = 0;
-        return -1;
-    }
-    ((stream_reader*)self)->chunk_size = count;
+    // ((stream_reader*)self)->chunk_start = 0;
+    // ((stream_reader*)self)->chunk_pos = 0;
+    // ((stream_reader*)self)->ifs = new std::istringstream(str);
+    // if(!((stream_reader*)self)->ifs->good()) {
+    //     std::cerr << "Could not create istrstream from string.\n";
+    //     ((stream_reader*)self)->chunk_size = 0;
+    //     return -1;
+    // }
+    // ((stream_reader*)self)->chunk_size = count;
 
     return 0;
 }
@@ -95,20 +139,20 @@ static int stream_reader_pyinit(PyObject *self, PyObject *args, PyObject *kwds)
 
 // We use this (and not the above) from C to init our StreamReader object
 // Will seek to chunk beginning
-static void stream_reader_init(stream_reader *self, std::istream * ifs, size_t start, size_t sz)
+static void stream_reader_init(stream_reader *self, FileReader * ifs, size_t start, size_t sz)
 {
     if(!ifs) {
         std::cerr << "Can't handle NULL pointer as input stream.\n";
         return;
     }
     self->ifs = ifs;
-    if(!self->ifs->good() || self->ifs->eof()) {
+    if(!self->ifs->ok()) {
         std::cerr << "Got bad istream in initializing StreamReader object." << std::endl;
         return;
     }
     // seek to our chunk beginning
-    self->ifs->seekg(start, std::ios_base::beg);
-    if(!self->ifs->good() || self->ifs->eof()) {
+    bool ok = self->ifs->seek(start);
+    if(!ok) {
         std::cerr << "Could not seek to start position " << start << std::endl;
         return;
     }
@@ -160,9 +204,9 @@ static PyObject * stream_reader_read(stream_reader* self, PyObject *args)
     }
 
     self->buf.resize(size);
-    self->ifs->read(self->buf.data(), size);
+    bool ok = self->ifs->read(self->buf.data(), size);
     self->chunk_pos += size;
-    if(!*self->ifs) {
+    if(!ok) {
         std::cerr << "Failed reading " << size << " bytes";
         return NULL;
     }
@@ -242,8 +286,8 @@ extern "C" void PyInit_csv(PyObject * m)
     PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
     PyObject_SetAttrString(m, "csv_file_chunk_reader",
                            PyLong_FromVoidPtr((void*)(&csv_file_chunk_reader)));
-    PyObject_SetAttrString(m, "csv_string_chunk_reader",
-                           PyLong_FromVoidPtr((void*)(&csv_string_chunk_reader)));
+    // PyObject_SetAttrString(m, "csv_string_chunk_reader",
+    //                        PyLong_FromVoidPtr((void*)(&csv_string_chunk_reader)));
 }
 
 
@@ -254,12 +298,12 @@ extern "C" void PyInit_csv(PyObject * m)
 #define CHECK(expr, msg) if(!(expr)){std::cerr << "Error in csv_read: " << msg << std::endl; return NULL;}
 
 /// return vector of offsets of newlines in first n bytes of given stream
-static std::vector<size_t> count_lines(std::istream * f, size_t n)
+static std::vector<size_t> count_lines(FileReader * f, size_t n)
 {
     std::vector<size_t> pos;
     char c;
     size_t i=0;
-    while(i<n && f->get(c)) {
+    while(i<n && f->read(&c, 1)) {
         if(c == '\n') pos.push_back(i);
         ++i;
     }
@@ -282,7 +326,7 @@ static std::vector<size_t> count_lines(std::istream * f, size_t n)
  * @param[in]  fsz total number of bytes in stream
  * @return     StreamReader file-like object to read the owned chunk through pandas.read_csv
  **/
-static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel, int64_t skiprows, int64_t nrows)
+static PyObject* csv_chunk_reader(FileReader * f, size_t fsz, bool is_parallel, int64_t skiprows, int64_t nrows)
 {
     if (skiprows < 0)
     {
@@ -301,8 +345,8 @@ static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel
 
         // seek to our chunk
         size_t byte_offset = hpat_dist_get_start(fsz, nranks, rank);
-        f->seekg(byte_offset, std::ios_base::beg);
-        if(!f->good() || f->eof()) {
+        f->seek(byte_offset);
+        if(!f->ok()) {
             std::cerr << "Could not seek to start position " << hpat_dist_get_start(fsz, nranks, rank) << std::endl;
             return NULL;
         }
@@ -404,21 +448,22 @@ extern "C" PyObject* csv_file_chunk_reader(const char * fname, bool is_parallel,
 {
     CHECK(fname != NULL, "NULL filename provided.");
     // get total file-size
-    auto fsz = boost::filesystem::file_size(fname);
-    std::ifstream * f = new std::ifstream(fname);
-    CHECK(f->good() && !f->eof() && f->is_open(), "could not open file.");
-    return csv_chunk_reader(f, fsz, is_parallel, skiprows, nrows);
+    LocalFileReader *lf_reader = new LocalFileReader(fname);
+    auto fsz = lf_reader->getSize();
+    CHECK(lf_reader->ok(), "could not open file.");
+    return csv_chunk_reader(lf_reader, fsz, is_parallel, skiprows, nrows);
 }
 
 
 // taking a string to create a istream and calling csv_chunk_reader
-extern "C" PyObject* csv_string_chunk_reader(const std::string * str, bool is_parallel)
-{
-    CHECK(str != NULL, "NULL string provided.");
-    // get total file-size
-    std::istringstream * f = new std::istringstream(*str);
-    CHECK(f->good(), "could not create istrstream from string.");
-    return csv_chunk_reader(f, str->size(), is_parallel, 0, -1);
-}
+// TODO: develop a StringReader class for testing
+// extern "C" PyObject* csv_string_chunk_reader(const std::string * str, bool is_parallel)
+// {
+//     CHECK(str != NULL, "NULL string provided.");
+//     // get total file-size
+//     std::istringstream * f = new std::istringstream(*str);
+//     CHECK(f->good(), "could not create istrstream from string.");
+//     return csv_chunk_reader(f, str->size(), is_parallel, 0, -1);
+// }
 
 #undef CHECK
