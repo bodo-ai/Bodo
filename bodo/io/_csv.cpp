@@ -16,6 +16,7 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
+#include <algorithm>
 #include <boost/tokenizer.hpp>
 #include <boost/filesystem/operations.hpp>
 
@@ -297,17 +298,28 @@ extern "C" void PyInit_csv(PyObject * m)
 
 #define CHECK(expr, msg) if(!(expr)){std::cerr << "Error in csv_read: " << msg << std::endl; return NULL;}
 
+// 5MB buffer size to read from sources like AWS S3 in case they don't have buffering
+static constexpr size_t BUFF_SIZE = 5 * 1024 * 1024;
+// static constexpr size_t BUFF_SIZE = 5;
+
 /// return vector of offsets of newlines in first n bytes of given stream
 static std::vector<size_t> count_lines(FileReader * f, size_t n)
 {
     std::vector<size_t> pos;
-    char c;
-    size_t i=0;
-    while(i<n && f->read(&c, 1)) {
-        if(c == '\n') pos.push_back(i);
-        ++i;
+    size_t i = 0;
+    char *buffer = new char[BUFF_SIZE];
+
+    while (i<n) {
+        size_t n_read = std::min(n-i, BUFF_SIZE);
+        bool ok = f->read(buffer, n_read);
+        if (!ok) break;
+        for (size_t j=0; j<n_read; j++)
+            if(buffer[j] == '\n')
+                pos.push_back(i+j);
+        i += n_read;
     }
     if(i<n) std::cerr << "Warning, read only " << i << " bytes out of " << n << "requested\n";
+    delete[] buffer;
     return pos;
 }
 
