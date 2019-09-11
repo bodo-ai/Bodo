@@ -83,3 +83,11 @@ def test_startswith():
     S = pd.Series(['ABCC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
         [3, 5, 1, 0, 2], name='A')
     check_func(test_impl, (S,))
+
+def test_endswith():
+    def test_impl(S):
+        return S.str.startswith("AB")
+
+    S = pd.Series(['AB', 'ABB', 'BAAB', 'C,ABB, D', np.nan],
+        [3, 5, 1, 0, 2], name='A')
+    check_func(test_impl, (S,))
