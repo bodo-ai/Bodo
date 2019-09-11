@@ -76,6 +76,30 @@ def test_contains_noregex():
         [4, 3, 5, 1, 0], name='A')
     check_func(test_impl, (S,))
 
+def test_center():
+    def test_impl(S):
+        return S.str.center(5, '*')
+
+    S = pd.Series(['ABCDDC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
+        [3, 5, 1, 0, 2], name='A')
+    check_func(test_impl, (S,))
+
+def test_ljust():
+    def test_impl(S):
+        return S.str.ljust(5,'*')
+
+    S = pd.Series(['ABCDDC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
+        [3, 5, 1, 0, 2], name='A')
+    check_func(test_impl, (S,))
+
+def test_rjust():
+    def test_impl(S):
+        return S.str.rjust(5,'*')
+
+    S = pd.Series(['ABCDDC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
+        [3, 5, 1, 0, 2], name='A')
+    check_func(test_impl, (S,))
+
 def test_startswith():
     def test_impl(S):
         return S.str.startswith("AB")
