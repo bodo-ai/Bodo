@@ -140,7 +140,6 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
 
     return _str_split_impl
 
-
 @overload_method(SeriesStrMethodType, 'get')
 def overload_str_method_get(S_str, i):
     arr_typ = S_str.stype.data
@@ -320,6 +319,32 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
             bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls),
             index, name)
     return _str_contains_noregex_impl
+
+@overload_method(SeriesStrMethodType, 'find')
+def overload_str_method_find(S_str, sub):
+    #not supporting start,end as arguments
+    def impl(S_str, sub):
+        S = S_str._obj
+        str_arr = bodo.hiframes.api.get_series_data(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        numba.parfor.init_prange()
+        l = len(str_arr)
+        out_arr = np.empty(l,dtype=np.int64)
+        bitmap = np.empty((l+7)>>3, np.uint8)
+        for i in numba.parfor.internal_prange(l):
+            if bodo.hiframes.api.isna(str_arr, i):
+                out_arr[i] = -1
+                bodo.libs.int_arr_ext.set_bit_to_arr(
+                        bitmap, i, 0)
+            else:
+                out_arr[i] = str_arr[i].find(sub)
+                bodo.libs.int_arr_ext.set_bit_to_arr(
+                        bitmap, i, 1)
+        return bodo.hiframes.api.init_series(
+            bodo.libs.int_arr_ext.init_integer_array(out_arr, bitmap),
+            index, name)
+    return impl
 
 @overload_method(SeriesStrMethodType, 'center')
 def overload_str_method_center(S_str, width, fillchar=' '):

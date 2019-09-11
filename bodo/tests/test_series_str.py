@@ -23,11 +23,10 @@ def test_split():
 
     # TODO: more split tests similar to the ones test_hiframes
     # TODO: support and test NA
-    S = pd.Series(['AB,CC', 'C,ABB,D', 'LLL,JJ', 'C,D', 'C,ABB,D'],
-        [4, 3, 5, 1, 0], name='A')
+    S = pd.Series(['ABCC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
+        [3, 5, 1, 0, 2], name='A')
     # TODO: support distributed
     check_func(test_impl, (S,), False)
-
 
 def test_get():
     def test_impl(S):
@@ -75,6 +74,14 @@ def test_contains_noregex():
     S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
         [4, 3, 5, 1, 0], name='A')
     check_func(test_impl, (S,))
+
+def test_find():
+    def test_impl(S):
+        return S.str.find('AB')
+
+    S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
+        [4, 3, 5, 1, 0], name='A')
+    check_func(test_impl, (S,), check_dtype=False)
 
 def test_center():
     def test_impl(S):
