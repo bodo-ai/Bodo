@@ -424,6 +424,32 @@ def overload_str_method_rjust(S_str, width, fillchar=' '):
         return bodo.hiframes.api.init_series(out_arr, index, name)
     return impl
 
+@overload_method(SeriesStrMethodType, 'zfill')
+def overload_str_method_zfill(S_str, width):
+    def impl(S_str, width, fillchar=' '):
+        S = S_str._obj
+        str_arr = bodo.hiframes.api.get_series_data(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        numba.parfor.init_prange()
+        l = len(str_arr)
+        num_chars = 0
+        for i in numba.parfor.internal_prange(l):
+            if bodo.hiframes.api.isna(str_arr, i):
+                s = 0
+            else:
+                s = bodo.libs.str_arr_ext.get_utf8_size(str_arr[i].rjust(width, fillchar))
+            num_chars+=s
+        out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
+        for j in numba.parfor.internal_prange(l):
+            if bodo.hiframes.api.isna(str_arr, j):
+                out_arr[j] = ''
+                bodo.ir.join.setitem_arr_nan(out_arr, j)
+            else:
+                out_arr[j] = str_arr[j].zfill(width)
+        return bodo.hiframes.api.init_series(out_arr, index, name)
+    return impl
+
 
 @overload_method(SeriesStrMethodType, 'startswith')
 def overload_str_method_startswith(S_str, pat, na=np.nan):
