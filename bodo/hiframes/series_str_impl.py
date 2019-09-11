@@ -471,6 +471,30 @@ def overload_str_method_endswith(S_str, pat, na=np.nan):
             index, name)
     return impl
 
+@overload_method(SeriesStrMethodType, 'isupper')
+def overload_str_method_isupper(S_str):
+    def impl(S_str):
+        S = S_str._obj
+        str_arr = bodo.hiframes.api.get_series_data(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        numba.parfor.init_prange()
+        l = len(str_arr)
+        nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
+        out_arr = np.empty(l, dtype=np.bool_)
+        for i in numba.parfor.internal_prange(l):
+            if bodo.hiframes.api.isna(str_arr, i):
+                out_arr[i] = False
+                bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 0)
+            else:
+                out_arr[i] = str_arr[i].isupper()
+                bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
+        return bodo.hiframes.api.init_series(
+            bodo.libs.bool_arr_ext.init_bool_array(out_arr,nulls),
+            index, name)
+    return impl
+
+
 
 
 def create_str2str_methods_overload(func_name):

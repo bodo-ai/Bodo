@@ -122,3 +122,11 @@ def test_endswith():
     S = pd.Series(['AB', 'ABB', 'BAAB', 'C,ABB, D', np.nan],
         [3, 5, 1, 0, 2], name='A')
     check_func(test_impl, (S,))
+
+def test_isupper():
+    def test_impl(S):
+        return S.str.isupper()
+
+    S = pd.Series(['AB', 'ABb', 'abab', 'C,ABB, D', np.nan],
+        [3, 5, 1, 0, 2], name='A')
+    check_func(test_impl, (S,))
