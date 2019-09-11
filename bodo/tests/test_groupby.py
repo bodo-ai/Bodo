@@ -6,7 +6,7 @@ import numba
 import bodo
 from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
                             count_parfor_OneDs, count_array_OneDs, dist_IR_contains,
-                            get_start_end)
+                            get_start_end, check_func)
 import pytest
 
 
@@ -109,6 +109,14 @@ def test_agg_multi_udf_parallel(test_df):
     assert bodo_func(test_df[start:end]) == impl(test_df)
     assert count_array_REPs() == 0
     assert count_parfor_REPs() == 0
+
+
+def test_groupby_cumsum(test_df):
+    def impl(df):
+        df2 = df.groupby('A')['B'].cumsum()
+        return df2
+
+    check_func(impl, (test_df,), False)
 
 
 class TestGroupBy(unittest.TestCase):

@@ -46,6 +46,9 @@ supported_agg_funcs = ['sum', 'count', 'mean',
 
 def get_agg_func(func_ir, func_name, rhs):
     from bodo.hiframes.series_kernels import series_replace_funcs
+    # TODO: cumprod etc.
+    if func_name == 'cumsum':
+        return func_name
     if func_name == 'var':
         return _column_var_impl_linear
     if func_name == 'std':
@@ -529,27 +532,34 @@ def agg_distributed_run(agg_node, array_dists, typemap, calltypes, typingctx, ta
     pivot_typ = types.none if agg_node.pivot_arr is None else typemap[agg_node.pivot_arr.name]
     arg_typs = tuple(key_typs + in_col_typs + (pivot_typ,))
 
-    agg_func_struct = get_agg_func_struct(
-        agg_node.agg_func, in_col_typs, out_col_typs, typingctx, targetctx,
-        pivot_typ, agg_node.pivot_values, agg_node.is_crosstab)
+    kind = "transform" if agg_node.agg_func == 'cumsum' else "aggregate"
 
     return_key = agg_node.out_key_vars is not None
     out_typs = [t.dtype for t in out_col_typs]
 
-    top_level_func = gen_top_level_agg_func(
-        agg_node.key_names, return_key, agg_func_struct.var_typs, out_typs,
-        agg_node.df_in_vars.keys(), agg_node.df_out_vars.keys(), parallel)
+    glbs = {'bodo': bodo, 'np': np, 'dt64_dtype': np.dtype('datetime64[ns]')}
+
+    if kind == 'transform':
+        top_level_func = gen_top_level_transform_func(agg_node.key_names,
+            agg_node.df_in_vars.keys(), agg_node.df_out_vars.keys(), parallel)
+        glbs.update({'group_cumsum': group_cumsum})
+    else:
+        agg_func_struct = get_agg_func_struct(
+            agg_node.agg_func, in_col_typs, out_col_typs, typingctx, targetctx,
+            pivot_typ, agg_node.pivot_values, agg_node.is_crosstab)
+
+        top_level_func = gen_top_level_agg_func(
+            agg_node.key_names, return_key, agg_func_struct.var_typs, out_typs,
+            agg_node.df_in_vars.keys(), agg_node.df_out_vars.keys(), parallel)
+        glbs.update({'agg_seq_iter': agg_seq_iter,
+            'parallel_agg' : parallel_agg,
+            '__update_redvars': agg_func_struct.update_all_func,
+            '__init_func': agg_func_struct.init_func,
+            '__combine_redvars': agg_func_struct.combine_all_func,
+            '__eval_res': agg_func_struct.eval_all_func})
 
     f_block = compile_to_numba_ir(top_level_func,
-                                  {'bodo': bodo, 'np': np,
-                                  'agg_seq_iter': agg_seq_iter,
-                                  'parallel_agg' : parallel_agg,
-                                  '__update_redvars': agg_func_struct.update_all_func,
-                                  '__init_func': agg_func_struct.init_func,
-                                  '__combine_redvars': agg_func_struct.combine_all_func,
-                                  '__eval_res': agg_func_struct.eval_all_func,
-                                  'dt64_dtype': np.dtype('datetime64[ns]'),
-                                  },
+                                  glbs,
                                   typingctx, arg_typs,
                                   typemap, calltypes).blocks.popitem()[1]
 
@@ -621,11 +631,6 @@ def parallel_agg(key_arrs, data_redvar_dummy, out_dummy_tup, data_in, init_vals,
     out_arrs = agg_parallel_combine_iter(key_arrs, reduce_recvs, out_dummy_tup,
         init_vals, __combine_redvars, __eval_res, return_key, data_in, pivot_arr)
     return out_arrs
-
-    # key_arr = shuffle_meta.out_arr
-    # n_uniq_keys = len(set(key_arr))
-    # out_key = __agg_func(n_uniq_keys, 0, key_arr)
-    # return (out_key,)
 
 
 @numba.njit(no_cpython_wrapper=True)
@@ -1006,6 +1011,42 @@ def gen_top_level_agg_func(key_names, return_key, red_var_typs, out_typs,
             "out_dummy_tup, data_in, init_vals, __update_redvars, "
             "__eval_res, {}, pivot_arr)\n").format(
                 out_tup, key_args, return_key_p)
+
+    func_text += "    return ({},)\n".format(out_tup)
+
+    # print(func_text)
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    agg_top = loc_vars['agg_top']
+    return agg_top
+
+
+def gen_top_level_transform_func(key_names, in_col_names, out_col_names, parallel):
+    """create the top level transformation function by generating text
+    """
+
+    # arg names
+    in_names = tuple("in_{}".format(c) for c in in_col_names)
+    out_names = tuple("out_{}".format(c) for c in out_col_names)
+    key_args = ", ".join("key_{}".format(
+        sanitize_varname(c)) for c in key_names)
+
+    in_args = ", ".join(in_names)
+    if in_args != '':
+        in_args = ", " + in_args
+
+    func_text = "def agg_top({}{}, pivot_arr):\n".format(key_args, in_args)
+    func_text += "    data_in = ({}{})\n".format(",".join(in_names),
+        "," if len(in_names) == 1 else "")
+
+    out_tup = ", ".join(out_names)
+
+    if parallel:
+        pass  # TODO
+    else:
+        func_text += "    ({},) = group_cumsum(({},), data_in)\n".format(
+                out_tup, key_args)
 
     func_text += "    return ({},)\n".format(out_tup)
 
@@ -1799,3 +1840,40 @@ def _build_set_tup_overload(arr_tup):
             return s
         return _impl
     return _build_set_tup
+
+
+###############  transform functions like cumsum  ###########################
+
+
+# @numba.njit(no_cpython_wrapper=True)
+# def parallel_groupby_transform(key_arrs, data_in):  # pragma: no cover
+
+#     shuffle_meta = par_agg_get_shuffle_meta(
+#         key_arrs, data_redvar_dummy, init_vals)
+
+#     agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy, __update_redvars, pivot_arr)
+
+#     recvs = alltoallv_tup(key_arrs + data_redvar_dummy, shuffle_meta, key_arrs)
+
+#     return out_arrs
+
+
+# TODO: cumprod etc.
+@numba.njit(no_cpython_wrapper=True)
+def group_cumsum(key_arrs, data):  # pragma: no cover
+    n = len(key_arrs[0])
+    acc_map = dict()
+    acc_map[key_arrs[0][0]] = 0
+    zero = 0
+    # TODO: multiple outputs
+    out = empty_like_type(n, data[0])
+
+    for i in range(n):
+        k = getitem_arr_tup_single(key_arrs, i)
+        val = getitem_arr_tup_single(data, i)
+        acc = acc_map.get(k, zero)
+        acc += val
+        acc_map[k] = acc
+        out[i] = acc
+
+    return (out,)
