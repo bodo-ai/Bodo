@@ -1022,15 +1022,17 @@ def gen_top_level_agg_func(key_names, return_key, red_var_typs, out_typs,
     return agg_top
 
 
-def gen_top_level_transform_func(key_names, in_col_names, out_col_names, parallel):
+def gen_top_level_transform_func(key_names, in_col_names, out_col_names,
+                                 parallel):
     """create the top level transformation function by generating text
     """
 
     # arg names
     in_names = tuple("in_{}".format(c) for c in in_col_names)
     out_names = tuple("out_{}".format(c) for c in out_col_names)
-    key_args = ", ".join("key_{}".format(
+    key_names = tuple("key_{}".format(
         sanitize_varname(c)) for c in key_names)
+    key_args = ", ".join(key_names)
 
     in_args = ", ".join(in_names)
     if in_args != '':
@@ -1039,18 +1041,18 @@ def gen_top_level_transform_func(key_names, in_col_names, out_col_names, paralle
     func_text = "def agg_top({}{}, pivot_arr):\n".format(key_args, in_args)
     func_text += "    data_in = ({}{})\n".format(",".join(in_names),
         "," if len(in_names) == 1 else "")
+    func_text += "    key_in = ({}{})\n".format(",".join(key_names),
+        "," if len(key_names) == 1 else "")
 
     out_tup = ", ".join(out_names)
 
     if parallel:
-        pass  # TODO
-    else:
-        func_text += "    ({},) = group_cumsum(({},), data_in)\n".format(
-                out_tup, key_args)
+        # reuse join's shuffle function
+        func_text += "    key_in, data_in = bodo.ir.join.parallel_join(key_in, data_in)\n".format()
+    func_text += "    ({},) = group_cumsum(key_in, data_in)\n".format(
+            out_tup)
 
     func_text += "    return ({},)\n".format(out_tup)
-
-    # print(func_text)
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -1845,20 +1847,8 @@ def _build_set_tup_overload(arr_tup):
 ###############  transform functions like cumsum  ###########################
 
 
-# @numba.njit(no_cpython_wrapper=True)
-# def parallel_groupby_transform(key_arrs, data_in):  # pragma: no cover
-
-#     shuffle_meta = par_agg_get_shuffle_meta(
-#         key_arrs, data_redvar_dummy, init_vals)
-
-#     agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy, __update_redvars, pivot_arr)
-
-#     recvs = alltoallv_tup(key_arrs + data_redvar_dummy, shuffle_meta, key_arrs)
-
-#     return out_arrs
-
-
 # TODO: cumprod etc.
+# adapted from Pandas group_cumsum()
 @numba.njit(no_cpython_wrapper=True)
 def group_cumsum(key_arrs, data):  # pragma: no cover
     n = len(key_arrs[0])

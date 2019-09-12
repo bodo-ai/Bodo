@@ -116,7 +116,7 @@ def test_groupby_cumsum(test_df):
         df2 = df.groupby('A')['B'].cumsum()
         return df2
 
-    check_func(impl, (test_df,), False)
+    check_func(impl, (test_df,), sort_output=True)
 
 
 def test_groupby_cumsum_multi1():
@@ -126,7 +126,7 @@ def test_groupby_cumsum_multi1():
 
     df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7],
                        'C': [3,5,6,5,4,4,3]})
-    check_func(impl, (df,), False)
+    check_func(impl, (df,), sort_output=True)
 
 
 def test_groupby_cumsum_multi2():
@@ -138,7 +138,7 @@ def test_groupby_cumsum_multi2():
                        'B': [1, 2, 3, 2, 1, 1, 1],
                        'C': [3, 5, 6, 5, 4, 4, 3],
                        'D': [3.1, 1.1, 6.0, np.nan, 4.0, np.nan, 3],})
-    check_func(impl, (df,), False)
+    check_func(impl, (df,), sort_output=True)
 
 
 class TestGroupBy(unittest.TestCase):
