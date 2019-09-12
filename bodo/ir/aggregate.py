@@ -28,7 +28,7 @@ from bodo.libs.set_ext import num_total_chars_set_string, build_set
 from bodo.libs.str_arr_ext import (string_array_type, pre_alloc_string_array,
                               get_offset_ptr, get_data_ptr)
 
-from bodo.ir.join import write_send_buff, setitem_arr_tup_nan
+from bodo.ir.join import write_send_buff, setitem_arr_tup_nan, setitem_arr_nan
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.utils.shuffle import (getitem_arr_tup_single, val_to_tup,
     alltoallv_tup, finalize_shuffle_meta, update_shuffle_meta,
@@ -1879,6 +1879,8 @@ def group_cumsum(key_arrs, data):  # pragma: no cover
             continue
         k = getitem_arr_tup_single(key_arrs, i)
         val = getitem_arr_tup_single(data, i)
+        # replace NAs with zero for acc calculation
+        val = set_nan_zero_tup(data, i, val)
         if k in acc_map:
             acc = acc_map[k]
         else:
@@ -1886,6 +1888,8 @@ def group_cumsum(key_arrs, data):  # pragma: no cover
         acc = add_tup(acc, val)
         acc_map[k] = acc
         setitem_arr_tup(out, i, acc)
+        # set NA in out if data is NA
+        setitem_arr_tup_na_match(out, data, i)
 
     return out
 
@@ -1936,7 +1940,8 @@ def add_tup_overload(val1_tup, val2_tup):
     count = val1_tup.count
     func_text = "def f(val1_tup, val2_tup):\n"
     func_text += "  return {}\n".format(
-        ", ".join('val1_tup[{0}] + val2_tup[{0}]'.format(i) for i in range(count)))
+        ", ".join('val1_tup[{0}] + val2_tup[{0}]'.format(i)
+                  for i in range(count)))
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -1961,9 +1966,57 @@ def isna_tup_overload(arr_tup, ind):
     count = arr_tup.count
     func_text = "def f(arr_tup, ind):\n"
     func_text += "  return {}\n".format(
-        " or ".join('bodo.hiframes.api.isna(arr_tup[{}], ind)'.format(i) for i in range(count)))
+        " or ".join('bodo.hiframes.api.isna(arr_tup[{}], ind)'.format(i)
+                    for i in range(count)))
 
     loc_vars = {}
     exec(func_text, {'bodo': bodo}, loc_vars)
+    impl = loc_vars['f']
+    return impl
+
+
+def set_nan_zero_tup(arr_tup, ind, val):
+    return tuple((0.0 if np.isnan(arr[ind]) else val[ind]) for arr in arr_tup)
+
+
+@overload(set_nan_zero_tup)
+def set_nan_zero_tup_overload(arr_tup, ind, val):
+    """replace NAs with zero in val and return new val
+    """
+    if not isinstance(val, types.BaseTuple):
+        zero = val(0)
+        return lambda arr_tup, ind, val: \
+            zero if bodo.hiframes.api.isna(arr_tup[0], ind) else val
+
+    count = arr_tup.count
+    func_text = "def f(arr_tup, ind, val):\n"
+    func_text += "  return {}\n".format(
+        ", ".join('0 if bodo.hiframes.api.isna(arr_tup[{0}], ind) else val[{0}]'.format(i)
+                    for i in range(count)))
+
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo}, loc_vars)
+    impl = loc_vars['f']
+    return impl
+
+
+def setitem_arr_tup_na_match(arr_tup1, arr_tup2, ind):
+    pass
+
+
+@overload(setitem_arr_tup_na_match)
+def setitem_arr_tup_na_match_overload(arr_tup1, arr_tup2, ind):
+    """set NA in arr_tup1[ind] if arr_tup2[2] is NA
+    """
+
+    count = arr_tup1.count
+    func_text = "def f(arr_tup1, arr_tup2, ind):\n"
+    for i in range(count):
+        func_text += "  if bodo.hiframes.api.isna(arr_tup2[{}], ind):\n".format(i)
+        func_text += "    setitem_arr_nan(arr_tup1[{}], ind)\n".format(i)
+
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo, 'setitem_arr_nan': setitem_arr_nan},
+         loc_vars)
     impl = loc_vars['f']
     return impl
