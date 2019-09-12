@@ -505,6 +505,7 @@ GroupBy
 
 * :meth:`GroupBy.aggregate` same as `agg`.
 * :meth:`GroupBy.count`
+* :meth:`GroupBy.cumsum`
 * :meth:`GroupBy.max`
 * :meth:`GroupBy.mean`
 * :meth:`GroupBy.median`
