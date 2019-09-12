@@ -29,7 +29,7 @@ from bodo.libs.str_arr_ext import (string_array_type, pre_alloc_string_array,
                               get_offset_ptr, get_data_ptr)
 
 from bodo.ir.join import write_send_buff
-from bodo.libs.timsort import getitem_arr_tup
+from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.utils.shuffle import (getitem_arr_tup_single, val_to_tup,
     alltoallv_tup, finalize_shuffle_meta, update_shuffle_meta,
     alloc_pre_shuffle_metadata, _get_keys_tup, _get_data_tup)
@@ -1862,18 +1862,79 @@ def _build_set_tup_overload(arr_tup):
 @numba.njit(no_cpython_wrapper=True)
 def group_cumsum(key_arrs, data):  # pragma: no cover
     n = len(key_arrs[0])
+    out = alloc_arr_tup(n, data)
+    if n == 0:
+        return out
+
     acc_map = dict()
-    acc_map[key_arrs[0][0]] = 0
-    zero = 0
+    # extra assign to help with type inference
+    zero = get_zero_tup(data)
+    acc_map[getitem_arr_tup_single(key_arrs, 0)] = zero
     # TODO: multiple outputs
-    out = empty_like_type(n, data[0])
 
     for i in range(n):
         k = getitem_arr_tup_single(key_arrs, i)
         val = getitem_arr_tup_single(data, i)
-        acc = acc_map.get(k, zero)
-        acc += val
+        if k in acc_map:
+            acc = acc_map[k]
+        else:
+            acc = zero
+        acc = add_tup(acc, val)
         acc_map[k] = acc
-        out[i] = acc
+        setitem_arr_tup(out, i, acc)
 
-    return (out,)
+    return out
+
+
+def get_zero_tup(arr_tup):
+    zeros = []
+    for in_arr in arr_tup:
+        zeros.append(in_arr.dtype(0))
+    return tuple(zeros)
+
+
+@overload(get_zero_tup)
+def get_zero_tup_overload(data):
+    """get a tuple of zeros matching the data types of data (tuple of arrays)
+    tuple of single array returns a single value
+    """
+    count = data.count
+    if count == 1:
+        zero = data.types[0].dtype(0)
+        return lambda data: zero
+
+    zeros = {'z{}'.format(i): data.types[i].dtype(0) for i in range(count)}
+
+    func_text = "def f(data):\n"
+    func_text += "  return {}\n".format(
+        ", ".join('z{}'.format(i) for i in range(count)))
+
+    loc_vars = {}
+    exec(func_text, zeros, loc_vars)
+    impl = loc_vars['f']
+    return impl
+
+
+def add_tup(val1_tup, val2_tup):
+    out = []
+    for v1, v2 in zip(val1_tup, val2_tup):
+        out.append(v1 + v2)
+    return tuple(out)
+
+
+@overload(add_tup)
+def add_tup_overload(val1_tup, val2_tup):
+    """add two tuples element-wise
+    """
+    if not isinstance(val1_tup, types.BaseTuple):
+        return lambda val1_tup, val2_tup: val1_tup + val2_tup
+
+    count = val1_tup.count
+    func_text = "def f(val1_tup, val2_tup):\n"
+    func_text += "  return {}\n".format(
+        ", ".join('val1_tup[{0}] + val2_tup[{0}]'.format(i) for i in range(count)))
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars['f']
+    return impl
