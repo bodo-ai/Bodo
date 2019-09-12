@@ -28,6 +28,7 @@ def test_split():
     # TODO: support distributed
     check_func(test_impl, (S,), False)
 
+
 def test_get():
     def test_impl(S):
         B = S.str.split(',')
@@ -75,6 +76,7 @@ def test_contains_noregex():
         [4, 3, 5, 1, 0], name='A')
     check_func(test_impl, (S,))
 
+
 def test_find():
     def test_impl(S):
         return S.str.find('AB')
@@ -82,6 +84,7 @@ def test_find():
     S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
         [4, 3, 5, 1, 0], name='A')
     check_func(test_impl, (S,), check_dtype=False)
+
 
 def test_center():
     def test_impl(S):
@@ -91,21 +94,24 @@ def test_center():
         [3, 5, 1, 0, 2], name='A')
     check_func(test_impl, (S,))
 
+
 def test_ljust():
     def test_impl(S):
-        return S.str.ljust(5,'*')
+        return S.str.ljust(5, '*')
 
     S = pd.Series(['ABCDDC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
         [3, 5, 1, 0, 2], name='A')
     check_func(test_impl, (S,))
+
 
 def test_rjust():
     def test_impl(S):
-        return S.str.rjust(5,'*')
+        return S.str.rjust(5, '*')
 
     S = pd.Series(['ABCDDC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
         [3, 5, 1, 0, 2], name='A')
     check_func(test_impl, (S,))
+
 
 def test_zfill():
     def test_impl(S):
@@ -115,6 +121,7 @@ def test_zfill():
         [3, 5, 1, 0, 2], name='A')
     check_func(test_impl, (S,))
 
+
 def test_startswith():
     def test_impl(S):
         return S.str.startswith("AB")
@@ -122,6 +129,7 @@ def test_startswith():
     S = pd.Series(['ABCC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
         [3, 5, 1, 0, 2], name='A')
     check_func(test_impl, (S,))
+
 
 def test_endswith():
     def test_impl(S):
@@ -131,6 +139,7 @@ def test_endswith():
         [3, 5, 1, 0, 2], name='A')
     check_func(test_impl, (S,))
 
+
 def test_isupper():
     def test_impl(S):
         return S.str.isupper()
@@ -138,3 +147,4 @@ def test_isupper():
     S = pd.Series(['AB', 'ABb', 'abab', 'C,ABB, D', np.nan],
         [3, 5, 1, 0, 2], name='A')
     check_func(test_impl, (S,))
+    
