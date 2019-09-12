@@ -28,7 +28,7 @@ from bodo.libs.set_ext import num_total_chars_set_string, build_set
 from bodo.libs.str_arr_ext import (string_array_type, pre_alloc_string_array,
                               get_offset_ptr, get_data_ptr)
 
-from bodo.ir.join import write_send_buff
+from bodo.ir.join import write_send_buff, setitem_arr_tup_nan
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.utils.shuffle import (getitem_arr_tup_single, val_to_tup,
     alltoallv_tup, finalize_shuffle_meta, update_shuffle_meta,
@@ -1873,6 +1873,10 @@ def group_cumsum(key_arrs, data):  # pragma: no cover
     # TODO: multiple outputs
 
     for i in range(n):
+        if isna_tup(key_arrs, i):
+            # group_cumsum stores -1 for int arrays in location of NAs
+            setitem_arr_tup_nan(out, i, -1)
+            continue
         k = getitem_arr_tup_single(key_arrs, i)
         val = getitem_arr_tup_single(data, i)
         if k in acc_map:
@@ -1936,5 +1940,30 @@ def add_tup_overload(val1_tup, val2_tup):
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
+    impl = loc_vars['f']
+    return impl
+
+
+def isna_tup(arr_tup, ind):
+    for arr in arr_tup:
+        if np.isnan(arr[ind]):
+            return True
+    return False
+
+
+@overload(isna_tup)
+def isna_tup_overload(arr_tup, ind):
+    """return True if any array value is NA
+    """
+    if not isinstance(arr_tup, types.BaseTuple):
+        return lambda arr_tup, ind: bodo.hiframes.api.isna(arr_tup, ind)
+
+    count = arr_tup.count
+    func_text = "def f(arr_tup, ind):\n"
+    func_text += "  return {}\n".format(
+        " or ".join('bodo.hiframes.api.isna(arr_tup[{}], ind)'.format(i) for i in range(count)))
+
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo}, loc_vars)
     impl = loc_vars['f']
     return impl
