@@ -28,8 +28,8 @@ from bodo.libs.set_ext import num_total_chars_set_string, build_set
 from bodo.libs.str_arr_ext import (string_array_type, pre_alloc_string_array,
                               get_offset_ptr, get_data_ptr)
 
-from bodo.ir.join import write_send_buff
-from bodo.libs.timsort import getitem_arr_tup
+from bodo.ir.join import write_send_buff, setitem_arr_tup_nan, setitem_arr_nan
+from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.utils.shuffle import (getitem_arr_tup_single, val_to_tup,
     alltoallv_tup, finalize_shuffle_meta, update_shuffle_meta,
     alloc_pre_shuffle_metadata, _get_keys_tup, _get_data_tup)
@@ -46,6 +46,9 @@ supported_agg_funcs = ['sum', 'count', 'mean',
 
 def get_agg_func(func_ir, func_name, rhs):
     from bodo.hiframes.series_kernels import series_replace_funcs
+    # TODO: cumprod etc.
+    if func_name == 'cumsum':
+        return func_name
     if func_name == 'var':
         return _column_var_impl_linear
     if func_name == 'std':
@@ -529,27 +532,34 @@ def agg_distributed_run(agg_node, array_dists, typemap, calltypes, typingctx, ta
     pivot_typ = types.none if agg_node.pivot_arr is None else typemap[agg_node.pivot_arr.name]
     arg_typs = tuple(key_typs + in_col_typs + (pivot_typ,))
 
-    agg_func_struct = get_agg_func_struct(
-        agg_node.agg_func, in_col_typs, out_col_typs, typingctx, targetctx,
-        pivot_typ, agg_node.pivot_values, agg_node.is_crosstab)
+    kind = "transform" if agg_node.agg_func == 'cumsum' else "aggregate"
 
     return_key = agg_node.out_key_vars is not None
     out_typs = [t.dtype for t in out_col_typs]
 
-    top_level_func = gen_top_level_agg_func(
-        agg_node.key_names, return_key, agg_func_struct.var_typs, out_typs,
-        agg_node.df_in_vars.keys(), agg_node.df_out_vars.keys(), parallel)
+    glbs = {'bodo': bodo, 'np': np, 'dt64_dtype': np.dtype('datetime64[ns]')}
+
+    if kind == 'transform':
+        top_level_func = gen_top_level_transform_func(agg_node.key_names,
+            agg_node.df_in_vars.keys(), agg_node.df_out_vars.keys(), parallel)
+        glbs.update({'group_cumsum': group_cumsum})
+    else:
+        agg_func_struct = get_agg_func_struct(
+            agg_node.agg_func, in_col_typs, out_col_typs, typingctx, targetctx,
+            pivot_typ, agg_node.pivot_values, agg_node.is_crosstab)
+
+        top_level_func = gen_top_level_agg_func(
+            agg_node.key_names, return_key, agg_func_struct.var_typs, out_typs,
+            agg_node.df_in_vars.keys(), agg_node.df_out_vars.keys(), parallel)
+        glbs.update({'agg_seq_iter': agg_seq_iter,
+            'parallel_agg' : parallel_agg,
+            '__update_redvars': agg_func_struct.update_all_func,
+            '__init_func': agg_func_struct.init_func,
+            '__combine_redvars': agg_func_struct.combine_all_func,
+            '__eval_res': agg_func_struct.eval_all_func})
 
     f_block = compile_to_numba_ir(top_level_func,
-                                  {'bodo': bodo, 'np': np,
-                                  'agg_seq_iter': agg_seq_iter,
-                                  'parallel_agg' : parallel_agg,
-                                  '__update_redvars': agg_func_struct.update_all_func,
-                                  '__init_func': agg_func_struct.init_func,
-                                  '__combine_redvars': agg_func_struct.combine_all_func,
-                                  '__eval_res': agg_func_struct.eval_all_func,
-                                  'dt64_dtype': np.dtype('datetime64[ns]'),
-                                  },
+                                  glbs,
                                   typingctx, arg_typs,
                                   typemap, calltypes).blocks.popitem()[1]
 
@@ -621,11 +631,6 @@ def parallel_agg(key_arrs, data_redvar_dummy, out_dummy_tup, data_in, init_vals,
     out_arrs = agg_parallel_combine_iter(key_arrs, reduce_recvs, out_dummy_tup,
         init_vals, __combine_redvars, __eval_res, return_key, data_in, pivot_arr)
     return out_arrs
-
-    # key_arr = shuffle_meta.out_arr
-    # n_uniq_keys = len(set(key_arr))
-    # out_key = __agg_func(n_uniq_keys, 0, key_arr)
-    # return (out_key,)
 
 
 @numba.njit(no_cpython_wrapper=True)
@@ -1010,6 +1015,44 @@ def gen_top_level_agg_func(key_names, return_key, red_var_typs, out_typs,
     func_text += "    return ({},)\n".format(out_tup)
 
     # print(func_text)
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    agg_top = loc_vars['agg_top']
+    return agg_top
+
+
+def gen_top_level_transform_func(key_names, in_col_names, out_col_names,
+                                 parallel):
+    """create the top level transformation function by generating text
+    """
+
+    # arg names
+    in_names = tuple("in_{}".format(c) for c in in_col_names)
+    out_names = tuple("out_{}".format(c) for c in out_col_names)
+    key_names = tuple("key_{}".format(
+        sanitize_varname(c)) for c in key_names)
+    key_args = ", ".join(key_names)
+
+    in_args = ", ".join(in_names)
+    if in_args != '':
+        in_args = ", " + in_args
+
+    func_text = "def agg_top({}{}, pivot_arr):\n".format(key_args, in_args)
+    func_text += "    data_in = ({}{})\n".format(",".join(in_names),
+        "," if len(in_names) == 1 else "")
+    func_text += "    key_in = ({}{})\n".format(",".join(key_names),
+        "," if len(key_names) == 1 else "")
+
+    out_tup = ", ".join(out_names)
+
+    if parallel:
+        # reuse join's shuffle function
+        func_text += "    key_in, data_in = bodo.ir.join.parallel_join(key_in, data_in)\n".format()
+    func_text += "    ({},) = group_cumsum(key_in, data_in)\n".format(
+            out_tup)
+
+    func_text += "    return ({},)\n".format(out_tup)
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -1799,3 +1842,171 @@ def _build_set_tup_overload(arr_tup):
             return s
         return _impl
     return _build_set_tup
+
+
+###############  transform functions like cumsum  ###########################
+
+
+# TODO: cumprod etc.
+# adapted from Pandas group_cumsum()
+@numba.njit(no_cpython_wrapper=True)
+def group_cumsum(key_arrs, data):  # pragma: no cover
+    n = len(key_arrs[0])
+    out = alloc_arr_tup(n, data)
+    if n == 0:
+        return out
+
+    acc_map = dict()
+    # extra assign to help with type inference
+    zero = get_zero_tup(data)
+    acc_map[getitem_arr_tup_single(key_arrs, 0)] = zero
+    # TODO: multiple outputs
+
+    for i in range(n):
+        if isna_tup(key_arrs, i):
+            # group_cumsum stores -1 for int arrays in location of NAs
+            setitem_arr_tup_nan(out, i, -1)
+            continue
+        k = getitem_arr_tup_single(key_arrs, i)
+        val = getitem_arr_tup_single(data, i)
+        # replace NAs with zero for acc calculation
+        val = set_nan_zero_tup(data, i, val)
+        if k in acc_map:
+            acc = acc_map[k]
+        else:
+            acc = zero
+        acc = add_tup(acc, val)
+        acc_map[k] = acc
+        setitem_arr_tup(out, i, acc)
+        # set NA in out if data is NA
+        setitem_arr_tup_na_match(out, data, i)
+
+    return out
+
+
+def get_zero_tup(arr_tup):
+    zeros = []
+    for in_arr in arr_tup:
+        zeros.append(in_arr.dtype(0))
+    return tuple(zeros)
+
+
+@overload(get_zero_tup)
+def get_zero_tup_overload(data):
+    """get a tuple of zeros matching the data types of data (tuple of arrays)
+    tuple of single array returns a single value
+    """
+    count = data.count
+    if count == 1:
+        zero = data.types[0].dtype(0)
+        return lambda data: zero
+
+    zeros = {'z{}'.format(i): data.types[i].dtype(0) for i in range(count)}
+
+    func_text = "def f(data):\n"
+    func_text += "  return {}\n".format(
+        ", ".join('z{}'.format(i) for i in range(count)))
+
+    loc_vars = {}
+    exec(func_text, zeros, loc_vars)
+    impl = loc_vars['f']
+    return impl
+
+
+def add_tup(val1_tup, val2_tup):
+    out = []
+    for v1, v2 in zip(val1_tup, val2_tup):
+        out.append(v1 + v2)
+    return tuple(out)
+
+
+@overload(add_tup)
+def add_tup_overload(val1_tup, val2_tup):
+    """add two tuples element-wise
+    """
+    if not isinstance(val1_tup, types.BaseTuple):
+        return lambda val1_tup, val2_tup: val1_tup + val2_tup
+
+    count = val1_tup.count
+    func_text = "def f(val1_tup, val2_tup):\n"
+    func_text += "  return {}\n".format(
+        ", ".join('val1_tup[{0}] + val2_tup[{0}]'.format(i)
+                  for i in range(count)))
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars['f']
+    return impl
+
+
+def isna_tup(arr_tup, ind):
+    for arr in arr_tup:
+        if np.isnan(arr[ind]):
+            return True
+    return False
+
+
+@overload(isna_tup)
+def isna_tup_overload(arr_tup, ind):
+    """return True if any array value is NA
+    """
+    if not isinstance(arr_tup, types.BaseTuple):
+        return lambda arr_tup, ind: bodo.hiframes.api.isna(arr_tup, ind)
+
+    count = arr_tup.count
+    func_text = "def f(arr_tup, ind):\n"
+    func_text += "  return {}\n".format(
+        " or ".join('bodo.hiframes.api.isna(arr_tup[{}], ind)'.format(i)
+                    for i in range(count)))
+
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo}, loc_vars)
+    impl = loc_vars['f']
+    return impl
+
+
+def set_nan_zero_tup(arr_tup, ind, val):
+    return tuple((0.0 if np.isnan(arr[ind]) else val[ind]) for arr in arr_tup)
+
+
+@overload(set_nan_zero_tup)
+def set_nan_zero_tup_overload(arr_tup, ind, val):
+    """replace NAs with zero in val and return new val
+    """
+    if not isinstance(val, types.BaseTuple):
+        zero = val(0)
+        return lambda arr_tup, ind, val: \
+            zero if bodo.hiframes.api.isna(arr_tup[0], ind) else val
+
+    count = arr_tup.count
+    func_text = "def f(arr_tup, ind, val):\n"
+    func_text += "  return {}\n".format(
+        ", ".join('0 if bodo.hiframes.api.isna(arr_tup[{0}], ind) else val[{0}]'.format(i)
+                    for i in range(count)))
+
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo}, loc_vars)
+    impl = loc_vars['f']
+    return impl
+
+
+def setitem_arr_tup_na_match(arr_tup1, arr_tup2, ind):
+    pass
+
+
+@overload(setitem_arr_tup_na_match)
+def setitem_arr_tup_na_match_overload(arr_tup1, arr_tup2, ind):
+    """set NA in arr_tup1[ind] if arr_tup2[2] is NA
+    """
+
+    count = arr_tup1.count
+    func_text = "def f(arr_tup1, arr_tup2, ind):\n"
+    for i in range(count):
+        func_text += "  if bodo.hiframes.api.isna(arr_tup2[{}], ind):\n".format(i)
+        func_text += "    setitem_arr_nan(arr_tup1[{}], ind)\n".format(i)
+
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo, 'setitem_arr_nan': setitem_arr_nan},
+         loc_vars)
+    impl = loc_vars['f']
+    return impl

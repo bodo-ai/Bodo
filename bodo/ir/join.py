@@ -1129,38 +1129,38 @@ def local_merge_asof(left_keys, right_keys, data_left, data_right):
     return out_left_keys, out_right_keys, out_data_left, out_data_right
 
 
-def setitem_arr_nan(arr, ind):
+def setitem_arr_nan(arr, ind, int_nan_const=0):
     arr[ind] = np.nan
 
 
 @overload(setitem_arr_nan)
-def setitem_arr_nan_overload(arr, ind):
+def setitem_arr_nan_overload(arr, ind, int_nan_const=0):
     if isinstance(arr.dtype, types.Float):
         return setitem_arr_nan
 
     if isinstance(arr.dtype, (types.NPDatetime, types.NPTimedelta)):
         nat = arr.dtype('NaT')
-        def _setnan_impl(arr, ind):
+        def _setnan_impl(arr, ind, int_nan_const=0):
             arr[ind] = nat
         return _setnan_impl
 
     if arr == string_array_type:
-        return lambda arr, ind: str_arr_set_na(arr, ind)
+        return lambda arr, ind, int_nan_const=0: str_arr_set_na(arr, ind)
 
     if isinstance(arr, IntegerArrayType) or arr == boolean_array:
-        lambda arr, ind: bodo.libs.int_arr_ext.set_bit_to_arr(
+        return lambda arr, ind, int_nan_const=0: bodo.libs.int_arr_ext.set_bit_to_arr(
                         arr._null_bitmap, ind, 0)
 
     # TODO: support strings, bools, etc.
     # XXX: set NA values in bool arrays to False
     # FIXME: replace with proper NaN
     if arr.dtype == types.bool_:
-        def b_set(arr, ind):
+        def b_set(arr, ind, int_nan_const=0):
             arr[ind] = False
         return b_set
 
     if isinstance(arr, CategoricalArray):
-        def setitem_arr_nan_cat(arr, ind):
+        def setitem_arr_nan_cat(arr, ind, int_nan_const=0):
             int_arr = bodo.hiframes.pd_categorical_ext.cat_array_to_int(arr)
             int_arr[ind] = -1
         return setitem_arr_nan_cat
@@ -1168,25 +1168,25 @@ def setitem_arr_nan_overload(arr, ind):
     # XXX set integer NA to 0 to avoid unexpected errors
     # TODO: convert integer to float if nan
     if isinstance(arr.dtype, types.Integer):
-        def setitem_arr_nan_int(arr, ind):
-            arr[ind] = 0
+        def setitem_arr_nan_int(arr, ind, int_nan_const=0):
+            arr[ind] = int_nan_const
         return setitem_arr_nan_int
 
-    return lambda arr, ind: None
+    return lambda arr, ind, int_nan_const: None
 
 
-def setitem_arr_tup_nan(arr_tup, ind):  # pragma: no cover
+def setitem_arr_tup_nan(arr_tup, ind, int_nan_const=0):  # pragma: no cover
     for arr in arr_tup:
         arr[ind] = np.nan
 
 
 @overload(setitem_arr_tup_nan)
-def setitem_arr_tup_nan_overload(arr_tup, ind):
+def setitem_arr_tup_nan_overload(arr_tup, ind, int_nan_const=0):
     count = arr_tup.count
 
-    func_text = "def f(arr_tup, ind):\n"
+    func_text = "def f(arr_tup, ind, int_nan_const=0):\n"
     for i in range(count):
-        func_text += "  setitem_arr_nan(arr_tup[{}], ind)\n".format(i)
+        func_text += "  setitem_arr_nan(arr_tup[{}], ind, int_nan_const)\n".format(i)
     func_text += "  return\n"
 
     loc_vars = {}

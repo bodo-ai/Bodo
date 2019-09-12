@@ -116,6 +116,7 @@ class GetItemDataFrameGroupBy2(AbstractTemplate):
                 grpby.df_type, grpby.keys, selection, grpby.as_index, True)
             return signature(ret_grp, *args)
 
+
 @infer_getattr
 class DataframeGroupByAttribute(AttributeTemplate):
     key = DataFrameGroupByType
@@ -224,6 +225,25 @@ class DataframeGroupByAttribute(AttributeTemplate):
     def resolve_std(self, grp, args, kws):
         func = get_agg_func(None, 'std', None)
         return self._get_agg_typ(grp, args, func.__code__)
+
+    # TODO: cumprod etc.
+    @bound_function("groupby.cumsum")
+    def resolve_cumsum(self, grp, args, kws):
+        index = types.none
+        out_columns = []
+        out_data = []
+        for c in grp.selection:
+            out_columns.append(c)
+            ind = grp.df_type.columns.index(c)
+            data = grp.df_type.data[ind]
+            out_data.append(data)
+        out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
+        # XXX output becomes series if single output and explicitly selected
+        if len(grp.selection) == 1 and grp.explicit_select and grp.as_index:
+            out_res = SeriesType(
+                out_data[0].dtype, data=out_data[0],
+                index=index, name_typ=bodo.string_type)
+        return signature(out_res, *args)
 
 
 # a dummy pivot_table function that will be replace in dataframe_pass

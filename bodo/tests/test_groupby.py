@@ -6,7 +6,7 @@ import numba
 import bodo
 from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
                             count_parfor_OneDs, count_array_OneDs, dist_IR_contains,
-                            get_start_end)
+                            get_start_end, check_func)
 import pytest
 
 
@@ -109,6 +109,36 @@ def test_agg_multi_udf_parallel(test_df):
     assert bodo_func(test_df[start:end]) == impl(test_df)
     assert count_array_REPs() == 0
     assert count_parfor_REPs() == 0
+
+
+def test_groupby_cumsum(test_df):
+    def impl(df):
+        df2 = df.groupby('A')['B'].cumsum()
+        return df2
+
+    check_func(impl, (test_df,), sort_output=True)
+
+
+def test_groupby_cumsum_multi1():
+    def impl(df):
+        df2 = df.groupby(['A', 'B'])['C'].cumsum()
+        return df2
+
+    df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7],
+                       'C': [3,5,6,5,4,4,3]})
+    check_func(impl, (df,), sort_output=True)
+
+
+def test_groupby_cumsum_multi2():
+    def impl(df):
+        df2 = df.groupby(['A', 'B'])['C', 'D'].cumsum()
+        return df2
+
+    df = pd.DataFrame({'A': [2.0, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],
+                       'B': [1, 2, 3, 2, 1, 1, 1],
+                       'C': [3, 5, 6, 5, 4, 4, 3],
+                       'D': [3.1, 1.1, 6.0, np.nan, 4.0, np.nan, 3],})
+    check_func(impl, (df,), sort_output=True)
 
 
 class TestGroupBy(unittest.TestCase):
