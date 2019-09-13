@@ -354,6 +354,10 @@ def duplicated(data, ind_arr, parallel=False):
     if parallel:
         data, (ind_arr,) = bodo.ir.join.parallel_join(data, (ind_arr,))
 
+    # XXX: convert StringArray to list of strings due to strange error with set
+    # TODO: debug StringArray issue on test_df_duplicated with multiple pes
+    data = bodo.libs.str_arr_ext.to_string_list(data)
+
     n = len(data[0])
     out = np.empty(n, np.bool_)
     uniqs = set()
