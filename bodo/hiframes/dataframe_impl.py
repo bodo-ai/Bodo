@@ -563,6 +563,21 @@ def overload_dataframe_duplicated(df, subset=None, keep='first'):
     return impl
 
 
+@overload_method(DataFrameType, 'drop_duplicates')
+def overload_dataframe_drop_duplicates(df, subset=None, keep='first',
+                                       inplace=False):
+    # TODO: support inplace, subset and first
+    if not is_overload_none(subset):
+        raise ValueError("drop_duplicates() subset argument not supported yet")
+
+    if is_overload_true(inplace):
+        raise ValueError("drop_duplicates() inplace argument not supported yet")
+
+    def impl(df, subset=None, keep='first', inplace=False):
+        return df[~df.duplicated()]
+    return impl
+
+
 def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
     if index is None:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"

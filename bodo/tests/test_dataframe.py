@@ -596,6 +596,22 @@ def test_df_duplicated():
     df = pd.DataFrame({'A': ['A', 'B', 'A', 'B', 'C'],
         'B': ['F', 'E', 'F', 'S', 'C']})
     check_func(impl, (df,), False)
+    df = pd.DataFrame({'A': [1, 3, 1, 2, 3],
+        'B': ['F', 'E', 'F', 'S', 'C']}, index=[3, 1, 2, 4, 6])
+    check_func(impl, (df,), False)
+
+
+def test_df_drop_duplicates():
+
+    def impl(df):
+        return df.drop_duplicates()
+
+    df = pd.DataFrame({'A': ['A', 'B', 'A', 'B', 'C'],
+        'B': ['F', 'E', 'F', 'S', 'C']})
+    check_func(impl, (df,), False)
+    df = pd.DataFrame({'A': [1, 3, 1, 2, 3],
+        'B': ['F', 'E', 'F', 'S', 'C']}, index=[3, 1, 2, 4, 6])
+    check_func(impl, (df,), False)
 
 
 def _gen_df_str(n):
