@@ -532,6 +532,13 @@ class DistributedPass(object):
             f = lambda arr: bodo.libs.array_kernels.median(arr, True)
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
+        if fdef == ('duplicated', 'bodo.libs.array_kernels') and (
+                self._is_1D_tup(rhs.args[0].name)
+                    or self._is_1D_Var_tup(rhs.args[0].name)):
+            f = lambda arr, ind_arr: bodo.libs.array_kernels.duplicated(
+                arr, ind_arr, True)
+            return compile_func_single_block(f, rhs.args, assign.target, self)
+
         if fdef == ('convert_rec_to_tup', 'bodo.hiframes.api'):
             # optimize Series back to back map pattern with tuples
             # TODO: create another optimization pass?
@@ -2112,6 +2119,16 @@ class DistributedPass(object):
         # they are not in dists list
         return (arr_name in self._dist_analysis.array_dists and
                 self._dist_analysis.array_dists[arr_name] == Distribution.OneD_Var)
+
+    def _is_1D_tup(self, var_name):
+        return (var_name in self._dist_analysis.array_dists and
+                all(a == Distribution.OneD
+                    for a in self._dist_analysis.array_dists[var_name]))
+
+    def _is_1D_Var_tup(self, var_name):
+        return (var_name in self._dist_analysis.array_dists and
+                all(a == Distribution.OneD_Var
+                    for a in self._dist_analysis.array_dists[var_name]))
 
     def _is_REP(self, arr_name):
         return (arr_name not in self._dist_analysis.array_dists or

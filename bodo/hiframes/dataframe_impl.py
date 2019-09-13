@@ -552,10 +552,11 @@ def overload_dataframe_duplicated(df, subset=None, keep='first'):
     func_text = "def impl(df, subset=None, keep='first'):\n"
     for i in range(n_cols):
         func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(i)
-    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
-    func_text += "  duplicated = bodo.libs.array_kernels.duplicated(({},))\n".format(
-        ", ".join("data_{}".format(i) for i in range(n_cols)))
-    func_text += "  return bodo.hiframes.api.init_series(duplicated, {})\n".format(index)
+    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))"
+    func_text += "  duplicated, index_arr = bodo.libs.array_kernels.duplicated(({},), {})\n".format(
+        ", ".join("data_{}".format(i) for i in range(n_cols)), index)
+    func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
+    func_text += "  return bodo.hiframes.api.init_series(duplicated, index)\n"
     # print(func_text)
     loc_vars = {}
     exec(func_text, {'bodo': bodo}, loc_vars)

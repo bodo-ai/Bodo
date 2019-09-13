@@ -521,6 +521,19 @@ class DistributedAnalysis(object):
             self._set_var_dist(lhs, array_dists, Distribution.REP)
             return
 
+        if fdef == ('duplicated', 'bodo.libs.array_kernels'):
+            arg_dist = min(a.value for a in array_dists[rhs.args[0].name])
+            lhs_dist = arg_dist
+            if lhs in array_dists:
+                lhs_dist = min(a.value for a in array_dists[lhs])
+            new_dist = Distribution(min(array_dists[rhs.args[1].name].value,
+                arg_dist, lhs_dist))
+            array_dists[lhs] = [new_dist for _ in range(len(self.typemap[lhs]))]
+            array_dists[rhs.args[0].name] = [new_dist
+                for _ in range(len(array_dists[rhs.args[0].name]))]
+            array_dists[rhs.args[1].name] = new_dist
+            return
+
         if fdef == ('nancorr', 'bodo.libs.array_kernels'):
             array_dists[lhs] = Distribution.REP
             return
@@ -1144,7 +1157,7 @@ class DistributedAnalysis(object):
             self._set_var_dist(arr2, array_dists, top_dist, False)
 
         if is_distributable_tuple_typ(typ1):
-            assert typ1 == typ2
+            assert len(typ1) == len(typ2)
             dist1 = array_dists[arr1]
             dist2 = array_dists[arr2]
             n = len(typ1)

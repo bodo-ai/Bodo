@@ -347,9 +347,13 @@ def nancorr(mat, cov=0, minpv=1, parallel=False):
 
 
 @numba.njit(no_cpython_wrapper=True)
-def duplicated(data, parallel=False):
+def duplicated(data, ind_arr, parallel=False):
     # TODO: inline for optimization?
     # TODO: handle NAs better?
+
+    if parallel:
+        data, (ind_arr,) = bodo.ir.join.parallel_join(data, (ind_arr,))
+
     n = len(data[0])
     out = np.empty(n, np.bool_)
     uniqs = set()
@@ -362,7 +366,7 @@ def duplicated(data, parallel=False):
             out[i] = False
             uniqs.add(val)
 
-    return out
+    return out, ind_arr
 
 
 # np.arange implementation is copied from parfor.py and range length
