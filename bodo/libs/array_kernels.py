@@ -19,6 +19,7 @@ import bodo
 from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType
+from bodo.utils.shuffle import getitem_arr_tup_single
 
 import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
@@ -343,6 +344,25 @@ def nancorr(mat, cov=0, minpv=1, parallel=False):
                     result[xi, yi] = result[yi, xi] = np.nan
 
     return result
+
+
+@numba.njit(no_cpython_wrapper=True)
+def duplicated(data, parallel=False):
+    # TODO: inline for optimization?
+    # TODO: handle NAs better?
+    n = len(data[0])
+    out = np.empty(n, np.bool_)
+    uniqs = set()
+
+    for i in range(n):
+        val = getitem_arr_tup_single(data, i)
+        if val in uniqs:
+            out[i] = True
+        else:
+            out[i] = False
+            uniqs.add(val)
+
+    return out
 
 
 # np.arange implementation is copied from parfor.py and range length

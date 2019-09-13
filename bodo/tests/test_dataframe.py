@@ -588,6 +588,16 @@ def test_df_set_index(df_value):
     check_func(impl, (df_value,))
 
 
+def test_df_duplicated():
+
+    def impl(df):
+        return df.duplicated()
+
+    df = pd.DataFrame({'A': ['A', 'B', 'A', 'B', 'C'],
+        'B': ['F', 'E', 'F', 'S', 'C']})
+    check_func(impl, (df,), False)
+
+
 def _gen_df_str(n):
     str_vals = []
     for _ in range(n):

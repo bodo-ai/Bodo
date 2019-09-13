@@ -541,6 +541,28 @@ def overload_dataframe_set_index(df, keys, drop=True, append=False,
     return _gen_init_df(header, columns, data_args, index)
 
 
+@overload_method(DataFrameType, 'duplicated')
+def overload_dataframe_duplicated(df, subset=None, keep='first'):
+    # TODO: support subset and first
+    if not is_overload_none(subset):
+        raise ValueError("duplicated() subset argument not supported yet")
+
+    n_cols = len(df.columns)
+
+    func_text = "def impl(df, subset=None, keep='first'):\n"
+    for i in range(n_cols):
+        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(i)
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
+    func_text += "  duplicated = bodo.libs.array_kernels.duplicated(({},))\n".format(
+        ", ".join("data_{}".format(i) for i in range(n_cols)))
+    func_text += "  return bodo.hiframes.api.init_series(duplicated, {})\n".format(index)
+    # print(func_text)
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo}, loc_vars)
+    impl = loc_vars['impl']
+    return impl
+
+
 def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
     if index is None:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
