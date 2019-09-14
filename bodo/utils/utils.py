@@ -342,7 +342,8 @@ def is_distributable_typ(var_typ):
 
 def is_distributable_tuple_typ(var_typ):
     return (isinstance(var_typ, types.BaseTuple)
-            and any(is_distributable_typ(t) for t in var_typ.types))
+            and any(is_distributable_typ(t) or is_distributable_tuple_typ(t)
+            for t in var_typ.types))
 
 
 # converts an iterable to array, similar to np.array, but can support

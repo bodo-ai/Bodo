@@ -17,6 +17,7 @@ from numba.numpy_support import as_dtype
 
 import bodo
 from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
+from bodo.libs.str_arr_ext import string_array_type, pre_alloc_string_array
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.utils.shuffle import getitem_arr_tup_single
@@ -371,6 +372,76 @@ def duplicated(data, ind_arr, parallel=False):
             uniqs.add(val)
 
     return out, ind_arr
+
+
+def drop_duplicates(data, ind_arr, parallel=False):
+    return data, ind_arr
+
+
+@overload(drop_duplicates)
+def overload_drop_duplicates(data, ind_arr, parallel=False):
+
+    # TODO: inline for optimization?
+    # TODO: handle NAs better?
+    count = len(data)
+
+    func_text = "def impl(data, ind_arr, parallel=False):\n"
+    func_text += "  if parallel:\n"
+    func_text += "    data, (ind_arr,) = bodo.ir.join.parallel_join(data, (ind_arr,))\n"
+    # XXX: convert StringArray to list of strings due to strange error with set
+    # TODO: debug StringArray issue on test_df_duplicated with multiple pes
+    func_text += "  data = bodo.libs.str_arr_ext.to_string_list(data)\n"
+    func_text += "  n = len(data[0])\n"
+    # count the numder of unique values for allocation
+    func_text += "  n_uniq = 0\n"
+    func_text += "  uniqs_i = set()\n"
+    # strings need number of characters too
+    for i in range(count):
+        if data.types[i] == string_array_type:
+            func_text += "  n_chars_{} = 0\n".format(i)
+    if ind_arr == string_array_type:
+        func_text += "  n_chars_index = 0\n"
+    func_text += "  for i in range(n):\n"
+    func_text += "    val = getitem_arr_tup_single(data, i)\n"
+    func_text += "    if val in uniqs_i:\n"
+    func_text += "      continue\n"
+    func_text += "    n_uniq += 1\n"
+    func_text += "    uniqs_i.add(val)\n"
+    for i in range(count):
+        if data.types[i] == string_array_type:
+            func_text += "    n_chars_{} += len(val{})\n".format(
+                i, "[{}]".format(i) if count > 0 else "")
+    if ind_arr == string_array_type:
+        func_text += "    n_chars_index += len(ind_arr[i])\n"
+    for i in range(count):
+        if data.types[i] == string_array_type:
+            func_text += "  out_arr_{0} = pre_alloc_string_array(n_uniq, n_chars_{0})\n".format(i)
+        else:
+            func_text += "  out_arr_{0} = bodo.utils.utils.alloc_type(n_uniq, data[{0}])\n".format(i)
+    if ind_arr == string_array_type:
+        func_text += "  out_arr_index = pre_alloc_string_array(n_uniq, n_chars_index)\n"
+    else:
+        func_text += "  out_arr_index = bodo.utils.utils.alloc_type(n_uniq, ind_arr)\n"
+    func_text += "  uniqs = set()\n"
+    func_text += "  w_ind = 0\n"
+    func_text += "  for i in range(n):\n"
+    func_text += "    val = getitem_arr_tup_single(data, i)\n"
+    func_text += "    if val in uniqs:\n"
+    func_text += "      continue\n"
+    func_text += "    uniqs.add(val)\n"
+    for i in range(count):
+        func_text += "    out_arr_{0}[w_ind] = data[{0}][i]\n".format(i)
+    func_text += "    out_arr_index[w_ind] = ind_arr[i]\n"
+    func_text += "    w_ind += 1\n"
+    func_text += "  return ({},), out_arr_index\n".format(
+        ", ".join("out_arr_{}".format(i) for i in range(count)))
+    # print(func_text)
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo,
+        'pre_alloc_string_array': pre_alloc_string_array,
+        'getitem_arr_tup_single': getitem_arr_tup_single}, loc_vars)
+    impl = loc_vars['impl']
+    return impl
 
 
 # np.arange implementation is copied from parfor.py and range length

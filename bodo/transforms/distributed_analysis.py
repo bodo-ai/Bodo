@@ -280,8 +280,8 @@ class DistributedAnalysis(object):
                 if d is None:
                     new_dist.append(None)
                     continue
-                new_d = Distribution(min(d.value,
-                    self._get_var_dist(v.name, array_dists).value))
+                new_d = self._min_dist(d,
+                    self._get_var_dist(v.name, array_dists))
                 self._set_var_dist(v.name, array_dists, new_d)
                 new_dist.append(new_d)
 
@@ -521,6 +521,21 @@ class DistributedAnalysis(object):
             self._set_var_dist(lhs, array_dists, Distribution.REP)
             return
 
+        if fdef == ('drop_duplicates', 'bodo.libs.array_kernels'):
+            lhs_typ = self.typemap[lhs]
+            arg_dist = min(a.value for a in array_dists[rhs.args[0].name])
+            lhs_dist = arg_dist
+            if lhs in array_dists:
+                lhs_dist = min(a.value for a in array_dists[lhs][0])
+                lhs_dist = min(lhs_dist, array_dists[lhs][1].value)
+            new_dist = Distribution(min(array_dists[rhs.args[1].name].value,
+                arg_dist, lhs_dist))
+            array_dists[lhs] = [[new_dist for _ in range(len(lhs_typ.types[0]))], new_dist]
+            array_dists[rhs.args[0].name] = [new_dist
+                for _ in range(len(array_dists[rhs.args[0].name]))]
+            array_dists[rhs.args[1].name] = new_dist
+            return
+
         if fdef == ('duplicated', 'bodo.libs.array_kernels'):
             arg_dist = min(a.value for a in array_dists[rhs.args[0].name])
             lhs_dist = arg_dist
@@ -612,18 +627,20 @@ class DistributedAnalysis(object):
         if fdef == ('init_dataframe', 'bodo.hiframes.pd_dataframe_ext'):
             # lhs, data arrays, and index should have the same distribution
             # data arrays
-            seq_info = guard(
-                find_build_sequence, self.func_ir, rhs.args[0])
-            assert seq_info is not None
-            for arr in seq_info[0]:
-                new_dist = self._meet_array_dists(lhs, arr.name, array_dists)
-
+            data_varname = rhs.args[0].name
+            ind_varname = rhs.args[1].name
+            new_dist_val = min(a.value for a in array_dists[data_varname])
+            if lhs in array_dists:
+                new_dist_val = min(new_dist_val, array_dists[lhs].value)
             # handle index
-            if self.typemap[rhs.args[1].name] != types.none:
-                new_dist = self._meet_array_dists(
-                    lhs, rhs.args[1].name, array_dists, new_dist)
-            for arr in seq_info[0]:
-                array_dists[arr.name] = new_dist
+            if self.typemap[ind_varname] != types.none:
+                new_dist_val = min(
+                    new_dist_val, array_dists[ind_varname].value)
+            new_dist = Distribution(new_dist_val)
+            self._set_var_dist(data_varname, array_dists, new_dist)
+            if self.typemap[ind_varname] != types.none:
+                self._set_var_dist(ind_varname, array_dists, new_dist)
+            self._set_var_dist(lhs, array_dists, new_dist)
             return
 
         if fdef == ('init_integer_array', 'bodo.libs.int_arr_ext'):
@@ -991,18 +1008,20 @@ class DistributedAnalysis(object):
         index_typ = self.typemap[index_var.name]
 
         # selecting an array from a tuple
+        # nested tuples are also possible
         if (isinstance(in_typ, types.BaseTuple)
                 and isinstance(index_typ, types.IntegerLiteral)
-                and is_distributable_typ(self.typemap[lhs])):
+                and (is_distributable_typ(self.typemap[lhs])
+                    or is_distributable_tuple_typ(self.typemap[lhs]))):
             # meet distributions
             ind_val = index_typ.literal_value
             tup = rhs.value.name
             if tup not in array_dists:
                 self._set_var_dist(tup, array_dists, Distribution.OneD)
             if lhs not in array_dists:
-                array_dists[lhs] = Distribution.OneD
-            new_dist = Distribution(min(array_dists[tup][ind_val].value,
-                                    array_dists[lhs].value))
+                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+            new_dist = self._min_dist(
+                array_dists[tup][ind_val], array_dists[lhs])
             array_dists[tup][ind_val] = new_dist
             array_dists[lhs] = new_dist
             return
@@ -1156,24 +1175,9 @@ class DistributedAnalysis(object):
         if arr2 not in array_dists:
             self._set_var_dist(arr2, array_dists, top_dist, False)
 
-        if is_distributable_tuple_typ(typ1):
-            assert len(typ1) == len(typ2)
-            dist1 = array_dists[arr1]
-            dist2 = array_dists[arr2]
-            n = len(typ1)
-            new_dist = [Distribution(min(dist1[i].value, dist2[i].value))
-                        if dist1[i] is not None else None
-                        for i in range(n)]
-            new_dist = [Distribution(min(new_dist[i].value, top_dist.value))
-                        if dist1[i] is not None else None
-                        for i in range(n)]
-            array_dists[arr1] = new_dist
-            array_dists[arr2] = new_dist
-            return new_dist
-
-        new_dist = Distribution(min(array_dists[arr1].value,
-                                    array_dists[arr2].value))
-        new_dist = Distribution(min(new_dist.value, top_dist.value))
+        new_dist = self._min_dist(
+            array_dists[arr1], array_dists[arr2])
+        new_dist = self._min_dist_top(new_dist, top_dist)
         array_dists[arr1] = new_dist
         array_dists[arr2] = new_dist
         return new_dist
@@ -1197,15 +1201,38 @@ class DistributedAnalysis(object):
         # some non-distributable types could need to be assigned distribution
         # sometimes, e.g. SeriesILocType. check_type=False handles these cases.
         typ = self.typemap[varname]
-        if is_distributable_tuple_typ(typ):
-            t_dist = [dist if is_distributable_typ(v) else None
-                      for v in typ.types]
-            array_dists[varname] = t_dist
+        dist = self._get_dist(typ, dist)
         # XXX: Index values can be None so they should have distribution
         # TODO: use proper "FullRangeIndex" type
-        elif not check_type or (
-                is_distributable_typ(typ) or typ is types.none):
+        if not check_type or (
+                is_distributable_typ(typ) or is_distributable_tuple_typ(typ)
+                or typ is types.none):
             array_dists[varname] = dist
+
+    def _get_dist(self, typ, dist):
+        if is_distributable_tuple_typ(typ):
+            return [self._get_dist(t, dist)
+                    if (is_distributable_typ(t)
+                        or is_distributable_tuple_typ(t)) else None
+                    for t in typ.types]
+        return dist
+
+    def _min_dist(self, dist1, dist2):
+        if isinstance(dist1, list):
+            assert len(dist1) == len(dist2)
+            n = len(dist1)
+            return [self._min_dist(dist1[i], dist2[i])
+                        if dist1[i] is not None else None
+                        for i in range(n)]
+        return Distribution(min(dist1.value, dist2.value))
+
+    def _min_dist_top(self, dist, top_dist):
+        if isinstance(dist, list):
+            n = len(dist)
+            return [self._min_dist_top(dist[i], top_dist)
+                        if dist[i] is not None else None
+                        for i in range(n)]
+        return Distribution(min(dist.value, top_dist.value))
 
     def _rebalance_arrs(self, array_dists, parfor_dists):
         # rebalance an array if it is accessed in a parfor that has output

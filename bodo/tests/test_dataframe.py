@@ -601,17 +601,27 @@ def test_df_duplicated():
     check_func(impl, (df,), sort_output=True)
 
 
-def test_df_drop_duplicates():
+@pytest.mark.parametrize('test_df', [
+    # all string
+    pd.DataFrame({'A': ['A', 'B', 'A', 'B', 'C'],
+                  'B': ['F', 'E', 'F', 'S', 'C']}),
+    # mix string and numbers and index
+    pd.DataFrame({'A': [1, 3, 1, 2, 3],
+                  'B': ['F', 'E', 'F', 'S', 'C']}, index=[3, 1, 2, 4, 6]),
+    # string index
+    pd.DataFrame({'A': [1, 3, 1, 2, 3],
+                  'B': ['F', 'E', 'F', 'S', 'C']},
+                  index=['A', 'C', 'D', 'E', 'AA']),
+    # all numbers
+    pd.DataFrame({'A': [1, 3, 1, 2, 3],
+                  'B': [1.2, 3.1, 1.2, 2.5, 3.3]}, index=[3, 1, 2, 4, 6]),
+])
+def test_df_drop_duplicates(test_df):
 
     def impl(df):
         return df.drop_duplicates()
 
-    df = pd.DataFrame({'A': ['A', 'B', 'A', 'B', 'C'],
-        'B': ['F', 'E', 'F', 'S', 'C']})
-    check_func(impl, (df,), sort_output=True)
-    df = pd.DataFrame({'A': [1, 3, 1, 2, 3],
-        'B': ['F', 'E', 'F', 'S', 'C']}, index=[3, 1, 2, 4, 6])
-    check_func(impl, (df,), sort_output=True)
+    check_func(impl, (test_df,), sort_output=True)
 
 
 def _gen_df_str(n):

@@ -574,9 +574,20 @@ def overload_dataframe_drop_duplicates(df, subset=None, keep='first',
     if is_overload_true(inplace):
         raise ValueError("drop_duplicates() inplace argument not supported yet")
 
-    def impl(df, subset=None, keep='first', inplace=False):
-        return df[~df.duplicated()]
-    return impl
+    # XXX: can't reuse duplicated() here since it shuffles data and chunks
+    # may not match
+
+    n_cols = len(df.columns)
+    data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
+
+    func_text = "def impl(df, subset=None, keep='first', inplace=False):\n"
+    for i in range(n_cols):
+        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(i)
+    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))"
+    func_text += "  ({0},), index_arr = bodo.libs.array_kernels.drop_duplicates(({0},), {1})\n".format(
+        data_args, index)
+    func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
+    return _gen_init_df(func_text, df.columns, data_args, 'index')
 
 
 def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):

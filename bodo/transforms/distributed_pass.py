@@ -539,6 +539,13 @@ class DistributedPass(object):
                 arr, ind_arr, True)
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
+        if fdef == ('drop_duplicates', 'bodo.libs.array_kernels') and (
+                self._is_1D_tup(rhs.args[0].name)
+                    or self._is_1D_Var_tup(rhs.args[0].name)):
+            f = lambda arr, ind_arr: bodo.libs.array_kernels.drop_duplicates(
+                arr, ind_arr, True)
+            return compile_func_single_block(f, rhs.args, assign.target, self)
+
         if fdef == ('convert_rec_to_tup', 'bodo.hiframes.api'):
             # optimize Series back to back map pattern with tuples
             # TODO: create another optimization pass?
