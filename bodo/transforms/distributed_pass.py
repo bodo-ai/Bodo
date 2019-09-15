@@ -739,6 +739,9 @@ class DistributedPass(object):
             df_typ = self.typemap[df.name]
             rhs = assign.value
             fname = args[0]
+            # convert StringLiteral to Unicode to make ._data available
+            self.typemap.pop(fname.name)
+            self.typemap[fname.name] = string_type
 
             # update df index and get to_csv from new df
             nodes = self._fix_parallel_df_index(df)
