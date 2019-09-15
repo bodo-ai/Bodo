@@ -403,6 +403,24 @@ class SeriesPass(object):
         arg1, arg2 = rhs.lhs, rhs.rhs
         typ1, typ2 = self.typemap[arg1.name], self.typemap[arg2.name]
 
+
+        # both dt64
+        if is_dt64_series_typ(typ1) and is_dt64_series_typ(typ2):
+            func = rhs.fn
+            def impl(S1, S2):
+                arr1 = bodo.hiframes.api.get_series_data(S1)
+                arr2 = bodo.hiframes.api.get_series_data(S2)
+                l = len(arr1)
+                S = np.empty(l, dtype=np.bool_)
+                nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
+                for i in numba.parfor.internal_prange(l):
+                    S[i] = func(arr1[i], arr2[i])
+                    bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
+                return bodo.hiframes.api.init_series(
+                    bodo.libs.bool_arr_ext.init_bool_array(S, nulls))
+
+            return self._replace_func(impl, [arg1, arg2])
+
         # inline overloaded
         # TODO: use overload inlining when available
         if rhs.fn == operator.sub:
@@ -1941,7 +1959,7 @@ class SeriesPass(object):
         arg1, arg2 = rhs.lhs, rhs.rhs
 
         def _is_allowed_type(t):
-            return is_dt64_series_typ(t) or t == string_type
+            return is_dt64_series_typ(t) or t in (string_type, types.NPDatetime('ns'))
 
         # TODO: this has to be more generic to support all combinations.
         if (is_dt64_series_typ(self.typemap[arg1.name]) and
@@ -1966,12 +1984,17 @@ class SeriesPass(object):
             arg1 = self._get_series_data(arg1, nodes)
             func_text += '  dt_index, _str = arg1, arg2\n'
             comp = 'dt_index[i] {} other'.format(op_str)
+            other_typ = typ2
         else:
             arg2 = self._get_series_data(arg2, nodes)
             func_text += '  dt_index, _str = arg2, arg1\n'
             comp = 'other {} dt_index[i]'.format(op_str)
+            other_typ = typ1
         func_text += '  l = len(dt_index)\n'
-        func_text += '  other = bodo.hiframes.pd_timestamp_ext.parse_datetime_str(_str)\n'
+        if other_typ == string_type:
+            func_text += '  other = bodo.hiframes.pd_timestamp_ext.parse_datetime_str(_str)\n'
+        else:
+            func_text += '  other = _str\n'
         func_text += '  S = np.empty(l, dtype=np.bool_)\n'
         func_text += '  nulls = np.empty((l + 7) >> 3, dtype=np.uint8)\n'
         func_text += '  for i in numba.parfor.internal_prange(l):\n'
@@ -1982,7 +2005,7 @@ class SeriesPass(object):
         exec(func_text, {}, loc_vars)
         f = loc_vars['f']
         # print(func_text)
-        return self._replace_func(f, [arg1, arg2])
+        return self._replace_func(f, [arg1, arg2], pre_nodes=nodes)
 
     def _handle_string_array_expr(self, assign, rhs):
         # convert str_arr==str into parfor

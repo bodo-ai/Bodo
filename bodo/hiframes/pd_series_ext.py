@@ -526,8 +526,11 @@ class SeriesCompEqual(AbstractTemplate):
             assert is_str_arr_typ(vb) or vb == string_type
             return signature(SeriesType(types.boolean, boolean_array), va, vb)
 
-        if ((is_dt64_series_typ(va) and vb == string_type)
-                or (is_dt64_series_typ(vb) and va == string_type)):
+        if ((is_dt64_series_typ(va) and vb in (string_type, types.NPDatetime('ns')))
+                or (is_dt64_series_typ(vb) and va in (string_type, types.NPDatetime('ns')))):
+            return signature(SeriesType(types.boolean, boolean_array), va, vb)
+
+        if is_dt64_series_typ(va) and is_dt64_series_typ(vb):
             return signature(SeriesType(types.boolean, boolean_array), va, vb)
 
 

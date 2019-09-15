@@ -7,9 +7,29 @@ import bodo
 from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
                             count_parfor_OneDs, count_array_OneDs,
                             count_parfor_OneD_Vars, count_array_OneD_Vars,
-                            dist_IR_contains)
+                            dist_IR_contains, check_func)
 from datetime import datetime
 import random
+import pytest
+
+
+def test_series_dt64_scalar_cmp():
+    t = np.datetime64('2018-04-27').astype('datetime64[ns]')
+    def test_impl(S):
+        return S >= t
+
+    S = pd.Series(pd.date_range(start='2018-04-24', end='2018-04-29', periods=5))
+    check_func(test_impl, (S,))
+
+
+def test_series_dt64_cmp():
+    def test_impl(S1, S2):
+        return S1 >= S2
+
+    S1 = pd.Series(pd.date_range(start='2018-04-24', end='2018-04-29', periods=5))
+    S2 = pd.Series(pd.date_range(start='2018-04-24', end='2018-04-29', periods=5))
+    S2.values[3] = np.datetime64('2018-05-03').astype('datetime64[ns]')
+    check_func(test_impl, (S1, S2))
 
 
 class TestDate(unittest.TestCase):
