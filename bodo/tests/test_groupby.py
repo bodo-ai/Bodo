@@ -141,6 +141,17 @@ def test_groupby_cumsum_multi2():
     check_func(impl, (df,), sort_output=True)
 
 
+def test_groupby_multi_str():
+    def impl(df):
+        df2 = df.groupby(['A', 'B'], as_index=False)['C'].sum()
+        return df2
+
+    df = pd.DataFrame({'A': ['aa','b','b','b','aa','aa','b'],
+                       'B': ['ccc','a','a','aa','ccc','ggg','a'],
+                       'C': [3, 5, 6, 5, 4, 4, 3],})
+    check_func(impl, (df,), sort_output=True)
+
+
 class TestGroupBy(unittest.TestCase):
     def test_agg_seq(self):
         def test_impl(df):

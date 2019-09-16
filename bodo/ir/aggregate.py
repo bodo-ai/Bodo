@@ -641,28 +641,24 @@ def agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy,
     # _init_val_1 = np.int64(0)
     # redvar_1_arr = np.full(n_uniq_keys, _init_val_1, np.int64)
     # out_key = np.empty(n_uniq_keys, np.float64)
+
     n_pes = bodo.libs.distributed_api.get_size()
-    # bodo.libs.dict_ext.init_dict_float64_int64()
-    # key_write_map = get_key_dict(key_arrs[0])
-    key_write_map, byte_v = get_key_dict(key_arrs)
+    key_write_map = get_key_dict(key_arrs)
 
     redvar_arrs = get_shuffle_data_send_buffs(shuffle_meta, key_arrs, data_redvar_dummy)
 
     for i in range(len(key_arrs[0])):
-        # k = key_arrs[0][i]
-        k = _getitem_keys(key_arrs, i, byte_v)
-        if k not in key_write_map:
-            # k is byte_vec but we need tuple value for hashing
-            val = getitem_arr_tup_single(key_arrs, i)
+        # val = key_arrs[0][i]
+        val = getitem_arr_tup_single(key_arrs, i)
+        if val not in key_write_map:
             node_id = hash(val) % n_pes
             w_ind = write_send_buff(shuffle_meta, node_id, i, val_to_tup(val), ())
             shuffle_meta.tmp_offset[node_id] += 1
-            key_write_map[k] = w_ind
+            key_write_map[val] = w_ind
         else:
-            w_ind = key_write_map[k]
+            w_ind = key_write_map[val]
         __update_redvars(redvar_arrs, data_in, w_ind, i, pivot_arr)
         #redvar_arrs[0][w_ind], redvar_arrs[1][w_ind] = __update_redvars(redvar_arrs[0][w_ind], redvar_arrs[1][w_ind], data_in[0][i])
-    bodo.libs.dict_ext.byte_vec_free(byte_v)
     return
 
 
@@ -677,11 +673,11 @@ def agg_parallel_combine_iter(key_arrs, reduce_recvs, out_dummy_tup, init_vals,
     local_redvars = alloc_arr_tup(n_uniq_keys, reduce_recvs, init_vals)
 
     # key_write_map = get_key_dict(key_arrs[0])
-    key_write_map, byte_v = get_key_dict(key_arrs)
+    key_write_map = get_key_dict(key_arrs)
     curr_write_ind = 0
     for i in range(len(key_arrs[0])):
         # k = key_arrs[0][i]
-        k = _getitem_keys(key_arrs, i, byte_v)
+        k = getitem_arr_tup_single(key_arrs, i)
         if k not in key_write_map:
             w_ind = curr_write_ind
             curr_write_ind += 1
@@ -696,7 +692,6 @@ def agg_parallel_combine_iter(key_arrs, reduce_recvs, out_dummy_tup, init_vals,
     for j in range(n_uniq_keys):
         __eval_res(local_redvars, out_arrs, j)
 
-    bodo.libs.dict_ext.byte_vec_free(byte_v)
     return out_arrs
 
 
@@ -710,11 +705,11 @@ def agg_seq_iter(key_arrs, redvar_dummy_tup, out_dummy_tup, data_in, init_vals,
     # out_arrs = alloc_arr_tup(n_uniq_keys, out_dummy_tup)
     local_redvars = alloc_arr_tup(n_uniq_keys, redvar_dummy_tup, init_vals)
 
-    key_write_map, byte_v = get_key_dict(key_arrs)
+    key_write_map = get_key_dict(key_arrs)
     curr_write_ind = 0
     for i in range(len(key_arrs[0])):
         #k = key_arrs[0][i]
-        k = _getitem_keys(key_arrs, i, byte_v)
+        k = getitem_arr_tup_single(key_arrs, i)
         if k not in key_write_map:
             w_ind = curr_write_ind
             curr_write_ind += 1
@@ -729,7 +724,6 @@ def agg_seq_iter(key_arrs, redvar_dummy_tup, out_dummy_tup, data_in, init_vals,
     for j in range(n_uniq_keys):
         __eval_res(local_redvars, out_arrs, j)
 
-    bodo.libs.dict_ext.byte_vec_free(byte_v)
     return out_arrs
 
 
@@ -765,50 +759,20 @@ def get_key_dict_overload(arr):
     """
     # get byte_vec dict for multi-key case
     if isinstance(arr, types.BaseTuple) and len(arr.types) != 1:
-        n_bytes = 0
-        context = numba.targets.registry.cpu_target.target_context
-        for t in arr.types:
-            n_bytes += context.get_abi_sizeof(context.get_data_type(t.dtype))
+        key_typ = types.Tuple([a.dtype for a in arr.types])
         def _impl(arr):
-            b_v = bodo.libs.dict_ext.byte_vec_init(n_bytes, 0)
-            b_dict = bodo.libs.dict_ext.dict_byte_vec_int64_init()
-            return b_dict, b_v
+            return numba.typed.Dict.empty(
+                key_type=key_typ, value_type=types.int64)
         return _impl
 
     # regular scalar keys
     dtype = arr.types[0].dtype
     func_text = "def k_dict_impl(arr):\n"
-    func_text += "  b_v = bodo.libs.dict_ext.byte_vec_init(1, 0)\n"
-    func_text += "  return bodo.libs.dict_ext.dict_{}_int64_init(), b_v\n".format(dtype)
+    func_text += "  return bodo.libs.dict_ext.dict_{}_int64_init()\n".format(dtype)
     loc_vars = {}
     exec(func_text, {'bodo': bodo}, loc_vars)
     k_dict_impl = loc_vars['k_dict_impl']
     return k_dict_impl
-
-
-def _getitem_keys(key_arrs, i, b_v):
-    return key_arrs[i]
-
-
-@overload(_getitem_keys)
-def _getitem_keys_overload(arrs, ind, b_v):
-    if isinstance(arrs, types.BaseTuple) and len(arrs.types) != 1:
-        func_text = "def getitem_impl(arrs, ind, b_v):\n"
-        offset = 0
-        context = numba.targets.registry.cpu_target.target_context
-        for i, t in enumerate(arrs.types):
-            n_bytes = context.get_abi_sizeof(context.get_data_type(t.dtype))
-            func_text += "  arr_ptr = arrs[{}].ctypes.data + ind * {}\n".format(i, n_bytes)
-            func_text += "  bodo.libs.dict_ext.byte_vec_set(b_v, {}, arr_ptr, {})\n".format(offset, n_bytes)
-            offset += n_bytes
-
-        func_text += "  return b_v\n"
-        loc_vars = {}
-        exec(func_text, {'bodo': bodo}, loc_vars)
-        getitem_impl = loc_vars['getitem_impl']
-        return getitem_impl
-
-    return lambda arrs, ind, b_v: arrs[0][ind]
 
 
 def _set_out_keys(out_arrs, w_ind, key_arrs, i, k):
@@ -884,14 +848,14 @@ def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set, return_key):
         for i in range(n_data):
             func_text += "  c_{} = empty_like_type(n_uniq_keys, out_dummy_tup[{}])\n".format(i, i)
 
-        # string special case
-        # TODO: handle strings in multi-key case
-        if key_types == [string_type]:
+        if string_type in key_types:
             # TODO: handle unicode length
-            func_text += "  num_total_chars = num_total_chars_set_string(key_set)\n"
-            func_text += "  out_key_0 = pre_alloc_string_array(n_uniq_keys, num_total_chars)\n"
-        else:
-            for i, key_typ in enumerate(key_types):
+            func_text += "  num_total_chars = num_total_chars_set(key_set)\n"
+
+        for i, key_typ in enumerate(key_types):
+            if key_typ == string_type:
+                func_text += "  out_key_{0} = pre_alloc_string_array(n_uniq_keys, num_total_chars[{0}])\n".format(i)
+            else:
                 func_text += "  out_key_{} = np.empty(n_uniq_keys, np.{})\n".format(i, key_typ)
 
         func_text += "  return ({}{}{},)\n".format(
@@ -903,7 +867,7 @@ def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set, return_key):
         # print(func_text)
         exec(func_text, {'empty_like_type': empty_like_type, 'np': np,
             'pre_alloc_string_array': pre_alloc_string_array,
-            'num_total_chars_set_string': num_total_chars_set_string}, loc_vars)
+            'num_total_chars_set': num_total_chars_set}, loc_vars)
         alloc_impl = loc_vars['out_alloc_f']
         return alloc_impl
 
@@ -1845,10 +1809,43 @@ def _build_set_tup_overload(arr_tup):
             n = len(arr_tup[0])
             s = set()
             for i in range(n):
-                s.add(getitem_arr_tup(arr_tup, i))
+                val = getitem_arr_tup(arr_tup, i)
+                s.add(val)
             return s
         return _impl
     return _build_set_tup
+
+
+def num_total_chars_set(s):
+    return (0,)
+
+
+@overload(num_total_chars_set)
+def num_total_chars_set_overload(s):
+    key_typs = s.dtype.types if isinstance(
+        s.dtype, types.BaseTuple) else [s.dtype]
+
+    count = len(key_typs)
+    func_text = "def f(s):\n"
+    for i in range(count):
+        func_text += "  n_{} = 0\n".format(i)
+    if any(t == string_type for t in key_typs):
+        func_text += "  for v in s:\n"
+        for i in range(count):
+            if key_typs[i] == string_type:
+                func_text += "    n_{} += len(v{})\n".format(
+                    i, "[{}]".format(i)
+                        if isinstance(s.dtype, types.BaseTuple) else "")
+    func_text += "  return ({},)\n".format(
+        ", ".join("n_{}".format(i) for i in range(count)))
+
+    # print(func_text)
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo}, loc_vars)
+    impl = loc_vars['f']
+    return impl
+
+
 
 
 ###############  transform functions like cumsum  ###########################

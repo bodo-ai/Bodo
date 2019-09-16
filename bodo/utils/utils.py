@@ -534,6 +534,19 @@ def get_ctypes_ptr(typingctx, ctypes_typ=None):
     return types.voidptr(ctypes_typ), codegen
 
 
+@intrinsic
+def incref(typingctx, data=None):
+    """manual incref of data to workaround bugs. Should be avoided if possible.
+    """
+    def codegen(context, builder, signature, args):
+        data_val, = args
+
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[0], data_val)
+
+    return types.void(data), codegen
+
+
 def remove_return_from_block(last_block):
     # remove const none, cast, return nodes
     assert isinstance(last_block.body[-1], ir.Return)
