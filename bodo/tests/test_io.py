@@ -750,6 +750,26 @@ class TestIO(unittest.TestCase):
                 pd.testing.assert_frame_equal(
                     pd.read_csv(hp_fname), pd.read_csv(pd_fname))
 
+    def test_write_csv_parallel2(self):
+        # 1D_Var case
+        def test_impl(n, fname):
+            df = pd.DataFrame({'A': np.arange(n)})
+            df = df[df.A%2==1]
+            df.to_csv(fname, index=False)
+
+        bodo_func = bodo.jit(test_impl)
+        n = 111
+        hp_fname = 'test_write_csv1_hpat_par.csv'
+        pd_fname = 'test_write_csv1_pd_par.csv'
+        with ensure_clean(pd_fname), ensure_clean(hp_fname):
+            bodo_func(n, hp_fname)
+            self.assertEqual(count_array_REPs(), 0)
+            self.assertEqual(count_parfor_REPs(), 0)
+            if get_rank() == 0:
+                test_impl(n, pd_fname)
+                pd.testing.assert_frame_equal(
+                    pd.read_csv(hp_fname), pd.read_csv(pd_fname))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -724,7 +724,8 @@ class DistributedPass(object):
         return out
 
     def _run_call_df(self, lhs, df, func_name, assign, args):
-        if func_name == 'to_csv' and self._is_1D_arr(df.name):
+        if func_name == 'to_csv' and (self._is_1D_arr(df.name)
+                or self._is_1D_Var_arr(df.name)):
             # set index to proper range if None
             # avoid header for non-zero ranks
             # write to string then parallel file write
