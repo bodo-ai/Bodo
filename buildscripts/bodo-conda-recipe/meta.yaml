@@ -16,9 +16,9 @@ requirements:
   host:
     - python
     - setuptools
-    - numba 0.44.*
+    - numba 0.46.*
     - numpy
-    - pandas >=0.24
+    - pandas >=0.25
     - pyarrow >=0.11
     - arrow-cpp
     - boost
@@ -31,11 +31,11 @@ requirements:
   run:
     - python
     - {{ pin_compatible('numpy') }}
-    - pandas >=0.24
+    - pandas >=0.25
     - pyarrow >=0.11
     - arrow-cpp
     - boost
-    - numba 0.44.*
+    - numba 0.46.*
     - mpich # [not win]
     - impi_rt # [win]
 
