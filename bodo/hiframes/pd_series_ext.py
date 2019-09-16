@@ -324,7 +324,7 @@ class SeriesAttribute(AttributeTemplate):
             _globals = func.literal_value.globals
 
         f_ir = numba.ir_utils.get_ir_of_code(_globals, code)
-        _, f_return_type, _ = numba.compiler.type_inference_stage(
+        _, f_return_type, _ = numba.typed_passes.type_inference_stage(
                 self.context, f_ir, (dtype,), None)
 
         return signature(
@@ -376,7 +376,7 @@ class SeriesAttribute(AttributeTemplate):
             dtype2 = pandas_timestamp_type
         code = func.literal_value.code
         f_ir = numba.ir_utils.get_ir_of_code({'np': np, 'pd': pd}, code)
-        _, f_return_type, _ = numba.compiler.type_inference_stage(
+        _, f_return_type, _ = numba.typed_passes.type_inference_stage(
                 self.context, f_ir, (dtype1,dtype2,), None)
 
         # TODO: output name is always None in Pandas?

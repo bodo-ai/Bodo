@@ -908,7 +908,7 @@ class DataFramePass(object):
 
         arg_typs = tuple(df_typ.data[df_typ.columns.index(c)] for c in used_cols)
         arg_typs += (df_typ.index,)
-        f_typemap, f_return_type, f_calltypes = numba.compiler.type_inference_stage(
+        f_typemap, f_return_type, f_calltypes = numba.typed_passes.type_inference_stage(
                     self.typingctx, f_ir, arg_typs, None)
         self.typemap.update(f_typemap)
         self.calltypes.update(f_calltypes)
