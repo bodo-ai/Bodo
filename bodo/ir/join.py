@@ -623,67 +623,6 @@ def write_data_buff_overload(meta, node_id, i, val, data):
     return write_impl
 
 
-
-
-# def write_send_buff(shuffle_meta, node_id, val):
-#     return 0
-
-# @overload(write_send_buff)
-# def write_send_buff_overload(meta, node_id, val):
-#     arr = meta.struct['out_arr']
-#     if isinstance(arr, types.Array):
-#         def write_impl(shuffle_meta, node_id, val):
-#             # TODO: refactor to use only tmp_offset
-#             ind = shuffle_meta.send_disp[node_id] + shuffle_meta.tmp_offset[node_id]
-#             shuffle_meta.send_buff[ind] = val
-#             return ind
-
-#         return write_impl
-#     assert arr == string_array_type
-#     def write_str_impl(shuffle_meta, node_id, val):
-#         n_chars = len(val)
-#         # offset buff
-#         ind = shuffle_meta.send_disp[node_id] + shuffle_meta.tmp_offset[node_id]
-#         shuffle_meta.send_arr_lens[ind] = n_chars
-#         # data buff
-#         indc = shuffle_meta.send_disp_char[node_id] + shuffle_meta.tmp_offset_char[node_id]
-#         str_copy_ptr(shuffle_meta.send_arr_chars, indc, val._data, n_chars)
-#         shuffle_meta.tmp_offset_char[node_id] += n_chars
-#         return ind
-
-#     return write_str_impl
-
-
-def write_data_send_buff(data_shuffle_meta, node_id, i, data, key_meta):
-    return
-
-
-@overload(write_data_send_buff)
-def write_data_send_buff_overload(meta_tup, node_id, ind, data, key_meta):
-    func_text = "def f(meta_tup, node_id, ind, data, key_meta):\n"
-    for i, typ in enumerate(data.types):
-        func_text += "  val_{} = data[{}][ind]\n".format(i, i)
-        func_text += "  ind_{} = key_meta.send_disp[node_id] + key_meta.tmp_offset[node_id]\n".format(i)
-        # TODO: support bool NA
-        if isinstance(typ, types.Array) or typ == boolean_array:
-            func_text += "  meta_tup[{}].send_buff[ind_{}] = val_{}\n".format(i, i, i)
-        else:
-            # TODO: fix
-            assert typ == string_array_type
-            func_text += "  n_chars_{} = get_utf8_size(val_{})\n".format(i, i)
-            func_text += "  meta_tup[{}].send_arr_lens[ind_{}] = n_chars_{}\n".format(i, i, i)
-            func_text += "  indc_{} = meta_tup[{}].send_disp_char[node_id] + meta_tup[{}].tmp_offset_char[node_id]\n".format(i, i, i)
-            func_text += "  str_copy_ptr(meta_tup[{}].send_arr_chars, indc_{}, val_{}._data, n_chars_{})\n".format(i, i, i, i)
-            func_text += "  meta_tup[{}].tmp_offset_char[node_id] += n_chars_{}\n".format(i, i)
-
-    func_text += "  return\n"
-    loc_vars = {}
-    exec(func_text, {'str_copy_ptr': str_copy_ptr,
-        'get_utf8_size': get_utf8_size}, loc_vars)
-    write_impl = loc_vars['f']
-    return write_impl
-
-
 from numba.typing.templates import (
     signature, AbstractTemplate, infer_global, infer)
 from numba.extending import (register_model, models, lower_builtin)
