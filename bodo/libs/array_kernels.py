@@ -409,10 +409,10 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     func_text += "    uniqs_i.add(val)\n"
     for i in range(count):
         if data.types[i] == string_array_type:
-            func_text += "    n_chars_{} += len(val{})\n".format(
+            func_text += "    n_chars_{} += get_utf8_size(val{})\n".format(
                 i, "[{}]".format(i) if count > 0 else "")
     if ind_arr == string_array_type:
-        func_text += "    n_chars_index += len(ind_arr[i])\n"
+        func_text += "    n_chars_index += get_utf8_size(ind_arr[i])\n"
     for i in range(count):
         if data.types[i] == string_array_type:
             func_text += "  out_arr_{0} = pre_alloc_string_array(n_uniq, n_chars_{0})\n".format(i)
@@ -439,7 +439,8 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     loc_vars = {}
     exec(func_text, {'bodo': bodo,
         'pre_alloc_string_array': pre_alloc_string_array,
-        'getitem_arr_tup_single': getitem_arr_tup_single}, loc_vars)
+        'getitem_arr_tup_single': getitem_arr_tup_single,
+        'get_utf8_size': bodo.libs.str_arr_ext.get_utf8_size}, loc_vars)
     impl = loc_vars['impl']
     return impl
 

@@ -223,7 +223,7 @@ def gatherv(data, allgather=False):
 
             for i in range(n_loc):
                 _str = data[i]
-                send_arr_lens[i] = len(_str)
+                send_arr_lens[i] = bodo.libs.str_arr_ext.get_utf8_size(_str)
 
             recv_counts = gather_scalar(np.int32(n_loc), allgather)
             recv_counts_char = gather_scalar(np.int32(n_all_chars), allgather)
@@ -415,7 +415,7 @@ def bcast_overload(data):
                 send_arr_lens = np.empty(n_loc, np.uint32)  # XXX offset type is uint32
                 for i in range(n_loc):
                     _str = data[i]
-                    send_arr_lens[i] = len(_str)
+                    send_arr_lens[i] = bodo.libs.str_arr_ext.get_utf8_size(_str)
 
                 c_bcast(send_arr_lens.ctypes, np.int32(n_loc), int32_typ_enum)
             else:

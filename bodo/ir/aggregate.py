@@ -26,7 +26,7 @@ from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
 from bodo.libs.str_ext import string_type
 from bodo.libs.set_ext import num_total_chars_set_string, build_set
 from bodo.libs.str_arr_ext import (string_array_type, pre_alloc_string_array,
-                              get_offset_ptr, get_data_ptr)
+                              get_offset_ptr, get_data_ptr, get_utf8_size)
 
 from bodo.ir.join import write_send_buff, setitem_arr_tup_nan, setitem_arr_nan
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
@@ -1833,7 +1833,7 @@ def num_total_chars_set_overload(s):
         func_text += "  for v in s:\n"
         for i in range(count):
             if key_typs[i] == string_type:
-                func_text += "    n_{} += len(v{})\n".format(
+                func_text += "    n_{} += get_utf8_size(v{})\n".format(
                     i, "[{}]".format(i)
                         if isinstance(s.dtype, types.BaseTuple) else "")
     func_text += "  return ({},)\n".format(
@@ -1841,7 +1841,7 @@ def num_total_chars_set_overload(s):
 
     # print(func_text)
     loc_vars = {}
-    exec(func_text, {'bodo': bodo}, loc_vars)
+    exec(func_text, {'bodo': bodo, 'get_utf8_size': get_utf8_size}, loc_vars)
     impl = loc_vars['f']
     return impl
 

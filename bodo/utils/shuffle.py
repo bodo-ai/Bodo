@@ -130,7 +130,7 @@ def update_shuffle_meta_overload(pre_shuffle_meta, node_id, ind, val, data, is_c
     for i, typ in enumerate(val.types + data.types):
         if typ in (string_type, string_array_type):
             val_or_data = 'val[{}]'.format(i) if i < n_keys else 'getitem_arr_tup(data, ind)[{}]'.format(i - n_keys)
-            func_text += "  n_chars = len({})\n".format(val_or_data)
+            func_text += "  n_chars = get_utf8_size({})\n".format(val_or_data)
             func_text += "  pre_shuffle_meta.send_counts_char_tup[{}][node_id] += n_chars\n".format(i)
             func_text += "  if is_contig:\n"
             func_text += "    pre_shuffle_meta.send_arr_lens_tup[{}][ind] = n_chars\n".format(i)
@@ -149,7 +149,8 @@ def update_shuffle_meta_overload(pre_shuffle_meta, node_id, ind, val, data, is_c
         'get_bit_bitmap': get_bit_bitmap,
         'get_null_bitmap_ptr': get_null_bitmap_ptr,
         'getitem_arr_tup': getitem_arr_tup,
-        'get_mask_bit': get_mask_bit}, loc_vars)
+        'get_mask_bit': get_mask_bit,
+        'get_utf8_size': bodo.libs.str_arr_ext.get_utf8_size}, loc_vars)
     update_impl = loc_vars['f']
     return update_impl
 
