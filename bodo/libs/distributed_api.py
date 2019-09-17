@@ -597,6 +597,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
             l = bcast_scalar(l)
             if rank != root:
                 val = numba.unicode._empty_string(kind, l, 1)
+            # TODO: unicode fix?
             c_bcast(val._data, np.int32(l), char_typ_enum)
             return val
 

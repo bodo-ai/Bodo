@@ -17,7 +17,7 @@ from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
     cp_str_list_to_array, get_bit_bitmap, num_total_chars,
     get_offset_ptr, get_data_ptr, get_null_bitmap_ptr, pre_alloc_string_array,
     getitem_str_offset, copy_str_arr_slice, str_copy_ptr, get_utf8_size,
-    setitem_str_offset, str_arr_set_na, set_bit_to)
+    setitem_str_offset, str_arr_set_na, set_bit_to, print_str_arr)
 from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -506,7 +506,6 @@ def parallel_join_impl(key_arrs, data):
     recvs = alltoallv_tup(key_arrs + data, shuffle_meta, key_arrs)
     out_keys = _get_keys_tup(recvs, key_arrs)
     out_data = _get_data_tup(recvs, key_arrs)
-
     return out_keys, out_data
 
 
@@ -657,6 +656,7 @@ def write_data_buff_overload(meta, node_id, i, val, data):
 
 def write_data_send_buff(data_shuffle_meta, node_id, i, data, key_meta):
     return
+
 
 @overload(write_data_send_buff)
 def write_data_send_buff_overload(meta_tup, node_id, ind, data, key_meta):

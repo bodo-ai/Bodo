@@ -118,6 +118,7 @@ void mask_arr_to_bitmap(uint8_t *bitmap_arr, uint8_t *mask_arr, int64_t n);
 PyArrayObject* set_nulls_bool_array(PyArrayObject* bool_arr, uint8_t *bitmap_arr);
 int is_bool_array(PyArrayObject* arr);
 void unbox_bool_array_obj(PyArrayObject* arr, uint8_t *data, uint8_t *bitmap, int64_t n);
+void print_str_arr(uint64_t n, uint64_t n_chars, uint32_t *offsets, uint8_t *data);
 
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
@@ -193,6 +194,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                             PyLong_FromVoidPtr((void*)(&print_char)));
     PyObject_SetAttrString(m, "print_int",
                             PyLong_FromVoidPtr((void*)(&print_int)));
+    PyObject_SetAttrString(m, "print_str_arr",
+                            PyLong_FromVoidPtr((void*)(&print_str_arr)));
     PyObject_SetAttrString(m, "str_arr_to_int64",
                             PyLong_FromVoidPtr((void*)(&str_arr_to_int64)));
     PyObject_SetAttrString(m, "str_arr_to_float64",
@@ -939,6 +942,21 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t *data, uint8_t *bitmap, in
     }
 
 #undef CHECK
+}
+
+
+void print_str_arr(uint64_t n, uint64_t n_chars, uint32_t *offsets, uint8_t *data)
+{
+    printf("n: %lld n_chars: %lld\n", n, n_chars);
+    for(uint64_t i=0; i<n; i++)
+    {
+        printf("offsets: %u %u  chars:", offsets[i], offsets[i+1]);
+        for(uint64_t j=offsets[i]; j<offsets[i+1]; j++)
+        {
+            printf("%d ", data[j]);
+        }
+        printf("\n");
+    }
 }
 
 

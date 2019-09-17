@@ -125,8 +125,8 @@ class StringArrayModel(models.StructModel):
 make_attribute_wrapper(StringArrayType, 'num_items', '_num_items')
 make_attribute_wrapper(StringArrayType, 'num_total_chars', '_num_total_chars')
 make_attribute_wrapper(StringArrayType, 'null_bitmap', '_null_bitmap')
-# make_attribute_wrapper(StringArrayType, 'offsets', 'offsets')
-# make_attribute_wrapper(StringArrayType, 'data', 'data')
+make_attribute_wrapper(StringArrayType, 'offsets', '_offsets')
+make_attribute_wrapper(StringArrayType, 'data', '_data')
 
 
 def create_binary_op_overload(op):
@@ -695,6 +695,7 @@ ll.add_symbol('dtor_string_array', hstr_ext.dtor_string_array)
 ll.add_symbol('c_glob', hstr_ext.c_glob)
 ll.add_symbol('decode_utf8', hstr_ext.decode_utf8)
 ll.add_symbol('get_utf8_size', hstr_ext.get_utf8_size)
+ll.add_symbol('print_str_arr', hstr_ext.print_str_arr)
 
 convert_len_arr_to_offset = types.ExternalFunction(
     "convert_len_arr_to_offset", types.void(types.voidptr, types.intp))
@@ -705,6 +706,9 @@ setitem_string_array = types.ExternalFunction("setitem_string_array",
             types.intp))
 _get_utf8_size = types.ExternalFunction("get_utf8_size",
             types.intp(types.voidptr, types.intp, types.int32))
+_print_str_arr = types.ExternalFunction(
+    "print_str_arr", types.void(types.uint64, types.uint64,
+    types.CPointer(offset_typ), types.CPointer(char_typ)))
 
 
 def construct_string_array(context, builder):
@@ -1180,6 +1184,12 @@ def _memcpy(typingctx, dest_t, src_t, count_t, item_size_t=None):
         return context.get_dummy_value()
 
     return types.void(types.voidptr, types.voidptr, types.intp, types.intp), codegen
+
+
+@numba.njit
+def print_str_arr(arr):
+    _print_str_arr(
+        arr._num_items, arr._num_total_chars, arr._offsets, arr._data)
 
 
 @overload(operator.getitem)

@@ -16,7 +16,7 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
     get_offset_ptr, get_data_ptr, convert_len_arr_to_offset, set_bit_to,
     pre_alloc_string_array, num_total_chars, get_null_bitmap_ptr,
-    get_bit_bitmap)
+    get_bit_bitmap, print_str_arr)
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 
@@ -353,7 +353,8 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
          'convert_len_arr_to_offset': convert_len_arr_to_offset,
          'copy_gathered_null_bytes':
             bodo.libs.distributed_api.copy_gathered_null_bytes,
-         'get_arr_null_ptr': get_arr_null_ptr}, loc_vars)
+         'get_arr_null_ptr': get_arr_null_ptr,
+         'print_str_arr': print_str_arr}, loc_vars)
     a2a_impl = loc_vars['f']
     return a2a_impl
 
