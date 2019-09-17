@@ -229,7 +229,7 @@ def unique_overload_parallel(A):
         for i in range(len(uniq_A)):
             val = uniq_A[i]
             node_id = hash(val) % n_pes
-            write_send_buff(shuffle_meta, node_id, i, (val,), ())
+            write_send_buff(shuffle_meta, node_id, i, key_arrs, ())
             # update last since it is reused in data
             shuffle_meta.tmp_offset[node_id] += 1
 

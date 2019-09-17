@@ -17,7 +17,8 @@ from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
     cp_str_list_to_array, get_bit_bitmap, num_total_chars,
     get_offset_ptr, get_data_ptr, get_null_bitmap_ptr, pre_alloc_string_array,
     getitem_str_offset, copy_str_arr_slice, str_copy_ptr, get_utf8_size,
-    setitem_str_offset, str_arr_set_na, set_bit_to, print_str_arr)
+    setitem_str_offset, str_arr_set_na, set_bit_to, print_str_arr,
+    get_str_arr_item_ptr, get_str_arr_item_length)
 from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -498,7 +499,7 @@ def parallel_join_impl(key_arrs, data):
     for i in range(len(key_arrs[0])):
         val = getitem_arr_tup_single(key_arrs, i)
         node_id = hash(val) % n_pes
-        write_send_buff(shuffle_meta, node_id, i, val_to_tup(val), data)
+        write_send_buff(shuffle_meta, node_id, i, key_arrs, data)
         # update last since it is reused in data
         shuffle_meta.tmp_offset[node_id] += 1
 
@@ -583,30 +584,30 @@ def _count_overlap(r_key_arr, start, end):
 
 
 
-def write_send_buff(shuffle_meta, node_id, i, val, data):
+def write_send_buff(shuffle_meta, node_id, i, key_arrs, data):
     return i
 
 
 @overload(write_send_buff)
-def write_data_buff_overload(meta, node_id, i, val, data):
-    func_text = "def f(meta, node_id, i, val, data):\n"
+def write_data_buff_overload(meta, node_id, i, key_arrs, data):
+    func_text = "def f(meta, node_id, i, key_arrs, data):\n"
     func_text += "  w_ind = meta.send_disp[node_id] + meta.tmp_offset[node_id]\n"
-    n_keys = len(val.types)
-    for i, typ in enumerate(val.types + data.types):
-        val = ("val[{}]".format(i) if i < n_keys
-               else "data[{}][i]".format(i - n_keys))
-        func_text += "  val_{} = {}\n".format(i, val)
+    n_keys = len(key_arrs.types)
+    for i, typ in enumerate(key_arrs.types + data.types):
+        arr = ("key_arrs[{}]".format(i) if i < n_keys
+               else "data[{}]".format(i - n_keys))
         if not typ in (string_type, string_array_type):
-            func_text += "  meta.send_buff_tup[{}][w_ind] = val_{}\n".format(i, i)
+            func_text += "  meta.send_buff_tup[{}][w_ind] = {}[i]\n".format(i, arr)
         else:
-            func_text += "  n_chars_{} = get_utf8_size(val_{})\n".format(i, i)
+            func_text += "  n_chars_{} = get_str_arr_item_length({}, i)\n".format(i, arr)
             func_text += "  meta.send_arr_lens_tup[{}][w_ind] = n_chars_{}\n".format(i, i)
             if i >= n_keys:
                 func_text += "  out_bitmap = meta.send_arr_nulls_tup[{}][meta.send_disp_nulls[node_id]:].ctypes\n".format(i)
                 func_text += "  bit_val = get_bit_bitmap(get_null_bitmap_ptr(data[{}]), i)\n".format(i - n_keys)
                 func_text += "  set_bit_to(out_bitmap, meta.tmp_offset[node_id], bit_val)\n"
             func_text += "  indc_{} = meta.send_disp_char_tup[{}][node_id] + meta.tmp_offset_char_tup[{}][node_id]\n".format(i, i, i)
-            func_text += "  str_copy_ptr(meta.send_arr_chars_tup[{}], indc_{}, val_{}._data, n_chars_{})\n".format(i, i, i, i)
+            func_text += "  item_ptr_{} = get_str_arr_item_ptr({}, i)\n".format(i, arr)
+            func_text += "  str_copy_ptr(meta.send_arr_chars_tup[{}], indc_{}, item_ptr_{}, n_chars_{})\n".format(i, i, i, i)
             func_text += "  meta.tmp_offset_char_tup[{}][node_id] += n_chars_{}\n".format(i, i)
 
     func_text += "  return w_ind\n"
@@ -618,7 +619,9 @@ def write_data_buff_overload(meta, node_id, i, val, data):
         'get_utf8_size': get_utf8_size,
         'get_null_bitmap_ptr': get_null_bitmap_ptr,
         'get_bit_bitmap': get_bit_bitmap,
-        'set_bit_to': set_bit_to}, loc_vars)
+        'set_bit_to': set_bit_to,
+        'get_str_arr_item_length': get_str_arr_item_length,
+        'get_str_arr_item_ptr': get_str_arr_item_ptr}, loc_vars)
     write_impl = loc_vars['f']
     return write_impl
 

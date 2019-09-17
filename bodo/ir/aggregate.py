@@ -652,7 +652,7 @@ def agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy,
         val = getitem_arr_tup_single(key_arrs, i)
         if val not in key_write_map:
             node_id = hash(val) % n_pes
-            w_ind = write_send_buff(shuffle_meta, node_id, i, val_to_tup(val), ())
+            w_ind = write_send_buff(shuffle_meta, node_id, i, key_arrs, ())
             shuffle_meta.tmp_offset[node_id] += 1
             key_write_map[val] = w_ind
         else:

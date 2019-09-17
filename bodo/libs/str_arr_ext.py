@@ -459,6 +459,7 @@ def copy_non_null_offsets(typingctx, str_arr_typ, out_str_arr_typ=None):
 
     return types.void(string_array_type, string_array_type), codegen
 
+
 @intrinsic
 def str_copy(typingctx, buff_arr_typ, ind_typ, str_typ, len_typ=None):
     def codegen(context, builder, sig, args):
@@ -480,6 +481,16 @@ def str_copy_ptr(typingctx, ptr_typ, ind_typ, str_typ, len_typ=None):
         return context.get_dummy_value()
 
     return types.void(types.voidptr, types.intp, types.voidptr, types.intp), codegen
+
+
+@numba.njit(no_cpython_wrapper=True)
+def get_str_arr_item_length(A, i):
+    return getitem_str_offset(A, i+1) - getitem_str_offset(A, i)
+
+
+@numba.njit(no_cpython_wrapper=True)
+def get_str_arr_item_ptr(A, i):
+    return get_data_ptr_ind(A, getitem_str_offset(A, i))
 
 
 @numba.njit(no_cpython_wrapper=True)
@@ -629,6 +640,7 @@ class GetItemStringArray(AbstractTemplate):
                 return signature(string_array_type, *args)
             elif idx == types.Array(types.intp, 1, 'C'):
                 return signature(string_array_type, *args)
+
 
 @infer_global(operator.setitem)
 class SetItemStringArray(AbstractTemplate):
