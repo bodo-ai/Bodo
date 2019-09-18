@@ -346,7 +346,16 @@ def overload_index_to_array(I, l=0):
     from bodo.hiframes.pd_index_ext import RangeIndexType
 
     if is_overload_none(I):
-        return lambda I, l=0: np.arange(l)
+        # return lambda I, l=0: np.arange(l)
+        # XXX use implementation of arange directly to avoid calc_nitems calls
+        # TODO: remove calc_nitems() with trivial input
+        def impl(I, l=0):
+            numba.parfor.init_prange()
+            arr = np.empty(l, np.int64)
+            for i in numba.parfor.internal_prange(l):
+                arr[i] = i
+            return arr
+        return impl
 
     if isinstance(I, RangeIndexType):
         return lambda I, l=0: np.arange(I._start, I._stop, I._step)
