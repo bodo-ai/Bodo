@@ -800,8 +800,32 @@ def _set_out_keys_overload(out_arrs, w_ind, key_arrs, i, k):
     return _set_out_keys
 
 
+def get_numba_set(dtype):
+    pass
+
+
+@infer_global(get_numba_set)
+class GetNumbaSetTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 1
+        arr = args[0]
+        dtype = (types.Tuple([t.dtype for t in arr.types])
+            if isinstance(arr, types.BaseTuple) else arr.dtype)
+        if isinstance(arr, types.BaseTuple) and len(arr.types) == 1:
+            dtype = arr.types[0].dtype
+        return signature(types.Set(dtype), *args)
+
+
+@lower_builtin(get_numba_set, types.Any)
+def lower_get_numba_set(context, builder, sig, args):
+    return numba.targets.setobj.set_empty_constructor(
+        context, builder, sig, args)
+
+
 def get_key_set(arr):  # pragma: no cover
     return set()
+
 
 @overload(get_key_set)
 def get_key_set_overload(arr):
@@ -809,23 +833,26 @@ def get_key_set_overload(arr):
             and len(arr.types) == 1 and arr.types[0] == string_array_type):
         return lambda arr: bodo.libs.set_ext.init_set_string()
 
-    if isinstance(arr, types.BaseTuple):
-        def get_set_tup(arr):
-            s = set()
-            v = getitem_arr_tup_single(arr, 0)
-            s.add(v)
-            s.remove(v)
-            return s
-        return get_set_tup
+    return lambda arr: get_numba_set(arr)
 
-    # hack to return set with specified type
-    def get_set(arr):
-        s = set()
-        s.add(arr[0])
-        s.remove(arr[0])
-        return s
+    # HACK below can cause crashes in case of zero-length arrays
+    # if isinstance(arr, types.BaseTuple):
+    #     def get_set_tup(arr):
+    #         s = set()
+    #         v = getitem_arr_tup_single(arr, 0)
+    #         s.add(v)
+    #         s.remove(v)
+    #         return s
+    #     return get_set_tup
 
-    return get_set
+    # # hack to return set with specified type
+    # def get_set(arr):
+    #     s = set()
+    #     s.add(arr[0])
+    #     s.remove(arr[0])
+    #     return s
+
+    # return get_set
 
 
 def alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set, return_key):  # pragma: no cover

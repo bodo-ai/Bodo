@@ -80,7 +80,7 @@ def alloc_pre_shuffle_metadata_overload(key_arrs, data, n_pes, is_contig):
                       else "  arr = data[{}]\n".format(i - n_keys))
         if typ == string_array_type:
             func_text += "  send_counts_char_{} = np.zeros(n_pes, np.int32)\n".format(i)
-            func_text += "  send_arr_lens_{} = np.empty(1, np.uint32)\n".format(i)
+            func_text += "  send_arr_lens_{} = np.empty(0, np.uint32)\n".format(i)
             # needs allocation since written in update before finalize
             func_text += "  if is_contig:\n"
             func_text += "    send_arr_lens_{} = np.empty(len(arr), np.uint32)\n".format(i)
@@ -90,7 +90,7 @@ def alloc_pre_shuffle_metadata_overload(key_arrs, data, n_pes, is_contig):
 
         # null masks for string array, int array
         if is_null_masked_type(typ):
-            func_text += "  send_arr_nulls_{} = np.empty(1, np.uint8)\n".format(i)
+            func_text += "  send_arr_nulls_{} = np.empty(0, np.uint8)\n".format(i)
             # allocate null bytes, 2 * n_pes extra space since bits are
             # unpacked around processor border
             func_text += "  if is_contig:\n"
@@ -213,7 +213,7 @@ def finalize_shuffle_meta_overload(key_arrs, data, pre_shuffle_meta, n_pes, is_c
             func_text += "  send_arr_lens_{} = pre_shuffle_meta.send_arr_lens_tup[{}]\n".format(i, i)
             # send char arr
             # TODO: arr refcount if arr is not stored somewhere?
-            func_text += "  send_arr_chars_arr_{} = np.empty(1, np.uint8)\n".format(i)
+            func_text += "  send_arr_chars_arr_{} = np.empty(0, np.uint8)\n".format(i)
             func_text += "  send_arr_chars_{} = get_ctypes_ptr(get_data_ptr(arr))\n".format(i)
             func_text += "  if not is_contig:\n"
             func_text += "    send_arr_lens_{} = np.empty(n_send, np.uint32)\n".format(i)
