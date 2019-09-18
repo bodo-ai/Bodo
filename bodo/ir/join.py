@@ -71,8 +71,17 @@ def join_array_analysis(join_node, equiv_set, typemap, array_analysis):
 
     # arrays of left_df and right_df have same size in first dimension
     all_shapes = []
-    in_vars = (list(join_node.left_vars.values())
-               + list(join_node.right_vars.values()))
+    in_vars = list(join_node.left_vars.values())
+    for col_var in in_vars:
+        typ = typemap[col_var.name]
+        col_shape = equiv_set.get_shape(col_var)
+        all_shapes.append(col_shape[0])
+
+    if len(all_shapes) > 1:
+        equiv_set.insert_equiv(*all_shapes)
+
+    all_shapes = []
+    in_vars = list(join_node.right_vars.values())
     for col_var in in_vars:
         typ = typemap[col_var.name]
         col_shape = equiv_set.get_shape(col_var)
