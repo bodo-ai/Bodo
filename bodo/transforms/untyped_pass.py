@@ -98,6 +98,8 @@ def remove_hiframes(rhs, lives, call_list):
         return True
     if call_list == ['calc_nitems', 'array_kernels', 'libs', bodo]:
         return True
+    if call_list == ['add_consts_to_type', 'typing', 'utils', bodo]:
+        return True
     if call_list == [list]:
         return True
     if call_list == ['groupby']:
