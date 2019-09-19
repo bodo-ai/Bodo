@@ -17,7 +17,8 @@ from numba.numpy_support import as_dtype
 
 import bodo
 from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
-from bodo.libs.str_arr_ext import string_array_type, pre_alloc_string_array
+from bodo.libs.str_arr_ext import (string_array_type, pre_alloc_string_array,
+    get_str_arr_item_length)
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.utils.shuffle import getitem_arr_tup_single
@@ -406,10 +407,9 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     func_text += "    uniqs_i.add(val)\n"
     for i in range(count):
         if data.types[i] == string_array_type:
-            func_text += "    n_chars_{} += get_utf8_size(val{})\n".format(
-                i, "[{}]".format(i) if count > 0 else "")
+            func_text += "    n_chars_{0} += get_str_arr_item_length(data[{0}], i)\n".format(i)
     if ind_arr == string_array_type:
-        func_text += "    n_chars_index += get_utf8_size(ind_arr[i])\n"
+        func_text += "    n_chars_index += get_str_arr_item_length(ind_arr, i)\n"
     for i in range(count):
         if data.types[i] == string_array_type:
             func_text += "  out_arr_{0} = pre_alloc_string_array(n_uniq, n_chars_{0})\n".format(i)
@@ -437,7 +437,7 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     exec(func_text, {'bodo': bodo,
         'pre_alloc_string_array': pre_alloc_string_array,
         'getitem_arr_tup_single': getitem_arr_tup_single,
-        'get_utf8_size': bodo.libs.str_arr_ext.get_utf8_size}, loc_vars)
+        'get_str_arr_item_length': get_str_arr_item_length}, loc_vars)
     impl = loc_vars['impl']
     return impl
 
