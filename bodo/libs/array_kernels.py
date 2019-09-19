@@ -388,9 +388,6 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     func_text = "def impl(data, ind_arr, parallel=False):\n"
     func_text += "  if parallel:\n"
     func_text += "    data, (ind_arr,) = bodo.ir.join.parallel_join(data, (ind_arr,))\n"
-    # XXX: convert StringArray to list of strings due to strange error with set
-    # TODO: debug StringArray issue on test_df_duplicated with multiple pes
-    func_text += "  data = bodo.libs.str_arr_ext.to_string_list(data)\n"
     func_text += "  n = len(data[0])\n"
     # count the numder of unique values for allocation
     func_text += "  n_uniq = 0\n"
