@@ -17,6 +17,7 @@ from bodo.libs.str_arr_ext import (string_array_type, num_total_chars,
     setitem_str_bitmap, set_bit_to)
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.utils.utils import (debug_prints, empty_like_type,
     _numba_to_c_type_map, unliteral_all)
 from llvmlite import ir as lir
@@ -182,6 +183,15 @@ def copy_gathered_null_bytes(null_bitmap_ptr, tmp_null_bytes,
 
 @numba.generated_jit(nopython=True)
 def gatherv(data, allgather=False):
+
+    if isinstance(data, CategoricalArray):
+        def impl_cat(data, allgather=False):
+            int_arr = bodo.hiframes.pd_categorical_ext.cat_array_to_int(data)
+            return bodo.hiframes.pd_categorical_ext.set_cat_dtype(
+                bodo.gatherv(int_arr, allgather), data)
+
+        return impl_cat
+
     if isinstance(data, types.Array):
         typ_val = _numba_to_c_type_map[data.dtype]
 

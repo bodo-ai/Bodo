@@ -19,6 +19,19 @@ class PDCategoricalDtype(types.Opaque):
         super(PDCategoricalDtype, self).__init__(name=name)
 
 
+class PDCategoricalClass(types.Opaque):
+    # class for categorical dtype objects passed as types to astype() etc.
+    def __init__(self, _categories):
+        self.categories = _categories
+        name = 'PDCategoricalClass({})'.format(self.categories)
+        super(PDCategoricalClass, self).__init__(name=name)
+
+
+@typeof_impl.register(pd.CategoricalDtype)
+def _typeof_pd_cat_class(val, c):
+    return PDCategoricalClass(val.categories.to_list())
+
+
 @register_model(PDCategoricalDtype)
 class CategoricalDtypeModel(models.IntegerModel):
     def __init__(self, dmm, fe_type):

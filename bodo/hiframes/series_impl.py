@@ -10,6 +10,7 @@ from numba.extending import overload, overload_attribute, overload_method
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_index_ext import is_pd_index_type
+from bodo.hiframes.pd_categorical_ext import PDCategoricalClass
 from bodo.utils.typing import (is_overload_none, is_overload_true,
     is_overload_false, is_overload_zero, is_overload_str)
 

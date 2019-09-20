@@ -167,6 +167,8 @@ def _infer_series_dtype(S):
     # nullable int dtype
     if isinstance(S.dtype, pd.core.arrays.integer._IntegerDtype):
         return typeof_pd_int_dtype(S.dtype, None)
+    elif isinstance(S.dtype, pd.CategoricalDtype):
+        return PDCategoricalDtype(S.dtype.categories)
 
     # regular numpy types
     try:

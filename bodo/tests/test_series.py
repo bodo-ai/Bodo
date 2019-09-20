@@ -307,6 +307,30 @@ def test_series_astype_bool_arr(S):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.skip(reason="categorical feature gaps")
+@pytest.mark.parametrize('S', [
+    pd.Series(['A', 'BB', 'A', 'BBB', 'BB', 'A']),
+])
+def test_series_astype_cat(S):
+    ctype = pd.CategoricalDtype(S.unique())
+
+    def test_impl(S):
+        return S.astype(ctype)
+
+    check_func(test_impl, (S,))
+
+
+@pytest.mark.parametrize('S', [
+    pd.Series(['A', 'BB', 'A', 'BBB', 'BB', 'A']).astype('category'),
+])
+def test_series_cat_box(S):
+
+    def test_impl(S):
+        return S
+
+    check_func(test_impl, (S,))
+
+
 def test_series_copy_deep(series_val):
     # TODO: test deep/shallow cases properly
     def test_impl(S):
