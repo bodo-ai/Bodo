@@ -118,6 +118,23 @@ def box_categorical_array(typ, val, c):
     return cat_arr
 
 
+# TODO: handle all ops, redo CategoricalArray without Array subtyping
+@overload(operator.eq)
+def overload_cat_arr_eq_str(A, other):
+    if isinstance(A, CategoricalArray) and isinstance(other, types.StringLiteral):
+        other_idx = list(A.dtype.categories).index(other.literal_value)
+        def impl(A, other):
+            out_arr = cat_array_to_int(A) == other_idx
+            return out_arr
+
+        return impl
+
+
+@lower_cast(CategoricalArray, types.Array)
+def cast_cat_arr(context, builder, fromty, toty, val):
+    return val
+
+
 def _get_cat_obj_items(categories, c):
     assert len(categories) > 0
     val = categories[0]

@@ -32,6 +32,7 @@ from bodo.libs.str_arr_ext import (string_array_type, StringArrayType,
     is_str_arr_typ, pre_alloc_string_array, get_utf8_size)
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.hiframes.pd_series_ext import (SeriesType, is_str_series_typ,
     series_to_array_type, is_dt64_series_typ, is_bool_series_typ,
     if_series_to_array_type, is_series_type,
@@ -403,6 +404,9 @@ class SeriesPass(object):
         arg1, arg2 = rhs.lhs, rhs.rhs
         typ1, typ2 = self.typemap[arg1.name], self.typemap[arg2.name]
 
+        if isinstance(typ1, CategoricalArray) and isinstance(typ2, types.StringLiteral):
+            impl = bodo.hiframes.pd_categorical_ext.overload_cat_arr_eq_str(typ1, typ2)
+            return self._replace_func(impl, [arg1, arg2])
 
         # both dt64
         if is_dt64_series_typ(typ1) and is_dt64_series_typ(typ2):
@@ -671,6 +675,9 @@ class SeriesPass(object):
                         pysig=numba.utils.pysignature(impl),
                         kws=dict(rhs.kws))
 
+        if fdef == ('cat_array_to_int', 'bodo.hiframes.pd_categorical_ext'):
+            assign.value = rhs.args[0]
+            return [assign]
 
         # replace _get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
@@ -972,7 +979,8 @@ class SeriesPass(object):
         if func in bodo.hiframes.pd_series_ext.series_binary_ops:
             expr = ir.Expr.binop(func, rhs.args[0], rhs.args[1], rhs.loc)
             self.calltypes[expr] = self.calltypes[rhs]
-            return [ir.Assign(expr, assign.target, rhs.loc)]
+            return self._run_binop(
+                ir.Assign(expr, assign.target, rhs.loc), expr)
 
         if func in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
             # TODO: test

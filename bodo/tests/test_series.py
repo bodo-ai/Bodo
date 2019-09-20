@@ -331,6 +331,17 @@ def test_series_cat_box(S):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.parametrize('S', [
+    pd.Series(['A', 'BB', 'A', 'BBB', 'BB', 'A']).astype('category'),
+])
+def test_series_cat_comp(S):
+
+    def test_impl(S):
+        return S == 'BB'
+
+    check_func(test_impl, (S,))
+
+
 def test_series_copy_deep(series_val):
     # TODO: test deep/shallow cases properly
     def test_impl(S):
