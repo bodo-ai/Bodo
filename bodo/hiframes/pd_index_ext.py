@@ -777,11 +777,11 @@ def init_range_index(typingctx, start, stop, step, name=None):
 def unbox_range_index(typ, val, c):
     # get start/stop/step attributes
     start = c.pyapi.to_native_value(
-        types.int64, c.pyapi.object_getattr_string(val, '_start')).value
+        types.int64, c.pyapi.object_getattr_string(val, 'start')).value
     stop = c.pyapi.to_native_value(
-        types.int64, c.pyapi.object_getattr_string(val, '_stop')).value
+        types.int64, c.pyapi.object_getattr_string(val, 'stop')).value
     step = c.pyapi.to_native_value(
-        types.int64, c.pyapi.object_getattr_string(val, '_step')).value
+        types.int64, c.pyapi.object_getattr_string(val, 'step')).value
     name = c.pyapi.to_native_value(
         typ.name_typ, c.pyapi.object_getattr_string(val, 'name')).value
 
