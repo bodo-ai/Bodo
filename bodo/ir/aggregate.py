@@ -1037,11 +1037,15 @@ def gen_top_level_transform_func(key_names, in_col_names, out_col_names,
 
     out_tup = ", ".join(out_names)
 
+    # cumsum ignores the index and returns a Series with values in the same
+    # order as original column. Therefore, we need to shuffle the data back.
     if parallel:
-        # reuse join's shuffle function
-        func_text += "    key_in, data_in = bodo.ir.join.parallel_join(key_in, data_in)\n".format()
-    func_text += "    ({},) = group_cumsum(key_in, data_in)\n".format(
-            out_tup)
+        func_text += "    key_in, data_in, orig_indices, shuffle_meta = bodo.utils.shuffle.shuffle_with_index(key_in, data_in)\n".format()
+
+    func_text += "    ({},) = group_cumsum(key_in, data_in)\n".format(out_tup)
+
+    if parallel:
+        func_text += "    ({0},) = bodo.utils.shuffle.reverse_shuffle(({0},), orig_indices, shuffle_meta)\n".format(out_tup)
 
     func_text += "    return ({},)\n".format(out_tup)
 

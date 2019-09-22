@@ -6,11 +6,12 @@ from collections import namedtuple
 import numpy as np
 
 import numba
-from numba import types
+from numba import types, generated_jit
 from numba.extending import overload
 
 import bodo
-from bodo.utils.utils import get_ctypes_ptr, _numba_to_c_type_map
+from bodo.utils.utils import get_ctypes_ptr, _numba_to_c_type_map, alloc_arr_tup
+from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.libs.timsort import getitem_arr_tup
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
@@ -357,6 +358,72 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
          'print_str_arr': print_str_arr}, loc_vars)
     a2a_impl = loc_vars['f']
     return a2a_impl
+
+
+def shuffle_with_index_impl(key_arrs, data):
+    # alloc shuffle meta
+    n_pes = bodo.libs.distributed_api.get_size()
+    pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, False)
+    orig_indices = np.arange(len(key_arrs[0]))
+
+    # calc send/recv counts
+    for i in range(len(key_arrs[0])):
+        val = getitem_arr_tup_single(key_arrs, i)
+        node_id = hash(val) % n_pes
+        update_shuffle_meta(pre_shuffle_meta, node_id, i, val_to_tup(val),
+            data, False)
+
+    shuffle_meta = finalize_shuffle_meta(key_arrs, data, pre_shuffle_meta,
+                                          n_pes, False)
+
+    # write send buffers
+    for i in range(len(key_arrs[0])):
+        val = getitem_arr_tup_single(key_arrs, i)
+        node_id = hash(val) % n_pes
+        w_ind = bodo.ir.join.write_send_buff(
+            shuffle_meta, node_id, i, key_arrs, data)
+        orig_indices[w_ind] = i
+        # update last since it is reused in data
+        shuffle_meta.tmp_offset[node_id] += 1
+
+    # shuffle
+    recvs = alltoallv_tup(key_arrs + data, shuffle_meta, key_arrs)
+    out_keys = _get_keys_tup(recvs, key_arrs)
+    out_data = _get_data_tup(recvs, key_arrs)
+    return out_keys, out_data, orig_indices, shuffle_meta
+
+
+@generated_jit(nopython=True, cache=True)
+def shuffle_with_index(key_arrs, data):
+    """shuffle the data but preserve index of data elements to reverse later
+    """
+    return shuffle_with_index_impl
+
+
+@numba.njit(cache=True)
+def reverse_shuffle(data, orig_indices, shuffle_meta):
+    # TODO: handle strings
+    # allocate output
+    out_arrs = alloc_arr_tup(shuffle_meta.n_send, data)
+    # reverse send/recv buffers
+    new_sh = ShuffleMeta(shuffle_meta.recv_counts, shuffle_meta.send_counts,
+        shuffle_meta.n_out, shuffle_meta.n_send, shuffle_meta.recv_disp,
+        shuffle_meta.send_disp, shuffle_meta.recv_disp_nulls,
+        shuffle_meta.send_disp_nulls, shuffle_meta.tmp_offset,
+        data, out_arrs,
+        shuffle_meta.recv_counts_char_tup, shuffle_meta.send_counts_char_tup,
+        shuffle_meta.send_arr_lens_tup, shuffle_meta.send_arr_nulls_tup,
+        shuffle_meta.send_arr_chars_tup, shuffle_meta.recv_disp_char_tup,
+        shuffle_meta.send_disp_char_tup, shuffle_meta.tmp_offset_char_tup,
+        shuffle_meta.send_arr_chars_arr_tup)
+
+    out_arrs = alltoallv_tup(data, new_sh, ())
+
+    new_out = alloc_arr_tup(shuffle_meta.n_send, data)
+    for i in range(len(orig_indices)):
+        setitem_arr_tup(new_out, orig_indices[i], getitem_arr_tup(out_arrs, i))
+
+    return new_out
 
 
 def _get_keys_tup(recvs, key_arrs):
