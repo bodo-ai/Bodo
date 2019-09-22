@@ -521,6 +521,12 @@ class DistributedAnalysis(object):
             self._set_var_dist(lhs, array_dists, Distribution.REP)
             return
 
+        if fdef == ('set_df_column_with_reflect', 'bodo.hiframes.pd_dataframe_ext'):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            self._meet_array_dists(lhs, rhs.args[2].name, array_dists)
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ('drop_duplicates', 'bodo.libs.array_kernels'):
             lhs_typ = self.typemap[lhs]
             arg_dist = min(a.value for a in array_dists[rhs.args[0].name])
