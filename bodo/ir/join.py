@@ -1,6 +1,7 @@
 import operator
 from collections import defaultdict
 import numpy as np
+import pandas as pd
 
 import numba
 from numba import typeinfer, ir, ir_utils, config, types, generated_jit
@@ -9,6 +10,7 @@ from numba.ir_utils import (visit_vars_inner, replace_vars_inner,
                             compile_to_numba_ir, replace_arg_nodes,
                             mk_unique_var)
 import bodo
+from bodo import objmode
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.utils.utils import debug_prints, alloc_arr_tup
 from bodo.transforms.distributed_analysis import Distribution
@@ -318,6 +320,9 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx,
         join_node, array_dists)
 
     method = 'hash'
+    pd_join_func = None
+    if bodo.use_pandas_join:
+        method = 'pandas'
     # method = 'sort'
     # TODO: rebalance if output distributions are 1D instead of 1D_Var
     loc = join_node.loc
@@ -413,6 +418,12 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx,
         func_text += ("    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
         " = bodo.ir.join.local_merge_new(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
             join_node.how in ('left', 'outer'), join_node.how == 'outer'))
+    elif method == 'pandas':
+        pd_join_func = _gen_pd_join(left_key_vars, right_key_vars,
+            left_other_col_vars, right_other_col_vars, typemap, join_node.how)
+        func_text += ("    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
+            " = pd_join_func(t1_keys, t2_keys, data_left, data_right, '{}', {})\n".format(
+            join_node.how, join_node.left_keys == join_node.right_keys))
     else:
         assert method == 'hash'
         func_text += ("    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
@@ -449,7 +460,7 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx,
 
     # print(func_text)
 
-    glbs = {'bodo': bodo, 'np': np,
+    glbs = {'bodo': bodo, 'np': np, 'pd_join_func': pd_join_func,
                                   'to_string_list': to_string_list,
                                   'cp_str_list_to_array': cp_str_list_to_array,
                                   'parallel_join': parallel_join,
@@ -948,6 +959,7 @@ def _hash_if_tup(val):
         return lambda val: val[0]
     return lambda val: hash(val)
 
+
 @generated_jit(nopython=True, cache=True)
 def _check_ind_if_hashed(right_keys, r_ind, l_key):
     if right_keys == types.Tuple((types.intp[::1],)):
@@ -958,6 +970,76 @@ def _check_ind_if_hashed(right_keys, r_ind, l_key):
             return -1
         return r_ind
     return _impl
+
+
+def _gen_pd_join(left_key_vars, right_key_vars, left_other_col_vars,
+                 right_other_col_vars, typemap, how):
+    l_keys_typ = types.Tuple([typemap[v.name] for v in left_key_vars])
+    r_keys_typ = types.Tuple([typemap[v.name] for v in right_key_vars])
+    l_data_typ = types.Tuple([typemap[v.name] for v in left_other_col_vars])
+    r_data_typ = types.Tuple([typemap[v.name] for v in right_other_col_vars])
+    lk_name = 'pd_join{}'.format(str(ir_utils.next_label()))
+    rk_name = 'pd_join{}'.format(str(ir_utils.next_label()))
+    ld_name = 'pd_join{}'.format(str(ir_utils.next_label()))
+    rd_name = 'pd_join{}'.format(str(ir_utils.next_label()))
+    setattr(types, lk_name, l_keys_typ)
+    setattr(types, rk_name, r_keys_typ)
+    setattr(types, ld_name, l_data_typ)
+    setattr(types, rd_name, r_data_typ)
+
+    typ_strs = "out_t1_keys='{}', out_t2_keys='{}', out_data_left='{}', out_data_right='{}'".format(
+        lk_name, rk_name, ld_name, rd_name)
+
+    func_text = "def f(t1_keys, t2_keys, data_left, data_right, how, same_keys):\n"
+    func_text += "  with objmode({}):\n".format(typ_strs)
+    func_text += "    out_t1_keys, out_t2_keys, out_data_left, out_data_right = bodo.ir.join.pd_join(t1_keys, t2_keys, data_left, data_right, how, same_keys)\n"
+    func_text += "  return out_t1_keys, out_t2_keys, out_data_left, out_data_right\n"
+
+    loc_vars = {}
+    exec(func_text, {'bodo': bodo, 'objmode': objmode}, loc_vars)
+    f = loc_vars['f']
+
+    # TODO: no_cpython_wrapper=True crashes for some reason
+    jit_func = numba.njit(f)
+    bodo.ir.csv_ext.compiled_funcs.append(jit_func)
+    return jit_func
+
+
+def pd_join(t1_keys, t2_keys, data_left, data_right, how, same_keys):
+    # construct dataframes and call join
+    lk_prefix = 'lk'
+    rk_prefix = 'rk'
+    if same_keys:
+        # same key case matters since Pandas avoids NAs in outer case
+        # like test_join_outer_seq1
+        rk_prefix = 'lk'
+
+    data1 = {'{}{}'.format(lk_prefix, i): v for i, v in enumerate(t1_keys)}
+    data2 = {'{}{}'.format(rk_prefix, i): v for i, v in enumerate(t2_keys)}
+    left_on = list(data1.keys())
+    right_on = list(data2.keys())
+    data1.update({'ld{}'.format(i): v for i, v in enumerate(data_left)})
+    data2.update({'rd{}'.format(i): v for i, v in enumerate(data_right)})
+    df1 = pd.DataFrame(data1)
+    df2 = pd.DataFrame(data2)
+    df3 = df1.merge(df2, left_on=left_on, right_on=right_on, how=how)
+    out_t1_keys = tuple(_get_pd_out_arr(df3['{}{}'.format(lk_prefix, i)], t1_keys[i])
+        for i in range(len(t1_keys)))
+    out_t2_keys = tuple(_get_pd_out_arr(df3['{}{}'.format(rk_prefix, i)], t2_keys[i])
+        for i in range(len(t2_keys)))
+    out_data_left = tuple(_get_pd_out_arr(df3['ld{}'.format(i)], data_left[i])
+        for i in range(len(data_left)))
+    out_data_right = tuple(_get_pd_out_arr(df3['rd{}'.format(i)], data_right[i])
+        for i in range(len(data_right)))
+    return out_t1_keys, out_t2_keys, out_data_left, out_data_right
+
+
+def _get_pd_out_arr(out_series, in_arr):
+    # Pandas converts int to float in case of NAs so convert back
+    if out_series.hasnans and in_arr.dtype in (np.int8, np.int16, np.int32,
+            np.int64, np.uint8, np.uint16, np.uint32, np.uint64):
+        out_series = out_series.fillna(0)
+    return out_series.astype(in_arr.dtype).values
 
 
 @numba.njit

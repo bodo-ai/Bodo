@@ -26,6 +26,7 @@ import bodo.hiframes.pd_timestamp_ext
 import bodo.hiframes.boxing
 import bodo.config
 import bodo.libs.timsort
+use_pandas_join = False
 from bodo.decorators import jit
 
 if bodo.config._has_xenon:

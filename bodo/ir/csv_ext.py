@@ -244,9 +244,11 @@ register_model(StreamReaderType)(models.OpaqueModel)
 def box_stream_reader(typ, val, c):
     return val
 
+
 csv_file_chunk_reader = types.ExternalFunction(
     "csv_file_chunk_reader", stream_reader_type(
         types.voidptr, types.bool_, types.int64, types.int64))
+
 
 def _get_dtype_str(t):
     dtype = t.dtype
