@@ -3,6 +3,7 @@ helper data structures and functions for shuffle (alltoall).
 """
 
 from collections import namedtuple
+import os
 import numpy as np
 
 import numba
@@ -125,14 +126,27 @@ def update_shuffle_meta(pre_shuffle_meta, node_id, ind, val, data, is_contig=Tru
 
 @overload(update_shuffle_meta)
 def update_shuffle_meta_overload(pre_shuffle_meta, node_id, ind, val, data, is_contig=True, padded_bits=0):
+    env_name = 'BODO_DEBUG_LEVEL'
+    debug_level = 0
+    try:
+        debug_level = int(os.environ[env_name])
+    except:
+        pass
+
     func_text = "def f(pre_shuffle_meta, node_id, ind, val, data, is_contig=True, padded_bits=0):\n"
     func_text += "  pre_shuffle_meta.send_counts[node_id] += 1\n"
+    if debug_level > 0:
+        func_text += "  if pre_shuffle_meta.send_counts[node_id] >= {}:\n".format(bodo.libs.distributed_api.INT_MAX)
+        func_text += "    print('large shuffle error')\n"
     n_keys = len(val.types)
     for i, typ in enumerate(val.types + data.types):
         if typ in (string_type, string_array_type):
             val_or_data = 'val[{}]'.format(i) if i < n_keys else 'getitem_arr_tup(data, ind)[{}]'.format(i - n_keys)
             func_text += "  n_chars = get_utf8_size({})\n".format(val_or_data)
             func_text += "  pre_shuffle_meta.send_counts_char_tup[{}][node_id] += n_chars\n".format(i)
+            if debug_level > 0:
+                func_text += "  if pre_shuffle_meta.send_counts_char_tup[{}][node_id] >= {}:\n".format(i, bodo.libs.distributed_api.INT_MAX)
+                func_text += "    print('large shuffle error')\n"
             func_text += "  if is_contig:\n"
             func_text += "    pre_shuffle_meta.send_arr_lens_tup[{}][ind] = n_chars\n".format(i)
 
