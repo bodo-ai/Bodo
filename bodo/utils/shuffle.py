@@ -378,12 +378,15 @@ def shuffle_with_index_impl(key_arrs, data):
     # alloc shuffle meta
     n_pes = bodo.libs.distributed_api.get_size()
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, False)
-    orig_indices = np.arange(len(key_arrs[0]))
+    n = len(key_arrs[0])
+    orig_indices = np.arange(n)
+    node_ids = np.empty(n, np.int32)
 
     # calc send/recv counts
-    for i in range(len(key_arrs[0])):
+    for i in range(n):
         val = getitem_arr_tup_single(key_arrs, i)
         node_id = hash(val) % n_pes
+        node_ids[i] = node_id
         update_shuffle_meta(pre_shuffle_meta, node_id, i, val_to_tup(val),
             data, False)
 
@@ -391,9 +394,9 @@ def shuffle_with_index_impl(key_arrs, data):
                                           n_pes, False)
 
     # write send buffers
-    for i in range(len(key_arrs[0])):
+    for i in range(n):
         val = getitem_arr_tup_single(key_arrs, i)
-        node_id = hash(val) % n_pes
+        node_id = node_ids[i]
         w_ind = bodo.ir.join.write_send_buff(
             shuffle_meta, node_id, i, key_arrs, data)
         orig_indices[w_ind] = i
