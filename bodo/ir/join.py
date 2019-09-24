@@ -373,9 +373,9 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx,
             func_text += "    t2_keys, data_right = parallel_asof_comm(t1_keys, t2_keys, data_right)\n"
     else:
         if left_parallel:
-            func_text += "    t1_keys, data_left = parallel_join(t1_keys, data_left)\n"
+            func_text += "    t1_keys, data_left = parallel_shuffle(t1_keys, data_left)\n"
         if right_parallel:
-            func_text += "    t2_keys, data_right = parallel_join(t2_keys, data_right)\n"
+            func_text += "    t2_keys, data_right = parallel_shuffle(t2_keys, data_right)\n"
         #func_text += "    print(t2_key, data_right)\n"
 
     if method == 'sort' and join_node.how != 'asof':
@@ -463,7 +463,7 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx,
     glbs = {'bodo': bodo, 'np': np, 'pd_join_func': pd_join_func,
                                   'to_string_list': to_string_list,
                                   'cp_str_list_to_array': cp_str_list_to_array,
-                                  'parallel_join': parallel_join,
+                                  'parallel_shuffle': parallel_shuffle,
                                   'parallel_asof_comm': parallel_asof_comm}
 
     f_block = compile_to_numba_ir(join_impl,
@@ -538,7 +538,7 @@ def parallel_join_impl(key_arrs, data):
 
 
 @generated_jit(nopython=True, cache=True)
-def parallel_join(key_arrs, data):
+def parallel_shuffle(key_arrs, data):
     return parallel_join_impl
 
 
