@@ -390,35 +390,16 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     func_text += "  if parallel:\n"
     func_text += "    data, (ind_arr,) = bodo.ir.join.parallel_join(data, (ind_arr,))\n"
     func_text += "  n = len(data[0])\n"
-    # count the numder of unique values for allocation
-    func_text += "  n_uniq = 0\n"
-    func_text += "  uniqs_i = set()\n"
-    # strings need number of characters too
+
     for i in range(count):
         if data.types[i] == string_array_type:
-            func_text += "  n_chars_{} = 0\n".format(i)
-    if ind_arr == string_array_type:
-        func_text += "  n_chars_index = 0\n"
-    func_text += "  for i in range(n):\n"
-    func_text += "    val = getitem_arr_tup_single(data, i)\n"
-    func_text += "    if val in uniqs_i:\n"
-    func_text += "      continue\n"
-    func_text += "    n_uniq += 1\n"
-    func_text += "    uniqs_i.add(val)\n"
-    for i in range(count):
-        if data.types[i] == string_array_type:
-            func_text += "    n_chars_{0} += get_str_arr_item_length(data[{0}], i)\n".format(i)
-    if ind_arr == string_array_type:
-        func_text += "    n_chars_index += get_str_arr_item_length(ind_arr, i)\n"
-    for i in range(count):
-        if data.types[i] == string_array_type:
-            func_text += "  out_arr_{0} = pre_alloc_string_array(n_uniq, n_chars_{0})\n".format(i)
+            func_text += "  out_arr_{0} = pre_alloc_string_array(n, data[{0}]._num_total_chars)\n".format(i)
         else:
-            func_text += "  out_arr_{0} = bodo.utils.utils.alloc_type(n_uniq, data[{0}])\n".format(i)
+            func_text += "  out_arr_{0} = bodo.utils.utils.alloc_type(n, data[{0}])\n".format(i)
     if ind_arr == string_array_type:
-        func_text += "  out_arr_index = pre_alloc_string_array(n_uniq, n_chars_index)\n"
+        func_text += "  out_arr_index = pre_alloc_string_array(n, ind_arr._num_total_chars)\n"
     else:
-        func_text += "  out_arr_index = bodo.utils.utils.alloc_type(n_uniq, ind_arr)\n"
+        func_text += "  out_arr_index = bodo.utils.utils.alloc_type(n, ind_arr)\n"
     func_text += "  uniqs = set()\n"
     func_text += "  w_ind = 0\n"
     func_text += "  for i in range(n):\n"
@@ -430,6 +411,9 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
         func_text += "    out_arr_{0}[w_ind] = data[{0}][i]\n".format(i)
     func_text += "    out_arr_index[w_ind] = ind_arr[i]\n"
     func_text += "    w_ind += 1\n"
+    for i in range(count):
+        func_text += "  out_arr_{0} = trim_arr(out_arr_{0}, w_ind)\n".format(i)
+    func_text += "  out_arr_index = trim_arr(out_arr_index, w_ind)\n"
     func_text += "  return ({},), out_arr_index\n".format(
         ", ".join("out_arr_{}".format(i) for i in range(count)))
     # print(func_text)
@@ -437,7 +421,8 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     exec(func_text, {'bodo': bodo,
         'pre_alloc_string_array': pre_alloc_string_array,
         'getitem_arr_tup_single': getitem_arr_tup_single,
-        'get_str_arr_item_length': get_str_arr_item_length}, loc_vars)
+        'get_str_arr_item_length': get_str_arr_item_length,
+        'trim_arr': bodo.ir.join.trim_arr}, loc_vars)
     impl = loc_vars['impl']
     return impl
 
