@@ -600,6 +600,7 @@ def par_agg_get_shuffle_meta(key_arrs, data_redvar_dummy, init_vals):
     # alloc shuffle meta
     n_pes = bodo.libs.distributed_api.get_size()
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data_redvar_dummy, n_pes, False)
+    node_ids = np.empty(len(key_arrs[0]), np.int32)
 
     # calc send/recv counts
     key_set = get_key_set(key_arrs)
@@ -608,21 +609,24 @@ def par_agg_get_shuffle_meta(key_arrs, data_redvar_dummy, init_vals):
         if val not in key_set:
             key_set.add(val)
             node_id = hash(val) % n_pes
+            node_ids[i] = node_id
             # data isn't computed here yet so pass empty tuple
             update_shuffle_meta(pre_shuffle_meta, node_id, i, val_to_tup(val), (), False)
 
-    shuffle_meta = finalize_shuffle_meta(key_arrs, data_redvar_dummy, pre_shuffle_meta, n_pes, False, init_vals)
-    return shuffle_meta
+    shuffle_meta = finalize_shuffle_meta(key_arrs, data_redvar_dummy,
+        pre_shuffle_meta, n_pes, False, init_vals)
+    return shuffle_meta, node_ids
 
 
 @numba.njit(no_cpython_wrapper=True)
 def parallel_agg(key_arrs, data_redvar_dummy, out_dummy_tup, data_in, init_vals,
         __update_redvars, __combine_redvars, __eval_res, return_key, pivot_arr):  # pragma: no cover
 
-    shuffle_meta = par_agg_get_shuffle_meta(
+    shuffle_meta, node_ids = par_agg_get_shuffle_meta(
         key_arrs, data_redvar_dummy, init_vals)
 
-    agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy, __update_redvars, pivot_arr)
+    agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy,
+        __update_redvars, pivot_arr, node_ids)
 
     recvs = alltoallv_tup(key_arrs + data_redvar_dummy, shuffle_meta, key_arrs)
     #print(data_shuffle_meta[0].out_arr)
@@ -635,7 +639,7 @@ def parallel_agg(key_arrs, data_redvar_dummy, out_dummy_tup, data_in, init_vals,
 
 @numba.njit(no_cpython_wrapper=True)
 def agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy,
-                                        __update_redvars, pivot_arr):  # pragma: no cover
+                            __update_redvars, pivot_arr, node_ids):  # pragma: no cover
     # _init_val_0 = np.int64(0)
     # redvar_0_arr = np.full(n_uniq_keys, _init_val_0, np.int64)
     # _init_val_1 = np.int64(0)
@@ -651,7 +655,7 @@ def agg_parallel_local_iter(key_arrs, data_in, shuffle_meta, data_redvar_dummy,
         # val = key_arrs[0][i]
         val = getitem_arr_tup_single(key_arrs, i)
         if val not in key_write_map:
-            node_id = hash(val) % n_pes
+            node_id = node_ids[i]
             w_ind = write_send_buff(shuffle_meta, node_id, i, key_arrs, ())
             shuffle_meta.tmp_offset[node_id] += 1
             key_write_map[val] = w_ind
