@@ -66,7 +66,7 @@ It is built with `Sphinx <http://www.sphinx-doc.org>`_ and the bootstrap theme::
     conda install sphinx
     pip install sphinx_bootstrap_theme
 
-After updating documentation, run `make html` in the `docs` folder to build.
+After updating documentation, run :code:`make html` in the `docs` folder to build.
 
 
 Building from Source on Windows
