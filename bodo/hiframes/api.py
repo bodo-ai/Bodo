@@ -213,22 +213,24 @@ def unique_overload_parallel(A):
     def unique_par(A):
         uniq_A = bodo.utils.utils.unique(A)
         key_arrs = (uniq_A,)
+        n = len(uniq_A)
+        node_ids = np.empty(n, np.int32)
 
         n_pes = bodo.libs.distributed_api.get_size()
         pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, (), n_pes, False)
 
         # calc send/recv counts
-        for i in range(len(uniq_A)):
+        for i in range(n):
             val = uniq_A[i]
             node_id = hash(val) % n_pes
+            node_ids[i] = node_id
             update_shuffle_meta(pre_shuffle_meta, node_id, i, (val,), (), False)
 
         shuffle_meta = finalize_shuffle_meta(key_arrs, (), pre_shuffle_meta, n_pes, False)
 
         # write send buffers
-        for i in range(len(uniq_A)):
-            val = uniq_A[i]
-            node_id = hash(val) % n_pes
+        for i in range(n):
+            node_id = node_ids[i]
             write_send_buff(shuffle_meta, node_id, i, key_arrs, ())
             # update last since it is reused in data
             shuffle_meta.tmp_offset[node_id] += 1
