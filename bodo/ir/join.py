@@ -509,11 +509,14 @@ def parallel_join_impl(key_arrs, data):
     # alloc shuffle meta
     n_pes = bodo.libs.distributed_api.get_size()
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, False)
+    n = len(key_arrs[0])
+    node_ids = np.empty(n, np.int32)
 
     # calc send/recv counts
-    for i in range(len(key_arrs[0])):
+    for i in range(n):
         val = getitem_arr_tup_single(key_arrs, i)
         node_id = hash(val) % n_pes
+        node_ids[i] = node_id
         update_shuffle_meta(pre_shuffle_meta, node_id, i, val_to_tup(val),
             data, False)
 
@@ -521,9 +524,8 @@ def parallel_join_impl(key_arrs, data):
                                           n_pes, False)
 
     # write send buffers
-    for i in range(len(key_arrs[0])):
-        val = getitem_arr_tup_single(key_arrs, i)
-        node_id = hash(val) % n_pes
+    for i in range(n):
+        node_id = node_ids[i]
         write_send_buff(shuffle_meta, node_id, i, key_arrs, data)
         # update last since it is reused in data
         shuffle_meta.tmp_offset[node_id] += 1
