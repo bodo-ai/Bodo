@@ -570,6 +570,9 @@ class DistributedAnalysis(object):
         if fdef == ('isna', 'bodo.hiframes.api'):
             return
 
+        if fdef == ('get_str_arr_item_length', 'bodo.libs.str_arr_ext'):
+            return
+
         if fdef == ('get_series_name', 'bodo.hiframes.api'):
             return
 
@@ -1429,6 +1432,8 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
                         if fdef == ('str_arr_item_to_numeric', 'bodo.libs.str_arr_ext'):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                             accesses.add((rhs.args[2].name, rhs.args[3].name, False))
+                        if fdef == ('get_str_arr_item_length', 'bodo.libs.str_arr_ext'):
+                            accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ('get_bit_bitmap_arr', 'bodo.libs.int_arr_ext'):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, True))
                         if fdef == ('set_bit_to_arr', 'bodo.libs.int_arr_ext'):

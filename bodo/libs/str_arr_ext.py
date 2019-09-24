@@ -485,7 +485,7 @@ def str_copy_ptr(typingctx, ptr_typ, ind_typ, str_typ, len_typ=None):
 
 @numba.njit(no_cpython_wrapper=True)
 def get_str_arr_item_length(A, i):
-    return getitem_str_offset(A, i+1) - getitem_str_offset(A, i)
+    return np.int64(getitem_str_offset(A, i+1) - getitem_str_offset(A, i))
 
 
 @numba.njit(no_cpython_wrapper=True)

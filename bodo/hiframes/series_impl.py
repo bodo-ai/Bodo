@@ -8,6 +8,7 @@ import numba
 from numba import types
 from numba.extending import overload, overload_attribute, overload_method
 import bodo
+from bodo.libs.str_arr_ext import get_str_arr_item_length
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_index_ext import is_pd_index_type
 from bodo.hiframes.pd_categorical_ext import PDCategoricalClass
@@ -794,15 +795,16 @@ def overload_series_fillna(S, value=None, method=None, axis=None,
             def str_fillna_inplace_impl(S, value=None, method=None, axis=None,
                                      inplace=False, limit=None, downcast=None):
                 in_arr = bodo.hiframes.api.get_series_data(S)
+                val_len = bodo.libs.str_arr_ext.get_utf8_size(value)
                 n = len(in_arr)
                 num_chars = 0
                 # get total chars in new array
                 for i in numba.parfor.internal_prange(n):
-                    s = in_arr[i]
+                    s_len = get_str_arr_item_length(in_arr, i)
                     if bodo.hiframes.api.isna(in_arr, i):
-                        l = bodo.libs.str_arr_ext.get_utf8_size(value)
+                        l = val_len
                     else:
-                        l = bodo.libs.str_arr_ext.get_utf8_size(s)
+                        l = s_len
                     num_chars += l
                 out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(
                     n, num_chars)
@@ -831,17 +833,18 @@ def overload_series_fillna(S, value=None, method=None, axis=None,
                 in_arr = bodo.hiframes.api.get_series_data(S)
                 index = bodo.hiframes.api.get_series_index(S)
                 name = bodo.hiframes.api.get_series_name(S)
+                val_len = bodo.libs.str_arr_ext.get_utf8_size(value)
                 n = len(in_arr)
                 num_chars = 0
                 # get total chars in new array
                 for i in numba.parfor.internal_prange(n):
-                    s = in_arr[i]
+                    s_len = get_str_arr_item_length(in_arr, i)
                     # TODO: fix dist reduce when "num_chars += ..." is in
                     # both branches
                     if bodo.hiframes.api.isna(in_arr, i):
-                        l = bodo.libs.str_arr_ext.get_utf8_size(value)
+                        l = val_len
                     else:
-                        l = bodo.libs.str_arr_ext.get_utf8_size(s)
+                        l = s_len
                     num_chars += l
                 out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(
                     n, num_chars)

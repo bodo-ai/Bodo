@@ -456,7 +456,8 @@ class DistributedPass(object):
 
         if (fdef in (('isna', 'bodo.hiframes.api'),
                     ('get_bit_bitmap_arr', 'bodo.libs.int_arr_ext'),
-                    ('set_bit_to_arr', 'bodo.libs.int_arr_ext'))
+                    ('set_bit_to_arr', 'bodo.libs.int_arr_ext'),
+                    ('get_str_arr_item_length', 'bodo.libs.str_arr_ext'))
                 and self._dist_arr_needs_adjust(rhs.args[0].name)):
             # fix index in call to isna
             arr = rhs.args[0]
@@ -2047,6 +2048,7 @@ class DistributedPass(object):
                     ('setitem_arr_nan', 'bodo.ir.join'),
                     ('str_arr_item_to_numeric', 'bodo.libs.str_arr_ext'),
                     ('setitem_str_arr_ptr', 'bodo.libs.str_arr_ext'),
+                    ('get_str_arr_item_length', 'bodo.libs.str_arr_ext'),
                     ('get_split_view_index', 'bodo.hiframes.split_impl'),
                     ('get_bit_bitmap_arr', 'bodo.libs.int_arr_ext'),
                     ('set_bit_to_arr', 'bodo.libs.int_arr_ext')
