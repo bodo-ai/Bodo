@@ -479,8 +479,23 @@ static void c_alltoallv(void* send_data, void* recv_data, int* send_counts,
                 int* recv_counts, int* send_disp, int* recv_disp, int typ_enum)
 {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
-    MPI_Alltoallv(send_data, send_counts, send_disp, mpi_typ,
+    MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
+    int err_code = MPI_Alltoallv(send_data, send_counts, send_disp, mpi_typ,
         recv_data, recv_counts, recv_disp, mpi_typ, MPI_COMM_WORLD);
+
+    // TODO: create a macro for this and add to all MPI calls
+    if (err_code != MPI_SUCCESS) {
+        char err_string[MPI_MAX_ERROR_STRING];
+        err_string[MPI_MAX_ERROR_STRING-1] = '\0';
+        int err_len, err_class, my_rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+        MPI_Error_class(err_code, &err_class);
+        MPI_Error_string(err_class, err_string, &err_len);
+        fprintf(stderr, "%d: %s\n", my_rank, err_string);
+        MPI_Error_string(err_code, err_string, &err_len);
+        fprintf(stderr, "%d: %s\n", my_rank, err_string);
+        MPI_Abort(MPI_COMM_WORLD, err_code);
+    }
 }
 
 static void c_alltoall(void* send_data, void* recv_data, int count, int typ_enum)
