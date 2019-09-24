@@ -18,7 +18,7 @@ from bodo.transforms.distributed_analysis import Distribution
 from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
     cp_str_list_to_array, get_bit_bitmap, num_total_chars,
     get_offset_ptr, get_data_ptr, get_null_bitmap_ptr, pre_alloc_string_array,
-    getitem_str_offset, copy_str_arr_slice, str_copy_ptr, get_utf8_size,
+    getitem_str_offset, copy_str_arr_slice, str_copy_ptr,
     setitem_str_offset, str_arr_set_na, set_bit_to, print_str_arr,
     get_str_arr_item_ptr, get_str_arr_item_length)
 from bodo.libs.str_ext import string_type
@@ -517,7 +517,7 @@ def parallel_join_impl(key_arrs, data):
         val = getitem_arr_tup_single(key_arrs, i)
         node_id = hash(val) % n_pes
         node_ids[i] = node_id
-        update_shuffle_meta(pre_shuffle_meta, node_id, i, val_to_tup(val),
+        update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs,
             data, False)
 
     shuffle_meta = finalize_shuffle_meta(key_arrs, data, pre_shuffle_meta,
@@ -643,7 +643,6 @@ def write_data_buff_overload(meta, node_id, i, key_arrs, data):
 
     loc_vars = {}
     exec(func_text, {'str_copy_ptr': str_copy_ptr,
-        'get_utf8_size': get_utf8_size,
         'get_null_bitmap_ptr': get_null_bitmap_ptr,
         'get_bit_bitmap': get_bit_bitmap,
         'set_bit_to': set_bit_to,

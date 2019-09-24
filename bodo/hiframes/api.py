@@ -224,7 +224,7 @@ def unique_overload_parallel(A):
             val = uniq_A[i]
             node_id = hash(val) % n_pes
             node_ids[i] = node_id
-            update_shuffle_meta(pre_shuffle_meta, node_id, i, (val,), (), False)
+            update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs, (), False)
 
         shuffle_meta = finalize_shuffle_meta(key_arrs, (), pre_shuffle_meta, n_pes, False)
 

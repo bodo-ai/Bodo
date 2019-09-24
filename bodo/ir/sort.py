@@ -466,7 +466,7 @@ def parallel_sort(key_arrs, data, ascending=True):
                                 or (not ascending) and val <= bounds[node_id]):
             node_id += 1
             padded_bits += (-(padded_bits + i) % 8)
-        update_shuffle_meta(pre_shuffle_meta, node_id, i, (val,), data, True, padded_bits)
+        update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs, data, True, padded_bits)
 
     shuffle_meta = finalize_shuffle_meta(key_arrs, data, pre_shuffle_meta,
                                           n_pes, True)

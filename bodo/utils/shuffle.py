@@ -18,7 +18,7 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
     get_offset_ptr, get_data_ptr, convert_len_arr_to_offset, set_bit_to,
     pre_alloc_string_array, num_total_chars, get_null_bitmap_ptr,
-    get_bit_bitmap, print_str_arr)
+    get_bit_bitmap, print_str_arr, get_str_arr_item_length)
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 
@@ -120,12 +120,12 @@ def alloc_pre_shuffle_metadata_overload(key_arrs, data, n_pes, is_contig):
 
 # 'send_counts' is updated, and 'send_counts_char' and 'send_arr_lens'
 # for every string type
-def update_shuffle_meta(pre_shuffle_meta, node_id, ind, val, data, is_contig=True, padded_bits=0):
+def update_shuffle_meta(pre_shuffle_meta, node_id, ind, key_arrs, data, is_contig=True, padded_bits=0):
     pre_shuffle_meta.send_counts[node_id] += 1
 
 
 @overload(update_shuffle_meta)
-def update_shuffle_meta_overload(pre_shuffle_meta, node_id, ind, val, data, is_contig=True, padded_bits=0):
+def update_shuffle_meta_overload(pre_shuffle_meta, node_id, ind, key_arrs, data, is_contig=True, padded_bits=0):
     env_name = 'BODO_DEBUG_LEVEL'
     debug_level = 0
     try:
@@ -133,16 +133,16 @@ def update_shuffle_meta_overload(pre_shuffle_meta, node_id, ind, val, data, is_c
     except:
         pass
 
-    func_text = "def f(pre_shuffle_meta, node_id, ind, val, data, is_contig=True, padded_bits=0):\n"
+    func_text = "def f(pre_shuffle_meta, node_id, ind, key_arrs, data, is_contig=True, padded_bits=0):\n"
     func_text += "  pre_shuffle_meta.send_counts[node_id] += 1\n"
     if debug_level > 0:
         func_text += "  if pre_shuffle_meta.send_counts[node_id] >= {}:\n".format(bodo.libs.distributed_api.INT_MAX)
         func_text += "    print('large shuffle error')\n"
-    n_keys = len(val.types)
-    for i, typ in enumerate(val.types + data.types):
+    n_keys = len(key_arrs.types)
+    for i, typ in enumerate(key_arrs.types + data.types):
         if typ in (string_type, string_array_type):
-            val_or_data = 'val[{}]'.format(i) if i < n_keys else 'getitem_arr_tup(data, ind)[{}]'.format(i - n_keys)
-            func_text += "  n_chars = get_utf8_size({})\n".format(val_or_data)
+            arr = 'key_arrs[{}]'.format(i) if i < n_keys else 'data[{}]'.format(i - n_keys)
+            func_text += "  n_chars = get_str_arr_item_length({}, ind)\n".format(arr)
             func_text += "  pre_shuffle_meta.send_counts_char_tup[{}][node_id] += n_chars\n".format(i)
             if debug_level > 0:
                 func_text += "  if pre_shuffle_meta.send_counts_char_tup[{}][node_id] >= {}:\n".format(i, bodo.libs.distributed_api.INT_MAX)
@@ -165,7 +165,7 @@ def update_shuffle_meta_overload(pre_shuffle_meta, node_id, ind, val, data, is_c
         'get_null_bitmap_ptr': get_null_bitmap_ptr,
         'getitem_arr_tup': getitem_arr_tup,
         'get_mask_bit': get_mask_bit,
-        'get_utf8_size': bodo.libs.str_arr_ext.get_utf8_size}, loc_vars)
+        'get_str_arr_item_length': get_str_arr_item_length}, loc_vars)
     update_impl = loc_vars['f']
     return update_impl
 
@@ -387,7 +387,7 @@ def shuffle_with_index_impl(key_arrs, data):
         val = getitem_arr_tup_single(key_arrs, i)
         node_id = hash(val) % n_pes
         node_ids[i] = node_id
-        update_shuffle_meta(pre_shuffle_meta, node_id, i, val_to_tup(val),
+        update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs,
             data, False)
 
     shuffle_meta = finalize_shuffle_meta(key_arrs, data, pre_shuffle_meta,

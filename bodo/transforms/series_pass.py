@@ -29,7 +29,7 @@ from bodo.utils.utils import (debug_prints, inline_new_blocks, ReplaceFunc,
 from bodo.libs.str_ext import (string_type, unicode_to_std_str, std_str_to_unicode,
     list_string_array_type)
 from bodo.libs.str_arr_ext import (string_array_type, StringArrayType,
-    is_str_arr_typ, pre_alloc_string_array, get_utf8_size)
+    is_str_arr_typ, pre_alloc_string_array)
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_categorical_ext import CategoricalArray

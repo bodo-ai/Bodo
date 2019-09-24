@@ -611,7 +611,7 @@ def par_agg_get_shuffle_meta(key_arrs, data_redvar_dummy, init_vals):
             node_id = hash(val) % n_pes
             node_ids[i] = node_id
             # data isn't computed here yet so pass empty tuple
-            update_shuffle_meta(pre_shuffle_meta, node_id, i, val_to_tup(val), (), False)
+            update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs, (), False)
 
     shuffle_meta = finalize_shuffle_meta(key_arrs, data_redvar_dummy,
         pre_shuffle_meta, n_pes, False, init_vals)
