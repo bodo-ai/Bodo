@@ -21,8 +21,8 @@ such as Numba on Ubuntu Linux::
     cd numba
     python setup.py develop
     cd ..
-    git clone https://github.com/bodo-inc/bodo.git
-    cd bodo
+    git clone https://github.com/Bodo-inc/Bodo.git
+    cd Bodo
     # build Bodo
     HDF5_DIR=$CONDA_PREFIX python setup.py develop
 
@@ -30,7 +30,8 @@ such as Numba on Ubuntu Linux::
 A command line for running the Pi example on 4 cores::
 
     mpiexec -n 4 python examples/pi.py
-
+If you run into gethostbyname failed error, try `this <https://stackoverflow.com/questions/23112515/mpich2-gethostbyname-failed>`_
+    
 Running unit tests::
 
     conda install pytest
