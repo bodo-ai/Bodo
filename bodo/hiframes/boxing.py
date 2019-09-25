@@ -232,7 +232,11 @@ def box_dataframe(typ, val, c):
 
         with builder.if_else(use_parent) as (then, orelse):
             with then:
-                arr_obj = pyapi.object_getattr_string(dataframe.parent, cname)
+                ser_obj = pyapi.object_getattr_string(dataframe.parent, cname)
+                # need to get underlying array since Series has index but
+                # df_obj doesn't have index yet, leading to index mismatches
+                arr_obj = pyapi.object_getattr_string(ser_obj, 'values')
+                pyapi.decref(ser_obj)
                 pyapi.object_setitem(df_obj, cname_obj, arr_obj)
 
             with orelse:
