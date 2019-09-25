@@ -1368,8 +1368,7 @@ def lower_string_arr_getitem_slice(context, builder, sig, args):
             # get number of chars
             n_chars = 0
             for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                _str = str_arr[i]
-                n_chars += get_utf8_size(_str)
+                n_chars += get_str_arr_item_length(str_arr, i)
             new_arr = pre_alloc_string_array(span, np.int64(n_chars))
             # TODO: more efficient copy
             for i in range(span):
