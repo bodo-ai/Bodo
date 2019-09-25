@@ -232,8 +232,8 @@ def gatherv(data, allgather=False):
             n_bytes = (n_loc + 7) >> 3
 
             for i in range(n_loc):
-                _str = data[i]
-                send_arr_lens[i] = bodo.libs.str_arr_ext.get_utf8_size(_str)
+                send_arr_lens[i] = \
+                    bodo.libs.str_arr_ext.get_str_arr_item_length(data, i)
 
             recv_counts = gather_scalar(np.int32(n_loc), allgather)
             recv_counts_char = gather_scalar(np.int32(n_all_chars), allgather)
@@ -424,8 +424,8 @@ def bcast_overload(data):
             if rank == MPI_ROOT:
                 send_arr_lens = np.empty(n_loc, np.uint32)  # XXX offset type is uint32
                 for i in range(n_loc):
-                    _str = data[i]
-                    send_arr_lens[i] = bodo.libs.str_arr_ext.get_utf8_size(_str)
+                    send_arr_lens[i] = \
+                        bodo.libs.str_arr_ext.get_str_arr_item_length(data, i)
 
                 c_bcast(send_arr_lens.ctypes, np.int32(n_loc), int32_typ_enum)
             else:
