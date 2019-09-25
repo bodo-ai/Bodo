@@ -27,6 +27,7 @@ ll.add_symbol('get_char_from_string', hstr_ext.get_char_from_string)
 ll.add_symbol('get_char_ptr', hstr_ext.get_char_ptr)
 ll.add_symbol('del_str', hstr_ext.del_str)
 ll.add_symbol('_hash_str', hstr_ext.hash_str)
+ll.add_symbol('unicode_to_utf8', hstr_ext.unicode_to_utf8)
 
 
 string_type = types.unicode_type
@@ -145,6 +146,74 @@ def re_sub_overload(p, repl, string, count=0):
             out = p.sub(repl, string, count)
         return out
     return _re_sub_impl
+
+
+
+utf8_str_type = types.ArrayCTypes(types.Array(types.uint8, 1, 'C'))
+
+
+@intrinsic
+def unicode_to_utf8_and_len(typingctx, str_typ=None):
+    """convert unicode string to utf8 string and return its utf8 length.
+    If input is ascii, just wrap its data and meminfo. Otherwise, allocate
+    a new buffer and call encoder.
+    """
+    assert str_typ == string_type
+    ret_typ = types.Tuple([utf8_str_type, types.int64])
+
+    def codegen(context, builder, sig, args):
+        str_in, = args
+
+        uni_str = cgutils.create_struct_proxy(string_type)(
+            context, builder, value=str_in)
+        utf8_str = cgutils.create_struct_proxy(utf8_str_type)(
+            context, builder)
+
+        out_tup = cgutils.create_struct_proxy(ret_typ)(context, builder)
+
+        is_ascii = builder.icmp_unsigned('==', uni_str.is_ascii,
+            lir.Constant(uni_str.is_ascii.type, 1))
+
+        with builder.if_else(is_ascii) as (then, orelse):
+            # ascii case
+            with then:
+                # TODO: check refcount
+                if context.enable_nrt:
+                    context.nrt.incref(builder, string_type, str_in)
+                utf8_str.data = uni_str.data
+                utf8_str.meminfo = uni_str.meminfo
+                out_tup.f1 = uni_str.length
+            # non-ascii case
+            with orelse:
+                # add null padding character
+                # XXX: assuming kind is same as number of bytes per char
+                nbytes_val = builder.mul(context.cast(
+                        builder, uni_str.kind, types.uint32, types.intp),
+                    builder.add(uni_str.length,
+                        lir.Constant(uni_str.length.type, 1)))
+                utf8_str.meminfo = context.nrt.meminfo_alloc_aligned(
+                    builder, size=nbytes_val, align=32)
+
+                utf8_str.data = context.nrt.meminfo_data(
+                    builder, utf8_str.meminfo)
+
+                fnty = lir.FunctionType(lir.IntType(64),
+                    [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer(),
+                    lir.IntType(64), lir.IntType(32)])
+                fn_encode = builder.module.get_or_insert_function(
+                    fnty, name="unicode_to_utf8")
+                utf8_len = builder.call(fn_encode,
+                    [utf8_str.data, uni_str.data, uni_str.length, uni_str.kind]
+                )
+                out_tup.f1 = utf8_len
+
+        out_tup.f0 = utf8_str._getvalue()
+
+        return out_tup._getvalue()
+
+    return ret_typ(string_type), codegen
+
+
 
 
 #######################  type for std string pointer  ########################

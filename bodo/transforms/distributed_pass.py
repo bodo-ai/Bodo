@@ -31,7 +31,7 @@ import bodo
 from bodo.io.pio_api import h5file_type, h5group_type
 from bodo.libs import (distributed_api,
                   distributed_lower)  # import lower for module initialization
-from bodo.libs.str_ext import string_type
+from bodo.libs.str_ext import string_type, unicode_to_utf8_and_len
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.transforms.distributed_analysis import (Distribution,
     DistributedAnalysis, _get_array_accesses)
@@ -804,22 +804,17 @@ class DistributedPass(object):
             from bodo.libs import hio
             import llvmlite.binding as ll
             ll.add_symbol('file_write_parallel', hio.file_write_parallel)
-            # HACK use the string in a dummy function to avoid refcount issues
-            # TODO: fix string data reference count
-            dummy_use = numba.njit(lambda a: None)
-
 
             def f(fname, str_out):  # pragma: no cover
-                count = len(str_out)
-                start = bodo.libs.distributed_api.dist_exscan(count)
-                # TODO: unicode name
+                utf8_str, utf8_len = unicode_to_utf8_and_len(str_out)
+                start = bodo.libs.distributed_api.dist_exscan(utf8_len)
+                # TODO: unicode file name
                 bodo.io.np_io._file_write_parallel(
-                    fname._data, str_out._data, start, count, 1)
-                _dummy_use(str_out)
+                    fname._data, utf8_str, start, utf8_len, 1)
 
             return nodes + compile_func_single_block(
                 f, [fname, str_out], assign.target, self,
-                extra_globals={'_dummy_use': dummy_use})
+                extra_globals={'unicode_to_utf8_and_len': unicode_to_utf8_and_len})
 
         return [assign]
 

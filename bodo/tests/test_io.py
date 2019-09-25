@@ -149,6 +149,27 @@ def test_csv_bool_na(datapath):
     check_func(test_impl, ())
 
 
+def test_write_csv_parallel_unicode():
+    def test_impl(df, fname):
+        df.to_csv(fname, index=False)
+
+    bodo_func = bodo.jit(all_args_distributed=True)(test_impl)
+    S1 = ['¡Y tú quién te crees?', '🐍⚡', '大处着眼，小处着手。' ] * 2
+    S2 = ['abc¡Y tú quién te crees?', 'dd2🐍⚡', '22 大处着眼，小处着手。'] * 2
+    df = pd.DataFrame({'A': S1, 'B': S2})
+    hp_fname = 'test_write_csv1_bodo_par_unicode.csv'
+    pd_fname = 'test_write_csv1_pd_par_unicode.csv'
+    with ensure_clean(pd_fname), ensure_clean(hp_fname):
+        start, end = get_start_end(len(df))
+        bdf = df.iloc[start:end]
+        bodo_func(bdf, hp_fname)
+        bodo.barrier()
+        if get_rank() == 0:
+            test_impl(df, pd_fname)
+            pd.testing.assert_frame_equal(
+                pd.read_csv(hp_fname), pd.read_csv(pd_fname))
+
+
 def test_h5_read_seq(datapath):
     fname = datapath("lr.hdf5")
     def test_impl():
@@ -724,7 +745,7 @@ class TestIO(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         n = 111
         df = pd.DataFrame({'A': np.arange(n)})
-        hp_fname = 'test_write_csv1_hpat.csv'
+        hp_fname = 'test_write_csv1_bodo.csv'
         pd_fname = 'test_write_csv1_pd.csv'
         with ensure_clean(pd_fname), ensure_clean(hp_fname):
             bodo_func(df, hp_fname)
@@ -739,7 +760,7 @@ class TestIO(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         n = 111
-        hp_fname = 'test_write_csv1_hpat_par.csv'
+        hp_fname = 'test_write_csv1_bodo_par.csv'
         pd_fname = 'test_write_csv1_pd_par.csv'
         with ensure_clean(pd_fname), ensure_clean(hp_fname):
             bodo_func(n, hp_fname)
@@ -759,7 +780,7 @@ class TestIO(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         n = 111
-        hp_fname = 'test_write_csv1_hpat_par.csv'
+        hp_fname = 'test_write_csv1_bodo_par.csv'
         pd_fname = 'test_write_csv1_pd_par.csv'
         with ensure_clean(pd_fname), ensure_clean(hp_fname):
             bodo_func(n, hp_fname)

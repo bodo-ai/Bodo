@@ -228,6 +228,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                             PyLong_FromVoidPtr((void*)(&c_glob)));
     PyObject_SetAttrString(m, "array_size",
                             PyLong_FromVoidPtr((void*)(&array_size)));
+    PyObject_SetAttrString(m, "unicode_to_utf8",
+                            PyLong_FromVoidPtr((void*)(&unicode_to_utf8)));
     PyObject_SetAttrString(m, "array_getptr1",
                             PyLong_FromVoidPtr((void*)(&array_getptr1)));
     PyObject_SetAttrString(m, "array_setitem",
