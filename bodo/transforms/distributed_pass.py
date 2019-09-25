@@ -812,6 +812,7 @@ class DistributedPass(object):
             def f(fname, str_out):  # pragma: no cover
                 count = len(str_out)
                 start = bodo.libs.distributed_api.dist_exscan(count)
+                # TODO: unicode name
                 bodo.io.np_io._file_write_parallel(
                     fname._data, str_out._data, start, count, 1)
                 _dummy_use(str_out)

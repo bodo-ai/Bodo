@@ -97,6 +97,7 @@ def tofile_overload(arr_ty, fname_ty):
         def tofile_impl(arr, fname):
             A = np.ascontiguousarray(arr)
             dtype_size = get_dtype_size(A.dtype)
+            # TODO: unicode name
             file_write(fname._data, A.ctypes, dtype_size * A.size)
 
         return tofile_impl
@@ -124,6 +125,7 @@ def file_write_parallel_overload(fname, arr, start, count):
             dtype_size = get_dtype_size(A.dtype)
             elem_size = dtype_size * bodo.libs.distributed_lower.get_tuple_prod(A.shape[1:])
             # bodo.cprint(start, count, elem_size)
+            # TODO: unicode name
             _file_write_parallel(fname._data, A.ctypes,
                         start, count, elem_size)
         return _impl
@@ -145,6 +147,7 @@ def file_read(fname, arr, size):
 @overload(file_read)
 def file_read_overload(fname, arr, size):
     if fname == string_type:
+        # TODO: unicode name
         return lambda fname, arr, size: _file_read(fname._data, arr.ctypes, size)
 
 def get_file_size(fname):
@@ -153,4 +156,5 @@ def get_file_size(fname):
 @overload(get_file_size)
 def get_file_size_overload(fname):
     if fname == string_type:
+        # TODO: unicode name
         return lambda fname: _get_file_size(fname._data)

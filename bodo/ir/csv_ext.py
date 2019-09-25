@@ -327,6 +327,7 @@ def _gen_csv_reader_py(col_names, col_typs, usecols, sep, typingctx, targetctx,
 
     func_text = "def csv_reader_py(fname):\n"
     func_text += "  skiprows = {}\n".format(skiprows)
+    # TODO: unicode name
     func_text += "  f_reader = csv_file_chunk_reader(fname._data, {}, skiprows, -1)\n".format(
                                                                       parallel)
     func_text += "  with objmode({}):\n".format(typ_strs)

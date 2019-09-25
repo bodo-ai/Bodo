@@ -405,6 +405,7 @@ def str_arr_split_view_getitem_overload(A, ind):
                 data_end = getitem_c_arr(
                     A._data_offsets, start_index + i + 1)
                 length = data_end - data_start
+                # TODO: unicode
                 _str = numba.unicode._empty_string(kind, length)
                 ptr = get_array_ctypes_ptr(A._data, data_start)
                 _memcpy(_str._data, ptr, length, 1)
