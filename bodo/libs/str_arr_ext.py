@@ -1303,10 +1303,8 @@ def lower_string_arr_getitem_bool(context, builder, sig, args):
         n_chars = 0
         for i in range(n):
             if bool_arr[i]:
-                # TODO: use get_cstr_and_len instead of getitem
-                _str = str_arr[i]
                 n_strs += 1
-                n_chars += get_utf8_size(_str)
+                n_chars += get_str_arr_item_length(str_arr, i)
         out_arr = pre_alloc_string_array(n_strs, n_chars)
         str_ind = 0
         for i in range(n):
@@ -1330,10 +1328,8 @@ def lower_string_arr_getitem_arr(context, builder, sig, args):
         n_strs = 0
         n_chars = 0
         for i in range(n):
-            # TODO: use get_cstr_and_len instead of getitem
-            _str = str_arr[ind_arr[i]]
             n_strs += 1
-            n_chars += get_utf8_size(_str)
+            n_chars += get_str_arr_item_length(str_arr, ind_arr[i])
 
         out_arr = pre_alloc_string_array(n_strs, n_chars)
         str_ind = 0
