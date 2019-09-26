@@ -22,9 +22,12 @@ source deactivate
 
 conda remove --all -q -y -n $CONDA_ENV
 
-conda create -n $CONDA_ENV -q -y numpy scipy pandas boost cmake h5py pyarrow mpich mpi
+conda create -n $CONDA_ENV -q -y numpy scipy pandas boost cmake
 source activate $CONDA_ENV
-
+$CONDA_INSTALL pyarrow
+#$CONDA_INSTALL daal-devel daal-include daal -c intel --no-deps
+#$CONDA_INSTALL tbb
+$CONDA_INSTALL pyspark
 
 # install compilers
 if [[ "$unamestr" == 'Linux' ]]; then
@@ -35,6 +38,9 @@ else
     echo "Error in compiler install"
 fi
 
+$CONDA_INSTALL mpich mpi -c conda-forge --no-deps
 $CONDA_INSTALL -c numba/label/dev numba
+$CONDA_INSTALL libgfortran
+$CONDA_INSTALL h5py
 
 if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi
