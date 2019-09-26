@@ -833,9 +833,9 @@ def get_key_set(arr):  # pragma: no cover
 
 @overload(get_key_set)
 def get_key_set_overload(arr):
-    if arr == string_array_type or (isinstance(arr, types.BaseTuple)
-            and len(arr.types) == 1 and arr.types[0] == string_array_type):
-        return lambda arr: bodo.libs.set_ext.init_set_string()
+    # if arr == string_array_type or (isinstance(arr, types.BaseTuple)
+    #         and len(arr.types) == 1 and arr.types[0] == string_array_type):
+    #     return lambda arr: bodo.libs.set_ext.init_set_string()
 
     return lambda arr: get_numba_set(arr)
 
