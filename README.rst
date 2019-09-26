@@ -15,4 +15,7 @@ alternatives like `Apache Spark <http://spark.apache.org/>`_.
 
 
 Development guide: https://github.com/Bodo-inc/Bodo/blob/master/docs/development/development.rst
+
 Install from source: https://github.com/Bodo-inc/Bodo/blob/master/docs/development/install.rst
+
+Bodo Documentation: https://docs.bodo-inc.com/_build/html/index.html

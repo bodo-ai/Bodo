@@ -17,8 +17,9 @@ such as Numba on Ubuntu Linux::
     # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64
     conda install -c numba/label/dev llvmlite
-    git clone https://github.com/numba/numba.git
+    git clone https://github.com/ehsantn/numba.git
     cd numba
+    git checkout set_str
     python setup.py develop
     cd ..
     git clone https://github.com/Bodo-inc/Bodo.git
@@ -59,14 +60,14 @@ number of processors::
 Building Documentation
 ----------------------
 
-The documentation is under the `docs` directory of the repository and uses
+The `documentation <https://docs.bodo-inc.com/_build/html/index.html>`_ is under the `docs` directory of the repository and uses
 the reStructuredText format.
 It is built with `Sphinx <http://www.sphinx-doc.org>`_ and the bootstrap theme::
 
     conda install sphinx
     pip install sphinx_bootstrap_theme
 
-After updating documentation, run :code:`make html` in the `docs` folder to build.
+After updating documentation, run :code:`make html` in the `docs` folder to build. Open `index.html` to view the documentation.
 
 
 Building from Source on Windows
