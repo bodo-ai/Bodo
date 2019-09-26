@@ -20,7 +20,7 @@ from bodo.libs.str_arr_ext import (string_array_type, to_string_list,
     get_offset_ptr, get_data_ptr, get_null_bitmap_ptr, pre_alloc_string_array,
     getitem_str_offset, copy_str_arr_slice, str_copy_ptr,
     setitem_str_offset, str_arr_set_na, set_bit_to, print_str_arr,
-    get_str_arr_item_ptr, get_str_arr_item_length)
+    get_str_arr_item_ptr, get_str_arr_item_length, get_utf8_size)
 from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -771,7 +771,7 @@ def copy_elem_buff_overload(arr, ind, val):
 
     assert arr == string_array_type
     def copy_elem_buff_str(arr, ind, val):
-        new_arr = ensure_capacity_str(arr, ind+1, len(val))
+        new_arr = ensure_capacity_str(arr, ind+1, get_utf8_size(val))
         new_arr[ind] = val
         return new_arr
 
