@@ -167,7 +167,10 @@ static PyObject * stream_reader_read(stream_reader* self, PyObject *args)
         return NULL;
     }
 
-    return PyUnicode_FromStringAndSize(self->buf.data(), size);
+    // buffer_rd_bytes() function of pandas expects a Bytes object
+    // using PyUnicode_FromStringAndSize is wrong since 'size'
+    // may end up in the middle a multi-byte UTF-8 character
+    return PyBytes_FromStringAndSize(self->buf.data(), size);
 }
 
 

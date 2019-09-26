@@ -334,7 +334,7 @@ def _gen_csv_reader_py(col_names, col_typs, usecols, sep, typingctx, targetctx,
     func_text += "    df = pd.read_csv(f_reader, names={},\n".format(col_names)
     func_text += "       parse_dates=[{}],\n".format(date_inds)
     func_text += "       dtype={{{}}},\n".format(pd_dtype_strs)
-    func_text += "       usecols={}, sep='{}')\n".format(usecols, sep)
+    func_text += "       usecols={}, sep='{}', low_memory=False)\n".format(usecols, sep)
     for s_cname, cname in zip(sanitized_cnames, col_names):
         func_text += "    {} = df['{}'].values\n".format(s_cname, cname)
         # func_text += "    print({})\n".format(s_cname)
