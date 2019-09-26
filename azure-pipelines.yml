@@ -6,27 +6,34 @@
 trigger:
 - master
 
-pool:
-  vmImage: 'ubuntu-latest'
-strategy:
-  matrix:
-    Python36:
-      python.version: '3.6'
-    Python37:
-      python.version: '3.7'
-
-steps:
-- task: UsePythonVersion@0
-  inputs:
-    versionSpec: '$(python.version)'
-  displayName: 'Use Python $(python.version)'
-
-- script: |
-    python -m pip install --upgrade pip
-    pip install -r requirements.txt
-  displayName: 'Install dependencies'
-
-- script: |
-    pip install pytest pytest-azurepipelines
-    pytest
-  displayName: 'pytest'
+jobs:
+# Mac and Linux use the same template with different matrixes
+- template: buildscripts/azure/azure-linux-macos.yml
+  parameters:
+    name: Linux
+    vmImage: ubuntu-latest
+    matrix:
+      py37_np1:
+        CONDA_ENV: 'bodo'
+        NP: 1
+      py37_np2:
+        CONDA_ENV: 'bodo'
+        NP: 2
+      py37_np3:
+        CONDA_ENV: 'bodo'
+        NP: 3
+           
+- template: buildscripts/azure/azure-linux-macos.yml
+  parameters:
+    name: macOS
+    vmImage: xcode9-macos10.13
+    matrix:
+      py37_np1:
+        CONDA_ENV: 'bodo'
+        NP: 1
+      py37_np2:
+        CONDA_ENV: 'bodo'
+        NP: 2
+      py37_np3:
+        CONDA_ENV: 'bodo'
+        NP: 3
