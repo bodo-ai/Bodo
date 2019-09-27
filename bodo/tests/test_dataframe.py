@@ -77,6 +77,7 @@ def df_value(request):
 def numeric_df_value(request):
     return request.param
 
+
 @pytest.fixture(params = [
     # column name overlaps with pandas function
     pd.DataFrame({'product':['a', 'b', 'c']}),
@@ -85,6 +86,7 @@ def numeric_df_value(request):
 
 def column_name_df_value(request):
     return request.param
+
 
 def test_unbox_df1(df_value):
     # just unbox
@@ -106,12 +108,14 @@ def test_unbox_df1(df_value):
 
     check_func(impl3, (df_value,))
 
+
 def test_unbox_df2(column_name_df_value):
     # unbox column with name overlaps with pandas function
     def impl1(df_arg):
         return df_arg['product']
 
     check_func(impl1, (column_name_df_value,))
+
 
 def test_box_df():
     # box dataframe contains column with name overlaps with pandas function
@@ -121,6 +125,7 @@ def test_box_df():
 
     bodo_func = bodo.jit(impl)
     pd.testing.assert_frame_equal(bodo_func(), impl())
+
 
 def test_df_index(df_value):
     def impl(df):
