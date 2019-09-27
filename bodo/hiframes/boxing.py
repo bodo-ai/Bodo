@@ -232,7 +232,7 @@ def box_dataframe(typ, val, c):
 
         with builder.if_else(use_parent) as (then, orelse):
             with then:
-                ser_obj = pyapi.object_getattr_string(dataframe.parent, cname)
+                ser_obj = pyapi.object_getitem(dataframe.parent, cname_obj)
                 # need to get underlying array since Series has index but
                 # df_obj doesn't have index yet, leading to index mismatches
                 arr_obj = pyapi.object_getattr_string(ser_obj, 'values')
@@ -267,11 +267,13 @@ def unbox_dataframe_column(typingctx, df, i=None):
         col_ind = sig.args[1].literal_value
         data_typ = df_typ.data[col_ind]
         col_name = df_typ.columns[col_ind]
+        col_name_str = context.insert_const_string(c.builder.module, col_name)
+        col_name_obj = pyapi.string_from_string(col_name_str)
         # TODO: refcounts?
 
         dataframe = cgutils.create_struct_proxy(
             sig.args[0])(context, builder, value=args[0])
-        series_obj = c.pyapi.object_getattr_string(dataframe.parent, col_name)
+        series_obj = c.pyapi.object_getitem(dataframe.parent, col_name_obj)
         arr_obj = c.pyapi.object_getattr_string(series_obj, "values")
 
         # TODO: support column of tuples?
