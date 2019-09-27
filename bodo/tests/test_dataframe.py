@@ -83,7 +83,6 @@ def numeric_df_value(request):
     pd.DataFrame({'product':['a', 'b', 'c']}),
     pd.DataFrame({'product':['a', 'b', 'c'], 'keys':[1,2,3]}),
 ])
-
 def column_name_df_value(request):
     return request.param
 
