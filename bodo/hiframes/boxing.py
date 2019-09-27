@@ -258,7 +258,7 @@ def box_dataframe(typ, val, c):
 
 @intrinsic
 def unbox_dataframe_column(typingctx, df, i=None):
-    
+
     def codegen(context, builder, sig, args):
         pyapi = context.get_python_api(builder)
         c = numba.pythonapi._UnboxContext(context, builder, pyapi)
