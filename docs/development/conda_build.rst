@@ -12,6 +12,8 @@ Conda Build Bodo
     
     # clone and build bodo in the container
     git clone https://github.com/Bodo-inc/Bodo.git
+    pip install astunparse
+    python buildscripts/remove_docstring.py
     cd Bodo/buildscripts/bodo-conda-recipe/
     conda-build . -c defaults -c numba/label/dev --no-test
 
