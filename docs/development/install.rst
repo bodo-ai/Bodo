@@ -16,12 +16,7 @@ such as Numba on Ubuntu Linux::
     source activate DEV
     # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64
-    conda install -c numba/label/dev llvmlite
-    git clone https://github.com/ehsantn/numba.git
-    cd numba
-    git checkout set_str
-    python setup.py develop
-    cd ..
+    conda install -c numba/label/dev numba
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo

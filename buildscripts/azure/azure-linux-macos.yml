@@ -26,13 +26,6 @@ jobs:
   - script: |
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      cd ..
-      git clone https://github.com/ehsantn/numba.git
-      cd numba
-      git checkout set_str
-      echo "set up numba"
-      python setup.py develop
-      cd ../s
       HDF5_DIR=$CONDA_PREFIX python setup.py develop
     displayName: 'Build'
 
