@@ -98,9 +98,6 @@ the following has to be specified:
 - distributed analysis (including array access analysis)
 - distributed transformation
 
-Building conda package::
-  conda-build . -c defaults -c numba/label/dev -c conda-forge
-
 
 Papers
 ------
