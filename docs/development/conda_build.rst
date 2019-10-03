@@ -16,6 +16,8 @@ Conda Build Bodo
     cd Bodo
     python buildscripts/remove_docstring.py
     cd buildscripts/bodo-conda-recipe/
+    # if trial version
+    # export TRIAL_PERIOD=14
     conda-build . -c defaults -c numba/label/dev --no-test
 
 Open a new terminal window (replace yourContainerID :code:`docker container ls` and the name of `.tar.bz2` File)::

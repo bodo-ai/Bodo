@@ -1,4 +1,5 @@
 #include "_distributed.h"
+#include <ctime>
 
 PyMODINIT_FUNC PyInit_hdist(void) {
     PyObject *m;
@@ -7,6 +8,20 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     m = PyModule_Create(&moduledef);
     if (m == NULL)
         return NULL;
+
+#ifdef TRIAL_PERIOD
+    // printf("trial period %d\n", TRIAL_PERIOD);
+    // printf("trial start %d\n", TRIAL_START);
+    // check expiration date
+    std::time_t curr_time = std::time(0);   // get time of now
+    std::time_t start_time = TRIAL_START;
+    double time_diff = std::difftime(curr_time, start_time) / (60 * 60 * 24);
+    if (time_diff > TRIAL_PERIOD) {
+        PyErr_SetString(PyExc_RuntimeError, "Bodo trial period has expired!");
+        return NULL;
+    }
+#endif
+
 
     // make sure MPI is initialized, assuming this will be called
     // on all processes

@@ -12,6 +12,8 @@ requirements:
   build:
     - {{ compiler('c') }}
     - {{ compiler('cxx') }}
+    script_env:
+      - TRIAL_PERIOD
 
   host:
     - python

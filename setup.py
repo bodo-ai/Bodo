@@ -1,5 +1,5 @@
 from setuptools import setup, Extension, find_packages
-import platform, os
+import platform, os, time
 
 # Note we don't import Numpy at the toplevel, since setup.py
 # should be able to run without Numpy for pip to discover the
@@ -110,10 +110,19 @@ ext_hdf5 = Extension(name="bodo.io._hdf5",
 )
 
 
+dist_macros = []
+if "TRIAL_PERIOD" in os.environ and os.environ["TRIAL_PERIOD"] != "":
+    trial_period = os.environ["TRIAL_PERIOD"]
+    trial_start = str(int(time.time()))
+    dist_macros.append(('TRIAL_PERIOD', trial_period))
+    dist_macros.append(('TRIAL_START', trial_start))
+
+
 ext_hdist = Extension(name="bodo.libs.hdist",
                       sources=["bodo/libs/_distributed.cpp"],
                       depends=["bodo/libs/_hpat_common.h"],
                       libraries = MPI_LIBS,
+                      define_macros = dist_macros,
                       extra_compile_args = eca,
                       extra_link_args = ela,
                       include_dirs = ind,
@@ -230,7 +239,7 @@ setup(name='bodo',
       description='compiling Python code for clusters',
       long_description=readme(),
       classifiers=[
-        "Development Status :: 2 - Pre-Alpha",
+        "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
         "Operating System :: POSIX :: Linux",
         "Programming Language :: Python",
@@ -239,8 +248,8 @@ setup(name='bodo',
         "Topic :: System :: Distributed Computing",
       ],
       keywords='data analytics cluster',
-      url='https://github.com/IntelLabs/bodo',
-      author='Intel',
+      url='https://bodo-inc.com',
+      author='Bodo',
       packages=find_packages(),
       install_requires=['numba'],
       extras_require={'HDF5': ["h5py"], 'Parquet': ["pyarrow"]},
