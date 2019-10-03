@@ -454,7 +454,6 @@ class TestGroupBy(unittest.TestCase):
         self.assertEqual(set(res[1]), set(h_res[1]))
         np.testing.assert_array_equal(res[0], h_res[0])
 
-    @unittest.skip("TODO")
     def test_agg_seq_str(self):
         def test_impl(df):
             A = df.groupby('A')['B'].agg(lambda x: (x=='aa').sum())

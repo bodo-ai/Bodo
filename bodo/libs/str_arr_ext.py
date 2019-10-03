@@ -140,9 +140,13 @@ def create_binary_op_overload(op):
                 out_arr = np.empty(n, np.bool_)
                 for i in numba.parfor.internal_prange(n):
                     if bodo.hiframes.api.isna(A, i) or bodo.hiframes.api.isna(B, i):
-                        out_arr[i] = na_fill
+                        val = na_fill
                     else:
-                        out_arr[i] = op(A[i], B[i])
+                        val = op(A[i], B[i])
+                    out_arr[i] = val
+                    # XXX assigning to out_arr indirectly since parfor fusion
+                    # cannot handle branching properly here and doesn't remove
+                    # out_arr. Example issue in test_agg_seq_str
 
                 return out_arr
 
@@ -156,9 +160,10 @@ def create_binary_op_overload(op):
                 out_arr = np.empty(n, np.bool_)
                 for i in numba.parfor.internal_prange(n):
                     if bodo.hiframes.api.isna(A, i):
-                        out_arr[i] = na_fill
+                        val = na_fill
                     else:
-                        out_arr[i] = op(A[i], B)
+                        val = op(A[i], B)
+                    out_arr[i] = val
 
                 return out_arr
             return impl_left
@@ -171,9 +176,10 @@ def create_binary_op_overload(op):
                 out_arr = np.empty(n, np.bool_)
                 for i in numba.parfor.internal_prange(n):
                     if bodo.hiframes.api.isna(B, i):
-                        out_arr[i] = na_fill
+                        val = na_fill
                     else:
-                        out_arr[i] = op(A, B[i])
+                        val = op(A, B[i])
+                    out_arr[i] = val
 
                 return out_arr
             return impl_right
