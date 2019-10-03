@@ -17,7 +17,8 @@ import collections
 import numpy as np
 import bodo
 from bodo.libs.str_ext import string_type, list_string_array_type
-from bodo.libs.str_arr_ext import string_array_type, num_total_chars, pre_alloc_string_array
+from bodo.libs.str_arr_ext import (string_array_type, num_total_chars,
+    pre_alloc_string_array, get_utf8_size)
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from enum import Enum
@@ -355,6 +356,32 @@ def to_array(A):
 
 @overload(to_array)
 def to_array_overload(A):
+    # handle dict for set replacement workaround
+    if isinstance(A, types.DictType):
+        dtype = A.key_type
+        if dtype == string_type:
+            def impl_str(A):
+                n = len(A)
+                n_char = 0
+                for v in A.keys():
+                    n_char += get_utf8_size(v)
+                arr = pre_alloc_string_array(n, n_char)
+                i = 0
+                for v in A.keys():
+                    arr[i] = v
+                    i += 1
+                return arr
+            return impl_str
+
+        def impl(A):
+            n = len(A)
+            arr = np.empty(n, dtype)
+            i = 0
+            for v in A.keys():
+                arr[i] = v
+                i += 1
+            return arr
+        return impl
     # try regular np.array and return it if it works
     def to_array_impl(A):
         return np.array(A)

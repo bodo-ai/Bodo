@@ -29,6 +29,7 @@ from bodo.libs.str_arr_ext import (StringArray, StringArrayType, string_array_ty
                               pre_alloc_string_array, StringArrayPayloadType,
                               is_str_arr_typ)
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.bool_arr_ext import boolean_array
 
 
 # similar to types.Container.Set
@@ -83,35 +84,40 @@ num_total_chars_set_string = types.ExternalFunction("num_total_chars_set_string"
 
 @generated_jit(nopython=True, cache=True)
 def build_set(A):
-    if is_str_arr_typ(A):
-        return _build_str_set_impl
-    elif isinstance(A, IntegerArrayType):
-        #return lambda A: set(A._data)
+    # if isinstance(A, IntegerArrayType):
+    #     #return lambda A: set(A._data)
+    #     def impl_int_arr(A):
+    #         s = set()
+    #         for i in range(len(A)):
+    #             if not bodo.hiframes.api.isna(A, i):
+    #                 s.add(A[i])
+    #         return s
+
+    #     return impl_int_arr
+    # else:
+    #     return lambda A: set(A)
+
+    # TODO: use more efficient hash table optimized for addition and
+    # membership check
+    # XXX using dict for now due to Numba's #4577
+    # avoid value if NA is not sentinel like np.nan
+    if (isinstance(A, IntegerArrayType)
+            or A in (string_array_type, boolean_array)):
         def impl_int_arr(A):
-            s = set()
+            s = dict()
             for i in range(len(A)):
                 if not bodo.hiframes.api.isna(A, i):
-                    s.add(A[i])
+                    s[A[i]] = 0
             return s
 
         return impl_int_arr
     else:
-        return lambda A: set(A)
-
-
-def _build_str_set_impl(A):
-    str_set = init_set_string()
-    n = len(A)
-    for i in range(n):
-        _str = A[i]
-        str_set.add(_str)
-    return str_set
-
-# TODO: remove since probably unused
-@overload(set)
-def init_set_string_array(A):
-    if is_str_arr_typ(A):
-        return _build_str_set_impl
+        def impl(A):
+            s = dict()
+            for i in range(len(A)):
+                s[A[i]] = 0
+            return s
+        return impl
 
 
 @overload_method(SetType, 'add')

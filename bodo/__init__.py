@@ -8,7 +8,6 @@ from numba.types import *
 import bodo.libs
 import bodo.libs.dict_ext
 import bodo.libs.set_ext
-from bodo.libs.set_ext import init_set_string
 import bodo.libs.distributed_api
 from bodo.libs.distributed_api import (dist_time, parallel_print, get_rank,
     get_size, barrier, gatherv, allgatherv)

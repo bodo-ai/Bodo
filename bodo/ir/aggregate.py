@@ -607,7 +607,8 @@ def par_agg_get_shuffle_meta(key_arrs, data_redvar_dummy, init_vals):
     for i in range(len(key_arrs[0])):
         val = getitem_arr_tup_single(key_arrs, i)
         if val not in key_set:
-            key_set.add(val)
+            # key_set.add(val)
+            key_set[val] = 0
             node_id = hash(val) % n_pes
             node_ids[i] = node_id
             # data isn't computed here yet so pass empty tuple
@@ -828,7 +829,8 @@ def lower_get_numba_set(context, builder, sig, args):
 
 
 def get_key_set(arr):  # pragma: no cover
-    return set()
+    # return set()
+    return dict()
 
 
 @overload(get_key_set)
@@ -837,7 +839,14 @@ def get_key_set_overload(arr):
     #         and len(arr.types) == 1 and arr.types[0] == string_array_type):
     #     return lambda arr: bodo.libs.set_ext.init_set_string()
 
-    return lambda arr: get_numba_set(arr)
+    # XXX using dict instead of set due to refcount issue
+    # return lambda arr: get_numba_set(arr)
+    dtype = (types.Tuple([t.dtype for t in arr.types])
+        if isinstance(arr, types.BaseTuple) else arr.dtype)
+    if isinstance(arr, types.BaseTuple) and len(arr.types) == 1:
+        dtype = arr.types[0].dtype
+
+    return lambda arr: numba.typed.Dict.empty(dtype, types.int64)
 
     # HACK below can cause crashes in case of zero-length arrays
     # if isinstance(arr, types.BaseTuple):
@@ -869,7 +878,8 @@ def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set, return_key):
     # return key is either True or None
     if is_overload_true(return_key) or return_key == types.boolean:
         # TODO: handle pivot_table/crosstab with return key
-        dtype = key_set.dtype
+        # dtype = key_set.dtype
+        dtype = key_set.key_type
         key_types = (list(dtype.types) if isinstance(dtype, types.BaseTuple)
                      else [dtype])
         n_keys = len(key_types)
@@ -1842,10 +1852,10 @@ def _build_set_tup_overload(arr_tup):
     if isinstance(arr_tup, types.BaseTuple) and len(arr_tup.types) != 1:
         def _impl(arr_tup):
             n = len(arr_tup[0])
-            s = set()
+            s = dict()
             for i in range(n):
                 val = getitem_arr_tup(arr_tup, i)
-                s.add(val)
+                s[val] = 0
             return s
         return _impl
     return _build_set_tup
@@ -1857,8 +1867,10 @@ def num_total_chars_set(s):
 
 @overload(num_total_chars_set)
 def num_total_chars_set_overload(s):
-    key_typs = s.dtype.types if isinstance(
-        s.dtype, types.BaseTuple) else [s.dtype]
+    # XXX assuming dict for set workaround
+    dtype = s.key_type
+    key_typs = dtype.types if isinstance(
+        dtype, types.BaseTuple) else [dtype]
 
     count = len(key_typs)
     func_text = "def f(s):\n"
@@ -1870,7 +1882,7 @@ def num_total_chars_set_overload(s):
             if key_typs[i] == string_type:
                 func_text += "    n_{} += get_utf8_size(v{})\n".format(
                     i, "[{}]".format(i)
-                        if isinstance(s.dtype, types.BaseTuple) else "")
+                        if isinstance(dtype, types.BaseTuple) else "")
     func_text += "  return ({},)\n".format(
         ", ".join("n_{}".format(i) for i in range(count)))
 

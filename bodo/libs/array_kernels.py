@@ -362,7 +362,8 @@ def duplicated(data, ind_arr, parallel=False):
 
     n = len(data[0])
     out = np.empty(n, np.bool_)
-    uniqs = set()
+    # uniqs = set()
+    uniqs = dict()
 
     for i in range(n):
         val = getitem_arr_tup_single(data, i)
@@ -370,7 +371,8 @@ def duplicated(data, ind_arr, parallel=False):
             out[i] = True
         else:
             out[i] = False
-            uniqs.add(val)
+            # uniqs.add(val)
+            uniqs[val] = 0
 
     return out, ind_arr
 
@@ -400,13 +402,15 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
         func_text += "  out_arr_index = pre_alloc_string_array(n, ind_arr._num_total_chars)\n"
     else:
         func_text += "  out_arr_index = bodo.utils.utils.alloc_type(n, ind_arr)\n"
-    func_text += "  uniqs = set()\n"
+    # func_text += "  uniqs = set()\n"
+    func_text += "  uniqs = dict()\n"
     func_text += "  w_ind = 0\n"
     func_text += "  for i in range(n):\n"
     func_text += "    val = getitem_arr_tup_single(data, i)\n"
     func_text += "    if val in uniqs:\n"
     func_text += "      continue\n"
-    func_text += "    uniqs.add(val)\n"
+    # func_text += "    uniqs.add(val)\n"
+    func_text += "    uniqs[val] = 0\n"
     for i in range(count):
         func_text += "    out_arr_{0}[w_ind] = data[{0}][i]\n".format(i)
     func_text += "    out_arr_index[w_ind] = ind_arr[i]\n"
