@@ -23,7 +23,7 @@ def test_split():
 
     # TODO: more split tests similar to the ones test_hiframes
     # TODO: support and test NA
-    S = pd.Series(['ABCC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
+    S = pd.Series(['ABCC', 'ABBD', 'AA', 'C,ABB, D', 'B,B,CC'],
         [3, 5, 1, 0, 2], name='A')
     # TODO: support distributed
     check_func(test_impl, (S,), False)
