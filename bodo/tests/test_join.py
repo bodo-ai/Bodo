@@ -173,6 +173,29 @@ def test_join_bool():
     check_func(test_impl, (df1, df2), sort_output=True)
 
 
+def test_join_match_key_types():
+    # test cases where key types mismatch but values can be equal
+    # happens especially when Pandas convert ints to float to use np.nan
+    def test_impl1(df1, df2):
+        return df1.merge(df2, on=['A'])
+
+    def test_impl2(df1, df2):
+        return df1.merge(df2, on=['A', 'B'])
+
+    df1 = pd.DataFrame({'A': [3,1,1,3,4],
+                        'B': [1,2,3,2,3],
+                        'C': [1,2,3,2,3]})
+
+    df2 = pd.DataFrame({'A': [2,1,4,4,3],
+                        'B': [1,3,2,3,2],
+                        'D': [1,3,2,3,2]})
+    df2['A'] = df2.A.astype(np.float64)
+    check_func(test_impl1, (df1, df2), sort_output=True)
+    check_func(test_impl1, (df2, df1), sort_output=True)
+    check_func(test_impl2, (df1, df2), sort_output=True)
+    check_func(test_impl2, (df2, df1), sort_output=True)
+
+
 class TestJoin(unittest.TestCase):
     def test_join1(self):
         def test_impl(n):

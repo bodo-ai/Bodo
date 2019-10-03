@@ -866,10 +866,10 @@ def setnan_elem_buff_tup_overload(data, ind):
 
 
 #@numba.njit
-def local_hash_join_impl(left_keys, right_keys, data_left, data_right, is_left=False,
+def local_hash_join_impl(_left_keys, _right_keys, data_left, data_right, is_left=False,
                                                                is_right=False):
-    l_len = len(left_keys[0])
-    r_len = len(right_keys[0])
+    l_len = len(_left_keys[0])
+    r_len = len(_right_keys[0])
     # TODO: approximate output size properly
     curr_size = 101 + min(l_len, r_len) // 2
     if is_left:
@@ -878,6 +878,10 @@ def local_hash_join_impl(left_keys, right_keys, data_left, data_right, is_left=F
         curr_size = int(1.1 * r_len)
     if is_left and is_right:
         curr_size = int(1.1 * (l_len + r_len))
+
+    # if one array is int and another is float, the int value or hash scheme
+    # below doesn't work since float will be hashed but int will be just stored
+    left_keys, right_keys = _fix_key_type_mismatch(_left_keys, _right_keys)
 
     out_left_key = alloc_arr_tup(curr_size, left_keys)
     out_data_left = alloc_arr_tup(curr_size, data_left)
@@ -945,11 +949,16 @@ def local_hash_join_impl(left_keys, right_keys, data_left, data_right, is_left=F
     out_data_left = trim_arr_tup(out_data_left, out_ind)
     out_data_right = trim_arr_tup(out_data_right, out_ind)
 
+    out_left_key = _reverse_key_type_mismatch_fix(
+        out_left_key, _left_keys, _right_keys)
+    out_right_key = _reverse_key_type_mismatch_fix(
+        out_right_key, _right_keys, _left_keys)
+
     return out_left_key, out_right_key, out_data_left, out_data_right
 
 
 @generated_jit(nopython=True, cache=True, no_cpython_wrapper=True)
-def local_hash_join(left_keys, right_keys, data_left, data_right, is_left=False,
+def local_hash_join(_left_keys, _right_keys, data_left, data_right, is_left=False,
                                                                is_right=False):
     return local_hash_join_impl
 
@@ -971,6 +980,34 @@ def _check_ind_if_hashed(right_keys, r_ind, l_key):
             return -1
         return r_ind
     return _impl
+
+
+@generated_jit(nopython=True, cache=True)
+def _fix_key_type_mismatch(left_keys, right_keys):
+    """make sure both arrays are int64 if one of them is int64. This avoids
+    problems with storing hash versus value in multimap_int64
+    """
+    # TODO: nullable integer array
+    int64_tup = types.Tuple((types.int64[::1],))
+    if left_keys == int64_tup or right_keys == int64_tup:
+        return lambda left_keys, right_keys: \
+            ((left_keys[0].astype(np.int64),),
+             (right_keys[0].astype(np.int64),))
+
+    return lambda left_keys, right_keys: (left_keys, right_keys)
+
+
+@generated_jit(nopython=True, cache=True)
+def _reverse_key_type_mismatch_fix(out, orig_in, orig_other):
+    """reverse the type change done in _fix_key_type_mismatch
+    """
+    # TODO: nullable integer array
+    int64_tup = types.Tuple((types.int64[::1],))
+    if orig_in == int64_tup or orig_other == int64_tup:
+        return lambda out, orig_in, orig_other: \
+            (out[0].astype(orig_in[0].dtype),)
+
+    return lambda out, orig_in, orig_other: out
 
 
 def _gen_pd_join(left_key_vars, right_key_vars, left_other_col_vars,
