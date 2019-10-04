@@ -101,10 +101,9 @@ class TestString(unittest.TestCase):
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars['test_impl']
             bodo_func = bodo.jit(test_impl)
-            # XXX: \t support pending Numba #4188
-            # arg = ' \tbbCD\t '
-            arg = ' DbbCD01 '
-            self.assertEqual(bodo_func(arg), test_impl(arg))
+            args = ['11', 'aa', 'AA', ' ', 'Hi There']
+            for arg in args:
+                self.assertEqual(bodo_func(arg), test_impl(arg))
 
     def test_equality(self):
         def test_impl(_str):

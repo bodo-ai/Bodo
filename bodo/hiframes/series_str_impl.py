@@ -28,13 +28,6 @@ from bodo.hiframes.split_impl import (string_array_split_view_type,
     get_split_view_index, get_split_view_data_ptr)
 
 
-str2str_methods = ('capitalize', 'lower', 'lstrip', 'rstrip',
-            'strip', 'swapcase', 'title', 'upper')
-
-str2bool_methods = ('isalnum', 'isalpha', 'isdigit',
-    'isspace', 'islower', 'isupper', 'istitle', 'isnumeric', 'isdecimal')
-
-
 class SeriesStrMethodType(types.Type):
     def __init__(self, stype):
         # keeping Series type since string data representation can be varied
