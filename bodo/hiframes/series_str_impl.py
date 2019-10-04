@@ -28,10 +28,6 @@ from bodo.hiframes.split_impl import (string_array_split_view_type,
     get_split_view_index, get_split_view_data_ptr)
 
 
-str2str_methods = ('capitalize', 'lower', 'lstrip', 'rstrip',
-            'strip', 'swapcase', 'title', 'upper')
-
-
 class SeriesStrMethodType(types.Type):
     def __init__(self, stype):
         # keeping Series type since string data representation can be varied
@@ -533,30 +529,6 @@ def overload_str_method_endswith(S_str, pat, na=np.nan):
     return impl
 
 
-@overload_method(SeriesStrMethodType, 'isupper')
-def overload_str_method_isupper(S_str):
-    def impl(S_str):
-        S = S_str._obj
-        str_arr = bodo.hiframes.api.get_series_data(S)
-        name = bodo.hiframes.api.get_series_name(S)
-        index = bodo.hiframes.api.get_series_index(S)
-        numba.parfor.init_prange()
-        l = len(str_arr)
-        nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
-        out_arr = np.empty(l, dtype=np.bool_)
-        for i in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, i):
-                out_arr[i] = False
-                bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 0)
-            else:
-                out_arr[i] = str_arr[i].isupper()
-                bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
-        return bodo.hiframes.api.init_series(
-            bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls),
-            index, name)
-    return impl
-
-
 def create_str2str_methods_overload(func_name):
     def overload_str2str_methods(S_str):
         func_text = 'def f(S_str):\n'
@@ -596,6 +568,38 @@ def create_str2str_methods_overload(func_name):
     return overload_str2str_methods
 
 
+def create_str2bool_methods_overload(func_name):
+    def overload_str2bool_methods(S_str):
+        func_text = 'def f(S_str):\n'
+        func_text += '    S = S_str._obj\n'
+        func_text += '    str_arr = bodo.hiframes.api.get_series_data(S)\n'
+        func_text += '    index = bodo.hiframes.api.get_series_index(S)\n'
+        func_text += '    name = bodo.hiframes.api.get_series_name(S)\n'
+        func_text += '    numba.parfor.init_prange()\n'
+        func_text += '    l = len(str_arr)\n'
+        func_text += '    nulls = np.empty((l + 7) >> 3, dtype=np.uint8)\n'
+        func_text += '    out_arr = np.empty(l, dtype=np.bool_)\n'
+        func_text += '    for i in numba.parfor.internal_prange(l):\n'
+        func_text += '        if bodo.hiframes.api.isna(str_arr, i):\n'
+        func_text += '            out_arr[i] = False\n'
+        func_text += '            set_bit_to_arr(nulls, i, 0)\n'
+        func_text += '        else:\n'
+        func_text += '            out_arr[i] = str_arr[i].{}()\n'.format(func_name)
+        func_text += '            set_bit_to_arr(nulls, i, 1)\n'
+        func_text += '    return bodo.hiframes.api.init_series(\n'
+        func_text += '      init_bool_array(out_arr, nulls),index, name)\n'
+        loc_vars = {}
+        # print(func_text)
+        exec(func_text, {'bodo': bodo, 'numba': numba, 'np': np,
+            "set_bit_to_arr":bodo.libs.int_arr_ext.set_bit_to_arr,
+            'init_bool_array': bodo.libs.bool_arr_ext.init_bool_array}, loc_vars)
+        f = loc_vars['f']
+        return f
+
+    return overload_str2bool_methods
+
+
+
 def _install_str2str_methods():
     # install methods that just transform the string into another string
     for op in bodo.hiframes.pd_series_ext.str2str_methods:
@@ -603,4 +607,12 @@ def _install_str2str_methods():
         overload_method(SeriesStrMethodType, op)(overload_impl)
 
 
+def _install_str2bool_methods():
+    # install methods that just transform the string into another boolean
+    for op in bodo.hiframes.pd_series_ext.str2bool_methods:
+        overload_impl = create_str2bool_methods_overload(op)
+        overload_method(SeriesStrMethodType, op)(overload_impl)
+
+
 _install_str2str_methods()
+_install_str2bool_methods()

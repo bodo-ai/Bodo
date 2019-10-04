@@ -2164,6 +2164,18 @@ class TestSeries(unittest.TestCase):
             S = pd.Series([' bbCD ', 'ABC', ' mCDm ', np.nan, 'abc'])
             check_func(test_impl, (S,))
 
+    def test_series_str2bool(self):
+        str2bool_methods = ('isalnum', 'isalpha', 'isdigit',
+            'isspace', 'isupper','islower', 'istitle', 'isnumeric', 'isdecimal')
+        for method in str2bool_methods:
+            func_text = "def test_impl(S):\n"
+            func_text += "  return S.str.{}()\n".format(method)
+            loc_vars = {}
+            exec(func_text, {'bodo': bodo}, loc_vars)
+            test_impl = loc_vars['test_impl']
+            S = pd.Series([' 1aB ', '982', 'ABC', '  ', np.nan, 'abc', 'Hi There', '100.20'])
+            check_func(test_impl, (S,))
+
     def test_series_append1(self):
         def test_impl(S, other):
             return S.append(other).values

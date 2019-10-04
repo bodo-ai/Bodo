@@ -668,6 +668,9 @@ class SeriesPass(object):
             if func_name in bodo.hiframes.pd_series_ext.str2str_methods:
                 impl = bodo.hiframes.series_str_impl.create_str2str_methods_overload(
                     func_name)(self.typemap[func_mod.name])
+            elif func_name in bodo.hiframes.pd_series_ext.str2bool_methods:
+                impl = bodo.hiframes.series_str_impl.create_str2bool_methods_overload(
+                    func_name)(self.typemap[func_mod.name])
             else:
                 impl = getattr(bodo.hiframes.series_str_impl,
                     'overload_str_method_' + func_name)(*arg_typs, **kw_typs)

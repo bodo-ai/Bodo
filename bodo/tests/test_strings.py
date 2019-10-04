@@ -91,6 +91,20 @@ class TestString(unittest.TestCase):
             arg = ' bbCD '
             self.assertEqual(bodo_func(arg), test_impl(arg))
 
+    def test_str2bool(self):
+        str2bool_methods = ['isalnum', 'isalpha', 'isdigit',
+        'isspace', 'islower', 'isupper', 'istitle', 'isnumeric', 'isdecimal']
+        for method in str2bool_methods:
+            func_text = "def test_impl(_str):\n"
+            func_text += "  return _str.{}()\n".format(method)
+            loc_vars = {}
+            exec(func_text, {}, loc_vars)
+            test_impl = loc_vars['test_impl']
+            bodo_func = bodo.jit(test_impl)
+            args = ['11', 'aa', 'AA', ' ', 'Hi There']
+            for arg in args:
+                self.assertEqual(bodo_func(arg), test_impl(arg))
+
     def test_equality(self):
         def test_impl(_str):
             return (_str=='test_str')

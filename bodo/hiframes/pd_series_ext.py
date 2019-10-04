@@ -435,6 +435,10 @@ str2str_methods = ('capitalize', 'lower', 'lstrip', 'rstrip',
             'strip', 'swapcase', 'title', 'upper')
 
 
+str2bool_methods = ('isalnum', 'isalpha', 'isdigit',
+    'isspace', 'islower', 'isupper', 'istitle', 'isnumeric', 'isdecimal')
+
+
 class SeriesDtMethodType(types.Type):
     def __init__(self):
         name = "SeriesDtMethodType"
