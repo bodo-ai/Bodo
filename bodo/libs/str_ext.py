@@ -148,6 +148,15 @@ def re_sub_overload(p, repl, string, count=0):
     return _re_sub_impl
 
 
+@overload_method(RePatternType, 'findall')
+def str_findall_overload(regex, in_str):
+
+    def _str_findall_impl(re,in_str):
+        with numba.objmode(out='int'):
+            out = len(regex.findall(in_str))
+        return out
+    return _str_findall_impl
+
 
 utf8_str_type = types.ArrayCTypes(types.Array(types.uint8, 1, 'C'))
 
@@ -897,3 +906,4 @@ def impl_unicode_string_contains_noregex(context, builder, sig, args):
     std_pat = gen_unicode_to_std_str(context, builder, pat)
     return impl_string_contains_noregex(
         context, builder, sig, [std_val, std_pat])
+

@@ -77,6 +77,24 @@ def test_contains_noregex():
     check_func(test_impl, (S,))
 
 
+def test_count_noflag():
+    def test_impl(S):
+        return S.str.count('A')
+
+    S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
+        [4, 3, 5, 1, 0], name='A')
+    check_func(test_impl, (S,))
+
+
+def test_count_flag():
+    def test_impl(S):
+        return S.str.count('A', re.IGNORECASE)
+
+    S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
+        [4, 3, 5, 1, 0], name='A')
+    check_func(test_impl, (S,))
+
+
 def test_find():
     def test_impl(S):
         return S.str.find('AB')
