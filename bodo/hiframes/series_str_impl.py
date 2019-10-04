@@ -281,7 +281,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
             numba.parfor.init_prange()
             e = bodo.libs.str_ext.compile_regex(pat)
             l = len(arr)
-            out_arr = np.empty(l, dtype=nsp.bool_)
+            out_arr = np.empty(l, dtype=np.bool_)
             nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
             for i in numba.parfor.internal_prange(l):
                 if bodo.hiframes.api.isna(arr, i):
@@ -324,6 +324,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
 
 @overload_method(SeriesStrMethodType, 'count')
 def overload_str_method_count(S_str, pat, flags=0):
+    # python str.count() and pandas str.count() are different
     def impl(S_str, pat, flags=0):
         S = S_str._obj
         str_arr = bodo.hiframes.api.get_series_data(S)

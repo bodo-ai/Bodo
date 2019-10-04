@@ -156,8 +156,6 @@ def str_findall_count(regex, in_str):
     return _str_findall_count_impl
 
 
-
-
 utf8_str_type = types.ArrayCTypes(types.Array(types.uint8, 1, 'C'))
 
 
@@ -906,4 +904,3 @@ def impl_unicode_string_contains_noregex(context, builder, sig, args):
     std_pat = gen_unicode_to_std_str(context, builder, pat)
     return impl_string_contains_noregex(
         context, builder, sig, [std_val, std_pat])
-
