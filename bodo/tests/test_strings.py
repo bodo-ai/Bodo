@@ -93,7 +93,7 @@ class TestString(unittest.TestCase):
 
     def test_str2bool(self):
         str2bool_methods = ['isalnum', 'isalpha', 'isdigit',
-        'isspace', 'islower', 'istitle', 'isnumeric', 'isdecimal']
+        'isspace', 'islower', 'isupper', 'istitle', 'isnumeric', 'isdecimal']
         for method in str2bool_methods:
             func_text = "def test_impl(_str):\n"
             func_text += "  return _str.{}()\n".format(method)

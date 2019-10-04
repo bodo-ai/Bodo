@@ -90,6 +90,7 @@ for method in str2str_methods:
     exec(func_text, {'numba': numba}, loc_vars)
     str_overload = loc_vars['str_overload']
     overload_method(types.UnicodeType, method)(str_overload)
+    
 
 str2bool_methods = ('isalnum', 'isalpha', 'isdigit',
     'isspace', 'islower', 'istitle', 'isnumeric', 'isdecimal')
