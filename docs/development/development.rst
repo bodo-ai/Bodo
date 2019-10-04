@@ -102,6 +102,12 @@ Debugging
 
 `pdb <https://docs.python.org/3/library/pdb.html>`_: :code:`import pdb; pdb.set_trace()` for breakpoints
 
+`NUMBA_DEBUG_PRINT_AFTER <https://docs.python.org/3/library/pdb.html>`_ enviroment variable: 
+::
+    # example of printing after parfor pass
+    export NUMBA_DEBUG_PRINT_AFTER='parfor_pass'
+    # other common ones: distributed pass, series pass
+
 Papers
 ------
 
