@@ -91,6 +91,7 @@ for method in str2str_methods:
     str_overload = loc_vars['str_overload']
     overload_method(types.UnicodeType, method)(str_overload)
 
+
 # string methods that just return another boolean
 # 'isupper' is in numba 
 str2bool_methods = ('isalnum', 'isalpha', 'isdigit',
