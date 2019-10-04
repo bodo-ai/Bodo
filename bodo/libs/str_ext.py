@@ -91,6 +91,21 @@ for method in str2str_methods:
     str_overload = loc_vars['str_overload']
     overload_method(types.UnicodeType, method)(str_overload)
 
+str2bool_methods = ('isalnum', 'isalpha', 'isdigit',
+    'isspace', 'islower', 'istitle', 'isnumeric', 'isdecimal')
+
+
+for method in str2bool_methods:
+    func_text = "def str_overload(in_str):\n"
+    func_text += "  def _str_impl(in_str):\n"
+    func_text += "    with numba.objmode(out='boolean'):\n"
+    func_text += "      out = in_str.{}()\n".format(method)
+    func_text += "    return out\n"
+    func_text += "  return _str_impl\n"
+    loc_vars = {}
+    exec(func_text, {'numba': numba}, loc_vars)
+    str_overload = loc_vars['str_overload']
+    overload_method(types.UnicodeType, method)(str_overload)
 
 @overload_method(types.UnicodeType, 'replace')
 def str_replace_overload(in_str, old, new, count=-1):
