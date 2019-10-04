@@ -49,7 +49,7 @@ else:
 
 _has_xenon = False
 
-if 'HPAT_XE_SUPPORT' in os.environ and  os.environ['HPAT_XE_SUPPORT'] != "0":
+if 'BODO_XE_SUPPORT' in os.environ and  os.environ['BODO_XE_SUPPORT'] != "0":
     _has_xenon = True
 
 ind = [PREFIX_DIR+'/include',]
@@ -83,7 +83,7 @@ if not is_win:
 
 ext_io = Extension(name="bodo.libs.hio",
                    sources=["bodo/io/_io.cpp", "bodo/io/_csv.cpp"],
-                   depends=["bodo/libs/_hpat_common.h",
+                   depends=["bodo/libs/_bodo_common.h",
                             "bodo/libs/_distributed.h",
                             "bodo/libs/_import_py.h",
                             "bodo/io/_csv.h",
@@ -120,7 +120,7 @@ if "TRIAL_PERIOD" in os.environ and os.environ["TRIAL_PERIOD"] != "":
 
 ext_hdist = Extension(name="bodo.libs.hdist",
                       sources=["bodo/libs/_distributed.cpp"],
-                      depends=["bodo/libs/_hpat_common.h"],
+                      depends=["bodo/libs/_bodo_common.h"],
                       libraries = MPI_LIBS,
                       define_macros = dist_macros,
                       extra_compile_args = eca,
@@ -181,7 +181,7 @@ ext_dt = Extension(name="bodo.libs.hdatetime_ext",
 
 ext_quantile = Extension(name="bodo.libs.quantile_alg",
                          sources=["bodo/libs/_quantile_alg.cpp"],
-                         depends=["bodo/libs/_hpat_common.h"],
+                         depends=["bodo/libs/_bodo_common.h"],
                          libraries = MPI_LIBS,
                          extra_compile_args = eca,
                          extra_link_args = ela,

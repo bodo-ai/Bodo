@@ -8,7 +8,7 @@
 #include <cassert>
 #include <iostream>
 
-#include "_hpat_common.h"
+#include "_bodo_common.h"
 #include "_distributed.h"
 
 #define root 0
@@ -92,21 +92,21 @@ double quantile_parallel(void* data, int64_t local_size, int64_t total_size, dou
 double quantile_dispatch(void* data, int64_t local_size, double quantile, double at, int type_enum, bool parallel)
 {
     switch (type_enum) {
-        case HPAT_CTypes::INT8:
+        case Bodo_CTypes::INT8:
             return quantile_int((char *)data, local_size, at, type_enum, parallel);
-        case HPAT_CTypes::UINT8:
+        case Bodo_CTypes::UINT8:
             return quantile_int((unsigned char *) data, local_size, at, type_enum, parallel);
-        case HPAT_CTypes::INT32:
+        case Bodo_CTypes::INT32:
             return quantile_int((int *)data, local_size, at, type_enum, parallel);
-        case HPAT_CTypes::UINT32:
+        case Bodo_CTypes::UINT32:
             return quantile_int((uint32_t *)data, local_size, at, type_enum, parallel);
-        case HPAT_CTypes::INT64:
+        case Bodo_CTypes::INT64:
             return quantile_int((int64_t *)data, local_size, at, type_enum, parallel);
-        case HPAT_CTypes::UINT64:
+        case Bodo_CTypes::UINT64:
             return quantile_int((uint64_t*)data, local_size, at, type_enum, parallel);
-        case HPAT_CTypes::FLOAT32:
+        case Bodo_CTypes::FLOAT32:
             return quantile_float((float*)data, local_size, quantile, type_enum, parallel);
-        case HPAT_CTypes::FLOAT64:
+        case Bodo_CTypes::FLOAT64:
             return quantile_float((double*)data, local_size, quantile, type_enum, parallel);
         default:
             std::cerr << "unknown quantile data type" << "\n";
@@ -440,21 +440,21 @@ void nth_dispatch(void* res, void* data, int64_t local_size, int64_t k, int type
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
     switch (type_enum) {
-        case HPAT_CTypes::INT8:
+        case Bodo_CTypes::INT8:
             return get_nth((char *)res, (char *)data, local_size, k, type_enum, myrank, n_pes, parallel);
-        case HPAT_CTypes::UINT8:
+        case Bodo_CTypes::UINT8:
             return get_nth((unsigned char *) res, (unsigned char *) data, local_size, k, type_enum, myrank, n_pes, parallel);
-        case HPAT_CTypes::INT32:
+        case Bodo_CTypes::INT32:
             return get_nth((int *) res, (int *)data, local_size, k, type_enum, myrank, n_pes, parallel);
-        case HPAT_CTypes::UINT32:
+        case Bodo_CTypes::UINT32:
             return get_nth((uint32_t *) res, (uint32_t *)data, local_size, k, type_enum, myrank, n_pes, parallel);
-        case HPAT_CTypes::INT64:
+        case Bodo_CTypes::INT64:
             return get_nth((int64_t *) res, (int64_t *)data, local_size, k, type_enum, myrank, n_pes, parallel);
-        case HPAT_CTypes::UINT64:
+        case Bodo_CTypes::UINT64:
             return get_nth((uint64_t*) res, (uint64_t*)data, local_size, k, type_enum, myrank, n_pes, parallel);
-        case HPAT_CTypes::FLOAT32:
+        case Bodo_CTypes::FLOAT32:
             return get_nth((float*) res, (float*)data, local_size, k, type_enum, myrank, n_pes, parallel);
-        case HPAT_CTypes::FLOAT64:
+        case Bodo_CTypes::FLOAT64:
             return get_nth((double*) res, (double*)data, local_size, k, type_enum, myrank, n_pes, parallel);
         default:
             std::cerr << "unknown nth data type" << "\n";

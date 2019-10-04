@@ -12,7 +12,7 @@
 #include <tuple>
 #include <random>
 
-#include "_hpat_common.h"
+#include "_bodo_common.h"
 
 #define ROOT_PE 0
 
@@ -356,26 +356,26 @@ static void hpat_dist_waitall(int size, MPI_Request *req_arr)
 static MPI_Datatype get_MPI_typ(int typ_enum)
 {
     switch (typ_enum) {
-        case HPAT_CTypes::INT8:
+        case Bodo_CTypes::INT8:
             return MPI_CHAR;
-        case HPAT_CTypes::UINT8:
+        case Bodo_CTypes::UINT8:
             return MPI_UNSIGNED_CHAR;
-        case HPAT_CTypes::INT32:
+        case Bodo_CTypes::INT32:
             return MPI_INT;
-        case HPAT_CTypes::UINT32:
+        case Bodo_CTypes::UINT32:
             return MPI_UNSIGNED;
-        case HPAT_CTypes::INT64:
+        case Bodo_CTypes::INT64:
             return MPI_LONG_LONG_INT;
-        case HPAT_CTypes::UINT64:
+        case Bodo_CTypes::UINT64:
             return MPI_UNSIGNED_LONG_LONG;
-        case HPAT_CTypes::FLOAT32:
+        case Bodo_CTypes::FLOAT32:
             return MPI_FLOAT;
-        case HPAT_CTypes::FLOAT64:
+        case Bodo_CTypes::FLOAT64:
             return MPI_DOUBLE;
-        case HPAT_CTypes::INT16:
+        case Bodo_CTypes::INT16:
             // TODO: use MPI_INT16_T?
             return MPI_SHORT;
-        case HPAT_CTypes::UINT16:
+        case Bodo_CTypes::UINT16:
             return MPI_UNSIGNED_SHORT;
         default:
             std::cerr << "Invalid MPI_Type " << typ_enum << "\n";

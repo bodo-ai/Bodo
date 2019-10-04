@@ -6,7 +6,7 @@
 #include <numpy/arrayobject.h>
 #include <iostream>
 
-#include "_hpat_common.h"
+#include "_bodo_common.h"
 
 extern "C" {
 

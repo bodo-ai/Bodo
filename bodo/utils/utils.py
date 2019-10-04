@@ -25,7 +25,7 @@ from enum import Enum
 
 
 # int values for types to pass to C code
-# XXX: _hpat_common.h
+# XXX: _bodo_common.h
 class CTypeEnum(Enum):
     Int8 = 0
     UInt8 = 1

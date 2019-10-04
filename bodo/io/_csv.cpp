@@ -314,7 +314,7 @@ static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel
         // get total number of lines using allreduce
         size_t tot_no_lines(0);
 
-        hpat_dist_reduce(reinterpret_cast<char *>(&no_lines), reinterpret_cast<char *>(&tot_no_lines), HPAT_ReduceOps::SUM, HPAT_CTypes::UINT64);
+        hpat_dist_reduce(reinterpret_cast<char *>(&no_lines), reinterpret_cast<char *>(&tot_no_lines), HPAT_ReduceOps::SUM, Bodo_CTypes::UINT64);
 
         // Now we need to communicate the distribution as we really want it
         // First determine which is our first line (which is the sum of previous lines)
@@ -327,8 +327,8 @@ static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel
         const int START_OFFSET = 47011;
         const int END_OFFSET = 47012;
         std::vector<MPI_Request> mpi_reqs;
-        mpi_reqs.push_back(hpat_dist_irecv(&my_off_start, 1, HPAT_CTypes::UINT64, MPI_ANY_SOURCE, START_OFFSET, (rank>0 || skiprows>0)));
-        mpi_reqs.push_back(hpat_dist_irecv(&my_off_end, 1, HPAT_CTypes::UINT64, MPI_ANY_SOURCE, END_OFFSET, ((rank<(nranks-1)) || nrows!=-1)));
+        mpi_reqs.push_back(hpat_dist_irecv(&my_off_start, 1, Bodo_CTypes::UINT64, MPI_ANY_SOURCE, START_OFFSET, (rank>0 || skiprows>0)));
+        mpi_reqs.push_back(hpat_dist_irecv(&my_off_end, 1, Bodo_CTypes::UINT64, MPI_ANY_SOURCE, END_OFFSET, ((rank<(nranks-1)) || nrows!=-1)));
 
         // check nrows argument
         if (nrows != -1 && (nrows < 0 || nrows > tot_no_lines))
@@ -343,13 +343,13 @@ static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel
         // send start offset of rank 0
         if(skiprows > byte_first_line && skiprows <= byte_last_line) {
             size_t i_off = byte_offset + line_offset[skiprows-byte_first_line-1]+1; // +1 to skip/include leading/trailing newline
-            mpi_reqs.push_back(hpat_dist_isend(&i_off, 1, HPAT_CTypes::UINT64, 0, START_OFFSET, true));
+            mpi_reqs.push_back(hpat_dist_isend(&i_off, 1, Bodo_CTypes::UINT64, 0, START_OFFSET, true));
         }
 
         // send end offset of rank n-1
         if(nrows > byte_first_line && nrows <= byte_last_line) {
             size_t i_off = byte_offset + line_offset[nrows-byte_first_line-1]+1; // +1 to skip/include leading/trailing newline
-            mpi_reqs.push_back(hpat_dist_isend(&i_off, 1, HPAT_CTypes::UINT64, nranks-1, END_OFFSET, true));
+            mpi_reqs.push_back(hpat_dist_isend(&i_off, 1, Bodo_CTypes::UINT64, nranks-1, END_OFFSET, true));
         }
 
         // We iterate through chunk boundaries (defined by line-numbers)
@@ -362,9 +362,9 @@ static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel
                 // if so, send stream-offset to ranks which start/end here
                 size_t i_off = byte_offset + line_offset[i_bndry-byte_first_line-1]+1; // +1 to skip/include leading/trailing newline
                 // send to rank that starts at this boundary: i
-                mpi_reqs.push_back(hpat_dist_isend(&i_off, 1, HPAT_CTypes::UINT64, i, START_OFFSET, true));
+                mpi_reqs.push_back(hpat_dist_isend(&i_off, 1, Bodo_CTypes::UINT64, i, START_OFFSET, true));
                 // send to rank that ends at this boundary: i-1
-                mpi_reqs.push_back(hpat_dist_isend(&i_off, 1, HPAT_CTypes::UINT64, i-1, END_OFFSET, true));
+                mpi_reqs.push_back(hpat_dist_isend(&i_off, 1, Bodo_CTypes::UINT64, i-1, END_OFFSET, true));
             } else {
                 // if not and we past our chunk -> we stop
                 if(i_bndry > byte_last_line) break;
