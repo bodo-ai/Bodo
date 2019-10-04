@@ -12,7 +12,7 @@ import gc
 import re
 import pyarrow.parquet as pq
 from bodo.libs.str_arr_ext import StringArray
-from bodo.libs.str_ext import unicode_to_std_str, std_str_to_unicode
+from bodo.libs.str_ext import unicode_to_std_str, std_str_to_unicode, str_findall_count
 from bodo.tests.utils import check_func
 import pytest
 
@@ -162,13 +162,23 @@ class TestString(unittest.TestCase):
         arg = 'aabbcc'
         self.assertEqual(bodo_func(arg), test_impl(arg))
 
+    # def test_str_findall_count(self):
+    #     def bodo_test_impl(_str):
+    #         p = re.compile('ab*')
+    #         return str_findall_count(p, _str)
+    #     def test_impl(_str):
+    #         p = re.compile('ab*')
+    #         return len(p.findall(_str))
+    #     bodo_func = bodo.jit(bodo_test_impl)
+    #     arg = 'abaabbcc'
+    #     self.assertEqual(bodo_func(arg), len(test_impl(arg)))
+
     def test_regex_std(self):
         def test_impl(_str, _pat):
             return bodo.libs.str_ext.contains_regex(_str, bodo.libs.str_ext.compile_regex(_pat))
         bodo_func = bodo.jit(test_impl)
         self.assertEqual(bodo_func('What does the fox say', r'd.*(the |fox ){2}'), True)
         self.assertEqual(bodo_func('What does the fox say', r'[kz]u*'), False)
-
 
     def test_replace_regex_std(self):
         def test_impl(_str, pat, val):

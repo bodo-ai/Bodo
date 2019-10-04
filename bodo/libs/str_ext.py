@@ -148,6 +148,14 @@ def re_sub_overload(p, repl, string, count=0):
     return _re_sub_impl
 
 
+@numba.generated_jit
+def str_findall_count(regex, in_str):
+    def _str_findall_count_impl(regex, in_str):
+        with numba.objmode(res='int64'):
+            res = len(regex.findall(in_str))
+        return res
+    return _str_findall_count_impl
+
 
 utf8_str_type = types.ArrayCTypes(types.Array(types.uint8, 1, 'C'))
 
