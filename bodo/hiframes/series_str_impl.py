@@ -330,7 +330,7 @@ def overload_str_method_count(S_str, pat, flags=0):
         str_arr = bodo.hiframes.api.get_series_data(S)
         name = bodo.hiframes.api.get_series_name(S)
         index = bodo.hiframes.api.get_series_index(S)
-        e = re.compile(pat)
+        e = re.compile(pat, flags)
         numba.parfor.init_prange()
         l = len(str_arr)
         out_arr = np.empty(l, dtype=np.int64)
