@@ -147,6 +147,7 @@ def re_sub_overload(p, repl, string, count=0):
         return out
     return _re_sub_impl
 
+
 @numba.generated_jit
 def str_findall_count(regex, in_str):
     def _str_findall_count_impl(regex, in_str):
