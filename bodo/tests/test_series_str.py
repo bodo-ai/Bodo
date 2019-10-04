@@ -81,18 +81,19 @@ def test_count_noflag():
     def test_impl(S):
         return S.str.count('A')
 
-    S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
+    S = pd.Series(['AAABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
         [4, 3, 5, 1, 0], name='A')
-    check_func(test_impl, (S,))
+    check_func(test_impl, (S,), check_dtype=False)
 
 
 def test_count_flag():
+    import re
     def test_impl(S):
         return S.str.count('A', re.IGNORECASE)
 
-    S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
+    S = pd.Series(['AAABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
         [4, 3, 5, 1, 0], name='A')
-    check_func(test_impl, (S,))
+    check_func(test_impl, (S,), check_dtype=False)
 
 
 def test_find():

@@ -20,7 +20,7 @@ from bodo.hiframes.pd_timestamp_ext import (pandas_timestamp_type,
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
 from bodo.utils.typing import (is_list_like_index_type, is_overload_false,
     is_overload_true)
-from bodo.libs.str_ext import string_type
+from bodo.libs.str_ext import string_type, str_findall_count
 from bodo.libs.str_arr_ext import (string_array_type, pre_alloc_string_array,
     get_utf8_size)
 from bodo.hiframes.split_impl import (string_array_split_view_type,
@@ -281,7 +281,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
             numba.parfor.init_prange()
             e = bodo.libs.str_ext.compile_regex(pat)
             l = len(arr)
-            out_arr = np.empty(l, dtype=np.bool_)
+            out_arr = np.empty(l, dtype=nsp.bool_)
             nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
             for i in numba.parfor.internal_prange(l):
                 if bodo.hiframes.api.isna(arr, i):
@@ -324,13 +324,13 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
 
 @overload_method(SeriesStrMethodType, 'count')
 def overload_str_method_count(S_str, pat, flags=0):
-    def impl(S_str, sub):
+    def impl(S_str, pat, flags=0):
         S = S_str._obj
         str_arr = bodo.hiframes.api.get_series_data(S)
         name = bodo.hiframes.api.get_series_name(S)
         index = bodo.hiframes.api.get_series_index(S)
+        e = re.compile(pat)
         numba.parfor.init_prange()
-        e = re.compile(pat, flags = flags)
         l = len(str_arr)
         out_arr = np.empty(l, dtype=np.int64)
         bitmap = np.empty((l+7)>>3, np.uint8)
@@ -340,9 +340,7 @@ def overload_str_method_count(S_str, pat, flags=0):
                 bodo.libs.int_arr_ext.set_bit_to_arr(
                         bitmap, i, 0)
             else:
-                print(type(e))
-                print(type(str_arr[i])
-                out_arr[i] = e.findall(str_arr[i])
+                out_arr[i] = str_findall_count(e, str_arr[i])
                 bodo.libs.int_arr_ext.set_bit_to_arr(
                         bitmap, i, 1)
         return bodo.hiframes.api.init_series(
