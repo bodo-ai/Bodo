@@ -9,7 +9,6 @@ Technology Overview and Architecture
 This `slide deck <https://drive.google.com/file/d/1mHrbjAEfP6p-o-bWJOVdtmKNEA7lreDt/view?usp=sharing>`_
 provides an overview of Bodo technology and software architecture.
 
-
 Numba Development
 -----------------
 
@@ -98,6 +97,10 @@ the following has to be specified:
 - distributed analysis (including array access analysis)
 - distributed transformation
 
+Debugging
+---------------
+
+`pdb <https://docs.python.org/3/library/pdb.html>`_: :code:`import pdb; pdb.set_trace()` for breakpoints
 
 Papers
 ------
