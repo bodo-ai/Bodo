@@ -34,6 +34,6 @@ else
     echo "Error in compiler install"
 fi
 
-$CONDA_INSTALL -c numba numba
+$CONDA_INSTALL -c numba numba=0.46.0rc1
 
 if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi
