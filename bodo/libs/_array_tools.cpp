@@ -14,8 +14,13 @@
 
 array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data, char *offsets, char* null_bitmap) {
     // TODO: better memory management of struct, meminfo refcount?
-    printf("%llu %llu\n", n_items, n_chars);
     return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, n_items, n_chars, data, offsets, NULL, null_bitmap);
+}
+
+
+array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum) {
+    // TODO: better memory management of struct, meminfo refcount?
+    return new array_info(bodo_array_type::NUMPY, (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, data, NULL, NULL, NULL);
 }
 
 
@@ -34,6 +39,8 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     // DEC_MOD_METHOD(string_array_to_info);
     PyObject_SetAttrString(m, "string_array_to_info",
                             PyLong_FromVoidPtr((void*)(&string_array_to_info)));
+    PyObject_SetAttrString(m, "numpy_array_to_info",
+                            PyLong_FromVoidPtr((void*)(&numpy_array_to_info)));
 
     return m;
 }
