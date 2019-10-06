@@ -161,10 +161,15 @@ ext_str = Extension(name="bodo.libs.hstr_ext",
                     library_dirs = np_compile_args['library_dirs'] + lid,
 )
 
-#dt_args = copy.copy(np_compile_args)
-#dt_args['include_dirs'] = dt_args['include_dirs'] + [PANDAS_DIR+'/_libs/src/datetime/']
-#dt_args['library_dirs'] = dt_args['library_dirs'] + [PANDAS_DIR+'/_libs/tslibs']
-#dt_args['libraries'] = dt_args['libraries'] + ['np_datetime']
+ext_arr = Extension(name="bodo.libs.array_tools_ext",
+                    sources=["bodo/libs/_array_tools.cpp"],
+                    extra_compile_args = eca,
+                    extra_link_args = ela,
+                    define_macros = np_compile_args['define_macros'],
+                    include_dirs = np_compile_args['include_dirs'] + ind,
+                    library_dirs = np_compile_args['library_dirs'] + lid,
+)
+
 
 
 ext_dt = Extension(name="bodo.libs.hdatetime_ext",
@@ -223,7 +228,8 @@ ext_xenon_wrapper = Extension(name="bodo.hxe_ext",
                               extra_link_args = ela,
 )
 
-_ext_mods = [ext_hdist, ext_dict, ext_set, ext_str, ext_quantile, ext_dt, ext_io]
+_ext_mods = [ext_hdist, ext_dict, ext_set, ext_str, ext_quantile, ext_dt,
+    ext_io, ext_arr]
 
 if _has_h5py:
     _ext_mods.append(ext_hdf5)
