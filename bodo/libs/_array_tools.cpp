@@ -41,6 +41,20 @@ void info_to_string_array(array_info* info, uint64_t* n_items, uint64_t* n_chars
 }
 
 
+void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data, NRT_MemInfo** meminfo)
+{
+    if (info->arr_type != bodo_array_type::NUMPY)
+    {
+        PyErr_SetString(PyExc_RuntimeError, "info_to_numpy_array requires numpy input");
+        return;
+    }
+    *n_items = info->length;
+    *data = info->data1;
+    *meminfo = info->meminfo;
+    return;
+}
+
+
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     PyObject *m;
     static struct PyModuleDef moduledef = {
@@ -59,6 +73,8 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                             PyLong_FromVoidPtr((void*)(&numpy_array_to_info)));
     PyObject_SetAttrString(m, "info_to_string_array",
                             PyLong_FromVoidPtr((void*)(&info_to_string_array)));
+    PyObject_SetAttrString(m, "info_to_numpy_array",
+                            PyLong_FromVoidPtr((void*)(&info_to_numpy_array)));
 
     return m;
 }

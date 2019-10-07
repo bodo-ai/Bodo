@@ -17,6 +17,7 @@ import llvmlite.binding as ll
 ll.add_symbol('string_array_to_info', array_tools_ext.string_array_to_info)
 ll.add_symbol('numpy_array_to_info', array_tools_ext.numpy_array_to_info)
 ll.add_symbol('info_to_string_array', array_tools_ext.info_to_string_array)
+ll.add_symbol('info_to_numpy_array', array_tools_ext.info_to_numpy_array)
 
 
 class ArrayInfoType(types.Type):
@@ -101,5 +102,43 @@ def info_to_array(typingctx, info_type, arr_type):
                 string_array._get_ptr_by_name('null_bitmap'),
                 string_array._get_ptr_by_name('meminfo')])
             return string_array._getvalue()
+
+        # Numpy
+        if isinstance(arr_type, types.Array):
+            assert arr_type.ndim == 1, "only 1D array supported"
+            arr = context.make_array(arr_type)(context, builder)
+
+            length_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+            data_ptr = cgutils.alloca_once(
+                builder, lir.IntType(8).as_pointer())
+            meminfo_ptr = cgutils.alloca_once(
+                builder, lir.IntType(8).as_pointer())
+
+            fnty = lir.FunctionType(lir.VoidType(),
+                [lir.IntType(8).as_pointer(),  # info
+                lir.IntType(64).as_pointer(),  # num_items
+                lir.IntType(8).as_pointer().as_pointer(),   # data
+                lir.IntType(8).as_pointer().as_pointer()])  # meminfo
+            fn_tp = builder.module.get_or_insert_function(
+                fnty, name="info_to_numpy_array")
+            builder.call(fn_tp, [in_info, length_ptr, data_ptr, meminfo_ptr])
+
+            intp_t = context.get_value_type(types.intp)
+            shape_array = cgutils.pack_array(
+                builder, [builder.load(length_ptr)], ty=intp_t)
+            itemsize = context.get_constant(types.intp,
+                context.get_abi_sizeof(context.get_data_type(arr_type.dtype)))
+            strides_array = cgutils.pack_array(builder, [itemsize], ty=intp_t)
+
+            data = builder.bitcast(builder.load(data_ptr),
+                context.get_data_type(arr_type.dtype).as_pointer())
+
+            numba.targets.arrayobj.populate_array(arr,
+                   data=data,
+                   shape=shape_array,
+                   strides=strides_array,
+                   itemsize=itemsize,
+                   meminfo=builder.load(meminfo_ptr))
+            return arr._getvalue()
 
     return arr_type(info_type, arr_type), codegen
