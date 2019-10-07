@@ -19,6 +19,7 @@ ll.add_symbol('numpy_array_to_info', array_tools_ext.numpy_array_to_info)
 ll.add_symbol('info_to_string_array', array_tools_ext.info_to_string_array)
 ll.add_symbol('info_to_numpy_array', array_tools_ext.info_to_numpy_array)
 ll.add_symbol('alloc_numpy', array_tools_ext.alloc_numpy)
+ll.add_symbol('alloc_string_array', array_tools_ext.alloc_string_array)
 
 
 class ArrayInfoType(types.Type):
@@ -146,20 +147,31 @@ def info_to_array(typingctx, info_type, arr_type):
 
 
 @intrinsic
-def test_alloc(typingctx, len_typ, arr_type):
+def test_alloc_np(typingctx, len_typ, arr_type):
     def codegen(context, builder, sig, args):
         length, _ = args
-
-        # Numpy
-        if isinstance(arr_type, types.Array):
-            typ_enum = _numba_to_c_type_map[arr_type.dtype]
-            typ_arg = cgutils.alloca_once_value(
-                builder, lir.Constant(lir.IntType(32), typ_enum))
-            fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
-                [lir.IntType(64),  # num_items
-                lir.IntType(32)])
-            fn_tp = builder.module.get_or_insert_function(
-                fnty, name="alloc_numpy")
-            return builder.call(fn_tp, [length, builder.load(typ_arg)])
+        typ_enum = _numba_to_c_type_map[arr_type.dtype]
+        typ_arg = cgutils.alloca_once_value(
+            builder, lir.Constant(lir.IntType(32), typ_enum))
+        fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
+            [lir.IntType(64),  # num_items
+            lir.IntType(32)])
+        fn_tp = builder.module.get_or_insert_function(
+            fnty, name="alloc_numpy")
+        return builder.call(fn_tp, [length, builder.load(typ_arg)])
 
     return array_info_type(len_typ, arr_type), codegen
+
+
+@intrinsic
+def test_alloc_string(typingctx, len_typ, n_chars_typ):
+    def codegen(context, builder, sig, args):
+        length, n_chars = args
+        fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
+            [lir.IntType(64),  # num_items
+            lir.IntType(64)])
+        fn_tp = builder.module.get_or_insert_function(
+            fnty, name="alloc_string_array")
+        return builder.call(fn_tp, [length, n_chars])
+
+    return array_info_type(len_typ, n_chars_typ), codegen

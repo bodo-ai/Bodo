@@ -64,6 +64,14 @@ array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum)
 }
 
 
+array_info* alloc_string_array(int64_t length, int64_t n_chars)
+{
+    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_dtor_safe(sizeof(str_arr_payload), (NRT_dtor_function)dtor_string_array);
+    str_arr_payload* payload = (str_arr_payload*)meminfo->data;
+    allocate_string_array(&(payload->offsets), &(payload->data), &(payload->null_bitmap), length, n_chars);
+    return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, length, n_chars, payload->data, (char*)payload->offsets, NULL, (char*)payload->null_bitmap, meminfo);
+}
+
 
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     PyObject *m;
@@ -87,6 +95,8 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                             PyLong_FromVoidPtr((void*)(&info_to_numpy_array)));
     PyObject_SetAttrString(m, "alloc_numpy",
                             PyLong_FromVoidPtr((void*)(&alloc_numpy)));
+    PyObject_SetAttrString(m, "alloc_string_array",
+                            PyLong_FromVoidPtr((void*)(&alloc_string_array)));
 
     return m;
 }

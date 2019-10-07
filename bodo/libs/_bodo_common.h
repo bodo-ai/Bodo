@@ -78,4 +78,54 @@ struct array_info {
 
 #define DEC_MOD_METHOD(func) PyObject_SetAttrString(m, #func, PyLong_FromVoidPtr((void*)(&func)))
 
+extern "C" {
+
+// XXX: equivalent to payload data model in str_arr_ext.py
+struct str_arr_payload {
+    uint32_t *offsets;
+    char* data;
+    uint8_t* null_bitmap;
+};
+
+// XXX: equivalent to payload data model in split_impl.py
+struct str_arr_split_view_payload {
+    uint32_t *index_offsets;
+    uint32_t *data_offsets;
+    // uint8_t* null_bitmap;
+};
+
+
+void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in)
+{
+    // printf("str arr dtor size: %lld\n", in_str_arr->size);
+    // printf("num chars: %d\n", in_str_arr->offsets[in_str_arr->size]);
+    delete[] in_str_arr->offsets;
+    delete[] in_str_arr->data;
+    if (in_str_arr->null_bitmap != nullptr)
+        delete[] in_str_arr->null_bitmap;
+    return;
+}
+
+
+void allocate_string_array(uint32_t **offsets, char **data, uint8_t **null_bitmap, int64_t num_strings,
+                                                            int64_t total_size)
+{
+    // std::cout << "allocating string array: " << num_strings << " " <<
+    //                                                 total_size << std::endl;
+    *offsets = new uint32_t[num_strings+1];
+    *data = new char[total_size];
+    (*offsets)[0] = 0;
+    (*offsets)[num_strings] = (uint32_t)total_size;  // in case total chars is read from here
+    // allocate nulls
+    int64_t n_bytes = (num_strings+sizeof(uint8_t)-1)/sizeof(uint8_t);
+    *null_bitmap = new uint8_t[n_bytes];
+    // set all bits to 1 indicating non-null as default
+    memset(*null_bitmap, -1, n_bytes);
+    // *data = (char*) new std::string("gggg");
+    return;
+}
+
+
+}
+
 #endif /* BODO_COMMON_H_ */
