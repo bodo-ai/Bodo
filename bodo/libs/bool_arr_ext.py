@@ -155,8 +155,9 @@ def unbox_bool_array(typ, obj, c):
 
 @box(BooleanArrayType)
 def box_bool_arr(typ, val, c):
-    """Box int array into Numpy boolean array if there are no NAs. Otherwise,
-    use object array with NAs converted to np.nan.
+    """Box bool array into Numpy object array with NAs converted to np.nan.
+    Always use object array to avoid inconsistency across processors.
+    e.g. bodo/tests/test_series.py::test_series_values[series_val3] on 2 pes
     """
     bool_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
     bool_arr_obj =  c.pyapi.from_native_value(

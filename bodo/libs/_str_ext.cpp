@@ -857,24 +857,11 @@ PyArrayObject* set_nulls_bool_array(PyArrayObject* bool_arr, uint8_t *bitmap_arr
 {
 #define CHECK(expr, msg) if(!(expr)){std::cerr << msg << std::endl; PyGILState_Release(gilstate); return NULL;}
     auto gilstate = PyGILState_Ensure();
+    // Always use object array to avoid inconsistency across processors.
+    // e.g. bodo/tests/test_series.py::test_series_values[series_val3] on 2 pes
 
-    // if there are no NAs, just return bool array untouched
     int64_t n = PyArray_SIZE(bool_arr);
     CHECK(n>=0, "invalid array size");
-
-    bool has_na = false;
-    for(int i=0; i<n; i++)
-        if (!GetBit(bitmap_arr, i)) {
-            has_na = true;
-            break;
-        }
-
-    if (!has_na) {
-        // no conversion needed
-        PyGILState_Release(gilstate);
-        return bool_arr;
-    }
-
 
     PyObject* np_mod = PyImport_ImportModule("numpy");
     CHECK(np_mod, "importing numpy module failed");
