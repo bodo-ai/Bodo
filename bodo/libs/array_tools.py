@@ -31,6 +31,9 @@ register_model(ArrayInfoType)(models.OpaqueModel)
 def array_to_info(typingctx, arr_type):
     def codegen(context, builder, sig, args):
         in_arr, = args
+        # XXX: meminfo is not updated, so array may go away if not used
+        # afterwards somewhere
+        # TODO: fix memory management
 
         # StringArray
         if arr_type == string_array_type:

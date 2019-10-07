@@ -373,9 +373,13 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx,
             func_text += "    t2_keys, data_right = parallel_asof_comm(t1_keys, t2_keys, data_right)\n"
     else:
         if left_parallel:
-            func_text += "    t1_keys, data_left = parallel_shuffle(t1_keys, data_left)\n"
+            # func_text += "    t1_keys, data_left = parallel_shuffle(t1_keys, data_left)\n"
+            func_text += _gen_par_shuffle(
+                left_key_names, left_other_names, "t1_keys", "data_left")
         if right_parallel:
-            func_text += "    t2_keys, data_right = parallel_shuffle(t2_keys, data_right)\n"
+            # func_text += "    t2_keys, data_right = parallel_shuffle(t2_keys, data_right)\n"
+            func_text += _gen_par_shuffle(
+                right_key_names, right_other_names, "t2_keys", "data_right")
         #func_text += "    print(t2_key, data_right)\n"
 
     if method == 'sort' and join_node.how != 'asof':
@@ -502,6 +506,36 @@ def _get_table_parallel_flags(join_node, array_dists):
                         for v in join_node.df_out_vars.values())
 
     return left_parallel, right_parallel
+
+
+def _gen_par_shuffle(key_names, data_names, key_tup_out, data_tup_out):
+    all_arrs = key_names + data_names
+    n_keys = len(key_names)
+    n_data = len(data_names)
+    n_all = len(all_arrs)
+
+    # convert arrays to table
+    func_text = "    info_list = [{}]\n".format(
+        ", ".join("array_to_info({})".format(a) for a in all_arrs))
+    func_text += "    table = arr_info_list_to_table(info_list)\n"
+
+    # shuffle
+    func_text += "    out_table = shuffle_table(table, {})\n".format(n_keys)
+
+    # extract arrays from output table
+    out_keys = ["info_to_array(info_from_table(out_table, {}))".format(i)
+                for i in range(n_keys)]
+    out_data = ["info_to_array(info_from_table(out_table, {}))".format(i)
+                for i in range(n_keys, n_all)]
+    func_text += "    {} = ({},)\n".format(key_tup_out, ", ".join(out_keys))
+    func_text += "    {} = ({}{})\n".format(
+        data_tup_out, ", ".join(out_data), "," if n_data != 0 else "")
+
+    # clean up
+    func_text += "    delete_table(table)\n"
+    func_text += "    delete_table(out_table)\n"
+
+    return func_text
 
 
 # @numba.njit
