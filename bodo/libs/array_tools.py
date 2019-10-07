@@ -16,6 +16,7 @@ from llvmlite import ir as lir
 import llvmlite.binding as ll
 ll.add_symbol('string_array_to_info', array_tools_ext.string_array_to_info)
 ll.add_symbol('numpy_array_to_info', array_tools_ext.numpy_array_to_info)
+ll.add_symbol('info_to_string_array', array_tools_ext.info_to_string_array)
 
 
 class ArrayInfoType(types.Type):
@@ -69,3 +70,36 @@ def array_to_info(typingctx, arr_type):
                 builder.load(typ_arg), arr.meminfo])
 
     return array_info_type(arr_type), codegen
+
+
+@intrinsic
+def info_to_array(typingctx, info_type, arr_type):
+    assert info_type == array_info_type
+    def codegen(context, builder, sig, args):
+        in_info, _ = args
+        # TODO: update meminfo?
+
+        # StringArray
+        if arr_type == string_array_type:
+            string_array = context.make_helper(
+                builder, string_array_type)
+            fnty = lir.FunctionType(lir.VoidType(),
+                [lir.IntType(8).as_pointer(),  # info
+                lir.IntType(64).as_pointer(),  # num_items
+                lir.IntType(64).as_pointer(),  # num_total_chars
+                lir.IntType(8).as_pointer().as_pointer(),   # data
+                lir.IntType(32).as_pointer().as_pointer(),  # offsets
+                lir.IntType(8).as_pointer().as_pointer(),   # null_bitmap
+                lir.IntType(8).as_pointer().as_pointer()])  # meminfo
+            fn_tp = builder.module.get_or_insert_function(
+                fnty, name="info_to_string_array")
+            builder.call(fn_tp, [in_info,
+                string_array._get_ptr_by_name('num_items'),
+                string_array._get_ptr_by_name('num_total_chars'),
+                string_array._get_ptr_by_name('data'),
+                string_array._get_ptr_by_name('offsets'),
+                string_array._get_ptr_by_name('null_bitmap'),
+                string_array._get_ptr_by_name('meminfo')])
+            return string_array._getvalue()
+
+    return arr_type(info_type, arr_type), codegen

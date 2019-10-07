@@ -24,6 +24,22 @@ array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum, NRT_
 }
 
 
+void info_to_string_array(array_info* info, uint64_t* n_items, uint64_t* n_chars, char** data, char** offsets, char** null_bitmap, NRT_MemInfo** meminfo)
+{
+    if (info->arr_type != bodo_array_type::STRING)
+    {
+        PyErr_SetString(PyExc_RuntimeError, "info_to_string_array requires string input");
+        return;
+    }
+    *n_items = info->length;
+    *n_chars = info->n_sub_elems;
+    *data = info->data1;
+    *offsets = info->data2;
+    *null_bitmap = info->null_bitmask;
+    *meminfo = info->meminfo;
+    return;
+}
+
 
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     PyObject *m;
@@ -41,6 +57,8 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                             PyLong_FromVoidPtr((void*)(&string_array_to_info)));
     PyObject_SetAttrString(m, "numpy_array_to_info",
                             PyLong_FromVoidPtr((void*)(&numpy_array_to_info)));
+    PyObject_SetAttrString(m, "info_to_string_array",
+                            PyLong_FromVoidPtr((void*)(&info_to_string_array)));
 
     return m;
 }
