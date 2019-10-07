@@ -31,9 +31,9 @@ register_model(ArrayInfoType)(models.OpaqueModel)
 def array_to_info(typingctx, arr_type):
     def codegen(context, builder, sig, args):
         in_arr, = args
-        # XXX: meminfo is not updated, so array may go away if not used
-        # afterwards somewhere
-        # TODO: fix memory management
+        # arr_info struct keeps a reference
+        if context.enable_nrt:
+            context.nrt.incref(builder, arr_type, in_arr)
 
         # StringArray
         if arr_type == string_array_type:
@@ -41,12 +41,14 @@ def array_to_info(typingctx, arr_type):
                 builder, string_array_type, in_arr)
             fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
                 [lir.IntType(64), lir.IntType(64), lir.IntType(8).as_pointer(),
-                lir.IntType(32).as_pointer(), lir.IntType(8).as_pointer()])
+                lir.IntType(32).as_pointer(), lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer()])
             fn_tp = builder.module.get_or_insert_function(
                 fnty, name="string_array_to_info")
             return builder.call(fn_tp, [string_array.num_items,
                 string_array.num_total_chars, string_array.data,
-                string_array.offsets, string_array.null_bitmap])
+                string_array.offsets, string_array.null_bitmap,
+                string_array.meminfo])
 
         # Numpy
         if isinstance(arr_type, types.Array):
@@ -59,11 +61,11 @@ def array_to_info(typingctx, arr_type):
 
             fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
                 [lir.IntType(64), lir.IntType(8).as_pointer(),
-                lir.IntType(32)])
+                lir.IntType(32), lir.IntType(8).as_pointer()])
             fn_tp = builder.module.get_or_insert_function(
                 fnty, name="numpy_array_to_info")
             return builder.call(fn_tp, [length,
                 builder.bitcast(arr.data, lir.IntType(8).as_pointer()),
-                builder.load(typ_arg)])
+                builder.load(typ_arg), arr.meminfo])
 
     return array_info_type(arr_type), codegen

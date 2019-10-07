@@ -523,9 +523,11 @@ def _gen_par_shuffle(key_names, data_names, key_tup_out, data_tup_out):
     func_text += "    out_table = shuffle_table(table, {})\n".format(n_keys)
 
     # extract arrays from output table
-    out_keys = ["info_to_array(info_from_table(out_table, {}))".format(i)
+    out_keys = ["info_to_array(info_from_table(out_table, {}), {})".format(
+                    i, all_arrs[i])
                 for i in range(n_keys)]
-    out_data = ["info_to_array(info_from_table(out_table, {}))".format(i)
+    out_data = ["info_to_array(info_from_table(out_table, {}), {})".format(
+                    i, all_arrs[i])
                 for i in range(n_keys, n_all)]
     func_text += "    {} = ({},)\n".format(key_tup_out, ", ".join(out_keys))
     func_text += "    {} = ({}{})\n".format(

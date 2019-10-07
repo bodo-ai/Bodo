@@ -8,6 +8,9 @@
 #endif
 
 
+#include "_meminfo.h"
+
+
 // class CTypeEnum(Enum):
 //     Int8 = 0
 //     UInt8 = 1
@@ -64,11 +67,12 @@ struct array_info {
     char* data2;
     char* data3;
     char* null_bitmask;  // for nullable arrays like strings
+    NRT_MemInfo* meminfo;
     // TODO: shape/stride for multi-dim arrays
     explicit array_info(bodo_array_type::arr_type_enum _arr_type, Bodo_CTypes::CTypeEnum _dtype,
-        int64_t _length, int64_t _n_sub_elems, char* _data1, char* _data2, char* _data3, char* _null_bitmask): 
+        int64_t _length, int64_t _n_sub_elems, char* _data1, char* _data2, char* _data3, char* _null_bitmask, NRT_MemInfo* _meminfo):
            arr_type(_arr_type), dtype(_dtype), length(_length), n_sub_elems(_n_sub_elems),
-           data1(_data1), data2(_data2), data3(_data3), null_bitmask(_null_bitmask) {}
+           data1(_data1), data2(_data2), data3(_data3), null_bitmask(_null_bitmask), meminfo(_meminfo) {}
 };
 
 
