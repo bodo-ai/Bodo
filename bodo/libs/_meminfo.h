@@ -156,5 +156,43 @@ NRT_MemInfo *NRT_MemInfo_alloc_safe(size_t size) {
 }
 
 
+static
+void *nrt_allocate_meminfo_and_data_align(size_t size, unsigned align,
+                                          NRT_MemInfo **mi)
+{
+    size_t offset, intptr, remainder;
+    char *base = (char*)nrt_allocate_meminfo_and_data(size + 2 * align, mi);
+    intptr = (size_t) base;
+    /* See if we are aligned */
+    remainder = intptr % align;
+    if (remainder == 0){ /* Yes */
+        offset = 0;
+    } else { /* No, move forward `offset` bytes */
+        offset = align - remainder;
+    }
+    return base + offset;
+}
+
+NRT_MemInfo *NRT_MemInfo_alloc_aligned(size_t size, unsigned align) {
+    NRT_MemInfo *mi;
+    void *data = nrt_allocate_meminfo_and_data_align(size, align, &mi);
+    NRT_Debug(nrt_debug_print("NRT_MemInfo_alloc_aligned %p\n", data));
+    NRT_MemInfo_init(mi, data, size, NULL, NULL);
+    return mi;
+}
+
+
+NRT_MemInfo *NRT_MemInfo_alloc_safe_aligned(size_t size, unsigned align) {
+    NRT_MemInfo *mi;
+    void *data = nrt_allocate_meminfo_and_data_align(size, align, &mi);
+    /* Only fill up a couple cachelines with debug markers, to minimize
+       overhead. */
+    memset(data, 0xCB, MIN(size, 256));
+    NRT_Debug(nrt_debug_print("NRT_MemInfo_alloc_safe_aligned %p %zu\n",
+                              data, size));
+    NRT_MemInfo_init(mi, data, size, nrt_internal_dtor_safe, (void*)size);
+    return mi;
+}
+
 
 #endif // #ifndef _MEMINFO_INCLUDED

@@ -10,6 +10,7 @@
 #include <numpy/arrayobject.h>
 #include <cstdio>
 #include "_bodo_common.h"
+#define ALIGNMENT 64  // preferred alignment for AVX512
 
 
 array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data, char *offsets, char* null_bitmap, NRT_MemInfo* meminfo) {
@@ -55,6 +56,15 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data, NRT_M
 }
 
 
+array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum)
+{
+    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(length, ALIGNMENT);
+    char* data = (char*)meminfo->data;
+    return new array_info(bodo_array_type::NUMPY, typ_enum, length, -1, data, NULL, NULL, NULL, meminfo);
+}
+
+
+
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     PyObject *m;
     static struct PyModuleDef moduledef = {
@@ -75,6 +85,8 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                             PyLong_FromVoidPtr((void*)(&info_to_string_array)));
     PyObject_SetAttrString(m, "info_to_numpy_array",
                             PyLong_FromVoidPtr((void*)(&info_to_numpy_array)));
+    PyObject_SetAttrString(m, "alloc_numpy",
+                            PyLong_FromVoidPtr((void*)(&alloc_numpy)));
 
     return m;
 }
