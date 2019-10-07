@@ -330,4 +330,7 @@ def test_unique(int_arr_value):
     def test_impl(A):
         return A.unique()
 
-    check_func(test_impl, (int_arr_value,), False)
+    # only sequential check since not directly parallelized
+    bodo_func = bodo.jit(test_impl)
+    pd.util.testing.assert_extension_array_equal(
+        bodo_func(int_arr_value), test_impl(int_arr_value))
