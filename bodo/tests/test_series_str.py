@@ -107,6 +107,15 @@ def test_find():
     check_func(test_impl, (S,), check_dtype=False)
 
 
+def test_rfind():
+    def test_impl(S):
+        return S.str.rfind('AB')
+
+    S = pd.Series(['ABCC', 'CABBDAB', np.nan, 'ABAB', 'C,BB,D'],
+        [4, 3, 5, 1, 0], name='A')
+    check_func(test_impl, (S,), check_dtype=False)
+
+
 def test_center():
     def test_impl(S):
         return S.str.center(5, '*')
@@ -134,9 +143,39 @@ def test_rjust():
     check_func(test_impl, (S,))
 
 
+def test_pad():
+    def test_impl_default(S):
+        return S.str.pad(5)
+
+    def test_impl_left(S):
+        return S.str.pad(5, 'left', '*')
+
+    def test_impl_right(S):
+        return S.str.pad(5, 'right', '*')
+
+    def test_impl_both(S):
+        return S.str.pad(5, 'both', '*')
+
+    S = pd.Series(['ABCDDC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
+        [3, 5, 1, 0, 2], name='A')
+    check_func(test_impl_default, (S,))
+    check_func(test_impl_left, (S,))
+    check_func(test_impl_right, (S,))
+    check_func(test_impl_both, (S,))
+
+
 def test_zfill():
     def test_impl(S):
         return S.str.zfill(10)
+
+    S = pd.Series(['ABCDDCABABAAB', 'ABBD', 'AA', 'C,ABB, D', np.nan],
+        [3, 5, 1, 0, 2], name='A')
+    check_func(test_impl, (S,))
+
+
+def test_slice():
+    def test_impl(S):
+        return S.str.slice(step=2)
 
     S = pd.Series(['ABCDDCABABAAB', 'ABBD', 'AA', 'C,ABB, D', np.nan],
         [3, 5, 1, 0, 2], name='A')
