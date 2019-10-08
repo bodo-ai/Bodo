@@ -126,10 +126,7 @@ def str_rfind_overload(in_str, sub, start=0, end=None):
 
     def _str_rfind_impl(in_str, sub, start=0, end=None):
         with numba.objmode(out='int64'):
-            if end is None:
-                out = in_str.rfind(sub, start)
-            else:
-                out = in_str.rfind(sub, start, end)
+            out = in_str.rfind(sub, start, end)
         return out
 
     return _str_rfind_impl

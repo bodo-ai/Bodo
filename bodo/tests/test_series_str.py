@@ -111,7 +111,7 @@ def test_rfind():
     def test_impl(S):
         return S.str.rfind('AB')
 
-    S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
+    S = pd.Series(['ABCC', 'CABBDAB', np.nan, 'ABAB', 'C,BB,D'],
         [4, 3, 5, 1, 0], name='A')
     check_func(test_impl, (S,), check_dtype=False)
 
