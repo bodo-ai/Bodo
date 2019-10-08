@@ -562,7 +562,8 @@ def test_df_take(df_value):
         return df.take([1, 3])
 
     bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value))
+    pd.testing.assert_frame_equal(bodo_func(df_value), impl(df_value),
+                                  check_dtype=False)
 
 
 def test_df_sort_values(df_value):

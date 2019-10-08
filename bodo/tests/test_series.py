@@ -82,7 +82,8 @@ def test_series_constructor(data, index, name):
 
     bodo_func = bodo.jit(impl)
     pd.testing.assert_series_equal(
-        bodo_func(data, index, name), impl(data, index, name))
+        bodo_func(data, index, name), impl(data, index, name),
+        check_dtype=False)
 
 
 def test_series_constructor_dtype1():
@@ -256,7 +257,8 @@ def test_series_put(series_val):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
-        bodo_func(series_val.copy()), test_impl(series_val.copy()))
+        bodo_func(series_val.copy()), test_impl(series_val.copy()),
+        check_dtype=False)
 
 
 def test_series_astype_numeric(numeric_series_val):
@@ -401,7 +403,8 @@ def test_series_iat_setitem(series_val):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
-        bodo_func(series_val.copy(), val), test_impl(series_val.copy(), val))
+        bodo_func(series_val.copy(), val), test_impl(series_val.copy(), val),
+        check_dtype=False)
 
 
 def test_series_iloc_getitem_int(series_val):
@@ -421,7 +424,7 @@ def test_series_iloc_getitem_slice(series_val):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val))
+        bodo_func(series_val), test_impl(series_val), check_dtype=False)
     # fix distributed
     # check_func(test_impl, (series_val,))
 
@@ -432,7 +435,7 @@ def test_series_iloc_getitem_array_int(series_val):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val))
+        bodo_func(series_val), test_impl(series_val), check_dtype=False)
 
 
 def test_series_iloc_getitem_array_bool(series_val):
@@ -441,7 +444,7 @@ def test_series_iloc_getitem_array_bool(series_val):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val))
+        bodo_func(series_val), test_impl(series_val), check_dtype=False)
 
 
 def test_series_iloc_setitem_int(series_val):
@@ -457,7 +460,8 @@ def test_series_iloc_setitem_int(series_val):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
-        bodo_func(series_val.copy(), val), test_impl(series_val.copy(), val))
+        bodo_func(series_val.copy(), val), test_impl(series_val.copy(), val),
+        check_dtype=False)
 
 
 def test_series_iloc_setitem_slice(series_val):
@@ -475,7 +479,8 @@ def test_series_iloc_setitem_slice(series_val):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
-        bodo_func(series_val.copy(), val), test_impl(series_val.copy(), val))
+        bodo_func(series_val.copy(), val), test_impl(series_val.copy(), val),
+        check_dtype=False)
 
 
 @pytest.mark.parametrize('idx', [[1, 3], np.array([1, 3]), pd.Series([1, 3])])
@@ -495,7 +500,7 @@ def test_series_iloc_setitem_list_int(series_val, idx):
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
         bodo_func(series_val.copy(), val, idx),
-        test_impl(series_val.copy(), val, idx))
+        test_impl(series_val.copy(), val, idx), check_dtype=False)
 
 
 ####### getitem tests ###############
@@ -521,7 +526,7 @@ def test_series_getitem_slice(series_val):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val))
+        bodo_func(series_val), test_impl(series_val), check_dtype=False)
 
 
 @pytest.mark.parametrize('idx', [[1, 3], np.array([1, 3]), pd.Series([1, 3])])
@@ -536,7 +541,8 @@ def test_series_getitem_list_int(series_val, idx):
             bodo_func(series_val, idx)
     else:
         pd.testing.assert_series_equal(
-            bodo_func(series_val, idx), test_impl(series_val, idx))
+            bodo_func(series_val, idx), test_impl(series_val, idx),
+            check_dtype=False)
 
 
 def test_series_getitem_array_bool(series_val):
@@ -545,7 +551,7 @@ def test_series_getitem_array_bool(series_val):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val))
+        bodo_func(series_val), test_impl(series_val), check_dtype=False)
 
 
 ############### setitem tests #################
@@ -569,7 +575,7 @@ def test_series_setitem_int(series_val):
     else:
         pd.testing.assert_series_equal(
             bodo_func(series_val.copy(), val),
-            test_impl(series_val.copy(), val))
+            test_impl(series_val.copy(), val), check_dtype=False)
 
 
 def test_series_setitem_slice(series_val):
@@ -587,7 +593,8 @@ def test_series_setitem_slice(series_val):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
-        bodo_func(series_val.copy(), val), test_impl(series_val.copy(), val))
+        bodo_func(series_val.copy(), val), test_impl(series_val.copy(), val),
+        check_dtype=False)
 
 
 @pytest.mark.parametrize('idx', [[1, 4], np.array([1, 4]), pd.Series([1, 4])])
@@ -617,7 +624,7 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg):
             return
         pd.testing.assert_series_equal(
             bodo_func(series_val.copy(), val, idx),
-            test_impl(series_val.copy(), val, idx))
+            test_impl(series_val.copy(), val, idx), check_dtype=False)
 
 
 ############################ binary ops #############################
@@ -1124,7 +1131,7 @@ def test_series_take(series_val):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val))
+        bodo_func(series_val), test_impl(series_val), check_dtype=False)
     # TODO: dist support for selection with index list
 
 
@@ -1167,6 +1174,7 @@ def test_series_append_single(series_val, ignore_index):
     pd.testing.assert_series_equal(
         bodo_func(series_val, series_val),
         test_impl(series_val, series_val),
+        check_dtype=False,
         check_names=False)  # XXX append can't set name yet
 
 
@@ -1182,6 +1190,7 @@ def test_series_append_multi(series_val, ignore_index):
     pd.testing.assert_series_equal(
         bodo_func(series_val, series_val, series_val),
         test_impl(series_val, series_val, series_val),
+        check_dtype=False,
         check_names=False)  # XXX append can't set name yet
 
 

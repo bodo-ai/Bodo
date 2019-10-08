@@ -1986,8 +1986,8 @@ class SeriesPass(object):
 
         # string comparison with Series(dt64)
         op_str = _binop_to_str[rhs.fn]
-        typ1 = self.typemap[arg1.name]
-        typ2 = self.typemap[arg2.name]
+        typ1 = types.unliteral(self.typemap[arg1.name])
+        typ2 = types.unliteral(self.typemap[arg2.name])
         nodes = []
 
         func_text = 'def f(arg1, arg2):\n'

@@ -439,7 +439,8 @@ class TestIO(unittest.TestCase):
                                    columns=['three', 'five'])
 
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        pd.testing.assert_frame_equal(
+            bodo_func(), test_impl(), check_dtype=False)
 
     def test_pq_str_with_nan_seq(self):
         fname = os.path.join('bodo', 'tests', 'data', 'example.parquet')
