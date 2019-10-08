@@ -63,13 +63,20 @@ def check_func(func, args, is_out_distributed=None, sort_output=False,
     """test bodo compilation of function 'func' on arguments using REP and 1D
     inputs/outputs
     """
+    n_pes = bodo.get_size()
+    sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
+
     call_args = tuple(_get_arg(a, copy_input) for a in args)
     py_output = func(*call_args)
     # sequential
     bodo_func = bodo.jit(func)
     call_args = tuple(_get_arg(a, copy_input) for a in args)
-    _test_equal(bodo_func(*call_args), py_output, sort_output, check_names,
-                                                                   check_dtype)
+    passed = _test_equal_guard(bodo_func(*call_args), py_output, sort_output,
+                               check_names, check_dtype)
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = bodo.libs.distributed_api.dist_reduce(passed, np.int32(sum_op))
+    assert n_passed == n_pes
 
     if is_out_distributed is None:
         # assume all distributable output is distributed if not specified
@@ -86,9 +93,12 @@ def check_func(func, args, is_out_distributed=None, sort_output=False,
     if is_out_distributed:
         bodo_output = bodo.gatherv(bodo_output)
     # only rank 0 should check if gatherv() called on output
+    passed = 1
     if not is_out_distributed or bodo.get_rank() == 0:
-        _test_equal(bodo_output, py_output, sort_output, check_names,
-                                                                 check_dtype)
+        passed = _test_equal_guard(bodo_output, py_output, sort_output,
+                                   check_names, check_dtype)
+    n_passed = bodo.libs.distributed_api.dist_reduce(passed, np.int32(sum_op))
+    assert n_passed == n_pes
 
     # 1D distributed variable length
     bodo_func = bodo.jit(
@@ -98,9 +108,12 @@ def check_func(func, args, is_out_distributed=None, sort_output=False,
     bodo_output = bodo_func(*dist_args)
     if is_out_distributed:
         bodo_output = bodo.gatherv(bodo_output)
+    passed = 1
     if not is_out_distributed or bodo.get_rank() == 0:
-        _test_equal(bodo_output, py_output, sort_output, check_names,
-                                                                 check_dtype)
+        passed = _test_equal_guard(bodo_output, py_output, sort_output,
+                                   check_names, check_dtype)
+    n_passed = bodo.libs.distributed_api.dist_reduce(passed, np.int32(sum_op))
+    assert n_passed == n_pes
 
 
 def _get_arg(a, copy=False):
@@ -131,8 +144,19 @@ def _get_dist_arg(a, copy=False, var_length=False):
     return a[start:end]
 
 
+def _test_equal_guard(bodo_out, py_out, sort_output, check_names=True,
+                      check_dtype=True):
+    passed = 1
+    try:
+        _test_equal(bodo_out, py_out, sort_output, check_names, check_dtype)
+    except Exception as e:
+        print(e)
+        passed = 0
+    return passed
+
+
 def _test_equal(bodo_out, py_out, sort_output, check_names=True,
-                                                             check_dtype=True):
+                check_dtype=True):
 
     if isinstance(py_out, pd.Series):
         if sort_output:
