@@ -99,25 +99,39 @@ the following has to be specified:
 
 Debugging
 ---------------
-`pdb <https://docs.python.org/3/library/pdb.html>`_: :code:`import pdb; pdb.set_trace()` for breakpoints
+- `pdb <https://docs.python.org/3/library/pdb.html>`_: :code:`import pdb; pdb.set_trace()` for breakpoints
 
-`NUMBA_DEBUG_PRINT_AFTER <https://numba.pydata.org/numba-doc/dev/reference/envvars.html?highlight=numba_debug_print#envvar-NUMBA_DEBUG_PRINT_AFTER>`_ enviroment variable: 
-::
-    # example of printing after parfor pass
-    export NUMBA_DEBUG_PRINT_AFTER='parfor_pass'
-    # other common ones: 'bodo_distributed_pass', 'bodo_series_pass'
+- `NUMBA_DEBUG_PRINT_AFTER <https://numba.pydata.org/numba-doc/dev/reference/envvars.html?highlight=numba_debug_print#envvar-NUMBA_DEBUG_PRINT_AFTER>`_ enviroment variable: 
+  ::
+      # example of printing after parfor pass
+      export NUMBA_DEBUG_PRINT_AFTER='parfor_pass'
+      # other common ones: 'bodo_distributed_pass', 'bodo_series_pass'
 
-mpiexec redirect stdout from differet processes to different files:
-::
-    export PYTHONUNBUFFERED=1 # set the enviroment variable 
-    mpiexec -outfile-pattern="out_%r.log" -n 8 python small_test01.py
+- mpiexec redirect stdout from differet processes to different files:
+  ::
+      export PYTHONUNBUFFERED=1 # set the enviroment variable 
+      mpiexec -outfile-pattern="out_%r.log" -n 8 python small_test01.py
 
-
-or :
-::
-    # use the flag instead of setting the enviroment variable
-    mpiexec -outfile-pattern="out_%r.log" -n 8 python -u small_test01.py
-
+  or :
+  ::
+      # use the flag instead of setting the enviroment variable
+      mpiexec -outfile-pattern="out_%r.log" -n 8 python -u small_test01.py
+      
+- Docker with  `bind mounts <https://docs.docker.com/storage/bind-mounts/>`_ :
+  ::
+      # build is the image we are using here 
+      # -it, connect the container to terminal
+      # -v your_path:path_in_docker, mounts directory
+      # -m, memory limit
+      # --oom-kill-disable, whether to disable OOM Killer for the container or no
+      docker run -it -m 16000m --oom-kill-disable -v ~/Bodo:/Bodo -v ~/claims_poc:/claims_poc build bash
+      
+  To run a command in a running container:
+  
+  Use :code:`docker container ls` to find the container ID
+  ::
+      # replace d030f4d9c8ac with your container ID
+      docker exec -it d030f4d9c8ac bash
 
 Papers
 ------
