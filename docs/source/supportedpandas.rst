@@ -235,6 +235,7 @@ String handling:
 * :meth:`Series.str.capitalize`
 * :meth:`Series.str.center`
 * :meth:`Series.str.contains` regex argument supported.
+* :meth:`Series.str.count`
 * :meth:`Series.str.endswith`
 * :meth:`Series.str.find`
 * :meth:`Series.str.get`
@@ -242,9 +243,12 @@ String handling:
 * :meth:`Series.str.ljust`
 * :meth:`Series.str.lower`
 * :meth:`Series.str.lstrip`
+* :meth:`Series.str.pad`
 * :meth:`Series.str.replace` regex argument supported.
+* :meth:`Series.str.rfind`
 * :meth:`Series.str.rjust`
 * :meth:`Series.str.rstrip`
+* :meth:`Series.str.slice`
 * :meth:`Series.str.split`
 * :meth:`Series.str.startswith`
 * :meth:`Series.str.strip`
@@ -252,7 +256,15 @@ String handling:
 * :meth:`Series.str.title`
 * :meth:`Series.str.upper`
 * :meth:`Series.str.zfill`
+* :meth:`Series.str.isalnum`
+* :meth:`Series.str.isalpha`
+* :meth:`Series.str.isdigit`
+* :meth:`Series.str.isspace`
+* :meth:`Series.str.islower`
 * :meth:`Series.str.isupper`
+* :meth:`Series.str.istitle`
+* :meth:`Series.str.isnumeric`
+* :meth:`Series.str.isdecimal`
 
 
 DataFrame
