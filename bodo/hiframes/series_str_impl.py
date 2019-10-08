@@ -454,6 +454,43 @@ def overload_str_method_rjust(S_str, width, fillchar=' '):
     return impl
 
 
+@overload_method(SeriesStrMethodType, 'pad')
+def overload_str_method_pad(S_str, width, side='left', fillchar=' '):
+    def impl(S_str, width, side='left', fillchar=' '):
+        S = S_str._obj
+        str_arr = bodo.hiframes.api.get_series_data(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        numba.parfor.init_prange()
+        l = len(str_arr)
+        num_chars = 0
+        for i in numba.parfor.internal_prange(l):
+            if bodo.hiframes.api.isna(str_arr, i):
+                s = 0
+            else:
+                if side == 'left':
+                    s = bodo.libs.str_arr_ext.get_utf8_size(str_arr[i].rjust(width, fillchar))
+                elif side == 'right':
+                    s = bodo.libs.str_arr_ext.get_utf8_size(str_arr[i].ljust(width, fillchar))
+                elif side == 'both':
+                    s = bodo.libs.str_arr_ext.get_utf8_size(str_arr[i].center(width, fillchar))
+            num_chars += s
+        out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
+        for j in numba.parfor.internal_prange(l):
+            if bodo.hiframes.api.isna(str_arr, j):
+                out_arr[j] = ''
+                bodo.ir.join.setitem_arr_nan(out_arr, j)
+            else:
+                if side == 'left':
+                    out_arr[j] = str_arr[j].rjust(width, fillchar)
+                elif side == 'right':
+                    out_arr[j] = str_arr[j].ljust(width, fillchar)
+                elif side == 'both':
+                    out_arr[j] = str_arr[j].center(width, fillchar)
+        return bodo.hiframes.api.init_series(out_arr, index, name)
+    return impl
+
+
 @overload_method(SeriesStrMethodType, 'zfill')
 def overload_str_method_zfill(S_str, width):
     def impl(S_str, width):

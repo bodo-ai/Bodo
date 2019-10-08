@@ -134,6 +134,27 @@ def test_rjust():
     check_func(test_impl, (S,))
 
 
+def test_pad():
+    def test_impl_default(S):
+        return S.str.pad(5)
+
+    def test_impl_left(S):
+        return S.str.pad(5, 'left', '*')
+
+    def test_impl_right(S):
+        return S.str.pad(5, 'right', '*')
+
+    def test_impl_both(S):
+        return S.str.pad(5, 'both', '*')
+
+    S = pd.Series(['ABCDDC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
+        [3, 5, 1, 0, 2], name='A')
+    check_func(test_impl_default, (S,))
+    check_func(test_impl_left, (S,))
+    check_func(test_impl_right, (S,))
+    check_func(test_impl_both, (S,))
+
+
 def test_zfill():
     def test_impl(S):
         return S.str.zfill(10)
