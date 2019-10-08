@@ -142,9 +142,6 @@ def str_rfind_overload(in_str, sub, start=0, end=None):
 
     return _str_rfind_impl
 
-
-
-
 #####################  re support  ###################
 
 class RePatternType(types.Opaque):
