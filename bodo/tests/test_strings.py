@@ -137,6 +137,13 @@ class TestString(unittest.TestCase):
         arg = 'aa/bb/cc'
         self.assertEqual(bodo_func(arg), test_impl(arg))
 
+    def test_rfind(self):
+        def test_impl(_str):
+            return _str.rfind('/', 2)
+        bodo_func = bodo.jit(test_impl)
+        arg = 'aa/bb/cc'
+        self.assertEqual(bodo_func(arg), test_impl(arg))
+
     def test_getitem_int(self):
         def test_impl(_str):
             return _str[3]

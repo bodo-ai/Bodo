@@ -121,6 +121,22 @@ def str_replace_overload(in_str, old, new, count=-1):
     return _str_replace_impl
 
 
+@overload_method(types.UnicodeType, 'rfind')
+def str_rfind_overload(in_str, sub, start=0, end=None):
+
+    def _str_rfind_impl(in_str, sub, start=0, end=None):
+        with numba.objmode(out='int64'):
+            if end is None:
+                out = in_str.rfind(sub, start)
+            else:
+                out = in_str.rfind(sub, start, end)
+        return out
+
+    return _str_rfind_impl
+
+
+
+
 #####################  re support  ###################
 
 class RePatternType(types.Opaque):

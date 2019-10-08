@@ -107,6 +107,15 @@ def test_find():
     check_func(test_impl, (S,), check_dtype=False)
 
 
+def test_rfind():
+    def test_impl(S):
+        return S.str.rfind('AB')
+
+    S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
+        [4, 3, 5, 1, 0], name='A')
+    check_func(test_impl, (S,), check_dtype=False)
+
+
 def test_center():
     def test_impl(S):
         return S.str.center(5, '*')
