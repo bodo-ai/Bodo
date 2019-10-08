@@ -73,6 +73,25 @@ array_info* alloc_string_array(int64_t length, int64_t n_chars)
 }
 
 
+
+table_info* arr_info_list_to_table(array_info** arrs, int64_t n_arrs)
+{
+    std::vector<array_info*> columns = std::vector<array_info*>(n_arrs);
+    for(size_t i=0; i<n_arrs; i++)
+    {
+        columns[i] = arrs[i];
+    }
+    return new table_info(columns);
+}
+
+
+array_info* info_from_table(table_info* table, int64_t col_ind)
+{
+    return table->columns[col_ind];
+}
+
+
+
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     PyObject *m;
     static struct PyModuleDef moduledef = {
@@ -97,6 +116,10 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                             PyLong_FromVoidPtr((void*)(&alloc_numpy)));
     PyObject_SetAttrString(m, "alloc_string_array",
                             PyLong_FromVoidPtr((void*)(&alloc_string_array)));
+    PyObject_SetAttrString(m, "arr_info_list_to_table",
+                            PyLong_FromVoidPtr((void*)(&arr_info_list_to_table)));
+    PyObject_SetAttrString(m, "info_from_table",
+                            PyLong_FromVoidPtr((void*)(&info_from_table)));
 
     return m;
 }

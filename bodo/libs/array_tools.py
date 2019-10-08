@@ -20,6 +20,8 @@ ll.add_symbol('info_to_string_array', array_tools_ext.info_to_string_array)
 ll.add_symbol('info_to_numpy_array', array_tools_ext.info_to_numpy_array)
 ll.add_symbol('alloc_numpy', array_tools_ext.alloc_numpy)
 ll.add_symbol('alloc_string_array', array_tools_ext.alloc_string_array)
+ll.add_symbol('arr_info_list_to_table', array_tools_ext.arr_info_list_to_table)
+ll.add_symbol('info_from_table', array_tools_ext.info_from_table)
 
 
 class ArrayInfoType(types.Type):
@@ -29,6 +31,15 @@ class ArrayInfoType(types.Type):
 
 array_info_type = ArrayInfoType()
 register_model(ArrayInfoType)(models.OpaqueModel)
+
+
+class TableType(types.Type):
+    def __init__(self):
+        super(TableType, self).__init__(name='TableType()')
+
+
+table_type = TableType()
+register_model(TableType)(models.OpaqueModel)
 
 
 @intrinsic
@@ -175,3 +186,32 @@ def test_alloc_string(typingctx, len_typ, n_chars_typ):
         return builder.call(fn_tp, [length, n_chars])
 
     return array_info_type(len_typ, n_chars_typ), codegen
+
+
+@intrinsic
+def arr_info_list_to_table(typingctx, list_arr_info_typ):
+    assert list_arr_info_typ == types.List(array_info_type)
+    def codegen(context, builder, sig, args):
+        info_list, = args
+        inst = numba.targets.listobj.ListInstance(
+            context, builder, sig.args[0], info_list)
+        fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
+            [lir.IntType(8).as_pointer().as_pointer(), lir.IntType(64)])
+        fn_tp = builder.module.get_or_insert_function(
+            fnty, name="arr_info_list_to_table")
+        return builder.call(fn_tp, [inst.data, inst.size])
+
+    return table_type(list_arr_info_typ), codegen
+
+
+@intrinsic
+def info_from_table(typingctx, table_t, ind_t):
+    assert table_t == table_type
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
+            [lir.IntType(8).as_pointer(), lir.IntType(64)])
+        fn_tp = builder.module.get_or_insert_function(
+            fnty, name="info_from_table")
+        return builder.call(fn_tp, args)
+
+    return array_info_type(table_t, ind_t), codegen

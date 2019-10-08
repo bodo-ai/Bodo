@@ -7,7 +7,7 @@
 #define __UNUSED__
 #endif
 
-
+#include <vector>
 #include "_meminfo.h"
 
 
@@ -73,6 +73,12 @@ struct array_info {
         int64_t _length, int64_t _n_sub_elems, char* _data1, char* _data2, char* _data3, char* _null_bitmask, NRT_MemInfo* _meminfo):
            arr_type(_arr_type), dtype(_dtype), length(_length), n_sub_elems(_n_sub_elems),
            data1(_data1), data2(_data2), data3(_data3), null_bitmask(_null_bitmask), meminfo(_meminfo) {}
+};
+
+
+struct table_info {
+    std::vector<array_info*> columns;
+    explicit table_info(std::vector<array_info*> _columns): columns(_columns) {}
 };
 
 
