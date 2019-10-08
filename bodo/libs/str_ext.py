@@ -119,6 +119,7 @@ def str_replace_overload(in_str, old, new, count=-1):
         return out
 
     return _str_replace_impl
+    
 
 @numba.generated_jit
 def str_slice(in_str, start=None, stop=None, step=None):
