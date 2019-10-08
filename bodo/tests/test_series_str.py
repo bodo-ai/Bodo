@@ -173,6 +173,15 @@ def test_zfill():
     check_func(test_impl, (S,))
 
 
+def test_slice():
+    def test_impl(S):
+        return S.str.slice(step=2)
+
+    S = pd.Series(['ABCDDCABABAAB', 'ABBD', 'AA', 'C,ABB, D', np.nan],
+        [3, 5, 1, 0, 2], name='A')
+    check_func(test_impl, (S,))
+
+
 def test_startswith():
     def test_impl(S):
         return S.str.startswith("AB")

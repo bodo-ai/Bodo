@@ -20,7 +20,7 @@ from bodo.hiframes.pd_timestamp_ext import (pandas_timestamp_type,
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
 from bodo.utils.typing import (is_list_like_index_type, is_overload_false,
     is_overload_true)
-from bodo.libs.str_ext import string_type, str_findall_count
+from bodo.libs.str_ext import string_type, str_findall_count, str_slice
 from bodo.libs.str_arr_ext import (string_array_type, pre_alloc_string_array,
     get_utf8_size)
 from bodo.hiframes.split_impl import (string_array_split_view_type,
@@ -540,6 +540,33 @@ def overload_str_method_zfill(S_str, width):
                 bodo.ir.join.setitem_arr_nan(out_arr, j)
             else:
                 out_arr[j] = str_arr[j].zfill(width)
+        return bodo.hiframes.api.init_series(out_arr, index, name)
+    return impl
+
+
+@overload_method(SeriesStrMethodType, 'slice')
+def overload_str_method_slice(S_str, start=None, stop=None, step=None):
+    def impl(S_str, start=None, stop=None, step=None):
+        S = S_str._obj
+        str_arr = bodo.hiframes.api.get_series_data(S)
+        name = bodo.hiframes.api.get_series_name(S)
+        index = bodo.hiframes.api.get_series_index(S)
+        numba.parfor.init_prange()
+        l = len(str_arr)
+        num_chars = 0
+        for i in numba.parfor.internal_prange(l):
+            if bodo.hiframes.api.isna(str_arr, i):
+                s = 0
+            else:
+                s = bodo.libs.str_arr_ext.get_utf8_size(str_slice(str_arr[i], start, stop, step))
+            num_chars+=s
+        out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
+        for j in numba.parfor.internal_prange(l):
+            if bodo.hiframes.api.isna(str_arr, j):
+                out_arr[j] = ''
+                bodo.ir.join.setitem_arr_nan(out_arr, j)
+            else:
+                out_arr[j] = str_slice(str_arr[j], start, stop, step)
         return bodo.hiframes.api.init_series(out_arr, index, name)
     return impl
 
