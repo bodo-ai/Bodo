@@ -91,6 +91,16 @@ array_info* info_from_table(table_info* table, int64_t col_ind)
 }
 
 
+void delete_table(table_info* table)
+{
+    for(array_info* a: table->columns)
+    {
+        delete a;
+    }
+    delete table;
+    return;
+}
+
 
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     PyObject *m;
@@ -120,6 +130,8 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                             PyLong_FromVoidPtr((void*)(&arr_info_list_to_table)));
     PyObject_SetAttrString(m, "info_from_table",
                             PyLong_FromVoidPtr((void*)(&info_from_table)));
+    PyObject_SetAttrString(m, "delete_table",
+                            PyLong_FromVoidPtr((void*)(&delete_table)));
 
     return m;
 }

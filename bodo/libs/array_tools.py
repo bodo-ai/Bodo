@@ -22,6 +22,7 @@ ll.add_symbol('alloc_numpy', array_tools_ext.alloc_numpy)
 ll.add_symbol('alloc_string_array', array_tools_ext.alloc_string_array)
 ll.add_symbol('arr_info_list_to_table', array_tools_ext.arr_info_list_to_table)
 ll.add_symbol('info_from_table', array_tools_ext.info_from_table)
+ll.add_symbol('delete_table', array_tools_ext.delete_table)
 
 
 class ArrayInfoType(types.Type):
@@ -215,3 +216,18 @@ def info_from_table(typingctx, table_t, ind_t):
         return builder.call(fn_tp, args)
 
     return array_info_type(table_t, ind_t), codegen
+
+
+@intrinsic
+def delete_table(typingctx, table_t):
+    """Deletes table and its array_info objects. Doesn't delete array data.
+    """
+    assert table_t == table_type
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(lir.VoidType(),
+            [lir.IntType(8).as_pointer()])
+        fn_tp = builder.module.get_or_insert_function(
+            fnty, name="delete_table")
+        builder.call(fn_tp, args)
+
+    return types.void(table_t), codegen
