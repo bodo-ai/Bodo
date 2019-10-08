@@ -58,13 +58,18 @@ def get_start_end(n):
     return start, end
 
 
+@numba.njit
+def reduce_sum(val):
+    sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
+    return bodo.libs.distributed_api.dist_reduce(val, np.int32(sum_op))
+
+
 def check_func(func, args, is_out_distributed=None, sort_output=False,
                          check_names=True, copy_input=False, check_dtype=True):
     """test bodo compilation of function 'func' on arguments using REP and 1D
     inputs/outputs
     """
     n_pes = bodo.get_size()
-    sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
 
     call_args = tuple(_get_arg(a, copy_input) for a in args)
     py_output = func(*call_args)
@@ -75,7 +80,7 @@ def check_func(func, args, is_out_distributed=None, sort_output=False,
                                check_names, check_dtype)
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs
-    n_passed = bodo.libs.distributed_api.dist_reduce(passed, np.int32(sum_op))
+    n_passed = reduce_sum(passed)
     assert n_passed == n_pes
 
     if is_out_distributed is None:
@@ -97,7 +102,7 @@ def check_func(func, args, is_out_distributed=None, sort_output=False,
     if not is_out_distributed or bodo.get_rank() == 0:
         passed = _test_equal_guard(bodo_output, py_output, sort_output,
                                    check_names, check_dtype)
-    n_passed = bodo.libs.distributed_api.dist_reduce(passed, np.int32(sum_op))
+    n_passed = reduce_sum(passed)
     assert n_passed == n_pes
 
     # 1D distributed variable length
@@ -112,7 +117,7 @@ def check_func(func, args, is_out_distributed=None, sort_output=False,
     if not is_out_distributed or bodo.get_rank() == 0:
         passed = _test_equal_guard(bodo_output, py_output, sort_output,
                                    check_names, check_dtype)
-    n_passed = bodo.libs.distributed_api.dist_reduce(passed, np.int32(sum_op))
+    n_passed = reduce_sum(passed)
     assert n_passed == n_pes
 
 
