@@ -13,6 +13,7 @@
 #include <numeric>
 #include <iostream>
 #include "_bodo_common.h"
+#include "_distributed.h"
 #define ALIGNMENT 64  // preferred alignment for AVX512
 
 
@@ -284,8 +285,9 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys)
     for (size_t i=0; i<(size_t)n_keys; i++)
     {
         fill_send_array(send_key_arrs[i], key_arrs[i], hashes, send_disp, n_pes);
-        MPI_Alltoallv(send_key_arrs[i]->data1, send_count.data(), send_disp.data(), MPI_LONG_LONG_INT,
-            out_key_arrs[i]->data1, recv_count.data(), recv_disp.data(), MPI_LONG_LONG_INT, MPI_COMM_WORLD);
+        MPI_Datatype mpi_typ = get_MPI_typ(key_arrs[i]->dtype);
+        MPI_Alltoallv(send_key_arrs[i]->data1, send_count.data(), send_disp.data(), mpi_typ,
+            out_key_arrs[i]->data1, recv_count.data(), recv_disp.data(), mpi_typ, MPI_COMM_WORLD);
     }
 
     // clean up

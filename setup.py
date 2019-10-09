@@ -163,6 +163,8 @@ ext_str = Extension(name="bodo.libs.hstr_ext",
 
 ext_arr = Extension(name="bodo.libs.array_tools_ext",
                     sources=["bodo/libs/_array_tools.cpp"],
+                    depends=["bodo/libs/_bodo_common.h",
+                             "bodo/libs/_distributed.h"],
                     extra_compile_args = eca,
                     extra_link_args = ela,
                     define_macros = np_compile_args['define_macros'],
