@@ -29,6 +29,8 @@ from bodo.utils.shuffle import (getitem_arr_tup_single, val_to_tup,
     alltoallv_tup, finalize_shuffle_meta,
     update_shuffle_meta,  alloc_pre_shuffle_metadata,
     _get_keys_tup, _get_data_tup)
+from bodo.libs.array_tools import (array_to_info, arr_info_list_to_table,
+    shuffle_table, info_from_table, info_to_array, delete_table)
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 
 
@@ -465,10 +467,17 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx,
     # print(func_text)
 
     glbs = {'bodo': bodo, 'np': np, 'pd_join_func': pd_join_func,
-                                  'to_string_list': to_string_list,
-                                  'cp_str_list_to_array': cp_str_list_to_array,
-                                  'parallel_shuffle': parallel_shuffle,
-                                  'parallel_asof_comm': parallel_asof_comm}
+            'to_string_list': to_string_list,
+            'cp_str_list_to_array': cp_str_list_to_array,
+            'parallel_shuffle': parallel_shuffle,
+            'parallel_asof_comm': parallel_asof_comm,
+            'array_to_info': array_to_info,
+            'arr_info_list_to_table': arr_info_list_to_table,
+            'shuffle_table': shuffle_table,
+            'info_from_table': info_from_table,
+            'info_to_array': info_to_array,
+            'delete_table': delete_table,
+            }
 
     f_block = compile_to_numba_ir(join_impl,
                                   glbs,
@@ -530,6 +539,7 @@ def _gen_par_shuffle(key_names, data_names, key_tup_out, data_tup_out):
                     i, all_arrs[i])
                 for i in range(n_keys, n_all)]
     func_text += "    {} = ({},)\n".format(key_tup_out, ", ".join(out_keys))
+    # func_text += "    print(bodo.get_rank(), {})\n".format(key_tup_out)
     func_text += "    {} = ({}{})\n".format(
         data_tup_out, ", ".join(out_data), "," if n_data != 0 else "")
 

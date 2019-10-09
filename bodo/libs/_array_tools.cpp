@@ -8,7 +8,10 @@
 #include <Python.h>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
+#include "mpi.h"
 #include <cstdio>
+#include <numeric>
+#include <iostream>
 #include "_bodo_common.h"
 #define ALIGNMENT 64  // preferred alignment for AVX512
 
@@ -56,9 +59,43 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data, NRT_M
 }
 
 
+int64_t get_item_size(Bodo_CTypes::CTypeEnum typ_enum)
+{
+    switch (typ_enum)
+    {
+    case Bodo_CTypes::INT8:
+        return sizeof(int8_t);
+    case Bodo_CTypes::UINT8:
+        return sizeof(uint8_t);
+    case Bodo_CTypes::INT16:
+        return sizeof(int16_t);
+    case Bodo_CTypes::UINT16:
+        return sizeof(uint16_t);
+    case Bodo_CTypes::INT32:
+        return sizeof(int32_t);
+    case Bodo_CTypes::UINT32:
+        return sizeof(uint32_t);
+    case Bodo_CTypes::INT64:
+        return sizeof(int64_t);
+    case Bodo_CTypes::UINT64:
+        return sizeof(uint64_t);
+    case Bodo_CTypes::FLOAT32:
+        return sizeof(float);
+    case Bodo_CTypes::FLOAT64:
+        return sizeof(double);
+    case Bodo_CTypes::STRING:
+        PyErr_SetString(PyExc_RuntimeError, "Invalid item size call on string type");
+        return 0;
+    }
+    PyErr_SetString(PyExc_RuntimeError, "Invalid item size call on unknown type");
+    return 0;
+}
+
+
 array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum)
 {
-    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(length, ALIGNMENT);
+    int64_t size = length * get_item_size(typ_enum);
+    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
     return new array_info(bodo_array_type::NUMPY, typ_enum, length, -1, data, NULL, NULL, NULL, meminfo);
 }
@@ -102,6 +139,79 @@ void delete_table(table_info* table)
 }
 
 
+
+table_info* shuffle_table(table_info* in_table, int64_t n_keys)
+{
+    // declare comm auxiliary data structures
+    int n_pes, rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    std::vector<int> send_count(n_pes, 0);
+    std::vector<int> recv_count(n_pes);
+    std::vector<int> send_disp(n_pes);
+    std::vector<int> recv_disp(n_pes);
+    std::vector<int> tmp_offset(n_pes);
+
+    // get send count
+    array_info *keys = in_table->columns[0];
+    int64_t n_rows = keys->length;
+
+    int64_t *k_data = (int64_t *)keys->data1;
+
+    for(size_t i=0; i<n_rows; i++)
+    {
+        int64_t k = k_data[i];
+        send_count[k%n_pes]++;
+    }
+
+    // get recv count
+    MPI_Alltoall(send_count.data(), 1, MPI_INT, recv_count.data(), 1, MPI_INT, MPI_COMM_WORLD);
+    // printf("%d send counts %d %d\n", rank, send_count[0], send_count[1]);
+    // printf("%d recv counts %d %d\n", rank, recv_count[0], recv_count[1]);
+
+    // calc disps
+    send_disp[0] = 0;
+    for(int i=1; i<n_pes; i++)
+        send_disp[i] = send_disp[i-1] + send_count[i-1];
+
+    recv_disp[0] = 0;
+    for(int i=1; i<n_pes; i++)
+        recv_disp[i] = recv_disp[i-1] + recv_count[i-1];
+
+    int total_recv = std::accumulate(recv_count.begin(), recv_count.end(), 0);
+    // printf("%d total count %d\n", rank, total_recv);
+
+    // allocate output array
+    array_info *out_keys = alloc_numpy(total_recv, Bodo_CTypes::INT64);
+    int64_t *out_k = (int64_t *)out_keys->data1;
+    array_info *send_keys = alloc_numpy(total_recv, Bodo_CTypes::INT64);
+    int64_t *send_k = (int64_t *)send_keys->data1;
+
+
+    // fill send buffer
+    tmp_offset = send_disp;
+    // printf("rank %d offsets %d %d\n", rank, tmp_offset[0], tmp_offset[1]);
+    for(size_t i=0; i<n_rows; i++) {
+        int64_t k = k_data[i];
+        int node = k%n_pes;
+        int ind = tmp_offset[node];
+        send_k[ind] = k;
+        tmp_offset[node]++;
+    }
+    // printf("rank %d offsets %d %d\n", rank, tmp_offset[0], tmp_offset[1]);
+
+    MPI_Alltoallv(send_k, send_count.data(), send_disp.data(), MPI_LONG_LONG_INT,
+        out_k, recv_count.data(), recv_disp.data(), MPI_LONG_LONG_INT, MPI_COMM_WORLD);
+
+    delete[] send_keys->meminfo;
+
+    std::vector<array_info*> out_cols;
+    out_cols.push_back(out_keys);
+    return new table_info(out_cols);
+}
+
+
+
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     PyObject *m;
     static struct PyModuleDef moduledef = {
@@ -132,6 +242,8 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                             PyLong_FromVoidPtr((void*)(&info_from_table)));
     PyObject_SetAttrString(m, "delete_table",
                             PyLong_FromVoidPtr((void*)(&delete_table)));
+    PyObject_SetAttrString(m, "shuffle_table",
+                            PyLong_FromVoidPtr((void*)(&shuffle_table)));
 
     return m;
 }

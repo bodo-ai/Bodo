@@ -23,6 +23,7 @@ ll.add_symbol('alloc_string_array', array_tools_ext.alloc_string_array)
 ll.add_symbol('arr_info_list_to_table', array_tools_ext.arr_info_list_to_table)
 ll.add_symbol('info_from_table', array_tools_ext.info_from_table)
 ll.add_symbol('delete_table', array_tools_ext.delete_table)
+ll.add_symbol('shuffle_table', array_tools_ext.shuffle_table)
 
 
 class ArrayInfoType(types.Type):
@@ -231,3 +232,18 @@ def delete_table(typingctx, table_t):
         builder.call(fn_tp, args)
 
     return types.void(table_t), codegen
+
+
+@intrinsic
+def shuffle_table(typingctx, table_t, n_keys_t):
+    """
+    """
+    assert table_t == table_type
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
+            [lir.IntType(8).as_pointer(), lir.IntType(64)])
+        fn_tp = builder.module.get_or_insert_function(
+            fnty, name="shuffle_table")
+        return builder.call(fn_tp, args)
+
+    return table_type(table_t, types.int64), codegen
