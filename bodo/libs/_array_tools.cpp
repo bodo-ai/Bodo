@@ -185,6 +185,49 @@ int* hash_keys(std::vector<array_info*> key_arrs)
 }
 
 
+template <class T>
+void fill_send_array_inner(T* send_buff, T* data, int *hashes, std::vector<int> &send_disp, int n_pes, size_t n_rows)
+{
+    std::vector<int> tmp_offset(send_disp);
+    for(size_t i=0; i<n_rows; i++) {
+        int node = hashes[i] % n_pes;
+        int ind = tmp_offset[node];
+        send_buff[ind] = data[i];
+        tmp_offset[node]++;
+    }
+}
+
+
+void fill_send_array(array_info* send_arr, array_info *array, int *hashes, std::vector<int> &send_disp, int n_pes)
+{
+    size_t n_rows = (size_t)array->length;
+    // dispatch to proper function
+    // TODO: general dispatcher
+    // TODO: string
+    if (array->dtype == Bodo_CTypes::INT8)
+        return fill_send_array_inner<int8_t>((int8_t*)send_arr->data1, (int8_t*)array->data1, hashes, send_disp, n_pes, n_rows);
+    if (array->dtype == Bodo_CTypes::UINT8)
+        return fill_send_array_inner<uint8_t>((uint8_t*)send_arr->data1, (uint8_t*)array->data1, hashes, send_disp, n_pes, n_rows);
+    if (array->dtype == Bodo_CTypes::INT16)
+        return fill_send_array_inner<int16_t>((int16_t*)send_arr->data1, (int16_t*)array->data1, hashes, send_disp, n_pes, n_rows);
+    if (array->dtype == Bodo_CTypes::UINT16)
+        return fill_send_array_inner<uint16_t>((uint16_t*)send_arr->data1, (uint16_t*)array->data1, hashes, send_disp, n_pes, n_rows);
+    if (array->dtype == Bodo_CTypes::INT32)
+        return fill_send_array_inner<int32_t>((int32_t*)send_arr->data1, (int32_t*)array->data1, hashes, send_disp, n_pes, n_rows);
+    if (array->dtype == Bodo_CTypes::UINT32)
+        return fill_send_array_inner<uint32_t>((uint32_t*)send_arr->data1, (uint32_t*)array->data1, hashes, send_disp, n_pes, n_rows);
+    if (array->dtype == Bodo_CTypes::INT64)
+        return fill_send_array_inner<int64_t>((int64_t*)send_arr->data1, (int64_t*)array->data1, hashes, send_disp, n_pes, n_rows);
+    if (array->dtype == Bodo_CTypes::UINT64)
+        return fill_send_array_inner<uint64_t>((uint64_t*)send_arr->data1, (uint64_t*)array->data1, hashes, send_disp, n_pes, n_rows);
+    if (array->dtype == Bodo_CTypes::FLOAT32)
+        return fill_send_array_inner<float>((float*)send_arr->data1, (float*)array->data1, hashes, send_disp, n_pes, n_rows);
+    if (array->dtype == Bodo_CTypes::FLOAT64)
+        return fill_send_array_inner<double>((double*)send_arr->data1, (double*)array->data1, hashes, send_disp, n_pes, n_rows);
+    PyErr_SetString(PyExc_RuntimeError, "Invalid data type for send fill");
+}
+
+
 table_info* shuffle_table(table_info* in_table, int64_t n_keys)
 {
     // error checking
@@ -202,7 +245,6 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys)
     std::vector<int> recv_count(n_pes);
     std::vector<int> send_disp(n_pes);
     std::vector<int> recv_disp(n_pes);
-    std::vector<int> tmp_offset(n_pes);
 
     size_t n_rows = (size_t) in_table->columns[0]->length;
     std::vector<array_info*> key_arrs = std::vector<array_info*>(in_table->columns.begin(), in_table->columns.begin() + n_keys);
@@ -216,8 +258,6 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys)
 
     // get recv count
     MPI_Alltoall(send_count.data(), 1, MPI_INT, recv_count.data(), 1, MPI_INT, MPI_COMM_WORLD);
-    // printf("%d send counts %d %d\n", rank, send_count[0], send_count[1]);
-    // printf("%d recv counts %d %d\n", rank, recv_count[0], recv_count[1]);
 
     // calc disps
     send_disp[0] = 0;
@@ -231,38 +271,29 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys)
     int total_recv = std::accumulate(recv_count.begin(), recv_count.end(), 0);
     // printf("%d total count %d\n", rank, total_recv);
 
-    // allocate output array
-    array_info *out_keys = alloc_numpy(total_recv, Bodo_CTypes::INT64);
-    int64_t *out_k = (int64_t *)out_keys->data1;
-    array_info *send_keys = alloc_numpy(total_recv, Bodo_CTypes::INT64);
-    int64_t *send_k = (int64_t *)send_keys->data1;
-
-
-    array_info *keys = in_table->columns[0];
-    int64_t *k_data = (int64_t *)keys->data1;
-
-
-    // fill send buffer
-    tmp_offset = send_disp;
-    // printf("rank %d offsets %d %d\n", rank, tmp_offset[0], tmp_offset[1]);
-    for(size_t i=0; i<n_rows; i++) {
-        int64_t k = k_data[i];
-        int node = k%n_pes;
-        int ind = tmp_offset[node];
-        send_k[ind] = k;
-        tmp_offset[node]++;
+    // allocate send and output arrays
+    std::vector<array_info*> out_key_arrs;
+    std::vector<array_info*> send_key_arrs;
+    for (size_t i=0; i<(size_t)n_keys; i++)
+    {
+        send_key_arrs.push_back(alloc_numpy(total_recv, key_arrs[i]->dtype));
+        out_key_arrs.push_back(alloc_numpy(total_recv, key_arrs[i]->dtype));
     }
-    // printf("rank %d offsets %d %d\n", rank, tmp_offset[0], tmp_offset[1]);
 
-    MPI_Alltoallv(send_k, send_count.data(), send_disp.data(), MPI_LONG_LONG_INT,
-        out_k, recv_count.data(), recv_disp.data(), MPI_LONG_LONG_INT, MPI_COMM_WORLD);
+    // fill send buffer and send
+    for (size_t i=0; i<(size_t)n_keys; i++)
+    {
+        fill_send_array(send_key_arrs[i], key_arrs[i], hashes, send_disp, n_pes);
+        MPI_Alltoallv(send_key_arrs[i]->data1, send_count.data(), send_disp.data(), MPI_LONG_LONG_INT,
+            out_key_arrs[i]->data1, recv_count.data(), recv_disp.data(), MPI_LONG_LONG_INT, MPI_COMM_WORLD);
+    }
 
-    delete[] send_keys->meminfo;
+    // clean up
+    for (size_t i=0; i<(size_t)n_keys; i++)
+        delete[] send_key_arrs[i]->meminfo;
     delete[] hashes;
 
-    std::vector<array_info*> out_cols;
-    out_cols.push_back(out_keys);
-    return new table_info(out_cols);
+    return new table_info(out_key_arrs);
 }
 
 
