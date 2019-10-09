@@ -149,9 +149,30 @@ void hash_array_inner(int *out_hashes, T* data, int64_t n_rows)
 
 void hash_array(int *out_hashes, array_info* array, size_t n_rows)
 {
-    // TODO: other types
+    // dispatch to proper function
+    // TODO: general dispatcher
+    // TODO: string
+    if (array->dtype == Bodo_CTypes::INT8)
+        return hash_array_inner<int8_t>(out_hashes, (int8_t*)array->data1, n_rows);
+    if (array->dtype == Bodo_CTypes::UINT8)
+        return hash_array_inner<uint8_t>(out_hashes, (uint8_t*)array->data1, n_rows);
+    if (array->dtype == Bodo_CTypes::INT16)
+        return hash_array_inner<int16_t>(out_hashes, (int16_t*)array->data1, n_rows);
+    if (array->dtype == Bodo_CTypes::UINT16)
+        return hash_array_inner<uint16_t>(out_hashes, (uint16_t*)array->data1, n_rows);
+    if (array->dtype == Bodo_CTypes::INT32)
+        return hash_array_inner<int32_t>(out_hashes, (int32_t*)array->data1, n_rows);
+    if (array->dtype == Bodo_CTypes::UINT32)
+        return hash_array_inner<uint32_t>(out_hashes, (uint32_t*)array->data1, n_rows);
     if (array->dtype == Bodo_CTypes::INT64)
         return hash_array_inner<int64_t>(out_hashes, (int64_t*)array->data1, n_rows);
+    if (array->dtype == Bodo_CTypes::UINT64)
+        return hash_array_inner<uint64_t>(out_hashes, (uint64_t*)array->data1, n_rows);
+    if (array->dtype == Bodo_CTypes::FLOAT32)
+        return hash_array_inner<float>(out_hashes, (float*)array->data1, n_rows);
+    if (array->dtype == Bodo_CTypes::FLOAT64)
+        return hash_array_inner<double>(out_hashes, (double*)array->data1, n_rows);
+    PyErr_SetString(PyExc_RuntimeError, "Invalid data type for hash");
 }
 
 
