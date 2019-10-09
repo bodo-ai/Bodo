@@ -139,9 +139,40 @@ void delete_table(table_info* table)
 }
 
 
+template <class T>
+void hash_array_inner(int *out_hashes, T* data, int64_t n_rows)
+{
+    for (size_t i=0; i<n_rows; i++)
+        out_hashes[i] = std::hash<T>{}(data[i]);
+}
+
+
+void hash_array(int *out_hashes, array_info* array, size_t n_rows)
+{
+    // TODO: other types
+    if (array->dtype == Bodo_CTypes::INT64)
+        return hash_array_inner<int64_t>(out_hashes, (int64_t*)array->data1, n_rows);
+}
+
+
+int* hash_keys(std::vector<array_info*> key_arrs)
+{
+    size_t n_rows = (size_t)key_arrs[0]->length;
+    int *hashes = new int[n_rows];
+    hash_array(hashes, key_arrs[0], n_rows);
+    return hashes;
+}
+
 
 table_info* shuffle_table(table_info* in_table, int64_t n_keys)
 {
+    // error checking
+    if (in_table->columns.size() <= 0 || n_keys <= 0)
+    {
+        PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
+        return NULL;
+    }
+
     // declare comm auxiliary data structures
     int n_pes, rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -152,17 +183,15 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys)
     std::vector<int> recv_disp(n_pes);
     std::vector<int> tmp_offset(n_pes);
 
+    size_t n_rows = (size_t) in_table->columns[0]->length;
+    std::vector<array_info*> key_arrs = std::vector<array_info*>(in_table->columns.begin(), in_table->columns.begin() + n_keys);
+
+    // get hashes
+    int* hashes = hash_keys(key_arrs);
+
     // get send count
-    array_info *keys = in_table->columns[0];
-    int64_t n_rows = keys->length;
-
-    int64_t *k_data = (int64_t *)keys->data1;
-
     for(size_t i=0; i<n_rows; i++)
-    {
-        int64_t k = k_data[i];
-        send_count[k%n_pes]++;
-    }
+        send_count[hashes[i] % n_pes]++;
 
     // get recv count
     MPI_Alltoall(send_count.data(), 1, MPI_INT, recv_count.data(), 1, MPI_INT, MPI_COMM_WORLD);
@@ -188,6 +217,10 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys)
     int64_t *send_k = (int64_t *)send_keys->data1;
 
 
+    array_info *keys = in_table->columns[0];
+    int64_t *k_data = (int64_t *)keys->data1;
+
+
     // fill send buffer
     tmp_offset = send_disp;
     // printf("rank %d offsets %d %d\n", rank, tmp_offset[0], tmp_offset[1]);
@@ -204,6 +237,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys)
         out_k, recv_count.data(), recv_disp.data(), MPI_LONG_LONG_INT, MPI_COMM_WORLD);
 
     delete[] send_keys->meminfo;
+    delete[] hashes;
 
     std::vector<array_info*> out_cols;
     out_cols.push_back(out_keys);
