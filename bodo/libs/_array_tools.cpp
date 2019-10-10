@@ -148,6 +148,20 @@ void hash_array_inner(int *out_hashes, T* data, int64_t n_rows)
 }
 
 
+void hash_array_string(int *out_hashes, char* data, uint32_t* offsets, int64_t n_rows)
+{
+    uint32_t start_offset = 0;
+    for (size_t i=0; i<n_rows; i++) {
+        uint32_t end_offset = offsets[i+1];
+        uint32_t len = end_offset - start_offset;
+        std::string val(&data[start_offset], len);
+        out_hashes[i] = std::hash<std::string>{}(val);
+        start_offset = end_offset;
+    }
+}
+
+
+
 void hash_array(int *out_hashes, array_info* array, size_t n_rows)
 {
     // dispatch to proper function
@@ -173,6 +187,8 @@ void hash_array(int *out_hashes, array_info* array, size_t n_rows)
         return hash_array_inner<float>(out_hashes, (float*)array->data1, n_rows);
     if (array->dtype == Bodo_CTypes::FLOAT64)
         return hash_array_inner<double>(out_hashes, (double*)array->data1, n_rows);
+    if (array->arr_type == bodo_array_type::STRING)
+        return hash_array_string(out_hashes, (char*)array->data1, (uint32_t*)array->data2, n_rows);
     PyErr_SetString(PyExc_RuntimeError, "Invalid data type for hash");
 }
 
