@@ -278,7 +278,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys)
     for (size_t i=0; i<(size_t)n_cols; i++)
     {
         array_info *in_arr = in_table->columns[i];
-        array_info *send_arr = alloc_numpy(total_recv, in_arr->dtype);
+        array_info *send_arr = alloc_numpy(n_rows, in_arr->dtype);
         array_info *out_arr = alloc_numpy(total_recv, in_arr->dtype);
 
         fill_send_array(send_arr, in_arr, hashes, send_disp, n_pes);
@@ -286,7 +286,8 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys)
         MPI_Alltoallv(send_arr->data1, send_count.data(), send_disp.data(), mpi_typ,
             out_arr->data1, recv_count.data(), recv_disp.data(), mpi_typ, MPI_COMM_WORLD);
         out_arrs.push_back(out_arr);
-        delete[] send_arr->meminfo;  // TODO: decref for cleanup?
+        free(send_arr->meminfo);  // TODO: decref for cleanup?
+        delete send_arr;
     }
 
     // clean up
