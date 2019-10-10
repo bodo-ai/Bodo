@@ -248,6 +248,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys)
     std::vector<int> recv_disp(n_pes);
 
     size_t n_rows = (size_t) in_table->columns[0]->length;
+    size_t n_cols = in_table->columns.size();
     std::vector<array_info*> key_arrs = std::vector<array_info*>(in_table->columns.begin(), in_table->columns.begin() + n_keys);
 
     // get hashes
@@ -272,30 +273,26 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys)
     int total_recv = std::accumulate(recv_count.begin(), recv_count.end(), 0);
     // printf("%d total count %d\n", rank, total_recv);
 
-    // allocate send and output arrays
-    std::vector<array_info*> out_key_arrs;
-    std::vector<array_info*> send_key_arrs;
-    for (size_t i=0; i<(size_t)n_keys; i++)
-    {
-        send_key_arrs.push_back(alloc_numpy(total_recv, key_arrs[i]->dtype));
-        out_key_arrs.push_back(alloc_numpy(total_recv, key_arrs[i]->dtype));
-    }
-
     // fill send buffer and send
-    for (size_t i=0; i<(size_t)n_keys; i++)
+    std::vector<array_info*> out_arrs;
+    for (size_t i=0; i<(size_t)n_cols; i++)
     {
-        fill_send_array(send_key_arrs[i], key_arrs[i], hashes, send_disp, n_pes);
-        MPI_Datatype mpi_typ = get_MPI_typ(key_arrs[i]->dtype);
-        MPI_Alltoallv(send_key_arrs[i]->data1, send_count.data(), send_disp.data(), mpi_typ,
-            out_key_arrs[i]->data1, recv_count.data(), recv_disp.data(), mpi_typ, MPI_COMM_WORLD);
+        array_info *in_arr = in_table->columns[i];
+        array_info *send_arr = alloc_numpy(total_recv, in_arr->dtype);
+        array_info *out_arr = alloc_numpy(total_recv, in_arr->dtype);
+
+        fill_send_array(send_arr, in_arr, hashes, send_disp, n_pes);
+        MPI_Datatype mpi_typ = get_MPI_typ(in_arr->dtype);
+        MPI_Alltoallv(send_arr->data1, send_count.data(), send_disp.data(), mpi_typ,
+            out_arr->data1, recv_count.data(), recv_disp.data(), mpi_typ, MPI_COMM_WORLD);
+        out_arrs.push_back(out_arr);
+        delete[] send_arr->meminfo;  // TODO: decref for cleanup?
     }
 
     // clean up
-    for (size_t i=0; i<(size_t)n_keys; i++)
-        delete[] send_key_arrs[i]->meminfo;
     delete[] hashes;
 
-    return new table_info(out_key_arrs);
+    return new table_info(out_arrs);
 }
 
 
