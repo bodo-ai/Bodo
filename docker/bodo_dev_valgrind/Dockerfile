@@ -34,7 +34,7 @@ ENV PATH /root/miniconda3/bin/:${PATH}
 RUN conda create -n BODODEV numpy scipy pandas boost cmake h5py pyarrow mpich mpi gcc_linux-64 gxx_linux-64 gfortran_linux-64 
 RUN echo "source activate BODODEV" > ~/.bashrc
 ENV PATH /opt/conda/envs/env/bin:$PATH
-RUN conda install -c numba numba=0.46.0rc1 \
+RUN conda install -c numba numba=0.46.0 \
     && conda install nomkl numpy
 
 ENTRYPOINT ["bash"]
