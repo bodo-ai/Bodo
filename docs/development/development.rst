@@ -106,6 +106,9 @@ Two Docker images can be used for Bodo development:
 2. Bodo development with valgrind(:code:`Bodo/docker/bodo_dev_valgrind`)
     - has conda enviroment setup
     - has python and valgrind configured
+        - :code:`PYTHONMALLOC=malloc`, whereas default is :code:`PYTHONMALLOC=pymalloc`
+        - a different version of numpy
+        - more configurations can be found in the dockerfile
 
 Setup:
 
