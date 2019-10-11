@@ -115,7 +115,7 @@ array_info* alloc_string_array(int64_t length, int64_t n_chars)
 table_info* arr_info_list_to_table(array_info** arrs, int64_t n_arrs)
 {
     std::vector<array_info*> columns = std::vector<array_info*>(n_arrs);
-    for(size_t i=0; i<n_arrs; i++)
+    for(size_t i=0; i<(size_t)n_arrs; i++)
     {
         columns[i] = arrs[i];
     }
@@ -273,7 +273,27 @@ void fill_send_array_inner(T* send_buff, T* data, int *hashes, std::vector<int> 
 }
 
 
-void fill_send_array(array_info* send_arr, array_info *array, int *hashes, std::vector<int> &send_disp, int n_pes)
+void fill_send_array_string_inner(char* send_data_buff, uint32_t *send_length_buff, char *arr_data, uint32_t *arr_offsets, int *hashes,
+    std::vector<int> &send_disp, std::vector<int> &send_disp_char, int n_pes, size_t n_rows)
+{
+    std::vector<int> tmp_offset(send_disp);
+    std::vector<int> tmp_offset_char(send_disp_char);
+    for(size_t i=0; i<n_rows; i++) {
+        int node = hashes[i] % n_pes;
+        // write length
+        int ind = tmp_offset[node];
+        uint32_t str_len = arr_offsets[i+1] - arr_offsets[i];
+        send_length_buff[ind] = str_len;
+        tmp_offset[node]++;
+        // write data
+        int c_ind = tmp_offset_char[node];
+        memcpy(&send_data_buff[c_ind], &arr_data[arr_offsets[i]], str_len);
+        tmp_offset_char[node] += str_len;
+    }
+}
+
+
+void fill_send_array(array_info* send_arr, array_info *array, int *hashes, std::vector<int> &send_disp, std::vector<int> &send_disp_char, int n_pes)
 {
     size_t n_rows = (size_t)array->length;
     // dispatch to proper function
@@ -299,7 +319,167 @@ void fill_send_array(array_info* send_arr, array_info *array, int *hashes, std::
         return fill_send_array_inner<float>((float*)send_arr->data1, (float*)array->data1, hashes, send_disp, n_pes, n_rows);
     if (array->dtype == Bodo_CTypes::FLOAT64)
         return fill_send_array_inner<double>((double*)send_arr->data1, (double*)array->data1, hashes, send_disp, n_pes, n_rows);
+    if (array->arr_type == bodo_array_type::STRING)
+        return fill_send_array_string_inner((char*)send_arr->data1, (uint32_t*)send_arr->data2, (char*)array->data1, (uint32_t*)array->data2,
+            hashes, send_disp, send_disp_char, n_pes, n_rows);
     PyErr_SetString(PyExc_RuntimeError, "Invalid data type for send fill");
+}
+
+
+void calc_disp(std::vector<int> &disps, std::vector<int> &counts)
+{
+    size_t n = counts.size();
+    disps[0] = 0;
+    for(size_t i=1; i<n; i++)
+        disps[i] = disps[i-1] + counts[i-1];
+    return;
+}
+
+
+struct mpi_comm_info {
+    int n_pes;
+    std::vector<array_info*> arrays;
+    size_t n_rows;
+    // generally required MPI counts
+    std::vector<int> send_count;
+    std::vector<int> recv_count;
+    std::vector<int> send_disp;
+    std::vector<int> recv_disp;
+    // counts required for string arrays
+    std::vector<std::vector<int>> send_count_char;
+    std::vector<std::vector<int>> recv_count_char;
+    std::vector<std::vector<int>> send_disp_char;
+    std::vector<std::vector<int>> recv_disp_char;
+
+    explicit mpi_comm_info(int _n_pes, std::vector<array_info*> &_arrays): n_pes(_n_pes), arrays(_arrays)
+    {
+        n_rows = arrays[0]->length;
+        // init counts
+        send_count = std::vector<int>(n_pes, 0);
+        recv_count = std::vector<int>(n_pes);
+        send_disp = std::vector<int>(n_pes);
+        recv_disp = std::vector<int>(n_pes);
+        // init counts for string arrays
+        for(array_info *arr_info : arrays) {
+            if (arr_info->arr_type == bodo_array_type::STRING) {
+                send_count_char.push_back(std::vector<int>(n_pes, 0));
+                recv_count_char.push_back(std::vector<int>(n_pes));
+                send_disp_char.push_back(std::vector<int>(n_pes));
+                recv_disp_char.push_back(std::vector<int>(n_pes));
+            }
+            else {
+                send_count_char.push_back(std::vector<int>());
+                recv_count_char.push_back(std::vector<int>());
+                send_disp_char.push_back(std::vector<int>());
+                recv_disp_char.push_back(std::vector<int>());
+            }
+        }
+    }
+
+    void get_counts(int* hashes)
+    {
+        // get send count
+        for(size_t i=0; i<n_rows; i++)
+            send_count[hashes[i] % n_pes]++;
+
+        // get recv count
+        MPI_Alltoall(send_count.data(), 1, MPI_INT, recv_count.data(), 1, MPI_INT, MPI_COMM_WORLD);
+
+        // get displacements
+        calc_disp(send_disp, send_count);
+        calc_disp(recv_disp, recv_count);
+
+        // counts for string arrays
+        for(size_t i=0; i<arrays.size(); i++) {
+            array_info *arr_info = arrays[i];
+            if (arr_info->arr_type == bodo_array_type::STRING) {
+                // send counts
+                std::vector<int> &char_counts = send_count_char[i];
+                uint32_t *offsets = (uint32_t*)arr_info->data2;
+                for(size_t i=0; i<n_rows; i++) {
+                    int str_len = offsets[i+1] - offsets[i];
+                    char_counts[hashes[i] % n_pes] += str_len;
+                }
+                // get recv count
+                MPI_Alltoall(char_counts.data(), 1, MPI_INT, recv_count_char[i].data(), 1, MPI_INT, MPI_COMM_WORLD);
+                // get displacements
+                calc_disp(send_disp_char[i], char_counts);
+                calc_disp(recv_disp_char[i], recv_count_char[i]);
+            }
+        }
+
+    }
+};
+
+
+void convert_len_arr_to_offset(uint32_t *offsets, size_t num_strs)
+{
+    uint32_t curr_offset = 0;
+    for(int64_t i=0; i<num_strs; i++)
+    {
+        uint32_t val = offsets[i];
+        offsets[i] = curr_offset;
+        curr_offset += val;
+    }
+    offsets[num_strs] = curr_offset;
+    return;
+}
+
+
+void shuffle_array(array_info *send_arr, array_info *out_arr, std::vector<int> &send_count, std::vector<int> &recv_count,
+    std::vector<int> &send_disp, std::vector<int> &recv_disp,
+    std::vector<int> &send_count_char, std::vector<int> &recv_count_char,
+    std::vector<int> &send_disp_char, std::vector<int> &recv_disp_char)
+{
+    // strings need data and length comm
+    if (send_arr->arr_type == bodo_array_type::STRING) {
+        // string lengths
+        MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
+        MPI_Alltoallv(send_arr->data2, send_count.data(), send_disp.data(), mpi_typ,
+            out_arr->data2, recv_count.data(), recv_disp.data(), mpi_typ, MPI_COMM_WORLD);
+        convert_len_arr_to_offset((uint32_t *)out_arr->data2, (size_t)out_arr->length);
+        mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+        MPI_Alltoallv(send_arr->data1, send_count_char.data(), send_disp_char.data(), mpi_typ,
+            out_arr->data1, recv_count_char.data(), recv_disp_char.data(), mpi_typ, MPI_COMM_WORLD);
+
+    } else { // Numpy arrays
+        MPI_Datatype mpi_typ = get_MPI_typ(send_arr->dtype);
+        MPI_Alltoallv(send_arr->data1, send_count.data(), send_disp.data(), mpi_typ,
+            out_arr->data1, recv_count.data(), recv_disp.data(), mpi_typ, MPI_COMM_WORLD);
+    }
+    return;
+}
+
+
+
+array_info *alloc_array(int64_t length, int64_t n_sub_elems, bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype)
+{
+    if (arr_type == bodo_array_type::STRING)
+        return alloc_string_array(length, n_sub_elems);
+
+    // Numpy
+    // TODO: error check
+    return alloc_numpy(length, dtype);
+}
+
+
+
+void free_array(array_info *arr)
+{
+    // string array
+    if (arr->arr_type == bodo_array_type::STRING)
+    {
+        // data
+        delete[] arr->data1;
+        // offsets
+        delete[] arr->data2;
+        // nulls
+        if (arr->null_bitmask != nullptr)
+            delete[] arr->null_bitmask;
+    } else {  // Numpy
+        free(arr->meminfo);  // TODO: decref for cleanup?
+    }
+    return;
 }
 
 
@@ -316,10 +496,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys)
     int n_pes, rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-    std::vector<int> send_count(n_pes, 0);
-    std::vector<int> recv_count(n_pes);
-    std::vector<int> send_disp(n_pes);
-    std::vector<int> recv_disp(n_pes);
+    mpi_comm_info comm_info(n_pes, in_table->columns);
 
     size_t n_rows = (size_t) in_table->columns[0]->length;
     size_t n_cols = in_table->columns.size();
@@ -328,23 +505,13 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys)
     // get hashes
     int* hashes = hash_keys(key_arrs);
 
-    // get send count
-    for(size_t i=0; i<n_rows; i++)
-        send_count[hashes[i] % n_pes]++;
+    comm_info.get_counts(hashes);
 
-    // get recv count
-    MPI_Alltoall(send_count.data(), 1, MPI_INT, recv_count.data(), 1, MPI_INT, MPI_COMM_WORLD);
+    int total_recv = std::accumulate(comm_info.recv_count.begin(), comm_info.recv_count.end(), 0);
+    std::vector<int> n_char_recvs(n_cols);
+    for (size_t i=0; i<(size_t)n_cols; i++)
+        n_char_recvs[i] = std::accumulate(comm_info.recv_count_char[i].begin(), comm_info.recv_count_char[i].end(), 0);
 
-    // calc disps
-    send_disp[0] = 0;
-    for(int i=1; i<n_pes; i++)
-        send_disp[i] = send_disp[i-1] + send_count[i-1];
-
-    recv_disp[0] = 0;
-    for(int i=1; i<n_pes; i++)
-        recv_disp[i] = recv_disp[i-1] + recv_count[i-1];
-
-    int total_recv = std::accumulate(recv_count.begin(), recv_count.end(), 0);
     // printf("%d total count %d\n", rank, total_recv);
 
     // fill send buffer and send
@@ -352,15 +519,17 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys)
     for (size_t i=0; i<(size_t)n_cols; i++)
     {
         array_info *in_arr = in_table->columns[i];
-        array_info *send_arr = alloc_numpy(n_rows, in_arr->dtype);
-        array_info *out_arr = alloc_numpy(total_recv, in_arr->dtype);
+        array_info *send_arr = alloc_array(n_rows, in_arr->n_sub_elems, in_arr->arr_type, in_arr->dtype);
+        array_info *out_arr = alloc_array(total_recv, n_char_recvs[i], in_arr->arr_type, in_arr->dtype);
 
-        fill_send_array(send_arr, in_arr, hashes, send_disp, n_pes);
-        MPI_Datatype mpi_typ = get_MPI_typ(in_arr->dtype);
-        MPI_Alltoallv(send_arr->data1, send_count.data(), send_disp.data(), mpi_typ,
-            out_arr->data1, recv_count.data(), recv_disp.data(), mpi_typ, MPI_COMM_WORLD);
+        fill_send_array(send_arr, in_arr, hashes, comm_info.send_disp, comm_info.send_disp_char[i], n_pes);
+
+        shuffle_array(send_arr, out_arr, comm_info.send_count, comm_info.recv_count,
+            comm_info.send_disp, comm_info.recv_disp, comm_info.send_count_char[i], comm_info.recv_count_char[i],
+            comm_info.send_disp_char[i], comm_info.recv_disp_char[i]);
+
         out_arrs.push_back(out_arr);
-        free(send_arr->meminfo);  // TODO: decref for cleanup?
+        free_array(send_arr);
         delete send_arr;
     }
 
