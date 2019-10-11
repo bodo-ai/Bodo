@@ -136,7 +136,7 @@ Setup:
         # replace ~/Bodo with your path to Bodo
         docker run -it -v ~/Bodo:/Bodo bodo_dev_valgrind
         
-    Other useful falgs & `bind mounts <https://docs.docker.com/storage/bind-mounts/>`_:
+    Other useful flags & `bind mounts <https://docs.docker.com/storage/bind-mounts/>`_:
     ::
         # bodo_dev is the image we are using here 
         # -v your_path:path_in_docker, mounts directory
