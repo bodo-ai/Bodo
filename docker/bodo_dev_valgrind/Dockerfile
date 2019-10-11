@@ -1,3 +1,5 @@
+# A initial version
+# TODO: hava Python compiled from source to work with conda
 FROM buildpack-deps:stretch
 ARG PYTHON_VERSION=3.7.2
 
@@ -33,7 +35,6 @@ RUN wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -
 ENV PATH /root/miniconda3/bin/:${PATH}
 RUN conda create -n BODODEV numpy scipy pandas boost cmake h5py pyarrow mpich mpi gcc_linux-64 gxx_linux-64 gfortran_linux-64 
 RUN echo "source activate BODODEV" > ~/.bashrc
-ENV PATH /opt/conda/envs/env/bin:$PATH
 RUN conda install -c numba numba=0.46.0 \
     && conda install nomkl numpy
 
