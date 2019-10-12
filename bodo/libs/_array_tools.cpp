@@ -265,7 +265,7 @@ void fill_send_array_inner(T* send_buff, T* data, int *hashes, std::vector<int> 
 {
     std::vector<int> tmp_offset(send_disp);
     for(size_t i=0; i<n_rows; i++) {
-        int node = hashes[i] % n_pes;
+        size_t node = (size_t)hashes[i] % (size_t)n_pes;
         int ind = tmp_offset[node];
         send_buff[ind] = data[i];
         tmp_offset[node]++;
@@ -279,7 +279,7 @@ void fill_send_array_string_inner(char* send_data_buff, uint32_t *send_length_bu
     std::vector<int> tmp_offset(send_disp);
     std::vector<int> tmp_offset_char(send_disp_char);
     for(size_t i=0; i<n_rows; i++) {
-        int node = hashes[i] % n_pes;
+        size_t node = (size_t)hashes[i] % (size_t)n_pes;
         // write length
         int ind = tmp_offset[node];
         uint32_t str_len = arr_offsets[i+1] - arr_offsets[i];
@@ -379,8 +379,10 @@ struct mpi_comm_info {
     void get_counts(int* hashes)
     {
         // get send count
-        for(size_t i=0; i<n_rows; i++)
-            send_count[hashes[i] % n_pes]++;
+        for(size_t i=0; i<n_rows; i++) {
+            size_t node = (size_t)hashes[i] % (size_t)n_pes;
+            send_count[node]++;
+        }
 
         // get recv count
         MPI_Alltoall(send_count.data(), 1, MPI_INT, recv_count.data(), 1, MPI_INT, MPI_COMM_WORLD);
@@ -398,7 +400,8 @@ struct mpi_comm_info {
                 uint32_t *offsets = (uint32_t*)arr_info->data2;
                 for(size_t i=0; i<n_rows; i++) {
                     int str_len = offsets[i+1] - offsets[i];
-                    char_counts[hashes[i] % n_pes] += str_len;
+                    size_t node = (size_t)hashes[i] % (size_t)n_pes;
+                    char_counts[node] += str_len;
                 }
                 // get recv count
                 MPI_Alltoall(char_counts.data(), 1, MPI_INT, recv_count_char[i].data(), 1, MPI_INT, MPI_COMM_WORLD);
@@ -407,7 +410,7 @@ struct mpi_comm_info {
                 calc_disp(recv_disp_char[i], recv_count_char[i]);
             }
         }
-
+        return;
     }
 };
 
