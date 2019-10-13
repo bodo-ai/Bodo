@@ -359,8 +359,16 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx,
                 ("," if len(left_other_names) != 0 else ""),
                 ",".join(right_other_names))
 
-    func_text += "    t1_keys = ({},)\n".format(",".join(left_key_names))
-    func_text += "    t2_keys = ({},)\n".format(",".join(right_key_names))
+
+    left_key_types = tuple(typemap[v.name] for v in left_key_vars)
+    right_key_types = tuple(typemap[v.name] for v in right_key_vars)
+
+    func_text += "    t1_keys = ({},)\n".format(", ".join(
+        "{}{}".format(left_key_names[i], _gen_type_match(
+            left_key_types[i], right_key_types[i])) for i in range(n_keys)))
+    func_text += "    t2_keys = ({},)\n".format(", ".join(
+        "{}{}".format(right_key_names[i], _gen_type_match(
+            right_key_types[i], left_key_types[i])) for i in range(n_keys)))
 
     func_text += "    data_left = ({}{})\n".format(",".join(left_other_names),
                                                 "," if len(left_other_names) != 0 else "")
@@ -377,11 +385,13 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx,
         if left_parallel:
             # func_text += "    t1_keys, data_left = parallel_shuffle(t1_keys, data_left)\n"
             func_text += _gen_par_shuffle(
-                left_key_names, left_other_names, "t1_keys", "data_left")
+                left_key_names, left_other_names, "t1_keys", "data_left",
+                left_key_types, right_key_types)
         if right_parallel:
             # func_text += "    t2_keys, data_right = parallel_shuffle(t2_keys, data_right)\n"
             func_text += _gen_par_shuffle(
-                right_key_names, right_other_names, "t2_keys", "data_right")
+                right_key_names, right_other_names, "t2_keys", "data_right",
+                right_key_types, left_key_types)
         #func_text += "    print(t2_key, data_right)\n"
 
     if method == 'sort' and join_node.how != 'asof':
@@ -443,10 +453,14 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx,
         func_text += "    right_{} = out_data_right[{}]\n".format(i, i)
 
     for i in range(n_keys):
-        func_text += "    t1_keys_{} = out_t1_keys[{}]\n".format(i, i)
+        func_text += "    t1_keys_{} = out_t1_keys[{}]{}\n".format(
+            i, i, _gen_reverse_type_match(
+                left_key_types[i], right_key_types[i]))
 
     for i in range(n_keys):
-        func_text += "    t2_keys_{} = out_t2_keys[{}]\n".format(i, i)
+        func_text += "    t2_keys_{} = out_t2_keys[{}]\n".format(
+            i, i, _gen_reverse_type_match(
+                right_key_types[i], left_key_types[i]))
 
     for i in range(n_keys):
         func_text += "    {} = t1_keys_{}\n".format(out_names[i], i)
@@ -495,6 +509,29 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx,
 distributed_pass.distributed_run_extensions[Join] = join_distributed_run
 
 
+def _gen_type_match(t1, t2):
+    """Match key types to have equal hash values.
+    Python's hasher is consistent across types (e.g. int vs float) but others
+    are not.
+    """
+    if (isinstance(t1, types.Array) and isinstance(t2, types.Array)
+            and isinstance(t1.dtype, types.Float)
+            and isinstance(t2.dtype, types.Integer)):
+        return ".astype(np.{})".format(t2.dtype)
+    return ""
+
+
+def _gen_reverse_type_match(t1, t2):
+    """Reverse of the operation above.
+    """
+    if (isinstance(t1, types.Array) and isinstance(t2, types.Array)
+            and isinstance(t1.dtype, types.Float)
+            and isinstance(t2.dtype, types.Integer)):
+        return ".astype(np.{})".format(t1.dtype)
+    return ""
+
+
+
 def _get_table_parallel_flags(join_node, array_dists):
     par_dists = (distributed_pass.Distribution.OneD,
                  distributed_pass.Distribution.OneD_Var)
@@ -517,7 +554,10 @@ def _get_table_parallel_flags(join_node, array_dists):
     return left_parallel, right_parallel
 
 
-def _gen_par_shuffle(key_names, data_names, key_tup_out, data_tup_out):
+def _gen_par_shuffle(key_names, data_names, key_tup_out, data_tup_out,
+                     key_types, other_key_types):
+    key_names = tuple("{}{}".format(key_names[i], _gen_type_match(
+            key_types[i], other_key_types[i])) for i in range(len(key_names)))
     all_arrs = key_names + data_names
     n_keys = len(key_names)
     n_data = len(data_names)
@@ -912,10 +952,10 @@ def setnan_elem_buff_tup_overload(data, ind):
 
 
 #@numba.njit
-def local_hash_join_impl(_left_keys, _right_keys, data_left, data_right, is_left=False,
+def local_hash_join_impl(left_keys, right_keys, data_left, data_right, is_left=False,
                                                                is_right=False):
-    l_len = len(_left_keys[0])
-    r_len = len(_right_keys[0])
+    l_len = len(left_keys[0])
+    r_len = len(right_keys[0])
     # TODO: approximate output size properly
     curr_size = 101 + min(l_len, r_len) // 2
     if is_left:
@@ -924,10 +964,6 @@ def local_hash_join_impl(_left_keys, _right_keys, data_left, data_right, is_left
         curr_size = int(1.1 * r_len)
     if is_left and is_right:
         curr_size = int(1.1 * (l_len + r_len))
-
-    # if one array is int and another is float, the int value or hash scheme
-    # below doesn't work since float will be hashed but int will be just stored
-    left_keys, right_keys = _fix_key_type_mismatch(_left_keys, _right_keys)
 
     out_left_key = alloc_arr_tup(curr_size, left_keys)
     out_data_left = alloc_arr_tup(curr_size, data_left)
@@ -995,16 +1031,11 @@ def local_hash_join_impl(_left_keys, _right_keys, data_left, data_right, is_left
     out_data_left = trim_arr_tup(out_data_left, out_ind)
     out_data_right = trim_arr_tup(out_data_right, out_ind)
 
-    out_left_key = _reverse_key_type_mismatch_fix(
-        out_left_key, _left_keys, _right_keys)
-    out_right_key = _reverse_key_type_mismatch_fix(
-        out_right_key, _right_keys, _left_keys)
-
     return out_left_key, out_right_key, out_data_left, out_data_right
 
 
 @generated_jit(nopython=True, cache=True, no_cpython_wrapper=True)
-def local_hash_join(_left_keys, _right_keys, data_left, data_right, is_left=False,
+def local_hash_join(left_keys, right_keys, data_left, data_right, is_left=False,
                                                                is_right=False):
     return local_hash_join_impl
 
@@ -1026,34 +1057,6 @@ def _check_ind_if_hashed(right_keys, r_ind, l_key):
             return -1
         return r_ind
     return _impl
-
-
-@generated_jit(nopython=True, cache=True)
-def _fix_key_type_mismatch(left_keys, right_keys):
-    """make sure both arrays are int64 if one of them is int64. This avoids
-    problems with storing hash versus value in multimap_int64
-    """
-    # TODO: nullable integer array
-    int64_tup = types.Tuple((types.int64[::1],))
-    if left_keys == int64_tup or right_keys == int64_tup:
-        return lambda left_keys, right_keys: \
-            ((left_keys[0].astype(np.int64),),
-             (right_keys[0].astype(np.int64),))
-
-    return lambda left_keys, right_keys: (left_keys, right_keys)
-
-
-@generated_jit(nopython=True, cache=True)
-def _reverse_key_type_mismatch_fix(out, orig_in, orig_other):
-    """reverse the type change done in _fix_key_type_mismatch
-    """
-    # TODO: nullable integer array
-    int64_tup = types.Tuple((types.int64[::1],))
-    if orig_in == int64_tup or orig_other == int64_tup:
-        return lambda out, orig_in, orig_other: \
-            (out[0].astype(orig_in[0].dtype),)
-
-    return lambda out, orig_in, orig_other: out
 
 
 def _gen_pd_join(left_key_vars, right_key_vars, left_other_col_vars,
