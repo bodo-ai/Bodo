@@ -72,7 +72,11 @@ def array_to_info(typingctx, arr_type):
             arr = context.make_array(arr_type)(context, builder, in_arr)
             assert arr_type.ndim == 1, "only 1D array shuffle supported"
             length = builder.extract_value(arr.shape, 0)
-            typ_enum = _numba_to_c_type_map[arr_type.dtype]
+            dtype = arr_type.dtype
+            # handle Categorical type
+            if isinstance(dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
+                dtype = bodo.hiframes.pd_categorical_ext.get_categories_int_type(dtype)
+            typ_enum = _numba_to_c_type_map[dtype]
             typ_arg = cgutils.alloca_once_value(
                 builder, lir.Constant(lir.IntType(32), typ_enum))
 
