@@ -13,6 +13,7 @@
 #include <numeric>
 #include <iostream>
 #include "_bodo_common.h"
+#include "_hash.cpp"
 #include "_distributed.h"
 #define ALIGNMENT 64  // preferred alignment for AVX512
 
@@ -141,29 +142,29 @@ void delete_table(table_info* table)
 
 
 template <class T>
-void hash_array_inner(int *out_hashes, T* data, size_t n_rows)
+void hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows)
 {
-    // XXX: using std::hash is wrong since it's not consistent across processors!
     for (size_t i=0; i<n_rows; i++)
-        out_hashes[i] = std::hash<T>{}(data[i]);
+        hash_inner_32<T>(&data[i], &out_hashes[i])
 }
 
 
-void hash_array_string(int *out_hashes, char* data, uint32_t* offsets, size_t n_rows)
+void hash_array_string(uint32_t* out_hashes, char* data, uint32_t* offsets, size_t n_rows)
 {
     uint32_t start_offset = 0;
     for (size_t i=0; i<n_rows; i++) {
         uint32_t end_offset = offsets[i+1];
         uint32_t len = end_offset - start_offset;
         std::string val(&data[start_offset], len);
-        out_hashes[i] = std::hash<std::string>{}(val);
+        const char* val_chars = val.c_str();
+        hash_string_32(val_chars, (const int)len, &out_hashes[i]);
         start_offset = end_offset;
     }
 }
 
 
 
-void hash_array(int *out_hashes, array_info* array, size_t n_rows)
+void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows)
 {
     // dispatch to proper function
     // TODO: general dispatcher
@@ -194,29 +195,34 @@ void hash_array(int *out_hashes, array_info* array, size_t n_rows)
 
 
 template <class T>
-void hash_array_combine_inner(int *out_hashes, T* data, size_t n_rows)
+void hash_array_combine_inner(uint32_t* out_hashes, T* data, size_t n_rows)
 {
     // hash combine code from boost
     // https://github.com/boostorg/container_hash/blob/504857692148d52afe7110bcb96cf837b0ced9d7/include/boost/container_hash/hash.hpp#L313
     for (size_t i=0; i<n_rows; i++)
-        out_hashes[i] ^= std::hash<T>{}(data[i]) + 0x9e3779b9 + (out_hashes[i]<<6) + (out_hashes[i]>>2);
+        uint32_t out_hash = 0
+        hash_inner_32<T>(&data[i], &out_hash)
+        out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i]<<6) + (out_hashes[i]>>2);
 }
 
 
-void hash_array_combine_string(int *out_hashes, char* data, uint32_t* offsets, size_t n_rows)
+void hash_array_combine_string(uint32_t* out_hashes, char* data, uint32_t* offsets, size_t n_rows)
 {
     uint32_t start_offset = 0;
     for (size_t i=0; i<n_rows; i++) {
         uint32_t end_offset = offsets[i+1];
         uint32_t len = end_offset - start_offset;
         std::string val(&data[start_offset], len);
-        out_hashes[i] ^= std::hash<std::string>{}(val) + 0x9e3779b9 + (out_hashes[i]<<6) + (out_hashes[i]>>2);
+        uint32_t out_hash = 0
+        const char* val_chars = val.c_str();
+        hash_string_32(val_chars, (const int)len, &out_hash);
+        out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i]<<6) + (out_hashes[i]>>2);
         start_offset = end_offset;
     }
 }
 
 
-void hash_array_combine(int *out_hashes, array_info* array, size_t n_rows)
+void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows)
 {
     // dispatch to proper function
     // TODO: general dispatcher
@@ -246,10 +252,10 @@ void hash_array_combine(int *out_hashes, array_info* array, size_t n_rows)
 }
 
 
-int* hash_keys(std::vector<array_info*> key_arrs)
+uint32_t* hash_keys(std::vector<array_info*> key_arrs)
 {
     size_t n_rows = (size_t)key_arrs[0]->length;
-    int *hashes = new int[n_rows];
+    uint32_t *hashes = new uint32_t[n_rows];
     // hash first array
     hash_array(hashes, key_arrs[0], n_rows);
     // combine other array hashes
@@ -261,7 +267,7 @@ int* hash_keys(std::vector<array_info*> key_arrs)
 
 
 template <class T>
-void fill_send_array_inner(T* send_buff, T* data, int *hashes, std::vector<int> &send_disp, int n_pes, size_t n_rows)
+void fill_send_array_inner(T* send_buff, T* data, uint32_t *hashes, std::vector<int> &send_disp, int n_pes, size_t n_rows)
 {
     std::vector<int> tmp_offset(send_disp);
     for(size_t i=0; i<n_rows; i++) {
@@ -273,7 +279,7 @@ void fill_send_array_inner(T* send_buff, T* data, int *hashes, std::vector<int> 
 }
 
 
-void fill_send_array(array_info* send_arr, array_info *array, int *hashes, std::vector<int> &send_disp, int n_pes)
+void fill_send_array(array_info* send_arr, array_info *array, uint32_t *hashes, std::vector<int> &send_disp, int n_pes)
 {
     size_t n_rows = (size_t)array->length;
     // dispatch to proper function
@@ -303,7 +309,7 @@ void fill_send_array(array_info* send_arr, array_info *array, int *hashes, std::
 }
 
 
-table_info* shuffle_table(table_info* in_table, int64_t n_keys)
+table_info* (table_info* in_table, int64_t n_keys)
 {
     // error checking
     if (in_table->columns.size() <= 0 || n_keys <= 0)
@@ -326,7 +332,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys)
     std::vector<array_info*> key_arrs = std::vector<array_info*>(in_table->columns.begin(), in_table->columns.begin() + n_keys);
 
     // get hashes
-    int* hashes = hash_keys(key_arrs);
+    uint32_t* hashes = hash_keys(key_arrs);
 
     // get send count
     for(size_t i=0; i<n_rows; i++)
