@@ -321,6 +321,10 @@ def parquet_file_schema(file_name):
         if n_indices > 1:
             raise ValueError("read_parquet: MultiIndex not supported yet")
         index_col = pandas_metadata['index_columns'][0] if n_indices else None
+        # arrow >=0.13 stores RangeIndex as just a dictionary here and it's
+        # not a column name anymore
+        # TODO: support RangeIndex in parquet properly
+        index_col = index_col if isinstance(index_col, str) else None
 
     col_types = [_get_numba_typ_from_pa_typ(pa_schema.field_by_name(c),
                  c == index_col) for c in col_names]
