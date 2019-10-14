@@ -28,14 +28,9 @@ using std::regex_search;
 
 extern "C" {
 
-// taken from Arrow bin-util.h
-static constexpr uint8_t kBitmask[] = {1, 2, 4, 8, 16, 32, 64, 128};
 // the bitwise complement version of kBitmask
 static constexpr uint8_t kFlippedBitmask[] = {254, 253, 251, 247, 239, 223, 191, 127};
 
-static inline bool GetBit(const uint8_t* bits, uint64_t i) {
-  return (bits[i >> 3] >> (i & 0x07)) & 1;
-}
 static inline void ClearBit(uint8_t* bits, int64_t i) {
   bits[i / 8] &= kFlippedBitmask[i % 8];
 }
