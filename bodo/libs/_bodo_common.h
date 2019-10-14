@@ -114,7 +114,7 @@ void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in)
 
 
 void allocate_string_array(uint32_t **offsets, char **data, uint8_t **null_bitmap, int64_t num_strings,
-                                                            int64_t total_size)
+                                                            int64_t total_size, int64_t extra_null_bytes)
 {
     // std::cout << "allocating string array: " << num_strings << " " <<
     //                                                 total_size << std::endl;
@@ -123,14 +123,27 @@ void allocate_string_array(uint32_t **offsets, char **data, uint8_t **null_bitma
     (*offsets)[0] = 0;
     (*offsets)[num_strings] = (uint32_t)total_size;  // in case total chars is read from here
     // allocate nulls
-    int64_t n_bytes = (num_strings+sizeof(uint8_t)-1)/sizeof(uint8_t);
-    *null_bitmap = new uint8_t[n_bytes];
+    int64_t n_bytes = (num_strings+sizeof(uint8_t)-1)/sizeof(uint8_t) + extra_null_bytes;
+    *null_bitmap = new uint8_t[(size_t)n_bytes];
     // set all bits to 1 indicating non-null as default
     memset(*null_bitmap, -1, n_bytes);
     // *data = (char*) new std::string("gggg");
     return;
 }
 
+// copied from Arrow bit_util.h
+// Bitmask selecting the k-th bit in a byte
+static constexpr uint8_t kBitmask[] = {1, 2, 4, 8, 16, 32, 64, 128};
+
+
+static inline bool GetBit(const uint8_t* bits, uint64_t i) {
+  return (bits[i >> 3] >> (i & 0x07)) & 1;
+}
+
+static inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
+  bits[i / 8] ^= static_cast<uint8_t>(-static_cast<uint8_t>(bit_is_set) ^ bits[i / 8]) &
+                 kBitmask[i % 8];
+}
 
 }
 

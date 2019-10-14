@@ -896,12 +896,14 @@ def pre_alloc_string_array(typingctx, num_strs_typ, num_total_chars_typ=None):
         meminfo, meminfo_data_ptr = construct_string_array(context, builder)
 
         str_arr_payload = cgutils.create_struct_proxy(str_arr_payload_type)(context, builder)
+        extra_null_bytes = context.get_constant(types.int64, 0)
 
         # allocate string array
         fnty = lir.FunctionType(lir.VoidType(),
                                 [lir.IntType(32).as_pointer().as_pointer(),
                                  lir.IntType(8).as_pointer().as_pointer(),
                                  lir.IntType(8).as_pointer().as_pointer(),
+                                 lir.IntType(64),
                                  lir.IntType(64),
                                  lir.IntType(64)])
         fn_alloc = builder.module.get_or_insert_function(fnty,
@@ -910,7 +912,8 @@ def pre_alloc_string_array(typingctx, num_strs_typ, num_total_chars_typ=None):
                                 str_arr_payload._get_ptr_by_name('data'),
                                 str_arr_payload._get_ptr_by_name('null_bitmap'),
                                 num_strs,
-                                num_total_chars])
+                                num_total_chars,
+                                extra_null_bytes])
 
         builder.store(str_arr_payload._getvalue(), meminfo_data_ptr)
         string_array = context.make_helper(builder, string_array_type)
