@@ -3,7 +3,10 @@
 Conda Build Bodo
 ----------------------
 ::
-
+    # tags Bodo version
+    git tag 2019.10
+    git push --tags
+    
     cd docker/build_instance/
     
     # run docker build container
