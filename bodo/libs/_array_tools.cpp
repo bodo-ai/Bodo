@@ -15,6 +15,7 @@
 #include "_bodo_common.h"
 #include "_hash.cpp"
 #include "_distributed.h"
+#include "_murmurhash3.cpp"
 #define ALIGNMENT 64  // preferred alignment for AVX512
 
 
@@ -145,8 +146,9 @@ void delete_table(table_info* table)
 template <class T>
 void hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows)
 {
-    for (size_t i=0; i<n_rows; i++)
-        hash_inner_32<T>(&data[i], &out_hashes[i])
+    for (size_t i=0; i<n_rows; i++){
+        hash_inner_32<T>(&data[i], &out_hashes[i]);
+    }
 }
 
 
@@ -200,10 +202,11 @@ void hash_array_combine_inner(uint32_t* out_hashes, T* data, size_t n_rows)
 {
     // hash combine code from boost
     // https://github.com/boostorg/container_hash/blob/504857692148d52afe7110bcb96cf837b0ced9d7/include/boost/container_hash/hash.hpp#L313
-    for (size_t i=0; i<n_rows; i++)
-        uint32_t out_hash = 0
-        hash_inner_32<T>(&data[i], &out_hash)
+    for (size_t i=0; i<n_rows; i++){
+        uint32_t out_hash = 0;
+        hash_inner_32<T>(&data[i], &out_hash);
         out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i]<<6) + (out_hashes[i]>>2);
+    };
 }
 
 
@@ -214,7 +217,7 @@ void hash_array_combine_string(uint32_t* out_hashes, char* data, uint32_t* offse
         uint32_t end_offset = offsets[i+1];
         uint32_t len = end_offset - start_offset;
         std::string val(&data[start_offset], len);
-        uint32_t out_hash = 0
+        uint32_t out_hash = 0;
         const char* val_chars = val.c_str();
         hash_string_32(val_chars, (const int)len, &out_hash);
         out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i]<<6) + (out_hashes[i]>>2);
@@ -280,7 +283,7 @@ void fill_send_array_inner(T* send_buff, T* data, uint32_t *hashes, std::vector<
 }
 
 
-void fill_send_array_string_inner(char* send_data_buff, uint32_t *send_length_buff, char *arr_data, uint32_t *arr_offsets, int *hashes,
+void fill_send_array_string_inner(char* send_data_buff, uint32_t *send_length_buff, char *arr_data, uint32_t *arr_offsets, uint32_t* hashes,
     std::vector<int> &send_disp, std::vector<int> &send_disp_char, int n_pes, size_t n_rows)
 {
     std::vector<int> tmp_offset(send_disp);
@@ -300,8 +303,8 @@ void fill_send_array_string_inner(char* send_data_buff, uint32_t *send_length_bu
 }
 
 
-void fill_send_array_null_inner(uint8_t *send_null_bitmask, uint8_t *array_null_bitmask, int *hashes,
-    std::vector<int> &send_disp_null, int n_pes, size_t n_rows)
+void fill_send_array_null_inner(uint8_t *send_null_bitmask, uint8_t *array_null_bitmask, uint32_t* hashes,
+    std::vector<int> &send_disp, std::vector<int> &send_disp_null, int n_pes, size_t n_rows)
 {
     std::vector<int> tmp_offset(n_pes, 0);
     for(size_t i=0; i<n_rows; i++) {
