@@ -349,7 +349,7 @@ void fill_send_array(array_info* send_arr, array_info *array, uint32_t *hashes, 
     if (array->arr_type == bodo_array_type::STRING)
         fill_send_array_string_inner((char*)send_arr->data1, (uint32_t*)send_arr->data2, (char*)array->data1, (uint32_t*)array->data2,
             hashes, send_disp, send_disp_char, n_pes, n_rows);
-        fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask, (uint8_t*)array->null_bitmask, hashes, send_disp_null, n_pes, n_rows);
+        fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask, (uint8_t*)array->null_bitmask, hashes, send_disp, send_disp_null, n_pes, n_rows);
         return;
     PyErr_SetString(PyExc_RuntimeError, "Invalid data type for send fill");
 }
@@ -420,7 +420,7 @@ struct mpi_comm_info {
         }
     }
 
-    void get_counts(int* hashes)
+    void get_counts(uint32_t* hashes)
     {
         // get send count
         for(size_t i=0; i<n_rows; i++) {
