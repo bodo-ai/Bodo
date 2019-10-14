@@ -295,9 +295,9 @@ void fill_send_array_string_inner(char* send_data_buff, uint32_t *send_length_bu
 
 
 void fill_send_array_null_inner(uint8_t *send_null_bitmask, uint8_t *array_null_bitmask, int *hashes,
-    std::vector<int> &send_disp, std::vector<int> &send_disp_null, int n_pes, size_t n_rows)
+    std::vector<int> &send_disp_null, int n_pes, size_t n_rows)
 {
-    std::vector<int> tmp_offset(send_disp);
+    std::vector<int> tmp_offset(n_pes, 0);
     for(size_t i=0; i<n_rows; i++) {
         size_t node = (size_t)hashes[i] % (size_t)n_pes;
         int ind = tmp_offset[node];
@@ -340,7 +340,7 @@ void fill_send_array(array_info* send_arr, array_info *array, int *hashes, std::
     if (array->arr_type == bodo_array_type::STRING)
         fill_send_array_string_inner((char*)send_arr->data1, (uint32_t*)send_arr->data2, (char*)array->data1, (uint32_t*)array->data2,
             hashes, send_disp, send_disp_char, n_pes, n_rows);
-        fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask, (uint8_t*)array->null_bitmask, hashes, send_disp, send_disp_null, n_pes, n_rows);
+        fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask, (uint8_t*)array->null_bitmask, hashes, send_disp_null, n_pes, n_rows);
         return;
     PyErr_SetString(PyExc_RuntimeError, "Invalid data type for send fill");
 }
