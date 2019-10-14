@@ -516,7 +516,7 @@ void shuffle_array(array_info *send_arr, array_info *out_arr, std::vector<int> &
         // nulls
         MPI_Alltoallv(send_arr->null_bitmask, send_count_null.data(), send_disp_null.data(), mpi_typ,
             tmp_null_bytes.data(), recv_count_null.data(), recv_disp_null.data(), mpi_typ, MPI_COMM_WORLD);
-        copy_gathered_null_bytes((uint8_t*)send_arr->null_bitmask, tmp_null_bytes, recv_count_null, recv_count);
+        copy_gathered_null_bytes((uint8_t*)out_arr->null_bitmask, tmp_null_bytes, recv_count_null, recv_count);
 
     } else { // Numpy arrays
         MPI_Datatype mpi_typ = get_MPI_typ(send_arr->dtype);
