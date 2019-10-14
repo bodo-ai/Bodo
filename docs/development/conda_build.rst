@@ -18,7 +18,7 @@ Conda Build Bodo
     cd buildscripts/bodo-conda-recipe/
     # if trial version
     # export TRIAL_PERIOD=14
-    conda-build . -c defaults -c numba/label/dev --no-test
+    conda-build . -c defaults -c numba --no-test
 
 Open a new terminal window (replace yourContainerID :code:`docker container ls` and the name of `.tar.bz2` File)::
     
