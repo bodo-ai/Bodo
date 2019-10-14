@@ -217,7 +217,9 @@ void hash_array_combine_string(uint32_t* out_hashes, char* data, uint32_t* offse
         uint32_t end_offset = offsets[i+1];
         uint32_t len = end_offset - start_offset;
         std::string val(&data[start_offset], len);
+
         uint32_t out_hash = 0;
+
         const char* val_chars = val.c_str();
         hash_string_32(val_chars, (const int)len, &out_hash);
         out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i]<<6) + (out_hashes[i]>>2);

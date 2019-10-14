@@ -15,3 +15,4 @@ template <class T>
 void hash_inner_32(T* data, uint32_t* out_hash){
     MurmurHash3_x64_32 ((const void *)data, sizeof(T), HASHSEED, (void*)out_hash);
 }
+
