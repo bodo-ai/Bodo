@@ -47,8 +47,7 @@ struct bodo_array_type {
     enum arr_type_enum {
         NUMPY = 0,
         STRING = 1,
-        INT_NULLABLE = 2,
-        BOOL_NULLABLE = 3,
+        NULLABLE_INT_BOOL = 2, // nullable int or bool
         // TODO: add all Bodo arrays list_string_array_type, string_array_split_view_type, etc.
     };
 };
@@ -68,11 +67,12 @@ struct array_info {
     char* data3;
     char* null_bitmask;  // for nullable arrays like strings
     NRT_MemInfo* meminfo;
+    NRT_MemInfo* meminfo_bitmask;
     // TODO: shape/stride for multi-dim arrays
     explicit array_info(bodo_array_type::arr_type_enum _arr_type, Bodo_CTypes::CTypeEnum _dtype,
-        int64_t _length, int64_t _n_sub_elems, char* _data1, char* _data2, char* _data3, char* _null_bitmask, NRT_MemInfo* _meminfo):
+        int64_t _length, int64_t _n_sub_elems, char* _data1, char* _data2, char* _data3, char* _null_bitmask, NRT_MemInfo* _meminfo, NRT_MemInfo* _meminfo_bitmask):
            arr_type(_arr_type), dtype(_dtype), length(_length), n_sub_elems(_n_sub_elems),
-           data1(_data1), data2(_data2), data3(_data3), null_bitmask(_null_bitmask), meminfo(_meminfo) {}
+           data1(_data1), data2(_data2), data3(_data3), null_bitmask(_null_bitmask), meminfo(_meminfo), meminfo_bitmask(_meminfo_bitmask) {}
 };
 
 
