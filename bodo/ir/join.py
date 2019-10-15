@@ -383,15 +383,19 @@ def join_distributed_run(join_node, array_dists, typemap, calltypes, typingctx,
             func_text += "    t2_keys, data_right = parallel_asof_comm(t1_keys, t2_keys, data_right)\n"
     else:
         if left_parallel:
-            # func_text += "    t1_keys, data_left = parallel_shuffle(t1_keys, data_left)\n"
-            func_text += _gen_par_shuffle(
-                left_key_names, left_other_names, "t1_keys", "data_left",
-                left_key_types, right_key_types)
+            if bodo.use_legacy_shuffle:
+                func_text += "    t1_keys, data_left = parallel_shuffle(t1_keys, data_left)\n"
+            else:
+                func_text += _gen_par_shuffle(
+                    left_key_names, left_other_names, "t1_keys", "data_left",
+                    left_key_types, right_key_types)
         if right_parallel:
-            # func_text += "    t2_keys, data_right = parallel_shuffle(t2_keys, data_right)\n"
-            func_text += _gen_par_shuffle(
-                right_key_names, right_other_names, "t2_keys", "data_right",
-                right_key_types, left_key_types)
+            if bodo.use_legacy_shuffle:
+                func_text += "    t2_keys, data_right = parallel_shuffle(t2_keys, data_right)\n"
+            else:
+                func_text += _gen_par_shuffle(
+                    right_key_names, right_other_names, "t2_keys", "data_right",
+                    right_key_types, left_key_types)
         #func_text += "    print(t2_key, data_right)\n"
 
     if method == 'sort' and join_node.how != 'asof':
