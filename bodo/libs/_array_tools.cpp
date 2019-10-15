@@ -13,7 +13,6 @@
 #include <numeric>
 #include <iostream>
 #include "_bodo_common.h"
-#include "_hash.cpp"
 #include "_distributed.h"
 #include "_murmurhash3.cpp"
 #define ALIGNMENT 64  // preferred alignment for AVX512
@@ -246,7 +245,7 @@ void hash_array_combine_inner(uint32_t* out_hashes, T* data, size_t n_rows)
         uint32_t out_hash = 0;
         hash_inner_32<T>(&data[i], &out_hash);
         out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i]<<6) + (out_hashes[i]>>2);
-    };
+    }
 }
 
 
@@ -346,7 +345,7 @@ void fill_send_array_string_inner(char* send_data_buff, uint32_t *send_length_bu
 
 
 void fill_send_array_null_inner(uint8_t *send_null_bitmask, uint8_t *array_null_bitmask, uint32_t* hashes,
-    std::vector<int> &send_disp, std::vector<int> &send_disp_null, int n_pes, size_t n_rows)
+    std::vector<int> &send_disp_null, int n_pes, size_t n_rows)
 {
     std::vector<int> tmp_offset(n_pes, 0);
     for(size_t i=0; i<n_rows; i++) {
@@ -392,7 +391,7 @@ void fill_send_array(array_info* send_arr, array_info *array, uint32_t *hashes, 
     if (array->arr_type == bodo_array_type::STRING)
         fill_send_array_string_inner((char*)send_arr->data1, (uint32_t*)send_arr->data2, (char*)array->data1, (uint32_t*)array->data2,
             hashes, send_disp, send_disp_char, n_pes, n_rows);
-        fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask, (uint8_t*)array->null_bitmask, hashes, send_disp, send_disp_null, n_pes, n_rows);
+        fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask, (uint8_t*)array->null_bitmask, hashes, send_disp_null, n_pes, n_rows);
         return;
     PyErr_SetString(PyExc_RuntimeError, "Invalid data type for send fill");
 }

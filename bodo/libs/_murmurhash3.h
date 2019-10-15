@@ -26,9 +26,12 @@ typedef unsigned __int64 uint64_t;
 
 //-----------------------------------------------------------------------------
 
-void MurmurHash3_x64_32 ( const void * key, int len, uint32_t seed, void * out );
+void hash_string_32(const char* str, const int len, uint32_t* out_hash);
 
-void MurmurHash3_x64_128 ( const void * key, int len, uint32_t seed, void * out );
+template <class T>
+void hash_inner_32(T* data, uint32_t* out_hash);
+
+void MurmurHash3_x64_32 ( const void * key, int len, uint32_t seed, void * out );
 
 //-----------------------------------------------------------------------------
 
