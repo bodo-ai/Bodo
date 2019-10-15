@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 import numpy as np
 import math
 from collections import defaultdict

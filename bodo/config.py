@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 """
 Checks for available configurations and sets config flags.
 """

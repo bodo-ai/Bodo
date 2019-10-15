@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 import operator
 import numba
 from numba import types, typing, generated_jit

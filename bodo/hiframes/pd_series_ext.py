@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 """
 Implement pd.Series typing and data model handling.
 """

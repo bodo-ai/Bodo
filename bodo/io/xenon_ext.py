@@ -1,4 +1,4 @@
-import numba
+# Copyright (C) 2019 Bodo Inc.import numba
 from numba import ir, ir_utils, types
 from numba.ir_utils import (mk_unique_var, replace_vars_inner, find_topo_order,
                             get_name_var_table, replace_var_names,

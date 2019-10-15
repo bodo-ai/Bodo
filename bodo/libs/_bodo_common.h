@@ -1,3 +1,4 @@
+// Copyright (C) 2019 Bodo Inc.
 #ifndef BODO_COMMON_H_
 #define BODO_COMMON_H_
 

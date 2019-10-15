@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 """
 converts data frame operations to Series and Array operations
 as much as possible to provide implementation and enable optimization.

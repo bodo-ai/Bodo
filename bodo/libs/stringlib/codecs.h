@@ -1,3 +1,4 @@
+// Copyright (C) 2019 Bodo Inc.
 /* stringlib: codec implementations */
 
 // copied from CPython 31e8d69bfe7cf5d4ffe0967cb225d2a8a229cc97

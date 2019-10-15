@@ -1,3 +1,4 @@
+// Copyright (C) 2019 Bodo Inc.
 #ifndef _DISTRIBUTED_H_INCLUDED
 #define _DISTRIBUTED_H_INCLUDED
 

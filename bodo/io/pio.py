@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 """
 Analysis and transformation for HDF5 support.
 """

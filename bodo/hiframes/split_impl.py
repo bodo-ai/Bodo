@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 import operator
 import numpy as np
 import numba

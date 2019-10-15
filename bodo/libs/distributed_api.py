@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 import operator
 from enum import Enum
 import math

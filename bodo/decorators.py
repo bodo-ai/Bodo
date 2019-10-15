@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 """
 Defines decorators of Bodo. Currently just @jit.
 """

@@ -1,3 +1,4 @@
+// Copyright (C) 2019 Bodo Inc.
 /* this is sort of a hack.  there's at least one place (formatting
    floats) where some stringlib code takes a different path if it's
    compiled as unicode. */
