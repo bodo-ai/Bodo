@@ -21,13 +21,21 @@
 
 array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data, char *offsets, char* null_bitmap, NRT_MemInfo* meminfo) {
     // TODO: better memory management of struct, meminfo refcount?
-    return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, n_items, n_chars, data, offsets, NULL, null_bitmap, meminfo);
+    return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, n_items, n_chars, data, offsets, NULL, null_bitmap, meminfo, NULL);
 }
 
 
 array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum, NRT_MemInfo* meminfo) {
     // TODO: better memory management of struct, meminfo refcount?
-    return new array_info(bodo_array_type::NUMPY, (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, data, NULL, NULL, NULL, meminfo);
+    return new array_info(bodo_array_type::NUMPY, (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, data, NULL, NULL, NULL, meminfo, NULL);
+}
+
+
+array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum, char* null_bitmap,
+                                   NRT_MemInfo* meminfo, NRT_MemInfo* meminfo_bitmask) {
+    // TODO: better memory management of struct, meminfo refcount?
+    return new array_info(bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
+                            n_items, -1, data, NULL, NULL, null_bitmap, meminfo, meminfo_bitmask);
 }
 
 
@@ -58,6 +66,24 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data, NRT_M
     *n_items = info->length;
     *data = info->data1;
     *meminfo = info->meminfo;
+    return;
+}
+
+
+void info_to_nullable_array(array_info* info, uint64_t* n_items, uint64_t* n_bytes, char** data, char** null_bitmap,
+                            NRT_MemInfo** meminfo, NRT_MemInfo** meminfo_bitmask)
+{
+    if (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL)
+    {
+        PyErr_SetString(PyExc_RuntimeError, "info_to_nullable_array requires nullable input");
+        return;
+    }
+    *n_items = info->length;
+    *n_bytes = (info->length + 7) >> 3;
+    *data = info->data1;
+    *null_bitmap = info->null_bitmask;
+    *meminfo = info->meminfo;
+    *meminfo_bitmask = info->meminfo_bitmask;
     return;
 }
 
@@ -100,7 +126,20 @@ array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum)
     int64_t size = length * get_item_size(typ_enum);
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
-    return new array_info(bodo_array_type::NUMPY, typ_enum, length, -1, data, NULL, NULL, NULL, meminfo);
+    return new array_info(bodo_array_type::NUMPY, typ_enum, length, -1, data, NULL, NULL, NULL, meminfo, NULL);
+}
+
+
+array_info* alloc_nullable_array(int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes)
+{
+    int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
+    int64_t size = length * get_item_size(typ_enum);
+    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
+    char* data = (char*)meminfo->data;
+    NRT_MemInfo* meminfo_bitmask = NRT_MemInfo_alloc_safe_aligned(n_bytes * sizeof(uint8_t), ALIGNMENT);
+    char* null_bitmap = (char*)meminfo_bitmask->data;
+    return new array_info(bodo_array_type::NULLABLE_INT_BOOL, typ_enum,
+                            length, -1, data, NULL, NULL, null_bitmap, meminfo, meminfo_bitmask);
 }
 
 
@@ -110,9 +149,9 @@ array_info* alloc_string_array(int64_t length, int64_t n_chars, int64_t extra_nu
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_dtor_safe(sizeof(str_arr_payload), (NRT_dtor_function)dtor_string_array);
     str_arr_payload* payload = (str_arr_payload*)meminfo->data;
     allocate_string_array(&(payload->offsets), &(payload->data), &(payload->null_bitmap), length, n_chars, extra_null_bytes);
-    return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, length, n_chars, payload->data, (char*)payload->offsets, NULL, (char*)payload->null_bitmap, meminfo);
+    return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, length, n_chars, payload->data, (char*)payload->offsets,
+        NULL, (char*)payload->null_bitmap, meminfo, NULL);
 }
-
 
 
 table_info* arr_info_list_to_table(array_info** arrs, int64_t n_arrs)
@@ -171,6 +210,7 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows)
 {
     // dispatch to proper function
     // TODO: general dispatcher
+    // XXX: assumes nullable array data for nulls is always consistent
     if (array->dtype == Bodo_CTypes::INT8)
         return hash_array_inner<int8_t>(out_hashes, (int8_t*)array->data1, n_rows);
     if (array->dtype == Bodo_CTypes::UINT8)
@@ -327,7 +367,8 @@ void fill_send_array(array_info* send_arr, array_info *array, uint32_t *hashes, 
     size_t n_rows = (size_t)array->length;
     // dispatch to proper function
     // TODO: general dispatcher
-    // TODO: string
+    if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL)
+        fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask, (uint8_t*)array->null_bitmask, hashes, send_disp_null, n_pes, n_rows);
     if (array->dtype == Bodo_CTypes::INT8)
         return fill_send_array_inner<int8_t>((int8_t*)send_arr->data1, (int8_t*)array->data1, hashes, send_disp, n_pes, n_rows);
     if (array->dtype == Bodo_CTypes::UINT8)
@@ -393,6 +434,10 @@ struct mpi_comm_info {
     {
         n_rows = arrays[0]->length;
         has_nulls = false;
+        for(array_info *arr_info : arrays) {
+            if (arr_info->arr_type == bodo_array_type::STRING || arr_info->arr_type == bodo_array_type::NULLABLE_INT_BOOL)
+                has_nulls = true;
+        }
         // init counts
         send_count = std::vector<int>(n_pes, 0);
         recv_count = std::vector<int>(n_pes);
@@ -401,7 +446,6 @@ struct mpi_comm_info {
         // init counts for string arrays
         for(array_info *arr_info : arrays) {
             if (arr_info->arr_type == bodo_array_type::STRING) {
-                has_nulls = true;
                 send_count_char.push_back(std::vector<int>(n_pes, 0));
                 recv_count_char.push_back(std::vector<int>(n_pes));
                 send_disp_char.push_back(std::vector<int>(n_pes));
@@ -524,15 +568,18 @@ void shuffle_array(array_info *send_arr, array_info *out_arr, std::vector<int> &
         mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
         MPI_Alltoallv(send_arr->data1, send_count_char.data(), send_disp_char.data(), mpi_typ,
             out_arr->data1, recv_count_char.data(), recv_disp_char.data(), mpi_typ, MPI_COMM_WORLD);
-        // nulls
-        MPI_Alltoallv(send_arr->null_bitmask, send_count_null.data(), send_disp_null.data(), mpi_typ,
-            tmp_null_bytes.data(), recv_count_null.data(), recv_disp_null.data(), mpi_typ, MPI_COMM_WORLD);
-        copy_gathered_null_bytes((uint8_t*)out_arr->null_bitmask, tmp_null_bytes, recv_count_null, recv_count);
 
-    } else { // Numpy arrays
+    } else { // Numpy/nullable arrays
         MPI_Datatype mpi_typ = get_MPI_typ(send_arr->dtype);
         MPI_Alltoallv(send_arr->data1, send_count.data(), send_disp.data(), mpi_typ,
             out_arr->data1, recv_count.data(), recv_disp.data(), mpi_typ, MPI_COMM_WORLD);
+    }
+    if (send_arr->arr_type == bodo_array_type::STRING || send_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        // nulls
+        MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+        MPI_Alltoallv(send_arr->null_bitmask, send_count_null.data(), send_disp_null.data(), mpi_typ,
+            tmp_null_bytes.data(), recv_count_null.data(), recv_disp_null.data(), mpi_typ, MPI_COMM_WORLD);
+        copy_gathered_null_bytes((uint8_t*)out_arr->null_bitmask, tmp_null_bytes, recv_count_null, recv_count);
     }
     return;
 }
@@ -543,6 +590,10 @@ array_info *alloc_array(int64_t length, int64_t n_sub_elems, bodo_array_type::ar
 {
     if (arr_type == bodo_array_type::STRING)
         return alloc_string_array(length, n_sub_elems, extra_null_bytes);
+
+    // nullable array
+    if (arr_type == bodo_array_type::NULLABLE_INT_BOOL)
+        return alloc_nullable_array(length, dtype, extra_null_bytes);
 
     // Numpy
     // TODO: error check
@@ -563,8 +614,10 @@ void free_array(array_info *arr)
         // nulls
         if (arr->null_bitmask != nullptr)
             delete[] arr->null_bitmask;
-    } else {  // Numpy
+    } else {  // Numpy or nullable array
         free(arr->meminfo);  // TODO: decref for cleanup?
+        if (arr->meminfo_bitmask != NULL)
+            free(arr->meminfo_bitmask);
     }
     return;
 }
@@ -645,10 +698,14 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                             PyLong_FromVoidPtr((void*)(&string_array_to_info)));
     PyObject_SetAttrString(m, "numpy_array_to_info",
                             PyLong_FromVoidPtr((void*)(&numpy_array_to_info)));
+    PyObject_SetAttrString(m, "nullable_array_to_info",
+                            PyLong_FromVoidPtr((void*)(&nullable_array_to_info)));
     PyObject_SetAttrString(m, "info_to_string_array",
                             PyLong_FromVoidPtr((void*)(&info_to_string_array)));
     PyObject_SetAttrString(m, "info_to_numpy_array",
                             PyLong_FromVoidPtr((void*)(&info_to_numpy_array)));
+    PyObject_SetAttrString(m, "info_to_nullable_array",
+                            PyLong_FromVoidPtr((void*)(&info_to_nullable_array)));
     PyObject_SetAttrString(m, "alloc_numpy",
                             PyLong_FromVoidPtr((void*)(&alloc_numpy)));
     PyObject_SetAttrString(m, "alloc_string_array",
@@ -664,4 +721,3 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
 
     return m;
 }
-

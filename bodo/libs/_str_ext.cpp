@@ -28,6 +28,7 @@ using std::regex_search;
 
 extern "C" {
 
+// taken from Arrow bin-util.h
 // the bitwise complement version of kBitmask
 static constexpr uint8_t kFlippedBitmask[] = {254, 253, 251, 247, 239, 223, 191, 127};
 

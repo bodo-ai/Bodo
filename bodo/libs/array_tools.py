@@ -10,14 +10,18 @@ from numba.extending import (typeof_impl, type_callable, models,
 import bodo
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.utils import _numba_to_c_type_map
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.bool_arr_ext import boolean_array
 
 from bodo.libs import array_tools_ext
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 ll.add_symbol('string_array_to_info', array_tools_ext.string_array_to_info)
 ll.add_symbol('numpy_array_to_info', array_tools_ext.numpy_array_to_info)
+ll.add_symbol('nullable_array_to_info', array_tools_ext.nullable_array_to_info)
 ll.add_symbol('info_to_string_array', array_tools_ext.info_to_string_array)
 ll.add_symbol('info_to_numpy_array', array_tools_ext.info_to_numpy_array)
+ll.add_symbol('info_to_nullable_array', array_tools_ext.info_to_nullable_array)
 ll.add_symbol('alloc_numpy', array_tools_ext.alloc_numpy)
 ll.add_symbol('alloc_string_array', array_tools_ext.alloc_string_array)
 ll.add_symbol('arr_info_list_to_table', array_tools_ext.arr_info_list_to_table)
@@ -89,6 +93,33 @@ def array_to_info(typingctx, arr_type):
                 builder.bitcast(arr.data, lir.IntType(8).as_pointer()),
                 builder.load(typ_arg), arr.meminfo])
 
+        # nullable integer/bool array
+        if isinstance(arr_type, IntegerArrayType) or arr_type == boolean_array:
+            arr = cgutils.create_struct_proxy(arr_type)(
+                context, builder, in_arr)
+            dtype = arr_type.dtype
+            data_arr = context.make_array(types.Array(dtype, 1, 'C'))(
+                context, builder, arr.data)
+            length = builder.extract_value(data_arr.shape, 0)
+            bitmap_arr = context.make_array(types.Array(types.uint8, 1, 'C'))(
+                context, builder, arr.null_bitmap)
+
+            typ_enum = _numba_to_c_type_map[dtype]
+            typ_arg = cgutils.alloca_once_value(
+                builder, lir.Constant(lir.IntType(32), typ_enum))
+
+            fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
+                [lir.IntType(64), lir.IntType(8).as_pointer(),
+                lir.IntType(32), lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer()])
+            fn_tp = builder.module.get_or_insert_function(
+                fnty, name="nullable_array_to_info")
+            return builder.call(fn_tp, [length,
+                builder.bitcast(data_arr.data, lir.IntType(8).as_pointer()),
+                builder.load(typ_arg),
+                builder.bitcast(bitmap_arr.data, lir.IntType(8).as_pointer()),
+                data_arr.meminfo, bitmap_arr.meminfo])
+
     return array_info_type(arr_type), codegen
 
 
@@ -158,6 +189,77 @@ def info_to_array(typingctx, info_type, arr_type):
                    strides=strides_array,
                    itemsize=itemsize,
                    meminfo=builder.load(meminfo_ptr))
+            return arr._getvalue()
+
+        # nullable integer/bool array
+        if isinstance(arr_type, IntegerArrayType) or arr_type == boolean_array:
+            arr = cgutils.create_struct_proxy(arr_type)(context, builder)
+            data_arr_type = types.Array(arr_type.dtype, 1, 'C')
+            data_arr = context.make_array(data_arr_type)(context, builder)
+            nulls_arr_type = types.Array(types.uint8, 1, 'C')
+            nulls_arr = context.make_array(nulls_arr_type)(context, builder)
+
+            length_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+            n_bytes_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+            data_ptr = cgutils.alloca_once(
+                builder, lir.IntType(8).as_pointer())
+            nulls_ptr = cgutils.alloca_once(
+                builder, lir.IntType(8).as_pointer())
+            meminfo_ptr = cgutils.alloca_once(
+                builder, lir.IntType(8).as_pointer())
+            meminfo_nulls_ptr = cgutils.alloca_once(
+                builder, lir.IntType(8).as_pointer())
+
+            fnty = lir.FunctionType(lir.VoidType(),
+                [lir.IntType(8).as_pointer(),  # info
+                lir.IntType(64).as_pointer(),  # num_items
+                lir.IntType(64).as_pointer(),  # num_bytes
+                lir.IntType(8).as_pointer().as_pointer(),   # data
+                lir.IntType(8).as_pointer().as_pointer(),   # nulls
+                lir.IntType(8).as_pointer().as_pointer(),  # meminfo
+                lir.IntType(8).as_pointer().as_pointer()])  # meminfo_nulls
+            fn_tp = builder.module.get_or_insert_function(
+                fnty, name="info_to_nullable_array")
+            builder.call(fn_tp, [in_info, length_ptr, n_bytes_ptr, data_ptr,
+                nulls_ptr, meminfo_ptr, meminfo_nulls_ptr])
+
+            intp_t = context.get_value_type(types.intp)
+
+            # data array
+            shape_array = cgutils.pack_array(
+                builder, [builder.load(length_ptr)], ty=intp_t)
+            itemsize = context.get_constant(types.intp,
+                context.get_abi_sizeof(context.get_data_type(arr_type.dtype)))
+            strides_array = cgutils.pack_array(builder, [itemsize], ty=intp_t)
+
+            data = builder.bitcast(builder.load(data_ptr),
+                context.get_data_type(arr_type.dtype).as_pointer())
+
+            numba.targets.arrayobj.populate_array(data_arr,
+                   data=data,
+                   shape=shape_array,
+                   strides=strides_array,
+                   itemsize=itemsize,
+                   meminfo=builder.load(meminfo_ptr))
+            arr.data = data_arr._getvalue()
+
+            # nulls array
+            shape_array = cgutils.pack_array(
+                builder, [builder.load(n_bytes_ptr)], ty=intp_t)
+            itemsize = context.get_constant(types.intp,
+                context.get_abi_sizeof(context.get_data_type(types.uint8)))
+            strides_array = cgutils.pack_array(builder, [itemsize], ty=intp_t)
+
+            data = builder.bitcast(builder.load(nulls_ptr),
+                context.get_data_type(types.uint8).as_pointer())
+
+            numba.targets.arrayobj.populate_array(nulls_arr,
+                   data=data,
+                   shape=shape_array,
+                   strides=strides_array,
+                   itemsize=itemsize,
+                   meminfo=builder.load(meminfo_nulls_ptr))
+            arr.null_bitmap = nulls_arr._getvalue()
             return arr._getvalue()
 
     return arr_type(info_type, arr_type), codegen
