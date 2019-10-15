@@ -560,6 +560,10 @@ def _get_table_parallel_flags(join_node, array_dists):
 
 def _gen_par_shuffle(key_names, data_names, key_tup_out, data_tup_out,
                      key_types, other_key_types):
+    """Generates data shuffle.
+    Converts data to C arrays, creates a C table, shuffles it, and returns
+    regular arrays.
+    """
     key_names = tuple("{}{}".format(key_names[i], _gen_type_match(
             key_types[i], other_key_types[i])) for i in range(len(key_names)))
     all_arrs = key_names + data_names
