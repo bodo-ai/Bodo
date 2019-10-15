@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 from bodo.tests.test_basic import *
 from bodo.tests.test_series import *
 from bodo.tests.test_dataframe import *

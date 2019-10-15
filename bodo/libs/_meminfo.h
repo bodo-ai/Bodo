@@ -1,3 +1,4 @@
+// Copyright (C) 2019 Bodo Inc.
 #ifndef _MEMINFO_INCLUDED
 #define _MEMINFO_INCLUDED
 

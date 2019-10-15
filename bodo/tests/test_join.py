@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 """Test join operations like df.merge(), df.join(), pd.merge_asof() ...
 """
 import unittest

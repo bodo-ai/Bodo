@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 import numba
 
 # re-export from Numba

@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 """Nullable integer array corresponding to Pandas IntegerArray.
 However, nulls are stored in bit arrays similar to Arrow's arrays.
 """

@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 import numba
 from numba import types
 from numba.extending import (typeof_impl, unbox, register_model, models,

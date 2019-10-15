@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 """
 Parallelizes the IR for distributed execution and inserts MPI calls.
 """

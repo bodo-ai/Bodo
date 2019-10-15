@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 """
 converts Series operations to array operations as much as possible
 to provide implementation and enable optimization.

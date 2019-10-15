@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 """
 Support for Series.str methods
 """

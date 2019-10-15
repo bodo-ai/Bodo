@@ -1,3 +1,4 @@
+// Copyright (C) 2019 Bodo Inc.
 #ifndef _CSV_H_INCLUDED
 #define _CSV_H_INCLUDED
 

@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 """
 helper data structures and functions for shuffle (alltoall).
 """

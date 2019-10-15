@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 """
 Implements array kernels such as median and quantile.
 """

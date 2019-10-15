@@ -1,3 +1,4 @@
+// Copyright (C) 2019 Bodo Inc.
 #undef  FASTSEARCH
 #undef  STRINGLIB
 #undef  STRINGLIB_SIZEOF_CHAR

@@ -1,3 +1,4 @@
+// Copyright (C) 2019 Bodo Inc.
 /**
  * @file _array_tools.cpp
  * @author Ehsan (ehsan@bodo-inc.com)

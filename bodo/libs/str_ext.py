@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 import operator
 import re
 from collections import namedtuple

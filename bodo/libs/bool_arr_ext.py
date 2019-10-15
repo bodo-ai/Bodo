@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 """Nullable boolean array that stores data in Numpy format (1 byte per value)
 but nulls are stored in bit arrays (1 bit per value) similar to Arrow's nulls.
 Pandas converts boolean array to object when NAs are introduced.

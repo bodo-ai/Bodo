@@ -1,3 +1,4 @@
+// Copyright (C) 2019 Bodo Inc.
 #include <string>
 #include <iostream>
 #include <cstring>

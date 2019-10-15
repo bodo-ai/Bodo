@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc.
 from collections import defaultdict
 import numpy as np
 import re
