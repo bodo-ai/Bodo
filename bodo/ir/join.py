@@ -579,9 +579,10 @@ def _gen_par_shuffle(key_names, data_names, key_tup_out, data_tup_out,
                     i, all_arrs[i])
                 for i in range(n_keys, n_all)]
     func_text += "    {} = ({},)\n".format(key_tup_out, ", ".join(out_keys))
-    # func_text += "    print(bodo.get_rank(), {})\n".format(key_tup_out)
     func_text += "    {} = ({}{})\n".format(
         data_tup_out, ", ".join(out_data), "," if n_data != 0 else "")
+    # func_text += "    print(bodo.get_rank(), {})\n".format(key_tup_out)
+    # func_text += "    print(bodo.get_rank(), {})\n".format(data_tup_out)
 
     # clean up
     func_text += "    delete_table(table)\n"
@@ -1342,15 +1343,20 @@ def get_nan_bits(arr, ind):  # pragma: no cover
 
 @overload(get_nan_bits)
 def overload_get_nan_bits(arr, ind):
-    """Get nan bit for types that have null bitmap, currently just string array
+    """Get nan bit for types that have null bitmap
     """
     if arr == string_array_type:
-        def impl(arr, ind):
+        def impl_str(arr, ind):
             in_null_bitmap_ptr = get_null_bitmap_ptr(arr)
             return get_bit_bitmap(in_null_bitmap_ptr, ind)
+        return impl_str
+
+    if isinstance(arr, IntegerArrayType) or arr == boolean_array:
+        def impl(arr, ind):
+            return bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                arr._null_bitmap, ind)
         return impl
-    
-    # TODO: other arrays that should have bitmap like Bool array
+
     return lambda arr, ind: False
 
 
@@ -1383,12 +1389,15 @@ def overload_set_nan_bits(arr, ind, na_val):
     """Set nan bit for types that have null bitmap, currently just string array
     """
     if arr == string_array_type:
-        def impl(arr, ind, na_val):
+        def impl_str(arr, ind, na_val):
             in_null_bitmap_ptr = get_null_bitmap_ptr(arr)
             set_bit_to(in_null_bitmap_ptr, ind, na_val)
+        return impl_str
+
+    if isinstance(arr, IntegerArrayType) or arr == boolean_array:
+        def impl(arr, ind, na_val):
+            bodo.libs.int_arr_ext.set_bit_to_arr(arr._null_bitmap, ind, na_val)
         return impl
-    
-    # TODO: other arrays that should have bitmap like Bool array
     return lambda arr, ind, na_val: None
 
 
