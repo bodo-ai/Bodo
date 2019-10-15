@@ -160,17 +160,17 @@ def test_merge_str_nan2():
 
 def test_join_bool():
     def test_impl(df1, df2):
-        return df1.merge(df2, on=['A', 'B'])
+        return df1.merge(df2, on=['A'])
 
-    # TODO: bool NA in input
-    df1 = pd.DataFrame({'A': [3,1,1,3,4],
-                        'B': [1,2,3,2,3],
-                        'C': [True, False, True, False, True]})
+    # XXX the test can get stuck if output of join for boolean arrays is empty
+    # or just nan on some processor, since default type is string for object
+    # arrays, resulting in inconsistent types
+    df1 = pd.DataFrame({'A': [3,1,1,3,4,2,4],
+                        'B': [True, False, True, False, np.nan, True, False]})
 
-    df2 = pd.DataFrame({'A': [2,1,4,4,3],
-                        'B': [1,3,2,3,2],
-                        'D': [False, True, True, False, False]})
-    check_func(test_impl, (df1, df2), sort_output=True)
+    df2 = pd.DataFrame({'A': [2,1,4,4,3,2,4],
+                        'C': [False, True, np.nan, False, False, True, False]})
+    check_func(test_impl, (df1, df2), sort_output=True, check_dtype=False)
 
 
 def test_join_match_key_types():

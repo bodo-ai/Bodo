@@ -26,6 +26,7 @@ import bodo.hiframes.boxing
 import bodo.config
 import bodo.libs.timsort
 use_pandas_join = False
+use_legacy_shuffle = False
 from bodo.decorators import jit
 
 if bodo.config._has_xenon:

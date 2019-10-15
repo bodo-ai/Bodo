@@ -6,6 +6,8 @@
 #include <vector>
 #include <boost/algorithm/string/replace.hpp>
 
+#include "_bodo_common.h"
+
 #include "_str_decode.cpp"
 
 #ifdef USE_BOOST_REGEX
@@ -26,28 +28,10 @@ using std::regex_search;
 
 extern "C" {
 
-// XXX: equivalent to payload data model in str_arr_ext.py
-struct str_arr_payload {
-    uint32_t *offsets;
-    char* data;
-    uint8_t* null_bitmap;
-};
-
-// XXX: equivalent to payload data model in split_impl.py
-struct str_arr_split_view_payload {
-    uint32_t *index_offsets;
-    uint32_t *data_offsets;
-    // uint8_t* null_bitmap;
-};
-
 // taken from Arrow bin-util.h
-static constexpr uint8_t kBitmask[] = {1, 2, 4, 8, 16, 32, 64, 128};
 // the bitwise complement version of kBitmask
 static constexpr uint8_t kFlippedBitmask[] = {254, 253, 251, 247, 239, 223, 191, 127};
 
-static inline bool GetBit(const uint8_t* bits, uint64_t i) {
-  return (bits[i >> 3] >> (i & 0x07)) & 1;
-}
 static inline void ClearBit(uint8_t* bits, int64_t i) {
   bits[i / 8] &= kFlippedBitmask[i % 8];
 }
@@ -58,7 +42,6 @@ static inline void SetBit(uint8_t* bits, int64_t i) { bits[i / 8] |= kBitmask[i 
 void* init_string(char*, int64_t);
 void* init_string_const(char* in_str, int64_t size);
 void dtor_string(std::string** in_str, int64_t size, void* in);
-void dtor_string_array(str_arr_payload* in_str, int64_t size, void* in);
 void dtor_str_arr_split_view(str_arr_split_view_payload* in_str_arr, int64_t size, void* in);
 void str_arr_split_view_alloc(str_arr_split_view_payload* out_view, int64_t num_items, int64_t num_offsets);
 void str_arr_split_view_impl(str_arr_split_view_payload* out_view, int64_t n_strs, uint32_t* offsets, char* data, char sep);
@@ -78,8 +61,6 @@ void string_array_from_sequence(PyObject * obj, int64_t * no_strings, uint32_t *
     char ** buffer, uint8_t **null_bitmap);
 void* np_array_from_string_array(int64_t no_strings, const uint32_t * offset_table,
     const char *buffer, const uint8_t *null_bitmap);
-void allocate_string_array(uint32_t **offsets, char **data, uint8_t **null_bitmap,
-    int64_t num_strings, int64_t total_size);
 
 void setitem_string_array(uint32_t *offsets, char *data, int64_t n_bytes, char* str, int64_t len, int kind, int is_ascii, int64_t index);
 int64_t get_utf8_size(char* str, int64_t len, int kind);
@@ -281,16 +262,6 @@ int64_t hash_str(std::string* in_str)
     return (int64_t)h1;
 }
 
-void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in)
-{
-    // printf("str arr dtor size: %lld\n", in_str_arr->size);
-    // printf("num chars: %d\n", in_str_arr->offsets[in_str_arr->size]);
-    delete[] in_str_arr->offsets;
-    delete[] in_str_arr->data;
-    if (in_str_arr->null_bitmap != nullptr)
-        delete[] in_str_arr->null_bitmap;
-    return;
-}
 
 void dtor_str_arr_split_view(str_arr_split_view_payload* in_str_arr, int64_t size, void* in)
 {
@@ -452,23 +423,6 @@ int64_t get_str_len(std::string* str)
     return str->length();
 }
 
-void allocate_string_array(uint32_t **offsets, char **data, uint8_t **null_bitmap, int64_t num_strings,
-                                                            int64_t total_size)
-{
-    // std::cout << "allocating string array: " << num_strings << " " <<
-    //                                                 total_size << std::endl;
-    *offsets = new uint32_t[num_strings+1];
-    *data = new char[total_size];
-    (*offsets)[0] = 0;
-    (*offsets)[num_strings] = (uint32_t)total_size;  // in case total chars is read from here
-    // allocate nulls
-    int64_t n_bytes = (num_strings+sizeof(uint8_t)-1)/sizeof(uint8_t);
-    *null_bitmap = new uint8_t[n_bytes];
-    // set all bits to 1 indicating non-null as default
-    memset(*null_bitmap, -1, n_bytes);
-    // *data = (char*) new std::string("gggg");
-    return;
-}
 
 void setitem_string_array(uint32_t *offsets, char *data, int64_t n_bytes, char* str, int64_t len, int kind, int is_ascii, int64_t index)
 {
