@@ -11,7 +11,6 @@
 #include <vector>
 #include "_meminfo.h"
 
-
 // class CTypeEnum(Enum):
 //     Int8 = 0
 //     UInt8 = 1
@@ -21,7 +20,6 @@
 //     UInt64 = 5
 //     Float32 = 6
 //     Float64 = 7
-
 
 struct Bodo_CTypes {
     enum CTypeEnum {
@@ -39,20 +37,19 @@ struct Bodo_CTypes {
     };
 };
 
-
 /**
  * @brief enum for array types supported by Bodo
- * 
+ *
  */
 struct bodo_array_type {
     enum arr_type_enum {
         NUMPY = 0,
         STRING = 1,
-        NULLABLE_INT_BOOL = 2, // nullable int or bool
-        // TODO: add all Bodo arrays list_string_array_type, string_array_split_view_type, etc.
+        NULLABLE_INT_BOOL = 2,  // nullable int or bool
+        // TODO: add all Bodo arrays list_string_array_type,
+        // string_array_split_view_type, etc.
     };
 };
-
 
 /**
  * @brief generic struct that holds info of Bodo arrays to enable communication.
@@ -60,9 +57,11 @@ struct bodo_array_type {
 struct array_info {
     bodo_array_type::arr_type_enum arr_type;
     Bodo_CTypes::CTypeEnum dtype;
-    int64_t length; // number of elements in the array (not bytes)
-    int64_t n_sub_elems; // number of sub-elements for variable length arrays, e.g. characters in string array
-    // data1 is the main data pointer. some arrays have multiple data pointers e.g. string offsets
+    int64_t length;       // number of elements in the array (not bytes)
+    int64_t n_sub_elems;  // number of sub-elements for variable length arrays,
+                          // e.g. characters in string array
+    // data1 is the main data pointer. some arrays have multiple data pointers
+    // e.g. string offsets
     char* data1;
     char* data2;
     char* data3;
@@ -70,61 +69,70 @@ struct array_info {
     NRT_MemInfo* meminfo;
     NRT_MemInfo* meminfo_bitmask;
     // TODO: shape/stride for multi-dim arrays
-    explicit array_info(bodo_array_type::arr_type_enum _arr_type, Bodo_CTypes::CTypeEnum _dtype,
-        int64_t _length, int64_t _n_sub_elems, char* _data1, char* _data2, char* _data3, char* _null_bitmask, NRT_MemInfo* _meminfo, NRT_MemInfo* _meminfo_bitmask):
-           arr_type(_arr_type), dtype(_dtype), length(_length), n_sub_elems(_n_sub_elems),
-           data1(_data1), data2(_data2), data3(_data3), null_bitmask(_null_bitmask), meminfo(_meminfo), meminfo_bitmask(_meminfo_bitmask) {}
+    explicit array_info(bodo_array_type::arr_type_enum _arr_type,
+                        Bodo_CTypes::CTypeEnum _dtype, int64_t _length,
+                        int64_t _n_sub_elems, char* _data1, char* _data2,
+                        char* _data3, char* _null_bitmask,
+                        NRT_MemInfo* _meminfo, NRT_MemInfo* _meminfo_bitmask)
+        : arr_type(_arr_type),
+          dtype(_dtype),
+          length(_length),
+          n_sub_elems(_n_sub_elems),
+          data1(_data1),
+          data2(_data2),
+          data3(_data3),
+          null_bitmask(_null_bitmask),
+          meminfo(_meminfo),
+          meminfo_bitmask(_meminfo_bitmask) {}
 };
-
 
 struct table_info {
     std::vector<array_info*> columns;
-    explicit table_info(std::vector<array_info*> _columns): columns(_columns) {}
+    explicit table_info(std::vector<array_info*> _columns)
+        : columns(_columns) {}
 };
 
-
-#define DEC_MOD_METHOD(func) PyObject_SetAttrString(m, #func, PyLong_FromVoidPtr((void*)(&func)))
+#define DEC_MOD_METHOD(func) \
+    PyObject_SetAttrString(m, #func, PyLong_FromVoidPtr((void*)(&func)))
 
 extern "C" {
 
 // XXX: equivalent to payload data model in str_arr_ext.py
 struct str_arr_payload {
-    uint32_t *offsets;
+    uint32_t* offsets;
     char* data;
     uint8_t* null_bitmap;
 };
 
 // XXX: equivalent to payload data model in split_impl.py
 struct str_arr_split_view_payload {
-    uint32_t *index_offsets;
-    uint32_t *data_offsets;
+    uint32_t* index_offsets;
+    uint32_t* data_offsets;
     // uint8_t* null_bitmap;
 };
 
-
-void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in)
-{
+void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in) {
     // printf("str arr dtor size: %lld\n", in_str_arr->size);
     // printf("num chars: %d\n", in_str_arr->offsets[in_str_arr->size]);
     delete[] in_str_arr->offsets;
     delete[] in_str_arr->data;
-    if (in_str_arr->null_bitmap != nullptr)
-        delete[] in_str_arr->null_bitmap;
+    if (in_str_arr->null_bitmap != nullptr) delete[] in_str_arr->null_bitmap;
     return;
 }
 
-
-void allocate_string_array(uint32_t **offsets, char **data, uint8_t **null_bitmap, int64_t num_strings,
-                                                            int64_t total_size, int64_t extra_null_bytes)
-{
+void allocate_string_array(uint32_t** offsets, char** data,
+                           uint8_t** null_bitmap, int64_t num_strings,
+                           int64_t total_size, int64_t extra_null_bytes) {
     // std::cout << "allocating string array: " << num_strings << " " <<
     //                                                 total_size << std::endl;
-    *offsets = new uint32_t[num_strings+1];
+    *offsets = new uint32_t[num_strings + 1];
     *data = new char[total_size];
     (*offsets)[0] = 0;
-    (*offsets)[num_strings] = (uint32_t)total_size;  // in case total chars is read from here
+    (*offsets)[num_strings] =
+        (uint32_t)total_size;  // in case total chars is read from here
     // allocate nulls
-    int64_t n_bytes = (num_strings+sizeof(uint8_t)-1)/sizeof(uint8_t) + extra_null_bytes;
+    int64_t n_bytes = (num_strings + sizeof(uint8_t) - 1) / sizeof(uint8_t) +
+                      extra_null_bytes;
     *null_bitmap = new uint8_t[(size_t)n_bytes];
     // set all bits to 1 indicating non-null as default
     memset(*null_bitmap, -1, n_bytes);
@@ -136,16 +144,15 @@ void allocate_string_array(uint32_t **offsets, char **data, uint8_t **null_bitma
 // Bitmask selecting the k-th bit in a byte
 static constexpr uint8_t kBitmask[] = {1, 2, 4, 8, 16, 32, 64, 128};
 
-
 static inline bool GetBit(const uint8_t* bits, uint64_t i) {
-  return (bits[i >> 3] >> (i & 0x07)) & 1;
+    return (bits[i >> 3] >> (i & 0x07)) & 1;
 }
 
 static inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
-  bits[i / 8] ^= static_cast<uint8_t>(-static_cast<uint8_t>(bit_is_set) ^ bits[i / 8]) &
-                 kBitmask[i % 8];
+    bits[i / 8] ^=
+        static_cast<uint8_t>(-static_cast<uint8_t>(bit_is_set) ^ bits[i / 8]) &
+        kBitmask[i % 8];
 }
-
 }
 
 #endif /* BODO_COMMON_H_ */
