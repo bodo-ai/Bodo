@@ -11,93 +11,101 @@ from numba.extending import overload, overload_attribute, overload_method
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.utils.typing import (is_overload_none, is_overload_true,
-    is_overload_false, is_overload_zero, get_overload_const_str)
+from bodo.utils.typing import (
+    is_overload_none,
+    is_overload_true,
+    is_overload_false,
+    is_overload_zero,
+    get_overload_const_str,
+)
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 
 
-@overload_attribute(DataFrameType, 'index')
+@overload_attribute(DataFrameType, "index")
 def overload_dataframe_index(df):
     # None index means full RangeIndex
     if df.index == types.none:
         return lambda df: bodo.hiframes.pd_index_ext.init_range_index(
-            0, len(df), 1, None)
+            0, len(df), 1, None
+        )
 
     return lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
 
 
-@overload_attribute(DataFrameType, 'columns')
+@overload_attribute(DataFrameType, "columns")
 def overload_dataframe_columns(df):
     str_arr = "bodo.utils.conversion.coerce_to_array({})".format(df.columns)
     func_text = "def impl(df):\n"
     func_text += "  return bodo.hiframes.pd_index_ext.init_string_index({})\n".format(
-        str_arr)
+        str_arr
+    )
     loc_vars = {}
-    exec(func_text, {'bodo': bodo}, loc_vars)
+    exec(func_text, {"bodo": bodo}, loc_vars)
     # print(func_text)
-    impl = loc_vars['impl']
+    impl = loc_vars["impl"]
     return impl
 
 
-@overload_attribute(DataFrameType, 'values')
+@overload_attribute(DataFrameType, "values")
 def overload_dataframe_values(df):
     n_cols = len(df.columns)
     data_args = ", ".join(
-        'bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})'.format(i)
-        for i in range(n_cols))
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(i)
+        for i in range(n_cols)
+    )
     func_text = "def f(df):\n".format()
     func_text += "    return np.stack(({},), 1)\n".format(data_args)
 
     loc_vars = {}
-    exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
-    f = loc_vars['f']
+    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
+    f = loc_vars["f"]
     return f
 
 
-@overload_method(DataFrameType, 'get_values')
+@overload_method(DataFrameType, "get_values")
 def overload_dataframe_get_values(df):
     def impl(df):
         return df.values
+
     return impl
 
 
-@overload_attribute(DataFrameType, 'ndim')
+@overload_attribute(DataFrameType, "ndim")
 def overload_dataframe_ndim(df):
     return lambda df: 2
 
 
-@overload_attribute(DataFrameType, 'size')
+@overload_attribute(DataFrameType, "size")
 def overload_dataframe_size(df):
     ncols = len(df.columns)
     return lambda df: ncols * len(df)
 
 
-@overload_attribute(DataFrameType, 'shape')
+@overload_attribute(DataFrameType, "shape")
 def overload_dataframe_shape(df):
     ncols = len(df.columns)
     return lambda df: (len(df), ncols)
 
 
-@overload_attribute(DataFrameType, 'empty')
+@overload_attribute(DataFrameType, "empty")
 def overload_dataframe_empty(df):
     if len(df.columns) == 0:
         return lambda df: True
     return lambda df: len(df) == 0
 
 
-@overload_method(DataFrameType, 'astype')
-def overload_dataframe_astype(df, dtype, copy=True, errors='raise'):
+@overload_method(DataFrameType, "astype")
+def overload_dataframe_astype(df, dtype, copy=True, errors="raise"):
     # just call astype() on all column Series
     # TODO: support categorical, dt64, etc.
 
-    data_args = ", ".join("df['{}'].astype(dtype).values".format(c)
-        for c in df.columns)
+    data_args = ", ".join("df['{}'].astype(dtype).values".format(c) for c in df.columns)
     header = "def impl(df, dtype, copy=True, errors='raise'):\n"
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, 'copy')
+@overload_method(DataFrameType, "copy")
 def overload_dataframe_copy(df, deep=True):
     # just call copy() on all arrays
     data_outs = []
@@ -114,48 +122,48 @@ def overload_dataframe_copy(df, deep=True):
     return _gen_init_df(header, df.columns, ", ".join(data_outs))
 
 
-@overload_method(DataFrameType, 'isna')
-@overload_method(DataFrameType, 'isnull')
+@overload_method(DataFrameType, "isna")
+@overload_method(DataFrameType, "isnull")
 def overload_dataframe_isna(df):
     # call isna() on column Series
-    data_args = ", ".join("df['{}'].isna().values".format(c)
-        for c in df.columns)
+    data_args = ", ".join("df['{}'].isna().values".format(c) for c in df.columns)
     header = "def impl(df):\n"
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, 'notna')
+@overload_method(DataFrameType, "notna")
 def overload_dataframe_notna(df):
     # call notna() on column Series
-    data_args = ", ".join("df['{}'].notna().values".format(c)
-        for c in df.columns)
+    data_args = ", ".join("df['{}'].notna().values".format(c) for c in df.columns)
     header = "def impl(df):\n"
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, 'head')
+@overload_method(DataFrameType, "head")
 def overload_dataframe_head(df, n=5):
     # call head() on column Series
-    data_args = ", ".join("df['{}'].head(n).values".format(c)
-        for c in df.columns)
+    data_args = ", ".join("df['{}'].head(n).values".format(c) for c in df.columns)
     header = "def impl(df, n=5):\n"
-    index = ("bodo.utils.conversion.fix_none_index("
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))[:n]")
+    index = (
+        "bodo.utils.conversion.fix_none_index("
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))[:n]"
+    )
     return _gen_init_df(header, df.columns, data_args, index)
 
 
-@overload_method(DataFrameType, 'tail')
+@overload_method(DataFrameType, "tail")
 def overload_dataframe_tail(df, n=5):
     # call tail() on column Series
-    data_args = ", ".join("df['{}'].tail(n).values".format(c)
-        for c in df.columns)
+    data_args = ", ".join("df['{}'].tail(n).values".format(c) for c in df.columns)
     header = "def impl(df, n=5):\n"
-    index = ("bodo.utils.conversion.fix_none_index("
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))[-n:]")
+    index = (
+        "bodo.utils.conversion.fix_none_index("
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))[-n:]"
+    )
     return _gen_init_df(header, df.columns, data_args, index)
 
 
-@overload_method(DataFrameType, 'isin')
+@overload_method(DataFrameType, "isin")
 def overload_dataframe_isin(df, values):
     # TODO: call isin on Series
     # TODO: make sure df indices match?
@@ -165,16 +173,22 @@ def overload_dataframe_isin(df, values):
     # dataframe case
     if isinstance(values, DataFrameType):
         df_case = True
-        other_colmap = {c: "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(values, {})".format(values.columns.index(c))
-                        for c in df.columns if c in values.columns}
+        other_colmap = {
+            c: "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(values, {})".format(
+                values.columns.index(c)
+            )
+            for c in df.columns
+            if c in values.columns
+        }
     else:
         # general iterable (e.g. list, set) case
         # TODO: handle passed in dict case (pass colname to func?)
         other_colmap = {c: "values" for c in df.columns}
 
     data = [
-        'bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})'.format(i)
-        for i in range(len(df.columns))]
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(i)
+        for i in range(len(df.columns))
+    ]
 
     isin_func = "bodo.hiframes.api.df_isin({}, {})"
     isin_vals_func = "bodo.hiframes.api.df_isin_vals({}, {})"
@@ -197,7 +211,7 @@ def overload_dataframe_isin(df, values):
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, 'abs')
+@overload_method(DataFrameType, "abs")
 def overload_dataframe_abs(df):
     # only works for numerical data and Timedelta
     # TODO: handle timedelta
@@ -208,23 +222,26 @@ def overload_dataframe_abs(df):
     first_col_dtype = df.data[0] if len(df.data) > 0 else None
     if not all(c == first_col_dtype for c in df.data):
         dtypes = [numba.numpy_support.as_dtype(d.dtype) for d in df.data]
-        out_dtype = numba.numpy_support.from_dtype(
-            np.find_common_type(dtypes, []))
+        out_dtype = numba.numpy_support.from_dtype(np.find_common_type(dtypes, []))
         extra = ".astype(np.{})".format(out_dtype)
 
     n_cols = len(df.columns)
     data_args = ", ".join(
-        'np.abs(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){})'.format(i, extra)
-        for i in range(n_cols))
+        "np.abs(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){})".format(
+            i, extra
+        )
+        for i in range(n_cols)
+    )
     header = "def impl(df):\n"
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, 'corr')
-def overload_dataframe_corr(df, method='pearson', min_periods=1):
+@overload_method(DataFrameType, "corr")
+def overload_dataframe_corr(df, method="pearson", min_periods=1):
 
-    numeric_cols = [c for c, d in zip(df.columns, df.data)
-        if _is_numeric_dtype(d.dtype)]
+    numeric_cols = [
+        c for c, d in zip(df.columns, df.data) if _is_numeric_dtype(d.dtype)
+    ]
     # TODO: support empty dataframe
     assert len(numeric_cols) != 0
 
@@ -234,19 +251,23 @@ def overload_dataframe_corr(df, method='pearson', min_periods=1):
         typ_conv = ".astype(np.float64)"
 
     arr_args = ", ".join(
-        'bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}'.format(
-        df.columns.index(c), '.astype(np.float64)'
-        if (isinstance(df.data[df.columns.index(c)], IntegerArrayType)
-            or df.data[df.columns.index(c)] == boolean_array) else '')
-        for c in numeric_cols)
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}".format(
+            df.columns.index(c),
+            ".astype(np.float64)"
+            if (
+                isinstance(df.data[df.columns.index(c)], IntegerArrayType)
+                or df.data[df.columns.index(c)] == boolean_array
+            )
+            else "",
+        )
+        for c in numeric_cols
+    )
     mat = "np.stack(({},), 1){}".format(arr_args, typ_conv)
 
-    data_args = ", ".join(
-        'res[:,{}]'.format(i) for i in range(len(numeric_cols)))
+    data_args = ", ".join("res[:,{}]".format(i) for i in range(len(numeric_cols)))
 
     str_arr = "bodo.utils.conversion.coerce_to_array({})".format(numeric_cols)
-    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(
-        str_arr)
+    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(str_arr)
 
     header = "def impl(df, method='pearson', min_periods=1):\n"
     header += "  mat = {}\n".format(mat)
@@ -254,13 +275,14 @@ def overload_dataframe_corr(df, method='pearson', min_periods=1):
     return _gen_init_df(header, numeric_cols, data_args, index)
 
 
-@overload_method(DataFrameType, 'cov')
+@overload_method(DataFrameType, "cov")
 def overload_dataframe_cov(df, min_periods=None):
     # TODO: support calling np.cov() when there is no NA
     minpv = "1" if is_overload_none(min_periods) else "min_periods"
 
-    numeric_cols = [c for c, d in zip(df.columns, df.data)
-        if _is_numeric_dtype(d.dtype)]
+    numeric_cols = [
+        c for c, d in zip(df.columns, df.data) if _is_numeric_dtype(d.dtype)
+    ]
     # TODO: support empty dataframe
     assert len(numeric_cols) != 0
 
@@ -270,19 +292,23 @@ def overload_dataframe_cov(df, min_periods=None):
         typ_conv = ".astype(np.float64)"
 
     arr_args = ", ".join(
-        'bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}'.format(
-        df.columns.index(c), '.astype(np.float64)'
-        if (isinstance(df.data[df.columns.index(c)], IntegerArrayType)
-            or df.data[df.columns.index(c)] == boolean_array) else '')
-        for c in numeric_cols)
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}".format(
+            df.columns.index(c),
+            ".astype(np.float64)"
+            if (
+                isinstance(df.data[df.columns.index(c)], IntegerArrayType)
+                or df.data[df.columns.index(c)] == boolean_array
+            )
+            else "",
+        )
+        for c in numeric_cols
+    )
     mat = "np.stack(({},), 1){}".format(arr_args, typ_conv)
 
-    data_args = ", ".join(
-        'res[:,{}]'.format(i) for i in range(len(numeric_cols)))
+    data_args = ", ".join("res[:,{}]".format(i) for i in range(len(numeric_cols)))
 
     str_arr = "bodo.utils.conversion.coerce_to_array({})".format(numeric_cols)
-    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(
-        str_arr)
+    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(str_arr)
 
     header = "def impl(df, min_periods=1):\n"
     header += "  mat = {}\n".format(mat)
@@ -290,241 +316,263 @@ def overload_dataframe_cov(df, min_periods=None):
     return _gen_init_df(header, numeric_cols, data_args, index)
 
 
-@overload_method(DataFrameType, 'count')
+@overload_method(DataFrameType, "count")
 def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
     # TODO: numeric_only flag
     data_args = ", ".join("df['{}'].count()".format(c) for c in df.columns)
 
     str_arr = "bodo.utils.conversion.coerce_to_array({})".format(df.columns)
-    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(
-        str_arr)
+    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(str_arr)
 
     func_text = "def impl(df, axis=0, level=None, numeric_only=False):\n"
     func_text += "  data = np.array([{}])\n".format(data_args)
     func_text += "  return bodo.hiframes.api.init_series(data, {})\n".format(index)
     # print(func_text)
     loc_vars = {}
-    exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
-    impl = loc_vars['impl']
+    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
+    impl = loc_vars["impl"]
     return impl
 
 
-@overload_method(DataFrameType, 'nunique')
+@overload_method(DataFrameType, "nunique")
 def overload_dataframe_nunique(df, axis=0, dropna=True):
     data_args = ", ".join("df['{}'].nunique()".format(c) for c in df.columns)
 
     str_arr = "bodo.utils.conversion.coerce_to_array({})".format(df.columns)
-    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(
-        str_arr)
+    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(str_arr)
 
     func_text = "def impl(df, axis=0, dropna=True):\n"
     func_text += "  data = np.asarray(({},))\n".format(data_args)
     func_text += "  return bodo.hiframes.api.init_series(data, {})\n".format(index)
     # print(func_text)
     loc_vars = {}
-    exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
-    impl = loc_vars['impl']
+    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
+    impl = loc_vars["impl"]
     return impl
 
 
-@overload_method(DataFrameType, 'prod')
-@overload_method(DataFrameType, 'product')
-def overload_dataframe_prod(df, axis=None, skipna=None, level=None,
-                                               numeric_only=None, min_count=0):
-    return _gen_reduce_impl(df, 'prod')
+@overload_method(DataFrameType, "prod")
+@overload_method(DataFrameType, "product")
+def overload_dataframe_prod(
+    df, axis=None, skipna=None, level=None, numeric_only=None, min_count=0
+):
+    return _gen_reduce_impl(df, "prod")
 
 
-@overload_method(DataFrameType, 'sum')
-def overload_dataframe_sum(df, axis=None, skipna=None, level=None,
-                                               numeric_only=None, min_count=0):
-    return _gen_reduce_impl(df, 'sum')
+@overload_method(DataFrameType, "sum")
+def overload_dataframe_sum(
+    df, axis=None, skipna=None, level=None, numeric_only=None, min_count=0
+):
+    return _gen_reduce_impl(df, "sum")
 
 
-@overload_method(DataFrameType, 'max')
-def overload_dataframe_max(df, axis=None, skipna=None, level=None,
-                                                            numeric_only=None):
-    return _gen_reduce_impl(df, 'max')
+@overload_method(DataFrameType, "max")
+def overload_dataframe_max(df, axis=None, skipna=None, level=None, numeric_only=None):
+    return _gen_reduce_impl(df, "max")
 
 
-@overload_method(DataFrameType, 'min')
-def overload_dataframe_min(df, axis=None, skipna=None, level=None,
-                                                            numeric_only=None):
-    return _gen_reduce_impl(df, 'min')
+@overload_method(DataFrameType, "min")
+def overload_dataframe_min(df, axis=None, skipna=None, level=None, numeric_only=None):
+    return _gen_reduce_impl(df, "min")
 
 
-@overload_method(DataFrameType, 'mean')
-def overload_dataframe_mean(df, axis=None, skipna=None, level=None,
-                                                            numeric_only=None):
-    return _gen_reduce_impl(df, 'mean')
+@overload_method(DataFrameType, "mean")
+def overload_dataframe_mean(df, axis=None, skipna=None, level=None, numeric_only=None):
+    return _gen_reduce_impl(df, "mean")
 
 
-@overload_method(DataFrameType, 'var')
-def overload_dataframe_var(df, axis=None, skipna=None, level=None, ddof=1,
-                                                            numeric_only=None):
-    return _gen_reduce_impl(df, 'var')
+@overload_method(DataFrameType, "var")
+def overload_dataframe_var(
+    df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None
+):
+    return _gen_reduce_impl(df, "var")
 
 
-@overload_method(DataFrameType, 'std')
-def overload_dataframe_std(df, axis=None, skipna=None, level=None, ddof=1,
-                                                            numeric_only=None):
-    return _gen_reduce_impl(df, 'std')
+@overload_method(DataFrameType, "std")
+def overload_dataframe_std(
+    df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None
+):
+    return _gen_reduce_impl(df, "std")
 
 
-@overload_method(DataFrameType, 'median')
-def overload_dataframe_median(df, axis=None, skipna=None, level=None,
-                                                            numeric_only=None):
-    return _gen_reduce_impl(df, 'median')
+@overload_method(DataFrameType, "median")
+def overload_dataframe_median(
+    df, axis=None, skipna=None, level=None, numeric_only=None
+):
+    return _gen_reduce_impl(df, "median")
 
 
-@overload_method(DataFrameType, 'quantile')
-def overload_dataframe_quantile(df, q=0.5, axis=0, numeric_only=True,
-                                                       interpolation='linear'):
+@overload_method(DataFrameType, "quantile")
+def overload_dataframe_quantile(
+    df, q=0.5, axis=0, numeric_only=True, interpolation="linear"
+):
     # TODO: name is str(q)
-    return _gen_reduce_impl(df, 'quantile', 'q')
+    return _gen_reduce_impl(df, "quantile", "q")
 
 
-@overload_method(DataFrameType, 'idxmax')
+@overload_method(DataFrameType, "idxmax")
 def overload_dataframe_idxmax(df, axis=0, skipna=True):
-    return _gen_reduce_impl(df, 'idxmax')
+    return _gen_reduce_impl(df, "idxmax")
 
 
-@overload_method(DataFrameType, 'idxmin')
+@overload_method(DataFrameType, "idxmin")
 def overload_dataframe_idxmin(df, axis=0, skipna=True):
-    return _gen_reduce_impl(df, 'idxmin')
+    return _gen_reduce_impl(df, "idxmin")
 
 
 def _gen_reduce_impl(df, func_name, args=None):
-    args = '' if args is None else args
+    args = "" if args is None else args
 
-    if func_name in ('idxmax', 'idxmin'):
+    if func_name in ("idxmax", "idxmin"):
         out_colnames = df.columns
     else:
         # TODO: numeric_only=None tries its best: core/frame.py/DataFrame/_reduce
-        numeric_cols = [c for c, d in zip(df.columns, df.data)
-            if _is_numeric_dtype(d.dtype)]
+        numeric_cols = [
+            c for c, d in zip(df.columns, df.data) if _is_numeric_dtype(d.dtype)
+        ]
         out_colnames = numeric_cols
 
     # TODO: support empty dataframe
     assert len(out_colnames) != 0
 
-    dtypes = [numba.numpy_support.as_dtype(df.data[df.columns.index(c)].dtype)
-              for c in out_colnames]
-    comm_dtype = numba.numpy_support.from_dtype(
-            np.find_common_type(dtypes, []))
+    dtypes = [
+        numba.numpy_support.as_dtype(df.data[df.columns.index(c)].dtype)
+        for c in out_colnames
+    ]
+    comm_dtype = numba.numpy_support.from_dtype(np.find_common_type(dtypes, []))
 
     # XXX: use common type for min/max to avoid float for ints due to NaN
     # TODO: handle NaN for ints better
     typ_cast = ""
-    if func_name in ('min', 'max'):
+    if func_name in ("min", "max"):
         typ_cast = ", dtype=np.{}".format(comm_dtype)
 
     # XXX pandas combines all column values so int8/float32 results in float32
     # not float64
-    if comm_dtype == types.float32 and func_name in ('sum', 'prod', 'mean',
-                                                       'var', 'std', 'median'):
+    if comm_dtype == types.float32 and func_name in (
+        "sum",
+        "prod",
+        "mean",
+        "var",
+        "std",
+        "median",
+    ):
         typ_cast = ", dtype=np.float32"
 
-    data_args = ", ".join("df['{}'].{}({})".format(c, func_name, args)
-                          for c in out_colnames)
+    data_args = ", ".join(
+        "df['{}'].{}({})".format(c, func_name, args) for c in out_colnames
+    )
 
     str_arr = "bodo.utils.conversion.coerce_to_array({})".format(out_colnames)
-    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(
-        str_arr)
+    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(str_arr)
 
     minc = ""
-    if func_name in ('sum', 'prod'):
+    if func_name in ("sum", "prod"):
         minc = ", min_count=0"
 
     ddof = ""
-    if func_name in ('var', 'std'):
+    if func_name in ("var", "std"):
         ddof = "ddof=1, "
 
     # function signature
-    func_text = "def impl(df, axis=None, skipna=None, level=None,{} numeric_only=None{}):\n".format(ddof, minc)
-    if func_name == 'quantile':
-        func_text = "def impl(df, q=0.5, axis=0, numeric_only=True, interpolation='linear'):\n"
-    if func_name in ('idxmax', 'idxmin'):
+    func_text = "def impl(df, axis=None, skipna=None, level=None,{} numeric_only=None{}):\n".format(
+        ddof, minc
+    )
+    if func_name == "quantile":
+        func_text = (
+            "def impl(df, q=0.5, axis=0, numeric_only=True, interpolation='linear'):\n"
+        )
+    if func_name in ("idxmax", "idxmin"):
         func_text = "def impl(df, axis=0, skipna=True):\n"
 
     # data conversion
-    if func_name in ('idxmax', 'idxmin'):
+    if func_name in ("idxmax", "idxmin"):
         # idxmax/idxmin don't cast type since just index value is produced
         # but need to convert tuple of Timestamp to dt64 array
         # see idxmax test numeric_df_value[6]
-        func_text += "  data = bodo.utils.conversion.coerce_to_array(({},))\n".format(data_args)
+        func_text += "  data = bodo.utils.conversion.coerce_to_array(({},))\n".format(
+            data_args
+        )
     else:
         func_text += "  data = np.asarray(({},){})\n".format(data_args, typ_cast)
     func_text += "  return bodo.hiframes.api.init_series(data, {})\n".format(index)
     # print(func_text)
     loc_vars = {}
-    exec(func_text, {'bodo': bodo, 'np': np}, loc_vars)
-    impl = loc_vars['impl']
+    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
+    impl = loc_vars["impl"]
     return impl
 
 
-@overload_method(DataFrameType, 'pct_change')
-def overload_dataframe_pct_change(df, periods=1, fill_method='pad', limit=None,
-                                                                    freq=None):
-    data_args = ", ".join("df['{}'].pct_change(periods).values".format(c)
-        for c in df.columns)
+@overload_method(DataFrameType, "pct_change")
+def overload_dataframe_pct_change(
+    df, periods=1, fill_method="pad", limit=None, freq=None
+):
+    data_args = ", ".join(
+        "df['{}'].pct_change(periods).values".format(c) for c in df.columns
+    )
     header = "def impl(df, periods=1, fill_method='pad', limit=None, freq=None):\n"
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, 'cumprod')
+@overload_method(DataFrameType, "cumprod")
 def overload_dataframe_cumprod(df, axis=None, skipna=True):
-    data_args = ", ".join("df['{}'].values.cumprod()".format(c)
-        for c in df.columns)
+    data_args = ", ".join("df['{}'].values.cumprod()".format(c) for c in df.columns)
     header = "def impl(df, axis=None, skipna=True):\n"
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, 'cumsum')
+@overload_method(DataFrameType, "cumsum")
 def overload_dataframe_cumsum(df, axis=None, skipna=True):
     # TODO: handle NA
-    data_args = ", ".join("df['{}'].values.cumsum()".format(c)
-        for c in df.columns)
+    data_args = ", ".join("df['{}'].values.cumsum()".format(c) for c in df.columns)
     header = "def impl(df, axis=None, skipna=True):\n"
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, 'describe')
-def overload_dataframe_describe(df, percentiles=None, include=None,
-                                                                 exclude=None):
-    data_args = ", ".join("df['{}'].describe().values".format(c)
-        for c in df.columns)
+@overload_method(DataFrameType, "describe")
+def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None):
+    data_args = ", ".join("df['{}'].describe().values".format(c) for c in df.columns)
     header = "def impl(df, percentiles=None, include=None, exclude=None):\n"
-    index = ("bodo.utils.conversion.convert_to_index(['count', 'mean', 'std', "
-        "'min', '25%', '50%', '75%', 'max'])")
+    index = (
+        "bodo.utils.conversion.convert_to_index(['count', 'mean', 'std', "
+        "'min', '25%', '50%', '75%', 'max'])"
+    )
     return _gen_init_df(header, df.columns, data_args, index)
 
 
-@overload_method(DataFrameType, 'take')
+@overload_method(DataFrameType, "take")
 def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
     data_args = ", ".join(
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[indices_t]".format(i)
-        for i in range(len(df.columns)))
+        for i in range(len(df.columns))
+    )
     header = "def impl(df, indices, axis=0, convert=None, is_copy=True):\n"
     header += "  indices_t = bodo.utils.conversion.coerce_to_ndarray(indices)\n"
-    index = ("bodo.utils.conversion.fix_none_index("
+    index = (
+        "bodo.utils.conversion.fix_none_index("
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))"
-        "[indices_t]")
+        "[indices_t]"
+    )
     return _gen_init_df(header, df.columns, data_args, index)
 
 
-@overload_method(DataFrameType, 'shift')
+@overload_method(DataFrameType, "shift")
 def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
     # TODO: handle fill_value, freq, int NA
     data_args = ", ".join(
-        "bodo.hiframes.rolling.shift(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}), periods, False)".format(i)
-        for i in range(len(df.columns)))
+        "bodo.hiframes.rolling.shift(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}), periods, False)".format(
+            i
+        )
+        for i in range(len(df.columns))
+    )
     header = "def impl(df, periods=1, freq=None, axis=0, fill_value=None):\n"
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, 'set_index')
-def overload_dataframe_set_index(df, keys, drop=True, append=False,
-                                        inplace=False, verify_integrity=False):
+@overload_method(DataFrameType, "set_index")
+def overload_dataframe_set_index(
+    df, keys, drop=True, append=False, inplace=False, verify_integrity=False
+):
     if not is_overload_false(inplace):
         raise ValueError("set_index() inplace argument not supported yet")
 
@@ -533,17 +581,20 @@ def overload_dataframe_set_index(df, keys, drop=True, append=False,
 
     data_args = ", ".join(
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(i)
-        for i in range(len(df.columns)) if i != col_ind)
+        for i in range(len(df.columns))
+        if i != col_ind
+    )
     header = "def impl(df, keys, drop=True, append=False, inplace=False, verify_integrity=False):\n"
     columns = tuple(c for c in df.columns if c != col_name)
-    index = ("bodo.utils.conversion.index_from_array("
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}), '{}')").format(
-            col_ind, col_name)
+    index = (
+        "bodo.utils.conversion.index_from_array("
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}), '{}')"
+    ).format(col_ind, col_name)
     return _gen_init_df(header, columns, data_args, index)
 
 
-@overload_method(DataFrameType, 'duplicated')
-def overload_dataframe_duplicated(df, subset=None, keep='first'):
+@overload_method(DataFrameType, "duplicated")
+def overload_dataframe_duplicated(df, subset=None, keep="first"):
     # TODO: support subset and first
     if not is_overload_none(subset):
         raise ValueError("duplicated() subset argument not supported yet")
@@ -552,22 +603,24 @@ def overload_dataframe_duplicated(df, subset=None, keep='first'):
 
     func_text = "def impl(df, subset=None, keep='first'):\n"
     for i in range(n_cols):
-        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(i)
+        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
+            i
+        )
     index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))"
     func_text += "  duplicated, index_arr = bodo.libs.array_kernels.duplicated(({},), {})\n".format(
-        ", ".join("data_{}".format(i) for i in range(n_cols)), index)
+        ", ".join("data_{}".format(i) for i in range(n_cols)), index
+    )
     func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
     func_text += "  return bodo.hiframes.api.init_series(duplicated, index)\n"
     # print(func_text)
     loc_vars = {}
-    exec(func_text, {'bodo': bodo}, loc_vars)
-    impl = loc_vars['impl']
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    impl = loc_vars["impl"]
     return impl
 
 
-@overload_method(DataFrameType, 'drop_duplicates')
-def overload_dataframe_drop_duplicates(df, subset=None, keep='first',
-                                       inplace=False):
+@overload_method(DataFrameType, "drop_duplicates")
+def overload_dataframe_drop_duplicates(df, subset=None, keep="first", inplace=False):
     # TODO: support inplace, subset and first
     if not is_overload_none(subset):
         raise ValueError("drop_duplicates() subset argument not supported yet")
@@ -583,12 +636,15 @@ def overload_dataframe_drop_duplicates(df, subset=None, keep='first',
 
     func_text = "def impl(df, subset=None, keep='first', inplace=False):\n"
     for i in range(n_cols):
-        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(i)
+        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
+            i
+        )
     index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))"
     func_text += "  ({0},), index_arr = bodo.libs.array_kernels.drop_duplicates(({0},), {1})\n".format(
-        data_args, index)
+        data_args, index
+    )
     func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
-    return _gen_init_df(func_text, df.columns, data_args, 'index')
+    return _gen_init_df(func_text, df.columns, data_args, "index")
 
 
 def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
@@ -601,17 +657,17 @@ def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
     # using add_consts_to_type with list to avoid const tuple problems
     # TODO: fix type inference for const str
     col_seq = ", ".join("'{}'".format(c) for c in columns)
-    col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
-        col_seq, col_seq)
+    col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_seq, col_seq)
 
     func_text = "{}  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
-        header, data_args, index, col_var)
+        header, data_args, index, col_var
+    )
     # print(func_text)
     loc_vars = {}
-    _global = {'bodo': bodo, 'np': np}
+    _global = {"bodo": bodo, "np": np}
     _global.update(extra_globals)
     exec(func_text, _global, loc_vars)
-    impl = loc_vars['impl']
+    impl = loc_vars["impl"]
     return impl
 
 
@@ -631,29 +687,41 @@ def create_binary_op_overload(op):
             if isinstance(right, DataFrameType):
                 if left != right:
                     raise TypeError(
-                        "Inconsistent dataframe schemas in binary operator {} ({} and {})".format(op, left, right))
+                        "Inconsistent dataframe schemas in binary operator {} ({} and {})".format(
+                            op, left, right
+                        )
+                    )
 
                 data_args = ", ".join(
-                    ("bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0}) {1}"
-                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0})").format(i, op_str)
-                    for i in range(len(left.columns)))
+                    (
+                        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0}) {1}"
+                        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0})"
+                    ).format(i, op_str)
+                    for i in range(len(left.columns))
+                )
                 header = "def impl(left, right):\n"
                 index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(left)"
                 return _gen_init_df(header, left.columns, data_args, index)
 
             # scalar case, TODO: check
             data_args = ", ".join(
-                ("bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0}) {1}"
-                "right").format(i, op_str)
-                for i in range(len(left.columns)))
+                (
+                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0}) {1}"
+                    "right"
+                ).format(i, op_str)
+                for i in range(len(left.columns))
+            )
             header = "def impl(left, right):\n"
             index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(left)"
             return _gen_init_df(header, left.columns, data_args, index)
 
         if isinstance(right, DataFrameType):
             data_args = ", ".join(
-                "left {1} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0})".format(i, op_str)
-                for i in range(len(right.columns)))
+                "left {1} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0})".format(
+                    i, op_str
+                )
+                for i in range(len(right.columns))
+            )
             header = "def impl(left, right):\n"
             index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(right)"
             return _gen_init_df(header, right.columns, data_args, index)
@@ -681,27 +749,36 @@ def create_inplace_binary_op_overload(op):
             if isinstance(right, DataFrameType):
                 if left != right:
                     raise TypeError(
-                        "Inconsistent dataframe schemas in binary operator {} ({} and {})".format(op, left, right))
+                        "Inconsistent dataframe schemas in binary operator {} ({} and {})".format(
+                            op, left, right
+                        )
+                    )
 
                 func_text = "def impl(left, right):\n"
                 for i in range(len(left.columns)):
-                    func_text += "  df_arr{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0})\n".format(i)
-                    func_text += "  df_arr{0} {1} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0})\n".format(i, op_str)
+                    func_text += "  df_arr{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0})\n".format(
+                        i
+                    )
+                    func_text += "  df_arr{0} {1} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0})\n".format(
+                        i, op_str
+                    )
                 # print(func_text)
                 data_args = ", ".join(
-                    ("df_arr{}").format(i)
-                    for i in range(len(left.columns)))
+                    ("df_arr{}").format(i) for i in range(len(left.columns))
+                )
                 index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(left)"
                 return _gen_init_df(func_text, left.columns, data_args, index)
 
             # scalar case
             func_text = "def impl(left, right):\n"
             for i in range(len(left.columns)):
-                func_text += "  df_arr{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0})\n".format(i)
+                func_text += "  df_arr{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0})\n".format(
+                    i
+                )
                 func_text += "  df_arr{0} {1} right\n".format(i, op_str)
             data_args = ", ".join(
-                ("df_arr{}").format(i)
-                for i in range(len(left.columns)))
+                ("df_arr{}").format(i) for i in range(len(left.columns))
+            )
             index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(left)"
             return _gen_init_df(func_text, left.columns, data_args, index)
 
@@ -726,8 +803,11 @@ def create_unary_op_overload(op):
         if isinstance(df, DataFrameType):
             op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
             data_args = ", ".join(
-                "{1} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})".format(i, op_str)
-                for i in range(len(df.columns)))
+                "{1} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})".format(
+                    i, op_str
+                )
+                for i in range(len(df.columns))
+            )
             header = "def impl(df):\n"
             return _gen_init_df(header, df.columns, data_args)
 
@@ -752,8 +832,9 @@ _install_unary_ops()
 @overload(pd.isnull)
 def overload_isna(obj):
     # DataFrame, Series, Index
-    if (isinstance(obj, (DataFrameType, SeriesType))
-            or bodo.hiframes.pd_index_ext.is_pd_index_type(obj)):
+    if isinstance(
+        obj, (DataFrameType, SeriesType)
+    ) or bodo.hiframes.pd_index_ext.is_pd_index_type(obj):
         return lambda obj: obj.isna()
 
     # arrays
@@ -763,6 +844,7 @@ def overload_isna(obj):
     # array of strings
     # TODO: other string array data structures
     if obj == bodo.string_array_type:
+
         def impl(obj):
             numba.parfor.init_prange()
             n = len(obj)
@@ -770,6 +852,7 @@ def overload_isna(obj):
             for i in numba.parfor.internal_prange(n):
                 out_arr[i] = bodo.hiframes.api.isna(obj, i)
             return out_arr
+
         return impl
 
     # array-like: list, tuple
@@ -797,10 +880,11 @@ def overload_notna(obj):
     # test_dataframe.py::test_pd_notna[na_test_obj7] with 1D_Var input
     if isinstance(obj, DataFrameType):
         return lambda obj: obj.notna()
-    if (isinstance(obj, (SeriesType, types.Array, types.List,
-                types.UniTuple))
-            or bodo.hiframes.pd_index_ext.is_pd_index_type(obj)
-            or obj == bodo.string_array_type):
+    if (
+        isinstance(obj, (SeriesType, types.Array, types.List, types.UniTuple))
+        or bodo.hiframes.pd_index_ext.is_pd_index_type(obj)
+        or obj == bodo.string_array_type
+    ):
         return lambda obj: ~pd.isna(obj)
 
     # scalars

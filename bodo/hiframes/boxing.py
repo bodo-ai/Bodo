@@ -6,8 +6,15 @@ import pandas as pd
 import numpy as np
 import datetime
 import numba
-from numba.extending import (typeof_impl, unbox, register_model, models,
-    NativeValue, box, intrinsic)
+from numba.extending import (
+    typeof_impl,
+    unbox,
+    register_model,
+    models,
+    NativeValue,
+    box,
+    intrinsic,
+)
 from numba import numpy_support, types, cgutils
 from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate, CallableTemplate
@@ -16,25 +23,37 @@ from numba.targets.boxing import _NumbaTypeHelper
 from numba.targets import listobj
 
 import bodo
-from bodo.hiframes.pd_dataframe_ext import (DataFrameType, construct_dataframe,
-    DataFramePayloadType)
-from bodo.hiframes.pd_timestamp_ext import (datetime_date_type,
-    unbox_datetime_date_array, box_datetime_date_array)
+from bodo.hiframes.pd_dataframe_ext import (
+    DataFrameType,
+    construct_dataframe,
+    DataFramePayloadType,
+)
+from bodo.hiframes.pd_timestamp_ext import (
+    datetime_date_type,
+    unbox_datetime_date_array,
+    box_datetime_date_array,
+)
 from bodo.libs.str_ext import string_type, list_string_array_type
 from bodo.libs.int_arr_ext import typeof_pd_int_dtype
-from bodo.hiframes.pd_categorical_ext import (PDCategoricalDtype,
-    box_categorical_array, unbox_categorical_array)
-from bodo.hiframes.pd_series_ext import (SeriesType, _get_series_array_type)
-from bodo.hiframes.split_impl import (string_array_split_view_type,
-    box_str_arr_split_view)
+from bodo.hiframes.pd_categorical_ext import (
+    PDCategoricalDtype,
+    box_categorical_array,
+    unbox_categorical_array,
+)
+from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
+from bodo.hiframes.split_impl import (
+    string_array_split_view_type,
+    box_str_arr_split_view,
+)
 
 from bodo.libs import hstr_ext
 import llvmlite.binding as ll
 from llvmlite import ir as lir
 import llvmlite.llvmpy.core as lc
 from llvmlite.llvmpy.core import Type as LLType
-ll.add_symbol('array_size', hstr_ext.array_size)
-ll.add_symbol('array_getptr1', hstr_ext.array_getptr1)
+
+ll.add_symbol("array_size", hstr_ext.array_size)
+ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
 
 
 @typeof_impl.register(pd.DataFrame)
@@ -53,22 +72,20 @@ def typeof_pd_series(val, c):
     return SeriesType(
         _infer_series_dtype(val),
         index=numba.typeof(val.index),
-        name_typ=numba.typeof(val.name))
+        name_typ=numba.typeof(val.name),
+    )
 
 
 @typeof_impl.register(pd.Index)
 def typeof_pd_index(val, c):
-    if (val.inferred_type == 'string'
-            or pd._libs.lib.infer_dtype(val, True) == 'string'):
+    if val.inferred_type == "string" or pd._libs.lib.infer_dtype(val, True) == "string":
         # Index.inferred_type doesn't skip NAs so we call infer_dtype with
         # skipna=True
-        return bodo.hiframes.pd_index_ext.StringIndexType(
-            numba.typeof(val.name))
+        return bodo.hiframes.pd_index_ext.StringIndexType(numba.typeof(val.name))
 
     # XXX: assume string data type for empty Index with object dtype
     if val.equals(pd.Index([])):
-        return bodo.hiframes.pd_index_ext.StringIndexType(
-            numba.typeof(val.name))
+        return bodo.hiframes.pd_index_ext.StringIndexType(numba.typeof(val.name))
 
     # catch-all for non-supported Index types
     # RangeIndex is directly supported (TODO: make sure this is not called)
@@ -81,38 +98,41 @@ def unbox_dataframe(typ, val, c):
     columns will be extracted later if necessary.
     """
     n_cols = len(typ.columns)
-    column_strs = [numba.unicode.make_string_from_constant(
-                c.context, c.builder, string_type, a) for a in typ.columns]
+    column_strs = [
+        numba.unicode.make_string_from_constant(c.context, c.builder, string_type, a)
+        for a in typ.columns
+    ]
 
     column_tup = c.context.make_tuple(
-        c.builder, types.UniTuple(string_type, n_cols), column_strs)
+        c.builder, types.UniTuple(string_type, n_cols), column_strs
+    )
     zero = c.context.get_constant(types.int8, 0)
     unboxed_tup = c.context.make_tuple(
-        c.builder, types.UniTuple(types.int8, n_cols+1), [zero]*(n_cols+1))
+        c.builder, types.UniTuple(types.int8, n_cols + 1), [zero] * (n_cols + 1)
+    )
 
     # TODO: support unboxing index
     if typ.index == types.none:
         index_val = c.context.get_constant(types.none, None)
     elif isinstance(typ.index, bodo.hiframes.pd_index_ext.RangeIndexType):
         # TODO: more Index classes
-        ind_obj = c.pyapi.object_getattr_string(val, 'index')
+        ind_obj = c.pyapi.object_getattr_string(val, "index")
         index_val = c.pyapi.to_native_value(typ.index, ind_obj).value
         c.pyapi.decref(ind_obj)
     else:
         # treating numerical index like Numpy arrays for now
         # TODO: proper index types
-        ind_obj = c.pyapi.object_getattr_string(val, 'index')
+        ind_obj = c.pyapi.object_getattr_string(val, "index")
         index_val = c.pyapi.to_native_value(typ.index, ind_obj).value
         c.pyapi.decref(ind_obj)
 
     # TODO: does this work for array types?
     data_nulls = [c.context.get_constant_null(t) for t in typ.data]
-    data_tup = c.context.make_tuple(
-        c.builder, types.Tuple(typ.data), data_nulls)
+    data_tup = c.context.make_tuple(c.builder, types.Tuple(typ.data), data_nulls)
 
     dataframe_val = construct_dataframe(
-        c.context, c.builder, typ, data_tup, index_val, column_tup,
-        unboxed_tup, val)
+        c.context, c.builder, typ, data_tup, index_val, column_tup, unboxed_tup, val
+    )
 
     # increase refcount of stored values
     if c.context.enable_nrt:
@@ -128,13 +148,14 @@ def get_hiframes_dtypes(df):
     """
     col_names = df.columns.tolist()
     # TODO: remove pd int dtype hack
-    hi_typs = [_get_series_array_type(_infer_series_dtype(df[cname]))
-                for cname in col_names]
+    hi_typs = [
+        _get_series_array_type(_infer_series_dtype(df[cname])) for cname in col_names
+    ]
     return tuple(hi_typs)
 
 
 def _infer_series_dtype(S):
-    if S.dtype == np.dtype('O'):
+    if S.dtype == np.dtype("O"):
         # XXX: assume empty series/column is string since it's the most common
         # TODO: checks for distributed case with list/datetime.date/...
         # e.g. one rank's data is empty but other ranks have other types
@@ -162,7 +183,10 @@ def _infer_series_dtype(S):
             return datetime_date_type
         else:
             raise ValueError(
-                "object dtype infer: data type for column {} not supported".format(S.name))
+                "object dtype infer: data type for column {} not supported".format(
+                    S.name
+                )
+            )
 
     # nullable int dtype
     if isinstance(S.dtype, pd.core.arrays.integer._IntegerDtype):
@@ -174,24 +198,23 @@ def _infer_series_dtype(S):
     try:
         return numpy_support.from_dtype(S.dtype)
     except NotImplementedError:
-        raise ValueError("np dtype infer: data type for column {} not supported".format(S.name))
+        raise ValueError(
+            "np dtype infer: data type for column {} not supported".format(S.name)
+        )
 
 
 def _infer_series_list_dtype(S):
     for i in range(len(S)):
         first_val = S.iloc[i]
         if not isinstance(first_val, list):
-            raise ValueError(
-                "data type for column {} not supported".format(S.name))
+            raise ValueError("data type for column {} not supported".format(S.name))
         if len(first_val) > 0:
             # TODO: support more types
             if isinstance(first_val[0], str):
                 return types.List(string_type)
             else:
-                raise ValueError(
-                    "data type for column {} not supported".format(S.name))
-    raise ValueError(
-            "data type for column {} not supported".format(S.name))
+                raise ValueError("data type for column {} not supported".format(S.name))
+    raise ValueError("data type for column {} not supported".format(S.name))
 
 
 @box(DataFrameType)
@@ -205,16 +228,16 @@ def box_dataframe(typ, val, c):
     dtypes = [a.dtype for a in arr_typs]  # TODO: check Categorical
 
     dataframe_payload = bodo.hiframes.pd_dataframe_ext.get_dataframe_payload(
-        c.context, c.builder, typ, val)
-    dataframe = cgutils.create_struct_proxy(typ)(
-        context, builder, value=val)
+        c.context, c.builder, typ, val
+    )
+    dataframe = cgutils.create_struct_proxy(typ)(context, builder, value=val)
 
     col_arrs = [builder.extract_value(dataframe_payload.data, i) for i in range(n_cols)]
     # df unboxed from Python
     has_parent = cgutils.is_not_null(builder, dataframe.parent)
 
     pyapi = c.pyapi
-    #gil_state = pyapi.gil_ensure()  # acquire GIL
+    # gil_state = pyapi.gil_ensure()  # acquire GIL
 
     mod_name = context.insert_const_string(c.builder.module, "pandas")
     class_obj = pyapi.import_module_noblock(mod_name)
@@ -227,7 +250,9 @@ def box_dataframe(typ, val, c):
         cname_obj = pyapi.string_from_string(name_str)
         # if column not unboxed, just used the boxed version from parent
         unboxed_val = builder.extract_value(dataframe_payload.unboxed, i)
-        not_unboxed = builder.icmp(lc.ICMP_EQ, unboxed_val, context.get_constant(types.int8, 0))
+        not_unboxed = builder.icmp(
+            lc.ICMP_EQ, unboxed_val, context.get_constant(types.int8, 0)
+        )
         use_parent = builder.and_(has_parent, not_unboxed)
 
         with builder.if_else(use_parent) as (then, orelse):
@@ -235,7 +260,7 @@ def box_dataframe(typ, val, c):
                 ser_obj = pyapi.object_getitem(dataframe.parent, cname_obj)
                 # need to get underlying array since Series has index but
                 # df_obj doesn't have index yet, leading to index mismatches
-                arr_obj = pyapi.object_getattr_string(ser_obj, 'values')
+                arr_obj = pyapi.object_getattr_string(ser_obj, "values")
                 pyapi.decref(ser_obj)
                 pyapi.object_setitem(df_obj, cname_obj, arr_obj)
 
@@ -249,8 +274,9 @@ def box_dataframe(typ, val, c):
     # set df.index if necessary
     if typ.index != types.none:
         arr_obj = c.pyapi.from_native_value(
-            typ.index, dataframe_payload.index, c.env_manager)
-        pyapi.object_setattr_string(df_obj, 'index', arr_obj)
+            typ.index, dataframe_payload.index, c.env_manager
+        )
+        pyapi.object_setattr_string(df_obj, "index", arr_obj)
 
     pyapi.decref(class_obj)
     return df_obj
@@ -258,7 +284,6 @@ def box_dataframe(typ, val, c):
 
 @intrinsic
 def unbox_dataframe_column(typingctx, df, i=None):
-
     def codegen(context, builder, sig, args):
         pyapi = context.get_python_api(builder)
         c = numba.pythonapi._UnboxContext(context, builder, pyapi)
@@ -271,25 +296,28 @@ def unbox_dataframe_column(typingctx, df, i=None):
         col_name_obj = pyapi.string_from_string(col_name_str)
         # TODO: refcounts?
 
-        dataframe = cgutils.create_struct_proxy(
-            sig.args[0])(context, builder, value=args[0])
+        dataframe = cgutils.create_struct_proxy(sig.args[0])(
+            context, builder, value=args[0]
+        )
         series_obj = c.pyapi.object_getitem(dataframe.parent, col_name_obj)
         arr_obj = c.pyapi.object_getattr_string(series_obj, "values")
 
         # TODO: support column of tuples?
-        native_val = _unbox_series_data(
-            data_typ.dtype, data_typ, arr_obj, c)
+        native_val = _unbox_series_data(data_typ.dtype, data_typ, arr_obj, c)
 
         c.pyapi.decref(series_obj)
         c.pyapi.decref(arr_obj)
 
         # assign array and set unboxed flag
         dataframe_payload = bodo.hiframes.pd_dataframe_ext.get_dataframe_payload(
-            c.context, c.builder, df_typ, args[0])
+            c.context, c.builder, df_typ, args[0]
+        )
         dataframe_payload.data = builder.insert_value(
-            dataframe_payload.data, native_val.value, col_ind)
+            dataframe_payload.data, native_val.value, col_ind
+        )
         dataframe_payload.unboxed = builder.insert_value(
-            dataframe_payload.unboxed, context.get_constant(types.int8, 1), col_ind)
+            dataframe_payload.unboxed, context.get_constant(types.int8, 1), col_ind
+        )
 
         # store payload
         payload_type = DataFramePayloadType(df_typ)
@@ -307,15 +335,14 @@ def unbox_series(typ, val, c):
     data_val = _unbox_series_data(typ.dtype, typ.data, arr_obj, c).value
 
     index_obj = c.pyapi.object_getattr_string(val, "index")
-    index_val = c.pyapi.to_native_value(
-        typ.index, index_obj).value
+    index_val = c.pyapi.to_native_value(typ.index, index_obj).value
 
     name_obj = c.pyapi.object_getattr_string(val, "name")
-    name_val = c.pyapi.to_native_value(
-        typ.name_typ, name_obj).value
+    name_val = c.pyapi.to_native_value(typ.name_typ, name_obj).value
 
     series_val = bodo.hiframes.api.construct_series(
-        c.context, c.builder, typ, data_val, index_val, name_val)
+        c.context, c.builder, typ, data_val, index_val, name_val
+    )
     # TODO: set parent pointer
     c.pyapi.decref(arr_obj)
     return NativeValue(series_val)
@@ -344,19 +371,17 @@ def box_series(typ, val, c):
 
     # TODO: handle parent
     series_payload = bodo.hiframes.api.get_series_payload(
-        c.context, c.builder, typ, val)
+        c.context, c.builder, typ, val
+    )
 
     arr = _box_series_data(dtype, typ.data, series_payload.data, c)
 
-    index = c.pyapi.from_native_value(
-            typ.index, series_payload.index, c.env_manager)
+    index = c.pyapi.from_native_value(typ.index, series_payload.index, c.env_manager)
 
-    name = c.pyapi.from_native_value(
-            typ.name_typ, series_payload.name, c.env_manager)
+    name = c.pyapi.from_native_value(typ.name_typ, series_payload.name, c.env_manager)
 
     dtype = c.pyapi.make_none()  # TODO: dtype
-    res = c.pyapi.call_method(
-        pd_class_obj, "Series", (arr, index, dtype, name))
+    res = c.pyapi.call_method(pd_class_obj, "Series", (arr, index, dtype, name))
 
     c.pyapi.decref(pd_class_obj)
     return res
@@ -365,8 +390,7 @@ def box_series(typ, val, c):
 def _box_series_data(dtype, data_typ, val, c):
 
     if isinstance(dtype, types.BaseTuple):
-        np_dtype = np.dtype(
-            ','.join(str(t) for t in dtype.types), align=True)
+        np_dtype = np.dtype(",".join(str(t) for t in dtype.types), align=True)
         dtype = numba.numpy_support.from_dtype(np_dtype)
 
     # TODO: make proper array for datetime.date()
@@ -374,7 +398,6 @@ def _box_series_data(dtype, data_typ, val, c):
         arr = box_datetime_date_array(data_typ, val, c)
     else:
         arr = c.pyapi.from_native_value(data_typ, val, c.env_manager)
-
 
     if isinstance(dtype, types.Record):
         o_str = c.context.insert_const_string(c.builder.module, "O")
@@ -399,8 +422,7 @@ def _unbox_array_list_str(obj, c):
 
     _python_array_obj_to_native_list(typ, obj, c, size, listptr, errorptr)
 
-    return NativeValue(c.builder.load(listptr),
-                       is_error=c.builder.load(errorptr))
+    return NativeValue(c.builder.load(listptr), is_error=c.builder.load(errorptr))
 
 
 def _python_array_obj_to_native_list(typ, obj, c, size, listptr, errorptr):
@@ -409,25 +431,24 @@ def _python_array_obj_to_native_list(typ, obj, c, size, listptr, errorptr):
     copied from _python_list_to_native but list_getitem is converted to array
     getitem.
     """
+
     def check_element_type(nth, itemobj, expected_typobj):
         typobj = nth.typeof(itemobj)
         # Check if *typobj* is NULL
-        with c.builder.if_then(
-                cgutils.is_null(c.builder, typobj),
-                likely=False,
-                ):
+        with c.builder.if_then(cgutils.is_null(c.builder, typobj), likely=False):
             c.builder.store(cgutils.true_bit, errorptr)
             loop.do_break()
         # Mandate that objects all have the same exact type
-        type_mismatch = c.builder.icmp_signed('!=', typobj, expected_typobj)
+        type_mismatch = c.builder.icmp_signed("!=", typobj, expected_typobj)
 
         with c.builder.if_then(type_mismatch, likely=False):
             c.builder.store(cgutils.true_bit, errorptr)
             c.pyapi.err_format(
                 "PyExc_TypeError",
                 "can't unbox heterogeneous list: %S != %S",
-                expected_typobj, typobj,
-                )
+                expected_typobj,
+                typobj,
+            )
             c.pyapi.decref(typobj)
             loop.do_break()
         c.pyapi.decref(typobj)
@@ -435,15 +456,16 @@ def _python_array_obj_to_native_list(typ, obj, c, size, listptr, errorptr):
     # Allocate a new native list
     ok, list = listobj.ListInstance.allocate_ex(c.context, c.builder, typ, size)
     # Array getitem call
-    arr_get_fnty = LLType.function(LLType.pointer(c.pyapi.pyobj), [c.pyapi.pyobj, c.pyapi.py_ssize_t])
+    arr_get_fnty = LLType.function(
+        LLType.pointer(c.pyapi.pyobj), [c.pyapi.pyobj, c.pyapi.py_ssize_t]
+    )
     arr_get_fn = c.pyapi._get_function(arr_get_fnty, name="array_getptr1")
 
     with c.builder.if_else(ok, likely=True) as (if_ok, if_not_ok):
         with if_ok:
             list.size = size
             zero = lir.Constant(size.type, 0)
-            with c.builder.if_then(c.builder.icmp_signed('>', size, zero),
-                                   likely=True):
+            with c.builder.if_then(c.builder.icmp_signed(">", size, zero), likely=True):
                 # Traverse Python list and unbox objects into native list
                 with _NumbaTypeHelper(c) as nth:
                     # Note: *expected_typobj* can't be NULL
@@ -455,7 +477,7 @@ def _python_array_obj_to_native_list(typ, obj, c, size, listptr, errorptr):
                         itemobj = c.builder.call(arr_get_fn, [obj, loop.index])
                         # extra load since we have ptr to object
                         itemobj = c.builder.load(itemobj)
-                        #c.pyapi.print_object(itemobj)
+                        # c.pyapi.print_object(itemobj)
                         # check_element_type(nth, itemobj, expected_typobj)
                         # XXX we don't call native cleanup for each
                         # list element, since that would require keeping
@@ -471,8 +493,9 @@ def _python_array_obj_to_native_list(typ, obj, c, size, listptr, errorptr):
                 list.parent = obj
             # Stuff meminfo pointer into the Python object for
             # later reuse.
-            with c.builder.if_then(c.builder.not_(c.builder.load(errorptr)),
-                                                  likely=False):
+            with c.builder.if_then(
+                c.builder.not_(c.builder.load(errorptr)), likely=False
+            ):
                 c.pyapi.object_set_private_data(obj, list.meminfo)
             list.set_dirty(False)
             c.builder.store(list.value, listptr)

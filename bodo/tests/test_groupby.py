@@ -5,27 +5,44 @@ import numpy as np
 import pyarrow.parquet as pq
 import numba
 import bodo
-from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
-                            count_parfor_OneDs, count_array_OneDs, dist_IR_contains,
-                            get_start_end, check_func)
+from bodo.tests.utils import (
+    count_array_REPs,
+    count_parfor_REPs,
+    count_parfor_OneDs,
+    count_array_OneDs,
+    dist_IR_contains,
+    get_start_end,
+    check_func,
+)
 import pytest
 
 
-_pivot_df1 = pd.DataFrame({"A": ["foo", "foo", "foo", "foo", "foo",
-                    "bar", "bar", "bar", "bar"],
-            "B": ["one", "one", "one", "two", "two",
-                    "one", "one", "two", "two"],
-            "C": ["small", "large", "large", "small",
-                    "small", "large", "small", "small",
-                    "large"],
-            "D": [1, 2, 2, 6, 3, 4, 5, 6, 9]})
+_pivot_df1 = pd.DataFrame(
+    {
+        "A": ["foo", "foo", "foo", "foo", "foo", "bar", "bar", "bar", "bar"],
+        "B": ["one", "one", "one", "two", "two", "one", "one", "two", "two"],
+        "C": [
+            "small",
+            "large",
+            "large",
+            "small",
+            "small",
+            "large",
+            "small",
+            "small",
+            "large",
+        ],
+        "D": [1, 2, 2, 6, 3, 4, 5, 6, 9],
+    }
+)
 
 
 def test_agg_parallel_str(datapath):
     fname = datapath("groupby3.pq")
+
     def impl():
         df = pq.read_table(fname).to_pandas()
-        A = df.groupby('A')['B'].agg(lambda x: x.max()-x.min())
+        A = df.groupby("A")["B"].agg(lambda x: x.max() - x.min())
         return A.sum()
 
     bodo_func = bodo.jit(impl)
@@ -36,33 +53,33 @@ def test_agg_parallel_str(datapath):
 
 def test_pivot_parallel(datapath):
     fname = datapath("pivot2.pq")
+
     def impl():
         df = pd.read_parquet(fname)
-        pt = df.pivot_table(index='A', columns='C', values='D', aggfunc='sum')
+        pt = df.pivot_table(index="A", columns="C", values="D", aggfunc="sum")
         res = pt.small.values.sum()
         return res
 
-    bodo_func = bodo.jit(
-        pivots={'pt': ['small', 'large']})(impl)
+    bodo_func = bodo.jit(pivots={"pt": ["small", "large"]})(impl)
     assert bodo_func() == impl()
 
 
 def test_crosstab_parallel1(datapath):
     fname = datapath("pivot2.pq")
+
     def impl():
         df = pd.read_parquet(fname)
         pt = pd.crosstab(df.A, df.C)
         res = pt.small.values.sum()
         return res
 
-    bodo_func = bodo.jit(
-        pivots={'pt': ['small', 'large']})(impl)
+    bodo_func = bodo.jit(pivots={"pt": ["small", "large"]})(impl)
     assert bodo_func() == impl()
 
 
-@pytest.fixture(params = [
-pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7]})
-])
+@pytest.fixture(
+    params=[pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [-8, 2, 3, 1, 5, 6, 7]})]
+)
 def test_df(request):
     return request.param
 
@@ -70,42 +87,47 @@ def test_df(request):
 def test_groupby_simple_df_index(test_df):
     # check returning df with index
     def impl(df):
-        return df.groupby('A').sum()
+        return df.groupby("A").sum()
 
     bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(test_df).sort_index(), impl(test_df))
+    pd.testing.assert_frame_equal(bodo_func(test_df).sort_index(), impl(test_df))
 
 
 def test_groupby_simple_series_index(test_df):
     # check returning series with index
     def impl(df):
-        return df.groupby('A').sum()
+        return df.groupby("A").sum()
 
     bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(test_df).sort_index(), impl(test_df))
+    pd.testing.assert_frame_equal(bodo_func(test_df).sort_index(), impl(test_df))
 
 
 def test_agg_multi_udf1(test_df):
     def impl(df):
-        def id1(x): return (x<=2).sum()
-        def id2(x): return (x>2).sum()
-        return df.groupby('A')['B'].agg((id1, id2))
+        def id1(x):
+            return (x <= 2).sum()
+
+        def id2(x):
+            return (x > 2).sum()
+
+        return df.groupby("A")["B"].agg((id1, id2))
 
     bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(test_df).sort_index(), impl(test_df))
+    pd.testing.assert_frame_equal(bodo_func(test_df).sort_index(), impl(test_df))
 
 
 def test_agg_multi_udf_parallel(test_df):
     def impl(df):
-        def id1(x): return (x<=2).sum()
-        def id2(x): return (x>2).sum()
-        df2 = df.groupby('A')['B'].agg((id1, id2))
+        def id1(x):
+            return (x <= 2).sum()
+
+        def id2(x):
+            return (x > 2).sum()
+
+        df2 = df.groupby("A")["B"].agg((id1, id2))
         return df2.id1.sum() + df2.id2.sum()
 
-    bodo_func = bodo.jit(distributed={'df'})(impl)
+    bodo_func = bodo.jit(distributed={"df"})(impl)
     start, end = get_start_end(len(test_df))
     assert bodo_func(test_df[start:end]) == impl(test_df)
     assert count_array_REPs() == 0
@@ -114,7 +136,7 @@ def test_agg_multi_udf_parallel(test_df):
 
 def test_groupby_cumsum(test_df):
     def impl(df):
-        df2 = df.groupby('A')['B'].cumsum()
+        df2 = df.groupby("A")["B"].cumsum()
         return df2
 
     check_func(impl, (test_df,))
@@ -122,194 +144,228 @@ def test_groupby_cumsum(test_df):
 
 def test_groupby_cumsum_multi1():
     def impl(df):
-        df2 = df.groupby(['A', 'B'])['C'].cumsum()
+        df2 = df.groupby(["A", "B"])["C"].cumsum()
         return df2
 
-    df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7],
-                       'C': [3,5,6,5,4,4,3]})
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [-8, 2, 3, 1, 5, 6, 7],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        }
+    )
     check_func(impl, (df,))
 
 
 def test_groupby_cumsum_multi2():
     def impl(df):
-        df2 = df.groupby(['A', 'B'])['C', 'D'].cumsum()
+        df2 = df.groupby(["A", "B"])["C", "D"].cumsum()
         return df2
 
-    df = pd.DataFrame({'A': [2.0, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],
-                       'B': [1, 2, 3, 2, 1, 1, 1],
-                       'C': [3, 5, 6, 5, 4, 4, 3],
-                       'D': [3.1, 1.1, 6.0, np.nan, 4.0, np.nan, 3],})
+    df = pd.DataFrame(
+        {
+            "A": [2.0, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],
+            "B": [1, 2, 3, 2, 1, 1, 1],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+            "D": [3.1, 1.1, 6.0, np.nan, 4.0, np.nan, 3],
+        }
+    )
     check_func(impl, (df,))
-
 
 
 def test_groupby_cumsum_par():
     def impl(df):
-        df2 = df.groupby('A')['B'].cumsum()
+        df2 = df.groupby("A")["B"].cumsum()
         # bodo.parallel_print(df2)
         return df2
 
-    df = pd.DataFrame({'A': [0, 1, 3, 2, 1, 0, 4, 0, 2, 0],
-                       'B': [-8, 2, 3, 1, 5, 6, 7, 3, 1, 2]})
+    df = pd.DataFrame(
+        {"A": [0, 1, 3, 2, 1, 0, 4, 0, 2, 0], "B": [-8, 2, 3, 1, 5, 6, 7, 3, 1, 2]}
+    )
     check_func(impl, (df,), sort_output=True)
-    df = pd.DataFrame({'A': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-                       'B': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]})
+    df = pd.DataFrame(
+        {"A": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "B": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]}
+    )
     check_func(impl, (df,))
-
 
 
 def test_groupby_multi_str():
     def impl(df):
-        df2 = df.groupby(['A', 'B'], as_index=False)['C'].sum()
+        df2 = df.groupby(["A", "B"], as_index=False)["C"].sum()
         return df2
 
-    df = pd.DataFrame({'A': ['aa','b','b','b','aa','aa','b'],
-                       'B': ['ccc','a','a','aa','ccc','ggg','a'],
-                       'C': [3, 5, 6, 5, 4, 4, 3],})
+    df = pd.DataFrame(
+        {
+            "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
+            "B": ["ccc", "a", "a", "aa", "ccc", "ggg", "a"],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        }
+    )
     check_func(impl, (df,), sort_output=True)
 
 
 class TestGroupBy(unittest.TestCase):
     def test_agg_seq(self):
         def test_impl(df):
-            A = df.groupby('A')['B'].agg(lambda x: x.max()-x.min())
+            A = df.groupby("A")["B"].agg(lambda x: x.max() - x.min())
             return A.values
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7]})
+        df = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [-8, 2, 3, 1, 5, 6, 7]})
         # np.testing.assert_array_equal(bodo_func(df), test_impl(df))
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_agg_seq_sum(self):
         def test_impl(df):
-            A = df.groupby('A')['B'].sum()
+            A = df.groupby("A")["B"].sum()
             return A.values
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7]})
+        df = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [-8, 2, 3, 1, 5, 6, 7]})
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_agg_seq_count(self):
         def test_impl(df):
-            A = df.groupby('A')['B'].count()
+            A = df.groupby("A")["B"].count()
             return A.values
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7]})
+        df = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [-8, 2, 3, 1, 5, 6, 7]})
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_agg_seq_mean(self):
         def test_impl(df):
-            A = df.groupby('A')['B'].mean()
+            A = df.groupby("A")["B"].mean()
             return A.values
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7]})
+        df = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [-8, 2, 3, 1, 5, 6, 7]})
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_agg_seq_min(self):
         def test_impl(df):
-            A = df.groupby('A')['B'].min()
+            A = df.groupby("A")["B"].min()
             return A.values
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7]})
+        df = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [-8, 2, 3, 1, 5, 6, 7]})
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_agg_seq_min_date(self):
         def test_impl(df):
-            df2 = df.groupby('A', as_index=False).min()
+            df2 = df.groupby("A", as_index=False).min()
             return df2
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': pd.date_range('2019-1-3', '2019-1-9')})
+        df = pd.DataFrame(
+            {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
+        )
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_agg_seq_max(self):
         def test_impl(df):
-            A = df.groupby('A')['B'].max()
+            A = df.groupby("A")["B"].max()
             return A.values
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7]})
+        df = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [-8, 2, 3, 1, 5, 6, 7]})
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_agg_seq_all_col(self):
         def test_impl(df):
-            df2 = df.groupby('A').mean()
+            df2 = df.groupby("A").mean()
             return df2.B.values
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7]})
+        df = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [-8, 2, 3, 1, 5, 6, 7]})
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_agg_seq_as_index(self):
         def test_impl(df):
-            df2 = df.groupby('A', as_index=False).mean()
+            df2 = df.groupby("A", as_index=False).mean()
             return df2.A.values
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7]})
+        df = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [-8, 2, 3, 1, 5, 6, 7]})
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_agg_seq_prod(self):
         def test_impl(df):
-            A = df.groupby('A')['B'].prod()
+            A = df.groupby("A")["B"].prod()
             return A.values
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7]})
+        df = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [-8, 2, 3, 1, 5, 6, 7]})
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_agg_seq_var(self):
         def test_impl(df):
-            A = df.groupby('A')['B'].var()
+            A = df.groupby("A")["B"].var()
             return A.values
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7]})
+        df = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [-8, 2, 3, 1, 5, 6, 7]})
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_agg_seq_std(self):
         def test_impl(df):
-            A = df.groupby('A')['B'].std()
+            A = df.groupby("A")["B"].std()
             return A.values
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7]})
+        df = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [-8, 2, 3, 1, 5, 6, 7]})
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_agg_seq_multiselect(self):
         def test_impl(df):
-            df2 = df.groupby('A')['B', 'C'].sum()
+            df2 = df.groupby("A")["B", "C"].sum()
             return df2.C.values
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7],
-                           'C': [3,5,6,5,4,4,3]})
+        df = pd.DataFrame(
+            {
+                "A": [2, 1, 1, 1, 2, 2, 1],
+                "B": [-8, 2, 3, 1, 5, 6, 7],
+                "C": [3, 5, 6, 5, 4, 4, 3],
+            }
+        )
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_agg_multikey_seq(self):
         def test_impl(df):
-            A = df.groupby(['A', 'C'])['B'].sum()
+            A = df.groupby(["A", "C"])["B"].sum()
             return A.values
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7],
-                           'C': [3,5,6,5,4,4,3]})
+        df = pd.DataFrame(
+            {
+                "A": [2, 1, 1, 1, 2, 2, 1],
+                "B": [-8, 2, 3, 1, 5, 6, 7],
+                "C": [3, 5, 6, 5, 4, 4, 3],
+            }
+        )
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_agg_multikey_parallel(self):
         def test_impl(in_A, in_B, in_C):
-            df = pd.DataFrame({'A': in_A, 'B': in_B, 'C': in_C})
-            A = df.groupby(['A', 'C'])['B'].sum()
+            df = pd.DataFrame({"A": in_A, "B": in_B, "C": in_C})
+            A = df.groupby(["A", "C"])["B"].sum()
             return A.sum()
 
-        bodo_func = bodo.jit(locals={'in_A:input': 'distributed',
-            'in_B:input': 'distributed',
-            'in_C:input': 'distributed'})(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7],
-                           'C': [3,5,6,5,4,4,3]})
+        bodo_func = bodo.jit(
+            locals={
+                "in_A:input": "distributed",
+                "in_B:input": "distributed",
+                "in_C:input": "distributed",
+            }
+        )(test_impl)
+        df = pd.DataFrame(
+            {
+                "A": [2, 1, 1, 1, 2, 2, 1],
+                "B": [-8, 2, 3, 1, 5, 6, 7],
+                "C": [3, 5, 6, 5, 4, 4, 3],
+            }
+        )
         start, end = get_start_end(len(df))
         h_A = df.A.values[start:end]
         h_B = df.B.values[start:end]
@@ -323,8 +379,8 @@ class TestGroupBy(unittest.TestCase):
 
     def test_agg_parallel(self):
         def test_impl(n):
-            df = pd.DataFrame({'A': np.ones(n, np.int64), 'B': np.arange(n)})
-            A = df.groupby('A')['B'].agg(lambda x: x.max()-x.min())
+            df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+            A = df.groupby("A")["B"].agg(lambda x: x.max() - x.min())
             return A.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -335,8 +391,8 @@ class TestGroupBy(unittest.TestCase):
 
     def test_agg_parallel_sum(self):
         def test_impl(n):
-            df = pd.DataFrame({'A': np.ones(n, np.int64), 'B': np.arange(n)})
-            A = df.groupby('A')['B'].sum()
+            df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+            A = df.groupby("A")["B"].sum()
             return A.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -347,8 +403,8 @@ class TestGroupBy(unittest.TestCase):
 
     def test_agg_parallel_count(self):
         def test_impl(n):
-            df = pd.DataFrame({'A': np.ones(n, np.int64), 'B': np.arange(n)})
-            A = df.groupby('A')['B'].count()
+            df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+            A = df.groupby("A")["B"].count()
             return A.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -359,8 +415,8 @@ class TestGroupBy(unittest.TestCase):
 
     def test_agg_parallel_mean(self):
         def test_impl(n):
-            df = pd.DataFrame({'A': np.ones(n, np.int64), 'B': np.arange(n)})
-            A = df.groupby('A')['B'].mean()
+            df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+            A = df.groupby("A")["B"].mean()
             return A.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -371,8 +427,8 @@ class TestGroupBy(unittest.TestCase):
 
     def test_agg_parallel_min(self):
         def test_impl(n):
-            df = pd.DataFrame({'A': np.ones(n, np.int64), 'B': np.arange(n)})
-            A = df.groupby('A')['B'].min()
+            df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+            A = df.groupby("A")["B"].min()
             return A.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -383,8 +439,8 @@ class TestGroupBy(unittest.TestCase):
 
     def test_agg_parallel_max(self):
         def test_impl(n):
-            df = pd.DataFrame({'A': np.ones(n, np.int64), 'B': np.arange(n)})
-            A = df.groupby('A')['B'].max()
+            df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+            A = df.groupby("A")["B"].max()
             return A.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -395,8 +451,8 @@ class TestGroupBy(unittest.TestCase):
 
     def test_agg_parallel_var(self):
         def test_impl(n):
-            df = pd.DataFrame({'A': np.ones(n, np.int64), 'B': np.arange(n)})
-            A = df.groupby('A')['B'].var()
+            df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+            A = df.groupby("A")["B"].var()
             return A.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -407,8 +463,8 @@ class TestGroupBy(unittest.TestCase):
 
     def test_agg_parallel_std(self):
         def test_impl(n):
-            df = pd.DataFrame({'A': np.ones(n, np.int64), 'B': np.arange(n)})
-            A = df.groupby('A')['B'].std()
+            df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+            A = df.groupby("A")["B"].std()
             return A.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -419,8 +475,8 @@ class TestGroupBy(unittest.TestCase):
 
     def test_agg_parallel_all_col(self):
         def test_impl(n):
-            df = pd.DataFrame({'A': np.ones(n, np.int64), 'B': np.arange(n)})
-            df2 = df.groupby('A').max()
+            df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+            df2 = df.groupby("A").max()
             return df2.B.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -431,8 +487,8 @@ class TestGroupBy(unittest.TestCase):
 
     def test_agg_parallel_as_index(self):
         def test_impl(n):
-            df = pd.DataFrame({'A': np.ones(n, np.int64), 'B': np.arange(n)})
-            df2 = df.groupby('A', as_index=False).max()
+            df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+            df2 = df.groupby("A", as_index=False).max()
             return df2.A.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -444,11 +500,17 @@ class TestGroupBy(unittest.TestCase):
     def test_muti_hiframes_node_filter_agg(self):
         def test_impl(df, cond):
             df2 = df[cond]
-            c = df2.groupby('A')['B'].count()
+            c = df2.groupby("A")["B"].count()
             return df2.C, c
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': [2,1,1,1,2,2,1], 'B': [-8,2,3,1,5,6,7], 'C': [2,3,-1,1,2,3,-1]})
+        df = pd.DataFrame(
+            {
+                "A": [2, 1, 1, 1, 2, 2, 1],
+                "B": [-8, 2, 3, 1, 5, 6, 7],
+                "C": [2, 3, -1, 1, 2, 3, -1],
+            }
+        )
         cond = df.A > 1
         res = test_impl(df, cond)
         h_res = bodo_func(df, cond)
@@ -457,47 +519,51 @@ class TestGroupBy(unittest.TestCase):
 
     def test_agg_seq_str(self):
         def test_impl(df):
-            A = df.groupby('A')['B'].agg(lambda x: (x=='aa').sum())
+            A = df.groupby("A")["B"].agg(lambda x: (x == "aa").sum())
             return A.values
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': ['aa','b','b','b','aa','aa','b'],
-                           'B': ['ccc','a','bb','aa','dd','ggg','rr']})
+        df = pd.DataFrame(
+            {
+                "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
+                "B": ["ccc", "a", "bb", "aa", "dd", "ggg", "rr"],
+            }
+        )
         # np.testing.assert_array_equal(bodo_func(df), test_impl(df))
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_agg_seq_count_str(self):
         def test_impl(df):
-            A = df.groupby('A')['B'].count()
+            A = df.groupby("A")["B"].count()
             return A.values
 
         bodo_func = bodo.jit(test_impl)
-        df = pd.DataFrame({'A': ['aa','b','b','b','aa','aa','b'],
-                           'B': ['ccc','a','bb','aa','dd','ggg','rr']})
+        df = pd.DataFrame(
+            {
+                "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
+                "B": ["ccc", "a", "bb", "aa", "dd", "ggg", "rr"],
+            }
+        )
         # np.testing.assert_array_equal(bodo_func(df), test_impl(df))
         self.assertEqual(set(bodo_func(df)), set(test_impl(df)))
 
     def test_pivot(self):
         def test_impl(df):
-            pt = df.pivot_table(index='A', columns='C', values='D', aggfunc='sum')
+            pt = df.pivot_table(index="A", columns="C", values="D", aggfunc="sum")
             return (pt.small.values, pt.large.values)
 
-        bodo_func = bodo.jit(pivots={'pt': ['small', 'large']})(test_impl)
-        self.assertEqual(
-            set(bodo_func(_pivot_df1)[0]), set(test_impl(_pivot_df1)[0]))
-        self.assertEqual(
-            set(bodo_func(_pivot_df1)[1]), set(test_impl(_pivot_df1)[1]))
+        bodo_func = bodo.jit(pivots={"pt": ["small", "large"]})(test_impl)
+        self.assertEqual(set(bodo_func(_pivot_df1)[0]), set(test_impl(_pivot_df1)[0]))
+        self.assertEqual(set(bodo_func(_pivot_df1)[1]), set(test_impl(_pivot_df1)[1]))
 
     def test_crosstab1(self):
         def test_impl(df):
             pt = pd.crosstab(df.A, df.C)
             return (pt.small.values, pt.large.values)
 
-        bodo_func = bodo.jit(pivots={'pt': ['small', 'large']})(test_impl)
-        self.assertEqual(
-            set(bodo_func(_pivot_df1)[0]), set(test_impl(_pivot_df1)[0]))
-        self.assertEqual(
-            set(bodo_func(_pivot_df1)[1]), set(test_impl(_pivot_df1)[1]))
+        bodo_func = bodo.jit(pivots={"pt": ["small", "large"]})(test_impl)
+        self.assertEqual(set(bodo_func(_pivot_df1)[0]), set(test_impl(_pivot_df1)[0]))
+        self.assertEqual(set(bodo_func(_pivot_df1)[1]), set(test_impl(_pivot_df1)[1]))
 
 
 if __name__ == "__main__":

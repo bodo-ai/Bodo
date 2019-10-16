@@ -4,11 +4,26 @@ import pandas as pd
 import numpy as np
 import numba
 from numba import types, cgutils
-from numba.extending import (models, register_model, lower_cast, infer_getattr,
-    type_callable, infer, overload, make_attribute_wrapper, intrinsic,
-    lower_builtin, overload_method)
-from numba.typing.templates import (infer_global, AbstractTemplate, signature,
-    AttributeTemplate, bound_function)
+from numba.extending import (
+    models,
+    register_model,
+    lower_cast,
+    infer_getattr,
+    type_callable,
+    infer,
+    overload,
+    make_attribute_wrapper,
+    intrinsic,
+    lower_builtin,
+    overload_method,
+)
+from numba.typing.templates import (
+    infer_global,
+    AbstractTemplate,
+    signature,
+    AttributeTemplate,
+    bound_function,
+)
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 import bodo
 from bodo.libs.str_ext import string_type
@@ -20,6 +35,7 @@ class RollingType(types.Type):
     """Temporary type class for RollingType objects before transformation
     to rolling node.
     """
+
     def __init__(self, df_type, on, selection, explicit_select=False):
 
         self.df_type = df_type
@@ -29,13 +45,14 @@ class RollingType(types.Type):
 
         super(RollingType, self).__init__(
             name="RollingType({}, {}, {}, {})".format(
-                df_type, on, selection, explicit_select))
+                df_type, on, selection, explicit_select
+            )
+        )
 
     def copy(self):
         # XXX is copy necessary?
         # TODO: key attribute?
-        return RollingType(self.df_type, self.on, self.selection,
-            self.explicit_select)
+        return RollingType(self.df_type, self.on, self.selection, self.explicit_select)
 
 
 # dummy model since info is kept in type
@@ -43,14 +60,28 @@ class RollingType(types.Type):
 register_model(RollingType)(models.OpaqueModel)
 
 
-@overload_method(DataFrameType, 'rolling')
-def df_rolling_overload(df, window, min_periods=None, center=False,
-        win_type=None, on=None, axis=0, closed=None):
-
-    def _impl(df, window, min_periods=None, center=False,
-            win_type=None, on=None, axis=0, closed=None):
-        return bodo.hiframes.pd_rolling_ext.rolling_dummy(
-            df, window, center, on)
+@overload_method(DataFrameType, "rolling")
+def df_rolling_overload(
+    df,
+    window,
+    min_periods=None,
+    center=False,
+    win_type=None,
+    on=None,
+    axis=0,
+    closed=None,
+):
+    def _impl(
+        df,
+        window,
+        min_periods=None,
+        center=False,
+        win_type=None,
+        on=None,
+        axis=0,
+        closed=None,
+    ):
+        return bodo.hiframes.pd_rolling_ext.rolling_dummy(df, window, center, on)
 
     return _impl
 
@@ -70,16 +101,14 @@ class RollingTyper(AbstractTemplate):
             on = None
         else:
             if not isinstance(on, types.StringLiteral):
-                raise ValueError(
-                    "'on' argument to rolling() should be constant string")
+                raise ValueError("'on' argument to rolling() should be constant string")
             on = on.literal_value
 
         selection = list(df.columns)
         if on is not None:
             selection.remove(on)
 
-        out_typ = RollingType(
-            df, on, tuple(selection), False)
+        out_typ = RollingType(df, on, tuple(selection), False)
         return signature(out_typ, *args)
 
 
@@ -92,7 +121,7 @@ def lower_rolling_dummy(context, builder, sig, args):
 
 @infer
 class GetItemDataFrameRolling2(AbstractTemplate):
-    key = 'static_getitem'
+    key = "static_getitem"
 
     def generic(self, args, kws):
         rolling, idx = args
@@ -105,9 +134,9 @@ class GetItemDataFrameRolling2(AbstractTemplate):
                 selection = (idx,)
             else:
                 raise ValueError("invalid rolling selection {}".format(idx))
-            ret_rolling = RollingType(
-                rolling.df_type, rolling.on, selection, True)
+            ret_rolling = RollingType(rolling.df_type, rolling.on, selection, True)
             return signature(ret_rolling, *args)
+
 
 @infer_getattr
 class DataframeRollingAttribute(AttributeTemplate):
@@ -115,11 +144,14 @@ class DataframeRollingAttribute(AttributeTemplate):
 
     def generic_resolve(self, rolling, func_name):
         if func_name not in supported_rolling_funcs:
-            raise ValueError("only ({}) supported in rolling".format(
-                                           ", ".join(supported_rolling_funcs)))
-        template_key = 'rolling.' + func_name
+            raise ValueError(
+                "only ({}) supported in rolling".format(
+                    ", ".join(supported_rolling_funcs)
+                )
+            )
+        template_key = "rolling." + func_name
         # output is always float64
-        out_arr = types.Array(types.float64, 1, 'C')
+        out_arr = types.Array(types.float64, 1, "C")
 
         # TODO: handle Series case (explicit select)
         columns = rolling.selection
@@ -144,13 +176,19 @@ class DataframeRollingAttribute(AttributeTemplate):
             key = template_key
 
             def generic(self, args, kws):
-                if func_name in ('cov', 'corr'):
+                if func_name in ("cov", "corr"):
                     if len(args) != 1:
-                        raise ValueError("rolling {} requires one argument (other)".format(func_name))
+                        raise ValueError(
+                            "rolling {} requires one argument (other)".format(func_name)
+                        )
                     # XXX pandas only accepts variable window cov/corr
                     # when both inputs have time index
                     if rolling.on is not None:
-                        raise ValueError("variable window rolling {} not supported yet.".format(func_name))
+                        raise ValueError(
+                            "variable window rolling {} not supported yet.".format(
+                                func_name
+                            )
+                        )
                     # TODO: support variable window rolling cov/corr which is only
                     # possible in pandas with time index
                     other = args[0]
@@ -158,8 +196,10 @@ class DataframeRollingAttribute(AttributeTemplate):
                     # pairwise flag)
                     # TODO: support pairwise arg
                     out_cols = tuple(sorted(set(columns) | set(other.columns)))
-                    return signature(DataFrameType(
-                            (out_arr,)*len(out_cols), index, out_cols), *args)
+                    return signature(
+                        DataFrameType((out_arr,) * len(out_cols), index, out_cols),
+                        *args
+                    )
                 return signature(out_typ, *args)
 
         return types.BoundFunction(MethodTemplate, rolling)

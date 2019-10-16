@@ -7,46 +7,52 @@ import pandas as pd
 import numba
 from numba import types
 from numba.extending import register_model, models, overload
-from numba.typing.templates import (infer_global, AbstractTemplate,
-    CallableTemplate)
+from numba.typing.templates import infer_global, AbstractTemplate, CallableTemplate
 from numba.typing import signature
 from numba.targets.imputils import lower_builtin, impl_ret_borrowed
 import bodo
 
 
 def is_overload_none(val):
-    return (val is None or val == types.none
-            or getattr(val, 'value', False) is None)
+    return val is None or val == types.none or getattr(val, "value", False) is None
 
 
 def is_overload_true(val):
-    return (val == True or val == bodo.utils.utils.BooleanLiteral(True)
-            or getattr(val, 'value', False) is True)
+    return (
+        val == True
+        or val == bodo.utils.utils.BooleanLiteral(True)
+        or getattr(val, "value", False) is True
+    )
 
 
 def is_overload_false(val):
-    return (val == False or val == bodo.utils.utils.BooleanLiteral(False)
-            or getattr(val, 'value', True) is False)
+    return (
+        val == False
+        or val == bodo.utils.utils.BooleanLiteral(False)
+        or getattr(val, "value", True) is False
+    )
 
 
 def is_overload_zero(val):
-    return (val == 0 or val == types.IntegerLiteral(0)
-            or getattr(val, 'value', -1) == 0)
+    return val == 0 or val == types.IntegerLiteral(0) or getattr(val, "value", -1) == 0
 
 
 def is_overload_str(val, const):
-    return (val == const or val == types.StringLiteral(const)
-            or getattr(val, 'value', -1) == const)
+    return (
+        val == const
+        or val == types.StringLiteral(const)
+        or getattr(val, "value", -1) == const
+    )
 
 
 def get_const_str_list(val):
     # 'ommited' case
-    if getattr(val, 'value', None) is not None:
+    if getattr(val, "value", None) is not None:
         return [val.value]
     # literal case
-    if hasattr(val, 'literal_value'):
+    if hasattr(val, "literal_value"):
         return [val.literal_value]
-    if hasattr(val, 'consts'):
+    if hasattr(val, "consts"):
         return val.consts
 
 
@@ -54,7 +60,7 @@ def get_overload_const_str(val):
     if isinstance(val, str):
         return val
     # 'ommited' case
-    if getattr(val, 'value', None) is not None:
+    if getattr(val, "value", None) is not None:
         assert isinstance(val.value, str)
         return val.value
     # literal case
@@ -71,9 +77,10 @@ def parse_dtype(dtype):
 
     try:
         d_str = get_overload_const_str(dtype)
-        if d_str.startswith('Int') or d_str.startswith('UInt'):
+        if d_str.startswith("Int") or d_str.startswith("UInt"):
             return bodo.libs.int_arr_ext.typeof_pd_int_dtype(
-                pd.api.types.pandas_dtype(d_str), None)
+                pd.api.types.pandas_dtype(d_str), None
+            )
         return numba.numpy_support.from_dtype(np.dtype(d_str))
     except:
         pass
@@ -86,12 +93,15 @@ def is_list_like_index_type(t):
     """
     from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
     from bodo.hiframes.pd_series_ext import SeriesType
+
     # TODO: include datetimeindex/timedeltaindex?
 
-    return (isinstance(t, types.List)
+    return (
+        isinstance(t, types.List)
         or (isinstance(t, types.Array) and t.ndim == 1)
         or isinstance(t, (NumericIndexType, RangeIndexType))
-        or isinstance(t, SeriesType))
+        or isinstance(t, SeriesType)
+    )
 
 
 # type used to pass metadata to type inference functions
@@ -148,6 +158,7 @@ def flatten_to_series(A):  # pragma: no cover
 class FlattenTyp(AbstractTemplate):
     def generic(self, args, kws):
         from bodo.hiframes.pd_series_ext import SeriesType
+
         assert not kws
         assert len(args) == 1
         # only list of lists supported
@@ -155,8 +166,7 @@ class FlattenTyp(AbstractTemplate):
         l_dtype = args[0].dtype
         assert isinstance(l_dtype, types.List)
         dtype = l_dtype.dtype
-        return signature(
-            SeriesType(dtype), *bodo.utils.utils.unliteral_all(args))
+        return signature(SeriesType(dtype), *bodo.utils.utils.unliteral_all(args))
 
 
 # Type used to add constant values to constant lists to enable typing
@@ -220,6 +230,8 @@ def lower_add_consts_to_type(context, builder, sig, args):
 # dummy empty itertools implementation to avoid typing errors for series str
 # flatten case
 import itertools
+
+
 @overload(itertools.chain)
 def chain_overload():
     return lambda: [0]
@@ -228,7 +240,6 @@ def chain_overload():
 # taken from numba/typing/listdecl.py
 @infer_global(sorted)
 class SortedBuiltinLambda(CallableTemplate):
-
     def generic(self):
         # TODO: reverse=None
         def typer(iterable, key=None):

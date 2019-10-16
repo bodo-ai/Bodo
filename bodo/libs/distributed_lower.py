@@ -20,27 +20,28 @@ from bodo.libs.distributed_api import mpi_req_numba_type, ReqArrayType, req_arra
 from llvmlite import ir as lir
 from bodo.libs import hdist
 import llvmlite.binding as ll
-ll.add_symbol('hpat_dist_get_time', hdist.hpat_dist_get_time)
-ll.add_symbol('hpat_get_time', hdist.hpat_get_time)
-ll.add_symbol('hpat_dist_reduce', hdist.hpat_dist_reduce)
-ll.add_symbol('hpat_dist_arr_reduce', hdist.hpat_dist_arr_reduce)
-ll.add_symbol('hpat_dist_exscan_i4', hdist.hpat_dist_exscan_i4)
-ll.add_symbol('hpat_dist_exscan_i8', hdist.hpat_dist_exscan_i8)
-ll.add_symbol('hpat_dist_exscan_f4', hdist.hpat_dist_exscan_f4)
-ll.add_symbol('hpat_dist_exscan_f8', hdist.hpat_dist_exscan_f8)
-ll.add_symbol('hpat_dist_irecv', hdist.hpat_dist_irecv)
-ll.add_symbol('hpat_dist_isend', hdist.hpat_dist_isend)
-ll.add_symbol('hpat_dist_wait', hdist.hpat_dist_wait)
-ll.add_symbol('hpat_dist_get_item_pointer', hdist.hpat_dist_get_item_pointer)
-ll.add_symbol('hpat_get_dummy_ptr', hdist.hpat_get_dummy_ptr)
-ll.add_symbol('allgather', hdist.allgather)
-ll.add_symbol('comm_req_alloc', hdist.comm_req_alloc)
-ll.add_symbol('comm_req_dealloc', hdist.comm_req_dealloc)
-ll.add_symbol('req_array_setitem', hdist.req_array_setitem)
-ll.add_symbol('hpat_dist_waitall', hdist.hpat_dist_waitall)
-ll.add_symbol('oneD_reshape_shuffle', hdist.oneD_reshape_shuffle)
-ll.add_symbol('permutation_int', hdist.permutation_int)
-ll.add_symbol('permutation_array_index', hdist.permutation_array_index)
+
+ll.add_symbol("hpat_dist_get_time", hdist.hpat_dist_get_time)
+ll.add_symbol("hpat_get_time", hdist.hpat_get_time)
+ll.add_symbol("hpat_dist_reduce", hdist.hpat_dist_reduce)
+ll.add_symbol("hpat_dist_arr_reduce", hdist.hpat_dist_arr_reduce)
+ll.add_symbol("hpat_dist_exscan_i4", hdist.hpat_dist_exscan_i4)
+ll.add_symbol("hpat_dist_exscan_i8", hdist.hpat_dist_exscan_i8)
+ll.add_symbol("hpat_dist_exscan_f4", hdist.hpat_dist_exscan_f4)
+ll.add_symbol("hpat_dist_exscan_f8", hdist.hpat_dist_exscan_f8)
+ll.add_symbol("hpat_dist_irecv", hdist.hpat_dist_irecv)
+ll.add_symbol("hpat_dist_isend", hdist.hpat_dist_isend)
+ll.add_symbol("hpat_dist_wait", hdist.hpat_dist_wait)
+ll.add_symbol("hpat_dist_get_item_pointer", hdist.hpat_dist_get_item_pointer)
+ll.add_symbol("hpat_get_dummy_ptr", hdist.hpat_get_dummy_ptr)
+ll.add_symbol("allgather", hdist.allgather)
+ll.add_symbol("comm_req_alloc", hdist.comm_req_alloc)
+ll.add_symbol("comm_req_dealloc", hdist.comm_req_dealloc)
+ll.add_symbol("req_array_setitem", hdist.req_array_setitem)
+ll.add_symbol("hpat_dist_waitall", hdist.hpat_dist_waitall)
+ll.add_symbol("oneD_reshape_shuffle", hdist.oneD_reshape_shuffle)
+ll.add_symbol("permutation_int", hdist.permutation_int)
+ll.add_symbol("permutation_array_index", hdist.permutation_array_index)
 
 # get size dynamically from C code
 mpi_req_llvm_type = lir.IntType(8 * hdist.mpi_req_num_bytes)
@@ -64,13 +65,15 @@ def lower_dist_reduce(context, builder, sig, args):
         target_typ = target_typ.val_typ
         supported_typs = [types.int32, types.float32, types.float64]
         import sys
-        if not sys.platform.startswith('win'):
+
+        if not sys.platform.startswith("win"):
             # long is 4 byte on Windows
             supported_typs.append(types.int64)
-            supported_typs.append(types.NPDatetime('ns'))
+            supported_typs.append(types.NPDatetime("ns"))
         if target_typ not in supported_typs:  # pragma: no cover
-            raise TypeError("argmin/argmax not supported for type {}".format(
-                target_typ))
+            raise TypeError(
+                "argmin/argmax not supported for type {}".format(target_typ)
+            )
 
     in_ptr = cgutils.alloca_once(builder, val_typ)
     out_ptr = cgutils.alloca_once(builder, val_typ)
@@ -80,11 +83,19 @@ def lower_dist_reduce(context, builder, sig, args):
     out_ptr = builder.bitcast(out_ptr, lir.IntType(8).as_pointer())
 
     typ_enum = _numba_to_c_type_map[target_typ]
-    typ_arg = cgutils.alloca_once_value(builder, lir.Constant(lir.IntType(32),
-                                                              typ_enum))
+    typ_arg = cgutils.alloca_once_value(
+        builder, lir.Constant(lir.IntType(32), typ_enum)
+    )
 
-    fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer(),
-                                             lir.IntType(8).as_pointer(), op_typ, lir.IntType(32)])
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [
+            lir.IntType(8).as_pointer(),
+            lir.IntType(8).as_pointer(),
+            op_typ,
+            lir.IntType(32),
+        ],
+    )
     fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_reduce")
     builder.call(fn, [in_ptr, out_ptr, args[1], builder.load(typ_arg)])
     # cast back to value type
@@ -100,7 +111,8 @@ def lower_dist_arr_reduce(context, builder, sig, args):
     # store an int to specify data type
     typ_enum = _numba_to_c_type_map[sig.args[0].dtype]
     typ_arg = cgutils.alloca_once_value(
-        builder, lir.Constant(lir.IntType(32), typ_enum))
+        builder, lir.Constant(lir.IntType(32), typ_enum)
+    )
     ndims = sig.args[0].ndim
 
     out = make_array(sig.args[0])(context, builder, args[0])
@@ -110,16 +122,26 @@ def lower_dist_arr_reduce(context, builder, sig, args):
     size_arg = builder.bitcast(size_ptr, lir.IntType(64).as_pointer())
 
     ndim_arg = cgutils.alloca_once_value(
-        builder, lir.Constant(lir.IntType(32), sig.args[0].ndim))
-    call_args = [builder.bitcast(out.data, lir.IntType(8).as_pointer()),
-                 size_arg, builder.load(ndim_arg), args[1], builder.load(typ_arg)]
+        builder, lir.Constant(lir.IntType(32), sig.args[0].ndim)
+    )
+    call_args = [
+        builder.bitcast(out.data, lir.IntType(8).as_pointer()),
+        size_arg,
+        builder.load(ndim_arg),
+        args[1],
+        builder.load(typ_arg),
+    ]
 
     # array, shape, ndim, extra last arg type for type enum
-    arg_typs = [lir.IntType(8).as_pointer(), lir.IntType(64).as_pointer(),
-                lir.IntType(32), op_typ, lir.IntType(32)]
+    arg_typs = [
+        lir.IntType(8).as_pointer(),
+        lir.IntType(64).as_pointer(),
+        lir.IntType(32),
+        op_typ,
+        lir.IntType(32),
+    ]
     fnty = lir.FunctionType(lir.IntType(32), arg_typs)
-    fn = builder.module.get_or_insert_function(
-        fnty, name="hpat_dist_arr_reduce")
+    fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_arr_reduce")
     builder.call(fn, call_args)
     res = out._getvalue()
     return impl_ret_borrowed(context, builder, sig.return_type, res)
@@ -155,9 +177,9 @@ def lower_dist_cumsum(context, builder, sig, args):
             out_arr[i] = prefix_var
         return 0
 
-    res = context.compile_internal(builder, cumsum_impl, sig, args,
-                                   locals=dict(c=dtype,
-                                               prefix_var=dtype))
+    res = context.compile_internal(
+        builder, cumsum_impl, sig, args, locals=dict(c=dtype, prefix_var=dtype)
+    )
     return res
 
 
@@ -168,18 +190,31 @@ def lower_dist_cumsum(context, builder, sig, args):
 def lower_dist_exscan(context, builder, sig, args):
     ltyp = args[0].type
     fnty = lir.FunctionType(ltyp, [ltyp])
-    typ_map = {types.int32: "i4", types.int64: "i8",
-               types.float32: "f4", types.float64: "f8"}
+    typ_map = {
+        types.int32: "i4",
+        types.int64: "i8",
+        types.float32: "f4",
+        types.float64: "f8",
+    }
     typ_str = typ_map[sig.args[0]]
     fn = builder.module.get_or_insert_function(
-        fnty, name="hpat_dist_exscan_{}".format(typ_str))
+        fnty, name="hpat_dist_exscan_{}".format(typ_str)
+    )
     return builder.call(fn, [args[0]])
 
+
 # array, size, pe, tag, cond
-@lower_builtin(distributed_api.irecv, types.npytypes.Array, types.int32,
-                types.int32, types.int32)
-@lower_builtin(distributed_api.irecv, types.npytypes.Array, types.int32,
-               types.int32, types.int32, types.boolean)
+@lower_builtin(
+    distributed_api.irecv, types.npytypes.Array, types.int32, types.int32, types.int32
+)
+@lower_builtin(
+    distributed_api.irecv,
+    types.npytypes.Array,
+    types.int32,
+    types.int32,
+    types.int32,
+    types.boolean,
+)
 def lower_dist_irecv(context, builder, sig, args):
     # store an int to specify data type
     typ_enum = _numba_to_c_type_map[sig.args[0].dtype]
@@ -191,25 +226,42 @@ def lower_dist_irecv(context, builder, sig, args):
     else:
         cond_arg = args[4]
 
-    call_args = [builder.bitcast(out.data, lir.IntType(8).as_pointer()),
-                 size_arg, typ_arg,
-                 args[2], args[3], cond_arg]
+    call_args = [
+        builder.bitcast(out.data, lir.IntType(8).as_pointer()),
+        size_arg,
+        typ_arg,
+        args[2],
+        args[3],
+        cond_arg,
+    ]
 
     # array, size, extra arg type for type enum
     # pe, tag, cond
-    arg_typs = [lir.IntType(8).as_pointer(),
-                lir.IntType(32), lir.IntType(
-                    32), lir.IntType(32), lir.IntType(32),
-                lir.IntType(1)]
+    arg_typs = [
+        lir.IntType(8).as_pointer(),
+        lir.IntType(32),
+        lir.IntType(32),
+        lir.IntType(32),
+        lir.IntType(32),
+        lir.IntType(1),
+    ]
     fnty = lir.FunctionType(mpi_req_llvm_type, arg_typs)
     fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_irecv")
     return builder.call(fn, call_args)
 
+
 # array, size, pe, tag, cond
-@lower_builtin(distributed_api.isend, types.Array, types.int32,
-                types.int32, types.int32)
-@lower_builtin(distributed_api.isend, types.Array, types.int32,
-               types.int32, types.int32, types.boolean)
+@lower_builtin(
+    distributed_api.isend, types.Array, types.int32, types.int32, types.int32
+)
+@lower_builtin(
+    distributed_api.isend,
+    types.Array,
+    types.int32,
+    types.int32,
+    types.int32,
+    types.boolean,
+)
 def lower_dist_isend(context, builder, sig, args):
     # store an int to specify data type
     typ_enum = _numba_to_c_type_map[sig.args[0].dtype]
@@ -221,23 +273,38 @@ def lower_dist_isend(context, builder, sig, args):
     else:
         cond_arg = args[4]
 
-    call_args = [builder.bitcast(out.data, lir.IntType(8).as_pointer()),
-                 args[1], typ_arg,
-                 args[2], args[3], cond_arg]
+    call_args = [
+        builder.bitcast(out.data, lir.IntType(8).as_pointer()),
+        args[1],
+        typ_arg,
+        args[2],
+        args[3],
+        cond_arg,
+    ]
 
     # array, size, extra arg type for type enum
     # pe, tag, cond
-    arg_typs = [lir.IntType(8).as_pointer(),
-                lir.IntType(32), lir.IntType(
-                    32), lir.IntType(32), lir.IntType(32),
-                lir.IntType(1)]
+    arg_typs = [
+        lir.IntType(8).as_pointer(),
+        lir.IntType(32),
+        lir.IntType(32),
+        lir.IntType(32),
+        lir.IntType(32),
+        lir.IntType(1),
+    ]
     fnty = lir.FunctionType(mpi_req_llvm_type, arg_typs)
     fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_isend")
     return builder.call(fn, call_args)
 
 
-@lower_builtin(distributed_api.isend, types.voidptr, types.int32,
-               types.int32, types.int32, types.boolean)
+@lower_builtin(
+    distributed_api.isend,
+    types.voidptr,
+    types.int32,
+    types.int32,
+    types.int32,
+    types.boolean,
+)
 def lower_dist_isend_void(context, builder, sig, args):
     # store an int to specify data type
     typ_enum = _numba_to_c_type_map[types.int64]
@@ -248,16 +315,18 @@ def lower_dist_isend_void(context, builder, sig, args):
     else:
         cond_arg = args[4]
 
-    call_args = [args[0],
-                 args[1], typ_arg,
-                 args[2], args[3], cond_arg]
+    call_args = [args[0], args[1], typ_arg, args[2], args[3], cond_arg]
 
     # array, size, extra arg type for type enum
     # pe, tag, cond
-    arg_typs = [lir.IntType(8).as_pointer(),
-                lir.IntType(32), lir.IntType(
-                    32), lir.IntType(32), lir.IntType(32),
-                lir.IntType(1)]
+    arg_typs = [
+        lir.IntType(8).as_pointer(),
+        lir.IntType(32),
+        lir.IntType(32),
+        lir.IntType(32),
+        lir.IntType(32),
+        lir.IntType(1),
+    ]
     fnty = lir.FunctionType(mpi_req_llvm_type, arg_typs)
     fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_isend")
     return builder.call(fn, call_args)
@@ -269,13 +338,16 @@ def lower_dist_wait(context, builder, sig, args):
     fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_wait")
     return builder.call(fn, args)
 
+
 @lower_builtin(distributed_api.waitall, types.int32, req_array_type)
 def lower_dist_waitall(context, builder, sig, args):
-    fnty = lir.FunctionType(lir.VoidType(),
-                            [lir.IntType(32), lir.IntType(8).as_pointer()])
+    fnty = lir.FunctionType(
+        lir.VoidType(), [lir.IntType(32), lir.IntType(8).as_pointer()]
+    )
     fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_waitall")
     builder.call(fn, args)
     return context.get_dummy_value()
+
 
 @lower_builtin(distributed_api.rebalance_array_parallel, types.Array, types.intp)
 def lower_dist_rebalance_array_parallel(context, builder, sig, args):
@@ -284,8 +356,9 @@ def lower_dist_rebalance_array_parallel(context, builder, sig, args):
     ndim = arr_typ.ndim
     # TODO: support string type
 
-    shape_tup = ",".join(["count"]
-                    + ["in_arr.shape[{}]".format(i) for i in range(1, ndim)])
+    shape_tup = ",".join(
+        ["count"] + ["in_arr.shape[{}]".format(i) for i in range(1, ndim)]
+    )
     alloc_text = "np.empty(({}), in_arr.dtype)".format(shape_tup)
 
     func_text = """def f(in_arr, count):
@@ -337,11 +410,13 @@ def lower_dist_rebalance_array_parallel(context, builder, sig, args):
     bodo.libs.distributed_api.waitall(np.int32(comm_req_ind), comm_reqs)
     bodo.libs.distributed_api.comm_req_dealloc(comm_reqs)
     return out_arr
-    """.format(alloc_text)
+    """.format(
+        alloc_text
+    )
 
     loc = {}
-    exec(func_text, {'bodo': bodo, 'np': np}, loc)
-    rebalance_impl = loc['f']
+    exec(func_text, {"bodo": bodo, "np": np}, loc)
+    rebalance_impl = loc["f"]
 
     res = context.compile_internal(builder, rebalance_impl, sig, args)
     return impl_ret_borrowed(context, builder, sig.return_type, res)
@@ -365,11 +440,17 @@ def lower_dist_allgather(context, builder, sig, args):
 
     out = make_array(sig.args[0])(context, builder, args[0])
 
-    call_args = [builder.bitcast(out.data, lir.IntType(8).as_pointer()),
-                 size_arg, val_ptr, typ_arg]
+    call_args = [
+        builder.bitcast(out.data, lir.IntType(8).as_pointer()),
+        size_arg,
+        val_ptr,
+        typ_arg,
+    ]
 
-    fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer(),
-                            lir.IntType(32), val_ptr.type, lir.IntType(32)])
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [lir.IntType(8).as_pointer(), lir.IntType(32), val_ptr.type, lir.IntType(32)],
+    )
     fn = builder.module.get_or_insert_function(fnty, name="allgather")
     builder.call(fn, call_args)
     return context.get_dummy_value()
@@ -381,6 +462,7 @@ def lower_dist_comm_req_alloc(context, builder, sig, args):
     fn = builder.module.get_or_insert_function(fnty, name="comm_req_alloc")
     return builder.call(fn, args)
 
+
 @lower_builtin(distributed_api.comm_req_dealloc, req_array_type)
 def lower_dist_comm_req_dealloc(context, builder, sig, args):
     fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer()])
@@ -391,12 +473,13 @@ def lower_dist_comm_req_dealloc(context, builder, sig, args):
 
 @lower_builtin(operator.setitem, ReqArrayType, types.intp, mpi_req_numba_type)
 def setitem_req_array(context, builder, sig, args):
-    fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer(),
-                                             lir.IntType(64),
-                                             mpi_req_llvm_type])
-    fn = builder.module.get_or_insert_function(
-        fnty, name="req_array_setitem")
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [lir.IntType(8).as_pointer(), lir.IntType(64), mpi_req_llvm_type],
+    )
+    fn = builder.module.get_or_insert_function(fnty, name="req_array_setitem")
     return builder.call(fn, args)
+
 
 # @lower_builtin(distributed_api.dist_setitem, types.Array, types.Any, types.Any,
 #     types.intp, types.intp)
@@ -467,8 +550,10 @@ def _root_rank_select(old_val, new_val):  # pragma: no cover
         return old_val
     return new_val
 
+
 def get_tuple_prod(t):
     return np.prod(t)
+
 
 @overload(get_tuple_prod)
 def get_tuple_prod_overload(t):
@@ -486,58 +571,75 @@ def get_tuple_prod_overload(t):
 
 
 sig = types.void(
-            types.voidptr,  # output array
-            types.voidptr,  # input array
-            types.intp,     # old_len
-            types.intp,     # new_len
-            types.intp,     # input lower_dim size in bytes
-            types.intp,     # output lower_dim size in bytes
-            )
+    types.voidptr,  # output array
+    types.voidptr,  # input array
+    types.intp,  # old_len
+    types.intp,  # new_len
+    types.intp,  # input lower_dim size in bytes
+    types.intp,  # output lower_dim size in bytes
+)
 
 oneD_reshape_shuffle = types.ExternalFunction("oneD_reshape_shuffle", sig)
 
+
 @numba.njit
-def dist_oneD_reshape_shuffle(lhs, in_arr, new_0dim_global_len, old_0dim_global_len, dtype_size):  # pragma: no cover
+def dist_oneD_reshape_shuffle(
+    lhs, in_arr, new_0dim_global_len, old_0dim_global_len, dtype_size
+):  # pragma: no cover
     c_in_arr = np.ascontiguousarray(in_arr)
     in_lower_dims_size = get_tuple_prod(c_in_arr.shape[1:])
     out_lower_dims_size = get_tuple_prod(lhs.shape[1:])
-    #print(c_in_arr)
+    # print(c_in_arr)
     # print(new_0dim_global_len, old_0dim_global_len, out_lower_dims_size, in_lower_dims_size)
-    oneD_reshape_shuffle(lhs.ctypes, c_in_arr.ctypes,
-                            new_0dim_global_len, old_0dim_global_len,
-                            dtype_size * out_lower_dims_size,
-                            dtype_size * in_lower_dims_size)
-    #print(in_arr)
+    oneD_reshape_shuffle(
+        lhs.ctypes,
+        c_in_arr.ctypes,
+        new_0dim_global_len,
+        old_0dim_global_len,
+        dtype_size * out_lower_dims_size,
+        dtype_size * in_lower_dims_size,
+    )
+    # print(in_arr)
 
-permutation_int = types.ExternalFunction("permutation_int",
-                                         types.void(types.voidptr, types.intp))
+
+permutation_int = types.ExternalFunction(
+    "permutation_int", types.void(types.voidptr, types.intp)
+)
+
+
 @numba.njit
 def dist_permutation_int(lhs, n):
     permutation_int(lhs.ctypes, n)
 
-permutation_array_index = types.ExternalFunction("permutation_array_index",
-                                                 types.void(types.voidptr,
-                                                            types.intp,
-                                                            types.intp,
-                                                            types.voidptr,
-                                                            types.voidptr,
-                                                            types.intp))
+
+permutation_array_index = types.ExternalFunction(
+    "permutation_array_index",
+    types.void(
+        types.voidptr, types.intp, types.intp, types.voidptr, types.voidptr, types.intp
+    ),
+)
+
+
 @numba.njit
 def dist_permutation_array_index(lhs, lhs_len, dtype_size, rhs, p, p_len):
     c_rhs = np.ascontiguousarray(rhs)
     lower_dims_size = get_tuple_prod(c_rhs.shape[1:])
     elem_size = dtype_size * lower_dims_size
-    permutation_array_index(lhs.ctypes, lhs_len, elem_size, c_rhs.ctypes,
-                            p.ctypes, p_len)
+    permutation_array_index(
+        lhs.ctypes, lhs_len, elem_size, c_rhs.ctypes, p.ctypes, p_len
+    )
 
 
 ########### finalize MPI when exiting ####################
 
+
 def hpat_finalize():
     return 0
 
+
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.typing import signature
+
 
 @infer_global(hpat_finalize)
 class FinalizeInfer(AbstractTemplate):
@@ -546,13 +648,16 @@ class FinalizeInfer(AbstractTemplate):
         assert len(args) == 0
         return signature(types.int32, *args)
 
-ll.add_symbol('hpat_finalize', hdist.hpat_finalize)
+
+ll.add_symbol("hpat_finalize", hdist.hpat_finalize)
+
 
 @lower_builtin(hpat_finalize)
 def lower_hpat_finalize(context, builder, sig, args):
     fnty = lir.FunctionType(lir.IntType(32), [])
     fn = builder.module.get_or_insert_function(fnty, name="hpat_finalize")
     return builder.call(fn, args)
+
 
 @numba.njit
 def call_finalize():

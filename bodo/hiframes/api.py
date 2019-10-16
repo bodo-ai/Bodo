@@ -13,29 +13,40 @@ from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.typing.arraydecl import _expand_integer
 from numba.extending import overload, intrinsic
-from numba.targets.imputils import (impl_ret_new_ref, impl_ret_borrowed,
-    iternext_impl, RefType)
+from numba.targets.imputils import (
+    impl_ret_new_ref,
+    impl_ret_borrowed,
+    iternext_impl,
+    RefType,
+)
 from numba.targets.arrayobj import _getitem_array1d
 from numba.extending import register_model, models
 
 import bodo
 from bodo.libs.str_ext import string_type, list_string_array_type
-from bodo.libs.str_arr_ext import (StringArrayType, string_array_type,
-    is_str_arr_typ)
+from bodo.libs.str_arr_ext import StringArrayType, string_array_type, is_str_arr_typ
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 
 from bodo.libs.set_ext import build_set
 from numba.targets.imputils import lower_builtin, impl_ret_untracked
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
-from bodo.hiframes.pd_series_ext import (SeriesType, SeriesPayloadType,
-    is_str_series_typ, if_arr_to_series_type,
-    series_to_array_type, if_series_to_array_type, is_dt64_series_typ)
+from bodo.hiframes.pd_series_ext import (
+    SeriesType,
+    SeriesPayloadType,
+    is_str_series_typ,
+    if_arr_to_series_type,
+    series_to_array_type,
+    if_series_to_array_type,
+    is_dt64_series_typ,
+)
 from bodo.hiframes.pd_index_ext import DatetimeIndexType, TimedeltaIndexType
 from bodo.ir.sort import (
-    alltoallv_tup, finalize_shuffle_meta,
-    update_shuffle_meta,  alloc_pre_shuffle_metadata,
-    )
+    alltoallv_tup,
+    finalize_shuffle_meta,
+    update_shuffle_meta,
+    alloc_pre_shuffle_metadata,
+)
 from bodo.ir.join import write_send_buff
 from bodo.hiframes.split_impl import string_array_split_view_type
 
@@ -47,8 +58,10 @@ import llvmlite.llvmpy.core as lc
 def fillna(A):  # pragma: no cover
     return 0
 
+
 def fillna_str_alloc(A, fill):  # pragma: no cover
     return 0
+
 
 def dropna(A):  # pragma: no cover
     return 0
@@ -64,18 +77,20 @@ class ConcatType(AbstractTemplate):
         assert not kws
         assert len(args) == 1
         arr_list = args[0]
-        if (isinstance(arr_list, types.UniTuple)
-                and is_str_arr_typ(arr_list.dtype)):
+        if isinstance(arr_list, types.UniTuple) and is_str_arr_typ(arr_list.dtype):
             ret_typ = string_array_type
-        elif (isinstance(arr_list, types.UniTuple)
-                and (isinstance(arr_list.dtype, IntegerArrayType)
-                     or arr_list.dtype == boolean_array)):
+        elif isinstance(arr_list, types.UniTuple) and (
+            isinstance(arr_list.dtype, IntegerArrayType)
+            or arr_list.dtype == boolean_array
+        ):
             ret_typ = arr_list.dtype
             # TODO: support concat with different dtypes or with regular numpy
         else:
             # use typer of np.concatenate
             arr_list_to_arr = if_series_to_array_type(arr_list)
-            ret_typ = numba.typing.npydecl.NdConcatenate(self.context).generic()(arr_list_to_arr)
+            ret_typ = numba.typing.npydecl.NdConcatenate(self.context).generic()(
+                arr_list_to_arr
+            )
 
         return signature(ret_typ, arr_list)
 
@@ -91,8 +106,8 @@ def lower_concat(context, builder, sig, args):
 def concat_overload(arr_list):
     # all string input case
     # TODO: handle numerics to string casting case
-    if (isinstance(arr_list, types.UniTuple)
-            and is_str_arr_typ(arr_list.dtype)):
+    if isinstance(arr_list, types.UniTuple) and is_str_arr_typ(arr_list.dtype):
+
         def string_concat_impl(in_arrs):
             # preallocate the output
             num_strs = 0
@@ -108,26 +123,29 @@ def concat_overload(arr_list):
             for A in in_arrs:
                 arr = A
                 bodo.libs.str_arr_ext.set_string_array_range(
-                    out_arr, arr, curr_str_ind, curr_chars_ind)
+                    out_arr, arr, curr_str_ind, curr_chars_ind
+                )
                 curr_str_ind += len(arr)
                 curr_chars_ind += bodo.libs.str_arr_ext.num_total_chars(arr)
             return out_arr
 
         return string_concat_impl
 
-    if (isinstance(arr_list, types.UniTuple)
-            and isinstance(arr_list.dtype, IntegerArrayType)):
+    if isinstance(arr_list, types.UniTuple) and isinstance(
+        arr_list.dtype, IntegerArrayType
+    ):
         return lambda arr_list: bodo.libs.int_arr_ext.init_integer_array(
             np.concatenate(bodo.libs.int_arr_ext.get_int_arr_data_tup(arr_list)),
-            bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list))
+            bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list),
+        )
 
-    if (isinstance(arr_list, types.UniTuple)
-            and arr_list.dtype == boolean_array):
+    if isinstance(arr_list, types.UniTuple) and arr_list.dtype == boolean_array:
         # reusing int arr concat functions
         # TODO: test
         return lambda arr_list: bodo.libs.bool_arr_ext.init_bool_array(
             np.concatenate(bodo.libs.int_arr_ext.get_int_arr_data_tup(arr_list)),
-            bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list))
+            bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list),
+        )
 
     for typ in arr_list:
         if not isinstance(typ, types.Array):
@@ -170,6 +188,7 @@ def nunique_overload(arr_typ):
     # TODO: extend to other types like datetime?
     def nunique_seq(A):
         return len(build_set(A))
+
     return nunique_seq
 
 
@@ -205,12 +224,12 @@ def unique_overload(A):
     # TODO: extend to other types like datetime?
     def unique_seq(A):
         return bodo.utils.utils.unique(A)
+
     return unique_seq
 
 
 @overload(unique_parallel)
 def unique_overload_parallel(A):
-
     def unique_par(A):
         uniq_A = bodo.utils.utils.unique(A)
         key_arrs = (uniq_A,)
@@ -227,7 +246,9 @@ def unique_overload_parallel(A):
             node_ids[i] = node_id
             update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs, (), False)
 
-        shuffle_meta = finalize_shuffle_meta(key_arrs, (), pre_shuffle_meta, n_pes, False)
+        shuffle_meta = finalize_shuffle_meta(
+            key_arrs, (), pre_shuffle_meta, n_pes, False
+        )
 
         # write send buffers
         for i in range(n):
@@ -251,6 +272,7 @@ class FillNaType(AbstractTemplate):
         assert len(args) == 3
         # args: out_arr, in_arr, value
         return signature(types.none, *args)
+
 
 @infer_global(fillna_str_alloc)
 class FillNaStrType(AbstractTemplate):
@@ -277,14 +299,17 @@ class DropNAType(AbstractTemplate):
 def alloc_shift(A):
     return np.empty_like(A)
 
+
 @overload(alloc_shift)
 def alloc_shift_overload(A):
     if isinstance(A.dtype, types.Integer):
         return lambda A: np.empty(len(A), np.float64)
     return lambda A: np.empty(len(A), A.dtype)
 
+
 def shift_dtype(d):
     return d
+
 
 @overload(shift_dtype)
 def shift_dtype_overload(a):
@@ -307,7 +332,8 @@ def isna_overload(arr, i):
     # masked Integer array, boolean array
     if isinstance(arr, IntegerArrayType) or arr == boolean_array:
         return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
-            arr._null_bitmap, i)
+            arr._null_bitmap, i
+        )
 
     # TODO: support NaN in list(list(str))
     if arr == list_string_array_type:
@@ -324,7 +350,7 @@ def isna_overload(arr, i):
 
     # NaT for dt64
     if isinstance(dtype, (types.NPDatetime, types.NPTimedelta)):
-        nat = dtype('NaT')
+        nat = dtype("NaT")
         # TODO: replace with np.isnat
         return lambda arr, i: arr[i] == nat
 
@@ -344,6 +370,7 @@ def overload_argsort(A):
         data = (np.arange(n),)
         bodo.libs.timsort.sort(l_key_arrs, 0, n, data)
         return data[0]
+
     return impl
 
 
@@ -369,6 +396,7 @@ def overload_sort(arr, index_arr, ascending, inplace):
         bodo.libs.str_arr_ext.cp_str_list_to_array(key_arrs, l_key_arrs)
         bodo.libs.str_arr_ext.cp_str_list_to_array(data, l_data, True)
         return key_arrs[0], data[0]
+
     return impl
 
 
@@ -396,7 +424,7 @@ class DfIsinCol(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         assert len(args) == 2
-        return signature(types.Array(types.bool_, 1, 'C'), *unliteral_all(args))
+        return signature(types.Array(types.bool_, 1, "C"), *unliteral_all(args))
 
 
 # dummy lowering functions
@@ -442,6 +470,7 @@ def set_df_col(df, cname, arr, inplace):
 class SetDfColInfer(AbstractTemplate):
     def generic(self, args, kws):
         from bodo.hiframes.pd_dataframe_ext import DataFrameType
+
         assert not kws
         assert len(args) == 4
         assert isinstance(args[1], types.Literal)
@@ -464,8 +493,7 @@ class SetDfColInfer(AbstractTemplate):
                 # set a new column
                 new_cols = target.columns + (ind,)
                 new_typs = target.data + (val,)
-            ret = DataFrameType(
-                new_typs, target.index, new_cols, target.has_parent)
+            ret = DataFrameType(new_typs, target.index, new_cols, target.has_parent)
 
         return signature(ret, *args)
 
@@ -496,17 +524,21 @@ def get_series_data_tup(series_tup):
 def overload_get_series_data_tup(series_tup):
     n_series = len(series_tup.types)
     func_text = "def f(series_tup):\n"
-    res = ",".join("bodo.hiframes.api.get_series_data(series_tup[{}])".format(i) for i in range(n_series))
-    func_text += "  return ({}{})\n".format(res, "," if n_series==1 else "")
+    res = ",".join(
+        "bodo.hiframes.api.get_series_data(series_tup[{}])".format(i)
+        for i in range(n_series)
+    )
+    func_text += "  return ({}{})\n".format(res, "," if n_series == 1 else "")
     loc_vars = {}
-    exec(func_text, {'bodo': bodo}, loc_vars)
-    impl = loc_vars['f']
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    impl = loc_vars["f"]
     return impl
 
 
 # convert tuple of Series to tuple of arrays statically (for append)
 def series_tup_to_arr_tup(arrs):  # pragma: no cover
     return arrs
+
 
 @infer_global(series_tup_to_arr_tup)
 class SeriesTupleToArrTupleTyper(AbstractTemplate):
@@ -519,8 +551,7 @@ class SeriesTupleToArrTupleTyper(AbstractTemplate):
 
 
 def get_series_payload(context, builder, series_type, value):
-    meminfo = cgutils.create_struct_proxy(
-        series_type)(context, builder, value).meminfo
+    meminfo = cgutils.create_struct_proxy(series_type)(context, builder, value).meminfo
     payload_type = SeriesPayloadType(series_type)
     payload = context.nrt.meminfo_data(builder, meminfo)
     ptrty = context.get_data_type(payload_type).as_pointer()
@@ -530,12 +561,11 @@ def get_series_payload(context, builder, series_type, value):
 
 @intrinsic
 def _get_series_data(typingctx, series_typ=None):
-
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
-            context, builder, signature.args[0], args[0])
-        return impl_ret_borrowed(
-            context, builder, series_typ.data, series_payload.data)
+            context, builder, signature.args[0], args[0]
+        )
+        return impl_ret_borrowed(context, builder, series_typ.data, series_payload.data)
 
     ret_typ = series_typ.data
     sig = signature(ret_typ, series_typ)
@@ -544,10 +574,10 @@ def _get_series_data(typingctx, series_typ=None):
 
 @intrinsic
 def update_series_data(typingctx, series_typ, arr_typ=None):
-
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
-            context, builder, signature.args[0], args[0])
+            context, builder, signature.args[0], args[0]
+        )
         series_payload.data = args[1]
         if context.enable_nrt:
             context.nrt.incref(builder, signature.args[1], args[1])
@@ -559,10 +589,10 @@ def update_series_data(typingctx, series_typ, arr_typ=None):
 
 @intrinsic
 def update_series_index(typingctx, series_typ, arr_typ=None):
-
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
-            context, builder, signature.args[0], args[0])
+            context, builder, signature.args[0], args[0]
+        )
         series_payload.index = args[1]
         if context.enable_nrt:
             context.nrt.incref(builder, signature.args[1], args[1])
@@ -574,12 +604,13 @@ def update_series_index(typingctx, series_typ, arr_typ=None):
 
 @intrinsic
 def _get_series_index(typingctx, series_typ=None):
-
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
-            context, builder, signature.args[0], args[0])
+            context, builder, signature.args[0], args[0]
+        )
         return impl_ret_borrowed(
-            context, builder, series_typ.index, series_payload.index)
+            context, builder, series_typ.index, series_payload.index
+        )
 
     ret_typ = series_typ.index
     sig = signature(ret_typ, series_typ)
@@ -588,16 +619,18 @@ def _get_series_index(typingctx, series_typ=None):
 
 @intrinsic
 def _get_series_name(typingctx, series_typ=None):
-
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
-            context, builder, signature.args[0], args[0])
+            context, builder, signature.args[0], args[0]
+        )
         # TODO: is borrowing None reference ok here?
         return impl_ret_borrowed(
-            context, builder, signature.return_type, series_payload.name)
+            context, builder, signature.return_type, series_payload.name
+        )
 
     sig = signature(series_typ.name_typ, series_typ)
     return sig, codegen
+
 
 # this function should be used for getting S._data for alias analysis to work
 # no_cpython_wrapper since Array(DatetimeDate) cannot be boxed
@@ -637,8 +670,8 @@ def get_series_data_equiv(self, scope, equiv_set, args, kws):
 
 
 from numba.array_analysis import ArrayAnalysis
-ArrayAnalysis._analyze_op_call_bodo_hiframes_api_get_series_data = \
-    get_series_data_equiv
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_api_get_series_data = get_series_data_equiv
 
 
 def init_series_equiv(self, scope, equiv_set, args, kws):
@@ -650,8 +683,7 @@ def init_series_equiv(self, scope, equiv_set, args, kws):
     return None
 
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_api_init_series = \
-    init_series_equiv
+ArrayAnalysis._analyze_op_call_bodo_hiframes_api_init_series = init_series_equiv
 
 
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
@@ -672,29 +704,64 @@ def alias_ext_init_integer_array(lhs_name, args, alias_map, arg_aliases):
     numba.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
 
 
-if hasattr(numba.ir_utils, 'alias_func_extensions'):
-    numba.ir_utils.alias_func_extensions[('init_series', 'bodo.hiframes.api')] = alias_ext_init_series
-    numba.ir_utils.alias_func_extensions[('get_series_data', 'bodo.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('get_series_index', 'bodo.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('init_datetime_index', 'bodo.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('init_timedelta_index', 'bodo.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('init_numeric_index', 'bodo.hiframes.pd_index_ext')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('init_string_index', 'bodo.hiframes.pd_index_ext')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('get_index_data', 'bodo.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('get_dataframe_data', 'bodo.hiframes.pd_dataframe_ext')] = alias_ext_dummy_func
+if hasattr(numba.ir_utils, "alias_func_extensions"):
+    numba.ir_utils.alias_func_extensions[
+        ("init_series", "bodo.hiframes.api")
+    ] = alias_ext_init_series
+    numba.ir_utils.alias_func_extensions[
+        ("get_series_data", "bodo.hiframes.api")
+    ] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[
+        ("get_series_index", "bodo.hiframes.api")
+    ] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[
+        ("init_datetime_index", "bodo.hiframes.api")
+    ] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[
+        ("init_timedelta_index", "bodo.hiframes.api")
+    ] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[
+        ("init_numeric_index", "bodo.hiframes.pd_index_ext")
+    ] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[
+        ("init_string_index", "bodo.hiframes.pd_index_ext")
+    ] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[
+        ("get_index_data", "bodo.hiframes.api")
+    ] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[
+        ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext")
+    ] = alias_ext_dummy_func
     # TODO: init_dataframe
-    numba.ir_utils.alias_func_extensions[('to_arr_from_series', 'bodo.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('to_date_series_type', 'bodo.hiframes.api')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('init_integer_array', 'bodo.libs.int_arr_ext')] = alias_ext_init_integer_array
-    numba.ir_utils.alias_func_extensions[('get_int_arr_data', 'bodo.libs.int_arr_ext')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('get_int_arr_bitmap', 'bodo.libs.int_arr_ext')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('init_bool_array', 'bodo.libs.bool_arr_ext')] = alias_ext_init_integer_array
-    numba.ir_utils.alias_func_extensions[('get_bool_arr_data', 'bodo.libs.bool_arr_ext')] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[('get_bool_arr_bitmap', 'bodo.libs.bool_arr_ext')] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[
+        ("to_arr_from_series", "bodo.hiframes.api")
+    ] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[
+        ("to_date_series_type", "bodo.hiframes.api")
+    ] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[
+        ("init_integer_array", "bodo.libs.int_arr_ext")
+    ] = alias_ext_init_integer_array
+    numba.ir_utils.alias_func_extensions[
+        ("get_int_arr_data", "bodo.libs.int_arr_ext")
+    ] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[
+        ("get_int_arr_bitmap", "bodo.libs.int_arr_ext")
+    ] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[
+        ("init_bool_array", "bodo.libs.bool_arr_ext")
+    ] = alias_ext_init_integer_array
+    numba.ir_utils.alias_func_extensions[
+        ("get_bool_arr_data", "bodo.libs.bool_arr_ext")
+    ] = alias_ext_dummy_func
+    numba.ir_utils.alias_func_extensions[
+        ("get_bool_arr_bitmap", "bodo.libs.bool_arr_ext")
+    ] = alias_ext_dummy_func
 
 
 def convert_tup_to_rec(val):
     return val
+
 
 @infer_global(convert_tup_to_rec)
 class ConvertTupRecType(AbstractTemplate):
@@ -705,11 +772,11 @@ class ConvertTupRecType(AbstractTemplate):
         out_dtype = in_dtype
 
         if isinstance(in_dtype, types.BaseTuple):
-            np_dtype = np.dtype(
-                ','.join(str(t) for t in in_dtype.types), align=True)
+            np_dtype = np.dtype(",".join(str(t) for t in in_dtype.types), align=True)
             out_dtype = numba.numpy_support.from_dtype(np_dtype)
 
         return signature(out_dtype, in_dtype)
+
 
 @lower_builtin(convert_tup_to_rec, types.Any)
 def lower_convert_impl(context, builder, sig, args):
@@ -728,7 +795,7 @@ def lower_convert_impl(context, builder, sig, args):
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
-    set_rec = loc_vars['_set_rec']
+    set_rec = loc_vars["_set_rec"]
 
     context.compile_internal(builder, set_rec, types.void(rec_typ, in_typ), [res, val])
     return impl_ret_new_ref(context, builder, sig.return_type, res)
@@ -736,6 +803,7 @@ def lower_convert_impl(context, builder, sig, args):
 
 def convert_rec_to_tup(val):
     return val
+
 
 @infer_global(convert_rec_to_tup)
 class ConvertRecTupType(AbstractTemplate):
@@ -750,6 +818,7 @@ class ConvertRecTupType(AbstractTemplate):
 
         return signature(out_dtype, in_dtype)
 
+
 @lower_builtin(convert_rec_to_tup, types.Any)
 def lower_convert_rec_tup_impl(context, builder, sig, args):
     val, = args
@@ -763,11 +832,12 @@ def lower_convert_rec_tup_impl(context, builder, sig, args):
 
     func_text = "def _rec_to_tup(r):\n"
     func_text += "  return ({},)\n".format(
-        ", ".join("r.f{}".format(i) for i in range(n_fields)))
+        ", ".join("r.f{}".format(i) for i in range(n_fields))
+    )
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
-    _rec_to_tup = loc_vars['_rec_to_tup']
+    _rec_to_tup = loc_vars["_rec_to_tup"]
 
     res = context.compile_internal(builder, _rec_to_tup, tup_typ(rec_typ), [val])
     return impl_ret_borrowed(context, builder, sig.return_type, res)
@@ -782,7 +852,7 @@ class FixDfRollingArrayType(AbstractTemplate):
         dtype = column.dtype
         ret_typ = column
         if dtype == types.boolean or isinstance(dtype, types.Integer):
-            ret_typ = types.Array(types.float64, 1, 'C')
+            ret_typ = types.Array(types.float64, 1, "C")
         # TODO: add other types
         return signature(ret_typ, column)
 
@@ -793,26 +863,29 @@ def lower_fix_rolling_array(context, builder, sig, args):
     res = context.compile_internal(builder, func, sig, args)
     return impl_ret_borrowed(context, builder, sig.return_type, res)
 
+
 # @overload(fix_rolling_array)
 def fix_rolling_array_overload(column):
     assert isinstance(column, types.Array)
     dtype = column.dtype
     # convert bool and integer to float64
     if dtype == types.boolean or isinstance(dtype, types.Integer):
+
         def fix_rolling_array_impl(column):  # pragma: no cover
             return column.astype(np.float64)
+
     else:
+
         def fix_rolling_array_impl(column):  # pragma: no cover
             return column
+
     return fix_rolling_array_impl
 
 
-def construct_series(context, builder, series_type, data_val, index_val,
-                                                                     name_val):
+def construct_series(context, builder, series_type, data_val, index_val, name_val):
     # create payload struct and store values
     payload_type = SeriesPayloadType(series_type)
-    series_payload = cgutils.create_struct_proxy(
-        payload_type)(context, builder)
+    series_payload = cgutils.create_struct_proxy(payload_type)(context, builder)
     series_payload.data = data_val
     series_payload.index = index_val
     series_payload.name = name_val
@@ -821,15 +894,14 @@ def construct_series(context, builder, series_type, data_val, index_val,
     payload_ll_type = context.get_data_type(payload_type)
     payload_size = context.get_abi_sizeof(payload_ll_type)
     meminfo = context.nrt.meminfo_alloc(
-        builder, context.get_constant(types.uintp, payload_size))
+        builder, context.get_constant(types.uintp, payload_size)
+    )
     meminfo_data_ptr = context.nrt.meminfo_data(builder, meminfo)
-    meminfo_data_ptr = builder.bitcast(meminfo_data_ptr,
-                                        payload_ll_type.as_pointer())
+    meminfo_data_ptr = builder.bitcast(meminfo_data_ptr, payload_ll_type.as_pointer())
     builder.store(series_payload._getvalue(), meminfo_data_ptr)
 
     # create Series struct
-    series = cgutils.create_struct_proxy(
-        series_type)(context, builder)
+    series = cgutils.create_struct_proxy(series_type)(context, builder)
     series.meminfo = meminfo
     # Set parent to NULL
     series.parent = cgutils.get_null_value(series.parent.type)
@@ -854,7 +926,8 @@ def init_series(typingctx, data, index=None, name=None):
         series_type = signature.return_type
 
         series_val = construct_series(
-            context, builder, series_type, data_val, index_val, name_val)
+            context, builder, series_type, data_val, index_val, name_val
+        )
 
         # increase refcount of stored values
         if context.enable_nrt:
@@ -882,8 +955,7 @@ def init_datetime_index(typingctx, data, name=None):
     def codegen(context, builder, signature, args):
         data_val, name_val = args
         # create dt_index struct and store values
-        dt_index = cgutils.create_struct_proxy(
-            signature.return_type)(context, builder)
+        dt_index = cgutils.create_struct_proxy(signature.return_type)(context, builder)
         dt_index.data = data_val
         dt_index.name = name_val
 
@@ -909,8 +981,9 @@ def init_timedelta_index(typingctx, data, name=None):
     def codegen(context, builder, signature, args):
         data_val, name_val = args
         # create timedelta_index struct and store values
-        timedelta_index = cgutils.create_struct_proxy(
-            signature.return_type)(context, builder)
+        timedelta_index = cgutils.create_struct_proxy(signature.return_type)(
+            context, builder
+        )
         timedelta_index.data = data_val
         timedelta_index.name = name_val
 
@@ -935,6 +1008,7 @@ def np_array_array_overload(A):
         # TODO: naive implementation, data from set can probably
         # be copied to array more efficienty
         dtype = A.dtype
+
         def f(A):
             n = len(A)
             arr = np.empty(n, dtype)
@@ -943,6 +1017,7 @@ def np_array_array_overload(A):
                 arr[i] = a
                 i += 1
             return arr
+
         return f
 
 
@@ -956,6 +1031,7 @@ class JoinTyper(AbstractTemplate):
     def generic(self, args, kws):
         from bodo.hiframes.pd_dataframe_ext import DataFrameType
         from bodo.utils.typing import is_overload_str
+
         assert not kws
         left_df, right_df, left_on, right_on, how = args
 
@@ -964,26 +1040,31 @@ class JoinTyper(AbstractTemplate):
         comm_data = set(left_df.columns) & set(right_df.columns)
         add_suffix = comm_data - comm_keys
 
-        columns = [(c + '_x' if c in add_suffix else c)
-                    for c in left_df.columns]
+        columns = [(c + "_x" if c in add_suffix else c) for c in left_df.columns]
         # common keys are added only once so avoid adding them
-        columns += [(c + '_y' if c in add_suffix else c)
-                    for c in right_df.columns if c not in comm_keys]
+        columns += [
+            (c + "_y" if c in add_suffix else c)
+            for c in right_df.columns
+            if c not in comm_keys
+        ]
         data = list(left_df.data)
-        data += [right_df.data[right_df.columns.index(c)]
-                for c in right_df.columns if c not in comm_keys]
+        data += [
+            right_df.data[right_df.columns.index(c)]
+            for c in right_df.columns
+            if c not in comm_keys
+        ]
 
         # TODO: unify left/right indices if necessary (e.g. RangeIndex/Int64)
         index_typ = types.none
-        left_index = '$_bodo_index_' in left_on.consts
-        right_index = '$_bodo_index_' in right_on.consts
-        if left_index and right_index and not is_overload_str(how, 'asof'):
+        left_index = "$_bodo_index_" in left_on.consts
+        right_index = "$_bodo_index_" in right_on.consts
+        if left_index and right_index and not is_overload_str(how, "asof"):
             index_typ = left_df.index
             if isinstance(index_typ, bodo.hiframes.pd_index_ext.RangeIndexType):
                 index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
-        elif right_index and is_overload_str(how, 'left'):
+        elif right_index and is_overload_str(how, "left"):
             index_typ = left_df.index
-        elif left_index and is_overload_str(how, 'right'):
+        elif left_index and is_overload_str(how, "right"):
             index_typ = right_df.index
 
         out_df = DataFrameType(tuple(data), index_typ, tuple(columns))
@@ -994,8 +1075,7 @@ class JoinTyper(AbstractTemplate):
 # is merged
 @lower_builtin(join_dummy, types.VarArg(types.Any))
 def lower_join_dummy(context, builder, sig, args):
-    dataframe = cgutils.create_struct_proxy(
-            sig.return_type)(context, builder)
+    dataframe = cgutils.create_struct_proxy(sig.return_type)(context, builder)
     return dataframe._getvalue()
 
 
@@ -1005,16 +1085,34 @@ def drop_inplace(df):
 
 
 @overload(drop_inplace)
-def drop_inplace_overload(df, labels=None, axis=0, index=None, columns=None,
-        level=None, inplace=False, errors='raise'):
+def drop_inplace_overload(
+    df,
+    labels=None,
+    axis=0,
+    index=None,
+    columns=None,
+    level=None,
+    inplace=False,
+    errors="raise",
+):
 
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
+
     assert isinstance(df, DataFrameType)
     # TODO: support recovery when object is not df
-    def _impl(df, labels=None, axis=0, index=None, columns=None,
-            level=None, inplace=False, errors='raise'):
+    def _impl(
+        df,
+        labels=None,
+        axis=0,
+        index=None,
+        columns=None,
+        level=None,
+        inplace=False,
+        errors="raise",
+    ):
         new_df = bodo.hiframes.pd_dataframe_ext.drop_dummy(
-            df, labels, axis, columns, inplace)
+            df, labels, axis, columns, inplace
+        )
         return new_df, None
 
     return _impl
@@ -1026,17 +1124,27 @@ def sort_values_inplace(df):
 
 
 @overload(sort_values_inplace)
-def sort_values_inplace_overload(df, by, axis=0, ascending=True, inplace=False,
-        kind='quicksort', na_position='last'):
+def sort_values_inplace_overload(
+    df, by, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last"
+):
 
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
+
     assert isinstance(df, DataFrameType)
     # TODO: support recovery when object is not df
-    def _impl(df, by, axis=0, ascending=True, inplace=False, kind='quicksort',
-            na_position='last'):
+    def _impl(
+        df,
+        by,
+        axis=0,
+        ascending=True,
+        inplace=False,
+        kind="quicksort",
+        na_position="last",
+    ):
 
         new_df = bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
-            df, by, ascending, inplace)
+            df, by, ascending, inplace
+        )
         return new_df, None
 
     return _impl
@@ -1044,9 +1152,12 @@ def sort_values_inplace_overload(df, by, axis=0, ascending=True, inplace=False,
 
 @overload(operator.getitem)
 def list_str_arr_getitem_array(arr, ind):
-    if (arr == list_string_array_type and isinstance(ind, types.Array)
-            and ind.ndim == 1 and isinstance(
-            ind.dtype, (types.Integer, types.Boolean))):
+    if (
+        arr == list_string_array_type
+        and isinstance(ind, types.Array)
+        and ind.ndim == 1
+        and isinstance(ind.dtype, (types.Integer, types.Boolean))
+    ):
         # TODO: convert to parfor in typed pass
         def list_str_arr_getitem_impl(arr, ind):
             n = ind.sum()
@@ -1069,33 +1180,37 @@ class DataFrameTupleIterator(types.SimpleIteratorType):
     def __init__(self, col_names, arr_typs):
         self.array_types = arr_typs
         self.col_names = col_names
-        name_args = ["{}={}".format(col_names[i], arr_typs[i])
-                                                for i in range(len(col_names))]
+        name_args = [
+            "{}={}".format(col_names[i], arr_typs[i]) for i in range(len(col_names))
+        ]
         name = "itertuples({})".format(",".join(name_args))
-        py_ntup = namedtuple('Pandas', col_names)
+        py_ntup = namedtuple("Pandas", col_names)
         yield_type = types.NamedTuple([_get_series_dtype(a) for a in arr_typs], py_ntup)
         super(DataFrameTupleIterator, self).__init__(name, yield_type)
 
+
 def _get_series_dtype(arr_typ):
     # values of datetimeindex are extracted as Timestamp
-    if arr_typ == types.Array(types.NPDatetime('ns'), 1, 'C'):
+    if arr_typ == types.Array(types.NPDatetime("ns"), 1, "C"):
         return pandas_timestamp_type
     return arr_typ.dtype
 
+
 def get_itertuples():  # pragma: no cover
     pass
+
 
 @infer_global(get_itertuples)
 class TypeIterTuples(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         assert len(args) % 2 == 0, "name and column pairs expected"
-        col_names = [a.literal_value for a in args[:len(args)//2]]
-        arr_types =  [if_series_to_array_type(a) for a in args[len(args)//2:]]
+        col_names = [a.literal_value for a in args[: len(args) // 2]]
+        arr_types = [if_series_to_array_type(a) for a in args[len(args) // 2 :]]
         # XXX index handling, assuming implicit index
         assert "Index" not in col_names[0]
-        col_names = ['Index'] + col_names
-        arr_types = [types.Array(types.int64, 1, 'C')] + arr_types
+        col_names = ["Index"] + col_names
+        arr_types = [types.Array(types.int64, 1, "C")] + arr_types
         iter_typ = DataFrameTupleIterator(col_names, arr_types)
         return signature(iter_typ, *args)
 
@@ -1105,8 +1220,9 @@ class DataFrameTupleIteratorModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         # We use an unsigned index to avoid the cost of negative index tests.
         # XXX array_types[0] is implicit index
-        members = ([('index', types.EphemeralPointer(types.uintp))]
-            + [('array{}'.format(i), arr) for i, arr in enumerate(fe_type.array_types[1:])])
+        members = [("index", types.EphemeralPointer(types.uintp))] + [
+            ("array{}".format(i), arr) for i, arr in enumerate(fe_type.array_types[1:])
+        ]
         super(DataFrameTupleIteratorModel, self).__init__(dmm, fe_type, members)
 
     def from_return(self, builder, value):
@@ -1118,8 +1234,8 @@ class DataFrameTupleIteratorModel(models.StructModel):
 
 @lower_builtin(get_itertuples, types.VarArg(types.Any))
 def get_itertuples_impl(context, builder, sig, args):
-    arrays = args[len(args)//2:]
-    array_types = sig.args[len(sig.args)//2:]
+    arrays = args[len(args) // 2 :]
+    array_types = sig.args[len(sig.args) // 2 :]
 
     iterobj = context.make_helper(builder, sig.return_type)
 
@@ -1141,13 +1257,15 @@ def get_itertuples_impl(context, builder, sig, args):
     # Note: a decref on the iterator will dereference all internal MemInfo*
     return impl_ret_new_ref(context, builder, sig.return_type, res)
 
-@lower_builtin('getiter', DataFrameTupleIterator)
+
+@lower_builtin("getiter", DataFrameTupleIterator)
 def getiter_itertuples(context, builder, sig, args):
     # simply return the iterator
     return impl_ret_borrowed(context, builder, sig.return_type, args[0])
 
+
 # similar to iternext of ArrayIterator
-@lower_builtin('iternext', DataFrameTupleIterator)
+@lower_builtin("iternext", DataFrameTupleIterator)
 @iternext_impl(RefType.UNTRACKED)
 def iternext_itertuples(context, builder, sig, args, result):
     # TODO: refcount issues?
@@ -1159,7 +1277,9 @@ def iternext_itertuples(context, builder, sig, args, result):
     # first array type is implicit int index
     # use len() to support string arrays
     len_sig = signature(types.intp, iterty.array_types[1])
-    nitems = context.compile_internal(builder, lambda a: len(a), len_sig, [iterobj.array0])
+    nitems = context.compile_internal(
+        builder, lambda a: len(a), len_sig, [iterobj.array0]
+    )
     # ary = make_array(iterty.array_types[1])(context, builder, value=iterobj.array0)
     # nitems, = cgutils.unpack_tuple(builder, ary.shape, count=1)
 
@@ -1172,14 +1292,21 @@ def iternext_itertuples(context, builder, sig, args, result):
         for i, arr_typ in enumerate(iterty.array_types[1:]):
             arr_ptr = getattr(iterobj, "array{}".format(i))
 
-            if arr_typ == types.Array(types.NPDatetime('ns'), 1, 'C'):
+            if arr_typ == types.Array(types.NPDatetime("ns"), 1, "C"):
                 getitem_sig = signature(pandas_timestamp_type, arr_typ, types.intp)
-                val = context.compile_internal(builder,
-                    lambda a,i: bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(np.int64(a[i])),
-                        getitem_sig, [arr_ptr, index])
+                val = context.compile_internal(
+                    builder,
+                    lambda a, i: bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
+                        np.int64(a[i])
+                    ),
+                    getitem_sig,
+                    [arr_ptr, index],
+                )
             else:
                 getitem_sig = signature(arr_typ.dtype, arr_typ, types.intp)
-                val = context.compile_internal(builder, lambda a,i: a[i], getitem_sig, [arr_ptr, index])
+                val = context.compile_internal(
+                    builder, lambda a, i: a[i], getitem_sig, [arr_ptr, index]
+                )
             # arr = make_array(arr_typ)(context, builder, value=arr_ptr)
             # val = _getitem_array1d(context, builder, arr_typ, arr, index,
             #                      wraparound=False)
@@ -1220,15 +1347,16 @@ def _analyze_op_pair_first(self, scope, equiv_set, expr):
     self.typemap[lhs.name] = typ
     rhs = ir.Expr.pair_first(expr.value, expr.loc)
     lhs_assign = ir.Assign(rhs, lhs, expr.loc)
-    #(shape, post) = self._gen_shape_call(equiv_set, lhs, typ.count, )
+    # (shape, post) = self._gen_shape_call(equiv_set, lhs, typ.count, )
     var = lhs
     out = []
     size_vars = []
     ndims = typ.count
     for i in range(ndims):
         # get size: Asize0 = A_sh_attr[0]
-        size_var = ir.Var(var.scope, mk_unique_var(
-                            "{}_size{}".format(var.name, i)), var.loc)
+        size_var = ir.Var(
+            var.scope, mk_unique_var("{}_size{}".format(var.name, i)), var.loc
+        )
         getitem = ir.Expr.static_getitem(lhs, i, None, var.loc)
         self.calltypes[getitem] = None
         out.append(ir.Assign(getitem, size_var, var.loc))
@@ -1236,5 +1364,6 @@ def _analyze_op_pair_first(self, scope, equiv_set, expr):
         size_vars.append(size_var)
     shape = tuple(size_vars)
     return shape, [lhs_assign] + out
+
 
 numba.array_analysis.ArrayAnalysis._analyze_op_pair_first = _analyze_op_pair_first

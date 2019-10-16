@@ -6,25 +6,35 @@ import pandas as pd
 import numpy as np
 import numba
 import bodo
-from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
-    count_parfor_OneDs, count_array_OneDs, dist_IR_contains)
+from bodo.tests.utils import (
+    count_array_REPs,
+    count_parfor_REPs,
+    count_parfor_OneDs,
+    count_array_OneDs,
+    dist_IR_contains,
+)
 from bodo.hiframes.rolling import supported_rolling_funcs
 import pytest
 
 
-LONG_TEST = (int(os.environ['HPAT_LONG_ROLLING_TEST']) != 0
-             if 'HPAT_LONG_ROLLING_TEST' in os.environ else False)
+LONG_TEST = (
+    int(os.environ["HPAT_LONG_ROLLING_TEST"]) != 0
+    if "HPAT_LONG_ROLLING_TEST" in os.environ
+    else False
+)
 
-test_funcs = ('mean', 'max',)
+test_funcs = ("mean", "max")
 if LONG_TEST:
     # all functions except apply, cov, corr
     test_funcs = supported_rolling_funcs[:-3]
 
 
-@pytest.fixture(params = [
-pd.DataFrame({'B': [0, 1, 2, np.nan, 4]}, [4, 1, 3, 0, -1])
-#pd.DataFrame({'B': [0, 1, 2, -2, 4]}, [4, 1, 3, 0, -1])
-])
+@pytest.fixture(
+    params=[
+        pd.DataFrame({"B": [0, 1, 2, np.nan, 4]}, [4, 1, 3, 0, -1])
+        # pd.DataFrame({'B': [0, 1, 2, -2, 4]}, [4, 1, 3, 0, -1])
+    ]
+)
 def test_df(request):
     return request.param
 
@@ -39,15 +49,19 @@ def test_fixed_index(test_df):
 
 def test_variable_on_index():
     def impl(df):
-        return df.rolling('2s').mean()
+        return df.rolling("2s").mean()
 
     bodo_func = bodo.jit(impl)
-    df = pd.DataFrame({'B': [0, 1, 2, np.nan, 4],},
-                     [pd.Timestamp('20130101 09:00:00'),
-                        pd.Timestamp('20130101 09:00:02'),
-                        pd.Timestamp('20130101 09:00:03'),
-                        pd.Timestamp('20130101 09:00:05'),
-                        pd.Timestamp('20130101 09:00:06')])
+    df = pd.DataFrame(
+        {"B": [0, 1, 2, np.nan, 4]},
+        [
+            pd.Timestamp("20130101 09:00:00"),
+            pd.Timestamp("20130101 09:00:02"),
+            pd.Timestamp("20130101 09:00:03"),
+            pd.Timestamp("20130101 09:00:05"),
+            pd.Timestamp("20130101 09:00:06"),
+        ],
+    )
     pd.testing.assert_frame_equal(bodo_func(df), impl(df))
 
 
@@ -60,17 +74,23 @@ class TestRolling(unittest.TestCase):
         centers = (False, True)
 
         for func_name in test_funcs:
-            func_text = "def test_impl(df, w, c):\n  return df.rolling(w, center=c).{}()\n".format(func_name)
+            func_text = "def test_impl(df, w, c):\n  return df.rolling(w, center=c).{}()\n".format(
+                func_name
+            )
             loc_vars = {}
             exec(func_text, {}, loc_vars)
-            test_impl = loc_vars['test_impl']
+            test_impl = loc_vars["test_impl"]
             bodo_func = bodo.jit(test_impl)
 
             for args in itertools.product(wins, centers):
-                df = pd.DataFrame({'B': [0, 1, 2, np.nan, 4]})
-                pd.testing.assert_frame_equal(bodo_func(df, *args), test_impl(df, *args))
-                df = pd.DataFrame({'B': [0, 1, 2, -2, 4]})
-                pd.testing.assert_frame_equal(bodo_func(df, *args), test_impl(df, *args))
+                df = pd.DataFrame({"B": [0, 1, 2, np.nan, 4]})
+                pd.testing.assert_frame_equal(
+                    bodo_func(df, *args), test_impl(df, *args)
+                )
+                df = pd.DataFrame({"B": [0, 1, 2, -2, 4]})
+                pd.testing.assert_frame_equal(
+                    bodo_func(df, *args), test_impl(df, *args)
+                )
 
     def test_fixed2(self):
         # test sequentially with generated dfs
@@ -81,34 +101,38 @@ class TestRolling(unittest.TestCase):
             wins = (2, 3, 5)
         centers = (False, True)
         for func_name in test_funcs:
-            func_text = "def test_impl(df, w, c):\n  return df.rolling(w, center=c).{}()\n".format(func_name)
+            func_text = "def test_impl(df, w, c):\n  return df.rolling(w, center=c).{}()\n".format(
+                func_name
+            )
             loc_vars = {}
             exec(func_text, {}, loc_vars)
-            test_impl = loc_vars['test_impl']
+            test_impl = loc_vars["test_impl"]
             bodo_func = bodo.jit(test_impl)
             for n, w, c in itertools.product(sizes, wins, centers):
-                df = pd.DataFrame({'B': np.arange(n)})
+                df = pd.DataFrame({"B": np.arange(n)})
                 pd.testing.assert_frame_equal(bodo_func(df, w, c), test_impl(df, w, c))
 
     def test_fixed_apply1(self):
         # test sequentially with manually created dfs
         def test_impl(df, w, c):
             return df.rolling(w, center=c).apply(lambda a: a.sum())
+
         bodo_func = bodo.jit(test_impl)
         wins = (3,)
         if LONG_TEST:
             wins = (2, 3, 5)
         centers = (False, True)
         for args in itertools.product(wins, centers):
-            df = pd.DataFrame({'B': [0, 1, 2, np.nan, 4]})
+            df = pd.DataFrame({"B": [0, 1, 2, np.nan, 4]})
             pd.testing.assert_frame_equal(bodo_func(df, *args), test_impl(df, *args))
-            df = pd.DataFrame({'B': [0, 1, 2, -2, 4]})
+            df = pd.DataFrame({"B": [0, 1, 2, -2, 4]})
             pd.testing.assert_frame_equal(bodo_func(df, *args), test_impl(df, *args))
 
     def test_fixed_apply2(self):
         # test sequentially with generated dfs
         def test_impl(df, w, c):
             return df.rolling(w, center=c).apply(lambda a: a.sum())
+
         bodo_func = bodo.jit(test_impl)
         sizes = (121,)
         wins = (3,)
@@ -117,12 +141,12 @@ class TestRolling(unittest.TestCase):
             wins = (2, 3, 5)
         centers = (False, True)
         for n, w, c in itertools.product(sizes, wins, centers):
-            df = pd.DataFrame({'B': np.arange(n)})
+            df = pd.DataFrame({"B": np.arange(n)})
             pd.testing.assert_frame_equal(bodo_func(df, w, c), test_impl(df, w, c))
 
     def test_fixed_parallel1(self):
         def test_impl(n, w, center):
-            df = pd.DataFrame({'B': np.arange(n)})
+            df = pd.DataFrame({"B": np.arange(n)})
             R = df.rolling(w, center=center).sum()
             return R.B.sum()
 
@@ -134,14 +158,17 @@ class TestRolling(unittest.TestCase):
             wins = (2, 4, 5, 10, 11)
         centers = (False, True)
         for args in itertools.product(sizes, wins, centers):
-            self.assertEqual(bodo_func(*args), test_impl(*args),
-                             "rolling fixed window with {}".format(args))
+            self.assertEqual(
+                bodo_func(*args),
+                test_impl(*args),
+                "rolling fixed window with {}".format(args),
+            )
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_fixed_parallel_apply1(self):
         def test_impl(n, w, center):
-            df = pd.DataFrame({'B': np.arange(n)})
+            df = pd.DataFrame({"B": np.arange(n)})
             R = df.rolling(w, center=center).apply(lambda a: a.sum())
             return R.B.sum()
 
@@ -153,112 +180,147 @@ class TestRolling(unittest.TestCase):
             wins = (2, 4, 5, 10, 11)
         centers = (False, True)
         for args in itertools.product(sizes, wins, centers):
-            self.assertEqual(bodo_func(*args), test_impl(*args),
-                             "rolling fixed window with {}".format(args))
+            self.assertEqual(
+                bodo_func(*args),
+                test_impl(*args),
+                "rolling fixed window with {}".format(args),
+            )
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_variable1(self):
         # test sequentially with manually created dfs
-        df1 = pd.DataFrame({'B': [0, 1, 2, np.nan, 4],
-                'time': [pd.Timestamp('20130101 09:00:00'),
-                        pd.Timestamp('20130101 09:00:02'),
-                        pd.Timestamp('20130101 09:00:03'),
-                        pd.Timestamp('20130101 09:00:05'),
-                        pd.Timestamp('20130101 09:00:06')]})
-        df2 = pd.DataFrame({'B': [0, 1, 2, -2, 4],
-                    'time': [pd.Timestamp('20130101 09:00:01'),
-                        pd.Timestamp('20130101 09:00:02'),
-                        pd.Timestamp('20130101 09:00:03'),
-                        pd.Timestamp('20130101 09:00:04'),
-                        pd.Timestamp('20130101 09:00:09')]})
-        wins = ('2s',)
+        df1 = pd.DataFrame(
+            {
+                "B": [0, 1, 2, np.nan, 4],
+                "time": [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                ],
+            }
+        )
+        df2 = pd.DataFrame(
+            {
+                "B": [0, 1, 2, -2, 4],
+                "time": [
+                    pd.Timestamp("20130101 09:00:01"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:04"),
+                    pd.Timestamp("20130101 09:00:09"),
+                ],
+            }
+        )
+        wins = ("2s",)
         if LONG_TEST:
-            wins = ('1s', '2s', '3s', '4s')
+            wins = ("1s", "2s", "3s", "4s")
         # all functions except apply
         for w, func_name in itertools.product(wins, test_funcs):
-            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').{}()\n".format(w, func_name)
+            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').{}()\n".format(
+                w, func_name
+            )
             loc_vars = {}
             exec(func_text, {}, loc_vars)
-            test_impl = loc_vars['test_impl']
+            test_impl = loc_vars["test_impl"]
             bodo_func = bodo.jit(test_impl)
             # XXX: skipping min/max for this test since the behavior of Pandas
             # is inconsistent: it assigns NaN to last output instead of 4!
-            if func_name not in ('min', 'max'):
+            if func_name not in ("min", "max"):
                 pd.testing.assert_frame_equal(bodo_func(df1), test_impl(df1))
             pd.testing.assert_frame_equal(bodo_func(df2), test_impl(df2))
 
     def test_variable2(self):
         # test sequentially with generated dfs
-        wins = ('2s',)
+        wins = ("2s",)
         sizes = (121,)
         if LONG_TEST:
-            wins = ('1s', '2s', '3s', '4s')
+            wins = ("1s", "2s", "3s", "4s")
             sizes = (1, 2, 10, 11, 121, 1000)
         # all functions except apply
         for w, func_name in itertools.product(wins, test_funcs):
-            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').{}()\n".format(w, func_name)
+            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').{}()\n".format(
+                w, func_name
+            )
             loc_vars = {}
             exec(func_text, {}, loc_vars)
-            test_impl = loc_vars['test_impl']
+            test_impl = loc_vars["test_impl"]
             bodo_func = bodo.jit(test_impl)
             for n in sizes:
-                time = pd.date_range(start='1/1/2018', periods=n, freq='s')
-                df = pd.DataFrame({'B': np.arange(n), 'time': time})
+                time = pd.date_range(start="1/1/2018", periods=n, freq="s")
+                df = pd.DataFrame({"B": np.arange(n), "time": time})
                 pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
 
     def test_variable_apply1(self):
         # test sequentially with manually created dfs
-        df1 = pd.DataFrame({'B': [0, 1, 2, np.nan, 4],
-                'time': [pd.Timestamp('20130101 09:00:00'),
-                        pd.Timestamp('20130101 09:00:02'),
-                        pd.Timestamp('20130101 09:00:03'),
-                        pd.Timestamp('20130101 09:00:05'),
-                        pd.Timestamp('20130101 09:00:06')]})
-        df2 = pd.DataFrame({'B': [0, 1, 2, -2, 4],
-                    'time': [pd.Timestamp('20130101 09:00:01'),
-                        pd.Timestamp('20130101 09:00:02'),
-                        pd.Timestamp('20130101 09:00:03'),
-                        pd.Timestamp('20130101 09:00:04'),
-                        pd.Timestamp('20130101 09:00:09')]})
-        wins = ('2s',)
+        df1 = pd.DataFrame(
+            {
+                "B": [0, 1, 2, np.nan, 4],
+                "time": [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                ],
+            }
+        )
+        df2 = pd.DataFrame(
+            {
+                "B": [0, 1, 2, -2, 4],
+                "time": [
+                    pd.Timestamp("20130101 09:00:01"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:04"),
+                    pd.Timestamp("20130101 09:00:09"),
+                ],
+            }
+        )
+        wins = ("2s",)
         if LONG_TEST:
-            wins = ('1s', '2s', '3s', '4s')
+            wins = ("1s", "2s", "3s", "4s")
         # all functions except apply
         for w in wins:
-            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').apply(lambda a: a.sum())\n".format(w)
+            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').apply(lambda a: a.sum())\n".format(
+                w
+            )
             loc_vars = {}
             exec(func_text, {}, loc_vars)
-            test_impl = loc_vars['test_impl']
+            test_impl = loc_vars["test_impl"]
             bodo_func = bodo.jit(test_impl)
             pd.testing.assert_frame_equal(bodo_func(df1), test_impl(df1))
             pd.testing.assert_frame_equal(bodo_func(df2), test_impl(df2))
 
     def test_variable_apply2(self):
         # test sequentially with generated dfs
-        wins = ('2s',)
+        wins = ("2s",)
         sizes = (121,)
         if LONG_TEST:
-            wins = ('1s', '2s', '3s', '4s')
+            wins = ("1s", "2s", "3s", "4s")
             # TODO: this crashes on Travis (3 process config) with size 1
             sizes = (2, 10, 11, 121, 1000)
         # all functions except apply
         for w in wins:
-            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').apply(lambda a: a.sum())\n".format(w)
+            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').apply(lambda a: a.sum())\n".format(
+                w
+            )
             loc_vars = {}
             exec(func_text, {}, loc_vars)
-            test_impl = loc_vars['test_impl']
+            test_impl = loc_vars["test_impl"]
             bodo_func = bodo.jit(test_impl)
             for n in sizes:
-                time = pd.date_range(start='1/1/2018', periods=n, freq='s')
-                df = pd.DataFrame({'B': np.arange(n), 'time': time})
+                time = pd.date_range(start="1/1/2018", periods=n, freq="s")
+                df = pd.DataFrame({"B": np.arange(n), "time": time})
                 pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
 
     def test_variable_parallel1(self):
-        wins = ('2s',)
+        wins = ("2s",)
         sizes = (121,)
         if LONG_TEST:
-            wins = ('1s', '2s', '3s', '4s')
+            wins = ("1s", "2s", "3s", "4s")
             # XXX: Pandas returns time = [np.nan] for size==1 for some reason
             sizes = (2, 10, 11, 121, 1000)
         # all functions except apply
@@ -266,11 +328,13 @@ class TestRolling(unittest.TestCase):
             func_text = "def test_impl(n):\n"
             func_text += "  df = pd.DataFrame({'B': np.arange(n), 'time': "
             func_text += "    pd.DatetimeIndex(np.arange(n) * 1000000000)})\n"
-            func_text += "  res = df.rolling('{}', on='time').{}()\n".format(w, func_name)
+            func_text += "  res = df.rolling('{}', on='time').{}()\n".format(
+                w, func_name
+            )
             func_text += "  return res.B.sum()\n"
             loc_vars = {}
-            exec(func_text, {'pd': pd, 'np': np, 'bodo': bodo}, loc_vars)
-            test_impl = loc_vars['test_impl']
+            exec(func_text, {"pd": pd, "np": np, "bodo": bodo}, loc_vars)
+            test_impl = loc_vars["test_impl"]
             bodo_func = bodo.jit(test_impl)
             for n in sizes:
                 np.testing.assert_almost_equal(bodo_func(n), test_impl(n))
@@ -278,10 +342,10 @@ class TestRolling(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_variable_apply_parallel1(self):
-        wins = ('2s',)
+        wins = ("2s",)
         sizes = (121,)
         if LONG_TEST:
-            wins = ('1s', '2s', '3s', '4s')
+            wins = ("1s", "2s", "3s", "4s")
             # XXX: Pandas returns time = [np.nan] for size==1 for some reason
             sizes = (2, 10, 11, 121, 1000)
         # all functions except apply
@@ -289,11 +353,13 @@ class TestRolling(unittest.TestCase):
             func_text = "def test_impl(n):\n"
             func_text += "  df = pd.DataFrame({'B': np.arange(n), 'time': "
             func_text += "    pd.DatetimeIndex(np.arange(n) * 1000000000)})\n"
-            func_text += "  res = df.rolling('{}', on='time').apply(lambda a: a.sum())\n".format(w)
+            func_text += "  res = df.rolling('{}', on='time').apply(lambda a: a.sum())\n".format(
+                w
+            )
             func_text += "  return res.B.sum()\n"
             loc_vars = {}
-            exec(func_text, {'pd': pd, 'np': np, 'bodo': bodo}, loc_vars)
-            test_impl = loc_vars['test_impl']
+            exec(func_text, {"pd": pd, "np": np, "bodo": bodo}, loc_vars)
+            test_impl = loc_vars["test_impl"]
             bodo_func = bodo.jit(test_impl)
             for n in sizes:
                 np.testing.assert_almost_equal(bodo_func(n), test_impl(n))
@@ -310,21 +376,32 @@ class TestRolling(unittest.TestCase):
             wins = (2, 3, 5)
         centers = (False, True)
         for func_name in test_funcs:
-            func_text = "def test_impl(S, w, c):\n  return S.rolling(w, center=c).{}()\n".format(func_name)
+            func_text = "def test_impl(S, w, c):\n  return S.rolling(w, center=c).{}()\n".format(
+                func_name
+            )
             loc_vars = {}
             exec(func_text, {}, loc_vars)
-            test_impl = loc_vars['test_impl']
+            test_impl = loc_vars["test_impl"]
             bodo_func = bodo.jit(test_impl)
             for args in itertools.product(wins, centers):
-                pd.testing.assert_series_equal(bodo_func(S1, *args), test_impl(S1, *args))
-                pd.testing.assert_series_equal(bodo_func(S2, *args), test_impl(S2, *args))
+                pd.testing.assert_series_equal(
+                    bodo_func(S1, *args), test_impl(S1, *args)
+                )
+                pd.testing.assert_series_equal(
+                    bodo_func(S2, *args), test_impl(S2, *args)
+                )
         # test apply
         def apply_test_impl(S, w, c):
             return S.rolling(w, center=c).apply(lambda a: a.sum())
+
         bodo_func = bodo.jit(apply_test_impl)
         for args in itertools.product(wins, centers):
-            pd.testing.assert_series_equal(bodo_func(S1, *args), apply_test_impl(S1, *args))
-            pd.testing.assert_series_equal(bodo_func(S2, *args), apply_test_impl(S2, *args))
+            pd.testing.assert_series_equal(
+                bodo_func(S1, *args), apply_test_impl(S1, *args)
+            )
+            pd.testing.assert_series_equal(
+                bodo_func(S2, *args), apply_test_impl(S2, *args)
+            )
 
     def test_series_cov1(self):
         # test series rolling functions
@@ -335,14 +412,18 @@ class TestRolling(unittest.TestCase):
         if LONG_TEST:
             wins = (2, 3, 5)
         centers = (False, True)
+
         def test_impl(S, S2, w, c):
             return S.rolling(w, center=c).cov(S2)
+
         bodo_func = bodo.jit(test_impl)
         for args in itertools.product([S1, S2], [S1, S2], wins, centers):
             pd.testing.assert_series_equal(bodo_func(*args), test_impl(*args))
             pd.testing.assert_series_equal(bodo_func(*args), test_impl(*args))
+
         def test_impl2(S, S2, w, c):
             return S.rolling(w, center=c).corr(S2)
+
         bodo_func = bodo.jit(test_impl2)
         for args in itertools.product([S1, S2], [S1, S2], wins, centers):
             pd.testing.assert_series_equal(bodo_func(*args), test_impl2(*args))
@@ -351,24 +432,29 @@ class TestRolling(unittest.TestCase):
     def test_df_cov1(self):
         # test series rolling functions
         # all functions except apply
-        df1 = pd.DataFrame({'A': [0, 1, 2, np.nan, 4], 'B': np.ones(5)})
-        df2 = pd.DataFrame({'A': [0, 1, 2, -2, 4], 'C': np.ones(5)})
+        df1 = pd.DataFrame({"A": [0, 1, 2, np.nan, 4], "B": np.ones(5)})
+        df2 = pd.DataFrame({"A": [0, 1, 2, -2, 4], "C": np.ones(5)})
         wins = (3,)
         if LONG_TEST:
             wins = (2, 3, 5)
         centers = (False, True)
+
         def test_impl(df, df2, w, c):
             return df.rolling(w, center=c).cov(df2)
+
         bodo_func = bodo.jit(test_impl)
         for args in itertools.product([df1, df2], [df1, df2], wins, centers):
             pd.testing.assert_frame_equal(bodo_func(*args), test_impl(*args))
             pd.testing.assert_frame_equal(bodo_func(*args), test_impl(*args))
+
         def test_impl2(df, df2, w, c):
             return df.rolling(w, center=c).corr(df2)
+
         bodo_func = bodo.jit(test_impl2)
         for args in itertools.product([df1, df2], [df1, df2], wins, centers):
             pd.testing.assert_frame_equal(bodo_func(*args), test_impl2(*args))
             pd.testing.assert_frame_equal(bodo_func(*args), test_impl2(*args))
+
 
 if __name__ == "__main__":
     unittest.main()

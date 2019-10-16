@@ -6,12 +6,21 @@ import itertools
 import numba
 import bodo
 import random
-from bodo.tests.utils import (count_array_REPs, count_parfor_REPs,
-    count_parfor_OneDs, count_array_OneDs, count_array_OneD_Vars,
-    dist_IR_contains, get_rank, get_start_end)
+from bodo.tests.utils import (
+    count_array_REPs,
+    count_parfor_REPs,
+    count_parfor_OneDs,
+    count_array_OneDs,
+    count_array_OneD_Vars,
+    dist_IR_contains,
+    get_rank,
+    get_start_end,
+)
+
 
 def get_np_state_ptr():
     return numba._helperlib.rnd_get_np_state_ptr()
+
 
 def _copy_py_state(r, ptr):
     """
@@ -24,7 +33,6 @@ def _copy_py_state(r, ptr):
 
 
 class BaseTest(unittest.TestCase):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.rank = bodo.jit(lambda: bodo.libs.distributed_api.get_rank())()
@@ -33,13 +41,17 @@ class BaseTest(unittest.TestCase):
     def _rank_begin(self, arr_len):
         f = bodo.jit(
             lambda arr_len, num_ranks, rank: bodo.libs.distributed_api.get_start(
-                arr_len, np.int32(num_ranks), np.int32(rank)))
+                arr_len, np.int32(num_ranks), np.int32(rank)
+            )
+        )
         return f(arr_len, self.num_ranks, self.rank)
 
     def _rank_end(self, arr_len):
         f = bodo.jit(
             lambda arr_len, num_ranks, rank: bodo.libs.distributed_api.get_end(
-                arr_len, np.int32(num_ranks), np.int32(rank)))
+                arr_len, np.int32(num_ranks), np.int32(rank)
+            )
+        )
         return f(arr_len, self.num_ranks, self.rank)
 
     def _rank_bounds(self, arr_len):
@@ -55,7 +67,7 @@ class TestBasic(BaseTest):
     def test_getitem(self):
         def test_impl(N):
             A = np.ones(N)
-            B = np.ones(N) > .5
+            B = np.ones(N) > 0.5
             C = A[B]
             return C.sum()
 
@@ -67,7 +79,7 @@ class TestBasic(BaseTest):
 
     def test_setitem1(self):
         def test_impl(N):
-            A = np.arange(10)+1.0
+            A = np.arange(10) + 1.0
             A[0] = 30
             return A.sum()
 
@@ -79,7 +91,7 @@ class TestBasic(BaseTest):
 
     def test_setitem2(self):
         def test_impl(N):
-            A = np.arange(10)+1.0
+            A = np.arange(10) + 1.0
             A[0:4] = 30
             return A.sum()
 
@@ -118,7 +130,6 @@ class TestBasic(BaseTest):
         # self.assertEqual(count_array_REPs(), 0)
         # self.assertEqual(count_parfor_REPs(), 0)
 
-
     def test_inplace_binop(self):
         def test_impl(N):
             A = np.ones(N)
@@ -135,7 +146,7 @@ class TestBasic(BaseTest):
     def test_getitem_multidim(self):
         def test_impl(N):
             A = np.ones((N, 3))
-            B = np.ones(N) > .5
+            B = np.ones(N) > 0.5
             C = A[B, 2]
             return C.sum()
 
@@ -148,7 +159,7 @@ class TestBasic(BaseTest):
     def test_whole_slice(self):
         def test_impl(N):
             X = np.ones((N, 4))
-            X[:,3] = (X[:,3]) / (np.max(X[:,3]) - np.min(X[:,3]))
+            X[:, 3] = (X[:, 3]) / (np.max(X[:, 3]) - np.min(X[:, 3]))
             return X.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -171,32 +182,38 @@ class TestBasic(BaseTest):
 
     def test_inline_locals(self):
         # make sure locals in inlined function works
-        @bodo.jit(locals={'B': bodo.float64[:]})
+        @bodo.jit(locals={"B": bodo.float64[:]})
         def g(S):
-            B = pd.to_numeric(S, errors='coerce')
+            B = pd.to_numeric(S, errors="coerce")
             return B
 
         def f():
-            return g(pd.Series(['1.2']))
+            return g(pd.Series(["1.2"]))
 
         pd.testing.assert_series_equal(bodo.jit(f)(), f())
 
     def test_reduce(self):
         import sys
-        dtypes = ['float32', 'float64', 'int32', 'int64']
-        funcs = ['sum', 'prod', 'min', 'max', 'argmin', 'argmax']
+
+        dtypes = ["float32", "float64", "int32", "int64"]
+        funcs = ["sum", "prod", "min", "max", "argmin", "argmax"]
         for (dtype, func) in itertools.product(dtypes, funcs):
             # loc allreduce doesn't support int64 on windows
-            if (sys.platform.startswith('win') and dtype=='int64'
-                                            and func in ['argmin', 'argmax']):
+            if (
+                sys.platform.startswith("win")
+                and dtype == "int64"
+                and func in ["argmin", "argmax"]
+            ):
                 continue
             func_text = """def f(n):
                 A = np.arange(0, n, 1, np.{})
                 return A.{}()
-            """.format(dtype, func)
+            """.format(
+                dtype, func
+            )
             loc_vars = {}
-            exec(func_text, {'np': np, 'bodo': bodo}, loc_vars)
-            test_impl = loc_vars['f']
+            exec(func_text, {"np": np, "bodo": bodo}, loc_vars)
+            test_impl = loc_vars["f"]
 
             bodo_func = bodo.jit(test_impl)
             n = 21  # XXX arange() on float32 has overflow issues on large n
@@ -206,61 +223,84 @@ class TestBasic(BaseTest):
 
     def test_reduce2(self):
         import sys
-        dtypes = ['float32', 'float64', 'int32', 'int64']
-        funcs = ['sum', 'prod', 'min', 'max', 'argmin', 'argmax']
+
+        dtypes = ["float32", "float64", "int32", "int64"]
+        funcs = ["sum", "prod", "min", "max", "argmin", "argmax"]
         for (dtype, func) in itertools.product(dtypes, funcs):
             # loc allreduce doesn't support int64 on windows
-            if (sys.platform.startswith('win') and dtype=='int64'
-                                            and func in ['argmin', 'argmax']):
+            if (
+                sys.platform.startswith("win")
+                and dtype == "int64"
+                and func in ["argmin", "argmax"]
+            ):
                 continue
             func_text = """def f(A):
                 return A.{}()
-            """.format(func)
+            """.format(
+                func
+            )
             loc_vars = {}
-            exec(func_text, {'np': np}, loc_vars)
-            test_impl = loc_vars['f']
+            exec(func_text, {"np": np}, loc_vars)
+            test_impl = loc_vars["f"]
 
-            bodo_func = bodo.jit(locals={'A:input':'distributed'})(test_impl)
+            bodo_func = bodo.jit(locals={"A:input": "distributed"})(test_impl)
             n = 21
             start, end = get_start_end(n)
             np.random.seed(0)
             A = np.random.randint(0, 10, n).astype(dtype)
             np.testing.assert_almost_equal(
-                bodo_func(A[start:end]), test_impl(A), decimal=3)
+                bodo_func(A[start:end]), test_impl(A), decimal=3
+            )
             self.assertEqual(count_array_REPs(), 0)
             self.assertEqual(count_parfor_REPs(), 0)
 
     def test_reduce_filter1(self):
         import sys
-        dtypes = ['float32', 'float64', 'int32', 'int64']
-        funcs = ['sum', 'prod', 'min', 'max', 'argmin', 'argmax']
+
+        dtypes = ["float32", "float64", "int32", "int64"]
+        funcs = ["sum", "prod", "min", "max", "argmin", "argmax"]
         for (dtype, func) in itertools.product(dtypes, funcs):
             # loc allreduce doesn't support int64 on windows
-            if (sys.platform.startswith('win') and dtype=='int64'
-                                            and func in ['argmin', 'argmax']):
+            if (
+                sys.platform.startswith("win")
+                and dtype == "int64"
+                and func in ["argmin", "argmax"]
+            ):
                 continue
             func_text = """def f(A):
                 A = A[A>5]
                 return A.{}()
-            """.format(func)
+            """.format(
+                func
+            )
             loc_vars = {}
-            exec(func_text, {'np': np}, loc_vars)
-            test_impl = loc_vars['f']
+            exec(func_text, {"np": np}, loc_vars)
+            test_impl = loc_vars["f"]
 
-            bodo_func = bodo.jit(locals={'A:input':'distributed'})(test_impl)
+            bodo_func = bodo.jit(locals={"A:input": "distributed"})(test_impl)
             n = 21
             start, end = get_start_end(n)
             np.random.seed(0)
             A = np.random.randint(0, 10, n).astype(dtype)
             np.testing.assert_almost_equal(
-                bodo_func(A[start:end]), test_impl(A), decimal=3,
-                err_msg="{} on {}".format(func, dtype))
+                bodo_func(A[start:end]),
+                test_impl(A),
+                decimal=3,
+                err_msg="{} on {}".format(func, dtype),
+            )
             self.assertEqual(count_array_REPs(), 0)
             self.assertEqual(count_parfor_REPs(), 0)
 
     def test_array_reduce(self):
-        binops = ['+=', '*=', '+=', '*=', '|=', '|=']
-        dtypes = ['np.float32', 'np.float32', 'np.float64', 'np.float64', 'np.int32', 'np.int64']
+        binops = ["+=", "*=", "+=", "*=", "|=", "|="]
+        dtypes = [
+            "np.float32",
+            "np.float32",
+            "np.float64",
+            "np.float64",
+            "np.int32",
+            "np.int64",
+        ]
         for (op, typ) in zip(binops, dtypes):
             func_text = """def f(n):
                   A = np.arange(0, 10, 1, {})
@@ -268,10 +308,12 @@ class TestBasic(BaseTest):
                   for i in numba.prange(n):
                       A {} B
                   return A
-            """.format(typ, typ, op)
+            """.format(
+                typ, typ, op
+            )
             loc_vars = {}
-            exec(func_text, {'np': np, 'numba': numba, 'bodo': bodo}, loc_vars)
-            test_impl = loc_vars['f']
+            exec(func_text, {"np": np, "numba": numba, "bodo": bodo}, loc_vars)
+            test_impl = loc_vars["f"]
 
             bodo_func = bodo.jit(test_impl)
             n = 128
@@ -284,33 +326,38 @@ class TestBasic(BaseTest):
             A = np.arange(N)
             return A
 
-        bodo_func = bodo.jit(locals={'A:return': 'distributed'})(test_impl)
+        bodo_func = bodo.jit(locals={"A:return": "distributed"})(test_impl)
         n = 128
         dist_sum = bodo.jit(
             lambda a: bodo.libs.distributed_api.dist_reduce(
-                a, np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)))
+                a, np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
+            )
+        )
         dist_sum(1)  # run to compile
-        np.testing.assert_allclose(
-            dist_sum(bodo_func(n).sum()), test_impl(n).sum())
+        np.testing.assert_allclose(dist_sum(bodo_func(n).sum()), test_impl(n).sum())
         self.assertTrue(count_array_OneDs() >= 1)
         self.assertEqual(count_parfor_OneDs(), 1)
 
     def test_dist_return_tuple(self):
         def test_impl(N):
             A = np.arange(N)
-            B = np.arange(N)+1.5
+            B = np.arange(N) + 1.5
             return A, B
 
-        bodo_func = bodo.jit(locals={'A:return': 'distributed',
-                                     'B:return': 'distributed'})(test_impl)
+        bodo_func = bodo.jit(
+            locals={"A:return": "distributed", "B:return": "distributed"}
+        )(test_impl)
         n = 128
         dist_sum = bodo.jit(
             lambda a: bodo.libs.distributed_api.dist_reduce(
-                a, np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)))
+                a, np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
+            )
+        )
         dist_sum(1.0)  # run to compile
         np.testing.assert_allclose(
             dist_sum((bodo_func(n)[0] + bodo_func(n)[1]).sum()),
-                    (test_impl(n)[0] + test_impl(n)[1]).sum())
+            (test_impl(n)[0] + test_impl(n)[1]).sum(),
+        )
         self.assertTrue(count_array_OneDs() >= 2)
         self.assertEqual(count_parfor_OneDs(), 2)
 
@@ -318,7 +365,7 @@ class TestBasic(BaseTest):
         def test_impl(A):
             return len(A)
 
-        bodo_func = bodo.jit(distributed=['A'])(test_impl)
+        bodo_func = bodo.jit(distributed=["A"])(test_impl)
         n = 128
         arr = np.ones(n)
         np.testing.assert_allclose(bodo_func(arr) / self.num_ranks, test_impl(arr))
@@ -327,7 +374,7 @@ class TestBasic(BaseTest):
     def test_rebalance(self):
         def test_impl(N):
             A = np.arange(n)
-            B = A[A>10]
+            B = A[A > 10]
             C = bodo.libs.distributed_api.rebalance_array(B)
             return C.sum()
 
@@ -344,7 +391,7 @@ class TestBasic(BaseTest):
     def test_rebalance_loop(self):
         def test_impl(N):
             A = np.arange(n)
-            B = A[A>10]
+            B = A[A > 10]
             s = 0
             for i in range(3):
                 s += B.sum()
@@ -357,7 +404,7 @@ class TestBasic(BaseTest):
             np.testing.assert_allclose(bodo_func(n), test_impl(n))
             self.assertTrue(count_array_OneDs() >= 3)
             self.assertEqual(count_parfor_OneDs(), 2)
-            self.assertIn('allgather', list(bodo_func.inspect_llvm().values())[0])
+            self.assertIn("allgather", list(bodo_func.inspect_llvm().values())[0])
         finally:
             bodo.transforms.distributed_analysis.auto_rebalance = False
 
@@ -410,8 +457,9 @@ class TestBasic(BaseTest):
         # details please see https://github.com/numba/numba/issues/2782.
         r = self._follow_cpython(get_np_state_ptr())
 
-        hpat_func1 = bodo.jit(locals={'A:return': 'distributed',
-                                      'B:return': 'distributed'})(test_one_dim)
+        hpat_func1 = bodo.jit(
+            locals={"A:return": "distributed", "B:return": "distributed"}
+        )(test_one_dim)
 
         # Test one-dimensional array indexing.
         for arr_len in [11, 111, 128, 120]:
@@ -440,8 +488,9 @@ class TestBasic(BaseTest):
             A, B = A[P], B[P]
             return A, B
 
-        hpat_func2 = bodo.jit(locals={'A:return': 'distributed',
-                                      'B:return': 'distributed'})(test_two_dim)
+        hpat_func2 = bodo.jit(
+            locals={"A:return": "distributed", "B:return": "distributed"}
+        )(test_two_dim)
 
         for arr_len in [18, 66, 128]:
             hpat_A, hpat_B = hpat_func2(arr_len)
@@ -459,9 +508,13 @@ class TestBasic(BaseTest):
             C = A[P]
             return A, B, C
 
-        hpat_func3 = bodo.jit(locals={'A:return': 'distributed',
-                                      'B:return': 'distributed',
-                                      'C:return': 'distributed'})(test_rhs)
+        hpat_func3 = bodo.jit(
+            locals={
+                "A:return": "distributed",
+                "B:return": "distributed",
+                "C:return": "distributed",
+            }
+        )(test_rhs)
 
         for arr_len in [15, 23, 26]:
             A, B, _ = hpat_func3(arr_len)

@@ -10,8 +10,13 @@ from numba.typing.templates import infer_global, AbstractTemplate, signature
 
 import bodo
 from bodo.libs.str_ext import string_type, unicode_to_std_str, std_str_to_unicode
-from bodo.libs.str_arr_ext import (string_array_type, StringArrayType,
-    is_str_arr_typ, pre_alloc_string_array, get_utf8_size)
+from bodo.libs.str_arr_ext import (
+    string_array_type,
+    StringArrayType,
+    is_str_arr_typ,
+    pre_alloc_string_array,
+    get_utf8_size,
+)
 from bodo.libs.int_arr_ext import IntDtype
 
 
@@ -46,6 +51,7 @@ def _column_fillna_impl(A, B, fill):  # pragma: no cover
             s = fill
         A[i] = s
 
+
 def _series_fillna_str_alloc_impl(B, fill, index, name):  # pragma: no cover
     n = len(B)
     num_chars = 0
@@ -59,6 +65,7 @@ def _series_fillna_str_alloc_impl(B, fill, index, name):  # pragma: no cover
     A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
     bodo.hiframes.api.fillna(A, B, fill)
     return bodo.hiframes.api.init_series(A, index, name)
+
 
 def _series_dropna_float_impl(S, name):  # pragma: no cover
     old_len = len(S)
@@ -106,7 +113,7 @@ def _get_nan(val):
 @overload(_get_nan)
 def _get_nan_overload(val):
     if isinstance(val, (types.NPDatetime, types.NPTimedelta)):
-        nat = val('NaT')
+        nat = val("NaT")
         return lambda val: nat
     # TODO: other types
     return lambda val: np.nan
@@ -126,7 +133,8 @@ def _get_type_max_value_overload(dtype):
     # dt64/td64
     if isinstance(dtype.dtype, (types.NPDatetime, types.NPTimedelta)):
         return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-            numba.targets.builtins.get_type_max_value(numba.types.int64))
+            numba.targets.builtins.get_type_max_value(numba.types.int64)
+        )
 
     if dtype.dtype == types.bool_:
         return lambda dtype: True
@@ -148,7 +156,8 @@ def _get_type_min_value_overload(dtype):
     # dt64/td64
     if isinstance(dtype.dtype, (types.NPDatetime, types.NPTimedelta)):
         return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-            numba.targets.builtins.get_type_min_value(numba.types.int64))
+            numba.targets.builtins.get_type_min_value(numba.types.int64)
+        )
 
     if dtype.dtype == types.bool_:
         return lambda dtype: False
@@ -159,20 +168,24 @@ def _get_type_min_value_overload(dtype):
 @overload(min)
 def indval_min(a1, a2):
     if a1 == types.bool_ and a2 == types.bool_:
+
         def min_impl(a1, a2):
             if a1 > a2:
                 return a2
             return a1
+
         return min_impl
 
 
 @overload(max)
 def indval_max(a1, a2):
     if a1 == types.bool_ and a2 == types.bool_:
+
         def max_impl(a1, a2):
             if a2 > a1:
                 return a2
             return a1
+
         return max_impl
 
 
@@ -181,6 +194,7 @@ def _sum_handle_nan(s, count):  # pragma: no cover
     if not count:
         s = bodo.hiframes.series_kernels._get_nan(s)
     return s
+
 
 def _column_sum_impl_basic(A):  # pragma: no cover
     numba.parfor.init_prange()
@@ -208,6 +222,7 @@ def _column_sum_impl_count(A):  # pragma: no cover
     res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
     return res
 
+
 def _column_prod_impl_basic(A):  # pragma: no cover
     numba.parfor.init_prange()
     # TODO: fix output type
@@ -225,7 +240,7 @@ def _column_prod_impl_basic(A):  # pragma: no cover
 def get_float_nan(s):
     nan = np.nan
     if s == types.float32:
-        nan = np.float32('nan')
+        nan = np.float32("nan")
     return lambda s: nan
 
 
@@ -278,7 +293,7 @@ def _column_var_impl(A):  # pragma: no cover
     for i in numba.parfor.internal_prange(len(A)):
         val = A[i]
         if not np.isnan(val):
-            s += (val - m)**2
+            s += (val - m) ** 2
             count += 1
 
     res = bodo.hiframes.series_kernels._var_handle_nan(s, count)
@@ -287,7 +302,7 @@ def _column_var_impl(A):  # pragma: no cover
 
 def _column_std_impl(A):  # pragma: no cover
     var = bodo.hiframes.api.init_series(A).var()
-    return var**0.5
+    return var ** 0.5
 
 
 def _column_min_impl(in_arr):  # pragma: no cover
@@ -347,7 +362,9 @@ def _column_sub_impl_datetime_series_timestamp(in_arr, ts):  # pragma: no cover
     S = numba.unsafe.ndarray.empty_inferred((n,))
     tsint = bodo.hiframes.pd_timestamp_ext.convert_timestamp_to_datetime64(ts)
     for i in numba.parfor.internal_prange(n):
-        S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i]) - tsint)
+        S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+            bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i]) - tsint
+        )
     return bodo.hiframes.api.init_series(S)
 
 
@@ -357,21 +374,24 @@ def _column_describe_impl(S):  # pragma: no cover
     a_max = S.max()
     a_mean = S.mean()
     a_std = S.std()
-    q25 = S.quantile(.25)
-    q50 = S.quantile(.5)
-    q75 = S.quantile(.75)
+    q25 = S.quantile(0.25)
+    q50 = S.quantile(0.5)
+    q75 = S.quantile(0.75)
     # TODO: pandas returns dataframe, maybe return namedtuple instread of
     # string?
     # TODO: fix string formatting to match python/pandas
-    res = "count    " + str(a_count) + "\n"\
-        "mean     " + str(a_mean) + "\n"\
-        "std      " + str(a_std) + "\n"\
-        "min      " + str(a_min) + "\n"\
-        "25%      " + str(q25) + "\n"\
-        "50%      " + str(q50) + "\n"\
-        "75%      " + str(q75) + "\n"\
+    res = (
+        "count    " + str(a_count) + "\n"
+        "mean     " + str(a_mean) + "\n"
+        "std      " + str(a_std) + "\n"
+        "min      " + str(a_min) + "\n"
+        "25%      " + str(q25) + "\n"
+        "50%      " + str(q50) + "\n"
+        "75%      " + str(q75) + "\n"
         "max      " + str(a_max) + "\n"
+    )
     return res
+
 
 def _column_fillna_alloc_impl(S, val, index, name):  # pragma: no cover
     # TODO: handle string, etc.
@@ -387,7 +407,7 @@ def _column_cov_impl(S1, S2):  # pragma: no cover
     ma = S1.mean()
     mb = S2.mean()
     # TODO: check aligned nans, (S1.notna() != S2.notna()).any()
-    return ((S1-ma)*(S2-mb)).sum()/(S1.count()-1.0)
+    return ((S1 - ma) * (S2 - mb)).sum() / (S1.count() - 1.0)
 
 
 def _column_corr_impl(S1, S2):  # pragma: no cover
@@ -396,26 +416,26 @@ def _column_corr_impl(S1, S2):  # pragma: no cover
     ma = S1.sum()
     mb = S2.sum()
     # TODO: check aligned nans, (S1.notna() != S2.notna()).any()
-    a = n * ((S1*S2).sum()) - ma * mb
-    b1 = n * (S1**2).sum() - ma**2
-    b2 = n * (S2**2).sum() - mb**2
+    a = n * ((S1 * S2).sum()) - ma * mb
+    b1 = n * (S1 ** 2).sum() - ma ** 2
+    b2 = n * (S2 ** 2).sum() - mb ** 2
     # TODO: np.clip
     # TODO: np.true_divide?
-    return a / np.sqrt(b1*b2)
+    return a / np.sqrt(b1 * b2)
 
 
 # TODO: index and name for append
 def _series_append_single_impl(arr, other):
-    return bodo.hiframes.api.init_series(
-        bodo.hiframes.api.concat((arr, other)))
+    return bodo.hiframes.api.init_series(bodo.hiframes.api.concat((arr, other)))
+
 
 def _series_append_tuple_impl(arr, other):
     tup_other = bodo.utils.typing.to_const_tuple(other)
     tup_other = bodo.hiframes.api.series_tup_to_arr_tup(tup_other)
     arrs = (arr,) + tup_other
     c_arrs = bodo.utils.typing.to_const_tuple(arrs)
-    return bodo.hiframes.api.init_series(
-        bodo.hiframes.api.concat(c_arrs))
+    return bodo.hiframes.api.init_series(bodo.hiframes.api.concat(c_arrs))
+
 
 def _series_isna_impl(arr, index, name):
     numba.parfor.init_prange()
@@ -465,7 +485,7 @@ def _str_replace_regex_impl(str_arr, pat, val, index, name):
     out_arr = pre_alloc_string_array(n, n_total_chars)
     for j in numba.parfor.internal_prange(n):
         if bodo.hiframes.api.isna(str_arr, j):
-            out_arr[j] = ''
+            out_arr[j] = ""
             bodo.ir.join.setitem_arr_nan(out_arr, j)
             continue
         _str = str_list[j]
@@ -512,7 +532,7 @@ def _str_replace_noregex_impl(str_arr, pat, val, index, name):
     out_arr = pre_alloc_string_array(n, n_total_chars)
     for j in numba.parfor.internal_prange(n):
         if bodo.hiframes.api.isna(str_arr, j):
-            out_arr[j] = ''
+            out_arr[j] = ""
             bodo.ir.join.setitem_arr_nan(out_arr, j)
             continue
         _str = str_list[j]
@@ -524,43 +544,61 @@ def _str_replace_noregex_impl(str_arr, pat, val, index, name):
 def lt_f(a, b):
     return a < b
 
+
 @numba.njit
 def gt_f(a, b):
     return a > b
 
+
 series_replace_funcs = {
-    'sum': _column_sum_impl_basic,
-    'prod': _column_prod_impl_basic,
-    'count': _column_count_impl,
-    'mean': _column_mean_impl,
-    'max': defaultdict(lambda: _column_max_impl, [(types.NPDatetime('ns'), _column_max_impl_dt64)]),
-    'min': defaultdict(lambda: _column_min_impl, [(types.NPDatetime('ns'), _column_min_impl_dt64)]),
-    'var': _column_var_impl,
-    'std': _column_std_impl,
-    'nunique': lambda A: bodo.hiframes.api.nunique(A),
-    'unique': lambda A: bodo.hiframes.api.unique(A),
-    'describe': _column_describe_impl,
-    'fillna_alloc': _column_fillna_alloc_impl,
-    'fillna_str_alloc': _series_fillna_str_alloc_impl,
-    'dropna_float': _series_dropna_float_impl,
-    'dropna_str_alloc': _series_dropna_str_alloc_impl,
+    "sum": _column_sum_impl_basic,
+    "prod": _column_prod_impl_basic,
+    "count": _column_count_impl,
+    "mean": _column_mean_impl,
+    "max": defaultdict(
+        lambda: _column_max_impl, [(types.NPDatetime("ns"), _column_max_impl_dt64)]
+    ),
+    "min": defaultdict(
+        lambda: _column_min_impl, [(types.NPDatetime("ns"), _column_min_impl_dt64)]
+    ),
+    "var": _column_var_impl,
+    "std": _column_std_impl,
+    "nunique": lambda A: bodo.hiframes.api.nunique(A),
+    "unique": lambda A: bodo.hiframes.api.unique(A),
+    "describe": _column_describe_impl,
+    "fillna_alloc": _column_fillna_alloc_impl,
+    "fillna_str_alloc": _series_fillna_str_alloc_impl,
+    "dropna_float": _series_dropna_float_impl,
+    "dropna_str_alloc": _series_dropna_str_alloc_impl,
     # TODO: handle index shift properly
-    'shift': lambda A, shift, index, name: bodo.hiframes.api.init_series(bodo.hiframes.rolling.shift(A, shift, False), index, name),
-    'shift_default': lambda A, index, name: bodo.hiframes.api.init_series(bodo.hiframes.rolling.shift(A, 1, False), index, name),
-    'pct_change': lambda A, shift, index, name: bodo.hiframes.api.init_series(bodo.hiframes.rolling.pct_change(A, shift, False), index, name),
-    'pct_change_default': lambda A, index, name: bodo.hiframes.api.init_series(bodo.hiframes.rolling.pct_change(A, 1, False), index, name),
-    'abs': lambda A, index, name: bodo.hiframes.api.init_series(np.abs(A), index, name),  # TODO: timedelta
-    'cov': _column_cov_impl,
-    'corr': _column_corr_impl,
-    'append_single': _series_append_single_impl,
-    'append_tuple': _series_append_tuple_impl,
-    'isna': _series_isna_impl,
+    "shift": lambda A, shift, index, name: bodo.hiframes.api.init_series(
+        bodo.hiframes.rolling.shift(A, shift, False), index, name
+    ),
+    "shift_default": lambda A, index, name: bodo.hiframes.api.init_series(
+        bodo.hiframes.rolling.shift(A, 1, False), index, name
+    ),
+    "pct_change": lambda A, shift, index, name: bodo.hiframes.api.init_series(
+        bodo.hiframes.rolling.pct_change(A, shift, False), index, name
+    ),
+    "pct_change_default": lambda A, index, name: bodo.hiframes.api.init_series(
+        bodo.hiframes.rolling.pct_change(A, 1, False), index, name
+    ),
+    "abs": lambda A, index, name: bodo.hiframes.api.init_series(
+        np.abs(A), index, name
+    ),  # TODO: timedelta
+    "cov": _column_cov_impl,
+    "corr": _column_corr_impl,
+    "append_single": _series_append_single_impl,
+    "append_tuple": _series_append_tuple_impl,
+    "isna": _series_isna_impl,
     # isnull is just alias of isna
-    'isnull': _series_isna_impl,
-    'head': lambda A, I, k, name: bodo.hiframes.api.init_series(A[:k], None, name),
-    'head_index': lambda A, I, k, name: bodo.hiframes.api.init_series(A[:k], I[:k], name),
-    'median': lambda A: bodo.libs.array_kernels.median(A),
+    "isnull": _series_isna_impl,
+    "head": lambda A, I, k, name: bodo.hiframes.api.init_series(A[:k], None, name),
+    "head_index": lambda A, I, k, name: bodo.hiframes.api.init_series(
+        A[:k], I[:k], name
+    ),
+    "median": lambda A: bodo.libs.array_kernels.median(A),
     # TODO: handle NAs in argmin/argmax
-    'idxmin': lambda A: A.argmin(),
-    'idxmax': lambda A: A.argmax(),
+    "idxmin": lambda A: A.argmin(),
+    "idxmax": lambda A: A.argmax(),
 }

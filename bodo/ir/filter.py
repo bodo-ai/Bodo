@@ -30,8 +30,9 @@ class Filter(ir.Stmt):
         for (c, v) in self.df_in_vars.items():
             in_cols += "'{}':{}, ".format(c, v.name)
         df_in_str = "{}{{{}}}".format(self.df_in, in_cols)
-        return "filter: {} = {} [cond: {}] ".format(df_out_str, df_in_str,
-                                                    self.bool_arr)
+        return "filter: {} = {} [cond: {}] ".format(
+            df_out_str, df_in_str, self.bool_arr
+        )
 
 
 def filter_array_analysis(filter_node, equiv_set, typemap, array_analysis):
@@ -50,8 +51,7 @@ def filter_array_analysis(filter_node, equiv_set, typemap, array_analysis):
     for col_var in filter_node.df_in_vars.values():
         typ = typemap[col_var.name]
         # TODO handle list_string_array_type in other nodes
-        if typ in (list_string_array_type,
-                    string_array_split_view_type):
+        if typ in (list_string_array_type, string_array_split_view_type):
             continue
         col_shape = equiv_set.get_shape(col_var)
         all_shapes.append(col_shape[0])
@@ -65,11 +65,11 @@ def filter_array_analysis(filter_node, equiv_set, typemap, array_analysis):
     all_shapes = []
     for col_var in filter_node.df_out_vars.values():
         typ = typemap[col_var.name]
-        if typ in (list_string_array_type,
-                    string_array_split_view_type):
+        if typ in (list_string_array_type, string_array_split_view_type):
             continue
         (shape, c_post) = array_analysis._gen_shape_call(
-            equiv_set, col_var, typ.ndim, None)
+            equiv_set, col_var, typ.ndim, None
+        )
         equiv_set.insert_equiv(col_var, shape)
         post.extend(c_post)
         all_shapes.append(shape[0])
@@ -89,13 +89,13 @@ def filter_distributed_analysis(filter_node, array_dists):
     # input columns have same distribution
     in_dist = Distribution.OneD
     for col_var in filter_node.df_in_vars.values():
-        in_dist = Distribution(
-            min(in_dist.value, array_dists[col_var.name].value))
+        in_dist = Distribution(min(in_dist.value, array_dists[col_var.name].value))
 
     # bool arr
     if filter_node.bool_arr.name in array_dists:
         in_dist = Distribution(
-            min(in_dist.value, array_dists[filter_node.bool_arr.name].value))
+            min(in_dist.value, array_dists[filter_node.bool_arr.name].value)
+        )
     for col_var in filter_node.df_in_vars.values():
         array_dists[col_var.name] = in_dist
     if filter_node.bool_arr.name in array_dists:
@@ -107,7 +107,8 @@ def filter_distributed_analysis(filter_node, array_dists):
         # output dist might not be assigned yet
         if col_var.name in array_dists:
             out_dist = Distribution(
-                min(out_dist.value, array_dists[col_var.name].value))
+                min(out_dist.value, array_dists[col_var.name].value)
+            )
 
     # out dist should meet input dist (e.g. REP in causes REP out)
     out_dist = Distribution(min(out_dist.value, in_dist.value))
@@ -124,7 +125,10 @@ def filter_distributed_analysis(filter_node, array_dists):
     return
 
 
-distributed_analysis.distributed_analysis_extensions[Filter] = filter_distributed_analysis
+distributed_analysis.distributed_analysis_extensions[
+    Filter
+] = filter_distributed_analysis
+
 
 def build_filter_definitions(filter_node, definitions=None):
     if definitions is None:
@@ -135,10 +139,13 @@ def build_filter_definitions(filter_node, definitions=None):
 
     return definitions
 
+
 ir_utils.build_defs_extensions[Filter] = build_filter_definitions
 
 
-def filter_distributed_run(filter_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass):
+def filter_distributed_run(
+    filter_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass
+):
     # TODO: rebalance if output distributions are 1D instead of 1D_Var
     loc = filter_node.loc
     bool_arr = filter_node.bool_arr
@@ -152,7 +159,8 @@ def filter_distributed_run(filter_node, array_dists, typemap, calltypes, typingc
         calltypes[getitem_call] = signature(
             typemap[col_out_var.name],  # output type
             typemap[col_in_var.name],  # input type
-            typemap[bool_arr.name])  # index type
+            typemap[bool_arr.name],
+        )  # index type
         out.append(ir.Assign(getitem_call, col_out_var, loc))
 
     return out
@@ -164,8 +172,11 @@ distributed_pass.distributed_run_extensions[Filter] = filter_distributed_run
 def filter_typeinfer(filter_node, typeinferer):
     for col_name, col_var in filter_node.df_in_vars.items():
         out_col_var = filter_node.df_out_vars[col_name]
-        typeinferer.constraints.append(typeinfer.Propagate(dst=out_col_var.name,
-                                                           src=col_var.name, loc=filter_node.loc))
+        typeinferer.constraints.append(
+            typeinfer.Propagate(
+                dst=out_col_var.name, src=col_var.name, loc=filter_node.loc
+            )
+        )
     return
 
 
@@ -177,15 +188,16 @@ def visit_vars_filter(filter_node, callback, cbdata):
         print("visiting filter vars for:", filter_node)
         print("cbdata: ", sorted(cbdata.items()))
 
-    filter_node.bool_arr = visit_vars_inner(
-        filter_node.bool_arr, callback, cbdata)
+    filter_node.bool_arr = visit_vars_inner(filter_node.bool_arr, callback, cbdata)
 
     for col_name in list(filter_node.df_in_vars.keys()):
         filter_node.df_in_vars[col_name] = visit_vars_inner(
-            filter_node.df_in_vars[col_name], callback, cbdata)
+            filter_node.df_in_vars[col_name], callback, cbdata
+        )
     for col_name in list(filter_node.df_out_vars.keys()):
         filter_node.df_out_vars[col_name] = visit_vars_inner(
-            filter_node.df_out_vars[col_name], callback, cbdata)
+            filter_node.df_out_vars[col_name], callback, cbdata
+        )
 
 
 # add call to visit filter variable
@@ -241,17 +253,20 @@ def get_copies_filter(filter_node, typemap):
 ir_utils.copy_propagate_extensions[Filter] = get_copies_filter
 
 
-def apply_copies_filter(filter_node, var_dict, name_var_table,
-                        typemap, calltypes, save_copies):
+def apply_copies_filter(
+    filter_node, var_dict, name_var_table, typemap, calltypes, save_copies
+):
     """apply copy propagate in filter node"""
     filter_node.bool_arr = replace_vars_inner(filter_node.bool_arr, var_dict)
 
     for col_name in list(filter_node.df_in_vars.keys()):
         filter_node.df_in_vars[col_name] = replace_vars_inner(
-            filter_node.df_in_vars[col_name], var_dict)
+            filter_node.df_in_vars[col_name], var_dict
+        )
     for col_name in list(filter_node.df_out_vars.keys()):
         filter_node.df_out_vars[col_name] = replace_vars_inner(
-            filter_node.df_out_vars[col_name], var_dict)
+            filter_node.df_out_vars[col_name], var_dict
+        )
 
     return
 

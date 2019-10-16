@@ -4,14 +4,29 @@ import pandas as pd
 import numpy as np
 import numba
 from numba import types, cgutils
-from numba.extending import (models, register_model, lower_cast, infer_getattr,
-    type_callable, infer, overload, make_attribute_wrapper, intrinsic,
-    lower_builtin, overload_method)
-from numba.typing.templates import (infer_global, AbstractTemplate, signature,
-    AttributeTemplate, bound_function)
+from numba.extending import (
+    models,
+    register_model,
+    lower_cast,
+    infer_getattr,
+    type_callable,
+    infer,
+    overload,
+    make_attribute_wrapper,
+    intrinsic,
+    lower_builtin,
+    overload_method,
+)
+from numba.typing.templates import (
+    infer_global,
+    AbstractTemplate,
+    signature,
+    AttributeTemplate,
+    bound_function,
+)
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 import bodo
-from bodo.hiframes.pd_series_ext import (SeriesType, _get_series_array_type)
+from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.libs.str_ext import string_type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.ir.aggregate import get_agg_func
@@ -21,6 +36,7 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
     """Temporary type class for DataFrameGroupBy objects before transformation
     to aggregate node.
     """
+
     def __init__(self, df_type, keys, selection, as_index, explicit_select=False):
 
         self.df_type = df_type
@@ -31,12 +47,15 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
 
         super(DataFrameGroupByType, self).__init__(
             name="DataFrameGroupBy({}, {}, {}, {}, {})".format(
-                df_type, keys, selection, as_index, explicit_select))
+                df_type, keys, selection, as_index, explicit_select
+            )
+        )
 
     def copy(self):
         # XXX is copy necessary?
-        return DataFrameGroupByType(self.df_type, self.keys, self.selection,
-            self.as_index, self.explicit_select)
+        return DataFrameGroupByType(
+            self.df_type, self.keys, self.selection, self.as_index, self.explicit_select
+        )
 
 
 # dummy model since info is kept in type
@@ -44,15 +63,33 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
 register_model(DataFrameGroupByType)(models.OpaqueModel)
 
 
-@overload_method(DataFrameType, 'groupby')
-def df_groupby_overload(df, by=None, axis=0, level=None, as_index=True,
-        sort=True, group_keys=True, squeeze=False, observed=False):
+@overload_method(DataFrameType, "groupby")
+def df_groupby_overload(
+    df,
+    by=None,
+    axis=0,
+    level=None,
+    as_index=True,
+    sort=True,
+    group_keys=True,
+    squeeze=False,
+    observed=False,
+):
 
     if by is None:
         raise ValueError("groupby 'by' argument required")
 
-    def _impl(df, by=None, axis=0, level=None, as_index=True,
-            sort=True, group_keys=True, squeeze=False, observed=False):
+    def _impl(
+        df,
+        by=None,
+        axis=0,
+        level=None,
+        as_index=True,
+        sort=True,
+        group_keys=True,
+        squeeze=False,
+        observed=False,
+    ):
         return bodo.hiframes.pd_groupby_ext.groupby_dummy(df, by, as_index)
 
     return _impl
@@ -71,7 +108,7 @@ class GroupbyTyper(AbstractTemplate):
 
         if isinstance(by, types.StringLiteral):
             keys = (by.literal_value,)
-        elif hasattr(by, 'consts'):
+        elif hasattr(by, "consts"):
             keys = by.consts
 
         selection = list(df.columns)
@@ -86,8 +123,7 @@ class GroupbyTyper(AbstractTemplate):
             # TODO: more robust fix or just check
             as_index = True
 
-        out_typ = DataFrameGroupByType(
-            df, keys, tuple(selection), as_index, False)
+        out_typ = DataFrameGroupByType(df, keys, tuple(selection), as_index, False)
         return signature(out_typ, *args)
 
 
@@ -100,7 +136,7 @@ def lower_groupby_dummy(context, builder, sig, args):
 
 @infer
 class GetItemDataFrameGroupBy2(AbstractTemplate):
-    key = 'static_getitem'
+    key = "static_getitem"
 
     def generic(self, args, kws):
         grpby, idx = args
@@ -114,7 +150,8 @@ class GetItemDataFrameGroupBy2(AbstractTemplate):
             else:
                 raise ValueError("invalid groupby selection {}".format(idx))
             ret_grp = DataFrameGroupByType(
-                grpby.df_type, grpby.keys, selection, grpby.as_index, True)
+                grpby.df_type, grpby.keys, selection, grpby.as_index, True
+            )
             return signature(ret_grp, *args)
 
 
@@ -124,7 +161,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     def _get_agg_typ(self, grp, args, code):
         f_ir = numba.ir_utils.get_ir_of_code(
-            {'np': np, 'numba': numba, 'bodo': bodo}, code)
+            {"np": np, "numba": numba, "bodo": bodo}, code
+        )
         index = types.none
         out_data = []
         out_columns = []
@@ -143,7 +181,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
             else:
                 ind = grp.df_type.columns.index(grp.keys[0])
                 index = bodo.hiframes.pd_index_ext.array_typ_to_index(
-                    grp.df_type.data[ind], bodo.string_type)
+                    grp.df_type.data[ind], bodo.string_type
+                )
 
         # get output type for each selected column
         for c in grp.selection:
@@ -151,7 +190,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
             ind = grp.df_type.columns.index(c)
             data = grp.df_type.data[ind]
             _, out_dtype, _ = numba.typed_passes.type_inference_stage(
-                self.context, f_ir, (data,), None)
+                self.context, f_ir, (data,), None
+            )
             out_arr = _get_series_array_type(out_dtype)
             out_data.append(out_arr)
 
@@ -159,7 +199,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
         # XXX output becomes series if single output and explicitly selected
         if len(grp.selection) == 1 and grp.explicit_select and grp.as_index:
             out_res = SeriesType(
-                out_data[0].dtype, index=index, name_typ=bodo.string_type)
+                out_data[0].dtype, index=index, name_typ=bodo.string_type
+            )
         return signature(out_res, *args)
 
     @bound_function("groupby.agg")
@@ -189,42 +230,42 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.sum")
     def resolve_sum(self, grp, args, kws):
-        func = get_agg_func(None, 'sum', None)
+        func = get_agg_func(None, "sum", None)
         return self._get_agg_typ(grp, args, func.__code__)
 
     @bound_function("groupby.count")
     def resolve_count(self, grp, args, kws):
-        func = get_agg_func(None, 'count', None)
+        func = get_agg_func(None, "count", None)
         return self._get_agg_typ(grp, args, func.__code__)
 
     @bound_function("groupby.mean")
     def resolve_mean(self, grp, args, kws):
-        func = get_agg_func(None, 'mean', None)
+        func = get_agg_func(None, "mean", None)
         return self._get_agg_typ(grp, args, func.__code__)
 
     @bound_function("groupby.min")
     def resolve_min(self, grp, args, kws):
-        func = get_agg_func(None, 'min', None)
+        func = get_agg_func(None, "min", None)
         return self._get_agg_typ(grp, args, func.__code__)
 
     @bound_function("groupby.max")
     def resolve_max(self, grp, args, kws):
-        func = get_agg_func(None, 'max', None)
+        func = get_agg_func(None, "max", None)
         return self._get_agg_typ(grp, args, func.__code__)
 
     @bound_function("groupby.prod")
     def resolve_prod(self, grp, args, kws):
-        func = get_agg_func(None, 'prod', None)
+        func = get_agg_func(None, "prod", None)
         return self._get_agg_typ(grp, args, func.__code__)
 
     @bound_function("groupby.var")
     def resolve_var(self, grp, args, kws):
-        func = get_agg_func(None, 'var', None)
+        func = get_agg_func(None, "var", None)
         return self._get_agg_typ(grp, args, func.__code__)
 
     @bound_function("groupby.std")
     def resolve_std(self, grp, args, kws):
-        func = get_agg_func(None, 'std', None)
+        func = get_agg_func(None, "std", None)
         return self._get_agg_typ(grp, args, func.__code__)
 
     # TODO: cumprod etc.
@@ -242,8 +283,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
         # XXX output becomes series if single output and explicitly selected
         if len(grp.selection) == 1 and grp.explicit_select and grp.as_index:
             out_res = SeriesType(
-                out_data[0].dtype, data=out_data[0],
-                index=index, name_typ=bodo.string_type)
+                out_data[0].dtype,
+                data=out_data[0],
+                index=index,
+                name_typ=bodo.string_type,
+            )
         return signature(out_res, *args)
 
 
@@ -258,11 +302,15 @@ class PivotTyper(AbstractTemplate):
         assert not kws
         df, values, index, columns, aggfunc, _pivot_values = args
 
-        if not (isinstance(values, types.StringLiteral)
-                and isinstance(index, types.StringLiteral)
-                and isinstance(columns, types.StringLiteral)):
-            raise ValueError("pivot_table() only support string constants for"
-                "'values', 'index' and 'columns' arguments")
+        if not (
+            isinstance(values, types.StringLiteral)
+            and isinstance(index, types.StringLiteral)
+            and isinstance(columns, types.StringLiteral)
+        ):
+            raise ValueError(
+                "pivot_table() only support string constants for"
+                "'values', 'index' and 'columns' arguments"
+            )
 
         values = values.literal_value
         index = index.literal_value
@@ -272,15 +320,16 @@ class PivotTyper(AbstractTemplate):
         data = df.data[df.columns.index(values)]
         func = get_agg_func(None, aggfunc.literal_value, None)
         f_ir = numba.ir_utils.get_ir_of_code(
-            {'np': np, 'numba': numba, 'bodo': bodo}, func.__code__)
+            {"np": np, "numba": numba, "bodo": bodo}, func.__code__
+        )
         _, out_dtype, _ = numba.typed_passes.type_inference_stage(
-            self.context, f_ir, (data,), None)
+            self.context, f_ir, (data,), None
+        )
         out_arr_typ = _get_series_array_type(out_dtype)
-
 
         pivot_vals = _pivot_values.meta
         n_vals = len(pivot_vals)
-        out_df = DataFrameType((out_arr_typ,)*n_vals, None, tuple(pivot_vals))
+        out_df = DataFrameType((out_arr_typ,) * n_vals, None, tuple(pivot_vals))
 
         return signature(out_df, *args)
 
@@ -304,11 +353,11 @@ class CrossTabTyper(AbstractTemplate):
         index, columns, _pivot_values = args
 
         # TODO: support agg func other than frequency
-        out_arr_typ = types.Array(types.int64, 1, 'C')
+        out_arr_typ = types.Array(types.int64, 1, "C")
 
         pivot_vals = _pivot_values.meta
         n_vals = len(pivot_vals)
-        out_df = DataFrameType((out_arr_typ,)*n_vals, None, tuple(pivot_vals))
+        out_df = DataFrameType((out_arr_typ,) * n_vals, None, tuple(pivot_vals))
 
         return signature(out_df, *args)
 

@@ -14,15 +14,30 @@ from bodo.transforms.dataframe_pass import DataFramePass
 import numba
 import numba.compiler
 from numba.compiler_machinery import FunctionPass, register_pass, PassManager
-from numba.untyped_passes import (ExtractByteCode, TranslateByteCode, FixupArgs,
-                             IRProcessing, DeadBranchPrune,
-                             RewriteSemanticConstants, InlineClosureLikes,
-                             GenericRewrites, WithLifting, InlineInlinables)
+from numba.untyped_passes import (
+    ExtractByteCode,
+    TranslateByteCode,
+    FixupArgs,
+    IRProcessing,
+    DeadBranchPrune,
+    RewriteSemanticConstants,
+    InlineClosureLikes,
+    GenericRewrites,
+    WithLifting,
+    InlineInlinables,
+)
 
-from numba.typed_passes import (NopythonTypeInference, AnnotateTypes,
-                           NopythonRewrites, PreParforPass, ParforPass,
-                           DumpParforDiagnostics, IRLegalization,
-                           NoPythonBackend, InlineOverloads)
+from numba.typed_passes import (
+    NopythonTypeInference,
+    AnnotateTypes,
+    NopythonRewrites,
+    PreParforPass,
+    ParforPass,
+    DumpParforDiagnostics,
+    IRLegalization,
+    NoPythonBackend,
+    InlineOverloads,
+)
 
 from numba import ir_utils, ir, postproc
 from numba.targets.registry import CPUDispatcher
@@ -35,26 +50,30 @@ import bodo.libs.int_arr_ext  # side effect
 import bodo.utils
 import bodo.utils.typing
 import bodo.io
+
 if config._has_h5py:
     from bodo.io import pio
 
 # workaround for Numba #3876 issue with large labels in mortgage benchmark
 from llvmlite import binding
+
 binding.set_option("tmp", "-non-global-value-max-name-size=2048")
 
 
 from numba.errors import NumbaPerformanceWarning
-warnings.simplefilter('ignore', category=NumbaPerformanceWarning)
+
+warnings.simplefilter("ignore", category=NumbaPerformanceWarning)
 
 
 class BodoCompiler(numba.compiler.CompilerBase):
     """Bodo compiler pipeline
     """
+
     def define_pipelines(self):
         return self._create_bodo_pipeline(True)
 
     def _create_bodo_pipeline(self, distributed):
-        pm = PassManager('bodo')
+        pm = PassManager("bodo")
 
         if self.state.func_ir is None:
             pm.add_pass(TranslateByteCode, "analyzing bytecode")
@@ -68,8 +87,7 @@ class BodoCompiler(numba.compiler.CompilerBase):
             pm.add_pass(GenericRewrites, "nopython rewrites")
             pm.add_pass(RewriteSemanticConstants, "rewrite semantic constants")
             pm.add_pass(DeadBranchPrune, "dead branch pruning")
-        pm.add_pass(InlineClosureLikes,
-                    "inline calls to locally defined closures")
+        pm.add_pass(InlineClosureLikes, "inline calls to locally defined closures")
 
         # inline functions that have been determined as inlinable and rerun
         # branch pruning this needs to be run after closures are inlined as
@@ -108,8 +126,7 @@ class BodoCompiler(numba.compiler.CompilerBase):
             pm.add_pass(LowerParforSeq, "lower parfor sequentially")
 
         # legalise
-        pm.add_pass(IRLegalization,
-                    "ensure IR is legal prior to lowering")
+        pm.add_pass(IRLegalization, "ensure IR is legal prior to lowering")
 
         # lower
         pm.add_pass(NoPythonBackend, "nopython mode backend")
@@ -152,8 +169,9 @@ class BodoUntypedPass(FunctionPass):
         """
         # Ensure we have an IR and type information.
         assert state.func_ir
-        untyped_pass = UntypedPass(state.func_ir, state.typingctx,
-                              state.args, state.locals, state.metadata)
+        untyped_pass = UntypedPass(
+            state.func_ir, state.typingctx, state.args, state.locals, state.metadata
+        )
         untyped_pass.run()
         return True
 
@@ -173,10 +191,15 @@ class BodoDistributedPass(FunctionPass):
         # Ensure we have an IR and type information.
         assert state.func_ir
         from bodo.transforms.distributed_pass import DistributedPass
+
         dist_pass = DistributedPass(
-            state.func_ir, state.typingctx, state.targetctx,
-            state.type_annotation.typemap, state.type_annotation.calltypes,
-            state.metadata)
+            state.func_ir,
+            state.typingctx,
+            state.targetctx,
+            state.type_annotation.typemap,
+            state.type_annotation.calltypes,
+            state.metadata,
+        )
         dist_pass.run()
         return True
 
@@ -195,9 +218,12 @@ class BodoSeriesPass(FunctionPass):
         """
         # Ensure we have an IR and type information.
         assert state.func_ir
-        series_pass = SeriesPass(state.func_ir, state.typingctx,
-                             state.type_annotation.typemap,
-                             state.type_annotation.calltypes)
+        series_pass = SeriesPass(
+            state.func_ir,
+            state.typingctx,
+            state.type_annotation.typemap,
+            state.type_annotation.calltypes,
+        )
         series_pass.run()
         return True
 
@@ -216,9 +242,12 @@ class BodoDataFramePass(FunctionPass):
         """
         # Ensure we have an IR and type information.
         assert state.func_ir
-        df_pass = DataFramePass(state.func_ir, state.typingctx,
-                                state.type_annotation.typemap,
-                                state.type_annotation.calltypes)
+        df_pass = DataFramePass(
+            state.func_ir,
+            state.typingctx,
+            state.type_annotation.typemap,
+            state.type_annotation.calltypes,
+        )
         df_pass.run()
         return True
 
@@ -237,20 +266,21 @@ class BodoDumpDiagnosticsPass(FunctionPass):
         set.
         """
         diag_level = 0
-        env_name = 'BODO_DISTRIBUTED_DIAGNOSTICS'
+        env_name = "BODO_DISTRIBUTED_DIAGNOSTICS"
         try:
             diag_level = int(os.environ[env_name])
         except:
             pass
 
         if diag_level > 0:
-            state.metadata['distributed_diagnostics'].dump(diag_level)
+            state.metadata["distributed_diagnostics"].dump(diag_level)
         return True
 
 
 class BodoCompilerSeq(BodoCompiler):
     """Bodo pipeline without the distributed pass (used in rolling kernels)
     """
+
     def define_pipelines(self):
         return self._create_bodo_pipeline(False)
 
@@ -265,7 +295,8 @@ class LowerParforSeq(FunctionPass):
 
     def run_pass(self, state):
         numba.parfor.lower_parfor_sequential(
-                state.typingctx, state.func_ir, state.typemap, state.calltypes)
+            state.typingctx, state.func_ir, state.typemap, state.calltypes
+        )
         return True
 
 
@@ -278,14 +309,20 @@ def inline_calls(func_ir, _locals):
         for i, instr in enumerate(block.body):
             if isinstance(instr, ir.Assign):
                 expr = instr.value
-                if isinstance(expr, ir.Expr) and expr.op == 'call':
+                if isinstance(expr, ir.Expr) and expr.op == "call":
                     func_def = guard(get_definition, func_ir, expr.func)
-                    if (isinstance(func_def, (ir.Global, ir.FreeVar))
-                            and isinstance(func_def.value, CPUDispatcher)):
+                    if isinstance(func_def, (ir.Global, ir.FreeVar)) and isinstance(
+                        func_def.value, CPUDispatcher
+                    ):
                         py_func = func_def.value.py_func
                         inline_out = inline_closure_call(
-                            func_ir, py_func.__globals__, block, i, py_func,
-                            work_list=work_list)
+                            func_ir,
+                            py_func.__globals__,
+                            block,
+                            i,
+                            py_func,
+                            work_list=work_list,
+                        )
 
                         # TODO remove if when inline_closure_call() output fix
                         # is merged in Numba
@@ -293,10 +330,11 @@ def inline_calls(func_ir, _locals):
                             var_dict = inline_out[1]
                             # TODO: update '##distributed' and '##threaded'
                             # in _locals
-                            _locals.update((var_dict[k].name, v)
-                                           for k, v in
-                                           func_def.value.locals.items()
-                                           if k in var_dict)
+                            _locals.update(
+                                (var_dict[k].name, v)
+                                for k, v in func_def.value.locals.items()
+                                if k in var_dict
+                            )
                         # for block in new_blocks:
                         #     work_list.append(block)
                         # current block is modified, skip the rest

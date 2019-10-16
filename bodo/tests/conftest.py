@@ -22,7 +22,7 @@ def datapath():
     ValueError
         If the path doesn't exist.
     """
-    BASE_PATH = os.path.join(os.path.dirname(__file__), 'data')
+    BASE_PATH = os.path.join(os.path.dirname(__file__), "data")
 
     def deco(*args):
         path = os.path.join(BASE_PATH, *args)
@@ -30,4 +30,5 @@ def datapath():
             msg = "Could not find file {}."
             raise ValueError(msg.format(path))
         return path
+
     return deco

@@ -6,6 +6,7 @@ Checks for available configurations and sets config flags.
 try:
     from .io import _hdf5
     import h5py
+
     # TODO: make sure h5py/hdf5 supports parallel
 except ImportError:
     _has_h5py = False

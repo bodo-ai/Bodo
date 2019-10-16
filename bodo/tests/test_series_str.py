@@ -13,134 +13,146 @@ def test_len():
     def test_impl(S):
         return S.str.len()
 
-    S = pd.Series([' bbCD ', 'ABC', ' mCDm ', np.nan, 'abcffcc', '', 'A'],
-        [4, 3, 5, 1, 0, -3, 2], name='A')
+    S = pd.Series(
+        [" bbCD ", "ABC", " mCDm ", np.nan, "abcffcc", "", "A"],
+        [4, 3, 5, 1, 0, -3, 2],
+        name="A",
+    )
     check_func(test_impl, (S,), check_dtype=False)
 
 
 def test_split():
     def test_impl(S):
-        return S.str.split(',')
+        return S.str.split(",")
 
     # TODO: more split tests similar to the ones test_hiframes
     # TODO: support and test NA
-    S = pd.Series(['ABCC', 'ABBD', 'AA', 'C,ABB, D', 'B,B,CC'],
-        [3, 5, 1, 0, 2], name='A')
+    S = pd.Series(
+        ["ABCC", "ABBD", "AA", "C,ABB, D", "B,B,CC"], [3, 5, 1, 0, 2], name="A"
+    )
     # TODO: support distributed
     check_func(test_impl, (S,), False)
 
 
 def test_get():
     def test_impl(S):
-        B = S.str.split(',')
+        B = S.str.split(",")
         return B.str.get(1)
 
     # TODO: support and test NA
-    S = pd.Series(['AB,CC', 'C,ABB,D', 'LLL,JJ', 'C,D', 'C,ABB,D'],
-        [4, 3, 5, 1, 0], name='A')
+    S = pd.Series(
+        ["AB,CC", "C,ABB,D", "LLL,JJ", "C,D", "C,ABB,D"], [4, 3, 5, 1, 0], name="A"
+    )
     # TODO: support distributed
     check_func(test_impl, (S,), False)
 
 
 def test_replace_regex():
     def test_impl(S):
-        return S.str.replace('AB*', 'EE', regex=True)
+        return S.str.replace("AB*", "EE", regex=True)
 
-    S = pd.Series(['ABCC', 'CABBD', np.nan, 'CCD', 'C,ABB,D'],
-        [4, 3, 5, 1, 0], name='A')
+    S = pd.Series(
+        ["ABCC", "CABBD", np.nan, "CCD", "C,ABB,D"], [4, 3, 5, 1, 0], name="A"
+    )
     check_func(test_impl, (S,))
 
 
 def test_replace_noregex():
     def test_impl(S):
-        return S.str.replace('AB', 'EE', regex=False)
+        return S.str.replace("AB", "EE", regex=False)
 
-    S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
-        [4, 3, 5, 1, 0], name='A')
+    S = pd.Series(["ABCC", "CABBD", np.nan, "AA", "C,ABB,D"], [4, 3, 5, 1, 0], name="A")
     check_func(test_impl, (S,))
 
 
 def test_contains_regex():
     def test_impl(S):
-        return S.str.contains('AB*', regex=True)
+        return S.str.contains("AB*", regex=True)
 
-    S = pd.Series(['ABCC', 'CABBD', np.nan, 'CCD', 'C,ABB,D'],
-        [4, 3, 5, 1, 0], name='A')
+    S = pd.Series(
+        ["ABCC", "CABBD", np.nan, "CCD", "C,ABB,D"], [4, 3, 5, 1, 0], name="A"
+    )
     check_func(test_impl, (S,))
 
 
 def test_contains_noregex():
     def test_impl(S):
-        return S.str.contains('AB', regex=False)
+        return S.str.contains("AB", regex=False)
 
-    S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
-        [4, 3, 5, 1, 0], name='A')
+    S = pd.Series(["ABCC", "CABBD", np.nan, "AA", "C,ABB,D"], [4, 3, 5, 1, 0], name="A")
     check_func(test_impl, (S,))
 
 
 def test_count_noflag():
     def test_impl(S):
-        return S.str.count('A')
+        return S.str.count("A")
 
-    S = pd.Series(['AAABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
-        [4, 3, 5, 1, 0], name='A')
+    S = pd.Series(
+        ["AAABCC", "CABBD", np.nan, "AA", "C,ABB,D"], [4, 3, 5, 1, 0], name="A"
+    )
     check_func(test_impl, (S,), check_dtype=False)
 
 
 def test_count_flag():
     import re
+
     # TODO: the flag does not work inside numba
     flag = re.IGNORECASE.value
-    def test_impl(S):
-        return S.str.count('A', flag)
 
-    S = pd.Series(['AAABCC', 'CABBD', np.nan, 'Aaba', 'C,BB,D'],
-        [4, 3, 5, 1, 0], name='A')
+    def test_impl(S):
+        return S.str.count("A", flag)
+
+    S = pd.Series(
+        ["AAABCC", "CABBD", np.nan, "Aaba", "C,BB,D"], [4, 3, 5, 1, 0], name="A"
+    )
     check_func(test_impl, (S,), check_dtype=False)
 
 
 def test_find():
     def test_impl(S):
-        return S.str.find('AB')
+        return S.str.find("AB")
 
-    S = pd.Series(['ABCC', 'CABBD', np.nan, 'AA', 'C,ABB,D'],
-        [4, 3, 5, 1, 0], name='A')
+    S = pd.Series(["ABCC", "CABBD", np.nan, "AA", "C,ABB,D"], [4, 3, 5, 1, 0], name="A")
     check_func(test_impl, (S,), check_dtype=False)
 
 
 def test_rfind():
     def test_impl(S):
-        return S.str.rfind('AB')
+        return S.str.rfind("AB")
 
-    S = pd.Series(['ABCC', 'CABBDAB', np.nan, 'ABAB', 'C,BB,D'],
-        [4, 3, 5, 1, 0], name='A')
+    S = pd.Series(
+        ["ABCC", "CABBDAB", np.nan, "ABAB", "C,BB,D"], [4, 3, 5, 1, 0], name="A"
+    )
     check_func(test_impl, (S,), check_dtype=False)
 
 
 def test_center():
     def test_impl(S):
-        return S.str.center(5, '*')
+        return S.str.center(5, "*")
 
-    S = pd.Series(['ABCDDC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
-        [3, 5, 1, 0, 2], name='A')
+    S = pd.Series(
+        ["ABCDDC", "ABBD", "AA", "C,ABB, D", np.nan], [3, 5, 1, 0, 2], name="A"
+    )
     check_func(test_impl, (S,))
 
 
 def test_ljust():
     def test_impl(S):
-        return S.str.ljust(5, '*')
+        return S.str.ljust(5, "*")
 
-    S = pd.Series(['ABCDDC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
-        [3, 5, 1, 0, 2], name='A')
+    S = pd.Series(
+        ["ABCDDC", "ABBD", "AA", "C,ABB, D", np.nan], [3, 5, 1, 0, 2], name="A"
+    )
     check_func(test_impl, (S,))
 
 
 def test_rjust():
     def test_impl(S):
-        return S.str.rjust(5, '*')
+        return S.str.rjust(5, "*")
 
-    S = pd.Series(['ABCDDC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
-        [3, 5, 1, 0, 2], name='A')
+    S = pd.Series(
+        ["ABCDDC", "ABBD", "AA", "C,ABB, D", np.nan], [3, 5, 1, 0, 2], name="A"
+    )
     check_func(test_impl, (S,))
 
 
@@ -149,16 +161,17 @@ def test_pad():
         return S.str.pad(5)
 
     def test_impl_left(S):
-        return S.str.pad(5, 'left', '*')
+        return S.str.pad(5, "left", "*")
 
     def test_impl_right(S):
-        return S.str.pad(5, 'right', '*')
+        return S.str.pad(5, "right", "*")
 
     def test_impl_both(S):
-        return S.str.pad(5, 'both', '*')
+        return S.str.pad(5, "both", "*")
 
-    S = pd.Series(['ABCDDC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
-        [3, 5, 1, 0, 2], name='A')
+    S = pd.Series(
+        ["ABCDDC", "ABBD", "AA", "C,ABB, D", np.nan], [3, 5, 1, 0, 2], name="A"
+    )
     check_func(test_impl_default, (S,))
     check_func(test_impl_left, (S,))
     check_func(test_impl_right, (S,))
@@ -169,8 +182,9 @@ def test_zfill():
     def test_impl(S):
         return S.str.zfill(10)
 
-    S = pd.Series(['ABCDDCABABAAB', 'ABBD', 'AA', 'C,ABB, D', np.nan],
-        [3, 5, 1, 0, 2], name='A')
+    S = pd.Series(
+        ["ABCDDCABABAAB", "ABBD", "AA", "C,ABB, D", np.nan], [3, 5, 1, 0, 2], name="A"
+    )
     check_func(test_impl, (S,))
 
 
@@ -178,8 +192,9 @@ def test_slice():
     def test_impl(S):
         return S.str.slice(step=2)
 
-    S = pd.Series(['ABCDDCABABAAB', 'ABBD', 'AA', 'C,ABB, D', np.nan],
-        [3, 5, 1, 0, 2], name='A')
+    S = pd.Series(
+        ["ABCDDCABABAAB", "ABBD", "AA", "C,ABB, D", np.nan], [3, 5, 1, 0, 2], name="A"
+    )
     check_func(test_impl, (S,))
 
 
@@ -187,8 +202,7 @@ def test_startswith():
     def test_impl(S):
         return S.str.startswith("AB")
 
-    S = pd.Series(['ABCC', 'ABBD', 'AA', 'C,ABB, D', np.nan],
-        [3, 5, 1, 0, 2], name='A')
+    S = pd.Series(["ABCC", "ABBD", "AA", "C,ABB, D", np.nan], [3, 5, 1, 0, 2], name="A")
     check_func(test_impl, (S,))
 
 
@@ -196,8 +210,7 @@ def test_endswith():
     def test_impl(S):
         return S.str.startswith("AB")
 
-    S = pd.Series(['AB', 'ABB', 'BAAB', 'C,ABB, D', np.nan],
-        [3, 5, 1, 0, 2], name='A')
+    S = pd.Series(["AB", "ABB", "BAAB", "C,ABB, D", np.nan], [3, 5, 1, 0, 2], name="A")
     check_func(test_impl, (S,))
 
 
@@ -205,7 +218,5 @@ def test_isupper():
     def test_impl(S):
         return S.str.isupper()
 
-    S = pd.Series(['AB', 'ABb', 'abab', 'C,ABB, D', np.nan],
-        [3, 5, 1, 0, 2], name='A')
+    S = pd.Series(["AB", "ABb", "abab", "C,ABB, D", np.nan], [3, 5, 1, 0, 2], name="A")
     check_func(test_impl, (S,))
-    
