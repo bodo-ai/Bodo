@@ -204,6 +204,15 @@ Debugging
       mpiexec -outfile-pattern="out_%r.log" -n 8 python -u small_test01.py
 
 
+Main documentation
+---------
+Instuctions on building and viewing the documentation is `here <https://github.com/Bodo-inc/Bodo/blob/master/docs/development/install.rst#building-documentation>`_ .
+To upload the documentation, use the :code:`gh-pages.py` script under :code:`docs`:
+::
+    python gh-pages.py
+Then verify the repository under the :code:`gh-pages` directory and :code:`git push` to `Bodo-doc <https://github.com/Bodo-inc/Bodo-doc>`_ repo :code:`gh-pages` branch.
+
+
 Code Style
 ----------
 
