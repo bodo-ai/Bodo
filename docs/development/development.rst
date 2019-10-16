@@ -101,7 +101,7 @@ Develop using Docker
 --------------------
 Two Docker images can be used for Bodo development:
 
-(**optional**: the reason we have this is mainly for mac users since mac doesn't show certain dependency errors and valgrind does not support the newest macOS)
+(**optional**: the reason we have this is mainly for Mac users since Mac doesn't show certain dependency errors and valgrind does not support the newest macOS)
 
 1. Bodo development(:code:`Bodo/docker/bodo_dev`)
     - has conda enviroment setup
