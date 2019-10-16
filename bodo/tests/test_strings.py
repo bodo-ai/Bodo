@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Bodo Inc.
+# Copyright (C) 2019 Bodo Inc. All rights reserved.
 # -*- coding: utf-8 -*-
 
 import unittest

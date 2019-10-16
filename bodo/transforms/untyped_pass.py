@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Bodo Inc.
+# Copyright (C) 2019 Bodo Inc. All rights reserved.
 """
 transforms the IR to remove features that Numba's type inference cannot support
 such as non-uniform dictionary input of `pd.DataFrame({})`.

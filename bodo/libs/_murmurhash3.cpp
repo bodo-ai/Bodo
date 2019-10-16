@@ -1,4 +1,4 @@
-// Copyright (C) 2019 Bodo Inc.
+// Copyright (C) 2019 Bodo Inc. All rights reserved.
 //-----------------------------------------------------------------------------
 // based on MurmurHash3 written by Austin Appleby
 // https://github.com/aappleby/smhasher/blob/master/src/MurmurHash3.cpp

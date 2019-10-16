@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Bodo Inc.
+# Copyright (C) 2019 Bodo Inc. All rights reserved.
 from collections import defaultdict
 import numba
 from numba import typeinfer, ir, ir_utils, config, types, cgutils

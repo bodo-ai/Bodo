@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Bodo Inc.
+# Copyright (C) 2019 Bodo Inc. All rights reserved.
 import numba
 from numba import types
 from numba.extending import typeof_impl, unbox, register_model, models, NativeValue, box

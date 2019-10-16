@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Bodo Inc.
+# Copyright (C) 2019 Bodo Inc. All rights reserved.
 """
 Utility functions for conversion of data such as list to array.
 Need to be inlined for better optimization.

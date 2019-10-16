@@ -1,4 +1,4 @@
-// Copyright (C) 2019 Bodo Inc.
+// Copyright (C) 2019 Bodo Inc. All rights reserved.
 /*
  * Implementation of dictionaries using std::unordered_map.
  *

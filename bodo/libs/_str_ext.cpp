@@ -1,4 +1,4 @@
-// Copyright (C) 2019 Bodo Inc.
+// Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>

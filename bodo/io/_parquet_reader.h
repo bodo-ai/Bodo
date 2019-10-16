@@ -1,4 +1,4 @@
-// Copyright (C) 2019 Bodo Inc.
+// Copyright (C) 2019 Bodo Inc. All rights reserved.
 #ifndef _PARQUET_READER_H_INCLUDED
 #define _PARQUET_READER_H_INCLUDED
 
