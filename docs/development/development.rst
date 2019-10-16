@@ -98,7 +98,7 @@ the following has to be specified:
 - distributed transformation
 
 Develop using Docker
----------------
+--------------------
 Two Docker images can be used for Bodo development:
 
 1. Bodo development(:code:`Bodo/docker/bodo_dev`)
@@ -182,7 +182,7 @@ To remove all stopped containers:
     
     
 Debugging
----------------
+---------
 - `pdb <https://docs.python.org/3/library/pdb.html>`_: :code:`import pdb; pdb.set_trace()` for breakpoints
 
 - `NUMBA_DEBUG_PRINT_AFTER <https://numba.pydata.org/numba-doc/dev/reference/envvars.html?highlight=numba_debug_print#envvar-NUMBA_DEBUG_PRINT_AFTER>`_ enviroment variable: 
@@ -200,6 +200,15 @@ Debugging
   ::
       # use the flag instead of setting the enviroment variable
       mpiexec -outfile-pattern="out_%r.log" -n 8 python -u small_test01.py
+
+
+Code Style
+----------
+
+Bodo uses the PEP8 standard for Python code style.
+We use `black <https://github.com/psf/black>`_ as formatter
+and check format with `flake8 <http://flake8.pycqa.org/en/latest/>`_.
+
 
 Papers
 ------
