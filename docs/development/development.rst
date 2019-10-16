@@ -209,6 +209,11 @@ Bodo uses the PEP8 standard for Python code style.
 We use `black <https://github.com/psf/black>`_ as formatter
 and check format with `flake8 <http://flake8.pycqa.org/en/latest/>`_.
 
+We use the Google C++ code style guide
+and enforce with `cpplint <https://github.com/cpplint/cpplint>`_.
+We use `clang-format` as the formatter.
+See `instructions in Pandas <https://pandas.pydata.org/pandas-docs/stable/development/contributing.html#c-cpplint>`_.
+
 
 Papers
 ------
