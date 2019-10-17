@@ -153,17 +153,6 @@ def str_replace_overload(in_str, old, new, count=-1):
     return _str_replace_impl
 
 
-@numba.generated_jit
-def str_slice(in_str, start=None, stop=None, step=None):
-    def _str_slice_impl(in_str, start=None, stop=None, step=None):
-        with numba.objmode(out="unicode_type"):
-            slice_obj = slice(start, stop, step)
-            out = in_str[slice_obj]
-        return out
-
-    return _str_slice_impl
-
-
 @overload_method(types.UnicodeType, "rfind")
 def str_rfind_overload(in_str, sub, start=0, end=None):
     def _str_rfind_impl(in_str, sub, start=0, end=None):

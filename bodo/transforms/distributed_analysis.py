@@ -1149,6 +1149,11 @@ class DistributedAnalysis(object):
             array_dists[lhs] = new_dist
             return
 
+        # indexing into arrays from this point only, check for array type
+        if not is_array_typ(in_typ):
+            self._set_REP(inst.list_vars(), array_dists)
+            return
+
         if (rhs.value.name, index_var.name) in self._parallel_accesses:
             # XXX: is this always valid? should be done second pass?
             self._set_REP([inst.target], array_dists)
