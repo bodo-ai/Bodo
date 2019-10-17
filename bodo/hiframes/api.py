@@ -28,7 +28,7 @@ from bodo.libs.str_arr_ext import StringArrayType, string_array_type, is_str_arr
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 
-from bodo.libs.set_ext import build_set
+from bodo.utils.utils import build_set
 from numba.targets.imputils import lower_builtin, impl_ret_untracked
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 from bodo.hiframes.pd_series_ext import (

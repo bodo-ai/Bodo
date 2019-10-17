@@ -146,14 +146,6 @@ ext_dict = Extension(
     library_dirs=lid,
 )
 
-ext_set = Extension(
-    name="bodo.libs.hset_ext",
-    sources=["bodo/libs/_set_ext.cpp"],
-    extra_compile_args=eca,
-    extra_link_args=ela,
-    include_dirs=ind,
-    library_dirs=lid,
-)
 
 str_libs = np_compile_args["libraries"]
 
@@ -251,7 +243,6 @@ ext_xenon_wrapper = Extension(
 _ext_mods = [
     ext_hdist,
     ext_dict,
-    ext_set,
     ext_str,
     ext_quantile,
     ext_dt,

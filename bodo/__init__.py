@@ -18,7 +18,6 @@ from numba.types import *
 
 import bodo.libs
 import bodo.libs.dict_ext
-import bodo.libs.set_ext
 import bodo.libs.distributed_api
 from bodo.libs.distributed_api import (
     dist_time,
