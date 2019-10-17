@@ -1,5 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import unittest
+import pytest
 import os
 import pandas as pd
 import numpy as np
@@ -33,6 +34,7 @@ def test_pq_pandas_date(datapath):
     pd.testing.assert_frame_equal(bodo_func(), impl())
 
 
+@pytest.skip("Needs datetime.date() support in parquet for latest arrow")
 def test_pq_spark_date(datapath):
     fname = datapath("sdf_dt.pq")
 
