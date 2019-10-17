@@ -57,10 +57,10 @@ Building Documentation
 
 The `documentation <https://docs.bodo-inc.com/_build/html/index.html>`_ is under the `docs` directory of the repository and uses
 the reStructuredText format.
-It is built with `Sphinx <http://www.sphinx-doc.org>`_ and the bootstrap theme::
+It is built with `Sphinx <http://www.sphinx-doc.org>`_ and the read the doc theme::
 
     conda install sphinx
-    pip install sphinx_bootstrap_theme
+    pip install sphinx_rtd_theme
 
 After updating documentation, run :code:`make html` in the `docs` folder to build. Open `index.html` to view the documentation.
 
