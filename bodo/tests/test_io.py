@@ -34,7 +34,7 @@ def test_pq_pandas_date(datapath):
     pd.testing.assert_frame_equal(bodo_func(), impl())
 
 
-@pytest.skip("Needs datetime.date() support in parquet for latest arrow")
+@pytest.mark.skip("Needs datetime.date() support in parquet for latest arrow")
 def test_pq_spark_date(datapath):
     fname = datapath("sdf_dt.pq")
 
