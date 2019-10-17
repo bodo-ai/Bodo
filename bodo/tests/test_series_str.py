@@ -31,7 +31,8 @@ def test_split():
         ["ABCC", "ABBD", "AA", "C,ABB, D", "B,B,CC"], [3, 5, 1, 0, 2], name="A"
     )
     # TODO: support distributed
-    check_func(test_impl, (S,), False)
+    # check_func(test_impl, (S,))
+    pd.testing.assert_series_equal(bodo.jit(test_impl)(S), test_impl(S))
 
 
 def test_get():
@@ -44,7 +45,8 @@ def test_get():
         ["AB,CC", "C,ABB,D", "LLL,JJ", "C,D", "C,ABB,D"], [4, 3, 5, 1, 0], name="A"
     )
     # TODO: support distributed
-    check_func(test_impl, (S,), False)
+    # check_func(test_impl, (S,))
+    pd.testing.assert_series_equal(bodo.jit(test_impl)(S), test_impl(S))
 
 
 def test_replace_regex():
