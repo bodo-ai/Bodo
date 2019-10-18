@@ -22,7 +22,7 @@ develop Numba extensions is necessary.
     of ParallelAccelerator and Bodo transformations. Run `a simple parallel
     example <http://numba.pydata.org/numba-doc/latest/user/parallel.html#explicit-parallel-loops>`_
     and make sure you understad the IR at different stages.
-- | `Exending Numba page <http://numba.pydata.org/numba-doc/latest/extending/index.html>`_
+- | `Extending Numba page <http://numba.pydata.org/numba-doc/latest/extending/index.html>`_
     provides details on how to provide native implementations for data types and functions.
     The low-level API should be avoided as much as possible for ease of development and
     code readability. The `unicode support <https://github.com/numba/numba/blob/master/numba/unicode.py>`_
