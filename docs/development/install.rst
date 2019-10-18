@@ -38,18 +38,7 @@ In case of issues, reinstalling in a new conda environment is recommended.
 
 Other useful packages for development::
     conda install pytest sphinx pylint jupyter
-    conda install daal4py -c defaults -c intel
-
-Test Suite
-----------
-
-
-We use `pytest` for testing and run the test suite on different
-number of processors::
-
-    pytest -s -v -W ignore
-    mpiexec -n 2 pytest -s -v -W ignore
-    mpiexec -n 3 pytest -s -v -W ignore
+    .. conda install daal4py -c defaults -c intel
 
 
 Building Documentation

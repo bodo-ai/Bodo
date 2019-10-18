@@ -64,6 +64,18 @@ the following has to be specified:
 - distributed transformation
 
 
+Test Suite
+----------
+
+
+We use `pytest` for testing and run the test suite on different
+number of processors (should run in Bodo repo's main directory)::
+
+    pytest -s -v -W ignore
+    mpiexec -n 2 pytest -s -v -W ignore
+    mpiexec -n 3 pytest -s -v -W ignore
+
+
 Debugging
 ---------
 - `pdb <https://docs.python.org/3/library/pdb.html>`_: :code:`import pdb; pdb.set_trace()` for breakpoints
