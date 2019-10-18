@@ -215,15 +215,15 @@ def test_join_bool():
     # arrays, resulting in inconsistent types
     df1 = pd.DataFrame(
         {
-            "A": [3, 1, 1, 3, 4, 2, 4],
-            "B": [True, False, True, False, np.nan, True, False],
+            "A": [3, 1, 1, 3, 4, 2, 4, 11],
+            "B": [True, False, True, False, np.nan, True, False, True],
         }
     )
 
     df2 = pd.DataFrame(
         {
-            "A": [2, 1, 4, 4, 3, 2, 4],
-            "C": [False, True, np.nan, False, False, True, False],
+            "A": [2, 1, 4, 4, 3, 2, 4, 11],
+            "C": [False, True, np.nan, False, False, True, False, True],
         }
     )
     check_func(test_impl, (df1, df2), sort_output=True, check_dtype=False)
