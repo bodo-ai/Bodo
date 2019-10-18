@@ -26,7 +26,7 @@ such as Numba on Ubuntu Linux::
 A command line for running the Pi example on 4 cores::
 
     mpiexec -n 4 python examples/pi.py
-If you run into gethostbyname failed error, try `this fix<https://stackoverflow.com/questions/23112515/mpich2-gethostbyname-failed>`_.
+If you run into gethostbyname failed error, try `this fix <https://stackoverflow.com/questions/23112515/mpich2-gethostbyname-failed>`_.
 
 Running unit tests::
 
@@ -44,7 +44,7 @@ Other useful packages for development::
 Building Documentation
 ----------------------
 
-The `documentation <https://docs.bodo-inc.com/_build/html/index.html>`_ is under the `docs` directory of the repository and uses
+The `documentation <https://docs.bodo.ai>`_ is under the `docs` directory of the repository and uses
 the reStructuredText format.
 It is built with `Sphinx <http://www.sphinx-doc.org>`_ and the read the doc theme::
 

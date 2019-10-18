@@ -16,4 +16,4 @@ Development guide: https://github.com/Bodo-inc/Bodo/blob/master/docs/development
 
 Install from source: https://github.com/Bodo-inc/Bodo/blob/master/docs/development/install.rst
 
-Bodo Documentation: https://docs.bodo-inc.com/_build/html/index.html
+Bodo Documentation: https://docs.bodo.ai
