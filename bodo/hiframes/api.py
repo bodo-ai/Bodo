@@ -498,24 +498,6 @@ class SetDfColInfer(AbstractTemplate):
         return signature(ret, *args)
 
 
-def to_arr_from_series(arr):
-    return arr
-
-
-@infer_global(to_arr_from_series)
-class ToArrFromSeriesType(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        arr = args[0]
-        return signature(if_series_to_array_type(arr), arr)
-
-
-@lower_builtin(to_arr_from_series, types.Any)
-def to_arr_from_series_dummy_impl(context, builder, sig, args):
-    return impl_ret_borrowed(context, builder, sig.return_type, args[0])
-
-
 def get_series_data_tup(series_tup):
     return tuple(get_series_data(s) for s in series_tup)
 
@@ -733,9 +715,6 @@ if hasattr(numba.ir_utils, "alias_func_extensions"):
         ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext")
     ] = alias_ext_dummy_func
     # TODO: init_dataframe
-    numba.ir_utils.alias_func_extensions[
-        ("to_arr_from_series", "bodo.hiframes.api")
-    ] = alias_ext_dummy_func
     numba.ir_utils.alias_func_extensions[
         ("to_date_series_type", "bodo.hiframes.api")
     ] = alias_ext_dummy_func

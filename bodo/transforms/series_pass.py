@@ -1199,9 +1199,6 @@ class SeriesPass(object):
         return self._replace_func(impl, args)
 
     def _run_call_hiframes(self, assign, lhs, rhs, func_name):
-        if func_name in ("to_arr_from_series",):
-            assign.value = rhs.args[0]
-            return [assign]
 
         # pd.DataFrame() calls init_series for even Series since it's untyped
         # remove the call since it is invalid for analysis here

@@ -662,7 +662,6 @@ class DistributedAnalysis(object):
             "get_series_data",
             "get_series_index",
             "get_index_data",
-            "to_arr_from_series",
             "to_date_series_type",
             "init_datetime_index",
             "init_timedelta_index",
