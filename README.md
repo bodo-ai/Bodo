@@ -1,6 +1,7 @@
 # Bodo Core Engine
 
 [![Build Status](https://dev.azure.com/bodo-inc/Bodo/_apis/build/status/Bodo-inc.Bodo?branchName=master)](https://dev.azure.com/bodo-inc/Bodo/_build/latest?definitionId=1&branchName=master)
+[![codecov](https://codecov.io/gh/Bodo-inc/Bodo/branch/master/graph/badge.svg?token=zYHQy0R9ck)](https://codecov.io/gh/Bodo-inc/Bodo)
 
 ## The Most Efficient Data Science Engine
 
