@@ -716,9 +716,6 @@ if hasattr(numba.ir_utils, "alias_func_extensions"):
     ] = alias_ext_dummy_func
     # TODO: init_dataframe
     numba.ir_utils.alias_func_extensions[
-        ("to_date_series_type", "bodo.hiframes.api")
-    ] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[
         ("init_integer_array", "bodo.libs.int_arr_ext")
     ] = alias_ext_init_integer_array
     numba.ir_utils.alias_func_extensions[
