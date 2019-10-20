@@ -265,6 +265,15 @@ def test_join_rm_dead_data_name_overlap():
     assert bodo.jit(test_impl)(df1, df2) == test_impl(df1, df2)
 
 
+def test_join_rm_dead_data_name_overlap2():
+    def test_impl(df1, df2):
+        return df1.merge(df2, left_on = ["id"], right_on = ["user_id"])
+
+    df1 = pd.DataFrame({'id': [3, 4, 1]})
+    df2 = pd.DataFrame({'id': [3, 4, 2], 'user_id': [3, 5, 6]})
+    pd.testing.assert_frame_equal(bodo.jit(test_impl)(df1, df2), test_impl(df1, df2))
+
+
 class TestJoin(unittest.TestCase):
     def test_join1(self):
         def test_impl(n):
