@@ -252,6 +252,19 @@ def test_join_match_key_types():
     check_func(test_impl2, (df2, df1), sort_output=True)
 
 
+def test_join_rm_dead_data_name_overlap():
+    """Test dead code elimination when there are matching names in data columns of
+    input tables but only one of them is actually used.
+    """
+    def test_impl(df1, df2):
+        df3 = df1.merge(df2, on='user_id')
+        return len(df3.id_x.values)
+
+    df1 = pd.DataFrame({'id': [3,4], 'user_id': [5, 6]})
+    df2 = pd.DataFrame({'id': [3,4], 'user_id': [5, 6]})
+    assert bodo.jit(test_impl)(df1, df2) == test_impl(df1, df2)
+
+
 class TestJoin(unittest.TestCase):
     def test_join1(self):
         def test_impl(n):

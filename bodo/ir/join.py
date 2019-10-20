@@ -280,15 +280,20 @@ def remove_dead_join(join_node, lives, arg_aliases, alias_map, func_ir, typemap)
 
     for cname in dead_cols:
         join_node.df_out_vars.pop(cname)
-        cname = cname[:-2] if cname.endswith("_x") or cname.endswith("_y") else cname
 
         # same name columns are duplicated and appended with _x/_y,
         # so one version of cname may be removed already and input may not
         # exist anymore because of that
+        # TODO: handle other suffixes, cases where actual name ends with _x/_y
         if cname in join_node.left_vars:
             join_node.left_vars.pop(cname, None)
+        elif cname.endswith("_x") and cname[:-2] in join_node.left_vars:
+            join_node.left_vars.pop(cname[:-2], None)
+
         if cname in join_node.right_vars:
             join_node.right_vars.pop(cname, None)
+        elif cname.endswith("_y") and cname[:-2] in join_node.right_vars:
+            join_node.right_vars.pop(cname[:-2], None)
 
     # remove empty join node
     if len(join_node.df_out_vars) == 0:
