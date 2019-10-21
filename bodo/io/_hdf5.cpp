@@ -11,7 +11,7 @@ extern "C" {
 
 hid_t hpat_h5_open(char* file_name, char* mode, int64_t is_parallel);
 hid_t hpat_h5_open_dset_or_group_obj(hid_t file_id, char* obj_name);
-int64_t hpat_h5_size(hid_t dataset_id, int dim);
+int64_t h5_size(hid_t dataset_id, int dim);
 int hpat_h5_read(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
                  int64_t is_parallel, void* out, int typ_enum);
 int hpat_h5_read_filter(hid_t dataset_id, int ndims, int64_t* starts,
@@ -42,8 +42,8 @@ PyMODINIT_FUNC PyInit__hdf5(void) {
     PyObject_SetAttrString(
         m, "hpat_h5_open_dset_or_group_obj",
         PyLong_FromVoidPtr((void*)(&hpat_h5_open_dset_or_group_obj)));
-    PyObject_SetAttrString(m, "hpat_h5_size",
-                           PyLong_FromVoidPtr((void*)(&hpat_h5_size)));
+    PyObject_SetAttrString(m, "h5_size",
+                           PyLong_FromVoidPtr((void*)(&h5_size)));
     PyObject_SetAttrString(m, "hpat_h5_read",
                            PyLong_FromVoidPtr((void*)(&hpat_h5_read)));
     PyObject_SetAttrString(m, "hpat_h5_read_filter",
@@ -137,7 +137,7 @@ hid_t hpat_h5_open_dset_or_group_obj(hid_t file_or_group_id, char* obj_name) {
     return obj_id;
 }
 
-int64_t hpat_h5_size(hid_t dataset_id, int dim) {
+int64_t h5_size(hid_t dataset_id, int dim) {
     CHECK(dataset_id != -1, "h5 invalid dataset_id input to size call");
     hid_t space_id = H5Dget_space(dataset_id);
     CHECK(space_id != -1, "h5 size get_space error");

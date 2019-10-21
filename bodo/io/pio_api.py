@@ -23,6 +23,7 @@ if bodo.config._has_h5py:
     import llvmlite.binding as ll
 
     ll.add_symbol("hpat_h5_read_filter", _hdf5.hpat_h5_read_filter)
+    ll.add_symbol("h5_size", _hdf5.h5_size)
 
 
 ################## Types #######################
@@ -171,11 +172,6 @@ def h5g_get_objname_by_idx():
     return
 
 
-def h5size():
-    """dummy function for C h5_size"""
-    return
-
-
 def h5read():
     """dummy function for C h5_read"""
     return
@@ -224,12 +220,9 @@ if bodo.config._has_h5py:
             return signature(h5file_type, *unliteral_all(args))
 
 
-@infer_global(h5size)
-class H5Size(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2
-        return signature(types.int64, *unliteral_all(args))
+h5size = types.ExternalFunction(
+    "h5_size", types.int64(h5dataset_or_group_type, types.int32)
+)
 
 
 @infer_global(h5read)

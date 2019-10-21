@@ -26,7 +26,6 @@ if bodo.config._has_h5py:
     ll.add_symbol(
         "hpat_h5_open_dset_or_group_obj", _hdf5.hpat_h5_open_dset_or_group_obj
     )
-    ll.add_symbol("hpat_h5_size", _hdf5.hpat_h5_size)
     ll.add_symbol("hpat_h5_read", _hdf5.hpat_h5_read)
     ll.add_symbol("hpat_h5_get_type_enum", _hdf5.hpat_h5_get_type_enum)
     ll.add_symbol("hpat_h5_create_dset", _hdf5.hpat_h5_create_dset)
@@ -81,13 +80,6 @@ if bodo.config._has_h5py:
         )
         fn = builder.module.get_or_insert_function(fnty, name="hpat_h5_open")
         return builder.call(fn, [fname, mode, is_parallel])
-
-
-@lower_builtin(pio_api.h5size, h5dataset_or_group_type, types.int32)
-def h5_size(context, builder, sig, args):
-    fnty = lir.FunctionType(lir.IntType(64), [h5file_lir_type, lir.IntType(32)])
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_h5_size")
-    return builder.call(fn, [args[0], args[1]])
 
 
 @lower_builtin(
