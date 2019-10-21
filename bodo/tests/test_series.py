@@ -822,8 +822,8 @@ def test_series_binary_ufunc(ufunc):
 @pytest.mark.parametrize(
     "S",
     [
-        pd.Series([True, False, False, True, True]),
-        pd.Series([True, False, np.nan, True, True]),
+        pd.Series([True, False, False, True, True, True, False, False]),
+        pd.Series([True, False, np.nan, True, True, False, True, False]),
     ],
 )
 def test_series_bool_cmp_op(S, op):
