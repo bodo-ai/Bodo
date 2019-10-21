@@ -42,7 +42,9 @@ import pytest
 def test_merge_common_cols(df1, df2):
     # test merge() based on common columns when key columns not provided
     def impl(df1, df2):
-        return df1.merge(df2)
+        df3=df1.merge(df2)
+        print("1: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
+        return df3
 
     bodo_func = bodo.jit(impl)
     pd.testing.assert_frame_equal(bodo_func(df1, df2), impl(df1, df2))
@@ -65,13 +67,17 @@ def test_merge_common_cols(df1, df2):
 def test_merge_suffix(df1, df2):
     # test cases that have name overlaps, require adding suffix to column names
     def impl1(df1, df2):
-        return df1.merge(df2, on="A")
+        df3=df1.merge(df2, on="A")
+        print("2: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
+        return df3
 
     bodo_func = bodo.jit(impl1)
     pd.testing.assert_frame_equal(bodo_func(df1, df2), impl1(df1, df2))
 
     def impl2(df1, df2):
-        return df1.merge(df2, on=["B", "A"])
+        df3=df1.merge(df2, on=["B", "A"])
+        print("3: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
+        return df3
 
     bodo_func = bodo.jit(impl2)
     pd.testing.assert_frame_equal(bodo_func(df1, df2), impl2(df1, df2))
@@ -98,7 +104,9 @@ def test_merge_suffix(df1, df2):
 def test_merge_index(df1, df2):
     # test using index for join
     def impl1(df1, df2):
-        return df1.merge(df2, left_index=True, right_index=True)
+        df3=df1.merge(df2, left_index=True, right_index=True)
+        print("4: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
+        return df3
 
     bodo_func = bodo.jit(impl1)
     pd.testing.assert_frame_equal(bodo_func(df1, df2), impl1(df1, df2))
@@ -137,7 +145,9 @@ def test_merge_index(df1, df2):
 )
 def test_join_call(df1, df2):
     def impl1(df1, df2):
-        return df1.join(df2)
+        df3=df1.join(df2)
+        print("5: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
+        return df3
 
     bodo_func = bodo.jit(impl1)
     pd.testing.assert_frame_equal(bodo_func(df1, df2), impl1(df1, df2))
@@ -273,6 +283,7 @@ class TestJoin(unittest.TestCase):
     def test_join1_seq(self):
         def test_impl(df1, df2):
             df3 = df1.merge(df2, left_on="key1", right_on="key2")
+            print("7: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
             return df3
 
         bodo_func = bodo.jit(test_impl)
@@ -290,6 +301,7 @@ class TestJoin(unittest.TestCase):
             df1 = pd.DataFrame({"key1": ["foo", "bar", "baz"]})
             df2 = pd.DataFrame({"key2": ["baz", "bar", "baz"], "B": ["b", "zzz", "ss"]})
             df3 = pd.merge(df1, df2, left_on="key1", right_on="key2")
+            print("8: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
             return df3.B
 
         bodo_func = bodo.jit(test_impl)
@@ -301,6 +313,7 @@ class TestJoin(unittest.TestCase):
             df1 = pd.DataFrame({"key1": ["foo", "bar", "baz"]})
             df2 = pd.DataFrame({"key2": ["baz", "bar", "baz"], "B": ["b", "zzz", "ss"]})
             df3 = df1.merge(df2, left_on="key1", right_on="key2", how="left")
+            print("9: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
             return df3.B
 
         bodo_func = bodo.jit(test_impl)
@@ -308,7 +321,9 @@ class TestJoin(unittest.TestCase):
 
     def test_join_mutil_seq1(self):
         def test_impl(df1, df2):
-            return df1.merge(df2, on=["A", "B"])
+            df3=df1.merge(df2, on=["A", "B"])
+            print("10: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
+            return df3
 
         bodo_func = bodo.jit(test_impl)
         df1 = pd.DataFrame(
@@ -326,6 +341,7 @@ class TestJoin(unittest.TestCase):
             df1 = pd.DataFrame({"A": A1, "B": B1, "C": C1})
             df2 = pd.DataFrame({"A": A2, "B": B2, "D": D2})
             df3 = df1.merge(df2, on=["A", "B"])
+            print("11: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
             return df3.C.sum() + df3.D.sum()
 
         bodo_func = bodo.jit(
@@ -410,7 +426,9 @@ class TestJoin(unittest.TestCase):
 
     def test_join_datetime_seq1(self):
         def test_impl(df1, df2):
-            return pd.merge(df1, df2, on="time")
+            df3=pd.merge(df1, df2, on="time")
+            print("12: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
+            return df3
 
         bodo_func = bodo.jit(test_impl)
         df1 = pd.DataFrame(
@@ -430,6 +448,7 @@ class TestJoin(unittest.TestCase):
     def test_join_datetime_parallel1(self):
         def test_impl(df1, df2):
             df3 = pd.merge(df1, df2, on="time")
+#            print("13: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
             return (df3.A.sum(), df3.time.max(), df3.B.sum())
 
         bodo_func = bodo.jit(distributed=["df1", "df2"])(test_impl)
@@ -482,15 +501,13 @@ class TestJoin(unittest.TestCase):
 
     def test_join_left_seq1(self):
         def test_impl(df1, df2):
-            return pd.merge(df1, df2, how="left", on="key")
+            df3=pd.merge(df1, df2, how="left", on="key")
+            print("15: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
+            return df3
 
         bodo_func = bodo.jit(test_impl)
-        df1 = pd.DataFrame(
-            {"key": [2, 3, 5, 1, 2, 8], "A": np.array([4, 6, 3, 9, 9, -1], np.float)}
-        )
-        df2 = pd.DataFrame(
-            {"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], np.float)}
-        )
+        df1 = pd.DataFrame({"key": [2, 3, 5, 1, 2, 8], "A": np.array([4, 6, 3, 9, 9, -1], np.float)})
+        df2 = pd.DataFrame({"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], np.float)})
         h_res = bodo_func(df1, df2)
         res = test_impl(df1, df2)
         np.testing.assert_array_equal(h_res.key.values, res.key.values)
@@ -500,7 +517,9 @@ class TestJoin(unittest.TestCase):
 
     def test_join_left_seq2(self):
         def test_impl(df1, df2):
-            return pd.merge(df1, df2, how="left", on="key")
+            df3=pd.merge(df1, df2, how="left", on="key")
+            print("16: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
+            return df3
 
         bodo_func = bodo.jit(test_impl)
         # test left run where a key is repeated on left but not right side
@@ -519,7 +538,9 @@ class TestJoin(unittest.TestCase):
 
     def test_join_right_seq1(self):
         def test_impl(df1, df2):
-            return pd.merge(df1, df2, how="right", on="key")
+            df3=pd.merge(df1, df2, how="right", on="key")
+            print("17: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
+            return df3
 
         bodo_func = bodo.jit(test_impl)
         df1 = pd.DataFrame(
@@ -537,15 +558,13 @@ class TestJoin(unittest.TestCase):
 
     def test_join_outer_seq1(self):
         def test_impl(df1, df2):
-            return pd.merge(df1, df2, how="outer", on="key")
+            df3=pd.merge(df1, df2, how="outer", on="key")
+            print("18: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
+            return df3
 
         bodo_func = bodo.jit(test_impl)
-        df1 = pd.DataFrame(
-            {"key": [2, 3, 5, 1, 2, 8], "A": np.array([4, 6, 3, 9, 9, -1], np.float)}
-        )
-        df2 = pd.DataFrame(
-            {"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], np.float)}
-        )
+        df1 = pd.DataFrame({"key": [2, 3, 5, 1, 2, 8], "A": np.array([4, 6, 3, 9, 9, -1], np.float)})
+        df2 = pd.DataFrame({"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], np.float)})
         h_res = bodo_func(df1, df2)
         res = test_impl(df1, df2)
         self.assertEqual(set(h_res.key.values), set(res.key.values))
@@ -582,6 +601,7 @@ class TestJoin(unittest.TestCase):
                 {"C1": 2 * np.arange(n) + 1, "AAA": n + np.arange(n) + 1.0}
             )
             df3 = df1.merge(df2, on="C1")
+            print("19: df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
             return df3
 
         bodo_func = bodo.jit(test_impl)
@@ -600,6 +620,7 @@ class TestJoin(unittest.TestCase):
                 {"C1": 2 * np.arange(n) + 1, "AAA": n + np.arange(n) + 1.0}
             )
             df3 = df1.merge(df2, on="C1", how="right")
+            print("df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
             return df3
 
         bodo_func = bodo.jit(test_impl)
@@ -621,6 +642,7 @@ class TestJoin(unittest.TestCase):
                 {"C1": 2 * np.arange(n) + 1, "AAA": n + np.arange(n) + 1.0}
             )
             df3 = df1.merge(df2, on="C1")
+#            print("df1=", df1, "\ndf2=", df2, "\ndf3=", df3)
             return df3
 
         bodo_func = bodo.jit(distributed=["df3"])(test_impl)

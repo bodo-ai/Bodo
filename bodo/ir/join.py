@@ -552,28 +552,30 @@ def join_distributed_run(
         )
     else:
         assert method == "hash"
-        func_text += (
-            "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
-            " = bodo.ir.join.local_hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
-                join_node.how in ("left", "outer"), join_node.how == "outer"
+        is_left = join_node.how in ("left", "outer")
+        is_right = join_node.how == "outer"
+        if bodo.use_cpp_hash_join:
+            func_text += _gen_local_hash_join(left_other_names, right_other_names, n_keys, is_left, is_right)
+        else:
+            func_text += (
+                "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
+                " = bodo.ir.join.local_hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
+                    is_left, is_right
+                )
             )
-        )
-
-    for i in range(len(left_other_names)):
-        func_text += "    left_{} = out_data_left[{}]\n".format(i, i)
-
-    for i in range(len(right_other_names)):
-        func_text += "    right_{} = out_data_right[{}]\n".format(i, i)
-
-    for i in range(n_keys):
-        func_text += "    t1_keys_{} = out_t1_keys[{}]{}\n".format(
-            i, i, _gen_reverse_type_match(left_key_types[i], right_key_types[i])
-        )
-
-    for i in range(n_keys):
-        func_text += "    t2_keys_{} = out_t2_keys[{}]\n".format(
-            i, i, _gen_reverse_type_match(right_key_types[i], left_key_types[i])
-        )
+    if bodo.use_cpp_hash_join == False or join_node.how == "asof" or method != "hash":
+        for i in range(len(left_other_names)):
+            func_text += "    left_{} = out_data_left[{}]\n".format(i, i)
+        for i in range(len(right_other_names)):
+            func_text += "    right_{} = out_data_right[{}]\n".format(i, i)
+        for i in range(n_keys):
+            func_text += "    t1_keys_{} = out_t1_keys[{}]{}\n".format(
+                i, i, _gen_reverse_type_match(left_key_types[i], right_key_types[i])
+            )
+        for i in range(n_keys):
+            func_text += "    t2_keys_{} = out_t2_keys[{}]\n".format(
+                i, i, _gen_reverse_type_match(right_key_types[i], left_key_types[i])
+            )
 
     for i in range(n_keys):
         func_text += "    {} = t1_keys_{}\n".format(out_names[i], i)
@@ -681,6 +683,24 @@ def _get_table_parallel_flags(join_node, array_dists):
 
     return left_parallel, right_parallel
 
+
+def _gen_local_hash_join(left_other_names, right_other_names, n_keys, is_left, is_right):
+    func_ext =  "    out_table = hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(is_left, is_right)
+    idx = 0
+    for i in range(len(left_other_names)):
+        func_ext += "    left_{} = out_table[{}]\n".format(i, idx)
+        idx += 1
+    for i in range(len(right_other_names)):
+        func_ext += "    right_{} = out_table[{}]\n".format(i, idx)
+        idx += 1
+    for i in range(n_keys):
+        func_ext += "    t1_keys_{} = out_table[{}]\n".format(i, idx)
+        idx += 1
+    for i in range(n_keys):
+        func_ext += "    t2_keys_{} = out_table[{}]\n".format(i, idx)
+        idx += 1
+    func_ext += "    delete_table(out_table)\n"
+    return func_ext
 
 def _gen_par_shuffle(
     key_names, data_names, key_tup_out, data_tup_out, key_types, other_key_types

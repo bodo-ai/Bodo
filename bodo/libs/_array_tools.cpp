@@ -555,7 +555,9 @@ struct mpi_comm_info {
     }
 };
 
-void convert_len_arr_to_offset(uint32_t* offsets, size_t num_strs) {
+/* Internal function. Convert counts to displacements
+ */
+void convert_len_arr_to_offset(uint32_t* offsets, size_t const& num_strs) {
     uint32_t curr_offset = 0;
     for (int64_t i = 0; i < num_strs; i++) {
         uint32_t val = offsets[i];
@@ -566,10 +568,12 @@ void convert_len_arr_to_offset(uint32_t* offsets, size_t num_strs) {
     return;
 }
 
+/* 
+ */
 void copy_gathered_null_bytes(uint8_t* null_bitmask,
                               std::vector<uint8_t>& tmp_null_bytes,
-                              std::vector<int>& recv_count_null,
-                              std::vector<int>& recv_count) {
+                              std::vector<int> const& recv_count_null,
+                              std::vector<int> const& recv_count) {
     size_t curr_tmp_byte = 0;  // current location in buffer with all data
     size_t curr_str = 0;       // current string in output bitmap
     // for each chunk
@@ -587,14 +591,16 @@ void copy_gathered_null_bytes(uint8_t* null_bitmask,
     return;
 }
 
+
+
 void shuffle_array(
-    array_info* send_arr, array_info* out_arr, std::vector<int>& send_count,
-    std::vector<int>& recv_count, std::vector<int>& send_disp,
-    std::vector<int>& recv_disp, std::vector<int>& send_count_char,
-    std::vector<int>& recv_count_char, std::vector<int>& send_disp_char,
-    std::vector<int>& recv_disp_char, std::vector<int>& send_count_null,
-    std::vector<int>& recv_count_null, std::vector<int>& send_disp_null,
-    std::vector<int>& recv_disp_null, std::vector<uint8_t>& tmp_null_bytes) {
+    array_info* send_arr, array_info* out_arr, std::vector<int> const& send_count,
+    std::vector<int> const& recv_count, std::vector<int> const& send_disp,
+    std::vector<int> const& recv_disp, std::vector<int> const& send_count_char,
+    std::vector<int> const& recv_count_char, std::vector<int> const& send_disp_char,
+    std::vector<int> const& recv_disp_char, std::vector<int> const& send_count_null,
+    std::vector<int> const& recv_count_null, std::vector<int> const& send_disp_null,
+    std::vector<int> const& recv_disp_null, std::vector<uint8_t>& tmp_null_bytes) {
     // strings need data and length comm
     if (send_arr->arr_type == bodo_array_type::STRING) {
         // string lengths
@@ -727,6 +733,36 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
     delete[] hashes;
 
     return new table_info(out_arrs);
+}
+
+
+/* There is no need for using MPI since this has already been done
+   following the _gen_par_shuffle.
+   
+
+ */
+table_info* hash_join(table_info* key_left, table_info* key_right, table_info* data_left, table_info* data_right,
+                      bool is_left, bool is_right)
+{
+  //
+  struct ArrEntry {
+    array_info* TheEnt;
+    std::vector<array_info*> ListDataLeft;
+    std::vector<array_info*> ListDataRight;
+  };
+  size_t nb_key_left = key_left->columns.size();
+  size_t nb_key_right = key_right->columns.size();
+  if (nb_key_left != nb_key_right) {
+    PyErr_SetString(PyExc_RuntimeError, "key_left is inconsistent with key_right");
+    return NULL;
+  }
+  size_t nb_data_left = data_left->columns.size();
+  size_t nb_data_right = data_right->columns.size();
+  size_t n_rows = (size_t)key_left->columns[0]->length;
+  for (size_t i=0; i<n_rows; i++) {
+    
+  }
+  
 }
 
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
