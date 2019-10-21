@@ -256,21 +256,22 @@ def test_join_rm_dead_data_name_overlap():
     """Test dead code elimination when there are matching names in data columns of
     input tables but only one of them is actually used.
     """
+
     def test_impl(df1, df2):
-        df3 = df1.merge(df2, on='user_id')
+        df3 = df1.merge(df2, on="user_id")
         return len(df3.id_x.values)
 
-    df1 = pd.DataFrame({'id': [3,4], 'user_id': [5, 6]})
-    df2 = pd.DataFrame({'id': [3,4], 'user_id': [5, 6]})
+    df1 = pd.DataFrame({"id": [3, 4], "user_id": [5, 6]})
+    df2 = pd.DataFrame({"id": [3, 4], "user_id": [5, 6]})
     assert bodo.jit(test_impl)(df1, df2) == test_impl(df1, df2)
 
 
 def test_join_rm_dead_data_name_overlap2():
     def test_impl(df1, df2):
-        return df1.merge(df2, left_on = ["id"], right_on = ["user_id"])
+        return df1.merge(df2, left_on=["id"], right_on=["user_id"])
 
-    df1 = pd.DataFrame({'id': [3, 4, 1]})
-    df2 = pd.DataFrame({'id': [3, 4, 2], 'user_id': [3, 5, 6]})
+    df1 = pd.DataFrame({"id": [3, 4, 1]})
+    df2 = pd.DataFrame({"id": [3, 4, 2], "user_id": [3, 5, 6]})
     pd.testing.assert_frame_equal(bodo.jit(test_impl)(df1, df2), test_impl(df1, df2))
 
 

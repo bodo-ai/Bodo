@@ -98,13 +98,14 @@ class Join(ir.Stmt):
         add_suffix = comm_data - comm_keys
 
         self.column_origins = {
-            (c + "_x" if c in add_suffix else c): ('left', c)
-            for c in left_vars.keys()
+            (c + "_x" if c in add_suffix else c): ("left", c) for c in left_vars.keys()
         }
-        self.column_origins.update({
-            (c + "_y" if c in add_suffix else c): ('right', c)
-            for c in right_vars.keys()
-        })
+        self.column_origins.update(
+            {
+                (c + "_y" if c in add_suffix else c): ("right", c)
+                for c in right_vars.keys()
+            }
+        )
 
     def __repr__(self):  # pragma: no cover
         out_cols = ""
@@ -286,10 +287,10 @@ def remove_dead_join(join_node, lives, arg_aliases, alias_map, func_ir, typemap)
         if col_var.name in lives:
             continue
         orig, orig_name = join_node.column_origins[col_name]
-        if orig == 'left' and orig_name not in join_node.left_keys:
+        if orig == "left" and orig_name not in join_node.left_keys:
             join_node.left_vars.pop(orig_name)
             dead_cols.append(col_name)
-        if orig == 'right' and orig_name not in join_node.right_keys:
+        if orig == "right" and orig_name not in join_node.right_keys:
             join_node.right_vars.pop(orig_name)
             dead_cols.append(col_name)
 

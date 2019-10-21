@@ -240,15 +240,7 @@ ext_xenon_wrapper = Extension(
     extra_link_args=ela,
 )
 
-_ext_mods = [
-    ext_hdist,
-    ext_dict,
-    ext_str,
-    ext_quantile,
-    ext_dt,
-    ext_io,
-    ext_arr,
-]
+_ext_mods = [ext_hdist, ext_dict, ext_str, ext_quantile, ext_dt, ext_io, ext_arr]
 
 if _has_h5py:
     _ext_mods.append(ext_hdf5)

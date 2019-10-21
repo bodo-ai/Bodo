@@ -42,7 +42,7 @@ extensions = [
     "sphinx.ext.todo",
     "sphinx.ext.mathjax",
     "sphinx.ext.githubpages",
-    'alabaster',
+    "alabaster",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -96,7 +96,7 @@ todo_include_todos = True
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+html_theme = "alabaster"
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -104,17 +104,17 @@ html_theme = 'alabaster'
 #
 # html_theme_options = {}
 html_theme_options = {
-    "logo" : "img/bodo_logo.jpg",
-    "fixed_sidebar" : "true",
-    "page_width" : "1300px",
-    'body_max_width': 'auto',
-    "sidebar_header" : "#006600",
-    "sidebar_link_underscore" : "#006600",
-    "base_bg" : "#edf5ee",
-    "body_text" :"#282c30",
-    "head_font_family" : "'Bitstream Vera Sans Mono'",
-    "show_powered_by" : "false",
-    "show_relbar_top" : "true"
+    "logo": "img/bodo_logo.jpg",
+    "fixed_sidebar": "true",
+    "page_width": "1300px",
+    "body_max_width": "auto",
+    "sidebar_header": "#006600",
+    "sidebar_link_underscore": "#006600",
+    "base_bg": "#edf5ee",
+    "body_text": "#282c30",
+    "head_font_family": "'Bitstream Vera Sans Mono'",
+    "show_powered_by": "false",
+    "show_relbar_top": "true",
 }
 
 html_show_sphinx = False
