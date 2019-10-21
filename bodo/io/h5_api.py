@@ -11,7 +11,14 @@ from numba.typing.templates import (
 )
 from numba.typing import signature
 from llvmlite import ir as lir
-from numba.extending import (register_model, models, infer_getattr, infer, intrinsic, overload)
+from numba.extending import (
+    register_model,
+    models,
+    infer_getattr,
+    infer,
+    intrinsic,
+    overload,
+)
 from bodo.libs.str_ext import string_type
 import bodo
 from bodo.utils.utils import unliteral_all
@@ -85,9 +92,7 @@ string_list_type = types.List(string_type)
 
 #################################################
 
-h5_open = types.ExternalFunction(
-    "h5_open", h5file_type(types.voidptr, types.voidptr)
-)
+h5_open = types.ExternalFunction("h5_open", h5file_type(types.voidptr, types.voidptr))
 
 if bodo.config._has_h5py:
 
