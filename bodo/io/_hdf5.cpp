@@ -9,7 +9,7 @@
 
 extern "C" {
 
-hid_t h5_open(char* file_name, char* mode, int64_t is_parallel);
+hid_t h5_open(char* file_name, char* mode);
 hid_t h5_open_dset_or_group_obj(hid_t file_id, char* obj_name);
 int64_t h5_size(hid_t dataset_id, int dim);
 int h5_read(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
@@ -76,7 +76,7 @@ PyMODINIT_FUNC PyInit__hdf5(void) {
         H5Eprint(H5E_DEFAULT, NULL);   \
     }
 
-hid_t h5_open(char* file_name, char* mode, int64_t is_parallel) {
+hid_t h5_open(char* file_name, char* mode) {
     // printf("h5_open file_name: %s mode:%s\n", file_name, mode);
     hid_t plist_id = H5Pcreate(H5P_FILE_ACCESS);
     CHECK(plist_id != -1, "h5 open property create error");

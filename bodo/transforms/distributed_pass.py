@@ -374,13 +374,14 @@ class DistributedPass(object):
             nodes.append(assign)
             return nodes
 
-        if fdef == ("File", "h5py"):
-            # create and save a variable holding 1, in case we need to use it
-            # to parallelize this call in _file_open_set_parallel()
-            one_var = ir.Var(scope, mk_unique_var("$one"), loc)
-            self.typemap[one_var.name] = types.IntegerLiteral(1)
-            self._set1_var = one_var
-            return [ir.Assign(ir.Const(1, loc), one_var, loc), assign]
+        # XXX: enable when mpiio driver of hdf5 is working
+        # if fdef == ("File", "h5py"):
+        #     # create and save a variable holding 1, in case we need to use it
+        #     # to parallelize this call in _file_open_set_parallel()
+        #     one_var = ir.Var(scope, mk_unique_var("$one"), loc)
+        #     self.typemap[one_var.name] = types.IntegerLiteral(1)
+        #     self._set1_var = one_var
+        #     return [ir.Assign(ir.Const(1, loc), one_var, loc), assign]
 
         if (
             bodo.config._has_h5py
@@ -426,8 +427,9 @@ class DistributedPass(object):
             rhs.args[3] = counts_var
             rhs.args[4] = one_var
             # set parallel arg in file open
-            file_varname = rhs.args[0].name
-            self._file_open_set_parallel(file_varname)
+            # XXX: enable when mpiio driver of hdf5 is working
+            # file_varname = rhs.args[0].name
+            # self._file_open_set_parallel(file_varname)
             return nodes
 
         # TODO: fix numba.extending
@@ -2124,27 +2126,28 @@ class DistributedPass(object):
         replace_arg_nodes(block, args)
         return block.body[:-2]  # ignore return nodes
 
-    def _file_open_set_parallel(self, file_varname):
-        var = file_varname
-        while True:
-            var_def = get_definition(self.func_ir, var)
-            require(isinstance(var_def, ir.Expr))
-            if var_def.op == "call":
-                fdef = find_callname(self.func_ir, var_def)
-                if (
-                    fdef[0] in ("create_dataset", "create_group")
-                    and isinstance(fdef[1], ir.Var)
-                    and self.typemap[fdef[1].name] in (h5file_type, h5group_type)
-                ):
-                    self._file_open_set_parallel(fdef[1].name)
-                    return
-                else:
-                    assert fdef == ("File", "h5py")
-                    var_def.args[2] = self._set1_var
-                    return
-            # TODO: handle control flow
-            require(var_def.op in ("getitem", "static_getitem"))
-            var = var_def.value.name
+    # XXX: enable when mpiio driver of hdf5 is working
+    # def _file_open_set_parallel(self, file_varname):
+    #     var = file_varname
+    #     while True:
+    #         var_def = get_definition(self.func_ir, var)
+    #         require(isinstance(var_def, ir.Expr))
+    #         if var_def.op == "call":
+    #             fdef = find_callname(self.func_ir, var_def)
+    #             if (
+    #                 fdef[0] in ("create_dataset", "create_group")
+    #                 and isinstance(fdef[1], ir.Var)
+    #                 and self.typemap[fdef[1].name] in (h5file_type, h5group_type)
+    #             ):
+    #                 self._file_open_set_parallel(fdef[1].name)
+    #                 return
+    #             else:
+    #                 assert fdef == ("File", "h5py")
+    #                 var_def.args[2] = self._set1_var
+    #                 return
+    #         # TODO: handle control flow
+    #         require(var_def.op in ("getitem", "static_getitem"))
+    #         var = var_def.value.name
 
         # for label, block in self.func_ir.blocks.items():
         #     for stmt in block.body:

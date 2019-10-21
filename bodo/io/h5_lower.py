@@ -63,25 +63,6 @@ def h5_open_dset_lower(context, builder, sig, args):
     return builder.call(fn, [fg_id, dset_name])
 
 
-if bodo.config._has_h5py:
-
-    @lower_builtin(h5py.File, string_type, string_type)
-    @lower_builtin(h5py.File, string_type, string_type, types.int64)
-    def h5_open(context, builder, sig, args):
-        fname = args[0]
-        mode = args[1]
-        fname = gen_get_unicode_chars(context, builder, fname)
-        mode = gen_get_unicode_chars(context, builder, mode)
-
-        is_parallel = context.get_constant(types.int64, 0) if len(args) < 3 else args[2]
-        fnty = lir.FunctionType(
-            h5file_lir_type,
-            [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer(), lir.IntType(64)],
-        )
-        fn = builder.module.get_or_insert_function(fnty, name="h5_open")
-        return builder.call(fn, [fname, mode, is_parallel])
-
-
 @lower_builtin(
     h5_api.h5read,
     h5dataset_or_group_type,

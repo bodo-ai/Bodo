@@ -11,7 +11,7 @@ from numba.typing.templates import (
 )
 from numba.typing import signature
 from llvmlite import ir as lir
-from numba.extending import register_model, models, infer_getattr, infer, intrinsic
+from numba.extending import (register_model, models, infer_getattr, infer, intrinsic, overload)
 from bodo.libs.str_ext import string_type
 import bodo
 from bodo.utils.utils import unliteral_all
@@ -84,6 +84,43 @@ string_list_type = types.List(string_type)
 
 
 #################################################
+
+h5_open = types.ExternalFunction(
+    "h5_open", h5file_type(types.voidptr, types.voidptr)
+)
+
+if bodo.config._has_h5py:
+
+    @overload(h5py.File)
+    def overload_h5py_file(
+        name,
+        mode=None,
+        driver=None,
+        libver=None,
+        userblock_size=None,
+        swmr=False,
+        rdcc_nslots=None,
+        rdcc_nbytes=None,
+        rdcc_w0=None,
+        track_order=None,
+    ):
+        def impl(
+            name,
+            mode=None,
+            driver=None,
+            libver=None,
+            userblock_size=None,
+            swmr=False,
+            rdcc_nslots=None,
+            rdcc_nbytes=None,
+            rdcc_w0=None,
+            track_order=None,
+        ):
+            if mode is None:
+                mode = "a"
+            return h5_open(name._data, mode._data)
+
+        return impl
 
 
 def _create_dataset_typer(args, kws):
@@ -209,15 +246,6 @@ class H5ReadType(AbstractTemplate):
         dtype = getattr(types, args[2].literal_value)
         ret_typ = types.Array(dtype, ndim, "C")
         return signature(ret_typ, *args)
-
-
-if bodo.config._has_h5py:
-
-    @infer_global(h5py.File)
-    class H5File(AbstractTemplate):
-        def generic(self, args, kws):
-            assert not kws
-            return signature(h5file_type, *unliteral_all(args))
 
 
 h5size = types.ExternalFunction(
