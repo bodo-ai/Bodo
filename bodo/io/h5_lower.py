@@ -4,9 +4,9 @@ from numba import types, cgutils
 from numba.targets.imputils import lower_builtin
 from numba.targets.arrayobj import make_array
 import bodo.io
-from bodo.io import pio_api
+from bodo.io import h5_api
 from bodo.utils.utils import _numba_to_c_type_map
-from bodo.io.pio_api import (
+from bodo.io.h5_api import (
     h5file_type,
     h5dataset_or_group_type,
     h5dataset_type,
@@ -83,7 +83,7 @@ if bodo.config._has_h5py:
 
 
 @lower_builtin(
-    pio_api.h5read,
+    h5_api.h5read,
     h5dataset_or_group_type,
     types.int32,
     types.UniTuple,
@@ -129,7 +129,7 @@ def h5_read(context, builder, sig, args):
     return builder.call(fn, call_args)
 
 
-@lower_builtin(pio_api.h5close, h5file_type)
+@lower_builtin(h5_api.h5close, h5file_type)
 @lower_builtin("h5file.close", h5file_type)
 def h5_close(context, builder, sig, args):
     fnty = lir.FunctionType(lir.IntType(32), [h5file_lir_type])
@@ -145,7 +145,7 @@ def h5_close(context, builder, sig, args):
     "h5file.create_dataset", h5file_type, string_type, types.UniTuple, string_type
 )
 @lower_builtin(
-    pio_api.h5create_dset, h5file_type, string_type, types.UniTuple, string_type
+    h5_api.h5create_dset, h5file_type, string_type, types.UniTuple, string_type
 )
 def h5_create_dset(context, builder, sig, args):
     fg_id, dset_name, counts, dtype_str = args
@@ -189,7 +189,7 @@ def h5_create_dset(context, builder, sig, args):
 
 @lower_builtin("h5group.create_group", h5group_type, string_type)
 @lower_builtin("h5file.create_group", h5file_type, string_type)
-@lower_builtin(pio_api.h5create_group, h5file_type, string_type)
+@lower_builtin(h5_api.h5create_group, h5file_type, string_type)
 def h5_create_group(context, builder, sig, args):
     fg_id, gname = args
     gname = gen_get_unicode_chars(context, builder, gname)
@@ -213,7 +213,7 @@ def h5_create_group(context, builder, sig, args):
 
 
 @lower_builtin(
-    pio_api.h5write,
+    h5_api.h5write,
     h5dataset_type,
     types.int32,
     types.UniTuple,
@@ -264,9 +264,9 @@ def h5_write(context, builder, sig, args):
 def lower_dict_get(context, builder, sig, args):
     def h5f_keys_imp(file_id):
         obj_name_list = []
-        nobjs = pio_api.h5g_get_num_objs(file_id)
+        nobjs = h5_api.h5g_get_num_objs(file_id)
         for i in range(nobjs):
-            obj_name = pio_api.h5g_get_objname_by_idx(file_id, i)
+            obj_name = h5_api.h5g_get_objname_by_idx(file_id, i)
             obj_name_list.append(obj_name)
         return obj_name_list
 
@@ -274,16 +274,16 @@ def lower_dict_get(context, builder, sig, args):
     return res
 
 
-@lower_builtin(pio_api.h5g_get_num_objs, h5file_type)
-@lower_builtin(pio_api.h5g_get_num_objs, h5dataset_or_group_type)
+@lower_builtin(h5_api.h5g_get_num_objs, h5file_type)
+@lower_builtin(h5_api.h5g_get_num_objs, h5dataset_or_group_type)
 def h5g_get_num_objs_lower(context, builder, sig, args):
     fnty = lir.FunctionType(lir.IntType(64), [h5file_lir_type])
     fn = builder.module.get_or_insert_function(fnty, name="h5g_get_num_objs")
     return builder.call(fn, args)
 
 
-@lower_builtin(pio_api.h5g_get_objname_by_idx, h5file_type, types.int64)
-@lower_builtin(pio_api.h5g_get_objname_by_idx, h5dataset_or_group_type, types.int64)
+@lower_builtin(h5_api.h5g_get_objname_by_idx, h5file_type, types.int64)
+@lower_builtin(h5_api.h5g_get_objname_by_idx, h5dataset_or_group_type, types.int64)
 def h5g_get_objname_by_idx_lower(context, builder, sig, args):
     fnty = lir.FunctionType(
         lir.IntType(8).as_pointer(), [h5file_lir_type, lir.IntType(64)]

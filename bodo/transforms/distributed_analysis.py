@@ -533,13 +533,13 @@ class DistributedAnalysis(object):
             return
 
         if bodo.config._has_h5py and (
-            func_mod == "bodo.io.pio_api"
+            func_mod == "bodo.io.h5_api"
             and func_name in ("h5read", "h5write", "h5read_filter")
         ):
             return
 
         if bodo.config._has_h5py and (
-            func_mod == "bodo.io.pio_api" and func_name == "get_filter_read_indices"
+            func_mod == "bodo.io.h5_api" and func_name == "get_filter_read_indices"
         ):
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD

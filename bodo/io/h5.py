@@ -24,15 +24,15 @@ import numpy as np
 
 import bodo
 import bodo.io
-from bodo.io import pio_api, pio_lower
+from bodo.io import h5_api, h5_lower
 from bodo.utils.utils import find_str_const, debug_prints
 
 
 def remove_h5(rhs, lives, call_list):
     # the call is dead if the read array is dead
-    if call_list == ["h5read", "io", pio_api] and rhs.args[6].name not in lives:
+    if call_list == ["h5read", "io", h5_api] and rhs.args[6].name not in lives:
         return True
-    if call_list == ["h5size", "io", pio_api]:
+    if call_list == ["h5size", "io", h5_api]:
         return True
     return False
 
@@ -54,7 +54,7 @@ class PIO(object):
             dtype_str = str(tp.dtype)
             func_text = "def _h5_read_impl(dset, index):\n"
             # TODO: index arg?
-            func_text += "  arr = bodo.io.pio_api.h5_read_dummy(dset, {}, '{}', index)\n".format(
+            func_text += "  arr = bodo.io.h5_api.h5_read_dummy(dset, {}, '{}', index)\n".format(
                 tp.ndim, dtype_str
             )
             loc_vars = {}

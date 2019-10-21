@@ -48,7 +48,7 @@ from numba.parfor import Parfor, lower_parfor_sequential
 import numpy as np
 
 import bodo
-from bodo.io.pio_api import h5file_type, h5group_type
+from bodo.io.h5_api import h5file_type, h5group_type
 from bodo.libs import (
     distributed_api,
     distributed_lower,
@@ -385,7 +385,7 @@ class DistributedPass(object):
         if (
             bodo.config._has_h5py
             and (
-                func_mod == "bodo.io.pio_api"
+                func_mod == "bodo.io.h5_api"
                 and func_name in ("h5read", "h5write", "h5read_filter")
             )
             and self._is_1D_arr(rhs.args[5].name)

@@ -38,7 +38,7 @@ from numba.analysis import compute_cfg_from_blocks
 import bodo
 from bodo import config
 import bodo.io
-from bodo.io import pio, parquet_pio
+from bodo.io import h5, parquet_pio
 from bodo.io.parquet_pio import ParquetHandler
 from bodo.utils.utils import inline_new_blocks, ReplaceFunc, is_call, is_assign, is_expr
 import bodo.hiframes.api
@@ -187,7 +187,7 @@ class UntypedPass(object):
         self.pq_handler = ParquetHandler(
             func_ir, typingctx, args, _locals, self.reverse_copies
         )
-        self.h5_handler = pio.PIO(self.func_ir, _locals, self.reverse_copies)
+        self.h5_handler = h5.PIO(self.func_ir, _locals, self.reverse_copies)
 
     def run(self):
         # XXX: the block structure shouldn't change in this pass since labels

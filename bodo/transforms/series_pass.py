@@ -72,7 +72,7 @@ from bodo.hiframes.pd_series_ext import (
     series_dt_methods_type,
 )
 from bodo.hiframes.pd_index_ext import DatetimeIndexType, TimedeltaIndexType
-from bodo.io.pio_api import h5dataset_type
+from bodo.io.h5_api import h5dataset_type
 from bodo.hiframes.rolling import get_rolling_setup_args
 import bodo.hiframes.series_impl  # side effect: install Series overloads
 import bodo.hiframes.series_indexing  # side effect: install Series overloads
@@ -814,7 +814,7 @@ class SeriesPass(object):
                 lambda d: numba.targets.builtins.get_type_max_value(d), rhs.args
             )
 
-        if fdef == ("h5_read_dummy", "bodo.io.pio_api"):
+        if fdef == ("h5_read_dummy", "bodo.io.h5_api"):
             ndim = guard(find_const, self.func_ir, rhs.args[1])
             dtype_str = guard(find_const, self.func_ir, rhs.args[2])
             index_var = rhs.args[3]
@@ -822,15 +822,15 @@ class SeriesPass(object):
 
             func_text = "def _h5_read_impl(dset_id, ndim, dtype_str, index):\n"
             if guard(is_whole_slice, self.typemap, self.func_ir, index_var):
-                func_text += "  size_0 = bodo.io.pio_api.h5size(dset_id, np.int32(0))\n"
+                func_text += "  size_0 = bodo.io.h5_api.h5size(dset_id, np.int32(0))\n"
             else:
                 # TODO: check index format for this case
                 filter_read = True
                 assert isinstance(self.typemap[index_var.name], types.BaseTuple)
-                func_text += "  read_indices = bodo.io.pio_api.get_filter_read_indices(index[0])\n"
+                func_text += "  read_indices = bodo.io.h5_api.get_filter_read_indices(index[0])\n"
                 func_text += "  size_0 = len(read_indices)\n"
             for i in range(1, ndim):
-                func_text += "  size_{} = bodo.io.pio_api.h5size(dset_id, np.int32({}))\n".format(
+                func_text += "  size_{} = bodo.io.h5_api.h5size(dset_id, np.int32({}))\n".format(
                     i, i
                 )
             func_text += "  arr_shape = ({},)\n".format(
@@ -839,11 +839,11 @@ class SeriesPass(object):
             func_text += "  zero_tup = ({},)\n".format(", ".join(["0"] * ndim))
             func_text += "  A = np.empty(arr_shape, np.{})\n".format(dtype_str)
             if filter_read:
-                func_text += "  err = bodo.io.pio_api.h5read_filter(dset_id, np.int32({}), zero_tup, arr_shape, 0, A, read_indices)\n".format(
+                func_text += "  err = bodo.io.h5_api.h5read_filter(dset_id, np.int32({}), zero_tup, arr_shape, 0, A, read_indices)\n".format(
                     ndim
                 )
             else:
-                func_text += "  err = bodo.io.pio_api.h5read(dset_id, np.int32({}), zero_tup, arr_shape, 0, A)\n".format(
+                func_text += "  err = bodo.io.h5_api.h5read(dset_id, np.int32({}), zero_tup, arr_shape, 0, A)\n".format(
                     ndim
                 )
             func_text += "  return A\n"
@@ -2528,7 +2528,7 @@ class SeriesPass(object):
         func_text += "  arr_shape = ({},)\n".format(
             ", ".join(["arr.shape[{}]".format(i) for i in range(ndim)])
         )
-        func_text += "  err = bodo.io.pio_api.h5write(dset_id, np.int32({}), zero_tup, arr_shape, 0, arr)\n".format(
+        func_text += "  err = bodo.io.h5_api.h5write(dset_id, np.int32({}), zero_tup, arr_shape, 0, arr)\n".format(
             ndim
         )
 
