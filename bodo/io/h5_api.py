@@ -139,22 +139,16 @@ def overload_h5_file(f):
     return impl
 
 
-def h5f_keys_impl(obj_id):
-    obj_name_list = []
-    nobjs = h5g_get_num_objs(obj_id)
-    for i in range(nobjs):
-        obj_name = h5g_get_objname_by_idx(obj_id, i)
-        obj_name_list.append(obj_name)
-    return obj_name_list
-
-
 @overload_method(H5FileType, "keys")
-def overload_h5_file_keys(obj_id):
-    return h5f_keys_impl
-
-
 @overload_method(H5DatasetOrGroupType, "keys")
-def overload_h5_dset_keys(obj_id):
+def overload_h5_file_keys(obj_id):
+    def h5f_keys_impl(obj_id):
+        obj_name_list = []
+        nobjs = h5g_get_num_objs(obj_id)
+        for i in range(nobjs):
+            obj_name = h5g_get_objname_by_idx(obj_id, i)
+            obj_name_list.append(obj_name)
+        return obj_name_list
     return h5f_keys_impl
 
 
@@ -174,12 +168,6 @@ def _create_dataset_typer(args, kws):
 # @infer_getattr
 # class FileAttribute(AttributeTemplate):
 #     key = h5file_type
-
-#     @bound_function("h5file.keys")
-#     def resolve_keys(self, dict, args, kws):
-#         assert not kws
-#         assert not args
-#         return signature(string_list_type, *args)
 
 #     @bound_function("h5file.create_dataset")
 #     def resolve_create_dataset(self, f_id, args, kws):
