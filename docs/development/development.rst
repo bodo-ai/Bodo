@@ -52,8 +52,22 @@ for information about Numba, which is critical for Bodo development.
 See the `Bodo install page <https://github.com/Bodo-inc/Bodo/blob/master/docs/development/numba.rst>`_
 for information about setting up the enviroment for Bodo development.
 
-For the pipline to handle a function properly
-(either overloading Pandas or internal),
+
+Sentinel Functions
+------------------
+
+Bodo transforms Pandas APIs (and others if needed) into *sentinel*
+functions that can be analyzed and optimized throughout the pipeline.
+Different stages of the compiler handle these functions if necessary,
+with all the analysis for them available if needed.
+
+For example, `get_series_data` function is used for getting the underlying
+data array of a Series object. BodoSeriesPass removes this function
+if the data array is available at that point in the program
+(Series object was created using `init_series` and not altered).
+
+
+For the pipline to handle a sentinel function properly
 the following has to be specified:
 
 - side effects for dead code elimination
@@ -62,6 +76,10 @@ the following has to be specified:
 - array analysis
 - distributed analysis (including array access analysis)
 - distributed transformation
+
+For example, `get_series_data` does not have side effects and can be removed
+if output is not live. In addition, the output is aliased with the input,
+and both have the same parallel distribution.
 
 
 Code Structure
