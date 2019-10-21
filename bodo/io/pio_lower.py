@@ -34,7 +34,7 @@ if bodo.config._has_h5py:
     ll.add_symbol("h5_close", _hdf5.h5_close)
     ll.add_symbol("h5g_get_num_objs", _hdf5.h5g_get_num_objs)
     ll.add_symbol("h5g_get_objname_by_idx", _hdf5.h5g_get_objname_by_idx)
-    ll.add_symbol("h5g_close", _hdf5.hpat_h5g_close)
+    ll.add_symbol("h5g_close", _hdf5.h5g_close)
 
 h5file_lir_type = lir.IntType(64)
 

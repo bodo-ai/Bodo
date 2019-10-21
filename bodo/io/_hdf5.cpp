@@ -27,7 +27,7 @@ int h5_get_type_enum(char* s);
 hid_t get_h5_typ(int typ_enum);
 int64_t h5g_get_num_objs(hid_t file_id);
 void* h5g_get_objname_by_idx(hid_t file_id, int64_t ind);
-void hpat_h5g_close(hid_t group_id);
+void h5g_close(hid_t group_id);
 
 PyMODINIT_FUNC PyInit__hdf5(void) {
     PyObject* m;
@@ -63,8 +63,8 @@ PyMODINIT_FUNC PyInit__hdf5(void) {
     PyObject_SetAttrString(
         m, "h5g_get_objname_by_idx",
         PyLong_FromVoidPtr((void*)(&h5g_get_objname_by_idx)));
-    PyObject_SetAttrString(m, "hpat_h5g_close",
-                           PyLong_FromVoidPtr((void*)(&hpat_h5g_close)));
+    PyObject_SetAttrString(m, "h5g_close",
+                           PyLong_FromVoidPtr((void*)(&h5g_close)));
 
     return m;
 }
@@ -448,7 +448,7 @@ void* h5g_get_objname_by_idx(hid_t file_id, int64_t ind) {
     return outstr;
 }
 
-void hpat_h5g_close(hid_t group_id) { herr_t err = H5Gclose(group_id); }
+void h5g_close(hid_t group_id) { herr_t err = H5Gclose(group_id); }
 
 #undef CHECK
 
