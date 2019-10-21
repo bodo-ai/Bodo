@@ -741,8 +741,9 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
    
 
  */
-table_info* hash_join(table_info* key_left, table_info* key_right, table_info* data_left, table_info* data_right,
-                      bool is_left, bool is_right)
+table_info* hash_join_table(table_info* key_left, table_info* key_right,
+                            table_info* data_left, table_info* data_right,
+                            bool is_left, bool is_right)
 {
   //
   struct ArrEntry {
@@ -762,7 +763,6 @@ table_info* hash_join(table_info* key_left, table_info* key_right, table_info* d
   for (size_t i=0; i<n_rows; i++) {
     
   }
-  
 }
 
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
@@ -804,6 +804,8 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                            PyLong_FromVoidPtr((void*)(&delete_table)));
     PyObject_SetAttrString(m, "shuffle_table",
                            PyLong_FromVoidPtr((void*)(&shuffle_table)));
+    PyObject_SetAttrString(m, "hash_join_table",
+                           PyLong_FromVoidPtr((void*)(&hash_join_table)));
 
     return m;
 }
