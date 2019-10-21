@@ -22,7 +22,7 @@ if bodo.config._has_h5py:
     from bodo.io import _hdf5
     import llvmlite.binding as ll
 
-    ll.add_symbol("hpat_h5_read_filter", _hdf5.hpat_h5_read_filter)
+    ll.add_symbol("h5_read_filter", _hdf5.h5_read_filter)
     ll.add_symbol("h5_size", _hdf5.h5_size)
 
 
@@ -327,7 +327,7 @@ def tuple_to_ptr(typingctx, tuple_tp=None):
 
 
 _h5read_filter = types.ExternalFunction(
-    "hpat_h5_read_filter",
+    "h5_read_filter",
     types.int32(
         h5dataset_or_group_type,
         types.int32,

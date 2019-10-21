@@ -22,16 +22,16 @@ if bodo.config._has_h5py:
     import h5py
     from bodo.io import _hdf5
 
-    ll.add_symbol("hpat_h5_open", _hdf5.hpat_h5_open)
+    ll.add_symbol("h5_open", _hdf5.h5_open)
     ll.add_symbol(
-        "hpat_h5_open_dset_or_group_obj", _hdf5.hpat_h5_open_dset_or_group_obj
+        "h5_open_dset_or_group_obj", _hdf5.h5_open_dset_or_group_obj
     )
-    ll.add_symbol("hpat_h5_read", _hdf5.hpat_h5_read)
-    ll.add_symbol("hpat_h5_get_type_enum", _hdf5.hpat_h5_get_type_enum)
-    ll.add_symbol("hpat_h5_create_dset", _hdf5.hpat_h5_create_dset)
-    ll.add_symbol("hpat_h5_create_group", _hdf5.hpat_h5_create_group)
-    ll.add_symbol("hpat_h5_write", _hdf5.hpat_h5_write)
-    ll.add_symbol("hpat_h5_close", _hdf5.hpat_h5_close)
+    ll.add_symbol("h5_read", _hdf5.h5_read)
+    ll.add_symbol("h5_get_type_enum", _hdf5.h5_get_type_enum)
+    ll.add_symbol("h5_create_dset", _hdf5.h5_create_dset)
+    ll.add_symbol("h5_create_group", _hdf5.h5_create_group)
+    ll.add_symbol("h5_write", _hdf5.h5_write)
+    ll.add_symbol("h5_close", _hdf5.h5_close)
     ll.add_symbol("h5g_get_num_objs", _hdf5.h5g_get_num_objs)
     ll.add_symbol("h5g_get_objname_by_idx", _hdf5.h5g_get_objname_by_idx)
     ll.add_symbol("h5g_close", _hdf5.hpat_h5g_close)
@@ -58,7 +58,7 @@ def h5_open_dset_lower(context, builder, sig, args):
         h5file_lir_type, [h5file_lir_type, lir.IntType(8).as_pointer()]
     )
     fn = builder.module.get_or_insert_function(
-        fnty, name="hpat_h5_open_dset_or_group_obj"
+        fnty, name="h5_open_dset_or_group_obj"
     )
     return builder.call(fn, [fg_id, dset_name])
 
@@ -78,7 +78,7 @@ if bodo.config._has_h5py:
             h5file_lir_type,
             [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer(), lir.IntType(64)],
         )
-        fn = builder.module.get_or_insert_function(fnty, name="hpat_h5_open")
+        fn = builder.module.get_or_insert_function(fnty, name="h5_open")
         return builder.call(fn, [fname, mode, is_parallel])
 
 
@@ -104,7 +104,7 @@ def h5_read(context, builder, sig, args):
     ]
     fnty = lir.FunctionType(lir.IntType(32), arg_typs)
 
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_h5_read")
+    fn = builder.module.get_or_insert_function(fnty, name="h5_read")
     out = make_array(sig.args[5])(context, builder, args[5])
     # store size vars array struct to pointer
     count_ptr = cgutils.alloca_once(builder, args[2].type)
@@ -133,7 +133,7 @@ def h5_read(context, builder, sig, args):
 @lower_builtin("h5file.close", h5file_type)
 def h5_close(context, builder, sig, args):
     fnty = lir.FunctionType(lir.IntType(32), [h5file_lir_type])
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_h5_close")
+    fn = builder.module.get_or_insert_function(fnty, name="h5_close")
     builder.call(fn, args)
     return context.get_dummy_value()
 
@@ -163,7 +163,7 @@ def h5_create_dset(context, builder, sig, args):
     ]
     fnty = lir.FunctionType(h5file_lir_type, arg_typs)
 
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_h5_create_dset")
+    fn = builder.module.get_or_insert_function(fnty, name="h5_create_dset")
 
     ndims = sig.args[2].count
     ndims_arg = lir.Constant(lir.IntType(32), ndims)
@@ -173,7 +173,7 @@ def h5_create_dset(context, builder, sig, args):
     builder.store(counts, count_ptr)
 
     t_fnty = lir.FunctionType(lir.IntType(32), [lir.IntType(8).as_pointer()])
-    t_fn = builder.module.get_or_insert_function(t_fnty, name="hpat_h5_get_type_enum")
+    t_fn = builder.module.get_or_insert_function(t_fnty, name="h5_get_type_enum")
     typ_arg = builder.call(t_fn, [dtype_str])
 
     call_args = [
@@ -198,7 +198,7 @@ def h5_create_group(context, builder, sig, args):
         h5file_lir_type, [h5file_lir_type, lir.IntType(8).as_pointer()]
     )
 
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_h5_create_group")
+    fn = builder.module.get_or_insert_function(fnty, name="h5_create_group")
     return builder.call(fn, [fg_id, gname])
 
 
@@ -234,7 +234,7 @@ def h5_write(context, builder, sig, args):
     ]
     fnty = lir.FunctionType(lir.IntType(32), arg_typs)
 
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_h5_write")
+    fn = builder.module.get_or_insert_function(fnty, name="h5_write")
     out = make_array(sig.args[5])(context, builder, args[5])
     # store size vars array struct to pointer
     count_ptr = cgutils.alloca_once(builder, args[2].type)
