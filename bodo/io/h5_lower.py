@@ -110,15 +110,6 @@ def h5_read(context, builder, sig, args):
     return builder.call(fn, call_args)
 
 
-@lower_builtin(h5_api.h5close, h5file_type)
-@lower_builtin("h5file.close", h5file_type)
-def h5_close(context, builder, sig, args):
-    fnty = lir.FunctionType(lir.IntType(32), [h5file_lir_type])
-    fn = builder.module.get_or_insert_function(fnty, name="h5_close")
-    builder.call(fn, args)
-    return context.get_dummy_value()
-
-
 @lower_builtin(
     "h5group.create_dataset", h5group_type, string_type, types.UniTuple, string_type
 )
@@ -238,21 +229,6 @@ def h5_write(context, builder, sig, args):
     ]
 
     return builder.call(fn, call_args)
-
-
-@lower_builtin("h5file.keys", h5file_type)
-@lower_builtin("h5group.keys", h5dataset_or_group_type)
-def lower_dict_get(context, builder, sig, args):
-    def h5f_keys_imp(file_id):
-        obj_name_list = []
-        nobjs = h5_api.h5g_get_num_objs(file_id)
-        for i in range(nobjs):
-            obj_name = h5_api.h5g_get_objname_by_idx(file_id, i)
-            obj_name_list.append(obj_name)
-        return obj_name_list
-
-    res = context.compile_internal(builder, h5f_keys_imp, sig, args)
-    return res
 
 
 @lower_builtin(h5_api.h5g_get_num_objs, h5file_type)

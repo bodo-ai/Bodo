@@ -18,6 +18,7 @@ from numba.extending import (
     infer,
     intrinsic,
     overload,
+    overload_method,
 )
 from bodo.libs.str_ext import string_type
 import bodo
@@ -128,6 +129,35 @@ if bodo.config._has_h5py:
         return impl
 
 
+h5_close = types.ExternalFunction("h5_close", types.int32(h5file_type))
+
+
+@overload_method(H5FileType, "close")
+def overload_h5_file(f):
+    def impl(f):
+        h5_close(f)
+    return impl
+
+
+def h5f_keys_impl(obj_id):
+    obj_name_list = []
+    nobjs = h5g_get_num_objs(obj_id)
+    for i in range(nobjs):
+        obj_name = h5g_get_objname_by_idx(obj_id, i)
+        obj_name_list.append(obj_name)
+    return obj_name_list
+
+
+@overload_method(H5FileType, "keys")
+def overload_h5_file_keys(obj_id):
+    return h5f_keys_impl
+
+
+@overload_method(H5DatasetOrGroupType, "keys")
+def overload_h5_dset_keys(obj_id):
+    return h5f_keys_impl
+
+
 def _create_dataset_typer(args, kws):
     kwargs = dict(kws)
     name = args[0] if len(args) > 0 else types.unliteral(kwargs["name"])
@@ -141,38 +171,24 @@ def _create_dataset_typer(args, kws):
     return signature(h5dataset_type, name, shape, dtype).replace(pysig=pysig)
 
 
-@infer_getattr
-class FileAttribute(AttributeTemplate):
-    key = h5file_type
+# @infer_getattr
+# class FileAttribute(AttributeTemplate):
+#     key = h5file_type
 
-    @bound_function("h5file.keys")
-    def resolve_keys(self, dict, args, kws):
-        assert not kws
-        assert not args
-        return signature(string_list_type, *args)
+#     @bound_function("h5file.keys")
+#     def resolve_keys(self, dict, args, kws):
+#         assert not kws
+#         assert not args
+#         return signature(string_list_type, *args)
 
-    @bound_function("h5file.close")
-    def resolve_close(self, f_id, args, kws):
-        return signature(types.none, *args)
+#     @bound_function("h5file.create_dataset")
+#     def resolve_create_dataset(self, f_id, args, kws):
+#         return _create_dataset_typer(unliteral_all(args), kws)
 
-    @bound_function("h5file.create_dataset")
-    def resolve_create_dataset(self, f_id, args, kws):
-        return _create_dataset_typer(unliteral_all(args), kws)
+#     @bound_function("h5file.create_group")
+#     def resolve_create_group(self, f_id, args, kws):
+#         return signature(h5group_type, *unliteral_all(args))
 
-    @bound_function("h5file.create_group")
-    def resolve_create_group(self, f_id, args, kws):
-        return signature(h5group_type, *unliteral_all(args))
-
-
-@infer_getattr
-class GroupOrDatasetAttribute(AttributeTemplate):
-    key = h5dataset_or_group_type
-
-    @bound_function("h5group.keys")
-    def resolve_keys(self, dict, args, kws):
-        assert not kws
-        assert not args
-        return signature(string_list_type, *args)
 
 
 @infer_getattr
@@ -219,11 +235,6 @@ def h5read():
     return
 
 
-def h5close():
-    """dummy function for C h5_close"""
-    return
-
-
 def h5create_dset():
     """dummy function for C h5_create_dset"""
     return
@@ -264,14 +275,6 @@ class H5Read(AbstractTemplate):
         assert not kws
         assert len(args) == 6
         return signature(types.int32, *unliteral_all(args))
-
-
-@infer_global(h5close)
-class H5Close(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        return signature(types.none, *args)
 
 
 @infer_global(h5create_dset)
