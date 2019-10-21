@@ -32,6 +32,15 @@ from llvmlite import ir as lir
 from bodo.libs import quantile_alg
 import llvmlite.binding as ll
 
+from bodo.libs.array_tools import (
+    array_to_info,
+    arr_info_list_to_table,
+    shuffle_table,
+    info_from_table,
+    info_to_array,
+    delete_table,
+)
+
 ll.add_symbol("quantile_sequential", quantile_alg.quantile_sequential)
 ll.add_symbol("quantile_parallel", quantile_alg.quantile_parallel)
 ll.add_symbol("nth_sequential", quantile_alg.nth_sequential)
@@ -412,9 +421,9 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
 
     func_text = "def impl(data, ind_arr, parallel=False):\n"
     func_text += "  if parallel:\n"
-    func_text += (
-        "    data, (ind_arr,) = bodo.ir.join.parallel_shuffle(data, (ind_arr,))\n"
-    )
+    key_names = tuple(['data[' + str(i) + ']' for i in range(len(data))])
+    func_text += bodo.ir.join._gen_par_shuffle(key_names, ('ind_arr',), 'data', 'ind_arr',
+                                               data.types, data.types, data_is_vector=True)
     func_text += "  n = len(data[0])\n"
 
     for i in range(count):
@@ -461,6 +470,12 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
             "getitem_arr_tup_single": getitem_arr_tup_single,
             "get_str_arr_item_length": get_str_arr_item_length,
             "trim_arr": bodo.ir.join.trim_arr,
+            "array_to_info": array_to_info,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "shuffle_table": shuffle_table,
+            "info_from_table": info_from_table,
+            "info_to_array": info_to_array,
+            "delete_table": delete_table,
         },
         loc_vars,
     )
