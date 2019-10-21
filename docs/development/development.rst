@@ -82,6 +82,16 @@ if output is not live. In addition, the output is aliased with the input,
 and both have the same parallel distribution.
 
 
+IR Extensions
+-------------
+
+Bodo uses IR extensions for operations that are too complex for
+sentinel functions to represent. For example, Join and Aggregate nodes
+represent `merge` and `groupby/aggregate` operations of Pandas respectively.
+IR extensions have full transformation and analysis support (usually
+more extensive that sentinel functions).
+
+
 Code Structure
 --------------
 
