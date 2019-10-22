@@ -282,9 +282,11 @@ def remove_dead_join(join_node, lives, arg_aliases, alias_map, func_ir, typemap)
     # anymore in the join
     dead_cols = []
     # TODO: remove output of dead keys
+    all_cols_dead = True
 
     for col_name, col_var in join_node.df_out_vars.items():
         if col_var.name in lives:
+            all_cols_dead = False
             continue
         orig, orig_name = join_node.column_origins[col_name]
         if orig == "left" and orig_name not in join_node.left_keys:
@@ -298,7 +300,7 @@ def remove_dead_join(join_node, lives, arg_aliases, alias_map, func_ir, typemap)
         join_node.df_out_vars.pop(cname)
 
     # remove empty join node
-    if len(join_node.df_out_vars) == 0:
+    if all_cols_dead:
         return None
 
     return join_node

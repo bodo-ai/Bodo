@@ -9,6 +9,31 @@ import random
 import string
 import pyarrow.parquet as pq
 import numba
+from numba.untyped_passes import (
+    ExtractByteCode,
+    TranslateByteCode,
+    FixupArgs,
+    IRProcessing,
+    DeadBranchPrune,
+    RewriteSemanticConstants,
+    InlineClosureLikes,
+    GenericRewrites,
+    WithLifting,
+    InlineInlinables,
+    PreserveIR
+)
+from numba.typed_passes import (
+    NopythonTypeInference,
+    AnnotateTypes,
+    NopythonRewrites,
+    PreParforPass,
+    ParforPass,
+    DumpParforDiagnostics,
+    IRLegalization,
+    NoPythonBackend,
+    InlineOverloads,
+)
+from numba.compiler import PassManager
 import bodo
 from bodo.libs.str_arr_ext import StringArray
 from bodo.tests.utils import (
@@ -22,6 +47,70 @@ from bodo.tests.utils import (
 )
 import pytest
 
+
+class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):
+    def define_pipelines(self):
+        pm = PassManager("inline_test")
+
+        if self.state.func_ir is None:
+            pm.add_pass(TranslateByteCode, "analyzing bytecode")
+            pm.add_pass(FixupArgs, "fix up args")
+        pm.add_pass(IRProcessing, "processing IR")
+
+        pm.add_pass(WithLifting, "Handle with contexts")
+
+        # pre typing
+        if not self.state.flags.no_rewrites:
+            pm.add_pass(GenericRewrites, "nopython rewrites")
+            pm.add_pass(RewriteSemanticConstants, "rewrite semantic constants")
+            pm.add_pass(DeadBranchPrune, "dead branch pruning")
+        pm.add_pass(InlineClosureLikes, "inline calls to locally defined closures")
+
+        # inline functions that have been determined as inlinable and rerun
+        # branch pruning this needs to be run after closures are inlined as
+        # the IR repr of a closure masks call sites if an inlinable is called
+        # inside a closure
+        pm.add_pass(InlineInlinables, "inline inlinable functions")
+        if not self.state.flags.no_rewrites:
+            pm.add_pass(DeadBranchPrune, "dead branch pruning")
+
+        pm.add_pass(bodo.compiler.InlinePass, "inline funcs")
+        pm.add_pass(bodo.compiler.BodoUntypedPass, "untyped pass")
+
+        # typing
+        pm.add_pass(NopythonTypeInference, "nopython frontend")
+        pm.add_pass(AnnotateTypes, "annotate types")
+
+        # optimisation
+        pm.add_pass(InlineOverloads, "inline overloaded functions")
+
+        # Series pass should be before pre_parfor since
+        # S.call to np.call transformation is invalid for
+        # Series (e.g. S.var is not the same as np.var(S))
+        pm.add_pass(bodo.compiler.BodoDataFramePass, "typed dataframe pass")
+        pm.add_pass(bodo.compiler.BodoSeriesPass, "typed series pass")
+
+        if self.state.flags.auto_parallel.enabled:
+            pm.add_pass(PreParforPass, "Preprocessing for parfors")
+        if not self.state.flags.no_rewrites:
+            pm.add_pass(NopythonRewrites, "nopython rewrites")
+        if self.state.flags.auto_parallel.enabled:
+            pm.add_pass(ParforPass, "convert to parfors")
+
+        pm.add_pass(PreserveIR)
+
+        # pm.add_pass(bodo.compiler.LowerParforSeq, "lower parfor sequentially")
+        pm.add_pass(bodo.compiler.BodoDistributedPass, "convert to distributed")
+
+        # # legalise
+        pm.add_pass(IRLegalization, "ensure IR is legal prior to lowering")
+
+        # lower
+        pm.add_pass(NoPythonBackend, "nopython mode backend")
+        pm.add_pass(DumpParforDiagnostics, "dump parfor diagnostics")
+        pm.add_pass(bodo.compiler.BodoDumpDiagnosticsPass, "dump distributed diagnostics")
+        pm.finalize()
+        return [pm]
 
 @pytest.mark.parametrize(
     "df1",
@@ -273,6 +362,40 @@ def test_join_rm_dead_data_name_overlap2():
     df1 = pd.DataFrame({"id": [3, 4, 1]})
     df2 = pd.DataFrame({"id": [3, 4, 2], "user_id": [3, 5, 6]})
     pd.testing.assert_frame_equal(bodo.jit(test_impl)(df1, df2), test_impl(df1, df2))
+
+
+def test_join_deadcode_cleanup():
+    def test_impl(df1, df2):
+        df3 = df1.merge(df2, on=['A'])
+        return
+    def test_impl_with_join(df1, df2):
+        df3 = df1.merge(df2, on=['A'])
+        return df3
+
+    df1 = pd.DataFrame({'A': [1,2,3], 'B': ['a', 'b', 'c']})
+    df2 = pd.DataFrame({'A': [1,2,3], 'C': [4, 5, 6]})
+
+    j_func = bodo.jit(distributed=['df1', 'df2', 'df3'], pipeline_class=DeadcodeTestPipeline)(test_impl)
+    j_func_with_join = \
+        bodo.jit(distributed=['df1', 'df2', 'df3'], pipeline_class=DeadcodeTestPipeline)(test_impl_with_join)
+    j_func(df1, df2) #calling the function to get function IR
+    j_func_with_join(df1, df2)
+    fir = j_func.overloads[j_func.signatures[0]].metadata['preserved_ir']
+    fir_with_join = j_func_with_join.overloads[j_func.signatures[0]].metadata['preserved_ir']
+
+    for block in fir.blocks.values():
+        for statement in block.body:
+            assert not isinstance(statement, bodo.ir.join.Join)
+
+    joined = False
+    for block in fir_with_join.blocks.values():
+        for statement in block.body:
+            if isinstance(statement, bodo.ir.join.Join):
+                joined = True
+                break
+        if joined:
+            break
+    assert(joined)
 
 
 class TestJoin(unittest.TestCase):
