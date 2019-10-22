@@ -395,7 +395,7 @@ def test_join_deadcode_cleanup():
                 break
         if joined:
             break
-    assert(joined)
+    assert joined
 
 
 class TestJoin(unittest.TestCase):
