@@ -32,7 +32,7 @@ def distributed_diagnostics(self, signature=None, level=1):
 numba.dispatcher.Dispatcher.distributed_diagnostics = distributed_diagnostics
 
 
-def jit(signature_or_function=None, pipeline_class=bodo.compiler.BodoCompiler, **options):
+def jit(signature_or_function=None, **options):
     # set nopython by default
     if "nopython" not in options:
         options["nopython"] = True
@@ -90,5 +90,5 @@ def jit(signature_or_function=None, pipeline_class=bodo.compiler.BodoCompiler, *
     }
 
     return numba.jit(
-        signature_or_function, pipeline_class=pipeline_class, **options
+        signature_or_function, pipeline_class=bodo.compiler.BodoCompiler, **options
     )
