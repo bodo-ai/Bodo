@@ -28,9 +28,21 @@ import bodo.io
 
 if bodo.config._has_h5py:
     import h5py
+    assert h5py.version.hdf5_version_tuple[1] == 10, "only hdf5 1.10 supported"
     from bodo.io import _hdf5
     import llvmlite.binding as ll
 
+    ll.add_symbol("h5_open", _hdf5.h5_open)
+    ll.add_symbol(
+        "h5_open_dset_or_group_obj", _hdf5.h5_open_dset_or_group_obj
+    )
+    ll.add_symbol("h5_read", _hdf5.h5_read)
+    ll.add_symbol("h5_create_group", _hdf5.h5_create_group)
+    ll.add_symbol("h5_write", _hdf5.h5_write)
+    ll.add_symbol("h5_close", _hdf5.h5_close)
+    ll.add_symbol("h5g_get_num_objs", _hdf5.h5g_get_num_objs)
+    ll.add_symbol("h5g_get_objname_by_idx", _hdf5.h5g_get_objname_by_idx)
+    ll.add_symbol("h5g_close", _hdf5.h5g_close)
     ll.add_symbol("h5_read_filter", _hdf5.h5_read_filter)
     ll.add_symbol("h5_size", _hdf5.h5_size)
     ll.add_symbol("h5_create_dset", _hdf5.h5_create_dset)
@@ -222,6 +234,7 @@ class SetItemH5Dset(AbstractTemplate):
 
 
 
+h5g_close = types.ExternalFunction("h5g_close", types.none(h5group_type))
 _h5g_get_num_objs = types.ExternalFunction("h5g_get_num_objs", types.int64(h5file_type))
 
 

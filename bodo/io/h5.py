@@ -24,7 +24,7 @@ import numpy as np
 
 import bodo
 import bodo.io
-from bodo.io import h5_api, h5_lower
+from bodo.io import h5_api
 from bodo.utils.utils import find_str_const, debug_prints
 
 
