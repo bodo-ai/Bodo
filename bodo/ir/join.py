@@ -689,7 +689,7 @@ def _get_table_parallel_flags(join_node, array_dists):
 
 
 def _gen_par_shuffle(
-    key_names, data_names, key_tup_out, data_tup_out, key_types, other_key_types, data_is_vector=False
+    key_names, data_names, key_tup_out, data_tup_out, key_types, other_key_types
 ):
     """Generates data shuffle.
     Converts data to C arrays, creates a C table, shuffles it, and returns
@@ -723,15 +723,9 @@ def _gen_par_shuffle(
         for i in range(n_keys, n_all)
     ]
     func_text += "    {} = ({},)\n".format(key_tup_out, ", ".join(out_keys))
-    if not data_is_vector:
-        func_text += "    {} = ({}{})\n".format(
-            data_tup_out, ", ".join(out_data), "," if n_data != 0 else ""
-        )
-    else:
-        assert n_data == 1
-        func_text += "    {} = ({}{})[0]\n".format(
-            data_tup_out, ", ".join(out_data), ","
-        )
+    func_text += "    {} = ({}{})\n".format(
+        data_tup_out, ", ".join(out_data), "," if n_data != 0 else ""
+    )
     # func_text += "    print(bodo.get_rank(), {})\n".format(key_tup_out)
     # func_text += "    print(bodo.get_rank(), {})\n".format(data_tup_out)
 

@@ -422,8 +422,10 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     func_text = "def impl(data, ind_arr, parallel=False):\n"
     func_text += "  if parallel:\n"
     key_names = tuple(['data[' + str(i) + ']' for i in range(len(data))])
-    func_text += bodo.ir.join._gen_par_shuffle(key_names, ('ind_arr',), 'data', 'ind_arr',
-                                               data.types, data.types, data_is_vector=True)
+    func_text += bodo.ir.join._gen_par_shuffle(key_names, ('ind_arr',),
+                                               'data', 'data_ind',
+                                               data.types, data.types)
+    func_text += "    (ind_arr,) = data_ind\n"
     func_text += "  n = len(data[0])\n"
 
     for i in range(count):
