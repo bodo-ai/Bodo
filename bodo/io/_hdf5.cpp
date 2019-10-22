@@ -23,11 +23,11 @@ hid_t h5_create_dset(hid_t file_id, char* dset_name, int ndims,
 hid_t h5_create_group(hid_t file_id, char* group_name);
 int h5_write(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
                   int64_t is_parallel, void* out, int typ_enum);
-int h5_get_type_enum(char* s);
 hid_t get_h5_typ(int typ_enum);
 int64_t h5g_get_num_objs(hid_t file_id);
 void* h5g_get_objname_by_idx(hid_t file_id, int64_t ind);
 void h5g_close(hid_t group_id);
+
 
 PyMODINIT_FUNC PyInit__hdf5(void) {
     PyObject* m;
@@ -56,8 +56,6 @@ PyMODINIT_FUNC PyInit__hdf5(void) {
                            PyLong_FromVoidPtr((void*)(&h5_create_group)));
     PyObject_SetAttrString(m, "h5_write",
                            PyLong_FromVoidPtr((void*)(&h5_write)));
-    PyObject_SetAttrString(m, "h5_get_type_enum",
-                           PyLong_FromVoidPtr((void*)(&h5_get_type_enum)));
     PyObject_SetAttrString(m, "h5g_get_num_objs",
                            PyLong_FromVoidPtr((void*)(&h5g_get_num_objs)));
     PyObject_SetAttrString(
@@ -295,28 +293,6 @@ hid_t get_h5_typ(int typ_enum) {
     return types_list[typ_enum];
 }
 
-//  _h5_str_typ_table = {
-//      'i1':0,
-//      'u1':1,
-//      'i4':2,
-//      'i8':3,
-//      'f4':4,
-//      'f8':5
-//      }
-
-// TODO: remove this
-int h5_get_type_enum(char* s) {
-    int typ = -1;
-    if (strcmp(s, "i1") == 0) typ = 0;
-    if (strcmp(s, "u1") == 0) typ = 1;
-    if (strcmp(s, "i4") == 0) typ = 2;
-    if (strcmp(s, "u4") == 0) typ = 3;
-    if (strcmp(s, "i8") == 0) typ = 4;
-    if (strcmp(s, "f4") == 0) typ = 5;
-    if (strcmp(s, "f8") == 0) typ = 6;
-
-    return typ;
-}
 
 void h5_close_object(hid_t obj_id) {
     H5O_info_t object_info;

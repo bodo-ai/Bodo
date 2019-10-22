@@ -27,7 +27,6 @@ if bodo.config._has_h5py:
         "h5_open_dset_or_group_obj", _hdf5.h5_open_dset_or_group_obj
     )
     ll.add_symbol("h5_read", _hdf5.h5_read)
-    ll.add_symbol("h5_get_type_enum", _hdf5.h5_get_type_enum)
     ll.add_symbol("h5_create_group", _hdf5.h5_create_group)
     ll.add_symbol("h5_write", _hdf5.h5_write)
     ll.add_symbol("h5_close", _hdf5.h5_close)
@@ -107,80 +106,6 @@ def h5_read(context, builder, sig, args):
     ]
 
     return builder.call(fn, call_args)
-
-
-@lower_builtin(
-    "h5group.create_dataset", h5group_type, string_type, types.UniTuple, string_type
-)
-# @lower_builtin(
-#     "h5file.create_dataset", h5file_type, string_type, types.UniTuple, string_type
-# )
-@lower_builtin(
-    h5_api.h5create_dset, h5file_type, string_type, types.UniTuple, string_type
-)
-def h5_create_dset(context, builder, sig, args):
-    fg_id, dset_name, counts, dtype_str = args
-
-    dset_name = gen_get_unicode_chars(context, builder, dset_name)
-    dtype_str = gen_get_unicode_chars(context, builder, dtype_str)
-
-    # extra last arg type for type enum
-    arg_typs = [
-        h5file_lir_type,
-        lir.IntType(8).as_pointer(),
-        lir.IntType(32),
-        lir.IntType(64).as_pointer(),
-        lir.IntType(32),
-    ]
-    fnty = lir.FunctionType(h5file_lir_type, arg_typs)
-
-    fn = builder.module.get_or_insert_function(fnty, name="h5_create_dset")
-
-    ndims = sig.args[2].count
-    ndims_arg = lir.Constant(lir.IntType(32), ndims)
-
-    # store size vars array struct to pointer
-    count_ptr = cgutils.alloca_once(builder, counts.type)
-    builder.store(counts, count_ptr)
-
-    t_fnty = lir.FunctionType(lir.IntType(32), [lir.IntType(8).as_pointer()])
-    t_fn = builder.module.get_or_insert_function(t_fnty, name="h5_get_type_enum")
-    typ_arg = builder.call(t_fn, [dtype_str])
-
-    call_args = [
-        fg_id,
-        dset_name,
-        ndims_arg,
-        builder.bitcast(count_ptr, lir.IntType(64).as_pointer()),
-        typ_arg,
-    ]
-
-    return builder.call(fn, call_args)
-
-
-# @lower_builtin("h5group.create_group", h5group_type, string_type)
-# @lower_builtin("h5file.create_group", h5file_type, string_type)
-# @lower_builtin(h5_api.h5create_group, h5file_type, string_type)
-def h5_create_group(context, builder, sig, args):
-    fg_id, gname = args
-    gname = gen_get_unicode_chars(context, builder, gname)
-
-    fnty = lir.FunctionType(
-        h5file_lir_type, [h5file_lir_type, lir.IntType(8).as_pointer()]
-    )
-
-    fn = builder.module.get_or_insert_function(fnty, name="h5_create_group")
-    return builder.call(fn, [fg_id, gname])
-
-
-# _h5_str_typ_table = {
-#     'i1':0,
-#     'u1':1,
-#     'i4':2,
-#     'i8':3,
-#     'f4':4,
-#     'f8':5
-#     }
 
 
 @lower_builtin(
