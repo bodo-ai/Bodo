@@ -296,6 +296,28 @@ def test_h5_group_keys(datapath):
     assert bodo_func() == test_impl()
 
 
+def test_h5_write():
+    # run only on 1 processor
+    if bodo.get_size() != 1:
+        return
+
+    def test_impl(A, fname):
+        f = h5py.File(fname, "w")
+        dset1 = f.create_dataset("A", A.shape, "f8")
+        dset1[:] = A
+        f.close()
+
+    fname = "test_w.hdf5"
+    n = 11
+    A = np.arange(n).astype(np.float64)
+    with ensure_clean(fname):
+        bodo.jit(test_impl)(A, fname)
+        f = h5py.File(fname, "r")
+        A2 = f["A"][:]
+        f.close()
+        np.testing.assert_array_equal(A, A2)
+
+
 def test_np_io1(datapath):
     fname = datapath("np_file1.dat")
 

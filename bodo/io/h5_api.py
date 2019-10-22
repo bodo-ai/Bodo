@@ -20,9 +20,10 @@ from numba.extending import (
     overload,
     overload_method,
 )
-from bodo.libs.str_ext import string_type
+from bodo.libs.str_ext import string_type, string_to_char_ptr
 import bodo
-from bodo.utils.utils import unliteral_all
+from bodo.utils.utils import unliteral_all, _numba_to_c_type_map
+from bodo.utils.typing import parse_dtype, is_overload_none
 import bodo.io
 
 if bodo.config._has_h5py:
@@ -32,6 +33,7 @@ if bodo.config._has_h5py:
 
     ll.add_symbol("h5_read_filter", _hdf5.h5_read_filter)
     ll.add_symbol("h5_size", _hdf5.h5_size)
+    ll.add_symbol("h5_create_dset", _hdf5.h5_create_dset)
 
 
 ################## Types #######################
@@ -150,6 +152,26 @@ def overload_h5_file_keys(obj_id):
             obj_name_list.append(obj_name)
         return obj_name_list
     return h5f_keys_impl
+
+
+h5_create_dset = types.ExternalFunction("h5_create_dset", h5dataset_type(h5file_type,
+    types.voidptr, types.int32, types.voidptr, types.int32))
+
+
+@overload_method(H5FileType, "create_dataset")
+def overload_h5_file_create_dataset(obj_id, name, shape=None, dtype=None, data=None):
+    assert is_overload_none(data)  # TODO: support passing data directly
+    # TODO: support non-constant dtype string value
+    nb_dtype = parse_dtype(dtype)
+    typ_enum = np.int32(_numba_to_c_type_map[nb_dtype])
+    ndim = np.int32(len(shape))
+
+    def impl(obj_id, name, shape=None, dtype=None, data=None):
+        counts = np.asarray(shape)
+        return h5_create_dset(
+            obj_id, string_to_char_ptr(name), ndim, counts.ctypes, typ_enum)
+    return impl
+
 
 
 def _create_dataset_typer(args, kws):

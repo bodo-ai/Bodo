@@ -28,7 +28,6 @@ if bodo.config._has_h5py:
     )
     ll.add_symbol("h5_read", _hdf5.h5_read)
     ll.add_symbol("h5_get_type_enum", _hdf5.h5_get_type_enum)
-    ll.add_symbol("h5_create_dset", _hdf5.h5_create_dset)
     ll.add_symbol("h5_create_group", _hdf5.h5_create_group)
     ll.add_symbol("h5_write", _hdf5.h5_write)
     ll.add_symbol("h5_close", _hdf5.h5_close)
@@ -113,9 +112,9 @@ def h5_read(context, builder, sig, args):
 @lower_builtin(
     "h5group.create_dataset", h5group_type, string_type, types.UniTuple, string_type
 )
-@lower_builtin(
-    "h5file.create_dataset", h5file_type, string_type, types.UniTuple, string_type
-)
+# @lower_builtin(
+#     "h5file.create_dataset", h5file_type, string_type, types.UniTuple, string_type
+# )
 @lower_builtin(
     h5_api.h5create_dset, h5file_type, string_type, types.UniTuple, string_type
 )

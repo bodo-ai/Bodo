@@ -163,6 +163,24 @@ def str_rfind_overload(in_str, sub, start=0, end=None):
     return _str_rfind_impl
 
 
+@intrinsic
+def string_to_char_ptr(typingctx, str_tp=None):
+    assert str_tp == string_type or isinstance(str_tp, types.StringLiteral)
+    def codegen(context, builder, sig, args):
+
+        if str_tp == string_type:
+            uni_str = cgutils.create_struct_proxy(str_tp)(
+                context, builder, value=args[0])
+            return uni_str.data
+        else:
+            # TODO: what about unicode strings?
+            ptr = context.insert_const_string(builder.module, str_tp.literal_value)
+            return ptr
+
+    return types.voidptr(str_tp), codegen
+
+
+
 #####################  re support  ###################
 
 
