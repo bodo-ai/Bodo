@@ -201,18 +201,16 @@ def overload_h5_file_create_group(obj_id, name, track_order=None):
     return impl
 
 
-@infer_global(operator.getitem)
-class GetItemH5File(AbstractTemplate):
-    key = operator.getitem
+h5_open_dset_or_group_obj = types.ExternalFunction("h5_open_dset_or_group_obj",
+    h5dataset_or_group_type(h5file_type, types.voidptr))
 
-    def generic(self, args, kws):
-        assert not kws
-        (in_f, in_idx) = args
-        if in_f == h5file_type:
-            assert in_idx == string_type
-            return signature(h5dataset_or_group_type, in_f, in_idx)
-        if in_f == h5dataset_or_group_type and in_idx == string_type:
-            return signature(h5dataset_or_group_type, in_f, in_idx)
+
+@overload(operator.getitem)
+def overload_getitem_file(in_f, in_idx):
+    if in_f in (h5file_type, h5dataset_or_group_type) and in_idx == string_type:
+        def impl(in_f, in_idx):
+            return h5_open_dset_or_group_obj(unify_h5_id(in_f), in_idx._data)
+        return impl
 
 
 @infer_global(operator.setitem)

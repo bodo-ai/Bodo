@@ -44,18 +44,3 @@ if bodo.config._has_h5py:
         assert h5py.version.hdf5_version_tuple[1] == 10
 
 h5g_close = types.ExternalFunction("h5g_close", types.none(h5group_type))
-
-
-@lower_builtin(operator.getitem, h5file_type, string_type)
-@lower_builtin(operator.getitem, h5dataset_or_group_type, string_type)
-def h5_open_dset_lower(context, builder, sig, args):
-    fg_id, dset_name = args
-    dset_name = gen_get_unicode_chars(context, builder, dset_name)
-
-    fnty = lir.FunctionType(
-        h5file_lir_type, [h5file_lir_type, lir.IntType(8).as_pointer()]
-    )
-    fn = builder.module.get_or_insert_function(
-        fnty, name="h5_open_dset_or_group_obj"
-    )
-    return builder.call(fn, [fg_id, dset_name])
