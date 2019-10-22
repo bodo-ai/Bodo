@@ -95,6 +95,19 @@ string_list_type = types.List(string_type)
 
 #################################################
 
+
+
+@intrinsic
+def unify_h5_id(typingctx, tp=None):
+    """converts h5 id objects (which all have the same hid_t representation) to a single
+    type to enable reuse of external functions.
+    """
+    def codegen(context, builder, sig, args):
+        return args[0]
+    return h5file_type(tp), codegen
+
+
+
 h5_open = types.ExternalFunction("h5_open", h5file_type(types.voidptr, types.voidptr))
 
 if bodo.config._has_h5py:
@@ -159,6 +172,7 @@ h5_create_dset = types.ExternalFunction("h5_create_dset", h5dataset_type(h5file_
 
 
 @overload_method(H5FileType, "create_dataset")
+@overload_method(H5GroupType, "create_dataset")
 def overload_h5_file_create_dataset(obj_id, name, shape=None, dtype=None, data=None):
     assert is_overload_none(data)  # TODO: support passing data directly
     # TODO: support non-constant dtype string value
@@ -169,45 +183,22 @@ def overload_h5_file_create_dataset(obj_id, name, shape=None, dtype=None, data=N
     def impl(obj_id, name, shape=None, dtype=None, data=None):
         counts = np.asarray(shape)
         return h5_create_dset(
-            obj_id, string_to_char_ptr(name), ndim, counts.ctypes, typ_enum)
+            unify_h5_id(obj_id), string_to_char_ptr(name), ndim, counts.ctypes, typ_enum)
     return impl
 
 
-
-def _create_dataset_typer(args, kws):
-    kwargs = dict(kws)
-    name = args[0] if len(args) > 0 else types.unliteral(kwargs["name"])
-    shape = args[1] if len(args) > 1 else types.unliteral(kwargs["shape"])
-    dtype = args[2] if len(args) > 2 else types.unliteral(kwargs["dtype"])
-
-    def create_dset_stub(name, shape, dtype):
-        pass
-
-    pysig = numba.utils.pysignature(create_dset_stub)
-    return signature(h5dataset_type, name, shape, dtype).replace(pysig=pysig)
+h5_create_group = types.ExternalFunction("h5_create_group", h5group_type(h5file_type,
+    types.voidptr))
 
 
-# @infer_getattr
-# class FileAttribute(AttributeTemplate):
-#     key = h5file_type
+@overload_method(H5FileType, "create_group")
+@overload_method(H5GroupType, "create_group")
+def overload_h5_file_create_group(obj_id, name, track_order=None):
+    assert is_overload_none(track_order)  # TODO: support?
 
-#     @bound_function("h5file.create_dataset")
-#     def resolve_create_dataset(self, f_id, args, kws):
-#         return _create_dataset_typer(unliteral_all(args), kws)
-
-#     @bound_function("h5file.create_group")
-#     def resolve_create_group(self, f_id, args, kws):
-#         return signature(h5group_type, *unliteral_all(args))
-
-
-
-@infer_getattr
-class GroupAttribute(AttributeTemplate):
-    key = h5group_type
-
-    @bound_function("h5group.create_dataset")
-    def resolve_create_dataset(self, f_id, args, kws):
-        return _create_dataset_typer(unliteral_all(args), kws)
+    def impl(obj_id, name, track_order=None):
+        return h5_create_group(unify_h5_id(obj_id), string_to_char_ptr(name))
+    return impl
 
 
 @infer_global(operator.getitem)

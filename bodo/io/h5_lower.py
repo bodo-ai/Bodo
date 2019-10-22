@@ -158,9 +158,9 @@ def h5_create_dset(context, builder, sig, args):
     return builder.call(fn, call_args)
 
 
-@lower_builtin("h5group.create_group", h5group_type, string_type)
-@lower_builtin("h5file.create_group", h5file_type, string_type)
-@lower_builtin(h5_api.h5create_group, h5file_type, string_type)
+# @lower_builtin("h5group.create_group", h5group_type, string_type)
+# @lower_builtin("h5file.create_group", h5file_type, string_type)
+# @lower_builtin(h5_api.h5create_group, h5file_type, string_type)
 def h5_create_group(context, builder, sig, args):
     fg_id, gname = args
     gname = gen_get_unicode_chars(context, builder, gname)
