@@ -241,9 +241,26 @@ def h5g_get_objname_by_idx(obj_id, ind):
     return std_str_to_unicode(_h5g_get_objname_by_idx(unify_h5_id(obj_id), ind))
 
 
-def h5read():
-    """dummy function for C h5_read"""
-    return
+
+_h5_read = types.ExternalFunction("h5_read",
+    types.int32(h5dataset_or_group_type, types.int32, types.voidptr, types.voidptr,
+    types.int64, types.voidptr, types.int32))
+
+
+@numba.njit
+def h5read(dset_id, ndim, starts, counts, is_parallel, out_arr):
+    starts_ptr = tuple_to_ptr(starts)
+    counts_ptr = tuple_to_ptr(counts)
+    type_enum = bodo.libs.distributed_api.get_type_enum(out_arr)
+    return _h5_read(
+        dset_id,
+        ndim,
+        starts_ptr,
+        counts_ptr,
+        is_parallel,
+        out_arr.ctypes,
+        type_enum,
+    )
 
 
 def h5write():
@@ -268,14 +285,6 @@ class H5ReadType(AbstractTemplate):
 h5size = types.ExternalFunction(
     "h5_size", types.int64(h5dataset_or_group_type, types.int32)
 )
-
-
-@infer_global(h5read)
-class H5Read(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 6
-        return signature(types.int32, *unliteral_all(args))
 
 
 @infer_global(h5write)

@@ -171,8 +171,8 @@ int h5_read(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
 
     hid_t space_id = get_dset_space_from_range(dataset_id, starts, counts);
 
-    int num_pes;
-    MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
+    // int num_pes;
+    // MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
     hid_t xfer_plist_id = H5P_DEFAULT;
     // TODO: enable MPIO after fixing address overflow issues
     // if(false && is_parallel && num_pes>1)

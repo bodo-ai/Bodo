@@ -62,53 +62,6 @@ def h5_open_dset_lower(context, builder, sig, args):
 
 
 @lower_builtin(
-    h5_api.h5read,
-    h5dataset_or_group_type,
-    types.int32,
-    types.UniTuple,
-    types.UniTuple,
-    types.int64,
-    types.npytypes.Array,
-)
-def h5_read(context, builder, sig, args):
-    # extra last arg type for type enum
-    arg_typs = [
-        h5file_lir_type,
-        lir.IntType(32),
-        lir.IntType(64).as_pointer(),
-        lir.IntType(64).as_pointer(),
-        lir.IntType(64),
-        lir.IntType(8).as_pointer(),
-        lir.IntType(32),
-    ]
-    fnty = lir.FunctionType(lir.IntType(32), arg_typs)
-
-    fn = builder.module.get_or_insert_function(fnty, name="h5_read")
-    out = make_array(sig.args[5])(context, builder, args[5])
-    # store size vars array struct to pointer
-    count_ptr = cgutils.alloca_once(builder, args[2].type)
-    builder.store(args[2], count_ptr)
-    size_ptr = cgutils.alloca_once(builder, args[3].type)
-    builder.store(args[3], size_ptr)
-    # store an int to specify data type
-    typ_enum = _numba_to_c_type_map[sig.args[5].dtype]
-    typ_arg = cgutils.alloca_once_value(
-        builder, lir.Constant(lir.IntType(32), typ_enum)
-    )
-    call_args = [
-        args[0],
-        args[1],
-        builder.bitcast(count_ptr, lir.IntType(64).as_pointer()),
-        builder.bitcast(size_ptr, lir.IntType(64).as_pointer()),
-        args[4],
-        builder.bitcast(out.data, lir.IntType(8).as_pointer()),
-        builder.load(typ_arg),
-    ]
-
-    return builder.call(fn, call_args)
-
-
-@lower_builtin(
     h5_api.h5write,
     h5dataset_type,
     types.int32,
