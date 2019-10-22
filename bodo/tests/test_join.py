@@ -9,6 +9,8 @@ import random
 import string
 import pyarrow.parquet as pq
 import numba
+from numba.untyped_passes import PreserveIR 
+from numba.typed_passes import NopythonRewrites
 import bodo
 from bodo.libs.str_arr_ext import StringArray
 from bodo.tests.utils import (
@@ -21,6 +23,15 @@ from bodo.tests.utils import (
     get_start_end,
 )
 import pytest
+
+
+class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):
+    def define_pipelines(self):
+        [pipeline] = self._create_bodo_pipeline(True)
+        pipeline._finalized = False
+        pipeline.add_pass_after(PreserveIR, NopythonRewrites)
+        pipeline.finalize()
+        return [pipeline]
 
 
 @pytest.mark.parametrize(
@@ -273,6 +284,40 @@ def test_join_rm_dead_data_name_overlap2():
     df1 = pd.DataFrame({"id": [3, 4, 1]})
     df2 = pd.DataFrame({"id": [3, 4, 2], "user_id": [3, 5, 6]})
     pd.testing.assert_frame_equal(bodo.jit(test_impl)(df1, df2), test_impl(df1, df2))
+
+
+def test_join_deadcode_cleanup():
+    def test_impl(df1, df2):
+        df3 = df1.merge(df2, on=['A'])
+        return
+    def test_impl_with_join(df1, df2):
+        df3 = df1.merge(df2, on=['A'])
+        return df3
+
+    df1 = pd.DataFrame({'A': [1,2,3], 'B': ['a', 'b', 'c']})
+    df2 = pd.DataFrame({'A': [1,2,3], 'C': [4, 5, 6]})
+
+    j_func = numba.njit(pipeline_class=DeadcodeTestPipeline)(test_impl)
+    j_func_with_join = \
+        numba.njit(pipeline_class=DeadcodeTestPipeline)(test_impl_with_join)
+    j_func(df1, df2) #calling the function to get function IR
+    j_func_with_join(df1, df2)
+    fir = j_func.overloads[j_func.signatures[0]].metadata['preserved_ir']
+    fir_with_join = j_func_with_join.overloads[j_func.signatures[0]].metadata['preserved_ir']
+
+    for block in fir.blocks.values():
+        for statement in block.body:
+            assert not isinstance(statement, bodo.ir.join.Join)
+
+    joined = False
+    for block in fir_with_join.blocks.values():
+        for statement in block.body:
+            if isinstance(statement, bodo.ir.join.Join):
+                joined = True
+                break
+        if joined:
+            break
+    assert joined
 
 
 class TestJoin(unittest.TestCase):
