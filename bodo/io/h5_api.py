@@ -263,9 +263,21 @@ def h5read(dset_id, ndim, starts, counts, is_parallel, out_arr):
     )
 
 
-def h5write():
-    """dummy function for C h5_write"""
-    return
+
+@numba.njit
+def h5write(dset_id, ndim, starts, counts, is_parallel, out_arr):
+    starts_ptr = tuple_to_ptr(starts)
+    counts_ptr = tuple_to_ptr(counts)
+    type_enum = bodo.libs.distributed_api.get_type_enum(out_arr)
+    return _h5_read(
+        dset_id,
+        ndim,
+        starts_ptr,
+        counts_ptr,
+        is_parallel,
+        out_arr.ctypes,
+        type_enum,
+    )
 
 
 def h5_read_dummy():
@@ -285,14 +297,6 @@ class H5ReadType(AbstractTemplate):
 h5size = types.ExternalFunction(
     "h5_size", types.int64(h5dataset_or_group_type, types.int32)
 )
-
-
-@infer_global(h5write)
-class H5Write(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 6
-        return signature(types.int32, *unliteral_all(args))
 
 
 sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
