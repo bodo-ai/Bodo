@@ -9,30 +9,8 @@ import random
 import string
 import pyarrow.parquet as pq
 import numba
-from numba.untyped_passes import (
-    ExtractByteCode,
-    TranslateByteCode,
-    FixupArgs,
-    IRProcessing,
-    DeadBranchPrune,
-    RewriteSemanticConstants,
-    InlineClosureLikes,
-    GenericRewrites,
-    WithLifting,
-    InlineInlinables,
-    PreserveIR
-)
-from numba.typed_passes import (
-    NopythonTypeInference,
-    AnnotateTypes,
-    NopythonRewrites,
-    PreParforPass,
-    ParforPass,
-    DumpParforDiagnostics,
-    IRLegalization,
-    NoPythonBackend,
-    InlineOverloads,
-)
+from numba.untyped_passes import PreserveIR 
+from numba.typed_passes import NopythonRewrites
 from numba.compiler import PassManager
 import bodo
 from bodo.libs.str_arr_ext import StringArray
