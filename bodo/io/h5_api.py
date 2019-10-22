@@ -20,7 +20,7 @@ from numba.extending import (
     overload,
     overload_method,
 )
-from bodo.libs.str_ext import string_type, string_to_char_ptr
+from bodo.libs.str_ext import string_type, string_to_char_ptr, std_str_type, std_str_to_unicode
 import bodo
 from bodo.utils.utils import unliteral_all, _numba_to_c_type_map
 from bodo.utils.typing import parse_dtype, is_overload_none
@@ -232,8 +232,13 @@ def h5g_get_num_objs(obj_id):
     return _h5g_get_num_objs(unify_h5_id(obj_id))
 
 
-def h5g_get_objname_by_idx():
-    return
+_h5g_get_objname_by_idx = types.ExternalFunction("h5g_get_objname_by_idx",
+    std_str_type(h5file_type, types.int64))
+
+
+@numba.njit
+def h5g_get_objname_by_idx(obj_id, ind):
+    return std_str_to_unicode(_h5g_get_objname_by_idx(unify_h5_id(obj_id), ind))
 
 
 def h5read():
@@ -305,14 +310,6 @@ class H5Write(AbstractTemplate):
         assert not kws
         assert len(args) == 6
         return signature(types.int32, *unliteral_all(args))
-
-
-@infer_global(h5g_get_objname_by_idx)
-class H5GgetObjNameByIdx(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2
-        return signature(string_type, *args)
 
 
 sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
