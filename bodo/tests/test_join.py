@@ -11,7 +11,6 @@ import pyarrow.parquet as pq
 import numba
 from numba.untyped_passes import PreserveIR 
 from numba.typed_passes import NopythonRewrites
-from numba.compiler import PassManager
 import bodo
 from bodo.libs.str_arr_ext import StringArray
 from bodo.tests.utils import (
