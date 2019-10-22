@@ -469,9 +469,6 @@ class UntypedPass(object):
                 assign, lhs, rhs, func_mod, inplace_var, replace_func, label
             )
 
-        if config._has_h5py and fdef == ("File", "h5py"):
-            return self.h5_handler._handle_h5_File_call(assign, lhs, rhs)
-
         if fdef == ("fromfile", "numpy"):
             return bodo.io.np_io._handle_np_fromfile(assign, lhs, rhs)
 
