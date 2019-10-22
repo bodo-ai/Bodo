@@ -155,14 +155,6 @@ def h5_write(context, builder, sig, args):
     return builder.call(fn, call_args)
 
 
-@lower_builtin(h5_api.h5g_get_num_objs, h5file_type)
-@lower_builtin(h5_api.h5g_get_num_objs, h5dataset_or_group_type)
-def h5g_get_num_objs_lower(context, builder, sig, args):
-    fnty = lir.FunctionType(lir.IntType(64), [h5file_lir_type])
-    fn = builder.module.get_or_insert_function(fnty, name="h5g_get_num_objs")
-    return builder.call(fn, args)
-
-
 @lower_builtin(h5_api.h5g_get_objname_by_idx, h5file_type, types.int64)
 @lower_builtin(h5_api.h5g_get_objname_by_idx, h5dataset_or_group_type, types.int64)
 def h5g_get_objname_by_idx_lower(context, builder, sig, args):

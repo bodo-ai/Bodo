@@ -223,8 +223,13 @@ class SetItemH5Dset(AbstractTemplate):
             return signature(types.none, *args)
 
 
-def h5g_get_num_objs():
-    return
+
+_h5g_get_num_objs = types.ExternalFunction("h5g_get_num_objs", types.int64(h5file_type))
+
+
+@numba.njit
+def h5g_get_num_objs(obj_id):
+    return _h5g_get_num_objs(unify_h5_id(obj_id))
 
 
 def h5g_get_objname_by_idx():
@@ -300,14 +305,6 @@ class H5Write(AbstractTemplate):
         assert not kws
         assert len(args) == 6
         return signature(types.int32, *unliteral_all(args))
-
-
-@infer_global(h5g_get_num_objs)
-class H5GgetNobj(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        return signature(types.int64, *args)
 
 
 @infer_global(h5g_get_objname_by_idx)
