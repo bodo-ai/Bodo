@@ -29,10 +29,10 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     MPI_Initialized(&is_initialized);
     if (!is_initialized) MPI_Init(NULL, NULL);
 
-    PyObject_SetAttrString(m, "hpat_dist_get_rank",
-                           PyLong_FromVoidPtr((void *)(&hpat_dist_get_rank)));
-    PyObject_SetAttrString(m, "hpat_dist_get_size",
-                           PyLong_FromVoidPtr((void *)(&hpat_dist_get_size)));
+    PyObject_SetAttrString(m, "dist_get_rank",
+                           PyLong_FromVoidPtr((void *)(&dist_get_rank)));
+    PyObject_SetAttrString(m, "dist_get_size",
+                           PyLong_FromVoidPtr((void *)(&dist_get_size)));
     PyObject_SetAttrString(m, "hpat_dist_get_start",
                            PyLong_FromVoidPtr((void *)(&hpat_dist_get_start)));
     PyObject_SetAttrString(m, "hpat_dist_get_end",

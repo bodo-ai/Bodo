@@ -276,7 +276,7 @@ static std::vector<size_t> count_lines(std::istream * f, size_t n)
  * We evenly distribute by number of lines by working on byte-chunks in parallel
  *   * counting new-lines and allreducing and exscaning numbers
  *   * computing start/end points of desired chunks-of-lines and sending them to corresponding ranks.
- * Using hpat_dist_get_size and hpat_dist_get_start to compute chunk start/end/size as well as
+ * Using dist_get_size and hpat_dist_get_start to compute chunk start/end/size as well as
  * the final chunking of lines.
  *
  * @param[in]  f   the input stream
@@ -290,15 +290,15 @@ static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel
         std::cerr << "Invalid skiprows argument: " << skiprows << std::endl;
         return NULL;
     }
-    // printf("rank %d skiprows %d nrows %d\n", hpat_dist_get_rank(), skiprows, nrows);
+    // printf("rank %d skiprows %d nrows %d\n", dist_get_rank(), skiprows, nrows);
 
-    size_t nranks = hpat_dist_get_size();
+    size_t nranks = dist_get_size();
 
     size_t my_off_start = 0;
     size_t my_off_end = fsz;
 
     if(is_parallel && nranks > 1) {
-        size_t rank = hpat_dist_get_rank();
+        size_t rank = dist_get_rank();
 
         // seek to our chunk
         size_t byte_offset = hpat_dist_get_start(fsz, nranks, rank);

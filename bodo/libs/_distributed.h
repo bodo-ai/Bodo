@@ -30,8 +30,8 @@ struct HPAT_ReduceOps {
     };
 };
 
-static int hpat_dist_get_rank() __UNUSED__;
-static int hpat_dist_get_size() __UNUSED__;
+static int dist_get_rank() __UNUSED__;
+static int dist_get_size() __UNUSED__;
 static int64_t hpat_dist_get_start(int64_t total, int num_pes,
                                    int node_id) __UNUSED__;
 static int64_t hpat_dist_get_end(int64_t total, int num_pes,
@@ -112,7 +112,7 @@ static void* hpat_get_dummy_ptr() { return hpat_dummy_ptr; }
 static size_t get_mpi_req_num_bytes() __UNUSED__;
 static size_t get_mpi_req_num_bytes() { return sizeof(MPI_Request); }
 
-static int hpat_dist_get_rank() {
+static int dist_get_rank() {
     int is_initialized;
     MPI_Initialized(&is_initialized);
     if (!is_initialized) MPI_Init(NULL, NULL);
@@ -122,7 +122,7 @@ static int hpat_dist_get_rank() {
     return rank;
 }
 
-static int hpat_dist_get_size() {
+static int dist_get_size() {
     int size;
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     // printf("r size:%d\n", sizeof(MPI_Request));
@@ -622,8 +622,8 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
     MPI_Type_contiguous(elem_size, MPI_UNSIGNED_CHAR, &element_t);
     MPI_Type_commit(&element_t);
 
-    auto num_ranks = hpat_dist_get_size();
-    auto rank = hpat_dist_get_rank();
+    auto num_ranks = dist_get_size();
+    auto rank = dist_get_rank();
     auto dest_ranks = find_dest_ranks(rank, num_ranks, p, p_len);
     auto send_counts = find_send_counts(dest_ranks, num_ranks, elem_size);
     auto send_disps = find_disps(send_counts);
@@ -674,8 +674,8 @@ static void oneD_reshape_shuffle(char* output, char* input,
                                  int64_t old_0dim_global_len,
                                  int64_t out_lower_dims_size,
                                  int64_t in_lower_dims_size) {
-    int num_pes = hpat_dist_get_size();
-    int rank = hpat_dist_get_rank();
+    int num_pes = dist_get_size();
+    int rank = dist_get_rank();
 
     // get my old and new data interval and convert to byte offsets
     int64_t my_old_start =
