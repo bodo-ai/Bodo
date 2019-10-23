@@ -943,9 +943,21 @@ def get_node_portion(total_size, pes, rank):
     return min(total_size, (rank + 1) * chunk) - min(total_size, rank * chunk)
 
 
-def dist_cumsum(arr):  # pragma: no cover
-    """dummy to implement cumsum"""
-    return arr
+@numba.generated_jit
+def dist_cumsum(in_arr, out_arr):
+    zero = in_arr.dtype(0)
+
+    def cumsum_impl(in_arr, out_arr):  # pragma: no cover
+        c = zero
+        for v in np.nditer(in_arr):
+            c += v.item()
+        prefix_var = dist_exscan(c)
+        for i in range(in_arr.size):
+            prefix_var += in_arr[i]
+            out_arr[i] = prefix_var
+        return 0
+
+    return cumsum_impl
 
 
 def dist_cumprod(arr):  # pragma: no cover
@@ -1046,15 +1058,6 @@ class DistExscan(AbstractTemplate):
         assert not kws
         assert len(args) == 1
         return signature(args[0], *unliteral_all(args))
-
-
-@infer_global(dist_cumsum)
-@infer_global(dist_cumprod)
-class DistCumsumprod(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2
-        return signature(types.int32, *unliteral_all(args))
 
 
 @infer_global(irecv)

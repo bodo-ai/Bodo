@@ -47,27 +47,6 @@ ll.add_symbol("permutation_array_index", hdist.permutation_array_index)
 mpi_req_llvm_type = lir.IntType(8 * hdist.mpi_req_num_bytes)
 
 
-@lower_builtin(distributed_api.dist_cumsum, types.Array, types.Array)
-def lower_dist_cumsum(context, builder, sig, args):
-
-    dtype = sig.args[0].dtype
-    zero = dtype(0)
-
-    def cumsum_impl(in_arr, out_arr):  # pragma: no cover
-        c = zero
-        for v in np.nditer(in_arr):
-            c += v.item()
-        prefix_var = distributed_api.dist_exscan(c)
-        for i in range(in_arr.size):
-            prefix_var += in_arr[i]
-            out_arr[i] = prefix_var
-        return 0
-
-    res = context.compile_internal(
-        builder, cumsum_impl, sig, args, locals=dict(c=dtype, prefix_var=dtype)
-    )
-    return res
-
 
 @lower_builtin(distributed_api.dist_exscan, types.int64)
 @lower_builtin(distributed_api.dist_exscan, types.int32)
