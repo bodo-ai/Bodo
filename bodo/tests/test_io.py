@@ -246,6 +246,22 @@ def test_h5_filter(datapath):
     np.testing.assert_allclose(bodo_func(), test_impl()[start:end])
 
 
+def test_h5_slice1(datapath):
+    fname = datapath("h5_test_filter.h5")
+
+    def test_impl():
+        f = h5py.File(fname, "r")
+        X = f["test"][:, 1:, :, :]
+        f.close()
+        return X
+
+    bodo_func = bodo.jit(locals={"X:return": "distributed"})(test_impl)
+    n = 11  # len(test_impl())
+    start, end = get_start_end(n)
+    np.testing.assert_allclose(bodo_func(), test_impl()[start:end])
+
+
+
 def test_h5_read_group(datapath):
     fname = datapath("test_group_read.hdf5")
 

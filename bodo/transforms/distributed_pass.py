@@ -395,27 +395,28 @@ class DistributedPass(object):
             arr = rhs.args[5]
             ndims = self.typemap[arr.name].ndim
             nodes = []
+
+            # divide 1st dimension
             size_var = self._get_dist_var_len(arr, nodes, equiv_set)
             start_var = self._get_1D_start(size_var, avail_vars, nodes)
             count_var = self._get_1D_count(size_var, nodes)
-            starts_var = ir.Var(scope, mk_unique_var("$h5_starts"), loc)
-            self.typemap[starts_var.name] = types.UniTuple(types.int64, ndims)
-            # XXX assuming starts of other dimensions are zero
-            prev_starts = guard(get_definition, self.func_ir, rhs.args[2])
-            assert isinstance(prev_starts.value, tuple) and all(
-                a == 0 for a in prev_starts.value
-            )
-            zero_var = ir.Var(scope, mk_unique_var("$zero"), loc)
-            self.typemap[zero_var.name] = types.IntegerLiteral(0)
-            nodes.append(ir.Assign(ir.Const(0, loc), zero_var, loc))
+
+            # const value 1
             one_var = ir.Var(scope, mk_unique_var("$one"), loc)
             self.typemap[one_var.name] = types.IntegerLiteral(1)
             nodes.append(ir.Assign(ir.Const(1, loc), one_var, loc))
+
+            # new starts
+            starts_var = ir.Var(scope, mk_unique_var("$h5_starts"), loc)
+            self.typemap[starts_var.name] = types.UniTuple(types.int64, ndims)
+            prev_starts = guard(get_definition, self.func_ir, rhs.args[2])
             start_tuple_call = ir.Expr.build_tuple(
-                [start_var] + [zero_var] * (ndims - 1), loc
+                [start_var] + prev_starts.items[1:], loc
             )
             starts_assign = ir.Assign(start_tuple_call, starts_var, loc)
             rhs.args[2] = starts_var
+
+            # new counts
             counts_var = ir.Var(scope, mk_unique_var("$h5_counts"), loc)
             self.typemap[counts_var.name] = types.UniTuple(types.int64, ndims)
             prev_counts = guard(get_definition, self.func_ir, rhs.args[3])
@@ -423,6 +424,7 @@ class DistributedPass(object):
                 [count_var] + prev_counts.items[1:], loc
             )
             counts_assign = ir.Assign(count_tuple_call, counts_var, loc)
+
             nodes += [starts_assign, counts_assign, assign]
             rhs.args[3] = counts_var
             rhs.args[4] = one_var

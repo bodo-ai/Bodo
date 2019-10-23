@@ -316,6 +316,11 @@ class H5ReadType(AbstractTemplate):
         ndim = args[1].literal_value
         dtype = getattr(types, args[2].literal_value)
         ret_typ = types.Array(dtype, ndim, "C")
+        index = args[3]
+        # the output type may not be the same as the whole dataset due to slice
+        # selection, e.g. A[:,2,:]
+        ret_typ = self.context.resolve_function_type(
+            operator.getitem, [ret_typ, index], {}).return_type.copy(layout="C")
         return signature(ret_typ, *args)
 
 
