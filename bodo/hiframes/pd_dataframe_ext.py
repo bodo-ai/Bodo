@@ -197,7 +197,7 @@ class DataFrameAttribute(AttributeTemplate):
             or not isinstance(axis, types.IntegerLiteral)
             or axis.literal_value != 1
         ):
-            raise ValueError("pd.DataFrame(): copy argument should be constant")
+            raise ValueError("only apply() with axis=1 supported")
 
         # using NamedTuple instead of Series, TODO: pass Series
         Row = namedtuple("R", df.columns)
