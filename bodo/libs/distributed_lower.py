@@ -24,7 +24,7 @@ import llvmlite.binding as ll
 ll.add_symbol("hpat_dist_get_time", hdist.hpat_dist_get_time)
 ll.add_symbol("hpat_get_time", hdist.hpat_get_time)
 ll.add_symbol("dist_reduce", hdist.dist_reduce)
-ll.add_symbol("hpat_dist_arr_reduce", hdist.hpat_dist_arr_reduce)
+ll.add_symbol("dist_arr_reduce", hdist.dist_arr_reduce)
 ll.add_symbol("hpat_dist_exscan_i4", hdist.hpat_dist_exscan_i4)
 ll.add_symbol("hpat_dist_exscan_i8", hdist.hpat_dist_exscan_i8)
 ll.add_symbol("hpat_dist_exscan_f4", hdist.hpat_dist_exscan_f4)
@@ -45,106 +45,6 @@ ll.add_symbol("permutation_array_index", hdist.permutation_array_index)
 
 # get size dynamically from C code
 mpi_req_llvm_type = lir.IntType(8 * hdist.mpi_req_num_bytes)
-
-
-@lower_builtin(distributed_api.dist_reduce, types.int8, types.int32)
-@lower_builtin(distributed_api.dist_reduce, types.uint8, types.int32)
-@lower_builtin(distributed_api.dist_reduce, types.int64, types.int32)
-@lower_builtin(distributed_api.dist_reduce, types.int32, types.int32)
-@lower_builtin(distributed_api.dist_reduce, types.float32, types.int32)
-@lower_builtin(distributed_api.dist_reduce, types.float64, types.int32)
-@lower_builtin(distributed_api.dist_reduce, IndexValueType, types.int32)
-@lower_builtin(distributed_api.dist_reduce, types.uint64, types.int32)
-@lower_builtin(distributed_api.dist_reduce, types.bool_, types.int32)
-def lower_dist_reduce(context, builder, sig, args):
-    val_typ = args[0].type
-    op_typ = args[1].type
-
-    target_typ = sig.args[0]
-    if isinstance(target_typ, IndexValueType):
-        target_typ = target_typ.val_typ
-        supported_typs = [types.int32, types.float32, types.float64]
-        import sys
-
-        if not sys.platform.startswith("win"):
-            # long is 4 byte on Windows
-            supported_typs.append(types.int64)
-            supported_typs.append(types.NPDatetime("ns"))
-        if target_typ not in supported_typs:  # pragma: no cover
-            raise TypeError(
-                "argmin/argmax not supported for type {}".format(target_typ)
-            )
-
-    in_ptr = cgutils.alloca_once(builder, val_typ)
-    out_ptr = cgutils.alloca_once(builder, val_typ)
-    builder.store(args[0], in_ptr)
-    # cast to char *
-    in_ptr = builder.bitcast(in_ptr, lir.IntType(8).as_pointer())
-    out_ptr = builder.bitcast(out_ptr, lir.IntType(8).as_pointer())
-
-    typ_enum = _numba_to_c_type_map[target_typ]
-    typ_arg = cgutils.alloca_once_value(
-        builder, lir.Constant(lir.IntType(32), typ_enum)
-    )
-
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(8).as_pointer(),
-            lir.IntType(8).as_pointer(),
-            op_typ,
-            lir.IntType(32),
-        ],
-    )
-    fn = builder.module.get_or_insert_function(fnty, name="dist_reduce")
-    builder.call(fn, [in_ptr, out_ptr, args[1], builder.load(typ_arg)])
-    # cast back to value type
-    out_ptr = builder.bitcast(out_ptr, val_typ.as_pointer())
-    return builder.load(out_ptr)
-
-
-@lower_builtin(distributed_api.dist_reduce, types.npytypes.Array, types.int32)
-def lower_dist_arr_reduce(context, builder, sig, args):
-
-    op_typ = args[1].type
-
-    # store an int to specify data type
-    typ_enum = _numba_to_c_type_map[sig.args[0].dtype]
-    typ_arg = cgutils.alloca_once_value(
-        builder, lir.Constant(lir.IntType(32), typ_enum)
-    )
-    ndims = sig.args[0].ndim
-
-    out = make_array(sig.args[0])(context, builder, args[0])
-    # store size vars array struct to pointer
-    size_ptr = cgutils.alloca_once(builder, out.shape.type)
-    builder.store(out.shape, size_ptr)
-    size_arg = builder.bitcast(size_ptr, lir.IntType(64).as_pointer())
-
-    ndim_arg = cgutils.alloca_once_value(
-        builder, lir.Constant(lir.IntType(32), sig.args[0].ndim)
-    )
-    call_args = [
-        builder.bitcast(out.data, lir.IntType(8).as_pointer()),
-        size_arg,
-        builder.load(ndim_arg),
-        args[1],
-        builder.load(typ_arg),
-    ]
-
-    # array, shape, ndim, extra last arg type for type enum
-    arg_typs = [
-        lir.IntType(8).as_pointer(),
-        lir.IntType(64).as_pointer(),
-        lir.IntType(32),
-        op_typ,
-        lir.IntType(32),
-    ]
-    fnty = lir.FunctionType(lir.IntType(32), arg_typs)
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_arr_reduce")
-    builder.call(fn, call_args)
-    res = out._getvalue()
-    return impl_ret_borrowed(context, builder, sig.return_type, res)
 
 
 @lower_builtin(time.time)

@@ -53,8 +53,7 @@ static int64_t hpat_dist_exscan_i8(int64_t value) __UNUSED__;
 static float hpat_dist_exscan_f4(float value) __UNUSED__;
 static double hpat_dist_exscan_f8(double value) __UNUSED__;
 
-static int hpat_dist_arr_reduce(void* out, int64_t* shapes, int ndims,
-                                int op_enum, int type_enum) __UNUSED__;
+static void dist_arr_reduce(void* out, int64_t total_size, int op_enum, int type_enum) __UNUSED__;
 static MPI_Request hpat_dist_irecv(void* out, int size, int type_enum, int pe,
                                    int tag, bool cond) __UNUSED__;
 static MPI_Request hpat_dist_isend(void* out, int size, int type_enum, int pe,
@@ -228,16 +227,7 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
     return;
 }
 
-static int hpat_dist_arr_reduce(void* out, int64_t* shapes, int ndims,
-                                int op_enum, int type_enum) {
-    int i;
-    // printf("ndims:%d shape: ", ndims);
-    // for(i=0; i<ndims; i++)
-    //     printf("%d ", shapes[i]);
-    // printf("\n");
-    // fflush(stdout);
-    int total_size = (int)shapes[0];
-    for (i = 1; i < ndims; i++) total_size *= (int)shapes[i];
+static void dist_arr_reduce(void* out, int64_t total_size, int op_enum, int type_enum) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     MPI_Op mpi_op = get_MPI_op(op_enum);
     int elem_size = get_elem_size(type_enum);
@@ -245,7 +235,7 @@ static int hpat_dist_arr_reduce(void* out, int64_t* shapes, int ndims,
     MPI_Allreduce(out, res_buf, total_size, mpi_typ, mpi_op, MPI_COMM_WORLD);
     memcpy(out, res_buf, total_size * elem_size);
     free(res_buf);
-    return 0;
+    return;
 }
 
 static int hpat_dist_exscan_i4(int value) {

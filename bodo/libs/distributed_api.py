@@ -6,7 +6,7 @@ import time
 import numpy as np
 
 import numba
-from numba import types
+from numba import types, cgutils
 from numba.typing.templates import infer_global, AbstractTemplate, infer
 from numba.typing import signature
 from numba.extending import models, register_model, intrinsic, overload
@@ -34,6 +34,7 @@ from bodo.utils.utils import (
     _numba_to_c_type_map,
     unliteral_all,
 )
+from numba.typing.builtins import IndexValueType
 from llvmlite import ir as lir
 from bodo.libs import hdist
 
@@ -183,6 +184,72 @@ c_gatherv = types.ExternalFunction(
         types.bool_,
     ),
 )
+
+
+@intrinsic
+def value_to_ptr(typingctx, val_tp=None):
+    def codegen(context, builder, sig, args):
+        ptr = cgutils.alloca_once(builder, args[0].type)
+        builder.store(args[0], ptr)
+        return builder.bitcast(ptr, lir.IntType(8).as_pointer())
+
+    return types.voidptr(val_tp), codegen
+
+
+@intrinsic
+def load_val_ptr(typingctx, ptr_tp, val_tp=None):
+    def codegen(context, builder, sig, args):
+        ptr = builder.bitcast(args[0], args[1].type.as_pointer())
+        return builder.load(ptr)
+
+    return val_tp(ptr_tp, val_tp), codegen
+
+
+_dist_reduce = types.ExternalFunction(
+    "dist_reduce",
+    types.void(types.voidptr, types.voidptr, types.int32, types.int32),
+)
+
+_dist_arr_reduce = types.ExternalFunction(
+    "dist_arr_reduce",
+    types.void(types.voidptr, types.int64, types.int32, types.int32),
+)
+
+
+@numba.generated_jit
+def dist_reduce(value, reduce_op):
+    if isinstance(value, types.Array):
+        typ_enum = np.int32(_numba_to_c_type_map[value.dtype])
+        def impl_arr(value, reduce_op):
+            A = np.ascontiguousarray(value)
+            _dist_arr_reduce(A.ctypes, A.size, reduce_op, typ_enum)
+            return A
+        return impl_arr
+
+    target_typ = types.unliteral(value)
+    if isinstance(target_typ, IndexValueType):
+        target_typ = target_typ.val_typ
+        supported_typs = [types.int32, types.float32, types.float64]
+        import sys
+
+        if not sys.platform.startswith("win"):
+            # long is 4 byte on Windows
+            supported_typs.append(types.int64)
+            supported_typs.append(types.NPDatetime("ns"))
+        if target_typ not in supported_typs:  # pragma: no cover
+            raise TypeError(
+                "argmin/argmax not supported for type {}".format(target_typ)
+            )
+
+    typ_enum = np.int32(_numba_to_c_type_map[target_typ])
+
+    def impl(value, reduce_op):
+        in_ptr = value_to_ptr(value)
+        out_ptr = value_to_ptr(value)
+        _dist_reduce(in_ptr, out_ptr, reduce_op, typ_enum)
+        return load_val_ptr(out_ptr, value)
+
+    return impl
 
 
 # from GetBit() in Arrow
@@ -868,16 +935,6 @@ def get_node_portion(total_size, pes, rank):
     return min(total_size, (rank + 1) * chunk) - min(total_size, rank * chunk)
 
 
-def dist_reduce(value, op):  # pragma: no cover
-    """dummy to implement simple reductions"""
-    return value
-
-
-def dist_arr_reduce(arr):  # pragma: no cover
-    """dummy to implement array reductions"""
-    return -1
-
-
 def dist_cumsum(arr):  # pragma: no cover
     """dummy to implement cumsum"""
     return arr
@@ -979,28 +1036,12 @@ class DistRebalanceParallel(AbstractTemplate):
         return signature(args[0], *unliteral_all(args))
 
 
-@infer_global(dist_reduce)
-class DistReduce(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2  # value and reduce_op
-        return signature(args[0], *unliteral_all(args))
-
-
 @infer_global(dist_exscan)
 class DistExscan(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         assert len(args) == 1
         return signature(args[0], *unliteral_all(args))
-
-
-@infer_global(dist_arr_reduce)
-class DistArrReduce(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2  # value and reduce_op
-        return signature(types.int32, *unliteral_all(args))
 
 
 @infer_global(time.time)

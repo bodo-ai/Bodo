@@ -59,8 +59,8 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     PyObject_SetAttrString(m, "hpat_dist_exscan_f8",
                            PyLong_FromVoidPtr((void *)(&hpat_dist_exscan_f8)));
 
-    PyObject_SetAttrString(m, "hpat_dist_arr_reduce",
-                           PyLong_FromVoidPtr((void *)(&hpat_dist_arr_reduce)));
+    PyObject_SetAttrString(m, "dist_arr_reduce",
+                           PyLong_FromVoidPtr((void *)(&dist_arr_reduce)));
     PyObject_SetAttrString(m, "hpat_dist_irecv",
                            PyLong_FromVoidPtr((void *)(&hpat_dist_irecv)));
     PyObject_SetAttrString(m, "hpat_dist_isend",
