@@ -47,6 +47,7 @@ import bodo.hiframes.pd_timestamp_ext
 import bodo.hiframes.boxing
 import bodo.config
 import bodo.libs.timsort
+import bodo.errors
 
 use_pandas_join = False
 use_legacy_shuffle = False
