@@ -23,7 +23,7 @@ import llvmlite.binding as ll
 
 ll.add_symbol("hpat_dist_get_time", hdist.hpat_dist_get_time)
 ll.add_symbol("hpat_get_time", hdist.hpat_get_time)
-ll.add_symbol("hpat_dist_reduce", hdist.hpat_dist_reduce)
+ll.add_symbol("dist_reduce", hdist.dist_reduce)
 ll.add_symbol("hpat_dist_arr_reduce", hdist.hpat_dist_arr_reduce)
 ll.add_symbol("hpat_dist_exscan_i4", hdist.hpat_dist_exscan_i4)
 ll.add_symbol("hpat_dist_exscan_i8", hdist.hpat_dist_exscan_i8)
@@ -96,7 +96,7 @@ def lower_dist_reduce(context, builder, sig, args):
             lir.IntType(32),
         ],
     )
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_reduce")
+    fn = builder.module.get_or_insert_function(fnty, name="dist_reduce")
     builder.call(fn, [in_ptr, out_ptr, args[1], builder.load(typ_arg)])
     # cast back to value type
     out_ptr = builder.bitcast(out_ptr, val_typ.as_pointer())

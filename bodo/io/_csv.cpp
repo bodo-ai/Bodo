@@ -315,7 +315,7 @@ static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel
         // get total number of lines using allreduce
         size_t tot_no_lines(0);
 
-        hpat_dist_reduce(reinterpret_cast<char *>(&no_lines), reinterpret_cast<char *>(&tot_no_lines), HPAT_ReduceOps::SUM, Bodo_CTypes::UINT64);
+        dist_reduce(reinterpret_cast<char *>(&no_lines), reinterpret_cast<char *>(&tot_no_lines), HPAT_ReduceOps::SUM, Bodo_CTypes::UINT64);
 
         // Now we need to communicate the distribution as we really want it
         // First determine which is our first line (which is the sum of previous lines)

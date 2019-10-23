@@ -45,7 +45,7 @@ static MPI_Datatype get_MPI_typ(int typ_enum) __UNUSED__;
 static MPI_Datatype get_val_rank_MPI_typ(int typ_enum) __UNUSED__;
 static MPI_Op get_MPI_op(int op_enum) __UNUSED__;
 static int get_elem_size(int type_enum) __UNUSED__;
-static void hpat_dist_reduce(char* in_ptr, char* out_ptr, int op,
+static void dist_reduce(char* in_ptr, char* out_ptr, int op,
                              int type_enum) __UNUSED__;
 
 static int hpat_dist_exscan_i4(int value) __UNUSED__;
@@ -173,7 +173,7 @@ static int hpat_barrier() {
     return 0;
 }
 
-static void hpat_dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
+static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
                              int type_enum) {
     // printf("reduce value: %d\n", value);
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
