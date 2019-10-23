@@ -73,7 +73,6 @@ _get_rank = types.ExternalFunction("c_get_rank", types.int32())
 _get_size = types.ExternalFunction("c_get_size", types.int32())
 _barrier = types.ExternalFunction("c_barrier", types.int32())
 
-
 @numba.njit
 def get_rank():
     """wrapper for getting process rank (MPI rank currently)"""
@@ -90,6 +89,15 @@ def get_size():
 def barrier():
     """wrapper for barrier (MPI barrier currently)"""
     return _barrier()
+
+
+_get_time = types.ExternalFunction("get_time", types.float64())
+dist_time = types.ExternalFunction("dist_get_time", types.float64())
+
+
+@overload(time.time)
+def overload_time_time():
+    return lambda: _get_time()
 
 
 @numba.generated_jit(nopython=True)
@@ -958,10 +966,6 @@ def allgather(arr, val):  # pragma: no cover
     arr[0] = val
 
 
-def dist_time():  # pragma: no cover
-    return time.time()
-
-
 def dist_return(A):  # pragma: no cover
     return A
 
@@ -1042,22 +1046,6 @@ class DistExscan(AbstractTemplate):
         assert not kws
         assert len(args) == 1
         return signature(args[0], *unliteral_all(args))
-
-
-@infer_global(time.time)
-class DistTime(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 0
-        return signature(types.float64, *unliteral_all(args))
-
-
-@infer_global(dist_time)
-class DistDistTime(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 0
-        return signature(types.float64, *unliteral_all(args))
 
 
 @infer_global(dist_cumsum)

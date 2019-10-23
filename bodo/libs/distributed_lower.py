@@ -47,20 +47,6 @@ ll.add_symbol("permutation_array_index", hdist.permutation_array_index)
 mpi_req_llvm_type = lir.IntType(8 * hdist.mpi_req_num_bytes)
 
 
-@lower_builtin(time.time)
-def dist_get_time(context, builder, sig, args):
-    fnty = lir.FunctionType(lir.DoubleType(), [])
-    fn = builder.module.get_or_insert_function(fnty, name="get_time")
-    return builder.call(fn, [])
-
-
-@lower_builtin(distributed_api.dist_time)
-def dist_get_dist_time(context, builder, sig, args):
-    fnty = lir.FunctionType(lir.DoubleType(), [])
-    fn = builder.module.get_or_insert_function(fnty, name="dist_get_time")
-    return builder.call(fn, [])
-
-
 @lower_builtin(distributed_api.dist_cumsum, types.Array, types.Array)
 def lower_dist_cumsum(context, builder, sig, args):
 
