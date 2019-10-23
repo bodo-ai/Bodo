@@ -20,7 +20,12 @@ from numba.extending import (
     overload,
     overload_method,
 )
-from bodo.libs.str_ext import string_type, string_to_char_ptr, std_str_type, std_str_to_unicode
+from bodo.libs.str_ext import (
+    string_type,
+    string_to_char_ptr,
+    std_str_type,
+    std_str_to_unicode,
+)
 import bodo
 from bodo.utils.utils import unliteral_all, _numba_to_c_type_map
 from bodo.utils.typing import parse_dtype, is_overload_none
@@ -28,14 +33,13 @@ import bodo.io
 
 if bodo.config._has_h5py:
     import h5py
+
     assert h5py.version.hdf5_version_tuple[1] == 10, "only hdf5 1.10 supported"
     from bodo.io import _hdf5
     import llvmlite.binding as ll
 
     ll.add_symbol("h5_open", _hdf5.h5_open)
-    ll.add_symbol(
-        "h5_open_dset_or_group_obj", _hdf5.h5_open_dset_or_group_obj
-    )
+    ll.add_symbol("h5_open_dset_or_group_obj", _hdf5.h5_open_dset_or_group_obj)
     ll.add_symbol("h5_read", _hdf5.h5_read)
     ll.add_symbol("h5_create_group", _hdf5.h5_create_group)
     ll.add_symbol("h5_write", _hdf5.h5_write)
@@ -108,14 +112,15 @@ string_list_type = types.List(string_type)
 #################################################
 
 
-
 @intrinsic
 def unify_h5_id(typingctx, tp=None):
     """converts h5 id objects (which all have the same hid_t representation) to a single
     type to enable reuse of external functions.
     """
+
     def codegen(context, builder, sig, args):
         return args[0]
+
     return h5file_type(tp), codegen
 
 
@@ -124,8 +129,10 @@ def cast_to_h5_dset(typingctx, tp=None):
     """converts h5dataset_or_group_type to h5dataset_type
     """
     assert tp in (h5dataset_type, h5dataset_or_group_type)
+
     def codegen(context, builder, sig, args):
         return args[0]
+
     return h5dataset_type(tp), codegen
 
 
@@ -173,6 +180,7 @@ h5_close = types.ExternalFunction("h5_close", types.int32(h5file_type))
 def overload_h5_file(f):
     def impl(f):
         h5_close(f)
+
     return impl
 
 
@@ -186,11 +194,14 @@ def overload_h5_file_keys(obj_id):
             obj_name = h5g_get_objname_by_idx(obj_id, i)
             obj_name_list.append(obj_name)
         return obj_name_list
+
     return h5f_keys_impl
 
 
-h5_create_dset = types.ExternalFunction("h5_create_dset", h5dataset_type(h5file_type,
-    types.voidptr, types.int32, types.voidptr, types.int32))
+h5_create_dset = types.ExternalFunction(
+    "h5_create_dset",
+    h5dataset_type(h5file_type, types.voidptr, types.int32, types.voidptr, types.int32),
+)
 
 
 @overload_method(H5FileType, "create_dataset")
@@ -205,12 +216,15 @@ def overload_h5_file_create_dataset(obj_id, name, shape=None, dtype=None, data=N
     def impl(obj_id, name, shape=None, dtype=None, data=None):
         counts = np.asarray(shape)
         return h5_create_dset(
-            unify_h5_id(obj_id), string_to_char_ptr(name), ndim, counts.ctypes, typ_enum)
+            unify_h5_id(obj_id), string_to_char_ptr(name), ndim, counts.ctypes, typ_enum
+        )
+
     return impl
 
 
-h5_create_group = types.ExternalFunction("h5_create_group", h5group_type(h5file_type,
-    types.voidptr))
+h5_create_group = types.ExternalFunction(
+    "h5_create_group", h5group_type(h5file_type, types.voidptr)
+)
 
 
 @overload_method(H5FileType, "create_group")
@@ -220,18 +234,22 @@ def overload_h5_file_create_group(obj_id, name, track_order=None):
 
     def impl(obj_id, name, track_order=None):
         return h5_create_group(unify_h5_id(obj_id), string_to_char_ptr(name))
+
     return impl
 
 
-h5_open_dset_or_group_obj = types.ExternalFunction("h5_open_dset_or_group_obj",
-    h5dataset_or_group_type(h5file_type, types.voidptr))
+h5_open_dset_or_group_obj = types.ExternalFunction(
+    "h5_open_dset_or_group_obj", h5dataset_or_group_type(h5file_type, types.voidptr)
+)
 
 
 @overload(operator.getitem)
 def overload_getitem_file(in_f, in_idx):
     if in_f in (h5file_type, h5dataset_or_group_type) and in_idx == string_type:
+
         def impl(in_f, in_idx):
             return h5_open_dset_or_group_obj(unify_h5_id(in_f), in_idx._data)
+
         return impl
 
 
@@ -243,7 +261,6 @@ class SetItemH5Dset(AbstractTemplate):
             return signature(types.none, *args)
 
 
-
 h5g_close = types.ExternalFunction("h5g_close", types.none(h5group_type))
 _h5g_get_num_objs = types.ExternalFunction("h5g_get_num_objs", types.int64(h5file_type))
 
@@ -253,8 +270,9 @@ def h5g_get_num_objs(obj_id):
     return _h5g_get_num_objs(unify_h5_id(obj_id))
 
 
-_h5g_get_objname_by_idx = types.ExternalFunction("h5g_get_objname_by_idx",
-    std_str_type(h5file_type, types.int64))
+_h5g_get_objname_by_idx = types.ExternalFunction(
+    "h5g_get_objname_by_idx", std_str_type(h5file_type, types.int64)
+)
 
 
 @numba.njit
@@ -262,10 +280,18 @@ def h5g_get_objname_by_idx(obj_id, ind):
     return std_str_to_unicode(_h5g_get_objname_by_idx(unify_h5_id(obj_id), ind))
 
 
-
-_h5_read = types.ExternalFunction("h5_read",
-    types.int32(h5dataset_type, types.int32, types.voidptr, types.voidptr,
-    types.int64, types.voidptr, types.int32))
+_h5_read = types.ExternalFunction(
+    "h5_read",
+    types.int32(
+        h5dataset_type,
+        types.int32,
+        types.voidptr,
+        types.voidptr,
+        types.int64,
+        types.voidptr,
+        types.int32,
+    ),
+)
 
 
 @numba.njit
@@ -284,9 +310,18 @@ def h5read(dset_id, ndim, starts, counts, is_parallel, out_arr):
     )
 
 
-_h5_write = types.ExternalFunction("h5_write",
-    types.int32(h5dataset_type, types.int32, types.voidptr, types.voidptr,
-    types.int64, types.voidptr, types.int32))
+_h5_write = types.ExternalFunction(
+    "h5_write",
+    types.int32(
+        h5dataset_type,
+        types.int32,
+        types.voidptr,
+        types.voidptr,
+        types.int64,
+        types.voidptr,
+        types.int32,
+    ),
+)
 
 
 @numba.njit
@@ -320,13 +355,12 @@ class H5ReadType(AbstractTemplate):
         # the output type may not be the same as the whole dataset due to slice
         # selection, e.g. A[:,2,:]
         ret_typ = self.context.resolve_function_type(
-            operator.getitem, [ret_typ, index], {}).return_type.copy(layout="C")
+            operator.getitem, [ret_typ, index], {}
+        ).return_type.copy(layout="C")
         return signature(ret_typ, *args)
 
 
-_h5size = types.ExternalFunction(
-    "h5_size", types.int64(h5dataset_type, types.int32)
-)
+_h5size = types.ExternalFunction("h5_size", types.int64(h5dataset_type, types.int32))
 
 
 @numba.njit

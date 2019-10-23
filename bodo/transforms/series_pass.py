@@ -820,7 +820,9 @@ class SeriesPass(object):
             index_var = rhs.args[3]
             index_tp = self.typemap[index_var.name]
             # index is either a single value (e.g. slice) or a tuple (e.g. slices)
-            index_types = index_tp.types if isinstance(index_tp, types.BaseTuple) else [index_tp]
+            index_types = (
+                index_tp.types if isinstance(index_tp, types.BaseTuple) else [index_tp]
+            )
             filter_read = False
 
             # check index types
@@ -828,9 +830,11 @@ class SeriesPass(object):
                 if i == 0 and t == types.Array(types.bool_, 1, "C"):
                     filter_read = True
                 else:
-                    assert ((isinstance(t, types.SliceType) and t.has_step == False)
-                        or isinstance(t, types.Integer)), \
-                        "only simple slice without step supported for reading hdf5"
+                    assert (
+                        isinstance(t, types.SliceType) and t.has_step == False
+                    ) or isinstance(
+                        t, types.Integer
+                    ), "only simple slice without step supported for reading hdf5"
 
             func_text = "def _h5_read_impl(dset_id, ndim, dtype_str, index):\n"
 
@@ -840,30 +844,49 @@ class SeriesPass(object):
                     # TODO: check index format for this case
                     assert isinstance(self.typemap[index_var.name], types.BaseTuple)
                     func_text += "  read_indices = bodo.io.h5_api.get_filter_read_indices(index{})\n".format(
-                        "[0]" if isinstance(index_tp, types.BaseTuple) else "")
+                        "[0]" if isinstance(index_tp, types.BaseTuple) else ""
+                    )
                     func_text += "  start_0 = 0\n"
                     func_text += "  size_0 = len(read_indices)\n"
                 else:
                     func_text += "  start_{0} = 0\n".format(i)
                     func_text += "  size_{0} = bodo.io.h5_api.h5size(dset_id, np.int32({0}))\n".format(
-                        i)
+                        i
+                    )
                     if i < len(index_types):
                         if isinstance(index_types[i], types.SliceType):
                             func_text += "  slice_idx_{0} = numba.unicode._normalize_slice(index{1}, size_{0})\n".format(
-                                i, "[{}]".format(i) if isinstance(index_tp, types.BaseTuple) else "")
+                                i,
+                                "[{}]".format(i)
+                                if isinstance(index_tp, types.BaseTuple)
+                                else "",
+                            )
                             func_text += "  start_{0} = slice_idx_{0}.start\n".format(i)
-                            func_text += "  size_{0} = numba.unicode._slice_span(slice_idx_{0})\n".format(i)
+                            func_text += "  size_{0} = numba.unicode._slice_span(slice_idx_{0})\n".format(
+                                i
+                            )
                         else:
                             assert isinstance(index_types[i], types.Integer)
                             func_text += "  start_{0} = index{1}\n".format(
-                                i, "[{}]".format(i) if isinstance(index_tp, types.BaseTuple) else "")
+                                i,
+                                "[{}]".format(i)
+                                if isinstance(index_tp, types.BaseTuple)
+                                else "",
+                            )
                             func_text += "  size_{0} = 1\n".format(i)
-
 
             # array dimensions can be less than dataset due to integer selection
             func_text += "  arr_shape = ({},)\n".format(
-                ", ".join(["size_{}".format(i) for i in range(ndim)
-                if not (i < len(index_types) and isinstance(index_types[i], types.Integer))])
+                ", ".join(
+                    [
+                        "size_{}".format(i)
+                        for i in range(ndim)
+                        if not (
+                            i < len(index_types)
+                            and isinstance(index_types[i], types.Integer)
+                        )
+                    ]
+                )
             )
             func_text += "  A = np.empty(arr_shape, np.{})\n".format(dtype_str)
 
