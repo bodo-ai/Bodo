@@ -119,8 +119,18 @@ def unify_h5_id(typingctx, tp=None):
     return h5file_type(tp), codegen
 
 
+@intrinsic
+def cast_to_h5_dset(typingctx, tp=None):
+    """converts h5dataset_or_group_type to h5dataset_type
+    """
+    assert tp in (h5dataset_type, h5dataset_or_group_type)
+    def codegen(context, builder, sig, args):
+        return args[0]
+    return h5dataset_type(tp), codegen
+
 
 h5_open = types.ExternalFunction("h5_open", h5file_type(types.voidptr, types.voidptr))
+
 
 if bodo.config._has_h5py:
 
@@ -254,7 +264,7 @@ def h5g_get_objname_by_idx(obj_id, ind):
 
 
 _h5_read = types.ExternalFunction("h5_read",
-    types.int32(h5dataset_or_group_type, types.int32, types.voidptr, types.voidptr,
+    types.int32(h5dataset_type, types.int32, types.voidptr, types.voidptr,
     types.int64, types.voidptr, types.int32))
 
 
@@ -264,7 +274,7 @@ def h5read(dset_id, ndim, starts, counts, is_parallel, out_arr):
     counts_ptr = tuple_to_ptr(counts)
     type_enum = bodo.libs.distributed_api.get_type_enum(out_arr)
     return _h5_read(
-        dset_id,
+        cast_to_h5_dset(dset_id),
         ndim,
         starts_ptr,
         counts_ptr,
@@ -274,14 +284,18 @@ def h5read(dset_id, ndim, starts, counts, is_parallel, out_arr):
     )
 
 
+_h5_write = types.ExternalFunction("h5_write",
+    types.int32(h5dataset_type, types.int32, types.voidptr, types.voidptr,
+    types.int64, types.voidptr, types.int32))
+
 
 @numba.njit
 def h5write(dset_id, ndim, starts, counts, is_parallel, out_arr):
     starts_ptr = tuple_to_ptr(starts)
     counts_ptr = tuple_to_ptr(counts)
     type_enum = bodo.libs.distributed_api.get_type_enum(out_arr)
-    return _h5_read(
-        dset_id,
+    return _h5_write(
+        cast_to_h5_dset(dset_id),
         ndim,
         starts_ptr,
         counts_ptr,
@@ -305,9 +319,14 @@ class H5ReadType(AbstractTemplate):
         return signature(ret_typ, *args)
 
 
-h5size = types.ExternalFunction(
-    "h5_size", types.int64(h5dataset_or_group_type, types.int32)
+_h5size = types.ExternalFunction(
+    "h5_size", types.int64(h5dataset_type, types.int32)
 )
+
+
+@numba.njit
+def h5size(obj_id, dim_ind):
+    return _h5size(cast_to_h5_dset(obj_id), dim_ind)
 
 
 sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
@@ -358,7 +377,7 @@ def tuple_to_ptr(typingctx, tuple_tp=None):
 _h5read_filter = types.ExternalFunction(
     "h5_read_filter",
     types.int32(
-        h5dataset_or_group_type,
+        h5dataset_type,
         types.int32,
         types.voidptr,
         types.voidptr,
@@ -377,7 +396,7 @@ def h5read_filter(dset_id, ndim, starts, counts, is_parallel, out_arr, read_indi
     counts_ptr = tuple_to_ptr(counts)
     type_enum = bodo.libs.distributed_api.get_type_enum(out_arr)
     return _h5read_filter(
-        dset_id,
+        cast_to_h5_dset(dset_id),
         ndim,
         starts_ptr,
         counts_ptr,
