@@ -1003,7 +1003,7 @@ def merge_overload(
     how = get_overload_const_str(how)
     
     if(how not in ["left", "right", "outer", "inner"]):
-        raise BodoError("merge(): invalid key for how")
+        raise BodoError("merge(): invalid key '{}' for how".format(how))
 
     comm_cols = tuple(set(left.columns) & set(right.columns))
 
@@ -1025,13 +1025,15 @@ def merge_overload(
         else:
             left_keys = get_const_str_list(left_on)
             if(len(set(left_keys).difference(set(left.columns)))>0):
-                raise BodoError("merge(): invalid key for on/left_on")
+                raise BodoError("merge(): invalid key {} for on/left_on".
+                    format(set(left_keys).difference(set(left.columns))))
         if is_overload_true(right_index):
             right_keys = ["$_bodo_index_"]
         else:
             right_keys = get_const_str_list(right_on)
             if(len(set(right_keys).difference(set(right.columns)))>0):
-                raise BodoError("merge(): invalid key for on/right_on")
+                raise BodoError("merge(): invalid key {} for on/right_on".
+                    format(set(right_keys).difference(set(right.columns))))
 
     left_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
         ", ".join("'{}'".format(c) for c in left_keys)
