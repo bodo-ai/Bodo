@@ -32,15 +32,15 @@ struct HPAT_ReduceOps {
 
 static int dist_get_rank() __UNUSED__;
 static int dist_get_size() __UNUSED__;
-static int64_t hpat_dist_get_start(int64_t total, int num_pes,
+static int64_t dist_get_start(int64_t total, int num_pes,
                                    int node_id) __UNUSED__;
-static int64_t hpat_dist_get_end(int64_t total, int num_pes,
+static int64_t dist_get_end(int64_t total, int num_pes,
                                  int node_id) __UNUSED__;
-static int64_t hpat_dist_get_node_portion(int64_t total, int num_pes,
+static int64_t dist_get_node_portion(int64_t total, int num_pes,
                                           int node_id) __UNUSED__;
-static double hpat_dist_get_time() __UNUSED__;
-static double hpat_get_time() __UNUSED__;
-static int hpat_barrier() __UNUSED__;
+static double dist_get_time() __UNUSED__;
+static double get_time() __UNUSED__;
+static int barrier() __UNUSED__;
 static MPI_Datatype get_MPI_typ(int typ_enum) __UNUSED__;
 static MPI_Datatype get_val_rank_MPI_typ(int typ_enum) __UNUSED__;
 static MPI_Op get_MPI_op(int op_enum) __UNUSED__;
@@ -129,24 +129,24 @@ static int dist_get_size() {
     return size;
 }
 
-static int64_t hpat_dist_get_start(int64_t total, int num_pes, int node_id) {
+static int64_t dist_get_start(int64_t total, int num_pes, int node_id) {
     int64_t div_chunk = (int64_t)ceil(total / ((double)num_pes));
     int64_t start = std::min(total, node_id * div_chunk);
     // printf("rank %d start:%lld\n", node_id, start);
     return start;
 }
 
-static int64_t hpat_dist_get_end(int64_t total, int num_pes, int node_id) {
+static int64_t dist_get_end(int64_t total, int num_pes, int node_id) {
     int64_t div_chunk = (int64_t)ceil(total / ((double)num_pes));
     int64_t end = std::min(total, (node_id + 1) * div_chunk);
     // printf("rank %d end:%lld\n", node_id, end);
     return end;
 }
 
-static int64_t hpat_dist_get_node_portion(int64_t total, int num_pes,
+static int64_t dist_get_node_portion(int64_t total, int num_pes,
                                           int node_id) {
-    return hpat_dist_get_end(total, num_pes, node_id) -
-           hpat_dist_get_start(total, num_pes, node_id);
+    return dist_get_end(total, num_pes, node_id) -
+           dist_get_start(total, num_pes, node_id);
 }
 
 static int64_t index_rank(int64_t total, int num_pes, int index) {
@@ -154,20 +154,20 @@ static int64_t index_rank(int64_t total, int num_pes, int index) {
     return index / div_chunk;
 }
 
-static double hpat_dist_get_time() {
+static double dist_get_time() {
     double wtime;
     MPI_Barrier(MPI_COMM_WORLD);
     wtime = MPI_Wtime();
     return wtime;
 }
 
-static double hpat_get_time() {
+static double get_time() {
     double wtime;
     wtime = MPI_Wtime();
     return wtime;
 }
 
-static int hpat_barrier() {
+static int barrier() {
     MPI_Barrier(MPI_COMM_WORLD);
     return 0;
 }
@@ -522,8 +522,8 @@ static void permutation_int(int64_t* output, int n) {
 // [0, 2, 0, 1].
 static std::vector<int64_t> find_dest_ranks(int64_t rank, int64_t num_ranks,
                                             int64_t* p, int64_t p_len) {
-    auto chunk_size = hpat_dist_get_node_portion(p_len, num_ranks, rank);
-    auto begin = hpat_dist_get_start(p_len, num_ranks, rank);
+    auto chunk_size = dist_get_node_portion(p_len, num_ranks, rank);
+    auto begin = dist_get_start(p_len, num_ranks, rank);
     std::vector<int64_t> dest_ranks(chunk_size);
 
     for (auto i = 0; i < p_len; ++i)
@@ -549,8 +549,8 @@ static std::vector<int> find_disps(const std::vector<int>& counts) {
 static std::vector<int> find_recv_counts(int64_t rank, int64_t num_ranks,
                                          int64_t* p, int64_t p_len,
                                          int64_t elem_size) {
-    auto begin = hpat_dist_get_start(p_len, num_ranks, rank);
-    auto end = hpat_dist_get_end(p_len, num_ranks, rank);
+    auto begin = dist_get_start(p_len, num_ranks, rank);
+    auto end = dist_get_end(p_len, num_ranks, rank);
     std::vector<int> recv_counts(num_ranks);
     for (auto i = begin; i < end; ++i)
         ++recv_counts[index_rank(p_len, num_ranks, p[i])];
@@ -641,7 +641,7 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
     // corresponds to the sorted chunk of our permutation, which is [2 5 6 7].
     // In order to recover the positions of [c f g h] in the target permutation
     // we first argsort our chunk of permutation array:
-    auto begin = p + hpat_dist_get_start(p_len, num_ranks, rank);
+    auto begin = p + dist_get_start(p_len, num_ranks, rank);
     auto p1 = arg_sort(begin, dest_ranks.size());
 
     // The result of the argsort, stored in p1, is [0 2 3 1].  This tells us how
@@ -670,14 +670,14 @@ static void oneD_reshape_shuffle(char* output, char* input,
     // get my old and new data interval and convert to byte offsets
     int64_t my_old_start =
         in_lower_dims_size *
-        hpat_dist_get_start(old_0dim_global_len, num_pes, rank);
+        dist_get_start(old_0dim_global_len, num_pes, rank);
     int64_t my_new_start =
         out_lower_dims_size *
-        hpat_dist_get_start(new_0dim_global_len, num_pes, rank);
+        dist_get_start(new_0dim_global_len, num_pes, rank);
     int64_t my_old_end = in_lower_dims_size *
-                         hpat_dist_get_end(old_0dim_global_len, num_pes, rank);
+                         dist_get_end(old_0dim_global_len, num_pes, rank);
     int64_t my_new_end = out_lower_dims_size *
-                         hpat_dist_get_end(new_0dim_global_len, num_pes, rank);
+                         dist_get_end(new_0dim_global_len, num_pes, rank);
 
     int64_t* send_counts = new int64_t[num_pes];
     int64_t* recv_counts = new int64_t[num_pes];
@@ -694,14 +694,14 @@ static void oneD_reshape_shuffle(char* output, char* input,
         // get pe's old and new data interval and convert to byte offsets
         int64_t pe_old_start =
             in_lower_dims_size *
-            hpat_dist_get_start(old_0dim_global_len, num_pes, i);
+            dist_get_start(old_0dim_global_len, num_pes, i);
         int64_t pe_new_start =
             out_lower_dims_size *
-            hpat_dist_get_start(new_0dim_global_len, num_pes, i);
+            dist_get_start(new_0dim_global_len, num_pes, i);
         int64_t pe_old_end = in_lower_dims_size *
-                             hpat_dist_get_end(old_0dim_global_len, num_pes, i);
+                             dist_get_end(old_0dim_global_len, num_pes, i);
         int64_t pe_new_end = out_lower_dims_size *
-                             hpat_dist_get_end(new_0dim_global_len, num_pes, i);
+                             dist_get_end(new_0dim_global_len, num_pes, i);
 
         send_counts[i] = 0;
         recv_counts[i] = 0;

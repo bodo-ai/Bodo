@@ -33,19 +33,19 @@ PyMODINIT_FUNC PyInit_hdist(void) {
                            PyLong_FromVoidPtr((void *)(&dist_get_rank)));
     PyObject_SetAttrString(m, "dist_get_size",
                            PyLong_FromVoidPtr((void *)(&dist_get_size)));
-    PyObject_SetAttrString(m, "hpat_dist_get_start",
-                           PyLong_FromVoidPtr((void *)(&hpat_dist_get_start)));
-    PyObject_SetAttrString(m, "hpat_dist_get_end",
-                           PyLong_FromVoidPtr((void *)(&hpat_dist_get_end)));
+    PyObject_SetAttrString(m, "dist_get_start",
+                           PyLong_FromVoidPtr((void *)(&dist_get_start)));
+    PyObject_SetAttrString(m, "dist_get_end",
+                           PyLong_FromVoidPtr((void *)(&dist_get_end)));
     PyObject_SetAttrString(
-        m, "hpat_dist_get_node_portion",
-        PyLong_FromVoidPtr((void *)(&hpat_dist_get_node_portion)));
-    PyObject_SetAttrString(m, "hpat_dist_get_time",
-                           PyLong_FromVoidPtr((void *)(&hpat_dist_get_time)));
-    PyObject_SetAttrString(m, "hpat_get_time",
-                           PyLong_FromVoidPtr((void *)(&hpat_get_time)));
-    PyObject_SetAttrString(m, "hpat_barrier",
-                           PyLong_FromVoidPtr((void *)(&hpat_barrier)));
+        m, "dist_get_node_portion",
+        PyLong_FromVoidPtr((void *)(&dist_get_node_portion)));
+    PyObject_SetAttrString(m, "dist_get_time",
+                           PyLong_FromVoidPtr((void *)(&dist_get_time)));
+    PyObject_SetAttrString(m, "get_time",
+                           PyLong_FromVoidPtr((void *)(&get_time)));
+    PyObject_SetAttrString(m, "barrier",
+                           PyLong_FromVoidPtr((void *)(&barrier)));
 
     PyObject_SetAttrString(m, "dist_reduce",
                            PyLong_FromVoidPtr((void *)(&dist_reduce)));

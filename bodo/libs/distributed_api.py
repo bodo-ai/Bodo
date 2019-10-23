@@ -42,7 +42,7 @@ import llvmlite.binding as ll
 
 ll.add_symbol("c_get_rank", hdist.dist_get_rank)
 ll.add_symbol("c_get_size", hdist.dist_get_size)
-ll.add_symbol("c_barrier", hdist.hpat_barrier)
+ll.add_symbol("c_barrier", hdist.barrier)
 ll.add_symbol("c_alltoall", hdist.c_alltoall)
 ll.add_symbol("c_gather_scalar", hdist.c_gather_scalar)
 ll.add_symbol("c_gatherv", hdist.c_gatherv)

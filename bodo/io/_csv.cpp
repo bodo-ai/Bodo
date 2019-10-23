@@ -276,7 +276,7 @@ static std::vector<size_t> count_lines(std::istream * f, size_t n)
  * We evenly distribute by number of lines by working on byte-chunks in parallel
  *   * counting new-lines and allreducing and exscaning numbers
  *   * computing start/end points of desired chunks-of-lines and sending them to corresponding ranks.
- * Using dist_get_size and hpat_dist_get_start to compute chunk start/end/size as well as
+ * Using dist_get_size and dist_get_start to compute chunk start/end/size as well as
  * the final chunking of lines.
  *
  * @param[in]  f   the input stream
@@ -301,16 +301,16 @@ static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel
         size_t rank = dist_get_rank();
 
         // seek to our chunk
-        size_t byte_offset = hpat_dist_get_start(fsz, nranks, rank);
+        size_t byte_offset = dist_get_start(fsz, nranks, rank);
         f->seekg(byte_offset, std::ios_base::beg);
         if(!f->good() || f->eof()) {
-            std::cerr << "Could not seek to start position " << hpat_dist_get_start(fsz, nranks, rank) << std::endl;
+            std::cerr << "Could not seek to start position " << dist_get_start(fsz, nranks, rank) << std::endl;
             return NULL;
         }
         // We evenly distribute the 'data' byte-wise
         // count number of lines in chunk
         // TODO: count only until nrows
-        std::vector<size_t> line_offset = count_lines(f, hpat_dist_get_node_portion(fsz, nranks, rank));
+        std::vector<size_t> line_offset = count_lines(f, dist_get_node_portion(fsz, nranks, rank));
         size_t no_lines = line_offset.size();
         // get total number of lines using allreduce
         size_t tot_no_lines(0);
@@ -356,7 +356,7 @@ static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel
         // We iterate through chunk boundaries (defined by line-numbers)
         // we start with boundary 1 as 0 is the beginning of file
         for(int i=1; i<nranks; ++i) {
-            size_t i_bndry = skiprows + hpat_dist_get_start(n_lines_to_read, (int)nranks, i);
+            size_t i_bndry = skiprows + dist_get_start(n_lines_to_read, (int)nranks, i);
             // Note our line_offsets mark the end of each line!
             // we check if boundary is on our byte-chunk
             if(i_bndry > byte_first_line && i_bndry <= byte_last_line) {

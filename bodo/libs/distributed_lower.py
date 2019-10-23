@@ -21,8 +21,8 @@ from llvmlite import ir as lir
 from bodo.libs import hdist
 import llvmlite.binding as ll
 
-ll.add_symbol("hpat_dist_get_time", hdist.hpat_dist_get_time)
-ll.add_symbol("hpat_get_time", hdist.hpat_get_time)
+ll.add_symbol("dist_get_time", hdist.dist_get_time)
+ll.add_symbol("get_time", hdist.get_time)
 ll.add_symbol("dist_reduce", hdist.dist_reduce)
 ll.add_symbol("dist_arr_reduce", hdist.dist_arr_reduce)
 ll.add_symbol("hpat_dist_exscan_i4", hdist.hpat_dist_exscan_i4)
@@ -50,14 +50,14 @@ mpi_req_llvm_type = lir.IntType(8 * hdist.mpi_req_num_bytes)
 @lower_builtin(time.time)
 def dist_get_time(context, builder, sig, args):
     fnty = lir.FunctionType(lir.DoubleType(), [])
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_get_time")
+    fn = builder.module.get_or_insert_function(fnty, name="get_time")
     return builder.call(fn, [])
 
 
 @lower_builtin(distributed_api.dist_time)
 def dist_get_dist_time(context, builder, sig, args):
     fnty = lir.FunctionType(lir.DoubleType(), [])
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_get_time")
+    fn = builder.module.get_or_insert_function(fnty, name="dist_get_time")
     return builder.call(fn, [])
 
 
