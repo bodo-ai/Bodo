@@ -146,41 +146,28 @@ def alltoall(send_arr, recv_arr, count):
     _alltoall(send_arr.ctypes, recv_arr.ctypes, np.int32(count), type_enum)
 
 
-def gather_scalar(data, allgather=False):  # pragma: no cover
-    return np.ones(1)
+@numba.generated_jit
+def gather_scalar(data, allgather=False):
+    data = types.unliteral(data)
+    typ_val = _numba_to_c_type_map[data]
+    dtype = data
+
+    def gather_scalar_impl(data, allgather=False):  # pragma: no cover
+      n_pes = bodo.libs.distributed_api.get_size()
+      rank = bodo.libs.distributed_api.get_rank()
+      send = np.full(1, data, dtype)
+      res_size = n_pes if (rank == MPI_ROOT or allgather) else 0
+      res = np.empty(res_size, dtype)
+      c_gather_scalar(send.ctypes, res.ctypes, np.int32(typ_val), allgather)
+      return res
+
+    return gather_scalar_impl
 
 
 c_gather_scalar = types.ExternalFunction(
     "c_gather_scalar",
     types.void(types.voidptr, types.voidptr, types.int32, types.bool_),
 )
-
-
-# TODO: test
-@overload(gather_scalar)
-def gather_scalar_overload(val, allgather=False):
-    assert isinstance(val, (types.Integer, types.Float))
-    # TODO: other types like boolean
-    typ_val = _numba_to_c_type_map[val]
-    func_text = (
-        "def gather_scalar_impl(val, allgather=False):\n"
-        "  n_pes = bodo.libs.distributed_api.get_size()\n"
-        "  rank = bodo.libs.distributed_api.get_rank()\n"
-        "  send = np.full(1, val, np.{})\n"
-        "  res_size = n_pes if (rank == {} or allgather) else 0\n"
-        "  res = np.empty(res_size, np.{})\n"
-        "  c_gather_scalar(send.ctypes, res.ctypes, np.int32({}), allgather)\n"
-        "  return res\n"
-    ).format(val, MPI_ROOT, val, typ_val)
-
-    loc_vars = {}
-    exec(
-        func_text,
-        {"bodo": bodo, "np": np, "c_gather_scalar": c_gather_scalar},
-        loc_vars,
-    )
-    gather_impl = loc_vars["gather_scalar_impl"]
-    return gather_impl
 
 
 # sendbuf, sendcount, recvbuf, recv_counts, displs, dtype
