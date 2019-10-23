@@ -261,6 +261,20 @@ def test_h5_slice1(datapath):
     np.testing.assert_allclose(bodo_func(), test_impl()[start:end])
 
 
+def test_h5_slice2(datapath):
+    fname = datapath("lr.hdf5")
+
+    def test_impl():
+        f = h5py.File(fname, "r")
+        X = f["points"][:, 1]
+        f.close()
+        return X
+
+    bodo_func = bodo.jit(locals={"X:return": "distributed"})(test_impl)
+    n = 101  # len(test_impl())
+    start, end = get_start_end(n)
+    np.testing.assert_allclose(bodo_func(), test_impl()[start:end])
+
 
 def test_h5_read_group(datapath):
     fname = datapath("test_group_read.hdf5")

@@ -393,7 +393,8 @@ class DistributedPass(object):
         ):
             # TODO: make create_dataset/create_group collective
             arr = rhs.args[5]
-            ndims = self.typemap[arr.name].ndim
+            # dataset dimensions can be different than array due to integer selection
+            ndims = len(self.typemap[rhs.args[2].name])
             nodes = []
 
             # divide 1st dimension
