@@ -24,7 +24,7 @@ import numpy as np
 
 import bodo
 import bodo.io
-from bodo.io import h5_api, h5_lower
+from bodo.io import h5_api
 from bodo.utils.utils import find_str_const, debug_prints
 
 
@@ -134,16 +134,3 @@ class PIO(object):
         if typ is None and new_name is not None:
             typ = self.locals.pop(new_name + ":h5_types", None)
         return typ
-
-    def _handle_h5_File_call(self, assign, lhs, rhs):
-        """
-        Handle h5py.File calls like:
-          f = h5py.File(file_name, mode)
-        """
-        # parallel arg = False for this stage
-        loc = lhs.loc
-        scope = lhs.scope
-        parallel_var = ir.Var(scope, mk_unique_var("$const_parallel"), loc)
-        parallel_assign = ir.Assign(ir.Const(0, loc), parallel_var, loc)
-        rhs.args.append(parallel_var)
-        return [parallel_assign, assign]

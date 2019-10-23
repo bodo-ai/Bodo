@@ -246,6 +246,36 @@ def test_h5_filter(datapath):
     np.testing.assert_allclose(bodo_func(), test_impl()[start:end])
 
 
+def test_h5_slice1(datapath):
+    fname = datapath("h5_test_filter.h5")
+
+    def test_impl():
+        f = h5py.File(fname, "r")
+        X = f["test"][:, 1:, :, :]
+        f.close()
+        return X
+
+    bodo_func = bodo.jit(locals={"X:return": "distributed"})(test_impl)
+    n = 11  # len(test_impl())
+    start, end = get_start_end(n)
+    np.testing.assert_allclose(bodo_func(), test_impl()[start:end])
+
+
+def test_h5_slice2(datapath):
+    fname = datapath("lr.hdf5")
+
+    def test_impl():
+        f = h5py.File(fname, "r")
+        X = f["points"][:, 1]
+        f.close()
+        return X
+
+    bodo_func = bodo.jit(locals={"X:return": "distributed"})(test_impl)
+    n = 101  # len(test_impl())
+    start, end = get_start_end(n)
+    np.testing.assert_allclose(bodo_func(), test_impl()[start:end])
+
+
 def test_h5_read_group(datapath):
     fname = datapath("test_group_read.hdf5")
 
@@ -314,6 +344,30 @@ def test_h5_write():
         bodo.jit(test_impl)(A, fname)
         f = h5py.File(fname, "r")
         A2 = f["A"][:]
+        f.close()
+        np.testing.assert_array_equal(A, A2)
+
+
+def test_h5_group_write():
+    # run only on 1 processor
+    if bodo.get_size() != 1:
+        return
+
+    def test_impl(A, fname):
+        f = h5py.File(fname, "w")
+        g1 = f.create_group("AA")
+        g2 = g1.create_group("BB")
+        dset1 = g2.create_dataset("A", A.shape, "f8")
+        dset1[:] = A
+        f.close()
+
+    fname = "test_w.hdf5"
+    n = 11
+    A = np.arange(n).astype(np.float64)
+    with ensure_clean(fname):
+        bodo.jit(test_impl)(A, fname)
+        f = h5py.File(fname, "r")
+        A2 = f["AA"]["BB"]["A"][:]
         f.close()
         np.testing.assert_array_equal(A, A2)
 
