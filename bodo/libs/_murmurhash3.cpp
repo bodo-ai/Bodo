@@ -5,8 +5,8 @@
 
 #include "_murmurhash3.h"
 
-#define HASHSEED 0xb0d01289
-#define HASHSEED_B 0xb0d01288
+//#define HASHSEED 0xb0d01289
+//#define HASHSEED_B 0xb0d01288
 
 // hash string
 // out hash: uint32_t*, 32 bits

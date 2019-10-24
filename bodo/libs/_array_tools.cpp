@@ -13,6 +13,8 @@
 #include <cstdio>
 #include <iostream>
 #include <numeric>
+#include <map>
+#include <unordered_map>
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_murmurhash3.cpp"
@@ -739,7 +741,6 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
 
 /* There is no need for using MPI since this has already been done
    following the _gen_par_shuffle.
-   
 
  */
 table_info* hash_join_table(table_info* key_left, table_info* key_right,
@@ -747,23 +748,250 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
                             bool is_left, bool is_right)
 {
   //
-  struct ArrEntry {
-    array_info* TheEnt;
-    std::vector<array_info*> ListDataLeft;
-    std::vector<array_info*> ListDataRight;
-  };
   size_t nb_key_left = key_left->columns.size();
   size_t nb_key_right = key_right->columns.size();
   if (nb_key_left != nb_key_right) {
     PyErr_SetString(PyExc_RuntimeError, "key_left is inconsistent with key_right");
     return NULL;
   }
+  size_t nb_key=nb_key_left;
   size_t nb_data_left = data_left->columns.size();
   size_t nb_data_right = data_right->columns.size();
   size_t n_rows = (size_t)key_left->columns[0]->length;
-  for (size_t i=0; i<n_rows; i++) {
+  //
+  //
+  std::vector<array_info*> key_arrs_left = std::vector<array_info*>(key_left->columns.begin(), key_left->columns.end());
+  uint32_t seed = 0xb0d01288;
+  uint32_t* hashes_left = hash_keys(key_arrs_left, seed);
+
+  std::vector<array_info*> key_arrs_right = std::vector<array_info*>(key_right->columns.begin(), key_right->columns.end());
+  uint32_t* hashes_right = hash_keys(key_arrs_right, seed);
+
+  std::unordered_map<uint32_t, std::vector<std::pair<int,size_t>>> ListEnt;
+  if (is_left) {
+    // inserting the left entries.
+    for (size_t iRowL=0; iRowL<n_rows; iRowL++) {
+      std::pair<int,size_t> eEnt{0,iRowL};
+      uint32_t eKey = hashes_left[iRowL];
+      if (ListEnt.count(eKey) == 0) {
+        ListEnt[eKey] = {eEnt};
+      }
+      else {
+        ListEnt[eKey].push_back(eEnt);
+      }
+    }
+    for (size_t iRowR=0; iRowR<n_rows; iRowR++) {
+      std::pair<int,size_t> eEnt{1,iRowR};
+      uint32_t eKey=hashes_right[iRowR];
+      if (ListEnt.count(eKey) == 0) {
+        if (is_right)
+          ListEnt[eKey] = {eEnt};
+      }
+      else {
+        ListEnt[eKey].push_back(eEnt);
+      }
+    }
+  }
+  else {
+    for (size_t iRowR=0; iRowR<n_rows; iRowR++) {
+      std::pair<int,size_t> eEnt{1,iRowR};
+      uint32_t eKey=hashes_right[iRowR];
+      if (ListEnt.count(eKey) == 0) {
+        ListEnt[eKey] = {eEnt};
+      }
+      else {
+        ListEnt[eKey].push_back(eEnt);
+      }
+    }
+    for (size_t iRowL=0; iRowL<n_rows; iRowL++) {
+      std::pair<int,size_t> eEnt{0,iRowL};
+      uint32_t eKey = hashes_left[iRowL];
+      if (ListEnt.count(eKey) == 0) {
+        if (is_left)
+          ListEnt[eKey] = {eEnt};
+      }
+      else {
+        ListEnt[eKey].push_back(eEnt);
+      }
+    }
+  }
+  //
+  // Testing equality of entries
+  //
+  auto TestEqual=[&](table_info* key1, size_t const& iRow1, table_info* key2, size_t const& iRow2) -> bool {
+    for (size_t iKey=0; iKey<nb_key; iKey++) {
+      if (key1->columns[iKey]->dtype == Bodo_CTypes::INT8) {
+        int8_t val1 = ((int8_t*)key1->columns[iKey]->data1)[iRow1];
+        int8_t val2 = ((int8_t*)key2->columns[iKey]->data1)[iRow2];
+        return val1 == val2;
+      }
+      if (key1->columns[iKey]->dtype == Bodo_CTypes::UINT8) {
+        uint8_t val1 = ((uint8_t*)key1->columns[iKey]->data1)[iRow1];
+        uint8_t val2 = ((uint8_t*)key2->columns[iKey]->data1)[iRow2];
+        return val1 == val2;
+      }
+      if (key1->columns[iKey]->dtype == Bodo_CTypes::INT16) {
+        int16_t val1 = ((int16_t*)key1->columns[iKey]->data1)[iRow1];
+        int16_t val2 = ((int16_t*)key2->columns[iKey]->data1)[iRow2];
+        return val1 == val2;
+      }
+      if (key1->columns[iKey]->dtype == Bodo_CTypes::UINT16) {
+        uint16_t val1 = ((uint16_t*)key1->columns[iKey]->data1)[iRow1];
+        uint16_t val2 = ((uint16_t*)key2->columns[iKey]->data1)[iRow2];
+        return val1 == val2;
+      }
+      if (key1->columns[iKey]->dtype == Bodo_CTypes::INT32) {
+        int32_t val1 = ((int32_t*)key1->columns[iKey]->data1)[iRow1];
+        int32_t val2 = ((int32_t*)key2->columns[iKey]->data1)[iRow2];
+        return val1 == val2;
+      }
+      if (key1->columns[iKey]->dtype == Bodo_CTypes::UINT32) {
+        uint32_t val1 = ((uint32_t*)key1->columns[iKey]->data1)[iRow1];
+        uint32_t val2 = ((uint32_t*)key2->columns[iKey]->data1)[iRow2];
+        return val1 == val2;
+      }
+      if (key1->columns[iKey]->dtype == Bodo_CTypes::INT64) {
+        int64_t val1 = ((int64_t*)key1->columns[iKey]->data1)[iRow1];
+        int64_t val2 = ((int64_t*)key2->columns[iKey]->data1)[iRow2];
+        return val1 == val2;
+      }
+      if (key1->columns[iKey]->dtype == Bodo_CTypes::UINT64) {
+        uint64_t val1 = ((uint64_t*)key1->columns[iKey]->data1)[iRow1];
+        uint64_t val2 = ((uint64_t*)key2->columns[iKey]->data1)[iRow2];
+        return val1 == val2;
+      }
+      if (key1->columns[iKey]->dtype == Bodo_CTypes::FLOAT32) {
+        float val1 = ((float*)key1->columns[iKey]->data1)[iRow1];
+        float val2 = ((float*)key2->columns[iKey]->data1)[iRow2];
+        return val1 == val2;
+      }
+      if (key1->columns[iKey]->dtype == Bodo_CTypes::FLOAT64) {
+        double val1 = ((double*)key1->columns[iKey]->data1)[iRow1];
+        double val2 = ((double*)key2->columns[iKey]->data1)[iRow2];
+        return val1 == val2;
+      }
+      if (key1->columns[iKey]->arr_type == bodo_array_type::STRING) {
+        uint32_t pos1_prev = ((uint32_t*)key1->columns[iKey]->data2)[iRow1];
+        uint32_t pos1_next = ((uint32_t*)key1->columns[iKey]->data2)[iRow1+1];
+        uint32_t pos2_prev = ((uint32_t*)key2->columns[iKey]->data2)[iRow2];
+        uint32_t pos2_next = ((uint32_t*)key2->columns[iKey]->data2)[iRow2+1];
+        uint32_t len1 = pos1_next - pos1_prev;
+        uint32_t len2 = pos2_next - pos2_prev;
+        if (len1 != len2)
+          return false;
+        for (uint32_t pos=0; pos<len1; pos++) {
+          uint32_t pos1=pos1_prev + pos;
+          uint32_t pos2=pos2_prev + pos;
+          char charL = ((char*)key1->columns[iKey]->data1)[pos1];
+          char charR = ((char*)key2->columns[iKey]->data1)[pos2];
+          if (charL != charR)
+            return false;
+        }
+        return true;
+      }
+    }
+    PyErr_SetString(PyExc_RuntimeError, "Invalid data type error");
+  };
+  //
+  // Now iterating and determining how many entries we have to do.
+  //
+  std::vector<std::pair<size_t, size_t>> ListPairWrite;
+  for (auto & ePair : ListEnt) {
+    std::vector<size_t> ListEntL, ListEntR;
+    for (auto fPair : ePair.second) {
+      int iSize=fPair.first;
+      size_t iRow=fPair.second;
+      if (iSize == 0)
+        ListEntL.push_back(iRow);
+      if (iSize == 1)
+        ListEntR.push_back(iRow);
+    }
+    int nbL=ListEntL.size();
+    int nbR=ListEntR.size();
+    auto GetBlocks=[&](table_info* table, std::vector<size_t> const& ListEnt) -> std::vector<std::vector<size_t>> {
+      int len=ListEnt.size();
+      std::vector<int> ListStatus(len,0);
+      std::vector<std::vector<size_t>> ListListEnt;
+      for (int i1=0; i1<len; i1++) {
+        if (ListStatus[i1] == 0) {
+          ListStatus[i1]=1;
+          std::vector<size_t> eList{ListEnt[i1]};
+          for (int i2=i1+1; i2<len; i2++) {
+            if (ListStatus[i2] == 0) {
+              bool test=TestEqual(table, ListEnt[i1], table, ListEnt[i2]);
+              if (test) {
+                ListStatus[i2]=1;
+                eList.push_back(ListEnt[i2]);
+              }
+            }
+          }
+          ListListEnt.push_back(eList);
+        }
+      }
+      return ListListEnt;
+    };
+
+    std::vector<std::vector<size_t>> ListListEntL = GetBlocks(key_left, ListEntL);
+    std::vector<std::vector<size_t>> ListListEntR = GetBlocks(key_right, ListEntR);
+    int nbBlockL=ListListEntL.size();
+    int nbBlockR=ListListEntL.size();
+
+    if (is_left) {
+      auto GetEntry=[&](size_t const& iRowL) -> int {
+        for (int iR=0; iR<nbBlockR; iR++) {
+          bool test = TestEqual(key_left, iRowL, key_right, ListListEntR[iR][0]);
+          if (test)
+            return iR;
+        }
+        return -1;
+      };
+      for (int iL=0; iL<nbBlockL; iL++) {
+        int iR=GetEntry(ListListEntL[iL][0]);
+        if (iR == -1) {
+          for (auto & uL : ListListEntL[iL])
+            ListPairWrite.push_back({uL, -1});
+        }
+        else {
+          for (auto & uL : ListListEntL[iL])
+            for (auto & uR : ListListEntR[iR])
+              ListPairWrite.push_back({uL,uR});
+        }
+      }
+    }
+    else {
+      auto GetEntry=[&](size_t const& iRowR) -> int {
+        for (int iL=0; iL<nbBlockL; iL++) {
+          bool test = TestEqual(key_left, ListListEntL[iL][0], key_right, iRowR);
+          if (test)
+            return iL;
+        }
+        return -1;
+      };
+      for (int iR=0; iR<nbBlockR; iR++) {
+        int iL=GetEntry(ListListEntR[iR][0]);
+        if (iL == -1) {
+          for (auto & uR : ListListEntR[iR])
+            ListPairWrite.push_back({-1, uR});
+        }
+        else {
+          for (auto & uL : ListListEntL[iL])
+            for (auto & uR : ListListEntR[iR])
+              ListPairWrite.push_back({uL,uR});
+        }
+      }
+    }
+    
+
+
     
   }
+  int nbRowOut = ListPairWrite.size();
+  
+
+
+  
+  delete[] hashes_left;
+  delete[] hashes_right;
 }
 
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
