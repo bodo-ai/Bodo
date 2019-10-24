@@ -998,16 +998,38 @@ def merge_overload(
 
     # make sure left and right are dataframes
     if not isinstance(left, DataFrameType) or not isinstance(right, DataFrameType):
-        raise TypeError("merge() requires dataframe inputs")
+        raise BodoError("merge() requires dataframe inputs")
+
+    # make sure right_on, right_index, left_on, left_index are speciefied properly
+    if (is_overload_true(left_index) and 
+        is_overload_none(right_on) and not is_overload_true(right_index)):
+            raise BodoError("merge(): Must pass right_on or right_index=True")
+    if (is_overload_true(right_index) and 
+        is_overload_none(left_on) and not is_overload_true(left_index)):
+            raise BodoError("merge(): Must pass left_on or left_index=True")
 
     how = get_overload_const_str(how)
-    
     if(how not in ["left", "right", "outer", "inner"]):
         raise BodoError("merge(): invalid key '{}' for how".format(how))
 
     comm_cols = tuple(set(left.columns) & set(right.columns))
+    if(len(comm_cols)==0):
+        raise BodoError("merge(): No common columns to perform merge on. "
+            "Merge options: left_on={lon}, right_on={ron}, "
+            "left_index={lidx}, right_index={ridx}".format(
+                lon = is_overload_true(left_on),
+                ron = is_overload_true(right_on),
+                lidx = is_overload_true(left_index),
+                ridx = is_overload_true(right_index)
+                )
+            )
 
     if not is_overload_none(on):
+        if (not is_overload_none(left_on)) or (not is_overload_none(right_on)):
+            raise BodoError(
+                'merge(): Can only pass argument "on" OR "left_on" '
+                'and "right_on", not a combination of both.'
+            )
         left_on = right_on = on
 
     if (
@@ -1034,6 +1056,10 @@ def merge_overload(
             if(len(set(right_keys).difference(set(right.columns)))>0):
                 raise BodoError("merge(): invalid key {} for on/right_on".
                     format(set(right_keys).difference(set(right.columns))))
+
+    if (not is_overload_true(left_index)) and (not is_overload_true(right_index)):
+        if(len(right_keys) != len(left_keys)):
+            raise BodoError("merge(): len(right_on) must equal len(left_on)")
 
     left_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
         ", ".join("'{}'".format(c) for c in left_keys)
