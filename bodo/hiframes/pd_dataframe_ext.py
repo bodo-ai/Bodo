@@ -35,6 +35,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import (
     is_overload_none,
+    is_bool,
     is_overload_true,
     is_overload_false,
     is_overload_zero,
@@ -999,6 +1000,36 @@ def merge_overload(
     # make sure left and right are dataframes
     if not isinstance(left, DataFrameType) or not isinstance(right, DataFrameType):
         raise BodoError("merge() requires dataframe inputs")
+    # make sure leftindex is of typeb bool
+    if not is_bool(left_index):
+        raise BodoError(
+            "merge(): left_index parameter must be of type bool, not "
+            "{left_index}".format(left_index=type(left_index))
+            )
+    # make sure rightindex is of type bool
+    if not is_bool(right_index):
+        raise BodoError(
+            "merge(): right_index parameter must be of type bool, not "
+            "{right_index}".format(right_index=type(right_index))
+            )
+    # make sure sort is the default value, sort=True not supported
+    if not is_overload_false(sort):
+        raise BodoError(
+            "merge(): sort parameter only supports default value False")
+    # TODO: error check suffixes
+    # make sure copy is the default value, copy=False not supported
+    if not is_overload_true(copy):
+        raise BodoError(
+            "merge(): copu parameter only supports default value True")
+    # make sure copy is the default value, copy=False not supported
+    if not is_overload_false(indicator):
+        raise BodoError(
+            "merge(): indicator parameter only supports default value False")
+    # make sure validate is None
+    if not is_overload_none(validate):
+        raise BodoError(
+            "merge(): validate parameter only supports default value None")
+
 
     # make sure right_on, right_index, left_on, left_index are speciefied properly
     if (is_overload_true(left_index) and 
@@ -1009,10 +1040,12 @@ def merge_overload(
             raise BodoError("merge(): Must pass left_on or left_index=True")
 
     how = get_overload_const_str(how)
+    # make sure how is one of ["left", "right", "outer", "inner"]
     if(how not in ["left", "right", "outer", "inner"]):
         raise BodoError("merge(): invalid key '{}' for how".format(how))
 
     comm_cols = tuple(set(left.columns) & set(right.columns))
+    # make sure two dataframes have common columns 
     if(len(comm_cols)==0):
         raise BodoError("merge(): No common columns to perform merge on. "
             "Merge options: left_on={lon}, right_on={ron}, "
@@ -1024,6 +1057,7 @@ def merge_overload(
                 )
             )
 
+    # make sure "on" does not coexist with left_on or right_on
     if not is_overload_none(on):
         if (not is_overload_none(left_on)) or (not is_overload_none(right_on)):
             raise BodoError(
@@ -1046,6 +1080,7 @@ def merge_overload(
             left_keys = ["$_bodo_index_"]
         else:
             left_keys = get_const_str_list(left_on)
+            # make sure all left_keys is a valid column in left
             if(len(set(left_keys).difference(set(left.columns)))>0):
                 raise BodoError("merge(): invalid key {} for on/left_on".
                     format(set(left_keys).difference(set(left.columns))))
@@ -1053,10 +1088,12 @@ def merge_overload(
             right_keys = ["$_bodo_index_"]
         else:
             right_keys = get_const_str_list(right_on)
+            # make sure all right_keys is a valid column in right
             if(len(set(right_keys).difference(set(right.columns)))>0):
                 raise BodoError("merge(): invalid key {} for on/right_on".
                     format(set(right_keys).difference(set(right.columns))))
 
+    # make sure right_on and left_on have the same size
     if (not is_overload_true(left_index)) and (not is_overload_true(right_index)):
         if(len(right_keys) != len(left_keys)):
             raise BodoError("merge(): len(right_on) must equal len(left_on)")
