@@ -1038,8 +1038,55 @@ def rebalance_array(A):
     return A
 
 
-def rebalance_array_parallel(A):
-    return A
+@numba.njit
+def rebalance_array_parallel(in_arr, count):
+    n_pes = bodo.libs.distributed_api.get_size()
+    my_rank = bodo.libs.distributed_api.get_rank()
+    out_arr = np.empty((count,) + in_arr.shape[1:], in_arr.dtype)
+    # copy old data
+    old_len = len(in_arr)
+    out_ind = 0
+    for i in range(min(old_len, count)):
+        out_arr[i] = in_arr[i]
+        out_ind += 1
+    # get diff data for all procs
+    my_diff = old_len - count
+    all_diffs = np.empty(n_pes, np.int64)
+    bodo.libs.distributed_api.allgather(all_diffs, my_diff)
+    # alloc comm requests
+    comm_req_ind = 0
+    comm_reqs = bodo.libs.distributed_api.comm_req_alloc(n_pes)
+    # for each potential receiver
+    for i in range(n_pes):
+        # if receiver
+        if all_diffs[i] < 0:
+            # for each potential sender
+            for j in range(n_pes):
+                # if sender
+                if all_diffs[j] > 0:
+                    send_size = min(all_diffs[j], -all_diffs[i])
+                    # if I'm receiver
+                    if my_rank == i:
+                        buff = out_arr[out_ind:(out_ind+send_size)]
+                        comm_reqs[comm_req_ind] = bodo.libs.distributed_api.irecv(
+                            buff, np.int32(buff.size), np.int32(j), np.int32(9))
+                        comm_req_ind += 1
+                        out_ind += send_size
+                    # if I'm sender
+                    if my_rank == j:
+                        buff = np.ascontiguousarray(in_arr[out_ind:(out_ind+send_size)])
+                        comm_reqs[comm_req_ind] = bodo.libs.distributed_api.isend(
+                            buff, np.int32(buff.size), np.int32(i), np.int32(9))
+                        comm_req_ind += 1
+                        out_ind += send_size
+                    # update sender and receivers remaining counts
+                    all_diffs[i] += send_size
+                    all_diffs[j] -= send_size
+                    # if receiver is done, stop sender search
+                    if all_diffs[i] == 0: break
+    bodo.libs.distributed_api.waitall(np.int32(comm_req_ind), comm_reqs)
+    bodo.libs.distributed_api.comm_req_dealloc(comm_reqs)
+    return out_arr
 
 
 @overload(rebalance_array)
@@ -1077,14 +1124,6 @@ class DistAllgather(AbstractTemplate):
         assert not kws
         assert len(args) == 2  # array and val
         return signature(types.none, *unliteral_all(args))
-
-
-@infer_global(rebalance_array_parallel)
-class DistRebalanceParallel(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2  # array and count
-        return signature(args[0], *unliteral_all(args))
 
 
 # @infer_global(dist_setitem)
