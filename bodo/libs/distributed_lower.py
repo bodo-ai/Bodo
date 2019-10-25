@@ -40,20 +40,6 @@ ll.add_symbol("oneD_reshape_shuffle", hdist.oneD_reshape_shuffle)
 ll.add_symbol("permutation_int", hdist.permutation_int)
 ll.add_symbol("permutation_array_index", hdist.permutation_array_index)
 
-# get size dynamically from C code
-mpi_req_llvm_type = lir.IntType(8 * hdist.mpi_req_num_bytes)
-
-
-
-@lower_builtin(operator.setitem, ReqArrayType, types.intp, mpi_req_numba_type)
-def setitem_req_array(context, builder, sig, args):
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [lir.IntType(8).as_pointer(), lir.IntType(64), mpi_req_llvm_type],
-    )
-    fn = builder.module.get_or_insert_function(fnty, name="req_array_setitem")
-    return builder.call(fn, args)
-
 
 # @lower_builtin(distributed_api.dist_setitem, types.Array, types.Any, types.Any,
 #     types.intp, types.intp)

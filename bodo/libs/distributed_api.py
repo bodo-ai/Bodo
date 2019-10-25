@@ -1142,16 +1142,11 @@ register_model(ReqArrayType)(models.OpaqueModel)
 waitall = types.ExternalFunction("dist_waitall", types.void(types.int32, req_array_type))
 comm_req_alloc = types.ExternalFunction("comm_req_alloc", req_array_type(types.int32))
 comm_req_dealloc = types.ExternalFunction("comm_req_dealloc", types.void(req_array_type))
+req_array_setitem = types.ExternalFunction("req_array_setitem", types.void(req_array_type, types.int64, mpi_req_numba_type))
 
 
-@infer_global(operator.setitem)
-class SetItemReqArray(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        [ary, idx, val] = args
-        if (
-            isinstance(ary, ReqArrayType)
-            and idx == types.intp
-            and val == mpi_req_numba_type
-        ):
-            return signature(types.none, *unliteral_all(args))
+@overload(operator.setitem)
+def overload_req_arr_setitem(A, idx, val):
+    if A == req_array_type:
+        assert val == mpi_req_numba_type
+        return lambda A, idx, val: req_array_setitem(A, idx, val)
