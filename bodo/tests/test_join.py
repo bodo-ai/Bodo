@@ -9,7 +9,7 @@ import random
 import string
 import pyarrow.parquet as pq
 import numba
-from numba.untyped_passes import PreserveIR 
+from numba.untyped_passes import PreserveIR
 from numba.typed_passes import NopythonRewrites
 import bodo
 from bodo.libs.str_arr_ext import StringArray
@@ -288,22 +288,26 @@ def test_join_rm_dead_data_name_overlap2():
 
 def test_join_deadcode_cleanup():
     def test_impl(df1, df2):
-        df3 = df1.merge(df2, on=['A'])
+        df3 = df1.merge(df2, on=["A"])
         return
+
     def test_impl_with_join(df1, df2):
-        df3 = df1.merge(df2, on=['A'])
+        df3 = df1.merge(df2, on=["A"])
         return df3
 
-    df1 = pd.DataFrame({'A': [1,2,3], 'B': ['a', 'b', 'c']})
-    df2 = pd.DataFrame({'A': [1,2,3], 'C': [4, 5, 6]})
+    df1 = pd.DataFrame({"A": [1, 2, 3], "B": ["a", "b", "c"]})
+    df2 = pd.DataFrame({"A": [1, 2, 3], "C": [4, 5, 6]})
 
     j_func = numba.njit(pipeline_class=DeadcodeTestPipeline)(test_impl)
-    j_func_with_join = \
-        numba.njit(pipeline_class=DeadcodeTestPipeline)(test_impl_with_join)
-    j_func(df1, df2) #calling the function to get function IR
+    j_func_with_join = numba.njit(pipeline_class=DeadcodeTestPipeline)(
+        test_impl_with_join
+    )
+    j_func(df1, df2)  # calling the function to get function IR
     j_func_with_join(df1, df2)
-    fir = j_func.overloads[j_func.signatures[0]].metadata['preserved_ir']
-    fir_with_join = j_func_with_join.overloads[j_func.signatures[0]].metadata['preserved_ir']
+    fir = j_func.overloads[j_func.signatures[0]].metadata["preserved_ir"]
+    fir_with_join = j_func_with_join.overloads[j_func.signatures[0]].metadata[
+        "preserved_ir"
+    ]
 
     for block in fir.blocks.values():
         for statement in block.body:

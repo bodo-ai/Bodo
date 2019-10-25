@@ -166,28 +166,36 @@ def recv(dtype, rank, tag):
 
 _isend = types.ExternalFunction(
     "dist_isend",
-    mpi_req_numba_type(types.voidptr, types.int32, types.int32, types.int32, types.int32, types.bool_),
+    mpi_req_numba_type(
+        types.voidptr, types.int32, types.int32, types.int32, types.int32, types.bool_
+    ),
 )
 
 
 @numba.generated_jit(nopython=True)
 def isend(arr, size, pe, tag, cond=True):
     if isinstance(arr, types.Array):
+
         def impl(arr, size, pe, tag, cond=True):
             type_enum = get_type_enum(arr)
             return _isend(arr.ctypes, size, type_enum, pe, tag, cond)
+
         return impl
 
     # voidptr input, pointer to bytes
     typ_enum = _numba_to_c_type_map[types.uint8]
+
     def impl_voidptr(arr, size, pe, tag, cond=True):
         return _isend(arr, size, typ_enum, pe, tag, cond)
+
     return impl_voidptr
 
 
 _irecv = types.ExternalFunction(
     "dist_irecv",
-    mpi_req_numba_type(types.voidptr, types.int32, types.int32, types.int32, types.int32, types.bool_),
+    mpi_req_numba_type(
+        types.voidptr, types.int32, types.int32, types.int32, types.int32, types.bool_
+    ),
 )
 
 
@@ -217,13 +225,13 @@ def gather_scalar(data, allgather=False):
     dtype = data
 
     def gather_scalar_impl(data, allgather=False):  # pragma: no cover
-      n_pes = bodo.libs.distributed_api.get_size()
-      rank = bodo.libs.distributed_api.get_rank()
-      send = np.full(1, data, dtype)
-      res_size = n_pes if (rank == MPI_ROOT or allgather) else 0
-      res = np.empty(res_size, dtype)
-      c_gather_scalar(send.ctypes, res.ctypes, np.int32(typ_val), allgather)
-      return res
+        n_pes = bodo.libs.distributed_api.get_size()
+        rank = bodo.libs.distributed_api.get_rank()
+        send = np.full(1, data, dtype)
+        res_size = n_pes if (rank == MPI_ROOT or allgather) else 0
+        res = np.empty(res_size, dtype)
+        c_gather_scalar(send.ctypes, res.ctypes, np.int32(typ_val), allgather)
+        return res
 
     return gather_scalar_impl
 
@@ -269,13 +277,11 @@ def load_val_ptr(typingctx, ptr_tp, val_tp=None):
 
 
 _dist_reduce = types.ExternalFunction(
-    "dist_reduce",
-    types.void(types.voidptr, types.voidptr, types.int32, types.int32),
+    "dist_reduce", types.void(types.voidptr, types.voidptr, types.int32, types.int32)
 )
 
 _dist_arr_reduce = types.ExternalFunction(
-    "dist_arr_reduce",
-    types.void(types.voidptr, types.int64, types.int32, types.int32),
+    "dist_arr_reduce", types.void(types.voidptr, types.int64, types.int32, types.int32)
 )
 
 
@@ -283,10 +289,12 @@ _dist_arr_reduce = types.ExternalFunction(
 def dist_reduce(value, reduce_op):
     if isinstance(value, types.Array):
         typ_enum = np.int32(_numba_to_c_type_map[value.dtype])
+
         def impl_arr(value, reduce_op):
             A = np.ascontiguousarray(value)
             _dist_arr_reduce(A.ctypes, A.size, reduce_op, typ_enum)
             return A
+
         return impl_arr
 
     target_typ = types.unliteral(value)
@@ -316,8 +324,7 @@ def dist_reduce(value, reduce_op):
 
 
 _dist_exscan = types.ExternalFunction(
-    "dist_exscan",
-    types.void(types.voidptr, types.voidptr, types.int32, types.int32),
+    "dist_exscan", types.void(types.voidptr, types.voidptr, types.int32, types.int32)
 )
 
 
@@ -1043,8 +1050,9 @@ def dist_setitem(arr, index, val):  # pragma: no cover
     return 0
 
 
-_allgather = types.ExternalFunction("allgather", types.void(types.voidptr, types.int32,
-    types.voidptr, types.int32))
+_allgather = types.ExternalFunction(
+    "allgather", types.void(types.voidptr, types.int32, types.voidptr, types.int32)
+)
 
 
 @numba.njit
@@ -1094,23 +1102,28 @@ def rebalance_array_parallel(in_arr, count):
                     send_size = min(all_diffs[j], -all_diffs[i])
                     # if I'm receiver
                     if my_rank == i:
-                        buff = out_arr[out_ind:(out_ind+send_size)]
+                        buff = out_arr[out_ind : (out_ind + send_size)]
                         comm_reqs[comm_req_ind] = bodo.libs.distributed_api.irecv(
-                            buff, np.int32(buff.size), np.int32(j), np.int32(9))
+                            buff, np.int32(buff.size), np.int32(j), np.int32(9)
+                        )
                         comm_req_ind += 1
                         out_ind += send_size
                     # if I'm sender
                     if my_rank == j:
-                        buff = np.ascontiguousarray(in_arr[out_ind:(out_ind+send_size)])
+                        buff = np.ascontiguousarray(
+                            in_arr[out_ind : (out_ind + send_size)]
+                        )
                         comm_reqs[comm_req_ind] = bodo.libs.distributed_api.isend(
-                            buff, np.int32(buff.size), np.int32(i), np.int32(9))
+                            buff, np.int32(buff.size), np.int32(i), np.int32(9)
+                        )
                         comm_req_ind += 1
                         out_ind += send_size
                     # update sender and receivers remaining counts
                     all_diffs[i] += send_size
                     all_diffs[j] -= send_size
                     # if receiver is done, stop sender search
-                    if all_diffs[i] == 0: break
+                    if all_diffs[i] == 0:
+                        break
     bodo.libs.distributed_api.waitall(np.int32(comm_req_ind), comm_reqs)
     bodo.libs.distributed_api.comm_req_dealloc(comm_reqs)
     return out_arr
@@ -1160,10 +1173,16 @@ class ReqArrayType(types.Type):
 
 req_array_type = ReqArrayType()
 register_model(ReqArrayType)(models.OpaqueModel)
-waitall = types.ExternalFunction("dist_waitall", types.void(types.int32, req_array_type))
+waitall = types.ExternalFunction(
+    "dist_waitall", types.void(types.int32, req_array_type)
+)
 comm_req_alloc = types.ExternalFunction("comm_req_alloc", req_array_type(types.int32))
-comm_req_dealloc = types.ExternalFunction("comm_req_dealloc", types.void(req_array_type))
-req_array_setitem = types.ExternalFunction("req_array_setitem", types.void(req_array_type, types.int64, mpi_req_numba_type))
+comm_req_dealloc = types.ExternalFunction(
+    "comm_req_dealloc", types.void(req_array_type)
+)
+req_array_setitem = types.ExternalFunction(
+    "req_array_setitem", types.void(req_array_type, types.int64, mpi_req_numba_type)
+)
 
 
 @overload(operator.setitem)
@@ -1171,7 +1190,6 @@ def overload_req_arr_setitem(A, idx, val):
     if A == req_array_type:
         assert val == mpi_req_numba_type
         return lambda A, idx, val: req_array_setitem(A, idx, val)
-
 
 
 # find overlapping range of an input range (start:stop) and a chunk range

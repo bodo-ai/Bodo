@@ -844,8 +844,13 @@ class DistributedPass(object):
                     start = bodo.libs.distributed_api.dist_exscan(count, _op)
                     return bodo.io.np_io.file_write_parallel(fname, arr, start, count)
 
-                return compile_func_single_block(f, [_fname, arr], assign.target, self,
-                    extra_globals={"_op": np.int32(Reduce_Type.Sum.value)})
+                return compile_func_single_block(
+                    f,
+                    [_fname, arr],
+                    assign.target,
+                    self,
+                    extra_globals={"_op": np.int32(Reduce_Type.Sum.value)},
+                )
 
         return out
 
@@ -944,8 +949,10 @@ class DistributedPass(object):
                 [fname, str_out],
                 assign.target,
                 self,
-                extra_globals={"unicode_to_utf8_and_len": unicode_to_utf8_and_len,
-                "_op": np.int32(Reduce_Type.Sum.value)},
+                extra_globals={
+                    "unicode_to_utf8_and_len": unicode_to_utf8_and_len,
+                    "_op": np.int32(Reduce_Type.Sum.value),
+                },
             )
 
         return [assign]
