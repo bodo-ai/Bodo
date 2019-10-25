@@ -48,8 +48,8 @@ ll.add_symbol("c_gather_scalar", hdist.c_gather_scalar)
 ll.add_symbol("c_gatherv", hdist.c_gatherv)
 ll.add_symbol("c_allgatherv", hdist.c_allgatherv)
 ll.add_symbol("c_bcast", hdist.c_bcast)
-ll.add_symbol("c_recv", hdist.hpat_dist_recv)
-ll.add_symbol("c_send", hdist.hpat_dist_send)
+ll.add_symbol("c_recv", hdist.dist_recv)
+ll.add_symbol("c_send", hdist.dist_send)
 
 
 # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)

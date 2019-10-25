@@ -53,21 +53,21 @@ PyMODINIT_FUNC PyInit_hdist(void) {
                            PyLong_FromVoidPtr((void *)(&dist_exscan)));
     PyObject_SetAttrString(m, "dist_arr_reduce",
                            PyLong_FromVoidPtr((void *)(&dist_arr_reduce)));
-    PyObject_SetAttrString(m, "hpat_dist_irecv",
-                           PyLong_FromVoidPtr((void *)(&hpat_dist_irecv)));
-    PyObject_SetAttrString(m, "hpat_dist_isend",
-                           PyLong_FromVoidPtr((void *)(&hpat_dist_isend)));
-    PyObject_SetAttrString(m, "hpat_dist_recv",
-                           PyLong_FromVoidPtr((void *)(&hpat_dist_recv)));
-    PyObject_SetAttrString(m, "hpat_dist_send",
-                           PyLong_FromVoidPtr((void *)(&hpat_dist_send)));
-    PyObject_SetAttrString(m, "hpat_dist_wait",
-                           PyLong_FromVoidPtr((void *)(&hpat_dist_wait)));
+    PyObject_SetAttrString(m, "dist_irecv",
+                           PyLong_FromVoidPtr((void *)(&dist_irecv)));
+    PyObject_SetAttrString(m, "dist_isend",
+                           PyLong_FromVoidPtr((void *)(&dist_isend)));
+    PyObject_SetAttrString(m, "dist_recv",
+                           PyLong_FromVoidPtr((void *)(&dist_recv)));
+    PyObject_SetAttrString(m, "dist_send",
+                           PyLong_FromVoidPtr((void *)(&dist_send)));
+    PyObject_SetAttrString(m, "dist_wait",
+                           PyLong_FromVoidPtr((void *)(&dist_wait)));
     PyObject_SetAttrString(
-        m, "hpat_dist_get_item_pointer",
-        PyLong_FromVoidPtr((void *)(&hpat_dist_get_item_pointer)));
-    PyObject_SetAttrString(m, "hpat_get_dummy_ptr",
-                           PyLong_FromVoidPtr((void *)(&hpat_get_dummy_ptr)));
+        m, "dist_get_item_pointer",
+        PyLong_FromVoidPtr((void *)(&dist_get_item_pointer)));
+    PyObject_SetAttrString(m, "get_dummy_ptr",
+                           PyLong_FromVoidPtr((void *)(&get_dummy_ptr)));
     PyObject_SetAttrString(m, "c_gather_scalar",
                            PyLong_FromVoidPtr((void *)(&c_gather_scalar)));
     PyObject_SetAttrString(m, "c_gatherv",
@@ -86,13 +86,13 @@ PyMODINIT_FUNC PyInit_hdist(void) {
                            PyLong_FromVoidPtr((void *)(&comm_req_alloc)));
     PyObject_SetAttrString(m, "req_array_setitem",
                            PyLong_FromVoidPtr((void *)(&req_array_setitem)));
-    PyObject_SetAttrString(m, "hpat_dist_waitall",
-                           PyLong_FromVoidPtr((void *)(&hpat_dist_waitall)));
+    PyObject_SetAttrString(m, "dist_waitall",
+                           PyLong_FromVoidPtr((void *)(&dist_waitall)));
     PyObject_SetAttrString(m, "comm_req_dealloc",
                            PyLong_FromVoidPtr((void *)(&comm_req_dealloc)));
 
-    PyObject_SetAttrString(m, "hpat_finalize",
-                           PyLong_FromVoidPtr((void *)(&hpat_finalize)));
+    PyObject_SetAttrString(m, "finalize",
+                           PyLong_FromVoidPtr((void *)(&finalize)));
     PyObject_SetAttrString(m, "oneD_reshape_shuffle",
                            PyLong_FromVoidPtr((void *)(&oneD_reshape_shuffle)));
     PyObject_SetAttrString(m, "permutation_int",

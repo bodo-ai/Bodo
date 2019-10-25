@@ -51,16 +51,16 @@ static void dist_exscan(char* in_ptr, char* out_ptr, int op,
                              int type_enum) __UNUSED__;
 
 static void dist_arr_reduce(void* out, int64_t total_size, int op_enum, int type_enum) __UNUSED__;
-static MPI_Request hpat_dist_irecv(void* out, int size, int type_enum, int pe,
+static MPI_Request dist_irecv(void* out, int size, int type_enum, int pe,
                                    int tag, bool cond) __UNUSED__;
-static MPI_Request hpat_dist_isend(void* out, int size, int type_enum, int pe,
+static MPI_Request dist_isend(void* out, int size, int type_enum, int pe,
                                    int tag, bool cond) __UNUSED__;
-static void hpat_dist_recv(void* out, int size, int type_enum, int pe,
+static void dist_recv(void* out, int size, int type_enum, int pe,
                            int tag) __UNUSED__;
-static void hpat_dist_send(void* out, int size, int type_enum, int pe,
+static void dist_send(void* out, int size, int type_enum, int pe,
                            int tag) __UNUSED__;
-static int hpat_dist_wait(MPI_Request req, bool cond) __UNUSED__;
-static void hpat_dist_waitall(int size, MPI_Request* req) __UNUSED__;
+static int dist_wait(MPI_Request req, bool cond) __UNUSED__;
+static void dist_waitall(int size, MPI_Request* req) __UNUSED__;
 
 static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum,
                             bool allgather) __UNUSED__;
@@ -77,7 +77,7 @@ static void c_alltoallv(void* send_data, void* recv_data, int* send_counts,
                         int typ_enum) __UNUSED__;
 static void c_alltoall(void* send_data, void* recv_data, int count,
                        int typ_enum) __UNUSED__;
-static int64_t hpat_dist_get_item_pointer(int64_t ind, int64_t start,
+static int64_t dist_get_item_pointer(int64_t ind, int64_t start,
                                           int64_t count) __UNUSED__;
 static void allgather(void* out_data, int size, void* in_data,
                       int type_enum) __UNUSED__;
@@ -96,14 +96,14 @@ static void permutation_int(int64_t* output, int n) __UNUSED__;
 static void permutation_array_index(unsigned char* lhs, int64_t len,
                                     int64_t elem_size, unsigned char* rhs,
                                     int64_t* p, int64_t p_len) __UNUSED__;
-static int hpat_finalize() __UNUSED__;
+static int finalize() __UNUSED__;
 static int hpat_dummy_ptr[64] __UNUSED__;
 
 /* *********************************************************************
 ************************************************************************/
 
-static void* hpat_get_dummy_ptr() __UNUSED__;
-static void* hpat_get_dummy_ptr() { return hpat_dummy_ptr; }
+static void* get_dummy_ptr() __UNUSED__;
+static void* get_dummy_ptr() { return hpat_dummy_ptr; }
 
 static size_t get_mpi_req_num_bytes() __UNUSED__;
 static size_t get_mpi_req_num_bytes() { return sizeof(MPI_Request); }
@@ -245,19 +245,19 @@ static void dist_exscan(char* in_ptr, char* out_ptr, int op_enum,
 }
 
 
-static void hpat_dist_recv(void* out, int size, int type_enum, int pe,
+static void dist_recv(void* out, int size, int type_enum, int pe,
                            int tag) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     MPI_Recv(out, size, mpi_typ, pe, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 }
 
-static void hpat_dist_send(void* out, int size, int type_enum, int pe,
+static void dist_send(void* out, int size, int type_enum, int pe,
                            int tag) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     MPI_Send(out, size, mpi_typ, pe, tag, MPI_COMM_WORLD);
 }
 
-static MPI_Request hpat_dist_irecv(void* out, int size, int type_enum, int pe,
+static MPI_Request dist_irecv(void* out, int size, int type_enum, int pe,
                                    int tag, bool cond) {
     MPI_Request mpi_req_recv(MPI_REQUEST_NULL);
     // printf("irecv size:%d pe:%d tag:%d, cond:%d\n", size, pe, tag, cond);
@@ -272,7 +272,7 @@ static MPI_Request hpat_dist_irecv(void* out, int size, int type_enum, int pe,
     return mpi_req_recv;
 }
 
-static MPI_Request hpat_dist_isend(void* out, int size, int type_enum, int pe,
+static MPI_Request dist_isend(void* out, int size, int type_enum, int pe,
                                    int tag, bool cond) {
     MPI_Request mpi_req_recv(MPI_REQUEST_NULL);
     // printf("isend size:%d pe:%d tag:%d, cond:%d\n", size, pe, tag, cond);
@@ -287,7 +287,7 @@ static MPI_Request hpat_dist_isend(void* out, int size, int type_enum, int pe,
     return mpi_req_recv;
 }
 
-static int hpat_dist_wait(MPI_Request req, bool cond) {
+static int dist_wait(MPI_Request req, bool cond) {
     if (cond) MPI_Wait(&req, MPI_STATUS_IGNORE);
     return 0;
 }
@@ -305,7 +305,7 @@ static void req_array_setitem(MPI_Request* req_arr, int64_t ind,
     return;
 }
 
-static void hpat_dist_waitall(int size, MPI_Request* req_arr) {
+static void dist_waitall(int size, MPI_Request* req_arr) {
     MPI_Waitall(size, req_arr, MPI_STATUSES_IGNORE);
     return;
 }
@@ -391,7 +391,7 @@ static int get_elem_size(int type_enum) {
     return types_sizes[type_enum];
 }
 
-static int64_t hpat_dist_get_item_pointer(int64_t ind, int64_t start,
+static int64_t dist_get_item_pointer(int64_t ind, int64_t start,
                                           int64_t count) {
     // printf("ind:%lld start:%lld count:%lld\n", ind, start, count);
     if (ind >= start && ind < start + count) return ind - start;
@@ -475,7 +475,7 @@ MPI_Request* comm_req_alloc(int size) {
 
 static void comm_req_dealloc(MPI_Request* req_arr) { delete[] req_arr; }
 
-static int hpat_finalize() {
+static int finalize() {
     int is_initialized;
     MPI_Initialized(&is_initialized);
     if (!is_initialized) {

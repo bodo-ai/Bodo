@@ -26,16 +26,16 @@ ll.add_symbol("get_time", hdist.get_time)
 ll.add_symbol("dist_reduce", hdist.dist_reduce)
 ll.add_symbol("dist_arr_reduce", hdist.dist_arr_reduce)
 ll.add_symbol("dist_exscan", hdist.dist_exscan)
-ll.add_symbol("hpat_dist_irecv", hdist.hpat_dist_irecv)
-ll.add_symbol("hpat_dist_isend", hdist.hpat_dist_isend)
-ll.add_symbol("hpat_dist_wait", hdist.hpat_dist_wait)
-ll.add_symbol("hpat_dist_get_item_pointer", hdist.hpat_dist_get_item_pointer)
-ll.add_symbol("hpat_get_dummy_ptr", hdist.hpat_get_dummy_ptr)
+ll.add_symbol("dist_irecv", hdist.dist_irecv)
+ll.add_symbol("dist_isend", hdist.dist_isend)
+ll.add_symbol("dist_wait", hdist.dist_wait)
+ll.add_symbol("dist_get_item_pointer", hdist.dist_get_item_pointer)
+ll.add_symbol("get_dummy_ptr", hdist.get_dummy_ptr)
 ll.add_symbol("allgather", hdist.allgather)
 ll.add_symbol("comm_req_alloc", hdist.comm_req_alloc)
 ll.add_symbol("comm_req_dealloc", hdist.comm_req_dealloc)
 ll.add_symbol("req_array_setitem", hdist.req_array_setitem)
-ll.add_symbol("hpat_dist_waitall", hdist.hpat_dist_waitall)
+ll.add_symbol("dist_waitall", hdist.dist_waitall)
 ll.add_symbol("oneD_reshape_shuffle", hdist.oneD_reshape_shuffle)
 ll.add_symbol("permutation_int", hdist.permutation_int)
 ll.add_symbol("permutation_array_index", hdist.permutation_array_index)
@@ -87,7 +87,7 @@ def lower_dist_irecv(context, builder, sig, args):
         lir.IntType(1),
     ]
     fnty = lir.FunctionType(mpi_req_llvm_type, arg_typs)
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_irecv")
+    fn = builder.module.get_or_insert_function(fnty, name="dist_irecv")
     return builder.call(fn, call_args)
 
 
@@ -134,7 +134,7 @@ def lower_dist_isend(context, builder, sig, args):
         lir.IntType(1),
     ]
     fnty = lir.FunctionType(mpi_req_llvm_type, arg_typs)
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_isend")
+    fn = builder.module.get_or_insert_function(fnty, name="dist_isend")
     return builder.call(fn, call_args)
 
 
@@ -169,14 +169,14 @@ def lower_dist_isend_void(context, builder, sig, args):
         lir.IntType(1),
     ]
     fnty = lir.FunctionType(mpi_req_llvm_type, arg_typs)
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_isend")
+    fn = builder.module.get_or_insert_function(fnty, name="dist_isend")
     return builder.call(fn, call_args)
 
 
 @lower_builtin(distributed_api.wait, mpi_req_numba_type, types.boolean)
 def lower_dist_wait(context, builder, sig, args):
     fnty = lir.FunctionType(lir.IntType(32), [mpi_req_llvm_type, lir.IntType(1)])
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_wait")
+    fn = builder.module.get_or_insert_function(fnty, name="dist_wait")
     return builder.call(fn, args)
 
 
@@ -185,7 +185,7 @@ def lower_dist_waitall(context, builder, sig, args):
     fnty = lir.FunctionType(
         lir.VoidType(), [lir.IntType(32), lir.IntType(8).as_pointer()]
     )
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_waitall")
+    fn = builder.module.get_or_insert_function(fnty, name="dist_waitall")
     builder.call(fn, args)
     return context.get_dummy_value()
 
@@ -339,7 +339,7 @@ def setitem_req_array(context, builder, sig, args):
 #                       wraparound=False):
 #         # get local index or -1 if out of bounds
 #         fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(64), lir.IntType(64), lir.IntType(64)])
-#         fn = builder.module.get_or_insert_function(fnty, name="hpat_dist_get_item_pointer")
+#         fn = builder.module.get_or_insert_function(fnty, name="dist_get_item_pointer")
 #         first_ind = builder.call(fn, [inds[0], start, count])
 #         inds = tuple([first_ind, *inds[1:]])
 #         # regular local pointer with new indices
@@ -349,7 +349,7 @@ def setitem_req_array(context, builder, sig, args):
 #         not_inbound = builder.icmp_signed('==', first_ind, lir.Constant(lir.IntType(64), -1))
 #         # get dummy pointer
 #         dummy_fnty  = lir.FunctionType(lir.IntType(8).as_pointer(), [])
-#         dummy_fn = builder.module.get_or_insert_function(dummy_fnty, name="hpat_get_dummy_ptr")
+#         dummy_fn = builder.module.get_or_insert_function(dummy_fnty, name="get_dummy_ptr")
 #         dummy_ptr = builder.bitcast(builder.call(dummy_fn, []), in_ptr.type)
 #         with builder.if_then(not_inbound, likely=True):
 #             builder.store(dummy_ptr, ret_ptr)
@@ -474,7 +474,7 @@ def dist_permutation_array_index(lhs, lhs_len, dtype_size, rhs, p, p_len):
 ########### finalize MPI when exiting ####################
 
 
-def hpat_finalize():
+def finalize():
     return 0
 
 
@@ -482,7 +482,7 @@ from numba.typing.templates import infer_global, AbstractTemplate
 from numba.typing import signature
 
 
-@infer_global(hpat_finalize)
+@infer_global(finalize)
 class FinalizeInfer(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
@@ -490,19 +490,19 @@ class FinalizeInfer(AbstractTemplate):
         return signature(types.int32, *args)
 
 
-ll.add_symbol("hpat_finalize", hdist.hpat_finalize)
+ll.add_symbol("finalize", hdist.finalize)
 
 
-@lower_builtin(hpat_finalize)
+@lower_builtin(finalize)
 def lower_hpat_finalize(context, builder, sig, args):
     fnty = lir.FunctionType(lir.IntType(32), [])
-    fn = builder.module.get_or_insert_function(fnty, name="hpat_finalize")
+    fn = builder.module.get_or_insert_function(fnty, name="finalize")
     return builder.call(fn, args)
 
 
 @numba.njit
 def call_finalize():
-    hpat_finalize()
+    finalize()
 
 
 def flush_stdout():
