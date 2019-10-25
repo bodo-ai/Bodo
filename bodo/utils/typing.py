@@ -12,15 +12,20 @@ from numba.typing import signature
 from numba.targets.imputils import lower_builtin, impl_ret_borrowed
 import bodo
 
+# error used to avoid numba's error checking
+class BodoError(BaseException):
+    pass
+
 
 def is_overload_none(val):
     return val is None or val == types.none or getattr(val, "value", False) is None
 
 
-def is_bool(val):
+def is_overload_constant_bool(val):
     return (
         isinstance(val, bool)
         or isinstance(val, bodo.utils.utils.BooleanLiteral)
+        or ((isinstance(val, types.Omitted) and isinstance(val.value, bool)))
     )
 
 
