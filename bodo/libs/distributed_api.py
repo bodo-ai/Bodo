@@ -1141,18 +1141,7 @@ req_array_type = ReqArrayType()
 register_model(ReqArrayType)(models.OpaqueModel)
 waitall = types.ExternalFunction("dist_waitall", types.void(types.int32, req_array_type))
 comm_req_alloc = types.ExternalFunction("comm_req_alloc", req_array_type(types.int32))
-
-
-def comm_req_dealloc():
-    return 0
-
-
-@infer_global(comm_req_dealloc)
-class DistCommReqDeAlloc(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1 and args[0] == req_array_type
-        return signature(types.none, *unliteral_all(args))
+comm_req_dealloc = types.ExternalFunction("comm_req_dealloc", types.void(req_array_type))
 
 
 @infer_global(operator.setitem)

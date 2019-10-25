@@ -44,13 +44,6 @@ ll.add_symbol("permutation_array_index", hdist.permutation_array_index)
 mpi_req_llvm_type = lir.IntType(8 * hdist.mpi_req_num_bytes)
 
 
-@lower_builtin(distributed_api.comm_req_dealloc, req_array_type)
-def lower_dist_comm_req_dealloc(context, builder, sig, args):
-    fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer()])
-    fn = builder.module.get_or_insert_function(fnty, name="comm_req_dealloc")
-    builder.call(fn, args)
-    return context.get_dummy_value()
-
 
 @lower_builtin(operator.setitem, ReqArrayType, types.intp, mpi_req_numba_type)
 def setitem_req_array(context, builder, sig, args):
