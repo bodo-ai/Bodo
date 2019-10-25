@@ -44,14 +44,6 @@ ll.add_symbol("permutation_array_index", hdist.permutation_array_index)
 mpi_req_llvm_type = lir.IntType(8 * hdist.mpi_req_num_bytes)
 
 
-
-@lower_builtin(distributed_api.wait, mpi_req_numba_type, types.boolean)
-def lower_dist_wait(context, builder, sig, args):
-    fnty = lir.FunctionType(lir.IntType(32), [mpi_req_llvm_type, lir.IntType(1)])
-    fn = builder.module.get_or_insert_function(fnty, name="dist_wait")
-    return builder.call(fn, args)
-
-
 @lower_builtin(distributed_api.waitall, types.int32, req_array_type)
 def lower_dist_waitall(context, builder, sig, args):
     fnty = lir.FunctionType(

@@ -1068,8 +1068,7 @@ def single_print(*args):
         print(*args)
 
 
-def wait():  # pragma: no cover
-    return 0
+wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
 
 
 def waitall():  # pragma: no cover
@@ -1090,14 +1089,6 @@ class DistRebalanceParallel(AbstractTemplate):
         assert not kws
         assert len(args) == 2  # array and count
         return signature(args[0], *unliteral_all(args))
-
-
-@infer_global(wait)
-class DistWait(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2
-        return signature(types.int32, *unliteral_all(args))
 
 
 @infer_global(waitall)

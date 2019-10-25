@@ -59,7 +59,7 @@ static void dist_recv(void* out, int size, int type_enum, int pe,
                            int tag) __UNUSED__;
 static void dist_send(void* out, int size, int type_enum, int pe,
                            int tag) __UNUSED__;
-static int dist_wait(MPI_Request req, bool cond) __UNUSED__;
+static void dist_wait(MPI_Request req, bool cond) __UNUSED__;
 static void dist_waitall(int size, MPI_Request* req) __UNUSED__;
 
 static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum,
@@ -287,9 +287,9 @@ static MPI_Request dist_isend(void* out, int size, int type_enum, int pe,
     return mpi_req_recv;
 }
 
-static int dist_wait(MPI_Request req, bool cond) {
-    if (cond) MPI_Wait(&req, MPI_STATUS_IGNORE);
-    return 0;
+static void dist_wait(MPI_Request req, bool cond) {
+    if (cond)
+        MPI_Wait(&req, MPI_STATUS_IGNORE);
 }
 
 static void allgather(void* out_data, int size, void* in_data, int type_enum) {
