@@ -143,6 +143,18 @@ def recv(dtype, rank, tag):
     return recv_arr[0]
 
 
+_irecv = types.ExternalFunction(
+    "dist_irecv",
+    mpi_req_numba_type(types.voidptr, types.int32, types.int32, types.int32, types.int32, types.bool_),
+)
+
+
+@numba.njit
+def irecv(arr, size, pe, tag, cond=True):
+    type_enum = get_type_enum(arr)
+    return _irecv(arr.ctypes, size, type_enum, pe, tag, cond)
+
+
 _alltoall = types.ExternalFunction(
     "c_alltoall", types.void(types.voidptr, types.voidptr, types.int32, types.int32)
 )
@@ -1038,10 +1050,6 @@ def single_print(*args):
         print(*args)
 
 
-def irecv():  # pragma: no cover
-    return 0
-
-
 def isend():  # pragma: no cover
     return 0
 
@@ -1070,7 +1078,6 @@ class DistRebalanceParallel(AbstractTemplate):
         return signature(args[0], *unliteral_all(args))
 
 
-@infer_global(irecv)
 @infer_global(isend)
 class DistIRecv(AbstractTemplate):
     def generic(self, args, kws):

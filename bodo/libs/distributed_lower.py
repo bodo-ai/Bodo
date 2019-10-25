@@ -46,53 +46,6 @@ mpi_req_llvm_type = lir.IntType(8 * hdist.mpi_req_num_bytes)
 
 # array, size, pe, tag, cond
 @lower_builtin(
-    distributed_api.irecv, types.npytypes.Array, types.int32, types.int32, types.int32
-)
-@lower_builtin(
-    distributed_api.irecv,
-    types.npytypes.Array,
-    types.int32,
-    types.int32,
-    types.int32,
-    types.boolean,
-)
-def lower_dist_irecv(context, builder, sig, args):
-    # store an int to specify data type
-    typ_enum = _numba_to_c_type_map[sig.args[0].dtype]
-    typ_arg = context.get_constant(types.int32, typ_enum)
-    out = make_array(sig.args[0])(context, builder, args[0])
-    size_arg = args[1]
-    if len(args) == 4:
-        cond_arg = context.get_constant(types.boolean, True)
-    else:
-        cond_arg = args[4]
-
-    call_args = [
-        builder.bitcast(out.data, lir.IntType(8).as_pointer()),
-        size_arg,
-        typ_arg,
-        args[2],
-        args[3],
-        cond_arg,
-    ]
-
-    # array, size, extra arg type for type enum
-    # pe, tag, cond
-    arg_typs = [
-        lir.IntType(8).as_pointer(),
-        lir.IntType(32),
-        lir.IntType(32),
-        lir.IntType(32),
-        lir.IntType(32),
-        lir.IntType(1),
-    ]
-    fnty = lir.FunctionType(mpi_req_llvm_type, arg_typs)
-    fn = builder.module.get_or_insert_function(fnty, name="dist_irecv")
-    return builder.call(fn, call_args)
-
-
-# array, size, pe, tag, cond
-@lower_builtin(
     distributed_api.isend, types.Array, types.int32, types.int32, types.int32
 )
 @lower_builtin(
