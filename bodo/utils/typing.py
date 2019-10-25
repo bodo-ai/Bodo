@@ -22,7 +22,7 @@ def is_overload_none(val):
     return val is None or val == types.none or getattr(val, "value", False) is None
 
 
-def is_overload_consuttant_bool(val):
+def is_overload_constant_bool(val):
     return (
         isinstance(val, bool)
         or isinstance(val, bodo.utils.utils.BooleanLiteral)
