@@ -33,9 +33,16 @@ def is_overload_constant_bool(val):
 def is_overload_constant_str(val):
     return (
         isinstance(val, str)
-        or (isinstance(val, types.StringLiteral) 
-            and isinstance(val.literal_value, str))
+        or (isinstance(val, types.StringLiteral) and isinstance(val.literal_value, str))
         or ((isinstance(val, types.Omitted) and isinstance(val.value, str)))
+    )
+
+
+def is_overload_constant_str_list(val):
+    return (
+        isinstance(val, bodo.utils.typing.ConstList)
+        and isinstance(val.consts, tuple)
+        and isinstance(val.consts[0], str)
     )
 
 

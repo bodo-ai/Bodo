@@ -86,6 +86,24 @@ def test_on_no_comm_cols():
         bodo.jit(impl)(df1, df3)
 
 
+# tests on type
+def test_on_str_strlist1():
+    def impl(df1, df2):
+        return df1.merge(df2, on=3)
+
+    with pytest.raises(BodoError, match="on must be of type str or str list"):
+        bodo.jit(impl)(df1, df2)
+
+
+# tests lefton type
+def test_on_str_strlist2():
+    def impl(df1, df2):
+        return df1.merge(df2, on=(1, "A"))
+
+    with pytest.raises(BodoError, match="on must be of type str or str list"):
+        bodo.jit(impl)(df1, df2)
+
+
 # tests both on and left_on specified
 def test_on_lefton():
     def impl(df1, df2):
@@ -140,7 +158,7 @@ def test_lefton_invalid():
 
 
 # tests invalid right_on key
-def test_lefton_invalid():
+def test_righton_invalid():
     def impl(df1, df2):
         return df1.merge(df2, left_on=["A", "E"], right_on=["A", "E"])
 
@@ -148,8 +166,44 @@ def test_lefton_invalid():
         bodo.jit(impl)(df1, df2)
 
 
+# tests lefton type
+def test_lefton_str_strlist1():
+    def impl(df1, df2):
+        return df1.merge(df2, left_on=3, right_on=["A", "B"])
+
+    with pytest.raises(BodoError, match="left_on must be of type str or str list"):
+        bodo.jit(impl)(df1, df2)
+
+
+# tests lefton type
+def test_lefton_str_strlist2():
+    def impl(df1, df2):
+        return df1.merge(df2, left_on=(1, "A"), right_on=["A", "B"])
+
+    with pytest.raises(BodoError, match="left_on must be of type str or str list"):
+        bodo.jit(impl)(df1, df2)
+
+
+# tests righton type
+def test_righton_str_strlist1():
+    def impl(df1, df2):
+        return df1.merge(df2, right_on=3, left_on=["A", "C"])
+
+    with pytest.raises(BodoError, match="right_on must be of type str or str list"):
+        bodo.jit(impl)(df1, df2)
+
+
+# tests righton type
+def test_righton_str_strlist2():
+    def impl(df1, df2):
+        return df1.merge(df2, right_on=(1, "A"), left_on=["A", "C"])
+
+    with pytest.raises(BodoError, match="right_on must be of type str or str list"):
+        bodo.jit(impl)(df1, df2)
+
+
 # tests unequal lengths of left_on and right_on
-def test_lefton_invalid():
+def test_lefton_righton_len_unequal():
     def impl(df1, df2):
         return df1.merge(df2, left_on=["A"], right_on=["A", "B"])
 

@@ -37,6 +37,7 @@ from bodo.utils.typing import (
     is_overload_none,
     is_overload_constant_bool,
     is_overload_constant_str,
+    is_overload_constant_str_list,
     is_overload_true,
     is_overload_false,
     is_overload_zero,
@@ -1129,6 +1130,27 @@ def validate_merge_spec(
     # make sure how is one of ["left", "right", "outer", "inner"]
     if how not in ["left", "right", "outer", "inner"]:
         raise BodoError("merge(): invalid key '{}' for how".format(how))
+    # make sure on is of type str or strlist
+    if (
+        (not is_overload_none(on))
+        and (not is_overload_constant_str_list(on))
+        and (not is_overload_constant_str(on))
+    ):
+        raise BodoError("merge(): on must be of type str or str list")
+    # make sure left_on is of type str or strlist
+    if (
+        (not is_overload_none(left_on))
+        and (not is_overload_constant_str_list(left_on))
+        and (not is_overload_constant_str(left_on))
+    ):
+        raise BodoError("merge(): left_on must be of type str or str list")
+    # make sure right_on is of type str or strlist
+    if (
+        (not is_overload_none(right_on))
+        and (not is_overload_constant_str_list(right_on))
+        and (not is_overload_constant_str(right_on))
+    ):
+        raise BodoError("merge(): right_on must be of type str or str list")
     # make sure leftindex is of type bool
     if not is_overload_constant_bool(left_index):
         raise BodoError(
