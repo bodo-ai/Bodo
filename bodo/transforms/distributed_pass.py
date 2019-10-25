@@ -49,10 +49,7 @@ import numpy as np
 
 import bodo
 from bodo.io.h5_api import h5file_type, h5group_type
-from bodo.libs import (
-    distributed_api,
-    distributed_lower,
-)  # import lower for module initialization
+from bodo.libs import distributed_api
 from bodo.libs.str_ext import string_type, unicode_to_utf8_and_len
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.transforms.distributed_analysis import (
@@ -994,7 +991,7 @@ class DistributedPass(object):
         n = args[0]
 
         def f(lhs, n):
-            bodo.libs.distributed_lower.dist_permutation_int(lhs, n)
+            bodo.libs.distributed_api.dist_permutation_int(lhs, n)
 
         f_block = compile_to_numba_ir(
             f,
@@ -1024,7 +1021,7 @@ class DistributedPass(object):
     #                     *self._array_sizes[lhs.name][1:]), dtype, scope, loc)
 
     #     def f(lhs, lhs_len, dtype_size, rhs, idx, idx_len):
-    #         bodo.libs.distributed_lower.dist_permutation_array_index(
+    #         bodo.libs.distributed_api.dist_permutation_array_index(
     #             lhs, lhs_len, dtype_size, rhs, idx, idx_len)
 
     #     f_block = compile_to_numba_ir(f, {'bodo': bodo},
@@ -1070,7 +1067,7 @@ class DistributedPass(object):
         def f(
             lhs, in_arr, new_0dim_global_len, old_0dim_global_len, dtype_size
         ):  # pragma: no cover
-            bodo.libs.distributed_lower.dist_oneD_reshape_shuffle(
+            bodo.libs.distributed_api.dist_oneD_reshape_shuffle(
                 lhs, in_arr, new_0dim_global_len, old_0dim_global_len, dtype_size
             )
 
@@ -1508,7 +1505,7 @@ class DistributedPass(object):
             if isinstance(self.typemap[index_var.name], types.Integer):
 
                 def f(A, val, index, chunk_start, chunk_count):  # pragma: no cover
-                    bodo.libs.distributed_lower._set_if_in_range(
+                    bodo.libs.distributed_api._set_if_in_range(
                         A, val, index, chunk_start, chunk_count
                     )
 
@@ -1523,7 +1520,7 @@ class DistributedPass(object):
             # convert setitem with global range to setitem with local range
             # that overlaps with the local array chunk
             def f(A, val, start, stop, chunk_start, chunk_count):  # pragma: no cover
-                loc_start, loc_stop = bodo.libs.distributed_lower._get_local_range(
+                loc_start, loc_stop = bodo.libs.distributed_api._get_local_range(
                     start, stop, chunk_start, chunk_count
                 )
                 A[loc_start:loc_stop] = val
@@ -2276,7 +2273,7 @@ class DistributedPass(object):
             pre_init_val = "v = np.full_like(s, {}, s.dtype)".format(init_val)
             init_val = "v"
 
-        f_text = "def f(s):\n  {}\n  s = bodo.libs.distributed_lower._root_rank_select(s, {})".format(
+        f_text = "def f(s):\n  {}\n  s = bodo.libs.distributed_api._root_rank_select(s, {})".format(
             pre_init_val, init_val
         )
         loc_vars = {}

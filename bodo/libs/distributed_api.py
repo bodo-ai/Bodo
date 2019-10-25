@@ -4,6 +4,8 @@ from enum import Enum
 import math
 import time
 import numpy as np
+import sys
+import atexit
 
 import numba
 from numba import types, cgutils
@@ -40,6 +42,25 @@ from bodo.libs import hdist
 
 import llvmlite.binding as ll
 
+
+ll.add_symbol("dist_get_time", hdist.dist_get_time)
+ll.add_symbol("get_time", hdist.get_time)
+ll.add_symbol("dist_reduce", hdist.dist_reduce)
+ll.add_symbol("dist_arr_reduce", hdist.dist_arr_reduce)
+ll.add_symbol("dist_exscan", hdist.dist_exscan)
+ll.add_symbol("dist_irecv", hdist.dist_irecv)
+ll.add_symbol("dist_isend", hdist.dist_isend)
+ll.add_symbol("dist_wait", hdist.dist_wait)
+ll.add_symbol("dist_get_item_pointer", hdist.dist_get_item_pointer)
+ll.add_symbol("get_dummy_ptr", hdist.get_dummy_ptr)
+ll.add_symbol("allgather", hdist.allgather)
+ll.add_symbol("comm_req_alloc", hdist.comm_req_alloc)
+ll.add_symbol("comm_req_dealloc", hdist.comm_req_dealloc)
+ll.add_symbol("req_array_setitem", hdist.req_array_setitem)
+ll.add_symbol("dist_waitall", hdist.dist_waitall)
+ll.add_symbol("oneD_reshape_shuffle", hdist.oneD_reshape_shuffle)
+ll.add_symbol("permutation_int", hdist.permutation_int)
+ll.add_symbol("permutation_array_index", hdist.permutation_array_index)
 ll.add_symbol("c_get_rank", hdist.dist_get_rank)
 ll.add_symbol("c_get_size", hdist.dist_get_size)
 ll.add_symbol("c_barrier", hdist.barrier)
@@ -1150,3 +1171,136 @@ def overload_req_arr_setitem(A, idx, val):
     if A == req_array_type:
         assert val == mpi_req_numba_type
         return lambda A, idx, val: req_array_setitem(A, idx, val)
+
+
+
+# find overlapping range of an input range (start:stop) and a chunk range
+# (chunk_start:chunk_start+chunk_count). Inputs are assumed positive.
+# output is set to empty range of local range goes out of bounds
+@numba.njit
+def _get_local_range(start, stop, chunk_start, chunk_count):  # pragma: no cover
+    assert start >= 0 and stop > 0
+    new_start = max(start, chunk_start)
+    new_stop = min(stop, chunk_start + chunk_count)
+    loc_start = new_start - chunk_start
+    loc_stop = new_stop - chunk_start
+    if loc_start < 0 or loc_stop < 0:
+        loc_start = 1
+        loc_stop = 0
+    return loc_start, loc_stop
+
+
+@numba.njit
+def _set_if_in_range(A, val, index, chunk_start, chunk_count):  # pragma: no cover
+    if index >= chunk_start and index < chunk_start + chunk_count:
+        A[index - chunk_start] = val
+
+
+@numba.njit
+def _root_rank_select(old_val, new_val):  # pragma: no cover
+    if get_rank() == 0:
+        return old_val
+    return new_val
+
+
+def get_tuple_prod(t):
+    return np.prod(t)
+
+
+@overload(get_tuple_prod)
+def get_tuple_prod_overload(t):
+    # handle empty tuple seperately since empty getiter doesn't work
+    if t == numba.types.containers.Tuple(()):
+        return lambda t: 1
+
+    def get_tuple_prod_impl(t):
+        res = 1
+        for a in t:
+            res *= a
+        return res
+
+    return get_tuple_prod_impl
+
+
+sig = types.void(
+    types.voidptr,  # output array
+    types.voidptr,  # input array
+    types.intp,  # old_len
+    types.intp,  # new_len
+    types.intp,  # input lower_dim size in bytes
+    types.intp,  # output lower_dim size in bytes
+)
+
+oneD_reshape_shuffle = types.ExternalFunction("oneD_reshape_shuffle", sig)
+
+
+@numba.njit
+def dist_oneD_reshape_shuffle(
+    lhs, in_arr, new_0dim_global_len, old_0dim_global_len, dtype_size
+):  # pragma: no cover
+    c_in_arr = np.ascontiguousarray(in_arr)
+    in_lower_dims_size = get_tuple_prod(c_in_arr.shape[1:])
+    out_lower_dims_size = get_tuple_prod(lhs.shape[1:])
+    # print(c_in_arr)
+    # print(new_0dim_global_len, old_0dim_global_len, out_lower_dims_size, in_lower_dims_size)
+    oneD_reshape_shuffle(
+        lhs.ctypes,
+        c_in_arr.ctypes,
+        new_0dim_global_len,
+        old_0dim_global_len,
+        dtype_size * out_lower_dims_size,
+        dtype_size * in_lower_dims_size,
+    )
+    # print(in_arr)
+
+
+permutation_int = types.ExternalFunction(
+    "permutation_int", types.void(types.voidptr, types.intp)
+)
+
+
+@numba.njit
+def dist_permutation_int(lhs, n):
+    permutation_int(lhs.ctypes, n)
+
+
+permutation_array_index = types.ExternalFunction(
+    "permutation_array_index",
+    types.void(
+        types.voidptr, types.intp, types.intp, types.voidptr, types.voidptr, types.intp
+    ),
+)
+
+
+@numba.njit
+def dist_permutation_array_index(lhs, lhs_len, dtype_size, rhs, p, p_len):
+    c_rhs = np.ascontiguousarray(rhs)
+    lower_dims_size = get_tuple_prod(c_rhs.shape[1:])
+    elem_size = dtype_size * lower_dims_size
+    permutation_array_index(
+        lhs.ctypes, lhs_len, elem_size, c_rhs.ctypes, p.ctypes, p_len
+    )
+
+
+########### finalize MPI when exiting ####################
+
+
+ll.add_symbol("finalize", hdist.finalize)
+finalize = types.ExternalFunction("finalize", types.int32())
+
+
+@numba.njit
+def call_finalize():
+    finalize()
+
+
+def flush_stdout():
+    # using a function since pytest throws an error sometimes
+    # if flush function is passed directly to atexit
+    if not sys.stdout.closed:
+        sys.stdout.flush()
+
+
+atexit.register(call_finalize)
+# flush output before finalize
+atexit.register(flush_stdout)
