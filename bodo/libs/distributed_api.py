@@ -1141,7 +1141,7 @@ class ReqArrayType(types.Type):
 
 req_array_type = ReqArrayType()
 register_model(ReqArrayType)(models.OpaqueModel)
-waitall = types.ExternalFunction("dist_wait", types.void(types.int32, req_array_type))
+waitall = types.ExternalFunction("dist_waitall", types.void(types.int32, req_array_type))
 
 
 def comm_req_alloc():
