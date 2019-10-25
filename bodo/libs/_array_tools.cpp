@@ -906,8 +906,6 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
       if (iSize == 1)
         ListEntR.push_back(iRow);
     }
-    int nbL=ListEntL.size();
-    int nbR=ListEntR.size();
     auto GetBlocks=[&](table_info* table, std::vector<size_t> const& ListEnt) -> std::vector<std::vector<size_t>> {
       int len=ListEnt.size();
       std::vector<int> ListStatus(len,0);
@@ -980,18 +978,89 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
         }
       }
     }
-    
-
-
-    
   }
-  int nbRowOut = ListPairWrite.size();
-  
-
-
-  
+  size_t nbRowOut = ListPairWrite.size();
+  //
+  //
+  //
+  auto RetrieveArray = [&](array_info* in_arr, int const& ChoiceColumn) -> array_info* {
+    auto get_iRow=[&](size_t const& iRowIn) -> size_t {
+      if (ChoiceColumn == 0)
+        return ListPairWrite[iRowIn].first;
+      return ListPairWrite[iRowIn].second;
+    };
+    if (in_arr->arr_type == bodo_array_type::STRING) {
+      int64_t n_chars=0;
+      uint32_t* in_offsets = (uint32_t*)in_arr->data2;
+      std::vector<uint32_t> ListSizes(nbRowOut);
+      for (size_t iRow=0; iRow<nbRowOut; iRow++) {
+        size_t iRowW=get_iRow(iRow);
+        uint32_t end_offset = in_offsets[iRowW + 1];
+        uint32_t start_offset = in_offsets[iRowW];
+        uint32_t size = end_offset - start_offset;
+        ListSizes[iRow] = size;
+        n_chars += size;
+      }
+      array_info* out_arr = alloc_array(nbRowOut, n_chars,
+                                        in_arr->arr_type, in_arr->dtype, 0);
+      uint32_t pos = 0;
+      uint32_t* out_offsets = (uint32_t*)out_arr->data2;
+      for (size_t iRow=0; iRow<nbRowOut; iRow++) {
+        size_t iRowW=get_iRow(iRow);
+        uint32_t start_offset = in_offsets[iRowW];
+        uint32_t size = ListSizes[iRow];
+        out_offsets[iRow] = pos;
+        for (uint32_t i=0; i<size; i++) {
+          out_arr->data1[pos] = in_arr->data1[start_offset];
+          pos++;
+          start_offset++;
+        }
+        pos += size;
+      }
+      out_offsets[nbRowOut] = pos;
+      return out_arr;
+    }
+    if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+      array_info* out_arr = alloc_array(nbRowOut, -1,
+                                        in_arr->arr_type, in_arr->dtype, 0);
+      uint8_t* in_null_bitmask = (uint8_t*)in_arr->null_bitmask;
+      uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
+      uint64_t siztype = get_item_size(in_arr->dtype);
+      for (size_t iRow=0; iRow<nbRowOut; iRow++) {
+        size_t iRowW=get_iRow(iRow);
+        //
+        for (uint64_t u=0; u<siztype; u++)
+          out_arr->data1[siztype*iRow + u] = in_arr->data1[siztype*iRowW + u];
+        //
+        bool bit = GetBit(in_null_bitmask, iRowW);
+        SetBitTo(out_null_bitmask, iRow, bit);
+      }
+    }
+    //
+    // NUMPY case
+    array_info* out_arr = alloc_array(nbRowOut, -1,
+                                      in_arr->arr_type, in_arr->dtype, 0);
+    uint64_t siztype = get_item_size(in_arr->dtype);
+    for (size_t iRow=0; iRow<nbRowOut; iRow++) {
+      size_t iRowW=get_iRow(iRow);
+      //
+        for (uint64_t u=0; u<siztype; u++)
+          out_arr->data1[siztype*iRow + u] = in_arr->data1[siztype*iRowW + u];
+    }
+  };
+  std::vector<array_info*> out_arrs;
+  for (size_t i=0; i<nb_data_left; i++)
+    out_arrs.push_back(RetrieveArray(data_left->columns[i], 0));
+  for (size_t i=0; i<nb_data_right; i++)
+    out_arrs.push_back(RetrieveArray(data_right->columns[i], 1));
+  for (size_t i=0; i<nb_key; i++)
+    out_arrs.push_back(RetrieveArray(key_left->columns[i], 0));
+  for (size_t i=0; i<nb_key; i++)
+    out_arrs.push_back(RetrieveArray(key_right->columns[i], 1));
+  //
   delete[] hashes_left;
   delete[] hashes_right;
+  return new table_info(out_arrs);
 }
 
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
