@@ -156,7 +156,7 @@ def alltoall(send_arr, recv_arr, count):
     _alltoall(send_arr.ctypes, recv_arr.ctypes, np.int32(count), type_enum)
 
 
-@numba.generated_jit
+@numba.generated_jit(nopython=True)
 def gather_scalar(data, allgather=False):
     data = types.unliteral(data)
     typ_val = _numba_to_c_type_map[data]
@@ -225,7 +225,7 @@ _dist_arr_reduce = types.ExternalFunction(
 )
 
 
-@numba.generated_jit
+@numba.generated_jit(nopython=True)
 def dist_reduce(value, reduce_op):
     if isinstance(value, types.Array):
         typ_enum = np.int32(_numba_to_c_type_map[value.dtype])
@@ -253,10 +253,6 @@ def dist_reduce(value, reduce_op):
     typ_enum = np.int32(_numba_to_c_type_map[target_typ])
 
     def impl(value, reduce_op):
-        # in_arr = np.full(1, value)
-        # out_arr = np.zeros(1, target_typ)
-        # _dist_reduce(in_arr.ctypes, out_arr.ctypes, reduce_op, typ_enum)
-        # return out_arr[0]
         in_ptr = value_to_ptr(value)
         out_ptr = value_to_ptr(value)
         _dist_reduce(in_ptr, out_ptr, reduce_op, typ_enum)
@@ -275,13 +271,13 @@ _dist_exscan = types.ExternalFunction(
 def dist_exscan(value, reduce_op):
     target_typ = types.unliteral(value)
     typ_enum = np.int32(_numba_to_c_type_map[target_typ])
+    zero = target_typ(0)
 
     def impl(value, reduce_op):
-        # TODO: avoid allocation
-        in_arr = np.full(1, value)
-        out_arr = np.zeros(1, target_typ)
-        _dist_exscan(in_arr.ctypes, out_arr.ctypes, reduce_op, typ_enum)
-        return out_arr[0]
+        in_ptr = value_to_ptr(value)
+        out_ptr = value_to_ptr(zero)
+        _dist_exscan(in_ptr, out_ptr, reduce_op, typ_enum)
+        return load_val_ptr(out_ptr, value)
 
     return impl
 
@@ -969,7 +965,7 @@ def get_node_portion(total_size, pes, rank):
     return min(total_size, (rank + 1) * chunk) - min(total_size, rank * chunk)
 
 
-@numba.generated_jit
+@numba.generated_jit(nopython=True)
 def dist_cumsum(in_arr, out_arr):
     zero = in_arr.dtype(0)
     op = np.int32(Reduce_Type.Sum.value)
