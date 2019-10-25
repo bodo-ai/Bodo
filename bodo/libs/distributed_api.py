@@ -1022,8 +1022,14 @@ def dist_setitem(arr, index, val):  # pragma: no cover
     return 0
 
 
+_allgather = types.ExternalFunction("allgather", types.void(types.voidptr, types.int32,
+    types.voidptr, types.int32))
+
+
+@numba.njit
 def allgather(arr, val):  # pragma: no cover
-    arr[0] = val
+    type_enum = get_type_enum(arr)
+    _allgather(arr.ctypes, 1, value_to_ptr(val), type_enum)
 
 
 def dist_return(A):  # pragma: no cover
@@ -1116,14 +1122,6 @@ def single_print(*args):
 
 
 wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
-
-
-@infer_global(allgather)
-class DistAllgather(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2  # array and val
-        return signature(types.none, *unliteral_all(args))
 
 
 # @infer_global(dist_setitem)
