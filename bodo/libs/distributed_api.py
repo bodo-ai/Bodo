@@ -1071,10 +1071,6 @@ def single_print(*args):
 wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
 
 
-def waitall():  # pragma: no cover
-    return 0
-
-
 @infer_global(allgather)
 class DistAllgather(AbstractTemplate):
     def generic(self, args, kws):
@@ -1089,14 +1085,6 @@ class DistRebalanceParallel(AbstractTemplate):
         assert not kws
         assert len(args) == 2  # array and count
         return signature(args[0], *unliteral_all(args))
-
-
-@infer_global(waitall)
-class DistWaitAll(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2 and args == (types.int32, req_array_type)
-        return signature(types.none, *unliteral_all(args))
 
 
 # @infer_global(dist_setitem)
@@ -1114,6 +1102,7 @@ class ReqArrayType(types.Type):
 
 req_array_type = ReqArrayType()
 register_model(ReqArrayType)(models.OpaqueModel)
+waitall = types.ExternalFunction("dist_wait", types.void(types.int32, req_array_type))
 
 
 def comm_req_alloc():
