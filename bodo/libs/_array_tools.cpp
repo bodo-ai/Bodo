@@ -543,7 +543,7 @@ struct mpi_comm_info {
             }
         }
         if (has_nulls) {
-            for (size_t i = 0; i < n_pes; i++) {
+            for (size_t i = 0; i < size_t(n_pes); i++) {
                 send_count_null[i] = (send_count[i] + 7) >> 3;
                 recv_count_null[i] = (recv_count[i] + 7) >> 3;
             }
@@ -561,7 +561,7 @@ struct mpi_comm_info {
  */
 void convert_len_arr_to_offset(uint32_t* offsets, size_t const& num_strs) {
     uint32_t curr_offset = 0;
-    for (int64_t i = 0; i < num_strs; i++) {
+    for (size_t i = 0; i < num_strs; i++) {
         uint32_t val = offsets[i];
         offsets[i] = curr_offset;
         curr_offset += val;
@@ -820,55 +820,25 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
   //
   auto TestEqual=[&](table_info* key1, size_t const& iRow1, table_info* key2, size_t const& iRow2) -> bool {
     for (size_t iKey=0; iKey<nb_key; iKey++) {
-      if (key1->columns[iKey]->dtype == Bodo_CTypes::INT8) {
-        int8_t val1 = ((int8_t*)key1->columns[iKey]->data1)[iRow1];
-        int8_t val2 = ((int8_t*)key2->columns[iKey]->data1)[iRow2];
-        return val1 == val2;
+      if (key1->columns[iKey]->arr_type == bodo_array_type::NUMPY) {
+        uint64_t siztype = get_item_size(key1->columns[iKey]->dtype);
+        for (uint64_t u=0; u<siztype; u++) {
+          if (key1->columns[iKey]->data1[siztype*iRow1 + u] != key2->columns[iKey]->data1[siztype*iRow2 + u])
+            return false;
+        }
       }
-      if (key1->columns[iKey]->dtype == Bodo_CTypes::UINT8) {
-        uint8_t val1 = ((uint8_t*)key1->columns[iKey]->data1)[iRow1];
-        uint8_t val2 = ((uint8_t*)key2->columns[iKey]->data1)[iRow2];
-        return val1 == val2;
-      }
-      if (key1->columns[iKey]->dtype == Bodo_CTypes::INT16) {
-        int16_t val1 = ((int16_t*)key1->columns[iKey]->data1)[iRow1];
-        int16_t val2 = ((int16_t*)key2->columns[iKey]->data1)[iRow2];
-        return val1 == val2;
-      }
-      if (key1->columns[iKey]->dtype == Bodo_CTypes::UINT16) {
-        uint16_t val1 = ((uint16_t*)key1->columns[iKey]->data1)[iRow1];
-        uint16_t val2 = ((uint16_t*)key2->columns[iKey]->data1)[iRow2];
-        return val1 == val2;
-      }
-      if (key1->columns[iKey]->dtype == Bodo_CTypes::INT32) {
-        int32_t val1 = ((int32_t*)key1->columns[iKey]->data1)[iRow1];
-        int32_t val2 = ((int32_t*)key2->columns[iKey]->data1)[iRow2];
-        return val1 == val2;
-      }
-      if (key1->columns[iKey]->dtype == Bodo_CTypes::UINT32) {
-        uint32_t val1 = ((uint32_t*)key1->columns[iKey]->data1)[iRow1];
-        uint32_t val2 = ((uint32_t*)key2->columns[iKey]->data1)[iRow2];
-        return val1 == val2;
-      }
-      if (key1->columns[iKey]->dtype == Bodo_CTypes::INT64) {
-        int64_t val1 = ((int64_t*)key1->columns[iKey]->data1)[iRow1];
-        int64_t val2 = ((int64_t*)key2->columns[iKey]->data1)[iRow2];
-        return val1 == val2;
-      }
-      if (key1->columns[iKey]->dtype == Bodo_CTypes::UINT64) {
-        uint64_t val1 = ((uint64_t*)key1->columns[iKey]->data1)[iRow1];
-        uint64_t val2 = ((uint64_t*)key2->columns[iKey]->data1)[iRow2];
-        return val1 == val2;
-      }
-      if (key1->columns[iKey]->dtype == Bodo_CTypes::FLOAT32) {
-        float val1 = ((float*)key1->columns[iKey]->data1)[iRow1];
-        float val2 = ((float*)key2->columns[iKey]->data1)[iRow2];
-        return val1 == val2;
-      }
-      if (key1->columns[iKey]->dtype == Bodo_CTypes::FLOAT64) {
-        double val1 = ((double*)key1->columns[iKey]->data1)[iRow1];
-        double val2 = ((double*)key2->columns[iKey]->data1)[iRow2];
-        return val1 == val2;
+      if (key1->columns[iKey]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        uint8_t* null_bitmask1 = (uint8_t*)key1->columns[iKey]->null_bitmask;
+        uint8_t* null_bitmask2 = (uint8_t*)key2->columns[iKey]->null_bitmask;
+        bool bit1 = GetBit(null_bitmask1, iRow1);
+        bool bit2 = GetBit(null_bitmask2, iRow2);
+        if (bit1 != bit2)
+          return false;
+        uint64_t siztype = get_item_size(key1->columns[iKey]->dtype);
+        for (uint64_t u=0; u<siztype; u++) {
+          if (key1->columns[iKey]->data1[siztype*iRow1 + u] != key2->columns[iKey]->data1[siztype*iRow2 + u])
+            return false;
+        }
       }
       if (key1->columns[iKey]->arr_type == bodo_array_type::STRING) {
         uint32_t pos1_prev = ((uint32_t*)key1->columns[iKey]->data2)[iRow1];
@@ -887,10 +857,9 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
           if (charL != charR)
             return false;
         }
-        return true;
       }
     }
-    PyErr_SetString(PyExc_RuntimeError, "Invalid data type error");
+    return true;
   };
   //
   // Now iterating and determining how many entries we have to do.
@@ -1035,6 +1004,7 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
         bool bit = GetBit(in_null_bitmask, iRowW);
         SetBitTo(out_null_bitmask, iRow, bit);
       }
+      return out_arr;
     }
     //
     // NUMPY case
@@ -1047,6 +1017,7 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
         for (uint64_t u=0; u<siztype; u++)
           out_arr->data1[siztype*iRow + u] = in_arr->data1[siztype*iRowW + u];
     }
+    return out_arr;
   };
   std::vector<array_info*> out_arrs;
   for (size_t i=0; i<nb_data_left; i++)
