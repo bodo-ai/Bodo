@@ -143,6 +143,27 @@ def recv(dtype, rank, tag):
     return recv_arr[0]
 
 
+_isend = types.ExternalFunction(
+    "dist_isend",
+    mpi_req_numba_type(types.voidptr, types.int32, types.int32, types.int32, types.int32, types.bool_),
+)
+
+
+@numba.generated_jit(nopython=True)
+def isend(arr, size, pe, tag, cond=True):
+    if isinstance(arr, types.Array):
+        def impl(arr, size, pe, tag, cond=True):
+            type_enum = get_type_enum(arr)
+            return _isend(arr.ctypes, size, type_enum, pe, tag, cond)
+        return impl
+
+    # voidptr input, pointer to bytes
+    typ_enum = _numba_to_c_type_map[types.uint8]
+    def impl_voidptr(arr, size, pe, tag, cond=True):
+        return _isend(arr, size, typ_enum, pe, tag, cond)
+    return impl_voidptr
+
+
 _irecv = types.ExternalFunction(
     "dist_irecv",
     mpi_req_numba_type(types.voidptr, types.int32, types.int32, types.int32, types.int32, types.bool_),
@@ -782,9 +803,6 @@ def int_getitem(arr, ind, arr_start, total_len, is_1D):
 @overload(int_getitem)
 def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
     if arr == string_array_type:
-        # TODO: fix and test. It fails with weird error on mpich 3.2.1:
-        # MPIDI_CH3U_Buffer_copy(64): Message truncated; 4 bytes received but
-        # buffer size is 4
         # TODO: other kinds, unicode
         kind = numba.unicode.PY_UNICODE_1BYTE_KIND
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
@@ -1050,10 +1068,6 @@ def single_print(*args):
         print(*args)
 
 
-def isend():  # pragma: no cover
-    return 0
-
-
 def wait():  # pragma: no cover
     return 0
 
@@ -1076,14 +1090,6 @@ class DistRebalanceParallel(AbstractTemplate):
         assert not kws
         assert len(args) == 2  # array and count
         return signature(args[0], *unliteral_all(args))
-
-
-@infer_global(isend)
-class DistIRecv(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) in [4, 5]
-        return signature(mpi_req_numba_type, *unliteral_all(args))
 
 
 @infer_global(wait)
