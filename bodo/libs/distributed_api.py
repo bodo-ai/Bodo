@@ -73,6 +73,7 @@ _get_rank = types.ExternalFunction("c_get_rank", types.int32())
 _get_size = types.ExternalFunction("c_get_size", types.int32())
 _barrier = types.ExternalFunction("c_barrier", types.int32())
 
+
 @numba.njit
 def get_rank():
     """wrapper for getting process rank (MPI rank currently)"""
@@ -252,10 +253,35 @@ def dist_reduce(value, reduce_op):
     typ_enum = np.int32(_numba_to_c_type_map[target_typ])
 
     def impl(value, reduce_op):
+        # in_arr = np.full(1, value)
+        # out_arr = np.zeros(1, target_typ)
+        # _dist_reduce(in_arr.ctypes, out_arr.ctypes, reduce_op, typ_enum)
+        # return out_arr[0]
         in_ptr = value_to_ptr(value)
         out_ptr = value_to_ptr(value)
         _dist_reduce(in_ptr, out_ptr, reduce_op, typ_enum)
         return load_val_ptr(out_ptr, value)
+
+    return impl
+
+
+_dist_exscan = types.ExternalFunction(
+    "dist_exscan",
+    types.void(types.voidptr, types.voidptr, types.int32, types.int32),
+)
+
+
+@numba.generated_jit(nopython=True)
+def dist_exscan(value, reduce_op):
+    target_typ = types.unliteral(value)
+    typ_enum = np.int32(_numba_to_c_type_map[target_typ])
+
+    def impl(value, reduce_op):
+        # TODO: avoid allocation
+        in_arr = np.full(1, value)
+        out_arr = np.zeros(1, target_typ)
+        _dist_exscan(in_arr.ctypes, out_arr.ctypes, reduce_op, typ_enum)
+        return out_arr[0]
 
     return impl
 
@@ -946,12 +972,13 @@ def get_node_portion(total_size, pes, rank):
 @numba.generated_jit
 def dist_cumsum(in_arr, out_arr):
     zero = in_arr.dtype(0)
+    op = np.int32(Reduce_Type.Sum.value)
 
     def cumsum_impl(in_arr, out_arr):  # pragma: no cover
         c = zero
         for v in np.nditer(in_arr):
             c += v.item()
-        prefix_var = dist_exscan(c)
+        prefix_var = dist_exscan(c, op)
         for i in range(in_arr.size):
             prefix_var += in_arr[i]
             out_arr[i] = prefix_var
@@ -963,11 +990,6 @@ def dist_cumsum(in_arr, out_arr):
 def dist_cumprod(arr):  # pragma: no cover
     """dummy to implement cumprod"""
     return arr
-
-
-def dist_exscan(value):  # pragma: no cover
-    """dummy to implement simple exscan"""
-    return value
 
 
 def dist_setitem(arr, index, val):  # pragma: no cover
@@ -1049,14 +1071,6 @@ class DistRebalanceParallel(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         assert len(args) == 2  # array and count
-        return signature(args[0], *unliteral_all(args))
-
-
-@infer_global(dist_exscan)
-class DistExscan(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
         return signature(args[0], *unliteral_all(args))
 
 

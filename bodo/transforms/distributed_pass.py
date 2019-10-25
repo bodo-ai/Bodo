@@ -844,10 +844,11 @@ class DistributedPass(object):
 
                 def f(fname, arr):  # pragma: no cover
                     count = len(arr)
-                    start = bodo.libs.distributed_api.dist_exscan(count)
+                    start = bodo.libs.distributed_api.dist_exscan(count, _op)
                     return bodo.io.np_io.file_write_parallel(fname, arr, start, count)
 
-                return compile_func_single_block(f, [_fname, arr], assign.target, self)
+                return compile_func_single_block(f, [_fname, arr], assign.target, self,
+                    extra_globals={"_op": np.int32(Reduce_Type.Sum.value)})
 
         return out
 
@@ -935,7 +936,7 @@ class DistributedPass(object):
 
             def f(fname, str_out):  # pragma: no cover
                 utf8_str, utf8_len = unicode_to_utf8_and_len(str_out)
-                start = bodo.libs.distributed_api.dist_exscan(utf8_len)
+                start = bodo.libs.distributed_api.dist_exscan(utf8_len, _op)
                 # TODO: unicode file name
                 bodo.io.np_io._file_write_parallel(
                     fname._data, utf8_str, start, utf8_len, 1
@@ -946,7 +947,8 @@ class DistributedPass(object):
                 [fname, str_out],
                 assign.target,
                 self,
-                extra_globals={"unicode_to_utf8_and_len": unicode_to_utf8_and_len},
+                extra_globals={"unicode_to_utf8_and_len": unicode_to_utf8_and_len,
+                "_op": np.int32(Reduce_Type.Sum.value)},
             )
 
         return [assign]
@@ -970,14 +972,14 @@ class DistributedPass(object):
     def _fix_parallel_df_index(self, df):
         def f(df):  # pragma: no cover
             l = len(df)
-            start = bodo.libs.distributed_api.dist_exscan(l)
+            start = bodo.libs.distributed_api.dist_exscan(l, _op)
             ind = np.arange(start, start + l)
             df2 = bodo.hiframes.pd_dataframe_ext.set_df_index(df, ind)
             return df2
 
         f_block = compile_to_numba_ir(
             f,
-            {"bodo": bodo, "np": np},
+            {"bodo": bodo, "np": np, "_op": np.int32(Reduce_Type.Sum.value)},
             self.typingctx,
             (self.typemap[df.name],),
             self.typemap,
@@ -1809,14 +1811,14 @@ class DistributedPass(object):
                 l_nest.start = start_var
 
             def _fix_ind_bounds(start, stop):
-                prefix = bodo.libs.distributed_api.dist_exscan(stop - start)
+                prefix = bodo.libs.distributed_api.dist_exscan(stop - start, _op)
                 # rank = bodo.libs.distributed_api.get_rank()
                 # print(rank, prefix, start, stop)
                 return start + prefix, stop + prefix
 
             f_block = compile_to_numba_ir(
                 _fix_ind_bounds,
-                {"bodo": bodo},
+                {"bodo": bodo, "_op": np.int32(Reduce_Type.Sum.value)},
                 self.typingctx,
                 (types.intp, types.intp),
                 self.typemap,
@@ -1941,10 +1943,11 @@ class DistributedPass(object):
         else:
             assert self._is_1D_Var_arr(arr.name)
             nodes = compile_func_single_block(
-                lambda arr: bodo.libs.distributed_api.dist_exscan(len(arr)),
+                lambda arr: bodo.libs.distributed_api.dist_exscan(len(arr), _op),
                 [arr],
                 None,
                 self,
+                extra_globals={"_op": np.int32(Reduce_Type.Sum.value)},
             )
             start_var = nodes[-1].target
         return start_var, nodes

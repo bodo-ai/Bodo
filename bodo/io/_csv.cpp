@@ -319,7 +319,8 @@ static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel
 
         // Now we need to communicate the distribution as we really want it
         // First determine which is our first line (which is the sum of previous lines)
-        size_t byte_first_line = hpat_dist_exscan_i8(no_lines);
+        size_t byte_first_line(0);
+        dist_exscan(reinterpret_cast<char *>(&no_lines), reinterpret_cast<char *>(&byte_first_line), HPAT_ReduceOps::SUM, Bodo_CTypes::UINT64);
         size_t byte_last_line = byte_first_line + no_lines;
 
         // We now determine the chunks of lines that begin and end in our byte-chunk

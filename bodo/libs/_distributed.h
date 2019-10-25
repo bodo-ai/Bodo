@@ -47,11 +47,8 @@ static MPI_Op get_MPI_op(int op_enum) __UNUSED__;
 static int get_elem_size(int type_enum) __UNUSED__;
 static void dist_reduce(char* in_ptr, char* out_ptr, int op,
                              int type_enum) __UNUSED__;
-
-static int hpat_dist_exscan_i4(int value) __UNUSED__;
-static int64_t hpat_dist_exscan_i8(int64_t value) __UNUSED__;
-static float hpat_dist_exscan_f4(float value) __UNUSED__;
-static double hpat_dist_exscan_f8(double value) __UNUSED__;
+static void dist_exscan(char* in_ptr, char* out_ptr, int op,
+                             int type_enum) __UNUSED__;
 
 static void dist_arr_reduce(void* out, int64_t total_size, int op_enum, int type_enum) __UNUSED__;
 static MPI_Request hpat_dist_irecv(void* out, int size, int type_enum, int pe,
@@ -238,33 +235,15 @@ static void dist_arr_reduce(void* out, int64_t total_size, int op_enum, int type
     return;
 }
 
-static int hpat_dist_exscan_i4(int value) {
-    // printf("sum value: %d\n", value);
-    int out = 0;
-    MPI_Exscan(&value, &out, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    return out;
+
+static void dist_exscan(char* in_ptr, char* out_ptr, int op_enum,
+                             int type_enum) {
+    MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
+    MPI_Op mpi_op = get_MPI_op(op_enum);
+    MPI_Exscan(in_ptr, out_ptr, 1, mpi_typ, mpi_op, MPI_COMM_WORLD);
+    return;
 }
 
-static int64_t hpat_dist_exscan_i8(int64_t value) {
-    // printf("sum value: %lld\n", value);
-    int64_t out = 0;
-    MPI_Exscan(&value, &out, 1, MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD);
-    return out;
-}
-
-static float hpat_dist_exscan_f4(float value) {
-    // printf("sum value: %f\n", value);
-    float out = 0;
-    MPI_Exscan(&value, &out, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-    return out;
-}
-
-static double hpat_dist_exscan_f8(double value) {
-    // printf("sum value: %lf\n", value);
-    double out = 0;
-    MPI_Exscan(&value, &out, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    return out;
-}
 
 static void hpat_dist_recv(void* out, int size, int type_enum, int pe,
                            int tag) {

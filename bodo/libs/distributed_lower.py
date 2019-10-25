@@ -25,10 +25,7 @@ ll.add_symbol("dist_get_time", hdist.dist_get_time)
 ll.add_symbol("get_time", hdist.get_time)
 ll.add_symbol("dist_reduce", hdist.dist_reduce)
 ll.add_symbol("dist_arr_reduce", hdist.dist_arr_reduce)
-ll.add_symbol("hpat_dist_exscan_i4", hdist.hpat_dist_exscan_i4)
-ll.add_symbol("hpat_dist_exscan_i8", hdist.hpat_dist_exscan_i8)
-ll.add_symbol("hpat_dist_exscan_f4", hdist.hpat_dist_exscan_f4)
-ll.add_symbol("hpat_dist_exscan_f8", hdist.hpat_dist_exscan_f8)
+ll.add_symbol("dist_exscan", hdist.dist_exscan)
 ll.add_symbol("hpat_dist_irecv", hdist.hpat_dist_irecv)
 ll.add_symbol("hpat_dist_isend", hdist.hpat_dist_isend)
 ll.add_symbol("hpat_dist_wait", hdist.hpat_dist_wait)
@@ -45,27 +42,6 @@ ll.add_symbol("permutation_array_index", hdist.permutation_array_index)
 
 # get size dynamically from C code
 mpi_req_llvm_type = lir.IntType(8 * hdist.mpi_req_num_bytes)
-
-
-
-@lower_builtin(distributed_api.dist_exscan, types.int64)
-@lower_builtin(distributed_api.dist_exscan, types.int32)
-@lower_builtin(distributed_api.dist_exscan, types.float32)
-@lower_builtin(distributed_api.dist_exscan, types.float64)
-def lower_dist_exscan(context, builder, sig, args):
-    ltyp = args[0].type
-    fnty = lir.FunctionType(ltyp, [ltyp])
-    typ_map = {
-        types.int32: "i4",
-        types.int64: "i8",
-        types.float32: "f4",
-        types.float64: "f8",
-    }
-    typ_str = typ_map[sig.args[0]]
-    fn = builder.module.get_or_insert_function(
-        fnty, name="hpat_dist_exscan_{}".format(typ_str)
-    )
-    return builder.call(fn, [args[0]])
 
 
 # array, size, pe, tag, cond
