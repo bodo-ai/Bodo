@@ -341,8 +341,9 @@ def test_getitem_slice_1D_Var(A, s):
 
 
 # TODO: np.arange(33).reshape(11, 3)
-@pytest.mark.parametrize("A", [pd.Series(np.arange(11))])
-#    pd.Series(['aafa', 'bbac', 'cff']*4)])
+@pytest.mark.parametrize(
+    "A", [pd.Series(np.arange(11)), pd.Series(["aafa", "bbac", "cff"] * 4)]
+)
 @pytest.mark.parametrize("s", [0, 1, 3, 7, 10, -1, -2])
 def test_getitem_int_1D(A, s):
     # get a single value of 1D_Block array

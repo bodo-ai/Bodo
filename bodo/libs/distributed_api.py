@@ -4,9 +4,11 @@ from enum import Enum
 import math
 import time
 import numpy as np
+import sys
+import atexit
 
 import numba
-from numba import types
+from numba import types, cgutils
 from numba.typing.templates import infer_global, AbstractTemplate, infer
 from numba.typing import signature
 from numba.extending import models, register_model, intrinsic, overload
@@ -34,21 +36,41 @@ from bodo.utils.utils import (
     _numba_to_c_type_map,
     unliteral_all,
 )
+from numba.typing.builtins import IndexValueType
 from llvmlite import ir as lir
 from bodo.libs import hdist
 
 import llvmlite.binding as ll
 
-ll.add_symbol("c_get_rank", hdist.hpat_dist_get_rank)
-ll.add_symbol("c_get_size", hdist.hpat_dist_get_size)
-ll.add_symbol("c_barrier", hdist.hpat_barrier)
+
+ll.add_symbol("dist_get_time", hdist.dist_get_time)
+ll.add_symbol("get_time", hdist.get_time)
+ll.add_symbol("dist_reduce", hdist.dist_reduce)
+ll.add_symbol("dist_arr_reduce", hdist.dist_arr_reduce)
+ll.add_symbol("dist_exscan", hdist.dist_exscan)
+ll.add_symbol("dist_irecv", hdist.dist_irecv)
+ll.add_symbol("dist_isend", hdist.dist_isend)
+ll.add_symbol("dist_wait", hdist.dist_wait)
+ll.add_symbol("dist_get_item_pointer", hdist.dist_get_item_pointer)
+ll.add_symbol("get_dummy_ptr", hdist.get_dummy_ptr)
+ll.add_symbol("allgather", hdist.allgather)
+ll.add_symbol("comm_req_alloc", hdist.comm_req_alloc)
+ll.add_symbol("comm_req_dealloc", hdist.comm_req_dealloc)
+ll.add_symbol("req_array_setitem", hdist.req_array_setitem)
+ll.add_symbol("dist_waitall", hdist.dist_waitall)
+ll.add_symbol("oneD_reshape_shuffle", hdist.oneD_reshape_shuffle)
+ll.add_symbol("permutation_int", hdist.permutation_int)
+ll.add_symbol("permutation_array_index", hdist.permutation_array_index)
+ll.add_symbol("c_get_rank", hdist.dist_get_rank)
+ll.add_symbol("c_get_size", hdist.dist_get_size)
+ll.add_symbol("c_barrier", hdist.barrier)
 ll.add_symbol("c_alltoall", hdist.c_alltoall)
 ll.add_symbol("c_gather_scalar", hdist.c_gather_scalar)
 ll.add_symbol("c_gatherv", hdist.c_gatherv)
 ll.add_symbol("c_allgatherv", hdist.c_allgatherv)
 ll.add_symbol("c_bcast", hdist.c_bcast)
-ll.add_symbol("c_recv", hdist.hpat_dist_recv)
-ll.add_symbol("c_send", hdist.hpat_dist_send)
+ll.add_symbol("c_recv", hdist.dist_recv)
+ll.add_symbol("c_send", hdist.dist_send)
 
 
 # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
@@ -89,6 +111,15 @@ def get_size():
 def barrier():
     """wrapper for barrier (MPI barrier currently)"""
     return _barrier()
+
+
+_get_time = types.ExternalFunction("get_time", types.float64())
+dist_time = types.ExternalFunction("dist_get_time", types.float64())
+
+
+@overload(time.time)
+def overload_time_time():
+    return lambda: _get_time()
 
 
 @numba.generated_jit(nopython=True)
@@ -133,6 +164,47 @@ def recv(dtype, rank, tag):
     return recv_arr[0]
 
 
+_isend = types.ExternalFunction(
+    "dist_isend",
+    mpi_req_numba_type(
+        types.voidptr, types.int32, types.int32, types.int32, types.int32, types.bool_
+    ),
+)
+
+
+@numba.generated_jit(nopython=True)
+def isend(arr, size, pe, tag, cond=True):
+    if isinstance(arr, types.Array):
+
+        def impl(arr, size, pe, tag, cond=True):
+            type_enum = get_type_enum(arr)
+            return _isend(arr.ctypes, size, type_enum, pe, tag, cond)
+
+        return impl
+
+    # voidptr input, pointer to bytes
+    typ_enum = _numba_to_c_type_map[types.uint8]
+
+    def impl_voidptr(arr, size, pe, tag, cond=True):
+        return _isend(arr, size, typ_enum, pe, tag, cond)
+
+    return impl_voidptr
+
+
+_irecv = types.ExternalFunction(
+    "dist_irecv",
+    mpi_req_numba_type(
+        types.voidptr, types.int32, types.int32, types.int32, types.int32, types.bool_
+    ),
+)
+
+
+@numba.njit
+def irecv(arr, size, pe, tag, cond=True):
+    type_enum = get_type_enum(arr)
+    return _irecv(arr.ctypes, size, type_enum, pe, tag, cond)
+
+
 _alltoall = types.ExternalFunction(
     "c_alltoall", types.void(types.voidptr, types.voidptr, types.int32, types.int32)
 )
@@ -146,41 +218,28 @@ def alltoall(send_arr, recv_arr, count):
     _alltoall(send_arr.ctypes, recv_arr.ctypes, np.int32(count), type_enum)
 
 
-def gather_scalar(data, allgather=False):  # pragma: no cover
-    return np.ones(1)
+@numba.generated_jit(nopython=True)
+def gather_scalar(data, allgather=False):
+    data = types.unliteral(data)
+    typ_val = _numba_to_c_type_map[data]
+    dtype = data
+
+    def gather_scalar_impl(data, allgather=False):  # pragma: no cover
+        n_pes = bodo.libs.distributed_api.get_size()
+        rank = bodo.libs.distributed_api.get_rank()
+        send = np.full(1, data, dtype)
+        res_size = n_pes if (rank == MPI_ROOT or allgather) else 0
+        res = np.empty(res_size, dtype)
+        c_gather_scalar(send.ctypes, res.ctypes, np.int32(typ_val), allgather)
+        return res
+
+    return gather_scalar_impl
 
 
 c_gather_scalar = types.ExternalFunction(
     "c_gather_scalar",
     types.void(types.voidptr, types.voidptr, types.int32, types.bool_),
 )
-
-
-# TODO: test
-@overload(gather_scalar)
-def gather_scalar_overload(val, allgather=False):
-    assert isinstance(val, (types.Integer, types.Float))
-    # TODO: other types like boolean
-    typ_val = _numba_to_c_type_map[val]
-    func_text = (
-        "def gather_scalar_impl(val, allgather=False):\n"
-        "  n_pes = bodo.libs.distributed_api.get_size()\n"
-        "  rank = bodo.libs.distributed_api.get_rank()\n"
-        "  send = np.full(1, val, np.{})\n"
-        "  res_size = n_pes if (rank == {} or allgather) else 0\n"
-        "  res = np.empty(res_size, np.{})\n"
-        "  c_gather_scalar(send.ctypes, res.ctypes, np.int32({}), allgather)\n"
-        "  return res\n"
-    ).format(val, MPI_ROOT, val, typ_val)
-
-    loc_vars = {}
-    exec(
-        func_text,
-        {"bodo": bodo, "np": np, "c_gather_scalar": c_gather_scalar},
-        loc_vars,
-    )
-    gather_impl = loc_vars["gather_scalar_impl"]
-    return gather_impl
 
 
 # sendbuf, sendcount, recvbuf, recv_counts, displs, dtype
@@ -196,6 +255,92 @@ c_gatherv = types.ExternalFunction(
         types.bool_,
     ),
 )
+
+
+@intrinsic
+def value_to_ptr(typingctx, val_tp=None):
+    def codegen(context, builder, sig, args):
+        ptr = cgutils.alloca_once(builder, args[0].type)
+        builder.store(args[0], ptr)
+        return builder.bitcast(ptr, lir.IntType(8).as_pointer())
+
+    return types.voidptr(val_tp), codegen
+
+
+@intrinsic
+def load_val_ptr(typingctx, ptr_tp, val_tp=None):
+    def codegen(context, builder, sig, args):
+        ptr = builder.bitcast(args[0], args[1].type.as_pointer())
+        return builder.load(ptr)
+
+    return val_tp(ptr_tp, val_tp), codegen
+
+
+_dist_reduce = types.ExternalFunction(
+    "dist_reduce", types.void(types.voidptr, types.voidptr, types.int32, types.int32)
+)
+
+_dist_arr_reduce = types.ExternalFunction(
+    "dist_arr_reduce", types.void(types.voidptr, types.int64, types.int32, types.int32)
+)
+
+
+@numba.generated_jit(nopython=True)
+def dist_reduce(value, reduce_op):
+    if isinstance(value, types.Array):
+        typ_enum = np.int32(_numba_to_c_type_map[value.dtype])
+
+        def impl_arr(value, reduce_op):
+            A = np.ascontiguousarray(value)
+            _dist_arr_reduce(A.ctypes, A.size, reduce_op, typ_enum)
+            return A
+
+        return impl_arr
+
+    target_typ = types.unliteral(value)
+    if isinstance(target_typ, IndexValueType):
+        target_typ = target_typ.val_typ
+        supported_typs = [types.int32, types.float32, types.float64]
+        import sys
+
+        if not sys.platform.startswith("win"):
+            # long is 4 byte on Windows
+            supported_typs.append(types.int64)
+            supported_typs.append(types.NPDatetime("ns"))
+        if target_typ not in supported_typs:  # pragma: no cover
+            raise TypeError(
+                "argmin/argmax not supported for type {}".format(target_typ)
+            )
+
+    typ_enum = np.int32(_numba_to_c_type_map[target_typ])
+
+    def impl(value, reduce_op):
+        in_ptr = value_to_ptr(value)
+        out_ptr = value_to_ptr(value)
+        _dist_reduce(in_ptr, out_ptr, reduce_op, typ_enum)
+        return load_val_ptr(out_ptr, value)
+
+    return impl
+
+
+_dist_exscan = types.ExternalFunction(
+    "dist_exscan", types.void(types.voidptr, types.voidptr, types.int32, types.int32)
+)
+
+
+@numba.generated_jit(nopython=True)
+def dist_exscan(value, reduce_op):
+    target_typ = types.unliteral(value)
+    typ_enum = np.int32(_numba_to_c_type_map[target_typ])
+    zero = target_typ(0)
+
+    def impl(value, reduce_op):
+        in_ptr = value_to_ptr(value)
+        out_ptr = value_to_ptr(zero)
+        _dist_exscan(in_ptr, out_ptr, reduce_op, typ_enum)
+        return load_val_ptr(out_ptr, value)
+
+    return impl
 
 
 # from GetBit() in Arrow
@@ -686,9 +831,6 @@ def int_getitem(arr, ind, arr_start, total_len, is_1D):
 @overload(int_getitem)
 def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
     if arr == string_array_type:
-        # TODO: fix and test. It fails with weird error on mpich 3.2.1:
-        # MPIDI_CH3U_Buffer_copy(64): Message truncated; 4 bytes received but
-        # buffer size is 4
         # TODO: other kinds, unicode
         kind = numba.unicode.PY_UNICODE_1BYTE_KIND
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
@@ -881,19 +1023,22 @@ def get_node_portion(total_size, pes, rank):
     return min(total_size, (rank + 1) * chunk) - min(total_size, rank * chunk)
 
 
-def dist_reduce(value, op):  # pragma: no cover
-    """dummy to implement simple reductions"""
-    return value
+@numba.generated_jit(nopython=True)
+def dist_cumsum(in_arr, out_arr):
+    zero = in_arr.dtype(0)
+    op = np.int32(Reduce_Type.Sum.value)
 
+    def cumsum_impl(in_arr, out_arr):  # pragma: no cover
+        c = zero
+        for v in np.nditer(in_arr):
+            c += v.item()
+        prefix_var = dist_exscan(c, op)
+        for i in range(in_arr.size):
+            prefix_var += in_arr[i]
+            out_arr[i] = prefix_var
+        return 0
 
-def dist_arr_reduce(arr):  # pragma: no cover
-    """dummy to implement array reductions"""
-    return -1
-
-
-def dist_cumsum(arr):  # pragma: no cover
-    """dummy to implement cumsum"""
-    return arr
+    return cumsum_impl
 
 
 def dist_cumprod(arr):  # pragma: no cover
@@ -901,21 +1046,19 @@ def dist_cumprod(arr):  # pragma: no cover
     return arr
 
 
-def dist_exscan(value):  # pragma: no cover
-    """dummy to implement simple exscan"""
-    return value
-
-
 def dist_setitem(arr, index, val):  # pragma: no cover
     return 0
 
 
+_allgather = types.ExternalFunction(
+    "allgather", types.void(types.voidptr, types.int32, types.voidptr, types.int32)
+)
+
+
+@numba.njit
 def allgather(arr, val):  # pragma: no cover
-    arr[0] = val
-
-
-def dist_time():  # pragma: no cover
-    return time.time()
+    type_enum = get_type_enum(arr)
+    _allgather(arr.ctypes, 1, value_to_ptr(val), type_enum)
 
 
 def dist_return(A):  # pragma: no cover
@@ -930,8 +1073,60 @@ def rebalance_array(A):
     return A
 
 
-def rebalance_array_parallel(A):
-    return A
+@numba.njit
+def rebalance_array_parallel(in_arr, count):
+    n_pes = bodo.libs.distributed_api.get_size()
+    my_rank = bodo.libs.distributed_api.get_rank()
+    out_arr = np.empty((count,) + in_arr.shape[1:], in_arr.dtype)
+    # copy old data
+    old_len = len(in_arr)
+    out_ind = 0
+    for i in range(min(old_len, count)):
+        out_arr[i] = in_arr[i]
+        out_ind += 1
+    # get diff data for all procs
+    my_diff = old_len - count
+    all_diffs = np.empty(n_pes, np.int64)
+    bodo.libs.distributed_api.allgather(all_diffs, my_diff)
+    # alloc comm requests
+    comm_req_ind = 0
+    comm_reqs = bodo.libs.distributed_api.comm_req_alloc(n_pes)
+    # for each potential receiver
+    for i in range(n_pes):
+        # if receiver
+        if all_diffs[i] < 0:
+            # for each potential sender
+            for j in range(n_pes):
+                # if sender
+                if all_diffs[j] > 0:
+                    send_size = min(all_diffs[j], -all_diffs[i])
+                    # if I'm receiver
+                    if my_rank == i:
+                        buff = out_arr[out_ind : (out_ind + send_size)]
+                        comm_reqs[comm_req_ind] = bodo.libs.distributed_api.irecv(
+                            buff, np.int32(buff.size), np.int32(j), np.int32(9)
+                        )
+                        comm_req_ind += 1
+                        out_ind += send_size
+                    # if I'm sender
+                    if my_rank == j:
+                        buff = np.ascontiguousarray(
+                            in_arr[out_ind : (out_ind + send_size)]
+                        )
+                        comm_reqs[comm_req_ind] = bodo.libs.distributed_api.isend(
+                            buff, np.int32(buff.size), np.int32(i), np.int32(9)
+                        )
+                        comm_req_ind += 1
+                        out_ind += send_size
+                    # update sender and receivers remaining counts
+                    all_diffs[i] += send_size
+                    all_diffs[j] -= send_size
+                    # if receiver is done, stop sender search
+                    if all_diffs[i] == 0:
+                        break
+    bodo.libs.distributed_api.waitall(np.int32(comm_req_ind), comm_reqs)
+    bodo.libs.distributed_api.comm_req_dealloc(comm_reqs)
+    return out_arr
 
 
 @overload(rebalance_array)
@@ -960,110 +1155,7 @@ def single_print(*args):
         print(*args)
 
 
-def irecv():  # pragma: no cover
-    return 0
-
-
-def isend():  # pragma: no cover
-    return 0
-
-
-def wait():  # pragma: no cover
-    return 0
-
-
-def waitall():  # pragma: no cover
-    return 0
-
-
-@infer_global(allgather)
-class DistAllgather(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2  # array and val
-        return signature(types.none, *unliteral_all(args))
-
-
-@infer_global(rebalance_array_parallel)
-class DistRebalanceParallel(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2  # array and count
-        return signature(args[0], *unliteral_all(args))
-
-
-@infer_global(dist_reduce)
-class DistReduce(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2  # value and reduce_op
-        return signature(args[0], *unliteral_all(args))
-
-
-@infer_global(dist_exscan)
-class DistExscan(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        return signature(args[0], *unliteral_all(args))
-
-
-@infer_global(dist_arr_reduce)
-class DistArrReduce(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2  # value and reduce_op
-        return signature(types.int32, *unliteral_all(args))
-
-
-@infer_global(time.time)
-class DistTime(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 0
-        return signature(types.float64, *unliteral_all(args))
-
-
-@infer_global(dist_time)
-class DistDistTime(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 0
-        return signature(types.float64, *unliteral_all(args))
-
-
-@infer_global(dist_cumsum)
-@infer_global(dist_cumprod)
-class DistCumsumprod(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2
-        return signature(types.int32, *unliteral_all(args))
-
-
-@infer_global(irecv)
-@infer_global(isend)
-class DistIRecv(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) in [4, 5]
-        return signature(mpi_req_numba_type, *unliteral_all(args))
-
-
-@infer_global(wait)
-class DistWait(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2
-        return signature(types.int32, *unliteral_all(args))
-
-
-@infer_global(waitall)
-class DistWaitAll(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2 and args == (types.int32, req_array_type)
-        return signature(types.none, *unliteral_all(args))
+wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
 
 
 # @infer_global(dist_setitem)
@@ -1081,40 +1173,152 @@ class ReqArrayType(types.Type):
 
 req_array_type = ReqArrayType()
 register_model(ReqArrayType)(models.OpaqueModel)
+waitall = types.ExternalFunction(
+    "dist_waitall", types.void(types.int32, req_array_type)
+)
+comm_req_alloc = types.ExternalFunction("comm_req_alloc", req_array_type(types.int32))
+comm_req_dealloc = types.ExternalFunction(
+    "comm_req_dealloc", types.void(req_array_type)
+)
+req_array_setitem = types.ExternalFunction(
+    "req_array_setitem", types.void(req_array_type, types.int64, mpi_req_numba_type)
+)
 
 
-def comm_req_alloc():
-    return 0
+@overload(operator.setitem)
+def overload_req_arr_setitem(A, idx, val):
+    if A == req_array_type:
+        assert val == mpi_req_numba_type
+        return lambda A, idx, val: req_array_setitem(A, idx, val)
 
 
-def comm_req_dealloc():
-    return 0
+# find overlapping range of an input range (start:stop) and a chunk range
+# (chunk_start:chunk_start+chunk_count). Inputs are assumed positive.
+# output is set to empty range of local range goes out of bounds
+@numba.njit
+def _get_local_range(start, stop, chunk_start, chunk_count):  # pragma: no cover
+    assert start >= 0 and stop > 0
+    new_start = max(start, chunk_start)
+    new_stop = min(stop, chunk_start + chunk_count)
+    loc_start = new_start - chunk_start
+    loc_stop = new_stop - chunk_start
+    if loc_start < 0 or loc_stop < 0:
+        loc_start = 1
+        loc_stop = 0
+    return loc_start, loc_stop
 
 
-@infer_global(comm_req_alloc)
-class DistCommReqAlloc(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1 and args[0] == types.int32
-        return signature(req_array_type, *unliteral_all(args))
+@numba.njit
+def _set_if_in_range(A, val, index, chunk_start, chunk_count):  # pragma: no cover
+    if index >= chunk_start and index < chunk_start + chunk_count:
+        A[index - chunk_start] = val
 
 
-@infer_global(comm_req_dealloc)
-class DistCommReqDeAlloc(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1 and args[0] == req_array_type
-        return signature(types.none, *unliteral_all(args))
+@numba.njit
+def _root_rank_select(old_val, new_val):  # pragma: no cover
+    if get_rank() == 0:
+        return old_val
+    return new_val
 
 
-@infer_global(operator.setitem)
-class SetItemReqArray(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        [ary, idx, val] = args
-        if (
-            isinstance(ary, ReqArrayType)
-            and idx == types.intp
-            and val == mpi_req_numba_type
-        ):
-            return signature(types.none, *unliteral_all(args))
+def get_tuple_prod(t):
+    return np.prod(t)
+
+
+@overload(get_tuple_prod)
+def get_tuple_prod_overload(t):
+    # handle empty tuple seperately since empty getiter doesn't work
+    if t == numba.types.containers.Tuple(()):
+        return lambda t: 1
+
+    def get_tuple_prod_impl(t):
+        res = 1
+        for a in t:
+            res *= a
+        return res
+
+    return get_tuple_prod_impl
+
+
+sig = types.void(
+    types.voidptr,  # output array
+    types.voidptr,  # input array
+    types.intp,  # old_len
+    types.intp,  # new_len
+    types.intp,  # input lower_dim size in bytes
+    types.intp,  # output lower_dim size in bytes
+)
+
+oneD_reshape_shuffle = types.ExternalFunction("oneD_reshape_shuffle", sig)
+
+
+@numba.njit
+def dist_oneD_reshape_shuffle(
+    lhs, in_arr, new_0dim_global_len, old_0dim_global_len, dtype_size
+):  # pragma: no cover
+    c_in_arr = np.ascontiguousarray(in_arr)
+    in_lower_dims_size = get_tuple_prod(c_in_arr.shape[1:])
+    out_lower_dims_size = get_tuple_prod(lhs.shape[1:])
+    # print(c_in_arr)
+    # print(new_0dim_global_len, old_0dim_global_len, out_lower_dims_size, in_lower_dims_size)
+    oneD_reshape_shuffle(
+        lhs.ctypes,
+        c_in_arr.ctypes,
+        new_0dim_global_len,
+        old_0dim_global_len,
+        dtype_size * out_lower_dims_size,
+        dtype_size * in_lower_dims_size,
+    )
+    # print(in_arr)
+
+
+permutation_int = types.ExternalFunction(
+    "permutation_int", types.void(types.voidptr, types.intp)
+)
+
+
+@numba.njit
+def dist_permutation_int(lhs, n):
+    permutation_int(lhs.ctypes, n)
+
+
+permutation_array_index = types.ExternalFunction(
+    "permutation_array_index",
+    types.void(
+        types.voidptr, types.intp, types.intp, types.voidptr, types.voidptr, types.intp
+    ),
+)
+
+
+@numba.njit
+def dist_permutation_array_index(lhs, lhs_len, dtype_size, rhs, p, p_len):
+    c_rhs = np.ascontiguousarray(rhs)
+    lower_dims_size = get_tuple_prod(c_rhs.shape[1:])
+    elem_size = dtype_size * lower_dims_size
+    permutation_array_index(
+        lhs.ctypes, lhs_len, elem_size, c_rhs.ctypes, p.ctypes, p_len
+    )
+
+
+########### finalize MPI when exiting ####################
+
+
+ll.add_symbol("finalize", hdist.finalize)
+finalize = types.ExternalFunction("finalize", types.int32())
+
+
+@numba.njit
+def call_finalize():
+    finalize()
+
+
+def flush_stdout():
+    # using a function since pytest throws an error sometimes
+    # if flush function is passed directly to atexit
+    if not sys.stdout.closed:
+        sys.stdout.flush()
+
+
+atexit.register(call_finalize)
+# flush output before finalize
+atexit.register(flush_stdout)

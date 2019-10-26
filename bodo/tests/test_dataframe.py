@@ -563,7 +563,7 @@ def test_df_nunique(df_value):
 
 
 def _is_supported_argminmax_typ(d):
-    # distributed argmax types, see distributed_lower.py
+    # distributed argmax types, see distributed_api.py
     supported_typs = [np.int32, np.float32, np.float64]
     if not sys.platform.startswith("win"):
         # long is 4 byte on Windows
