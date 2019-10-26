@@ -22,6 +22,7 @@ from bodo.tests.utils import (
     dist_IR_contains,
     get_start_end,
 )
+from bodo.utils.typing import BodoError
 import pytest
 
 
