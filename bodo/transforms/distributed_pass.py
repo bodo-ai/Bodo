@@ -406,9 +406,9 @@ class DistributedPass(object):
             # new starts
             starts_var = ir.Var(scope, mk_unique_var("$h5_starts"), loc)
             self.typemap[starts_var.name] = types.UniTuple(types.int64, ndims)
-            prev_starts = guard(get_definition, self.func_ir, rhs.args[2])
+            prev_starts = self._get_tuple_varlist(rhs.args[2], nodes)
             start_tuple_call = ir.Expr.build_tuple(
-                [start_var] + prev_starts.items[1:], loc
+                [start_var] + prev_starts[1:], loc
             )
             starts_assign = ir.Assign(start_tuple_call, starts_var, loc)
             rhs.args[2] = starts_var
@@ -416,9 +416,9 @@ class DistributedPass(object):
             # new counts
             counts_var = ir.Var(scope, mk_unique_var("$h5_counts"), loc)
             self.typemap[counts_var.name] = types.UniTuple(types.int64, ndims)
-            prev_counts = guard(get_definition, self.func_ir, rhs.args[3])
+            prev_counts = self._get_tuple_varlist(rhs.args[3], nodes)
             count_tuple_call = ir.Expr.build_tuple(
-                [count_var] + prev_counts.items[1:], loc
+                [count_var] + prev_counts[1:], loc
             )
             counts_assign = ir.Assign(count_tuple_call, counts_var, loc)
 
