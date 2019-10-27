@@ -427,7 +427,6 @@ def test_np_io4():
 
 
 class TestIO(unittest.TestCase):
-    @unittest.skip("fix collective create dataset")
     def test_h5_write_parallel(self):
         def test_impl(N, D):
             points = np.ones((N, D))
@@ -450,7 +449,6 @@ class TestIO(unittest.TestCase):
         np.testing.assert_almost_equal(X, np.ones((N, D)))
         np.testing.assert_almost_equal(Y, np.arange(N) + 1.0)
 
-    @unittest.skip("fix collective create dataset and group")
     def test_h5_write_group(self):
         def test_impl(n, fname):
             arr = np.arange(n)
