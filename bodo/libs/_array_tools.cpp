@@ -573,7 +573,7 @@ void convert_len_arr_to_offset(uint32_t* offsets, size_t const& num_strs) {
 /* 
  */
 void copy_gathered_null_bytes(uint8_t* null_bitmask,
-                              std::vector<uint8_t>& tmp_null_bytes,
+                              std::vector<uint8_t> const& tmp_null_bytes,
                               std::vector<int> const& recv_count_null,
                               std::vector<int> const& recv_count) {
     size_t curr_tmp_byte = 0;  // current location in buffer with all data
@@ -582,7 +582,7 @@ void copy_gathered_null_bytes(uint8_t* null_bitmask,
     for (size_t i = 0; i < recv_count.size(); i++) {
         size_t n_strs = recv_count[i];
         size_t n_bytes = recv_count_null[i];
-        uint8_t* chunk_bytes = &tmp_null_bytes[curr_tmp_byte];
+        const uint8_t* chunk_bytes = &tmp_null_bytes[curr_tmp_byte];
         // for each string in chunk
         for (size_t j = 0; j < n_strs; j++) {
             SetBitTo(null_bitmask, curr_str, GetBit(chunk_bytes, j));
@@ -698,7 +698,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
     int total_recv = std::accumulate(comm_info.recv_count.begin(),
                                      comm_info.recv_count.end(), 0);
     std::vector<int> n_char_recvs(n_cols);
-    for (size_t i = 0; i < (size_t)n_cols; i++)
+    for (size_t i = 0; i < n_cols; i++)
         n_char_recvs[i] =
             std::accumulate(comm_info.recv_count_char[i].begin(),
                             comm_info.recv_count_char[i].end(), 0);
@@ -707,7 +707,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
 
     // fill send buffer and send
     std::vector<array_info*> out_arrs;
-    for (size_t i = 0; i < (size_t)n_cols; i++) {
+    for (size_t i = 0; i < n_cols; i++) {
         array_info* in_arr = in_table->columns[i];
         array_info* send_arr =
             alloc_array(n_rows, in_arr->n_sub_elems, in_arr->arr_type,
@@ -737,6 +737,44 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
 
     return new table_info(out_arrs);
 }
+
+
+template<typename T>
+std::vector<char> GetVector(T const& val)
+{
+  const T* valptr= &val;
+  const char* charptr = (char*)valptr;
+  std::vector<char> V(sizeof(T));
+  for (size_t u=0; u<sizeof(T); u++)
+    V[u] = charptr[u];
+  return V;
+}
+
+std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype)
+{
+  if (dtype == Bodo_CTypes::INT8)
+    return GetVector<int8_t>(0);
+  if (dtype == Bodo_CTypes::UINT8)
+    return GetVector<uint8_t>(0);
+  if (dtype == Bodo_CTypes::INT16)
+    return GetVector<int16_t>(0);
+  if (dtype == Bodo_CTypes::UINT16)
+    return GetVector<uint16_t>(0);
+  if (dtype == Bodo_CTypes::INT32)
+    return GetVector<int32_t>(0);
+  if (dtype == Bodo_CTypes::UINT32)
+    return GetVector<uint32_t>(0);
+  if (dtype == Bodo_CTypes::INT64)
+    return GetVector<int64_t>(0);
+  if (dtype == Bodo_CTypes::UINT64)
+    return GetVector<uint64_t>(0);
+  if (dtype == Bodo_CTypes::FLOAT32)
+    return GetVector<float>(std::nanf("1"));
+  if (dtype == Bodo_CTypes::FLOAT64)
+    return GetVector<double>(std::nan("1"));
+  return {};
+}
+
 
 
 /* There is no need for using MPI since this has already been done
@@ -864,7 +902,7 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
   //
   // Now iterating and determining how many entries we have to do.
   //
-  std::vector<std::pair<size_t, size_t>> ListPairWrite;
+  std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
   for (auto & ePair : ListEnt) {
     std::vector<size_t> ListEntL, ListEntR;
     for (auto fPair : ePair.second) {
@@ -953,7 +991,7 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
   //
   //
   auto RetrieveArray = [&](array_info* in_arr, int const& ChoiceColumn) -> array_info* {
-    auto get_iRow=[&](size_t const& iRowIn) -> size_t {
+    auto get_iRow=[&](size_t const& iRowIn) -> std::ptrdiff_t {
       if (ChoiceColumn == 0)
         return ListPairWrite[iRowIn].first;
       return ListPairWrite[iRowIn].second;
@@ -963,27 +1001,37 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
       uint32_t* in_offsets = (uint32_t*)in_arr->data2;
       std::vector<uint32_t> ListSizes(nbRowOut);
       for (size_t iRow=0; iRow<nbRowOut; iRow++) {
-        size_t iRowW=get_iRow(iRow);
-        uint32_t end_offset = in_offsets[iRowW + 1];
-        uint32_t start_offset = in_offsets[iRowW];
-        uint32_t size = end_offset - start_offset;
+        std::ptrdiff_t iRowW=get_iRow(iRow);
+        uint32_t size=0;
+        if (iRowW >= 0) {
+          uint32_t end_offset = in_offsets[iRowW + 1];
+          uint32_t start_offset = in_offsets[iRowW];
+          size = end_offset - start_offset;
+        }
         ListSizes[iRow] = size;
         n_chars += size;
       }
       array_info* out_arr = alloc_array(nbRowOut, n_chars,
                                         in_arr->arr_type, in_arr->dtype, 0);
+      uint8_t* in_null_bitmask = (uint8_t*)in_arr->null_bitmask;
+      uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
       uint32_t pos = 0;
       uint32_t* out_offsets = (uint32_t*)out_arr->data2;
       for (size_t iRow=0; iRow<nbRowOut; iRow++) {
-        size_t iRowW=get_iRow(iRow);
-        uint32_t start_offset = in_offsets[iRowW];
+        std::ptrdiff_t iRowW=get_iRow(iRow);
         uint32_t size = ListSizes[iRow];
         out_offsets[iRow] = pos;
-        for (uint32_t i=0; i<size; i++) {
-          out_arr->data1[pos] = in_arr->data1[start_offset];
-          pos++;
-          start_offset++;
+        bool bit=false;
+        if (iRowW >= 0) {
+          uint32_t start_offset = in_offsets[iRowW];
+          for (uint32_t i=0; i<size; i++) {
+            out_arr->data1[pos] = in_arr->data1[start_offset];
+            pos++;
+            start_offset++;
+          }
+          bit = GetBit(in_null_bitmask, iRowW);
         }
+        SetBitTo(out_null_bitmask, iRow, bit);
         pos += size;
       }
       out_offsets[nbRowOut] = pos;
@@ -996,12 +1044,15 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
       uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
       uint64_t siztype = get_item_size(in_arr->dtype);
       for (size_t iRow=0; iRow<nbRowOut; iRow++) {
-        size_t iRowW=get_iRow(iRow);
+        std::ptrdiff_t iRowW=get_iRow(iRow);
         //
-        for (uint64_t u=0; u<siztype; u++)
-          out_arr->data1[siztype*iRow + u] = in_arr->data1[siztype*iRowW + u];
-        //
-        bool bit = GetBit(in_null_bitmask, iRowW);
+        bool bit=false;
+        if (iRowW >= 0) {
+          for (uint64_t u=0; u<siztype; u++)
+            out_arr->data1[siztype*iRow + u] = in_arr->data1[siztype*iRowW + u];
+          //
+          bit = GetBit(in_null_bitmask, iRowW);
+        }
         SetBitTo(out_null_bitmask, iRow, bit);
       }
       return out_arr;
@@ -1011,11 +1062,18 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
     array_info* out_arr = alloc_array(nbRowOut, -1,
                                       in_arr->arr_type, in_arr->dtype, 0);
     uint64_t siztype = get_item_size(in_arr->dtype);
+    std::vector<char> vectNaN = RetrieveNaNentry(in_arr->dtype);
     for (size_t iRow=0; iRow<nbRowOut; iRow++) {
-      size_t iRowW=get_iRow(iRow);
+      std::ptrdiff_t iRowW=get_iRow(iRow);
       //
+      if (iRowW >= 0) {
         for (uint64_t u=0; u<siztype; u++)
           out_arr->data1[siztype*iRow + u] = in_arr->data1[siztype*iRowW + u];
+      }
+      else {
+        for (uint64_t u=0; u<siztype; u++)
+          out_arr->data1[siztype*iRow + u] = vectNaN[u];
+      }
     }
     return out_arr;
   };
