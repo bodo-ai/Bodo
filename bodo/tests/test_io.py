@@ -428,10 +428,11 @@ def test_np_io4():
 
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
+        fname = "lr_w.hdf5"
         def test_impl(N, D):
             points = np.ones((N, D))
             responses = np.arange(N) + 1.0
-            f = h5py.File("lr_w.hdf5", "w")
+            f = h5py.File(fname, "w")
             dset1 = f.create_dataset("points", (N, D), dtype="f8")
             dset1[:] = points
             dset2 = f.create_dataset("responses", (N,), dtype="f8")
@@ -441,13 +442,14 @@ class TestIO(unittest.TestCase):
         N = 101
         D = 10
         bodo_func = bodo.jit(test_impl)
-        bodo_func(N, D)
-        f = h5py.File("lr_w.hdf5", "r")
-        X = f["points"][:]
-        Y = f["responses"][:]
-        f.close()
-        np.testing.assert_almost_equal(X, np.ones((N, D)))
-        np.testing.assert_almost_equal(Y, np.arange(N) + 1.0)
+        with ensure_clean(fname):
+            bodo_func(N, D)
+            f = h5py.File("lr_w.hdf5", "r")
+            X = f["points"][:]
+            Y = f["responses"][:]
+            f.close()
+            np.testing.assert_almost_equal(X, np.ones((N, D)))
+            np.testing.assert_almost_equal(Y, np.arange(N) + 1.0)
 
     def test_h5_write_group(self):
         def test_impl(n, fname):
@@ -463,11 +465,12 @@ class TestIO(unittest.TestCase):
         arr = np.arange(n)
         fname = "test_group.hdf5"
         bodo_func = bodo.jit(test_impl)
-        bodo_func(n, fname)
-        f = h5py.File(fname, "r")
-        X = f["G"]["data"][:]
-        f.close()
-        np.testing.assert_almost_equal(X, arr)
+        with ensure_clean(fname):
+            bodo_func(n, fname)
+            f = h5py.File(fname, "r")
+            X = f["G"]["data"][:]
+            f.close()
+            np.testing.assert_almost_equal(X, arr)
 
     def test_pq_read(self):
         fname = os.path.join("bodo", "tests", "data", "kde.parquet")
