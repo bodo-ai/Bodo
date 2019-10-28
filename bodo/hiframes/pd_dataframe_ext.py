@@ -1265,9 +1265,9 @@ def validate_keys_dtypes(
             rk_type = right.index.dtype
         elif is_overload_true(left_index):
             lk_type = left.index.dtype
-            rk_type = right.data[right.columns.index(rk)].dtype
+            rk_type = right.data[right.columns.index(right_keys[0])].dtype
         elif is_overload_true(right_index):
-            lk_type = left.data[left.columns.index(lk)].dtype
+            lk_type = left.data[left.columns.index(left_keys[0])].dtype
             rk_type = right.index.dtype
 
         try:
