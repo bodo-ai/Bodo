@@ -33,3 +33,7 @@ and the name of `.tar.bz2` File)::
     mkdir bodo-inc/linux-64
     cp bodo-2019.09.1-py37hc547734_0.tar.bz2 bodo-inc/linux-64/
     conda index bodo-inc/
+
+To build :code:`bodo` from the file bodo-inc::
+
+    conda install bodo -c file:///bodo-inc/ -c defaults -c numba -c conda-forge
