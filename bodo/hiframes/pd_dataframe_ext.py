@@ -1047,6 +1047,9 @@ def merge_overload(
     validate_keys_length(
         left_on, right_on, left_index, right_index, left_keys, right_keys
     )
+    validate_keys_dtypes(
+        left, right, left_on, right_on, left_index, right_index, left_keys, right_keys
+    )
 
     left_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
         ", ".join("'{}'".format(c) for c in left_keys)
@@ -1116,7 +1119,6 @@ def validate_merge_spec(
     indicator,
     validate,
 ):
-
     # make sure left and right are dataframes
     if not isinstance(left, DataFrameType) or not isinstance(right, DataFrameType):
         raise BodoError("merge() requires dataframe inputs")
@@ -1228,17 +1230,73 @@ def validate_keys_length(
         if len(right_keys) != len(left_keys):
             raise BodoError("merge(): len(right_on) must equal len(left_on)")
     if not is_overload_none(left_on) and is_overload_true(right_index):
-        if len(left_keys) != 1:
-            raise BodoError(
-                "merge(): len(left_on) must equal the number "
-                'of levels in the index of "right", which is 1'
-            )
+        raise BodoError(
+            "merge(): right_index = True and specifying left_on is not suppported yet."
+        )
+        # error checking after specifying left_on and right_index = True is supported
+        # if len(left_keys) != 1:
+        #     raise BodoError(
+        #         "merge(): len(left_on) must equal the number "
+        #         'of levels in the index of "right", which is 1'
+        #     )
     if not is_overload_none(right_on) and is_overload_true(left_index):
-        if len(right_keys) != 1:
-            raise BodoError(
-                "merge(): len(right_on) must equal the number "
-                'of levels in the index of "left", which is 1'
+        raise BodoError(
+            "merge(): left_index = True and specifying right_on is not suppported yet."
+        )
+        # error checking after specifying right_on and left_index = True is supported
+        # if len(right_keys) != 1:
+        #     raise BodoError(
+        #         "merge(): len(right_on) must equal the number "
+        #         'of levels in the index of "left", which is 1'
+        #     )
+
+
+def validate_keys_dtypes(
+    left, right, left_on, right_on, left_index, right_index, left_keys, right_keys
+):
+    # make sure left keys and right keys have comparable dtypes
+
+    typing_context = numba.targets.registry.cpu_target.typing_context
+
+    if is_overload_true(left_index) or is_overload_true(right_index):
+        # cases where index is used in merging
+        if is_overload_true(left_index) and is_overload_true(right_index):
+            lk_type = left.index.dtype
+            rk_type = right.index.dtype
+        elif is_overload_true(left_index):
+            lk_type = left.index.dtype
+            rk_type = right.data[right.columns.index(rk)].dtype
+        elif is_overload_true(right_index):
+            lk_type = left.data[left.columns.index(lk)].dtype
+            rk_type = right.index.dtype
+
+        try:
+            ret_dtype = typing_context.resolve_function_type(
+                operator.eq, (lk_type, rk_type), {}
             )
+        except:
+            raise BodoError(
+                "merge: You are trying to merge on {lk_dtype} and "
+                "{rk_dtype} columns. If you wish to proceed "
+                "you should use pd.concat".format(lk_dtype=lk_type, rk_dtype=rk_type)
+            )
+    else:  # cases where only columns are used in merge
+        for lk, rk in zip(left_keys, right_keys):
+            lk_type = left.data[left.columns.index(lk)].dtype
+            rk_type = right.data[right.columns.index(rk)].dtype
+
+            try:
+                ret_dtype = typing_context.resolve_function_type(
+                    operator.eq, (lk_type, rk_type), {}
+                )
+            except:
+                raise BodoError(
+                    "merge: You are trying to merge on column {lk} of {lk_dtype} and "
+                    "column {rk} of {rk_dtype}. If you wish to proceed "
+                    "you should use pd.concat".format(
+                        lk=lk, lk_dtype=lk_type, rk=rk, rk_dtype=rk_type
+                    )
+                )
 
 
 def validate_keys(keys, columns):
