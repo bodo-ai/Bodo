@@ -57,6 +57,7 @@ from bodo.libs import hstr_ext
 
 ll.add_symbol("list_string_array_from_sequence", hstr_ext.list_string_array_from_sequence)
 ll.add_symbol("dtor_list_string_array", hstr_ext.dtor_list_string_array)
+ll.add_symbol("np_array_from_list_string_array", hstr_ext.np_array_from_list_string_array)
 
 
 char_typ = types.uint8
@@ -215,3 +216,36 @@ def unbox_str_series(typ, val, c):
     # FIXME how to check that the returned size is > 0?
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(list_string_array._getvalue(), is_error=is_error)
+
+
+@box(ListStringArrayType)
+def box_list_str_arr(typ, val, c):
+    """box packed native representation of list of string array into python objects
+    """
+    list_string_array = c.context.make_helper(c.builder, typ, val)
+
+    fnty = lir.FunctionType(
+        c.context.get_argument_type(types.pyobject),
+        [
+            lir.IntType(64),                # num_items
+            lir.IntType(8).as_pointer(),    # data
+            lir.IntType(32).as_pointer(),   # data_offsets
+            lir.IntType(32).as_pointer(),   # index_offsets
+            lir.IntType(8).as_pointer(),    # null_bitmap
+        ],
+    )
+    fn_get = c.builder.module.get_or_insert_function(
+        fnty, name="np_array_from_list_string_array"
+    )
+    arr = c.builder.call(
+        fn_get,
+        [
+            list_string_array.num_items,
+            list_string_array.data,
+            list_string_array.data_offsets,
+            list_string_array.index_offsets,
+            list_string_array.null_bitmap,
+        ],
+    )
+
+    return arr

@@ -74,6 +74,11 @@ void* np_array_from_string_array(int64_t no_strings,
                                  const uint32_t* offset_table,
                                  const char* buffer,
                                  const uint8_t* null_bitmap);
+void* np_array_from_list_string_array(int64_t num_items,
+                                const char* buffer,
+                                const uint32_t* data_offsets,
+                                const uint32_t* index_offsets,
+                                const uint8_t* null_bitmap);
 
 void setitem_string_array(uint32_t* offsets, char* data, int64_t n_bytes,
                           char* str, int64_t len, int kind, int is_ascii,
@@ -122,6 +127,7 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
                           int64_t n);
 void print_str_arr(uint64_t n, uint64_t n_chars, uint32_t* offsets,
                    uint8_t* data);
+void print_list_str_arr(uint64_t n, const char* data, const uint32_t* data_offsets, const uint32_t* index_offsets, const uint8_t* null_bitmap);
 
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
@@ -189,6 +195,9 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject_SetAttrString(
         m, "np_array_from_string_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_string_array)));
+    PyObject_SetAttrString(
+        m, "np_array_from_list_string_array",
+        PyLong_FromVoidPtr((void*)(&np_array_from_list_string_array)));
     PyObject_SetAttrString(m, "allocate_string_array",
                            PyLong_FromVoidPtr((void*)(&allocate_string_array)));
     PyObject_SetAttrString(m, "setitem_string_array",
@@ -896,6 +905,77 @@ void list_string_array_from_sequence(PyObject* obj, int64_t* num_items,
 }
 
 
+/**
+ * @brief create a numpy array of lists of string objects from a ListStringArray
+ *
+ * @param num_items number of lists in input array
+ * @param buffer all character data
+ * @param data_offsets string offsets to data
+ * @param index_offsets list offsets to data_offsets
+ * @param null_bitmap null bitmask
+ * @return numpy array of list of string objects
+ */
+void* np_array_from_list_string_array(int64_t num_items,
+                                const char* buffer,
+                                const uint32_t* data_offsets,
+                                const uint32_t* index_offsets,
+                                const uint8_t* null_bitmap){
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return NULL;                   \
+    }
+    auto gilstate = PyGILState_Ensure();
+
+    // allocate array and get nan object
+    npy_intp dims[] = {num_items};
+    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
+    CHECK(ret, "allocating numpy array failed");
+    int err;
+    PyObject* np_mod = PyImport_ImportModule("numpy");
+    CHECK(np_mod, "importing numpy module failed");
+    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
+    CHECK(nan_obj, "getting np.nan failed");
+
+    size_t curr_str = 0;
+    // for each list item
+    for (int64_t i = 0; i < num_items; ++i) {
+
+        // set nan if item is NA
+        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
+        CHECK(p, "getting offset in numpy array failed");
+        if (is_na(null_bitmap, i)) {
+            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
+            CHECK(err == 0, "setting item in numpy array failed");
+            continue;
+        }
+
+        // alloc list item
+        Py_ssize_t n_strs = (Py_ssize_t)(index_offsets[i + 1] - index_offsets[i]);
+        PyObject* l = PyList_New(n_strs);
+
+        for (Py_ssize_t j = 0; j < n_strs; j++) {
+            PyObject* s = PyUnicode_FromStringAndSize(
+                buffer + data_offsets[curr_str], data_offsets[curr_str + 1] - data_offsets[curr_str]);
+            CHECK(s, "creating Python string/unicode object failed");
+            err = PyList_SetItem(l, j, s);  // steals reference to s!
+            CHECK(err == 0, "setting item in list failed");
+            curr_str++;
+        }
+
+        err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, l);
+        CHECK(err == 0, "setting item in numpy array failed");
+        Py_DECREF(l);
+    }
+
+    Py_DECREF(np_mod);
+    Py_DECREF(nan_obj);
+    PyGILState_Release(gilstate);
+    return ret;
+#undef CHECK
+}
+
 
 // helper functions for call Numpy APIs
 npy_intp array_size(PyArrayObject* arr) {
@@ -1033,6 +1113,22 @@ void print_str_arr(uint64_t n, uint64_t n_chars, uint32_t* offsets,
         printf("\n");
     }
 }
+
+void print_list_str_arr(uint64_t n, const char* data, const uint32_t* data_offsets, const uint32_t* index_offsets, const uint8_t* null_bitmap) {
+    uint64_t n_strs = index_offsets[n];
+    uint64_t n_chars = data_offsets[n_strs];
+    printf("n: %lld n_strs: %lld n_chars: %lld\n", n, n_strs, n_chars);
+    for (uint64_t i = 0; i < n; i++) {
+        printf("index_offsets: %u %u  lists:", index_offsets[i], index_offsets[i + 1]);
+        for (uint64_t j = index_offsets[i]; j < index_offsets[i + 1]; j++) {
+            for (uint64_t k = data_offsets[j]; k < data_offsets[j + 1]; k++)
+                printf("%c ", data[k]);
+            printf("\n");
+        }
+        printf("\n");
+    }
+}
+
 
 // glob support
 void c_glob(uint32_t** offsets, char** data, uint8_t** null_bitmap,

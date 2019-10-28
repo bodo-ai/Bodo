@@ -220,12 +220,13 @@ def _test_equal(bodo_out, py_out, sort_output, check_names=True, check_dtype=Tru
             py_out.sort()
             bodo_out.sort()
         # assert_array_equal throws Zero Division error for bool arrays with NA
+        # also, does not handle nan in list of string arrays for some reason
         # using custom code instead
-        if is_bool_object_series(py_out):
-            assert is_bool_object_series(bodo_out)
+        if is_bool_object_series(py_out) or is_list_str_object_series(py_out):
+            assert is_bool_object_series(bodo_out) or is_list_str_object_series(bodo_out)
             assert len(py_out) == len(bodo_out)
             for i in range(len(py_out)):
-                assert (np.isnan(py_out[i]) and np.isnan(bodo_out[i])) or py_out[
+                assert (isinstance(py_out[i], float) and np.isnan(py_out[i]) and np.isnan(bodo_out[i])) or py_out[
                     i
                 ] == bodo_out[i]
         else:
@@ -245,4 +246,13 @@ def is_bool_object_series(S):
     return (
         S.dtype == np.dtype("O")
         and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(S) == numba.types.bool_
+    )
+
+
+def is_list_str_object_series(S):
+    if isinstance(S, pd.Series):
+        S = S.values
+    return (
+        S.dtype == np.dtype("O")
+        and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(S) == numba.types.List(numba.types.unicode_type)
     )

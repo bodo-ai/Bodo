@@ -267,8 +267,8 @@ def test_list_str_arr_unbox(list_str_arr_value):
 
     check_func(impl, (list_str_arr_value,))
 
-    # # unbox and box
-    # def impl2(arr_arg):
-    #     return arr_arg
+    # unbox and box
+    def impl2(arr_arg):
+        return arr_arg
 
-    # check_func(impl2, (list_str_arr_value,))
+    check_func(impl2, (list_str_arr_value,))
