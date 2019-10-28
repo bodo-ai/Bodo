@@ -739,6 +739,10 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
 }
 
 
+
+
+
+
 template<typename T>
 std::vector<char> GetVector(T const& val)
 {
@@ -782,9 +786,10 @@ std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype)
 
  */
 table_info* hash_join_table(table_info* key_left, table_info* key_right,
-                            table_info* data_left, table_info* data_right,
-                            bool is_left, bool is_right)
+                            table_info* data_left, table_info* data_right)
 {
+  bool is_left=true;
+  bool is_right=true;
   //
   size_t nb_key_left = key_left->columns.size();
   size_t nb_key_right = key_right->columns.size();
@@ -1006,9 +1011,9 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
       std::vector<uint32_t> ListSizes(nbRowOut);
       for (size_t iRow=0; iRow<nbRowOut; iRow++) {
         std::pair<array_info*,std::ptrdiff_t> epair = get_iRow(iRow);
-        uint32_t* in_offsets = (uint32_t*)epair.first->data2;
         uint32_t size=0;
         if (epair.second >= 0) {
+          uint32_t* in_offsets = (uint32_t*)epair.first->data2;
           uint32_t end_offset = in_offsets[epair.second + 1];
           uint32_t start_offset = in_offsets[epair.second];
           size = end_offset - start_offset;
@@ -1023,11 +1028,11 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
       uint32_t* out_offsets = (uint32_t*)out_arr->data2;
       for (size_t iRow=0; iRow<nbRowOut; iRow++) {
         std::pair<array_info*,std::ptrdiff_t> epair=get_iRow(iRow);
-        uint8_t* in_null_bitmask = (uint8_t*)epair.first->null_bitmask;
         uint32_t size = ListSizes[iRow];
         out_offsets[iRow] = pos;
         bool bit=false;
         if (epair.second >= 0) {
+          uint8_t* in_null_bitmask = (uint8_t*)epair.first->null_bitmask;
           uint32_t* in_offsets = (uint32_t*)epair.first->data2;
           uint32_t start_offset = in_offsets[epair.second];
           for (uint32_t i=0; i<size; i++) {
@@ -1050,10 +1055,9 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
       uint64_t siztype = get_item_size(in_arr1->dtype);
       for (size_t iRow=0; iRow<nbRowOut; iRow++) {
         std::pair<array_info*,std::ptrdiff_t> epair=get_iRow(iRow);
-        uint8_t* in_null_bitmask = (uint8_t*)epair.first->null_bitmask;
-        //
         bool bit=false;
         if (epair.second >= 0) {
+          uint8_t* in_null_bitmask = (uint8_t*)epair.first->null_bitmask;
           for (uint64_t u=0; u<siztype; u++)
             out_arr->data1[siztype*iRow + u] = epair.first->data1[siztype*epair.second + u];
           //
@@ -1098,6 +1102,26 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
   return new table_info(out_arrs);
 }
 
+/*
+table_info* hash_fct1(table_info* key_left, bool const& is_right)
+{
+  return key_left;
+}
+
+
+table_info* hash_fct2(table_info* key_left, int64_t n_keys)
+{
+  return key_left;
+}
+
+
+table_info* hash_fct3(table_info* key_left, table_info* key_right)
+{
+  return key_left;
+}
+*/
+
+
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     PyObject* m;
     static struct PyModuleDef moduledef = {
@@ -1139,6 +1163,13 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                            PyLong_FromVoidPtr((void*)(&shuffle_table)));
     PyObject_SetAttrString(m, "hash_join_table",
                            PyLong_FromVoidPtr((void*)(&hash_join_table)));
-
+    /*
+    PyObject_SetAttrString(m, "hash_fct1",
+                           PyLong_FromVoidPtr((void*)(&hash_fct1)));
+    PyObject_SetAttrString(m, "hash_fct2",
+                           PyLong_FromVoidPtr((void*)(&hash_fct2)));
+    PyObject_SetAttrString(m, "hash_fct3",
+                           PyLong_FromVoidPtr((void*)(&hash_fct3)));
+    */
     return m;
 }

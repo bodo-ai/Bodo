@@ -59,6 +59,7 @@ from bodo.libs.array_tools import (
     array_to_info,
     arr_info_list_to_table,
     shuffle_table,
+    hash_join_table,
     info_from_table,
     info_to_array,
     delete_table,
@@ -591,6 +592,7 @@ def join_distributed_run(
         )
 
     loc_vars = {}
+    print("func_text=", func_text)
     exec(func_text, {}, loc_vars)
     join_impl = loc_vars["f"]
 
@@ -607,6 +609,7 @@ def join_distributed_run(
         "array_to_info": array_to_info,
         "arr_info_list_to_table": arr_info_list_to_table,
         "shuffle_table": shuffle_table,
+        "hash_join_table": hash_join_table,
         "info_from_table": info_from_table,
         "info_to_array": info_to_array,
         "delete_table": delete_table,
@@ -685,22 +688,44 @@ def _get_table_parallel_flags(join_node, array_dists):
 
 
 def _gen_local_hash_join(left_other_names, right_other_names, n_keys, is_left, is_right):
-    func_ext =  "    out_table = hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(is_left, is_right)
+    func_text =  "    # beginning of _gen_local_hash_join\n"
+    func_text += "    info_list_key_left = [{}]\n".format(",".join("array_to_info(t1_keys[{}])".format(i) for i in range(n_keys)))
+    func_text += "    table_key_left = arr_info_list_to_table(info_list_key_left)\n"
+    func_text += "    info_list_key_right = [{}]\n".format(",".join("array_to_info(t2_keys[{}])".format(i) for i in range(n_keys)))
+    func_text += "    table_key_right = arr_info_list_to_table(info_list_key_right)\n"
+    func_text += "    info_list_data_left = [{}]\n".format(",".join("array_to_info(data_left[{}])".format(i) for i in range(len(left_other_names))))
+    func_text += "    table_data_left = arr_info_list_to_table(info_list_data_left)\n"
+    func_text += "    info_list_data_right = [{}]\n".format(",".join("array_to_info(data_right[{}])".format(i) for i in range(len(right_other_names))))
+    func_text += "    table_data_right = arr_info_list_to_table(info_list_data_right)\n"
+
+    func_text += "    out_table = hash_join_table(table_key_left, table_key_right, table_data_left, table_data_right)\n"
+    func_text += "    delete_table(table_key_left)\n"
+    func_text += "    delete_table(table_key_right)\n"
+    func_text += "    delete_table(table_data_left)\n"
+    func_text += "    delete_table(table_data_right)\n"
+#    func_text =  "    val=5\n"
+#    func_text += "    out_table = hash_fct2(t1_keys, val)\n"
+#    func_text = (
+#        "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
+#        " = bodo.ir.join.local_hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
+#            is_left, is_right
+#        )
+#    )
     idx = 0
     for i in range(len(left_other_names)):
-        func_ext += "    left_{} = out_table[{}]\n".format(i, idx)
+        func_text += "    left_{} = out_table[{}]\n".format(i, idx)
         idx += 1
     for i in range(len(right_other_names)):
-        func_ext += "    right_{} = out_table[{}]\n".format(i, idx)
+        func_text += "    right_{} = out_table[{}]\n".format(i, idx)
         idx += 1
     for i in range(n_keys):
-        func_ext += "    t1_keys_{} = out_table[{}]\n".format(i, idx)
+        func_text += "    t1_keys_{} = out_table[{}]\n".format(i, idx)
         idx += 1
     for i in range(n_keys):
-        func_ext += "    t2_keys_{} = out_table[{}]\n".format(i, idx)
+        func_text += "    t2_keys_{} = out_table[{}]\n".format(i, idx)
         idx += 1
-    func_ext += "    delete_table(out_table)\n"
-    return func_ext
+    func_text += "    delete_table(out_table)\n"
+    return func_text
 
 def _gen_par_shuffle(
     key_names, data_names, key_tup_out, data_tup_out, key_types, other_key_types

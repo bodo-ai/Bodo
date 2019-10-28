@@ -464,7 +464,7 @@ def shuffle_table(typingctx, table_t, n_keys_t):
     return table_type(table_t, types.int64), codegen
 
 @intrinsic
-def hash_join_table(typingctx, key_left_t, key_right_t, data_left_t, data_right_t, isleft_b, isright_t):
+def hash_join_table(typingctx, key_left_t, key_right_t, data_left_t, data_right_t):
     """
     """
     assert key_left_t == table_type
@@ -477,9 +477,10 @@ def hash_join_table(typingctx, key_left_t, key_right_t, data_left_t, data_right_
                                 [lir.IntType(8).as_pointer(),
                                  lir.IntType(8).as_pointer(),
                                  lir.IntType(8).as_pointer(),
+                                 lir.IntType(8).as_pointer(),
                                  lir.IntType(1),
                                  lir.IntType(1)])
-        fn_tp = builder.module.get_or_insert_function(fnty, name="hash_join_tablee")
+        fn_tp = builder.module.get_or_insert_function(fnty, name="hash_join_table")
         return builder.call(fn_tp, args)
 
-    return table_type(key_left_t,key_right_t,data_left_t,data_right_t,types.boolean,types.boolean), codegen
+    return table_type(key_left_t,key_right_t,data_left_t,data_right_t), codegen
