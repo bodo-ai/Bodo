@@ -781,9 +781,24 @@ std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype)
 
 
 
-/* There is no need for using MPI since this has already been done
-   following the _gen_par_shuffle.
-
+/*
+  This implementation follows the Shared partition procedure.
+  The data is partitioned and shuffled with the _gen_par_shuffle.
+  ---
+  The first stage is the partitioning of the data by using hashes
+  and std::unordered_map array.
+  ---
+  Afterwards, secondary partitioning is done is the hashes match.
+  Then the pairs of left/right origins are created for subsequent
+  work. If a left key has no matching on the right, then value -1
+  is put (thus the std::ptrdiff_t type is used).
+  ---
+  Then the arrays in output are subsequently created by RetrieveArray.
+  Another interesting function is "TestEqual" for testing key equality.
+  ---
+  We use a single array on input since empty arrays cause problem for
+  Python which cannot determine their type.
+  Further debugging and optimization are needed.
  */
 table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_data_left_t, int64_t nb_data_right_t, bool is_left, bool is_right)
 {
