@@ -564,7 +564,7 @@ def join_distributed_run(
                     is_left, is_right
                 )
             )
-    if bodo.use_cpp_hash_join == False or join_node.how == "asof" or method != "hash":
+    if bodo.use_cpp_hash_join == False or join_node.how == "asof" or method != "hash" or True:
         for i in range(len(left_other_names)):
             func_text += "    left_{} = out_data_left[{}]\n".format(i, i)
         for i in range(len(right_other_names)):
@@ -689,42 +689,45 @@ def _get_table_parallel_flags(join_node, array_dists):
 
 def _gen_local_hash_join(left_other_names, right_other_names, n_keys, is_left, is_right):
     func_text =  "    # beginning of _gen_local_hash_join\n"
-    func_text += "    info_list_key_left = [{}]\n".format(",".join("array_to_info(t1_keys[{}])".format(i) for i in range(n_keys)))
-    func_text += "    table_key_left = arr_info_list_to_table(info_list_key_left)\n"
-    func_text += "    info_list_key_right = [{}]\n".format(",".join("array_to_info(t2_keys[{}])".format(i) for i in range(n_keys)))
-    func_text += "    table_key_right = arr_info_list_to_table(info_list_key_right)\n"
-    func_text += "    info_list_data_left = [{}]\n".format(",".join("array_to_info(data_left[{}])".format(i) for i in range(len(left_other_names))))
-    func_text += "    table_data_left = arr_info_list_to_table(info_list_data_left)\n"
-    func_text += "    info_list_data_right = [{}]\n".format(",".join("array_to_info(data_right[{}])".format(i) for i in range(len(right_other_names))))
-    func_text += "    table_data_right = arr_info_list_to_table(info_list_data_right)\n"
-
-    func_text += "    out_table = hash_join_table(table_key_left, table_key_right, table_data_left, table_data_right)\n"
-    func_text += "    delete_table(table_key_left)\n"
-    func_text += "    delete_table(table_key_right)\n"
-    func_text += "    delete_table(table_data_left)\n"
-    func_text += "    delete_table(table_data_right)\n"
-#    func_text =  "    val=5\n"
-#    func_text += "    out_table = hash_fct2(t1_keys, val)\n"
-#    func_text = (
-#        "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
-#        " = bodo.ir.join.local_hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
-#            is_left, is_right
-#        )
-#    )
-    idx = 0
+    eList = []
+    for i in range(n_keys):
+        eList.append("t1_keys[{}]".format(i))
+    for i in range(n_keys):
+        eList.append("t2_keys[{}]".format(i))
     for i in range(len(left_other_names)):
-        func_text += "    left_{} = out_table[{}]\n".format(i, idx)
-        idx += 1
+        eList.append("data_left[{}]".format(i))
     for i in range(len(right_other_names)):
-        func_text += "    right_{} = out_table[{}]\n".format(i, idx)
-        idx += 1
-    for i in range(n_keys):
-        func_text += "    t1_keys_{} = out_table[{}]\n".format(i, idx)
-        idx += 1
-    for i in range(n_keys):
-        func_text += "    t2_keys_{} = out_table[{}]\n".format(i, idx)
-        idx += 1
-    func_text += "    delete_table(out_table)\n"
+        eList.append("data_right[{}]".format(i))
+    func_text += "    info_list_total = [{}]\n".format(",".join("array_to_info({})".format(a) for a in eList))
+    func_text += "    table_total = arr_info_list_to_table(info_list_total)\n"
+
+    func_text += "    out_table = hash_join_table(table_total, {}, {}, {}, {}, {})\n".format(n_keys, len(left_other_names), len(right_other_names), is_left, is_right)
+#    func_text += "    out_table = shuffle_table(table_key_left, {})\n".format(n_keys)
+#    func_text += "    delete_table(table_key_left)\n"
+#    func_text += "    delete_table(table_key_right)\n"
+#    func_text += "    delete_table(table_data_left)\n"
+#    func_text += "    delete_table(table_data_right)\n"
+    func_text += (
+        "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
+        " = bodo.ir.join.local_hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
+            is_left, is_right
+        )
+    )
+    if False:
+        idx = 0
+        for i in range(len(left_other_names)):
+            func_text += "    left_{} = out_table[{}]\n".format(i, idx)
+            idx += 1
+        for i in range(len(right_other_names)):
+            func_text += "    right_{} = out_table[{}]\n".format(i, idx)
+            idx += 1
+        for i in range(n_keys):
+            func_text += "    t1_keys_{} = out_table[{}]\n".format(i, idx)
+            idx += 1
+        for i in range(n_keys):
+            func_text += "    t2_keys_{} = out_table[{}]\n".format(i, idx)
+            idx += 1
+        func_text += "    delete_table(out_table)\n"
     return func_text
 
 def _gen_par_shuffle(

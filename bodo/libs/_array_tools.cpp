@@ -785,35 +785,37 @@ std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype)
    following the _gen_par_shuffle.
 
  */
-table_info* hash_join_table(table_info* key_left, table_info* key_right,
-                            table_info* data_left, table_info* data_right)
+table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_data_left_t, int64_t nb_data_right_t, bool is_left, bool is_right)
 {
-  bool is_left=true;
-  bool is_right=true;
-  //
-  size_t nb_key_left = key_left->columns.size();
-  size_t nb_key_right = key_right->columns.size();
-  if (nb_key_left != nb_key_right) {
-    PyErr_SetString(PyExc_RuntimeError, "key_left is inconsistent with key_right");
+  std::cerr << "hash_join_table, step 1\n";
+  size_t nb_key = size_t(nb_key_t);
+  size_t nb_data_left = size_t(nb_data_left_t);
+  size_t nb_data_right = size_t(nb_data_right_t);
+  size_t sum_dim = 2*nb_key + nb_data_left + nb_data_right;
+  size_t nb_col = in_table->columns.size();
+  if (nb_col != sum_dim) {
+    PyErr_SetString(PyExc_RuntimeError, "incoherent dimensions");
     return NULL;
   }
-  size_t nb_key=nb_key_left;
-  size_t nb_data_left = data_left->columns.size();
-  size_t nb_data_right = data_right->columns.size();
-  size_t n_rows = (size_t)key_left->columns[0]->length;
+  //
+  size_t n_rows_left = (size_t)in_table->columns[0]->length;
+  size_t n_rows_right = (size_t)in_table->columns[nb_key]->length;
   //
   //
-  std::vector<array_info*> key_arrs_left = std::vector<array_info*>(key_left->columns.begin(), key_left->columns.end());
+  std::cerr << "hash_join_table, step 2\n";
+  std::vector<array_info*> key_arrs_left = std::vector<array_info*>(in_table->columns.begin(), in_table->columns.begin() + nb_key);
   uint32_t seed = 0xb0d01288;
   uint32_t* hashes_left = hash_keys(key_arrs_left, seed);
 
-  std::vector<array_info*> key_arrs_right = std::vector<array_info*>(key_right->columns.begin(), key_right->columns.end());
+  std::cerr << "hash_join_table, step 3\n";
+  std::vector<array_info*> key_arrs_right = std::vector<array_info*>(in_table->columns.begin()+nb_key, in_table->columns.begin() + 2*nb_key);
   uint32_t* hashes_right = hash_keys(key_arrs_right, seed);
 
+  std::cerr << "hash_join_table, step 4\n";
   std::unordered_map<uint32_t, std::vector<std::pair<int,size_t>>> ListEnt;
   if (is_left) {
     // inserting the left entries.
-    for (size_t iRowL=0; iRowL<n_rows; iRowL++) {
+    for (size_t iRowL=0; iRowL<n_rows_left; iRowL++) {
       std::pair<int,size_t> eEnt{0,iRowL};
       uint32_t eKey = hashes_left[iRowL];
       if (ListEnt.count(eKey) == 0) {
@@ -823,7 +825,7 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
         ListEnt[eKey].push_back(eEnt);
       }
     }
-    for (size_t iRowR=0; iRowR<n_rows; iRowR++) {
+    for (size_t iRowR=0; iRowR<n_rows_right; iRowR++) {
       std::pair<int,size_t> eEnt{1,iRowR};
       uint32_t eKey=hashes_right[iRowR];
       if (ListEnt.count(eKey) == 0) {
@@ -836,7 +838,7 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
     }
   }
   else {
-    for (size_t iRowR=0; iRowR<n_rows; iRowR++) {
+    for (size_t iRowR=0; iRowR<n_rows_right; iRowR++) {
       std::pair<int,size_t> eEnt{1,iRowR};
       uint32_t eKey=hashes_right[iRowR];
       if (ListEnt.count(eKey) == 0) {
@@ -846,7 +848,7 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
         ListEnt[eKey].push_back(eEnt);
       }
     }
-    for (size_t iRowL=0; iRowL<n_rows; iRowL++) {
+    for (size_t iRowL=0; iRowL<n_rows_left; iRowL++) {
       std::pair<int,size_t> eEnt{0,iRowL};
       uint32_t eKey = hashes_left[iRowL];
       if (ListEnt.count(eKey) == 0) {
@@ -861,33 +863,39 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
   //
   // Testing equality of entries
   //
-  auto TestEqual=[&](table_info* key1, size_t const& iRow1, table_info* key2, size_t const& iRow2) -> bool {
+  std::cerr << "hash_join_table, step 5\n";
+  auto TestEqual=[&](size_t const& shift_key1, size_t const& iRow1, size_t const& shift_key2, size_t const& iRow2) -> bool {
+    std::cerr << "TestEqual, begin\n";
     for (size_t iKey=0; iKey<nb_key; iKey++) {
-      if (key1->columns[iKey]->arr_type == bodo_array_type::NUMPY) {
-        uint64_t siztype = get_item_size(key1->columns[iKey]->dtype);
+      std::cerr << "iKey=" << iKey << " nb_key=" << nb_key << "\n";
+      if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::NUMPY) {
+        std::cerr << "  Case 1\n";
+        uint64_t siztype = get_item_size(in_table->columns[shift_key1+iKey]->dtype);
         for (uint64_t u=0; u<siztype; u++) {
-          if (key1->columns[iKey]->data1[siztype*iRow1 + u] != key2->columns[iKey]->data1[siztype*iRow2 + u])
+          if (in_table->columns[shift_key1+iKey]->data1[siztype*iRow1 + u] != in_table->columns[shift_key2+iKey]->data1[siztype*iRow2 + u])
             return false;
         }
       }
-      if (key1->columns[iKey]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        uint8_t* null_bitmask1 = (uint8_t*)key1->columns[iKey]->null_bitmask;
-        uint8_t* null_bitmask2 = (uint8_t*)key2->columns[iKey]->null_bitmask;
+      if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        std::cerr << "  Case 2\n";
+        uint8_t* null_bitmask1 = (uint8_t*)in_table->columns[shift_key1+iKey]->null_bitmask;
+        uint8_t* null_bitmask2 = (uint8_t*)in_table->columns[shift_key2+iKey]->null_bitmask;
         bool bit1 = GetBit(null_bitmask1, iRow1);
         bool bit2 = GetBit(null_bitmask2, iRow2);
         if (bit1 != bit2)
           return false;
-        uint64_t siztype = get_item_size(key1->columns[iKey]->dtype);
+        uint64_t siztype = get_item_size(in_table->columns[shift_key1+iKey]->dtype);
         for (uint64_t u=0; u<siztype; u++) {
-          if (key1->columns[iKey]->data1[siztype*iRow1 + u] != key2->columns[iKey]->data1[siztype*iRow2 + u])
+          if (in_table->columns[shift_key1+iKey]->data1[siztype*iRow1 + u] != in_table->columns[shift_key2+iKey]->data1[siztype*iRow2 + u])
             return false;
         }
       }
-      if (key1->columns[iKey]->arr_type == bodo_array_type::STRING) {
-        uint32_t pos1_prev = ((uint32_t*)key1->columns[iKey]->data2)[iRow1];
-        uint32_t pos1_next = ((uint32_t*)key1->columns[iKey]->data2)[iRow1+1];
-        uint32_t pos2_prev = ((uint32_t*)key2->columns[iKey]->data2)[iRow2];
-        uint32_t pos2_next = ((uint32_t*)key2->columns[iKey]->data2)[iRow2+1];
+      if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::STRING) {
+        std::cerr << "  Case 3\n";
+        uint32_t pos1_prev = ((uint32_t*)in_table->columns[shift_key1+iKey]->data2)[iRow1];
+        uint32_t pos1_next = ((uint32_t*)in_table->columns[shift_key1+iKey]->data2)[iRow1+1];
+        uint32_t pos2_prev = ((uint32_t*)in_table->columns[shift_key2+iKey]->data2)[iRow2];
+        uint32_t pos2_next = ((uint32_t*)in_table->columns[shift_key2+iKey]->data2)[iRow2+1];
         uint32_t len1 = pos1_next - pos1_prev;
         uint32_t len2 = pos2_next - pos2_prev;
         if (len1 != len2)
@@ -895,8 +903,8 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
         for (uint32_t pos=0; pos<len1; pos++) {
           uint32_t pos1=pos1_prev + pos;
           uint32_t pos2=pos2_prev + pos;
-          char charL = ((char*)key1->columns[iKey]->data1)[pos1];
-          char charR = ((char*)key2->columns[iKey]->data1)[pos2];
+          char charL = ((char*)in_table->columns[shift_key1+iKey]->data1)[pos1];
+          char charR = ((char*)in_table->columns[shift_key2+iKey]->data1)[pos2];
           if (charL != charR)
             return false;
         }
@@ -907,8 +915,10 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
   //
   // Now iterating and determining how many entries we have to do.
   //
+  std::cerr << "hash_join_table, step 6\n";
   std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
   for (auto & ePair : ListEnt) {
+    std::cerr << "hash_join_table, step 6.1\n";
     std::vector<size_t> ListEntL, ListEntR;
     for (auto fPair : ePair.second) {
       int iSize=fPair.first;
@@ -918,7 +928,9 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
       if (iSize == 1)
         ListEntR.push_back(iRow);
     }
-    auto GetBlocks=[&](table_info* table, std::vector<size_t> const& ListEnt) -> std::vector<std::vector<size_t>> {
+    std::cerr << "|ListEntL|=" << ListEntL.size() << " |ListEntR|=" << ListEntR.size() << "\n";
+    std::cerr << "hash_join_table, step 6.2\n";
+    auto GetBlocks=[&](size_t const& shift, std::vector<size_t> const& ListEnt) -> std::vector<std::vector<size_t>> {
       int len=ListEnt.size();
       std::vector<int> ListStatus(len,0);
       std::vector<std::vector<size_t>> ListListEnt;
@@ -928,35 +940,47 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
           std::vector<size_t> eList{ListEnt[i1]};
           for (int i2=i1+1; i2<len; i2++) {
             if (ListStatus[i2] == 0) {
-              bool test=TestEqual(table, ListEnt[i1], table, ListEnt[i2]);
+              bool test=TestEqual(shift, ListEnt[i1], shift, ListEnt[i2]);
               if (test) {
                 ListStatus[i2]=1;
                 eList.push_back(ListEnt[i2]);
               }
             }
           }
+          //          std::cerr << "|eList|=" << eList.size() << "\n";
           ListListEnt.push_back(eList);
         }
       }
+      //      std::cerr << "|ListListEnt|=" << ListListEnt.size() << "\n";
       return ListListEnt;
     };
+    std::cerr << "hash_join_table, step 6.3\n";
 
-    std::vector<std::vector<size_t>> ListListEntL = GetBlocks(key_left, ListEntL);
-    std::vector<std::vector<size_t>> ListListEntR = GetBlocks(key_right, ListEntR);
+    std::vector<std::vector<size_t>> ListListEntL = GetBlocks(0, ListEntL);
+    std::cerr << "hash_join_table, step 6.4\n";
+    std::vector<std::vector<size_t>> ListListEntR = GetBlocks(nb_key, ListEntR);
+    std::cerr << "hash_join_table, step 6.5\n";
     int nbBlockL=ListListEntL.size();
-    int nbBlockR=ListListEntL.size();
+    int nbBlockR=ListListEntR.size();
 
     if (is_left) {
+      std::cerr << "hash_join_table, step 6.6\n";
       auto GetEntry=[&](size_t const& iRowL) -> int {
+        //        std::cerr << "GetEntry : nbBlockR=" << nbBlockR << "\n";
         for (int iR=0; iR<nbBlockR; iR++) {
-          bool test = TestEqual(key_left, iRowL, key_right, ListListEntR[iR][0]);
+          //          std::cerr << "GetEntry : iR=" << iR << " |ListListEntR[iR]|=" << ListListEntR[iR].size() << "\n";
+          bool test = TestEqual(0, iRowL, nb_key, ListListEntR[iR][0]);
+          //          std::cerr << "GetEntry : test=" << test << "\n";
           if (test)
             return iR;
         }
         return -1;
       };
+      std::cerr << "hash_join_table, step 6.7\n";
       for (int iL=0; iL<nbBlockL; iL++) {
+        //        std::cerr << "iL=" << iL << " |ListListEntL[iL]|=" << ListListEntL[iL].size() << "\n";
         int iR=GetEntry(ListListEntL[iL][0]);
+        //        std::cerr << "iR=" << iR << "\n";
         if (iR == -1) {
           for (auto & uL : ListListEntL[iL])
             ListPairWrite.push_back({uL, -1});
@@ -967,16 +991,19 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
               ListPairWrite.push_back({uL,uR});
         }
       }
+      std::cerr << "hash_join_table, step 6.8\n";
     }
     else {
+      std::cerr << "hash_join_table, step 6.9\n";
       auto GetEntry=[&](size_t const& iRowR) -> int {
         for (int iL=0; iL<nbBlockL; iL++) {
-          bool test = TestEqual(key_left, ListListEntL[iL][0], key_right, iRowR);
+          bool test = TestEqual(0, ListListEntL[iL][0], nb_key, iRowR);
           if (test)
             return iL;
         }
         return -1;
       };
+      std::cerr << "hash_join_table, step 6.10\n";
       for (int iR=0; iR<nbBlockR; iR++) {
         int iL=GetEntry(ListListEntR[iR][0]);
         if (iL == -1) {
@@ -989,31 +1016,43 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
               ListPairWrite.push_back({uL,uR});
         }
       }
+      std::cerr << "hash_join_table, step 6.11\n";
     }
   }
   size_t nbRowOut = ListPairWrite.size();
+  std::cerr << "hash_join_table, step 7\n";
   //
   //
   //
-  auto RetrieveArray = [&](array_info* in_arr1, array_info* in_arr2, int const& ChoiceColumn) -> array_info* {
-    auto get_iRow=[&](size_t const& iRowIn) -> std::pair<array_info*,std::ptrdiff_t> {
+  auto RetrieveArray = [&](size_t const& shift1, size_t const& shift2, int const& ChoiceColumn) -> array_info* {
+    auto get_iRow=[&](size_t const& iRowIn) -> std::pair<size_t,std::ptrdiff_t> {
       std::pair<std::ptrdiff_t, std::ptrdiff_t> epair = ListPairWrite[iRowIn];
       if (ChoiceColumn == 0)
-        return {in_arr1, epair.first};
+        return {shift1, epair.first};
       if (ChoiceColumn == 1)
-        return {in_arr2, epair.second};
+        return {shift2, epair.second};
       if (epair.first != -1)
-        return {in_arr1, epair.first};
-      return {in_arr2, epair.second};
+        return {shift1, epair.first};
+      return {shift2, epair.second};
     };
-    if (in_arr1->arr_type == bodo_array_type::STRING) {
+    std::cerr << "shift1=" << shift1 << " shift2=" << shift2 << " ColiceColumn=" << ChoiceColumn << "\n";
+    size_t eshift;
+    if (ChoiceColumn == 0)
+      eshift=shift1;
+    if (ChoiceColumn == 1)
+      eshift=shift2;
+    if (ChoiceColumn == 2)
+      eshift=shift1;
+    std::cerr << "RetrieveArray, step 1\n";
+    if (in_table->columns[eshift]->arr_type == bodo_array_type::STRING) {
+      std::cerr << "RetrieveArray, step 2\n";
       int64_t n_chars=0;
       std::vector<uint32_t> ListSizes(nbRowOut);
       for (size_t iRow=0; iRow<nbRowOut; iRow++) {
-        std::pair<array_info*,std::ptrdiff_t> epair = get_iRow(iRow);
+        std::pair<size_t,std::ptrdiff_t> epair = get_iRow(iRow);
         uint32_t size=0;
         if (epair.second >= 0) {
-          uint32_t* in_offsets = (uint32_t*)epair.first->data2;
+          uint32_t* in_offsets = (uint32_t*)in_table->columns[epair.first]->data2;
           uint32_t end_offset = in_offsets[epair.second + 1];
           uint32_t start_offset = in_offsets[epair.second];
           size = end_offset - start_offset;
@@ -1021,22 +1060,26 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
         ListSizes[iRow] = size;
         n_chars += size;
       }
+      std::cerr << "RetrieveArray, step 2.1 nbRowOut=" << nbRowOut << " n_chars=" << n_chars << "\n";
       array_info* out_arr = alloc_array(nbRowOut, n_chars,
-                                        in_arr1->arr_type, in_arr1->dtype, 0);
+                                        in_table->columns[eshift]->arr_type,
+                                        in_table->columns[eshift]->dtype, 0);
+      std::cerr << "RetrieveArray, step 2.2\n";
       uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
       uint32_t pos = 0;
       uint32_t* out_offsets = (uint32_t*)out_arr->data2;
+      std::cerr << "RetrieveArray, step 2.3\n";
       for (size_t iRow=0; iRow<nbRowOut; iRow++) {
-        std::pair<array_info*,std::ptrdiff_t> epair=get_iRow(iRow);
+        std::pair<size_t,std::ptrdiff_t> epair=get_iRow(iRow);
         uint32_t size = ListSizes[iRow];
         out_offsets[iRow] = pos;
         bool bit=false;
         if (epair.second >= 0) {
-          uint8_t* in_null_bitmask = (uint8_t*)epair.first->null_bitmask;
-          uint32_t* in_offsets = (uint32_t*)epair.first->data2;
+          uint8_t* in_null_bitmask = (uint8_t*)in_table->columns[epair.first]->null_bitmask;
+          uint32_t* in_offsets = (uint32_t*)in_table->columns[epair.first]->data2;
           uint32_t start_offset = in_offsets[epair.second];
           for (uint32_t i=0; i<size; i++) {
-            out_arr->data1[pos] = epair.first->data1[start_offset];
+            out_arr->data1[pos] = in_table->columns[epair.first]->data1[start_offset];
             pos++;
             start_offset++;
           }
@@ -1045,21 +1088,25 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
         SetBitTo(out_null_bitmask, iRow, bit);
         pos += size;
       }
+      std::cerr << "RetrieveArray, step 2.4\n";
       out_offsets[nbRowOut] = pos;
+      std::cerr << "RetrieveArray, step 2.5\n";
       return out_arr;
     }
-    if (in_arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+    if (in_table->columns[eshift]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+      std::cerr << "RetrieveArray, step 3\n";
       array_info* out_arr = alloc_array(nbRowOut, -1,
-                                        in_arr1->arr_type, in_arr1->dtype, 0);
+                                        in_table->columns[eshift]->arr_type,
+                                        in_table->columns[eshift]->dtype, 0);
       uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
-      uint64_t siztype = get_item_size(in_arr1->dtype);
+      uint64_t siztype = get_item_size(in_table->columns[eshift]->dtype);
       for (size_t iRow=0; iRow<nbRowOut; iRow++) {
-        std::pair<array_info*,std::ptrdiff_t> epair=get_iRow(iRow);
+        std::pair<size_t,std::ptrdiff_t> epair=get_iRow(iRow);
         bool bit=false;
         if (epair.second >= 0) {
-          uint8_t* in_null_bitmask = (uint8_t*)epair.first->null_bitmask;
+          uint8_t* in_null_bitmask = (uint8_t*)in_table->columns[epair.first]->null_bitmask;
           for (uint64_t u=0; u<siztype; u++)
-            out_arr->data1[siztype*iRow + u] = epair.first->data1[siztype*epair.second + u];
+            out_arr->data1[siztype*iRow + u] = in_table->columns[epair.first]->data1[siztype*epair.second + u];
           //
           bit = GetBit(in_null_bitmask, epair.second);
         }
@@ -1069,16 +1116,18 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
     }
     //
     // NUMPY case
+    std::cerr << "RetrieveArray, step 4\n";
     array_info* out_arr = alloc_array(nbRowOut, -1,
-                                      in_arr1->arr_type, in_arr1->dtype, 0);
-    uint64_t siztype = get_item_size(in_arr1->dtype);
-    std::vector<char> vectNaN = RetrieveNaNentry(in_arr1->dtype);
+                                      in_table->columns[eshift]->arr_type,
+                                      in_table->columns[eshift]->dtype, 0);
+    uint64_t siztype = get_item_size(in_table->columns[eshift]->dtype);
+    std::vector<char> vectNaN = RetrieveNaNentry(in_table->columns[eshift]->dtype);
     for (size_t iRow=0; iRow<nbRowOut; iRow++) {
-      std::pair<array_info*,std::ptrdiff_t> epair=get_iRow(iRow);
+      std::pair<size_t,std::ptrdiff_t> epair=get_iRow(iRow);
       //
       if (epair.second >= 0) {
         for (uint64_t u=0; u<siztype; u++)
-          out_arr->data1[siztype*iRow + u] = epair.first->data1[siztype*epair.second + u];
+          out_arr->data1[siztype*iRow + u] = in_table->columns[epair.first]->data1[siztype*epair.second + u];
       }
       else {
         for (uint64_t u=0; u<siztype; u++)
@@ -1087,15 +1136,23 @@ table_info* hash_join_table(table_info* key_left, table_info* key_right,
     }
     return out_arr;
   };
+  std::cerr << "hash_join_table, step 8\n";
+  std::cerr << "nb_key=" << nb_key << " nb_data_left=" << nb_data_left << " nb_data_right=" << nb_data_right << "\n";
   std::vector<array_info*> out_arrs;
   for (size_t i=0; i<nb_data_left; i++)
-    out_arrs.push_back(RetrieveArray(data_left->columns[i], data_right->columns[i], 0));
-  for (size_t i=0; i<nb_data_right; i++)
-    out_arrs.push_back(RetrieveArray(data_left->columns[i], data_right->columns[i], 1));
+    out_arrs.push_back(RetrieveArray(i + 2*nb_key, -1, 0));
+  std::cerr << "hash_join_table, step 9\n";
+  for (size_t i=0; i<nb_data_right; i++) {
+    std::cerr << "  i=" << i << "\n";
+    out_arrs.push_back(RetrieveArray(-1, i + 2*nb_key + nb_data_left, 1));
+  }
+  std::cerr << "hash_join_table, step 10\n";
   for (size_t i=0; i<nb_key; i++)
-    out_arrs.push_back(RetrieveArray(key_left->columns[i], key_right->columns[i], 2));
+    out_arrs.push_back(RetrieveArray(0, nb_key, 2));
+  std::cerr << "hash_join_table, step 11\n";
   for (size_t i=0; i<nb_key; i++)
-    out_arrs.push_back(RetrieveArray(key_left->columns[i], key_right->columns[i], 2));
+    out_arrs.push_back(RetrieveArray(0, nb_key, 2));
+  std::cerr << "hash_join_table, step 12\n";
   //
   delete[] hashes_left;
   delete[] hashes_right;
