@@ -51,6 +51,13 @@ from numba.targets.hashing import _Py_hash_t
 import llvmlite.llvmpy.core as lc
 from glob import glob
 from bodo.utils.typing import is_overload_true, is_overload_none
+from llvmlite import ir as lir
+import llvmlite.binding as ll
+from bodo.libs import hstr_ext
+
+ll.add_symbol("list_string_array_from_sequence", hstr_ext.list_string_array_from_sequence)
+ll.add_symbol("dtor_list_string_array", hstr_ext.dtor_list_string_array)
+
 
 char_typ = types.uint8
 offset_typ = types.uint32
@@ -101,6 +108,7 @@ class ListStringArrayPayloadModel(models.StructModel):
 
 list_str_arr_model_members = [
     ("num_items", types.uint64),
+    ("num_total_strings", types.uint64),
     ("num_total_chars", types.uint64),
     ("data", types.CPointer(char_typ)),
     ("data_offsets", types.CPointer(offset_typ)),
@@ -119,8 +127,91 @@ class ListStringArrayModel(models.StructModel):
 
 # XXX: should these be exposed?
 make_attribute_wrapper(ListStringArrayType, "num_items", "_num_items")
+make_attribute_wrapper(ListStringArrayType, "num_total_strings", "_num_total_strings")
 make_attribute_wrapper(ListStringArrayType, "num_total_chars", "_num_total_chars")
 make_attribute_wrapper(ListStringArrayType, "data", "_data")
 make_attribute_wrapper(ListStringArrayType, "data_offsets", "_data_offsets")
 make_attribute_wrapper(ListStringArrayType, "index_offsets", "_index_offsets")
 make_attribute_wrapper(ListStringArrayType, "null_bitmap", "_null_bitmap")
+
+
+def construct_list_string_array(context, builder):
+    """Creates meminfo and sets dtor.
+    """
+    alloc_type = context.get_data_type(list_str_arr_payload_type)
+    alloc_size = context.get_abi_sizeof(alloc_type)
+
+    llvoidptr = context.get_value_type(types.voidptr)
+    llsize = context.get_value_type(types.uintp)
+    dtor_ftype = lir.FunctionType(lir.VoidType(), [llvoidptr, llsize, llvoidptr])
+    dtor_fn = builder.module.get_or_insert_function(
+        dtor_ftype, name="dtor_list_string_array"
+    )
+
+    meminfo = context.nrt.meminfo_alloc_dtor(
+        builder, context.get_constant(types.uintp, alloc_size), dtor_fn
+    )
+    meminfo_data_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_data_ptr, alloc_type.as_pointer())
+
+    return meminfo, meminfo_data_ptr
+
+
+@unbox(ListStringArrayType)
+def unbox_str_series(typ, val, c):
+    """
+    Unbox a numpy array with list of string data values.
+    """
+    payload = cgutils.create_struct_proxy(
+        list_str_arr_payload_type)(c.context, c.builder)
+    list_string_array = c.context.make_helper(c.builder, typ)
+
+    # function signature of list_string_array_from_sequence
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [
+            lir.IntType(8).as_pointer(),                    # obj
+            lir.IntType(64).as_pointer(),                   # num_items (pointer)
+            lir.IntType(8).as_pointer().as_pointer(),      # data
+            lir.IntType(32).as_pointer().as_pointer(),       # data_offsets
+            lir.IntType(32).as_pointer().as_pointer(),       # index_offsets
+            lir.IntType(8).as_pointer().as_pointer(),       # null_bitmap
+        ],
+    )
+    fn = c.builder.module.get_or_insert_function(
+        fnty, name="list_string_array_from_sequence"
+    )
+    c.builder.call(
+        fn,
+        [
+            val,
+            list_string_array._get_ptr_by_name("num_items"),
+            payload._get_ptr_by_name("data"),
+            payload._get_ptr_by_name("data_offsets"),
+            payload._get_ptr_by_name("index_offsets"),
+            payload._get_ptr_by_name("null_bitmap"),
+        ],
+    )
+
+    meminfo, meminfo_data_ptr = construct_list_string_array(c.context, c.builder)
+    c.builder.store(payload._getvalue(), meminfo_data_ptr)
+
+    list_string_array.meminfo = meminfo
+    list_string_array.data = payload.data
+    list_string_array.data_offsets = payload.data_offsets
+    list_string_array.index_offsets = payload.index_offsets
+    list_string_array.null_bitmap = payload.null_bitmap
+    list_string_array.num_total_strings = c.builder.zext(
+        c.builder.load(c.builder.gep(list_string_array.index_offsets,
+        [list_string_array.num_items])),
+        lir.IntType(64),
+    )
+    list_string_array.num_total_chars = c.builder.zext(
+        c.builder.load(c.builder.gep(list_string_array.data_offsets,
+        [list_string_array.num_total_strings])),
+        lir.IntType(64),
+    )
+
+    # FIXME how to check that the returned size is > 0?
+    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
+    return NativeValue(list_string_array._getvalue(), is_error=is_error)

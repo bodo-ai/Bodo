@@ -240,3 +240,35 @@ def test_isupper():
         name="A",
     )
     check_func(test_impl, (S,))
+
+
+##############  list of string array tests  #################
+
+
+@pytest.fixture(
+    params=[
+        np.array([['a', 'bc'], ['a'], ['aaa', 'b', 'cc']] * 2),
+        # empty strings, empty lists, NA
+        np.array([['a', 'bc'], ['a'], [], ['aaa', '', 'cc'], [''], np.nan] * 2),
+        # large array
+        np.array(
+            [['a', 'bc'], ['a'], [], ['aaa', '', 'cc'], [''], np.nan] * 1000
+        ),
+    ]
+)
+def list_str_arr_value(request):
+    return request.param
+
+
+def test_list_str_arr_unbox(list_str_arr_value):
+    # just unbox
+    def impl(arr_arg):
+        return True
+
+    check_func(impl, (list_str_arr_value,))
+
+    # # unbox and box
+    # def impl2(arr_arg):
+    #     return arr_arg
+
+    # check_func(impl2, (list_str_arr_value,))

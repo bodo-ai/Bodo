@@ -172,7 +172,7 @@ def _infer_series_dtype(S):
 
         first_val = S.iloc[i]
         if isinstance(first_val, list):
-            return _infer_series_list_dtype(S)
+            return _infer_series_list_dtype(S.values, S.name)
         elif isinstance(first_val, str):
             return string_type
         elif isinstance(first_val, bool):
@@ -203,18 +203,21 @@ def _infer_series_dtype(S):
         )
 
 
-def _infer_series_list_dtype(S):
-    for i in range(len(S)):
-        first_val = S.iloc[i]
+def _infer_series_list_dtype(A, name):
+    for i in range(len(A)):
+        first_val = A[i]
+        if isinstance(first_val, float) and np.isnan(first_val) or first_val is None:
+            continue
         if not isinstance(first_val, list):
-            raise ValueError("data type for column {} not supported".format(S.name))
+            raise ValueError("data type for column {} not supported".format(name))
         if len(first_val) > 0:
             # TODO: support more types
             if isinstance(first_val[0], str):
                 return types.List(string_type)
             else:
-                raise ValueError("data type for column {} not supported".format(S.name))
-    raise ValueError("data type for column {} not supported".format(S.name))
+                raise ValueError("data type for column {} not supported".format(name))
+    # assuming array of all empty lists is string by default
+    return types.List(string_type)
 
 
 @box(DataFrameType)

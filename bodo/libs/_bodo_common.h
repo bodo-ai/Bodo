@@ -104,6 +104,16 @@ struct str_arr_payload {
     uint8_t* null_bitmap;
 };
 
+
+// XXX: equivalent to payload data model in list_str_arr_ext.py
+struct list_str_arr_payload {
+    char* data;
+    uint32_t* data_offsets;
+    uint32_t* index_offsets;
+    uint8_t* null_bitmap;
+};
+
+
 // XXX: equivalent to payload data model in split_impl.py
 struct str_arr_split_view_payload {
     uint32_t* index_offsets;
@@ -116,9 +126,21 @@ void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in) {
     // printf("num chars: %d\n", in_str_arr->offsets[in_str_arr->size]);
     delete[] in_str_arr->offsets;
     delete[] in_str_arr->data;
-    if (in_str_arr->null_bitmap != nullptr) delete[] in_str_arr->null_bitmap;
+    if (in_str_arr->null_bitmap != nullptr)
+        delete[] in_str_arr->null_bitmap;
     return;
 }
+
+
+void dtor_list_string_array(list_str_arr_payload* in_list_str_arr, int64_t size, void* in) {
+    delete[] in_list_str_arr->data;
+    delete[] in_list_str_arr->data_offsets;
+    delete[] in_list_str_arr->index_offsets;
+    if (in_list_str_arr->null_bitmap != nullptr)
+        delete[] in_list_str_arr->null_bitmap;
+    return;
+}
+
 
 void allocate_string_array(uint32_t** offsets, char** data,
                            uint8_t** null_bitmap, int64_t num_strings,
