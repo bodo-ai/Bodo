@@ -702,30 +702,29 @@ def _gen_local_hash_join(left_other_names, right_other_names, n_keys, is_left, i
     func_text += "    table_total = arr_info_list_to_table(info_list_total)\n"
 
     func_text += "    out_table = hash_join_table(table_total, {}, {}, {}, {}, {})\n".format(n_keys, len(left_other_names), len(right_other_names), is_left, is_right)
-#    func_text += "    out_table = shuffle_table(table_key_left, {})\n".format(n_keys)
-#    func_text += "    delete_table(table_key_left)\n"
-#    func_text += "    delete_table(table_key_right)\n"
-#    func_text += "    delete_table(table_data_left)\n"
-#    func_text += "    delete_table(table_data_right)\n"
-    func_text += (
-        "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
-        " = bodo.ir.join.local_hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
-            is_left, is_right
+    func_text += "    delete_table(table_total)\n"
+    func_text += "    delete_table(out_table)\n"
+    use_cpp_code = False
+    if use_cpp_code == False:
+        func_text += (
+            "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
+            " = bodo.ir.join.local_hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
+                is_left, is_right
+            )
         )
-    )
-    if False:
+    if use_cpp_code:
         idx = 0
         for i in range(len(left_other_names)):
-            func_text += "    left_{} = out_table[{}]\n".format(i, idx)
+            func_text += "    left_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,"xxx")
             idx += 1
         for i in range(len(right_other_names)):
-            func_text += "    right_{} = out_table[{}]\n".format(i, idx)
+            func_text += "    right_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,"xxx")
             idx += 1
         for i in range(n_keys):
-            func_text += "    t1_keys_{} = out_table[{}]\n".format(i, idx)
+            func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,"xxx")
             idx += 1
         for i in range(n_keys):
-            func_text += "    t2_keys_{} = out_table[{}]\n".format(i, idx)
+            func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,"xxx")
             idx += 1
         func_text += "    delete_table(out_table)\n"
     return func_text
@@ -1177,6 +1176,7 @@ def local_hash_join_impl(
 ):
     l_len = len(left_keys[0])
     r_len = len(right_keys[0])
+    print("l_len=", l_len, " r_len=", r_len)
     # TODO: approximate output size properly
     curr_size = 101 + min(l_len, r_len) // 2
     if is_left:
