@@ -5,7 +5,7 @@ parameters:
 
 jobs:
 - job: ${{ parameters.name }}
-  timeoutInMinutes: 120
+  timeoutInMinutes: 240
   pool: 
     vmImage: ${{ parameters.vmImage }}
   strategy:
@@ -33,9 +33,15 @@ jobs:
   - script: |
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      pip install pytest pytest-azurepipelines
-      if [["$NP" == 1]]; then
-        pytest -s -v -W ignore bodo/tests/
+      pip install pytest pytest-azurepipelines pytest-cov
+      if [[ "$NP" -eq 1 ]]; then
+        if [[ "${{ parameters.name }}" == "Linux" ]]; then
+          pip install codecov
+          pytest -s -v -W ignore --cov-report=xml --cov=./ bodo/tests/
+          codecov -t $(CODECOV_TOKEN)
+        else
+          pytest -s -v -W ignore bodo/tests/
+        fi
       else
         mpiexec -n $NP pytest -s -v -W ignore bodo/tests/
       fi

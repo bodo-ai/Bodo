@@ -52,7 +52,7 @@ import bodo.utils.typing
 import bodo.io
 
 if config._has_h5py:
-    from bodo.io import pio
+    from bodo.io import h5
 
 # workaround for Numba #3876 issue with large labels in mortgage benchmark
 from llvmlite import binding

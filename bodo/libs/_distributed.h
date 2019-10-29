@@ -30,41 +30,37 @@ struct HPAT_ReduceOps {
     };
 };
 
-static int hpat_dist_get_rank() __UNUSED__;
-static int hpat_dist_get_size() __UNUSED__;
-static int64_t hpat_dist_get_start(int64_t total, int num_pes,
+static int dist_get_rank() __UNUSED__;
+static int dist_get_size() __UNUSED__;
+static int64_t dist_get_start(int64_t total, int num_pes,
                                    int node_id) __UNUSED__;
-static int64_t hpat_dist_get_end(int64_t total, int num_pes,
+static int64_t dist_get_end(int64_t total, int num_pes,
                                  int node_id) __UNUSED__;
-static int64_t hpat_dist_get_node_portion(int64_t total, int num_pes,
+static int64_t dist_get_node_portion(int64_t total, int num_pes,
                                           int node_id) __UNUSED__;
-static double hpat_dist_get_time() __UNUSED__;
-static double hpat_get_time() __UNUSED__;
-static int hpat_barrier() __UNUSED__;
+static double dist_get_time() __UNUSED__;
+static double get_time() __UNUSED__;
+static int barrier() __UNUSED__;
 static MPI_Datatype get_MPI_typ(int typ_enum) __UNUSED__;
 static MPI_Datatype get_val_rank_MPI_typ(int typ_enum) __UNUSED__;
 static MPI_Op get_MPI_op(int op_enum) __UNUSED__;
 static int get_elem_size(int type_enum) __UNUSED__;
-static void hpat_dist_reduce(char* in_ptr, char* out_ptr, int op,
+static void dist_reduce(char* in_ptr, char* out_ptr, int op,
+                             int type_enum) __UNUSED__;
+static void dist_exscan(char* in_ptr, char* out_ptr, int op,
                              int type_enum) __UNUSED__;
 
-static int hpat_dist_exscan_i4(int value) __UNUSED__;
-static int64_t hpat_dist_exscan_i8(int64_t value) __UNUSED__;
-static float hpat_dist_exscan_f4(float value) __UNUSED__;
-static double hpat_dist_exscan_f8(double value) __UNUSED__;
-
-static int hpat_dist_arr_reduce(void* out, int64_t* shapes, int ndims,
-                                int op_enum, int type_enum) __UNUSED__;
-static MPI_Request hpat_dist_irecv(void* out, int size, int type_enum, int pe,
+static void dist_arr_reduce(void* out, int64_t total_size, int op_enum, int type_enum) __UNUSED__;
+static MPI_Request dist_irecv(void* out, int size, int type_enum, int pe,
                                    int tag, bool cond) __UNUSED__;
-static MPI_Request hpat_dist_isend(void* out, int size, int type_enum, int pe,
+static MPI_Request dist_isend(void* out, int size, int type_enum, int pe,
                                    int tag, bool cond) __UNUSED__;
-static void hpat_dist_recv(void* out, int size, int type_enum, int pe,
+static void dist_recv(void* out, int size, int type_enum, int pe,
                            int tag) __UNUSED__;
-static void hpat_dist_send(void* out, int size, int type_enum, int pe,
+static void dist_send(void* out, int size, int type_enum, int pe,
                            int tag) __UNUSED__;
-static int hpat_dist_wait(MPI_Request req, bool cond) __UNUSED__;
-static void hpat_dist_waitall(int size, MPI_Request* req) __UNUSED__;
+static void dist_wait(MPI_Request req, bool cond) __UNUSED__;
+static void dist_waitall(int size, MPI_Request* req) __UNUSED__;
 
 static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum,
                             bool allgather) __UNUSED__;
@@ -81,7 +77,7 @@ static void c_alltoallv(void* send_data, void* recv_data, int* send_counts,
                         int typ_enum) __UNUSED__;
 static void c_alltoall(void* send_data, void* recv_data, int count,
                        int typ_enum) __UNUSED__;
-static int64_t hpat_dist_get_item_pointer(int64_t ind, int64_t start,
+static int64_t dist_get_item_pointer(int64_t ind, int64_t start,
                                           int64_t count) __UNUSED__;
 static void allgather(void* out_data, int size, void* in_data,
                       int type_enum) __UNUSED__;
@@ -100,19 +96,19 @@ static void permutation_int(int64_t* output, int n) __UNUSED__;
 static void permutation_array_index(unsigned char* lhs, int64_t len,
                                     int64_t elem_size, unsigned char* rhs,
                                     int64_t* p, int64_t p_len) __UNUSED__;
-static int hpat_finalize() __UNUSED__;
+static int finalize() __UNUSED__;
 static int hpat_dummy_ptr[64] __UNUSED__;
 
 /* *********************************************************************
 ************************************************************************/
 
-static void* hpat_get_dummy_ptr() __UNUSED__;
-static void* hpat_get_dummy_ptr() { return hpat_dummy_ptr; }
+static void* get_dummy_ptr() __UNUSED__;
+static void* get_dummy_ptr() { return hpat_dummy_ptr; }
 
 static size_t get_mpi_req_num_bytes() __UNUSED__;
 static size_t get_mpi_req_num_bytes() { return sizeof(MPI_Request); }
 
-static int hpat_dist_get_rank() {
+static int dist_get_rank() {
     int is_initialized;
     MPI_Initialized(&is_initialized);
     if (!is_initialized) MPI_Init(NULL, NULL);
@@ -122,7 +118,7 @@ static int hpat_dist_get_rank() {
     return rank;
 }
 
-static int hpat_dist_get_size() {
+static int dist_get_size() {
     int size;
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     // printf("r size:%d\n", sizeof(MPI_Request));
@@ -130,24 +126,24 @@ static int hpat_dist_get_size() {
     return size;
 }
 
-static int64_t hpat_dist_get_start(int64_t total, int num_pes, int node_id) {
+static int64_t dist_get_start(int64_t total, int num_pes, int node_id) {
     int64_t div_chunk = (int64_t)ceil(total / ((double)num_pes));
     int64_t start = std::min(total, node_id * div_chunk);
     // printf("rank %d start:%lld\n", node_id, start);
     return start;
 }
 
-static int64_t hpat_dist_get_end(int64_t total, int num_pes, int node_id) {
+static int64_t dist_get_end(int64_t total, int num_pes, int node_id) {
     int64_t div_chunk = (int64_t)ceil(total / ((double)num_pes));
     int64_t end = std::min(total, (node_id + 1) * div_chunk);
     // printf("rank %d end:%lld\n", node_id, end);
     return end;
 }
 
-static int64_t hpat_dist_get_node_portion(int64_t total, int num_pes,
+static int64_t dist_get_node_portion(int64_t total, int num_pes,
                                           int node_id) {
-    return hpat_dist_get_end(total, num_pes, node_id) -
-           hpat_dist_get_start(total, num_pes, node_id);
+    return dist_get_end(total, num_pes, node_id) -
+           dist_get_start(total, num_pes, node_id);
 }
 
 static int64_t index_rank(int64_t total, int num_pes, int index) {
@@ -155,25 +151,25 @@ static int64_t index_rank(int64_t total, int num_pes, int index) {
     return index / div_chunk;
 }
 
-static double hpat_dist_get_time() {
+static double dist_get_time() {
     double wtime;
     MPI_Barrier(MPI_COMM_WORLD);
     wtime = MPI_Wtime();
     return wtime;
 }
 
-static double hpat_get_time() {
+static double get_time() {
     double wtime;
     wtime = MPI_Wtime();
     return wtime;
 }
 
-static int hpat_barrier() {
+static int barrier() {
     MPI_Barrier(MPI_COMM_WORLD);
     return 0;
 }
 
-static void hpat_dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
+static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
                              int type_enum) {
     // printf("reduce value: %d\n", value);
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
@@ -228,16 +224,7 @@ static void hpat_dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
     return;
 }
 
-static int hpat_dist_arr_reduce(void* out, int64_t* shapes, int ndims,
-                                int op_enum, int type_enum) {
-    int i;
-    // printf("ndims:%d shape: ", ndims);
-    // for(i=0; i<ndims; i++)
-    //     printf("%d ", shapes[i]);
-    // printf("\n");
-    // fflush(stdout);
-    int total_size = (int)shapes[0];
-    for (i = 1; i < ndims; i++) total_size *= (int)shapes[i];
+static void dist_arr_reduce(void* out, int64_t total_size, int op_enum, int type_enum) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     MPI_Op mpi_op = get_MPI_op(op_enum);
     int elem_size = get_elem_size(type_enum);
@@ -245,50 +232,32 @@ static int hpat_dist_arr_reduce(void* out, int64_t* shapes, int ndims,
     MPI_Allreduce(out, res_buf, total_size, mpi_typ, mpi_op, MPI_COMM_WORLD);
     memcpy(out, res_buf, total_size * elem_size);
     free(res_buf);
-    return 0;
+    return;
 }
 
-static int hpat_dist_exscan_i4(int value) {
-    // printf("sum value: %d\n", value);
-    int out = 0;
-    MPI_Exscan(&value, &out, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    return out;
+
+static void dist_exscan(char* in_ptr, char* out_ptr, int op_enum,
+                             int type_enum) {
+    MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
+    MPI_Op mpi_op = get_MPI_op(op_enum);
+    MPI_Exscan(in_ptr, out_ptr, 1, mpi_typ, mpi_op, MPI_COMM_WORLD);
+    return;
 }
 
-static int64_t hpat_dist_exscan_i8(int64_t value) {
-    // printf("sum value: %lld\n", value);
-    int64_t out = 0;
-    MPI_Exscan(&value, &out, 1, MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD);
-    return out;
-}
 
-static float hpat_dist_exscan_f4(float value) {
-    // printf("sum value: %f\n", value);
-    float out = 0;
-    MPI_Exscan(&value, &out, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-    return out;
-}
-
-static double hpat_dist_exscan_f8(double value) {
-    // printf("sum value: %lf\n", value);
-    double out = 0;
-    MPI_Exscan(&value, &out, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    return out;
-}
-
-static void hpat_dist_recv(void* out, int size, int type_enum, int pe,
+static void dist_recv(void* out, int size, int type_enum, int pe,
                            int tag) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     MPI_Recv(out, size, mpi_typ, pe, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 }
 
-static void hpat_dist_send(void* out, int size, int type_enum, int pe,
+static void dist_send(void* out, int size, int type_enum, int pe,
                            int tag) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     MPI_Send(out, size, mpi_typ, pe, tag, MPI_COMM_WORLD);
 }
 
-static MPI_Request hpat_dist_irecv(void* out, int size, int type_enum, int pe,
+static MPI_Request dist_irecv(void* out, int size, int type_enum, int pe,
                                    int tag, bool cond) {
     MPI_Request mpi_req_recv(MPI_REQUEST_NULL);
     // printf("irecv size:%d pe:%d tag:%d, cond:%d\n", size, pe, tag, cond);
@@ -303,7 +272,7 @@ static MPI_Request hpat_dist_irecv(void* out, int size, int type_enum, int pe,
     return mpi_req_recv;
 }
 
-static MPI_Request hpat_dist_isend(void* out, int size, int type_enum, int pe,
+static MPI_Request dist_isend(void* out, int size, int type_enum, int pe,
                                    int tag, bool cond) {
     MPI_Request mpi_req_recv(MPI_REQUEST_NULL);
     // printf("isend size:%d pe:%d tag:%d, cond:%d\n", size, pe, tag, cond);
@@ -318,9 +287,9 @@ static MPI_Request hpat_dist_isend(void* out, int size, int type_enum, int pe,
     return mpi_req_recv;
 }
 
-static int hpat_dist_wait(MPI_Request req, bool cond) {
-    if (cond) MPI_Wait(&req, MPI_STATUS_IGNORE);
-    return 0;
+static void dist_wait(MPI_Request req, bool cond) {
+    if (cond)
+        MPI_Wait(&req, MPI_STATUS_IGNORE);
 }
 
 static void allgather(void* out_data, int size, void* in_data, int type_enum) {
@@ -336,7 +305,7 @@ static void req_array_setitem(MPI_Request* req_arr, int64_t ind,
     return;
 }
 
-static void hpat_dist_waitall(int size, MPI_Request* req_arr) {
+static void dist_waitall(int size, MPI_Request* req_arr) {
     MPI_Waitall(size, req_arr, MPI_STATUSES_IGNORE);
     return;
 }
@@ -422,7 +391,7 @@ static int get_elem_size(int type_enum) {
     return types_sizes[type_enum];
 }
 
-static int64_t hpat_dist_get_item_pointer(int64_t ind, int64_t start,
+static int64_t dist_get_item_pointer(int64_t ind, int64_t start,
                                           int64_t count) {
     // printf("ind:%lld start:%lld count:%lld\n", ind, start, count);
     if (ind >= start && ind < start + count) return ind - start;
@@ -506,7 +475,7 @@ MPI_Request* comm_req_alloc(int size) {
 
 static void comm_req_dealloc(MPI_Request* req_arr) { delete[] req_arr; }
 
-static int hpat_finalize() {
+static int finalize() {
     int is_initialized;
     MPI_Initialized(&is_initialized);
     if (!is_initialized) {
@@ -532,8 +501,8 @@ static void permutation_int(int64_t* output, int n) {
 // [0, 2, 0, 1].
 static std::vector<int64_t> find_dest_ranks(int64_t rank, int64_t num_ranks,
                                             int64_t* p, int64_t p_len) {
-    auto chunk_size = hpat_dist_get_node_portion(p_len, num_ranks, rank);
-    auto begin = hpat_dist_get_start(p_len, num_ranks, rank);
+    auto chunk_size = dist_get_node_portion(p_len, num_ranks, rank);
+    auto begin = dist_get_start(p_len, num_ranks, rank);
     std::vector<int64_t> dest_ranks(chunk_size);
 
     for (auto i = 0; i < p_len; ++i)
@@ -559,8 +528,8 @@ static std::vector<int> find_disps(const std::vector<int>& counts) {
 static std::vector<int> find_recv_counts(int64_t rank, int64_t num_ranks,
                                          int64_t* p, int64_t p_len,
                                          int64_t elem_size) {
-    auto begin = hpat_dist_get_start(p_len, num_ranks, rank);
-    auto end = hpat_dist_get_end(p_len, num_ranks, rank);
+    auto begin = dist_get_start(p_len, num_ranks, rank);
+    auto end = dist_get_end(p_len, num_ranks, rank);
     std::vector<int> recv_counts(num_ranks);
     for (auto i = begin; i < end; ++i)
         ++recv_counts[index_rank(p_len, num_ranks, p[i])];
@@ -622,8 +591,8 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
     MPI_Type_contiguous(elem_size, MPI_UNSIGNED_CHAR, &element_t);
     MPI_Type_commit(&element_t);
 
-    auto num_ranks = hpat_dist_get_size();
-    auto rank = hpat_dist_get_rank();
+    auto num_ranks = dist_get_size();
+    auto rank = dist_get_rank();
     auto dest_ranks = find_dest_ranks(rank, num_ranks, p, p_len);
     auto send_counts = find_send_counts(dest_ranks, num_ranks, elem_size);
     auto send_disps = find_disps(send_counts);
@@ -651,7 +620,7 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
     // corresponds to the sorted chunk of our permutation, which is [2 5 6 7].
     // In order to recover the positions of [c f g h] in the target permutation
     // we first argsort our chunk of permutation array:
-    auto begin = p + hpat_dist_get_start(p_len, num_ranks, rank);
+    auto begin = p + dist_get_start(p_len, num_ranks, rank);
     auto p1 = arg_sort(begin, dest_ranks.size());
 
     // The result of the argsort, stored in p1, is [0 2 3 1].  This tells us how
@@ -674,20 +643,20 @@ static void oneD_reshape_shuffle(char* output, char* input,
                                  int64_t old_0dim_global_len,
                                  int64_t out_lower_dims_size,
                                  int64_t in_lower_dims_size) {
-    int num_pes = hpat_dist_get_size();
-    int rank = hpat_dist_get_rank();
+    int num_pes = dist_get_size();
+    int rank = dist_get_rank();
 
     // get my old and new data interval and convert to byte offsets
     int64_t my_old_start =
         in_lower_dims_size *
-        hpat_dist_get_start(old_0dim_global_len, num_pes, rank);
+        dist_get_start(old_0dim_global_len, num_pes, rank);
     int64_t my_new_start =
         out_lower_dims_size *
-        hpat_dist_get_start(new_0dim_global_len, num_pes, rank);
+        dist_get_start(new_0dim_global_len, num_pes, rank);
     int64_t my_old_end = in_lower_dims_size *
-                         hpat_dist_get_end(old_0dim_global_len, num_pes, rank);
+                         dist_get_end(old_0dim_global_len, num_pes, rank);
     int64_t my_new_end = out_lower_dims_size *
-                         hpat_dist_get_end(new_0dim_global_len, num_pes, rank);
+                         dist_get_end(new_0dim_global_len, num_pes, rank);
 
     int64_t* send_counts = new int64_t[num_pes];
     int64_t* recv_counts = new int64_t[num_pes];
@@ -704,14 +673,14 @@ static void oneD_reshape_shuffle(char* output, char* input,
         // get pe's old and new data interval and convert to byte offsets
         int64_t pe_old_start =
             in_lower_dims_size *
-            hpat_dist_get_start(old_0dim_global_len, num_pes, i);
+            dist_get_start(old_0dim_global_len, num_pes, i);
         int64_t pe_new_start =
             out_lower_dims_size *
-            hpat_dist_get_start(new_0dim_global_len, num_pes, i);
+            dist_get_start(new_0dim_global_len, num_pes, i);
         int64_t pe_old_end = in_lower_dims_size *
-                             hpat_dist_get_end(old_0dim_global_len, num_pes, i);
+                             dist_get_end(old_0dim_global_len, num_pes, i);
         int64_t pe_new_end = out_lower_dims_size *
-                             hpat_dist_get_end(new_0dim_global_len, num_pes, i);
+                             dist_get_end(new_0dim_global_len, num_pes, i);
 
         send_counts[i] = 0;
         recv_counts[i] = 0;

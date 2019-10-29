@@ -276,7 +276,7 @@ static std::vector<size_t> count_lines(std::istream * f, size_t n)
  * We evenly distribute by number of lines by working on byte-chunks in parallel
  *   * counting new-lines and allreducing and exscaning numbers
  *   * computing start/end points of desired chunks-of-lines and sending them to corresponding ranks.
- * Using hpat_dist_get_size and hpat_dist_get_start to compute chunk start/end/size as well as
+ * Using dist_get_size and dist_get_start to compute chunk start/end/size as well as
  * the final chunking of lines.
  *
  * @param[in]  f   the input stream
@@ -290,36 +290,37 @@ static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel
         std::cerr << "Invalid skiprows argument: " << skiprows << std::endl;
         return NULL;
     }
-    // printf("rank %d skiprows %d nrows %d\n", hpat_dist_get_rank(), skiprows, nrows);
+    // printf("rank %d skiprows %d nrows %d\n", dist_get_rank(), skiprows, nrows);
 
-    size_t nranks = hpat_dist_get_size();
+    size_t nranks = dist_get_size();
 
     size_t my_off_start = 0;
     size_t my_off_end = fsz;
 
     if(is_parallel && nranks > 1) {
-        size_t rank = hpat_dist_get_rank();
+        size_t rank = dist_get_rank();
 
         // seek to our chunk
-        size_t byte_offset = hpat_dist_get_start(fsz, nranks, rank);
+        size_t byte_offset = dist_get_start(fsz, nranks, rank);
         f->seekg(byte_offset, std::ios_base::beg);
         if(!f->good() || f->eof()) {
-            std::cerr << "Could not seek to start position " << hpat_dist_get_start(fsz, nranks, rank) << std::endl;
+            std::cerr << "Could not seek to start position " << dist_get_start(fsz, nranks, rank) << std::endl;
             return NULL;
         }
         // We evenly distribute the 'data' byte-wise
         // count number of lines in chunk
         // TODO: count only until nrows
-        std::vector<size_t> line_offset = count_lines(f, hpat_dist_get_node_portion(fsz, nranks, rank));
+        std::vector<size_t> line_offset = count_lines(f, dist_get_node_portion(fsz, nranks, rank));
         size_t no_lines = line_offset.size();
         // get total number of lines using allreduce
         size_t tot_no_lines(0);
 
-        hpat_dist_reduce(reinterpret_cast<char *>(&no_lines), reinterpret_cast<char *>(&tot_no_lines), HPAT_ReduceOps::SUM, Bodo_CTypes::UINT64);
+        dist_reduce(reinterpret_cast<char *>(&no_lines), reinterpret_cast<char *>(&tot_no_lines), HPAT_ReduceOps::SUM, Bodo_CTypes::UINT64);
 
         // Now we need to communicate the distribution as we really want it
         // First determine which is our first line (which is the sum of previous lines)
-        size_t byte_first_line = hpat_dist_exscan_i8(no_lines);
+        size_t byte_first_line(0);
+        dist_exscan(reinterpret_cast<char *>(&no_lines), reinterpret_cast<char *>(&byte_first_line), HPAT_ReduceOps::SUM, Bodo_CTypes::UINT64);
         size_t byte_last_line = byte_first_line + no_lines;
 
         // We now determine the chunks of lines that begin and end in our byte-chunk
@@ -328,8 +329,8 @@ static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel
         const int START_OFFSET = 47011;
         const int END_OFFSET = 47012;
         std::vector<MPI_Request> mpi_reqs;
-        mpi_reqs.push_back(hpat_dist_irecv(&my_off_start, 1, Bodo_CTypes::UINT64, MPI_ANY_SOURCE, START_OFFSET, (rank>0 || skiprows>0)));
-        mpi_reqs.push_back(hpat_dist_irecv(&my_off_end, 1, Bodo_CTypes::UINT64, MPI_ANY_SOURCE, END_OFFSET, ((rank<(nranks-1)) || nrows!=-1)));
+        mpi_reqs.push_back(dist_irecv(&my_off_start, 1, Bodo_CTypes::UINT64, MPI_ANY_SOURCE, START_OFFSET, (rank>0 || skiprows>0)));
+        mpi_reqs.push_back(dist_irecv(&my_off_end, 1, Bodo_CTypes::UINT64, MPI_ANY_SOURCE, END_OFFSET, ((rank<(nranks-1)) || nrows!=-1)));
 
         // check nrows argument
         if (nrows != -1 && (nrows < 0 || nrows > tot_no_lines))
@@ -344,35 +345,35 @@ static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel
         // send start offset of rank 0
         if(skiprows > byte_first_line && skiprows <= byte_last_line) {
             size_t i_off = byte_offset + line_offset[skiprows-byte_first_line-1]+1; // +1 to skip/include leading/trailing newline
-            mpi_reqs.push_back(hpat_dist_isend(&i_off, 1, Bodo_CTypes::UINT64, 0, START_OFFSET, true));
+            mpi_reqs.push_back(dist_isend(&i_off, 1, Bodo_CTypes::UINT64, 0, START_OFFSET, true));
         }
 
         // send end offset of rank n-1
         if(nrows > byte_first_line && nrows <= byte_last_line) {
             size_t i_off = byte_offset + line_offset[nrows-byte_first_line-1]+1; // +1 to skip/include leading/trailing newline
-            mpi_reqs.push_back(hpat_dist_isend(&i_off, 1, Bodo_CTypes::UINT64, nranks-1, END_OFFSET, true));
+            mpi_reqs.push_back(dist_isend(&i_off, 1, Bodo_CTypes::UINT64, nranks-1, END_OFFSET, true));
         }
 
         // We iterate through chunk boundaries (defined by line-numbers)
         // we start with boundary 1 as 0 is the beginning of file
         for(int i=1; i<nranks; ++i) {
-            size_t i_bndry = skiprows + hpat_dist_get_start(n_lines_to_read, (int)nranks, i);
+            size_t i_bndry = skiprows + dist_get_start(n_lines_to_read, (int)nranks, i);
             // Note our line_offsets mark the end of each line!
             // we check if boundary is on our byte-chunk
             if(i_bndry > byte_first_line && i_bndry <= byte_last_line) {
                 // if so, send stream-offset to ranks which start/end here
                 size_t i_off = byte_offset + line_offset[i_bndry-byte_first_line-1]+1; // +1 to skip/include leading/trailing newline
                 // send to rank that starts at this boundary: i
-                mpi_reqs.push_back(hpat_dist_isend(&i_off, 1, Bodo_CTypes::UINT64, i, START_OFFSET, true));
+                mpi_reqs.push_back(dist_isend(&i_off, 1, Bodo_CTypes::UINT64, i, START_OFFSET, true));
                 // send to rank that ends at this boundary: i-1
-                mpi_reqs.push_back(hpat_dist_isend(&i_off, 1, Bodo_CTypes::UINT64, i-1, END_OFFSET, true));
+                mpi_reqs.push_back(dist_isend(&i_off, 1, Bodo_CTypes::UINT64, i-1, END_OFFSET, true));
             } else {
                 // if not and we past our chunk -> we stop
                 if(i_bndry > byte_last_line) break;
             } // else we are before our chunk -> continue iteration
         }
         // before reading, make sure we received our start/end offsets
-        hpat_dist_waitall(mpi_reqs.size(), mpi_reqs.data());
+        dist_waitall(mpi_reqs.size(), mpi_reqs.data());
     } // if is_parallel
     else if (skiprows>0 || nrows != -1) {
         std::vector<size_t> line_offset = count_lines(f, fsz);

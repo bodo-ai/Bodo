@@ -39,7 +39,7 @@ from bodo.utils.typing import (
     is_overload_false,
     is_overload_true,
 )
-from bodo.libs.str_ext import string_type, str_findall_count, str_slice
+from bodo.libs.str_ext import string_type, str_findall_count
 from bodo.libs.str_arr_ext import (
     string_array_type,
     pre_alloc_string_array,
@@ -602,9 +602,7 @@ def overload_str_method_slice(S_str, start=None, stop=None, step=None):
             if bodo.hiframes.api.isna(str_arr, i):
                 s = 0
             else:
-                s = bodo.libs.str_arr_ext.get_utf8_size(
-                    str_slice(str_arr[i], start, stop, step)
-                )
+                s = bodo.libs.str_arr_ext.get_utf8_size(str_arr[i][start:stop:step])
             num_chars += s
         out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
         for j in numba.parfor.internal_prange(l):
@@ -612,7 +610,7 @@ def overload_str_method_slice(S_str, start=None, stop=None, step=None):
                 out_arr[j] = ""
                 bodo.ir.join.setitem_arr_nan(out_arr, j)
             else:
-                out_arr[j] = str_slice(str_arr[j], start, stop, step)
+                out_arr[j] = str_arr[j][start:stop:step]
         return bodo.hiframes.api.init_series(out_arr, index, name)
 
     return impl

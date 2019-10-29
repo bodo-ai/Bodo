@@ -392,6 +392,46 @@ def is_distributable_tuple_typ(var_typ):
     )
 
 
+@numba.generated_jit(nopython=True, cache=True)
+def build_set(A):
+    # if isinstance(A, IntegerArrayType):
+    #     #return lambda A: set(A._data)
+    #     def impl_int_arr(A):
+    #         s = set()
+    #         for i in range(len(A)):
+    #             if not bodo.hiframes.api.isna(A, i):
+    #                 s.add(A[i])
+    #         return s
+
+    #     return impl_int_arr
+    # else:
+    #     return lambda A: set(A)
+
+    # TODO: use more efficient hash table optimized for addition and
+    # membership check
+    # XXX using dict for now due to Numba's #4577
+    # avoid value if NA is not sentinel like np.nan
+    if isinstance(A, IntegerArrayType) or A in (string_array_type, boolean_array):
+
+        def impl_int_arr(A):
+            s = dict()
+            for i in range(len(A)):
+                if not bodo.hiframes.api.isna(A, i):
+                    s[A[i]] = 0
+            return s
+
+        return impl_int_arr
+    else:
+
+        def impl(A):
+            s = dict()
+            for i in range(len(A)):
+                s[A[i]] = 0
+            return s
+
+        return impl
+
+
 # converts an iterable to array, similar to np.array, but can support
 # other things like StringArray
 # TODO: other types like datetime?
@@ -447,7 +487,7 @@ def unique(A):
         return lambda A: A.unique()
 
     # TODO: preserve order
-    return lambda A: to_array(bodo.libs.set_ext.build_set(A))
+    return lambda A: to_array(build_set(A))
 
 
 def empty_like_type(n, arr):

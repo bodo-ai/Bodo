@@ -45,7 +45,7 @@ from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
 from bodo.libs.str_ext import string_type
-from bodo.libs.set_ext import num_total_chars_set_string, build_set
+from bodo.utils.utils import build_set
 from bodo.libs.str_arr_ext import (
     string_array_type,
     pre_alloc_string_array,
@@ -1019,9 +1019,6 @@ def get_key_set(arr):  # pragma: no cover
 
 @overload(get_key_set)
 def get_key_set_overload(arr):
-    # if arr == string_array_type or (isinstance(arr, types.BaseTuple)
-    #         and len(arr.types) == 1 and arr.types[0] == string_array_type):
-    #     return lambda arr: bodo.libs.set_ext.init_set_string()
 
     # XXX using dict instead of set due to refcount issue
     # return lambda arr: get_numba_set(arr)

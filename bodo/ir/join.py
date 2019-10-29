@@ -92,6 +92,22 @@ class Join(ir.Stmt):
         self.how = how
         self.loc = loc
 
+        # keep the origin of output columns to enable proper dead code elimination
+        # columns with common name that are not common keys will get a suffix
+        comm_keys = set(left_keys) & set(right_keys)
+        comm_data = set(left_vars.keys()) & set(right_vars.keys())
+        add_suffix = comm_data - comm_keys
+
+        self.column_origins = {
+            (c + "_x" if c in add_suffix else c): ("left", c) for c in left_vars.keys()
+        }
+        self.column_origins.update(
+            {
+                (c + "_y" if c in add_suffix else c): ("right", c)
+                for c in right_vars.keys()
+            }
+        )
+
     def __repr__(self):  # pragma: no cover
         out_cols = ""
         for (c, v) in self.df_out_vars.items():
@@ -266,33 +282,26 @@ def remove_dead_join(join_node, lives, arg_aliases, alias_map, func_ir, typemap)
     # if an output column is dead, the related input column is not needed
     # anymore in the join
     dead_cols = []
-    left_key_dead = False
-    right_key_dead = False
     # TODO: remove output of dead keys
+    all_cols_dead = True
 
     for col_name, col_var in join_node.df_out_vars.items():
-        if col_var.name not in lives:
-            if col_name in join_node.left_keys:
-                left_key_dead = True
-            elif col_name in join_node.right_keys:
-                right_key_dead = True
-            else:
-                dead_cols.append(col_name)
+        if col_var.name in lives:
+            all_cols_dead = False
+            continue
+        orig, orig_name = join_node.column_origins[col_name]
+        if orig == "left" and orig_name not in join_node.left_keys:
+            join_node.left_vars.pop(orig_name)
+            dead_cols.append(col_name)
+        if orig == "right" and orig_name not in join_node.right_keys:
+            join_node.right_vars.pop(orig_name)
+            dead_cols.append(col_name)
 
     for cname in dead_cols:
         join_node.df_out_vars.pop(cname)
-        cname = cname[:-2] if cname.endswith("_x") or cname.endswith("_y") else cname
-
-        # same name columns are duplicated and appended with _x/_y,
-        # so one version of cname may be removed already and input may not
-        # exist anymore because of that
-        if cname in join_node.left_vars:
-            join_node.left_vars.pop(cname, None)
-        if cname in join_node.right_vars:
-            join_node.right_vars.pop(cname, None)
 
     # remove empty join node
-    if len(join_node.df_out_vars) == 0:
+    if all_cols_dead:
         return None
 
     return join_node

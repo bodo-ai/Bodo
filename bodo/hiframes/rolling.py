@@ -1249,7 +1249,7 @@ def _handle_small_data(
         all_out = np.empty(all_N, np.float64)
     bodo.libs.distributed_api.bcast(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
-    start = bodo.libs.distributed_api.dist_exscan(N)
+    start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
     end = start + N
     # start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
     # end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
@@ -1271,7 +1271,7 @@ def _handle_small_data_apply(
         all_out = np.empty(all_N, np.float64)
     bodo.libs.distributed_api.bcast(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
-    start = bodo.libs.distributed_api.dist_exscan(N)
+    start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
     end = start + N
     # start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
     # end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
@@ -1291,7 +1291,7 @@ def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
         all_out = np.empty(all_N, bodo.hiframes.api.shift_dtype(in_arr.dtype))
     bodo.libs.distributed_api.bcast(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
-    start = bodo.libs.distributed_api.dist_exscan(N)
+    start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
     end = start + N
     # start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
     # end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
@@ -1309,7 +1309,7 @@ def _handle_small_data_pct_change(in_arr, shift, rank, n_pes):  # pragma: no cov
         all_out = np.empty(all_N, bodo.hiframes.api.shift_dtype(in_arr.dtype))
     bodo.libs.distributed_api.bcast(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
-    start = bodo.libs.distributed_api.dist_exscan(N)
+    start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
     end = start + N
     # start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
     # end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
@@ -1380,7 +1380,7 @@ def _handle_small_data_variable(
         all_out = np.empty(all_N, np.float64)
     bodo.libs.distributed_api.bcast(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
-    start = bodo.libs.distributed_api.dist_exscan(N)
+    start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
     end = start + N
     # start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
     # end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)
@@ -1404,7 +1404,7 @@ def _handle_small_data_variable_apply(
         all_out = np.empty(all_N, np.float64)
     bodo.libs.distributed_api.bcast(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
-    start = bodo.libs.distributed_api.dist_exscan(N)
+    start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
     end = start + N
     # start = bodo.libs.distributed_api.get_start(all_N, n_pes, rank)
     # end = bodo.libs.distributed_api.get_end(all_N, n_pes, rank)

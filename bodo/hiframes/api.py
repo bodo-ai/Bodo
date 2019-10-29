@@ -28,7 +28,7 @@ from bodo.libs.str_arr_ext import StringArrayType, string_array_type, is_str_arr
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 
-from bodo.libs.set_ext import build_set
+from bodo.utils.utils import build_set
 from numba.targets.imputils import lower_builtin, impl_ret_untracked
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 from bodo.hiframes.pd_series_ext import (
@@ -498,24 +498,6 @@ class SetDfColInfer(AbstractTemplate):
         return signature(ret, *args)
 
 
-def to_arr_from_series(arr):
-    return arr
-
-
-@infer_global(to_arr_from_series)
-class ToArrFromSeriesType(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        arr = args[0]
-        return signature(if_series_to_array_type(arr), arr)
-
-
-@lower_builtin(to_arr_from_series, types.Any)
-def to_arr_from_series_dummy_impl(context, builder, sig, args):
-    return impl_ret_borrowed(context, builder, sig.return_type, args[0])
-
-
 def get_series_data_tup(series_tup):
     return tuple(get_series_data(s) for s in series_tup)
 
@@ -704,59 +686,52 @@ def alias_ext_init_integer_array(lhs_name, args, alias_map, arg_aliases):
     numba.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
 
 
-if hasattr(numba.ir_utils, "alias_func_extensions"):
-    numba.ir_utils.alias_func_extensions[
-        ("init_series", "bodo.hiframes.api")
-    ] = alias_ext_init_series
-    numba.ir_utils.alias_func_extensions[
-        ("get_series_data", "bodo.hiframes.api")
-    ] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[
-        ("get_series_index", "bodo.hiframes.api")
-    ] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[
-        ("init_datetime_index", "bodo.hiframes.api")
-    ] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[
-        ("init_timedelta_index", "bodo.hiframes.api")
-    ] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[
-        ("init_numeric_index", "bodo.hiframes.pd_index_ext")
-    ] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[
-        ("init_string_index", "bodo.hiframes.pd_index_ext")
-    ] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[
-        ("get_index_data", "bodo.hiframes.api")
-    ] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[
-        ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext")
-    ] = alias_ext_dummy_func
-    # TODO: init_dataframe
-    numba.ir_utils.alias_func_extensions[
-        ("to_arr_from_series", "bodo.hiframes.api")
-    ] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[
-        ("to_date_series_type", "bodo.hiframes.api")
-    ] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[
-        ("init_integer_array", "bodo.libs.int_arr_ext")
-    ] = alias_ext_init_integer_array
-    numba.ir_utils.alias_func_extensions[
-        ("get_int_arr_data", "bodo.libs.int_arr_ext")
-    ] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[
-        ("get_int_arr_bitmap", "bodo.libs.int_arr_ext")
-    ] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[
-        ("init_bool_array", "bodo.libs.bool_arr_ext")
-    ] = alias_ext_init_integer_array
-    numba.ir_utils.alias_func_extensions[
-        ("get_bool_arr_data", "bodo.libs.bool_arr_ext")
-    ] = alias_ext_dummy_func
-    numba.ir_utils.alias_func_extensions[
-        ("get_bool_arr_bitmap", "bodo.libs.bool_arr_ext")
-    ] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("init_series", "bodo.hiframes.api")
+] = alias_ext_init_series
+numba.ir_utils.alias_func_extensions[
+    ("get_series_data", "bodo.hiframes.api")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("get_series_index", "bodo.hiframes.api")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("init_datetime_index", "bodo.hiframes.api")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("init_timedelta_index", "bodo.hiframes.api")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("init_numeric_index", "bodo.hiframes.pd_index_ext")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("init_string_index", "bodo.hiframes.pd_index_ext")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("get_index_data", "bodo.hiframes.api")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext")
+] = alias_ext_dummy_func
+# TODO: init_dataframe
+numba.ir_utils.alias_func_extensions[
+    ("init_integer_array", "bodo.libs.int_arr_ext")
+] = alias_ext_init_integer_array
+numba.ir_utils.alias_func_extensions[
+    ("get_int_arr_data", "bodo.libs.int_arr_ext")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("get_int_arr_bitmap", "bodo.libs.int_arr_ext")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("init_bool_array", "bodo.libs.bool_arr_ext")
+] = alias_ext_init_integer_array
+numba.ir_utils.alias_func_extensions[
+    ("get_bool_arr_data", "bodo.libs.bool_arr_ext")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("get_bool_arr_bitmap", "bodo.libs.bool_arr_ext")
+] = alias_ext_dummy_func
 
 
 def convert_tup_to_rec(val):

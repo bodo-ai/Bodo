@@ -398,17 +398,6 @@ class TestString(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         self.assertEqual(bodo_func(), test_impl())
 
-    def test_set_string(self):
-        def test_impl():
-            s = bodo.libs.set_ext.init_set_string()
-            s.add("ff")
-            for v in s:
-                pass
-            return v
-
-        bodo_func = bodo.jit(test_impl)
-        self.assertEqual(bodo_func(), test_impl())
-
     def test_dict_string(self):
         def test_impl():
             s = bodo.libs.dict_ext.dict_unicode_type_unicode_type_init()

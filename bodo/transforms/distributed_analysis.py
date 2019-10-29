@@ -533,13 +533,13 @@ class DistributedAnalysis(object):
             return
 
         if bodo.config._has_h5py and (
-            func_mod == "bodo.io.pio_api"
+            func_mod == "bodo.io.h5_api"
             and func_name in ("h5read", "h5write", "h5read_filter")
         ):
             return
 
         if bodo.config._has_h5py and (
-            func_mod == "bodo.io.pio_api" and func_name == "get_filter_read_indices"
+            func_mod == "bodo.io.h5_api" and func_name == "get_filter_read_indices"
         ):
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
@@ -662,8 +662,6 @@ class DistributedAnalysis(object):
             "get_series_data",
             "get_series_index",
             "get_index_data",
-            "to_arr_from_series",
-            "to_date_series_type",
             "init_datetime_index",
             "init_timedelta_index",
         ):
@@ -1147,6 +1145,11 @@ class DistributedAnalysis(object):
             new_dist = self._min_dist(array_dists[tup][ind_val], array_dists[lhs])
             array_dists[tup][ind_val] = new_dist
             array_dists[lhs] = new_dist
+            return
+
+        # indexing into arrays from this point only, check for array type
+        if not is_array_typ(in_typ):
+            self._set_REP(inst.list_vars(), array_dists)
             return
 
         if (rhs.value.name, index_var.name) in self._parallel_accesses:

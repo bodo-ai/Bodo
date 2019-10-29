@@ -31,7 +31,8 @@ def test_split():
         ["ABCC", "ABBD", "AA", "C,ABB, D", "B,B,CC"], [3, 5, 1, 0, 2], name="A"
     )
     # TODO: support distributed
-    check_func(test_impl, (S,), False)
+    # check_func(test_impl, (S,))
+    pd.testing.assert_series_equal(bodo.jit(test_impl)(S), test_impl(S))
 
 
 def test_get():
@@ -44,7 +45,8 @@ def test_get():
         ["AB,CC", "C,ABB,D", "LLL,JJ", "C,D", "C,ABB,D"], [4, 3, 5, 1, 0], name="A"
     )
     # TODO: support distributed
-    check_func(test_impl, (S,), False)
+    # check_func(test_impl, (S,))
+    pd.testing.assert_series_equal(bodo.jit(test_impl)(S), test_impl(S))
 
 
 def test_replace_regex():
@@ -70,7 +72,9 @@ def test_contains_regex():
         return S.str.contains("AB*", regex=True)
 
     S = pd.Series(
-        ["ABCC", "CABBD", np.nan, "CCD", "C,ABB,D"], [4, 3, 5, 1, 0], name="A"
+        ["ABCC", "CABBD", np.nan, "AA", "C,ABB,D", "AAcB", "BBC", "AbC"],
+        [4, 3, 5, 1, 0, 2, 6, 11],
+        name="A",
     )
     check_func(test_impl, (S,))
 
@@ -79,7 +83,11 @@ def test_contains_noregex():
     def test_impl(S):
         return S.str.contains("AB", regex=False)
 
-    S = pd.Series(["ABCC", "CABBD", np.nan, "AA", "C,ABB,D"], [4, 3, 5, 1, 0], name="A")
+    S = pd.Series(
+        ["ABCC", "CABBD", np.nan, "AA", "C,ABB,D", "AAcB", "BBC", "AbC"],
+        [4, 3, 5, 1, 0, 2, 6, 11],
+        name="A",
+    )
     check_func(test_impl, (S,))
 
 
@@ -202,7 +210,11 @@ def test_startswith():
     def test_impl(S):
         return S.str.startswith("AB")
 
-    S = pd.Series(["ABCC", "ABBD", "AA", "C,ABB, D", np.nan], [3, 5, 1, 0, 2], name="A")
+    S = pd.Series(
+        ["AB", "ABb", "abab", "C,ABB, D", np.nan, "AA", "abc", "ABCa"],
+        [3, 5, 1, 0, 2, 4, 6, 7],
+        name="A",
+    )
     check_func(test_impl, (S,))
 
 
@@ -210,7 +222,11 @@ def test_endswith():
     def test_impl(S):
         return S.str.startswith("AB")
 
-    S = pd.Series(["AB", "ABB", "BAAB", "C,ABB, D", np.nan], [3, 5, 1, 0, 2], name="A")
+    S = pd.Series(
+        ["AB", "ABb", "abab", "C,ABB, D", np.nan, "AA", "abc", "ABCa"],
+        [3, 5, 1, 0, 2, 4, 6, 7],
+        name="A",
+    )
     check_func(test_impl, (S,))
 
 
@@ -218,5 +234,9 @@ def test_isupper():
     def test_impl(S):
         return S.str.isupper()
 
-    S = pd.Series(["AB", "ABb", "abab", "C,ABB, D", np.nan], [3, 5, 1, 0, 2], name="A")
+    S = pd.Series(
+        ["AB", "ABb", "abab", "C,ABB, D", np.nan, "AA", "abc", "ABCa"],
+        [3, 5, 1, 0, 2, 4, 6, 7],
+        name="A",
+    )
     check_func(test_impl, (S,))

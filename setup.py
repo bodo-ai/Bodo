@@ -17,7 +17,7 @@ is_win = platform.system() == "Windows"
 
 
 def readme():
-    with open("README.rst") as f:
+    with open("README.md") as f:
         return f.read()
 
 
@@ -127,7 +127,7 @@ if "TRIAL_PERIOD" in os.environ and os.environ["TRIAL_PERIOD"] != "":
 ext_hdist = Extension(
     name="bodo.libs.hdist",
     sources=["bodo/libs/_distributed.cpp"],
-    depends=["bodo/libs/_bodo_common.h"],
+    depends=["bodo/libs/_bodo_common.h", "bodo/libs/_distributed.h"],
     libraries=MPI_LIBS,
     define_macros=dist_macros,
     extra_compile_args=eca,
@@ -146,14 +146,6 @@ ext_dict = Extension(
     library_dirs=lid,
 )
 
-ext_set = Extension(
-    name="bodo.libs.hset_ext",
-    sources=["bodo/libs/_set_ext.cpp"],
-    extra_compile_args=eca,
-    extra_link_args=ela,
-    include_dirs=ind,
-    library_dirs=lid,
-)
 
 str_libs = np_compile_args["libraries"]
 
@@ -248,16 +240,7 @@ ext_xenon_wrapper = Extension(
     extra_link_args=ela,
 )
 
-_ext_mods = [
-    ext_hdist,
-    ext_dict,
-    ext_set,
-    ext_str,
-    ext_quantile,
-    ext_dt,
-    ext_io,
-    ext_arr,
-]
+_ext_mods = [ext_hdist, ext_dict, ext_str, ext_quantile, ext_dt, ext_io, ext_arr]
 
 if _has_h5py:
     _ext_mods.append(ext_hdf5)

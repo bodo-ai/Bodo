@@ -13,8 +13,37 @@ from numba.targets.imputils import lower_builtin, impl_ret_borrowed
 import bodo
 
 
+# error used to avoid numba's error checking
+class BodoError(BaseException):
+    pass
+
+
 def is_overload_none(val):
     return val is None or val == types.none or getattr(val, "value", False) is None
+
+
+def is_overload_constant_bool(val):
+    return (
+        isinstance(val, bool)
+        or isinstance(val, bodo.utils.utils.BooleanLiteral)
+        or ((isinstance(val, types.Omitted) and isinstance(val.value, bool)))
+    )
+
+
+def is_overload_constant_str(val):
+    return (
+        isinstance(val, str)
+        or (isinstance(val, types.StringLiteral) and isinstance(val.literal_value, str))
+        or ((isinstance(val, types.Omitted) and isinstance(val.value, str)))
+    )
+
+
+def is_overload_constant_str_list(val):
+    return (
+        isinstance(val, bodo.utils.typing.ConstList)
+        and isinstance(val.consts, tuple)
+        and isinstance(val.consts[0], str)
+    )
 
 
 def is_overload_true(val):

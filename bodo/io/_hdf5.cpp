@@ -9,25 +9,25 @@
 
 extern "C" {
 
-hid_t hpat_h5_open(char* file_name, char* mode, int64_t is_parallel);
-hid_t hpat_h5_open_dset_or_group_obj(hid_t file_id, char* obj_name);
-int64_t hpat_h5_size(hid_t dataset_id, int dim);
-int hpat_h5_read(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
+hid_t h5_open(char* file_name, char* mode);
+hid_t h5_open_dset_or_group_obj(hid_t file_id, char* obj_name);
+int64_t h5_size(hid_t dataset_id, int dim);
+int h5_read(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
                  int64_t is_parallel, void* out, int typ_enum);
-int hpat_h5_read_filter(hid_t dataset_id, int ndims, int64_t* starts,
+int h5_read_filter(hid_t dataset_id, int ndims, int64_t* starts,
                         int64_t* counts, int64_t is_parallel, void* out,
                         int typ_enum, int64_t* indices, int n_indices);
-int hpat_h5_close(hid_t file_id);
-hid_t hpat_h5_create_dset(hid_t file_id, char* dset_name, int ndims,
+int h5_close(hid_t file_id);
+hid_t h5_create_dset(hid_t file_id, char* dset_name, int ndims,
                           int64_t* counts, int typ_enum);
-hid_t hpat_h5_create_group(hid_t file_id, char* group_name);
-int hpat_h5_write(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
+hid_t h5_create_group(hid_t file_id, char* group_name);
+int h5_write(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
                   int64_t is_parallel, void* out, int typ_enum);
-int hpat_h5_get_type_enum(char* s);
 hid_t get_h5_typ(int typ_enum);
 int64_t h5g_get_num_objs(hid_t file_id);
 void* h5g_get_objname_by_idx(hid_t file_id, int64_t ind);
-void hpat_h5g_close(hid_t group_id);
+void h5g_close(hid_t group_id);
+
 
 PyMODINIT_FUNC PyInit__hdf5(void) {
     PyObject* m;
@@ -37,34 +37,32 @@ PyMODINIT_FUNC PyInit__hdf5(void) {
     m = PyModule_Create(&moduledef);
     if (m == NULL) return NULL;
 
-    PyObject_SetAttrString(m, "hpat_h5_open",
-                           PyLong_FromVoidPtr((void*)(&hpat_h5_open)));
+    PyObject_SetAttrString(m, "h5_open",
+                           PyLong_FromVoidPtr((void*)(&h5_open)));
     PyObject_SetAttrString(
-        m, "hpat_h5_open_dset_or_group_obj",
-        PyLong_FromVoidPtr((void*)(&hpat_h5_open_dset_or_group_obj)));
-    PyObject_SetAttrString(m, "hpat_h5_size",
-                           PyLong_FromVoidPtr((void*)(&hpat_h5_size)));
-    PyObject_SetAttrString(m, "hpat_h5_read",
-                           PyLong_FromVoidPtr((void*)(&hpat_h5_read)));
-    PyObject_SetAttrString(m, "hpat_h5_read_filter",
-                           PyLong_FromVoidPtr((void*)(&hpat_h5_read_filter)));
-    PyObject_SetAttrString(m, "hpat_h5_close",
-                           PyLong_FromVoidPtr((void*)(&hpat_h5_close)));
-    PyObject_SetAttrString(m, "hpat_h5_create_dset",
-                           PyLong_FromVoidPtr((void*)(&hpat_h5_create_dset)));
-    PyObject_SetAttrString(m, "hpat_h5_create_group",
-                           PyLong_FromVoidPtr((void*)(&hpat_h5_create_group)));
-    PyObject_SetAttrString(m, "hpat_h5_write",
-                           PyLong_FromVoidPtr((void*)(&hpat_h5_write)));
-    PyObject_SetAttrString(m, "hpat_h5_get_type_enum",
-                           PyLong_FromVoidPtr((void*)(&hpat_h5_get_type_enum)));
+        m, "h5_open_dset_or_group_obj",
+        PyLong_FromVoidPtr((void*)(&h5_open_dset_or_group_obj)));
+    PyObject_SetAttrString(m, "h5_size",
+                           PyLong_FromVoidPtr((void*)(&h5_size)));
+    PyObject_SetAttrString(m, "h5_read",
+                           PyLong_FromVoidPtr((void*)(&h5_read)));
+    PyObject_SetAttrString(m, "h5_read_filter",
+                           PyLong_FromVoidPtr((void*)(&h5_read_filter)));
+    PyObject_SetAttrString(m, "h5_close",
+                           PyLong_FromVoidPtr((void*)(&h5_close)));
+    PyObject_SetAttrString(m, "h5_create_dset",
+                           PyLong_FromVoidPtr((void*)(&h5_create_dset)));
+    PyObject_SetAttrString(m, "h5_create_group",
+                           PyLong_FromVoidPtr((void*)(&h5_create_group)));
+    PyObject_SetAttrString(m, "h5_write",
+                           PyLong_FromVoidPtr((void*)(&h5_write)));
     PyObject_SetAttrString(m, "h5g_get_num_objs",
                            PyLong_FromVoidPtr((void*)(&h5g_get_num_objs)));
     PyObject_SetAttrString(
         m, "h5g_get_objname_by_idx",
         PyLong_FromVoidPtr((void*)(&h5g_get_objname_by_idx)));
-    PyObject_SetAttrString(m, "hpat_h5g_close",
-                           PyLong_FromVoidPtr((void*)(&hpat_h5g_close)));
+    PyObject_SetAttrString(m, "h5g_close",
+                           PyLong_FromVoidPtr((void*)(&h5g_close)));
 
     return m;
 }
@@ -76,7 +74,7 @@ PyMODINIT_FUNC PyInit__hdf5(void) {
         H5Eprint(H5E_DEFAULT, NULL);   \
     }
 
-hid_t hpat_h5_open(char* file_name, char* mode, int64_t is_parallel) {
+hid_t h5_open(char* file_name, char* mode) {
     // printf("h5_open file_name: %s mode:%s\n", file_name, mode);
     hid_t plist_id = H5Pcreate(H5P_FILE_ACCESS);
     CHECK(plist_id != -1, "h5 open property create error");
@@ -117,7 +115,7 @@ hid_t hpat_h5_open(char* file_name, char* mode, int64_t is_parallel) {
     return file_id;
 }
 
-hid_t hpat_h5_open_dset_or_group_obj(hid_t file_or_group_id, char* obj_name) {
+hid_t h5_open_dset_or_group_obj(hid_t file_or_group_id, char* obj_name) {
     // handle obj['A'] call, the output can be group or dataset
     // printf("open dset or group: %s\n", obj_name);
     hid_t obj_id = -1;
@@ -137,7 +135,7 @@ hid_t hpat_h5_open_dset_or_group_obj(hid_t file_or_group_id, char* obj_name) {
     return obj_id;
 }
 
-int64_t hpat_h5_size(hid_t dataset_id, int dim) {
+int64_t h5_size(hid_t dataset_id, int dim) {
     CHECK(dataset_id != -1, "h5 invalid dataset_id input to size call");
     hid_t space_id = H5Dget_space(dataset_id);
     CHECK(space_id != -1, "h5 size get_space error");
@@ -163,7 +161,7 @@ hid_t get_dset_space_from_range(hid_t dataset_id, int64_t* starts,
     return space_id;
 }
 
-int hpat_h5_read(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
+int h5_read(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
                  int64_t is_parallel, void* out, int typ_enum) {
     // printf("h5read ndims:%d size:%d typ:%d\n", ndims, counts[0], typ_enum);
     // fflush(stdout);
@@ -173,8 +171,8 @@ int hpat_h5_read(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
 
     hid_t space_id = get_dset_space_from_range(dataset_id, starts, counts);
 
-    int num_pes;
-    MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
+    // int num_pes;
+    // MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
     hid_t xfer_plist_id = H5P_DEFAULT;
     // TODO: enable MPIO after fixing address overflow issues
     // if(false && is_parallel && num_pes>1)
@@ -240,7 +238,7 @@ hid_t get_dset_space_from_indices(hid_t dataset_id, int ndims, int64_t* starts,
     return space_id;
 }
 
-int hpat_h5_read_filter(hid_t dataset_id, int ndims, int64_t* starts,
+int h5_read_filter(hid_t dataset_id, int ndims, int64_t* starts,
                         int64_t* counts, int64_t is_parallel, void* out,
                         int typ_enum, int64_t* indices, int n_indices) {
     //
@@ -295,28 +293,6 @@ hid_t get_h5_typ(int typ_enum) {
     return types_list[typ_enum];
 }
 
-//  _h5_str_typ_table = {
-//      'i1':0,
-//      'u1':1,
-//      'i4':2,
-//      'i8':3,
-//      'f4':4,
-//      'f8':5
-//      }
-
-// TODO: remove this
-int hpat_h5_get_type_enum(char* s) {
-    int typ = -1;
-    if (strcmp(s, "i1") == 0) typ = 0;
-    if (strcmp(s, "u1") == 0) typ = 1;
-    if (strcmp(s, "i4") == 0) typ = 2;
-    if (strcmp(s, "u4") == 0) typ = 3;
-    if (strcmp(s, "i8") == 0) typ = 4;
-    if (strcmp(s, "f4") == 0) typ = 5;
-    if (strcmp(s, "f8") == 0) typ = 6;
-
-    return typ;
-}
 
 void h5_close_object(hid_t obj_id) {
     H5O_info_t object_info;
@@ -350,7 +326,7 @@ void h5_close_file_objects(hid_t file_id, unsigned types) {
     free(obj_list);
 }
 
-int hpat_h5_close(hid_t file_id) {
+int h5_close(hid_t file_id) {
     // printf("closing: %d\n", file_id);
     // close file objects similar to h5py/files.py:close
     h5_close_file_objects(file_id, ~H5F_OBJ_FILE);
@@ -359,7 +335,7 @@ int hpat_h5_close(hid_t file_id) {
     return 0;
 }
 
-hid_t hpat_h5_create_dset(hid_t file_id, char* dset_name, int ndims,
+hid_t h5_create_dset(hid_t file_id, char* dset_name, int ndims,
                           int64_t* counts, int typ_enum) {
     // printf("dset_name:%s ndims:%d size:%d typ:%d\n", dset_name, ndims,
     // counts[0], typ_enum);
@@ -375,7 +351,7 @@ hid_t hpat_h5_create_dset(hid_t file_id, char* dset_name, int ndims,
     return dataset_id;
 }
 
-hid_t hpat_h5_create_group(hid_t file_id, char* group_name) {
+hid_t h5_create_group(hid_t file_id, char* group_name) {
     // printf("group_name:%s\n", group_name);
     // fflush(stdout);
     CHECK(file_id != -1, "h5 create_group invalid file_id");
@@ -386,7 +362,7 @@ hid_t hpat_h5_create_group(hid_t file_id, char* group_name) {
     return group_id;
 }
 
-int hpat_h5_write(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
+int h5_write(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
                   int64_t is_parallel, void* out, int typ_enum) {
     // printf("dset_id:%s ndims:%d size:%d typ:%d\n", dset_id, ndims, counts[0],
     // typ_enum);
@@ -448,7 +424,7 @@ void* h5g_get_objname_by_idx(hid_t file_id, int64_t ind) {
     return outstr;
 }
 
-void hpat_h5g_close(hid_t group_id) { herr_t err = H5Gclose(group_id); }
+void h5g_close(hid_t group_id) { herr_t err = H5Gclose(group_id); }
 
 #undef CHECK
 
