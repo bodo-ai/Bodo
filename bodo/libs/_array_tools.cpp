@@ -1018,15 +1018,15 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
     //    std::cout << "hash_join_table, step 6.4\n";
     std::vector<std::vector<size_t>> ListListEntR = GetBlocks(nb_key, ListEntR);
     //    std::cout << "hash_join_table, step 6.5\n";
-    int nbBlockL=ListListEntL.size();
-    int nbBlockR=ListListEntR.size();
+    size_t nbBlockL=ListListEntL.size();
+    size_t nbBlockR=ListListEntR.size();
     std::cout << "nbBlockL=" << nbBlockL << " nbBlockR=" << nbBlockR << "\n";
 
     if (is_left) {
       //      std::cout << "hash_join_table, step 6.6\n";
-      auto GetEntry=[&](size_t const& iRowL) -> int {
+      auto GetEntry=[&](size_t const& iRowL) -> std::ptrdiff_t {
         //        std::cout << "GetEntry : nbBlockR=" << nbBlockR << "\n";
-        for (int iR=0; iR<nbBlockR; iR++) {
+        for (size_t iR=0; iR<nbBlockR; iR++) {
           //          std::cout << "GetEntry : iR=" << iR << " |ListListEntR[iR]|=" << ListListEntR[iR].size() << "\n";
           bool test = TestEqual(0, iRowL, nb_key, ListListEntR[iR][0]);
           //          std::cout << "GetEntry : test=" << test << "\n";
@@ -1036,26 +1036,35 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
         return -1;
       };
       //      std::cout << "hash_join_table, step 6.7\n";
-      for (int iL=0; iL<nbBlockL; iL++) {
+      std::vector<int> ListStatus(nbBlockR,0);
+      for (size_t iL=0; iL<nbBlockL; iL++) {
         //        std::cout << "iL=" << iL << " |ListListEntL[iL]|=" << ListListEntL[iL].size() << "\n";
-        int iR=GetEntry(ListListEntL[iL][0]);
+        std::ptrdiff_t iR=GetEntry(ListListEntL[iL][0]);
         //        std::cout << "iR=" << iR << "\n";
         if (iR == -1) {
           for (auto & uL : ListListEntL[iL])
             ListPairWrite.push_back({uL, -1});
         }
         else {
+          if (is_right)
+            ListStatus[iR]=1;
           for (auto & uL : ListListEntL[iL])
             for (auto & uR : ListListEntR[iR])
               ListPairWrite.push_back({uL,uR});
         }
       }
+      if (is_right) {
+        for (size_t iR=0; iR<nbBlockR; iR++)
+          if (ListStatus[iR] == 0)
+            for (auto & uR : ListListEntR[iR])
+              ListPairWrite.push_back({-1,uR});
+      }
       //      std::cout << "hash_join_table, step 6.8\n";
     }
     else {
       //      std::cout << "hash_join_table, step 6.9\n";
-      auto GetEntry=[&](size_t const& iRowR) -> int {
-        for (int iL=0; iL<nbBlockL; iL++) {
+      auto GetEntry=[&](size_t const& iRowR) -> std::ptrdiff_t {
+        for (size_t iL=0; iL<nbBlockL; iL++) {
           bool test = TestEqual(0, ListListEntL[iL][0], nb_key, iRowR);
           if (test)
             return iL;
@@ -1063,8 +1072,8 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
         return -1;
       };
       //      std::cout << "hash_join_table, step 6.10\n";
-      for (int iR=0; iR<nbBlockR; iR++) {
-        int iL=GetEntry(ListListEntR[iR][0]);
+      for (size_t iR=0; iR<nbBlockR; iR++) {
+        std::ptrdiff_t iL=GetEntry(ListListEntR[iR][0]);
         if (iL == -1) {
           if (is_right) {
             for (auto & uR : ListListEntR[iR])
