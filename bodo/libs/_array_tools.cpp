@@ -802,6 +802,7 @@ std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype)
  */
 table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_data_left_t, int64_t nb_data_right_t, bool is_left, bool is_right)
 {
+  std::cout << "nb_key_t=" << nb_key_t << " nb_data_left_t=" << nb_data_left_t << " nb_data_right_t=" << nb_data_right_t << "\n";
   std::cout << "hash_join_table, step 1 is_left=" << is_left << " is_right=" << is_right << "\n";
   size_t nb_key = size_t(nb_key_t);
   size_t nb_data_left = size_t(nb_data_left_t);
@@ -1053,6 +1054,9 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
     }
   }
   size_t nbRowOut = ListPairWrite.size();
+  for (int iRowOut=0; iRowOut<nbRowOut; iRowOut++)
+    std::cout << "iRowOut=" << iRowOut << " epair=" << ListPairWrite[iRowOut].first << " , " << ListPairWrite[iRowOut].second << "\n";
+
   std::cout << "hash_join_table, step 7 nbRowOut=" << nbRowOut << "\n";
   //
   //
@@ -1180,10 +1184,10 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
   }
   std::cout << "hash_join_table, step 10\n";
   for (size_t i=0; i<nb_key; i++)
-    out_arrs.push_back(RetrieveArray(0, nb_key, 2));
+    out_arrs.push_back(RetrieveArray(i, i+nb_key, 2));
   std::cout << "hash_join_table, step 11\n";
   for (size_t i=0; i<nb_key; i++)
-    out_arrs.push_back(RetrieveArray(0, nb_key, 2));
+    out_arrs.push_back(RetrieveArray(i, i+nb_key, 2));
   std::cout << "hash_join_table, step 12\n";
   //
   delete[] hashes_left;
