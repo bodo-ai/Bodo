@@ -68,7 +68,7 @@ offset_ctypes_type = types.ArrayCTypes(types.Array(offset_typ, 1, "C"))
 # nested offset structure to represent S.str.split()
 # data_offsets array includes offsets to character data array
 # index_offsets array includes offsets to data_offsets array to identify lists
-class StringArraySplitViewType(types.IterableType):
+class StringArraySplitViewType(types.ArrayCompatible):
     def __init__(self):
         super(StringArraySplitViewType, self).__init__(
             name="StringArraySplitViewType()"
@@ -79,10 +79,6 @@ class StringArraySplitViewType(types.IterableType):
         # TODO: optimized list type
         return types.List(string_type)
 
-    # TODO
-    @property
-    def iterator_type(self):
-        return  # StringArrayIterator()
 
     def copy(self):
         return StringArraySplitViewType()

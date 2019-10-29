@@ -39,7 +39,6 @@ def filter_array_analysis(filter_node, equiv_set, typemap, array_analysis):
     post = []
     # empty filter nodes should be deleted in remove dead
     assert len(filter_node.df_in_vars) > 0, "empty filter in array analysis"
-    from bodo.libs.list_str_arr_ext import list_string_array_type
 
     # arrays of input df have same size in first dimension
     all_shapes = []
@@ -50,9 +49,6 @@ def filter_array_analysis(filter_node, equiv_set, typemap, array_analysis):
         all_shapes.append(col_shape[0])
     for col_var in filter_node.df_in_vars.values():
         typ = typemap[col_var.name]
-        # TODO handle list_string_array_type in other nodes
-        if typ in (list_string_array_type, string_array_split_view_type):
-            continue
         col_shape = equiv_set.get_shape(col_var)
         all_shapes.append(col_shape[0])
 
@@ -65,8 +61,6 @@ def filter_array_analysis(filter_node, equiv_set, typemap, array_analysis):
     all_shapes = []
     for col_var in filter_node.df_out_vars.values():
         typ = typemap[col_var.name]
-        if typ in (list_string_array_type, string_array_split_view_type):
-            continue
         (shape, c_post) = array_analysis._gen_shape_call(
             equiv_set, col_var, typ.ndim, None
         )
