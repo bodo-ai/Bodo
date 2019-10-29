@@ -179,7 +179,7 @@ def _test_equal_guard(
     return passed
 
 
-def _test_equal(bodo_out, py_out, sort_output, check_names=True, check_dtype=True):
+def _test_equal(bodo_out, py_out, sort_output=False, check_names=True, check_dtype=True):
 
     if isinstance(py_out, pd.Series):
         if sort_output:

@@ -6,7 +6,7 @@ import pytest
 
 import numba
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, _test_equal
 
 
 def test_len():
@@ -281,3 +281,16 @@ def test_getitem_int(list_str_arr_value):
     bodo_func = bodo.jit(test_impl)
     i = 2
     assert bodo_func(list_str_arr_value, i) == test_impl(list_str_arr_value, i)
+
+
+def test_getitem_bool(list_str_arr_value):
+    def test_impl(A, ind):
+        return A[ind]
+
+    bodo_func = bodo.jit(test_impl)
+    np.random.seed(0)
+    ind = np.random.ranf(len(list_str_arr_value)) < 0.2
+    # TODO: parallel test
+    _test_equal(
+        bodo_func(list_str_arr_value, ind), test_impl(list_str_arr_value, ind)
+    )

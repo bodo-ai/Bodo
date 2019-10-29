@@ -346,3 +346,54 @@ def list_str_arr_getitem_array(arr, ind):
             return out
 
         return list_str_arr_getitem_impl
+
+    # bool arr indexing
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+
+        def impl_bool(arr, ind):
+            n = len(arr)
+            if n != len(ind):
+                raise IndexError(
+                    "boolean index did not match indexed array along dimension 0"
+                )
+            n_lists = 0
+            n_strs = 0
+            n_chars = 0
+            for i in range(n):
+                if ind[i]:
+                    n_lists += 1
+                    l_start_offset = arr._index_offsets[i]
+                    l_end_offset = arr._index_offsets[i + 1]
+                    for j in range(l_start_offset, l_end_offset):
+                        n_strs += 1
+                        n_chars += arr._data_offsets[j + 1] - arr._data_offsets[j]
+            out_arr = pre_alloc_list_string_array(n_lists, n_strs, n_chars)
+            out_ind = 0
+            curr_s_offset = 0
+            curr_d_offset = 0
+            for ii in range(n):
+                if ind[ii]:
+                    l_start_offset = arr._index_offsets[ii]
+                    l_end_offset = arr._index_offsets[ii + 1]
+                    n_str = l_end_offset - l_start_offset
+                    str_ind = 0
+                    for jj in range(l_start_offset, l_end_offset):
+                        out_arr._data_offsets[curr_s_offset + str_ind] = curr_d_offset
+                        n_char = arr._data_offsets[jj + 1] - arr._data_offsets[jj]
+                        in_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(arr._data, arr._data_offsets[jj])
+                        out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(out_arr._data, curr_d_offset)
+                        bodo.libs.str_arr_ext._memcpy(out_ptr, in_ptr, n_char, 1)
+                        curr_d_offset += n_char
+                        str_ind += 1
+
+                    out_arr._index_offsets[out_ind] = curr_s_offset
+                    curr_s_offset += n_str
+                    # set NA
+                    if bodo.libs.str_arr_ext.str_arr_is_na(arr, ii):
+                        bodo.libs.str_arr_ext.str_arr_set_na(out_arr, out_ind)
+                    out_ind += 1
+            out_arr._index_offsets[out_ind] = curr_s_offset
+            out_arr._data_offsets[curr_s_offset] = curr_d_offset
+            return out_arr
+
+        return impl_bool
