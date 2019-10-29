@@ -556,7 +556,7 @@ def join_distributed_run(
         is_left = join_node.how in ("left", "outer")
         is_right = join_node.how == "outer"
         if bodo.use_cpp_hash_join:
-            func_text += _gen_local_hash_join(left_other_names, right_other_names, n_keys, is_left, is_right)
+            func_text += _gen_local_hash_join(left_key_names,right_key_names,left_other_names, right_other_names, is_left, is_right)
         else:
             func_text += (
                 "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
@@ -564,7 +564,7 @@ def join_distributed_run(
                     is_left, is_right
                 )
             )
-    if bodo.use_cpp_hash_join == False or join_node.how == "asof" or method != "hash" or True:
+    if bodo.use_cpp_hash_join == False or join_node.how == "asof" or method != "hash":
         for i in range(len(left_other_names)):
             func_text += "    left_{} = out_data_left[{}]\n".format(i, i)
         for i in range(len(right_other_names)):
@@ -686,8 +686,9 @@ def _get_table_parallel_flags(join_node, array_dists):
 
     return left_parallel, right_parallel
 
-
-def _gen_local_hash_join(left_other_names, right_other_names, n_keys, is_left, is_right):
+def _gen_local_hash_join(left_key_names, right_key_names, left_other_names, right_other_names, is_left, is_right):
+    print("gen_local_hash_join: is_left=", is_left, " is_right=", is_right)
+    n_keys = len(left_key_names)
     func_text =  "    # beginning of _gen_local_hash_join\n"
     eList = []
     for i in range(n_keys):
@@ -703,8 +704,7 @@ def _gen_local_hash_join(left_other_names, right_other_names, n_keys, is_left, i
 
     func_text += "    out_table = hash_join_table(table_total, {}, {}, {}, {}, {})\n".format(n_keys, len(left_other_names), len(right_other_names), is_left, is_right)
     func_text += "    delete_table(table_total)\n"
-    func_text += "    delete_table(out_table)\n"
-    use_cpp_code = False
+    use_cpp_code = True
     if use_cpp_code == False:
         func_text += (
             "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
@@ -714,17 +714,17 @@ def _gen_local_hash_join(left_other_names, right_other_names, n_keys, is_left, i
         )
     if use_cpp_code:
         idx = 0
-        for i in range(len(left_other_names)):
-            func_text += "    left_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,"xxx")
+        for i, t in enumerate(left_other_names):
+            func_text += "    left_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,t)
             idx += 1
-        for i in range(len(right_other_names)):
-            func_text += "    right_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,"xxx")
+        for i, t in enumerate(right_other_names):
+            func_text += "    right_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,t)
             idx += 1
-        for i in range(n_keys):
-            func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,"xxx")
+        for i, t in enumerate(left_key_names):
+            func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,t)
             idx += 1
-        for i in range(n_keys):
-            func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,"xxx")
+        for i, t in enumerate(right_key_names):
+            func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,t)
             idx += 1
         func_text += "    delete_table(out_table)\n"
     return func_text
@@ -1176,7 +1176,7 @@ def local_hash_join_impl(
 ):
     l_len = len(left_keys[0])
     r_len = len(right_keys[0])
-    print("l_len=", l_len, " r_len=", r_len)
+    print("l_len=", l_len, " r_len=", r_len, " is_left=", is_left, " is_right=", is_right)
     # TODO: approximate output size properly
     curr_size = 101 + min(l_len, r_len) // 2
     if is_left:
