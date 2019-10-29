@@ -475,3 +475,27 @@ def overload_list_str_arr_copy(A):
         bodo.libs.str_arr_ext._memcpy(B._null_bitmap, A._null_bitmap, n_bytes, 1)
         return B
     return copy_impl
+
+
+# TODO: test array analysis and remove call
+def pre_alloc_list_str_arr_equiv(self, scope, equiv_set, args, kws):
+    assert len(args) == 3 and not kws
+    return args[0], []
+
+
+from numba.array_analysis import ArrayAnalysis
+
+ArrayAnalysis._analyze_op_call_bodo_libs_list_str_arr_ext_pre_alloc_list_string_array = (
+    pre_alloc_list_str_arr_equiv
+)
+
+
+def remove_str_arr(rhs, lives, call_list):
+    if call_list == ["pre_alloc_list_string_array", "list_str_arr_ext", "libs", bodo]:
+        return True
+    if call_list == call_list == [pre_alloc_list_string_array]:
+        return True
+    return False
+
+
+numba.ir_utils.remove_call_handlers.append(remove_str_arr)
