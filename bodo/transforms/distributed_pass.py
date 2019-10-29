@@ -371,14 +371,13 @@ class DistributedPass(object):
             nodes.append(assign)
             return nodes
 
-        # XXX: enable when mpiio driver of hdf5 is working
-        # if fdef == ("File", "h5py"):
-        #     # create and save a variable holding 1, in case we need to use it
-        #     # to parallelize this call in _file_open_set_parallel()
-        #     one_var = ir.Var(scope, mk_unique_var("$one"), loc)
-        #     self.typemap[one_var.name] = types.IntegerLiteral(1)
-        #     self._set1_var = one_var
-        #     return [ir.Assign(ir.Const(1, loc), one_var, loc), assign]
+        if fdef == ("File", "h5py"):
+            # create and save a variable holding 1, in case we need to use it
+            # to parallelize this call in _file_open_set_parallel()
+            one_var = ir.Var(scope, mk_unique_var("$one"), loc)
+            self.typemap[one_var.name] = types.IntegerLiteral(1)
+            self._set1_var = one_var
+            return [ir.Assign(ir.Const(1, loc), one_var, loc), assign]
 
         if (
             bodo.config._has_h5py
@@ -407,9 +406,9 @@ class DistributedPass(object):
             # new starts
             starts_var = ir.Var(scope, mk_unique_var("$h5_starts"), loc)
             self.typemap[starts_var.name] = types.UniTuple(types.int64, ndims)
-            prev_starts = guard(get_definition, self.func_ir, rhs.args[2])
+            prev_starts = self._get_tuple_varlist(rhs.args[2], nodes)
             start_tuple_call = ir.Expr.build_tuple(
-                [start_var] + prev_starts.items[1:], loc
+                [start_var] + prev_starts[1:], loc
             )
             starts_assign = ir.Assign(start_tuple_call, starts_var, loc)
             rhs.args[2] = starts_var
@@ -417,19 +416,19 @@ class DistributedPass(object):
             # new counts
             counts_var = ir.Var(scope, mk_unique_var("$h5_counts"), loc)
             self.typemap[counts_var.name] = types.UniTuple(types.int64, ndims)
-            prev_counts = guard(get_definition, self.func_ir, rhs.args[3])
+            prev_counts = self._get_tuple_varlist(rhs.args[3], nodes)
             count_tuple_call = ir.Expr.build_tuple(
-                [count_var] + prev_counts.items[1:], loc
+                [count_var] + prev_counts[1:], loc
             )
             counts_assign = ir.Assign(count_tuple_call, counts_var, loc)
 
             nodes += [starts_assign, counts_assign, assign]
             rhs.args[3] = counts_var
             rhs.args[4] = one_var
+
             # set parallel arg in file open
-            # XXX: enable when mpiio driver of hdf5 is working
-            # file_varname = rhs.args[0].name
-            # self._file_open_set_parallel(file_varname)
+            file_varname = rhs.args[0].name
+            self._file_open_set_parallel(file_varname)
             return nodes
 
         # TODO: fix numba.extending
@@ -2136,44 +2135,35 @@ class DistributedPass(object):
         replace_arg_nodes(block, args)
         return block.body[:-2]  # ignore return nodes
 
-    # XXX: enable when mpiio driver of hdf5 is working
-    # def _file_open_set_parallel(self, file_varname):
-    #     var = file_varname
-    #     while True:
-    #         var_def = get_definition(self.func_ir, var)
-    #         require(isinstance(var_def, ir.Expr))
-    #         if var_def.op == "call":
-    #             fdef = find_callname(self.func_ir, var_def)
-    #             if (
-    #                 fdef[0] in ("create_dataset", "create_group")
-    #                 and isinstance(fdef[1], ir.Var)
-    #                 and self.typemap[fdef[1].name] in (h5file_type, h5group_type)
-    #             ):
-    #                 self._file_open_set_parallel(fdef[1].name)
-    #                 return
-    #             else:
-    #                 assert fdef == ("File", "h5py")
-    #                 var_def.args[2] = self._set1_var
-    #                 return
-    #         # TODO: handle control flow
-    #         require(var_def.op in ("getitem", "static_getitem"))
-    #         var = var_def.value.name
-
-    # for label, block in self.func_ir.blocks.items():
-    #     for stmt in block.body:
-    #         if (isinstance(stmt, ir.Assign)
-    #                 and stmt.target.name == file_varname):
-    #             rhs = stmt.value
-    #             assert isinstance(rhs, ir.Expr) and rhs.op == 'call'
-    #             call_name = self._call_table[rhs.func.name][0]
-    #             if call_name == 'h5create_group':
-    #                 # if read/write call is on a group, find its actual file
-    #                 f_varname = rhs.args[0].name
-    #                 self._file_open_set_parallel(f_varname)
-    #                 return
-    #             else:
-    #                 assert call_name == 'File'
-    #                 rhs.args[2] = self._set1_var
+    def _file_open_set_parallel(self, file_varname):
+        """Finds file open call (h5py.File) for file_varname and sets the parallel flag.
+        """
+        # TODO: find and handle corner cases
+        var = file_varname
+        while True:
+            var_def = get_definition(self.func_ir, var)
+            require(isinstance(var_def, ir.Expr))
+            if var_def.op == "call":
+                fdef = find_callname(self.func_ir, var_def)
+                if (
+                    fdef[0] in ("create_dataset", "create_group")
+                    and isinstance(fdef[1], ir.Var)
+                    and self.typemap[fdef[1].name] in (h5file_type, h5group_type)
+                ):
+                    self._file_open_set_parallel(fdef[1].name)
+                    return
+                else:
+                    assert fdef == ("File", "h5py")
+                    call_type = self.calltypes.pop(var_def)
+                    arg_typs = tuple(call_type.args[:-1] + (types.IntegerLiteral(1),))
+                    self.calltypes[var_def] = self.typemap[var_def.func.name].get_call_type(self.typingctx, arg_typs, {})
+                    kws = dict(var_def.kws)
+                    kws['_is_parallel'] = self._set1_var
+                    var_def.kws = kws
+                    return
+            # TODO: handle control flow
+            require(var_def.op in ("getitem", "static_getitem"))
+            var = var_def.value.name
 
     def _gen_barrier(self):
         return compile_func_single_block(
