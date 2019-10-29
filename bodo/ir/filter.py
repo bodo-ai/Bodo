@@ -39,7 +39,7 @@ def filter_array_analysis(filter_node, equiv_set, typemap, array_analysis):
     post = []
     # empty filter nodes should be deleted in remove dead
     assert len(filter_node.df_in_vars) > 0, "empty filter in array analysis"
-    from bodo.libs.str_ext import list_string_array_type
+    from bodo.libs.list_str_arr_ext import list_string_array_type
 
     # arrays of input df have same size in first dimension
     all_shapes = []

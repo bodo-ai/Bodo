@@ -354,8 +354,6 @@ def unbox_series(typ, val, c):
 def _unbox_series_data(dtype, data_typ, arr_obj, c):
     if dtype == datetime_date_type:
         return unbox_datetime_date_array(data_typ, arr_obj, c)
-    elif data_typ == list_string_array_type:
-        return _unbox_array_list_str(arr_obj, c)
     elif data_typ == string_array_split_view_type:
         # XXX dummy unboxing to avoid errors in _get_dataframe_data()
         out_view = c.context.make_helper(c.builder, string_array_split_view_type)

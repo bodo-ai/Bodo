@@ -49,8 +49,8 @@ from bodo.libs.str_ext import (
     string_type,
     unicode_to_std_str,
     std_str_to_unicode,
-    list_string_array_type,
 )
+from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.str_arr_ext import (
     string_array_type,
     StringArrayType,

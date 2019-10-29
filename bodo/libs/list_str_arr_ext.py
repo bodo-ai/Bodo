@@ -249,3 +249,9 @@ def box_list_str_arr(typ, val, c):
     )
 
     return arr
+
+
+@overload(len)
+def overload_len_list_str_arr(A):
+    if A == list_string_array_type:
+        return lambda A: A._num_items
