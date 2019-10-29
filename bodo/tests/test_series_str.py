@@ -294,3 +294,15 @@ def test_getitem_bool(list_str_arr_value):
     _test_equal(
         bodo_func(list_str_arr_value, ind), test_impl(list_str_arr_value, ind)
     )
+
+
+def test_getitem_slice(list_str_arr_value):
+    def test_impl(A, ind):
+        return A[ind]
+
+    bodo_func = bodo.jit(test_impl)
+    ind = slice(1, 4)
+    # TODO: parallel test
+    _test_equal(
+        bodo_func(list_str_arr_value, ind), test_impl(list_str_arr_value, ind)
+    )
