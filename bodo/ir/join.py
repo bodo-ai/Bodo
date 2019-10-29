@@ -562,10 +562,11 @@ def join_distributed_run(
         )
     else:
         assert method == "hash"
+        print("join_node.how=", join_node.how)
         is_left = join_node.how in ("left", "outer")
         is_right = join_node.how == "outer"
         if bodo.use_cpp_hash_join:
-            func_text += _gen_local_hash_join(left_key_names,right_key_names,left_other_names, right_other_names, is_left, is_right)
+            func_text += _gen_local_hash_join(left_key_names, right_key_names, left_other_names, right_other_names, is_left, is_right)
         else:
             func_text += (
                 "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
@@ -1186,6 +1187,10 @@ def local_hash_join_impl(
     l_len = len(left_keys[0])
     r_len = len(right_keys[0])
     print("l_len=", l_len, " r_len=", r_len, " is_left=", is_left, " is_right=", is_right)
+    print("left_keys=", left_keys, " right_keys=", right_keys)
+    print("data_left=", data_left, " data_right=", data_right)
+    print("|left_keys|=", len(left_keys), " |right_keys|=", len(right_keys))
+    print("|data_left|=", len(data_left), " |data_right|=", len(data_right))
     # TODO: approximate output size properly
     curr_size = 101 + min(l_len, r_len) // 2
     if is_left:
