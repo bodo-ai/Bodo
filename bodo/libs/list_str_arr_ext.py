@@ -47,7 +47,7 @@ from numba.targets.imputils import (
     iternext_impl,
     RefType,
 )
-from numba.targets.hashing import _Py_hash_t
+from bodo.utils.typing import is_list_like_index_type
 import llvmlite.llvmpy.core as lc
 from glob import glob
 from bodo.utils.typing import is_overload_true, is_overload_none
@@ -324,3 +324,25 @@ def pre_alloc_list_string_array(typingctx, num_lists_typ, num_strs_typ, num_char
         return impl_ret_new_ref(context, builder, list_string_array_type, ret)
 
     return list_string_array_type(types.intp, types.intp, types.intp), codegen
+
+
+@overload(operator.getitem)
+def list_str_arr_getitem_array(arr, ind):
+    if arr != list_string_array_type:
+        return
+
+    if isinstance(ind, types.Integer):
+        # XXX: cannot handle NA for scalar getitem since not type stable
+        def list_str_arr_getitem_impl(arr, ind):
+            l_start_offset = arr._index_offsets[ind]
+            l_end_offset = arr._index_offsets[ind + 1]
+            out = []
+            for i in range(l_start_offset, l_end_offset):
+                start_offset = arr._data_offsets[i]
+                end_offset = arr._data_offsets[i + 1]
+                length = end_offset - start_offset
+                ptr = bodo.hiframes.split_impl.get_c_arr_ptr(arr._data, start_offset)
+                out.append(bodo.libs.str_arr_ext.decode_utf8(ptr, length))
+            return out
+
+        return list_str_arr_getitem_impl

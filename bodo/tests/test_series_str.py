@@ -272,3 +272,12 @@ def test_list_str_arr_unbox(list_str_arr_value):
         return arr_arg
 
     check_func(impl2, (list_str_arr_value,))
+
+
+def test_getitem_int(list_str_arr_value):
+    def test_impl(A, i):
+        return A[i]
+
+    bodo_func = bodo.jit(test_impl)
+    i = 2
+    assert bodo_func(list_str_arr_value, i) == test_impl(list_str_arr_value, i)
