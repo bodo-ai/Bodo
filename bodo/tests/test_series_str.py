@@ -306,3 +306,12 @@ def test_getitem_slice(list_str_arr_value):
     _test_equal(
         bodo_func(list_str_arr_value, ind), test_impl(list_str_arr_value, ind)
     )
+
+
+def test_copy(list_str_arr_value):
+    def test_impl(A):
+        return A.copy()
+
+    _test_equal(
+        bodo.jit(test_impl)(list_str_arr_value), list_str_arr_value
+    )

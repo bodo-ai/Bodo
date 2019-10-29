@@ -1410,7 +1410,7 @@ def _memcpy(typingctx, dest_t, src_t, count_t, item_size_t=None):
         cgutils.raw_memcpy(builder, dst, src, count, itemsize)
         return context.get_dummy_value()
 
-    return types.void(types.voidptr, types.voidptr, types.intp, types.intp), codegen
+    return types.void(dest_t, src_t, types.intp, types.intp), codegen
 
 
 @numba.njit
