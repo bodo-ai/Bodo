@@ -162,6 +162,34 @@ void allocate_string_array(uint32_t** offsets, char** data,
     return;
 }
 
+
+void allocate_list_string_array(char** data, uint32_t** data_offsets, uint32_t** index_offsets,
+                           uint8_t** null_bitmap, int64_t num_lists, int64_t num_strings,
+                           int64_t num_chars, int64_t extra_null_bytes) {
+    // std::cout << "allocating list string array: " << num_lists << " "<< num_strings << " " <<
+    //                                                 num_chars << std::endl;
+    *data = new char[num_chars];
+
+    *data_offsets = new uint32_t[num_strings + 1];
+    (*data_offsets)[0] = 0;
+    (*data_offsets)[num_strings] =
+        (uint32_t)num_chars;  // in case total chars is read from here
+
+    *index_offsets = new uint32_t[num_lists + 1];
+    (*index_offsets)[0] = 0;
+    (*index_offsets)[num_lists] =
+        (uint32_t)num_strings;  // in case total strings is read from here
+
+    // allocate nulls
+    int64_t n_bytes = (num_lists + sizeof(uint8_t) - 1) / sizeof(uint8_t) +
+                      extra_null_bytes;
+    *null_bitmap = new uint8_t[(size_t)n_bytes];
+    // set all bits to 1 indicating non-null as default
+    memset(*null_bitmap, -1, n_bytes);
+    return;
+}
+
+
 // copied from Arrow bit_util.h
 // Bitmask selecting the k-th bit in a byte
 static constexpr uint8_t kBitmask[] = {1, 2, 4, 8, 16, 32, 64, 128};

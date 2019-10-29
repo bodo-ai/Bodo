@@ -418,23 +418,25 @@ def setitem_str_offset(typingctx, str_arr_typ, ind_t, val_t=None):
 def getitem_str_bitmap(typingctx, in_bitmap_typ, ind_t=None):
     def codegen(context, builder, sig, args):
         in_bitmap, ind = args
-        ctinfo = context.make_helper(builder, data_ctypes_type, in_bitmap)
-        in_bitmap = ctinfo.data
+        if in_bitmap_typ == data_ctypes_type:
+            ctinfo = context.make_helper(builder, data_ctypes_type, in_bitmap)
+            in_bitmap = ctinfo.data
         return builder.load(builder.gep(in_bitmap, [ind]))
 
-    return char_typ(data_ctypes_type, ind_t), codegen
+    return char_typ(in_bitmap_typ, ind_t), codegen
 
 
 @intrinsic
 def setitem_str_bitmap(typingctx, in_bitmap_typ, ind_t, val_t=None):
     def codegen(context, builder, sig, args):
         in_bitmap, ind, val = args
-        ctinfo = context.make_helper(builder, data_ctypes_type, in_bitmap)
-        in_bitmap = ctinfo.data
+        if in_bitmap_typ == data_ctypes_type:
+            ctinfo = context.make_helper(builder, data_ctypes_type, in_bitmap)
+            in_bitmap = ctinfo.data
         builder.store(val, builder.gep(in_bitmap, [ind]))
         return context.get_dummy_value()
 
-    return types.void(data_ctypes_type, ind_t, char_typ), codegen
+    return types.void(in_bitmap_typ, ind_t, char_typ), codegen
 
 
 @intrinsic

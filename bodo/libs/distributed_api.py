@@ -29,6 +29,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.list_str_arr_ext import list_string_array_type, pre_alloc_list_string_array
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.utils.utils import (
     debug_prints,
@@ -611,6 +612,103 @@ def gatherv(data, allgather=False):
         impl_df = loc_vars["impl_df"]
         return impl_df
 
+    if data == list_string_array_type:
+        int32_typ_enum = np.int32(_numba_to_c_type_map[types.int32])
+        char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
+
+        def gatherv_list_str_arr_impl(data, allgather=False):
+            rank = bodo.libs.distributed_api.get_rank()
+            n_loc = len(data)
+            n_all_strs = data._num_total_strings
+            n_all_chars = data._num_total_chars
+
+            # allocate buffer for sending lengths of lists and strings
+            send_list_lens = np.empty(n_loc, np.uint32)  # XXX offset type is uint32
+            send_str_lens = np.empty(n_all_strs, np.uint32)
+            n_bytes = (n_loc + 7) >> 3
+
+            for i in range(n_loc):
+                send_list_lens[i] = data._index_offsets[i+1] - data._index_offsets[i]
+            for j in range(n_all_strs):
+                send_str_lens[j] = data._data_offsets[j+1] - data._data_offsets[j]
+
+            recv_counts = gather_scalar(np.int32(n_loc), allgather)
+            recv_counts_str = gather_scalar(np.int32(n_all_strs), allgather)
+            recv_counts_char = gather_scalar(np.int32(n_all_chars), allgather)
+            n_total = recv_counts.sum()
+            n_total_str = recv_counts_str.sum()
+            n_total_char = recv_counts_char.sum()
+
+            # displacements
+            all_data = pre_alloc_list_string_array(0, 0, 0)  # dummy arrays on non-root PEs
+            displs = np.empty(1, np.int32)
+            displs_str = np.empty(1, np.int32)
+            displs_char = np.empty(1, np.int32)
+            recv_counts_nulls = np.empty(1, np.int32)
+            displs_nulls = np.empty(1, np.int32)
+            tmp_null_bytes = np.empty(1, np.uint8)
+
+            if rank == MPI_ROOT or allgather:
+                all_data = pre_alloc_list_string_array(n_total, n_total_str, n_total_char)
+                displs = bodo.ir.join.calc_disp(recv_counts)
+                displs_str = bodo.ir.join.calc_disp(recv_counts_str)
+                displs_char = bodo.ir.join.calc_disp(recv_counts_char)
+                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
+                for k in range(len(recv_counts)):
+                    recv_counts_nulls[k] = (recv_counts[k] + 7) >> 3
+                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
+                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
+
+            # data
+            c_gatherv(
+                cptr_to_voidptr(data._data),
+                np.int32(n_all_chars),
+                cptr_to_voidptr(all_data._data),
+                recv_counts_char.ctypes,
+                displs_char.ctypes,
+                char_typ_enum,
+                allgather,
+            )
+            # data offset
+            c_gatherv(
+                send_str_lens.ctypes,
+                np.int32(n_all_strs),
+                cptr_to_voidptr(all_data._data_offsets),
+                recv_counts_str.ctypes,
+                displs_str.ctypes,
+                int32_typ_enum,
+                allgather,
+            )
+            # index offset
+            c_gatherv(
+                send_list_lens.ctypes,
+                np.int32(n_loc),
+                cptr_to_voidptr(all_data._index_offsets),
+                recv_counts.ctypes,
+                displs.ctypes,
+                int32_typ_enum,
+                allgather,
+            )
+            c_gatherv(
+                cptr_to_voidptr(data._null_bitmap),
+                np.int32(n_bytes),
+                tmp_null_bytes.ctypes,
+                recv_counts_nulls.ctypes,
+                displs_nulls.ctypes,
+                char_typ_enum,
+                allgather,
+            )
+            dummy_use(data)  # needed?
+
+            convert_len_arr_to_offset(cptr_to_voidptr(all_data._data_offsets), n_total_str)
+            convert_len_arr_to_offset(cptr_to_voidptr(all_data._index_offsets), n_total)
+            copy_gathered_null_bytes(
+                cptr_to_voidptr(all_data._null_bitmap), tmp_null_bytes, recv_counts_nulls, recv_counts
+            )
+            return all_data
+
+        return gatherv_list_str_arr_impl
+
     if data is types.none:
         return lambda data: None
 
@@ -620,6 +718,15 @@ def gatherv(data, allgather=False):
 @numba.generated_jit(nopython=True)
 def allgatherv(data):
     return lambda data: gatherv(data, True)
+
+
+@intrinsic
+def cptr_to_voidptr(typingctx, cptr_tp=None):
+    def codegen(context, builder, sig, args):
+        return builder.bitcast(args[0], lir.IntType(8).as_pointer())
+
+    return types.voidptr(cptr_tp), codegen
+
 
 
 # TODO: test

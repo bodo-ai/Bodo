@@ -58,6 +58,7 @@ from bodo.libs import hstr_ext
 ll.add_symbol("list_string_array_from_sequence", hstr_ext.list_string_array_from_sequence)
 ll.add_symbol("dtor_list_string_array", hstr_ext.dtor_list_string_array)
 ll.add_symbol("np_array_from_list_string_array", hstr_ext.np_array_from_list_string_array)
+ll.add_symbol("allocate_list_string_array", hstr_ext.allocate_list_string_array)
 
 
 char_typ = types.uint8
@@ -255,3 +256,66 @@ def box_list_str_arr(typ, val, c):
 def overload_len_list_str_arr(A):
     if A == list_string_array_type:
         return lambda A: A._num_items
+
+
+@intrinsic
+def pre_alloc_list_string_array(typingctx, num_lists_typ, num_strs_typ, num_chars_typ=None):
+    assert isinstance(num_lists_typ, types.Integer) and isinstance(num_strs_typ, types.Integer) and isinstance(
+        num_chars_typ, types.Integer
+    )
+
+    def codegen(context, builder, sig, args):
+        num_lists, num_strs, num_chars = args
+        meminfo, meminfo_data_ptr = construct_list_string_array(context, builder)
+
+        list_str_arr_payload = cgutils.create_struct_proxy(list_str_arr_payload_type)(
+            context, builder
+        )
+        extra_null_bytes = context.get_constant(types.int64, 0)
+
+        # allocate string array
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer().as_pointer(),
+                lir.IntType(32).as_pointer().as_pointer(),
+                lir.IntType(32).as_pointer().as_pointer(),
+                lir.IntType(8).as_pointer().as_pointer(),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+            ],
+        )
+        fn_alloc = builder.module.get_or_insert_function(
+            fnty, name="allocate_list_string_array"
+        )
+        builder.call(
+            fn_alloc,
+            [
+                list_str_arr_payload._get_ptr_by_name("data"),
+                list_str_arr_payload._get_ptr_by_name("data_offsets"),
+                list_str_arr_payload._get_ptr_by_name("index_offsets"),
+                list_str_arr_payload._get_ptr_by_name("null_bitmap"),
+                num_lists,
+                num_strs,
+                num_chars,
+                extra_null_bytes,
+            ],
+        )
+
+        builder.store(list_str_arr_payload._getvalue(), meminfo_data_ptr)
+        list_string_array = context.make_helper(builder, list_string_array_type)
+        list_string_array.num_items = num_lists
+        list_string_array.num_total_strings = num_strs
+        list_string_array.num_total_chars = num_chars
+        list_string_array.data = list_str_arr_payload.data
+        list_string_array.data_offsets = list_str_arr_payload.data_offsets
+        list_string_array.index_offsets = list_str_arr_payload.index_offsets
+        list_string_array.null_bitmap = list_str_arr_payload.null_bitmap
+        list_string_array.meminfo = meminfo
+        ret = list_string_array._getvalue()
+
+        return impl_ret_new_ref(context, builder, list_string_array_type, ret)
+
+    return list_string_array_type(types.intp, types.intp, types.intp), codegen
