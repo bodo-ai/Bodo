@@ -336,9 +336,9 @@ def isna_overload(arr, i):
             arr._null_bitmap, i
         )
 
-    # TODO: support NaN in list(list(str))
     if arr == list_string_array_type:
-        return lambda arr, i: False
+        # reuse string array function
+        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
 
     if arr == string_array_split_view_type:
         return lambda arr, i: False

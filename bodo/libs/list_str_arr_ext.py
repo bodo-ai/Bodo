@@ -258,6 +258,11 @@ def overload_len_list_str_arr(A):
         return lambda A: A._num_items
 
 
+@overload_attribute(ListStringArrayType, "shape")
+def overload_list_str_arr_shape(A):
+    return lambda A: (A._num_items,)
+
+
 @intrinsic
 def pre_alloc_list_string_array(typingctx, num_lists_typ, num_strs_typ, num_chars_typ=None):
     assert isinstance(num_lists_typ, types.Integer) and isinstance(num_strs_typ, types.Integer) and isinstance(

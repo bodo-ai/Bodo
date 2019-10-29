@@ -1189,11 +1189,12 @@ def box_str_arr(typ, val, c):
 @intrinsic
 def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    assert is_str_arr_typ(str_arr_typ)
+    # reuse for list_string_array_type
+    assert str_arr_typ in (string_array_type, list_string_array_type)
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        string_array = context.make_helper(builder, string_array_type, in_str_arr)
+        string_array = context.make_helper(builder, str_arr_typ, in_str_arr)
 
         # (null_bitmap[i / 8] & kBitmask[i % 8]) == 0;
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
@@ -1214,7 +1215,7 @@ def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
             "==", builder.and_(byte, mask), lir.Constant(lir.IntType(8), 0)
         )
 
-    return types.bool_(string_array_type, types.intp), codegen
+    return types.bool_(str_arr_typ, types.intp), codegen
 
 
 @intrinsic
