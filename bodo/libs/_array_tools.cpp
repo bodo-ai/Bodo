@@ -886,25 +886,41 @@ std::vector<std::string> PrintColumn(array_info* arr)
 
 void PrintSetOfColumn(std::ostream & os, std::vector<array_info*> const& ListArr)
 {
+  int nbCol=ListArr.size();
+  if (nbCol == 0) {
+    os << "Nothing to print really\n";
+    return;
+  }
+  std::vector<int> ListLen(nbCol);
+  int nbRowMax=0;
+  for (int iCol=0; iCol<nbCol; iCol++) {
+    int nbRow=ListArr[iCol]->length;
+    if (nbRow > nbRowMax)
+      nbRowMax = nbRow;
+    ListLen[iCol] = nbRow;
+  }
   std::vector<std::vector<std::string>> ListListStr;
-  for (auto & arr : ListArr)
-    ListListStr.push_back(PrintColumn(arr));
-  int nbRow=ListListStr[0].size();
-  std::vector<std::string> ListStrOut(nbRow);
-  for (int iRow=0; iRow<nbRow; iRow++) {
+  for (int iCol=0; iCol<nbCol; iCol++) {
+    std::vector<std::string> LStr = PrintColumn(ListArr[iCol]);
+    for (int iRow=ListLen[iCol]; iRow<nbRowMax; iRow++)
+      LStr.push_back("");
+    ListListStr.push_back(LStr);
+  }
+  std::vector<std::string> ListStrOut(nbRowMax);
+  for (int iRow=0; iRow<nbRowMax; iRow++) {
     std::string str = std::to_string(iRow) + " :";
     ListStrOut[iRow]=str;
   }
-  for (int iCol=0; iCol<int(ListArr.size()); iCol++) {
-    std::vector<int> ListLen(nbRow);
+  for (int iCol=0; iCol<nbCol; iCol++) {
+    std::vector<int> ListLen(nbRowMax);
     size_t maxlen=0;
-    for (int iRow=0; iRow<nbRow; iRow++) {
+    for (int iRow=0; iRow<nbRowMax; iRow++) {
       size_t elen = ListListStr[iCol][iRow].size();
       ListLen[iRow] = elen;
       if (elen > maxlen)
         maxlen = elen;
     }
-    for (int iRow=0; iRow<nbRow; iRow++) {
+    for (int iRow=0; iRow<nbRowMax; iRow++) {
       std::string str = ListStrOut[iRow] + " " + ListListStr[iCol][iRow];
       size_t diff = maxlen - ListLen[iRow];
       for (size_t u=0; u<diff; u++)
@@ -912,7 +928,7 @@ void PrintSetOfColumn(std::ostream & os, std::vector<array_info*> const& ListArr
       ListStrOut[iRow] = str;
     }
   }
-  for (int iRow=0; iRow<nbRow; iRow++)
+  for (int iRow=0; iRow<nbRowMax; iRow++)
     os << ListStrOut[iRow] << "\n";
 }
 
@@ -962,6 +978,8 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
 {
   std::cout << "nb_key_t=" << nb_key_t << " nb_data_left_t=" << nb_data_left_t << " nb_data_right_t=" << nb_data_right_t << "\n";
   std::cout << "hash_join_table, step 1 is_left=" << is_left << " is_right=" << is_right << "\n";
+  std::cout << "IN_TABLE:\n";
+  PrintSetOfColumn(std::cout, in_table->columns);
   size_t nb_key = size_t(nb_key_t);
   size_t nb_data_left = size_t(nb_data_left_t);
   size_t nb_data_right = size_t(nb_data_right_t);
