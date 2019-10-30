@@ -160,7 +160,9 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
             for s in vals:
                 num_chars += get_utf8_size(s)
 
-        out_arr = bodo.libs.list_str_arr_ext.pre_alloc_list_string_array(l, num_strs, num_chars)
+        out_arr = bodo.libs.list_str_arr_ext.pre_alloc_list_string_array(
+            l, num_strs, num_chars
+        )
         # XXX helper functions to establish aliasing between array and pointer
         # TODO: fix aliasing for getattr
         index_offsets = bodo.libs.list_str_arr_ext.get_index_offset_ptr(out_arr)
@@ -176,7 +178,9 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
                 s = vals[k]
                 utf8_str, n_char = bodo.libs.str_ext.unicode_to_utf8_and_len(s)
                 data_offsets[curr_s_offset + k] = curr_d_offset
-                out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(out_arr._data, curr_d_offset)
+                out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(
+                    out_arr._data, curr_d_offset
+                )
                 bodo.libs.str_arr_ext._memcpy(out_ptr, utf8_str, n_char, 1)
                 curr_d_offset += n_char
             # set NA

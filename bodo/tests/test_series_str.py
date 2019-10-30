@@ -247,13 +247,11 @@ def test_isupper():
 
 @pytest.fixture(
     params=[
-        np.array([['a', 'bc'], ['a'], ['aaa', 'b', 'cc']] * 2),
+        np.array([["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2),
         # empty strings, empty lists, NA
-        np.array([['a', 'bc'], ['a'], [], ['aaa', '', 'cc'], [''], np.nan] * 2),
+        np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 2),
         # large array
-        np.array(
-            [['a', 'bc'], ['a'], [], ['aaa', '', 'cc'], [''], np.nan] * 1000
-        ),
+        np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 1000),
     ]
 )
 def list_str_arr_value(request):
@@ -291,9 +289,7 @@ def test_getitem_bool(list_str_arr_value):
     np.random.seed(0)
     ind = np.random.ranf(len(list_str_arr_value)) < 0.2
     # TODO: parallel test
-    _test_equal(
-        bodo_func(list_str_arr_value, ind), test_impl(list_str_arr_value, ind)
-    )
+    _test_equal(bodo_func(list_str_arr_value, ind), test_impl(list_str_arr_value, ind))
 
 
 def test_getitem_slice(list_str_arr_value):
@@ -303,15 +299,11 @@ def test_getitem_slice(list_str_arr_value):
     bodo_func = bodo.jit(test_impl)
     ind = slice(1, 4)
     # TODO: parallel test
-    _test_equal(
-        bodo_func(list_str_arr_value, ind), test_impl(list_str_arr_value, ind)
-    )
+    _test_equal(bodo_func(list_str_arr_value, ind), test_impl(list_str_arr_value, ind))
 
 
 def test_copy(list_str_arr_value):
     def test_impl(A):
         return A.copy()
 
-    _test_equal(
-        bodo.jit(test_impl)(list_str_arr_value), list_str_arr_value
-    )
+    _test_equal(bodo.jit(test_impl)(list_str_arr_value), list_str_arr_value)

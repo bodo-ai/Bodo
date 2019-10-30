@@ -29,7 +29,10 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.list_str_arr_ext import list_string_array_type, pre_alloc_list_string_array
+from bodo.libs.list_str_arr_ext import (
+    list_string_array_type,
+    pre_alloc_list_string_array,
+)
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.utils.utils import (
     debug_prints,
@@ -628,9 +631,9 @@ def gatherv(data, allgather=False):
             n_bytes = (n_loc + 7) >> 3
 
             for i in range(n_loc):
-                send_list_lens[i] = data._index_offsets[i+1] - data._index_offsets[i]
+                send_list_lens[i] = data._index_offsets[i + 1] - data._index_offsets[i]
             for j in range(n_all_strs):
-                send_str_lens[j] = data._data_offsets[j+1] - data._data_offsets[j]
+                send_str_lens[j] = data._data_offsets[j + 1] - data._data_offsets[j]
 
             recv_counts = gather_scalar(np.int32(n_loc), allgather)
             recv_counts_str = gather_scalar(np.int32(n_all_strs), allgather)
@@ -640,7 +643,9 @@ def gatherv(data, allgather=False):
             n_total_char = recv_counts_char.sum()
 
             # displacements
-            all_data = pre_alloc_list_string_array(0, 0, 0)  # dummy arrays on non-root PEs
+            all_data = pre_alloc_list_string_array(
+                0, 0, 0
+            )  # dummy arrays on non-root PEs
             displs = np.empty(1, np.int32)
             displs_str = np.empty(1, np.int32)
             displs_char = np.empty(1, np.int32)
@@ -649,7 +654,9 @@ def gatherv(data, allgather=False):
             tmp_null_bytes = np.empty(1, np.uint8)
 
             if rank == MPI_ROOT or allgather:
-                all_data = pre_alloc_list_string_array(n_total, n_total_str, n_total_char)
+                all_data = pre_alloc_list_string_array(
+                    n_total, n_total_str, n_total_char
+                )
                 displs = bodo.ir.join.calc_disp(recv_counts)
                 displs_str = bodo.ir.join.calc_disp(recv_counts_str)
                 displs_char = bodo.ir.join.calc_disp(recv_counts_char)
@@ -700,10 +707,15 @@ def gatherv(data, allgather=False):
             )
             dummy_use(data)  # needed?
 
-            convert_len_arr_to_offset(cptr_to_voidptr(all_data._data_offsets), n_total_str)
+            convert_len_arr_to_offset(
+                cptr_to_voidptr(all_data._data_offsets), n_total_str
+            )
             convert_len_arr_to_offset(cptr_to_voidptr(all_data._index_offsets), n_total)
             copy_gathered_null_bytes(
-                cptr_to_voidptr(all_data._null_bitmap), tmp_null_bytes, recv_counts_nulls, recv_counts
+                cptr_to_voidptr(all_data._null_bitmap),
+                tmp_null_bytes,
+                recv_counts_nulls,
+                recv_counts,
             )
             return all_data
 
@@ -726,7 +738,6 @@ def cptr_to_voidptr(typingctx, cptr_tp=None):
         return builder.bitcast(args[0], lir.IntType(8).as_pointer())
 
     return types.voidptr(cptr_tp), codegen
-
 
 
 # TODO: test

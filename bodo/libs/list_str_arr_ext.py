@@ -55,9 +55,13 @@ from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import hstr_ext
 
-ll.add_symbol("list_string_array_from_sequence", hstr_ext.list_string_array_from_sequence)
+ll.add_symbol(
+    "list_string_array_from_sequence", hstr_ext.list_string_array_from_sequence
+)
 ll.add_symbol("dtor_list_string_array", hstr_ext.dtor_list_string_array)
-ll.add_symbol("np_array_from_list_string_array", hstr_ext.np_array_from_list_string_array)
+ll.add_symbol(
+    "np_array_from_list_string_array", hstr_ext.np_array_from_list_string_array
+)
 ll.add_symbol("allocate_list_string_array", hstr_ext.allocate_list_string_array)
 
 
@@ -89,7 +93,9 @@ list_string_array_type = ListStringArrayType()
 
 class ListStringArrayPayloadType(types.Type):
     def __init__(self):
-        super(ListStringArrayPayloadType, self).__init__(name="ListStringArrayPayloadType()")
+        super(ListStringArrayPayloadType, self).__init__(
+            name="ListStringArrayPayloadType()"
+        )
 
 
 list_str_arr_payload_type = ListStringArrayPayloadType()
@@ -164,20 +170,21 @@ def unbox_str_series(typ, val, c):
     """
     Unbox a numpy array with list of string data values.
     """
-    payload = cgutils.create_struct_proxy(
-        list_str_arr_payload_type)(c.context, c.builder)
+    payload = cgutils.create_struct_proxy(list_str_arr_payload_type)(
+        c.context, c.builder
+    )
     list_string_array = c.context.make_helper(c.builder, typ)
 
     # function signature of list_string_array_from_sequence
     fnty = lir.FunctionType(
         lir.VoidType(),
         [
-            lir.IntType(8).as_pointer(),                    # obj
-            lir.IntType(64).as_pointer(),                   # num_items (pointer)
-            lir.IntType(8).as_pointer().as_pointer(),      # data
-            lir.IntType(32).as_pointer().as_pointer(),       # data_offsets
-            lir.IntType(32).as_pointer().as_pointer(),       # index_offsets
-            lir.IntType(8).as_pointer().as_pointer(),       # null_bitmap
+            lir.IntType(8).as_pointer(),  # obj
+            lir.IntType(64).as_pointer(),  # num_items (pointer)
+            lir.IntType(8).as_pointer().as_pointer(),  # data
+            lir.IntType(32).as_pointer().as_pointer(),  # data_offsets
+            lir.IntType(32).as_pointer().as_pointer(),  # index_offsets
+            lir.IntType(8).as_pointer().as_pointer(),  # null_bitmap
         ],
     )
     fn = c.builder.module.get_or_insert_function(
@@ -204,13 +211,19 @@ def unbox_str_series(typ, val, c):
     list_string_array.index_offsets = payload.index_offsets
     list_string_array.null_bitmap = payload.null_bitmap
     list_string_array.num_total_strings = c.builder.zext(
-        c.builder.load(c.builder.gep(list_string_array.index_offsets,
-        [list_string_array.num_items])),
+        c.builder.load(
+            c.builder.gep(
+                list_string_array.index_offsets, [list_string_array.num_items]
+            )
+        ),
         lir.IntType(64),
     )
     list_string_array.num_total_chars = c.builder.zext(
-        c.builder.load(c.builder.gep(list_string_array.data_offsets,
-        [list_string_array.num_total_strings])),
+        c.builder.load(
+            c.builder.gep(
+                list_string_array.data_offsets, [list_string_array.num_total_strings]
+            )
+        ),
         lir.IntType(64),
     )
 
@@ -228,11 +241,11 @@ def box_list_str_arr(typ, val, c):
     fnty = lir.FunctionType(
         c.context.get_argument_type(types.pyobject),
         [
-            lir.IntType(64),                # num_items
-            lir.IntType(8).as_pointer(),    # data
-            lir.IntType(32).as_pointer(),   # data_offsets
-            lir.IntType(32).as_pointer(),   # index_offsets
-            lir.IntType(8).as_pointer(),    # null_bitmap
+            lir.IntType(64),  # num_items
+            lir.IntType(8).as_pointer(),  # data
+            lir.IntType(32).as_pointer(),  # data_offsets
+            lir.IntType(32).as_pointer(),  # index_offsets
+            lir.IntType(8).as_pointer(),  # null_bitmap
         ],
     )
     fn_get = c.builder.module.get_or_insert_function(
@@ -264,9 +277,13 @@ def overload_list_str_arr_shape(A):
 
 
 @intrinsic
-def pre_alloc_list_string_array(typingctx, num_lists_typ, num_strs_typ, num_chars_typ=None):
-    assert isinstance(num_lists_typ, types.Integer) and isinstance(num_strs_typ, types.Integer) and isinstance(
-        num_chars_typ, types.Integer
+def pre_alloc_list_string_array(
+    typingctx, num_lists_typ, num_strs_typ, num_chars_typ=None
+):
+    assert (
+        isinstance(num_lists_typ, types.Integer)
+        and isinstance(num_strs_typ, types.Integer)
+        and isinstance(num_chars_typ, types.Integer)
     )
 
     def codegen(context, builder, sig, args):
@@ -380,8 +397,12 @@ def list_str_arr_getitem_array(arr, ind):
                     for jj in range(l_start_offset, l_end_offset):
                         out_arr._data_offsets[curr_s_offset + str_ind] = curr_d_offset
                         n_char = arr._data_offsets[jj + 1] - arr._data_offsets[jj]
-                        in_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(arr._data, arr._data_offsets[jj])
-                        out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(out_arr._data, curr_d_offset)
+                        in_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(
+                            arr._data, arr._data_offsets[jj]
+                        )
+                        out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(
+                            out_arr._data, curr_d_offset
+                        )
                         bodo.libs.str_arr_ext._memcpy(out_ptr, in_ptr, n_char, 1)
                         curr_d_offset += n_char
                         str_ind += 1
@@ -428,8 +449,12 @@ def list_str_arr_getitem_array(arr, ind):
                 for jj in range(l_start_offset, l_end_offset):
                     out_arr._data_offsets[curr_s_offset + str_ind] = curr_d_offset
                     n_char = arr._data_offsets[jj + 1] - arr._data_offsets[jj]
-                    in_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(arr._data, arr._data_offsets[jj])
-                    out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(out_arr._data, curr_d_offset)
+                    in_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(
+                        arr._data, arr._data_offsets[jj]
+                    )
+                    out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(
+                        out_arr._data, curr_d_offset
+                    )
                     bodo.libs.str_arr_ext._memcpy(out_ptr, in_ptr, n_char, 1)
                     curr_d_offset += n_char
                     str_ind += 1
@@ -445,7 +470,6 @@ def list_str_arr_getitem_array(arr, ind):
             return out_arr
 
         return impl_int
-
 
     # slice case
     if isinstance(ind, types.SliceType):
@@ -463,18 +487,34 @@ def list_str_arr_getitem_array(arr, ind):
 @overload_method(ListStringArrayType, "copy")
 def overload_list_str_arr_copy(A):
     from bodo.libs.distributed_api import cptr_to_voidptr
+
     def copy_impl(A):
         n_lists = A._num_items
         n_strs = A._num_total_strings
         n_chars = A._num_total_chars
         B = pre_alloc_list_string_array(n_lists, n_strs, n_chars)
         offset_typ_size = 4  # uint32 offsets
-        bodo.libs.str_arr_ext._memcpy(cptr_to_voidptr(B._index_offsets), cptr_to_voidptr(A._index_offsets), n_lists + 1, offset_typ_size)
-        bodo.libs.str_arr_ext._memcpy(cptr_to_voidptr(B._data_offsets), cptr_to_voidptr(A._data_offsets), n_strs + 1, offset_typ_size)
-        bodo.libs.str_arr_ext._memcpy(cptr_to_voidptr(B._data), cptr_to_voidptr(A._data), n_chars, 1)
+        bodo.libs.str_arr_ext._memcpy(
+            cptr_to_voidptr(B._index_offsets),
+            cptr_to_voidptr(A._index_offsets),
+            n_lists + 1,
+            offset_typ_size,
+        )
+        bodo.libs.str_arr_ext._memcpy(
+            cptr_to_voidptr(B._data_offsets),
+            cptr_to_voidptr(A._data_offsets),
+            n_strs + 1,
+            offset_typ_size,
+        )
+        bodo.libs.str_arr_ext._memcpy(
+            cptr_to_voidptr(B._data), cptr_to_voidptr(A._data), n_chars, 1
+        )
         n_bytes = (n_lists + 7) >> 3
-        bodo.libs.str_arr_ext._memcpy(cptr_to_voidptr(B._null_bitmap), cptr_to_voidptr(A._null_bitmap), n_bytes, 1)
+        bodo.libs.str_arr_ext._memcpy(
+            cptr_to_voidptr(B._null_bitmap), cptr_to_voidptr(A._null_bitmap), n_bytes, 1
+        )
         return B
+
     return copy_impl
 
 

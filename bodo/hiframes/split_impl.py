@@ -83,7 +83,6 @@ class StringArraySplitViewType(types.ArrayCompatible):
         # TODO: optimized list type
         return types.List(string_type)
 
-
     def copy(self):
         return StringArraySplitViewType()
 

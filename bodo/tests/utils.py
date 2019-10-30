@@ -179,7 +179,9 @@ def _test_equal_guard(
     return passed
 
 
-def _test_equal(bodo_out, py_out, sort_output=False, check_names=True, check_dtype=True):
+def _test_equal(
+    bodo_out, py_out, sort_output=False, check_names=True, check_dtype=True
+):
 
     if isinstance(py_out, pd.Series):
         if sort_output:
@@ -223,12 +225,16 @@ def _test_equal(bodo_out, py_out, sort_output=False, check_names=True, check_dty
         # also, does not handle nan in list of string arrays for some reason
         # using custom code instead
         if is_bool_object_series(py_out) or is_list_str_object_series(py_out):
-            assert is_bool_object_series(bodo_out) or is_list_str_object_series(bodo_out)
+            assert is_bool_object_series(bodo_out) or is_list_str_object_series(
+                bodo_out
+            )
             assert len(py_out) == len(bodo_out)
             for i in range(len(py_out)):
-                assert (isinstance(py_out[i], float) and np.isnan(py_out[i]) and np.isnan(bodo_out[i])) or py_out[
-                    i
-                ] == bodo_out[i]
+                assert (
+                    isinstance(py_out[i], float)
+                    and np.isnan(py_out[i])
+                    and np.isnan(bodo_out[i])
+                ) or py_out[i] == bodo_out[i]
         else:
             np.testing.assert_array_equal(bodo_out, py_out)
     elif isinstance(py_out, pd.arrays.IntegerArray):
@@ -252,7 +258,6 @@ def is_bool_object_series(S):
 def is_list_str_object_series(S):
     if isinstance(S, pd.Series):
         S = S.values
-    return (
-        S.dtype == np.dtype("O")
-        and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(S) == numba.types.List(numba.types.unicode_type)
-    )
+    return S.dtype == np.dtype("O") and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(
+        S
+    ) == numba.types.List(numba.types.unicode_type)
