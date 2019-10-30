@@ -104,6 +104,16 @@ struct str_arr_payload {
     uint8_t* null_bitmap;
 };
 
+
+// XXX: equivalent to payload data model in list_str_arr_ext.py
+struct list_str_arr_payload {
+    char* data;
+    uint32_t* data_offsets;
+    uint32_t* index_offsets;
+    uint8_t* null_bitmap;
+};
+
+
 // XXX: equivalent to payload data model in split_impl.py
 struct str_arr_split_view_payload {
     uint32_t* index_offsets;
@@ -116,9 +126,21 @@ void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in) {
     // printf("num chars: %d\n", in_str_arr->offsets[in_str_arr->size]);
     delete[] in_str_arr->offsets;
     delete[] in_str_arr->data;
-    if (in_str_arr->null_bitmap != nullptr) delete[] in_str_arr->null_bitmap;
+    if (in_str_arr->null_bitmap != nullptr)
+        delete[] in_str_arr->null_bitmap;
     return;
 }
+
+
+void dtor_list_string_array(list_str_arr_payload* in_list_str_arr, int64_t size, void* in) {
+    delete[] in_list_str_arr->data;
+    delete[] in_list_str_arr->data_offsets;
+    delete[] in_list_str_arr->index_offsets;
+    if (in_list_str_arr->null_bitmap != nullptr)
+        delete[] in_list_str_arr->null_bitmap;
+    return;
+}
+
 
 void allocate_string_array(uint32_t** offsets, char** data,
                            uint8_t** null_bitmap, int64_t num_strings,
@@ -139,6 +161,34 @@ void allocate_string_array(uint32_t** offsets, char** data,
     // *data = (char*) new std::string("gggg");
     return;
 }
+
+
+void allocate_list_string_array(char** data, uint32_t** data_offsets, uint32_t** index_offsets,
+                           uint8_t** null_bitmap, int64_t num_lists, int64_t num_strings,
+                           int64_t num_chars, int64_t extra_null_bytes) {
+    // std::cout << "allocating list string array: " << num_lists << " "<< num_strings << " " <<
+    //                                                 num_chars << std::endl;
+    *data = new char[num_chars];
+
+    *data_offsets = new uint32_t[num_strings + 1];
+    (*data_offsets)[0] = 0;
+    (*data_offsets)[num_strings] =
+        (uint32_t)num_chars;  // in case total chars is read from here
+
+    *index_offsets = new uint32_t[num_lists + 1];
+    (*index_offsets)[0] = 0;
+    (*index_offsets)[num_lists] =
+        (uint32_t)num_strings;  // in case total strings is read from here
+
+    // allocate nulls
+    int64_t n_bytes = (num_lists + sizeof(uint8_t) - 1) / sizeof(uint8_t) +
+                      extra_null_bytes;
+    *null_bitmap = new uint8_t[(size_t)n_bytes];
+    // set all bits to 1 indicating non-null as default
+    memset(*null_bitmap, -1, n_bytes);
+    return;
+}
+
 
 // copied from Arrow bit_util.h
 // Bitmask selecting the k-th bit in a byte
