@@ -725,24 +725,16 @@ def _gen_local_hash_join(left_key_names, right_key_names, left_other_names, righ
     if use_cpp_code:
         idx = 0
         for i, t in enumerate(left_other_names):
-            func_text += "    print(\"step 1\")\n"
             func_text += "    left_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,t)
-            func_text += "    print(\"step 2\")\n"
             idx += 1
         for i, t in enumerate(right_other_names):
-            func_text += "    print(\"step 3\")\n"
             func_text += "    right_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,t)
-            func_text += "    print(\"step 4\")\n"
             idx += 1
         for i, t in enumerate(left_key_names):
-            func_text += "    print(\"step 5\")\n"
             func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,t)
-            func_text += "    print(\"step 6\")\n"
             idx += 1
         for i, t in enumerate(right_key_names):
-            func_text += "    print(\"step 7\")\n"
             func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,t)
-            func_text += "    print(\"step 8\")\n"
             idx += 1
         func_text += "    delete_table(out_table)\n"
     return func_text
