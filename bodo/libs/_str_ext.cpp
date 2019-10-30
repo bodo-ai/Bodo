@@ -68,17 +68,17 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
                                 uint32_t** offset_table, char** buffer,
                                 uint8_t** null_bitmap);
 void list_string_array_from_sequence(PyObject* obj, int64_t* num_items,
-                                char** buffer, uint32_t** data_offset, uint32_t** index_offset,
-                                uint8_t** null_bitmap);
+                                     char** buffer, uint32_t** data_offset,
+                                     uint32_t** index_offset,
+                                     uint8_t** null_bitmap);
 void* np_array_from_string_array(int64_t no_strings,
                                  const uint32_t* offset_table,
                                  const char* buffer,
                                  const uint8_t* null_bitmap);
-void* np_array_from_list_string_array(int64_t num_items,
-                                const char* buffer,
-                                const uint32_t* data_offsets,
-                                const uint32_t* index_offsets,
-                                const uint8_t* null_bitmap);
+void* np_array_from_list_string_array(int64_t num_items, const char* buffer,
+                                      const uint32_t* data_offsets,
+                                      const uint32_t* index_offsets,
+                                      const uint8_t* null_bitmap);
 
 void setitem_string_array(uint32_t* offsets, char* data, int64_t n_bytes,
                           char* str, int64_t len, int kind, int is_ascii,
@@ -127,8 +127,10 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
                           int64_t n);
 void print_str_arr(uint64_t n, uint64_t n_chars, uint32_t* offsets,
                    uint8_t* data);
-void print_list_str_arr(uint64_t n, const char* data, const uint32_t* data_offsets, const uint32_t* index_offsets, const uint8_t* null_bitmap);
-
+void print_list_str_arr(uint64_t n, const char* data,
+                        const uint32_t* data_offsets,
+                        const uint32_t* index_offsets,
+                        const uint8_t* null_bitmap);
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject* m;
@@ -149,8 +151,9 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&dtor_string)));
     PyObject_SetAttrString(m, "dtor_string_array",
                            PyLong_FromVoidPtr((void*)(&dtor_string_array)));
-    PyObject_SetAttrString(m, "dtor_list_string_array",
-                           PyLong_FromVoidPtr((void*)(&dtor_list_string_array)));
+    PyObject_SetAttrString(
+        m, "dtor_list_string_array",
+        PyLong_FromVoidPtr((void*)(&dtor_list_string_array)));
     PyObject_SetAttrString(
         m, "dtor_str_arr_split_view",
         PyLong_FromVoidPtr((void*)(&dtor_str_arr_split_view)));
@@ -200,8 +203,9 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
         PyLong_FromVoidPtr((void*)(&np_array_from_list_string_array)));
     PyObject_SetAttrString(m, "allocate_string_array",
                            PyLong_FromVoidPtr((void*)(&allocate_string_array)));
-    PyObject_SetAttrString(m, "allocate_list_string_array",
-                           PyLong_FromVoidPtr((void*)(&allocate_list_string_array)));
+    PyObject_SetAttrString(
+        m, "allocate_list_string_array",
+        PyLong_FromVoidPtr((void*)(&allocate_list_string_array)));
     PyObject_SetAttrString(m, "setitem_string_array",
                            PyLong_FromVoidPtr((void*)(&setitem_string_array)));
     PyObject_SetAttrString(
@@ -779,28 +783,31 @@ void* np_array_from_string_array(int64_t no_strings,
 #undef CHECK
 }
 
-
 /**
- * @brief create a concatenated string, data_offset, and index_offset table from an array of lists of strings.
+ * @brief create a concatenated string, data_offset, and index_offset table from
+ * an array of lists of strings.
  *
- * @param obj Python Sequence object, intended to be an array of lists of strings.
- * @param num_items number of items (lists), value < 0 indicates indicates an error
+ * @param obj Python Sequence object, intended to be an array of lists of
+ * strings.
+ * @param num_items number of items (lists), value < 0 indicates indicates an
+ * error
  * @param buffer newly allocated buffer with concatenated strings, or NULL
  * @param data_offset newly allocated array of num_strings+1 integers
  * @param index_offset newly allocated array of num_items+1 integers
  * @param null_bitmap newly allocated bitmask for nulls
  */
 void list_string_array_from_sequence(PyObject* obj, int64_t* num_items,
-                                char** buffer, uint32_t** data_offset, uint32_t** index_offset,
-                                uint8_t** null_bitmap) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        if (index_offset_buff != NULL) {   \
-            delete[] index_offset_buff;    \
-        }                              \
-        return;                        \
+                                     char** buffer, uint32_t** data_offset,
+                                     uint32_t** index_offset,
+                                     uint8_t** null_bitmap) {
+#define CHECK(expr, msg)                 \
+    if (!(expr)) {                       \
+        std::cerr << msg << std::endl;   \
+        PyGILState_Release(gilstate);    \
+        if (index_offset_buff != NULL) { \
+            delete[] index_offset_buff;  \
+        }                                \
+        return;                          \
     }
 
     std::vector<uint32_t> data_offset_buff;
@@ -808,7 +815,8 @@ void list_string_array_from_sequence(PyObject* obj, int64_t* num_items,
 
     auto gilstate = PyGILState_Ensure();
 
-    if (num_items == NULL || buffer == NULL || data_offset == NULL || index_offset == NULL || null_bitmap == NULL) {
+    if (num_items == NULL || buffer == NULL || data_offset == NULL ||
+        index_offset == NULL || null_bitmap == NULL) {
         PyGILState_Release(gilstate);
         return;
     }
@@ -886,14 +894,17 @@ void list_string_array_from_sequence(PyObject* obj, int64_t* num_items,
     }
     index_offset_buff[n] = n_all_strs;
     data_offset_buff.push_back(n_chars);
-    CHECK(data_offset_buff.size() == (n_all_strs + 1), "invalid data offset size");
+    CHECK(data_offset_buff.size() == (n_all_strs + 1),
+          "invalid data offset size");
 
     *data_offset = new uint32_t[n_all_strs + 1];
-    memcpy(*data_offset, data_offset_buff.data(), (n_all_strs + 1) * sizeof(uint32_t));
+    memcpy(*data_offset, data_offset_buff.data(),
+           (n_all_strs + 1) * sizeof(uint32_t));
 
     char* outbuf = new char[n_chars];
     for (Py_ssize_t i = 0; i < n_all_strs; ++i) {
-        memcpy(outbuf + data_offset_buff[i], tmp_store[i], data_offset_buff[i + 1] - data_offset_buff[i]);
+        memcpy(outbuf + data_offset_buff[i], tmp_store[i],
+               data_offset_buff[i + 1] - data_offset_buff[i]);
     }
 
     PyGILState_Release(gilstate);
@@ -906,7 +917,6 @@ void list_string_array_from_sequence(PyObject* obj, int64_t* num_items,
 #undef CHECK
 }
 
-
 /**
  * @brief create a numpy array of lists of string objects from a ListStringArray
  *
@@ -917,11 +927,10 @@ void list_string_array_from_sequence(PyObject* obj, int64_t* num_items,
  * @param null_bitmap null bitmask
  * @return numpy array of list of string objects
  */
-void* np_array_from_list_string_array(int64_t num_items,
-                                const char* buffer,
-                                const uint32_t* data_offsets,
-                                const uint32_t* index_offsets,
-                                const uint8_t* null_bitmap){
+void* np_array_from_list_string_array(int64_t num_items, const char* buffer,
+                                      const uint32_t* data_offsets,
+                                      const uint32_t* index_offsets,
+                                      const uint8_t* null_bitmap) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -943,7 +952,6 @@ void* np_array_from_list_string_array(int64_t num_items,
     size_t curr_str = 0;
     // for each list item
     for (int64_t i = 0; i < num_items; ++i) {
-
         // set nan if item is NA
         auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
         CHECK(p, "getting offset in numpy array failed");
@@ -954,12 +962,14 @@ void* np_array_from_list_string_array(int64_t num_items,
         }
 
         // alloc list item
-        Py_ssize_t n_strs = (Py_ssize_t)(index_offsets[i + 1] - index_offsets[i]);
+        Py_ssize_t n_strs =
+            (Py_ssize_t)(index_offsets[i + 1] - index_offsets[i]);
         PyObject* l = PyList_New(n_strs);
 
         for (Py_ssize_t j = 0; j < n_strs; j++) {
             PyObject* s = PyUnicode_FromStringAndSize(
-                buffer + data_offsets[curr_str], data_offsets[curr_str + 1] - data_offsets[curr_str]);
+                buffer + data_offsets[curr_str],
+                data_offsets[curr_str + 1] - data_offsets[curr_str]);
             CHECK(s, "creating Python string/unicode object failed");
             err = PyList_SetItem(l, j, s);  // steals reference to s!
             CHECK(err == 0, "setting item in list failed");
@@ -977,7 +987,6 @@ void* np_array_from_list_string_array(int64_t num_items,
     return ret;
 #undef CHECK
 }
-
 
 // helper functions for call Numpy APIs
 npy_intp array_size(PyArrayObject* arr) {
@@ -1116,12 +1125,16 @@ void print_str_arr(uint64_t n, uint64_t n_chars, uint32_t* offsets,
     }
 }
 
-void print_list_str_arr(uint64_t n, const char* data, const uint32_t* data_offsets, const uint32_t* index_offsets, const uint8_t* null_bitmap) {
+void print_list_str_arr(uint64_t n, const char* data,
+                        const uint32_t* data_offsets,
+                        const uint32_t* index_offsets,
+                        const uint8_t* null_bitmap) {
     uint64_t n_strs = index_offsets[n];
     uint64_t n_chars = data_offsets[n_strs];
     printf("n: %lld n_strs: %lld n_chars: %lld\n", n, n_strs, n_chars);
     for (uint64_t i = 0; i < n; i++) {
-        printf("index_offsets: %u %u  lists:", index_offsets[i], index_offsets[i + 1]);
+        printf("index_offsets: %u %u  lists:", index_offsets[i],
+               index_offsets[i + 1]);
         for (uint64_t j = index_offsets[i]; j < index_offsets[i + 1]; j++) {
             for (uint64_t k = data_offsets[j]; k < data_offsets[j + 1]; k++)
                 printf("%c ", data[k]);
@@ -1130,7 +1143,6 @@ void print_list_str_arr(uint64_t n, const char* data, const uint32_t* data_offse
         printf("\n");
     }
 }
-
 
 // glob support
 void c_glob(uint32_t** offsets, char** data, uint8_t** null_bitmap,
