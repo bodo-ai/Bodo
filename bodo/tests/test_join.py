@@ -689,6 +689,7 @@ class TestJoin(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func().sort_values("C1").reset_index(drop=True), test_impl().sort_values("C1").reset_index(drop=True))
+#        pd.testing.assert_frame_equal(test_impl().sort_values("C1").reset_index(drop=True), test_impl().sort_values("C1").reset_index(drop=True))
 
     def test_join_cat2(self):
         # test setting NaN in categorical array
@@ -704,6 +705,45 @@ class TestJoin(unittest.TestCase):
             )
             df3 = df1.merge(df2, on="C1", how="right")
             print("20: df1=", df1, "\n  df2=", df2, "\n  df3=", df3)
+            return df3
+
+        bodo_func = bodo.jit(test_impl)
+#        check_func(test_impl, (df1, df2), sort_output=True)
+        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+
+    def test_join_cat3(self):
+        # test setting NaN in categorical array
+        fname = os.path.join("bodo", "tests", "data", "csv_data_cat3.csv")
+
+        def test_impl():
+            ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
+            dtypes = {"C1": np.int, "C2": ct_dtype}
+            df1 = pd.read_csv(fname, names=["C1", "C2"], dtype=dtypes)
+            n = len(df1)
+            df2 = pd.DataFrame(
+                {"C1": 2 * np.arange(n) + 1, "AAA": n + np.arange(n) + 1.0}
+            )
+            df3 = df1.merge(df2, on="C1", how="right")
+            print("21: df1=", df1, "\n  df2=", df2, "\n  df3=", df3)
+            return df3
+
+        bodo_func = bodo.jit(test_impl)
+#        check_func(test_impl, (df1, df2), sort_output=True)
+        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+
+    def test_join_cat4(self):
+        # test setting NaN in categorical array
+        fname = os.path.join("bodo", "tests", "data", "csv_data_cat4.csv")
+
+        def test_impl():
+            dtypes = {"C1": np.int, "C2": str}
+            df1 = pd.read_csv(fname, names=["C1", "C2"], dtype=dtypes)
+            n = len(df1)
+            df2 = pd.DataFrame(
+                {"C1": 2 * np.arange(n) + 1, "AAA": n + np.arange(n) + 1.0}
+            )
+            df3 = df1.merge(df2, on="C1", how="right")
+            print("21: df1=", df1, "\n  df2=", df2, "\n  df3=", df3)
             return df3
 
         bodo_func = bodo.jit(test_impl)

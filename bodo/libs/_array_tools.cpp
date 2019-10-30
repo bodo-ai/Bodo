@@ -781,6 +781,160 @@ std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype)
 }
 
 
+std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype, char* ptrdata)
+{
+  if (dtype == Bodo_CTypes::INT8) {
+    int8_t* ptr = (int8_t*)ptrdata;
+    return std::to_string(*ptr);
+  }
+  if (dtype == Bodo_CTypes::UINT8) {
+    uint8_t* ptr = (uint8_t*)ptrdata;
+    return std::to_string(*ptr);
+  }
+  if (dtype == Bodo_CTypes::INT16) {
+    int16_t* ptr = (int16_t*)ptrdata;
+    return std::to_string(*ptr);
+  }
+  if (dtype == Bodo_CTypes::UINT16) {
+    uint16_t* ptr = (uint16_t*)ptrdata;
+    return std::to_string(*ptr);
+  }
+  //
+  if (dtype == Bodo_CTypes::INT32) {
+    int32_t* ptr = (int32_t*)ptrdata;
+    return std::to_string(*ptr);
+  }
+  if (dtype == Bodo_CTypes::UINT32) {
+    uint32_t* ptr = (uint32_t*)ptrdata;
+    return std::to_string(*ptr);
+  }
+  if (dtype == Bodo_CTypes::INT64) {
+    int64_t* ptr = (int64_t*)ptrdata;
+    return std::to_string(*ptr);
+  }
+  if (dtype == Bodo_CTypes::UINT64) {
+    uint64_t* ptr = (uint64_t*)ptrdata;
+    return std::to_string(*ptr);
+  }
+  //
+  if (dtype == Bodo_CTypes::FLOAT32) {
+    float* ptr = (float*)ptrdata;
+    return std::to_string(*ptr);
+  }
+  if (dtype == Bodo_CTypes::FLOAT64) {
+    double* ptr = (double*)ptrdata;
+    return std::to_string(*ptr);
+  }
+  return "no matching type";
+}
+
+
+std::vector<std::string> PrintColumn(array_info* arr)
+{
+  size_t nbRow=arr->length;
+  std::vector<std::string> ListStr(nbRow);
+  std::string strOut;
+  if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+    uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+    uint64_t siztype = get_item_size(arr->dtype);
+    for (size_t iRow=0; iRow<nbRow; iRow++) {
+      bool bit=GetBit(null_bitmask, iRow);
+      if (bit) {
+        char* ptrdata1 = &(arr->data1[siztype*iRow]);
+        strOut = GetStringExpression(arr->dtype, ptrdata1);
+      }
+      else {
+        strOut="false";
+      }
+      ListStr[iRow] = strOut;
+    }
+  }
+  if (arr->arr_type == bodo_array_type::NUMPY) {
+    uint64_t siztype = get_item_size(arr->dtype);
+    for (size_t iRow=0; iRow<nbRow; iRow++) {
+      char* ptrdata1 = &(arr->data1[siztype*iRow]);
+      strOut = GetStringExpression(arr->dtype, ptrdata1);
+      ListStr[iRow] = strOut;
+    }
+  }
+  if (arr->arr_type == bodo_array_type::STRING) {
+    uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+    uint32_t* data2 = (uint32_t*)arr->data2;
+    char* data1 = arr->data1;
+    for (size_t iRow=0; iRow<nbRow; iRow++) {
+      bool bit=GetBit(null_bitmask, iRow);
+      if (bit) {
+        uint32_t start_pos = data2[iRow];
+        uint32_t end_pos   = data2[iRow+1];
+        uint32_t len = end_pos - start_pos;
+        char* strname;
+        strname = new char[len+1];
+        for (uint32_t i=0; i<len; i++) {
+          strname[i] = data1[start_pos + i];
+        }
+        strname[len] = '\0';
+        strOut = strname;
+        delete [] strname;
+      }
+      else {
+        strOut="false";
+      }
+      ListStr[iRow] = strOut;
+    }
+  }
+  return ListStr;
+}
+
+void PrintSetOfColumn(std::ostream & os, std::vector<array_info*> const& ListArr)
+{
+  std::vector<std::vector<std::string>> ListListStr;
+  for (auto & arr : ListArr)
+    ListListStr.push_back(PrintColumn(arr));
+  int nbRow=ListListStr[0].size();
+  std::vector<std::string> ListStrOut(nbRow);
+  for (int iRow=0; iRow<nbRow; iRow++) {
+    std::string str = std::to_string(iRow) + " :";
+    ListStrOut[iRow]=str;
+  }
+  for (int iCol=0; iCol<int(ListArr.size()); iCol++) {
+    std::vector<int> ListLen(nbRow);
+    size_t maxlen=0;
+    for (int iRow=0; iRow<nbRow; iRow++) {
+      size_t elen = ListListStr[iCol][iRow].size();
+      ListLen[iRow] = elen;
+      if (elen > maxlen)
+        maxlen = elen;
+    }
+    for (int iRow=0; iRow<nbRow; iRow++) {
+      std::string str = ListStrOut[iRow] + " " + ListListStr[iCol][iRow];
+      size_t diff = maxlen - ListLen[iRow];
+      for (size_t u=0; u<diff; u++)
+        str += " ";
+      ListStrOut[iRow] = str;
+    }
+  }
+  for (int iRow=0; iRow<nbRow; iRow++)
+    os << ListStrOut[iRow] << "\n";
+}
+
+
+void PrintRefct(std::ostream &os, std::vector<array_info*> const& ListArr)
+{
+  int nbCol=ListArr.size();
+  for (int iCol=0; iCol<nbCol; iCol++) {
+    if (ListArr[iCol]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+      os << "iCol=" << iCol << " : NULLABLE : refct1=" << ListArr[iCol]->meminfo->refct << " refct2=" << ListArr[iCol]->meminfo_bitmask->refct << "\n";
+    }
+    if (ListArr[iCol]->arr_type == bodo_array_type::NUMPY) {
+      os << "iCol=" << iCol << " : NUMPY : refct1=" << ListArr[iCol]->meminfo->refct << "\n";
+    }
+    if (ListArr[iCol]->arr_type == bodo_array_type::STRING) {
+      os << "iCol=" << iCol << " : STRING : refct1=" << ListArr[iCol]->meminfo->refct << " refct2=" << ListArr[iCol]->meminfo_bitmask->refct << "\n";
+    }
+  }
+}
+
+
 
 /*
   This implementation follows the Shared partition procedure.
@@ -1097,7 +1251,15 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
 
   std::cout << "hash_join_table, step 7 nbRowOut=" << nbRowOut << "\n";
   //
+  // This function uses the combinatorial information computed in the "ListPairWrite"
+  // array.
+  // The other arguments shift1, shift2 and ChoiceColumn are for the choice of column
+  // ---For inserting a left data,  call (i+2*nb_key, -1                        , 0)
+  // ---For inserting a right data, call (-1        ,  i+2*nb_key + nb_data_left, 1)
+  // ---For the key, we need to put both the left and right key column (shift1, shift2)
+  //    and ChoiceColumn = 2
   //
+  // The code considers all the cases in turn and creates the new array from it.
   //
   auto RetrieveArray = [&](size_t const& shift1, size_t const& shift2, int const& ChoiceColumn) -> array_info* {
     std::cout << "--------------------------------------------------------------\n";
@@ -1133,6 +1295,7 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
           uint32_t start_offset = in_offsets[epair.second];
           size = end_offset - start_offset;
         }
+        std::cout << "iRow=" << iRow << " size=" << size << "\n";
         ListSizes[iRow] = size;
         n_chars += size;
       }
@@ -1149,6 +1312,7 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
         std::pair<size_t,std::ptrdiff_t> epair=get_iRow(iRow);
         uint32_t size = ListSizes[iRow];
         out_offsets[iRow] = pos;
+        std::cout << "  iRow=" << iRow << " size=" << size << " pos=" << pos << " epair.second=" << epair.second << "\n";
         bool bit=false;
         if (epair.second >= 0) {
           uint8_t* in_null_bitmask = (uint8_t*)in_table->columns[epair.first]->null_bitmask;
@@ -1160,10 +1324,12 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
             start_offset++;
           }
           bit = GetBit(in_null_bitmask, epair.second);
+          std::cout << "    bit=" << bit << "\n";
         }
+        std::cout << "  iRow=" << iRow << " bit=" << bit << "\n";
         SetBitTo(out_null_bitmask, iRow, bit);
       }
-      std::cout << "RetrieveArray, step 2.4\n";
+      std::cout << "RetrieveArray, step 2.4 pos=" << pos << "\n";
       out_offsets[nbRowOut] = pos;
       std::cout << "RetrieveArray, step 2.5\n";
       return out_arr;
@@ -1189,29 +1355,29 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
       }
       return out_arr;
     }
-    //
-    // NUMPY case
-    std::cout << "RetrieveArray, step 4\n";
-    array_info* out_arr = alloc_array(nbRowOut, -1,
-                                      in_table->columns[eshift]->arr_type,
-                                      in_table->columns[eshift]->dtype, 0);
-    uint64_t siztype = get_item_size(in_table->columns[eshift]->dtype);
-    std::cout << "siztype=" << siztype << "\n";
-    std::vector<char> vectNaN = RetrieveNaNentry(in_table->columns[eshift]->dtype);
-    for (size_t iRow=0; iRow<nbRowOut; iRow++) {
-      std::pair<size_t,std::ptrdiff_t> epair=get_iRow(iRow);
-      std::cout << "iRow=" << iRow << " epair=" << epair.first << " , " << epair.second << "\n";
-      //
-      if (epair.second >= 0) {
-        for (uint64_t u=0; u<siztype; u++)
-          out_arr->data1[siztype*iRow + u] = in_table->columns[epair.first]->data1[siztype*epair.second + u];
+    if (in_table->columns[eshift]->arr_type == bodo_array_type::NUMPY) {
+      std::cout << "RetrieveArray, step 4\n";
+      array_info* out_arr = alloc_array(nbRowOut, -1,
+                                        in_table->columns[eshift]->arr_type,
+                                        in_table->columns[eshift]->dtype, 0);
+      uint64_t siztype = get_item_size(in_table->columns[eshift]->dtype);
+      std::cout << "siztype=" << siztype << "\n";
+      std::vector<char> vectNaN = RetrieveNaNentry(in_table->columns[eshift]->dtype);
+      for (size_t iRow=0; iRow<nbRowOut; iRow++) {
+        std::pair<size_t,std::ptrdiff_t> epair=get_iRow(iRow);
+        std::cout << "iRow=" << iRow << " epair=" << epair.first << " , " << epair.second << "\n";
+        //
+        if (epair.second >= 0) {
+          for (uint64_t u=0; u<siztype; u++)
+            out_arr->data1[siztype*iRow + u] = in_table->columns[epair.first]->data1[siztype*epair.second + u];
+        }
+        else {
+          for (uint64_t u=0; u<siztype; u++)
+            out_arr->data1[siztype*iRow + u] = vectNaN[u];
+        }
       }
-      else {
-        for (uint64_t u=0; u<siztype; u++)
-          out_arr->data1[siztype*iRow + u] = vectNaN[u];
-      }
+      return out_arr;
     }
-    return out_arr;
   };
   std::cout << "hash_join_table, step 8\n";
   std::cout << "nb_key=" << nb_key << " nb_data_left=" << nb_data_left << " nb_data_right=" << nb_data_right << "\n";
@@ -1219,44 +1385,35 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
     std::cout << "2: i=" << i << " siztype=" << get_item_size(in_table->columns[i]->dtype) << "\n";
   
   std::vector<array_info*> out_arrs;
-  for (size_t i=0; i<nb_data_left; i++)
+  for (size_t i=0; i<nb_data_left; i++) {
+    std::cout << "1: i=" << i << "\n";
     out_arrs.push_back(RetrieveArray(i + 2*nb_key, -1, 0));
+  }
   std::cout << "hash_join_table, step 9\n";
   for (size_t i=0; i<nb_data_right; i++) {
-    std::cout << "  i=" << i << "\n";
+    std::cout << "2: i=" << i << "\n";
     out_arrs.push_back(RetrieveArray(-1, i + 2*nb_key + nb_data_left, 1));
   }
   std::cout << "hash_join_table, step 10\n";
-  for (size_t i=0; i<nb_key; i++)
+  for (size_t i=0; i<nb_key; i++) {
+    std::cout << "3: i=" << i << "\n";
     out_arrs.push_back(RetrieveArray(i, i+nb_key, 2));
+  }
   std::cout << "hash_join_table, step 11\n";
-  for (size_t i=0; i<nb_key; i++)
+  for (size_t i=0; i<nb_key; i++) {
+    std::cout << "4: i=" << i << "\n";
     out_arrs.push_back(RetrieveArray(i, i+nb_key, 2));
+  }
   std::cout << "hash_join_table, step 12\n";
+  PrintSetOfColumn(std::cout, out_arrs);
+  //  PrintRefct(std::cout, out_arrs);
+  std::cout << "hash_join_table, step 13\n";
   //
   delete[] hashes_left;
   delete[] hashes_right;
   return new table_info(out_arrs);
 }
 
-/*
-table_info* hash_fct1(table_info* key_left, bool const& is_right)
-{
-  return key_left;
-}
-
-
-table_info* hash_fct2(table_info* key_left, int64_t n_keys)
-{
-  return key_left;
-}
-
-
-table_info* hash_fct3(table_info* key_left, table_info* key_right)
-{
-  return key_left;
-}
-*/
 
 
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
@@ -1300,13 +1457,5 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                            PyLong_FromVoidPtr((void*)(&shuffle_table)));
     PyObject_SetAttrString(m, "hash_join_table",
                            PyLong_FromVoidPtr((void*)(&hash_join_table)));
-    /*
-    PyObject_SetAttrString(m, "hash_fct1",
-                           PyLong_FromVoidPtr((void*)(&hash_fct1)));
-    PyObject_SetAttrString(m, "hash_fct2",
-                           PyLong_FromVoidPtr((void*)(&hash_fct2)));
-    PyObject_SetAttrString(m, "hash_fct3",
-                           PyLong_FromVoidPtr((void*)(&hash_fct3)));
-    */
     return m;
 }
