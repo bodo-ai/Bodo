@@ -499,3 +499,30 @@ def remove_str_arr(rhs, lives, call_list):
 
 
 numba.ir_utils.remove_call_handlers.append(remove_str_arr)
+
+
+# XXX helper functions to establish aliasing between array and pointer
+# TODO: fix getattr aliasing
+# TODO: remove dead for these calls
+@numba.njit
+def get_index_offset_ptr(A):
+    return A._index_offsets
+
+
+@numba.njit
+def get_data_offset_ptr(A):
+    return A._data_offsets
+
+
+def alias_ext_ptr(lhs_name, args, alias_map, arg_aliases):
+    assert len(args) == 1
+    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+
+
+numba.ir_utils.alias_func_extensions[
+    ("get_index_offset_ptr", "bodo.libs.list_str_arr_ext")
+] = alias_ext_ptr
+
+numba.ir_utils.alias_func_extensions[
+    ("get_data_offset_ptr", "bodo.libs.list_str_arr_ext")
+] = alias_ext_ptr

@@ -75,6 +75,10 @@ class StringArraySplitViewType(types.ArrayCompatible):
         )
 
     @property
+    def as_array(self):
+        return types.Array(types.undefined, 1, "C")
+
+    @property
     def dtype(self):
         # TODO: optimized list type
         return types.List(string_type)
@@ -415,6 +419,11 @@ def get_split_view_data_ptr(arr, data_start):
 def str_arr_split_view_len_overload(arr):
     if arr == string_array_split_view_type:
         return lambda arr: np.int64(arr._num_items)
+
+
+@overload_attribute(StringArraySplitViewType, "shape")
+def overload_split_view_arr_shape(A):
+    return lambda A: (np.int64(A._num_items),)
 
 
 # @infer_global(operator.getitem)
