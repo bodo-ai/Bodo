@@ -462,17 +462,18 @@ def list_str_arr_getitem_array(arr, ind):
 
 @overload_method(ListStringArrayType, "copy")
 def overload_list_str_arr_copy(A):
+    from bodo.libs.distributed_api import cptr_to_voidptr
     def copy_impl(A):
         n_lists = A._num_items
         n_strs = A._num_total_strings
         n_chars = A._num_total_chars
         B = pre_alloc_list_string_array(n_lists, n_strs, n_chars)
         offset_typ_size = 4  # uint32 offsets
-        bodo.libs.str_arr_ext._memcpy(B._index_offsets, A._index_offsets, n_lists + 1, offset_typ_size)
-        bodo.libs.str_arr_ext._memcpy(B._data_offsets, A._data_offsets, n_strs + 1, offset_typ_size)
-        bodo.libs.str_arr_ext._memcpy(B._data, A._data, n_chars, 1)
+        bodo.libs.str_arr_ext._memcpy(cptr_to_voidptr(B._index_offsets), cptr_to_voidptr(A._index_offsets), n_lists + 1, offset_typ_size)
+        bodo.libs.str_arr_ext._memcpy(cptr_to_voidptr(B._data_offsets), cptr_to_voidptr(A._data_offsets), n_strs + 1, offset_typ_size)
+        bodo.libs.str_arr_ext._memcpy(cptr_to_voidptr(B._data), cptr_to_voidptr(A._data), n_chars, 1)
         n_bytes = (n_lists + 7) >> 3
-        bodo.libs.str_arr_ext._memcpy(B._null_bitmap, A._null_bitmap, n_bytes, 1)
+        bodo.libs.str_arr_ext._memcpy(cptr_to_voidptr(B._null_bitmap), cptr_to_voidptr(A._null_bitmap), n_bytes, 1)
         return B
     return copy_impl
 
