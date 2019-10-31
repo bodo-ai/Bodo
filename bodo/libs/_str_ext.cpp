@@ -11,15 +11,6 @@
 
 #include "_str_decode.cpp"
 
-#ifdef USE_BOOST_REGEX
-#include <boost/regex.hpp>
-using boost::regex;
-using boost::regex_search;
-#else
-#include <regex>
-using std::regex;
-using std::regex_search;
-#endif
 
 #include <boost/lexical_cast.hpp>
 
@@ -99,12 +90,7 @@ int str_arr_to_int64(int64_t* out, uint32_t* offsets, char* data,
                      int64_t index);
 int str_arr_to_float64(double* out, uint32_t* offsets, char* data,
                        int64_t index);
-void* compile_regex(std::string* pat);
-bool str_contains_regex(std::string* str, regex* e);
-bool str_contains_noregex(std::string* str, std::string* pat);
-std::string* str_replace_regex(std::string* str, regex* e, std::string* val);
-std::string* str_replace_noregex(std::string* str, std::string* pat,
-                                 std::string* val);
+
 char get_char_from_string(std::string* str, int64_t index);
 
 void* str_from_int32(int in);
@@ -570,37 +556,6 @@ int64_t str_to_int64(char* data, int64_t length) {
     return -1;
 }
 
-void* compile_regex(std::string* pat) {
-    // printf("compiling\n");
-    // regex rr2("3");
-    // printf("1 compiling\n");
-    // regex * rr = new regex(*pat);
-    // printf("done compiling\n");
-    return new regex(*pat);
-}
-
-bool str_contains_regex(std::string* str, regex* e) {
-    // printf("regex matching\n");
-    // regex e(*pat);
-    // return regex_search(*str, e, regex_constants::match_any);
-    return regex_search(*str, *e);
-}
-
-bool str_contains_noregex(std::string* str, std::string* pat) {
-    return (str->find(*pat) != std::string::npos);
-}
-
-std::string* str_replace_regex(std::string* str, regex* e, std::string* val) {
-    return new std::string(regex_replace(*str, *e, *val));
-}
-
-std::string* str_replace_noregex(std::string* str, std::string* pat,
-                                 std::string* val) {
-    std::string* out = new std::string(*str);
-    boost::replace_all(*out, *pat, *val);
-    // std::cout << *out << std::endl;
-    return out;
-}
 
 void print_str(std::string* str) {
     std::cout << *str;

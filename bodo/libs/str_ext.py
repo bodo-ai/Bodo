@@ -415,11 +415,6 @@ ll.add_symbol("str_to_int64", hstr_ext.str_to_int64)
 ll.add_symbol("std_str_to_int64", hstr_ext.std_str_to_int64)
 ll.add_symbol("str_to_float64", hstr_ext.str_to_float64)
 ll.add_symbol("get_str_len", hstr_ext.get_str_len)
-ll.add_symbol("compile_regex", hstr_ext.compile_regex)
-ll.add_symbol("str_contains_regex", hstr_ext.str_contains_regex)
-ll.add_symbol("str_contains_noregex", hstr_ext.str_contains_noregex)
-ll.add_symbol("str_replace_regex", hstr_ext.str_replace_regex)
-ll.add_symbol("str_replace_noregex", hstr_ext.str_replace_noregex)
 ll.add_symbol("str_from_int32", hstr_ext.str_from_int32)
 ll.add_symbol("str_from_int64", hstr_ext.str_from_int64)
 ll.add_symbol("str_from_float32", hstr_ext.str_from_float32)
@@ -434,14 +429,6 @@ init_string_from_chars = types.ExternalFunction(
 
 _str_to_int64 = types.ExternalFunction(
     "str_to_int64", signature(types.intp, types.voidptr, types.intp)
-)
-
-str_replace_regex = types.ExternalFunction(
-    "str_replace_regex", std_str_type(std_str_type, regex_type, std_str_type)
-)
-
-str_replace_noregex = types.ExternalFunction(
-    "str_replace_noregex", std_str_type(std_str_type, std_str_type, std_str_type)
 )
 
 
@@ -557,6 +544,13 @@ def string_from_impl(context, builder, sig, args):
     fn = builder.module.get_or_insert_function(fnty, name="str_from_" + str(in_typ))
     std_str = builder.call(fn, args)
     return gen_std_str_to_unicode(context, builder, std_str)
+
+
+@lower_cast(StdStringType, types.float64)
+def cast_str_to_float64(context, builder, fromty, toty, val):
+    fnty = lir.FunctionType(lir.DoubleType(), [lir.IntType(8).as_pointer()])
+    fn = builder.module.get_or_insert_function(fnty, name="str_to_float64")
+    return builder.call(fn, (val,))
 
 
 # XXX handle unicode until Numba supports float(str)
