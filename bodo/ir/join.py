@@ -733,7 +733,7 @@ def _gen_local_hash_join(left_key_names, right_key_names, left_key_types, right_
             func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), t1_keys[{}]){}\n".format(i,idx,i,_gen_reverse_type_match(left_key_types[i], right_key_types[i]))
             idx += 1
         for i, t in enumerate(right_key_names):
-            func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), {}){}\n".format(i,idx,t,_gen_reverse_type_match(right_key_types[i], left_key_types[i]))
+            func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), t2_keys[{}]){}\n".format(i,idx,i,_gen_reverse_type_match(right_key_types[i], left_key_types[i]))
             idx += 1
         func_text += "    delete_table(out_table)\n"
     return func_text
