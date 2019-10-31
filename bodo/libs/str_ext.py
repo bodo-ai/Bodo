@@ -318,24 +318,24 @@ def unicode_to_utf8_and_len(typingctx, str_typ=None):
 #######################  type for std string pointer  ########################
 
 
-class StringType(types.Opaque, types.Hashable):
+class StdStringType(types.Opaque, types.Hashable):
     def __init__(self):
-        super(StringType, self).__init__(name="StringType")
+        super(StdStringType, self).__init__(name="StdStringType")
 
 
-std_str_type = StringType()
+std_str_type = StdStringType()
 
 # XXX enabling this turns on old std::string implementation
-# string_type = StringType()
+# string_type = StdStringType()
 
 # @typeof_impl.register(str)
 # def _typeof_str(val, c):
 #     return string_type
 
 
-register_model(StringType)(models.OpaqueModel)
+register_model(StdStringType)(models.OpaqueModel)
 
-# XXX: should be subtype of StringType?
+# XXX: should be subtype of StdStringType?
 class CharType(types.Type):
     def __init__(self):
         super(CharType, self).__init__(name="CharType")
@@ -359,7 +359,7 @@ def char_getitem_overload(_str, ind):
 
 
 # XXX: fix overload for getitem and use it
-@lower_builtin(operator.getitem, StringType, types.Integer)
+@lower_builtin(operator.getitem, StdStringType, types.Integer)
 def getitem_string(context, builder, sig, args):
     fnty = lir.FunctionType(
         lir.IntType(8), [lir.IntType(8).as_pointer(), lir.IntType(64)]
@@ -387,12 +387,12 @@ _hash_str = types.ExternalFunction("_hash_str", types.int64(std_str_type))
 get_c_str = types.ExternalFunction("get_c_str", types.voidptr(std_str_type))
 
 
-@overload_method(StringType, "c_str")
+@overload_method(StdStringType, "c_str")
 def str_c_str(str_typ):
     return lambda s: get_c_str(s)
 
 
-@overload_method(StringType, "join")
+@overload_method(StdStringType, "join")
 def str_join(str_typ, iterable_typ):
     # TODO: more efficient implementation (e.g. C++ string buffer)
     def str_join_impl(sep_str, str_container):
@@ -451,7 +451,7 @@ class StringOpEq(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         (arg1, arg2) = args
-        if isinstance(arg1, StringType) and isinstance(arg2, StringType):
+        if isinstance(arg1, StdStringType) and isinstance(arg2, StdStringType):
             return signature(types.boolean, arg1, arg2)
         if arg1 == char_type and arg2 == char_type:
             return signature(types.boolean, arg1, arg2)
@@ -484,7 +484,7 @@ class StringOpLT(StringOpEq):
 
 @infer_getattr
 class StringAttribute(AttributeTemplate):
-    key = StringType
+    key = StdStringType
 
     @bound_function("str.split")
     def resolve_split(self, dict, args, kws):
@@ -499,7 +499,7 @@ class StringAttribute(AttributeTemplate):
 #
 #     def generic(self, args, kws):
 #         assert not kws
-#         if (len(args) == 2 and isinstance(args[0], StringType)
+#         if (len(args) == 2 and isinstance(args[0], StdStringType)
 #                 and isinstance(args[1], types.Integer)):
 #             return signature(args[0], *args)
 
@@ -526,7 +526,7 @@ def int_str_overload(in_str):
 #     def generic(self, args, kws):
 #         assert not kws
 #         [arg] = args
-#         if isinstance(arg, StringType):
+#         if isinstance(arg, StdStringType):
 #             return signature(types.intp, arg)
 #         # TODO: implement int(str) in Numba
 #         if arg == string_type:
@@ -538,7 +538,7 @@ class StrToFloat(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         [arg] = args
-        if isinstance(arg, StringType):
+        if isinstance(arg, StdStringType):
             return signature(types.float64, arg)
         # TODO: implement int(str) in Numba
         if arg == string_type:
@@ -758,7 +758,7 @@ def alloc_list_list_str(typingctx, n_t=None):
     return list_string_array_type(types.intp), codegen
 
 
-@unbox(StringType)
+@unbox(StdStringType)
 def unbox_string(typ, obj, c):
     """
     """
@@ -773,7 +773,7 @@ def unbox_string(typ, obj, c):
     return NativeValue(ret, is_error=c.builder.not_(ok))
 
 
-@box(StringType)
+@box(StdStringType)
 def box_str(typ, val, c):
     """
     """
@@ -796,7 +796,7 @@ def type_string_getpointer(context):
     return typer
 
 
-@lower_builtin(getpointer, StringType)
+@lower_builtin(getpointer, StdStringType)
 def getpointer_from_string(context, builder, sig, args):
     val = args[0]
     fnty = lir.FunctionType(lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer()])
@@ -811,7 +811,7 @@ def getpointer_from_string_literal(context, builder, sig, args):
     return cstr
 
 
-@lower_cast(StringType, types.StringLiteral)
+@lower_cast(StdStringType, types.StringLiteral)
 def string_type_to_const(context, builder, fromty, toty, val):
     # calling str() since the const value can be non-str like tuple const (CSV)
     cstr = context.insert_const_string(builder.module, str(toty.literal_value))
@@ -831,7 +831,7 @@ def string_type_to_const(context, builder, fromty, toty, val):
     return impl_ret_untracked(context, builder, toty, cstr)
 
 
-@lower_constant(StringType)
+@lower_constant(StdStringType)
 def const_string(context, builder, ty, pyval):
     cstr = context.insert_const_string(builder.module, pyval)
     length = context.get_constant(types.intp, len(pyval))
@@ -844,7 +844,7 @@ def const_string(context, builder, ty, pyval):
     return ret
 
 
-@lower_cast(types.StringLiteral, StringType)
+@lower_cast(types.StringLiteral, StdStringType)
 def const_to_string_type(context, builder, fromty, toty, val):
     cstr = context.insert_const_string(builder.module, fromty.literal_value)
     length = context.get_constant(types.intp, len(fromty.literal_value))
@@ -991,7 +991,7 @@ def string_split_impl(context, builder, sig, args):
     return impl_ret_new_ref(context, builder, sig.return_type, _list.value)
 
 
-# @lower_builtin(operator.getitem, StringType, types.Integer)
+# @lower_builtin(operator.getitem, StdStringType, types.Integer)
 # def getitem_string(context, builder, sig, args):
 #     fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
 #                             [lir.IntType(8).as_pointer(), lir.IntType(64)])
@@ -1001,7 +1001,7 @@ def string_split_impl(context, builder, sig, args):
 #     return (builder.call(fn, args))
 
 
-@lower_cast(StringType, types.int64)
+@lower_cast(StdStringType, types.int64)
 def cast_str_to_int64(context, builder, fromty, toty, val):
     fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(8).as_pointer()])
     fn = builder.module.get_or_insert_function(fnty, name="std_str_to_int64")
@@ -1015,7 +1015,7 @@ def cast_str_to_int64(context, builder, fromty, toty, val):
 #     return cast_str_to_int64(context, builder, std_str_type, toty, std_str)
 
 
-@lower_cast(StringType, types.float64)
+@lower_cast(StdStringType, types.float64)
 def cast_str_to_float64(context, builder, fromty, toty, val):
     fnty = lir.FunctionType(lir.DoubleType(), [lir.IntType(8).as_pointer()])
     fn = builder.module.get_or_insert_function(fnty, name="str_to_float64")
@@ -1029,7 +1029,7 @@ def cast_unicode_str_to_float64(context, builder, fromty, toty, val):
     return cast_str_to_float64(context, builder, std_str_type, toty, std_str)
 
 
-# @lower_builtin(len, StringType)
+# @lower_builtin(len, StdStringType)
 # def len_string(context, builder, sig, args):
 #     fnty = lir.FunctionType(lir.IntType(64),
 #                             [lir.IntType(8).as_pointer()])
