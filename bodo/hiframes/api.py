@@ -23,10 +23,11 @@ from numba.targets.arrayobj import _getitem_array1d
 from numba.extending import register_model, models
 
 import bodo
-from bodo.libs.str_ext import string_type, list_string_array_type
+from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import StringArrayType, string_array_type, is_str_arr_typ
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.list_str_arr_ext import list_string_array_type
 
 from bodo.utils.utils import build_set
 from numba.targets.imputils import lower_builtin, impl_ret_untracked
@@ -335,9 +336,9 @@ def isna_overload(arr, i):
             arr._null_bitmap, i
         )
 
-    # TODO: support NaN in list(list(str))
     if arr == list_string_array_type:
-        return lambda arr, i: False
+        # reuse string array function
+        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
 
     if arr == string_array_split_view_type:
         return lambda arr, i: False
@@ -1123,28 +1124,6 @@ def sort_values_inplace_overload(
         return new_df, None
 
     return _impl
-
-
-@overload(operator.getitem)
-def list_str_arr_getitem_array(arr, ind):
-    if (
-        arr == list_string_array_type
-        and isinstance(ind, types.Array)
-        and ind.ndim == 1
-        and isinstance(ind.dtype, (types.Integer, types.Boolean))
-    ):
-        # TODO: convert to parfor in typed pass
-        def list_str_arr_getitem_impl(arr, ind):
-            n = ind.sum()
-            out_arr = bodo.libs.str_ext.alloc_list_list_str(n)
-            j = 0
-            for i in range(len(ind)):
-                if ind[i]:
-                    out_arr[j] = arr[i]
-                    j += 1
-            return out_arr
-
-        return list_str_arr_getitem_impl
 
 
 class DataFrameTupleIterator(types.SimpleIteratorType):

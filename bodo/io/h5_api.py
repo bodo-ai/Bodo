@@ -136,7 +136,7 @@ def cast_to_h5_dset(typingctx, tp=None):
     return h5dataset_type(tp), codegen
 
 
-h5_open = types.ExternalFunction("h5_open", h5file_type(types.voidptr, types.voidptr))
+h5_open = types.ExternalFunction("h5_open", h5file_type(types.voidptr, types.voidptr, types.int64))
 
 
 if bodo.config._has_h5py:
@@ -153,6 +153,7 @@ if bodo.config._has_h5py:
         rdcc_nbytes=None,
         rdcc_w0=None,
         track_order=None,
+        _is_parallel=0,  # bodo internal flag
     ):
         def impl(
             name,
@@ -165,10 +166,11 @@ if bodo.config._has_h5py:
             rdcc_nbytes=None,
             rdcc_w0=None,
             track_order=None,
+            _is_parallel=0,  # bodo internal flag
         ):
             if mode is None:
-                mode = "a"
-            return h5_open(name._data, mode._data)
+                mode = "a"  # TODO: support and test
+            return h5_open(name._data, mode._data, _is_parallel)
 
         return impl
 

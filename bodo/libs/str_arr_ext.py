@@ -32,6 +32,7 @@ from numba.extending import (
 )
 from numba import cgutils
 from bodo.libs.str_ext import string_type
+from bodo.libs.list_str_arr_ext import list_string_array_type
 from numba.targets.imputils import (
     impl_ret_new_ref,
     impl_ret_borrowed,
@@ -417,23 +418,25 @@ def setitem_str_offset(typingctx, str_arr_typ, ind_t, val_t=None):
 def getitem_str_bitmap(typingctx, in_bitmap_typ, ind_t=None):
     def codegen(context, builder, sig, args):
         in_bitmap, ind = args
-        ctinfo = context.make_helper(builder, data_ctypes_type, in_bitmap)
-        in_bitmap = ctinfo.data
+        if in_bitmap_typ == data_ctypes_type:
+            ctinfo = context.make_helper(builder, data_ctypes_type, in_bitmap)
+            in_bitmap = ctinfo.data
         return builder.load(builder.gep(in_bitmap, [ind]))
 
-    return char_typ(data_ctypes_type, ind_t), codegen
+    return char_typ(in_bitmap_typ, ind_t), codegen
 
 
 @intrinsic
 def setitem_str_bitmap(typingctx, in_bitmap_typ, ind_t, val_t=None):
     def codegen(context, builder, sig, args):
         in_bitmap, ind, val = args
-        ctinfo = context.make_helper(builder, data_ctypes_type, in_bitmap)
-        in_bitmap = ctinfo.data
+        if in_bitmap_typ == data_ctypes_type:
+            ctinfo = context.make_helper(builder, data_ctypes_type, in_bitmap)
+            in_bitmap = ctinfo.data
         builder.store(val, builder.gep(in_bitmap, [ind]))
         return context.get_dummy_value()
 
-    return types.void(data_ctypes_type, ind_t, char_typ), codegen
+    return types.void(in_bitmap_typ, ind_t, char_typ), codegen
 
 
 @intrinsic
@@ -1186,11 +1189,12 @@ def box_str_arr(typ, val, c):
 @intrinsic
 def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    assert is_str_arr_typ(str_arr_typ)
+    # reuse for list_string_array_type
+    assert str_arr_typ in (string_array_type, list_string_array_type)
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        string_array = context.make_helper(builder, string_array_type, in_str_arr)
+        string_array = context.make_helper(builder, str_arr_typ, in_str_arr)
 
         # (null_bitmap[i / 8] & kBitmask[i % 8]) == 0;
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
@@ -1211,17 +1215,18 @@ def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
             "==", builder.and_(byte, mask), lir.Constant(lir.IntType(8), 0)
         )
 
-    return types.bool_(string_array_type, types.intp), codegen
+    return types.bool_(str_arr_typ, types.intp), codegen
 
 
 @intrinsic
 def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    assert is_str_arr_typ(str_arr_typ)
+    # reuse for list_string_array_type
+    assert str_arr_typ in (string_array_type, list_string_array_type)
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        string_array = context.make_helper(builder, string_array_type, in_str_arr)
+        string_array = context.make_helper(builder, str_arr_typ, in_str_arr)
 
         # bits[i / 8] |= kBitmask[i % 8];
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
@@ -1243,7 +1248,7 @@ def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
         builder.store(builder.and_(byte, mask), byte_ptr)
         return context.get_dummy_value()
 
-    return types.void(string_array_type, types.intp), codegen
+    return types.void(str_arr_typ, types.intp), codegen
 
 
 @intrinsic
@@ -1660,6 +1665,8 @@ def _typeof_ndarray(val, c):
             return string_array_type
         if dtype == types.bool_:
             return bodo.libs.bool_arr_ext.boolean_array
+        if dtype == types.List(string_type):
+            return list_string_array_type
         raise ValueError("Unsupported array dtype: %s" % (val.dtype,))
     layout = numba.numpy_support.map_layout(val)
     readonly = not val.flags.writeable
@@ -1684,6 +1691,8 @@ def _infer_ndarray_obj_dtype(val):
         return string_type
     elif isinstance(first_val, bool):
         return types.bool_
+    if isinstance(first_val, list):
+        return bodo.hiframes.boxing._infer_series_list_dtype(val, "array")
 
 
 # TODO: support array of strings

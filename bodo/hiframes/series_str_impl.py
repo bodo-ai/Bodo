@@ -127,6 +127,7 @@ def overload_str_method_len(S_str):
 def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
     # TODO: support or just check n and expand arguments
     # TODO: support distributed
+    # TODO: support regex
 
     # use split view if sep is a string of length 1
     if isinstance(pat, types.StringLiteral) and len(pat.literal_value) == 1:
@@ -141,6 +142,7 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
 
         return _str_split_view_impl
 
+    # TODO: optimize!
     def _str_split_impl(S_str, pat=None, n=-1, expand=False):
         S = S_str._obj
         arr = bodo.hiframes.api.get_series_data(S)
@@ -148,11 +150,47 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
         name = bodo.hiframes.api.get_series_name(S)
         numba.parfor.init_prange()
         l = len(arr)
-        out_arr = bodo.libs.str_ext.alloc_list_list_str(l)
+        num_strs = 0
+        num_chars = 0
         for i in numba.parfor.internal_prange(l):
-            in_str = arr[i]
-            out_arr[i] = in_str.split(pat)
+            if bodo.hiframes.api.isna(arr, i):
+                continue
+            vals = arr[i].split(pat, n)
+            num_strs += len(vals)
+            for s in vals:
+                num_chars += get_utf8_size(s)
 
+        out_arr = bodo.libs.list_str_arr_ext.pre_alloc_list_string_array(
+            l, num_strs, num_chars
+        )
+        # XXX helper functions to establish aliasing between array and pointer
+        # TODO: fix aliasing for getattr
+        index_offsets = bodo.libs.list_str_arr_ext.get_index_offset_ptr(out_arr)
+        data_offsets = bodo.libs.list_str_arr_ext.get_data_offset_ptr(out_arr)
+        curr_s_offset = 0
+        curr_d_offset = 0
+        for j in numba.parfor.internal_prange(l):
+            # TODO: NA
+            index_offsets[j] = curr_s_offset
+            vals = arr[j].split(pat, n)
+            n_str = len(vals)
+            for k in range(n_str):
+                s = vals[k]
+                utf8_str, n_char = bodo.libs.str_ext.unicode_to_utf8_and_len(s)
+                data_offsets[curr_s_offset + k] = curr_d_offset
+                out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(
+                    out_arr._data, curr_d_offset
+                )
+                bodo.libs.str_arr_ext._memcpy(out_ptr, utf8_str, n_char, 1)
+                curr_d_offset += n_char
+            # set NA
+            if bodo.libs.str_arr_ext.str_arr_is_na(arr, j):
+                bodo.libs.str_arr_ext.str_arr_set_na(out_arr, j)
+
+            curr_s_offset += n_str
+
+        index_offsets[l] = curr_s_offset
+        data_offsets[curr_s_offset] = curr_d_offset
         return bodo.hiframes.api.init_series(out_arr, index, name)
 
     return _str_split_impl

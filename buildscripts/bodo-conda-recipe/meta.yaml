@@ -24,7 +24,7 @@ requirements:
     - pyarrow >=0.11
     - arrow-cpp
     - boost
-    - hdf5
+    - hdf5 * mpi_mpich_*
     - h5py
     - mpich # [not win]
     - impi-devel # [win]
@@ -43,6 +43,7 @@ requirements:
 
 test:
   requires:
+    - hdf5 * mpi_mpich_*
     - h5py
     - scipy
     - pytest

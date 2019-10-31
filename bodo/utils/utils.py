@@ -25,7 +25,8 @@ from numba.extending import overload, intrinsic, lower_cast
 import collections
 import numpy as np
 import bodo
-from bodo.libs.str_ext import string_type, list_string_array_type
+from bodo.libs.str_ext import string_type
+from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.str_arr_ext import (
     string_array_type,
     num_total_chars,

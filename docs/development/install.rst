@@ -17,6 +17,7 @@ such as Numba on Ubuntu Linux::
     # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64
     conda install -c numba/label/dev numba
+    conda install -c defaults -c conda-forge hdf5=*=*mpich*
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo

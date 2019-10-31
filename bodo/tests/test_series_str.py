@@ -6,7 +6,7 @@ import pytest
 
 import numba
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, _test_equal
 
 
 def test_len():
@@ -240,3 +240,70 @@ def test_isupper():
         name="A",
     )
     check_func(test_impl, (S,))
+
+
+##############  list of string array tests  #################
+
+
+@pytest.fixture(
+    params=[
+        np.array([["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2),
+        # empty strings, empty lists, NA
+        np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 2),
+        # large array
+        np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 1000),
+    ]
+)
+def list_str_arr_value(request):
+    return request.param
+
+
+def test_list_str_arr_unbox(list_str_arr_value):
+    # just unbox
+    def impl(arr_arg):
+        return True
+
+    check_func(impl, (list_str_arr_value,))
+
+    # unbox and box
+    def impl2(arr_arg):
+        return arr_arg
+
+    check_func(impl2, (list_str_arr_value,))
+
+
+def test_getitem_int(list_str_arr_value):
+    def test_impl(A, i):
+        return A[i]
+
+    bodo_func = bodo.jit(test_impl)
+    i = 2
+    assert bodo_func(list_str_arr_value, i) == test_impl(list_str_arr_value, i)
+
+
+def test_getitem_bool(list_str_arr_value):
+    def test_impl(A, ind):
+        return A[ind]
+
+    bodo_func = bodo.jit(test_impl)
+    np.random.seed(0)
+    ind = np.random.ranf(len(list_str_arr_value)) < 0.2
+    # TODO: parallel test
+    _test_equal(bodo_func(list_str_arr_value, ind), test_impl(list_str_arr_value, ind))
+
+
+def test_getitem_slice(list_str_arr_value):
+    def test_impl(A, ind):
+        return A[ind]
+
+    bodo_func = bodo.jit(test_impl)
+    ind = slice(1, 4)
+    # TODO: parallel test
+    _test_equal(bodo_func(list_str_arr_value, ind), test_impl(list_str_arr_value, ind))
+
+
+def test_copy(list_str_arr_value):
+    def test_impl(A):
+        return A.copy()
+
+    _test_equal(bodo.jit(test_impl)(list_str_arr_value), list_str_arr_value)
