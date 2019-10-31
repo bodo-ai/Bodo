@@ -956,20 +956,28 @@ void PrintRefct(std::ostream &os, std::vector<array_info*> const& ListArr)
 
 
 
-//
-// This function uses the combinatorial information computed in the "ListPairWrite"
-// array.
-// The other arguments shift1, shift2 and ChoiceColumn are for the choice of column
-// ---For inserting a left data, ChoiceColumn = 0 indicates retrieving column from the left.
-// ---For inserting a right data, ChoiceColumn = 1 indicates retrieving column from the right.
-// ---For inserting a key, we need to access both to left and right columns.
-//    This corresponds to the columns shift1 and shift2.
-//
-// The code considers all the cases in turn and creates the new array from it.
-//
-// The keys in output re used twice: In the left and on the right and so they are
-// outputed twice.
-//
+/** This function uses the combinatorial information computed in the "ListPairWrite"
+ * array.
+ * The other arguments shift1, shift2 and ChoiceColumn are for the choice of column
+ * ---For inserting a left data, ChoiceColumn = 0 indicates retrieving column from the left.
+ * ---For inserting a right data, ChoiceColumn = 1 indicates retrieving column from the right.
+ * ---For inserting a key, we need to access both to left and right columns.
+ *    This corresponds to the columns shift1 and shift2.
+ *
+ * The code considers all the cases in turn and creates the new array from it.
+ *
+ * The keys in output re used twice: In the left and on the right and so they are
+ * outputed twice.
+ *
+ * No error is thrown but input is assumed to be coherent.
+ *
+ * @param in_table is the input table.
+ * @param ListPairWrite is the vector of list of pairs for the writing of the output table
+ * @param shift1 is the first shift (of the left array)
+ * @param shift2 is the second shift (of the left array)
+ * @param ChoiceColumn is the chosen option
+ * @return one column of the table output.
+ */
 array_info* RetrieveArray(table_info* const& in_table, std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite, size_t const& shift1, size_t const& shift2, int const& ChoiceColumn)
 {
   size_t nRowOut=ListPairWrite.size();
