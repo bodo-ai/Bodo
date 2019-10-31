@@ -1226,19 +1226,19 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
     PyErr_SetString(PyExc_RuntimeError, "incoherent dimensions");
     return NULL;
   }
-  for (size_t i=0; i<n_col; i++)
-    std::cout << "1: i=" << i << " dtype=" << in_table->columns[i]->dtype << "\n";
+  //  for (size_t i=0; i<n_col; i++)
+  //    std::cout << "1: i=" << i << " dtype=" << in_table->columns[i]->dtype << "\n";
   //
   size_t n_rows_left = (size_t)in_table->columns[0]->length;
   size_t n_rows_right = (size_t)in_table->columns[n_key]->length;
-  std::cout << "n_rows_left=" << n_rows_left << " n_rows_right=" << n_rows_right << "\n";
+  //  std::cout << "n_rows_left=" << n_rows_left << " n_rows_right=" << n_rows_right << "\n";
   //
-  std::cout << "hash_join_table, step 2\n";
+  //  std::cout << "hash_join_table, step 2\n";
   std::vector<array_info*> key_arrs_left = std::vector<array_info*>(in_table->columns.begin(), in_table->columns.begin() + n_key);
   uint32_t seed = 0xb0d01288;
   uint32_t* hashes_left = hash_keys(key_arrs_left, seed);
 
-  std::cout << "hash_join_table, step 3\n";
+  //  std::cout << "hash_join_table, step 3\n";
   std::vector<array_info*> key_arrs_right = std::vector<array_info*>(in_table->columns.begin()+n_key, in_table->columns.begin() + 2*n_key);
   uint32_t* hashes_right = hash_keys(key_arrs_right, seed);
   //
@@ -1246,10 +1246,6 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
   //    std::cout << "i=" << i << " hashes_left=" << hashes_left[i] << "\n";
   //  for (size_t i=0; i<n_rows_right; i++)
   //    std::cout << "i=" << i << " hashes_right=" << hashes_right[i] << "\n";
-
-  
-
-  std::cout << "hash_join_table, step 4\n";
   std::unordered_map<uint32_t, std::vector<std::pair<int,size_t>>> entList;
   // What we do here is actually an optimization (maybe premature?)
   // We insert entries on the left and right but if some entries

@@ -562,7 +562,6 @@ def join_distributed_run(
         )
     else:
         assert method == "hash"
-        print("join_node.how=", join_node.how)
         is_left = join_node.how in ("left", "outer")
         is_right = join_node.how == "outer"
         if bodo.use_cpp_hash_join:
@@ -697,7 +696,7 @@ def _get_table_parallel_flags(join_node, array_dists):
     return left_parallel, right_parallel
 
 def _gen_local_hash_join(left_key_names, right_key_names, left_key_types, right_key_types, left_other_names, right_other_names, is_left, is_right):
-    print("gen_local_hash_join: is_left=", is_left, " is_right=", is_right)
+#    print("gen_local_hash_join: is_left=", is_left, " is_right=", is_right)
     n_keys = len(left_key_names)
     func_text =  "    # beginning of _gen_local_hash_join\n"
     eList = []
