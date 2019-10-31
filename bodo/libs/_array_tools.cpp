@@ -1236,7 +1236,7 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
   
 
   std::cout << "hash_join_table, step 4\n";
-  std::unordered_map<uint32_t, std::vector<std::pair<int,size_t>>> ListEnt;
+  std::unordered_map<uint32_t, std::vector<std::pair<int,size_t>>> entList;
   // What we do here is actually an optimization (maybe premature?)
   // We insert entries on the left and right but if some entries
   // are not going to get used anyway, then we do not insert them.
@@ -1247,11 +1247,11 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
     for (size_t iRowL=0; iRowL<n_rows_left; iRowL++) {
       std::pair<int,size_t> eEnt{0,iRowL};
       uint32_t eKey = hashes_left[iRowL];
-      if (ListEnt.count(eKey) == 0) {
-        ListEnt[eKey] = {eEnt};
+      if (entList.count(eKey) == 0) {
+        entList[eKey] = {eEnt};
       }
       else {
-        ListEnt[eKey].push_back(eEnt);
+        entList[eKey].push_back(eEnt);
       }
     }
     // Now the right entries. If is_right = T then we insert and otherwise
@@ -1259,12 +1259,12 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
     for (size_t iRowR=0; iRowR<n_rows_right; iRowR++) {
       std::pair<int,size_t> eEnt{1,iRowR};
       uint32_t eKey=hashes_right[iRowR];
-      if (ListEnt.count(eKey) == 0) {
+      if (entList.count(eKey) == 0) {
         if (is_right)
-          ListEnt[eKey] = {eEnt};
+          entList[eKey] = {eEnt};
       }
       else {
-        ListEnt[eKey].push_back(eEnt);
+        entList[eKey].push_back(eEnt);
       }
     }
   }
@@ -1275,32 +1275,32 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
     for (size_t iRowR=0; iRowR<n_rows_right; iRowR++) {
       std::pair<int,size_t> eEnt{1,iRowR};
       uint32_t eKey=hashes_right[iRowR];
-      if (ListEnt.count(eKey) == 0) {
-        ListEnt[eKey] = {eEnt};
+      if (entList.count(eKey) == 0) {
+        entList[eKey] = {eEnt};
       }
       else {
-        ListEnt[eKey].push_back(eEnt);
+        entList[eKey].push_back(eEnt);
       }
     }
     for (size_t iRowL=0; iRowL<n_rows_left; iRowL++) {
       std::pair<int,size_t> eEnt{0,iRowL};
       uint32_t eKey = hashes_left[iRowL];
-      if (ListEnt.count(eKey) != 0) {
-        ListEnt[eKey].push_back(eEnt);
+      if (entList.count(eKey) != 0) {
+        entList[eKey].push_back(eEnt);
       }
     }
   }
-  std::cout << "|ListEnt|=" << ListEnt.size() << "\n";
+  std::cout << "|entList|=" << entList.size() << "\n";
   //
   // Now iterating and determining how many entries we have to do.
   //
   std::cout << "hash_join_table, step 6\n";
   std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
   // We consider now the construction of the pairs that are used
-  // 
-  for (auto & pairKeyListRows : ListEnt) {
+  // for the comparison.
+  for (auto & pairKeyListRows : entList) {
     //    std::cout << "hash_join_table, step 6.1\n";
-    std::vector<size_t> ListEntL, ListEntR;
+    std::vector<size_t> entListL, entListR;
     for (auto side_row_pair : pairKeyListRows.second) {
       // idx_side = 0 for origin on the left
       // idx_side = 1 for origin on the right
@@ -1308,11 +1308,11 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
       // iRow for the index (whether left or right)
       size_t iRow=side_row_pair.second;
       if (idx_side == 0)
-        ListEntL.push_back(iRow);
+        entListL.push_back(iRow);
       if (idx_side == 1)
-        ListEntR.push_back(iRow);
+        entListR.push_back(iRow);
     }
-    std::cout << "|ListEntL|=" << ListEntL.size() << " |ListEntR|=" << ListEntR.size() << "\n";
+    std::cout << "|entListL|=" << entListL.size() << " |entListR|=" << entListR.size() << "\n";
     //    std::cout << "hash_join_table, step 6.2\n";
     //
     // This function takes a list of lines in the in_table and return the list of line
@@ -1324,86 +1324,93 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
     // It is expected not to be a problem since different keys with the same hash should
     // be rare. If all the keys with same hash are also identical then the running time
     // is linear.
-    auto GetBlocks=[&](size_t const& shift, std::vector<size_t> const& ListEnt) -> std::vector<std::vector<size_t>> {
-      int len=ListEnt.size();
+    auto GetBlocks=[&](size_t const& shift, std::vector<size_t> const& entList) -> std::vector<std::vector<size_t>> {
+      int len=entList.size();
       std::vector<int> ListStatus(len,0);
-      std::vector<std::vector<size_t>> ListListEnt;
+      std::vector<std::vector<size_t>> entListBlocks;
       for (int i1=0; i1<len; i1++) {
         if (ListStatus[i1] == 0) {
           ListStatus[i1]=1;
-          std::vector<size_t> eList{ListEnt[i1]};
+          std::vector<size_t> eList{entList[i1]};
           for (int i2=i1+1; i2<len; i2++) {
             if (ListStatus[i2] == 0) {
-              bool test=TestEqual(in_table, n_key, shift, ListEnt[i1], shift, ListEnt[i2]);
+              bool test=TestEqual(in_table, n_key, shift, entList[i1], shift, entList[i2]);
               if (test) {
                 ListStatus[i2]=1;
-                eList.push_back(ListEnt[i2]);
+                eList.push_back(entList[i2]);
               }
             }
           }
-          ListListEnt.push_back(eList);
+          entListBlocks.push_back(eList);
         }
       }
-      return ListListEnt;
+      return entListBlocks;
     };
 
     // The blocks on the left and the right are now determined.
-    std::vector<std::vector<size_t>> ListListEntL = GetBlocks(0, ListEntL);
-    std::vector<std::vector<size_t>> ListListEntR = GetBlocks(n_key, ListEntR);
-    size_t nBlockL=ListListEntL.size();
-    size_t nBlockR=ListListEntR.size();
+    std::vector<std::vector<size_t>> entListBlocksL = GetBlocks(0, entListL);
+    std::vector<std::vector<size_t>> entListBlocksR = GetBlocks(n_key, entListR);
+    size_t nBlockL=entListBlocksL.size();
+    size_t nBlockR=entListBlocksR.size();
 
     if (is_left) {
-      auto GetEntry=[&](size_t const& iRowL) -> std::ptrdiff_t {
+      // We use a lambda for finding right entry.
+      auto GetRightEntry=[&](size_t const& iRowL) -> std::ptrdiff_t {
         for (size_t iR=0; iR<nBlockR; iR++) {
-          bool test = TestEqual(in_table, n_key, 0, iRowL, n_key, ListListEntR[iR][0]);
+          bool test = TestEqual(in_table, n_key, 0, iRowL, n_key, entListBlocksR[iR][0]);
           if (test)
             return iR;
         }
         return -1;
       };
+      // We need to find the ListStatus for knowing
+      // which right keys have been used.
       std::vector<int> ListStatus(nBlockR,0);
       for (size_t iL=0; iL<nBlockL; iL++) {
-        std::ptrdiff_t iR=GetEntry(ListListEntL[iL][0]);
+        std::ptrdiff_t iR=GetRightEntry(entListBlocksL[iL][0]);
         if (iR == -1) {
-          for (auto & uL : ListListEntL[iL])
+          for (auto & uL : entListBlocksL[iL])
             ListPairWrite.push_back({uL, -1});
         }
         else {
           if (is_right)
             ListStatus[iR]=1;
-          for (auto & uL : ListListEntL[iL])
-            for (auto & uR : ListListEntR[iR])
+          for (auto & uL : entListBlocksL[iL])
+            for (auto & uR : entListBlocksR[iR])
               ListPairWrite.push_back({uL,uR});
         }
       }
+      // If is_right = T then we need to consider
+      // the ones which have not been matched with the right.
       if (is_right) {
         for (size_t iR=0; iR<nBlockR; iR++)
           if (ListStatus[iR] == 0)
-            for (auto & uR : ListListEntR[iR])
+            for (auto & uR : entListBlocksR[iR])
               ListPairWrite.push_back({-1,uR});
       }
     }
     else {
-      auto GetEntry=[&](size_t const& iRowR) -> std::ptrdiff_t {
+      // The lambda is for finding the entry.
+      auto GetLeftEntry=[&](size_t const& iRowR) -> std::ptrdiff_t {
         for (size_t iL=0; iL<nBlockL; iL++) {
-          bool test = TestEqual(in_table, n_key, 0, ListListEntL[iL][0], n_key, iRowR);
+          bool test = TestEqual(in_table, n_key, 0, entListBlocksL[iL][0], n_key, iRowR);
           if (test)
             return iL;
         }
         return -1;
       };
+      // We consider the right entries.
       for (size_t iR=0; iR<nBlockR; iR++) {
-        std::ptrdiff_t iL=GetEntry(ListListEntR[iR][0]);
+        std::ptrdiff_t iL=GetLeftEntry(entListBlocksR[iR][0]);
         if (iL == -1) {
           if (is_right) {
-            for (auto & uR : ListListEntR[iR])
+            for (auto & uR : entListBlocksR[iR])
               ListPairWrite.push_back({-1, uR});
           }
         }
         else {
-          for (auto & uL : ListListEntL[iL])
-            for (auto & uR : ListListEntR[iR])
+          for (auto & uL : entListBlocksL[iL])
+            for (auto & uR : entListBlocksR[iR])
               ListPairWrite.push_back({uL,uR});
         }
       }
