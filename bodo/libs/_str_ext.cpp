@@ -42,16 +42,11 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
                              int64_t n_strs, uint32_t* offsets, char* data,
                              char sep);
 const char* get_c_str(std::string* s);
-void* str_concat(std::string* s1, std::string* s2);
-int str_compare(std::string* s1, std::string* s2);
-bool str_equal(std::string* s1, std::string* s2);
-bool str_equal_cstr(std::string* s1, char* s2);
-void* str_split(std::string* str, std::string* sep, int64_t* size);
-void* str_substr_int(std::string* str, int64_t index);
+
 int64_t str_to_int64(char* data, int64_t length);
-int64_t std_str_to_int64(std::string* str);
 double str_to_float64(std::string* str);
 int64_t get_str_len(std::string* str);
+
 void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
                                 uint32_t** offset_table, char** buffer,
                                 uint8_t** null_bitmap);
@@ -143,20 +138,7 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
         PyLong_FromVoidPtr((void*)(&str_arr_split_view_impl)));
     PyObject_SetAttrString(m, "get_c_str",
                            PyLong_FromVoidPtr((void*)(&get_c_str)));
-    PyObject_SetAttrString(m, "str_concat",
-                           PyLong_FromVoidPtr((void*)(&str_concat)));
-    PyObject_SetAttrString(m, "str_compare",
-                           PyLong_FromVoidPtr((void*)(&str_compare)));
-    PyObject_SetAttrString(m, "str_equal",
-                           PyLong_FromVoidPtr((void*)(&str_equal)));
-    PyObject_SetAttrString(m, "str_equal_cstr",
-                           PyLong_FromVoidPtr((void*)(&str_equal_cstr)));
-    PyObject_SetAttrString(m, "str_split",
-                           PyLong_FromVoidPtr((void*)(&str_split)));
-    PyObject_SetAttrString(m, "str_substr_int",
-                           PyLong_FromVoidPtr((void*)(&str_substr_int)));
-    PyObject_SetAttrString(m, "std_str_to_int64",
-                           PyLong_FromVoidPtr((void*)(&std_str_to_int64)));
+
     PyObject_SetAttrString(m, "str_to_int64",
                            PyLong_FromVoidPtr((void*)(&str_to_int64)));
     PyObject_SetAttrString(m, "str_to_float64",
@@ -333,57 +315,6 @@ const char* get_c_str(std::string* s) {
     return s->c_str();
 }
 
-
-void* str_concat(std::string* s1, std::string* s2) {
-    // printf("in concat %s %s\n", s1->c_str(), s2->c_str());
-    std::string* res = new std::string((*s1) + (*s2));
-    return res;
-}
-
-int str_compare(std::string* s1, std::string* s2) {
-    // printf("in str_comp %s %s\n", s1->c_str(), s2->c_str());
-    return s1->compare(*s2);
-}
-
-bool str_equal(std::string* s1, std::string* s2) {
-    // printf("in str_equal %s %s\n", s1->c_str(), s2->c_str());
-    return s1->compare(*s2) == 0;
-}
-
-bool str_equal_cstr(std::string* s1, char* s2) {
-    // printf("in str_equal %s %s\n", s1->c_str(), s2->c_str());
-    return s1->compare(s2) == 0;
-}
-
-void* str_split(std::string* str, std::string* sep, int64_t* size) {
-    // std::cout << *str << " " << *sep << std::endl;
-    std::vector<std::string*> res;
-
-    size_t last = 0;
-    size_t next = 0;
-    while ((next = str->find(*sep, last)) != std::string::npos) {
-        std::string* token = new std::string(str->substr(last, next - last));
-        res.push_back(token);
-        last = next + 1;
-    }
-    std::string* token = new std::string(str->substr(last));
-    res.push_back(token);
-    *size = res.size();
-    // for(int i=0; i<*size; i++)
-    //    std::cout<<*(res[i])<<std::endl;
-    // TODO: avoid extra copy
-    void* out = new void*[*size];
-    memcpy(out, res.data(), (*size) * sizeof(void*));
-    // std::cout<< *(((std::string**)(out))[1])<<std::endl;
-    return out;
-}
-
-void* str_substr_int(std::string* str, int64_t index) {
-    return new std::string(*str, index, 1);
-}
-
-
-int64_t std_str_to_int64(std::string* str) { return std::stoll(*str); }
 
 double str_to_float64(std::string* str) { return std::stod(*str); }
 
