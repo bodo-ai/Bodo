@@ -217,16 +217,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&str_arr_to_int64)));
     PyObject_SetAttrString(m, "str_arr_to_float64",
                            PyLong_FromVoidPtr((void*)(&str_arr_to_float64)));
-    PyObject_SetAttrString(m, "compile_regex",
-                           PyLong_FromVoidPtr((void*)(&compile_regex)));
-    PyObject_SetAttrString(m, "str_contains_noregex",
-                           PyLong_FromVoidPtr((void*)(&str_contains_noregex)));
-    PyObject_SetAttrString(m, "str_contains_regex",
-                           PyLong_FromVoidPtr((void*)(&str_contains_regex)));
-    PyObject_SetAttrString(m, "str_replace_regex",
-                           PyLong_FromVoidPtr((void*)(&str_replace_regex)));
-    PyObject_SetAttrString(m, "str_replace_noregex",
-                           PyLong_FromVoidPtr((void*)(&str_replace_noregex)));
     PyObject_SetAttrString(m, "str_from_int32",
                            PyLong_FromVoidPtr((void*)(&str_from_int32)));
     PyObject_SetAttrString(m, "str_from_int64",
