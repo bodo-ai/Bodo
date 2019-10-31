@@ -1177,6 +1177,49 @@ bool TestEqual(table_info* in_table, size_t const& n_key, size_t const& shift_ke
 };
 
 
+/** This function takes a list of lines in the in_table and return the list of line
+ *
+ * by blocks if they have the same key.
+ * The entry "shift" specifies the starting point of the keys.
+ * This is because the keys are done on the left or right in the same data structure.
+ *
+ * The algorithm is nothing special with quadratic run-time in worst case.
+ * It is expected not to be a problem since different keys with the same hash should
+ * be rare. If all the keys with same hash are also identical then the running time
+ * is linear.
+ *
+ *  @param shift starting point of the keys
+ *         This is because the keys are done on the left or right in the same data structure.
+ *  @param entList list of pairs indicating sides and row number
+ *  @return entListBlocks the list of line by blocks
+ */
+std::vector<std::vector<size_t>> GetBlocks(table_info* in_table, size_t const& n_key, size_t const& shift, std::vector<size_t> const& entList)
+{
+  size_t len=entList.size();
+  std::vector<int> ListStatus(len,0);
+  std::vector<std::vector<size_t>> entListBlocks;
+  for (size_t i1=0; i1<len; i1++) {
+    if (ListStatus[i1] == 0) {
+      ListStatus[i1]=1;
+      std::vector<size_t> eList{entList[i1]};
+      for (size_t i2=i1+1; i2<len; i2++) {
+        if (ListStatus[i2] == 0) {
+          bool test=TestEqual(in_table, n_key, shift, entList[i1], shift, entList[i2]);
+          if (test) {
+            ListStatus[i2]=1;
+            eList.push_back(entList[i2]);
+          }
+        }
+      }
+      entListBlocks.push_back(eList);
+    }
+  }
+  return entListBlocks;
+};
+
+
+
+
 
 /** This function does the joining of the table and returns the joined
  * table
@@ -1321,48 +1364,9 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
         entListR.push_back(iRow);
     }
     //    std::cout << "|entListL|=" << entListL.size() << " |entListR|=" << entListR.size() << "\n";
-    /** This function takes a list of lines in the in_table and return the list of line
-     *
-     * by blocks if they have the same key.
-     * The entry "shift" specifies the starting point of the keys.
-     * This is because the keys are done on the left or right in the same data structure.
-     *
-     * The algorithm is nothing special with quadratic run-time in worst case.
-     * It is expected not to be a problem since different keys with the same hash should
-     * be rare. If all the keys with same hash are also identical then the running time
-     * is linear.
-     *
-     *  @param shift starting point of the keys
-     *         This is because the keys are done on the left or right in the same data structure.
-     *  @param entList list of pairs indicating sides and row number
-     *  @return entListBlocks the list of line by blocks
-     */
-    auto GetBlocks=[&](size_t const& shift, std::vector<size_t> const& entList) -> std::vector<std::vector<size_t>> {
-      int len=entList.size();
-      std::vector<int> ListStatus(len,0);
-      std::vector<std::vector<size_t>> entListBlocks;
-      for (int i1=0; i1<len; i1++) {
-        if (ListStatus[i1] == 0) {
-          ListStatus[i1]=1;
-          std::vector<size_t> eList{entList[i1]};
-          for (int i2=i1+1; i2<len; i2++) {
-            if (ListStatus[i2] == 0) {
-              bool test=TestEqual(in_table, n_key, shift, entList[i1], shift, entList[i2]);
-              if (test) {
-                ListStatus[i2]=1;
-                eList.push_back(entList[i2]);
-              }
-            }
-          }
-          entListBlocks.push_back(eList);
-        }
-      }
-      return entListBlocks;
-    };
-
     // The blocks on the left and the right are now determined.
-    std::vector<std::vector<size_t>> entListBlocksL = GetBlocks(0, entListL);
-    std::vector<std::vector<size_t>> entListBlocksR = GetBlocks(n_key, entListR);
+    std::vector<std::vector<size_t>> entListBlocksL = GetBlocks(in_table, n_key, 0, entListL);
+    std::vector<std::vector<size_t>> entListBlocksR = GetBlocks(in_table, n_key, n_key, entListR);
     size_t nBlockL=entListBlocksL.size();
     size_t nBlockR=entListBlocksR.size();
 
