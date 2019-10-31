@@ -2548,12 +2548,10 @@ class SeriesPass(object):
                 func_text += "  {} = {}\n".format(out, v)
             else:
                 func_text += "  {} = np.empty(new_len, {}.dtype)\n".format(out, v)
+        for v in list_str_colnames:
+            func_text += "  index_offsets = bodo.libs.list_str_arr_ext.get_index_offset_ptr(out_arr)
+        data_offsets = bodo.libs.list_str_arr_ext.get_data_offset_ptr(out_arr)
         func_text += "  curr_ind = 0\n"
-        if v in list_str_colnames:
-            func_text += "  index_offsets_{} = bodo.libs.list_str_arr_ext.get_index_offset_ptr({})\n".format(c, out)
-            func_text += "  data_offsets_{} = bodo.libs.list_str_arr_ext.get_data_offset_ptr({})\n".format(c, out)
-            func_text += "  curr_s_offset_{} = 0\n".format(c)
-            func_text += "  curr_d_offset_{} = 0\n".format(c)
         func_text += "  for i in numba.parfor.internal_prange(old_len):\n"
         func_text += "    if not ({}):\n".format(" or ".join(isna_calls))
         for v, out in zip(in_names, out_names):
@@ -2565,30 +2563,26 @@ class SeriesPass(object):
                 func_text += "      n_str = l_end_offset - l_start_offset\n"
                 func_text += "      str_ind = 0\n"
                 func_text += "      for jj in range(l_start_offset, l_end_offset):\n"
-                func_text += "          data_offsets_{0}[curr_s_offset_{0} + str_ind] = curr_d_offset_{0}\n".format(c)
+                func_text += "          out_arr._data_offsets[curr_s_offset + str_ind] = curr_d_offset\n"
                 func_text += "          n_char = {0}._data_offsets[jj + 1] - {0}._data_offsets[jj]\n".format(v)
                 func_text += "          in_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(\n"
                 func_text += "              {0}._data, {0}._data_offsets[jj]\n".format(v)
                 func_text += "          )\n"
                 func_text += "          out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(\n"
-                func_text += "              {}._data, curr_d_offset_{}\n".format(out, c)
+                func_text += "              out_arr._data, curr_d_offset\n"
                 func_text += "          )\n"
                 func_text += "          bodo.libs.str_arr_ext._memcpy(out_ptr, in_ptr, n_char, 1)\n"
-                func_text += "          curr_d_offset_{0} += n_char\n".format(c)
+                func_text += "          curr_d_offset += n_char\n"
                 func_text += "          str_ind += 1\n"
-                func_text += "          index_offsets_{0}[curr_ind] = curr_s_offset_{0}\n".format(c)
-                func_text += "      curr_s_offset_{0} += n_str\n".format(c)
+                func_text += "      out_arr._index_offsets[out_ind] = curr_s_offset\n"
+                func_text += "      curr_s_offset += n_str\n"
                 continue
             func_text += "      {}[curr_ind] = {}[i]\n".format(out, v)
         func_text += "      curr_ind += 1\n"
-        if v in list_str_colnames:
-            func_text += "  index_offsets_{0}[new_len] = curr_s_offset_{0}\n".format(c, out)
-            func_text += "  data_offsets_{0}[curr_s_offset_{0}] = curr_d_offset_{0}\n".format(c, out)
         func_text += "  return ({},)\n".format(", ".join(out_names))
 
-        # print(func_text)
         loc_vars = {}
-        exec(func_text, {'get_utf8_size': bodo.libs.str_arr_ext.get_utf8_size}, loc_vars)
+        exec(func_text, {}, loc_vars)
         _dropna_impl = loc_vars["_dropna_impl"]
         return self._replace_func(_dropna_impl, rhs.args)
 

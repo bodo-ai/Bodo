@@ -1820,7 +1820,8 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df):
             return df.dropna()
 
-        df = pd.DataFrame({"A": [1.0, 2.0, 4.0, 1.0], "B": ["aa", "b", None, "ccc"]})
+        df = pd.DataFrame({"A": [1.0, 2.0, 4.0, 1.0], "B": ["aa", "b", None, "ccc"],
+            'C': [np.nan, ['AA', 'A'], ['B'], ['CC', 'D']]})
         bodo_func = bodo.jit(test_impl)
         out = test_impl(df).reset_index(drop=True)
         h_out = bodo_func(df)

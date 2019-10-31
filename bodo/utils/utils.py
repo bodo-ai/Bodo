@@ -207,8 +207,12 @@ def is_alloc_callname(func_name, mod_name):
             and mod_name == "bodo.libs.str_arr_ext"
         )
         or (
-            func_name in ("alloc_str_list", "alloc_list_list_str")
+            func_name ==  "alloc_str_list"
             and mod_name == "bodo.libs.str_ext"
+        )
+        or (
+            func_name == "pre_alloc_list_string_array"
+            and mod_name == "bodo.libs.list_str_arr_ext"
         )
     )
 
