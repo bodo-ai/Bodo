@@ -306,12 +306,14 @@ def test_join_rm_dead_data_name_overlap2():
 
 def test_join_deadcode_cleanup():
     def test_impl(df1, df2):
-        return df1.merge(df2, on=["A"])
+        df3 = df1.merge(df2, on=["A"])
+        return
 #        df3 = df1.merge(df2, on=["A"]).sort_values("A").reset_index(drop=True)
 #        return df3
 
     def test_impl_with_join(df1, df2):
-        return df1.merge(df2, on=["A"])
+        df3 = df1.merge(df2, on=["A"])
+        return df3
 #        df3 = df1.merge(df2, on=["A"]).sort_values("A").reset_index(drop=True)
 #        return df3
 

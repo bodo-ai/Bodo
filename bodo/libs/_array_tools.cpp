@@ -955,6 +955,148 @@ void PrintRefct(std::ostream &os, std::vector<array_info*> const& ListArr)
 
 
 
+
+//
+// This function uses the combinatorial information computed in the "ListPairWrite"
+// array.
+// The other arguments shift1, shift2 and ChoiceColumn are for the choice of column
+// ---For inserting a left data, ChoiceColumn = 0 indicates retrieving column from the left.
+// ---For inserting a right data, ChoiceColumn = 1 indicates retrieving column from the right.
+// ---For inserting a key, we need to access both to left and right columns.
+//    This corresponds to the columns shift1 and shift2.
+//
+// The code considers all the cases in turn and creates the new array from it.
+//
+// The keys in output re used twice: In the left and on the right and so they are
+// outputed twice.
+//
+array_info* RetrieveArray(table_info* const& in_table, std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite, size_t const& shift1, size_t const& shift2, int const& ChoiceColumn)
+{
+  size_t nRowOut=ListPairWrite.size();
+  array_info* out_arr = NULL;
+  std::cout << "--------------------------------------------------------------\n";
+  // The function get_iRow takes as input the iRow index from the table in output.
+  // In output is two things:
+  // ---the column to take from the input table.
+  // ---The index to take from the input column (which may be -1 in case of a NaN entry)
+  auto get_iRow=[&](size_t const& iRowIn) -> std::pair<size_t,std::ptrdiff_t> {
+    std::pair<std::ptrdiff_t, std::ptrdiff_t> epair = ListPairWrite[iRowIn];
+    if (ChoiceColumn == 0)
+      return {shift1, epair.first};
+    if (ChoiceColumn == 1)
+      return {shift2, epair.second};
+    if (epair.first != -1)
+      return {shift1, epair.first};
+    return {shift2, epair.second};
+  };
+  std::cout << "shift1=" << shift1 << " shift2=" << shift2 << " ChoiceColumn=" << ChoiceColumn << "\n";
+  // eshift is the in_table index used for the determination
+  // of arr_type and dtype of the returned column.
+  size_t eshift;
+  if (ChoiceColumn == 0)
+    eshift=shift1;
+  if (ChoiceColumn == 1)
+    eshift=shift2;
+  if (ChoiceColumn == 2)
+    eshift=shift1;
+  std::cout << "RetrieveArray, step 1\n";
+  if (in_table->columns[eshift]->arr_type == bodo_array_type::STRING) {
+    std::cout << "RetrieveArray, step 2\n";
+    int64_t n_chars=0;
+    std::vector<uint32_t> ListSizes(nRowOut);
+    for (size_t iRow=0; iRow<nRowOut; iRow++) {
+      std::pair<size_t,std::ptrdiff_t> epair = get_iRow(iRow);
+      uint32_t size=0;
+      if (epair.second >= 0) {
+        uint32_t* in_offsets = (uint32_t*)in_table->columns[epair.first]->data2;
+        uint32_t end_offset = in_offsets[epair.second + 1];
+        uint32_t start_offset = in_offsets[epair.second];
+        size = end_offset - start_offset;
+      }
+      std::cout << "iRow=" << iRow << " size=" << size << "\n";
+      ListSizes[iRow] = size;
+      n_chars += size;
+    }
+    std::cout << "RetrieveArray, step 2.1 nRowOut=" << nRowOut << " n_chars=" << n_chars << "\n";
+    out_arr = alloc_array(nRowOut, n_chars,
+                          in_table->columns[eshift]->arr_type,
+                          in_table->columns[eshift]->dtype, 0);
+    std::cout << "RetrieveArray, step 2.2\n";
+    uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
+    uint32_t pos = 0;
+    uint32_t* out_offsets = (uint32_t*)out_arr->data2;
+    std::cout << "RetrieveArray, step 2.3\n";
+    for (size_t iRow=0; iRow<nRowOut; iRow++) {
+      std::pair<size_t,std::ptrdiff_t> epair=get_iRow(iRow);
+      uint32_t size = ListSizes[iRow];
+      out_offsets[iRow] = pos;
+      std::cout << "  iRow=" << iRow << " size=" << size << " pos=" << pos << " epair.second=" << epair.second << "\n";
+      bool bit=false;
+      if (epair.second >= 0) {
+        uint8_t* in_null_bitmask = (uint8_t*)in_table->columns[epair.first]->null_bitmask;
+        uint32_t* in_offsets = (uint32_t*)in_table->columns[epair.first]->data2;
+        uint32_t start_offset = in_offsets[epair.second];
+        for (uint32_t i=0; i<size; i++) {
+          out_arr->data1[pos] = in_table->columns[epair.first]->data1[start_offset];
+          pos++;
+          start_offset++;
+        }
+        bit = GetBit(in_null_bitmask, epair.second);
+        std::cout << "    bit=" << bit << "\n";
+      }
+      std::cout << "  iRow=" << iRow << " bit=" << bit << "\n";
+      SetBitTo(out_null_bitmask, iRow, bit);
+    }
+    std::cout << "RetrieveArray, step 2.4 pos=" << pos << "\n";
+    out_offsets[nRowOut] = pos;
+    std::cout << "RetrieveArray, step 2.5\n";
+  }
+  if (in_table->columns[eshift]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+    std::cout << "RetrieveArray, step 3\n";
+    out_arr = alloc_array(nRowOut, -1,
+                          in_table->columns[eshift]->arr_type,
+                          in_table->columns[eshift]->dtype, 0);
+    uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
+    uint64_t siztype = get_item_size(in_table->columns[eshift]->dtype);
+    for (size_t iRow=0; iRow<nRowOut; iRow++) {
+      std::pair<size_t,std::ptrdiff_t> epair=get_iRow(iRow);
+      bool bit=false;
+      if (epair.second >= 0) {
+        uint8_t* in_null_bitmask = (uint8_t*)in_table->columns[epair.first]->null_bitmask;
+        for (uint64_t u=0; u<siztype; u++)
+          out_arr->data1[siztype*iRow + u] = in_table->columns[epair.first]->data1[siztype*epair.second + u];
+        //
+        bit = GetBit(in_null_bitmask, epair.second);
+      }
+      SetBitTo(out_null_bitmask, iRow, bit);
+    }
+  }
+  if (in_table->columns[eshift]->arr_type == bodo_array_type::NUMPY) {
+    std::cout << "RetrieveArray, step 4\n";
+    out_arr = alloc_array(nRowOut, -1,
+                          in_table->columns[eshift]->arr_type,
+                          in_table->columns[eshift]->dtype, 0);
+    uint64_t siztype = get_item_size(in_table->columns[eshift]->dtype);
+    std::cout << "siztype=" << siztype << "\n";
+    std::vector<char> vectNaN = RetrieveNaNentry(in_table->columns[eshift]->dtype);
+    for (size_t iRow=0; iRow<nRowOut; iRow++) {
+      std::pair<size_t,std::ptrdiff_t> epair=get_iRow(iRow);
+      std::cout << "iRow=" << iRow << " epair=" << epair.first << " , " << epair.second << "\n";
+      //
+      if (epair.second >= 0) {
+        for (uint64_t u=0; u<siztype; u++)
+          out_arr->data1[siztype*iRow + u] = in_table->columns[epair.first]->data1[siztype*epair.second + u];
+      }
+      else {
+        for (uint64_t u=0; u<siztype; u++)
+          out_arr->data1[siztype*iRow + u] = vectNaN[u];
+      }
+    }
+  }
+  return out_arr;
+};
+
+
 /*
   This implementation follows the Shared partition procedure.
   The data is partitioned and shuffled with the _gen_par_shuffle.
@@ -974,35 +1116,35 @@ void PrintRefct(std::ostream &os, std::vector<array_info*> const& ListArr)
   Python which cannot determine their type.
   Further debugging and optimization are needed.
  */
-table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_data_left_t, int64_t nb_data_right_t, bool is_left, bool is_right)
+table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_data_left_t, int64_t n_data_right_t, bool is_left, bool is_right)
 {
-  std::cout << "nb_key_t=" << nb_key_t << " nb_data_left_t=" << nb_data_left_t << " nb_data_right_t=" << nb_data_right_t << "\n";
+  std::cout << "n_key_t=" << n_key_t << " n_data_left_t=" << n_data_left_t << " n_data_right_t=" << n_data_right_t << "\n";
   std::cout << "hash_join_table, step 1 is_left=" << is_left << " is_right=" << is_right << "\n";
   std::cout << "IN_TABLE:\n";
   PrintSetOfColumn(std::cout, in_table->columns);
-  size_t nb_key = size_t(nb_key_t);
-  size_t nb_data_left = size_t(nb_data_left_t);
-  size_t nb_data_right = size_t(nb_data_right_t);
-  size_t sum_dim = 2*nb_key + nb_data_left + nb_data_right;
-  size_t nb_col = in_table->columns.size();
-  if (nb_col != sum_dim) {
+  size_t n_key = size_t(n_key_t);
+  size_t n_data_left = size_t(n_data_left_t);
+  size_t n_data_right = size_t(n_data_right_t);
+  size_t sum_dim = 2*n_key + n_data_left + n_data_right;
+  size_t n_col = in_table->columns.size();
+  if (n_col != sum_dim) {
     PyErr_SetString(PyExc_RuntimeError, "incoherent dimensions");
     return NULL;
   }
-  for (size_t i=0; i<nb_col; i++)
+  for (size_t i=0; i<n_col; i++)
     std::cout << "1: i=" << i << " dtype=" << in_table->columns[i]->dtype << "\n";
   //
   size_t n_rows_left = (size_t)in_table->columns[0]->length;
-  size_t n_rows_right = (size_t)in_table->columns[nb_key]->length;
+  size_t n_rows_right = (size_t)in_table->columns[n_key]->length;
   std::cout << "n_rows_left=" << n_rows_left << " n_rows_right=" << n_rows_right << "\n";
   //
   std::cout << "hash_join_table, step 2\n";
-  std::vector<array_info*> key_arrs_left = std::vector<array_info*>(in_table->columns.begin(), in_table->columns.begin() + nb_key);
+  std::vector<array_info*> key_arrs_left = std::vector<array_info*>(in_table->columns.begin(), in_table->columns.begin() + n_key);
   uint32_t seed = 0xb0d01288;
   uint32_t* hashes_left = hash_keys(key_arrs_left, seed);
 
   std::cout << "hash_join_table, step 3\n";
-  std::vector<array_info*> key_arrs_right = std::vector<array_info*>(in_table->columns.begin()+nb_key, in_table->columns.begin() + 2*nb_key);
+  std::vector<array_info*> key_arrs_right = std::vector<array_info*>(in_table->columns.begin()+n_key, in_table->columns.begin() + 2*n_key);
   uint32_t* hashes_right = hash_keys(key_arrs_right, seed);
   //
   for (size_t i=0; i<n_rows_left; i++)
@@ -1080,8 +1222,8 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
   // We consider all types of bodo_array_type
   auto TestEqual=[&](size_t const& shift_key1, size_t const& iRow1, size_t const& shift_key2, size_t const& iRow2) -> bool {
     //    std::cout << "TestEqual, begin\n";
-    for (size_t iKey=0; iKey<nb_key; iKey++) {
-      //      std::cout << "iKey=" << iKey << " nb_key=" << nb_key << "\n";
+    for (size_t iKey=0; iKey<n_key; iKey++) {
+      //      std::cout << "iKey=" << iKey << " n_key=" << n_key << "\n";
       if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::NUMPY) {
         //        std::cout << "  Case 1\n";
         uint64_t siztype = get_item_size(in_table->columns[shift_key1+iKey]->dtype);
@@ -1191,19 +1333,19 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
 
     std::vector<std::vector<size_t>> ListListEntL = GetBlocks(0, ListEntL);
     //    std::cout << "hash_join_table, step 6.4\n";
-    std::vector<std::vector<size_t>> ListListEntR = GetBlocks(nb_key, ListEntR);
+    std::vector<std::vector<size_t>> ListListEntR = GetBlocks(n_key, ListEntR);
     //    std::cout << "hash_join_table, step 6.5\n";
-    size_t nbBlockL=ListListEntL.size();
-    size_t nbBlockR=ListListEntR.size();
-    std::cout << "nbBlockL=" << nbBlockL << " nbBlockR=" << nbBlockR << "\n";
+    size_t nBlockL=ListListEntL.size();
+    size_t nBlockR=ListListEntR.size();
+    std::cout << "nBlockL=" << nBlockL << " nBlockR=" << nBlockR << "\n";
 
     if (is_left) {
       //      std::cout << "hash_join_table, step 6.6\n";
       auto GetEntry=[&](size_t const& iRowL) -> std::ptrdiff_t {
-        //        std::cout << "GetEntry : nbBlockR=" << nbBlockR << "\n";
-        for (size_t iR=0; iR<nbBlockR; iR++) {
+        //        std::cout << "GetEntry : nBlockR=" << nBlockR << "\n";
+        for (size_t iR=0; iR<nBlockR; iR++) {
           //          std::cout << "GetEntry : iR=" << iR << " |ListListEntR[iR]|=" << ListListEntR[iR].size() << "\n";
-          bool test = TestEqual(0, iRowL, nb_key, ListListEntR[iR][0]);
+          bool test = TestEqual(0, iRowL, n_key, ListListEntR[iR][0]);
           //          std::cout << "GetEntry : test=" << test << "\n";
           if (test)
             return iR;
@@ -1211,8 +1353,8 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
         return -1;
       };
       //      std::cout << "hash_join_table, step 6.7\n";
-      std::vector<int> ListStatus(nbBlockR,0);
-      for (size_t iL=0; iL<nbBlockL; iL++) {
+      std::vector<int> ListStatus(nBlockR,0);
+      for (size_t iL=0; iL<nBlockL; iL++) {
         //        std::cout << "iL=" << iL << " |ListListEntL[iL]|=" << ListListEntL[iL].size() << "\n";
         std::ptrdiff_t iR=GetEntry(ListListEntL[iL][0]);
         //        std::cout << "iR=" << iR << "\n";
@@ -1229,7 +1371,7 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
         }
       }
       if (is_right) {
-        for (size_t iR=0; iR<nbBlockR; iR++)
+        for (size_t iR=0; iR<nBlockR; iR++)
           if (ListStatus[iR] == 0)
             for (auto & uR : ListListEntR[iR])
               ListPairWrite.push_back({-1,uR});
@@ -1239,15 +1381,15 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
     else {
       //      std::cout << "hash_join_table, step 6.9\n";
       auto GetEntry=[&](size_t const& iRowR) -> std::ptrdiff_t {
-        for (size_t iL=0; iL<nbBlockL; iL++) {
-          bool test = TestEqual(0, ListListEntL[iL][0], nb_key, iRowR);
+        for (size_t iL=0; iL<nBlockL; iL++) {
+          bool test = TestEqual(0, ListListEntL[iL][0], n_key, iRowR);
           if (test)
             return iL;
         }
         return -1;
       };
       //      std::cout << "hash_join_table, step 6.10\n";
-      for (size_t iR=0; iR<nbBlockR; iR++) {
+      for (size_t iR=0; iR<nBlockR; iR++) {
         std::ptrdiff_t iL=GetEntry(ListListEntR[iR][0]);
         if (iL == -1) {
           if (is_right) {
@@ -1266,162 +1408,35 @@ table_info* hash_join_table(table_info* in_table, int64_t nb_key_t, int64_t nb_d
       //      std::cout << "hash_join_table, step 6.11\n";
     }
   }
-  size_t nbRowOut = ListPairWrite.size();
-  for (size_t iRowOut=0; iRowOut<nbRowOut; iRowOut++)
+  size_t nRowOut = ListPairWrite.size();
+  for (size_t iRowOut=0; iRowOut<nRowOut; iRowOut++)
     std::cout << "iRowOut=" << iRowOut << " epair=" << ListPairWrite[iRowOut].first << " , " << ListPairWrite[iRowOut].second << "\n";
 
-  std::cout << "hash_join_table, step 7 nbRowOut=" << nbRowOut << "\n";
-  //
-  // This function uses the combinatorial information computed in the "ListPairWrite"
-  // array.
-  // The other arguments shift1, shift2 and ChoiceColumn are for the choice of column
-  // ---For inserting a left data,  call (i+2*nb_key, -1                        , 0)
-  // ---For inserting a right data, call (-1        ,  i+2*nb_key + nb_data_left, 1)
-  // ---For the key, we need to put both the left and right key column (shift1, shift2)
-  //    and ChoiceColumn = 2
-  //
-  // The code considers all the cases in turn and creates the new array from it.
-  //
-  std::vector<array_info*> out_arrs;
-  auto RetrieveArray = [&](size_t const& shift1, size_t const& shift2, int const& ChoiceColumn) -> void {
-    array_info* out_arr = NULL;
-    std::cout << "--------------------------------------------------------------\n";
-    auto get_iRow=[&](size_t const& iRowIn) -> std::pair<size_t,std::ptrdiff_t> {
-      std::pair<std::ptrdiff_t, std::ptrdiff_t> epair = ListPairWrite[iRowIn];
-      if (ChoiceColumn == 0)
-        return {shift1, epair.first};
-      if (ChoiceColumn == 1)
-        return {shift2, epair.second};
-      if (epair.first != -1)
-        return {shift1, epair.first};
-      return {shift2, epair.second};
-    };
-    std::cout << "shift1=" << shift1 << " shift2=" << shift2 << " ChoiceColumn=" << ChoiceColumn << "\n";
-    size_t eshift;
-    if (ChoiceColumn == 0)
-      eshift=shift1;
-    if (ChoiceColumn == 1)
-      eshift=shift2;
-    if (ChoiceColumn == 2)
-      eshift=shift1;
-    std::cout << "RetrieveArray, step 1\n";
-    if (in_table->columns[eshift]->arr_type == bodo_array_type::STRING) {
-      std::cout << "RetrieveArray, step 2\n";
-      int64_t n_chars=0;
-      std::vector<uint32_t> ListSizes(nbRowOut);
-      for (size_t iRow=0; iRow<nbRowOut; iRow++) {
-        std::pair<size_t,std::ptrdiff_t> epair = get_iRow(iRow);
-        uint32_t size=0;
-        if (epair.second >= 0) {
-          uint32_t* in_offsets = (uint32_t*)in_table->columns[epair.first]->data2;
-          uint32_t end_offset = in_offsets[epair.second + 1];
-          uint32_t start_offset = in_offsets[epair.second];
-          size = end_offset - start_offset;
-        }
-        std::cout << "iRow=" << iRow << " size=" << size << "\n";
-        ListSizes[iRow] = size;
-        n_chars += size;
-      }
-      std::cout << "RetrieveArray, step 2.1 nbRowOut=" << nbRowOut << " n_chars=" << n_chars << "\n";
-      out_arr = alloc_array(nbRowOut, n_chars,
-                            in_table->columns[eshift]->arr_type,
-                            in_table->columns[eshift]->dtype, 0);
-      std::cout << "RetrieveArray, step 2.2\n";
-      uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
-      uint32_t pos = 0;
-      uint32_t* out_offsets = (uint32_t*)out_arr->data2;
-      std::cout << "RetrieveArray, step 2.3\n";
-      for (size_t iRow=0; iRow<nbRowOut; iRow++) {
-        std::pair<size_t,std::ptrdiff_t> epair=get_iRow(iRow);
-        uint32_t size = ListSizes[iRow];
-        out_offsets[iRow] = pos;
-        std::cout << "  iRow=" << iRow << " size=" << size << " pos=" << pos << " epair.second=" << epair.second << "\n";
-        bool bit=false;
-        if (epair.second >= 0) {
-          uint8_t* in_null_bitmask = (uint8_t*)in_table->columns[epair.first]->null_bitmask;
-          uint32_t* in_offsets = (uint32_t*)in_table->columns[epair.first]->data2;
-          uint32_t start_offset = in_offsets[epair.second];
-          for (uint32_t i=0; i<size; i++) {
-            out_arr->data1[pos] = in_table->columns[epair.first]->data1[start_offset];
-            pos++;
-            start_offset++;
-          }
-          bit = GetBit(in_null_bitmask, epair.second);
-          std::cout << "    bit=" << bit << "\n";
-        }
-        std::cout << "  iRow=" << iRow << " bit=" << bit << "\n";
-        SetBitTo(out_null_bitmask, iRow, bit);
-      }
-      std::cout << "RetrieveArray, step 2.4 pos=" << pos << "\n";
-      out_offsets[nbRowOut] = pos;
-      std::cout << "RetrieveArray, step 2.5\n";
-    }
-    if (in_table->columns[eshift]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-      std::cout << "RetrieveArray, step 3\n";
-      out_arr = alloc_array(nbRowOut, -1,
-                            in_table->columns[eshift]->arr_type,
-                            in_table->columns[eshift]->dtype, 0);
-      uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
-      uint64_t siztype = get_item_size(in_table->columns[eshift]->dtype);
-      for (size_t iRow=0; iRow<nbRowOut; iRow++) {
-        std::pair<size_t,std::ptrdiff_t> epair=get_iRow(iRow);
-        bool bit=false;
-        if (epair.second >= 0) {
-          uint8_t* in_null_bitmask = (uint8_t*)in_table->columns[epair.first]->null_bitmask;
-          for (uint64_t u=0; u<siztype; u++)
-            out_arr->data1[siztype*iRow + u] = in_table->columns[epair.first]->data1[siztype*epair.second + u];
-          //
-          bit = GetBit(in_null_bitmask, epair.second);
-        }
-        SetBitTo(out_null_bitmask, iRow, bit);
-      }
-    }
-    if (in_table->columns[eshift]->arr_type == bodo_array_type::NUMPY) {
-      std::cout << "RetrieveArray, step 4\n";
-      out_arr = alloc_array(nbRowOut, -1,
-                            in_table->columns[eshift]->arr_type,
-                            in_table->columns[eshift]->dtype, 0);
-      uint64_t siztype = get_item_size(in_table->columns[eshift]->dtype);
-      std::cout << "siztype=" << siztype << "\n";
-      std::vector<char> vectNaN = RetrieveNaNentry(in_table->columns[eshift]->dtype);
-      for (size_t iRow=0; iRow<nbRowOut; iRow++) {
-        std::pair<size_t,std::ptrdiff_t> epair=get_iRow(iRow);
-        std::cout << "iRow=" << iRow << " epair=" << epair.first << " , " << epair.second << "\n";
-        //
-        if (epair.second >= 0) {
-          for (uint64_t u=0; u<siztype; u++)
-            out_arr->data1[siztype*iRow + u] = in_table->columns[epair.first]->data1[siztype*epair.second + u];
-        }
-        else {
-          for (uint64_t u=0; u<siztype; u++)
-            out_arr->data1[siztype*iRow + u] = vectNaN[u];
-        }
-      }
-    }
-    out_arrs.push_back(out_arr);
-  };
+  std::cout << "hash_join_table, step 7 nRowOut=" << nRowOut << "\n";
   std::cout << "hash_join_table, step 8\n";
-  std::cout << "nb_key=" << nb_key << " nb_data_left=" << nb_data_left << " nb_data_right=" << nb_data_right << "\n";
-  for (size_t i=0; i<nb_col; i++)
+  std::cout << "n_key=" << n_key << " n_data_left=" << n_data_left << " n_data_right=" << n_data_right << "\n";
+  for (size_t i=0; i<n_col; i++)
     std::cout << "2: i=" << i << " dtype=" << in_table->columns[i]->dtype << "\n";
-  for (size_t i=0; i<nb_data_left; i++) {
+  std::vector<array_info*> out_arrs;
+  for (size_t i=0; i<n_data_left; i++) {
     std::cout << "1: i=" << i << "\n";
-    RetrieveArray(i + 2*nb_key, -1, 0);
+    out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
+                                     i + 2*n_key, -1, 0));
   }
   std::cout << "hash_join_table, step 9\n";
-  for (size_t i=0; i<nb_data_right; i++) {
+  for (size_t i=0; i<n_data_right; i++) {
     std::cout << "2: i=" << i << "\n";
-    RetrieveArray(-1, i + 2*nb_key + nb_data_left, 1);
+    out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, -1, i + 2*n_key + n_data_left, 1));
   }
   std::cout << "hash_join_table, step 10\n";
-  for (size_t i=0; i<nb_key; i++) {
+  for (size_t i=0; i<n_key; i++) {
     std::cout << "3: i=" << i << "\n";
-    RetrieveArray(i, i+nb_key, 2);
+    out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, i+n_key, 2));
   }
   std::cout << "hash_join_table, step 11\n";
-  for (size_t i=0; i<nb_key; i++) {
+  for (size_t i=0; i<n_key; i++) {
     std::cout << "4: i=" << i << "\n";
-    RetrieveArray(i, i+nb_key, 2);
+    out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, i+n_key, 2));
   }
   std::cout << "hash_join_table, step 12\n";
   PrintSetOfColumn(std::cout, out_arrs);
