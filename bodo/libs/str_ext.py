@@ -229,6 +229,13 @@ def re_sub_overload(p, repl, string, count=0):
     return _re_sub_impl
 
 
+@numba.njit
+def contains_regex(e, in_str):
+    with numba.objmode(res="bool_"):
+        res = bool(e.search(in_str))
+    return res
+
+
 @numba.generated_jit
 def str_findall_count(regex, in_str):
     def _str_findall_count_impl(regex, in_str):
@@ -402,36 +409,6 @@ regex_type = RegexType()
 
 register_model(RegexType)(models.OpaqueModel)
 
-
-def compile_regex(pat):
-    return 0
-
-
-@infer_global(compile_regex)
-class CompileRegexInfer(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        return signature(regex_type, *unliteral_all(args))
-
-
-def contains_regex(str, pat):
-    return False
-
-
-def contains_noregex(str, pat):
-    return False
-
-
-@infer_global(contains_regex)
-@infer_global(contains_noregex)
-class ContainsInfer(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2
-        return signature(types.boolean, *unliteral_all(args))
-
-
 ll.add_symbol("init_string_const", hstr_ext.init_string_const)
 ll.add_symbol("get_c_str", hstr_ext.get_c_str)
 ll.add_symbol("str_to_int64", hstr_ext.str_to_int64)
@@ -582,57 +559,8 @@ def string_from_impl(context, builder, sig, args):
     return gen_std_str_to_unicode(context, builder, std_str)
 
 
-
 # XXX handle unicode until Numba supports float(str)
 @lower_cast(string_type, types.float64)
 def cast_unicode_str_to_float64(context, builder, fromty, toty, val):
     std_str = gen_unicode_to_std_str(context, builder, val)
     return cast_str_to_float64(context, builder, std_str_type, toty, std_str)
-
-
-
-@lower_builtin(compile_regex, std_str_type)
-def lower_compile_regex(context, builder, sig, args):
-    fnty = lir.FunctionType(lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer()])
-    fn = builder.module.get_or_insert_function(fnty, name="compile_regex")
-    return builder.call(fn, args)
-
-
-@lower_builtin(compile_regex, string_type)
-def lower_compile_regex_unicode(context, builder, sig, args):
-    val = args[0]
-    std_val = gen_unicode_to_std_str(context, builder, val)
-    return lower_compile_regex(context, builder, sig, [std_val])
-
-
-@lower_builtin(contains_regex, std_str_type, regex_type)
-def impl_string_contains_regex(context, builder, sig, args):
-    fnty = lir.FunctionType(
-        lir.IntType(1), [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer()]
-    )
-    fn = builder.module.get_or_insert_function(fnty, name="str_contains_regex")
-    return builder.call(fn, args)
-
-
-@lower_builtin(contains_regex, string_type, regex_type)
-def impl_unicode_string_contains_regex(context, builder, sig, args):
-    val, reg = args
-    std_val = gen_unicode_to_std_str(context, builder, val)
-    return impl_string_contains_regex(context, builder, sig, [std_val, reg])
-
-
-@lower_builtin(contains_noregex, std_str_type, std_str_type)
-def impl_string_contains_noregex(context, builder, sig, args):
-    fnty = lir.FunctionType(
-        lir.IntType(1), [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer()]
-    )
-    fn = builder.module.get_or_insert_function(fnty, name="str_contains_noregex")
-    return builder.call(fn, args)
-
-
-@lower_builtin(contains_noregex, string_type, string_type)
-def impl_unicode_string_contains_noregex(context, builder, sig, args):
-    val, pat = args
-    std_val = gen_unicode_to_std_str(context, builder, val)
-    std_pat = gen_unicode_to_std_str(context, builder, pat)
-    return impl_string_contains_noregex(context, builder, sig, [std_val, std_pat])

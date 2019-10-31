@@ -231,47 +231,6 @@ class TestString(unittest.TestCase):
     #     arg = 'abaabbcc'
     #     self.assertEqual(bodo_func(arg), len(test_impl(arg)))
 
-    def test_regex_std(self):
-        def test_impl(_str, _pat):
-            return bodo.libs.str_ext.contains_regex(
-                _str, bodo.libs.str_ext.compile_regex(_pat)
-            )
-
-        bodo_func = bodo.jit(test_impl)
-        self.assertEqual(bodo_func("What does the fox say", r"d.*(the |fox ){2}"), True)
-        self.assertEqual(bodo_func("What does the fox say", r"[kz]u*"), False)
-
-    def test_replace_regex_std(self):
-        def test_impl(_str, pat, val):
-            s = unicode_to_std_str(_str)
-            e = bodo.libs.str_ext.compile_regex(unicode_to_std_str(pat))
-            val = unicode_to_std_str(val)
-            out = bodo.libs.str_ext.str_replace_regex(s, e, val)
-            return std_str_to_unicode(out)
-
-        _str = "What does the fox say"
-        pat = r"d.*(the |fox ){2}"
-        val = "does the cat "
-        bodo_func = bodo.jit(test_impl)
-        self.assertEqual(
-            bodo_func(_str, pat, val),
-            _str.replace(re.compile(pat).search(_str).group(), val),
-        )
-
-    def test_replace_noregex_std(self):
-        def test_impl(_str, pat, val):
-            s = unicode_to_std_str(_str)
-            e = unicode_to_std_str(pat)
-            val = unicode_to_std_str(val)
-            out = bodo.libs.str_ext.str_replace_noregex(s, e, val)
-            return std_str_to_unicode(out)
-
-        _str = "What does the fox say"
-        pat = "does the fox"
-        val = "does the cat"
-        bodo_func = bodo.jit(test_impl)
-        self.assertEqual(bodo_func(_str, pat, val), _str.replace(pat, val))
-
     # string array tests
     def test_string_array_constructor(self):
         # create StringArray and return as list of strings
