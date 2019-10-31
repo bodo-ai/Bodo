@@ -757,19 +757,19 @@ std::vector<char> GetVector(T const& val)
 std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype)
 {
   if (dtype == Bodo_CTypes::INT8)
-    return GetVector<int8_t>(0);
+    return GetVector<int8_t>(-1);
   if (dtype == Bodo_CTypes::UINT8)
     return GetVector<uint8_t>(0);
   if (dtype == Bodo_CTypes::INT16)
-    return GetVector<int16_t>(0);
+    return GetVector<int16_t>(-1);
   if (dtype == Bodo_CTypes::UINT16)
     return GetVector<uint16_t>(0);
   if (dtype == Bodo_CTypes::INT32)
-    return GetVector<int32_t>(0);
+    return GetVector<int32_t>(-1);
   if (dtype == Bodo_CTypes::UINT32)
     return GetVector<uint32_t>(0);
   if (dtype == Bodo_CTypes::INT64)
-    return GetVector<int64_t>(0);
+    return GetVector<int64_t>(-1);
   if (dtype == Bodo_CTypes::UINT64)
     return GetVector<uint64_t>(0);
   if (dtype == Bodo_CTypes::FLOAT32)

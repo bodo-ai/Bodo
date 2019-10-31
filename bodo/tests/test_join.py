@@ -709,7 +709,8 @@ class TestJoin(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
 #        check_func(test_impl, (df1, df2), sort_output=True)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        pd.testing.assert_frame_equal(bodo_func().sort_values("C1").reset_index(drop=True),
+                                      test_impl().sort_values("C1").reset_index(drop=True))
 
     def test_join_cat3(self):
         # test setting NaN in categorical array
@@ -729,7 +730,8 @@ class TestJoin(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
 #        check_func(test_impl, (df1, df2), sort_output=True)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        pd.testing.assert_frame_equal(bodo_func().sort_values("C1").reset_index(drop=True),
+                                      test_impl().sort_values("C1").reset_index(drop=True))
 
     def test_join_cat4(self):
         # test setting NaN in categorical array
@@ -748,7 +750,8 @@ class TestJoin(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
 #        check_func(test_impl, (df1, df2), sort_output=True)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        pd.testing.assert_frame_equal(bodo_func().sort_values("C1").reset_index(drop=True),
+                                      test_impl().sort_values("C1").reset_index(drop=True))
 
     def test_join_cat_parallel1(self):
         # TODO: cat as keys
