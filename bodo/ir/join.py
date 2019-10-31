@@ -602,7 +602,7 @@ def join_distributed_run(
         )
 
     loc_vars = {}
-    print("func_text=", func_text)
+#    print("func_text=", func_text)
     exec(func_text, {}, loc_vars)
     join_impl = loc_vars["f"]
 
@@ -1186,11 +1186,11 @@ def local_hash_join_impl(
 ):
     l_len = len(left_keys[0])
     r_len = len(right_keys[0])
-    print("l_len=", l_len, " r_len=", r_len, " is_left=", is_left, " is_right=", is_right)
-    print("left_keys=", left_keys, " right_keys=", right_keys)
-    print("data_left=", data_left, " data_right=", data_right)
-    print("|left_keys|=", len(left_keys), " |right_keys|=", len(right_keys))
-    print("|data_left|=", len(data_left), " |data_right|=", len(data_right))
+#    print("l_len=", l_len, " r_len=", r_len, " is_left=", is_left, " is_right=", is_right)
+#    print("left_keys=", left_keys, " right_keys=", right_keys)
+#    print("data_left=", data_left, " data_right=", data_right)
+#    print("|left_keys|=", len(left_keys), " |right_keys|=", len(right_keys))
+#    print("|data_left|=", len(data_left), " |data_right|=", len(data_right))
     # TODO: approximate output size properly
     curr_size = 101 + min(l_len, r_len) // 2
     if is_left:
