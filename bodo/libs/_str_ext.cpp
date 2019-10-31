@@ -33,9 +33,7 @@ static inline void SetBit(uint8_t* bits, int64_t i) {
     bits[i / 8] |= kBitmask[i % 8];
 }
 
-void* init_string(char*, int64_t);
 void* init_string_const(char* in_str, int64_t size);
-void dtor_string(std::string** in_str, int64_t size, void* in);
 void dtor_str_arr_split_view(str_arr_split_view_payload* in_str_arr,
                              int64_t size, void* in);
 void str_arr_split_view_alloc(str_arr_split_view_payload* out_view,
@@ -44,7 +42,6 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
                              int64_t n_strs, uint32_t* offsets, char* data,
                              char sep);
 const char* get_c_str(std::string* s);
-const char* get_char_ptr(char c);
 void* str_concat(std::string* s1, std::string* s2);
 int str_compare(std::string* s1, std::string* s2);
 bool str_equal(std::string* s1, std::string* s2);
@@ -91,7 +88,6 @@ int str_arr_to_int64(int64_t* out, uint32_t* offsets, char* data,
 int str_arr_to_float64(double* out, uint32_t* offsets, char* data,
                        int64_t index);
 
-char get_char_from_string(std::string* str, int64_t index);
 
 void* str_from_int32(int in);
 void* str_from_int64(int64_t in);
@@ -129,12 +125,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     // init numpy
     import_array();
 
-    PyObject_SetAttrString(m, "init_string",
-                           PyLong_FromVoidPtr((void*)(&init_string)));
     PyObject_SetAttrString(m, "init_string_const",
                            PyLong_FromVoidPtr((void*)(&init_string_const)));
-    PyObject_SetAttrString(m, "dtor_string",
-                           PyLong_FromVoidPtr((void*)(&dtor_string)));
     PyObject_SetAttrString(m, "dtor_string_array",
                            PyLong_FromVoidPtr((void*)(&dtor_string_array)));
     PyObject_SetAttrString(
@@ -151,8 +143,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
         PyLong_FromVoidPtr((void*)(&str_arr_split_view_impl)));
     PyObject_SetAttrString(m, "get_c_str",
                            PyLong_FromVoidPtr((void*)(&get_c_str)));
-    PyObject_SetAttrString(m, "get_char_ptr",
-                           PyLong_FromVoidPtr((void*)(&get_char_ptr)));
     PyObject_SetAttrString(m, "str_concat",
                            PyLong_FromVoidPtr((void*)(&str_concat)));
     PyObject_SetAttrString(m, "str_compare",
@@ -165,8 +155,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&str_split)));
     PyObject_SetAttrString(m, "str_substr_int",
                            PyLong_FromVoidPtr((void*)(&str_substr_int)));
-    PyObject_SetAttrString(m, "get_char_from_string",
-                           PyLong_FromVoidPtr((void*)(&get_char_from_string)));
     PyObject_SetAttrString(m, "std_str_to_int64",
                            PyLong_FromVoidPtr((void*)(&std_str_to_int64)));
     PyObject_SetAttrString(m, "str_to_int64",
@@ -253,23 +241,12 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     return m;
 }
 
-void* init_string(char* in_str, int64_t size) {
-    // std::cout<<"init str: "<<in_str<<" "<<size<<std::endl;
-    return new std::string(in_str, size);
-}
 
 void* init_string_const(char* in_str, int64_t size) {
     // std::cout<<"init str: "<<in_str<<" "<<size<<std::endl;
     return new std::string(in_str, size);
 }
 
-void dtor_string(std::string** in_str, int64_t size, void* info) {
-    printf("dtor size: %ld\n", size);
-    fflush(stdout);
-    // std::cout<<"del str: "<< (*in_str)->c_str() <<std::endl;
-    // delete (*in_str);
-    return;
-}
 
 void del_str(std::string* in_str) {
     delete in_str;
@@ -356,12 +333,6 @@ const char* get_c_str(std::string* s) {
     return s->c_str();
 }
 
-const char* get_char_ptr(char c) {
-    // printf("in get %s\n", s->c_str());
-    char* str = new char[1];
-    str[0] = c;
-    return str;
-}
 
 void* str_concat(std::string* s1, std::string* s2) {
     // printf("in concat %s %s\n", s1->c_str(), s2->c_str());
@@ -411,9 +382,6 @@ void* str_substr_int(std::string* str, int64_t index) {
     return new std::string(*str, index, 1);
 }
 
-char get_char_from_string(std::string* str, int64_t index) {
-    return str->at(index);
-}
 
 int64_t std_str_to_int64(std::string* str) { return std::stoll(*str); }
 

@@ -45,8 +45,6 @@ def unliteral_all(args):
 
 from bodo.libs import hstr_ext
 
-ll.add_symbol("get_char_from_string", hstr_ext.get_char_from_string)
-ll.add_symbol("get_char_ptr", hstr_ext.get_char_ptr)
 ll.add_symbol("del_str", hstr_ext.del_str)
 ll.add_symbol("unicode_to_utf8", hstr_ext.unicode_to_utf8)
 
