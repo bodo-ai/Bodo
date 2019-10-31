@@ -341,7 +341,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
             index = bodo.hiframes.api.get_series_index(S)
             name = bodo.hiframes.api.get_series_name(S)
             numba.parfor.init_prange()
-            e = bodo.libs.str_ext.compile_regex(pat)
+            e = re.compile(pat)
             l = len(arr)
             out_arr = np.empty(l, dtype=np.bool_)
             nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
@@ -350,7 +350,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
                     out_arr[i] = False
                     bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 0)
                 else:
-                    out_arr[i] = bodo.libs.str_ext.contains_regex(arr[i], e)
+                    out_arr[i] = bodo.libs.str_ext.contains_regex(e, arr[i])
                     bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
             return bodo.hiframes.api.init_series(
                 bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls), index, name
@@ -377,7 +377,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
                 out_arr[i] = False
                 bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 0)
             else:
-                out_arr[i] = bodo.libs.str_ext.contains_noregex(arr[i], pat)
+                out_arr[i] = pat in arr[i]
                 bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
         return bodo.hiframes.api.init_series(
             bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls), index, name

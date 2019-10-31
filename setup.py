@@ -147,16 +147,11 @@ ext_dict = Extension(
 )
 
 
-str_libs = np_compile_args["libraries"]
-
-if not is_win:
-    str_libs += ["boost_regex"]
-
 ext_str = Extension(
     name="bodo.libs.hstr_ext",
     sources=["bodo/libs/_str_ext.cpp"],
-    libraries=str_libs,
-    define_macros=np_compile_args["define_macros"] + [("USE_BOOST_REGEX", None)],
+    libraries=np_compile_args["libraries"],
+    define_macros=np_compile_args["define_macros"],
     extra_compile_args=eca,
     extra_link_args=ela,
     include_dirs=np_compile_args["include_dirs"] + ind,
