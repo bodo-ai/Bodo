@@ -9,4 +9,4 @@ ENV PATH /root/miniconda3/bin/:${PATH}
 RUN conda create -n BODODEV numpy scipy pandas boost cmake h5py pyarrow mpich mpi gcc_linux-64 gxx_linux-64 gfortran_linux-64 
 RUN echo "source activate BODODEV" > ~/.bashrc
 RUN conda install -c numba numba=0.46.0
-
+RUN conda install -c defaults -c conda-forge hdf5=*=*mpich*
