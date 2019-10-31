@@ -43,13 +43,11 @@ def unliteral_all(args):
     return tuple(types.unliteral(a) for a in args)
 
 
-# relative import seems required for C extensions
 from bodo.libs import hstr_ext
 
 ll.add_symbol("get_char_from_string", hstr_ext.get_char_from_string)
 ll.add_symbol("get_char_ptr", hstr_ext.get_char_ptr)
 ll.add_symbol("del_str", hstr_ext.del_str)
-ll.add_symbol("_hash_str", hstr_ext.hash_str)
 ll.add_symbol("unicode_to_utf8", hstr_ext.unicode_to_utf8)
 
 
@@ -316,74 +314,19 @@ def unicode_to_utf8_and_len(typingctx, str_typ=None):
 
 
 #######################  type for std string pointer  ########################
+# Some support for std::string since it is used in some C++ extension code.
 
 
-class StdStringType(types.Opaque, types.Hashable):
+class StdStringType(types.Opaque):
     def __init__(self):
         super(StdStringType, self).__init__(name="StdStringType")
 
 
 std_str_type = StdStringType()
-
-# XXX enabling this turns on old std::string implementation
-# string_type = StdStringType()
-
-# @typeof_impl.register(str)
-# def _typeof_str(val, c):
-#     return string_type
-
-
 register_model(StdStringType)(models.OpaqueModel)
-
-# XXX: should be subtype of StdStringType?
-class CharType(types.Type):
-    def __init__(self):
-        super(CharType, self).__init__(name="CharType")
-        self.bitwidth = 8
-
-
-char_type = CharType()
-register_model(CharType)(models.IntegerModel)
-
-
-@overload(operator.getitem)
-def char_getitem_overload(_str, ind):
-    if _str == std_str_type and isinstance(ind, types.Integer):
-        sig = char_type(std_str_type, types.intp)  # string  # index
-        get_char_from_string = types.ExternalFunction("get_char_from_string", sig)
-
-        def impl(_str, ind):
-            return get_char_from_string(_str, ind)
-
-        return impl
-
-
-# XXX: fix overload for getitem and use it
-@lower_builtin(operator.getitem, StdStringType, types.Integer)
-def getitem_string(context, builder, sig, args):
-    fnty = lir.FunctionType(
-        lir.IntType(8), [lir.IntType(8).as_pointer(), lir.IntType(64)]
-    )
-    fn = builder.module.get_or_insert_function(fnty, name="get_char_from_string")
-    return builder.call(fn, args)
-
-
-@box(CharType)
-def box_char(typ, val, c):
-    """
-    """
-    fnty = lir.FunctionType(lir.IntType(8).as_pointer(), [lir.IntType(8)])
-    fn = c.builder.module.get_or_insert_function(fnty, name="get_char_ptr")
-    c_str = c.builder.call(fn, [val])
-    pystr = c.pyapi.string_from_string_and_size(
-        c_str, c.context.get_constant(types.intp, 1)
-    )
-    # TODO: delete ptr
-    return pystr
 
 
 del_str = types.ExternalFunction("del_str", types.void(std_str_type))
-_hash_str = types.ExternalFunction("_hash_str", types.int64(std_str_type))
 get_c_str = types.ExternalFunction("get_c_str", types.voidptr(std_str_type))
 
 
@@ -408,28 +351,6 @@ def str_join(str_typ, iterable_typ):
     return str_join_impl
 
 
-# TODO: using lower_builtin since overload fails for str tuple
-# TODO: constant hash like hash("ss",) fails
-# @overload(hash)
-# def hash_overload(str_typ):
-#     if str_typ == string_type:
-#         return lambda s: _hash_str(s)
-
-
-@lower_builtin(hash, std_str_type)
-def hash_str_lower(context, builder, sig, args):
-    return context.compile_internal(builder, lambda s: _hash_str(s), sig, args)
-
-
-# XXX: use Numba's hash(str) when available
-@lower_builtin(hash, string_type)
-def hash_unicode_lower(context, builder, sig, args):
-    std_str = gen_unicode_to_std_str(context, builder, args[0])
-    return hash_str_lower(
-        context, builder, signature(sig.return_type, std_str_type), [std_str]
-    )
-
-
 @infer
 @infer_global(operator.add)
 @infer_global(operator.iadd)
@@ -452,8 +373,6 @@ class StringOpEq(AbstractTemplate):
         assert not kws
         (arg1, arg2) = args
         if isinstance(arg1, StdStringType) and isinstance(arg2, StdStringType):
-            return signature(types.boolean, arg1, arg2)
-        if arg1 == char_type and arg2 == char_type:
             return signature(types.boolean, arg1, arg2)
 
 
@@ -879,26 +798,6 @@ def impl_string_concat(context, builder, sig, args):
     fn = builder.module.get_or_insert_function(fnty, name="str_concat")
     return builder.call(fn, args)
 
-
-@lower_builtin(operator.eq, std_str_type, std_str_type)
-@lower_builtin("==", std_str_type, std_str_type)
-def string_eq_impl(context, builder, sig, args):
-    fnty = lir.FunctionType(
-        lir.IntType(1), [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer()]
-    )
-    fn = builder.module.get_or_insert_function(fnty, name="str_equal")
-    return builder.call(fn, args)
-
-
-@lower_builtin(operator.eq, char_type, char_type)
-@lower_builtin("==", char_type, char_type)
-def char_eq_impl(context, builder, sig, args):
-    def char_eq_impl(c1, c2):
-        return c1 == c2
-
-    new_sig = signature(sig.return_type, types.uint8, types.uint8)
-    res = context.compile_internal(builder, char_eq_impl, new_sig, args)
-    return res
 
 
 @lower_builtin(operator.ne, std_str_type, std_str_type)
