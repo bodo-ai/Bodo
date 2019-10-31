@@ -1324,7 +1324,7 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
       if (idx_side == 1)
         entListR.push_back(iRow);
     }
-    std::cout << "|entListL|=" << entListL.size() << " |entListR|=" << entListR.size() << "\n";
+    //    std::cout << "|entListL|=" << entListL.size() << " |entListR|=" << entListR.size() << "\n";
     /** This function takes a list of lines in the in_table and return the list of line
      *
      * by blocks if they have the same key.
@@ -1433,6 +1433,7 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
       }
     }
   }
+  /*
   size_t nRowOut = ListPairWrite.size();
   for (size_t iRowOut=0; iRowOut<nRowOut; iRowOut++)
     std::cout << "iRowOut=" << iRowOut << " epair=" << ListPairWrite[iRowOut].first << " , " << ListPairWrite[iRowOut].second << "\n";
@@ -1440,26 +1441,23 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
   std::cout << "hash_join_table, step 7 nRowOut=" << nRowOut << "\n";
   std::cout << "n_key=" << n_key << " n_data_left=" << n_data_left << " n_data_right=" << n_data_right << "\n";
   for (size_t i=0; i<n_col; i++)
-    std::cout << "2: i=" << i << " dtype=" << in_table->columns[i]->dtype << "\n";
+  std::cout << "2: i=" << i << " dtype=" << in_table->columns[i]->dtype << "\n"; */
   std::vector<array_info*> out_arrs;
   for (size_t i=0; i<n_data_left; i++) {
-    std::cout << "1: i=" << i << "\n";
+    //    std::cout << "1: i=" << i << "\n";
     out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
                                      i + 2*n_key, -1, 0));
   }
-  std::cout << "hash_join_table, step 9\n";
   for (size_t i=0; i<n_data_right; i++) {
-    std::cout << "2: i=" << i << "\n";
+    //    std::cout << "2: i=" << i << "\n";
     out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, -1, i + 2*n_key + n_data_left, 1));
   }
-  std::cout << "hash_join_table, step 10\n";
   for (size_t i=0; i<n_key; i++) {
-    std::cout << "3: i=" << i << "\n";
+    //    std::cout << "3: i=" << i << "\n";
     out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, i+n_key, 2));
   }
-  std::cout << "hash_join_table, step 11\n";
   for (size_t i=0; i<n_key; i++) {
-    std::cout << "4: i=" << i << "\n";
+    //    std::cout << "4: i=" << i << "\n";
     out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, i+n_key, 2));
   }
   //  std::cout << "hash_join_table, step 12\n";
