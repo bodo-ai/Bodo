@@ -327,7 +327,7 @@ register_model(StdStringType)(models.OpaqueModel)
 
 
 del_str = types.ExternalFunction("del_str", types.void(std_str_type))
-
+get_c_str = types.ExternalFunction("get_c_str", types.voidptr(std_str_type))
 
 
 @overload(int)
@@ -432,15 +432,8 @@ class ContainsInfer(AbstractTemplate):
         return signature(types.boolean, *unliteral_all(args))
 
 
-ll.add_symbol("init_string", hstr_ext.init_string)
 ll.add_symbol("init_string_const", hstr_ext.init_string_const)
 ll.add_symbol("get_c_str", hstr_ext.get_c_str)
-ll.add_symbol("str_concat", hstr_ext.str_concat)
-ll.add_symbol("str_compare", hstr_ext.str_compare)
-ll.add_symbol("str_equal", hstr_ext.str_equal)
-ll.add_symbol("str_equal_cstr", hstr_ext.str_equal_cstr)
-ll.add_symbol("str_split", hstr_ext.str_split)
-ll.add_symbol("str_substr_int", hstr_ext.str_substr_int)
 ll.add_symbol("str_to_int64", hstr_ext.str_to_int64)
 ll.add_symbol("std_str_to_int64", hstr_ext.std_str_to_int64)
 ll.add_symbol("str_to_float64", hstr_ext.str_to_float64)
