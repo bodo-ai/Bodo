@@ -1178,24 +1178,38 @@ bool TestEqual(table_info* in_table, size_t const& n_key, size_t const& shift_ke
 
 
 
-/*
-  This implementation follows the Shared partition procedure.
-  The data is partitioned and shuffled with the _gen_par_shuffle.
-  ---
-  The first stage is the partitioning of the data by using hashes
-  and std::unordered_map array.
-  ---
-  Afterwards, secondary partitioning is done is the hashes match.
-  Then the pairs of left/right origins are created for subsequent
-  work. If a left key has no matching on the right, then value -1
-  is put (thus the std::ptrdiff_t type is used).
-  ---
-  Then the arrays in output are subsequently created by RetrieveArray.
-  Another interesting function is "TestEqual" for testing key equality.
-  ---
-  We use a single array on input since empty arrays cause problem for
-  Python which cannot determine their type.
-  Further debugging and optimization are needed.
+/** This function does the joining of the table and returns the joined
+ * table
+ *
+ * This implementation follows the Shared partition procedure.
+ * The data is partitioned and shuffled with the _gen_par_shuffle.
+ *
+ * The first stage is the partitioning of the data by using hashes
+ * and std::unordered_map array.
+ *
+ * Afterwards, secondary partitioning is done is the hashes match.
+ * Then the pairs of left/right origins are created for subsequent
+ * work. If a left key has no matching on the right, then value -1
+ * is put (thus the std::ptrdiff_t type is used).
+ *
+ * External function used are "RetrieveArray" and "TestEqual"
+ *
+ * We need to merge all the arrays in input because we could not
+ * have empty arrays.
+ *
+ * is_left and is_right correspond
+ *   "inner" : is_left = T, is_right = T
+ *   "outer" : is_left = F, is_right = F
+ *   "left"  : is_left = T, is_right = F
+ *   "right" : is_left = F, is_right = T
+ *
+ * @param in_table : the joined left and right tables.
+ * @param n_key_t : the number of columns of keys on input
+ * @param n_data_left_t : the number of columns of data on the left
+ * @param n_data_right_t : the number of columns of data on the right
+ * @param is_left : whether we do merging on the left
+ * @param is_right : whether we do merging on the right.
+ * @return the returned table used in the code.
  */
 table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_data_left_t, int64_t n_data_right_t, bool is_left, bool is_right)
 {
@@ -1228,10 +1242,10 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
   std::vector<array_info*> key_arrs_right = std::vector<array_info*>(in_table->columns.begin()+n_key, in_table->columns.begin() + 2*n_key);
   uint32_t* hashes_right = hash_keys(key_arrs_right, seed);
   //
-  for (size_t i=0; i<n_rows_left; i++)
-    std::cout << "i=" << i << " hashes_left=" << hashes_left[i] << "\n";
-  for (size_t i=0; i<n_rows_right; i++)
-    std::cout << "i=" << i << " hashes_right=" << hashes_right[i] << "\n";
+  //  for (size_t i=0; i<n_rows_left; i++)
+  //    std::cout << "i=" << i << " hashes_left=" << hashes_left[i] << "\n";
+  //  for (size_t i=0; i<n_rows_right; i++)
+  //    std::cout << "i=" << i << " hashes_right=" << hashes_right[i] << "\n";
 
   
 
@@ -1290,11 +1304,9 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
       }
     }
   }
-  std::cout << "|entList|=" << entList.size() << "\n";
   //
   // Now iterating and determining how many entries we have to do.
   //
-  std::cout << "hash_join_table, step 6\n";
   std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
   // We consider now the construction of the pairs that are used
   // for the comparison.
@@ -1313,17 +1325,22 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
         entListR.push_back(iRow);
     }
     std::cout << "|entListL|=" << entListL.size() << " |entListR|=" << entListR.size() << "\n";
-    //    std::cout << "hash_join_table, step 6.2\n";
-    //
-    // This function takes a list of lines in the in_table and return the list of line
-    // by blocks if they have the same key.
-    // The entry "shift" specifies the starting point of the keys.
-    // This is because the keys are done on the left or right in the same data structure.
-    //
-    // The algorithm is nothing special with quadratic run-time in worst case.
-    // It is expected not to be a problem since different keys with the same hash should
-    // be rare. If all the keys with same hash are also identical then the running time
-    // is linear.
+    /** This function takes a list of lines in the in_table and return the list of line
+     *
+     * by blocks if they have the same key.
+     * The entry "shift" specifies the starting point of the keys.
+     * This is because the keys are done on the left or right in the same data structure.
+     *
+     * The algorithm is nothing special with quadratic run-time in worst case.
+     * It is expected not to be a problem since different keys with the same hash should
+     * be rare. If all the keys with same hash are also identical then the running time
+     * is linear.
+     *
+     *  @param shift starting point of the keys
+     *         This is because the keys are done on the left or right in the same data structure.
+     *  @param entList list of pairs indicating sides and row number
+     *  @return entListBlocks the list of line by blocks
+     */
     auto GetBlocks=[&](size_t const& shift, std::vector<size_t> const& entList) -> std::vector<std::vector<size_t>> {
       int len=entList.size();
       std::vector<int> ListStatus(len,0);
