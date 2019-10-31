@@ -798,7 +798,6 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype, char* ptrda
     uint16_t* ptr = (uint16_t*)ptrdata;
     return std::to_string(*ptr);
   }
-  //
   if (dtype == Bodo_CTypes::INT32) {
     int32_t* ptr = (int32_t*)ptrdata;
     return std::to_string(*ptr);
@@ -815,7 +814,6 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype, char* ptrda
     uint64_t* ptr = (uint64_t*)ptrdata;
     return std::to_string(*ptr);
   }
-  //
   if (dtype == Bodo_CTypes::FLOAT32) {
     float* ptr = (float*)ptrdata;
     return std::to_string(*ptr);
@@ -830,13 +828,13 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype, char* ptrda
 
 std::vector<std::string> PrintColumn(array_info* arr)
 {
-  size_t nbRow=arr->length;
-  std::vector<std::string> ListStr(nbRow);
+  size_t nRow=arr->length;
+  std::vector<std::string> ListStr(nRow);
   std::string strOut;
   if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
     uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
     uint64_t siztype = get_item_size(arr->dtype);
-    for (size_t iRow=0; iRow<nbRow; iRow++) {
+    for (size_t iRow=0; iRow<nRow; iRow++) {
       bool bit=GetBit(null_bitmask, iRow);
       if (bit) {
         char* ptrdata1 = &(arr->data1[siztype*iRow]);
@@ -850,7 +848,7 @@ std::vector<std::string> PrintColumn(array_info* arr)
   }
   if (arr->arr_type == bodo_array_type::NUMPY) {
     uint64_t siztype = get_item_size(arr->dtype);
-    for (size_t iRow=0; iRow<nbRow; iRow++) {
+    for (size_t iRow=0; iRow<nRow; iRow++) {
       char* ptrdata1 = &(arr->data1[siztype*iRow]);
       strOut = GetStringExpression(arr->dtype, ptrdata1);
       ListStr[iRow] = strOut;
@@ -860,7 +858,7 @@ std::vector<std::string> PrintColumn(array_info* arr)
     uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
     uint32_t* data2 = (uint32_t*)arr->data2;
     char* data1 = arr->data1;
-    for (size_t iRow=0; iRow<nbRow; iRow++) {
+    for (size_t iRow=0; iRow<nRow; iRow++) {
       bool bit=GetBit(null_bitmask, iRow);
       if (bit) {
         uint32_t start_pos = data2[iRow];
@@ -886,41 +884,41 @@ std::vector<std::string> PrintColumn(array_info* arr)
 
 void PrintSetOfColumn(std::ostream & os, std::vector<array_info*> const& ListArr)
 {
-  int nbCol=ListArr.size();
-  if (nbCol == 0) {
+  int nCol=ListArr.size();
+  if (nCol == 0) {
     os << "Nothing to print really\n";
     return;
   }
-  std::vector<int> ListLen(nbCol);
-  int nbRowMax=0;
-  for (int iCol=0; iCol<nbCol; iCol++) {
-    int nbRow=ListArr[iCol]->length;
-    if (nbRow > nbRowMax)
-      nbRowMax = nbRow;
-    ListLen[iCol] = nbRow;
+  std::vector<int> ListLen(nCol);
+  int nRowMax=0;
+  for (int iCol=0; iCol<nCol; iCol++) {
+    int nRow=ListArr[iCol]->length;
+    if (nRow > nRowMax)
+      nRowMax = nRow;
+    ListLen[iCol] = nRow;
   }
   std::vector<std::vector<std::string>> ListListStr;
-  for (int iCol=0; iCol<nbCol; iCol++) {
+  for (int iCol=0; iCol<nCol; iCol++) {
     std::vector<std::string> LStr = PrintColumn(ListArr[iCol]);
-    for (int iRow=ListLen[iCol]; iRow<nbRowMax; iRow++)
+    for (int iRow=ListLen[iCol]; iRow<nRowMax; iRow++)
       LStr.push_back("");
     ListListStr.push_back(LStr);
   }
-  std::vector<std::string> ListStrOut(nbRowMax);
-  for (int iRow=0; iRow<nbRowMax; iRow++) {
+  std::vector<std::string> ListStrOut(nRowMax);
+  for (int iRow=0; iRow<nRowMax; iRow++) {
     std::string str = std::to_string(iRow) + " :";
     ListStrOut[iRow]=str;
   }
-  for (int iCol=0; iCol<nbCol; iCol++) {
-    std::vector<int> ListLen(nbRowMax);
+  for (int iCol=0; iCol<nCol; iCol++) {
+    std::vector<int> ListLen(nRowMax);
     size_t maxlen=0;
-    for (int iRow=0; iRow<nbRowMax; iRow++) {
+    for (int iRow=0; iRow<nRowMax; iRow++) {
       size_t elen = ListListStr[iCol][iRow].size();
       ListLen[iRow] = elen;
       if (elen > maxlen)
         maxlen = elen;
     }
-    for (int iRow=0; iRow<nbRowMax; iRow++) {
+    for (int iRow=0; iRow<nRowMax; iRow++) {
       std::string str = ListStrOut[iRow] + " " + ListListStr[iCol][iRow];
       size_t diff = maxlen - ListLen[iRow];
       for (size_t u=0; u<diff; u++)
@@ -928,14 +926,14 @@ void PrintSetOfColumn(std::ostream & os, std::vector<array_info*> const& ListArr
       ListStrOut[iRow] = str;
     }
   }
-  for (int iRow=0; iRow<nbRowMax; iRow++)
+  for (int iRow=0; iRow<nRowMax; iRow++)
     os << ListStrOut[iRow] << "\n";
 }
 
 
 void PrintRefct(std::ostream &os, std::vector<array_info*> const& ListArr)
 {
-  int nbCol=ListArr.size();
+  int nCol=ListArr.size();
   auto GetType=[](bodo_array_type::arr_type_enum arr_type) -> std::string {
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL)
       return "NULLABLE";
@@ -948,7 +946,7 @@ void PrintRefct(std::ostream &os, std::vector<array_info*> const& ListArr)
       return "NULL";
     return "(refct=" + std::to_string(meminf->refct) + ")";
   };
-  for (int iCol=0; iCol<nbCol; iCol++) {
+  for (int iCol=0; iCol<nCol; iCol++) {
     os << "iCol=" << iCol << " : " << GetType(ListArr[iCol]->arr_type) << " : meminfo=" << GetNRTinfo(ListArr[iCol]->meminfo) << " meminfo_bitmask=" << GetNRTinfo(ListArr[iCol]->meminfo_bitmask) << "\n";
   }
 }
@@ -1071,7 +1069,6 @@ array_info* RetrieveArray(table_info* const& in_table, std::vector<std::pair<std
         uint8_t* in_null_bitmask = (uint8_t*)in_table->columns[pairShiftRow.first]->null_bitmask;
         for (uint64_t u=0; u<siztype; u++)
           out_arr->data1[siztype*iRow + u] = in_table->columns[pairShiftRow.first]->data1[siztype*pairShiftRow.second + u];
-        //
         bit = GetBit(in_null_bitmask, pairShiftRow.second);
       }
       SetBitTo(out_null_bitmask, iRow, bit);
