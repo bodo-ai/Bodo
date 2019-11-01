@@ -83,9 +83,9 @@ def df_value(request):
 @pytest.fixture(
     params=[
         # int
-        pd.DataFrame({"A": [1, 8, 4, 11, -3]}),
+        pytest.param(pd.DataFrame({"A": [1, 8, 4, 11, -3]}), marks=pytest.mark.slow),
         # int and float columns
-        pd.DataFrame({"A": [1, 8, 4, 11, -3], "B": [1.1, np.nan, 4.2, 3.1, -1.1]}),
+        pytest.param(pd.DataFrame({"A": [1, 8, 4, 11, -3], "B": [1.1, np.nan, 4.2, 3.1, -1.1]}), marks=pytest.mark.slow),
         # uint8, float32 dtypes
         pd.DataFrame(
             {
@@ -96,18 +96,18 @@ def df_value(request):
         # pd.DataFrame({'A': np.array([1, 8, 4, 0], dtype=np.uint8),
         # }),
         # int column, float index
-        pd.DataFrame({"A": [1, 8, 4, -1, 3]}, [-2.1, 0.1, 1.1, 7.1, 9.0]),
+        pytest.param(pd.DataFrame({"A": [1, 8, 4, -1, 3]}, [-2.1, 0.1, 1.1, 7.1, 9.0]), marks=pytest.mark.slow),
         # range index
-        pd.DataFrame({"A": [1, 8, 4, 1, -2]}, range(0, 5, 1)),
+        pytest.param(pd.DataFrame({"A": [1, 8, 4, 1, -2]}, range(0, 5, 1)), marks=pytest.mark.slow),
         # datetime column
         pd.DataFrame(
             {"A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)}
         ),
         # datetime index
-        pd.DataFrame(
+        pytest.param(pd.DataFrame(
             {"A": [3, 5, 1, -1, 2]},
             pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
-        ),
+        ), marks=pytest.mark.slow),
         # TODO: timedelta
     ]
 )
