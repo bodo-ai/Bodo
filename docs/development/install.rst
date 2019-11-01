@@ -32,7 +32,7 @@ If you run into gethostbyname failed error, try `this fix <https://stackoverflow
 Running unit tests::
 
     conda install pytest
-    pytest -x -s -v -W ignore
+    pytest -x -s -v -m "not slow" -W ignore
 
 In case of issues, reinstalling in a new conda environment is recommended.
 

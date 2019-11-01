@@ -120,9 +120,9 @@ Test Suite
 We use `pytest` for testing and run the test suite on different
 number of processors (should run in Bodo repo's main directory)::
 
-    pytest -s -v -W ignore
-    mpiexec -n 2 pytest -s -v -W ignore
-    mpiexec -n 3 pytest -s -v -W ignore
+    pytest -s -v -m "not slow" -W ignore
+    mpiexec -n 2 pytest -s -v -m "not slow" -W ignore
+    mpiexec -n 3 pytest -s -v -m "not slow" -W ignore
 
 
 Debugging

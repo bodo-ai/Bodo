@@ -21,30 +21,30 @@ np.random.seed(0)
 
 @pytest.fixture(
     params=[
-        pd.arrays.IntegerArray(
+        pytest.param(pd.arrays.IntegerArray(
             np.array([1, -3, 2, 3, 10], np.int8),
             np.array([False, True, True, False, False]),
-        ),
+        ), marks=pytest.mark.slow),
         pd.arrays.IntegerArray(
             np.array([1, -3, 2, 3, 10], np.int32),
             np.array([False, True, True, False, False]),
         ),
-        pd.arrays.IntegerArray(
+        pytest.param(pd.arrays.IntegerArray(
             np.array([1, -3, 2, 3, 10], np.int64),
             np.array([False, True, True, False, False]),
-        ),
-        pd.arrays.IntegerArray(
+        ), marks=pytest.mark.slow),
+        pytest.param(pd.arrays.IntegerArray(
             np.array([1, 4, 2, 3, 10], np.uint8),
             np.array([False, True, True, False, False]),
-        ),
-        pd.arrays.IntegerArray(
+        ), marks=pytest.mark.slow),
+        pytest.param(pd.arrays.IntegerArray(
             np.array([1, 4, 2, 3, 10], np.uint32),
             np.array([False, True, True, False, False]),
-        ),
-        pd.arrays.IntegerArray(
+        ), marks=pytest.mark.slow),
+        pytest.param(pd.arrays.IntegerArray(
             np.array([1, 4, 2, 3, 10], np.uint64),
             np.array([False, True, True, False, False]),
-        ),
+        ), marks=pytest.mark.slow),
         # large array
         pd.arrays.IntegerArray(
             np.random.randint(0, 100, 1211), np.random.ranf(1211) < 0.3
@@ -203,6 +203,7 @@ def test_shape():
     check_func(test_impl, (A,))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "ufunc", [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 1]
 )
@@ -228,6 +229,7 @@ def test_unary_ufunc_explicit_np():
     check_func(test_impl, (A,))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "ufunc", [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 2]
 )
@@ -249,6 +251,7 @@ def test_binary_ufunc(ufunc):
     check_func(test_impl, (arr, A2))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "op", numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
 )
@@ -284,6 +287,7 @@ def test_binary_op(op):
     check_func(test_impl, (2, A2))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "op", numba.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
 )

@@ -134,6 +134,7 @@ def test_rfind():
     check_func(test_impl, (S,), check_dtype=False)
 
 
+@pytest.mark.slow
 def test_center():
     def test_impl(S):
         return S.str.center(5, "*")
@@ -144,6 +145,7 @@ def test_center():
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_ljust():
     def test_impl(S):
         return S.str.ljust(5, "*")
@@ -154,6 +156,7 @@ def test_ljust():
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_rjust():
     def test_impl(S):
         return S.str.rjust(5, "*")
@@ -164,6 +167,7 @@ def test_rjust():
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_pad():
     def test_impl_default(S):
         return S.str.pad(5)
@@ -186,6 +190,7 @@ def test_pad():
     check_func(test_impl_both, (S,))
 
 
+@pytest.mark.slow
 def test_zfill():
     def test_impl(S):
         return S.str.zfill(10)
@@ -247,9 +252,9 @@ def test_isupper():
 
 @pytest.fixture(
     params=[
-        np.array([["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2),
+        pytest.param(np.array([["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2), marks=pytest.mark.slow),
         # empty strings, empty lists, NA
-        np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 2),
+        pytest.param(np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 2), marks=pytest.mark.slow),
         # large array
         np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 1000),
     ]

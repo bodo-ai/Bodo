@@ -26,36 +26,36 @@ from bodo.tests.utils import (
 @pytest.fixture(
     params=[
         # int and float columns
-        pd.DataFrame(
+        pytest.param(pd.DataFrame(
             {
                 "A": [1, 8, 4, 11, -3],
                 "B": [1.1, np.nan, 4.2, 3.1, -1.3],
                 "C": [True, False, False, True, True],
             }
-        ),
+        ), marks=pytest.mark.slow),
         pd.DataFrame(
             {
                 "A": pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
                 "B": [1.1, np.nan, 4.2, 3.1, -1.3],
                 "C": [True, False, False, np.nan, True],
-            }
+            }, ["A", "BA", "", "DD", "C"]
         ),
         # uint8, float32 dtypes
-        pd.DataFrame(
+        pytest.param(pd.DataFrame(
             {
                 "A": np.array([1, 8, 4, 0, 3], dtype=np.uint8),
                 "B": np.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype=np.float32),
             }
-        ),
+        ), marks=pytest.mark.slow),
         # string and int columns, float index
-        pd.DataFrame(
+        pytest.param(pd.DataFrame(
             {"A": ["AA", np.nan, "", "D", "GG"], "B": [1, 8, 4, -1, 2]},
             [-2.1, 0.1, 1.1, 7.1, 9.0],
-        ),
+        ), marks=pytest.mark.slow),
         # range index
-        pd.DataFrame(
+        pytest.param(pd.DataFrame(
             {"A": [1, 8, 4, 1, -2], "B": ["A", "B", "CG", "ACDE", "C"]}, range(0, 5, 1)
-        ),
+        ), marks=pytest.mark.slow),
         # TODO: parallel range index with start != 0 and stop != 1
         # int index
         pd.DataFrame(
@@ -63,16 +63,16 @@ from bodo.tests.utils import (
             [-2, 1, 3, 5, 9],
         ),
         # string index
-        pd.DataFrame({"A": [1, 2, 3, -1, 4]}, ["A", "BA", "", "DD", "C"]),
+        pytest.param(pd.DataFrame({"A": [1, 2, 3, -1, 4]}, ["A", "BA", "", "DD", "C"]), marks=pytest.mark.slow),
         # datetime column
         pd.DataFrame(
             {"A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)}
         ),
         # datetime index
-        pd.DataFrame(
+        pytest.param(pd.DataFrame(
             {"A": [3, 5, 1, -1, 4]},
             pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
-        ),
+        ), marks=pytest.mark.slow),
         # TODO: timedelta
     ]
 )
@@ -83,9 +83,9 @@ def df_value(request):
 @pytest.fixture(
     params=[
         # int
-        pd.DataFrame({"A": [1, 8, 4, 11, -3]}),
+        pytest.param(pd.DataFrame({"A": [1, 8, 4, 11, -3]}), marks=pytest.mark.slow),
         # int and float columns
-        pd.DataFrame({"A": [1, 8, 4, 11, -3], "B": [1.1, np.nan, 4.2, 3.1, -1.1]}),
+        pytest.param(pd.DataFrame({"A": [1, 8, 4, 11, -3], "B": [1.1, np.nan, 4.2, 3.1, -1.1]}), marks=pytest.mark.slow),
         # uint8, float32 dtypes
         pd.DataFrame(
             {
@@ -96,18 +96,18 @@ def df_value(request):
         # pd.DataFrame({'A': np.array([1, 8, 4, 0], dtype=np.uint8),
         # }),
         # int column, float index
-        pd.DataFrame({"A": [1, 8, 4, -1, 3]}, [-2.1, 0.1, 1.1, 7.1, 9.0]),
+        pytest.param(pd.DataFrame({"A": [1, 8, 4, -1, 3]}, [-2.1, 0.1, 1.1, 7.1, 9.0]), marks=pytest.mark.slow),
         # range index
-        pd.DataFrame({"A": [1, 8, 4, 1, -2]}, range(0, 5, 1)),
+        pytest.param(pd.DataFrame({"A": [1, 8, 4, 1, -2]}, range(0, 5, 1)), marks=pytest.mark.slow),
         # datetime column
         pd.DataFrame(
             {"A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)}
         ),
         # datetime index
-        pd.DataFrame(
+        pytest.param(pd.DataFrame(
             {"A": [3, 5, 1, -1, 2]},
             pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
-        ),
+        ), marks=pytest.mark.slow),
         # TODO: timedelta
     ]
 )
@@ -501,6 +501,7 @@ def test_df_pct_change(numeric_df_value):
     check_func(test_impl, (numeric_df_value,))
 
 
+@pytest.mark.slow
 def test_df_describe(numeric_df_value):
     # not supported for dt64 yet, TODO: support and test
     if any(d == np.dtype("datetime64[ns]") for d in numeric_df_value.dtypes):
@@ -725,6 +726,7 @@ def test_sort_values_str():
 ##################### binary ops ###############################
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_binary_ops)
 def test_dataframe_binary_op(op):
     # TODO: test parallelism
@@ -743,6 +745,7 @@ def test_dataframe_binary_op(op):
     check_func(test_impl, (2, df))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_inplace_binary_ops)
 def test_dataframe_inplace_binary_op(op):
     op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
