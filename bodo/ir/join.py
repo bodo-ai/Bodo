@@ -575,7 +575,7 @@ def join_distributed_run(
                     is_left, is_right
                 )
             )
-    if bodo.use_cpp_hash_join == False or join_node.how == "asof" or method != "hash":
+    if not bodo.use_cpp_hash_join or join_node.how == "asof" or method != "hash":
         for i in range(len(left_other_names)):
             func_text += "    left_{} = out_data_left[{}]\n".format(i, i)
         for i in range(len(right_other_names)):
@@ -716,7 +716,7 @@ def _gen_local_hash_join(left_key_names, right_key_names, left_key_types, right_
     func_text += "    out_table = hash_join_table(table_total, {}, {}, {}, {}, {})\n".format(n_keys, len(left_other_names), len(right_other_names), is_left, is_right)
     func_text += "    delete_table(table_total)\n"
     use_cpp_code = True
-    if use_cpp_code == False:
+    if not use_cpp_code:
         func_text += (
             "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
             " = bodo.ir.join.local_hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
