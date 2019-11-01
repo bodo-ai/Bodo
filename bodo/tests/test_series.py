@@ -46,6 +46,7 @@ GLOBAL_VAL = 2
 
 # TODO: integer Null and other Nulls
 # TODO: list of datetime.datetime, categorical, timedelta, ...
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "data",
     [
@@ -1196,6 +1197,7 @@ def test_series_tail(series_val):
     check_func(test_impl, (series_val,), False)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("k", [0, 1, 2, 3])
 def test_series_nlargest(numeric_series_val, k):
     # TODO: support nullable int
@@ -1219,6 +1221,7 @@ def test_series_nlargest_non_index():
     pd.testing.assert_series_equal(bodo_func(k), test_impl(k))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("k", [0, 1, 2, 3])
 def test_series_nsmallest(numeric_series_val, k):
     # TODO: support nullable int
