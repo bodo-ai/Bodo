@@ -4,7 +4,7 @@ import pandas as pd
 import bodo
 import numba
 from numba import types
-from numba.extending import lower_builtin, overload
+from numba.extending import lower_builtin, overload, register_jitable
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
@@ -271,7 +271,7 @@ def lower_rolling_variable_apply(context, builder, sig, args):
 comm_border_tag = 22  # arbitrary, TODO: revisit comm tags
 
 
-@numba.njit
+@register_jitable
 def roll_fixed_linear_generic(
     in_arr, win, center, parallel, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
@@ -347,7 +347,7 @@ def roll_fixed_linear_generic(
     return output
 
 
-@numba.njit
+@register_jitable
 def roll_fixed_linear_generic_seq(
     in_arr, win, center, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
@@ -388,7 +388,7 @@ def roll_fixed_linear_generic_seq(
     return output, border_data
 
 
-@numba.njit
+@register_jitable
 def roll_fixed_apply(in_arr, win, center, parallel, kernel_func):  # pragma: no cover
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
@@ -439,7 +439,7 @@ def roll_fixed_apply(in_arr, win, center, parallel, kernel_func):  # pragma: no 
     return output
 
 
-@numba.njit
+@register_jitable
 def roll_fixed_apply_seq(in_arr, win, center, kernel_func):  # pragma: no cover
     # TODO
     N = len(in_arr)
@@ -465,7 +465,7 @@ def roll_fixed_apply_seq(in_arr, win, center, kernel_func):  # pragma: no cover
 # variable window
 
 
-@numba.njit
+@register_jitable
 def roll_var_linear_generic(
     in_arr, on_arr_dt, win, center, parallel, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
@@ -555,8 +555,8 @@ def roll_var_linear_generic(
     return output
 
 
-@numba.njit
-def _get_var_recv_starts(on_arr, l_recv_t_buff, num_zero_starts, win):
+@register_jitable(cache=True)
+def _get_var_recv_starts(on_arr, l_recv_t_buff, num_zero_starts, win):  # pragma: no cover
     recv_starts = np.zeros(num_zero_starts, np.int64)
     halo_size = len(l_recv_t_buff)
     index = cast_dt64_arr_to_int(on_arr)
@@ -588,7 +588,7 @@ def _get_var_recv_starts(on_arr, l_recv_t_buff, num_zero_starts, win):
     return recv_starts
 
 
-@numba.njit
+@register_jitable
 def roll_var_linear_generic_seq(
     in_arr, on_arr, win, start, end, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
@@ -623,7 +623,7 @@ def roll_var_linear_generic_seq(
     return output
 
 
-@numba.njit
+@register_jitable
 def roll_variable_apply(
     in_arr, on_arr_dt, win, center, parallel, kernel_func
 ):  # pragma: no cover
@@ -689,7 +689,7 @@ def roll_variable_apply(
     return output
 
 
-@numba.njit
+@register_jitable
 def roll_variable_apply_seq(
     in_arr, on_arr, win, start, end, kernel_func
 ):  # pragma: no cover
@@ -710,8 +710,8 @@ def roll_variable_apply_seq(
     return output
 
 
-@numba.njit
-def _build_indexer(on_arr, N, win, left_closed, right_closed):
+@register_jitable(cache=True)
+def _build_indexer(on_arr, N, win, left_closed, right_closed):  # pragma: no cover
     index = cast_dt64_arr_to_int(on_arr)
     start = np.empty(N, np.int64)  # XXX pandas inits to -1 but doesn't seem required?
     end = np.empty(N, np.int64)
@@ -760,12 +760,12 @@ def _build_indexer(on_arr, N, win, left_closed, right_closed):
 # sum
 
 
-@numba.njit
+@register_jitable
 def init_data_sum():  # pragma: no cover
     return 0, 0.0
 
 
-@numba.njit
+@register_jitable
 def add_sum(val, nobs, sum_x):  # pragma: no cover
     if not np.isnan(val):
         nobs += 1
@@ -773,7 +773,7 @@ def add_sum(val, nobs, sum_x):  # pragma: no cover
     return nobs, sum_x
 
 
-@numba.njit
+@register_jitable
 def remove_sum(val, nobs, sum_x):  # pragma: no cover
     if not np.isnan(val):
         nobs -= 1
@@ -781,7 +781,7 @@ def remove_sum(val, nobs, sum_x):  # pragma: no cover
     return nobs, sum_x
 
 
-@numba.njit
+@register_jitable
 def calc_sum(minp, nobs, sum_x):  # pragma: no cover
     return sum_x if nobs >= minp else np.nan
 
@@ -790,12 +790,12 @@ def calc_sum(minp, nobs, sum_x):  # pragma: no cover
 # mean
 
 
-@numba.njit
+@register_jitable
 def init_data_mean():  # pragma: no cover
     return 0, 0.0, 0
 
 
-@numba.njit
+@register_jitable
 def add_mean(val, nobs, sum_x, neg_ct):  # pragma: no cover
     if not np.isnan(val):
         nobs += 1
@@ -805,7 +805,7 @@ def add_mean(val, nobs, sum_x, neg_ct):  # pragma: no cover
     return nobs, sum_x, neg_ct
 
 
-@numba.njit
+@register_jitable
 def remove_mean(val, nobs, sum_x, neg_ct):  # pragma: no cover
     if not np.isnan(val):
         nobs -= 1
@@ -815,7 +815,7 @@ def remove_mean(val, nobs, sum_x, neg_ct):  # pragma: no cover
     return nobs, sum_x, neg_ct
 
 
-@numba.njit
+@register_jitable
 def calc_mean(minp, nobs, sum_x, neg_ct):  # pragma: no cover
     if nobs >= minp:
         result = sum_x / nobs
@@ -836,12 +836,12 @@ def calc_mean(minp, nobs, sum_x, neg_ct):  # pragma: no cover
 # TODO: combine add/remove similar to pandas?
 
 
-@numba.njit
+@register_jitable
 def init_data_var():  # pragma: no cover
     return 0, 0.0, 0.0
 
 
-@numba.njit
+@register_jitable
 def add_var(val, nobs, mean_x, ssqdm_x):  # pragma: no cover
     if not np.isnan(val):
         nobs += 1
@@ -851,7 +851,7 @@ def add_var(val, nobs, mean_x, ssqdm_x):  # pragma: no cover
     return nobs, mean_x, ssqdm_x
 
 
-@numba.njit
+@register_jitable
 def remove_var(val, nobs, mean_x, ssqdm_x):  # pragma: no cover
     if not np.isnan(val):
         nobs -= 1
@@ -865,7 +865,7 @@ def remove_var(val, nobs, mean_x, ssqdm_x):  # pragma: no cover
     return nobs, mean_x, ssqdm_x
 
 
-@numba.njit
+@register_jitable
 def calc_var(minp, nobs, mean_x, ssqdm_x):  # pragma: no cover
     ddof = 1.0  # TODO: make argument
     result = np.nan
@@ -885,7 +885,7 @@ def calc_var(minp, nobs, mean_x, ssqdm_x):  # pragma: no cover
 # std
 
 
-@numba.njit
+@register_jitable
 def calc_std(minp, nobs, mean_x, ssqdm_x):  # pragma: no cover
     v = calc_var(minp, nobs, mean_x, ssqdm_x)
     return np.sqrt(v)
@@ -895,19 +895,19 @@ def calc_std(minp, nobs, mean_x, ssqdm_x):  # pragma: no cover
 # count
 
 
-@numba.njit
+@register_jitable
 def init_data_count():  # pragma: no cover
     return (0.0,)
 
 
-@numba.njit
+@register_jitable
 def add_count(val, count_x):  # pragma: no cover
     if not np.isnan(val):
         count_x += 1.0
     return (count_x,)
 
 
-@numba.njit
+@register_jitable
 def remove_count(val, count_x):  # pragma: no cover
     if not np.isnan(val):
         count_x -= 1.0
@@ -917,12 +917,12 @@ def remove_count(val, count_x):  # pragma: no cover
 # XXX: pandas uses minp=0 for fixed window count but minp=1 for variable window
 
 
-@numba.njit
+@register_jitable
 def calc_count(minp, count_x):  # pragma: no cover
     return count_x
 
 
-@numba.njit
+@register_jitable
 def calc_count_var(minp, count_x):  # pragma: no cover
     return count_x if count_x >= minp else np.nan
 
@@ -975,7 +975,7 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
     return output
 
 
-@numba.njit
+@register_jitable(cache=True)
 def shift_seq(in_arr, shift):  # pragma: no cover
     N = len(in_arr)
     output = bodo.hiframes.api.alloc_shift(in_arr)
@@ -1053,7 +1053,7 @@ def get_first_non_na(arr):
     if arr.dtype == types.float32:
         na_val = np.float32("nan")
 
-    def impl(arr):
+    def impl(arr):  # pragma: no cover
         for i in range(len(arr)):
             if not bodo.hiframes.api.isna(arr, i):
                 return arr[i]
@@ -1079,7 +1079,7 @@ def get_last_non_na(arr):
     if arr.dtype == types.float32:
         na_val = np.float32("nan")
 
-    def impl(arr):
+    def impl(arr):  # pragma: no cover
         l = len(arr)
         for i in range(len(arr)):
             ind = l - i - 1
@@ -1097,7 +1097,7 @@ def get_one_from_arr_dtype(arr):
     return lambda arr: one
 
 
-@numba.njit
+@register_jitable(cache=True)
 def pct_change_seq(in_arr, shift):  # pragma: no cover
     # TODO: parallel 'pad' fill
     N = len(in_arr)
@@ -1129,7 +1129,7 @@ def pct_change_seq(in_arr, shift):  # pragma: no cover
 # communication calls -----------
 
 
-@numba.njit
+@register_jitable(cache=True)
 def _border_icomm(in_arr, rank, n_pes, halo_size, dtype, center):  # pragma: no cover
     comm_tag = np.int32(comm_border_tag)
     l_recv_buff = np.empty(halo_size, dtype)
@@ -1160,7 +1160,7 @@ def _border_icomm(in_arr, rank, n_pes, halo_size, dtype, center):  # pragma: no 
     return l_recv_buff, r_recv_buff, l_send_req, r_send_req, l_recv_req, r_recv_req
 
 
-@numba.njit
+@register_jitable(cache=True)
 def _border_icomm_var(in_arr, on_arr, rank, n_pes, win_size, dtype):  # pragma: no cover
     comm_tag = np.int32(comm_border_tag)
     # find halo size from time array
@@ -1206,7 +1206,7 @@ def _border_icomm_var(in_arr, on_arr, rank, n_pes, win_size, dtype):  # pragma: 
     )
 
 
-@numba.njit
+@register_jitable
 def _border_send_wait(r_send_req, l_send_req, rank, n_pes, center):  # pragma: no cover
     # wait on send right
     if rank != n_pes - 1:
@@ -1216,7 +1216,7 @@ def _border_send_wait(r_send_req, l_send_req, rank, n_pes, center):  # pragma: n
         bodo.libs.distributed_api.wait(l_send_req, True)
 
 
-@numba.njit
+@register_jitable
 def _is_small_for_parallel(N, halo_size):  # pragma: no cover
     # gather data on one processor and compute sequentially if data of any
     # processor is too small for halo size
@@ -1232,7 +1232,7 @@ def _is_small_for_parallel(N, halo_size):  # pragma: no cover
 
 
 # TODO: refactor small data functions
-@numba.njit
+@register_jitable
 def _handle_small_data(
     in_arr, win, center, rank, n_pes, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
@@ -1256,7 +1256,7 @@ def _handle_small_data(
     return all_out[start:end]
 
 
-@numba.njit
+@register_jitable
 def _handle_small_data_apply(
     in_arr, win, center, rank, n_pes, kernel_func
 ):  # pragma: no cover
@@ -1278,7 +1278,7 @@ def _handle_small_data_apply(
     return all_out[start:end]
 
 
-@numba.njit
+@register_jitable
 def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(
@@ -1298,7 +1298,7 @@ def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
     return all_out[start:end]
 
 
-@numba.njit
+@register_jitable
 def _handle_small_data_pct_change(in_arr, shift, rank, n_pes):  # pragma: no cover
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(N, np.int32(Reduce_Type.Sum.value))
@@ -1341,7 +1341,7 @@ def lower_cast_dt64_arr_to_int(context, builder, sig, args):
 # variable window comm routines
 
 
-@numba.njit
+@register_jitable
 def _is_small_for_parallel_variable(on_arr, win_size):  # pragma: no cover
     # assume small if current processor's whole range is smaller than win_size
     if len(on_arr) < 2:
@@ -1355,7 +1355,7 @@ def _is_small_for_parallel_variable(on_arr, win_size):  # pragma: no cover
     return num_small != 0
 
 
-@numba.njit
+@register_jitable
 def _handle_small_data_variable(
     in_arr, on_arr, win, rank, n_pes, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
@@ -1387,7 +1387,7 @@ def _handle_small_data_variable(
     return all_out[start:end]
 
 
-@numba.njit
+@register_jitable
 def _handle_small_data_variable_apply(
     in_arr, on_arr, win, rank, n_pes, kernel_func
 ):  # pragma: no cover
@@ -1411,7 +1411,7 @@ def _handle_small_data_variable_apply(
     return all_out[start:end]
 
 
-@numba.njit
+@register_jitable(cache=True)
 def _dropna(arr):  # pragma: no cover
     old_len = len(arr)
     new_len = old_len - np.isnan(arr).sum()
