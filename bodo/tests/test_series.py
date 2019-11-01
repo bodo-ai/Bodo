@@ -665,6 +665,7 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg):
 ############################ binary ops #############################
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "op",
     [
@@ -726,6 +727,7 @@ def test_series_explicit_binary_op_nan(fill):
     check_func(test_impl, (L1, L2, fill))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_binary_ops)
 def test_series_binary_op(op):
     op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
@@ -741,6 +743,7 @@ def test_series_binary_op(op):
     check_func(test_impl, (2, S))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_inplace_binary_ops)
 def test_series_inplace_binary_op(op):
     op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
@@ -781,6 +784,7 @@ def test_series_unary_op(op):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "ufunc", [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 1]
 )
@@ -802,6 +806,7 @@ def test_series_unary_ufunc_np_call():
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "ufunc", [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 2]
 )
@@ -816,6 +821,7 @@ def test_series_binary_ufunc(ufunc):
     check_func(test_impl, (A, S))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.ge, operator.gt, operator.le, operator.lt]
 )
@@ -839,6 +845,7 @@ def test_series_bool_cmp_op(S, op):
     check_func(test_impl, (True, S))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.ge, operator.gt, operator.le, operator.lt]
 )
@@ -860,6 +867,7 @@ def test_series_bool_vals_cmp_op(S, op):
     check_func(test_impl, (S, S))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "S1,S2,fill,raises",
     [
