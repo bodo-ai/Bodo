@@ -125,25 +125,24 @@ def test_series_constructor_int_arr():
 # TODO: other possible Series types like Categorical, dt64, td64, ...
 @pytest.fixture(
     params=[
-        pd.Series([1, 8, 4, 11, -3]),
-        pd.Series([1.1, np.nan, 4.2, 3.1, -3.5]),
-        pd.Series([True, False, False, True, True]),  # bool array without NA
+        pytest.param(pd.Series([1, 8, 4, 11, -3]), marks=pytest.mark.slow),
+        pytest.param(pd.Series([True, False, False, True, True]), marks=pytest.mark.slow),  # bool array without NA
         pd.Series([True, False, False, np.nan, True]),  # bool array with NA
-        pd.Series([1, 8, 4, 0, 3], dtype=np.uint8),
+        pytest.param(pd.Series([1, 8, 4, 0, 3], dtype=np.uint8), marks=pytest.mark.slow),
         pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
-        pd.Series([1, 8, 4, -1, 2], name="ACD"),
-        pd.Series([1, 8, 4, 1, -3], [3, 7, 9, 2, 1]),
-        pd.Series([1, 8, 4, 11, -3], [3, 7, 9, 2, 1], name="AAC"),
+        pytest.param(pd.Series([1, 8, 4, -1, 2], name="ACD"), marks=pytest.mark.slow),
+        pytest.param(pd.Series([1, 8, 4, 1, -3], [3, 7, 9, 2, 1]), marks=pytest.mark.slow),
+        pd.Series([1.1, np.nan, 4.2, 3.1, -3.5], [3, 7, 9, 2, 1], name="AAC"),
         pd.Series([1, 2, 3, -1, 6], ["A", "BA", "", "DD", "GGG"]),
-        pd.Series(
+        pytest.param(pd.Series(
             ["A", "B", "CDD", "AA", "GGG"]
-        ),  # TODO: string with Null (np.testing fails)
+        ), marks=pytest.mark.slow),  # TODO: string with Null (np.testing fails)
         pd.Series(["A", "B", "CG", "ACDE", "C"], [4, 7, 0, 1, -2]),
         pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)),
-        pd.Series(
+        pytest.param(pd.Series(
             [3, 5, 1, -1, 2],
             pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
-        ),
+        ), marks=pytest.mark.slow),
         # TODO: timedelta
     ]
 )
@@ -154,11 +153,11 @@ def series_val(request):
 # TODO: timedelta, period, tuple, etc.
 @pytest.fixture(
     params=[
-        pd.Series([1, 8, 4, 11, -3]),
+        pytest.param(pd.Series([1, 8, 4, 11, -3]), marks=pytest.mark.slow),
         pd.Series([1.1, np.nan, 4.1, 1.4, -2.1]),
-        pd.Series([1, 8, 4, 10, 3], dtype=np.uint8),
-        pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
-        pd.Series([1, 8, 4, -1, 2], [3, 7, 9, 2, 1], name="AAC"),
+        pytest.param(pd.Series([1, 8, 4, 10, 3], dtype=np.uint8), marks=pytest.mark.slow),
+        pd.Series([1, 8, 4, 10, 3], [3, 7, 9, 2, 1], dtype="Int32"),
+        pytest.param(pd.Series([1, 8, 4, -1, 2], [3, 7, 9, 2, 1], name="AAC"), marks=pytest.mark.slow),
         pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)),
     ]
 )

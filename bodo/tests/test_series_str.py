@@ -252,9 +252,9 @@ def test_isupper():
 
 @pytest.fixture(
     params=[
-        np.array([["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2),
+        pytest.param(np.array([["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2), marks=pytest.mark.slow),
         # empty strings, empty lists, NA
-        np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 2),
+        pytest.param(np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 2), marks=pytest.mark.slow),
         # large array
         np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 1000),
     ]
