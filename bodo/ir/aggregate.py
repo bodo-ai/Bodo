@@ -953,12 +953,7 @@ def get_key_dict_overload(arr):
 
     # regular scalar keys
     dtype = arr.types[0].dtype
-    func_text = "def k_dict_impl(arr):\n"
-    func_text += "  return bodo.libs.dict_ext.dict_{}_int64_init()\n".format(dtype)
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    k_dict_impl = loc_vars["k_dict_impl"]
-    return k_dict_impl
+    return lambda arr: numba.typed.Dict.empty(dtype, types.int64)
 
 
 def _set_out_keys(out_arrs, w_ind, key_arrs, i, k):
