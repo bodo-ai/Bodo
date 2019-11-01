@@ -381,11 +381,12 @@ ir_utils.build_defs_extensions[Join] = build_join_definitions
 def join_distributed_run(
     join_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass
 ):
-
+    print("Beginning of join_distributed_run")
     left_parallel, right_parallel = _get_table_parallel_flags(join_node, array_dists)
 
     method = "hash"
     pd_join_func = None
+    print("bodo.use_pandas_join=", bodo.use_pandas_join)
     if bodo.use_pandas_join:
         method = "pandas"
     # method = 'sort'
@@ -456,7 +457,8 @@ def join_distributed_run(
     func_text += "    data_right = ({}{})\n".format(
         ",".join(right_other_names), "," if len(right_other_names) != 0 else ""
     )
-
+    print("join_node.how=", join_node.how, " method=", method)
+    print("left_parallel=", left_parallel, " right_parallel=", right_parallel)
     if join_node.how == "asof":
         if left_parallel or right_parallel:
             assert left_parallel and right_parallel

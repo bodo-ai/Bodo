@@ -1261,8 +1261,6 @@ std::vector<std::vector<size_t>> GetBlocks(table_info* in_table, size_t const& n
  */
 table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_data_left_t, int64_t n_data_right_t, bool is_left, bool is_right)
 {
-  //  std::cout << "n_key_t=" << n_key_t << " n_data_left_t=" << n_data_left_t << " n_data_right_t=" << n_data_right_t << "\n";
-  //  std::cout << "hash_join_table, step 1 is_left=" << is_left << " is_right=" << is_right << "\n";
   //  std::cout << "IN_TABLE:\n";
   //  PrintSetOfColumn(std::cout, in_table->columns);
   size_t n_key = size_t(n_key_t);
@@ -1279,7 +1277,6 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
   //
   size_t n_rows_left = (size_t)in_table->columns[0]->length;
   size_t n_rows_right = (size_t)in_table->columns[n_key]->length;
-  //  std::cout << "n_rows_left=" << n_rows_left << " n_rows_right=" << n_rows_right << "\n";
   //
   //  std::cout << "hash_join_table, step 2\n";
   std::vector<array_info*> key_arrs_left = std::vector<array_info*>(in_table->columns.begin(), in_table->columns.begin() + n_key);
@@ -1354,6 +1351,8 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
   std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
   // We consider now the construction of the pairs that are used
   // for the comparison.
+  size_t nCase=0;
+  std::vector<int> ListSizeL, ListSizeR;
   for (auto & pairKeyListRows : entList) {
     //    std::cout << "hash_join_table, step 6.1\n";
     std::vector<size_t> entListL, entListR;
@@ -1391,12 +1390,18 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
       for (size_t iL=0; iL<nBlockL; iL++) {
         std::ptrdiff_t iR=GetRightEntry(entListBlocksL[iL][0]);
         if (iR == -1) {
+          nCase++;
+          ListSizeL.push_back(int(entListBlocksL[iL].size()));
+          ListSizeR.push_back(1);
           for (auto & uL : entListBlocksL[iL])
             ListPairWrite.push_back({uL, -1});
         }
         else {
           if (is_right)
             ListStatus[iR]=1;
+          nCase++;
+          ListSizeL.push_back(int(entListBlocksL[iL].size()));
+          ListSizeR.push_back(int(entListBlocksR[iR].size()));
           for (auto & uL : entListBlocksL[iL])
             for (auto & uR : entListBlocksR[iR])
               ListPairWrite.push_back({uL,uR});
@@ -1406,9 +1411,13 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
       // the ones which have not been matched with the right.
       if (is_right) {
         for (size_t iR=0; iR<nBlockR; iR++)
-          if (ListStatus[iR] == 0)
+          if (ListStatus[iR] == 0) {
+            nCase++;
+            ListSizeL.push_back(1);
+            ListSizeR.push_back(int(entListBlocksR[iR].size()));
             for (auto & uR : entListBlocksR[iR])
               ListPairWrite.push_back({-1,uR});
+          }
       }
     }
     else {
@@ -1426,11 +1435,17 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
         std::ptrdiff_t iL=GetLeftEntry(entListBlocksR[iR][0]);
         if (iL == -1) {
           if (is_right) {
+            nCase++;
+            ListSizeL.push_back(1);
+            ListSizeR.push_back(int(entListBlocksR[iR].size()));
             for (auto & uR : entListBlocksR[iR])
               ListPairWrite.push_back({-1, uR});
           }
         }
         else {
+          nCase++;
+          ListSizeL.push_back(int(entListBlocksL[iL].size()));
+          ListSizeR.push_back(int(entListBlocksR[iR].size()));
           for (auto & uL : entListBlocksL[iL])
             for (auto & uR : entListBlocksR[iR])
               ListPairWrite.push_back({uL,uR});
@@ -1440,10 +1455,18 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
   }
   /*
   size_t nRowOut = ListPairWrite.size();
+  std::cout << "nRowOut=" << nRowOut << " nCase=" << nCase << "\n";
+  for (size_t iCase=0; iCase<nCase; iCase++)
+    std::cout << "iCase=" << iCase << " siz=" << ListSizeL[iCase] << " , " << ListSizeR[iCase] << "\n";
+  std::cout << "n_key_t=" << n_key_t << " n_data_left_t=" << n_data_left_t << " n_data_right_t=" << n_data_right_t << "\n";
+  std::cout << "hash_join_table, step 1 is_left=" << is_left << " is_right=" << is_right << "\n";
+  std::cout << "n_rows_left=" << n_rows_left << " n_rows_right=" << n_rows_right << "\n";
+  */
+  
+  /*
   for (size_t iRowOut=0; iRowOut<nRowOut; iRowOut++)
     std::cout << "iRowOut=" << iRowOut << " epair=" << ListPairWrite[iRowOut].first << " , " << ListPairWrite[iRowOut].second << "\n";
 
-  std::cout << "hash_join_table, step 7 nRowOut=" << nRowOut << "\n";
   std::cout << "n_key=" << n_key << " n_data_left=" << n_data_left << " n_data_right=" << n_data_right << "\n";
   for (size_t i=0; i<n_col; i++)
   std::cout << "2: i=" << i << " dtype=" << in_table->columns[i]->dtype << "\n"; */
