@@ -172,28 +172,6 @@ for key_typ in elem_types:
             )
         )
 
-dict_byte_vec_int64_type = DictType(byte_vec_type, types.int64)
-dict_byte_vec_int64_init = types.ExternalFunction(
-    "dict_byte_vec_int64_init", dict_byte_vec_int64_type()
-)
-_add_dict_symbols("byte_vec", "int64")
-
-ll.add_symbol("byte_vec_init", hdict_ext.byte_vec_init)
-ll.add_symbol("byte_vec_set", hdict_ext.byte_vec_set)
-ll.add_symbol("byte_vec_free", hdict_ext.byte_vec_free)
-ll.add_symbol("byte_vec_resize", hdict_ext.byte_vec_resize)
-
-byte_vec_init = types.ExternalFunction(
-    "byte_vec_init", byte_vec_type(types.int64, types.voidptr)
-)
-byte_vec_set = types.ExternalFunction(
-    "byte_vec_set", types.void(byte_vec_type, types.int64, types.voidptr, types.int64)
-)
-byte_vec_resize = types.ExternalFunction(
-    "byte_vec_resize", types.void(byte_vec_type, types.int64)
-)
-byte_vec_free = types.ExternalFunction("byte_vec_free", types.void(byte_vec_type))
-
 
 class MultiMapType(types.Opaque):
     def __init__(self, key_typ, val_typ):

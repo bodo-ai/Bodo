@@ -33,69 +33,7 @@ typedef bool bool_t;
 typedef int int_t;
 typedef float float32_t;
 typedef double float64_t;
-typedef std::vector<unsigned char> byte_vec_t;
 
-namespace std {
-// hash function for byte arrays
-template <>
-struct hash<byte_vec_t> {
-    typedef byte_vec_t argument_type;
-    typedef std::size_t result_type;
-
-    // interpret byte-array as array of given integer type (T) and produce hash
-    // we use boost::hash_combine for generating an aggregated hash value
-    template <typename T>
-    result_type hashit(const T* ptr, size_t n) const {
-        // we do this only for aligned pointers (at both ends!)
-        if (n >= sizeof(T) &&
-            reinterpret_cast<uintptr_t>(ptr) % sizeof(T) == 0 &&
-            n % sizeof(T) == 0) {
-            auto _ptr = reinterpret_cast<const T*>(ptr);
-            n /= sizeof(T);
-            std::size_t seed = 0;
-            for (size_t i = 0; i < n; ++i) boost::hash_combine(seed, _ptr[i]);
-            // std::cout << "[" << sizeof(T) << "] " << seed << std::endl;
-            return seed;
-        } else
-            return 0;
-    }
-
-    // returns the hash-value for given vector of bytes
-    // Note: this will return different hash-values for the same key depending
-    // on
-    //       the pointer alignment. E.g. if the data of a given vector is
-    //       aligned
-    //       at 8-byte boundary and its size is a multiple of 8 we use a
-    //       different
-    //       hashing algorithm than when the same bytes are unaligned.
-    //       We might need to revise this depending on how we use it
-    // We might want to produce specializations for specific sizes
-    result_type operator()(argument_type const& x) const {
-        std::size_t n = x.size();
-        if (n == 0) return 0;
-        const argument_type::value_type* ptr = x.data();
-        size_t h;
-        // we now try to reinterpret bytes as integers of different size,
-        // starting with long integers
-        if (sizeof(uintmax_t) > sizeof(uint64_t) &&
-            (h = hashit(reinterpret_cast<const uintmax_t*>(ptr), n)) != 0)
-            return h;
-        if ((h = hashit(reinterpret_cast<const uint64_t*>(ptr), n)) != 0)
-            return h;
-        if ((h = hashit(reinterpret_cast<const uint32_t*>(ptr), n)) != 0)
-            return h;
-        if ((h = hashit(reinterpret_cast<const uint16_t*>(ptr), n)) != 0)
-            return h;
-        // This is our fall-back, probably pretty slow
-        if ((h = hashit(reinterpret_cast<const uint8_t*>(ptr), n)) != 0)
-            return h;
-
-        // everything must align with 1 byte, so we should not ever get here
-        std::cerr << "Unexpected code path taken in hash operation";
-        return static_cast<result_type>(-1);
-    }
-};
-}
 
 template <typename T>
 std::ostream& operator<<(std::ostream& out, const std::vector<T>& v) {
@@ -128,14 +66,6 @@ struct IFTYPE<std::string> {
     static out_t out(std::string& o) { return &o; }
 };
 
-// byte-vectors appear by reference on the interface
-template <>
-struct IFTYPE<byte_vec_t> {
-    typedef byte_vec_t& in_t;
-    // hopefully we never need the out types
-    typedef byte_vec_t out_t;
-    static out_t out(byte_vec_t& o) { return o; }
-};
 
 // Generic template dict class
 template <typename IDX, typename VAL>
@@ -275,40 +205,6 @@ class dict {
         return m->keys();                                                     \
     }
 
-/*
- * Byte vectors are special, we need to somehow create them without copying
- * stuff several times.
- * To create such a vector
- *     - first get a handle with byte_vec_init
- *     - use the handle to set it's value with byte_vec_set or byte_vec_append
- * Free memory by calling byte_vec_init when done with it.
- */
-
-// forward decl
-void byte_vec_set(byte_vec_t* vec, size_t pos, const unsigned char* val,
-                  size_t n);
-
-/**
- * Init byte vector with given size and optional content
- * @param n make vector n bytes long (to be used with byte_vec_set) [default: 0]
- * @param val if != NULL copy n-bytes from here to new vector
- * @return new byte vector of size n
- **/
-byte_vec_t* byte_vec_init(size_t n, const unsigned char* val) {
-    auto v = new byte_vec_t(n);
-    if (val) byte_vec_set(v, 0, val, n);
-    return v;
-}
-// in vec, set n bytes starting at position pos to content of val
-// vec must have been initialized with size at least pos+n
-void byte_vec_set(byte_vec_t* vec, size_t pos, const unsigned char* val,
-                  size_t n) {
-    for (size_t i = 0; i < n; ++i) (*vec)[pos + i] = val[i];
-}
-// resize vector to given length
-void byte_vec_resize(byte_vec_t* vec, size_t n) { vec->resize(n); }
-// free vector
-void byte_vec_free(byte_vec_t* vec) { delete vec; }
 
 // multimap for hash join
 typedef std::unordered_multimap<int64_t, int64_t> multimap_int64_t;
@@ -362,8 +258,6 @@ void multimap_int64_it_inc(multimap_int64_it_t* r) {
         12, (int, int8, int16, int32, int64, uint8, uint16, uint32, uint64, \
              bool, float32, float64, unicode_type))
 
-// Bring our generic dict to life
-DEF_DICT(byte_vec, int64);
 
 // Now use some macro-magic from boost to support dicts for above types
 #define APPLY_DEF_DICT(r, product) DEF_DICT product
@@ -396,20 +290,10 @@ PyMODINIT_FUNC PyInit_hdict_ext(void) {
     m = PyModule_Create(&moduledef);
     if (m == NULL) return NULL;
 
-    // Add our generic dict
-    DEC_DICT_MOD(byte_vec, int64);
 // And all the other speicialized dicts
 #define APPLY_DEC_DICT_MOD(r, product) DEC_DICT_MOD product
     BOOST_PP_LIST_FOR_EACH_PRODUCT(APPLY_DEC_DICT_MOD, 2, (TYPES, TYPES));
 
-    PyObject_SetAttrString(m, "byte_vec_init",
-                           PyLong_FromVoidPtr((void*)(&byte_vec_init)));
-    PyObject_SetAttrString(m, "byte_vec_set",
-                           PyLong_FromVoidPtr((void*)(&byte_vec_set)));
-    PyObject_SetAttrString(m, "byte_vec_free",
-                           PyLong_FromVoidPtr((void*)(&byte_vec_free)));
-    PyObject_SetAttrString(m, "byte_vec_resize",
-                           PyLong_FromVoidPtr((void*)(&byte_vec_resize)));
     DEC_MOD_METHOD(multimap_int64_init);
     DEC_MOD_METHOD(multimap_int64_insert);
     DEC_MOD_METHOD(multimap_int64_equal_range);
