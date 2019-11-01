@@ -29,13 +29,6 @@ from bodo.libs.distributed_api import (
     allgatherv,
 )
 
-# legacy for STAC A3, TODO: remove
-from bodo.libs.dict_ext import (
-    DictIntInt,
-    DictInt32Int32,
-    dict_int_int_type,
-    dict_int32_int32_type,
-)
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from numba.types import List

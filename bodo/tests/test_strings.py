@@ -357,15 +357,6 @@ class TestString(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         self.assertEqual(bodo_func(), test_impl())
 
-    def test_dict_string(self):
-        def test_impl():
-            s = bodo.libs.dict_ext.dict_unicode_type_unicode_type_init()
-            s["aa"] = "bb"
-            return s["aa"], ("aa" in s)
-
-        bodo_func = bodo.jit(test_impl)
-        self.assertEqual(bodo_func(), ("bb", True))
-
 
 if __name__ == "__main__":
     unittest.main()

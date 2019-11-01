@@ -35,15 +35,6 @@ from bodo.utils.utils import unliteral_all
 ll_voidp = lir.IntType(8).as_pointer()
 
 
-class ByteVecType(types.Opaque):
-    def __init__(self):
-        super(ByteVecType, self).__init__(name="byte_vec")
-
-
-byte_vec_type = ByteVecType()
-register_model(ByteVecType)(models.OpaqueModel)
-
-
 class DictType(types.Opaque):
     def __init__(self, key_typ, val_typ):
         self.key_typ = key_typ
