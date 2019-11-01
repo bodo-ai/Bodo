@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <iostream>
 #include <numeric>
+#include <functional>
 #include <map>
 #include <unordered_map>
 #include "_bodo_common.h"
@@ -1105,14 +1106,22 @@ array_info* RetrieveArray(table_info* const& in_table, std::vector<std::pair<std
   return out_arr;
 };
 
-
-// This code test if two keys are equal (Before that the hash should have been used)
-// It is used that way because we assume that the left key have the same type as the
-// right keys.
-// The shift is used to precise whether we use the left keys or the right keys.
-// Equality means that all the columns are the same.
-// Thus the test iterates over the columns and if one is different then result is false.
-// We consider all types of bodo_array_type
+/** This code test if two keys are equal (Before that the hash should have been used)
+ * It is used that way because we assume that the left key have the same type as the
+ * right keys.
+ * The shift is used to precise whether we use the left keys or the right keys.
+ * Equality means that all the columns are the same.
+ * Thus the test iterates over the columns and if one is different then result is false.
+ * We consider all types of bodo_array_type
+ *
+ * @param in_table the input table
+ * @param n_key the number of keys considered for the comparison
+ * @param shift_key1 the column shift for the first key
+ * @param iRow1 the row of the first key
+ * @param shift_key2 the column for the second key
+ * @param iRow2 the row of the second key
+ * @return True if they are equal and false otherwise.
+ */
 bool TestEqual(table_info* in_table, size_t const& n_key, size_t const& shift_key1, size_t const& iRow1, size_t const& shift_key2, size_t const& iRow2)
 {
   // iteration over the list of key for the comparison.
@@ -1180,6 +1189,110 @@ bool TestEqual(table_info* in_table, size_t const& n_key, size_t const& shift_ke
   // If all keys are equal then we are ok and the keys are equals.
   return true;
 };
+
+
+
+/** This code test keys if two keys are equal (Before that the hash should have been used)
+ * It is used that way because we assume that the left key have the same type as the
+ * right keys.
+ * The shift is used to precise whether we use the left keys or the right keys.
+ * 0 means that the columns are equals and 1,-1 that the keys are different.
+ * Thus the test iterates over the columns and if one is different then we can conclude.
+ * We consider all types of bodo_array_type.
+ *
+ * @param in_table the input table
+ * @param n_key the number of keys considered for the comparison
+ * @param shift_key1 the column shift for the first key
+ * @param iRow1 the row of the first key
+ * @param shift_key2 the column for the second key
+ * @param iRow2 the row of the second key
+ * @return 1 if (shift_key1,iRow1) < (shift_key2,iRow2) , -1 is > and 0 if =
+ */
+int KeyComparison(table_info* in_table, size_t const& n_key, size_t const& shift_key1, size_t const& iRow1, size_t const& shift_key2, size_t const& iRow2)
+{
+  // iteration over the list of key for the comparison.
+  for (size_t iKey=0; iKey<n_key; iKey++) {
+    if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::NUMPY) {
+      // In the case of NUMPY, we compare the values for concluding.
+      uint64_t siztype = get_item_size(in_table->columns[shift_key1+iKey]->dtype);
+      for (uint64_t u=0; u<siztype; u++) {
+        char char1 = in_table->columns[shift_key1+iKey]->data1[siztype*iRow1 + u];
+        char char2 = in_table->columns[shift_key2+iKey]->data1[siztype*iRow2 + u];
+        if (char1 < char2)
+          return 1;
+        if (char1 > char2)
+          return -1;
+      }
+    }
+    if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+      // NULLABLE case. We need to consider the bitmask and the values.
+      uint8_t* null_bitmask1 = (uint8_t*)in_table->columns[shift_key1+iKey]->null_bitmask;
+      uint8_t* null_bitmask2 = (uint8_t*)in_table->columns[shift_key2+iKey]->null_bitmask;
+      bool bit1 = GetBit(null_bitmask1, iRow1);
+      bool bit2 = GetBit(null_bitmask2, iRow2);
+      // If one bitmask is T and the other the reverse then they are clearly not equal.
+      if (bit1 && !bit2)
+        return 1;
+      if (!bit1 && bit2)
+        return -1;
+      // If both bitmasks are false, then it does not matter what value they are storing.
+      // Comparison is the same as for NUMPY.
+      if (bit1) {
+        uint64_t siztype = get_item_size(in_table->columns[shift_key1+iKey]->dtype);
+        for (uint64_t u=0; u<siztype; u++) {
+          char char1 = in_table->columns[shift_key1+iKey]->data1[siztype*iRow1 + u];
+          char char2 = in_table->columns[shift_key2+iKey]->data1[siztype*iRow2 + u];
+          if (char1 < char2)
+            return 1;
+          if (char1 > char2)
+            return -1;
+        }
+      }
+    }
+    if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::STRING) {
+      // For STRING case we need to deal bitmask and the values.
+      uint8_t* null_bitmask1 = (uint8_t*)in_table->columns[shift_key1+iKey]->null_bitmask;
+      uint8_t* null_bitmask2 = (uint8_t*)in_table->columns[shift_key2+iKey]->null_bitmask;
+      bool bit1 = GetBit(null_bitmask1, iRow1);
+      bool bit2 = GetBit(null_bitmask2, iRow2);
+      // If bitmasks are different then we can conclude the comparison
+      if (bit1 && !bit2)
+        return 1;
+      if (!bit1 && bit2)
+        return -1;
+      // If bitmasks are both false, then no need to compare the string values.
+      if (bit1) {
+        // Here we consider the shifts in data2 for the comparison.
+        uint32_t* data2_1 = (uint32_t*)in_table->columns[shift_key1+iKey]->data2;
+        uint32_t* data2_2 = (uint32_t*)in_table->columns[shift_key2+iKey]->data2;
+        uint32_t len1 = data2_1[iRow1+1] - data2_1[iRow1];
+        uint32_t len2 = data2_2[iRow2+1] - data2_2[iRow2];
+        // If string lengths are different then we can conclude.
+        if (len1 < len2)
+          return 1;
+        if (len1 > len2)
+          return -1;
+        // Now we iterate over the characters for the comparison.
+        uint32_t pos1_prev = data2_1[iRow1];
+        uint32_t pos2_prev = data2_2[iRow2];
+        char* data1_1 = (char*)in_table->columns[shift_key1+iKey]->data1;
+        char* data1_2 = (char*)in_table->columns[shift_key2+iKey]->data1;
+        for (uint32_t pos=0; pos<len1; pos++) {
+          uint32_t pos1=pos1_prev + pos;
+          uint32_t pos2=pos2_prev + pos;
+          if (data1_1[pos1] < data1_2[pos2])
+            return 1;
+          if (data1_1[pos1] > data1_2[pos2])
+            return -1;
+        }
+      }
+    }
+  }
+  // If all keys are equal then we return 0
+  return 0;
+};
+
+
 
 
 /** This function takes a list of lines in the in_table and return the list of line
@@ -1272,8 +1385,10 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
     PyErr_SetString(PyExc_RuntimeError, "incoherent dimensions");
     return NULL;
   }
-  //  for (size_t i=0; i<n_col; i++)
-  //    std::cout << "1: i=" << i << " dtype=" << in_table->columns[i]->dtype << "\n";
+  /*
+  for (size_t i=0; i<n_col; i++)
+    std::cout << "1: i=" << i << " dtype=" << in_table->columns[i]->dtype << "\n";
+  */
   //
   size_t n_rows_left = (size_t)in_table->columns[0]->length;
   size_t n_rows_right = (size_t)in_table->columns[n_key]->length;
@@ -1291,207 +1406,173 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
   //    std::cout << "i=" << i << " hashes_left=" << hashes_left[i] << "\n";
   //  for (size_t i=0; i<n_rows_right; i++)
   //    std::cout << "i=" << i << " hashes_right=" << hashes_right[i] << "\n";
-  std::unordered_map<uint32_t, std::vector<std::pair<int,size_t>>> entList;
-  // What we do here is actually an optimization (maybe premature?)
-  // We insert entries on the left and right but if some entries
-  // are not going to get used anyway, then we do not insert them.
-  // The output of this is suboptimal and there are some duplication
-  // but this is unavoidable at this point.
-  if (is_left) {
-    // Since is_left = T we can insert the left entries safely. They will be used.
-    for (size_t iRowL=0; iRowL<n_rows_left; iRowL++) {
-      std::pair<int,size_t> eEnt{0,iRowL};
-      uint32_t eKey = hashes_left[iRowL];
-      if (entList.count(eKey) == 0) {
-        entList[eKey] = {eEnt};
-      }
-      else {
-        entList[eKey].push_back(eEnt);
-      }
-    }
-    // Now the right entries. If is_right = T then we insert and otherwise
-    // we insert only if present from the left.
-    for (size_t iRowR=0; iRowR<n_rows_right; iRowR++) {
-      std::pair<int,size_t> eEnt{1,iRowR};
-      uint32_t eKey=hashes_right[iRowR];
-      if (entList.count(eKey) == 0) {
-        if (is_right)
-          entList[eKey] = {eEnt};
-      }
-      else {
-        entList[eKey].push_back(eEnt);
-      }
-    }
+  int ChoiceOpt;
+  bool sec1_work, sec2_work; // This corresponds to is_left/is_right
+  size_t sec1_shift, sec2_shift; // This corresponds to the shift for left and right.
+  size_t sec1_rows, sec2_rows; // the number of rows
+  uint32_t *sec1_hashes, *sec2_hashes;
+  //  std::cout << "n_rows_left=" << n_rows_left << " n_rows_right=" << n_rows_right << "\n";
+  if (n_rows_left < n_rows_right) {
+    ChoiceOpt=0;
+    // 1 = left and 2 = right
+    sec1_work   = is_left;
+    sec2_work   = is_right;
+    sec1_shift  = 0;
+    sec2_shift  = n_key;
+    sec1_rows   = n_rows_left;
+    sec2_rows   = n_rows_right;
+    sec1_hashes = hashes_left;
+    sec2_hashes = hashes_right;
   }
   else {
-    // Is is_left = F then we insert first the ones on the right.
-    // This may be suboptimal if the is_right = is_left = F
-    // and the number of entries on the right is less than on the left.
-    for (size_t iRowR=0; iRowR<n_rows_right; iRowR++) {
-      std::pair<int,size_t> eEnt{1,iRowR};
-      uint32_t eKey=hashes_right[iRowR];
-      if (entList.count(eKey) == 0) {
-        entList[eKey] = {eEnt};
-      }
-      else {
-        entList[eKey].push_back(eEnt);
-      }
+    ChoiceOpt=1;
+    // 1 = right and 2 = left
+    sec1_work   = is_right;
+    sec2_work   = is_left;
+    sec1_shift  = n_key;
+    sec2_shift  = 0;
+    sec1_rows   = n_rows_right;
+    sec2_rows   = n_rows_left;
+    sec1_hashes = hashes_right;
+    sec2_hashes = hashes_left;
+  }
+
+  auto f=[&](size_t const& iRowA, size_t const& iRowB) -> bool {
+    //    std::cout << "Beginning of function f\n";
+    uint32_t hash_A, hash_B;
+    size_t jRowA, jRowB;
+    size_t shift_A, shift_B;
+    if (iRowA < sec1_rows) {
+      hash_A = sec1_hashes[iRowA];
+      shift_A = sec1_shift;
+      jRowA = iRowA;
     }
-    for (size_t iRowL=0; iRowL<n_rows_left; iRowL++) {
-      std::pair<int,size_t> eEnt{0,iRowL};
-      uint32_t eKey = hashes_left[iRowL];
-      if (entList.count(eKey) != 0) {
-        entList[eKey].push_back(eEnt);
-      }
+    else {
+      hash_A = sec2_hashes[iRowA - sec1_rows];
+      shift_A = sec2_shift;
+      jRowA = iRowA - sec1_rows;
+    }
+    //    std::cout << "hash_A=" << hash_A << "\n";
+    if (iRowB < sec1_rows) {
+      hash_B = sec1_hashes[iRowB];
+      shift_B = sec1_shift;
+      jRowB = iRowB;
+    }
+    else {
+      hash_B = sec2_hashes[iRowB - sec1_rows];
+      shift_B = sec2_shift;
+      jRowB = iRowB - sec1_rows;
+    }
+    //    std::cout << "hash_B=" << hash_B << "\n";
+    if (hash_A < hash_B)
+      return true;
+    if (hash_A > hash_B)
+      return false;
+    //    std::cout << "Before KeyComparison shift_A=" << shift_A << " shift_B=" << shift_B << "\n";
+    int val = KeyComparison(in_table, n_key, shift_A, jRowA, shift_B, jRowB);
+    //    std::cout << "val=" << val << "\n";
+    if (val == 1)
+      return true;
+    return false;
+  };
+  //
+  std::map<size_t, std::vector<size_t>, std::function<bool(size_t, size_t)> > entList1(f);
+  for (size_t i1=0; i1<sec1_rows; i1++) {
+    if (entList1.count(i1) == 0) {
+      entList1[i1]={i1};
+    }
+    else {
+      entList1[i1].push_back(i1);
     }
   }
+  size_t nEnt1=entList1.size();
+  //  std::cout << "nEnt1=" << nEnt1 << "\n";
   //
   // Now iterating and determining how many entries we have to do.
   //
   std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
-  // We consider now the construction of the pairs that are used
-  // for the comparison.
-  size_t nCase=0;
-  std::vector<int> ListSizeL, ListSizeR;
-  for (auto & pairKeyListRows : entList) {
-    //    std::cout << "hash_join_table, step 6.1\n";
-    std::vector<size_t> entListL, entListR;
-    for (auto side_row_pair : pairKeyListRows.second) {
-      // idx_side = 0 for origin on the left
-      // idx_side = 1 for origin on the right
-      int idx_side=side_row_pair.first;
-      // iRow for the index (whether left or right)
-      size_t iRow=side_row_pair.second;
-      if (idx_side == 0)
-        entListL.push_back(iRow);
-      if (idx_side == 1)
-        entListR.push_back(iRow);
-    }
-    //    std::cout << "|entListL|=" << entListL.size() << " |entListR|=" << entListR.size() << "\n";
-    // The blocks on the left and the right are now determined.
-    std::vector<std::vector<size_t>> entListBlocksL = GetBlocks(in_table, n_key, 0, entListL);
-    std::vector<std::vector<size_t>> entListBlocksR = GetBlocks(in_table, n_key, n_key, entListR);
-    size_t nBlockL=entListBlocksL.size();
-    size_t nBlockR=entListBlocksR.size();
-
-    if (is_left) {
-      // We use a lambda for finding right entry.
-      auto GetRightEntry=[&](size_t const& iRowL) -> std::ptrdiff_t {
-        for (size_t iR=0; iR<nBlockR; iR++) {
-          bool test = TestEqual(in_table, n_key, 0, iRowL, n_key, entListBlocksR[iR][0]);
-          if (test)
-            return iR;
-        }
-        return -1;
-      };
-      // We need to find the ListStatus for knowing
-      // which right keys have been used.
-      std::vector<int> ListStatus(nBlockR,0);
-      for (size_t iL=0; iL<nBlockL; iL++) {
-        std::ptrdiff_t iR=GetRightEntry(entListBlocksL[iL][0]);
-        if (iR == -1) {
-          nCase++;
-          ListSizeL.push_back(int(entListBlocksL[iL].size()));
-          ListSizeR.push_back(1);
-          for (auto & uL : entListBlocksL[iL])
-            ListPairWrite.push_back({uL, -1});
-        }
-        else {
-          if (is_right)
-            ListStatus[iR]=1;
-          nCase++;
-          ListSizeL.push_back(int(entListBlocksL[iL].size()));
-          ListSizeR.push_back(int(entListBlocksR[iR].size()));
-          for (auto & uL : entListBlocksL[iL])
-            for (auto & uR : entListBlocksR[iR])
-              ListPairWrite.push_back({uL,uR});
-        }
-      }
-      // If is_right = T then we need to consider
-      // the ones which have not been matched with the right.
-      if (is_right) {
-        for (size_t iR=0; iR<nBlockR; iR++)
-          if (ListStatus[iR] == 0) {
-            nCase++;
-            ListSizeL.push_back(1);
-            ListSizeR.push_back(int(entListBlocksR[iR].size()));
-            for (auto & uR : entListBlocksR[iR])
-              ListPairWrite.push_back({-1,uR});
-          }
-      }
+  std::vector<int> ListStatus(nEnt1,0);
+  for (size_t i2=0; i2<sec2_rows; i2++) {
+    size_t i2_shift = i2 + sec1_rows;
+    auto iter = entList1.find(i2_shift);
+    if (iter == entList1.end()) {
+      if (sec2_work)
+        ListPairWrite.push_back({-1, i2});
     }
     else {
-      // The lambda is for finding the entry.
-      auto GetLeftEntry=[&](size_t const& iRowR) -> std::ptrdiff_t {
-        for (size_t iL=0; iL<nBlockL; iL++) {
-          bool test = TestEqual(in_table, n_key, 0, entListBlocksL[iL][0], n_key, iRowR);
-          if (test)
-            return iL;
-        }
-        return -1;
-      };
-      // We consider the right entries.
-      for (size_t iR=0; iR<nBlockR; iR++) {
-        std::ptrdiff_t iL=GetLeftEntry(entListBlocksR[iR][0]);
-        if (iL == -1) {
-          if (is_right) {
-            nCase++;
-            ListSizeL.push_back(1);
-            ListSizeR.push_back(int(entListBlocksR[iR].size()));
-            for (auto & uR : entListBlocksR[iR])
-              ListPairWrite.push_back({-1, uR});
-          }
-        }
-        else {
-          nCase++;
-          ListSizeL.push_back(int(entListBlocksL[iL].size()));
-          ListSizeR.push_back(int(entListBlocksR[iR].size()));
-          for (auto & uL : entListBlocksL[iL])
-            for (auto & uR : entListBlocksR[iR])
-              ListPairWrite.push_back({uL,uR});
-        }
+      if (sec1_work) {
+        auto index = std::distance(entList1.begin(), iter);
+        ListStatus[index] = 1;
       }
+      for (auto & j1 : iter->second)
+        ListPairWrite.push_back({j1,i2});
+    }
+  }
+  if (sec1_work) {
+    auto iter = entList1.begin();
+    size_t iter_s=0;
+    while(iter != entList1.end()) {
+      if (ListStatus[iter_s] == 0) {
+        for (auto &j1 : iter ->second)
+          ListPairWrite.push_back({j1,-1});
+      }
+      iter++;
+      iter_s++;
     }
   }
   /*
   size_t nRowOut = ListPairWrite.size();
-  std::cout << "nRowOut=" << nRowOut << " nCase=" << nCase << "\n";
-  for (size_t iCase=0; iCase<nCase; iCase++)
-    std::cout << "iCase=" << iCase << " siz=" << ListSizeL[iCase] << " , " << ListSizeR[iCase] << "\n";
+  std::cout << "nRowOut=" << nRowOut << " ChoiceOpt=" << ChoiceOpt << "\n";
   std::cout << "n_key_t=" << n_key_t << " n_data_left_t=" << n_data_left_t << " n_data_right_t=" << n_data_right_t << "\n";
   std::cout << "hash_join_table, step 1 is_left=" << is_left << " is_right=" << is_right << "\n";
   std::cout << "n_rows_left=" << n_rows_left << " n_rows_right=" << n_rows_right << "\n";
-  */
   
-  /*
   for (size_t iRowOut=0; iRowOut<nRowOut; iRowOut++)
     std::cout << "iRowOut=" << iRowOut << " epair=" << ListPairWrite[iRowOut].first << " , " << ListPairWrite[iRowOut].second << "\n";
+  */
 
+  /*
   std::cout << "n_key=" << n_key << " n_data_left=" << n_data_left << " n_data_right=" << n_data_right << "\n";
   for (size_t i=0; i<n_col; i++)
   std::cout << "2: i=" << i << " dtype=" << in_table->columns[i]->dtype << "\n"; */
   std::vector<array_info*> out_arrs;
+  // Inserting the left data
   for (size_t i=0; i<n_data_left; i++) {
-    //    std::cout << "1: i=" << i << "\n";
-    out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
-                                     i + 2*n_key, -1, 0));
+    if (ChoiceOpt == 0) {
+      out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
+                                       i + 2*n_key, -1, 0));
+    }
+    else {
+      out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
+                                       -1, i + 2*n_key, 1));
+    }
   }
+  // Inserting the right data
   for (size_t i=0; i<n_data_right; i++) {
-    //    std::cout << "2: i=" << i << "\n";
-    out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, -1, i + 2*n_key + n_data_left, 1));
+    if (ChoiceOpt == 0) {
+      out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, -1, i + 2*n_key + n_data_left, 1));
+    }
+    else {
+      out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i + 2*n_key + n_data_left, -1, 0));
+    }
   }
-  for (size_t i=0; i<n_key; i++) {
-    //    std::cout << "3: i=" << i << "\n";
-    out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, i+n_key, 2));
+  // Putting the key two times.
+  for (size_t u=0; u<2; u++) {
+    for (size_t i=0; i<n_key; i++) {
+      if (ChoiceOpt == 0) {
+        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, i+n_key, 2));
+      }
+      else {
+        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i+n_key, i, 2));
+      }
+    }
   }
-  for (size_t i=0; i<n_key; i++) {
-    //    std::cout << "4: i=" << i << "\n";
-    out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, i+n_key, 2));
-  }
-  //  std::cout << "hash_join_table, step 12\n";
-  //  PrintSetOfColumn(std::cout, out_arrs);
-  //  PrintRefct(std::cout, out_arrs);
-  //  std::cout << "hash_join_table, step 13\n";
+  /*
+  std::cout << "hash_join_table, step 12\n";
+  PrintSetOfColumn(std::cout, out_arrs);
+  PrintRefct(std::cout, out_arrs);
+  std::cout << "hash_join_table, step 13\n";
+  */
   //
   delete[] hashes_left;
   delete[] hashes_right;

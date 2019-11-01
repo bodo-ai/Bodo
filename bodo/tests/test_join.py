@@ -733,6 +733,7 @@ class TestJoin(unittest.TestCase):
             df2 = pd.DataFrame(
                 {"C1": 2 * np.arange(n) + 1, "AAA": n + np.arange(n) + 1.0}
             )
+            df3 = df1.merge(df2, on="C1")
             return df3
 
         bodo_func = bodo.jit(distributed=["df3"])(test_impl)
