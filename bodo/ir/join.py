@@ -563,7 +563,16 @@ def join_distributed_run(
         is_left = join_node.how in ("left", "outer")
         is_right = join_node.how == "outer"
         if bodo.use_cpp_hash_join:
-            func_text += _gen_local_hash_join(left_key_names, right_key_names, left_key_types, right_key_types, left_other_names, right_other_names, is_left, is_right)
+            func_text += _gen_local_hash_join(
+                left_key_names,
+                right_key_names,
+                left_key_types,
+                right_key_types,
+                left_other_names,
+                right_other_names,
+                is_left,
+                is_right,
+            )
         else:
             func_text += (
                 "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
@@ -599,7 +608,7 @@ def join_distributed_run(
         )
 
     loc_vars = {}
-#    print("func_text=", func_text)
+    #    print("func_text=", func_text)
     exec(func_text, {}, loc_vars)
     join_impl = loc_vars["f"]
 
@@ -693,9 +702,19 @@ def _get_table_parallel_flags(join_node, array_dists):
 
     return left_parallel, right_parallel
 
-def _gen_local_hash_join(left_key_names, right_key_names, left_key_types, right_key_types, left_other_names, right_other_names, is_left, is_right):
+
+def _gen_local_hash_join(
+    left_key_names,
+    right_key_names,
+    left_key_types,
+    right_key_types,
+    left_other_names,
+    right_other_names,
+    is_left,
+    is_right,
+):
     n_keys = len(left_key_names)
-    func_text =  "    # beginning of _gen_local_hash_join\n"
+    func_text = "    # beginning of _gen_local_hash_join\n"
     eList = []
     for i in range(n_keys):
         eList.append("t1_keys[{}]".format(i))
@@ -705,10 +724,14 @@ def _gen_local_hash_join(left_key_names, right_key_names, left_key_types, right_
         eList.append("data_left[{}]".format(i))
     for i in range(len(right_other_names)):
         eList.append("data_right[{}]".format(i))
-    func_text += "    info_list_total = [{}]\n".format(",".join("array_to_info({})".format(a) for a in eList))
+    func_text += "    info_list_total = [{}]\n".format(
+        ",".join("array_to_info({})".format(a) for a in eList)
+    )
     func_text += "    table_total = arr_info_list_to_table(info_list_total)\n"
 
-    func_text += "    out_table = hash_join_table(table_total, {}, {}, {}, {}, {})\n".format(n_keys, len(left_other_names), len(right_other_names), is_left, is_right)
+    func_text += "    out_table = hash_join_table(table_total, {}, {}, {}, {}, {})\n".format(
+        n_keys, len(left_other_names), len(right_other_names), is_left, is_right
+    )
     func_text += "    delete_table(table_total)\n"
     use_cpp_code = True
     if not use_cpp_code:
@@ -721,19 +744,34 @@ def _gen_local_hash_join(left_key_names, right_key_names, left_key_types, right_
     if use_cpp_code:
         idx = 0
         for i, t in enumerate(left_other_names):
-            func_text += "    left_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,t)
+            func_text += "    left_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+                i, idx, t
+            )
             idx += 1
         for i, t in enumerate(right_other_names):
-            func_text += "    right_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(i,idx,t)
+            func_text += "    right_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+                i, idx, t
+            )
             idx += 1
         for i, t in enumerate(left_key_names):
-            func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), t1_keys[{}]){}\n".format(i,idx,i,_gen_reverse_type_match(left_key_types[i], right_key_types[i]))
+            func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), t1_keys[{}]){}\n".format(
+                i,
+                idx,
+                i,
+                _gen_reverse_type_match(left_key_types[i], right_key_types[i]),
+            )
             idx += 1
         for i, t in enumerate(right_key_names):
-            func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), t2_keys[{}]){}\n".format(i,idx,i,_gen_reverse_type_match(right_key_types[i], left_key_types[i]))
+            func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), t2_keys[{}]){}\n".format(
+                i,
+                idx,
+                i,
+                _gen_reverse_type_match(right_key_types[i], left_key_types[i]),
+            )
             idx += 1
         func_text += "    delete_table(out_table)\n"
     return func_text
+
 
 def _gen_par_shuffle(
     key_names, data_names, key_tup_out, data_tup_out, key_types, other_key_types

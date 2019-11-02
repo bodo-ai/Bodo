@@ -294,14 +294,10 @@ def test_join_deadcode_cleanup():
     def test_impl(df1, df2):
         df3 = df1.merge(df2, on=["A"])
         return
-#        df3 = df1.merge(df2, on=["A"]).sort_values("A").reset_index(drop=True)
-#        return df3
 
     def test_impl_with_join(df1, df2):
         df3 = df1.merge(df2, on=["A"])
         return df3
-#        df3 = df1.merge(df2, on=["A"]).sort_values("A").reset_index(drop=True)
-#        return df3
 
     df1 = pd.DataFrame({"A": [1, 2, 3], "B": ["a", "b", "c"]})
     df2 = pd.DataFrame({"A": [1, 2, 3], "C": [4, 5, 6]})
