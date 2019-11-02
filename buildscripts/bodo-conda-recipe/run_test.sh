@@ -7,6 +7,6 @@ export NUMBA_DISABLE_ERROR_MESSAGE_HIGHLIGHTING=1
 export PYTHONFAULTHANDLER=1
 
 
-#pytest -s -v -W ignore --pyargs bodo
-#mpiexec -n 2 pytest -s -v -W ignore --pyargs bodo
-#mpiexec -n 3 pytest -s -v -W ignore --pyargs bodo
+#pytest -s -v -m "not slow" -W ignore --pyargs bodo
+#mpiexec -n 2 pytest -s -v -m "not slow" -W ignore --pyargs bodo
+#mpiexec -n 3 pytest -s -v -m "not slow" -W ignore --pyargs bodo

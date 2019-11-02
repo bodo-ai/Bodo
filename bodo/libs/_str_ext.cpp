@@ -11,15 +11,6 @@
 
 #include "_str_decode.cpp"
 
-#ifdef USE_BOOST_REGEX
-#include <boost/regex.hpp>
-using boost::regex;
-using boost::regex_search;
-#else
-#include <regex>
-using std::regex;
-using std::regex_search;
-#endif
 
 #include <boost/lexical_cast.hpp>
 
@@ -42,9 +33,7 @@ static inline void SetBit(uint8_t* bits, int64_t i) {
     bits[i / 8] |= kBitmask[i % 8];
 }
 
-void* init_string(char*, int64_t);
 void* init_string_const(char* in_str, int64_t size);
-void dtor_string(std::string** in_str, int64_t size, void* in);
 void dtor_str_arr_split_view(str_arr_split_view_payload* in_str_arr,
                              int64_t size, void* in);
 void str_arr_split_view_alloc(str_arr_split_view_payload* out_view,
@@ -53,17 +42,11 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
                              int64_t n_strs, uint32_t* offsets, char* data,
                              char sep);
 const char* get_c_str(std::string* s);
-const char* get_char_ptr(char c);
-void* str_concat(std::string* s1, std::string* s2);
-int str_compare(std::string* s1, std::string* s2);
-bool str_equal(std::string* s1, std::string* s2);
-bool str_equal_cstr(std::string* s1, char* s2);
-void* str_split(std::string* str, std::string* sep, int64_t* size);
-void* str_substr_int(std::string* str, int64_t index);
+
 int64_t str_to_int64(char* data, int64_t length);
-int64_t std_str_to_int64(std::string* str);
 double str_to_float64(std::string* str);
 int64_t get_str_len(std::string* str);
+
 void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
                                 uint32_t** offset_table, char** buffer,
                                 uint8_t** null_bitmap);
@@ -99,13 +82,7 @@ int str_arr_to_int64(int64_t* out, uint32_t* offsets, char* data,
                      int64_t index);
 int str_arr_to_float64(double* out, uint32_t* offsets, char* data,
                        int64_t index);
-void* compile_regex(std::string* pat);
-bool str_contains_regex(std::string* str, regex* e);
-bool str_contains_noregex(std::string* str, std::string* pat);
-std::string* str_replace_regex(std::string* str, regex* e, std::string* val);
-std::string* str_replace_noregex(std::string* str, std::string* pat,
-                                 std::string* val);
-char get_char_from_string(std::string* str, int64_t index);
+
 
 void* str_from_int32(int in);
 void* str_from_int64(int64_t in);
@@ -143,12 +120,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     // init numpy
     import_array();
 
-    PyObject_SetAttrString(m, "init_string",
-                           PyLong_FromVoidPtr((void*)(&init_string)));
     PyObject_SetAttrString(m, "init_string_const",
                            PyLong_FromVoidPtr((void*)(&init_string_const)));
-    PyObject_SetAttrString(m, "dtor_string",
-                           PyLong_FromVoidPtr((void*)(&dtor_string)));
     PyObject_SetAttrString(m, "dtor_string_array",
                            PyLong_FromVoidPtr((void*)(&dtor_string_array)));
     PyObject_SetAttrString(
@@ -165,24 +138,7 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
         PyLong_FromVoidPtr((void*)(&str_arr_split_view_impl)));
     PyObject_SetAttrString(m, "get_c_str",
                            PyLong_FromVoidPtr((void*)(&get_c_str)));
-    PyObject_SetAttrString(m, "get_char_ptr",
-                           PyLong_FromVoidPtr((void*)(&get_char_ptr)));
-    PyObject_SetAttrString(m, "str_concat",
-                           PyLong_FromVoidPtr((void*)(&str_concat)));
-    PyObject_SetAttrString(m, "str_compare",
-                           PyLong_FromVoidPtr((void*)(&str_compare)));
-    PyObject_SetAttrString(m, "str_equal",
-                           PyLong_FromVoidPtr((void*)(&str_equal)));
-    PyObject_SetAttrString(m, "str_equal_cstr",
-                           PyLong_FromVoidPtr((void*)(&str_equal_cstr)));
-    PyObject_SetAttrString(m, "str_split",
-                           PyLong_FromVoidPtr((void*)(&str_split)));
-    PyObject_SetAttrString(m, "str_substr_int",
-                           PyLong_FromVoidPtr((void*)(&str_substr_int)));
-    PyObject_SetAttrString(m, "get_char_from_string",
-                           PyLong_FromVoidPtr((void*)(&get_char_from_string)));
-    PyObject_SetAttrString(m, "std_str_to_int64",
-                           PyLong_FromVoidPtr((void*)(&std_str_to_int64)));
+
     PyObject_SetAttrString(m, "str_to_int64",
                            PyLong_FromVoidPtr((void*)(&str_to_int64)));
     PyObject_SetAttrString(m, "str_to_float64",
@@ -231,16 +187,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&str_arr_to_int64)));
     PyObject_SetAttrString(m, "str_arr_to_float64",
                            PyLong_FromVoidPtr((void*)(&str_arr_to_float64)));
-    PyObject_SetAttrString(m, "compile_regex",
-                           PyLong_FromVoidPtr((void*)(&compile_regex)));
-    PyObject_SetAttrString(m, "str_contains_noregex",
-                           PyLong_FromVoidPtr((void*)(&str_contains_noregex)));
-    PyObject_SetAttrString(m, "str_contains_regex",
-                           PyLong_FromVoidPtr((void*)(&str_contains_regex)));
-    PyObject_SetAttrString(m, "str_replace_regex",
-                           PyLong_FromVoidPtr((void*)(&str_replace_regex)));
-    PyObject_SetAttrString(m, "str_replace_noregex",
-                           PyLong_FromVoidPtr((void*)(&str_replace_noregex)));
     PyObject_SetAttrString(m, "str_from_int32",
                            PyLong_FromVoidPtr((void*)(&str_from_int32)));
     PyObject_SetAttrString(m, "str_from_int64",
@@ -277,23 +223,12 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     return m;
 }
 
-void* init_string(char* in_str, int64_t size) {
-    // std::cout<<"init str: "<<in_str<<" "<<size<<std::endl;
-    return new std::string(in_str, size);
-}
 
 void* init_string_const(char* in_str, int64_t size) {
     // std::cout<<"init str: "<<in_str<<" "<<size<<std::endl;
     return new std::string(in_str, size);
 }
 
-void dtor_string(std::string** in_str, int64_t size, void* info) {
-    printf("dtor size: %ld\n", size);
-    fflush(stdout);
-    // std::cout<<"del str: "<< (*in_str)->c_str() <<std::endl;
-    // delete (*in_str);
-    return;
-}
 
 void del_str(std::string* in_str) {
     delete in_str;
@@ -380,66 +315,6 @@ const char* get_c_str(std::string* s) {
     return s->c_str();
 }
 
-const char* get_char_ptr(char c) {
-    // printf("in get %s\n", s->c_str());
-    char* str = new char[1];
-    str[0] = c;
-    return str;
-}
-
-void* str_concat(std::string* s1, std::string* s2) {
-    // printf("in concat %s %s\n", s1->c_str(), s2->c_str());
-    std::string* res = new std::string((*s1) + (*s2));
-    return res;
-}
-
-int str_compare(std::string* s1, std::string* s2) {
-    // printf("in str_comp %s %s\n", s1->c_str(), s2->c_str());
-    return s1->compare(*s2);
-}
-
-bool str_equal(std::string* s1, std::string* s2) {
-    // printf("in str_equal %s %s\n", s1->c_str(), s2->c_str());
-    return s1->compare(*s2) == 0;
-}
-
-bool str_equal_cstr(std::string* s1, char* s2) {
-    // printf("in str_equal %s %s\n", s1->c_str(), s2->c_str());
-    return s1->compare(s2) == 0;
-}
-
-void* str_split(std::string* str, std::string* sep, int64_t* size) {
-    // std::cout << *str << " " << *sep << std::endl;
-    std::vector<std::string*> res;
-
-    size_t last = 0;
-    size_t next = 0;
-    while ((next = str->find(*sep, last)) != std::string::npos) {
-        std::string* token = new std::string(str->substr(last, next - last));
-        res.push_back(token);
-        last = next + 1;
-    }
-    std::string* token = new std::string(str->substr(last));
-    res.push_back(token);
-    *size = res.size();
-    // for(int i=0; i<*size; i++)
-    //    std::cout<<*(res[i])<<std::endl;
-    // TODO: avoid extra copy
-    void* out = new void*[*size];
-    memcpy(out, res.data(), (*size) * sizeof(void*));
-    // std::cout<< *(((std::string**)(out))[1])<<std::endl;
-    return out;
-}
-
-void* str_substr_int(std::string* str, int64_t index) {
-    return new std::string(*str, index, 1);
-}
-
-char get_char_from_string(std::string* str, int64_t index) {
-    return str->at(index);
-}
-
-int64_t std_str_to_int64(std::string* str) { return std::stoll(*str); }
 
 double str_to_float64(std::string* str) { return std::stod(*str); }
 
@@ -570,37 +445,6 @@ int64_t str_to_int64(char* data, int64_t length) {
     return -1;
 }
 
-void* compile_regex(std::string* pat) {
-    // printf("compiling\n");
-    // regex rr2("3");
-    // printf("1 compiling\n");
-    // regex * rr = new regex(*pat);
-    // printf("done compiling\n");
-    return new regex(*pat);
-}
-
-bool str_contains_regex(std::string* str, regex* e) {
-    // printf("regex matching\n");
-    // regex e(*pat);
-    // return regex_search(*str, e, regex_constants::match_any);
-    return regex_search(*str, *e);
-}
-
-bool str_contains_noregex(std::string* str, std::string* pat) {
-    return (str->find(*pat) != std::string::npos);
-}
-
-std::string* str_replace_regex(std::string* str, regex* e, std::string* val) {
-    return new std::string(regex_replace(*str, *e, *val));
-}
-
-std::string* str_replace_noregex(std::string* str, std::string* pat,
-                                 std::string* val) {
-    std::string* out = new std::string(*str);
-    boost::replace_all(*out, *pat, *val);
-    // std::cout << *out << std::endl;
-    return out;
-}
 
 void print_str(std::string* str) {
     std::cout << *str;

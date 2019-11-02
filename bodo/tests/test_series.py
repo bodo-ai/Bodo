@@ -46,6 +46,7 @@ GLOBAL_VAL = 2
 
 # TODO: integer Null and other Nulls
 # TODO: list of datetime.datetime, categorical, timedelta, ...
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "data",
     [
@@ -124,25 +125,24 @@ def test_series_constructor_int_arr():
 # TODO: other possible Series types like Categorical, dt64, td64, ...
 @pytest.fixture(
     params=[
-        pd.Series([1, 8, 4, 11, -3]),
-        pd.Series([1.1, np.nan, 4.2, 3.1, -3.5]),
-        pd.Series([True, False, False, True, True]),  # bool array without NA
+        pytest.param(pd.Series([1, 8, 4, 11, -3]), marks=pytest.mark.slow),
+        pytest.param(pd.Series([True, False, False, True, True]), marks=pytest.mark.slow),  # bool array without NA
         pd.Series([True, False, False, np.nan, True]),  # bool array with NA
-        pd.Series([1, 8, 4, 0, 3], dtype=np.uint8),
+        pytest.param(pd.Series([1, 8, 4, 0, 3], dtype=np.uint8), marks=pytest.mark.slow),
         pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
-        pd.Series([1, 8, 4, -1, 2], name="ACD"),
-        pd.Series([1, 8, 4, 1, -3], [3, 7, 9, 2, 1]),
-        pd.Series([1, 8, 4, 11, -3], [3, 7, 9, 2, 1], name="AAC"),
+        pytest.param(pd.Series([1, 8, 4, -1, 2], name="ACD"), marks=pytest.mark.slow),
+        pytest.param(pd.Series([1, 8, 4, 1, -3], [3, 7, 9, 2, 1]), marks=pytest.mark.slow),
+        pd.Series([1.1, np.nan, 4.2, 3.1, -3.5], [3, 7, 9, 2, 1], name="AAC"),
         pd.Series([1, 2, 3, -1, 6], ["A", "BA", "", "DD", "GGG"]),
-        pd.Series(
+        pytest.param(pd.Series(
             ["A", "B", "CDD", "AA", "GGG"]
-        ),  # TODO: string with Null (np.testing fails)
+        ), marks=pytest.mark.slow),  # TODO: string with Null (np.testing fails)
         pd.Series(["A", "B", "CG", "ACDE", "C"], [4, 7, 0, 1, -2]),
         pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)),
-        pd.Series(
+        pytest.param(pd.Series(
             [3, 5, 1, -1, 2],
             pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
-        ),
+        ), marks=pytest.mark.slow),
         # TODO: timedelta
     ]
 )
@@ -153,11 +153,11 @@ def series_val(request):
 # TODO: timedelta, period, tuple, etc.
 @pytest.fixture(
     params=[
-        pd.Series([1, 8, 4, 11, -3]),
+        pytest.param(pd.Series([1, 8, 4, 11, -3]), marks=pytest.mark.slow),
         pd.Series([1.1, np.nan, 4.1, 1.4, -2.1]),
-        pd.Series([1, 8, 4, 10, 3], dtype=np.uint8),
-        pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
-        pd.Series([1, 8, 4, -1, 2], [3, 7, 9, 2, 1], name="AAC"),
+        pytest.param(pd.Series([1, 8, 4, 10, 3], dtype=np.uint8), marks=pytest.mark.slow),
+        pd.Series([1, 8, 4, 10, 3], [3, 7, 9, 2, 1], dtype="Int32"),
+        pytest.param(pd.Series([1, 8, 4, -1, 2], [3, 7, 9, 2, 1], name="AAC"), marks=pytest.mark.slow),
         pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)),
     ]
 )
@@ -665,6 +665,7 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg):
 ############################ binary ops #############################
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "op",
     [
@@ -726,6 +727,7 @@ def test_series_explicit_binary_op_nan(fill):
     check_func(test_impl, (L1, L2, fill))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_binary_ops)
 def test_series_binary_op(op):
     op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
@@ -741,6 +743,7 @@ def test_series_binary_op(op):
     check_func(test_impl, (2, S))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_inplace_binary_ops)
 def test_series_inplace_binary_op(op):
     op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
@@ -781,6 +784,7 @@ def test_series_unary_op(op):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "ufunc", [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 1]
 )
@@ -802,6 +806,7 @@ def test_series_unary_ufunc_np_call():
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "ufunc", [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 2]
 )
@@ -816,6 +821,7 @@ def test_series_binary_ufunc(ufunc):
     check_func(test_impl, (A, S))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.ge, operator.gt, operator.le, operator.lt]
 )
@@ -839,6 +845,7 @@ def test_series_bool_cmp_op(S, op):
     check_func(test_impl, (True, S))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.ge, operator.gt, operator.le, operator.lt]
 )
@@ -860,6 +867,7 @@ def test_series_bool_vals_cmp_op(S, op):
     check_func(test_impl, (S, S))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "S1,S2,fill,raises",
     [
@@ -1188,6 +1196,7 @@ def test_series_tail(series_val):
     check_func(test_impl, (series_val,), False)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("k", [0, 1, 2, 3])
 def test_series_nlargest(numeric_series_val, k):
     # TODO: support nullable int
@@ -1211,6 +1220,7 @@ def test_series_nlargest_non_index():
     pd.testing.assert_series_equal(bodo_func(k), test_impl(k))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("k", [0, 1, 2, 3])
 def test_series_nsmallest(numeric_series_val, k):
     # TODO: support nullable int
