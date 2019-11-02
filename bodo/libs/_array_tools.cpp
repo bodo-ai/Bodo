@@ -571,8 +571,6 @@ void convert_len_arr_to_offset(uint32_t* offsets, size_t const& num_strs) {
     return;
 }
 
-/* 
- */
 void copy_gathered_null_bytes(uint8_t* null_bitmask,
                               std::vector<uint8_t> const& tmp_null_bytes,
                               std::vector<int> const& recv_count_null,
