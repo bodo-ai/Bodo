@@ -743,7 +743,12 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
 
 
 
-
+/** Getting the expression of a T value in characters
+ *
+ * The template paramter is T.
+ * @param val the value in the type T.
+ * @return the vector of characters on output
+ */
 template<typename T>
 std::vector<char> GetVector(T const& val)
 {
@@ -755,6 +760,17 @@ std::vector<char> GetVector(T const& val)
   return V;
 }
 
+
+/* The NaN entry used in the case a normal value is not available.
+ *
+ * The choice are done in following way:
+ * ---int8_t / int16_t / int32_t / int64_t : return a -1 value
+ * ---uint8_t / uint16_t / uint32_t / uint64_t : return a 0 value
+ * ---float / double : return a NaN
+ *
+ * @param the dtype used.
+ * @return the list of characters in output.
+ */
 std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype)
 {
   if (dtype == Bodo_CTypes::INT8)
@@ -781,6 +797,8 @@ std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype)
 }
 
 
+/** Printing the string expression of an entry in the column
+ */
 std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype, char* ptrdata)
 {
   if (dtype == Bodo_CTypes::INT8) {
@@ -827,6 +845,8 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype, char* ptrda
 }
 
 
+/* This is a function used by "PrintSetOfColumn"
+ */
 std::vector<std::string> PrintColumn(array_info* arr)
 {
   size_t nRow=arr->length;
@@ -883,6 +903,18 @@ std::vector<std::string> PrintColumn(array_info* arr)
   return ListStr;
 }
 
+
+/** The PrintSetOfColumn is printing the contents of the table to
+ * the output stream.
+ * All cases are supported (NUMPY, SRING, NULLABLE_INT_BOOL) as well as
+ * all integer and floating types.
+ *
+ * The number of rows in the columns do not have to be the same.
+ *
+ * @param the output stream (e.g. std::cerr or std::cout)
+ * @param ListArr the list of columns in input
+ * @return Nothing. Everything is put in the stream
+ */
 void PrintSetOfColumn(std::ostream & os, std::vector<array_info*> const& ListArr)
 {
   int nCol=ListArr.size();
@@ -932,6 +964,14 @@ void PrintSetOfColumn(std::ostream & os, std::vector<array_info*> const& ListArr
 }
 
 
+
+/** This is a function used for debugging.
+ * It prints the nature of the columns of the tables
+ *
+ * @param the output stream (for example std::cerr or std::cout)
+ * @param The list of columns in output
+ * @return nothing. Everything is printed to the stream
+ */
 void PrintRefct(std::ostream &os, std::vector<array_info*> const& ListArr)
 {
   int nCol=ListArr.size();
@@ -981,10 +1021,13 @@ array_info* RetrieveArray(table_info* const& in_table, std::vector<std::pair<std
 {
   size_t nRowOut=ListPairWrite.size();
   array_info* out_arr = NULL;
-  // The function get_iRow takes as input the iRow index from the table in output.
-  // In output is two things:
-  // ---the column to take from the input table.
-  // ---The index to take from the input column (which may be -1 in case of a NaN entry)
+  /* The function for computing the returning values
+   * In the output is the column index to use and the row index to use.
+   * The row index may be -1 though.
+   *
+   * @param the row index in the output
+   * @return the pair (column,row) to be used.
+   */
   auto get_iRow=[&](size_t const& iRowIn) -> std::pair<size_t,std::ptrdiff_t> {
     std::pair<std::ptrdiff_t, std::ptrdiff_t> pairLRcolumn = ListPairWrite[iRowIn];
     if (ChoiceColumn == 0)
@@ -1105,6 +1148,9 @@ array_info* RetrieveArray(table_info* const& in_table, std::vector<std::pair<std
   }
   return out_arr;
 };
+
+
+
 
 /** This code test if two keys are equal (Before that the hash should have been used)
  * It is used that way because we assume that the left key have the same type as the
