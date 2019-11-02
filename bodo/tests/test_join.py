@@ -261,10 +261,10 @@ def test_join_match_key_types():
 
     df2 = pd.DataFrame({"A": [2, 1, 4, 4, 3], "B": [1, 3, 2, 3, 2], "D": [1, 3, 2, 3, 2]})
     df2["A"] = df2.A.astype(np.float64)
-#    check_func(test_impl1, (df1, df2), sort_output=True)
+    check_func(test_impl1, (df1, df2), sort_output=True)
     check_func(test_impl1, (df2, df1), sort_output=True)
-#    check_func(test_impl2, (df1, df2), sort_output=True)
-#    check_func(test_impl2, (df2, df1), sort_output=True)
+    check_func(test_impl2, (df1, df2), sort_output=True)
+    check_func(test_impl2, (df2, df1), sort_output=True)
 
 
 def test_join_rm_dead_data_name_overlap():

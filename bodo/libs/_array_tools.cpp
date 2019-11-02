@@ -741,7 +741,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
 
 
 
-/** Getting the expression of a T value in characters
+/** Getting the expression of a T value as a vector of characters
  *
  * The template paramter is T.
  * @param val the value in the type T.
@@ -765,6 +765,7 @@ std::vector<char> GetVector(T const& val)
  * ---int8_t / int16_t / int32_t / int64_t : return a -1 value
  * ---uint8_t / uint16_t / uint32_t / uint64_t : return a 0 value
  * ---float / double : return a NaN
+ * This is obviously not perfect as -1 can be a legitimate value, but here goes.
  *
  * @param the dtype used.
  * @return the list of characters in output.
@@ -796,6 +797,10 @@ std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype)
 
 
 /** Printing the string expression of an entry in the column
+ * 
+ * @param dtype: the data type on input
+ * @param ptrdata: The pointer to the data (its length is determined by dtype)
+ * @return The string on output.
  */
 std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype, char* ptrdata)
 {
@@ -844,6 +849,10 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype, char* ptrda
 
 
 /* This is a function used by "PrintSetOfColumn"
+ * It takes a column and returns a vector of string on output
+ *
+ * @param arr is the pointer.
+ * @return The vector of strings to be used later.
  */
 std::vector<std::string> PrintColumn(array_info* arr)
 {
@@ -1158,6 +1167,8 @@ array_info* RetrieveArray(table_info* const& in_table, std::vector<std::pair<std
  * Thus the test iterates over the columns and if one is different then result is false.
  * We consider all types of bodo_array_type
  *
+ * This function is currently unused but could be used in the future.
+ *
  * @param in_table the input table
  * @param n_key the number of keys considered for the comparison
  * @param shift_key1 the column shift for the first key
@@ -1339,46 +1350,6 @@ int KeyComparison(table_info* in_table, size_t const& n_key, size_t const& shift
 
 
 
-/** This function takes a list of lines in the in_table and return the list of line
- *
- * by blocks if they have the same key.
- * The entry "shift" specifies the starting point of the keys.
- * This is because the keys are done on the left or right in the same data structure.
- *
- * The algorithm is nothing special with quadratic run-time in worst case.
- * It is expected not to be a problem since different keys with the same hash should
- * be rare. If all the keys with same hash are also identical then the running time
- * is linear.
- *
- *  @param shift starting point of the keys
- *         This is because the keys are done on the left or right in the same data structure.
- *  @param entList list of pairs indicating sides and row number
- *  @return entListBlocks the list of line by blocks
- */
-std::vector<std::vector<size_t>> GetBlocks(table_info* in_table, size_t const& n_key, size_t const& shift, std::vector<size_t> const& entList)
-{
-  size_t len=entList.size();
-  std::vector<int> ListStatus(len,0);
-  std::vector<std::vector<size_t>> entListBlocks;
-  for (size_t i1=0; i1<len; i1++) {
-    if (ListStatus[i1] == 0) {
-      ListStatus[i1]=1;
-      std::vector<size_t> eList{entList[i1]};
-      for (size_t i2=i1+1; i2<len; i2++) {
-        if (ListStatus[i2] == 0) {
-          bool test=TestEqual(in_table, n_key, shift, entList[i1], shift, entList[i2]);
-          if (test) {
-            ListStatus[i2]=1;
-            eList.push_back(entList[i2]);
-          }
-        }
-      }
-      entListBlocks.push_back(eList);
-    }
-  }
-  return entListBlocks;
-};
-
 
 
 
@@ -1451,61 +1422,74 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
   //  for (size_t i=0; i<n_rows_right; i++)
   //    std::cout << "i=" << i << " hashes_right=" << hashes_right[i] << "\n";
   int ChoiceOpt;
-  bool sec1_work, sec2_work; // This corresponds to is_left/is_right
-  size_t sec1_shift, sec2_shift; // This corresponds to the shift for left and right.
-  size_t sec1_rows, sec2_rows; // the number of rows
-  uint32_t *sec1_hashes, *sec2_hashes;
+  bool short_table_work, long_table_work; // This corresponds to is_left/is_right
+  size_t short_table_shift, long_table_shift; // This corresponds to the shift for left and right.
+  size_t short_table_rows, long_table_rows; // the number of rows
+  uint32_t *short_table_hashes, *long_table_hashes;
   //  std::cout << "n_rows_left=" << n_rows_left << " n_rows_right=" << n_rows_right << "\n";
   if (n_rows_left < n_rows_right) {
     ChoiceOpt=0;
     // 1 = left and 2 = right
-    sec1_work   = is_left;
-    sec2_work   = is_right;
-    sec1_shift  = 0;
-    sec2_shift  = n_key;
-    sec1_rows   = n_rows_left;
-    sec2_rows   = n_rows_right;
-    sec1_hashes = hashes_left;
-    sec2_hashes = hashes_right;
+    short_table_work   = is_left;
+    long_table_work   = is_right;
+    short_table_shift  = 0;
+    long_table_shift  = n_key;
+    short_table_rows   = n_rows_left;
+    long_table_rows   = n_rows_right;
+    short_table_hashes = hashes_left;
+    long_table_hashes = hashes_right;
   }
   else {
     ChoiceOpt=1;
     // 1 = right and 2 = left
-    sec1_work   = is_right;
-    sec2_work   = is_left;
-    sec1_shift  = n_key;
-    sec2_shift  = 0;
-    sec1_rows   = n_rows_right;
-    sec2_rows   = n_rows_left;
-    sec1_hashes = hashes_right;
-    sec2_hashes = hashes_left;
+    short_table_work   = is_right;
+    long_table_work   = is_left;
+    short_table_shift  = n_key;
+    long_table_shift  = 0;
+    short_table_rows   = n_rows_right;
+    long_table_rows   = n_rows_left;
+    short_table_hashes = hashes_right;
+    long_table_hashes = hashes_left;
   }
-
-  auto f=[&](size_t const& iRowA, size_t const& iRowB) -> bool {
+  /* This is a function for comparing the rows.
+   * This is used as argument for the map function.
+   * First level of comparison is by using the hash.
+   * If failing then we go to the more complex value
+   * comparison.
+   *
+   * rows can be in the left or the right tables.
+   * If iRow < short_table_rows then it is in the first table.
+   * If iRow >= short_table_rows then it is in the second table.
+   *
+   * @param iRowA is the first row index for the comparison
+   * @param iRowB is the second row index for the comparison
+   * @return true/false depending on the case.
+   */
+  auto row_cmp=[&](size_t const& iRowA, size_t const& iRowB) -> bool {
     //    std::cout << "Beginning of function f\n";
     uint32_t hash_A, hash_B;
     size_t jRowA, jRowB;
     size_t shift_A, shift_B;
-    if (iRowA < sec1_rows) {
-      hash_A = sec1_hashes[iRowA];
-      shift_A = sec1_shift;
+    if (iRowA < short_table_rows) {
+      hash_A = short_table_hashes[iRowA];
+      shift_A = short_table_shift;
       jRowA = iRowA;
     }
     else {
-      hash_A = sec2_hashes[iRowA - sec1_rows];
-      shift_A = sec2_shift;
-      jRowA = iRowA - sec1_rows;
+      hash_A = long_table_hashes[iRowA - short_table_rows];
+      shift_A = long_table_shift;
+      jRowA = iRowA - short_table_rows;
     }
     //    std::cout << "hash_A=" << hash_A << "\n";
-    if (iRowB < sec1_rows) {
-      hash_B = sec1_hashes[iRowB];
-      shift_B = sec1_shift;
+    if (iRowB < short_table_rows) {
+      hash_B = short_table_hashes[iRowB];
+      shift_B = short_table_shift;
       jRowB = iRowB;
     }
     else {
-      hash_B = sec2_hashes[iRowB - sec1_rows];
-      shift_B = sec2_shift;
-      jRowB = iRowB - sec1_rows;
+      hash_B = long_table_hashes[iRowB - short_table_rows];
+      shift_B = long_table_shift;
+      jRowB = iRowB - short_table_rows;
     }
     //    std::cout << "hash_B=" << hash_B << "\n";
     if (hash_A < hash_B)
@@ -1519,66 +1503,67 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
       return true;
     return false;
   };
-  //
-  std::map<size_t, std::vector<size_t>, std::function<bool(size_t, size_t)> > entList1(f);
-  for (size_t i1=0; i1<sec1_rows; i1++) {
-    if (entList1.count(i1) == 0) {
-      entList1[i1]={i1};
+  // The entList contains the hash of the short table.
+  // We address the entry by the row index. We store all the rows which are identical
+  // in the std::vector.
+  std::map<size_t, std::vector<size_t>, std::function<bool(size_t, size_t)> > entList(row_cmp);
+  // The loop over the short table.
+  // entries are stored one by one and all of them are put even if identical in value.
+  for (size_t i_short=0; i_short<short_table_rows; i_short++) {
+    if (entList.count(i_short) == 0) {
+      entList[i_short]={i_short};
     }
     else {
-      entList1[i1].push_back(i1);
+      entList[i_short].push_back(i_short);
     }
   }
-  size_t nEnt1=entList1.size();
+  size_t nEnt=entList.size();
   //  std::cout << "nEnt1=" << nEnt1 << "\n";
   //
   // Now iterating and determining how many entries we have to do.
   //
+
+  //
+  // ListPairWrite is the table used for the output 
+  // It precises the index used for the writing of the output table.
   std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
-  std::vector<int> ListStatus(nEnt1,0);
-  for (size_t i2=0; i2<sec2_rows; i2++) {
-    size_t i2_shift = i2 + sec1_rows;
-    auto iter = entList1.find(i2_shift);
-    if (iter == entList1.end()) {
-      if (sec2_work)
-        ListPairWrite.push_back({-1, i2});
+  // This precise whether a short table entry has been used or not.
+  std::vector<int> ListStatus(nEnt,0);
+  // We now iterate over all entries of the long table in order to get
+  // the entries in the ListPairWrite.
+  for (size_t i_long=0; i_long<long_table_rows; i_long++) {
+    size_t i_long_shift = i_long + short_table_rows;
+    auto iter = entList.find(i_long_shift);
+    if (iter == entList.end()) {
+      if (long_table_work)
+        ListPairWrite.push_back({-1, i_long});
     }
     else {
-      if (sec1_work) {
-        auto index = std::distance(entList1.begin(), iter);
+      // If the short table entry are present in output as well, then
+      // we need to keep track whether they are used or not by the long table.
+      if (short_table_work) {
+        auto index = std::distance(entList.begin(), iter);
         ListStatus[index] = 1;
       }
-      for (auto & j1 : iter->second)
-        ListPairWrite.push_back({j1,i2});
+      for (auto & j_short : iter->second)
+        ListPairWrite.push_back({j_short,i_long});
     }
   }
-  if (sec1_work) {
-    auto iter = entList1.begin();
+  // if short_table is in output then we need to check
+  // if they are used by the long table and if so use them on output.
+  if (short_table_work) {
+    auto iter = entList.begin();
     size_t iter_s=0;
-    while(iter != entList1.end()) {
+    while(iter != entList.end()) {
       if (ListStatus[iter_s] == 0) {
-        for (auto &j1 : iter ->second)
-          ListPairWrite.push_back({j1,-1});
+        for (auto &j_short : iter ->second)
+          ListPairWrite.push_back({j_short,-1});
       }
       iter++;
       iter_s++;
     }
   }
-  /*
-  size_t nRowOut = ListPairWrite.size();
-  std::cout << "nRowOut=" << nRowOut << " ChoiceOpt=" << ChoiceOpt << "\n";
-  std::cout << "n_key_t=" << n_key_t << " n_data_left_t=" << n_data_left_t << " n_data_right_t=" << n_data_right_t << "\n";
-  std::cout << "hash_join_table, step 1 is_left=" << is_left << " is_right=" << is_right << "\n";
-  std::cout << "n_rows_left=" << n_rows_left << " n_rows_right=" << n_rows_right << "\n";
-  
-  for (size_t iRowOut=0; iRowOut<nRowOut; iRowOut++)
-    std::cout << "iRowOut=" << iRowOut << " epair=" << ListPairWrite[iRowOut].first << " , " << ListPairWrite[iRowOut].second << "\n";
-  */
 
-  /*
-  std::cout << "n_key=" << n_key << " n_data_left=" << n_data_left << " n_data_right=" << n_data_right << "\n";
-  for (size_t i=0; i<n_col; i++)
-  std::cout << "2: i=" << i << " dtype=" << in_table->columns[i]->dtype << "\n"; */
   std::vector<array_info*> out_arrs;
   // Inserting the left data
   for (size_t i=0; i<n_data_left; i++) {

@@ -694,7 +694,6 @@ def _get_table_parallel_flags(join_node, array_dists):
     return left_parallel, right_parallel
 
 def _gen_local_hash_join(left_key_names, right_key_names, left_key_types, right_key_types, left_other_names, right_other_names, is_left, is_right):
-#    print("gen_local_hash_join: is_left=", is_left, " is_right=", is_right)
     n_keys = len(left_key_names)
     func_text =  "    # beginning of _gen_local_hash_join\n"
     eList = []
@@ -1183,11 +1182,6 @@ def local_hash_join_impl(
 ):
     l_len = len(left_keys[0])
     r_len = len(right_keys[0])
-#    print("l_len=", l_len, " r_len=", r_len, " is_left=", is_left, " is_right=", is_right)
-#    print("left_keys=", left_keys, " right_keys=", right_keys)
-#    print("data_left=", data_left, " data_right=", data_right)
-#    print("|left_keys|=", len(left_keys), " |right_keys|=", len(right_keys))
-#    print("|data_left|=", len(data_left), " |data_right|=", len(data_right))
     # TODO: approximate output size properly
     curr_size = 101 + min(l_len, r_len) // 2
     if is_left:
