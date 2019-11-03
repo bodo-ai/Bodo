@@ -150,7 +150,7 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
 
     // TODO: handle large write count
     if (count >= (int64_t)INT_MAX) {
-        std::cerr << "write count too large " << file_name << '\n';
+        std::cerr << "write count too large: " << count << " file name:" << file_name << '\n';
         return;
     }
 
