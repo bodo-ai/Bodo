@@ -42,6 +42,7 @@ ll.add_symbol("arr_info_list_to_table", array_tools_ext.arr_info_list_to_table)
 ll.add_symbol("info_from_table", array_tools_ext.info_from_table)
 ll.add_symbol("delete_table", array_tools_ext.delete_table)
 ll.add_symbol("shuffle_table", array_tools_ext.shuffle_table)
+ll.add_symbol("hash_join_table", array_tools_ext.hash_join_table)
 
 
 class ArrayInfoType(types.Type):
@@ -461,3 +462,22 @@ def shuffle_table(typingctx, table_t, n_keys_t):
         return builder.call(fn_tp, args)
 
     return table_type(table_t, types.int64), codegen
+
+@intrinsic
+def hash_join_table(typingctx, table_t, n_keys_t, n_data_left_t, n_data_right_t, is_left_t, is_right_t):
+    """
+    """
+    assert table_t == table_type
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
+                                [lir.IntType(8).as_pointer(),
+                                 lir.IntType(64),
+                                 lir.IntType(64),
+                                 lir.IntType(64),
+                                 lir.IntType(1),
+                                 lir.IntType(1)])
+        fn_tp = builder.module.get_or_insert_function(fnty, name="hash_join_table")
+        return builder.call(fn_tp, args)
+
+    return table_type(table_t, types.int64, types.int64, types.int64, types.boolean, types.boolean), codegen

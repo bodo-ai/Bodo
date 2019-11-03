@@ -43,6 +43,7 @@ import bodo.libs.timsort
 
 use_pandas_join = False
 use_legacy_shuffle = False
+use_cpp_hash_join = True
 from bodo.decorators import jit
 
 if bodo.config._has_xenon:

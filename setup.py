@@ -56,7 +56,9 @@ if "BODO_XE_SUPPORT" in os.environ and os.environ["BODO_XE_SUPPORT"] != "0":
 
 ind = [PREFIX_DIR + "/include"]
 lid = [PREFIX_DIR + "/lib"]
-eca = ["-std=c++11"]  # '-g', '-O0']
+#eca = ["-std=c++11", "-fsanitize=address"]
+#ela = ["-std=c++11", "-fsanitize=address"]
+eca = ["-std=c++11"]
 ela = ["-std=c++11"]
 
 MPI_LIBS = ["mpi"]
