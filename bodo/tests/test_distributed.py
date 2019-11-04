@@ -5,6 +5,7 @@ import pytest
 
 import numba
 import bodo
+from bodo.utils.typing import BodoWarning
 from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
@@ -412,3 +413,17 @@ def test_dist_tuple2():
     np.testing.assert_array_equal(bodo_out[0], py_out[0][start:end])
     np.testing.assert_array_equal(bodo_out[1], py_out[1][start:end])
     assert count_array_OneDs() > 0
+
+
+def test_dist_warning():
+    """Make sure BodoWarning is thrown when there is no parallelism discovered due
+    to unsupported function
+    """
+    def impl(n):
+        A = np.ones((n, n))
+        # using a function we are not likely to support for warning test
+        # should be changed when/if we support slogdet()
+        return np.linalg.slogdet(A)
+
+    with pytest.warns(BodoWarning, match="No parallelism found for function"):
+        bodo.jit(impl)(10)
