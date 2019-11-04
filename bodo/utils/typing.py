@@ -18,6 +18,15 @@ class BodoError(BaseException):
     pass
 
 
+class BodoWarning(Warning):
+    """
+    Warning class for Bodo-related potential issues such as prevention of
+    parallelization by unsupported functions.
+    """
+    pass
+
+
+
 def is_overload_none(val):
     return val is None or val == types.none or getattr(val, "value", False) is None
 

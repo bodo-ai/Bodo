@@ -50,6 +50,7 @@ from bodo.utils.utils import (
 )
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.utils.transform import get_stmt_defs
+from bodo.utils.typing import BodoWarning
 
 
 class Distribution(Enum):
@@ -219,6 +220,26 @@ class DistributedAnalysis(object):
             changed = self._rebalance_arrs(array_dists, parfor_dists)
             if changed:
                 return self.run()
+
+        # warn when there is no parallel array or parfor
+        # only warn for parfor when there is no parallel array since there could be
+        # parallel functionality other than parfors
+        if (
+            len(array_dists) > 0
+            and all(d == Distribution.REP for d in array_dists.values())
+        ) or (
+            len(array_dists) == 0
+            and len(parfor_dists) > 0
+            and all(d == Distribution.REP for d in parfor_dists.values())
+        ):
+            if bodo.get_rank() == 0:
+                warnings.warn(
+                    BodoWarning(
+                        "No parallelism found for function '{}'. This could be due to "
+                        "unsupported usage. See distributed diagnostics for more "
+                        "information.".format(self.func_ir.func_id.func_name)
+                    )
+                )
 
         self.metadata["distributed_diagnostics"] = DistributedDiagnostics(
             self.parfor_locs,
