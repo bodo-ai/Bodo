@@ -759,13 +759,9 @@ class DistributedPass(object):
         scope = assign.target.scope
         loc = assign.loc
 
-        # numba doesn't support np.reshape() form yet
-        # if func_name == 'reshape':
-        #     size_var = args[1]
-        #     # handle reshape like new allocation
-        #     out, new_size_var = self._run_alloc(size_var, lhs)
-        #     args[1] = new_size_var
-        #     out.append(assign)
+        if func_name == "reshape" and self._is_1D_arr(args[0].name):
+            # TODO: handle and test reshape properly
+            return self._run_reshape(assign, args[0], args[1:], equiv_set)
 
         if func_name == "ravel" and self._is_1D_arr(args[0].name):
             assert self.typemap[args[0].name].ndim == 1, "only 1D ravel supported"
@@ -1061,7 +1057,7 @@ class DistributedPass(object):
         # get new local shape in reshape and set start/count vars like new allocation
         out, new_local_shape_var = self._run_alloc(new_shape, lhs.name, scope, loc)
         # get actual tuple for mk_alloc
-        if len(args) != 1:
+        if isinstance(self.typemap[new_local_shape_var.name], types.BaseTuple):
             sh_list = guard(find_build_tuple, self.func_ir, new_local_shape_var)
             assert sh_list is not None, "invalid shape in reshape"
             new_local_shape_var = tuple(sh_list)
@@ -1100,11 +1096,6 @@ class DistributedPass(object):
         )
         out += f_block.body[:-3]
         return out
-        # if len(args) == 1:
-        #     args[0] = new_size_var
-        # else:
-        #     args[0] = self._tuple_table[new_size_var.name][0]
-        # out.append(assign)
 
     def _run_call_rebalance_array(self, lhs, assign, args):
         out = [assign]

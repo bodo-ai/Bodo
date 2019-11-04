@@ -930,6 +930,17 @@ class DistributedAnalysis(object):
                     self._meet_array_dists(lhs, v.name, array_dists)
                 return
 
+        if func_name == "reshape":
+            # TODO: handle and test reshape properly
+            # shape argument can be int or tuple of ints
+            shape_typ = self.typemap[args[1].name]
+            if isinstance(shape_typ, types.Integer):
+                shape_vars = [args[1]]
+            else:
+                isinstance(shape_typ, types.BaseTuple)
+                shape_vars = find_build_tuple(self.func_ir, args[1])
+            return self._analyze_call_np_reshape(lhs, args[0], shape_vars, array_dists)
+
         if func_name in [
             "cumsum",
             "cumprod",
@@ -963,15 +974,18 @@ class DistributedAnalysis(object):
             self._meet_array_dists(lhs, in_arr_name, array_dists)
             return
 
-        if func_name in ("astype", "reshape", "copy", "view"):
+        if func_name == "reshape":
+            # array.reshape supports shape input as single tuple, as well as separate
+            # arguments
+            shape_vars = args
+            arg_typ = self.typemap[args[0].name]
+            if isinstance(arg_typ, types.BaseTuple):
+                shape_vars = find_build_tuple(self.func_ir, args[0])
+            return self._analyze_call_np_reshape(lhs, arr, shape_vars, array_dists)
+
+        if func_name in ("astype", "copy", "view"):
             in_arr_name = arr.name
             self._meet_array_dists(lhs, in_arr_name, array_dists)
-            # TODO: support 1D_Var reshape
-            if func_name == "reshape" and array_dists[lhs] == Distribution.OneD_Var:
-                # HACK support A.reshape(n, 1) for 1D_Var
-                if len(args) == 2 and guard(find_const, self.func_ir, args[1]) == 1:
-                    return
-                self._analyze_call_set_REP(lhs, args, array_dists, "array." + func_name)
             return
 
         # Array.tofile() is supported for all distributions
@@ -980,6 +994,18 @@ class DistributedAnalysis(object):
 
         # set REP if not found
         self._analyze_call_set_REP(lhs, args, array_dists, "array." + func_name)
+
+    def _analyze_call_np_reshape(self, lhs, arr, shape_vars, array_dists):
+        """distributed analysis for array.reshape or np.reshape calls
+        """
+        in_arr_name = arr.name
+        self._meet_array_dists(lhs, in_arr_name, array_dists)
+        # TODO: support 1D_Var reshape
+        if array_dists[lhs] == Distribution.OneD_Var:
+            # HACK support A.reshape(n, 1) for 1D_Var
+            if len(shape_vars) == 2 and guard(find_const, self.func_ir, shape_vars[1]) == 1:
+                return
+            self._analyze_call_set_REP(lhs, [arr], array_dists, "reshape")
 
     def _analyze_call_df(self, lhs, arr, func_name, args, array_dists):
         # to_csv() can be parallelized
