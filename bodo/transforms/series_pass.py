@@ -163,6 +163,7 @@ class SeriesPass(object):
 
     def run(self):
         blocks = self.func_ir.blocks
+        ir_utils.remove_dels(blocks)
         # topo_order necessary so Series data replacement optimization can be
         # performed in one pass
         topo_order = find_topo_order(blocks)
@@ -1476,7 +1477,7 @@ class SeriesPass(object):
             arr = rhs.args[0]
             ind = rhs.args[1]
             arr_typ = self.typemap[arr.name]
-            if isinstance(arr_typ, (types.Array, SeriesType)):
+            if isinstance(arr_typ, types.Array):
                 if isinstance(arr_typ.dtype, types.Float):
                     func = lambda arr, i: np.isnan(arr[i])
                     return self._replace_func(func, [arr, ind])
@@ -1484,7 +1485,7 @@ class SeriesPass(object):
                     nat = arr_typ.dtype("NaT")
                     # TODO: replace with np.isnat
                     return self._replace_func(lambda arr, i: arr[i] == nat, [arr, ind])
-                elif arr_typ.dtype != string_type:
+                elif isinstance(arr_typ.dtype, types.Integer):
                     return self._replace_func(lambda arr, i: False, [arr, ind])
 
         if func_name == "df_isin":
@@ -1561,7 +1562,7 @@ class SeriesPass(object):
             nodes.append(assign)
             return nodes
 
-        return self._handle_df_col_calls(assign, lhs, rhs, func_name)
+        return [assign]
 
     def _run_call_series(self, assign, lhs, rhs, series_var, func_name):
         if func_name in (
@@ -1770,27 +1771,21 @@ class SeriesPass(object):
         nodes = []
         data = self._get_series_data(series_var, nodes)
         name = self._get_series_name(series_var, nodes)
+        if dtype == string_type:
+            func = series_replace_funcs["dropna_str_alloc"]
+        elif isinstance(dtype, types.Float):
+            func = series_replace_funcs["dropna_float"]
+        else:
+            # integer case, TODO: bool, date etc.
+            func = lambda A, name: bodo.hiframes.api.init_series(A, None, name)
 
         if inplace:
             # Since arrays can't resize inplace, we have to create a new
             # array and assign it back to the same Series variable
             # result back to the same variable
-            def dropna_impl(A, name):
-                # not using A.dropna since definition list is not working
-                # for A to find callname
-                return bodo.hiframes.api.dropna(A, name)
-
             assign.target = series_var  # replace output
-            return self._replace_func(dropna_impl, [data, name], pre_nodes=nodes)
-        else:
-            if dtype == string_type:
-                func = series_replace_funcs["dropna_str_alloc"]
-            elif isinstance(dtype, types.Float):
-                func = series_replace_funcs["dropna_float"]
-            else:
-                # integer case, TODO: bool, date etc.
-                func = lambda A, name: bodo.hiframes.api.init_series(A, None, name)
-            return self._replace_func(func, [data, name], pre_nodes=nodes)
+
+        return self._replace_func(func, [data, name], pre_nodes=nodes)
 
     def _handle_series_map(self, assign, lhs, rhs, series_var, func_var):
         """translate df.A.map(lambda a:...) to prange()
@@ -2456,128 +2451,6 @@ class SeriesPass(object):
         return self._replace_func(
             series_kernels._column_filter_impl, [in_arr, bool_arr], pre_nodes=nodes
         )
-
-    def _handle_df_col_calls(self, assign, lhs, rhs, func_name):
-
-        if func_name == "dropna":
-            # df.dropna case
-            if isinstance(self.typemap[rhs.args[0].name], types.BaseTuple):
-                return self._handle_df_dropna(assign, lhs, rhs)
-            dtype = self.typemap[rhs.args[0].name].dtype
-            if dtype == string_type:
-                func = series_replace_funcs["dropna_str_alloc"]
-            elif isinstance(dtype, types.Float):
-                func = series_replace_funcs["dropna_float"]
-            else:
-                # integer case, TODO: bool, date etc.
-                func = lambda A: bodo.hiframes.api.init_series(A)
-            return self._replace_func(func, rhs.args)
-
-        return [assign]
-
-    def _handle_df_dropna(self, assign, lhs, rhs):
-        in_typ = self.typemap[rhs.args[0].name]
-
-        in_vars, _ = guard(find_build_sequence, self.func_ir, rhs.args[0])
-        in_names = [
-            mk_unique_var(in_vars[i].name).replace(".", "_")
-            for i in range(len(in_vars))
-        ]
-        out_names = [
-            mk_unique_var(in_vars[i].name).replace(".", "_")
-            for i in range(len(in_vars))
-        ]
-        str_colnames = [
-            in_names[i] for i, t in enumerate(in_typ.types) if is_str_arr_typ(t)
-        ]
-        list_str_colnames = [
-            in_names[i]
-            for i, t in enumerate(in_typ.types)
-            if t == list_string_array_type
-        ]
-        split_view_colnames = [
-            in_names[i]
-            for i, t in enumerate(in_typ.types)
-            if t == string_array_split_view_type
-        ]
-        isna_calls = ["bodo.hiframes.api.isna({}, i)".format(v) for v in in_names]
-
-        func_text = "def _dropna_impl(arr_tup, inplace):\n"
-        func_text += "  ({},) = arr_tup\n".format(", ".join(in_names))
-        func_text += "  old_len = len({})\n".format(in_names[0])
-        func_text += "  new_len = 0\n"
-        for c in str_colnames:
-            func_text += "  num_chars_{} = 0\n".format(c)
-        for c in list_str_colnames:
-            func_text += "  num_lists_{} = 0\n".format(c)
-            func_text += "  num_chars_{} = 0\n".format(c)
-        func_text += "  for i in numba.parfor.internal_prange(old_len):\n"
-        func_text += "    if not ({}):\n".format(" or ".join(isna_calls))
-        func_text += "      new_len += 1\n"
-        for c in str_colnames:
-            func_text += "      num_chars_{0} += get_utf8_size({0}[i])\n".format(c)
-        for c in list_str_colnames:
-            func_text += "      v_{0} = {0}[i]\n".format(c)
-            func_text += "      num_lists_{0} += len(v_{0})\n".format(c)
-            func_text += "      for s_{0} in v_{0}:\n".format(c)
-            func_text += "        num_chars_{0} += get_utf8_size(s_{0})\n".format(c)
-        for v, out in zip(in_names, out_names):
-            if v in str_colnames:
-                func_text += "  {} = bodo.libs.str_arr_ext.pre_alloc_string_array(new_len, num_chars_{})\n".format(
-                    out, v
-                )
-            elif v in list_str_colnames:
-                func_text += "  {0} = bodo.libs.list_str_arr_ext.pre_alloc_list_string_array(new_len, num_lists_{1}, num_chars_{1})\n".format(
-                    out, c
-                )
-            elif v in split_view_colnames:
-                # TODO support dropna() for split view
-                func_text += "  {} = {}\n".format(out, v)
-            else:
-                func_text += "  {} = np.empty(new_len, {}.dtype)\n".format(out, v)
-        func_text += "  curr_ind = 0\n"
-        if v in list_str_colnames:
-            func_text += "  index_offsets_{} = bodo.libs.list_str_arr_ext.get_index_offset_ptr({})\n".format(c, out)
-            func_text += "  data_offsets_{} = bodo.libs.list_str_arr_ext.get_data_offset_ptr({})\n".format(c, out)
-            func_text += "  curr_s_offset_{} = 0\n".format(c)
-            func_text += "  curr_d_offset_{} = 0\n".format(c)
-        func_text += "  for i in numba.parfor.internal_prange(old_len):\n"
-        func_text += "    if not ({}):\n".format(" or ".join(isna_calls))
-        for v, out in zip(in_names, out_names):
-            if v in split_view_colnames:
-                continue
-            if v in list_str_colnames:
-                func_text += "      l_start_offset = {0}._index_offsets[i]\n".format(v)
-                func_text += "      l_end_offset = {0}._index_offsets[i + 1]\n".format(v)
-                func_text += "      n_str = l_end_offset - l_start_offset\n"
-                func_text += "      str_ind = 0\n"
-                func_text += "      for jj in range(l_start_offset, l_end_offset):\n"
-                func_text += "          data_offsets_{0}[curr_s_offset_{0} + str_ind] = curr_d_offset_{0}\n".format(c)
-                func_text += "          n_char = {0}._data_offsets[jj + 1] - {0}._data_offsets[jj]\n".format(v)
-                func_text += "          in_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(\n"
-                func_text += "              {0}._data, {0}._data_offsets[jj]\n".format(v)
-                func_text += "          )\n"
-                func_text += "          out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(\n"
-                func_text += "              {}._data, curr_d_offset_{}\n".format(out, c)
-                func_text += "          )\n"
-                func_text += "          bodo.libs.str_arr_ext._memcpy(out_ptr, in_ptr, n_char, 1)\n"
-                func_text += "          curr_d_offset_{0} += n_char\n".format(c)
-                func_text += "          str_ind += 1\n"
-                func_text += "          index_offsets_{0}[curr_ind] = curr_s_offset_{0}\n".format(c)
-                func_text += "      curr_s_offset_{0} += n_str\n".format(c)
-                continue
-            func_text += "      {}[curr_ind] = {}[i]\n".format(out, v)
-        func_text += "      curr_ind += 1\n"
-        if v in list_str_colnames:
-            func_text += "  index_offsets_{0}[new_len] = curr_s_offset_{0}\n".format(c, out)
-            func_text += "  data_offsets_{0}[curr_s_offset_{0}] = curr_d_offset_{0}\n".format(c, out)
-        func_text += "  return ({},)\n".format(", ".join(out_names))
-
-        # print(func_text)
-        loc_vars = {}
-        exec(func_text, {'get_utf8_size': bodo.libs.str_arr_ext.get_utf8_size}, loc_vars)
-        _dropna_impl = loc_vars["_dropna_impl"]
-        return self._replace_func(_dropna_impl, rhs.args)
 
     def _run_call_concat(self, assign, lhs, rhs):
         nodes = []

@@ -30,7 +30,9 @@ def compile_func_single_block(func, args, ret_var, typing_info, extra_globals=No
         typing_info.typemap,
         typing_info.calltypes,
     )
-    assert len(f_ir.blocks) == 1
+    assert (
+        len(f_ir.blocks) == 1
+    ), "only single block functions supported in compile_func_single_block()"
     f_block = f_ir.blocks.popitem()[1]
     replace_arg_nodes(f_block, args)
     nodes = f_block.body[:-2]
