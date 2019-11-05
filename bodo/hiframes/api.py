@@ -1,17 +1,17 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import operator
+"""Old code for some auxiliary functionality. Needs to be refactored.
+"""
 from collections import namedtuple
 import pandas as pd
 import numpy as np
 
 import numba
-from numba import ir, ir_utils
-from numba.ir_utils import require, mk_unique_var
+from numba import ir
+from numba.ir_utils import mk_unique_var
 from numba import types, cgutils
 import numba.array_analysis
 from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
-from numba.typing.arraydecl import _expand_integer
 from numba.extending import overload, intrinsic
 from numba.targets.imputils import (
     impl_ret_new_ref,
@@ -24,7 +24,7 @@ from numba.extending import register_model, models
 
 import bodo
 from bodo.libs.str_ext import string_type
-from bodo.libs.str_arr_ext import StringArrayType, string_array_type, is_str_arr_typ
+from bodo.libs.str_arr_ext import string_array_type, is_str_arr_typ
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.list_str_arr_ext import list_string_array_type
@@ -35,11 +35,8 @@ from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 from bodo.hiframes.pd_series_ext import (
     SeriesType,
     SeriesPayloadType,
-    is_str_series_typ,
     if_arr_to_series_type,
-    series_to_array_type,
     if_series_to_array_type,
-    is_dt64_series_typ,
 )
 from bodo.hiframes.pd_index_ext import DatetimeIndexType, TimedeltaIndexType
 from bodo.ir.sort import (
