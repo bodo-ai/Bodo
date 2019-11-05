@@ -53,18 +53,6 @@ from bodo.utils.utils import unliteral_all
 import llvmlite.llvmpy.core as lc
 
 
-def shift_dtype(d):
-    return d
-
-
-@overload(shift_dtype)
-def shift_dtype_overload(a):
-    if isinstance(a.dtype, types.Integer):
-        return lambda a: np.float64
-    else:
-        return lambda a: a
-
-
 def isna(arr, i):
     return False
 

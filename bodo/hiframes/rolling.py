@@ -1288,7 +1288,7 @@ def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
     if rank == 0:
         all_out = shift_seq(all_in_arr, shift)
     else:
-        all_out = np.empty(all_N, bodo.hiframes.api.shift_dtype(in_arr.dtype))
+        all_out = np.empty(all_N, shift_dtype(in_arr.dtype))
     bodo.libs.distributed_api.bcast(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
     start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
@@ -1306,7 +1306,7 @@ def _handle_small_data_pct_change(in_arr, shift, rank, n_pes):  # pragma: no cov
     if rank == 0:
         all_out = pct_change_seq(all_in_arr, shift)
     else:
-        all_out = np.empty(all_N, bodo.hiframes.api.shift_dtype(in_arr.dtype))
+        all_out = np.empty(all_N, shift_dtype(in_arr.dtype))
     bodo.libs.distributed_api.bcast(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
     start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
@@ -1435,3 +1435,15 @@ def alloc_shift_overload(A):
     if isinstance(A.dtype, types.Integer):
         return lambda A: np.empty(len(A), np.float64)
     return lambda A: np.empty(len(A), A.dtype)
+
+
+def shift_dtype(d):
+    return d
+
+
+@overload(shift_dtype)
+def shift_dtype_overload(a):
+    if isinstance(a.dtype, types.Integer):
+        return lambda a: np.float64
+    else:
+        return lambda a: a
