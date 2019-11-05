@@ -1055,7 +1055,7 @@ def get_first_non_na(arr):
 
     def impl(arr):  # pragma: no cover
         for i in range(len(arr)):
-            if not bodo.hiframes.api.isna(arr, i):
+            if not bodo.libs.array_kernels.isna(arr, i):
                 return arr[i]
 
         return na_val
@@ -1083,7 +1083,7 @@ def get_last_non_na(arr):
         l = len(arr)
         for i in range(len(arr)):
             ind = l - i - 1
-            if not bodo.hiframes.api.isna(arr, ind):
+            if not bodo.libs.array_kernels.isna(arr, ind):
                 return arr[ind]
 
         return na_val

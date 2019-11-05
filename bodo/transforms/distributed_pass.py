@@ -552,7 +552,7 @@ class DistributedPass(object):
             return out
 
         if fdef in (
-            ("isna", "bodo.hiframes.api"),
+            ("isna", "bodo.libs.array_kernels"),
             ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"),
             ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
             ("get_str_arr_item_length", "bodo.libs.str_arr_ext"),
@@ -2336,7 +2336,7 @@ class DistributedPass(object):
             rhs = stmt.value
             fdef = guard(find_callname, self.func_ir, rhs, self.typemap)
             if fdef in (
-                ("isna", "bodo.hiframes.api"),
+                ("isna", "bodo.libs.array_kernels"),
                 ("setitem_arr_nan", "bodo.ir.join"),
                 ("str_arr_item_to_numeric", "bodo.libs.str_arr_ext"),
                 ("setitem_str_arr_ptr", "bodo.libs.str_arr_ext"),

@@ -666,7 +666,7 @@ class DistributedAnalysis(object):
             self._analyze_call_np_concatenate(lhs, args, array_dists)
             return
 
-        if fdef == ("isna", "bodo.hiframes.api"):
+        if fdef == ("isna", "bodo.libs.array_kernels"):
             return
 
         if fdef == ("get_str_arr_item_length", "bodo.libs.str_arr_ext"):
@@ -1614,7 +1614,7 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
                 if isinstance(rhs, ir.Expr) and rhs.op == "call":
                     fdef = guard(find_callname, func_ir, rhs, typemap)
                     if fdef is not None:
-                        if fdef == ("isna", "bodo.hiframes.api"):
+                        if fdef == ("isna", "bodo.libs.array_kernels"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ("get_split_view_index", "bodo.hiframes.split_impl"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))

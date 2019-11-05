@@ -404,7 +404,7 @@ def build_set(A):
     #     def impl_int_arr(A):
     #         s = set()
     #         for i in range(len(A)):
-    #             if not bodo.hiframes.api.isna(A, i):
+    #             if not bodo.libs.array_kernels.isna(A, i):
     #                 s.add(A[i])
     #         return s
 
@@ -421,7 +421,7 @@ def build_set(A):
         def impl_int_arr(A):
             s = dict()
             for i in range(len(A)):
-                if not bodo.hiframes.api.isna(A, i):
+                if not bodo.libs.array_kernels.isna(A, i):
                     s[A[i]] = 0
             return s
 

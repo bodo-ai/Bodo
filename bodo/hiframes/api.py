@@ -27,7 +27,6 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type, is_str_arr_typ
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.list_str_arr_ext import list_string_array_type
 
 from bodo.utils.utils import build_set
 from numba.targets.imputils import lower_builtin, impl_ret_untracked
@@ -46,50 +45,10 @@ from bodo.ir.sort import (
     alloc_pre_shuffle_metadata,
 )
 from bodo.ir.join import write_send_buff
-from bodo.hiframes.split_impl import string_array_split_view_type
 
 from numba.targets.arrayobj import make_array
 from bodo.utils.utils import unliteral_all
 import llvmlite.llvmpy.core as lc
-
-
-def isna(arr, i):
-    return False
-
-
-@overload(isna)
-def isna_overload(arr, i):
-    # String array
-    if arr == string_array_type:
-        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
-
-    # masked Integer array, boolean array
-    if isinstance(arr, IntegerArrayType) or arr == boolean_array:
-        return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
-            arr._null_bitmap, i
-        )
-
-    if arr == list_string_array_type:
-        # reuse string array function
-        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
-
-    if arr == string_array_split_view_type:
-        return lambda arr, i: False
-
-    # TODO: extend to other types
-    assert isinstance(arr, types.Array)
-    dtype = arr.dtype
-    if isinstance(dtype, types.Float):
-        return lambda arr, i: np.isnan(arr[i])
-
-    # NaT for dt64
-    if isinstance(dtype, (types.NPDatetime, types.NPTimedelta)):
-        nat = dtype("NaT")
-        # TODO: replace with np.isnat
-        return lambda arr, i: arr[i] == nat
-
-    # XXX integers don't have nans, extend to boolean
-    return lambda arr, i: False
 
 
 def argsort(A):

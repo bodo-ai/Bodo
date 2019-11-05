@@ -31,7 +31,7 @@ def _column_count_impl(A):  # pragma: no cover
     numba.parfor.init_prange()
     count = 0
     for i in numba.parfor.internal_prange(len(A)):
-        if not bodo.hiframes.api.isna(A, i):
+        if not bodo.libs.array_kernels.isna(A, i):
             count += 1
 
     res = count
@@ -41,7 +41,7 @@ def _column_count_impl(A):  # pragma: no cover
 def _column_fillna_impl(A, B, fill):  # pragma: no cover
     for i in numba.parfor.internal_prange(len(A)):
         s = B[i]
-        if bodo.hiframes.api.isna(B, i):
+        if bodo.libs.array_kernels.isna(B, i):
             s = fill
         A[i] = s
 
@@ -52,14 +52,14 @@ def _series_fillna_str_alloc_impl(B, fill, index, name):  # pragma: no cover
     # get total chars in new array
     for i in numba.parfor.internal_prange(n):
         s = B[i]
-        if bodo.hiframes.api.isna(B, i):
+        if bodo.libs.array_kernels.isna(B, i):
             num_chars += len(fill)
         else:
             num_chars += len(s)
     A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
     for i in numba.parfor.internal_prange(len(A)):
         s = B[i]
-        if bodo.hiframes.api.isna(B, i):
+        if bodo.libs.array_kernels.isna(B, i):
             s = fill
         A[i] = s
     return bodo.hiframes.api.init_series(A, index, name)
@@ -309,7 +309,7 @@ def _column_min_impl(in_arr):  # pragma: no cover
     s = bodo.hiframes.series_kernels._get_type_max_value(in_arr.dtype)
     for i in numba.parfor.internal_prange(len(in_arr)):
         val = in_arr[i]
-        if not bodo.hiframes.api.isna(in_arr, i):
+        if not bodo.libs.array_kernels.isna(in_arr, i):
             s = min(s, val)
             count += 1
     res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
@@ -322,7 +322,7 @@ def _column_max_impl(in_arr):  # pragma: no cover
     s = numba.targets.builtins.get_type_min_value(in_arr.dtype)
     for i in numba.parfor.internal_prange(len(in_arr)):
         val = in_arr[i]
-        if not bodo.hiframes.api.isna(in_arr, i):
+        if not bodo.libs.array_kernels.isna(in_arr, i):
             s = max(s, val)
             count += 1
     res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
@@ -334,7 +334,7 @@ def _column_max_impl_dt64(in_arr):
     s = numba.targets.builtins.get_type_min_value(np.int64)
     count = 0
     for i in numba.parfor.internal_prange(len(in_arr)):
-        if not bodo.hiframes.api.isna(in_arr, i):
+        if not bodo.libs.array_kernels.isna(in_arr, i):
             val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
             s = max(s, val)
             count += 1
@@ -346,7 +346,7 @@ def _column_min_impl_dt64(in_arr):
     s = numba.targets.builtins.get_type_max_value(np.int64)
     count = 0
     for i in numba.parfor.internal_prange(len(in_arr)):
-        if not bodo.hiframes.api.isna(in_arr, i):
+        if not bodo.libs.array_kernels.isna(in_arr, i):
             val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
             s = min(s, val)
             count += 1
@@ -371,7 +371,7 @@ def _column_fillna_alloc_impl(B, fill, index, name):  # pragma: no cover
     A = np.empty(len(B), B.dtype)
     for i in numba.parfor.internal_prange(len(A)):
         s = B[i]
-        if bodo.hiframes.api.isna(B, i):
+        if bodo.libs.array_kernels.isna(B, i):
             s = fill
         A[i] = s
     return bodo.hiframes.api.init_series(A, index, name)

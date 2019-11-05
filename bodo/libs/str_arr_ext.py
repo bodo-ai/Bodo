@@ -167,7 +167,7 @@ def create_binary_op_overload(op):
                 n = len(A)
                 out_arr = np.empty(n, np.bool_)
                 for i in numba.parfor.internal_prange(n):
-                    if bodo.hiframes.api.isna(A, i) or bodo.hiframes.api.isna(B, i):
+                    if bodo.libs.array_kernels.isna(A, i) or bodo.libs.array_kernels.isna(B, i):
                         val = na_fill
                     else:
                         val = op(A[i], B[i])
@@ -188,7 +188,7 @@ def create_binary_op_overload(op):
                 n = len(A)
                 out_arr = np.empty(n, np.bool_)
                 for i in numba.parfor.internal_prange(n):
-                    if bodo.hiframes.api.isna(A, i):
+                    if bodo.libs.array_kernels.isna(A, i):
                         val = na_fill
                     else:
                         val = op(A[i], B)
@@ -206,7 +206,7 @@ def create_binary_op_overload(op):
                 n = len(B)
                 out_arr = np.empty(n, np.bool_)
                 for i in numba.parfor.internal_prange(n):
-                    if bodo.hiframes.api.isna(B, i):
+                    if bodo.libs.array_kernels.isna(B, i):
                         val = na_fill
                     else:
                         val = op(A, B[i])
@@ -586,7 +586,7 @@ def get_str_null_bools(str_arr):
     n = len(str_arr)
     null_bools = np.empty(n, np.bool_)
     for i in range(n):
-        null_bools[i] = bodo.hiframes.api.isna(str_arr, i)
+        null_bools[i] = bodo.libs.array_kernels.isna(str_arr, i)
     return null_bools
 
 

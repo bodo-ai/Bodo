@@ -493,7 +493,7 @@ def overload_bool_arr_astype(A, dtype, copy=True):
             B = np.empty(n, nb_dtype)
             for i in numba.parfor.internal_prange(n):
                 B[i] = data[i]
-                if bodo.hiframes.api.isna(A, i):
+                if bodo.libs.array_kernels.isna(A, i):
                     B[i] = np.nan
             return B
 
@@ -688,7 +688,7 @@ def overload_unique(A):
         true_found = False
         false_found = False
         for i in range(len(A)):
-            if bodo.hiframes.api.isna(A, i):
+            if bodo.libs.array_kernels.isna(A, i):
                 if not na_found:
                     data.append(False)
                     mask.append(False)

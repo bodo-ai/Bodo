@@ -34,6 +34,8 @@ from bodo.ir.sort import (
     alloc_pre_shuffle_metadata,
 )
 from bodo.ir.join import write_send_buff
+from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.hiframes.split_impl import string_array_split_view_type
 
 import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
@@ -67,6 +69,45 @@ nth_parallel = types.ExternalFunction(
 
 MPI_ROOT = 0
 sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
+
+
+def isna(arr, i):
+    return False
+
+
+@overload(isna)
+def isna_overload(arr, i):
+    # String array
+    if arr == string_array_type:
+        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
+
+    # masked Integer array, boolean array
+    if isinstance(arr, IntegerArrayType) or arr == boolean_array:
+        return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+            arr._null_bitmap, i
+        )
+
+    if arr == list_string_array_type:
+        # reuse string array function
+        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
+
+    if arr == string_array_split_view_type:
+        return lambda arr, i: False
+
+    # TODO: extend to other types
+    assert isinstance(arr, types.Array)
+    dtype = arr.dtype
+    if isinstance(dtype, types.Float):
+        return lambda arr, i: np.isnan(arr[i])
+
+    # NaT for dt64
+    if isinstance(dtype, (types.NPDatetime, types.NPTimedelta)):
+        nat = dtype("NaT")
+        # TODO: replace with np.isnat
+        return lambda arr, i: arr[i] == nat
+
+    # XXX integers don't have nans, extend to boolean
+    return lambda arr, i: False
 
 
 ################################ median ####################################
@@ -252,7 +293,7 @@ def select_k_nonan_overload(A, index_arr, m, k):
         i = 0
         ind = 0
         while i < m and ind < k:
-            if not bodo.hiframes.api.isna(A, i):
+            if not bodo.libs.array_kernels.isna(A, i):
                 min_heap_vals[ind] = A[i]
                 min_heap_inds[ind] = index_arr[i]
                 ind += 1

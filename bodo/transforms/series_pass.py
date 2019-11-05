@@ -998,6 +998,23 @@ class SeriesPass(object):
             self.calltypes[rhs] = new_sig
             return nodes
 
+        # replace isna early to enable more optimization in PA
+        # TODO: handle more types
+        if fdef == ("isna", "bodo.libs.array_kernels"):
+            arr = rhs.args[0]
+            ind = rhs.args[1]
+            arr_typ = self.typemap[arr.name]
+            if isinstance(arr_typ, types.Array):
+                if isinstance(arr_typ.dtype, types.Float):
+                    func = lambda arr, i: np.isnan(arr[i])
+                    return self._replace_func(func, [arr, ind])
+                elif isinstance(arr_typ.dtype, (types.NPDatetime, types.NPTimedelta)):
+                    nat = arr_typ.dtype("NaT")
+                    # TODO: replace with np.isnat
+                    return self._replace_func(lambda arr, i: arr[i] == nat, [arr, ind])
+                elif isinstance(arr_typ.dtype, types.Integer):
+                    return self._replace_func(lambda arr, i: False, [arr, ind])
+
         if func_mod == "bodo.hiframes.api":
             return self._run_call_hiframes(assign, assign.target, rhs, func_name)
 
@@ -1470,23 +1487,6 @@ class SeriesPass(object):
             assign.value = new_tup
             nodes.append(assign)
             return nodes
-
-        # replace isna early to enable more optimization in PA
-        # TODO: handle more types
-        if func_name == "isna":
-            arr = rhs.args[0]
-            ind = rhs.args[1]
-            arr_typ = self.typemap[arr.name]
-            if isinstance(arr_typ, types.Array):
-                if isinstance(arr_typ.dtype, types.Float):
-                    func = lambda arr, i: np.isnan(arr[i])
-                    return self._replace_func(func, [arr, ind])
-                elif isinstance(arr_typ.dtype, (types.NPDatetime, types.NPTimedelta)):
-                    nat = arr_typ.dtype("NaT")
-                    # TODO: replace with np.isnat
-                    return self._replace_func(lambda arr, i: arr[i] == nat, [arr, ind])
-                elif isinstance(arr_typ.dtype, types.Integer):
-                    return self._replace_func(lambda arr, i: False, [arr, ind])
 
         if func_name == "df_isin":
             # XXX df isin is different than Series.isin, df.isin considers

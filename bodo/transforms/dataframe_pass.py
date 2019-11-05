@@ -1274,7 +1274,7 @@ class DataFramePass(object):
             if t == string_array_split_view_type
         ]
 
-        isna_calls = ["bodo.hiframes.api.isna({}, i)".format(v) for v in arg_names]
+        isna_calls = ["bodo.libs.array_kernels.isna({}, i)".format(v) for v in arg_names]
 
         func_text = "def _dropna_imp({}, inplace):\n".format(", ".join(arg_names))
         func_text += "  old_len = len({})\n".format(arg_names[0])
@@ -1316,7 +1316,7 @@ class DataFramePass(object):
             func_text += "  curr_d_offset_{} = 0\n".format(c)
         func_text += "  for ii in numba.parfor.internal_prange(old_len):\n"
         func_text += "    if not ({}):\n".format(" or ".join(
-            ["bodo.hiframes.api.isna({}, ii)".format(v) for v in arg_names]))
+            ["bodo.libs.array_kernels.isna({}, ii)".format(v) for v in arg_names]))
         for v, out in zip(arg_names, out_names):
             if v in split_view_colnames:
                 continue

@@ -204,7 +204,7 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
         s = numba.targets.builtins.get_type_max_value(numba.types.int64)
         count = 0
         for i in numba.parfor.internal_prange(len(in_arr)):
-            if not bodo.hiframes.api.isna(in_arr, i):
+            if not bodo.libs.array_kernels.isna(in_arr, i):
                 val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
                 s = min(s, val)
                 count += 1
@@ -226,7 +226,7 @@ def overload_datetime_index_max(dti, axis=None, skipna=True):
         s = numba.targets.builtins.get_type_min_value(numba.types.int64)
         count = 0
         for i in numba.parfor.internal_prange(len(in_arr)):
-            if not bodo.hiframes.api.isna(in_arr, i):
+            if not bodo.libs.array_kernels.isna(in_arr, i):
                 val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
                 s = max(s, val)
                 count += 1
@@ -1418,7 +1418,7 @@ def overload_index_isna(I):
         n = len(arr)
         out_arr = np.empty(n, np.bool_)
         for i in numba.parfor.internal_prange(n):
-            out_arr[i] = bodo.hiframes.api.isna(arr, i)
+            out_arr[i] = bodo.libs.array_kernels.isna(arr, i)
         return out_arr
 
     return impl

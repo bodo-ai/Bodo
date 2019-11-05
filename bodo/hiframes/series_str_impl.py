@@ -108,7 +108,7 @@ def overload_str_method_len(S_str):
         out_arr = np.empty(n, np.int64)
         bitmap = np.empty(n_bytes, np.uint8)
         for i in numba.parfor.internal_prange(n):
-            if bodo.hiframes.api.isna(arr, i):
+            if bodo.libs.array_kernels.isna(arr, i):
                 out_arr[i] = 1
                 bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 0)
             else:
@@ -153,7 +153,7 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
         num_strs = 0
         num_chars = 0
         for i in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(arr, i):
+            if bodo.libs.array_kernels.isna(arr, i):
                 continue
             vals = arr[i].split(pat, n)
             num_strs += len(vals)
@@ -275,7 +275,7 @@ def overload_str_method_replace(pat, repl, n=-1, case=None, flags=0, regex=True)
             n_total_chars = 0
             str_list = bodo.libs.str_ext.alloc_str_list(l)
             for i in numba.parfor.internal_prange(l):
-                if bodo.hiframes.api.isna(arr, i):
+                if bodo.libs.array_kernels.isna(arr, i):
                     continue
                 out_str = e.sub(repl, arr[i])
                 str_list[i] = out_str
@@ -283,7 +283,7 @@ def overload_str_method_replace(pat, repl, n=-1, case=None, flags=0, regex=True)
             numba.parfor.init_prange()
             out_arr = pre_alloc_string_array(l, n_total_chars)
             for j in numba.parfor.internal_prange(l):
-                if bodo.hiframes.api.isna(arr, j):
+                if bodo.libs.array_kernels.isna(arr, j):
                     out_arr[j] = ""
                     bodo.ir.join.setitem_arr_nan(out_arr, j)
                     continue
@@ -308,7 +308,7 @@ def overload_str_method_replace(pat, repl, n=-1, case=None, flags=0, regex=True)
         n_total_chars = 0
         str_list = bodo.libs.str_ext.alloc_str_list(l)
         for i in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(arr, i):
+            if bodo.libs.array_kernels.isna(arr, i):
                 continue
             out_str = arr[i].replace(pat, repl)
             str_list[i] = out_str
@@ -316,7 +316,7 @@ def overload_str_method_replace(pat, repl, n=-1, case=None, flags=0, regex=True)
         numba.parfor.init_prange()
         out_arr = pre_alloc_string_array(l, n_total_chars)
         for j in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(arr, j):
+            if bodo.libs.array_kernels.isna(arr, j):
                 out_arr[j] = ""
                 bodo.ir.join.setitem_arr_nan(out_arr, j)
                 continue
@@ -346,7 +346,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
             out_arr = np.empty(l, dtype=np.bool_)
             nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
             for i in numba.parfor.internal_prange(l):
-                if bodo.hiframes.api.isna(arr, i):
+                if bodo.libs.array_kernels.isna(arr, i):
                     out_arr[i] = False
                     bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 0)
                 else:
@@ -373,7 +373,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
         out_arr = np.empty(l, dtype=np.bool_)
         nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
         for i in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(arr, i):
+            if bodo.libs.array_kernels.isna(arr, i):
                 out_arr[i] = False
                 bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 0)
             else:
@@ -400,7 +400,7 @@ def overload_str_method_count(S_str, pat, flags=0):
         out_arr = np.empty(l, dtype=np.int64)
         bitmap = np.empty((l + 7) >> 3, np.uint8)
         for i in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, i):
+            if bodo.libs.array_kernels.isna(str_arr, i):
                 out_arr[i] = 1
                 bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 0)
             else:
@@ -426,7 +426,7 @@ def overload_str_method_find(S_str, sub):
         out_arr = np.empty(l, dtype=np.int64)
         bitmap = np.empty((l + 7) >> 3, np.uint8)
         for i in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, i):
+            if bodo.libs.array_kernels.isna(str_arr, i):
                 out_arr[i] = 1
                 bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 0)
             else:
@@ -451,7 +451,7 @@ def overload_str_method_rfind(S_str, sub, start=0, end=None):
         out_arr = np.empty(l, dtype=np.int64)
         bitmap = np.empty((l + 7) >> 3, np.uint8)
         for i in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, i):
+            if bodo.libs.array_kernels.isna(str_arr, i):
                 out_arr[i] = 1
                 bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 0)
             else:
@@ -475,7 +475,7 @@ def overload_str_method_center(S_str, width, fillchar=" "):
         l = len(str_arr)
         num_chars = 0
         for i in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, i):
+            if bodo.libs.array_kernels.isna(str_arr, i):
                 s = 0
             else:
                 s = bodo.libs.str_arr_ext.get_utf8_size(
@@ -484,7 +484,7 @@ def overload_str_method_center(S_str, width, fillchar=" "):
             num_chars += s
         out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
         for j in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, j):
+            if bodo.libs.array_kernels.isna(str_arr, j):
                 out_arr[j] = ""
                 bodo.ir.join.setitem_arr_nan(out_arr, j)
             else:
@@ -505,7 +505,7 @@ def overload_str_method_ljust(S_str, width, fillchar=" "):
         l = len(str_arr)
         num_chars = 0
         for i in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, i):
+            if bodo.libs.array_kernels.isna(str_arr, i):
                 s = 0
             else:
                 s = bodo.libs.str_arr_ext.get_utf8_size(
@@ -514,7 +514,7 @@ def overload_str_method_ljust(S_str, width, fillchar=" "):
             num_chars += s
         out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
         for j in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, j):
+            if bodo.libs.array_kernels.isna(str_arr, j):
                 out_arr[j] = ""
                 bodo.ir.join.setitem_arr_nan(out_arr, j)
             else:
@@ -535,7 +535,7 @@ def overload_str_method_rjust(S_str, width, fillchar=" "):
         l = len(str_arr)
         num_chars = 0
         for i in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, i):
+            if bodo.libs.array_kernels.isna(str_arr, i):
                 s = 0
             else:
                 s = bodo.libs.str_arr_ext.get_utf8_size(
@@ -544,7 +544,7 @@ def overload_str_method_rjust(S_str, width, fillchar=" "):
             num_chars += s
         out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
         for j in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, j):
+            if bodo.libs.array_kernels.isna(str_arr, j):
                 out_arr[j] = ""
                 bodo.ir.join.setitem_arr_nan(out_arr, j)
             else:
@@ -565,7 +565,7 @@ def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
         l = len(str_arr)
         num_chars = 0
         for i in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, i):
+            if bodo.libs.array_kernels.isna(str_arr, i):
                 s = 0
             else:
                 if side == "left":
@@ -583,7 +583,7 @@ def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
             num_chars += s
         out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
         for j in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, j):
+            if bodo.libs.array_kernels.isna(str_arr, j):
                 out_arr[j] = ""
                 bodo.ir.join.setitem_arr_nan(out_arr, j)
             else:
@@ -609,14 +609,14 @@ def overload_str_method_zfill(S_str, width):
         l = len(str_arr)
         num_chars = 0
         for i in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, i):
+            if bodo.libs.array_kernels.isna(str_arr, i):
                 s = 0
             else:
                 s = bodo.libs.str_arr_ext.get_utf8_size(str_arr[i].zfill(width))
             num_chars += s
         out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
         for j in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, j):
+            if bodo.libs.array_kernels.isna(str_arr, j):
                 out_arr[j] = ""
                 bodo.ir.join.setitem_arr_nan(out_arr, j)
             else:
@@ -637,14 +637,14 @@ def overload_str_method_slice(S_str, start=None, stop=None, step=None):
         l = len(str_arr)
         num_chars = 0
         for i in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, i):
+            if bodo.libs.array_kernels.isna(str_arr, i):
                 s = 0
             else:
                 s = bodo.libs.str_arr_ext.get_utf8_size(str_arr[i][start:stop:step])
             num_chars += s
         out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
         for j in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, j):
+            if bodo.libs.array_kernels.isna(str_arr, j):
                 out_arr[j] = ""
                 bodo.ir.join.setitem_arr_nan(out_arr, j)
             else:
@@ -666,7 +666,7 @@ def overload_str_method_startswith(S_str, pat, na=np.nan):
         nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
         out_arr = np.empty(l, dtype=np.bool_)
         for i in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, i):
+            if bodo.libs.array_kernels.isna(str_arr, i):
                 out_arr[i] = False
                 bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 0)
             else:
@@ -691,7 +691,7 @@ def overload_str_method_endswith(S_str, pat, na=np.nan):
         nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
         out_arr = np.empty(l, dtype=np.bool_)
         for i in numba.parfor.internal_prange(l):
-            if bodo.hiframes.api.isna(str_arr, i):
+            if bodo.libs.array_kernels.isna(str_arr, i):
                 out_arr[i] = False
                 bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 0)
             else:
@@ -719,7 +719,7 @@ def create_str2str_methods_overload(func_name):
         else:
             func_text += "    num_chars = 0\n"
             func_text += "    for i in numba.parfor.internal_prange(n):\n"
-            func_text += "        if bodo.hiframes.api.isna(str_arr, i):\n"
+            func_text += "        if bodo.libs.array_kernels.isna(str_arr, i):\n"
             func_text += "            l = 0\n"
             func_text += "        else:\n"
             func_text += "            l = get_utf8_size(str_arr[i].{}())\n".format(
@@ -730,7 +730,7 @@ def create_str2str_methods_overload(func_name):
             "    out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)\n"
         )
         func_text += "    for j in numba.parfor.internal_prange(n):\n"
-        func_text += "        if bodo.hiframes.api.isna(str_arr, j):\n"
+        func_text += "        if bodo.libs.array_kernels.isna(str_arr, j):\n"
         func_text += '            out_arr[j] = ""\n'
         func_text += "            bodo.ir.join.setitem_arr_nan(out_arr, j)\n"
         func_text += "        else:\n"
@@ -766,7 +766,7 @@ def create_str2bool_methods_overload(func_name):
         func_text += "    nulls = np.empty((l + 7) >> 3, dtype=np.uint8)\n"
         func_text += "    out_arr = np.empty(l, dtype=np.bool_)\n"
         func_text += "    for i in numba.parfor.internal_prange(l):\n"
-        func_text += "        if bodo.hiframes.api.isna(str_arr, i):\n"
+        func_text += "        if bodo.libs.array_kernels.isna(str_arr, i):\n"
         func_text += "            out_arr[i] = False\n"
         func_text += "            set_bit_to_arr(nulls, i, 0)\n"
         func_text += "        else:\n"

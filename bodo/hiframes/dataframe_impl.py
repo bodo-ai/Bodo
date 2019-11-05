@@ -850,7 +850,7 @@ def overload_isna(obj):
             n = len(obj)
             out_arr = np.empty(n, np.bool_)
             for i in numba.parfor.internal_prange(n):
-                out_arr[i] = bodo.hiframes.api.isna(obj, i)
+                out_arr[i] = bodo.libs.array_kernels.isna(obj, i)
             return out_arr
 
         return impl
