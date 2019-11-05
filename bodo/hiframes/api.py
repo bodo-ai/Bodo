@@ -61,28 +61,9 @@ def nunique_parallel(A):  # pragma: no cover
     return len(set(A))
 
 
-@infer_global(nunique)
-@infer_global(nunique_parallel)
-class NuniqueType(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        arr = args[0]
-        # if arr == string_series_type:
-        #     arr = string_array_type
-        return signature(types.intp, arr)
-
-
-@lower_builtin(nunique, types.Any)  # TODO: replace Any with types
-def lower_nunique(context, builder, sig, args):
-    func = nunique_overload(sig.args[0])
-    res = context.compile_internal(builder, func, sig, args)
-    return impl_ret_untracked(context, builder, sig.return_type, res)
-
-
-# @overload(nunique)
-def nunique_overload(arr_typ):
-    if arr_typ == boolean_array:
+@overload(nunique)
+def nunique_overload(A):
+    if A == boolean_array:
         return lambda A: len(A.unique())
     # TODO: extend to other types like datetime?
     def nunique_seq(A):
@@ -91,15 +72,8 @@ def nunique_overload(arr_typ):
     return nunique_seq
 
 
-@lower_builtin(nunique_parallel, types.Any)  # TODO: replace Any with types
-def lower_nunique_parallel(context, builder, sig, args):
-    func = nunique_overload_parallel(sig.args[0])
-    res = context.compile_internal(builder, func, sig, args)
-    return impl_ret_untracked(context, builder, sig.return_type, res)
-
-
-# @overload(nunique_parallel)
-def nunique_overload_parallel(arr_typ):
+@overload(nunique_parallel)
+def nunique_overload_parallel(A):
     sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
 
     def nunique_par(A):
