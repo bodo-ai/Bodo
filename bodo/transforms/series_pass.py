@@ -962,6 +962,42 @@ class SeriesPass(object):
                 impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
+        if fdef == ("concat", "bodo.libs.array_kernels"):
+            # concat() case where tuple type changes by to_const_type()
+            if any([a.name in self._type_changed_vars for a in rhs.args]):
+                argtyps = tuple(self.typemap[a.name] for a in rhs.args)
+                old_sig = self.calltypes.pop(rhs)
+                new_sig = self.typemap[rhs.func.name].get_call_type(
+                    self.typingctx, argtyps, dict(rhs.kws)
+                )
+                self.calltypes[rhs] = new_sig
+
+            # replace tuple of Series with tuple of Arrays
+            in_vars, _ = guard(find_build_sequence, self.func_ir, rhs.args[0])
+            nodes = []
+            s_arrs = [
+                self._get_series_data(v, nodes)
+                if isinstance(self.typemap[v.name], SeriesType)
+                else v
+                for v in in_vars
+            ]
+            loc = assign.target.loc
+            scope = assign.target.scope
+            new_tup = ir.Expr.build_tuple(s_arrs, loc)
+            new_arg = ir.Var(
+                scope, mk_unique_var(rhs.args[0].name + "_arrs"), loc
+            )
+            self.typemap[new_arg.name] = self.typemap[rhs.args[0].name]
+            nodes.append(ir.Assign(new_tup, new_arg, loc))
+            rhs.args[0] = new_arg
+            nodes.append(assign)
+            self.calltypes.pop(rhs)
+            new_sig = self.typemap[rhs.func.name].get_call_type(
+                self.typingctx, (self.typemap[new_arg.name],), dict(rhs.kws)
+            )
+            self.calltypes[rhs] = new_sig
+            return nodes
+
         if func_mod == "bodo.hiframes.api":
             return self._run_call_hiframes(assign, assign.target, rhs, func_name)
 
@@ -1433,40 +1469,6 @@ class SeriesPass(object):
             new_tup = ir.Expr.build_tuple(tup_items, lhs.loc)
             assign.value = new_tup
             nodes.append(assign)
-            return nodes
-
-        if func_name == "concat":
-            # concat() case where tuple type changes by to_const_type()
-            if any([a.name in self._type_changed_vars for a in rhs.args]):
-                argtyps = tuple(self.typemap[a.name] for a in rhs.args)
-                old_sig = self.calltypes.pop(rhs)
-                new_sig = self.typemap[rhs.func.name].get_call_type(
-                    self.typingctx, argtyps, dict(rhs.kws)
-                )
-                self.calltypes[rhs] = new_sig
-
-            # replace tuple of Series with tuple of Arrays
-            in_vars, _ = guard(find_build_sequence, self.func_ir, rhs.args[0])
-            nodes = []
-            s_arrs = [
-                self._get_series_data(v, nodes)
-                if isinstance(self.typemap[v.name], SeriesType)
-                else v
-                for v in in_vars
-            ]
-            new_tup = ir.Expr.build_tuple(s_arrs, lhs.loc)
-            new_arg = ir.Var(
-                lhs.scope, mk_unique_var(rhs.args[0].name + "_arrs"), lhs.loc
-            )
-            self.typemap[new_arg.name] = self.typemap[rhs.args[0].name]
-            nodes.append(ir.Assign(new_tup, new_arg, lhs.loc))
-            rhs.args[0] = new_arg
-            nodes.append(assign)
-            self.calltypes.pop(rhs)
-            new_sig = self.typemap[rhs.func.name].get_call_type(
-                self.typingctx, (self.typemap[new_arg.name],), dict(rhs.kws)
-            )
-            self.calltypes[rhs] = new_sig
             return nodes
 
         # replace isna early to enable more optimization in PA
@@ -2461,7 +2463,7 @@ class SeriesPass(object):
         # TODO: index and name
         return self._replace_func(
             lambda arr_list: bodo.hiframes.api.init_series(
-                bodo.hiframes.api.concat(arr_list)
+                bodo.libs.array_kernels.concat(arr_list)
             ),
             [arr_tup],
             pre_nodes=nodes,

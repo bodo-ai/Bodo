@@ -1589,9 +1589,9 @@ class ConcatDummyTyper(AbstractTemplate):
                 # TODO: fix NA column additions for other types
                 if len(arr_args) < len(objs.types):
                     arr_args.append(types.Array(types.float64, 1, "C"))
-                # use bodo.hiframes.api.concat() typer
+                # use bodo.libs.array_kernels.concat() typer
                 concat_typ = self.context.resolve_function_type(
-                    bodo.hiframes.api.concat, (types.Tuple(arr_args),), {}).return_type
+                    bodo.libs.array_kernels.concat, (types.Tuple(arr_args),), {}).return_type
                 all_data.append(concat_typ)
 
             ret_typ = DataFrameType(tuple(all_data), None, tuple(all_colnames))
@@ -1602,7 +1602,7 @@ class ConcatDummyTyper(AbstractTemplate):
             assert all(isinstance(t, SeriesType) for t in objs.types)
             arr_args = [S.data for S in objs.types]
             concat_typ = self.context.resolve_function_type(
-                    bodo.hiframes.api.concat, (types.Tuple(arr_args),), {}).return_type
+                    bodo.libs.array_kernels.concat, (types.Tuple(arr_args),), {}).return_type
             ret_typ = SeriesType(concat_typ.dtype, concat_typ)
             return signature(ret_typ, *args)
         # TODO: handle other iterables like arrays, lists, ...

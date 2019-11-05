@@ -661,7 +661,7 @@ class DistributedAnalysis(object):
         if fdef == ("median", "bodo.libs.array_kernels"):
             return
 
-        if fdef == ("concat", "bodo.hiframes.api"):
+        if fdef == ("concat", "bodo.libs.array_kernels"):
             # hiframes concat is similar to np.concatenate
             self._analyze_call_np_concatenate(lhs, args, array_dists)
             return

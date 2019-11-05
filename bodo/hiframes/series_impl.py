@@ -701,7 +701,7 @@ def overload_series_append(S, to_append, ignore_index=False, verify_integrity=Fa
                 tup_other = bodo.utils.typing.to_const_tuple(to_append)
                 other_arrs = bodo.hiframes.api.get_series_data_tup(tup_other)
                 all_arrs = bodo.utils.typing.to_const_tuple((arr,) + other_arrs)
-                out_arr = bodo.hiframes.api.concat(all_arrs)
+                out_arr = bodo.libs.array_kernels.concat(all_arrs)
                 return bodo.hiframes.api.init_series(out_arr)
 
             return impl_multi_noindex
@@ -711,7 +711,7 @@ def overload_series_append(S, to_append, ignore_index=False, verify_integrity=Fa
         ):
             arr = bodo.hiframes.api.get_series_data(S)
             other = bodo.hiframes.api.get_series_data(to_append)
-            out_arr = bodo.hiframes.api.concat((arr, other))
+            out_arr = bodo.libs.array_kernels.concat((arr, other))
             return bodo.hiframes.api.init_series(out_arr)
 
         return impl_single_noindex
@@ -735,8 +735,8 @@ def overload_series_append(S, to_append, ignore_index=False, verify_integrity=Fa
 
             all_arrs = bodo.utils.typing.to_const_tuple((arr,) + other_arrs)
             all_inds = bodo.utils.typing.to_const_tuple((index_arr,) + other_inds)
-            out_arr = bodo.hiframes.api.concat(all_arrs)
-            out_index = bodo.hiframes.api.concat(all_inds)
+            out_arr = bodo.libs.array_kernels.concat(all_arrs)
+            out_index = bodo.libs.array_kernels.concat(all_inds)
             return bodo.hiframes.api.init_series(out_arr, out_index)
 
         return impl
@@ -749,8 +749,8 @@ def overload_series_append(S, to_append, ignore_index=False, verify_integrity=Fa
         other = bodo.hiframes.api.get_series_data(to_append)
         other_index = bodo.utils.conversion.extract_index_array(to_append)
 
-        out_arr = bodo.hiframes.api.concat((arr, other))
-        out_index = bodo.hiframes.api.concat((index_arr, other_index))
+        out_arr = bodo.libs.array_kernels.concat((arr, other))
+        out_index = bodo.libs.array_kernels.concat((index_arr, other_index))
         return bodo.hiframes.api.init_series(out_arr, out_index)
 
     return impl_single

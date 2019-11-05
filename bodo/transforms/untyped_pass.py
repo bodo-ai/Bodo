@@ -77,7 +77,6 @@ def remove_hiframes(rhs, lives, call_list):
         and call_list[0]
         in [
             "fix_rolling_array",
-            "concat",
             "count",
             "mean",
             "quantile",
@@ -137,6 +136,8 @@ def remove_hiframes(rhs, lives, call_list):
     if call_list == ["rolling_dummy", "pd_rolling_ext", "hiframes", bodo]:
         return True
     if call_list == ["calc_nitems", "array_kernels", "libs", bodo]:
+        return True
+    if call_list == ["concat", "array_kernels", "libs", bodo]:
         return True
     if call_list == ["add_consts_to_type", "typing", "utils", bodo]:
         return True

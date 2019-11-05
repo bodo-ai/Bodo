@@ -24,7 +24,7 @@ from bodo.libs.str_arr_ext import (
     get_str_arr_item_length,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.bool_arr_ext import BooleanArrayType
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.utils.shuffle import getitem_arr_tup_single
 
 import llvmlite.llvmpy.core as lc
@@ -483,6 +483,62 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     )
     impl = loc_vars["impl"]
     return impl
+
+
+def concat(arr_list):
+    return pd.concat(arr_list)
+
+
+@overload(concat)
+def concat_overload(arr_list):
+    # all string input case
+    # TODO: handle numerics to string casting case
+    if isinstance(arr_list, types.UniTuple) and arr_list.dtype == string_array_type:
+
+        def string_concat_impl(arr_list):
+            # preallocate the output
+            num_strs = 0
+            num_chars = 0
+            for A in arr_list:
+                arr = A
+                num_strs += len(arr)
+                num_chars += bodo.libs.str_arr_ext.num_total_chars(arr)
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(num_strs, num_chars)
+            # copy data to output
+            curr_str_ind = 0
+            curr_chars_ind = 0
+            for A in arr_list:
+                arr = A
+                bodo.libs.str_arr_ext.set_string_array_range(
+                    out_arr, arr, curr_str_ind, curr_chars_ind
+                )
+                curr_str_ind += len(arr)
+                curr_chars_ind += bodo.libs.str_arr_ext.num_total_chars(arr)
+            return out_arr
+
+        return string_concat_impl
+
+    if isinstance(arr_list, types.UniTuple) and isinstance(
+        arr_list.dtype, IntegerArrayType
+    ):
+        return lambda arr_list: bodo.libs.int_arr_ext.init_integer_array(
+            np.concatenate(bodo.libs.int_arr_ext.get_int_arr_data_tup(arr_list)),
+            bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list),
+        )
+
+    if isinstance(arr_list, types.UniTuple) and arr_list.dtype == boolean_array:
+        # reusing int arr concat functions
+        # TODO: test
+        return lambda arr_list: bodo.libs.bool_arr_ext.init_bool_array(
+            np.concatenate(bodo.libs.int_arr_ext.get_int_arr_data_tup(arr_list)),
+            bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list),
+        )
+
+    for typ in arr_list:
+        if not isinstance(typ, types.Array):
+            raise ValueError("concat supports only numerical and string arrays")
+    # numerical input
+    return lambda arr_list: np.concatenate(arr_list)
 
 
 # np.arange implementation is copied from parfor.py and range length

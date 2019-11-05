@@ -2023,7 +2023,7 @@ class DataFramePass(object):
         # gen concat function
         arg_names = ", ".join(["in{}".format(i) for i in range(len(df_list))])
         func_text = "def _concat_imp({}):\n".format(arg_names)
-        func_text += "    return bodo.hiframes.api.concat(({}))\n".format(arg_names)
+        func_text += "    return bodo.libs.array_kernels.concat(({}))\n".format(arg_names)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _concat_imp = loc_vars["_concat_imp"]
