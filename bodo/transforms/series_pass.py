@@ -1458,9 +1458,7 @@ class SeriesPass(object):
             new_arg = ir.Var(
                 lhs.scope, mk_unique_var(rhs.args[0].name + "_arrs"), lhs.loc
             )
-            self.typemap[new_arg.name] = if_series_to_array_type(
-                self.typemap[rhs.args[0].name]
-            )
+            self.typemap[new_arg.name] = self.typemap[rhs.args[0].name]
             nodes.append(ir.Assign(new_tup, new_arg, lhs.loc))
             rhs.args[0] = new_arg
             nodes.append(assign)

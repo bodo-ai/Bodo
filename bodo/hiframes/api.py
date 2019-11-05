@@ -53,10 +53,6 @@ from bodo.utils.utils import unliteral_all
 import llvmlite.llvmpy.core as lc
 
 
-def dropna(A):  # pragma: no cover
-    return 0
-
-
 def concat(arr_list):
     return pd.concat(arr_list)
 
@@ -77,9 +73,8 @@ class ConcatType(AbstractTemplate):
             # TODO: support concat with different dtypes or with regular numpy
         else:
             # use typer of np.concatenate
-            arr_list_to_arr = if_series_to_array_type(arr_list)
             ret_typ = numba.typing.npydecl.NdConcatenate(self.context).generic()(
-                arr_list_to_arr
+                arr_list
             )
 
         return signature(ret_typ, arr_list)
@@ -253,19 +248,6 @@ def unique_overload_parallel(A):
         return bodo.utils.utils.unique(out_arr)
 
     return unique_par
-
-
-@infer_global(dropna)
-class DropNAType(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) in (1, 2)
-        # args: in_arr
-        ret = args[0]
-        if not isinstance(ret, types.BaseTuple):
-            # series case
-            ret = if_arr_to_series_type(ret)
-        return signature(ret, *args)
 
 
 def alloc_shift(A):
