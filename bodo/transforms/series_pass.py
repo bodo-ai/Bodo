@@ -1441,7 +1441,7 @@ class SeriesPass(object):
                 argtyps = tuple(self.typemap[a.name] for a in rhs.args)
                 old_sig = self.calltypes.pop(rhs)
                 new_sig = self.typemap[rhs.func.name].get_call_type(
-                    self.typingctx, argtyps, rhs.kws
+                    self.typingctx, argtyps, dict(rhs.kws)
                 )
                 self.calltypes[rhs] = new_sig
 
@@ -1464,7 +1464,7 @@ class SeriesPass(object):
             nodes.append(assign)
             self.calltypes.pop(rhs)
             new_sig = self.typemap[rhs.func.name].get_call_type(
-                self.typingctx, (self.typemap[new_arg.name],), rhs.kws
+                self.typingctx, (self.typemap[new_arg.name],), dict(rhs.kws)
             )
             self.calltypes[rhs] = new_sig
             return nodes

@@ -57,47 +57,17 @@ def concat(arr_list):
     return pd.concat(arr_list)
 
 
-@infer_global(concat)
-class ConcatType(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        arr_list = args[0]
-        if isinstance(arr_list, types.UniTuple) and is_str_arr_typ(arr_list.dtype):
-            ret_typ = string_array_type
-        elif isinstance(arr_list, types.UniTuple) and (
-            isinstance(arr_list.dtype, IntegerArrayType)
-            or arr_list.dtype == boolean_array
-        ):
-            ret_typ = arr_list.dtype
-            # TODO: support concat with different dtypes or with regular numpy
-        else:
-            # use typer of np.concatenate
-            ret_typ = numba.typing.npydecl.NdConcatenate(self.context).generic()(
-                arr_list
-            )
-
-        return signature(ret_typ, arr_list)
-
-
-@lower_builtin(concat, types.Any)  # TODO: replace Any with types
-def lower_concat(context, builder, sig, args):
-    func = concat_overload(sig.args[0])
-    res = context.compile_internal(builder, func, sig, args)
-    return impl_ret_borrowed(context, builder, sig.return_type, res)
-
-
-# @overload(concat)
+@overload(concat)
 def concat_overload(arr_list):
     # all string input case
     # TODO: handle numerics to string casting case
     if isinstance(arr_list, types.UniTuple) and is_str_arr_typ(arr_list.dtype):
 
-        def string_concat_impl(in_arrs):
+        def string_concat_impl(arr_list):
             # preallocate the output
             num_strs = 0
             num_chars = 0
-            for A in in_arrs:
+            for A in arr_list:
                 arr = A
                 num_strs += len(arr)
                 num_chars += bodo.libs.str_arr_ext.num_total_chars(arr)
@@ -105,7 +75,7 @@ def concat_overload(arr_list):
             # copy data to output
             curr_str_ind = 0
             curr_chars_ind = 0
-            for A in in_arrs:
+            for A in arr_list:
                 arr = A
                 bodo.libs.str_arr_ext.set_string_array_range(
                     out_arr, arr, curr_str_ind, curr_chars_ind
@@ -136,7 +106,7 @@ def concat_overload(arr_list):
         if not isinstance(typ, types.Array):
             raise ValueError("concat supports only numerical and string arrays")
     # numerical input
-    return lambda a: np.concatenate(a)
+    return lambda arr_list: np.concatenate(arr_list)
 
 
 def nunique(A):  # pragma: no cover

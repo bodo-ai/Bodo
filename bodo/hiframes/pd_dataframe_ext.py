@@ -1590,10 +1590,9 @@ class ConcatDummyTyper(AbstractTemplate):
                 if len(arr_args) < len(objs.types):
                     arr_args.append(types.Array(types.float64, 1, "C"))
                 # use bodo.hiframes.api.concat() typer
-                concat_typ = bodo.hiframes.api.ConcatType(self.context).generic(
-                    (types.Tuple(arr_args),), {}
-                )
-                all_data.append(concat_typ.return_type)
+                concat_typ = self.context.resolve_function_type(
+                    bodo.hiframes.api.concat, (types.Tuple(arr_args),), {}).return_type
+                all_data.append(concat_typ)
 
             ret_typ = DataFrameType(tuple(all_data), None, tuple(all_colnames))
             return signature(ret_typ, *args)
@@ -1602,10 +1601,9 @@ class ConcatDummyTyper(AbstractTemplate):
         elif isinstance(objs.types[0], SeriesType):
             assert all(isinstance(t, SeriesType) for t in objs.types)
             arr_args = [S.data for S in objs.types]
-            concat_typ = bodo.hiframes.api.ConcatType(self.context).generic(
-                (types.Tuple(arr_args),), {}
-            )
-            ret_typ = SeriesType(concat_typ.return_type.dtype, concat_typ.return_type)
+            concat_typ = self.context.resolve_function_type(
+                    bodo.hiframes.api.concat, (types.Tuple(arr_args),), {}).return_type
+            ret_typ = SeriesType(concat_typ.dtype, concat_typ)
             return signature(ret_typ, *args)
         # TODO: handle other iterables like arrays, lists, ...
 
