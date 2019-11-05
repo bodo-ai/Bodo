@@ -1752,7 +1752,7 @@ class SeriesPass(object):
                 )
             else:
                 return self._replace_func(
-                    lambda a, b, c: bodo.hiframes.api.fillna(a, b, c),
+                    series_kernels._column_fillna_impl,
                     [data, data, val],
                     pre_nodes=nodes,
                 )
@@ -2463,9 +2463,6 @@ class SeriesPass(object):
         )
 
     def _handle_df_col_calls(self, assign, lhs, rhs, func_name):
-
-        if func_name == "fillna":
-            return self._replace_func(series_kernels._column_fillna_impl, rhs.args)
 
         if func_name == "fillna_str_alloc":
             return self._replace_func(

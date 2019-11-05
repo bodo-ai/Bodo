@@ -57,7 +57,11 @@ def _series_fillna_str_alloc_impl(B, fill, index, name):  # pragma: no cover
         else:
             num_chars += len(s)
     A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
-    bodo.hiframes.api.fillna(A, B, fill)
+    for i in numba.parfor.internal_prange(len(A)):
+        s = B[i]
+        if bodo.hiframes.api.isna(B, i):
+            s = fill
+        A[i] = s
     return bodo.hiframes.api.init_series(A, index, name)
 
 
@@ -362,11 +366,15 @@ def _column_sub_impl_datetime_series_timestamp(in_arr, ts):  # pragma: no cover
     return bodo.hiframes.api.init_series(S)
 
 
-def _column_fillna_alloc_impl(S, val, index, name):  # pragma: no cover
+def _column_fillna_alloc_impl(B, fill, index, name):  # pragma: no cover
     # TODO: handle string, etc.
-    B = np.empty(len(S), S.dtype)
-    bodo.hiframes.api.fillna(B, S, val)
-    return bodo.hiframes.api.init_series(B, index, name)
+    A = np.empty(len(B), B.dtype)
+    for i in numba.parfor.internal_prange(len(A)):
+        s = B[i]
+        if bodo.hiframes.api.isna(B, i):
+            s = fill
+        A[i] = s
+    return bodo.hiframes.api.init_series(A, index, name)
 
 
 @numba.njit
