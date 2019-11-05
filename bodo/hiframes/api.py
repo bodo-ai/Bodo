@@ -53,17 +53,6 @@ from bodo.utils.utils import unliteral_all
 import llvmlite.llvmpy.core as lc
 
 
-def alloc_shift(A):
-    return np.empty_like(A)
-
-
-@overload(alloc_shift)
-def alloc_shift_overload(A):
-    if isinstance(A.dtype, types.Integer):
-        return lambda A: np.empty(len(A), np.float64)
-    return lambda A: np.empty(len(A), A.dtype)
-
-
 def shift_dtype(d):
     return d
 

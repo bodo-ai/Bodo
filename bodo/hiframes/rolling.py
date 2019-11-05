@@ -978,7 +978,7 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
 @register_jitable(cache=True)
 def shift_seq(in_arr, shift):  # pragma: no cover
     N = len(in_arr)
-    output = bodo.hiframes.api.alloc_shift(in_arr)
+    output = alloc_shift(in_arr)
     shift = min(shift, N)
     output[:shift] = np.nan
 
@@ -1101,7 +1101,7 @@ def get_one_from_arr_dtype(arr):
 def pct_change_seq(in_arr, shift):  # pragma: no cover
     # TODO: parallel 'pad' fill
     N = len(in_arr)
-    output = bodo.hiframes.api.alloc_shift(in_arr)
+    output = alloc_shift(in_arr)
     shift = min(shift, N)
     output[:shift] = np.nan
 
@@ -1424,3 +1424,14 @@ def _dropna(arr):  # pragma: no cover
             curr_ind += 1
 
     return A
+
+
+def alloc_shift(A):
+    return np.empty_like(A)
+
+
+@overload(alloc_shift)
+def alloc_shift_overload(A):
+    if isinstance(A.dtype, types.Integer):
+        return lambda A: np.empty(len(A), np.float64)
+    return lambda A: np.empty(len(A), A.dtype)
