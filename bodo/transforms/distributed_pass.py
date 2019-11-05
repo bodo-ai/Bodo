@@ -612,16 +612,16 @@ class DistributedPass(object):
             )
             return nodes + compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == ("nunique", "bodo.hiframes.api") and (
+        if fdef == ("nunique", "bodo.libs.array_kernels") and (
             self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)
         ):
-            f = lambda arr: bodo.hiframes.api.nunique_parallel(arr)
+            f = lambda arr: bodo.libs.array_kernels.nunique_parallel(arr)
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == ("unique", "bodo.hiframes.api") and (
+        if fdef == ("unique", "bodo.libs.array_kernels") and (
             self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)
         ):
-            f = lambda arr: bodo.hiframes.api.unique_parallel(arr)
+            f = lambda arr: bodo.libs.array_kernels.unique_parallel(arr)
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ("nlargest", "bodo.libs.array_kernels") and (

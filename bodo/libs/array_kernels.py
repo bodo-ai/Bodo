@@ -26,6 +26,14 @@ from bodo.libs.str_arr_ext import (
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.utils.shuffle import getitem_arr_tup_single
+from bodo.utils.utils import build_set
+from bodo.ir.sort import (
+    alltoallv_tup,
+    finalize_shuffle_meta,
+    update_shuffle_meta,
+    alloc_pre_shuffle_metadata,
+)
+from bodo.ir.join import write_send_buff
 
 import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
@@ -539,6 +547,91 @@ def concat_overload(arr_list):
             raise ValueError("concat supports only numerical and string arrays")
     # numerical input
     return lambda arr_list: np.concatenate(arr_list)
+
+
+def nunique(A):  # pragma: no cover
+    return len(set(A))
+
+
+def nunique_parallel(A):  # pragma: no cover
+    return len(set(A))
+
+
+@overload(nunique)
+def nunique_overload(A):
+    if A == boolean_array:
+        return lambda A: len(A.unique())
+    # TODO: extend to other types like datetime?
+    def nunique_seq(A):
+        return len(build_set(A))
+
+    return nunique_seq
+
+
+@overload(nunique_parallel)
+def nunique_overload_parallel(A):
+    sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
+
+    def nunique_par(A):
+        uniq_A = bodo.libs.array_kernels.unique_parallel(A)
+        loc_nuniq = len(uniq_A)
+        return bodo.libs.distributed_api.dist_reduce(loc_nuniq, np.int32(sum_op))
+
+    return nunique_par
+
+
+def unique(A):  # pragma: no cover
+    return np.array([a for a in set(A)]).astype(A.dtype)
+
+
+def unique_parallel(A):  # pragma: no cover
+    return np.array([a for a in set(A)]).astype(A.dtype)
+
+
+@overload(unique)
+def unique_overload(A):
+    # TODO: extend to other types like datetime?
+    def unique_seq(A):
+        return bodo.utils.utils.unique(A)
+
+    return unique_seq
+
+
+@overload(unique_parallel)
+def unique_overload_parallel(A):
+    def unique_par(A):
+        uniq_A = bodo.utils.utils.unique(A)
+        key_arrs = (uniq_A,)
+        n = len(uniq_A)
+        node_ids = np.empty(n, np.int32)
+
+        n_pes = bodo.libs.distributed_api.get_size()
+        pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, (), n_pes, False)
+
+        # calc send/recv counts
+        for i in range(n):
+            val = uniq_A[i]
+            node_id = hash(val) % n_pes
+            node_ids[i] = node_id
+            update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs, (), False)
+
+        shuffle_meta = finalize_shuffle_meta(
+            key_arrs, (), pre_shuffle_meta, n_pes, False
+        )
+
+        # write send buffers
+        for i in range(n):
+            node_id = node_ids[i]
+            write_send_buff(shuffle_meta, node_id, i, key_arrs, ())
+            # update last since it is reused in data
+            shuffle_meta.tmp_offset[node_id] += 1
+
+        # shuffle
+        out_arr, = alltoallv_tup(key_arrs, shuffle_meta, ())
+
+        return bodo.utils.utils.unique(out_arr)
+
+    return unique_par
 
 
 # np.arange implementation is copied from parfor.py and range length

@@ -771,7 +771,7 @@ def overload_series_nunique(S, dropna=True):
     # TODO: refactor, support NA, dt64
     def impl(S, dropna=True):
         arr = bodo.hiframes.api.get_series_data(S)
-        return bodo.hiframes.api.nunique(arr)
+        return bodo.libs.array_kernels.nunique(arr)
 
     return impl
 
@@ -781,7 +781,7 @@ def overload_series_unique(S):
     # TODO: refactor, support dt64
     def impl(S):
         arr = bodo.hiframes.api.get_series_data(S)
-        return bodo.hiframes.api.unique(arr)
+        return bodo.libs.array_kernels.unique(arr)
 
     return impl
 

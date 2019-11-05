@@ -570,11 +570,11 @@ class DistributedAnalysis(object):
             # quantile doesn't affect input's distribution
             return
 
-        if fdef == ("nunique", "bodo.hiframes.api"):
+        if fdef == ("nunique", "bodo.libs.array_kernels"):
             # nunique doesn't affect input's distribution
             return
 
-        if fdef == ("unique", "bodo.hiframes.api"):
+        if fdef == ("unique", "bodo.libs.array_kernels"):
             # doesn't affect distribution of input since input can stay 1D
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD_Var

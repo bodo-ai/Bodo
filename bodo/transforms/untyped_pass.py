@@ -81,7 +81,6 @@ def remove_hiframes(rhs, lives, call_list):
             "mean",
             "quantile",
             "var",
-            "nunique",
             "init_series",
             "init_datetime_index",
             "init_timedelta_index",
@@ -135,9 +134,17 @@ def remove_hiframes(rhs, lives, call_list):
     #     return True
     if call_list == ["rolling_dummy", "pd_rolling_ext", "hiframes", bodo]:
         return True
-    if call_list == ["calc_nitems", "array_kernels", "libs", bodo]:
-        return True
-    if call_list == ["concat", "array_kernels", "libs", bodo]:
+    if (
+        len(call_list) == 4
+        and call_list[1:] == ["array_kernels", "libs", bodo]
+        and call_list[0]
+        in [
+            "calc_nitems",
+            "concat",
+            "unique",
+            "nunique",
+        ]
+    ):
         return True
     if call_list == ["add_consts_to_type", "typing", "utils", bodo]:
         return True
