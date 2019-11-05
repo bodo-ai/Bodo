@@ -657,9 +657,9 @@ def overload_series_argsort(S, axis=0, kind="quicksort", order=None):
         mask = S.notna().values
         if not mask.all():
             out_arr = np.full(n, -1, np.int64)
-            out_arr[mask] = bodo.hiframes.api.argsort(arr[mask])
+            out_arr[mask] = argsort(arr[mask])
         else:
-            out_arr = bodo.hiframes.api.argsort(arr)
+            out_arr = argsort(arr)
         return bodo.hiframes.api.init_series(out_arr, index, name)
 
     return impl
@@ -1304,3 +1304,19 @@ def _install_np_ufuncs():
 
 
 _install_np_ufuncs()
+
+
+def argsort(A):
+    return np.argsort(A)
+
+
+@overload(argsort)
+def overload_argsort(A):
+    def impl(A):
+        n = len(A)
+        l_key_arrs = bodo.libs.str_arr_ext.to_string_list((A.copy(),))
+        data = (np.arange(n),)
+        bodo.libs.timsort.sort(l_key_arrs, 0, n, data)
+        return data[0]
+
+    return impl

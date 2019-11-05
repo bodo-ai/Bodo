@@ -51,22 +51,6 @@ from bodo.utils.utils import unliteral_all
 import llvmlite.llvmpy.core as lc
 
 
-def argsort(A):
-    return np.argsort(A)
-
-
-@overload(argsort)
-def overload_argsort(A):
-    def impl(A):
-        n = len(A)
-        l_key_arrs = bodo.libs.str_arr_ext.to_string_list((A.copy(),))
-        data = (np.arange(n),)
-        bodo.libs.timsort.sort(l_key_arrs, 0, n, data)
-        return data[0]
-
-    return impl
-
-
 def sort(arr, index_arr, ascending, inplace):
     return np.sort(arr), index_arr
 
