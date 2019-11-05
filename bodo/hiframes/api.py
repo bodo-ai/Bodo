@@ -53,10 +53,6 @@ from bodo.utils.utils import unliteral_all
 import llvmlite.llvmpy.core as lc
 
 
-def fillna_str_alloc(A, fill):  # pragma: no cover
-    return 0
-
-
 def dropna(A):  # pragma: no cover
     return 0
 
@@ -257,15 +253,6 @@ def unique_overload_parallel(A):
         return bodo.utils.utils.unique(out_arr)
 
     return unique_par
-
-
-@infer_global(fillna_str_alloc)
-class FillNaStrType(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 4
-        # args: in_arr, value
-        return signature(SeriesType(string_type), *args)
 
 
 @infer_global(dropna)

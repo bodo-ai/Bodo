@@ -1739,16 +1739,11 @@ class SeriesPass(object):
                 # array and assign it back to the same Series variable
                 # result back to the same variable
                 # TODO: handle string array reflection
-                def str_fillna_impl(A, fill, index, name):
-                    # not using A.fillna since definition list is not working
-                    # for A to find callname
-                    return bodo.hiframes.api.fillna_str_alloc(A, fill, index, name)
-                    # A.fillna(fill)
-
                 fill_var = rhs.args[0]
                 assign.target = series_var  # replace output
                 return self._replace_func(
-                    str_fillna_impl, (data, fill_var, index, name), pre_nodes=nodes
+                    series_kernels._series_fillna_str_alloc_impl,
+                    (data, fill_var, index, name), pre_nodes=nodes
                 )
             else:
                 return self._replace_func(
@@ -2463,11 +2458,6 @@ class SeriesPass(object):
         )
 
     def _handle_df_col_calls(self, assign, lhs, rhs, func_name):
-
-        if func_name == "fillna_str_alloc":
-            return self._replace_func(
-                series_kernels._series_fillna_str_alloc_impl, rhs.args
-            )
 
         if func_name == "dropna":
             # df.dropna case
