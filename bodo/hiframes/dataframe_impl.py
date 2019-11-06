@@ -979,3 +979,35 @@ def drop_inplace_overload(
         return new_df, None
 
     return _impl
+
+
+def sort_values_inplace(df):
+    res = None
+    return df, res
+
+
+@overload(sort_values_inplace)
+def sort_values_inplace_overload(
+    df, by, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last"
+):
+
+    from bodo.hiframes.pd_dataframe_ext import DataFrameType
+
+    assert isinstance(df, DataFrameType)
+    # TODO: support recovery when object is not df
+    def _impl(
+        df,
+        by,
+        axis=0,
+        ascending=True,
+        inplace=False,
+        kind="quicksort",
+        na_position="last",
+    ):
+
+        new_df = bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
+            df, by, ascending, inplace
+        )
+        return new_df, None
+
+    return _impl

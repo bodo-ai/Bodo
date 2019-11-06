@@ -709,10 +709,10 @@ class DataFramePass(object):
                 impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
-        if fdef == ("sort_values_inplace", "bodo.hiframes.api"):
+        if fdef == ("sort_values_inplace", "bodo.hiframes.dataframe_impl"):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.api.sort_values_inplace_overload(*arg_typs, **kw_typs)
+            impl = bodo.hiframes.dataframe_impl.sort_values_inplace_overload(*arg_typs, **kw_typs)
             return self._replace_func(
                 impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )

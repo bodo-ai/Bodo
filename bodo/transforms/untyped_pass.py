@@ -479,7 +479,7 @@ class UntypedPass(object):
             # variable replacement
             kws = dict(rhs.kws)
             inplace_var = self._get_arg("sort_values", rhs.args, kws, 3, "inplace", "")
-            replace_func = lambda: bodo.hiframes.api.sort_values_inplace
+            replace_func = lambda: bodo.hiframes.dataframe_impl.sort_values_inplace
             return self._handle_df_inplace_func(
                 assign, lhs, rhs, func_mod, inplace_var, replace_func, label
             )
