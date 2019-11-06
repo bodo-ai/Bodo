@@ -495,6 +495,28 @@ def unique(A):
     return lambda A: to_array(build_set(A))
 
 
+@overload(np.array)
+def np_array_array_overload(A):
+    if isinstance(A, types.Array):
+        return lambda A: A
+
+    if isinstance(A, types.containers.Set):
+        # TODO: naive implementation, data from set can probably
+        # be copied to array more efficienty
+        dtype = A.dtype
+
+        def f(A):
+            n = len(A)
+            arr = np.empty(n, dtype)
+            i = 0
+            for a in A:
+                arr[i] = a
+                i += 1
+            return arr
+
+        return f
+
+
 def empty_like_type(n, arr):
     return np.empty(n, arr.dtype)
 

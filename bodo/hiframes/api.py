@@ -404,28 +404,6 @@ def init_timedelta_index(typingctx, data, name=None):
     return sig, codegen
 
 
-@overload(np.array)
-def np_array_array_overload(A):
-    if isinstance(A, types.Array):
-        return lambda A: A
-
-    if isinstance(A, types.containers.Set):
-        # TODO: naive implementation, data from set can probably
-        # be copied to array more efficienty
-        dtype = A.dtype
-
-        def f(A):
-            n = len(A)
-            arr = np.empty(n, dtype)
-            i = 0
-            for a in A:
-                arr[i] = a
-                i += 1
-            return arr
-
-        return f
-
-
 # a dummy join function that will be replace in dataframe_pass
 def join_dummy(left_df, right_df, left_on, right_on, how):
     return left_df
