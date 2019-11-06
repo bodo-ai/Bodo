@@ -2188,7 +2188,7 @@ class DataFramePass(object):
         ):
             return var_def.args[1]
 
-        f = lambda S: bodo.hiframes.api.get_index_name(S)
+        f = lambda S: bodo.hiframes.pd_index_ext.get_index_name(S)
         if self.typemap[dt_var.name] == types.none:
             f = lambda S: None
 

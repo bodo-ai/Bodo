@@ -85,7 +85,7 @@ def overload_coerce_to_ndarray(data, error_on_nonarray=True, bool_arr_convert=No
 
     # index types
     if isinstance(data, (NumericIndexType, DatetimeIndexType, TimedeltaIndexType)):
-        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.hiframes.api.get_index_data(
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.hiframes.pd_index_ext.get_index_data(
             data
         )
 
@@ -122,7 +122,7 @@ def overload_coerce_to_array(data, error_on_nonarray=True, bool_arr_convert=None
         )
 
     if isinstance(data, StringIndexType):
-        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.hiframes.api.get_index_data(
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.hiframes.pd_index_ext.get_index_data(
             data
         )
 
@@ -394,7 +394,7 @@ def overload_index_to_array(I, l=0):
         return lambda I, l=0: np.arange(I._start, I._stop, I._step)
 
     # other indices have data
-    return lambda I, l=0: bodo.hiframes.api.get_index_data(I)
+    return lambda I, l=0: bodo.hiframes.pd_index_ext.get_index_data(I)
 
 
 def extract_name_if_none(data, name):
@@ -421,7 +421,7 @@ def overload_extract_name_if_none(data, name):
     if isinstance(
         data, (NumericIndexType, DatetimeIndexType, TimedeltaIndexType, PeriodIndexType)
     ):
-        return lambda data, name: bodo.hiframes.api.get_index_name(data)
+        return lambda data, name: bodo.hiframes.pd_index_ext.get_index_name(data)
 
     if isinstance(data, SeriesType):
         return lambda data, name: bodo.hiframes.api.get_series_name(data)
@@ -476,7 +476,7 @@ def overload_get_array_if_series_or_index(data):
         return lambda data: bodo.hiframes.api.get_series_data(data)
 
     if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
-        return lambda data: bodo.hiframes.api.get_index_data(data)
+        return lambda data: bodo.hiframes.pd_index_ext.get_index_data(data)
 
     return lambda data: data
 

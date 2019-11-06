@@ -1134,6 +1134,34 @@ class SeriesPass(object):
             )
             return compile_func_single_block(impl, (arg,), assign.target, self)
 
+        if fdef == ("get_index_data", "bodo.hiframes.pd_index_ext"):
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def)
+            if call_def in (
+                ("init_datetime_index", "bodo.hiframes.api"),
+                ("init_timedelta_index", "bodo.hiframes.api"),
+                ("init_string_index", "bodo.hiframes.pd_index_ext"),
+                ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
+            ):
+                assign.value = var_def.args[0]
+                return [assign]
+
+        if fdef == ("get_index_name", "bodo.hiframes.pd_index_ext"):
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def)
+            if (
+                call_def
+                in (
+                    ("init_datetime_index", "bodo.hiframes.api"),
+                    ("init_timedelta_index", "bodo.hiframes.api"),
+                    ("init_string_index", "bodo.hiframes.pd_index_ext"),
+                    ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
+                )
+                and len(var_def.args) > 1
+            ):
+                assign.value = var_def.args[1]
+                return [assign]
+
         if func_mod == "bodo.hiframes.api":
             return self._run_call_hiframes(assign, assign.target, rhs, func_name)
 
@@ -1437,34 +1465,6 @@ class SeriesPass(object):
         ):
             assign.value = rhs.args[0]
             return [assign]
-
-        if func_name == "get_index_data":
-            var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def)
-            if call_def in (
-                ("init_datetime_index", "bodo.hiframes.api"),
-                ("init_timedelta_index", "bodo.hiframes.api"),
-                ("init_string_index", "bodo.hiframes.pd_index_ext"),
-                ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
-            ):
-                assign.value = var_def.args[0]
-                return [assign]
-
-        if func_name == "get_index_name":
-            var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def)
-            if (
-                call_def
-                in (
-                    ("init_datetime_index", "bodo.hiframes.api"),
-                    ("init_timedelta_index", "bodo.hiframes.api"),
-                    ("init_string_index", "bodo.hiframes.pd_index_ext"),
-                    ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
-                )
-                and len(var_def.args) > 1
-            ):
-                assign.value = var_def.args[1]
-                return [assign]
 
         if func_name == "get_series_data":
             # TODO: make sure data is not altered using update_series_data()
@@ -2469,7 +2469,7 @@ class SeriesPass(object):
             return var_def.args[0]
 
         nodes += compile_func_single_block(
-            lambda S: bodo.hiframes.api.get_index_data(S), (dt_var,), None, self
+            lambda S: bodo.hiframes.pd_index_ext.get_index_data(S), (dt_var,), None, self
         )
         return nodes[-1].target
 

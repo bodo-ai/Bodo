@@ -150,16 +150,6 @@ def get_series_name(S):
     return lambda S: _get_series_name(S)
 
 
-@numba.generated_jit(nopython=True)
-def get_index_data(S):
-    return lambda S: S._data
-
-
-@numba.generated_jit(nopython=True)
-def get_index_name(S):
-    return lambda S: S._name
-
-
 # array analysis extension
 def get_series_data_equiv(self, scope, equiv_set, args, kws):
     assert len(args) == 1 and not kws
@@ -224,9 +214,6 @@ numba.ir_utils.alias_func_extensions[
 ] = alias_ext_dummy_func
 numba.ir_utils.alias_func_extensions[
     ("init_string_index", "bodo.hiframes.pd_index_ext")
-] = alias_ext_dummy_func
-numba.ir_utils.alias_func_extensions[
-    ("get_index_data", "bodo.hiframes.api")
 ] = alias_ext_dummy_func
 numba.ir_utils.alias_func_extensions[
     ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext")
