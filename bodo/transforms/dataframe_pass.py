@@ -1449,7 +1449,7 @@ class DataFramePass(object):
             orig_arr = arr_def.value
             bool_arr = arr_def.index
             nodes += compile_func_single_block(
-                lambda arr, bool_arr: bodo.hiframes.api.series_filter_bool(
+                lambda arr, bool_arr: bodo.hiframes.series_impl.series_filter_bool(
                     arr, bool_arr
                 ),
                 (orig_arr, bool_arr),

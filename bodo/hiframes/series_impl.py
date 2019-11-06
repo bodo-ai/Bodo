@@ -20,6 +20,7 @@ from bodo.utils.typing import (
     is_overload_zero,
     is_overload_str,
 )
+from numba.typing.templates import infer_global, AbstractTemplate
 
 
 @overload_attribute(SeriesType, "index")
@@ -1370,3 +1371,18 @@ def to_numeric_overload(A, dtype):
         return bodo.hiframes.api.init_series(B)
 
     return _to_numeric_impl
+
+
+def series_filter_bool(arr, bool_arr):
+    return arr[bool_arr]
+
+
+@infer_global(series_filter_bool)
+class SeriesFilterBoolInfer(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 2
+        ret = args[0]
+        if isinstance(ret.dtype, types.Integer):
+            ret = SeriesType(types.float64)
+        return ret(*args)

@@ -51,21 +51,6 @@ from bodo.utils.utils import unliteral_all
 import llvmlite.llvmpy.core as lc
 
 
-def series_filter_bool(arr, bool_arr):
-    return arr[bool_arr]
-
-
-@infer_global(series_filter_bool)
-class SeriesFilterBoolInfer(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2
-        ret = args[0]
-        if isinstance(ret.dtype, types.Integer):
-            ret = SeriesType(types.float64)
-        return signature(ret, *args)
-
-
 def set_df_col(df, cname, arr, inplace):
     df[cname] = arr
 

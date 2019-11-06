@@ -1099,6 +1099,19 @@ class SeriesPass(object):
             impl = bodo.hiframes.series_impl.to_numeric_overload(*arg_typs)
             return self._replace_func(impl, rhs.args)
 
+        if fdef == ("series_filter_bool", "bodo.hiframes.series_impl"):
+            nodes = []
+            in_arr = rhs.args[0]
+            bool_arr = rhs.args[1]
+            if is_series_type(self.typemap[in_arr.name]):
+                in_arr = self._get_series_data(in_arr, nodes)
+            if is_series_type(self.typemap[bool_arr.name]):
+                bool_arr = self._get_series_data(bool_arr, nodes)
+
+            return self._replace_func(
+                series_kernels._column_filter_impl, [in_arr, bool_arr], pre_nodes=nodes
+            )
+
         if func_mod == "bodo.hiframes.api":
             return self._run_call_hiframes(assign, assign.target, rhs, func_name)
 
@@ -1469,9 +1482,6 @@ class SeriesPass(object):
                 self.typemap[arg.name]
             )
             return compile_func_single_block(impl, (arg,), lhs, self)
-
-        if func_name == "series_filter_bool":
-            return self._handle_df_col_filter(assign, lhs, rhs)
 
         if func_name == "series_tup_to_arr_tup":
             in_typ = self.typemap[rhs.args[0].name]
@@ -2375,19 +2385,6 @@ class SeriesPass(object):
         nodes = f_block.body[:-3]  # remove none return
         nodes[-1].target = assign.target
         return nodes
-
-    def _handle_df_col_filter(self, assign, lhs, rhs):
-        nodes = []
-        in_arr = rhs.args[0]
-        bool_arr = rhs.args[1]
-        if is_series_type(self.typemap[in_arr.name]):
-            in_arr = self._get_series_data(in_arr, nodes)
-        if is_series_type(self.typemap[bool_arr.name]):
-            bool_arr = self._get_series_data(bool_arr, nodes)
-
-        return self._replace_func(
-            series_kernels._column_filter_impl, [in_arr, bool_arr], pre_nodes=nodes
-        )
 
     def _run_call_concat(self, assign, lhs, rhs):
         nodes = []
