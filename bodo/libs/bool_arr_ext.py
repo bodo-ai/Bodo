@@ -259,6 +259,28 @@ ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_init_bool_array = (
 )
 
 
+def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
+    assert len(args) >= 1
+    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+
+
+def alias_ext_init_bool_array(lhs_name, args, alias_map, arg_aliases):
+    assert len(args) == 2
+    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    numba.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
+
+
+numba.ir_utils.alias_func_extensions[
+    ("init_bool_array", "bodo.libs.bool_arr_ext")
+] = alias_ext_init_bool_array
+numba.ir_utils.alias_func_extensions[
+    ("get_bool_arr_data", "bodo.libs.bool_arr_ext")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("get_bool_arr_bitmap", "bodo.libs.bool_arr_ext")
+] = alias_ext_dummy_func
+
+
 @overload(operator.getitem)
 def bool_arr_getitem(A, ind):
     if A != boolean_array:

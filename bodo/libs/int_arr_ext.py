@@ -353,6 +353,28 @@ ArrayAnalysis._analyze_op_call_bodo_libs_int_arr_ext_init_integer_array = (
 )
 
 
+def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
+    assert len(args) >= 1
+    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+
+
+def alias_ext_init_integer_array(lhs_name, args, alias_map, arg_aliases):
+    assert len(args) == 2
+    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    numba.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
+
+
+numba.ir_utils.alias_func_extensions[
+    ("init_integer_array", "bodo.libs.int_arr_ext")
+] = alias_ext_init_integer_array
+numba.ir_utils.alias_func_extensions[
+    ("get_int_arr_data", "bodo.libs.int_arr_ext")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("get_int_arr_bitmap", "bodo.libs.int_arr_ext")
+] = alias_ext_dummy_func
+
+
 @numba.extending.register_jitable
 def set_bit_to_arr(bits, i, bit_is_set):
     bits[i // 8] ^= np.uint8(-np.uint8(bit_is_set) ^ bits[i // 8]) & kBitmask[i % 8]
