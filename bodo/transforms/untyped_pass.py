@@ -41,7 +41,6 @@ import bodo.io
 from bodo.io import h5, parquet_pio
 from bodo.io.parquet_pio import ParquetHandler
 from bodo.utils.utils import inline_new_blocks, ReplaceFunc, is_call, is_assign, is_expr
-import bodo.hiframes.api
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -73,13 +72,9 @@ def remove_hiframes(rhs, lives, call_list):
         return True
     if (
         len(call_list) == 4
-        and call_list[1:] == ["api", "hiframes", bodo]
+        and call_list[1:] == ["pd_series_ext", "hiframes", bodo]
         and call_list[0]
         in [
-            "count",
-            "mean",
-            "quantile",
-            "var",
             "get_series_data",
             "get_series_index",
             "get_series_name",
@@ -150,6 +145,7 @@ def remove_hiframes(rhs, lives, call_list):
             "concat",
             "unique",
             "nunique",
+            "quantile",
         ]
     ):
         return True

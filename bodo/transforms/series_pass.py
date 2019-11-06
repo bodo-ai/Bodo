@@ -496,8 +496,8 @@ class SeriesPass(object):
             func = rhs.fn
 
             def impl(S1, S2):
-                arr1 = bodo.hiframes.api.get_series_data(S1)
-                arr2 = bodo.hiframes.api.get_series_data(S2)
+                arr1 = bodo.hiframes.pd_series_ext.get_series_data(S1)
+                arr2 = bodo.hiframes.pd_series_ext.get_series_data(S2)
                 l = len(arr1)
                 S = np.empty(l, dtype=np.bool_)
                 nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
@@ -1171,8 +1171,37 @@ class SeriesPass(object):
             assign.value = rhs.args[0]
             return [assign]
 
-        if func_mod == "bodo.hiframes.api":
-            return self._run_call_hiframes(assign, assign.target, rhs, func_name)
+        if fdef == ("get_series_data", "bodo.hiframes.pd_series_ext"):
+            # TODO: make sure data is not altered using update_series_data()
+            # or other functions, using any reference to payload
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def)
+            if call_def == ("init_series", "bodo.hiframes.pd_series_ext"):
+                assign.value = var_def.args[0]
+                return [assign]
+
+        if fdef == ("get_series_index", "bodo.hiframes.pd_series_ext"):
+            # TODO: make sure index is not altered using update_series_index()
+            # or other functions, using any reference to payload
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def)
+            if (
+                call_def == ("init_series", "bodo.hiframes.pd_series_ext")
+                and len(var_def.args) > 1
+            ):
+                assign.value = var_def.args[1]
+                return [assign]
+
+        if fdef == ("get_series_name", "bodo.hiframes.pd_series_ext"):
+            # TODO: make sure name is not altered
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def)
+            if (
+                call_def == ("init_series", "bodo.hiframes.pd_series_ext")
+                and len(var_def.args) > 2
+            ):
+                assign.value = var_def.args[2]
+                return [assign]
 
         if func_mod == "bodo.hiframes.rolling":
             return self._run_call_rolling(assign, assign.target, rhs, func_name)
@@ -1253,7 +1282,7 @@ class SeriesPass(object):
             self.typemap[rhs.args[0].name]
         ):
             return self._replace_func(
-                lambda S: len(bodo.hiframes.api.get_series_data(S)), rhs.args
+                lambda S: len(bodo.hiframes.pd_series_ext.get_series_data(S)), rhs.args
             )
 
         # XXX sometimes init_dataframe() can't be resolved in dataframe_pass
@@ -1409,9 +1438,9 @@ class SeriesPass(object):
         if np_ufunc.nin == 1:
 
             def impl(S):
-                arr = bodo.hiframes.api.get_series_data(S)
-                index = bodo.hiframes.api.get_series_index(S)
-                name = bodo.hiframes.api.get_series_name(S)
+                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+                index = bodo.hiframes.pd_series_ext.get_series_index(S)
+                name = bodo.hiframes.pd_series_ext.get_series_name(S)
                 out_arr = _ufunc(arr)
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
@@ -1421,9 +1450,9 @@ class SeriesPass(object):
             if isinstance(self.typemap[args[0].name], SeriesType):
 
                 def impl(S1, S2):
-                    arr = bodo.hiframes.api.get_series_data(S1)
-                    index = bodo.hiframes.api.get_series_index(S1)
-                    name = bodo.hiframes.api.get_series_name(S1)
+                    arr = bodo.hiframes.pd_series_ext.get_series_data(S1)
+                    index = bodo.hiframes.pd_series_ext.get_series_index(S1)
+                    name = bodo.hiframes.pd_series_ext.get_series_name(S1)
                     other_arr = bodo.utils.conversion.get_array_if_series_or_index(S2)
                     out_arr = _ufunc(arr, other_arr)
                     return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
@@ -1436,9 +1465,9 @@ class SeriesPass(object):
 
                 def impl(S1, S2):
                     arr = bodo.utils.conversion.get_array_if_series_or_index(S1)
-                    other_arr = bodo.hiframes.api.get_series_data(S2)
-                    index = bodo.hiframes.api.get_series_index(S2)
-                    name = bodo.hiframes.api.get_series_name(S2)
+                    other_arr = bodo.hiframes.pd_series_ext.get_series_data(S2)
+                    index = bodo.hiframes.pd_series_ext.get_series_index(S2)
+                    name = bodo.hiframes.pd_series_ext.get_series_name(S2)
                     out_arr = _ufunc(arr, other_arr)
                     return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
@@ -1463,42 +1492,6 @@ class SeriesPass(object):
         in_typs = tuple(self.typemap[a.name] for a in args)
         impl = overload_func(*in_typs)
         return self._replace_func(impl, args)
-
-    def _run_call_hiframes(self, assign, lhs, rhs, func_name):
-
-        if func_name == "get_series_data":
-            # TODO: make sure data is not altered using update_series_data()
-            # or other functions, using any reference to payload
-            var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def)
-            if call_def == ("init_series", "bodo.hiframes.pd_series_ext"):
-                assign.value = var_def.args[0]
-                return [assign]
-
-        if func_name == "get_series_index":
-            # TODO: make sure index is not altered using update_series_index()
-            # or other functions, using any reference to payload
-            var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def)
-            if (
-                call_def == ("init_series", "bodo.hiframes.pd_series_ext")
-                and len(var_def.args) > 1
-            ):
-                assign.value = var_def.args[1]
-                return [assign]
-
-        if func_name == "get_series_name":
-            # TODO: make sure name is not altered
-            var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def)
-            if (
-                call_def == ("init_series", "bodo.hiframes.pd_series_ext")
-                and len(var_def.args) > 2
-            ):
-                assign.value = var_def.args[2]
-                return [assign]
-
-        return [assign]
 
     def _run_call_series(self, assign, lhs, rhs, series_var, func_name):
         if func_name in (
@@ -2487,7 +2480,7 @@ class SeriesPass(object):
         # XXX use get_series_data() for getting data instead of S._data
         # to enable alias analysis
         nodes += compile_func_single_block(
-            lambda S: bodo.hiframes.api.get_series_data(S), (series_var,), None, self
+            lambda S: bodo.hiframes.pd_series_ext.get_series_data(S), (series_var,), None, self
         )
         return nodes[-1].target
 
@@ -2504,7 +2497,7 @@ class SeriesPass(object):
         # XXX use get_series_index() for getting data instead of S._index
         # to enable alias analysis
         nodes += compile_func_single_block(
-            lambda S: bodo.hiframes.api.get_series_index(S), (series_var,), None, self
+            lambda S: bodo.hiframes.pd_series_ext.get_series_index(S), (series_var,), None, self
         )
         return nodes[-1].target
 
@@ -2515,7 +2508,7 @@ class SeriesPass(object):
             return var_def.args[2]
 
         nodes += compile_func_single_block(
-            lambda S: bodo.hiframes.api.get_series_name(S), (series_var,), None, self
+            lambda S: bodo.hiframes.pd_series_ext.get_series_name(S), (series_var,), None, self
         )
         return nodes[-1].target
 

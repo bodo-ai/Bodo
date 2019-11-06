@@ -371,7 +371,7 @@ def box_series(typ, val, c):
     dtype = typ.dtype
 
     # TODO: handle parent
-    series_payload = bodo.hiframes.api.get_series_payload(
+    series_payload = bodo.hiframes.pd_series_ext.get_series_payload(
         c.context, c.builder, typ, val
     )
 

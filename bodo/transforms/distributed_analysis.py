@@ -672,14 +672,14 @@ class DistributedAnalysis(object):
         if fdef == ("get_str_arr_item_length", "bodo.libs.str_arr_ext"):
             return
 
-        if fdef == ("get_series_name", "bodo.hiframes.api"):
+        if fdef == ("get_series_name", "bodo.hiframes.pd_series_ext"):
             return
 
         if fdef == ("get_index_name", "bodo.hiframes.pd_index_ext"):
             return
 
         # dummy hiframes functions
-        if func_mod == "bodo.hiframes.api" and func_name in (
+        if func_mod == "bodo.hiframes.pd_series_ext" and func_name in (
             "get_series_data",
             "get_series_index",
         ):

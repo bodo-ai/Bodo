@@ -668,7 +668,7 @@ def _get_df_args(data, index, columns, dtype, copy):
         if is_overload_none(index):
             for i, t in enumerate(data.types[n_cols + 1 :]):
                 if isinstance(t, SeriesType):
-                    index_arg = "bodo.hiframes.api.get_series_index(data[{}])".format(
+                    index_arg = "bodo.hiframes.pd_series_ext.get_series_index(data[{}])".format(
                         n_cols + 1 + i
                     )
                     break

@@ -1226,7 +1226,7 @@ class DataFramePass(object):
                 func_text += "  {} = {}.fillna(val)\n".format(d + "_S", d + "_S")
             else:
                 func_text += "  {}.fillna(val, inplace=True)\n".format(d + "_S")
-            func_text += "  {} = bodo.hiframes.api.get_series_data({})\n".format(
+            func_text += "  {} = bodo.hiframes.pd_series_ext.get_series_data({})\n".format(
                 d + "_O", d + "_S"
             )
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), df_index, {})\n".format(
@@ -2056,7 +2056,7 @@ class DataFramePass(object):
         out_vars = []
         for obj in objs:
             nodes += compile_func_single_block(
-                lambda S: bodo.hiframes.api.get_series_data(S), (obj,), None, self
+                lambda S: bodo.hiframes.pd_series_ext.get_series_data(S), (obj,), None, self
             )
             out_vars.append(nodes[-1].target)
 
