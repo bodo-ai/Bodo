@@ -682,8 +682,6 @@ class DistributedAnalysis(object):
         if func_mod == "bodo.hiframes.api" and func_name in (
             "get_series_data",
             "get_series_index",
-            "init_datetime_index",
-            "init_timedelta_index",
         ):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
@@ -718,6 +716,8 @@ class DistributedAnalysis(object):
         if func_mod == "bodo.hiframes.pd_index_ext" and func_name in (
             "init_numeric_index",
             "init_string_index",
+            "init_datetime_index",
+            "init_timedelta_index",
             "get_index_data",
         ):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)

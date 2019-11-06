@@ -203,18 +203,7 @@ numba.ir_utils.alias_func_extensions[
 numba.ir_utils.alias_func_extensions[
     ("get_series_index", "bodo.hiframes.api")
 ] = alias_ext_dummy_func
-numba.ir_utils.alias_func_extensions[
-    ("init_datetime_index", "bodo.hiframes.api")
-] = alias_ext_dummy_func
-numba.ir_utils.alias_func_extensions[
-    ("init_timedelta_index", "bodo.hiframes.api")
-] = alias_ext_dummy_func
-numba.ir_utils.alias_func_extensions[
-    ("init_numeric_index", "bodo.hiframes.pd_index_ext")
-] = alias_ext_dummy_func
-numba.ir_utils.alias_func_extensions[
-    ("init_string_index", "bodo.hiframes.pd_index_ext")
-] = alias_ext_dummy_func
+
 numba.ir_utils.alias_func_extensions[
     ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext")
 ] = alias_ext_dummy_func
@@ -299,58 +288,4 @@ def init_series(typingctx, data, index=None, name=None):
     data = if_series_to_array_type(data)
     ret_typ = SeriesType(dtype, data, index, name)
     sig = signature(ret_typ, data, index, name)
-    return sig, codegen
-
-
-@intrinsic
-def init_datetime_index(typingctx, data, name=None):
-    """Create a DatetimeIndex with provided data and name values.
-    """
-    name = types.none if name is None else name
-    name = types.unliteral(name)
-
-    def codegen(context, builder, signature, args):
-        data_val, name_val = args
-        # create dt_index struct and store values
-        dt_index = cgutils.create_struct_proxy(signature.return_type)(context, builder)
-        dt_index.data = data_val
-        dt_index.name = name_val
-
-        # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], data_val)
-            context.nrt.incref(builder, signature.args[1], name_val)
-
-        return dt_index._getvalue()
-
-    ret_typ = DatetimeIndexType(name)
-    sig = signature(ret_typ, data, name)
-    return sig, codegen
-
-
-@intrinsic
-def init_timedelta_index(typingctx, data, name=None):
-    """Create a TimedeltaIndex with provided data and name values.
-    """
-    name = types.none if name is None else name
-    name = types.unliteral(name)
-
-    def codegen(context, builder, signature, args):
-        data_val, name_val = args
-        # create timedelta_index struct and store values
-        timedelta_index = cgutils.create_struct_proxy(signature.return_type)(
-            context, builder
-        )
-        timedelta_index.data = data_val
-        timedelta_index.name = name_val
-
-        # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], data_val)
-            context.nrt.incref(builder, signature.args[1], name_val)
-
-        return timedelta_index._getvalue()
-
-    ret_typ = TimedeltaIndexType(name)
-    sig = signature(ret_typ, data, name)
     return sig, codegen

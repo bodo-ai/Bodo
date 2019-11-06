@@ -81,8 +81,6 @@ def remove_hiframes(rhs, lives, call_list):
             "quantile",
             "var",
             "init_series",
-            "init_datetime_index",
-            "init_timedelta_index",
             "get_series_data",
             "get_series_index",
             "get_series_name",
@@ -103,7 +101,8 @@ def remove_hiframes(rhs, lives, call_list):
         len(call_list) == 4
         and call_list[1:] == ["pd_index_ext", "hiframes", bodo]
         and call_list[0]
-        in ("init_string_index", "init_numeric_index", "_dti_val_finalize")
+        in ("init_string_index", "init_numeric_index", "_dti_val_finalize",
+            "init_datetime_index", "init_timedelta_index")
     ):
         return True
     if (

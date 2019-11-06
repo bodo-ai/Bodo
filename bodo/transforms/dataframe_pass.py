@@ -2179,8 +2179,8 @@ class DataFramePass(object):
         if (
             call_def
             in (
-                ("init_datetime_index", "bodo.hiframes.api"),
-                ("init_timedelta_index", "bodo.hiframes.api"),
+                ("init_datetime_index", "bodo.hiframes.pd_index_ext"),
+                ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
                 ("init_string_index", "bodo.hiframes.pd_index_ext"),
                 ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
             )

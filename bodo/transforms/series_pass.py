@@ -1138,8 +1138,8 @@ class SeriesPass(object):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def)
             if call_def in (
-                ("init_datetime_index", "bodo.hiframes.api"),
-                ("init_timedelta_index", "bodo.hiframes.api"),
+                ("init_datetime_index", "bodo.hiframes.pd_index_ext"),
+                ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
                 ("init_string_index", "bodo.hiframes.pd_index_ext"),
                 ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
             ):
@@ -1152,8 +1152,8 @@ class SeriesPass(object):
             if (
                 call_def
                 in (
-                    ("init_datetime_index", "bodo.hiframes.api"),
-                    ("init_timedelta_index", "bodo.hiframes.api"),
+                    ("init_datetime_index", "bodo.hiframes.pd_index_ext"),
+                    ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
                     ("init_string_index", "bodo.hiframes.pd_index_ext"),
                     ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
                 )
@@ -2461,8 +2461,8 @@ class SeriesPass(object):
         var_def = guard(get_definition, self.func_ir, dt_var)
         call_def = guard(find_callname, self.func_ir, var_def)
         if call_def in (
-            ("init_datetime_index", "bodo.hiframes.api"),
-            ("init_timedelta_index", "bodo.hiframes.api"),
+            ("init_datetime_index", "bodo.hiframes.pd_index_ext"),
+            ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
             ("init_string_index", "bodo.hiframes.pd_index_ext"),
             ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
         ):
