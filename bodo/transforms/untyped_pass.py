@@ -973,7 +973,7 @@ class UntypedPass(object):
         arg = rhs.args[0]
 
         return _compile_func_single_block(
-            lambda arr: bodo.hiframes.api.to_numeric(arr, _dtype),
+            lambda arr: bodo.hiframes.series_impl.to_numeric(arr, _dtype),
             [arg],
             lhs,
             extra_globals={"_dtype": dtype},

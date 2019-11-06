@@ -1346,3 +1346,27 @@ def overload_sort(arr, index_arr, ascending, inplace):
         return key_arrs[0], data[0]
 
     return impl
+
+
+def to_numeric(A, dtype):
+    return A
+
+
+@overload(to_numeric)
+def to_numeric_overload(A, dtype):
+    out_dtype = dtype.dtype
+    assert out_dtype == types.int64 or out_dtype == types.float64
+    # TODO: handle non-Series input
+
+    def _to_numeric_impl(A, dtype):
+        # TODO: fix distributed
+        arr = bodo.hiframes.api.get_series_data(A)
+        numba.parfor.init_prange()
+        n = len(arr)
+        B = np.empty(n, out_dtype)
+        for i in numba.parfor.internal_prange(n):
+            bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arr, i)
+
+        return bodo.hiframes.api.init_series(B)
+
+    return _to_numeric_impl

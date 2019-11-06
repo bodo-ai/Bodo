@@ -51,19 +51,6 @@ from bodo.utils.utils import unliteral_all
 import llvmlite.llvmpy.core as lc
 
 
-def to_numeric(A, dtype):
-    return A
-
-
-@infer_global(to_numeric)
-class ToNumeric(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2
-        dtype = args[1].dtype
-        return signature(SeriesType(dtype), *unliteral_all(args))
-
-
 def series_filter_bool(arr, bool_arr):
     return arr[bool_arr]
 

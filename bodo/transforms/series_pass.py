@@ -1094,6 +1094,11 @@ class SeriesPass(object):
                 lambda A, B: (A, B), (out_data, out_index), lhs, self
             )
 
+        if fdef == ("to_numeric", "bodo.hiframes.series_impl"):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            impl = bodo.hiframes.series_impl.to_numeric_overload(*arg_typs)
+            return self._replace_func(impl, rhs.args)
+
         if func_mod == "bodo.hiframes.api":
             return self._run_call_hiframes(assign, assign.target, rhs, func_name)
 
@@ -1478,31 +1483,6 @@ class SeriesPass(object):
             assign.value = new_tup
             nodes.append(assign)
             return nodes
-
-        if func_name == "to_numeric":
-            out_dtype = self.typemap[lhs.name].dtype
-            assert out_dtype == types.int64 or out_dtype == types.float64
-
-            # TODO: handle non-Series input
-
-            def _to_numeric_impl(A):
-                # TODO: fix distributed
-                numba.parfor.init_prange()
-                n = len(A)
-                B = np.empty(n, out_dtype)
-                for i in numba.parfor.internal_prange(n):
-                    bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, A, i)
-
-                return bodo.hiframes.api.init_series(B)
-
-            nodes = []
-            data = self._get_series_data(rhs.args[0], nodes)
-            return self._replace_func(
-                _to_numeric_impl,
-                [data],
-                pre_nodes=nodes,
-                extra_globals={"out_dtype": out_dtype},
-            )
 
         if func_name == "get_itertuples":
             nodes = []
