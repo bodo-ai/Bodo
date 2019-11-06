@@ -54,31 +54,6 @@ import llvmlite.llvmpy.core as lc
 def fix_rolling_array(c):  # pragma: no cover
     return c
 
-
-def df_isin(A, B):  # pragma: no cover
-    return A
-
-
-def df_isin_vals(A, B):  # pragma: no cover
-    return A
-
-
-@infer_global(df_isin)
-@infer_global(df_isin_vals)
-class DfIsinCol(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2
-        return signature(types.Array(types.bool_, 1, "C"), *unliteral_all(args))
-
-
-# dummy lowering functions
-@lower_builtin(df_isin, types.Any, types.Any)
-@lower_builtin(df_isin_vals, types.Any, types.Any)
-def lower_dummy_isin(context, builder, sig, args):
-    return context.get_constant_null(sig.return_type)
-
-
 def to_numeric(A, dtype):
     return A
 

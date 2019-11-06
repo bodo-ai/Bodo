@@ -168,47 +168,61 @@ def overload_dataframe_isin(df, values):
     # TODO: call isin on Series
     # TODO: make sure df indices match?
     # TODO: dictionary case
+
+    func_text = "def impl(df, values):\n"
+
     other_colmap = {}
     df_case = False
     # dataframe case
     if isinstance(values, DataFrameType):
         df_case = True
-        other_colmap = {
-            c: "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(values, {})".format(
-                values.columns.index(c)
-            )
-            for c in df.columns
-            if c in values.columns
-        }
+        for i, c in enumerate(df.columns):
+            if c in values.columns:
+                v_name = "val{}".format(i)
+                func_text += "  {} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(values, {})\n".format(
+                    v_name, values.columns.index(c))
+                other_colmap[c] = v_name
     else:
         # general iterable (e.g. list, set) case
         # TODO: handle passed in dict case (pass colname to func?)
         other_colmap = {c: "values" for c in df.columns}
 
-    data = [
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(i)
-        for i in range(len(df.columns))
-    ]
+    data = []
+    for i in range(len(df.columns)):
+        v_name = "data{}".format(i)
+        func_text += "  {} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})\n".format(v_name, i)
+        data.append(v_name)
 
-    isin_func = "bodo.hiframes.api.df_isin({}, {})"
-    isin_vals_func = "bodo.hiframes.api.df_isin_vals({}, {})"
-    bool_arr_func = "np.zeros(len(df), np.bool_)"
-    out_vars = []
-    for cname, in_var in zip(df.columns, data):
+    out_data = ["out{}".format(i) for i in range(len(df.columns))]
+
+    isin_func = """
+  numba.parfor.init_prange()
+  n = len({0})
+  m = len({1})
+  {2} = np.empty(n, np.bool_)
+  for i in numba.parfor.internal_prange(n):
+    {2}[i] = {0}[i] == {1}[i] if i < m else False
+"""
+
+    isin_vals_func = """
+  numba.parfor.init_prange()
+  n = len({0})
+  {2} = np.empty(n, np.bool_)
+  for i in numba.parfor.internal_prange(n):
+    {2}[i] = {0}[i] in {1}
+"""
+    bool_arr_func = "  {} = np.zeros(len(df), np.bool_)\n"
+    for i, (cname, in_var) in enumerate(zip(df.columns, data)):
         if cname in other_colmap:
-            if df_case:
-                func = isin_func
-            else:
-                func = isin_vals_func
             other_col_var = other_colmap[cname]
-            func = func.format(in_var, other_col_var)
+            if df_case:
+                func_text += isin_func.format(in_var, other_col_var, out_data[i])
+            else:
+                func_text += isin_vals_func.format(in_var, other_col_var, out_data[i])
         else:
-            func = bool_arr_func
-        out_vars.append(func)
+            func_text += bool_arr_func.format(out_data[i])
 
-    data_args = ", ".join(out_vars)
-    header = "def impl(df, values):\n"
-    return _gen_init_df(header, df.columns, data_args)
+    return _gen_init_df(func_text, df.columns, ",".join(out_data))
 
 
 @overload_method(DataFrameType, "abs")
@@ -664,7 +678,7 @@ def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
     )
     # print(func_text)
     loc_vars = {}
-    _global = {"bodo": bodo, "np": np}
+    _global = {"bodo": bodo, "np": np, "numba": numba}
     _global.update(extra_globals)
     exec(func_text, _global, loc_vars)
     impl = loc_vars["impl"]

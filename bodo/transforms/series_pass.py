@@ -1490,40 +1490,6 @@ class SeriesPass(object):
             nodes.append(assign)
             return nodes
 
-        if func_name == "df_isin":
-            # XXX df isin is different than Series.isin, df.isin considers
-            #  index but Series.isin ignores it (everything is set)
-            # TODO: support strings and other types
-            nodes = []
-            data, other = rhs.args
-
-            def _isin_series(A, B):
-                numba.parfor.init_prange()
-                n = len(A)
-                m = len(B)
-                S = np.empty(n, np.bool_)
-                for i in numba.parfor.internal_prange(n):
-                    S[i] = A[i] == B[i] if i < m else False
-                return S
-
-            return self._replace_func(_isin_series, [data, other], pre_nodes=nodes)
-
-        if func_name == "df_isin_vals":
-            nodes = []
-            data = rhs.args[0]
-
-            def _isin_series(A, vals):
-                numba.parfor.init_prange()
-                n = len(A)
-                S = np.empty(n, np.bool_)
-                for i in numba.parfor.internal_prange(n):
-                    S[i] = A[i] in vals
-                return S
-
-            return self._replace_func(
-                _isin_series, [data, rhs.args[1]], pre_nodes=nodes
-            )
-
         if func_name == "to_numeric":
             out_dtype = self.typemap[lhs.name].dtype
             assert out_dtype == types.int64 or out_dtype == types.float64
