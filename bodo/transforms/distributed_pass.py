@@ -662,13 +662,13 @@ class DistributedPass(object):
             )
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == ("convert_rec_to_tup", "bodo.hiframes.api"):
+        if fdef == ("convert_rec_to_tup", "bodo.utils.typing"):
             # optimize Series back to back map pattern with tuples
             # TODO: create another optimization pass?
             arg_def = guard(get_definition, self.func_ir, rhs.args[0])
             if is_call(arg_def) and guard(find_callname, self.func_ir, arg_def) == (
                 "convert_tup_to_rec",
-                "bodo.hiframes.api",
+                "bodo.utils.typing",
             ):
                 assign.value = arg_def.args[0]
             return out

@@ -86,6 +86,14 @@ def remove_hiframes(rhs, lives, call_list):
             "get_series_data",
             "get_series_index",
             "get_series_name",
+        ]
+    ):
+        return True
+    if (
+        len(call_list) == 4
+        and call_list[1:] == ["typing", "utils", bodo]
+        and call_list[0]
+        in [
             "convert_tup_to_rec",
             "convert_rec_to_tup",
         ]

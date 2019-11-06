@@ -1761,12 +1761,12 @@ class SeriesPass(object):
         if dtype == types.NPDatetime("ns"):
             func_text += "    t = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(np.int64(A[i]))\n"
         elif isinstance(dtype, types.BaseTuple):
-            func_text += "    t = bodo.hiframes.api.convert_rec_to_tup(A[i])\n"
+            func_text += "    t = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
         else:
             func_text += "    t = A[i]\n"
         func_text += "    v = map_func(t)\n"
         if isinstance(out_typ, types.BaseTuple):
-            func_text += "    S[i] = bodo.hiframes.api.convert_tup_to_rec(v)\n"
+            func_text += "    S[i] = bodo.utils.typing.convert_tup_to_rec(v)\n"
         else:
             func_text += "    S[i] = v\n"
         # func_text += "    print(S[i])\n"
