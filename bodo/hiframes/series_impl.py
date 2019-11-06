@@ -678,7 +678,7 @@ def overload_series_sort_values(
         index_arr = bodo.utils.conversion.coerce_to_array(index_t)
         name = bodo.hiframes.api.get_series_name(S)
 
-        out_arr, out_ind_arr = bodo.hiframes.api.sort(
+        out_arr, out_ind_arr = sort(
             arr, index_arr, ascending, inplace
         )
 
@@ -1318,5 +1318,31 @@ def overload_argsort(A):
         data = (np.arange(n),)
         bodo.libs.timsort.sort(l_key_arrs, 0, n, data)
         return data[0]
+
+    return impl
+
+
+def sort(arr, index_arr, ascending, inplace):
+    return np.sort(arr), index_arr
+
+
+@overload(sort)
+def overload_sort(arr, index_arr, ascending, inplace):
+    def impl(arr, index_arr, ascending, inplace):
+        n = len(arr)
+        key_arrs = (arr,)
+        data = (index_arr,)
+        if not inplace:
+            key_arrs = (arr.copy(),)
+            data = (index_arr.copy(),)
+
+        l_key_arrs = bodo.libs.str_arr_ext.to_string_list(key_arrs)
+        l_data = bodo.libs.str_arr_ext.to_string_list(data, True)
+        bodo.libs.timsort.sort(l_key_arrs, 0, n, l_data)
+        if not ascending:
+            bodo.libs.timsort.reverseRange(l_key_arrs, 0, n, l_data)
+        bodo.libs.str_arr_ext.cp_str_list_to_array(key_arrs, l_key_arrs)
+        bodo.libs.str_arr_ext.cp_str_list_to_array(data, l_data, True)
+        return key_arrs[0], data[0]
 
     return impl

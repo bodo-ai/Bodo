@@ -1015,6 +1015,85 @@ class SeriesPass(object):
                 elif isinstance(arr_typ.dtype, types.Integer):
                     return self._replace_func(lambda arr, i: False, [arr, ind])
 
+        if fdef == ("argsort", "bodo.hiframes.series_impl"):
+            lhs = assign.target
+            data = rhs.args[0]
+            nodes = []
+
+            def _get_indices(S):  # pragma: no cover
+                n = len(S)
+                return np.arange(n)
+
+            nodes += compile_func_single_block(_get_indices, (data,), None, self)
+            index_var = nodes[-1].target
+
+            # dummy output data arrays for results
+            out_data = ir.Var(lhs.scope, mk_unique_var(data.name + "_data"), lhs.loc)
+            self.typemap[out_data.name] = self.typemap[data.name]
+
+            in_df = {"inds": index_var}
+            out_df = {"inds": lhs}
+            in_keys = [data]
+            out_keys = [out_data]
+            ascending = True
+
+            # Sort node
+            nodes.append(
+                bodo.ir.sort.Sort(
+                    data.name,
+                    lhs.name,
+                    in_keys,
+                    out_keys,
+                    in_df,
+                    out_df,
+                    False,
+                    lhs.loc,
+                    ascending,
+                )
+            )
+
+            return nodes
+
+        if fdef == ("sort", "bodo.hiframes.series_impl"):
+            lhs = assign.target
+            data = rhs.args[0]
+            index_arr = rhs.args[1]
+            ascending = find_const(self.func_ir, rhs.args[2])
+            inplace = find_const(self.func_ir, rhs.args[3])
+
+            nodes = []
+
+            out_data = ir.Var(lhs.scope, mk_unique_var(data.name + "_data"), lhs.loc)
+            self.typemap[out_data.name] = self.typemap[data.name]
+            out_index = ir.Var(
+                lhs.scope, mk_unique_var(index_arr.name + "_index"), lhs.loc
+            )
+            self.typemap[out_index.name] = self.typemap[index_arr.name]
+
+            in_df = {"inds": index_arr}
+            out_df = {"inds": out_index}
+            in_keys = [data]
+            out_keys = [out_data]
+
+            # Sort node
+            nodes.append(
+                bodo.ir.sort.Sort(
+                    data.name,
+                    lhs.name,
+                    in_keys,
+                    out_keys,
+                    in_df,
+                    out_df,
+                    inplace,
+                    lhs.loc,
+                    ascending,
+                )
+            )
+
+            return nodes + compile_func_single_block(
+                lambda A, B: (A, B), (out_data, out_index), lhs, self
+            )
+
         if func_mod == "bodo.hiframes.api":
             return self._run_call_hiframes(assign, assign.target, rhs, func_name)
 
@@ -1378,83 +1457,6 @@ class SeriesPass(object):
             ):
                 assign.value = var_def.args[2]
                 return [assign]
-
-        if func_name == "argsort":
-            data = rhs.args[0]
-            nodes = []
-
-            def _get_indices(S):  # pragma: no cover
-                n = len(S)
-                return np.arange(n)
-
-            nodes += compile_func_single_block(_get_indices, (data,), None, self)
-            index_var = nodes[-1].target
-
-            # dummy output data arrays for results
-            out_data = ir.Var(lhs.scope, mk_unique_var(data.name + "_data"), lhs.loc)
-            self.typemap[out_data.name] = self.typemap[data.name]
-
-            in_df = {"inds": index_var}
-            out_df = {"inds": lhs}
-            in_keys = [data]
-            out_keys = [out_data]
-            ascending = True
-
-            # Sort node
-            nodes.append(
-                bodo.ir.sort.Sort(
-                    data.name,
-                    lhs.name,
-                    in_keys,
-                    out_keys,
-                    in_df,
-                    out_df,
-                    False,
-                    lhs.loc,
-                    ascending,
-                )
-            )
-
-            return nodes
-
-        if func_name == "sort":
-            data = rhs.args[0]
-            index_arr = rhs.args[1]
-            ascending = find_const(self.func_ir, rhs.args[2])
-            inplace = find_const(self.func_ir, rhs.args[3])
-
-            nodes = []
-
-            out_data = ir.Var(lhs.scope, mk_unique_var(data.name + "_data"), lhs.loc)
-            self.typemap[out_data.name] = self.typemap[data.name]
-            out_index = ir.Var(
-                lhs.scope, mk_unique_var(index_arr.name + "_index"), lhs.loc
-            )
-            self.typemap[out_index.name] = self.typemap[index_arr.name]
-
-            in_df = {"inds": index_arr}
-            out_df = {"inds": out_index}
-            in_keys = [data]
-            out_keys = [out_data]
-
-            # Sort node
-            nodes.append(
-                bodo.ir.sort.Sort(
-                    data.name,
-                    lhs.name,
-                    in_keys,
-                    out_keys,
-                    in_df,
-                    out_df,
-                    inplace,
-                    lhs.loc,
-                    ascending,
-                )
-            )
-
-            return nodes + compile_func_single_block(
-                lambda A, B: (A, B), (out_data, out_index), lhs, self
-            )
 
         if func_name == "get_series_data_tup":
             arg = rhs.args[0]
