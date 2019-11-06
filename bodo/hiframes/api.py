@@ -51,12 +51,6 @@ from bodo.utils.utils import unliteral_all
 import llvmlite.llvmpy.core as lc
 
 
-# the same as fix_df_array but can be parallel
-@numba.generated_jit(nopython=True)
-def parallel_fix_df_array(c):  # pragma: no cover
-    return lambda c: bodo.utils.conversion.coerce_to_array(c)
-
-
 def fix_rolling_array(c):  # pragma: no cover
     return c
 

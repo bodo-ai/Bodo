@@ -1229,7 +1229,7 @@ class SeriesPass(object):
                         flat_list.append(s)
 
                 return bodo.hiframes.api.init_series(
-                    bodo.hiframes.api.parallel_fix_df_array(flat_list)
+                    bodo.utils.typing.parallel_convert_to_array(flat_list)
                 )
 
             # TODO: index and name?

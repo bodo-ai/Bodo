@@ -207,6 +207,14 @@ class FlattenTyp(AbstractTemplate):
         return signature(SeriesType(dtype), *bodo.utils.utils.unliteral_all(args))
 
 
+@numba.generated_jit(nopython=True)
+def parallel_convert_to_array(c):  # pragma: no cover
+    """converts flattened list to array. Acts as a sentinel function to enable
+    parallelization
+    """
+    return lambda c: bodo.utils.conversion.coerce_to_array(c)
+
+
 # Type used to add constant values to constant lists to enable typing
 class ConstList(types.List):
     def __init__(self, dtype, consts):
