@@ -615,7 +615,7 @@ class DataFramePass(object):
                 impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
-        if fdef == ("join_dummy", "bodo.hiframes.api"):
+        if fdef == ("join_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_join(assign, lhs, rhs)
 
         if isinstance(func_mod, ir.Var) and isinstance(

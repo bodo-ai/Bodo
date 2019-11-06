@@ -1064,7 +1064,7 @@ def merge_overload(
     func_text += (
         "    suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):\n"
     )
-    func_text += "  return bodo.hiframes.api.join_dummy(left, right, {}, {}, '{}')\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, '{}')\n".format(
         left_keys, right_keys, how
     )
 
@@ -1084,7 +1084,7 @@ def merge_overload(
     #             right_on=None, left_index=False, right_index=False, sort=False,
     #             suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):
 
-    #         return bodo.hiframes.api.join_dummy(
+    #         return bodo.hiframes.pd_dataframe_ext.join_dummy(
     #             left, right, comm_cols, comm_cols, how)
 
     #     return _impl
@@ -1098,7 +1098,7 @@ def merge_overload(
     #     # if left_on is None and right_on is None and left_index == False and right_index == False:
     #     #     left_on = right_on = comm_cols
 
-    #     return bodo.hiframes.api.join_dummy(
+    #     return bodo.hiframes.pd_dataframe_ext.join_dummy(
     #         left, right, left_on, right_on, how)
 
     # return _impl
@@ -1332,7 +1332,7 @@ def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, other, on=None, how='left',\n"
     func_text += "    lsuffix='', rsuffix='', sort=False):\n"
-    func_text += "  return bodo.hiframes.api.join_dummy(left, other, {}, {}, '{}')\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}')\n".format(
         left_keys, right_keys, how
     )
 
@@ -1341,6 +1341,64 @@ def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort
     # print(func_text)
     _impl = loc_vars["_impl"]
     return _impl
+
+
+# a dummy join function that will be replace in dataframe_pass
+def join_dummy(left_df, right_df, left_on, right_on, how):
+    return left_df
+
+
+@infer_global(join_dummy)
+class JoinTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        from bodo.hiframes.pd_dataframe_ext import DataFrameType
+        from bodo.utils.typing import is_overload_str
+
+        assert not kws
+        left_df, right_df, left_on, right_on, how = args
+
+        # columns with common name that are not common keys will get a suffix
+        comm_keys = set(left_on.consts) & set(right_on.consts)
+        comm_data = set(left_df.columns) & set(right_df.columns)
+        add_suffix = comm_data - comm_keys
+
+        columns = [(c + "_x" if c in add_suffix else c) for c in left_df.columns]
+        # common keys are added only once so avoid adding them
+        columns += [
+            (c + "_y" if c in add_suffix else c)
+            for c in right_df.columns
+            if c not in comm_keys
+        ]
+        data = list(left_df.data)
+        data += [
+            right_df.data[right_df.columns.index(c)]
+            for c in right_df.columns
+            if c not in comm_keys
+        ]
+
+        # TODO: unify left/right indices if necessary (e.g. RangeIndex/Int64)
+        index_typ = types.none
+        left_index = "$_bodo_index_" in left_on.consts
+        right_index = "$_bodo_index_" in right_on.consts
+        if left_index and right_index and not is_overload_str(how, "asof"):
+            index_typ = left_df.index
+            if isinstance(index_typ, bodo.hiframes.pd_index_ext.RangeIndexType):
+                index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
+        elif right_index and is_overload_str(how, "left"):
+            index_typ = left_df.index
+        elif left_index and is_overload_str(how, "right"):
+            index_typ = right_df.index
+
+        out_df = DataFrameType(tuple(data), index_typ, tuple(columns))
+        return signature(out_df, *args)
+
+
+# dummy lowering to avoid overload errors, remove after overload inline PR
+# is merged
+@lower_builtin(join_dummy, types.VarArg(types.Any))
+def lower_join_dummy(context, builder, sig, args):
+    dataframe = cgutils.create_struct_proxy(sig.return_type)(context, builder)
+    return dataframe._getvalue()
 
 
 @overload(pd.merge_asof)
@@ -1404,7 +1462,7 @@ def merge_asof_overload(
     func_text += "    left_index=False, right_index=False, by=None, left_by=None,\n"
     func_text += "    right_by=None, suffixes=('_x', '_y'), tolerance=None,\n"
     func_text += "    allow_exact_matches=True, direction='backward'):\n"
-    func_text += "  return bodo.hiframes.api.join_dummy(left, right, {}, {}, 'asof')\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, 'asof')\n".format(
         left_keys, right_keys
     )
 
@@ -1421,7 +1479,7 @@ def merge_asof_overload(
     #     if on is not None:
     #         left_on = right_on = on
 
-    #     return bodo.hiframes.api.join_dummy(
+    #     return bodo.hiframes.pd_dataframe_ext.join_dummy(
     #         left, right, left_on, right_on, 'asof')
 
     # return _impl
