@@ -58,6 +58,9 @@ If you try to run this example on docker, there is a sample of data  inside clai
 
 `edited SQL code for OmniSci <https://github.com/Bodo-inc/claims_poc/blob/master/tests/omnisci/get_csv.sql>`_
 
+- Don't try to run this query with OmniSci as it requires data that was not in the repo
+- But do look at it for inspirations
+
 `test Python code correctness <https://github.com/Bodo-inc/claims_poc/blob/master/tests/test_python.py>`_
 
 test1.py through test9.py are used to `test Bodo code correctness <https://github.com/Bodo-inc/claims_poc/tree/master/tests>`_
