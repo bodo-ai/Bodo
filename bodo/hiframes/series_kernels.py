@@ -24,7 +24,7 @@ def _column_filter_impl(B, ind):  # pragma: no cover
             A[i] = B[i]
         else:
             bodo.ir.join.setitem_arr_nan(A, i)
-    return bodo.hiframes.api.init_series(A)
+    return bodo.hiframes.pd_series_ext.init_series(A)
 
 
 def _column_count_impl(A):  # pragma: no cover
@@ -62,12 +62,12 @@ def _series_fillna_str_alloc_impl(B, fill, index, name):  # pragma: no cover
         if bodo.libs.array_kernels.isna(B, i):
             s = fill
         A[i] = s
-    return bodo.hiframes.api.init_series(A, index, name)
+    return bodo.hiframes.pd_series_ext.init_series(A, index, name)
 
 
 def _series_dropna_float_impl(S, name):  # pragma: no cover
     old_len = len(S)
-    new_len = old_len - bodo.hiframes.api.init_series(S).isna().sum()
+    new_len = old_len - bodo.hiframes.pd_series_ext.init_series(S).isna().sum()
     A = np.empty(new_len, S.dtype)
     curr_ind = 0
     for i in numba.parfor.internal_prange(old_len):
@@ -76,7 +76,7 @@ def _series_dropna_float_impl(S, name):  # pragma: no cover
             A[curr_ind] = val
             curr_ind += 1
 
-    return bodo.hiframes.api.init_series(A, None, name)
+    return bodo.hiframes.pd_series_ext.init_series(A, None, name)
 
 
 # using njit since 1D_var is broken for alloc when there is calculation of len
@@ -100,7 +100,7 @@ def _series_dropna_str_alloc_impl_inner(B):  # pragma: no cover
 
 def _series_dropna_str_alloc_impl(B, name):  # pragma: no cover
     A = bodo.hiframes.series_kernels._series_dropna_str_alloc_impl_inner(B)
-    return bodo.hiframes.api.init_series(A, None, name)
+    return bodo.hiframes.pd_series_ext.init_series(A, None, name)
 
 
 # return the nan value for the type (handle dt64)
@@ -299,7 +299,7 @@ def _column_var_impl(A):  # pragma: no cover
 
 
 def _column_std_impl(A):  # pragma: no cover
-    var = bodo.hiframes.api.init_series(A).var()
+    var = bodo.hiframes.pd_series_ext.init_series(A).var()
     return var ** 0.5
 
 
@@ -363,7 +363,7 @@ def _column_sub_impl_datetime_series_timestamp(in_arr, ts):  # pragma: no cover
         S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
             bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i]) - tsint
         )
-    return bodo.hiframes.api.init_series(S)
+    return bodo.hiframes.pd_series_ext.init_series(S)
 
 
 def _column_fillna_alloc_impl(B, fill, index, name):  # pragma: no cover
@@ -374,7 +374,7 @@ def _column_fillna_alloc_impl(B, fill, index, name):  # pragma: no cover
         if bodo.libs.array_kernels.isna(B, i):
             s = fill
         A[i] = s
-    return bodo.hiframes.api.init_series(A, index, name)
+    return bodo.hiframes.pd_series_ext.init_series(A, index, name)
 
 
 @numba.njit

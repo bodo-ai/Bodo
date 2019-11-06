@@ -357,7 +357,7 @@ def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
 
     func_text = "def impl(df, axis=0, level=None, numeric_only=False):\n"
     func_text += "  data = np.array([{}])\n".format(data_args)
-    func_text += "  return bodo.hiframes.api.init_series(data, {})\n".format(index)
+    func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, {})\n".format(index)
     # print(func_text)
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
@@ -374,7 +374,7 @@ def overload_dataframe_nunique(df, axis=0, dropna=True):
 
     func_text = "def impl(df, axis=0, dropna=True):\n"
     func_text += "  data = np.asarray(({},))\n".format(data_args)
-    func_text += "  return bodo.hiframes.api.init_series(data, {})\n".format(index)
+    func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, {})\n".format(index)
     # print(func_text)
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
@@ -526,7 +526,7 @@ def _gen_reduce_impl(df, func_name, args=None):
         )
     else:
         func_text += "  data = np.asarray(({},){})\n".format(data_args, typ_cast)
-    func_text += "  return bodo.hiframes.api.init_series(data, {})\n".format(index)
+    func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, {})\n".format(index)
     # print(func_text)
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
@@ -642,7 +642,7 @@ def overload_dataframe_duplicated(df, subset=None, keep="first"):
         ", ".join("data_{}".format(i) for i in range(n_cols)), index
     )
     func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
-    func_text += "  return bodo.hiframes.api.init_series(duplicated, index)\n"
+    func_text += "  return bodo.hiframes.pd_series_ext.init_series(duplicated, index)\n"
     # print(func_text)
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)

@@ -80,7 +80,6 @@ def remove_hiframes(rhs, lives, call_list):
             "mean",
             "quantile",
             "var",
-            "init_series",
             "get_series_data",
             "get_series_index",
             "get_series_name",
@@ -129,6 +128,8 @@ def remove_hiframes(rhs, lives, call_list):
     ):
         return True
     if call_list == ["dist_return", "distributed_api", bodo]:
+        return True
+    if call_list == ["init_series", "pd_series_ext", "hiframes", bodo]:
         return True
     if call_list == ["init_dataframe", "pd_dataframe_ext", "hiframes", bodo]:
         return True

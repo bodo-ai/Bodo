@@ -116,7 +116,7 @@ def overload_str_method_len(S_str):
                 out_arr[i] = len(arr[i])
                 bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 1)
 
-        return bodo.hiframes.api.init_series(
+        return bodo.hiframes.pd_series_ext.init_series(
             bodo.libs.int_arr_ext.init_integer_array(out_arr, bitmap), index, name
         )
 
@@ -138,7 +138,7 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
             index = bodo.hiframes.api.get_series_index(S)
             name = bodo.hiframes.api.get_series_name(S)
             out_arr = bodo.hiframes.split_impl.compute_split_view(arr, pat)
-            return bodo.hiframes.api.init_series(out_arr, index, name)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
         return _str_split_view_impl
 
@@ -191,7 +191,7 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
 
         index_offsets[l] = curr_s_offset
         data_offsets[curr_s_offset] = curr_d_offset
-        return bodo.hiframes.api.init_series(out_arr, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return _str_split_impl
 
@@ -227,7 +227,7 @@ def overload_str_method_get(S_str, i):
                 data_start, length = get_split_view_index(arr, j, i)
                 ptr = get_split_view_data_ptr(arr, data_start)
                 bodo.libs.str_arr_ext.setitem_str_arr_ptr(out_arr, j, ptr, length)
-            return bodo.hiframes.api.init_series(out_arr, index, name)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
         return _str_get_split_impl
 
@@ -251,7 +251,7 @@ def overload_str_method_get(S_str, i):
         for j in numba.parfor.internal_prange(n):
             _str = str_list[j]
             out_arr[j] = _str
-        return bodo.hiframes.api.init_series(out_arr, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return _str_get_impl
 
@@ -289,7 +289,7 @@ def overload_str_method_replace(pat, repl, n=-1, case=None, flags=0, regex=True)
                     continue
                 _str = str_list[j]
                 out_arr[j] = _str
-            return bodo.hiframes.api.init_series(out_arr, index, name)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
         return _str_replace_regex_impl
 
@@ -322,7 +322,7 @@ def overload_str_method_replace(pat, repl, n=-1, case=None, flags=0, regex=True)
                 continue
             _str = str_list[j]
             out_arr[j] = _str
-        return bodo.hiframes.api.init_series(out_arr, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return _str_replace_noregex_impl
 
@@ -352,7 +352,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
                 else:
                     out_arr[i] = bodo.libs.str_ext.contains_regex(e, arr[i])
                     bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
-            return bodo.hiframes.api.init_series(
+            return bodo.hiframes.pd_series_ext.init_series(
                 bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls), index, name
             )
 
@@ -379,7 +379,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
             else:
                 out_arr[i] = pat in arr[i]
                 bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
-        return bodo.hiframes.api.init_series(
+        return bodo.hiframes.pd_series_ext.init_series(
             bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls), index, name
         )
 
@@ -406,7 +406,7 @@ def overload_str_method_count(S_str, pat, flags=0):
             else:
                 out_arr[i] = str_findall_count(e, str_arr[i])
                 bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 1)
-        return bodo.hiframes.api.init_series(
+        return bodo.hiframes.pd_series_ext.init_series(
             bodo.libs.int_arr_ext.init_integer_array(out_arr, bitmap), index, name
         )
 
@@ -432,7 +432,7 @@ def overload_str_method_find(S_str, sub):
             else:
                 out_arr[i] = str_arr[i].find(sub)
                 bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 1)
-        return bodo.hiframes.api.init_series(
+        return bodo.hiframes.pd_series_ext.init_series(
             bodo.libs.int_arr_ext.init_integer_array(out_arr, bitmap), index, name
         )
 
@@ -457,7 +457,7 @@ def overload_str_method_rfind(S_str, sub, start=0, end=None):
             else:
                 out_arr[i] = str_arr[i].rfind(sub, start, end)
                 bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 1)
-        return bodo.hiframes.api.init_series(
+        return bodo.hiframes.pd_series_ext.init_series(
             bodo.libs.int_arr_ext.init_integer_array(out_arr, bitmap), index, name
         )
 
@@ -489,7 +489,7 @@ def overload_str_method_center(S_str, width, fillchar=" "):
                 bodo.ir.join.setitem_arr_nan(out_arr, j)
             else:
                 out_arr[j] = str_arr[j].center(width, fillchar)
-        return bodo.hiframes.api.init_series(out_arr, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -519,7 +519,7 @@ def overload_str_method_ljust(S_str, width, fillchar=" "):
                 bodo.ir.join.setitem_arr_nan(out_arr, j)
             else:
                 out_arr[j] = str_arr[j].ljust(width, fillchar)
-        return bodo.hiframes.api.init_series(out_arr, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -549,7 +549,7 @@ def overload_str_method_rjust(S_str, width, fillchar=" "):
                 bodo.ir.join.setitem_arr_nan(out_arr, j)
             else:
                 out_arr[j] = str_arr[j].rjust(width, fillchar)
-        return bodo.hiframes.api.init_series(out_arr, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -593,7 +593,7 @@ def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
                     out_arr[j] = str_arr[j].ljust(width, fillchar)
                 elif side == "both":
                     out_arr[j] = str_arr[j].center(width, fillchar)
-        return bodo.hiframes.api.init_series(out_arr, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -621,7 +621,7 @@ def overload_str_method_zfill(S_str, width):
                 bodo.ir.join.setitem_arr_nan(out_arr, j)
             else:
                 out_arr[j] = str_arr[j].zfill(width)
-        return bodo.hiframes.api.init_series(out_arr, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -649,7 +649,7 @@ def overload_str_method_slice(S_str, start=None, stop=None, step=None):
                 bodo.ir.join.setitem_arr_nan(out_arr, j)
             else:
                 out_arr[j] = str_arr[j][start:stop:step]
-        return bodo.hiframes.api.init_series(out_arr, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -672,7 +672,7 @@ def overload_str_method_startswith(S_str, pat, na=np.nan):
             else:
                 out_arr[i] = str_arr[i].startswith(pat)
                 bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
-        return bodo.hiframes.api.init_series(
+        return bodo.hiframes.pd_series_ext.init_series(
             bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls), index, name
         )
 
@@ -697,7 +697,7 @@ def overload_str_method_endswith(S_str, pat, na=np.nan):
             else:
                 out_arr[i] = str_arr[i].endswith(pat)
                 bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
-        return bodo.hiframes.api.init_series(
+        return bodo.hiframes.pd_series_ext.init_series(
             bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls), index, name
         )
 
@@ -735,7 +735,7 @@ def create_str2str_methods_overload(func_name):
         func_text += "            bodo.ir.join.setitem_arr_nan(out_arr, j)\n"
         func_text += "        else:\n"
         func_text += "            out_arr[j] = str_arr[j].{}()\n".format(func_name)
-        func_text += "    return bodo.hiframes.api.init_series(out_arr, index, name)\n"
+        func_text += "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
         loc_vars = {}
         # print(func_text)
         exec(
@@ -772,7 +772,7 @@ def create_str2bool_methods_overload(func_name):
         func_text += "        else:\n"
         func_text += "            out_arr[i] = str_arr[i].{}()\n".format(func_name)
         func_text += "            set_bit_to_arr(nulls, i, 1)\n"
-        func_text += "    return bodo.hiframes.api.init_series(\n"
+        func_text += "    return bodo.hiframes.pd_series_ext.init_series(\n"
         func_text += "      init_bool_array(out_arr, nulls),index, name)\n"
         loc_vars = {}
         # print(func_text)

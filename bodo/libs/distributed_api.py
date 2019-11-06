@@ -561,7 +561,7 @@ def gatherv(data, allgather=False):
             out_arr = bodo.libs.distributed_api.gatherv(arr, allgather)
             out_index = bodo.gatherv(index, allgather)
             # create output Series
-            return bodo.hiframes.api.init_series(out_arr, out_index, name)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
 
         return impl
 

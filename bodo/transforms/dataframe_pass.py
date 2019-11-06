@@ -283,7 +283,7 @@ class DataFramePass(object):
             self.typemap[name_var.name] = types.StringLiteral(name_str)
             nodes.append(ir.Assign(ir.Const(name_str, lhs.loc), name_var, lhs.loc))
             return nodes + compile_func_single_block(
-                lambda A, df_index, name: bodo.hiframes.api.init_series(
+                lambda A, df_index, name: bodo.hiframes.pd_series_ext.init_series(
                     A, df_index, name
                 ),
                 (arr, df_index, name_var),
@@ -356,12 +356,12 @@ class DataFramePass(object):
             df_index_var = self._get_dataframe_index(df_var, nodes)
 
             if guard(is_whole_slice, self.typemap, self.func_ir, col_filter_var):
-                func = lambda A, ind, df_index, name: bodo.hiframes.api.init_series(
+                func = lambda A, ind, df_index, name: bodo.hiframes.pd_series_ext.init_series(
                     A, df_index, name
                 )
             else:
                 # TODO: test this case
-                func = lambda A, ind, df_index, name: bodo.hiframes.api.init_series(
+                func = lambda A, ind, df_index, name: bodo.hiframes.pd_series_ext.init_series(
                     A[ind], None, name
                 )
 
@@ -499,7 +499,7 @@ class DataFramePass(object):
             self.typemap[name.name] = types.StringLiteral(col_name)
             nodes.append(ir.Assign(ir.Const(col_name, arr.loc), name, arr.loc))
             return self._replace_func(
-                lambda arr, index, name: bodo.hiframes.api.init_series(
+                lambda arr, index, name: bodo.hiframes.pd_series_ext.init_series(
                     arr, index, name
                 ),
                 [arr, index, name],
@@ -985,14 +985,14 @@ class DataFramePass(object):
         func_text = "def f({}, df_index):\n".format(col_name_args)
         # make series to enable getitem of dt64 to timestamp for example
         for i in range(len(used_cols)):
-            func_text += "  c{} = bodo.hiframes.api.init_series(c{})\n".format(i, i)
+            func_text += "  c{} = bodo.hiframes.pd_series_ext.init_series(c{})\n".format(i, i)
         func_text += "  numba.parfor.init_prange()\n"
         func_text += "  n = len(c0)\n"
         func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ)\n"
         func_text += "  for i in numba.parfor.internal_prange(n):\n"
         func_text += "     row = Row({})\n".format(row_args)
         func_text += "     S[i] = map_func(row)\n"
-        func_text += "  return bodo.hiframes.api.init_series(S, df_index, None)\n"
+        func_text += "  return bodo.hiframes.pd_series_ext.init_series(S, df_index, None)\n"
 
         loc_vars = {}
         exec(func_text, {}, loc_vars)
@@ -1180,7 +1180,7 @@ class DataFramePass(object):
 
         func_text = "def _mean_impl({}):\n".format(", ".join(data_args))
         for d in data_args:
-            func_text += "  {} = bodo.hiframes.api.init_series({})\n".format(
+            func_text += "  {} = bodo.hiframes.pd_series_ext.init_series({})\n".format(
                 d + "_S", d
             )
             func_text += "  {} = {}.{}()\n".format(d + "_O", d + "_S", func_name)
@@ -1190,7 +1190,7 @@ class DataFramePass(object):
         func_text += "  index = bodo.libs.str_arr_ext.StringArray(({},))\n".format(
             ", ".join("'{}'".format(c) for c in df_typ.columns)
         )
-        func_text += "  return bodo.hiframes.api.init_series(data, index)\n"
+        func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, index)\n"
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _mean_impl = loc_vars["_mean_impl"]
@@ -1219,7 +1219,7 @@ class DataFramePass(object):
             ", ".join(data_args)
         )
         for d in data_args:
-            func_text += "  {} = bodo.hiframes.api.init_series({})\n".format(
+            func_text += "  {} = bodo.hiframes.pd_series_ext.init_series({})\n".format(
                 d + "_S", d
             )
             if not inplace:
@@ -1698,7 +1698,7 @@ class DataFramePass(object):
             self.typemap[name_var.name] = types.StringLiteral(name_str)
             nodes.append(ir.Assign(ir.Const(name_str, lhs.loc), name_var, lhs.loc))
             return self._replace_func(
-                lambda A, I, name: bodo.hiframes.api.init_series(A, I, name),
+                lambda A, I, name: bodo.hiframes.pd_series_ext.init_series(A, I, name),
                 list(df_col_map.values()) + [index_var, name_var],
                 pre_nodes=nodes,
             )
@@ -1917,7 +1917,7 @@ class DataFramePass(object):
                 and rolling_typ.as_index
             )
             return self._replace_func(
-                lambda A, I: bodo.hiframes.api.init_series(A, I, _name),
+                lambda A, I: bodo.hiframes.pd_series_ext.init_series(A, I, _name),
                 list(df_col_map.values()) + [out_index_var],
                 pre_nodes=nodes,
                 extra_globals={"_name": list(df_col_map.keys())[0]},

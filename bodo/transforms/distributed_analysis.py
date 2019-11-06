@@ -730,7 +730,7 @@ class DistributedAnalysis(object):
                 array_dists[lhs] = Distribution.OneD
             return
 
-        if fdef == ("init_series", "bodo.hiframes.api"):
+        if fdef == ("init_series", "bodo.hiframes.pd_series_ext"):
             # lhs, in_arr, and index should have the same distribution
             new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             if len(rhs.args) > 1 and self.typemap[rhs.args[1].name] != types.none:

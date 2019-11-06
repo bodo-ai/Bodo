@@ -343,7 +343,7 @@ def unbox_series(typ, val, c):
     name_obj = c.pyapi.object_getattr_string(val, "name")
     name_val = c.pyapi.to_native_value(typ.name_typ, name_obj).value
 
-    series_val = bodo.hiframes.api.construct_series(
+    series_val = bodo.hiframes.pd_series_ext.construct_series(
         c.context, c.builder, typ, data_val, index_val, name_val
     )
     # TODO: set parent pointer

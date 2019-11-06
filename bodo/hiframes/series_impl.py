@@ -113,7 +113,7 @@ def overload_series_copy(S, deep=True):
             arr = bodo.hiframes.api.get_series_data(S)
             index = bodo.hiframes.api.get_series_index(S)
             name = bodo.hiframes.api.get_series_name(S)
-            return bodo.hiframes.api.init_series(arr.copy(), index, name)
+            return bodo.hiframes.pd_series_ext.init_series(arr.copy(), index, name)
 
         return impl1
 
@@ -123,7 +123,7 @@ def overload_series_copy(S, deep=True):
             arr = bodo.hiframes.api.get_series_data(S)
             index = bodo.hiframes.api.get_series_index(S)
             name = bodo.hiframes.api.get_series_name(S)
-            return bodo.hiframes.api.init_series(arr, index, name)
+            return bodo.hiframes.pd_series_ext.init_series(arr, index, name)
 
         return impl2
 
@@ -133,7 +133,7 @@ def overload_series_copy(S, deep=True):
             arr = arr.copy()
         index = bodo.hiframes.api.get_series_index(S)
         name = bodo.hiframes.api.get_series_name(S)
-        return bodo.hiframes.api.init_series(arr, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(arr, index, name)
 
     return impl
 
@@ -175,7 +175,7 @@ def overload_series_isna(S):
         for i in numba.parfor.internal_prange(n):
             out_arr[i] = bodo.libs.array_kernels.isna(arr, i)
 
-        return bodo.hiframes.api.init_series(out_arr, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -283,7 +283,7 @@ def overload_series_cumsum(S):
         A = bodo.hiframes.api.get_series_data(S)
         index = bodo.hiframes.api.get_series_index(S)
         name = bodo.hiframes.api.get_series_name(S)
-        return bodo.hiframes.api.init_series(A.cumsum(), index, name)
+        return bodo.hiframes.pd_series_ext.init_series(A.cumsum(), index, name)
 
     return impl
 
@@ -295,7 +295,7 @@ def overload_series_cumprod(S):
         A = bodo.hiframes.api.get_series_data(S)
         index = bodo.hiframes.api.get_series_index(S)
         name = bodo.hiframes.api.get_series_name(S)
-        return bodo.hiframes.api.init_series(A.cumprod(), index, name)
+        return bodo.hiframes.pd_series_ext.init_series(A.cumprod(), index, name)
 
     return impl
 
@@ -309,7 +309,7 @@ def overload_series_rename(S, index=None):
     def impl(S, index=None):  # pragma: no cover
         A = bodo.hiframes.api.get_series_data(S)
         s_index = bodo.hiframes.api.get_series_index(S)
-        return bodo.hiframes.api.init_series(A, s_index, index)
+        return bodo.hiframes.pd_series_ext.init_series(A, s_index, index)
 
     return impl
 
@@ -321,7 +321,7 @@ def overload_series_abs(S):
         A = bodo.hiframes.api.get_series_data(S)
         index = bodo.hiframes.api.get_series_index(S)
         name = bodo.hiframes.api.get_series_name(S)
-        return bodo.hiframes.api.init_series(np.abs(A), index, name)
+        return bodo.hiframes.pd_series_ext.init_series(np.abs(A), index, name)
 
     return impl
 
@@ -527,7 +527,7 @@ def overload_series_head(S, n=5):
         index = bodo.hiframes.api.get_series_index(S)
         index_t = bodo.utils.conversion.fix_none_index(index, len(arr))
         name = bodo.hiframes.api.get_series_name(S)
-        return bodo.hiframes.api.init_series(arr[:n], index_t[:n], name)
+        return bodo.hiframes.pd_series_ext.init_series(arr[:n], index_t[:n], name)
 
     return impl
 
@@ -539,7 +539,7 @@ def overload_series_tail(S, n=5):
         index = bodo.hiframes.api.get_series_index(S)
         index_t = bodo.utils.conversion.fix_none_index(index, len(arr))
         name = bodo.hiframes.api.get_series_name(S)
-        return bodo.hiframes.api.init_series(arr[-n:], index_t[-n:], name)
+        return bodo.hiframes.pd_series_ext.init_series(arr[-n:], index_t[-n:], name)
 
     return impl
 
@@ -559,7 +559,7 @@ def overload_series_nlargest(S, n=5, keep="first"):
             arr, index_arr, n, True, bodo.hiframes.series_kernels.gt_f
         )
         out_index = bodo.utils.conversion.convert_to_index(out_ind_arr)
-        return bodo.hiframes.api.init_series(out_arr, out_index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
 
     return impl
 
@@ -577,7 +577,7 @@ def overload_series_nsmallest(S, n=5, keep="first"):
             arr, index_arr, n, False, bodo.hiframes.series_kernels.lt_f
         )
         out_index = bodo.utils.conversion.convert_to_index(out_ind_arr)
-        return bodo.hiframes.api.init_series(out_arr, out_index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
 
     return impl
 
@@ -617,7 +617,7 @@ def overload_series_astype(S, dtype, copy=True, errors="raise"):
                     s = arr[j]
                     A[j] = str(s)
 
-            return bodo.hiframes.api.init_series(A, index, name)
+            return bodo.hiframes.pd_series_ext.init_series(A, index, name)
 
         return impl_str
 
@@ -627,7 +627,7 @@ def overload_series_astype(S, dtype, copy=True, errors="raise"):
         index = bodo.hiframes.api.get_series_index(S)
         name = bodo.hiframes.api.get_series_name(S)
         out_arr = bodo.utils.conversion.fix_arr_dtype(arr, dtype, copy)
-        return bodo.hiframes.api.init_series(out_arr, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -641,7 +641,7 @@ def overload_series_take(S, indices, axis=0, convert=None, is_copy=True):
         index = bodo.hiframes.api.get_series_index(S)
         index_t = bodo.utils.conversion.fix_none_index(index, len(arr))
         name = bodo.hiframes.api.get_series_name(S)
-        return bodo.hiframes.api.init_series(arr[indices_t], index_t[indices_t], name)
+        return bodo.hiframes.pd_series_ext.init_series(arr[indices_t], index_t[indices_t], name)
 
     return impl
 
@@ -661,7 +661,7 @@ def overload_series_argsort(S, axis=0, kind="quicksort", order=None):
             out_arr[mask] = argsort(arr[mask])
         else:
             out_arr = argsort(arr)
-        return bodo.hiframes.api.init_series(out_arr, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -684,7 +684,7 @@ def overload_series_sort_values(
         )
 
         out_index = bodo.utils.conversion.convert_to_index(out_ind_arr)
-        return bodo.hiframes.api.init_series(out_arr, out_index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
 
     return impl
 
@@ -703,7 +703,7 @@ def overload_series_append(S, to_append, ignore_index=False, verify_integrity=Fa
                 other_arrs = bodo.hiframes.pd_series_ext.get_series_data_tup(tup_other)
                 all_arrs = bodo.utils.typing.to_const_tuple((arr,) + other_arrs)
                 out_arr = bodo.libs.array_kernels.concat(all_arrs)
-                return bodo.hiframes.api.init_series(out_arr)
+                return bodo.hiframes.pd_series_ext.init_series(out_arr)
 
             return impl_multi_noindex
 
@@ -713,7 +713,7 @@ def overload_series_append(S, to_append, ignore_index=False, verify_integrity=Fa
             arr = bodo.hiframes.api.get_series_data(S)
             other = bodo.hiframes.api.get_series_data(to_append)
             out_arr = bodo.libs.array_kernels.concat((arr, other))
-            return bodo.hiframes.api.init_series(out_arr)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr)
 
         return impl_single_noindex
 
@@ -738,7 +738,7 @@ def overload_series_append(S, to_append, ignore_index=False, verify_integrity=Fa
             all_inds = bodo.utils.typing.to_const_tuple((index_arr,) + other_inds)
             out_arr = bodo.libs.array_kernels.concat(all_arrs)
             out_index = bodo.libs.array_kernels.concat(all_inds)
-            return bodo.hiframes.api.init_series(out_arr, out_index)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index)
 
         return impl
 
@@ -752,7 +752,7 @@ def overload_series_append(S, to_append, ignore_index=False, verify_integrity=Fa
 
         out_arr = bodo.libs.array_kernels.concat((arr, other))
         out_index = bodo.libs.array_kernels.concat((index_arr, other_index))
-        return bodo.hiframes.api.init_series(out_arr, out_index)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index)
 
     return impl_single
 
@@ -800,7 +800,7 @@ def overload_series_describe(S, percentiles=None, include=None, exclude=None):
         q25 = S.quantile(0.25)
         q50 = S.quantile(0.5)
         q75 = S.quantile(0.75)
-        return bodo.hiframes.api.init_series(
+        return bodo.hiframes.pd_series_ext.init_series(
             np.array([a_count, a_mean, a_std, a_min, q25, q50, q75, a_max]),
             bodo.utils.conversion.convert_to_index(
                 ["count", "mean", "std", "min", "25%", "50%", "75%", "max"]
@@ -912,7 +912,7 @@ def overload_series_fillna(
                     if bodo.libs.array_kernels.isna(in_arr, j):
                         s = value
                     out_arr[j] = s
-                return bodo.hiframes.api.init_series(out_arr, index, name)
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return str_fillna_alloc_impl
         else:
@@ -936,7 +936,7 @@ def overload_series_fillna(
                     if bodo.libs.array_kernels.isna(in_arr, i):
                         s = value
                     out_arr[i] = s
-                return bodo.hiframes.api.init_series(out_arr, index, name)
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return fillna_impl
 
@@ -991,7 +991,7 @@ def overload_series_dropna(S, axis=0, inplace=False):
                 out_arr = bodo.hiframes.series_kernels._series_dropna_str_alloc_impl_inner(
                     in_arr
                 )
-                return bodo.hiframes.api.init_series(out_arr, out_index, name)
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
 
             return dropna_str_impl
         else:
@@ -1003,7 +1003,7 @@ def overload_series_dropna(S, axis=0, inplace=False):
                 mask = S.notna().values
                 out_index = bodo.utils.conversion.convert_to_index(index_arr[mask])
                 out_arr = in_arr[mask]
-                return bodo.hiframes.api.init_series(out_arr, out_index, name)
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
 
             return dropna_impl
 
@@ -1016,7 +1016,7 @@ def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
         index = bodo.hiframes.api.get_series_index(S)
         name = bodo.hiframes.api.get_series_name(S)
         out_arr = bodo.hiframes.rolling.shift(arr, periods, False)
-        return bodo.hiframes.api.init_series(out_arr, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -1029,7 +1029,7 @@ def overload_series_pct_change(S, periods=1, fill_method="pad", limit=None, freq
         index = bodo.hiframes.api.get_series_index(S)
         name = bodo.hiframes.api.get_series_name(S)
         out_arr = bodo.hiframes.rolling.pct_change(arr, periods, False)
-        return bodo.hiframes.api.init_series(out_arr, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -1075,7 +1075,7 @@ def create_explicit_binary_op_overload(op):
                     else:
                         out_arr[i] = op(arr[i], other)
 
-                return bodo.hiframes.api.init_series(out_arr, index, name)
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return impl_scalar
 
@@ -1109,7 +1109,7 @@ def create_explicit_binary_op_overload(op):
                 else:
                     out_arr[i] = op(arr[i], other_arr[i])
 
-            return bodo.hiframes.api.init_series(out_arr, index, name)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
         return impl
 
@@ -1157,7 +1157,7 @@ def create_binary_op_overload(op):
                 name = bodo.hiframes.api.get_series_name(S)
                 other_arr = bodo.utils.conversion.get_array_if_series_or_index(other)
                 out_arr = op(arr, other_arr)
-                return bodo.hiframes.api.init_series(out_arr, index, name)
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return impl
 
@@ -1170,7 +1170,7 @@ def create_binary_op_overload(op):
                 name = bodo.hiframes.api.get_series_name(other)
                 other_arr = bodo.utils.conversion.get_array_if_series_or_index(S)
                 out_arr = op(other_arr, arr)
-                return bodo.hiframes.api.init_series(out_arr, index, name)
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return impl2
 
@@ -1227,7 +1227,7 @@ def create_unary_op_overload(op):
                 index = bodo.hiframes.api.get_series_index(S)
                 name = bodo.hiframes.api.get_series_name(S)
                 out_arr = op(arr)
-                return bodo.hiframes.api.init_series(out_arr, index, name)
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return impl
 
@@ -1258,7 +1258,7 @@ def create_ufunc_overload(ufunc):
                     index = bodo.hiframes.api.get_series_index(S)
                     name = bodo.hiframes.api.get_series_name(S)
                     out_arr = ufunc(arr)
-                    return bodo.hiframes.api.init_series(out_arr, index, name)
+                    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
                 return impl
 
@@ -1274,7 +1274,7 @@ def create_ufunc_overload(ufunc):
                     name = bodo.hiframes.api.get_series_name(S1)
                     other_arr = bodo.utils.conversion.get_array_if_series_or_index(S2)
                     out_arr = ufunc(arr, other_arr)
-                    return bodo.hiframes.api.init_series(out_arr, index, name)
+                    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
                 return impl
             elif isinstance(S2, SeriesType):
@@ -1285,7 +1285,7 @@ def create_ufunc_overload(ufunc):
                     index = bodo.hiframes.api.get_series_index(S2)
                     name = bodo.hiframes.api.get_series_name(S2)
                     out_arr = ufunc(arr, other_arr)
-                    return bodo.hiframes.api.init_series(out_arr, index, name)
+                    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
                 return impl
 
@@ -1368,7 +1368,7 @@ def to_numeric_overload(A, dtype):
         for i in numba.parfor.internal_prange(n):
             bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arr, i)
 
-        return bodo.hiframes.api.init_series(B)
+        return bodo.hiframes.pd_series_ext.init_series(B)
 
     return _to_numeric_impl
 

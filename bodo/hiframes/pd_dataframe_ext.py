@@ -745,7 +745,7 @@ def df_len_overload(df):
 def df_getitem_overload(df, ind):
     if isinstance(df, DataFrameType) and isinstance(ind, types.StringLiteral):
         index = df.columns.index(ind.literal_value)
-        return lambda df, ind: bodo.hiframes.api.init_series(
+        return lambda df, ind: bodo.hiframes.pd_series_ext.init_series(
             get_dataframe_data(df, index), _get_dataframe_index(df), df._columns[index]
         )
 

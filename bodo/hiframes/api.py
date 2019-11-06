@@ -164,28 +164,9 @@ from numba.array_analysis import ArrayAnalysis
 ArrayAnalysis._analyze_op_call_bodo_hiframes_api_get_series_data = get_series_data_equiv
 
 
-def init_series_equiv(self, scope, equiv_set, args, kws):
-    assert len(args) >= 1 and not kws
-    # TODO: add shape for index
-    var = args[0]
-    if equiv_set.has_shape(var):
-        return var, []
-    return None
-
-
-ArrayAnalysis._analyze_op_call_bodo_hiframes_api_init_series = init_series_equiv
-
-
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
     assert len(args) >= 1
     numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
-
-
-def alias_ext_init_series(lhs_name, args, alias_map, arg_aliases):
-    assert len(args) >= 1
-    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
-    if len(args) > 1:  # has index
-        numba.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
 
 
 def alias_ext_init_integer_array(lhs_name, args, alias_map, arg_aliases):
@@ -194,9 +175,6 @@ def alias_ext_init_integer_array(lhs_name, args, alias_map, arg_aliases):
     numba.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
 
 
-numba.ir_utils.alias_func_extensions[
-    ("init_series", "bodo.hiframes.api")
-] = alias_ext_init_series
 numba.ir_utils.alias_func_extensions[
     ("get_series_data", "bodo.hiframes.api")
 ] = alias_ext_dummy_func
@@ -226,66 +204,3 @@ numba.ir_utils.alias_func_extensions[
 numba.ir_utils.alias_func_extensions[
     ("get_bool_arr_bitmap", "bodo.libs.bool_arr_ext")
 ] = alias_ext_dummy_func
-
-
-def construct_series(context, builder, series_type, data_val, index_val, name_val):
-    # create payload struct and store values
-    payload_type = SeriesPayloadType(series_type)
-    series_payload = cgutils.create_struct_proxy(payload_type)(context, builder)
-    series_payload.data = data_val
-    series_payload.index = index_val
-    series_payload.name = name_val
-
-    # create meminfo and store payload
-    payload_ll_type = context.get_data_type(payload_type)
-    payload_size = context.get_abi_sizeof(payload_ll_type)
-    meminfo = context.nrt.meminfo_alloc(
-        builder, context.get_constant(types.uintp, payload_size)
-    )
-    meminfo_data_ptr = context.nrt.meminfo_data(builder, meminfo)
-    meminfo_data_ptr = builder.bitcast(meminfo_data_ptr, payload_ll_type.as_pointer())
-    builder.store(series_payload._getvalue(), meminfo_data_ptr)
-
-    # create Series struct
-    series = cgutils.create_struct_proxy(series_type)(context, builder)
-    series.meminfo = meminfo
-    # Set parent to NULL
-    series.parent = cgutils.get_null_value(series.parent.type)
-    return series._getvalue()
-
-
-@intrinsic
-def init_series(typingctx, data, index=None, name=None):
-    """Create a Series with provided data, index and name values.
-    Used as a single constructor for Series and assigning its data, so that
-    optimization passes can look for init_series() to see if underlying
-    data has changed, and get the array variables from init_series() args if
-    not changed.
-    """
-
-    index = types.none if index is None else index
-    name = types.none if name is None else name
-    name = types.unliteral(name)
-
-    def codegen(context, builder, signature, args):
-        data_val, index_val, name_val = args
-        series_type = signature.return_type
-
-        series_val = construct_series(
-            context, builder, series_type, data_val, index_val, name_val
-        )
-
-        # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], data_val)
-            context.nrt.incref(builder, signature.args[1], index_val)
-            context.nrt.incref(builder, signature.args[2], name_val)
-
-        return series_val
-
-    dtype = data.dtype
-    # XXX pd.DataFrame() calls init_series for even Series since it's untyped
-    data = if_series_to_array_type(data)
-    ret_typ = SeriesType(dtype, data, index, name)
-    sig = signature(ret_typ, data, index, name)
-    return sig, codegen

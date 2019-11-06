@@ -504,7 +504,7 @@ class SeriesPass(object):
                 for i in numba.parfor.internal_prange(l):
                     S[i] = func(arr1[i], arr2[i])
                     bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
-                return bodo.hiframes.api.init_series(
+                return bodo.hiframes.pd_series_ext.init_series(
                     bodo.libs.bool_arr_ext.init_bool_array(S, nulls)
                 )
 
@@ -617,7 +617,7 @@ class SeriesPass(object):
         self.typemap[out_data.name] = self.calltypes[rhs].return_type
         nodes.append(ir.Assign(rhs, out_data, rhs.loc))
         return self._replace_func(
-            lambda data: bodo.hiframes.api.init_series(data, None, None),
+            lambda data: bodo.hiframes.pd_series_ext.init_series(data, None, None),
             [out_data],
             pre_nodes=nodes,
         )
@@ -1162,6 +1162,15 @@ class SeriesPass(object):
                 assign.value = var_def.args[1]
                 return [assign]
 
+        # pd.DataFrame() calls init_series for even Series since it's untyped
+        # remove the call since it is invalid for analysis here
+        # XXX remove when df pass is typed? (test_pass_series2)
+        if fdef == ("init_series", "bodo.hiframes.pd_series_ext") and isinstance(
+            self.typemap[rhs.args[0].name], SeriesType
+        ):
+            assign.value = rhs.args[0]
+            return [assign]
+
         if func_mod == "bodo.hiframes.api":
             return self._run_call_hiframes(assign, assign.target, rhs, func_name)
 
@@ -1296,7 +1305,7 @@ class SeriesPass(object):
                     for s in l:
                         flat_list.append(s)
 
-                return bodo.hiframes.api.init_series(
+                return bodo.hiframes.pd_series_ext.init_series(
                     bodo.utils.typing.parallel_convert_to_array(flat_list)
                 )
 
@@ -1350,7 +1359,7 @@ class SeriesPass(object):
             index = self._get_series_index(series_arg, nodes)
             name = self._get_series_name(series_arg, nodes)
             return self._replace_func(
-                lambda A, index, name: bodo.hiframes.api.init_series(A, index, name),
+                lambda A, index, name: bodo.hiframes.pd_series_ext.init_series(A, index, name),
                 (new_lhs, index, name),
                 pre_nodes=nodes,
             )
@@ -1404,7 +1413,7 @@ class SeriesPass(object):
                 index = bodo.hiframes.api.get_series_index(S)
                 name = bodo.hiframes.api.get_series_name(S)
                 out_arr = _ufunc(arr)
-                return bodo.hiframes.api.init_series(out_arr, index, name)
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             # impl.__globals__['_ufunc'] = np_ufunc
             return self._replace_func(impl, args, extra_globals={"_ufunc": np_ufunc})
@@ -1417,7 +1426,7 @@ class SeriesPass(object):
                     name = bodo.hiframes.api.get_series_name(S1)
                     other_arr = bodo.utils.conversion.get_array_if_series_or_index(S2)
                     out_arr = _ufunc(arr, other_arr)
-                    return bodo.hiframes.api.init_series(out_arr, index, name)
+                    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
                 return self._replace_func(
                     impl, args, extra_globals={"_ufunc": np_ufunc}
@@ -1431,7 +1440,7 @@ class SeriesPass(object):
                     index = bodo.hiframes.api.get_series_index(S2)
                     name = bodo.hiframes.api.get_series_name(S2)
                     out_arr = _ufunc(arr, other_arr)
-                    return bodo.hiframes.api.init_series(out_arr, index, name)
+                    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
                 return self._replace_func(
                     impl, args, extra_globals={"_ufunc": np_ufunc}
@@ -1457,21 +1466,12 @@ class SeriesPass(object):
 
     def _run_call_hiframes(self, assign, lhs, rhs, func_name):
 
-        # pd.DataFrame() calls init_series for even Series since it's untyped
-        # remove the call since it is invalid for analysis here
-        # XXX remove when df pass is typed? (test_pass_series2)
-        if func_name == "init_series" and isinstance(
-            self.typemap[rhs.args[0].name], SeriesType
-        ):
-            assign.value = rhs.args[0]
-            return [assign]
-
         if func_name == "get_series_data":
             # TODO: make sure data is not altered using update_series_data()
             # or other functions, using any reference to payload
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def)
-            if call_def == ("init_series", "bodo.hiframes.api"):
+            if call_def == ("init_series", "bodo.hiframes.pd_series_ext"):
                 assign.value = var_def.args[0]
                 return [assign]
 
@@ -1481,7 +1481,7 @@ class SeriesPass(object):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def)
             if (
-                call_def == ("init_series", "bodo.hiframes.api")
+                call_def == ("init_series", "bodo.hiframes.pd_series_ext")
                 and len(var_def.args) > 1
             ):
                 assign.value = var_def.args[1]
@@ -1492,7 +1492,7 @@ class SeriesPass(object):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def)
             if (
-                call_def == ("init_series", "bodo.hiframes.api")
+                call_def == ("init_series", "bodo.hiframes.pd_series_ext")
                 and len(var_def.args) > 2
             ):
                 assign.value = var_def.args[2]
@@ -1610,7 +1610,7 @@ class SeriesPass(object):
             )
             nodes.append(agg_node)
             # TODO: handle args like sort=False
-            func = lambda A, B, name: bodo.hiframes.api.init_series(
+            func = lambda A, B, name: bodo.hiframes.pd_series_ext.init_series(
                 A, bodo.utils.conversion.convert_to_index(B), name
             ).sort_values(ascending=False)
             return self._replace_func(
@@ -1713,7 +1713,7 @@ class SeriesPass(object):
             func = series_replace_funcs["dropna_float"]
         else:
             # integer case, TODO: bool, date etc.
-            func = lambda A, name: bodo.hiframes.api.init_series(A, None, name)
+            func = lambda A, name: bodo.hiframes.pd_series_ext.init_series(A, None, name)
 
         if inplace:
             # Since arrays can't resize inplace, we have to create a new
@@ -1759,7 +1759,7 @@ class SeriesPass(object):
         else:
             func_text += "    S[i] = v\n"
         # func_text += "    print(S[i])\n"
-        func_text += "  return bodo.hiframes.api.init_series(S, index, name)\n"
+        func_text += "  return bodo.hiframes.pd_series_ext.init_series(S, index, name)\n"
         # func_text += "  return ret\n"
 
         loc_vars = {}
@@ -1981,7 +1981,7 @@ class SeriesPass(object):
             func_text += "      t2 = B[i]\n"
         func_text += "    S[i] = map_func(t1, t2)\n"
         # TODO: Pandas combine ignores name for some reason!
-        func_text += "  return bodo.hiframes.api.init_series(S, index, None)\n"
+        func_text += "  return bodo.hiframes.pd_series_ext.init_series(S, index, None)\n"
 
         loc_vars = {}
         exec(func_text, {}, loc_vars)
@@ -2071,11 +2071,11 @@ class SeriesPass(object):
             else:
                 other = data
             if func_name == "cov":
-                f = lambda a, b, w, c, i, n: bodo.hiframes.api.init_series(
+                f = lambda a, b, w, c, i, n: bodo.hiframes.pd_series_ext.init_series(
                     bodo.hiframes.rolling.rolling_cov(a, b, w, c), i, n
                 )
             if func_name == "corr":
-                f = lambda a, b, w, c, i, n: bodo.hiframes.api.init_series(
+                f = lambda a, b, w, c, i, n: bodo.hiframes.pd_series_ext.init_series(
                     bodo.hiframes.rolling.rolling_corr(a, b, w, c), i, n
                 )
             return self._replace_func(
@@ -2090,7 +2090,7 @@ class SeriesPass(object):
             func_global = func_name
 
         def f(arr, w, center, index, name):  # pragma: no cover
-            return bodo.hiframes.api.init_series(
+            return bodo.hiframes.pd_series_ext.init_series(
                 bodo.hiframes.rolling.rolling_fixed(arr, w, center, False, _func),
                 index,
                 name,
@@ -2153,7 +2153,7 @@ class SeriesPass(object):
         )
         func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
         func_text += "        S[i] = ts." + field + "\n"
-        func_text += "    return bodo.hiframes.api.init_series(S)\n"
+        func_text += "    return bodo.hiframes.pd_series_ext.init_series(S)\n"
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         f = loc_vars["f"]
@@ -2180,7 +2180,7 @@ class SeriesPass(object):
         # func_text += '        S[i] = datetime.date(ts.year, ts.month, ts.day)\n'
         # func_text += '        S[i] = ts.day + (ts.month << 16) + (ts.year << 32)\n'
         # DatetimeIndex returns Array but Series.dt returns Series
-        func_text += "    return bodo.hiframes.api.init_series(S)\n"
+        func_text += "    return bodo.hiframes.pd_series_ext.init_series(S)\n"
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         f = loc_vars["f"]
@@ -2273,7 +2273,7 @@ class SeriesPass(object):
         func_text += "  for i in numba.parfor.internal_prange(l):\n"
         func_text += "    S[i] = {}\n".format(comp)
         func_text += "    bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)\n"
-        func_text += "  return bodo.hiframes.api.init_series(bodo.libs.bool_arr_ext.init_bool_array(S, nulls))\n"
+        func_text += "  return bodo.hiframes.pd_series_ext.init_series(bodo.libs.bool_arr_ext.init_bool_array(S, nulls))\n"
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         f = loc_vars["f"]
@@ -2335,7 +2335,7 @@ class SeriesPass(object):
             # TODO: proper NAs
             if is_series:
                 func_text += "    bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)\n"
-                func_text += "  return bodo.hiframes.api.init_series(bodo.libs.bool_arr_ext.init_bool_array(S, nulls))\n"
+                func_text += "  return bodo.hiframes.pd_series_ext.init_series(bodo.libs.bool_arr_ext.init_bool_array(S, nulls))\n"
             else:
                 func_text += "  return S\n"
 
@@ -2385,7 +2385,7 @@ class SeriesPass(object):
         nodes.append(ir.Assign(tup_expr, arr_tup, arr_tup.loc))
         # TODO: index and name
         return self._replace_func(
-            lambda arr_list: bodo.hiframes.api.init_series(
+            lambda arr_list: bodo.hiframes.pd_series_ext.init_series(
                 bodo.libs.array_kernels.concat(arr_list)
             ),
             [arr_tup],
@@ -2481,7 +2481,7 @@ class SeriesPass(object):
         # and series._data is never overwritten
         var_def = guard(get_definition, self.func_ir, series_var)
         call_def = guard(find_callname, self.func_ir, var_def)
-        if call_def == ("init_series", "bodo.hiframes.api"):
+        if call_def == ("init_series", "bodo.hiframes.pd_series_ext"):
             return var_def.args[0]
 
         # XXX use get_series_data() for getting data instead of S._data
@@ -2496,7 +2496,7 @@ class SeriesPass(object):
         # and series._index is never overwritten
         var_def = guard(get_definition, self.func_ir, series_var)
         call_def = guard(find_callname, self.func_ir, var_def)
-        if call_def == ("init_series", "bodo.hiframes.api") and (
+        if call_def == ("init_series", "bodo.hiframes.pd_series_ext") and (
             len(var_def.args) >= 2 and not self._is_const_none(var_def.args[1])
         ):
             return var_def.args[1]
@@ -2511,7 +2511,7 @@ class SeriesPass(object):
     def _get_series_name(self, series_var, nodes):
         var_def = guard(get_definition, self.func_ir, series_var)
         call_def = guard(find_callname, self.func_ir, var_def)
-        if call_def == ("init_series", "bodo.hiframes.api") and len(var_def.args) == 3:
+        if call_def == ("init_series", "bodo.hiframes.pd_series_ext") and len(var_def.args) == 3:
             return var_def.args[2]
 
         nodes += compile_func_single_block(
@@ -2689,7 +2689,7 @@ class SeriesPass(object):
             data_var = ir.Var(v.scope, mk_unique_var(v.name + "data"), v.loc)
             self.typemap[data_var.name] = series_to_array_type(self.typemap[v.name])
             f_block = compile_to_numba_ir(
-                lambda A: bodo.hiframes.api.init_series(A),
+                lambda A: bodo.hiframes.pd_series_ext.init_series(A),
                 {"bodo": bodo},
                 self.typingctx,
                 (self.typemap[data_var.name],),
