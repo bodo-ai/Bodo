@@ -26,7 +26,24 @@ from bodo.utils.typing import BodoError
 import pytest
 
 
-# ------------------------------ merge() ------------------------------ #
+def _gen_df_str(n):
+    """
+    helper function that generate dataframe with int and string columns
+    """
+    str_vals = []
+    for _ in range(n):
+        # store NA with 30% chance
+        if random.random() < 0.3:
+            str_vals.append(np.nan)
+            continue
+
+        k = random.randint(1, 10)
+        val = "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
+        str_vals.append(val)
+
+    A = np.random.randint(0, 100, n)
+    df = pd.DataFrame({"A": A, "B": str_vals})
+    return df
 
 
 class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):
@@ -41,6 +58,9 @@ class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):
         pipeline.add_pass_after(PreserveIR, NopythonRewrites)
         pipeline.finalize()
         return [pipeline]
+
+
+# ------------------------------ merge() ------------------------------ #
 
 
 def test_merge_key_change():
@@ -97,6 +117,29 @@ def test_merge_common_cols(df1, df2):
     pd.testing.assert_frame_equal(
         bodo_func(df1, df2).sort_values("A").reset_index(drop=True),
         impl(df1, df2).sort_values("A").reset_index(drop=True),
+    )
+
+
+def test_merge_inner():
+    """
+    Test merge(): 'how' = inner on specified integer column
+    """
+
+    def test_impl(df1, df2):
+        df3 = pd.merge(df1, df2, how="inner", on="key")
+        return df3
+
+    bodo_func = bodo.jit(test_impl)
+    df1 = pd.DataFrame(
+        {"key": [2, 3, 5, 1, 2, 8], "A": np.array([4, 6, 3, 9, 9, -1], np.float)}
+    )
+    df2 = pd.DataFrame(
+        {"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], np.float)}
+    )
+
+    pd.testing.assert_frame_equal(
+        bodo_func(df1, df2).sort_values("key").reset_index(drop=True),
+        test_impl(df1, df2).sort_values("key").reset_index(drop=True),
     )
 
 
@@ -193,6 +236,23 @@ def test_merge_outer():
     )
 
 
+def test_merge_overlap():
+    """
+    Test merge(): column overlapping behavior
+    """
+
+    def test_impl(df1):
+        df3 = df1.merge(df1, on=["A"])
+        return df3
+
+    df1 = pd.DataFrame({"A": [3, 1, 1, 4], "B": [1, 2, 3, 2], "C": [7, 8, 9, 4]})
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_frame_equal(
+        bodo_func(df1).sort_values(["A", "B_x", "C_x"]).reset_index(drop=True),
+        test_impl(df1).sort_values(["A", "B_x", "C_x"]).reset_index(drop=True),
+    )
+
+
 @pytest.mark.parametrize("n", [11, 11111])
 def test_merge_int_key(n):
     """
@@ -268,26 +328,6 @@ def test_merge_str_nan1():
     )
 
     check_func(test_impl, (df1, df2), sort_output=True)
-
-
-def _gen_df_str(n):
-    """
-    helper function that generate dataframe with int and string columns
-    """
-    str_vals = []
-    for _ in range(n):
-        # store NA with 30% chance
-        if random.random() < 0.3:
-            str_vals.append(np.nan)
-            continue
-
-        k = random.randint(1, 10)
-        val = "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
-        str_vals.append(val)
-
-    A = np.random.randint(0, 100, n)
-    df = pd.DataFrame({"A": A, "B": str_vals})
-    return df
 
 
 def test_merge_str_nan2():
@@ -464,9 +504,9 @@ def test_merge_suffix(df1, df2):
         ),
     ],
 )
-def test_merge_index(df1, df2):
+def test_merge_index1(df1, df2):
     """
-    merge with left_index and right_index specified, merge using index
+    test merge(): with left_index and right_index specified, merge using index
     """
 
     def impl1(df1, df2):
@@ -495,9 +535,131 @@ def test_merge_index(df1, df2):
     # pd.testing.assert_frame_equal(bodo_func(df1, df2), impl3(df1, df2))
 
 
+def test_merge_index_left():
+    """
+    test merge(): with left_index and right_index specified
+    with all on = left
+    """
+
+    def impl(df1, df2):
+        df3 = df1.merge(df2, left_index=True, right_index=True, how="left")
+        return df3
+
+    bodo_func = bodo.jit(impl)
+    df1 = pd.DataFrame({"a": [20, 10, 0]}, index=[2, 1, 0])
+    df2 = pd.DataFrame({"b": [300, 100, 200]}, index=[3, 1, 2])
+    pd.testing.assert_frame_equal(
+        bodo_func(df1, df2), impl(df1, df2).fillna(-1), check_dtype=False
+    )
+
+
+def test_merge_index_right():
+    """
+    test merge(): with left_index and right_index specified
+    with all on = right
+    """
+
+    def impl(df1, df2):
+        df3 = df1.merge(df2, left_index=True, right_index=True, how="right")
+        return df3
+
+    bodo_func = bodo.jit(impl)
+    df1 = pd.DataFrame({"a": [20, 10, 0]}, index=[2, 1, 0])
+    df2 = pd.DataFrame({"b": [300, 100, 200]}, index=[3, 1, 2])
+    pd.testing.assert_frame_equal(
+        bodo_func(df1, df2), impl(df1, df2).fillna(-1), check_dtype=False
+    )
+
+
+def test_merge_index_outer():
+    """
+    test merge(): with left_index and right_index specified
+    with all on = outer
+    """
+
+    def impl(df1, df2):
+        df3 = df1.merge(df2, left_index=True, right_index=True, how="outer")
+        return df3
+
+    bodo_func = bodo.jit(impl)
+    df1 = pd.DataFrame({"a": [20, 10, 0]}, index=[2, 1, 0])
+    df2 = pd.DataFrame({"b": [300, 100, 200]}, index=[3, 1, 2])
+
+    pd.testing.assert_frame_equal(
+        bodo_func(df1, df2).sort_values(["a", "b"]).reset_index(drop=True),
+        impl(df1, df2).fillna(-1).sort_values(["a", "b"]).reset_index(drop=True),
+        check_dtype=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "df1, df2",
+    [
+        (
+            pd.DataFrame({"A": ["foo", "bar"], "B": [3, 4]}, index=[-1, -1]),
+            pd.DataFrame({"A": ["baz"], "B": [1]}, index=[-1]),
+        ),
+        (
+            pd.DataFrame(
+                {"A": ["foo", "bar", "baz"], "B": [3, 4, 5]}, index=[0, -1, 2]
+            ),
+            pd.DataFrame(
+                {"A": ["baz", "baz", "foo", "foo", "bar"], "B": [1, 3, 2, 3, 4]},
+                index=[-1, 2, 2, 0, 0],
+            ),
+        ),
+        (
+            pd.DataFrame({"A": ["foo", "bar"], "B": [3, 4]}, index=[-1, -1]),
+            pd.DataFrame({"A": ["baz", "foo"], "B": [1, 3]}, index=[-1, -1]),
+        ),
+        (
+            pd.DataFrame(
+                {"A": ["foo", "bar", "baz", "bar"], "B": [3, 4, 5, 3]},
+                index=[0, 0, -1, -1],
+            ),
+            pd.DataFrame(
+                {"A": ["baz", "baz", "foo", "foo", "bar"], "B": [1, 3, 2, 3, 4]},
+                index=[-1, -1, 2, 0, 0],
+            ),
+        ),
+    ],
+)
+def test_merge_non_unique_index(df1, df2):
+    """
+    test merge(): merge on left and right non-unique index
+    """
+
+    def impl(df1, df2):
+        df3 = df1.merge(df2, left_index=True, right_index=True)
+        return df3
+
+    bodo_func = bodo.jit(impl)
+
+    pd.testing.assert_frame_equal(
+        bodo_func(df1, df2).sort_values("A_x").reset_index(drop=True),
+        impl(df1, df2).sort_values("A_x").reset_index(drop=True),
+    )
+
+
+def test_merge_all_nan_cols():
+    """
+    test merge(): all columns to merge on are null
+    """
+
+    def impl(df1, df2):
+        df3 = df1.merge(df2, on="A")
+        return df3
+
+    df1 = pd.DataFrame({"A": [np.nan, np.nan, np.nan], "B": [0, 1, 2]})
+    df2 = pd.DataFrame({"A": [np.nan, np.nan, np.nan], "B": [0, 1, 2]})
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_frame_equal(bodo_func(df1, df2), impl(df1, df2))
+
+
 def test_merge_match_key_types():
     """
-    test merge() where key types mismatch but values can be equal
+    test merge(): where key types mismatch but values can be equal
     happens especially when Pandas convert ints to float to use np.nan
     """
 
@@ -519,6 +681,50 @@ def test_merge_match_key_types():
     check_func(test_impl1, (df2, df1), sort_output=True)
     check_func(test_impl2, (df1, df2), sort_output=True)
     check_func(test_impl2, (df2, df1), sort_output=True)
+
+
+def test_merge_cat_identical():
+    """
+    Test merge(): merge identical dataframes on categorical column
+    """
+
+    def test_impl(df1):
+        df3 = df1.merge(df1, on="C2")
+        return df3
+
+    bodo_func = bodo.jit(test_impl)
+
+    fname = os.path.join("bodo", "tests", "data", "csv_data_cat1.csv")
+    ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
+    dtypes = {"C1": np.int, "C2": ct_dtype}
+    df1 = pd.read_csv(fname, names=["C1", "C2"], dtype=dtypes, usecols=[0, 1])
+    pd.testing.assert_frame_equal(
+        bodo_func(df1).sort_values("C2").reset_index(drop=True),
+        test_impl(df1).sort_values("C2").reset_index(drop=True),
+    )
+
+
+def test_merge_cat_multi_cols():
+    """
+    Test merge(): merge dataframes containing mutilple categorical cols
+    """
+    fname = os.path.join("bodo", "tests", "data", "csv_data_cat1.csv")
+
+    def test_impl(df1, df2):
+        df3 = df1.merge(df2, on=["C1", "C2"])
+        return df3
+
+    bodo_func = bodo.jit(test_impl)
+
+    ct_dtype1 = pd.CategoricalDtype(["2", "3", "4", "5"])
+    ct_dtype2 = pd.CategoricalDtype(["A", "B", "C"])
+    dtypes = {"C1": ct_dtype1, "C2": ct_dtype2, "C3": str}
+    df1 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes, skiprows=[0])
+    df2 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes, skiprows=[1])
+    pd.testing.assert_frame_equal(
+        bodo_func(df1, df2).sort_values("C1").reset_index(drop=True),
+        test_impl(df1, df2).sort_values("C1").reset_index(drop=True),
+    )
 
 
 def test_merge_cat1_inner():
@@ -686,11 +892,11 @@ def test_join_deadcode_cleanup():
     merge() is not executed
     """
 
-    def test_impl(df1, df2):
+    def test_impl(df1, df2):  # pragma: no cover
         df3 = df1.merge(df2, on=["A"])
         return
 
-    def test_impl_with_join(df1, df2):
+    def test_impl_with_join(df1, df2):  # pragma: no cover
         df3 = df1.merge(df2, on=["A"])
         return df3
 

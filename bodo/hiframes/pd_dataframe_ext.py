@@ -1283,7 +1283,12 @@ def validate_keys_dtypes(
     else:  # cases where only columns are used in merge
         for lk, rk in zip(left_keys, right_keys):
             lk_type = left.data[left.columns.index(lk)].dtype
+            lk_arr_type = left.data[left.columns.index(lk)]
             rk_type = right.data[right.columns.index(rk)].dtype
+            rk_arr_type = right.data[right.columns.index(rk)]
+
+            if lk_arr_type == rk_arr_type:
+                continue
 
             try:
                 ret_dtype = typing_context.resolve_function_type(
