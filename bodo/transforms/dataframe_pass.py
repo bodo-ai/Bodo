@@ -701,10 +701,10 @@ class DataFramePass(object):
         if fdef == ("reset_index_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_reset_index(assign, lhs, rhs)
 
-        if fdef == ("drop_inplace", "bodo.hiframes.api"):
+        if fdef == ("drop_inplace", "bodo.hiframes.dataframe_impl"):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.api.drop_inplace_overload(*arg_typs, **kw_typs)
+            impl = bodo.hiframes.dataframe_impl.drop_inplace_overload(*arg_typs, **kw_typs)
             return self._replace_func(
                 impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )

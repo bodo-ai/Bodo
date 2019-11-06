@@ -469,7 +469,7 @@ class UntypedPass(object):
             # variable replacement
             kws = dict(rhs.kws)
             inplace_var = self._get_arg("drop", rhs.args, kws, 5, "inplace", "")
-            replace_func = lambda: bodo.hiframes.api.drop_inplace
+            replace_func = lambda: bodo.hiframes.dataframe_impl.drop_inplace
             return self._handle_df_inplace_func(
                 assign, lhs, rhs, func_mod, inplace_var, replace_func, label
             )
