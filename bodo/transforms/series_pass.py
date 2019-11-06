@@ -1014,6 +1014,7 @@ class SeriesPass(object):
                     return self._replace_func(lambda arr, i: arr[i] == nat, [arr, ind])
                 elif isinstance(arr_typ.dtype, types.Integer):
                     return self._replace_func(lambda arr, i: False, [arr, ind])
+            return [assign]
 
         if fdef == ("argsort", "bodo.hiframes.series_impl"):
             lhs = assign.target
@@ -1144,7 +1145,7 @@ class SeriesPass(object):
                 ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
             ):
                 assign.value = var_def.args[0]
-                return [assign]
+            return [assign]
 
         if fdef == ("get_index_name", "bodo.hiframes.pd_index_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
@@ -1160,15 +1161,14 @@ class SeriesPass(object):
                 and len(var_def.args) > 1
             ):
                 assign.value = var_def.args[1]
-                return [assign]
+            return [assign]
 
         # pd.DataFrame() calls init_series for even Series since it's untyped
         # remove the call since it is invalid for analysis here
         # XXX remove when df pass is typed? (test_pass_series2)
-        if fdef == ("init_series", "bodo.hiframes.pd_series_ext") and isinstance(
-            self.typemap[rhs.args[0].name], SeriesType
-        ):
-            assign.value = rhs.args[0]
+        if fdef == ("init_series", "bodo.hiframes.pd_series_ext"):
+            if isinstance(self.typemap[rhs.args[0].name], SeriesType):
+                assign.value = rhs.args[0]
             return [assign]
 
         if fdef == ("get_series_data", "bodo.hiframes.pd_series_ext"):
@@ -1178,7 +1178,7 @@ class SeriesPass(object):
             call_def = guard(find_callname, self.func_ir, var_def)
             if call_def == ("init_series", "bodo.hiframes.pd_series_ext"):
                 assign.value = var_def.args[0]
-                return [assign]
+            return [assign]
 
         if fdef == ("get_series_index", "bodo.hiframes.pd_series_ext"):
             # TODO: make sure index is not altered using update_series_index()
@@ -1190,7 +1190,7 @@ class SeriesPass(object):
                 and len(var_def.args) > 1
             ):
                 assign.value = var_def.args[1]
-                return [assign]
+            return [assign]
 
         if fdef == ("get_series_name", "bodo.hiframes.pd_series_ext"):
             # TODO: make sure name is not altered
@@ -1201,7 +1201,7 @@ class SeriesPass(object):
                 and len(var_def.args) > 2
             ):
                 assign.value = var_def.args[2]
-                return [assign]
+            return [assign]
 
         if func_mod == "bodo.hiframes.rolling":
             return self._run_call_rolling(assign, assign.target, rhs, func_name)
