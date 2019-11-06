@@ -700,7 +700,7 @@ def overload_series_append(S, to_append, ignore_index=False, verify_integrity=Fa
             ):
                 arr = bodo.hiframes.api.get_series_data(S)
                 tup_other = bodo.utils.typing.to_const_tuple(to_append)
-                other_arrs = bodo.hiframes.api.get_series_data_tup(tup_other)
+                other_arrs = bodo.hiframes.pd_series_ext.get_series_data_tup(tup_other)
                 all_arrs = bodo.utils.typing.to_const_tuple((arr,) + other_arrs)
                 out_arr = bodo.libs.array_kernels.concat(all_arrs)
                 return bodo.hiframes.api.init_series(out_arr)
@@ -725,7 +725,7 @@ def overload_series_append(S, to_append, ignore_index=False, verify_integrity=Fa
             index_arr = bodo.utils.conversion.extract_index_array(S)
 
             tup_other = bodo.utils.typing.to_const_tuple(to_append)
-            other_arrs = bodo.hiframes.api.get_series_data_tup(tup_other)
+            other_arrs = bodo.hiframes.pd_series_ext.get_series_data_tup(tup_other)
             other_inds = bodo.utils.conversion.extract_index_array_tup(tup_other)
             # TODO: use regular list when tuple is not required
             # all_arrs = [arr]

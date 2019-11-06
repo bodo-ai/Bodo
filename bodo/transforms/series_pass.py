@@ -1127,6 +1127,13 @@ class SeriesPass(object):
             nodes.append(assign)
             return nodes
 
+        if fdef == ("get_series_data_tup", "bodo.hiframes.pd_series_ext"):
+            arg = rhs.args[0]
+            impl = bodo.hiframes.pd_series_ext.overload_get_series_data_tup(
+                self.typemap[arg.name]
+            )
+            return compile_func_single_block(impl, (arg,), assign.target, self)
+
         if func_mod == "bodo.hiframes.api":
             return self._run_call_hiframes(assign, assign.target, rhs, func_name)
 
@@ -1490,24 +1497,6 @@ class SeriesPass(object):
             ):
                 assign.value = var_def.args[2]
                 return [assign]
-
-        if func_name == "get_series_data_tup":
-            arg = rhs.args[0]
-            impl = bodo.hiframes.api.overload_get_series_data_tup(
-                self.typemap[arg.name]
-            )
-            return compile_func_single_block(impl, (arg,), lhs, self)
-
-        if func_name == "series_tup_to_arr_tup":
-            in_typ = self.typemap[rhs.args[0].name]
-            assert isinstance(in_typ, types.BaseTuple), "tuple expected"
-            series_vars = guard(get_definition, self.func_ir, rhs.args[0]).items
-            nodes = []
-            tup_items = [self._get_series_data(v, nodes) for v in series_vars]
-            new_tup = ir.Expr.build_tuple(tup_items, lhs.loc)
-            assign.value = new_tup
-            nodes.append(assign)
-            return nodes
 
         return [assign]
 

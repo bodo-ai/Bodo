@@ -706,3 +706,22 @@ def pd_series_overload(
         )
 
     return impl
+
+
+def get_series_data_tup(series_tup):
+    return tuple(get_series_data(s) for s in series_tup)
+
+
+@overload(get_series_data_tup)
+def overload_get_series_data_tup(series_tup):
+    n_series = len(series_tup.types)
+    func_text = "def f(series_tup):\n"
+    res = ",".join(
+        "bodo.hiframes.api.get_series_data(series_tup[{}])".format(i)
+        for i in range(n_series)
+    )
+    func_text += "  return ({}{})\n".format(res, "," if n_series == 1 else "")
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    impl = loc_vars["f"]
+    return impl
