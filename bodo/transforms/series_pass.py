@@ -1203,6 +1203,12 @@ class SeriesPass(object):
                 assign.value = var_def.args[2]
             return [assign]
 
+        if fdef == ("update_series_data", "bodo.hiframes.pd_series_ext"):
+            return [assign]
+
+        if fdef == ("update_series_index", "bodo.hiframes.pd_series_ext"):
+            return [assign]
+
         if func_mod == "bodo.hiframes.rolling":
             return self._run_call_rolling(assign, assign.target, rhs, func_name)
 
