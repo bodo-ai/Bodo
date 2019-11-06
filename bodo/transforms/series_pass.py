@@ -1465,17 +1465,6 @@ class SeriesPass(object):
             )
             return compile_func_single_block(impl, (arg,), lhs, self)
 
-        # arr = fix_rolling_array(col) -> arr=col if col is float array
-        if func_name == "fix_rolling_array":
-            in_arr = rhs.args[0]
-            if isinstance(self.typemap[in_arr.name].dtype, types.Float):
-                assign.value = rhs.args[0]
-                return [assign]
-            else:
-                return compile_func_single_block(
-                    lambda A: A.astype(np.float64), (in_arr,), lhs, self
-                )
-
         if func_name == "series_filter_bool":
             return self._handle_df_col_filter(assign, lhs, rhs)
 

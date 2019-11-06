@@ -76,7 +76,6 @@ def remove_hiframes(rhs, lives, call_list):
         and call_list[1:] == ["api", "hiframes", bodo]
         and call_list[0]
         in [
-            "fix_rolling_array",
             "count",
             "mean",
             "quantile",

@@ -51,9 +51,6 @@ from bodo.utils.utils import unliteral_all
 import llvmlite.llvmpy.core as lc
 
 
-def fix_rolling_array(c):  # pragma: no cover
-    return c
-
 def to_numeric(A, dtype):
     return A
 
@@ -436,45 +433,6 @@ def lower_convert_rec_tup_impl(context, builder, sig, args):
 
     res = context.compile_internal(builder, _rec_to_tup, tup_typ(rec_typ), [val])
     return impl_ret_borrowed(context, builder, sig.return_type, res)
-
-
-@infer_global(fix_rolling_array)
-class FixDfRollingArrayType(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        column = args[0]
-        dtype = column.dtype
-        ret_typ = column
-        if dtype == types.boolean or isinstance(dtype, types.Integer):
-            ret_typ = types.Array(types.float64, 1, "C")
-        # TODO: add other types
-        return signature(ret_typ, column)
-
-
-@lower_builtin(fix_rolling_array, types.Any)  # TODO: replace Any with types
-def lower_fix_rolling_array(context, builder, sig, args):
-    func = fix_rolling_array_overload(sig.args[0])
-    res = context.compile_internal(builder, func, sig, args)
-    return impl_ret_borrowed(context, builder, sig.return_type, res)
-
-
-# @overload(fix_rolling_array)
-def fix_rolling_array_overload(column):
-    assert isinstance(column, types.Array)
-    dtype = column.dtype
-    # convert bool and integer to float64
-    if dtype == types.boolean or isinstance(dtype, types.Integer):
-
-        def fix_rolling_array_impl(column):  # pragma: no cover
-            return column.astype(np.float64)
-
-    else:
-
-        def fix_rolling_array_impl(column):  # pragma: no cover
-            return column
-
-    return fix_rolling_array_impl
 
 
 def construct_series(context, builder, series_type, data_val, index_val, name_val):
