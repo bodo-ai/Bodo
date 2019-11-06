@@ -51,42 +51,6 @@ from bodo.utils.utils import unliteral_all
 import llvmlite.llvmpy.core as lc
 
 
-def set_df_col(df, cname, arr, inplace):
-    df[cname] = arr
-
-
-@infer_global(set_df_col)
-class SetDfColInfer(AbstractTemplate):
-    def generic(self, args, kws):
-        from bodo.hiframes.pd_dataframe_ext import DataFrameType
-
-        assert not kws
-        assert len(args) == 4
-        assert isinstance(args[1], types.Literal)
-        target = args[0]
-        ind = args[1].literal_value
-        val = args[2]
-        ret = target
-
-        if isinstance(target, DataFrameType):
-            if isinstance(val, SeriesType):
-                val = val.data
-            if ind in target.columns:
-                # set existing column, with possibly a new array type
-                new_cols = target.columns
-                col_id = target.columns.index(ind)
-                new_typs = list(target.data)
-                new_typs[col_id] = val
-                new_typs = tuple(new_typs)
-            else:
-                # set a new column
-                new_cols = target.columns + (ind,)
-                new_typs = target.data + (val,)
-            ret = DataFrameType(new_typs, target.index, new_cols, target.has_parent)
-
-        return signature(ret, *args)
-
-
 def get_series_data_tup(series_tup):
     return tuple(get_series_data(s) for s in series_tup)
 

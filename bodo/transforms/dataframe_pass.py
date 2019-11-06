@@ -594,7 +594,7 @@ class DataFramePass(object):
         if fdef == ("len", "builtins") and self._is_df_var(rhs.args[0]):
             return self._run_call_len(lhs, rhs.args[0])
 
-        if fdef == ("set_df_col", "bodo.hiframes.api"):
+        if fdef == ("set_df_col", "bodo.hiframes.dataframe_impl"):
             return self._run_call_set_df_column(assign, lhs, rhs)
 
         if fdef == ("merge", "pandas"):

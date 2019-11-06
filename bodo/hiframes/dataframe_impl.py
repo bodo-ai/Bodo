@@ -8,6 +8,7 @@ import pandas as pd
 import numba
 from numba import types
 from numba.extending import overload, overload_attribute, overload_method
+from numba.typing.templates import infer_global, AbstractTemplate
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_series_ext import SeriesType
@@ -903,3 +904,39 @@ def overload_notna(obj):
 
     # scalars
     return lambda obj: not pd.isna(obj)
+
+
+def set_df_col(df, cname, arr, inplace):
+    df[cname] = arr
+
+
+@infer_global(set_df_col)
+class SetDfColInfer(AbstractTemplate):
+    def generic(self, args, kws):
+        from bodo.hiframes.pd_dataframe_ext import DataFrameType
+
+        assert not kws
+        assert len(args) == 4
+        assert isinstance(args[1], types.Literal)
+        target = args[0]
+        ind = args[1].literal_value
+        val = args[2]
+        ret = target
+
+        if isinstance(target, DataFrameType):
+            if isinstance(val, SeriesType):
+                val = val.data
+            if ind in target.columns:
+                # set existing column, with possibly a new array type
+                new_cols = target.columns
+                col_id = target.columns.index(ind)
+                new_typs = list(target.data)
+                new_typs[col_id] = val
+                new_typs = tuple(new_typs)
+            else:
+                # set a new column
+                new_cols = target.columns + (ind,)
+                new_typs = target.data + (val,)
+            ret = DataFrameType(new_typs, target.index, new_cols, target.has_parent)
+
+        return ret(*args)

@@ -1362,7 +1362,7 @@ class UntypedPass(object):
         nodes = [ir.Assign(ir.Const(inst.index, inst.loc), cname_var, inst.loc)]
         inplace = not dominates
 
-        func = lambda df, cname, arr: bodo.hiframes.api.set_df_col(
+        func = lambda df, cname, arr: bodo.hiframes.dataframe_impl.set_df_col(
             df, cname, arr, _inplace
         )
         f_block = compile_to_numba_ir(
