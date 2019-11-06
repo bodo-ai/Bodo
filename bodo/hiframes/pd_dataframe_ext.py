@@ -1812,7 +1812,7 @@ class ItertuplesDummyTyper(AbstractTemplate):
         assert "Index" not in df.columns
         columns = ("Index",) + df.columns
         arr_types = (types.Array(types.int64, 1, "C"),) + df.data
-        iter_typ = bodo.hiframes.api.DataFrameTupleIterator(columns, arr_types)
+        iter_typ = bodo.hiframes.dataframe_impl.DataFrameTupleIterator(columns, arr_types)
         return signature(iter_typ, *args)
 
 

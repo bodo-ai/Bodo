@@ -1112,6 +1112,21 @@ class SeriesPass(object):
                 series_kernels._column_filter_impl, [in_arr, bool_arr], pre_nodes=nodes
             )
 
+        if fdef == ("get_itertuples", "bodo.hiframes.dataframe_impl"):
+            nodes = []
+            new_args = []
+            for arg in rhs.args:
+                if isinstance(self.typemap[arg.name], SeriesType):
+                    new_args.append(self._get_series_data(arg, nodes))
+                else:
+                    new_args.append(arg)
+
+            self._convert_series_calltype(rhs)
+            rhs.args = new_args
+
+            nodes.append(assign)
+            return nodes
+
         if func_mod == "bodo.hiframes.api":
             return self._run_call_hiframes(assign, assign.target, rhs, func_name)
 
@@ -1491,21 +1506,6 @@ class SeriesPass(object):
             tup_items = [self._get_series_data(v, nodes) for v in series_vars]
             new_tup = ir.Expr.build_tuple(tup_items, lhs.loc)
             assign.value = new_tup
-            nodes.append(assign)
-            return nodes
-
-        if func_name == "get_itertuples":
-            nodes = []
-            new_args = []
-            for arg in rhs.args:
-                if isinstance(self.typemap[arg.name], SeriesType):
-                    new_args.append(self._get_series_data(arg, nodes))
-                else:
-                    new_args.append(arg)
-
-            self._convert_series_calltype(rhs)
-            rhs.args = new_args
-
             nodes.append(assign)
             return nodes
 

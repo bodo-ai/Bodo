@@ -1154,7 +1154,7 @@ class DataFramePass(object):
         name_consts = ", ".join(["'{}'".format(c) for c in df_typ.columns])
 
         func_text = "def f({}):\n".format(col_name_args)
-        func_text += "  return bodo.hiframes.api.get_itertuples({}, {})\n".format(
+        func_text += "  return bodo.hiframes.dataframe_impl.get_itertuples({}, {})\n".format(
             name_consts, col_name_args
         )
 
