@@ -570,11 +570,11 @@ class DistributedAnalysis(object):
             # quantile doesn't affect input's distribution
             return
 
-        if fdef == ("nunique", "bodo.hiframes.api"):
+        if fdef == ("nunique", "bodo.libs.array_kernels"):
             # nunique doesn't affect input's distribution
             return
 
-        if fdef == ("unique", "bodo.hiframes.api"):
+        if fdef == ("unique", "bodo.libs.array_kernels"):
             # doesn't affect distribution of input since input can stay 1D
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD_Var
@@ -661,30 +661,27 @@ class DistributedAnalysis(object):
         if fdef == ("median", "bodo.libs.array_kernels"):
             return
 
-        if fdef == ("concat", "bodo.hiframes.api"):
+        if fdef == ("concat", "bodo.libs.array_kernels"):
             # hiframes concat is similar to np.concatenate
             self._analyze_call_np_concatenate(lhs, args, array_dists)
             return
 
-        if fdef == ("isna", "bodo.hiframes.api"):
+        if fdef == ("isna", "bodo.libs.array_kernels"):
             return
 
         if fdef == ("get_str_arr_item_length", "bodo.libs.str_arr_ext"):
             return
 
-        if fdef == ("get_series_name", "bodo.hiframes.api"):
+        if fdef == ("get_series_name", "bodo.hiframes.pd_series_ext"):
             return
 
-        if fdef == ("get_index_name", "bodo.hiframes.api"):
+        if fdef == ("get_index_name", "bodo.hiframes.pd_index_ext"):
             return
 
         # dummy hiframes functions
-        if func_mod == "bodo.hiframes.api" and func_name in (
+        if func_mod == "bodo.hiframes.pd_series_ext" and func_name in (
             "get_series_data",
             "get_series_index",
-            "get_index_data",
-            "init_datetime_index",
-            "init_timedelta_index",
         ):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
@@ -711,7 +708,7 @@ class DistributedAnalysis(object):
 
         # from flat map pattern: pd.Series(list(itertools.chain(*A)))
         # TODO: associate input/output distributions
-        if fdef == ("parallel_fix_df_array", "bodo.hiframes.api"):
+        if fdef == ("parallel_convert_to_array", "bodo.utils.typing"):
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
             return
@@ -719,6 +716,9 @@ class DistributedAnalysis(object):
         if func_mod == "bodo.hiframes.pd_index_ext" and func_name in (
             "init_numeric_index",
             "init_string_index",
+            "init_datetime_index",
+            "init_timedelta_index",
+            "get_index_data",
         ):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
@@ -730,7 +730,7 @@ class DistributedAnalysis(object):
                 array_dists[lhs] = Distribution.OneD
             return
 
-        if fdef == ("init_series", "bodo.hiframes.api"):
+        if fdef == ("init_series", "bodo.hiframes.pd_series_ext"):
             # lhs, in_arr, and index should have the same distribution
             new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             if len(rhs.args) > 1 and self.typemap[rhs.args[1].name] != types.none:
@@ -1614,7 +1614,7 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
                 if isinstance(rhs, ir.Expr) and rhs.op == "call":
                     fdef = guard(find_callname, func_ir, rhs, typemap)
                     if fdef is not None:
-                        if fdef == ("isna", "bodo.hiframes.api"):
+                        if fdef == ("isna", "bodo.libs.array_kernels"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ("get_split_view_index", "bodo.hiframes.split_impl"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))

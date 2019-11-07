@@ -134,13 +134,40 @@ def unbox_datetime_index(typ, val, c):
     return NativeValue(index_val._getvalue())
 
 
+
+@intrinsic
+def init_datetime_index(typingctx, data, name=None):
+    """Create a DatetimeIndex with provided data and name values.
+    """
+    name = types.none if name is None else name
+    name = types.unliteral(name)
+
+    def codegen(context, builder, signature, args):
+        data_val, name_val = args
+        # create dt_index struct and store values
+        dt_index = cgutils.create_struct_proxy(signature.return_type)(context, builder)
+        dt_index.data = data_val
+        dt_index.name = name_val
+
+        # increase refcount of stored values
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[0], data_val)
+            context.nrt.incref(builder, signature.args[1], name_val)
+
+        return dt_index._getvalue()
+
+    ret_typ = DatetimeIndexType(name)
+    sig = signature(ret_typ, data, name)
+    return sig, codegen
+
+
 # support DatetimeIndex date fields such as I.year
 def gen_dti_field_impl(field):
     # TODO: NaN
     func_text = "def impl(dti):\n"
     func_text += "    numba.parfor.init_prange()\n"
-    func_text += "    A = bodo.hiframes.api.get_index_data(dti)\n"
-    func_text += "    name = bodo.hiframes.api.get_index_name(dti)\n"
+    func_text += "    A = bodo.hiframes.pd_index_ext.get_index_data(dti)\n"
+    func_text += "    name = bodo.hiframes.pd_index_ext.get_index_name(dti)\n"
     func_text += "    n = len(A)\n"
     # all datetimeindex fields return int64 same as Timestamp fields
     func_text += "    S = np.empty(n, np.int64)\n"
@@ -171,7 +198,7 @@ def overload_datetime_index_date(dti):
 
     def impl(dti):
         numba.parfor.init_prange()
-        A = bodo.hiframes.api.get_index_data(dti)
+        A = bodo.hiframes.pd_index_ext.get_index_data(dti)
         n = len(A)
         S = numba.unsafe.ndarray.empty_inferred((n,))
         for i in numba.parfor.internal_prange(n):
@@ -200,11 +227,11 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
 
     def impl(dti, axis=None, skipna=True):
         numba.parfor.init_prange()
-        in_arr = bodo.hiframes.api.get_index_data(dti)
+        in_arr = bodo.hiframes.pd_index_ext.get_index_data(dti)
         s = numba.targets.builtins.get_type_max_value(numba.types.int64)
         count = 0
         for i in numba.parfor.internal_prange(len(in_arr)):
-            if not bodo.hiframes.api.isna(in_arr, i):
+            if not bodo.libs.array_kernels.isna(in_arr, i):
                 val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
                 s = min(s, val)
                 count += 1
@@ -222,11 +249,11 @@ def overload_datetime_index_max(dti, axis=None, skipna=True):
 
     def impl(dti, axis=None, skipna=True):
         numba.parfor.init_prange()
-        in_arr = bodo.hiframes.api.get_index_data(dti)
+        in_arr = bodo.hiframes.pd_index_ext.get_index_data(dti)
         s = numba.targets.builtins.get_type_min_value(numba.types.int64)
         count = 0
         for i in numba.parfor.internal_prange(len(in_arr)):
-            if not bodo.hiframes.api.isna(in_arr, i):
+            if not bodo.libs.array_kernels.isna(in_arr, i):
                 val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
                 s = max(s, val)
                 count += 1
@@ -288,7 +315,7 @@ def pd_datetimeindex_overload(
     ):
         data_arr = bodo.utils.conversion.coerce_to_array(data)
         S = bodo.utils.conversion.convert_to_dt64ns(data_arr)
-        return bodo.hiframes.api.init_datetime_index(S, name)
+        return bodo.hiframes.pd_index_ext.init_datetime_index(S, name)
 
     return f
 
@@ -303,8 +330,8 @@ def overload_datetime_index_sub(arg1, arg2):
 
         def impl(arg1, arg2):  # pragma: no cover
             numba.parfor.init_prange()
-            in_arr = bodo.hiframes.api.get_index_data(arg1)
-            name = bodo.hiframes.api.get_index_name(arg1)
+            in_arr = bodo.hiframes.pd_index_ext.get_index_data(arg1)
+            name = bodo.hiframes.pd_index_ext.get_index_name(arg1)
             n = len(in_arr)
             S = numba.unsafe.ndarray.empty_inferred((n,))
             tsint = bodo.hiframes.pd_timestamp_ext.convert_timestamp_to_datetime64(arg2)
@@ -312,7 +339,7 @@ def overload_datetime_index_sub(arg1, arg2):
                 S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
                     bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i]) - tsint
                 )
-            return bodo.hiframes.api.init_timedelta_index(S, name)
+            return bodo.hiframes.pd_index_ext.init_timedelta_index(S, name)
 
         return impl
 
@@ -324,8 +351,8 @@ def overload_datetime_index_sub(arg1, arg2):
 
         def impl(arg1, arg2):  # pragma: no cover
             numba.parfor.init_prange()
-            in_arr = bodo.hiframes.api.get_index_data(arg2)
-            name = bodo.hiframes.api.get_index_name(arg2)
+            in_arr = bodo.hiframes.pd_index_ext.get_index_data(arg2)
+            name = bodo.hiframes.pd_index_ext.get_index_name(arg2)
             n = len(in_arr)
             S = numba.unsafe.ndarray.empty_inferred((n,))
             tsint = bodo.hiframes.pd_timestamp_ext.convert_timestamp_to_datetime64(arg1)
@@ -333,7 +360,7 @@ def overload_datetime_index_sub(arg1, arg2):
                 S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
                     tsint - bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
                 )
-            return bodo.hiframes.api.init_timedelta_index(S, name)
+            return bodo.hiframes.pd_index_ext.init_timedelta_index(S, name)
 
         return impl
 
@@ -349,7 +376,7 @@ def gen_dti_str_binop_impl(op, is_arg1_dti):
     else:
         func_text += "  dt_index, _str = arg2, arg1\n"
         comp = "other {} arr[i]".format(op_str)
-    func_text += "  arr = bodo.hiframes.api.get_index_data(dt_index)\n"
+    func_text += "  arr = bodo.hiframes.pd_index_ext.get_index_data(dt_index)\n"
     func_text += "  l = len(arr)\n"
     func_text += "  other = bodo.hiframes.pd_timestamp_ext.parse_datetime_str(_str)\n"
     func_text += "  S = numba.unsafe.ndarray.empty_inferred((l,))\n"
@@ -395,7 +422,7 @@ def overload_datetime_index_getitem(dti, ind):
         if isinstance(ind, types.Integer):
 
             def impl(dti, ind):
-                dti_arr = bodo.hiframes.api.get_index_data(dti)
+                dti_arr = bodo.hiframes.pd_index_ext.get_index_data(dti)
                 dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dti_arr[ind])
                 return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
                     dt64
@@ -406,10 +433,10 @@ def overload_datetime_index_getitem(dti, ind):
             # slice, boolean array, etc.
             # TODO: other Index or Series objects as index?
             def impl(dti, ind):
-                dti_arr = bodo.hiframes.api.get_index_data(dti)
-                name = bodo.hiframes.api.get_index_name(dti)
+                dti_arr = bodo.hiframes.pd_index_ext.get_index_data(dti)
+                name = bodo.hiframes.pd_index_ext.get_index_name(dti)
                 new_arr = dti_arr[ind]
-                return bodo.hiframes.api.init_datetime_index(new_arr, name)
+                return bodo.hiframes.pd_index_ext.init_datetime_index(new_arr, name)
 
             return impl
 
@@ -589,7 +616,7 @@ def pd_date_range_overload(
             arr = arr[:-1]
 
         S = bodo.utils.conversion.convert_to_dt64ns(arr)
-        return bodo.hiframes.api.init_datetime_index(S, name)
+        return bodo.hiframes.pd_index_ext.init_datetime_index(S, name)
 
     return f
 
@@ -679,6 +706,34 @@ def unbox_timedelta_index(typ, val, c):
     return NativeValue(index_val._getvalue())
 
 
+@intrinsic
+def init_timedelta_index(typingctx, data, name=None):
+    """Create a TimedeltaIndex with provided data and name values.
+    """
+    name = types.none if name is None else name
+    name = types.unliteral(name)
+
+    def codegen(context, builder, signature, args):
+        data_val, name_val = args
+        # create timedelta_index struct and store values
+        timedelta_index = cgutils.create_struct_proxy(signature.return_type)(
+            context, builder
+        )
+        timedelta_index.data = data_val
+        timedelta_index.name = name_val
+
+        # increase refcount of stored values
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[0], data_val)
+            context.nrt.incref(builder, signature.args[1], name_val)
+
+        return timedelta_index._getvalue()
+
+    ret_typ = TimedeltaIndexType(name)
+    sig = signature(ret_typ, data, name)
+    return sig, codegen
+
+
 @infer_getattr
 class TimedeltaIndexAttribute(AttributeTemplate):
     key = TimedeltaIndexType
@@ -707,8 +762,8 @@ def gen_tdi_field_impl(field):
     # TODO: NaN
     func_text = "def impl(tdi):\n"
     func_text += "    numba.parfor.init_prange()\n"
-    func_text += "    A = bodo.hiframes.api.get_index_data(tdi)\n"
-    func_text += "    name = bodo.hiframes.api.get_index_name(tdi)\n"
+    func_text += "    A = bodo.hiframes.pd_index_ext.get_index_data(tdi)\n"
+    func_text += "    name = bodo.hiframes.pd_index_ext.get_index_name(tdi)\n"
     func_text += "    n = len(A)\n"
     # all timedeltaindex fields return int64 same as Timestamp fields
     func_text += "    S = np.empty(n, np.int64)\n"
@@ -783,7 +838,7 @@ def pd_timedelta_index_overload(
     ):
         data_arr = bodo.utils.conversion.coerce_to_array(data)
         S = bodo.utils.conversion.convert_to_td64ns(data_arr)
-        return bodo.hiframes.api.init_timedelta_index(S, name)
+        return bodo.hiframes.pd_index_ext.init_timedelta_index(S, name)
 
     return impl
 
@@ -1334,7 +1389,7 @@ def unbox_string_index(typ, val, c):
 @overload(operator.getitem)
 def overload_index_getitem(I, ind):
     if isinstance(I, (NumericIndexType, StringIndexType)):
-        return lambda I, ind: bodo.hiframes.api.get_index_data(I)[ind]
+        return lambda I, ind: bodo.hiframes.pd_index_ext.get_index_data(I)[ind]
 
 
 # similar to index_from_array()
@@ -1414,11 +1469,11 @@ def overload_index_isna(I):
 
     def impl(I):
         numba.parfor.init_prange()
-        arr = bodo.hiframes.api.get_index_data(I)
+        arr = bodo.hiframes.pd_index_ext.get_index_data(I)
         n = len(arr)
         out_arr = np.empty(n, np.bool_)
         for i in numba.parfor.internal_prange(n):
-            out_arr[i] = bodo.hiframes.api.isna(arr, i)
+            out_arr[i] = bodo.libs.array_kernels.isna(arr, i)
         return out_arr
 
     return impl
@@ -1437,4 +1492,36 @@ def overload_index_len(I):
         ),
     ):
         # TODO: test
-        return lambda I: len(bodo.hiframes.api.get_index_data(I))
+        return lambda I: len(bodo.hiframes.pd_index_ext.get_index_data(I))
+
+
+@numba.generated_jit(nopython=True)
+def get_index_data(S):
+    return lambda S: S._data
+
+
+@numba.generated_jit(nopython=True)
+def get_index_name(S):
+    return lambda S: S._name
+
+
+def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
+    assert len(args) >= 1
+    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+
+
+numba.ir_utils.alias_func_extensions[
+    ("get_index_data", "bodo.hiframes.pd_index_ext")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("init_datetime_index", "bodo.hiframes.pd_index_ext")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("init_timedelta_index", "bodo.hiframes.pd_index_ext")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("init_numeric_index", "bodo.hiframes.pd_index_ext")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("init_string_index", "bodo.hiframes.pd_index_ext")
+] = alias_ext_dummy_func

@@ -2017,13 +2017,13 @@ def gen_update_func(
                 continue
             if is_getitem(stmt) and stmt.value.value.name == arr_var.name:
                 stmt.value = in_vars[0]
-            # XXX replace bodo.hiframes.api.isna(A, i) for now
+            # XXX replace bodo.libs.array_kernels.isna(A, i) for now
             # TODO: handle actual NA
             # for test_agg_seq_count_str test
             if (
                 is_call_assign(stmt)
                 and guard(find_callname, pm.func_ir, stmt.value)
-                == ("isna", "bodo.hiframes.api")
+                == ("isna", "bodo.libs.array_kernels")
                 and stmt.value.args[0].name == arr_var.name
             ):
                 stmt.value = ir.Const(False, stmt.target.loc)
@@ -2386,13 +2386,13 @@ def isna_tup_overload(arr_tup, ind):
     """return True if any array value is NA
     """
     if not isinstance(arr_tup, types.BaseTuple):
-        return lambda arr_tup, ind: bodo.hiframes.api.isna(arr_tup, ind)
+        return lambda arr_tup, ind: bodo.libs.array_kernels.isna(arr_tup, ind)
 
     count = arr_tup.count
     func_text = "def f(arr_tup, ind):\n"
     func_text += "  return {}\n".format(
         " or ".join(
-            "bodo.hiframes.api.isna(arr_tup[{}], ind)".format(i) for i in range(count)
+            "bodo.libs.array_kernels.isna(arr_tup[{}], ind)".format(i) for i in range(count)
         )
     )
 
@@ -2414,7 +2414,7 @@ def set_nan_zero_tup_overload(arr_tup, ind, val):
         zero = val(0)
         return (
             lambda arr_tup, ind, val: zero
-            if bodo.hiframes.api.isna(arr_tup[0], ind)
+            if bodo.libs.array_kernels.isna(arr_tup[0], ind)
             else val
         )
 
@@ -2422,7 +2422,7 @@ def set_nan_zero_tup_overload(arr_tup, ind, val):
     func_text = "def f(arr_tup, ind, val):\n"
     func_text += "  return {}\n".format(
         ", ".join(
-            "0 if bodo.hiframes.api.isna(arr_tup[{0}], ind) else val[{0}]".format(i)
+            "0 if bodo.libs.array_kernels.isna(arr_tup[{0}], ind) else val[{0}]".format(i)
             for i in range(count)
         )
     )
@@ -2445,7 +2445,7 @@ def setitem_arr_tup_na_match_overload(arr_tup1, arr_tup2, ind):
     count = arr_tup1.count
     func_text = "def f(arr_tup1, arr_tup2, ind):\n"
     for i in range(count):
-        func_text += "  if bodo.hiframes.api.isna(arr_tup2[{}], ind):\n".format(i)
+        func_text += "  if bodo.libs.array_kernels.isna(arr_tup2[{}], ind):\n".format(i)
         func_text += "    setitem_arr_nan(arr_tup1[{}], ind)\n".format(i)
 
     loc_vars = {}

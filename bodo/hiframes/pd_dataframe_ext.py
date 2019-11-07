@@ -398,6 +398,17 @@ def get_dataframe_index(df):
     return lambda df: _get_dataframe_index(df)
 
 
+def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
+    assert len(args) >= 1
+    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+
+
+numba.ir_utils.alias_func_extensions[
+    ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext")
+] = alias_ext_dummy_func
+# TODO: init_dataframe, get_dataframe_index?
+
+
 @intrinsic
 def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
     col_ind = c_ind_typ.literal_value
@@ -668,7 +679,7 @@ def _get_df_args(data, index, columns, dtype, copy):
         if is_overload_none(index):
             for i, t in enumerate(data.types[n_cols + 1 :]):
                 if isinstance(t, SeriesType):
-                    index_arg = "bodo.hiframes.api.get_series_index(data[{}])".format(
+                    index_arg = "bodo.hiframes.pd_series_ext.get_series_index(data[{}])".format(
                         n_cols + 1 + i
                     )
                     break
@@ -745,7 +756,7 @@ def df_len_overload(df):
 def df_getitem_overload(df, ind):
     if isinstance(df, DataFrameType) and isinstance(ind, types.StringLiteral):
         index = df.columns.index(ind.literal_value)
-        return lambda df, ind: bodo.hiframes.api.init_series(
+        return lambda df, ind: bodo.hiframes.pd_series_ext.init_series(
             get_dataframe_data(df, index), _get_dataframe_index(df), df._columns[index]
         )
 
@@ -1064,7 +1075,7 @@ def merge_overload(
     func_text += (
         "    suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):\n"
     )
-    func_text += "  return bodo.hiframes.api.join_dummy(left, right, {}, {}, '{}')\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, '{}')\n".format(
         left_keys, right_keys, how
     )
 
@@ -1084,7 +1095,7 @@ def merge_overload(
     #             right_on=None, left_index=False, right_index=False, sort=False,
     #             suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):
 
-    #         return bodo.hiframes.api.join_dummy(
+    #         return bodo.hiframes.pd_dataframe_ext.join_dummy(
     #             left, right, comm_cols, comm_cols, how)
 
     #     return _impl
@@ -1098,7 +1109,7 @@ def merge_overload(
     #     # if left_on is None and right_on is None and left_index == False and right_index == False:
     #     #     left_on = right_on = comm_cols
 
-    #     return bodo.hiframes.api.join_dummy(
+    #     return bodo.hiframes.pd_dataframe_ext.join_dummy(
     #         left, right, left_on, right_on, how)
 
     # return _impl
@@ -1337,7 +1348,7 @@ def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, other, on=None, how='left',\n"
     func_text += "    lsuffix='', rsuffix='', sort=False):\n"
-    func_text += "  return bodo.hiframes.api.join_dummy(left, other, {}, {}, '{}')\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}')\n".format(
         left_keys, right_keys, how
     )
 
@@ -1346,6 +1357,64 @@ def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort
     # print(func_text)
     _impl = loc_vars["_impl"]
     return _impl
+
+
+# a dummy join function that will be replace in dataframe_pass
+def join_dummy(left_df, right_df, left_on, right_on, how):
+    return left_df
+
+
+@infer_global(join_dummy)
+class JoinTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        from bodo.hiframes.pd_dataframe_ext import DataFrameType
+        from bodo.utils.typing import is_overload_str
+
+        assert not kws
+        left_df, right_df, left_on, right_on, how = args
+
+        # columns with common name that are not common keys will get a suffix
+        comm_keys = set(left_on.consts) & set(right_on.consts)
+        comm_data = set(left_df.columns) & set(right_df.columns)
+        add_suffix = comm_data - comm_keys
+
+        columns = [(c + "_x" if c in add_suffix else c) for c in left_df.columns]
+        # common keys are added only once so avoid adding them
+        columns += [
+            (c + "_y" if c in add_suffix else c)
+            for c in right_df.columns
+            if c not in comm_keys
+        ]
+        data = list(left_df.data)
+        data += [
+            right_df.data[right_df.columns.index(c)]
+            for c in right_df.columns
+            if c not in comm_keys
+        ]
+
+        # TODO: unify left/right indices if necessary (e.g. RangeIndex/Int64)
+        index_typ = types.none
+        left_index = "$_bodo_index_" in left_on.consts
+        right_index = "$_bodo_index_" in right_on.consts
+        if left_index and right_index and not is_overload_str(how, "asof"):
+            index_typ = left_df.index
+            if isinstance(index_typ, bodo.hiframes.pd_index_ext.RangeIndexType):
+                index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
+        elif right_index and is_overload_str(how, "left"):
+            index_typ = left_df.index
+        elif left_index and is_overload_str(how, "right"):
+            index_typ = right_df.index
+
+        out_df = DataFrameType(tuple(data), index_typ, tuple(columns))
+        return signature(out_df, *args)
+
+
+# dummy lowering to avoid overload errors, remove after overload inline PR
+# is merged
+@lower_builtin(join_dummy, types.VarArg(types.Any))
+def lower_join_dummy(context, builder, sig, args):
+    dataframe = cgutils.create_struct_proxy(sig.return_type)(context, builder)
+    return dataframe._getvalue()
 
 
 @overload(pd.merge_asof)
@@ -1409,7 +1478,7 @@ def merge_asof_overload(
     func_text += "    left_index=False, right_index=False, by=None, left_by=None,\n"
     func_text += "    right_by=None, suffixes=('_x', '_y'), tolerance=None,\n"
     func_text += "    allow_exact_matches=True, direction='backward'):\n"
-    func_text += "  return bodo.hiframes.api.join_dummy(left, right, {}, {}, 'asof')\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, 'asof')\n".format(
         left_keys, right_keys
     )
 
@@ -1426,7 +1495,7 @@ def merge_asof_overload(
     #     if on is not None:
     #         left_on = right_on = on
 
-    #     return bodo.hiframes.api.join_dummy(
+    #     return bodo.hiframes.pd_dataframe_ext.join_dummy(
     #         left, right, left_on, right_on, 'asof')
 
     # return _impl
@@ -1594,11 +1663,10 @@ class ConcatDummyTyper(AbstractTemplate):
                 # TODO: fix NA column additions for other types
                 if len(arr_args) < len(objs.types):
                     arr_args.append(types.Array(types.float64, 1, "C"))
-                # use bodo.hiframes.api.concat() typer
-                concat_typ = bodo.hiframes.api.ConcatType(self.context).generic(
-                    (types.Tuple(arr_args),), {}
-                )
-                all_data.append(concat_typ.return_type)
+                # use bodo.libs.array_kernels.concat() typer
+                concat_typ = self.context.resolve_function_type(
+                    bodo.libs.array_kernels.concat, (types.Tuple(arr_args),), {}).return_type
+                all_data.append(concat_typ)
 
             ret_typ = DataFrameType(tuple(all_data), None, tuple(all_colnames))
             return signature(ret_typ, *args)
@@ -1607,10 +1675,9 @@ class ConcatDummyTyper(AbstractTemplate):
         elif isinstance(objs.types[0], SeriesType):
             assert all(isinstance(t, SeriesType) for t in objs.types)
             arr_args = [S.data for S in objs.types]
-            concat_typ = bodo.hiframes.api.ConcatType(self.context).generic(
-                (types.Tuple(arr_args),), {}
-            )
-            ret_typ = SeriesType(concat_typ.return_type.dtype, concat_typ.return_type)
+            concat_typ = self.context.resolve_function_type(
+                    bodo.libs.array_kernels.concat, (types.Tuple(arr_args),), {}).return_type
+            ret_typ = SeriesType(concat_typ.dtype, concat_typ)
             return signature(ret_typ, *args)
         # TODO: handle other iterables like arrays, lists, ...
 
@@ -1761,7 +1828,7 @@ class ItertuplesDummyTyper(AbstractTemplate):
         assert "Index" not in df.columns
         columns = ("Index",) + df.columns
         arr_types = (types.Array(types.int64, 1, "C"),) + df.data
-        iter_typ = bodo.hiframes.api.DataFrameTupleIterator(columns, arr_types)
+        iter_typ = bodo.hiframes.dataframe_impl.DataFrameTupleIterator(columns, arr_types)
         return signature(iter_typ, *args)
 
 

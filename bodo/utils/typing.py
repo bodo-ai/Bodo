@@ -5,11 +5,11 @@ Helper functions to enable typing.
 import numpy as np
 import pandas as pd
 import numba
-from numba import types
+from numba import types, cgutils
 from numba.extending import register_model, models, overload
 from numba.typing.templates import infer_global, AbstractTemplate, CallableTemplate
 from numba.typing import signature
-from numba.targets.imputils import lower_builtin, impl_ret_borrowed
+from numba.targets.imputils import lower_builtin, impl_ret_borrowed, impl_ret_new_ref
 import bodo
 
 
@@ -207,6 +207,14 @@ class FlattenTyp(AbstractTemplate):
         return signature(SeriesType(dtype), *bodo.utils.utils.unliteral_all(args))
 
 
+@numba.generated_jit(nopython=True)
+def parallel_convert_to_array(c):  # pragma: no cover
+    """converts flattened list to array. Acts as a sentinel function to enable
+    parallelization
+    """
+    return lambda c: bodo.utils.conversion.coerce_to_array(c)
+
+
 # Type used to add constant values to constant lists to enable typing
 class ConstList(types.List):
     def __init__(self, dtype, consts):
@@ -286,3 +294,87 @@ class SortedBuiltinLambda(CallableTemplate):
             return types.List(iterable.iterator_type.yield_type)
 
         return typer
+
+
+def convert_tup_to_rec(val):
+    return val
+
+
+@infer_global(convert_tup_to_rec)
+class ConvertTupRecType(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 1
+        in_dtype = args[0]
+        out_dtype = in_dtype
+
+        if isinstance(in_dtype, types.BaseTuple):
+            np_dtype = np.dtype(",".join(str(t) for t in in_dtype.types), align=True)
+            out_dtype = numba.numpy_support.from_dtype(np_dtype)
+
+        return signature(out_dtype, in_dtype)
+
+
+@lower_builtin(convert_tup_to_rec, types.Any)
+def lower_convert_impl(context, builder, sig, args):
+    val, = args
+    in_typ = sig.args[0]
+    rec_typ = sig.return_type
+
+    if not isinstance(in_typ, types.BaseTuple):
+        return impl_ret_borrowed(context, builder, sig.return_type, val)
+
+    res = cgutils.alloca_once(builder, context.get_data_type(rec_typ))
+
+    func_text = "def _set_rec(r, val):\n"
+    for i in range(len(rec_typ.members)):
+        func_text += "  r.f{} = val[{}]\n".format(i, i)
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    set_rec = loc_vars["_set_rec"]
+
+    context.compile_internal(builder, set_rec, types.void(rec_typ, in_typ), [res, val])
+    return impl_ret_new_ref(context, builder, sig.return_type, res)
+
+
+def convert_rec_to_tup(val):
+    return val
+
+
+@infer_global(convert_rec_to_tup)
+class ConvertRecTupType(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 1
+        in_dtype = args[0]
+        out_dtype = in_dtype
+
+        if isinstance(in_dtype, types.Record):
+            out_dtype = types.Tuple([m[1] for m in in_dtype.members])
+
+        return signature(out_dtype, in_dtype)
+
+
+@lower_builtin(convert_rec_to_tup, types.Any)
+def lower_convert_rec_tup_impl(context, builder, sig, args):
+    val, = args
+    rec_typ = sig.args[0]
+    tup_typ = sig.return_type
+
+    if not isinstance(rec_typ, types.Record):
+        return impl_ret_borrowed(context, builder, sig.return_type, val)
+
+    n_fields = len(rec_typ.members)
+
+    func_text = "def _rec_to_tup(r):\n"
+    func_text += "  return ({},)\n".format(
+        ", ".join("r.f{}".format(i) for i in range(n_fields))
+    )
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    _rec_to_tup = loc_vars["_rec_to_tup"]
+
+    res = context.compile_internal(builder, _rec_to_tup, tup_typ(rec_typ), [val])
+    return impl_ret_borrowed(context, builder, sig.return_type, res)

@@ -353,6 +353,28 @@ ArrayAnalysis._analyze_op_call_bodo_libs_int_arr_ext_init_integer_array = (
 )
 
 
+def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
+    assert len(args) >= 1
+    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+
+
+def alias_ext_init_integer_array(lhs_name, args, alias_map, arg_aliases):
+    assert len(args) == 2
+    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    numba.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
+
+
+numba.ir_utils.alias_func_extensions[
+    ("init_integer_array", "bodo.libs.int_arr_ext")
+] = alias_ext_init_integer_array
+numba.ir_utils.alias_func_extensions[
+    ("get_int_arr_data", "bodo.libs.int_arr_ext")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("get_int_arr_bitmap", "bodo.libs.int_arr_ext")
+] = alias_ext_dummy_func
+
+
 @numba.extending.register_jitable
 def set_bit_to_arr(bits, i, bit_is_set):
     bits[i // 8] ^= np.uint8(-np.uint8(bit_is_set) ^ bits[i // 8]) & kBitmask[i % 8]
@@ -604,7 +626,7 @@ def overload_int_arr_astype(A, dtype, copy=True):
             B = np.empty(n, nb_dtype)
             for i in numba.parfor.internal_prange(n):
                 B[i] = data[i]
-                if bodo.hiframes.api.isna(A, i):
+                if bodo.libs.array_kernels.isna(A, i):
                     B[i] = np.nan
             return B
 
@@ -897,7 +919,7 @@ def overload_unique(A):
         s = set()
         for i in range(len(A)):
             val = A[i]
-            if bodo.hiframes.api.isna(A, i):
+            if bodo.libs.array_kernels.isna(A, i):
                 if not na_found:
                     data.append(dtype(1))
                     mask.append(False)

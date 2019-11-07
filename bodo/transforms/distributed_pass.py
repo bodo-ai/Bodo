@@ -552,7 +552,7 @@ class DistributedPass(object):
             return out
 
         if fdef in (
-            ("isna", "bodo.hiframes.api"),
+            ("isna", "bodo.libs.array_kernels"),
             ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"),
             ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
             ("get_str_arr_item_length", "bodo.libs.str_arr_ext"),
@@ -612,16 +612,16 @@ class DistributedPass(object):
             )
             return nodes + compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == ("nunique", "bodo.hiframes.api") and (
+        if fdef == ("nunique", "bodo.libs.array_kernels") and (
             self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)
         ):
-            f = lambda arr: bodo.hiframes.api.nunique_parallel(arr)
+            f = lambda arr: bodo.libs.array_kernels.nunique_parallel(arr)
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == ("unique", "bodo.hiframes.api") and (
+        if fdef == ("unique", "bodo.libs.array_kernels") and (
             self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)
         ):
-            f = lambda arr: bodo.hiframes.api.unique_parallel(arr)
+            f = lambda arr: bodo.libs.array_kernels.unique_parallel(arr)
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ("nlargest", "bodo.libs.array_kernels") and (
@@ -662,13 +662,13 @@ class DistributedPass(object):
             )
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == ("convert_rec_to_tup", "bodo.hiframes.api"):
+        if fdef == ("convert_rec_to_tup", "bodo.utils.typing"):
             # optimize Series back to back map pattern with tuples
             # TODO: create another optimization pass?
             arg_def = guard(get_definition, self.func_ir, rhs.args[0])
             if is_call(arg_def) and guard(find_callname, self.func_ir, arg_def) == (
                 "convert_tup_to_rec",
-                "bodo.hiframes.api",
+                "bodo.utils.typing",
             ):
                 assign.value = arg_def.args[0]
             return out
@@ -2336,7 +2336,7 @@ class DistributedPass(object):
             rhs = stmt.value
             fdef = guard(find_callname, self.func_ir, rhs, self.typemap)
             if fdef in (
-                ("isna", "bodo.hiframes.api"),
+                ("isna", "bodo.libs.array_kernels"),
                 ("setitem_arr_nan", "bodo.ir.join"),
                 ("str_arr_item_to_numeric", "bodo.libs.str_arr_ext"),
                 ("setitem_str_arr_ptr", "bodo.libs.str_arr_ext"),

@@ -978,7 +978,7 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
 @register_jitable(cache=True)
 def shift_seq(in_arr, shift):  # pragma: no cover
     N = len(in_arr)
-    output = bodo.hiframes.api.alloc_shift(in_arr)
+    output = alloc_shift(in_arr)
     shift = min(shift, N)
     output[:shift] = np.nan
 
@@ -1055,7 +1055,7 @@ def get_first_non_na(arr):
 
     def impl(arr):  # pragma: no cover
         for i in range(len(arr)):
-            if not bodo.hiframes.api.isna(arr, i):
+            if not bodo.libs.array_kernels.isna(arr, i):
                 return arr[i]
 
         return na_val
@@ -1083,7 +1083,7 @@ def get_last_non_na(arr):
         l = len(arr)
         for i in range(len(arr)):
             ind = l - i - 1
-            if not bodo.hiframes.api.isna(arr, ind):
+            if not bodo.libs.array_kernels.isna(arr, ind):
                 return arr[ind]
 
         return na_val
@@ -1101,7 +1101,7 @@ def get_one_from_arr_dtype(arr):
 def pct_change_seq(in_arr, shift):  # pragma: no cover
     # TODO: parallel 'pad' fill
     N = len(in_arr)
-    output = bodo.hiframes.api.alloc_shift(in_arr)
+    output = alloc_shift(in_arr)
     shift = min(shift, N)
     output[:shift] = np.nan
 
@@ -1288,7 +1288,7 @@ def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
     if rank == 0:
         all_out = shift_seq(all_in_arr, shift)
     else:
-        all_out = np.empty(all_N, bodo.hiframes.api.shift_dtype(in_arr.dtype))
+        all_out = np.empty(all_N, shift_dtype(in_arr.dtype))
     bodo.libs.distributed_api.bcast(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
     start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
@@ -1306,7 +1306,7 @@ def _handle_small_data_pct_change(in_arr, shift, rank, n_pes):  # pragma: no cov
     if rank == 0:
         all_out = pct_change_seq(all_in_arr, shift)
     else:
-        all_out = np.empty(all_N, bodo.hiframes.api.shift_dtype(in_arr.dtype))
+        all_out = np.empty(all_N, shift_dtype(in_arr.dtype))
     bodo.libs.distributed_api.bcast(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
     start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
@@ -1424,3 +1424,26 @@ def _dropna(arr):  # pragma: no cover
             curr_ind += 1
 
     return A
+
+
+def alloc_shift(A):
+    return np.empty_like(A)
+
+
+@overload(alloc_shift)
+def alloc_shift_overload(A):
+    if isinstance(A.dtype, types.Integer):
+        return lambda A: np.empty(len(A), np.float64)
+    return lambda A: np.empty(len(A), A.dtype)
+
+
+def shift_dtype(d):
+    return d
+
+
+@overload(shift_dtype)
+def shift_dtype_overload(a):
+    if isinstance(a.dtype, types.Integer):
+        return lambda a: np.float64
+    else:
+        return lambda a: a

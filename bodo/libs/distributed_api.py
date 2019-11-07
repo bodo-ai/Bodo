@@ -554,14 +554,14 @@ def gatherv(data, allgather=False):
 
         def impl(data, allgather=False):
             # get data and index arrays
-            arr = bodo.hiframes.api.get_series_data(data)
-            index = bodo.hiframes.api.get_series_index(data)
-            name = bodo.hiframes.api.get_series_name(data)
+            arr = bodo.hiframes.pd_series_ext.get_series_data(data)
+            index = bodo.hiframes.pd_series_ext.get_series_index(data)
+            name = bodo.hiframes.pd_series_ext.get_series_name(data)
             # gather data
             out_arr = bodo.libs.distributed_api.gatherv(arr, allgather)
             out_index = bodo.gatherv(index, allgather)
             # create output Series
-            return bodo.hiframes.api.init_series(out_arr, out_index, name)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
 
         return impl
 

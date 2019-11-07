@@ -404,7 +404,7 @@ def build_set(A):
     #     def impl_int_arr(A):
     #         s = set()
     #         for i in range(len(A)):
-    #             if not bodo.hiframes.api.isna(A, i):
+    #             if not bodo.libs.array_kernels.isna(A, i):
     #                 s.add(A[i])
     #         return s
 
@@ -421,7 +421,7 @@ def build_set(A):
         def impl_int_arr(A):
             s = dict()
             for i in range(len(A)):
-                if not bodo.hiframes.api.isna(A, i):
+                if not bodo.libs.array_kernels.isna(A, i):
                     s[A[i]] = 0
             return s
 
@@ -493,6 +493,28 @@ def unique(A):
 
     # TODO: preserve order
     return lambda A: to_array(build_set(A))
+
+
+@overload(np.array)
+def np_array_array_overload(A):
+    if isinstance(A, types.Array):
+        return lambda A: A
+
+    if isinstance(A, types.containers.Set):
+        # TODO: naive implementation, data from set can probably
+        # be copied to array more efficienty
+        dtype = A.dtype
+
+        def f(A):
+            n = len(A)
+            arr = np.empty(n, dtype)
+            i = 0
+            for a in A:
+                arr[i] = a
+                i += 1
+            return arr
+
+        return f
 
 
 def empty_like_type(n, arr):

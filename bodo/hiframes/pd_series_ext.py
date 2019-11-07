@@ -6,7 +6,7 @@ import operator
 import pandas as pd
 import numpy as np
 import numba
-from numba import types
+from numba import types, cgutils
 from numba.extending import (
     models,
     register_model,
@@ -16,6 +16,7 @@ from numba.extending import (
     infer,
     overload,
     make_attribute_wrapper,
+    intrinsic,
 )
 from numba.typing.templates import (
     infer_global,
@@ -35,6 +36,7 @@ from numba.typing.npydecl import (
     NumpyRulesArrayOperator,
     NumpyRulesInplaceArrayOperator,
 )
+from numba.targets.imputils import impl_ret_borrowed
 import bodo
 from bodo.libs.str_ext import string_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
@@ -240,6 +242,221 @@ class SeriesModel(models.StructModel):
         super(SeriesModel, self).__init__(dmm, fe_type, members)
 
 
+def construct_series(context, builder, series_type, data_val, index_val, name_val):
+    # create payload struct and store values
+    payload_type = SeriesPayloadType(series_type)
+    series_payload = cgutils.create_struct_proxy(payload_type)(context, builder)
+    series_payload.data = data_val
+    series_payload.index = index_val
+    series_payload.name = name_val
+
+    # create meminfo and store payload
+    payload_ll_type = context.get_data_type(payload_type)
+    payload_size = context.get_abi_sizeof(payload_ll_type)
+    meminfo = context.nrt.meminfo_alloc(
+        builder, context.get_constant(types.uintp, payload_size)
+    )
+    meminfo_data_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_data_ptr, payload_ll_type.as_pointer())
+    builder.store(series_payload._getvalue(), meminfo_data_ptr)
+
+    # create Series struct
+    series = cgutils.create_struct_proxy(series_type)(context, builder)
+    series.meminfo = meminfo
+    # Set parent to NULL
+    series.parent = cgutils.get_null_value(series.parent.type)
+    return series._getvalue()
+
+
+@intrinsic
+def init_series(typingctx, data, index=None, name=None):
+    """Create a Series with provided data, index and name values.
+    Used as a single constructor for Series and assigning its data, so that
+    optimization passes can look for init_series() to see if underlying
+    data has changed, and get the array variables from init_series() args if
+    not changed.
+    """
+
+    index = types.none if index is None else index
+    name = types.none if name is None else name
+    name = types.unliteral(name)
+
+    def codegen(context, builder, signature, args):
+        data_val, index_val, name_val = args
+        series_type = signature.return_type
+
+        series_val = construct_series(
+            context, builder, series_type, data_val, index_val, name_val
+        )
+
+        # increase refcount of stored values
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[0], data_val)
+            context.nrt.incref(builder, signature.args[1], index_val)
+            context.nrt.incref(builder, signature.args[2], name_val)
+
+        return series_val
+
+    dtype = data.dtype
+    # XXX pd.DataFrame() calls init_series for even Series since it's untyped
+    data = if_series_to_array_type(data)
+    ret_typ = SeriesType(dtype, data, index, name)
+    sig = signature(ret_typ, data, index, name)
+    return sig, codegen
+
+
+def init_series_equiv(self, scope, equiv_set, args, kws):
+    assert len(args) >= 1 and not kws
+    # TODO: add shape for index
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return var, []
+    return None
+
+from numba.array_analysis import ArrayAnalysis
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_series_ext_init_series = init_series_equiv
+
+
+def get_series_payload(context, builder, series_type, value):
+    meminfo = cgutils.create_struct_proxy(series_type)(context, builder, value).meminfo
+    payload_type = SeriesPayloadType(series_type)
+    payload = context.nrt.meminfo_data(builder, meminfo)
+    ptrty = context.get_data_type(payload_type).as_pointer()
+    payload = builder.bitcast(payload, ptrty)
+    return context.make_data_helper(builder, payload_type, ref=payload)
+
+
+@intrinsic
+def _get_series_data(typingctx, series_typ=None):
+    def codegen(context, builder, signature, args):
+        series_payload = get_series_payload(
+            context, builder, signature.args[0], args[0]
+        )
+        return impl_ret_borrowed(context, builder, series_typ.data, series_payload.data)
+
+    ret_typ = series_typ.data
+    sig = signature(ret_typ, series_typ)
+    return sig, codegen
+
+
+@intrinsic
+def update_series_data(typingctx, series_typ, arr_typ=None):
+    def codegen(context, builder, signature, args):
+        series_payload = get_series_payload(
+            context, builder, signature.args[0], args[0]
+        )
+        series_payload.data = args[1]
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[1], args[1])
+        return
+
+    sig = types.none(series_typ, arr_typ)
+    return sig, codegen
+
+
+@intrinsic
+def update_series_index(typingctx, series_typ, arr_typ=None):
+    def codegen(context, builder, signature, args):
+        series_payload = get_series_payload(
+            context, builder, signature.args[0], args[0]
+        )
+        series_payload.index = args[1]
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[1], args[1])
+        return
+
+    sig = types.none(series_typ, arr_typ)
+    return sig, codegen
+
+
+@intrinsic
+def _get_series_index(typingctx, series_typ=None):
+    def codegen(context, builder, signature, args):
+        series_payload = get_series_payload(
+            context, builder, signature.args[0], args[0]
+        )
+        return impl_ret_borrowed(
+            context, builder, series_typ.index, series_payload.index
+        )
+
+    ret_typ = series_typ.index
+    sig = signature(ret_typ, series_typ)
+    return sig, codegen
+
+
+@intrinsic
+def _get_series_name(typingctx, series_typ=None):
+    def codegen(context, builder, signature, args):
+        series_payload = get_series_payload(
+            context, builder, signature.args[0], args[0]
+        )
+        # TODO: is borrowing None reference ok here?
+        return impl_ret_borrowed(
+            context, builder, signature.return_type, series_payload.name
+        )
+
+    sig = signature(series_typ.name_typ, series_typ)
+    return sig, codegen
+
+
+# this function should be used for getting S._data for alias analysis to work
+# no_cpython_wrapper since Array(DatetimeDate) cannot be boxed
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_series_data(S):
+    return lambda S: _get_series_data(S)
+
+
+# TODO: use separate index type instead of just storing array
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_series_index(S):
+    return lambda S: _get_series_index(S)
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_series_name(S):
+    return lambda S: _get_series_name(S)
+
+
+# array analysis extension
+def get_series_data_equiv(self, scope, equiv_set, args, kws):
+    assert len(args) == 1 and not kws
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return var, []
+    return None
+
+
+from numba.array_analysis import ArrayAnalysis
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_series_ext_get_series_data = get_series_data_equiv
+
+
+def alias_ext_init_series(lhs_name, args, alias_map, arg_aliases):
+    assert len(args) >= 1
+    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    if len(args) > 1:  # has index
+        numba.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
+
+
+numba.ir_utils.alias_func_extensions[
+    ("init_series", "bodo.hiframes.pd_series_ext")
+] = alias_ext_init_series
+
+
+def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
+    assert len(args) >= 1
+    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+
+
+numba.ir_utils.alias_func_extensions[
+    ("get_series_data", "bodo.hiframes.pd_series_ext")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("get_series_index", "bodo.hiframes.pd_series_ext")
+] = alias_ext_dummy_func
+
+
 def series_to_array_type(typ):
     return typ.data
     # return _get_series_array_type(typ.dtype)
@@ -297,10 +514,10 @@ def if_arr_to_series_type(typ):
 @numba.njit
 def convert_index_to_int64(S):
     # convert Series with none index to numeric index
-    data = bodo.hiframes.api.get_series_data(S)
+    data = bodo.hiframes.pd_series_ext.get_series_data(S)
     index_arr = np.arange(len(data))
-    name = bodo.hiframes.api.get_series_name(S)
-    return bodo.hiframes.api.init_series(
+    name = bodo.hiframes.pd_series_ext.get_series_name(S)
+    return bodo.hiframes.pd_series_ext.init_series(
         data, bodo.utils.conversion.convert_to_index(index_arr), name
     )
 
@@ -701,8 +918,27 @@ def pd_series_overload(
         # if copy:
         #     data_t2 = data_t1.copy()
 
-        return bodo.hiframes.api.init_series(
+        return bodo.hiframes.pd_series_ext.init_series(
             data_t2, bodo.utils.conversion.convert_to_index(index_t), name_t
         )
 
+    return impl
+
+
+def get_series_data_tup(series_tup):
+    return tuple(get_series_data(s) for s in series_tup)
+
+
+@overload(get_series_data_tup)
+def overload_get_series_data_tup(series_tup):
+    n_series = len(series_tup.types)
+    func_text = "def f(series_tup):\n"
+    res = ",".join(
+        "bodo.hiframes.pd_series_ext.get_series_data(series_tup[{}])".format(i)
+        for i in range(n_series)
+    )
+    func_text += "  return ({}{})\n".format(res, "," if n_series == 1 else "")
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    impl = loc_vars["f"]
     return impl

@@ -41,7 +41,6 @@ import bodo.io
 from bodo.io import h5, parquet_pio
 from bodo.io.parquet_pio import ParquetHandler
 from bodo.utils.utils import inline_new_blocks, ReplaceFunc, is_call, is_assign, is_expr
-import bodo.hiframes.api
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -73,22 +72,20 @@ def remove_hiframes(rhs, lives, call_list):
         return True
     if (
         len(call_list) == 4
-        and call_list[1:] == ["api", "hiframes", bodo]
+        and call_list[1:] == ["pd_series_ext", "hiframes", bodo]
         and call_list[0]
         in [
-            "fix_rolling_array",
-            "concat",
-            "count",
-            "mean",
-            "quantile",
-            "var",
-            "nunique",
-            "init_series",
-            "init_datetime_index",
-            "init_timedelta_index",
             "get_series_data",
             "get_series_index",
             "get_series_name",
+        ]
+    ):
+        return True
+    if (
+        len(call_list) == 4
+        and call_list[1:] == ["typing", "utils", bodo]
+        and call_list[0]
+        in [
             "convert_tup_to_rec",
             "convert_rec_to_tup",
         ]
@@ -98,7 +95,8 @@ def remove_hiframes(rhs, lives, call_list):
         len(call_list) == 4
         and call_list[1:] == ["pd_index_ext", "hiframes", bodo]
         and call_list[0]
-        in ("init_string_index", "init_numeric_index", "_dti_val_finalize")
+        in ("init_string_index", "init_numeric_index", "_dti_val_finalize",
+            "init_datetime_index", "init_timedelta_index")
     ):
         return True
     if (
@@ -126,6 +124,8 @@ def remove_hiframes(rhs, lives, call_list):
         return True
     if call_list == ["dist_return", "distributed_api", bodo]:
         return True
+    if call_list == ["init_series", "pd_series_ext", "hiframes", bodo]:
+        return True
     if call_list == ["init_dataframe", "pd_dataframe_ext", "hiframes", bodo]:
         return True
     if call_list == ["get_dataframe_data", "pd_dataframe_ext", "hiframes", bodo]:
@@ -136,7 +136,18 @@ def remove_hiframes(rhs, lives, call_list):
     #     return True
     if call_list == ["rolling_dummy", "pd_rolling_ext", "hiframes", bodo]:
         return True
-    if call_list == ["calc_nitems", "array_kernels", "libs", bodo]:
+    if (
+        len(call_list) == 4
+        and call_list[1:] == ["array_kernels", "libs", bodo]
+        and call_list[0]
+        in [
+            "calc_nitems",
+            "concat",
+            "unique",
+            "nunique",
+            "quantile",
+        ]
+    ):
         return True
     if call_list == ["add_consts_to_type", "typing", "utils", bodo]:
         return True
@@ -454,7 +465,7 @@ class UntypedPass(object):
             # variable replacement
             kws = dict(rhs.kws)
             inplace_var = self._get_arg("drop", rhs.args, kws, 5, "inplace", "")
-            replace_func = lambda: bodo.hiframes.api.drop_inplace
+            replace_func = lambda: bodo.hiframes.dataframe_impl.drop_inplace
             return self._handle_df_inplace_func(
                 assign, lhs, rhs, func_mod, inplace_var, replace_func, label
             )
@@ -464,7 +475,7 @@ class UntypedPass(object):
             # variable replacement
             kws = dict(rhs.kws)
             inplace_var = self._get_arg("sort_values", rhs.args, kws, 3, "inplace", "")
-            replace_func = lambda: bodo.hiframes.api.sort_values_inplace
+            replace_func = lambda: bodo.hiframes.dataframe_impl.sort_values_inplace
             return self._handle_df_inplace_func(
                 assign, lhs, rhs, func_mod, inplace_var, replace_func, label
             )
@@ -966,7 +977,7 @@ class UntypedPass(object):
         arg = rhs.args[0]
 
         return _compile_func_single_block(
-            lambda arr: bodo.hiframes.api.to_numeric(arr, _dtype),
+            lambda arr: bodo.hiframes.series_impl.to_numeric(arr, _dtype),
             [arg],
             lhs,
             extra_globals={"_dtype": dtype},
@@ -1355,7 +1366,7 @@ class UntypedPass(object):
         nodes = [ir.Assign(ir.Const(inst.index, inst.loc), cname_var, inst.loc)]
         inplace = not dominates
 
-        func = lambda df, cname, arr: bodo.hiframes.api.set_df_col(
+        func = lambda df, cname, arr: bodo.hiframes.dataframe_impl.set_df_col(
             df, cname, arr, _inplace
         )
         f_block = compile_to_numba_ir(

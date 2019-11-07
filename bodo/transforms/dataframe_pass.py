@@ -57,6 +57,9 @@ import bodo.hiframes.pd_rolling_ext
 from bodo.hiframes.pd_rolling_ext import RollingType
 from bodo.ir.aggregate import get_agg_func
 from bodo.utils.transform import compile_func_single_block, update_locs
+from bodo.libs.str_arr_ext import string_array_type
+from bodo.hiframes.split_impl import string_array_split_view_type
+from bodo.libs.list_str_arr_ext import list_string_array_type
 
 
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
@@ -280,7 +283,7 @@ class DataFramePass(object):
             self.typemap[name_var.name] = types.StringLiteral(name_str)
             nodes.append(ir.Assign(ir.Const(name_str, lhs.loc), name_var, lhs.loc))
             return nodes + compile_func_single_block(
-                lambda A, df_index, name: bodo.hiframes.api.init_series(
+                lambda A, df_index, name: bodo.hiframes.pd_series_ext.init_series(
                     A, df_index, name
                 ),
                 (arr, df_index, name_var),
@@ -353,12 +356,12 @@ class DataFramePass(object):
             df_index_var = self._get_dataframe_index(df_var, nodes)
 
             if guard(is_whole_slice, self.typemap, self.func_ir, col_filter_var):
-                func = lambda A, ind, df_index, name: bodo.hiframes.api.init_series(
+                func = lambda A, ind, df_index, name: bodo.hiframes.pd_series_ext.init_series(
                     A, df_index, name
                 )
             else:
                 # TODO: test this case
-                func = lambda A, ind, df_index, name: bodo.hiframes.api.init_series(
+                func = lambda A, ind, df_index, name: bodo.hiframes.pd_series_ext.init_series(
                     A[ind], None, name
                 )
 
@@ -496,7 +499,7 @@ class DataFramePass(object):
             self.typemap[name.name] = types.StringLiteral(col_name)
             nodes.append(ir.Assign(ir.Const(col_name, arr.loc), name, arr.loc))
             return self._replace_func(
-                lambda arr, index, name: bodo.hiframes.api.init_series(
+                lambda arr, index, name: bodo.hiframes.pd_series_ext.init_series(
                     arr, index, name
                 ),
                 [arr, index, name],
@@ -591,7 +594,7 @@ class DataFramePass(object):
         if fdef == ("len", "builtins") and self._is_df_var(rhs.args[0]):
             return self._run_call_len(lhs, rhs.args[0])
 
-        if fdef == ("set_df_col", "bodo.hiframes.api"):
+        if fdef == ("set_df_col", "bodo.hiframes.dataframe_impl"):
             return self._run_call_set_df_column(assign, lhs, rhs)
 
         if fdef == ("merge", "pandas"):
@@ -612,7 +615,7 @@ class DataFramePass(object):
                 impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
-        if fdef == ("join_dummy", "bodo.hiframes.api"):
+        if fdef == ("join_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_join(assign, lhs, rhs)
 
         if isinstance(func_mod, ir.Var) and isinstance(
@@ -698,18 +701,18 @@ class DataFramePass(object):
         if fdef == ("reset_index_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_reset_index(assign, lhs, rhs)
 
-        if fdef == ("drop_inplace", "bodo.hiframes.api"):
+        if fdef == ("drop_inplace", "bodo.hiframes.dataframe_impl"):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.api.drop_inplace_overload(*arg_typs, **kw_typs)
+            impl = bodo.hiframes.dataframe_impl.drop_inplace_overload(*arg_typs, **kw_typs)
             return self._replace_func(
                 impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
-        if fdef == ("sort_values_inplace", "bodo.hiframes.api"):
+        if fdef == ("sort_values_inplace", "bodo.hiframes.dataframe_impl"):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.api.sort_values_inplace_overload(*arg_typs, **kw_typs)
+            impl = bodo.hiframes.dataframe_impl.sort_values_inplace_overload(*arg_typs, **kw_typs)
             return self._replace_func(
                 impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
@@ -982,14 +985,14 @@ class DataFramePass(object):
         func_text = "def f({}, df_index):\n".format(col_name_args)
         # make series to enable getitem of dt64 to timestamp for example
         for i in range(len(used_cols)):
-            func_text += "  c{} = bodo.hiframes.api.init_series(c{})\n".format(i, i)
+            func_text += "  c{} = bodo.hiframes.pd_series_ext.init_series(c{})\n".format(i, i)
         func_text += "  numba.parfor.init_prange()\n"
         func_text += "  n = len(c0)\n"
         func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ)\n"
         func_text += "  for i in numba.parfor.internal_prange(n):\n"
         func_text += "     row = Row({})\n".format(row_args)
         func_text += "     S[i] = map_func(row)\n"
-        func_text += "  return bodo.hiframes.api.init_series(S, df_index, None)\n"
+        func_text += "  return bodo.hiframes.pd_series_ext.init_series(S, df_index, None)\n"
 
         loc_vars = {}
         exec(func_text, {}, loc_vars)
@@ -1151,7 +1154,7 @@ class DataFramePass(object):
         name_consts = ", ".join(["'{}'".format(c) for c in df_typ.columns])
 
         func_text = "def f({}):\n".format(col_name_args)
-        func_text += "  return bodo.hiframes.api.get_itertuples({}, {})\n".format(
+        func_text += "  return bodo.hiframes.dataframe_impl.get_itertuples({}, {})\n".format(
             name_consts, col_name_args
         )
 
@@ -1177,7 +1180,7 @@ class DataFramePass(object):
 
         func_text = "def _mean_impl({}):\n".format(", ".join(data_args))
         for d in data_args:
-            func_text += "  {} = bodo.hiframes.api.init_series({})\n".format(
+            func_text += "  {} = bodo.hiframes.pd_series_ext.init_series({})\n".format(
                 d + "_S", d
             )
             func_text += "  {} = {}.{}()\n".format(d + "_O", d + "_S", func_name)
@@ -1187,7 +1190,7 @@ class DataFramePass(object):
         func_text += "  index = bodo.libs.str_arr_ext.StringArray(({},))\n".format(
             ", ".join("'{}'".format(c) for c in df_typ.columns)
         )
-        func_text += "  return bodo.hiframes.api.init_series(data, index)\n"
+        func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, index)\n"
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _mean_impl = loc_vars["_mean_impl"]
@@ -1216,14 +1219,14 @@ class DataFramePass(object):
             ", ".join(data_args)
         )
         for d in data_args:
-            func_text += "  {} = bodo.hiframes.api.init_series({})\n".format(
+            func_text += "  {} = bodo.hiframes.pd_series_ext.init_series({})\n".format(
                 d + "_S", d
             )
             if not inplace:
                 func_text += "  {} = {}.fillna(val)\n".format(d + "_S", d + "_S")
             else:
                 func_text += "  {}.fillna(val, inplace=True)\n".format(d + "_S")
-            func_text += "  {} = bodo.hiframes.api.get_series_data({})\n".format(
+            func_text += "  {} = bodo.hiframes.pd_series_ext.get_series_data({})\n".format(
                 d + "_O", d + "_S"
             )
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), df_index, {})\n".format(
@@ -1243,42 +1246,123 @@ class DataFramePass(object):
             return self._set_df_inplace(_fillna_impl, args, df_var, lhs.loc, nodes)
 
     def _run_call_df_dropna(self, assign, lhs, rhs):
+        # TODO: refactor, support/test all array types
         df_var = rhs.args[0]
         inplace_var = rhs.args[1]
         inplace = guard(find_const, self.func_ir, inplace_var)
         df_typ = self.typemap[df_var.name]
 
+        # TODO: index
         nodes = []
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
 
         n_cols = len(df_typ.columns)
-        arg_names = ", ".join("data" + str(i) for i in range(n_cols))
-        out_names = ", ".join("out" + str(i) for i in range(n_cols))
+        arg_names = ["data" + str(i) for i in range(n_cols)]
+        out_names = ["out" + str(i) for i in range(n_cols)]
 
-        func_text = "def _dropna_imp({}, inplace):\n".format(arg_names)
-        func_text += "  ({},) = bodo.hiframes.api.dropna(({},), inplace)\n".format(
-            out_names, arg_names
+        str_colnames = [
+            arg_names[i] for i, t in enumerate(df_typ.data) if t == string_array_type
+        ]
+        list_str_colnames = [
+            arg_names[i]
+            for i, t in enumerate(df_typ.data)
+            if t == list_string_array_type
+        ]
+        split_view_colnames = [
+            arg_names[i]
+            for i, t in enumerate(df_typ.data)
+            if t == string_array_split_view_type
+        ]
+
+        isna_calls = ["bodo.libs.array_kernels.isna({}, i)".format(v) for v in arg_names]
+
+        func_text = "def _dropna_imp({}, inplace):\n".format(", ".join(arg_names))
+        func_text += "  old_len = len({})\n".format(arg_names[0])
+        func_text += "  new_len = 0\n"
+        for c in str_colnames:
+            func_text += "  num_chars_{} = 0\n".format(c)
+        for c in list_str_colnames:
+            func_text += "  num_lists_{} = 0\n".format(c)
+            func_text += "  num_chars_{} = 0\n".format(c)
+        func_text += "  for i in numba.parfor.internal_prange(old_len):\n"
+        func_text += "    if not ({}):\n".format(" or ".join(isna_calls))
+        func_text += "      new_len += 1\n"
+        for c in str_colnames:
+            func_text += "      num_chars_{0} += get_utf8_size({0}[i])\n".format(c)
+        for c in list_str_colnames:
+            func_text += "      v_{0} = {0}[i]\n".format(c)
+            func_text += "      num_lists_{0} += len(v_{0})\n".format(c)
+            func_text += "      for s_{0} in v_{0}:\n".format(c)
+            func_text += "        num_chars_{0} += get_utf8_size(s_{0})\n".format(c)
+        for v, out in zip(arg_names, out_names):
+            if v in str_colnames:
+                func_text += "  {} = bodo.libs.str_arr_ext.pre_alloc_string_array(new_len, num_chars_{})\n".format(
+                    out, v
+                )
+            elif v in list_str_colnames:
+                func_text += "  {0} = bodo.libs.list_str_arr_ext.pre_alloc_list_string_array(new_len, num_lists_{1}, num_chars_{1})\n".format(
+                    out, c
+                )
+            elif v in split_view_colnames:
+                # TODO support dropna() for split view
+                func_text += "  {} = {}\n".format(out, v)
+            else:
+                func_text += "  {} = np.empty(new_len, {}.dtype)\n".format(out, v)
+        func_text += "  curr_ind = 0\n"
+        if v in list_str_colnames:
+            func_text += "  index_offsets_{} = bodo.libs.list_str_arr_ext.get_index_offset_ptr({})\n".format(c, out)
+            func_text += "  data_offsets_{} = bodo.libs.list_str_arr_ext.get_data_offset_ptr({})\n".format(c, out)
+            func_text += "  curr_s_offset_{} = 0\n".format(c)
+            func_text += "  curr_d_offset_{} = 0\n".format(c)
+        func_text += "  for ii in numba.parfor.internal_prange(old_len):\n"
+        func_text += "    if not ({}):\n".format(" or ".join(
+            ["bodo.libs.array_kernels.isna({}, ii)".format(v) for v in arg_names]))
+        for v, out in zip(arg_names, out_names):
+            if v in split_view_colnames:
+                continue
+            if v in list_str_colnames:
+                func_text += "      l_start_offset = {0}._index_offsets[ii]\n".format(v)
+                func_text += "      l_end_offset = {0}._index_offsets[ii + 1]\n".format(v)
+                func_text += "      n_str = l_end_offset - l_start_offset\n"
+                func_text += "      str_ind = 0\n"
+                func_text += "      for jj in range(l_start_offset, l_end_offset):\n"
+                func_text += "          data_offsets_{0}[curr_s_offset_{0} + str_ind] = curr_d_offset_{0}\n".format(c)
+                func_text += "          n_char = {0}._data_offsets[jj + 1] - {0}._data_offsets[jj]\n".format(v)
+                func_text += "          in_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(\n"
+                func_text += "              {0}._data, {0}._data_offsets[jj]\n".format(v)
+                func_text += "          )\n"
+                func_text += "          out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(\n"
+                func_text += "              {}._data, curr_d_offset_{}\n".format(out, c)
+                func_text += "          )\n"
+                func_text += "          bodo.libs.str_arr_ext._memcpy(out_ptr, in_ptr, n_char, 1)\n"
+                func_text += "          curr_d_offset_{0} += n_char\n".format(c)
+                func_text += "          str_ind += 1\n"
+                func_text += "          index_offsets_{0}[curr_ind] = curr_s_offset_{0}\n".format(c)
+                func_text += "      curr_s_offset_{0} += n_str\n".format(c)
+                continue
+            func_text += "      {}[curr_ind] = {}[ii]\n".format(out, v)
+        func_text += "      curr_ind += 1\n"
+        if v in list_str_colnames:
+            func_text += "  index_offsets_{0}[new_len] = curr_s_offset_{0}\n".format(c)
+            func_text += "  data_offsets_{0}[curr_s_offset_{0}] = curr_d_offset_{0}\n".format(c)
+
+        col_seq = ", ".join("'{}'".format(c) for c in df_typ.columns)
+        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_seq, col_seq)
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
+            ", ".join(out_names), col_var
         )
+
+        # print(func_text)
         loc_vars = {}
-        exec(func_text, {}, loc_vars)
+        exec(func_text, {'get_utf8_size': bodo.libs.str_arr_ext.get_utf8_size}, loc_vars)
         _dropna_imp = loc_vars["_dropna_imp"]
 
-        nodes += compile_func_single_block(
-            _dropna_imp, col_vars + [inplace_var], None, self
-        )
-        nodes.pop()  # remove None value for return
-
-        # extract column vars from output
-        out_cols = []
-        for i in range(n_cols):
-            out_cols.append(nodes[-n_cols + i].target)
-
-        _init_df = _gen_init_df(df_typ.columns)
+        args = col_vars + [inplace_var]
 
         if not inplace:
-            return nodes + compile_func_single_block(_init_df, out_cols, lhs, self)
+            return self._replace_func(_dropna_imp, args, pre_nodes=nodes)
         else:
-            return self._set_df_inplace(_init_df, out_cols, df_var, lhs.loc, nodes)
+            return self._set_df_inplace(_dropna_imp, args, df_var, lhs.loc, nodes)
 
     def _run_call_reset_index(self, assign, lhs, rhs):
         # TODO: reflection, drop=False semantics
@@ -1365,7 +1449,7 @@ class DataFramePass(object):
             orig_arr = arr_def.value
             bool_arr = arr_def.index
             nodes += compile_func_single_block(
-                lambda arr, bool_arr: bodo.hiframes.api.series_filter_bool(
+                lambda arr, bool_arr: bodo.hiframes.series_impl.series_filter_bool(
                     arr, bool_arr
                 ),
                 (orig_arr, bool_arr),
@@ -1614,7 +1698,7 @@ class DataFramePass(object):
             self.typemap[name_var.name] = types.StringLiteral(name_str)
             nodes.append(ir.Assign(ir.Const(name_str, lhs.loc), name_var, lhs.loc))
             return self._replace_func(
-                lambda A, I, name: bodo.hiframes.api.init_series(A, I, name),
+                lambda A, I, name: bodo.hiframes.pd_series_ext.init_series(A, I, name),
                 list(df_col_map.values()) + [index_var, name_var],
                 pre_nodes=nodes,
             )
@@ -1833,7 +1917,7 @@ class DataFramePass(object):
                 and rolling_typ.as_index
             )
             return self._replace_func(
-                lambda A, I: bodo.hiframes.api.init_series(A, I, _name),
+                lambda A, I: bodo.hiframes.pd_series_ext.init_series(A, I, _name),
                 list(df_col_map.values()) + [out_index_var],
                 pre_nodes=nodes,
                 extra_globals={"_name": list(df_col_map.keys())[0]},
@@ -1939,7 +2023,7 @@ class DataFramePass(object):
         # gen concat function
         arg_names = ", ".join(["in{}".format(i) for i in range(len(df_list))])
         func_text = "def _concat_imp({}):\n".format(arg_names)
-        func_text += "    return bodo.hiframes.api.concat(({}))\n".format(arg_names)
+        func_text += "    return bodo.libs.array_kernels.concat(({}))\n".format(arg_names)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _concat_imp = loc_vars["_concat_imp"]
@@ -1972,7 +2056,7 @@ class DataFramePass(object):
         out_vars = []
         for obj in objs:
             nodes += compile_func_single_block(
-                lambda S: bodo.hiframes.api.get_series_data(S), (obj,), None, self
+                lambda S: bodo.hiframes.pd_series_ext.get_series_data(S), (obj,), None, self
             )
             out_vars.append(nodes[-1].target)
 
@@ -2095,8 +2179,8 @@ class DataFramePass(object):
         if (
             call_def
             in (
-                ("init_datetime_index", "bodo.hiframes.api"),
-                ("init_timedelta_index", "bodo.hiframes.api"),
+                ("init_datetime_index", "bodo.hiframes.pd_index_ext"),
+                ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
                 ("init_string_index", "bodo.hiframes.pd_index_ext"),
                 ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
             )
@@ -2104,7 +2188,7 @@ class DataFramePass(object):
         ):
             return var_def.args[1]
 
-        f = lambda S: bodo.hiframes.api.get_index_name(S)
+        f = lambda S: bodo.hiframes.pd_index_ext.get_index_name(S)
         if self.typemap[dt_var.name] == types.none:
             f = lambda S: None
 

@@ -24,8 +24,18 @@ from bodo.libs.str_arr_ext import (
     get_str_arr_item_length,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.bool_arr_ext import BooleanArrayType
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.utils.shuffle import getitem_arr_tup_single
+from bodo.utils.utils import build_set
+from bodo.ir.sort import (
+    alltoallv_tup,
+    finalize_shuffle_meta,
+    update_shuffle_meta,
+    alloc_pre_shuffle_metadata,
+)
+from bodo.ir.join import write_send_buff
+from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.hiframes.split_impl import string_array_split_view_type
 
 import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
@@ -59,6 +69,45 @@ nth_parallel = types.ExternalFunction(
 
 MPI_ROOT = 0
 sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
+
+
+def isna(arr, i):
+    return False
+
+
+@overload(isna)
+def isna_overload(arr, i):
+    # String array
+    if arr == string_array_type:
+        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
+
+    # masked Integer array, boolean array
+    if isinstance(arr, IntegerArrayType) or arr == boolean_array:
+        return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+            arr._null_bitmap, i
+        )
+
+    if arr == list_string_array_type:
+        # reuse string array function
+        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
+
+    if arr == string_array_split_view_type:
+        return lambda arr, i: False
+
+    # TODO: extend to other types
+    assert isinstance(arr, types.Array)
+    dtype = arr.dtype
+    if isinstance(dtype, types.Float):
+        return lambda arr, i: np.isnan(arr[i])
+
+    # NaT for dt64
+    if isinstance(dtype, (types.NPDatetime, types.NPTimedelta)):
+        nat = dtype("NaT")
+        # TODO: replace with np.isnat
+        return lambda arr, i: arr[i] == nat
+
+    # XXX integers don't have nans, extend to boolean
+    return lambda arr, i: False
 
 
 ################################ median ####################################
@@ -244,7 +293,7 @@ def select_k_nonan_overload(A, index_arr, m, k):
         i = 0
         ind = 0
         while i < m and ind < k:
-            if not bodo.hiframes.api.isna(A, i):
+            if not bodo.libs.array_kernels.isna(A, i):
                 min_heap_vals[ind] = A[i]
                 min_heap_inds[ind] = index_arr[i]
                 ind += 1
@@ -483,6 +532,147 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     )
     impl = loc_vars["impl"]
     return impl
+
+
+def concat(arr_list):
+    return pd.concat(arr_list)
+
+
+@overload(concat)
+def concat_overload(arr_list):
+    # all string input case
+    # TODO: handle numerics to string casting case
+    if isinstance(arr_list, types.UniTuple) and arr_list.dtype == string_array_type:
+
+        def string_concat_impl(arr_list):
+            # preallocate the output
+            num_strs = 0
+            num_chars = 0
+            for A in arr_list:
+                arr = A
+                num_strs += len(arr)
+                num_chars += bodo.libs.str_arr_ext.num_total_chars(arr)
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(num_strs, num_chars)
+            # copy data to output
+            curr_str_ind = 0
+            curr_chars_ind = 0
+            for A in arr_list:
+                arr = A
+                bodo.libs.str_arr_ext.set_string_array_range(
+                    out_arr, arr, curr_str_ind, curr_chars_ind
+                )
+                curr_str_ind += len(arr)
+                curr_chars_ind += bodo.libs.str_arr_ext.num_total_chars(arr)
+            return out_arr
+
+        return string_concat_impl
+
+    if isinstance(arr_list, types.UniTuple) and isinstance(
+        arr_list.dtype, IntegerArrayType
+    ):
+        return lambda arr_list: bodo.libs.int_arr_ext.init_integer_array(
+            np.concatenate(bodo.libs.int_arr_ext.get_int_arr_data_tup(arr_list)),
+            bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list),
+        )
+
+    if isinstance(arr_list, types.UniTuple) and arr_list.dtype == boolean_array:
+        # reusing int arr concat functions
+        # TODO: test
+        return lambda arr_list: bodo.libs.bool_arr_ext.init_bool_array(
+            np.concatenate(bodo.libs.int_arr_ext.get_int_arr_data_tup(arr_list)),
+            bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list),
+        )
+
+    for typ in arr_list:
+        if not isinstance(typ, types.Array):
+            raise ValueError("concat supports only numerical and string arrays")
+    # numerical input
+    return lambda arr_list: np.concatenate(arr_list)
+
+
+def nunique(A):  # pragma: no cover
+    return len(set(A))
+
+
+def nunique_parallel(A):  # pragma: no cover
+    return len(set(A))
+
+
+@overload(nunique)
+def nunique_overload(A):
+    if A == boolean_array:
+        return lambda A: len(A.unique())
+    # TODO: extend to other types like datetime?
+    def nunique_seq(A):
+        return len(build_set(A))
+
+    return nunique_seq
+
+
+@overload(nunique_parallel)
+def nunique_overload_parallel(A):
+    sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
+
+    def nunique_par(A):
+        uniq_A = bodo.libs.array_kernels.unique_parallel(A)
+        loc_nuniq = len(uniq_A)
+        return bodo.libs.distributed_api.dist_reduce(loc_nuniq, np.int32(sum_op))
+
+    return nunique_par
+
+
+def unique(A):  # pragma: no cover
+    return np.array([a for a in set(A)]).astype(A.dtype)
+
+
+def unique_parallel(A):  # pragma: no cover
+    return np.array([a for a in set(A)]).astype(A.dtype)
+
+
+@overload(unique)
+def unique_overload(A):
+    # TODO: extend to other types like datetime?
+    def unique_seq(A):
+        return bodo.utils.utils.unique(A)
+
+    return unique_seq
+
+
+@overload(unique_parallel)
+def unique_overload_parallel(A):
+    def unique_par(A):
+        uniq_A = bodo.utils.utils.unique(A)
+        key_arrs = (uniq_A,)
+        n = len(uniq_A)
+        node_ids = np.empty(n, np.int32)
+
+        n_pes = bodo.libs.distributed_api.get_size()
+        pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, (), n_pes, False)
+
+        # calc send/recv counts
+        for i in range(n):
+            val = uniq_A[i]
+            node_id = hash(val) % n_pes
+            node_ids[i] = node_id
+            update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs, (), False)
+
+        shuffle_meta = finalize_shuffle_meta(
+            key_arrs, (), pre_shuffle_meta, n_pes, False
+        )
+
+        # write send buffers
+        for i in range(n):
+            node_id = node_ids[i]
+            write_send_buff(shuffle_meta, node_id, i, key_arrs, ())
+            # update last since it is reused in data
+            shuffle_meta.tmp_offset[node_id] += 1
+
+        # shuffle
+        out_arr, = alltoallv_tup(key_arrs, shuffle_meta, ())
+
+        return bodo.utils.utils.unique(out_arr)
+
+    return unique_par
 
 
 # np.arange implementation is copied from parfor.py and range length
