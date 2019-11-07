@@ -6,6 +6,9 @@ from bodo.utils.typing import BodoError
 import pytest
 
 
+# ------------------------------ merge() ------------------------------ #
+
+
 df1 = pd.DataFrame({"A": [1, 2, 3], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
 df2 = pd.DataFrame({"A": [1, 2, 5], "B": ["aa", "b", "c"], "C": ["aa", "bb", "cc"]})
 
@@ -393,3 +396,110 @@ def test_merge_indicator_bool():
         BodoError, match="validate parameter only supports default value None"
     ):
         bodo.jit(impl)(df1, df2)
+
+
+# ------------------------------ join() ------------------------------ #
+
+
+df3 = pd.DataFrame({"A": [1, 2, 3], "C": ["aa", "b", "c"]})
+df4 = pd.DataFrame({"B": [1, 2, 5], "D": ["aa", "b", "c"]})
+
+
+# tests right is of type dataframe
+def test_join_right_dataframe():
+    def impl(df3):
+        return df3.join("abc")
+
+    with pytest.raises(BodoError, match="requires dataframe inputs"):
+        bodo.jit(impl)(df3)
+
+
+# tests how is of type str
+def test_join_how_str():
+    def impl(df3, df4):
+        return df3.join(df4, how=3)
+
+    with pytest.raises(BodoError, match="how parameter must be of type str"):
+        bodo.jit(impl)(df3, df4)
+
+
+# tests how is one of ["left", "right", "outer", "inner"]
+def test_join_how_invalid():
+    def impl(df3, df4):
+        return df3.join(df4, how="break")
+
+    with pytest.raises(BodoError, match="invalid key .* for how"):
+        bodo.jit(impl)(df3, df4)
+
+
+# tests on type
+def test_join_on_str_strlist1():
+    def impl(df3, df4):
+        return df3.join(df4, on=3)
+
+    with pytest.raises(BodoError, match="on must be of type str or str list"):
+        bodo.jit(impl)(df3, df4)
+
+
+# tests on length
+def test_join_on_len():
+    def impl(df3, df4):
+        return df3.join(df4, on=["B", "D"])
+
+    with pytest.raises(BodoError, match="must equals to 1 when specified"):
+        bodo.jit(impl)(df3, df4)
+
+
+# tests on length
+def test_join_on_key():
+    def impl(df3, df4):
+        return df3.join(df4, on=["B"])
+
+    with pytest.raises(BodoError, match="invalid key .* for on/left_on/right_on"):
+        bodo.jit(impl)(df3, df4)
+
+
+# tests sort is of type bool
+def test_join_sort_bool():
+    def impl(df3, df4):
+        return df3.join(df4, sort="break")
+
+    with pytest.raises(
+        BodoError, match="sort parameter only supports default value False"
+    ):
+        bodo.jit(impl)(df3, df4)
+
+
+# tests sort has default False
+def test_join_sort():
+    def impl(df3, df4):
+        return df3.join(df4, sort=True)
+
+    with pytest.raises(
+        BodoError, match="sort parameter only supports default value False"
+    ):
+        bodo.jit(impl)(df3, df4)
+
+
+# tests suffixes cannot be specified
+def test_join_suffixes():
+    def impl(df3, df4):
+        return df3.join(df4, lsuffix="_x", rsuffix="_y")
+
+    with pytest.raises(
+        BodoError, match="not supporting specifying 'lsuffix' or 'rsuffix'"
+    ):
+        bodo.jit(impl)(df3, df4)
+
+
+# tests left and other dataframes cannot have common columns
+def test_join_common_cols():
+    def impl(df3, df4):
+        return df3.join(df4)
+
+    df3 = pd.DataFrame({"A": [1, 2, 3], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
+    df4 = pd.DataFrame({"A": [1, 2, 5], "B": ["aa", "b", "c"], "C": ["aa", "bb", "cc"]})
+    with pytest.raises(
+        BodoError, match="not supporting joining on overlapping columns"
+    ):
+        bodo.jit(impl)(df3, df4)

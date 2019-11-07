@@ -975,6 +975,97 @@ def test_join_call(df1, df2):
     )
 
 
+@pytest.mark.parametrize(
+    "df1",
+    [
+        pd.DataFrame({"A": [1, 11, 3], "B": [4, 5, 1]}, index=[1, 4, 3]),
+        pd.DataFrame(
+            {"A": [1, 11, 3], "B": [4, 5, 1], "C": [-1, 3, 4]}, index=[1, 4, 3]
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "df2",
+    [
+        pd.DataFrame({"D": [1, 9, 3], "E": [-1.0, 1.0, 3.0]}, index=[-1, 1, 3]),
+        pd.DataFrame(
+            {"D": [4, 6, 1], "E": [-1.0, 1.0, 3.0], "F": [-1.0, 0.0, 1.0]},
+            index=[-1, 1, 3],
+        ),
+    ],
+)
+def test_join_how(df1, df2):
+    """
+    test join() 'how'
+    """
+
+    def impl_left(df1, df2):
+        df3 = df1.join(df2, how="left")
+        return df3
+
+    def impl_right(df1, df2):
+        df3 = df1.join(df2, how="right")
+        return df3
+
+    def impl_outer(df1, df2):
+        df3 = df1.join(df2, how="outer")
+        return df3
+
+    def impl_inner(df1, df2):
+        df3 = df1.join(df2, how="inner")
+        return df3
+
+    bodo_func_left = bodo.jit(impl_left)
+    bodo_func_right = bodo.jit(impl_right)
+    bodo_func_outer = bodo.jit(impl_outer)
+    bodo_func_inner = bodo.jit(impl_inner)
+
+    pd.testing.assert_frame_equal(
+        bodo_func_left(df1, df2)
+        .fillna(-1)
+        .sort_values(["A", "B", "D", "E"])
+        .reset_index(drop=True),
+        impl_left(df1, df2)
+        .fillna(-1)
+        .sort_values(["A", "B", "D", "E"])
+        .reset_index(drop=True),
+        check_dtype=False,
+    )
+    pd.testing.assert_frame_equal(
+        bodo_func_right(df1, df2)
+        .fillna(-1)
+        .sort_values(["A", "B", "D", "E"])
+        .reset_index(drop=True),
+        impl_right(df1, df2)
+        .fillna(-1)
+        .sort_values(["A", "B", "D", "E"])
+        .reset_index(drop=True),
+        check_dtype=False,
+    )
+    pd.testing.assert_frame_equal(
+        bodo_func_outer(df1, df2)
+        .fillna(-1)
+        .sort_values(["A", "B", "D", "E"])
+        .reset_index(drop=True),
+        impl_outer(df1, df2)
+        .fillna(-1)
+        .sort_values(["A", "B", "D", "E"])
+        .reset_index(drop=True),
+        check_dtype=False,
+    )
+    pd.testing.assert_frame_equal(
+        bodo_func_inner(df1, df2)
+        .fillna(-1)
+        .sort_values(["A", "B", "D", "E"])
+        .reset_index(drop=True),
+        impl_inner(df1, df2)
+        .fillna(-1)
+        .sort_values(["A", "B", "D", "E"])
+        .reset_index(drop=True),
+        check_dtype=False,
+    )
+
+
 # ------------------------------ merge_asof() ------------------------------ #
 
 
