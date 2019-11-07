@@ -1327,9 +1327,9 @@ def validate_keys(keys, columns):
 @overload_method(DataFrameType, "join")
 def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort=False):
 
-    # make sure left and right are dataframes
-    if not isinstance(left, DataFrameType) or not isinstance(other, DataFrameType):
-        raise TypeError("join() requires dataframe inputs")
+    validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort)
+
+    how = get_overload_const_str(how)
 
     if not is_overload_none(on):
         left_keys = get_const_str_list(on)
@@ -1357,6 +1357,49 @@ def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort
     # print(func_text)
     _impl = loc_vars["_impl"]
     return _impl
+
+
+def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
+    # make sure left and other are dataframes
+    if not isinstance(left, DataFrameType) or not isinstance(other, DataFrameType):
+        raise BodoError("join() requires dataframe inputs")
+    # make sure how is of type str
+    if not is_overload_constant_str(how):
+        raise BodoError(
+            "join(): how parameter must be of type str, not "
+            "{how}".format(how=type(how))
+        )
+    how = get_overload_const_str(how)
+    # make sure how is one of ["left", "right", "outer", "inner"]
+    if how not in ["left", "right", "outer", "inner"]:
+        raise BodoError("join(): invalid key '{}' for how".format(how))
+    # make sure on is of type str or strlist
+    if (
+        (not is_overload_none(on))
+        and (not is_overload_constant_str_list(on))
+        and (not is_overload_constant_str(on))
+    ):
+        raise BodoError("join(): on must be of type str or str list")
+    # make sure suffixes is not passed in
+    if lsuffix!="" or rsuffix!="":
+        raise BodoError(
+            "join(): not supporting specifying 'lsuffix' or 'rsuffix', ", 
+            "because we don't support joining on overlapping columns",
+            "Use DataFrame.merge() instead."
+        )
+    # make sure sort is the default value, sort=True not supported
+    if not is_overload_false(sort):
+        raise BodoError("join(): sort parameter only supports default value False")
+
+    comm_cols = tuple(set(left.columns) & set(other.columns))
+    if len(comm_cols)>0:
+        # make sure two dataframes do not have common columns
+        # because we are not supporting lsuffix and rsuffix
+        raise BodoError(
+            "join(): not supporting joining on overlapping columns:",
+            "{cols}".format(cols=comm_cols),
+            "Use DataFrame.merge() instead."
+        )
 
 
 # a dummy join function that will be replace in dataframe_pass

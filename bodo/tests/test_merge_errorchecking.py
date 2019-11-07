@@ -11,7 +11,7 @@ df2 = pd.DataFrame({"A": [1, 2, 5], "B": ["aa", "b", "c"], "C": ["aa", "bb", "cc
 
 
 # tests left is of type dataframe
-def test_left_dataframe():
+def test_merge_left_dataframe():
     def impl(df1):
         return pd.merge("abc", df1)
 
@@ -20,7 +20,7 @@ def test_left_dataframe():
 
 
 # tests right is of type dataframe
-def test_right_dataframe():
+def test_merge_right_dataframe():
     def impl(df1):
         return df1.merge("abc")
 
@@ -29,7 +29,7 @@ def test_right_dataframe():
 
 
 # tests how is of type str
-def test_how_str():
+def test_merge_how_str():
     def impl(df1, df2):
         return df1.merge(df2, how=3)
 
@@ -38,7 +38,7 @@ def test_how_str():
 
 
 # tests how is one of ["left", "right", "outer", "inner"]
-def test_how_invalid():
+def test_merge_how_invalid():
     def impl(df1, df2):
         return df1.merge(df2, how="break")
 
@@ -47,7 +47,7 @@ def test_how_invalid():
 
 
 # tests invalid on key in left dataframe
-def test_on_invalid_index_left():
+def test_merge_on_invalid_index_left():
     def impl(df1, df2):
         return df1.merge(df2, on=["A", "B"])
 
@@ -56,7 +56,7 @@ def test_on_invalid_index_left():
 
 
 # tests invalid on key in right dataframe
-def test_on_invalid_index_right():
+def test_merge_on_invalid_index_right():
     def impl(df1, df2):
         return df1.merge(df2, on=["A", "E"])
 
@@ -65,7 +65,7 @@ def test_on_invalid_index_right():
 
 
 # tests invalid on key in both dataframes
-def test_on_invalid_index_both():
+def test_merge_on_invalid_index_both():
     def impl(df1, df2):
         return df1.merge(df2, on=["A", "break"])
 
@@ -74,7 +74,7 @@ def test_on_invalid_index_both():
 
 
 # tests on without common cols
-def test_on_no_comm_cols():
+def test_merge_on_no_comm_cols():
     df3 = pd.DataFrame(
         {"AA": [1, 2, 3], "CC": ["aa", "b", "c"], "EE": ["aa", "bb", "cc"]}
     )
@@ -87,7 +87,7 @@ def test_on_no_comm_cols():
 
 
 # tests on type
-def test_on_str_strlist1():
+def test_merge_on_str_strlist1():
     def impl(df1, df2):
         return df1.merge(df2, on=3)
 
@@ -96,7 +96,7 @@ def test_on_str_strlist1():
 
 
 # tests lefton type
-def test_on_str_strlist2():
+def test_merge_on_str_strlist2():
     def impl(df1, df2):
         return df1.merge(df2, on=(1, "A"))
 
@@ -105,7 +105,7 @@ def test_on_str_strlist2():
 
 
 # tests both on and left_on specified
-def test_on_lefton():
+def test_merge_on_lefton():
     def impl(df1, df2):
         return df1.merge(df2, on=["A"], left_on=["C"])
 
@@ -118,7 +118,7 @@ def test_on_lefton():
 
 
 # tests both on and lefton specified
-def test_on_righton():
+def test_merge_on_righton():
     def impl(df1, df2):
         return df1.merge(df2, on=["A"], right_on=["C"])
 
@@ -131,7 +131,7 @@ def test_on_righton():
 
 
 # tests merging on columns with incompatible types
-def test_on_incompatible_dtype():
+def test_merge_on_incompatible_dtype():
     def impl(df1, df2):
         return df1.merge(df2, left_on="C", right_on="A")
 
@@ -143,7 +143,7 @@ def test_on_incompatible_dtype():
 
 
 # tests only left_on specified
-def test_lefton_only():
+def test_merge_lefton_only():
     def impl(df1, df2):
         return df1.merge(df2, left_on=["C"])
 
@@ -152,7 +152,7 @@ def test_lefton_only():
 
 
 # tests only right_on specified
-def test_righton_only():
+def test_merge_righton_only():
     def impl(df1, df2):
         return df1.merge(df2, right_on=["C"])
 
@@ -161,7 +161,7 @@ def test_righton_only():
 
 
 # tests invalid left_on key
-def test_lefton_invalid():
+def test_merge_lefton_invalid():
     def impl(df1, df2):
         return df1.merge(df2, left_on=["A", "B"], right_on=["A", "B"])
 
@@ -170,7 +170,7 @@ def test_lefton_invalid():
 
 
 # tests invalid right_on key
-def test_righton_invalid():
+def test_merge_righton_invalid():
     def impl(df1, df2):
         return df1.merge(df2, left_on=["A", "E"], right_on=["A", "E"])
 
@@ -179,7 +179,7 @@ def test_righton_invalid():
 
 
 # tests lefton type
-def test_lefton_str_strlist1():
+def test_merge_lefton_str_strlist1():
     def impl(df1, df2):
         return df1.merge(df2, left_on=3, right_on=["A", "B"])
 
@@ -188,7 +188,7 @@ def test_lefton_str_strlist1():
 
 
 # tests lefton type
-def test_lefton_str_strlist2():
+def test_merge_lefton_str_strlist2():
     def impl(df1, df2):
         return df1.merge(df2, left_on=(1, "A"), right_on=["A", "B"])
 
@@ -197,7 +197,7 @@ def test_lefton_str_strlist2():
 
 
 # tests righton type
-def test_righton_str_strlist1():
+def test_merge_righton_str_strlist1():
     def impl(df1, df2):
         return df1.merge(df2, right_on=3, left_on=["A", "C"])
 
@@ -206,7 +206,7 @@ def test_righton_str_strlist1():
 
 
 # tests righton type
-def test_righton_str_strlist2():
+def test_merge_righton_str_strlist2():
     def impl(df1, df2):
         return df1.merge(df2, right_on=(1, "A"), left_on=["A", "C"])
 
@@ -215,7 +215,7 @@ def test_righton_str_strlist2():
 
 
 # tests unequal lengths of left_on and right_on
-def test_lefton_righton_len_unequal():
+def test_merge_lefton_righton_len_unequal():
     def impl(df1, df2):
         return df1.merge(df2, left_on=["A"], right_on=["A", "B"])
 
@@ -224,7 +224,7 @@ def test_lefton_righton_len_unequal():
 
 
 # tests left_index is of type bool
-def test_leftindex_bool():
+def test_merge_leftindex_bool():
     def impl(df1, df2):
         return df1.merge(df2, left_index="A", right_index=True)
 
@@ -233,7 +233,7 @@ def test_leftindex_bool():
 
 
 # tests right_index is of type bool
-def test_rightindex_bool():
+def test_merge_rightindex_bool():
     def impl(df1, df2):
         return df1.merge(df2, left_index=True, right_index="B")
 
@@ -242,7 +242,7 @@ def test_rightindex_bool():
 
 
 # tests only left_on specified
-def test_leftindex_only():
+def test_merge_leftindex_only():
     def impl(df1, df2):
         return df1.merge(df2, left_index=True)
 
@@ -251,7 +251,7 @@ def test_leftindex_only():
 
 
 # tests only right_on specified
-def test_rightindex_only():
+def test_merge_rightindex_only():
     def impl(df1, df2):
         return df1.merge(df2, right_index=True)
 
@@ -260,7 +260,7 @@ def test_rightindex_only():
 
 
 # tests right_index=True and len(left_on)!=1
-def test_rightindex_lefton():
+def test_merge_rightindex_lefton():
     def impl(df1, df2):
         return df1.merge(df2, right_index=True, left_on=["A"])
 
@@ -272,7 +272,7 @@ def test_rightindex_lefton():
 
 
 # tests left_index=True and len(right_on)!=1
-def test_leftindex_righton():
+def test_merge_leftindex_righton():
     def impl(df1, df2):
         return df1.merge(df2, left_index=True, right_on=["A"])
 
@@ -310,7 +310,7 @@ def test_leftindex_righton():
 
 
 # tests sort is of type bool
-def test_sort_bool():
+def test_merge_sort_bool():
     def impl(df1, df2):
         return df1.merge(df2, sort="break")
 
@@ -321,7 +321,7 @@ def test_sort_bool():
 
 
 # tests sort has default False
-def test_sort():
+def test_merge_sort():
     def impl(df1, df2):
         return df1.merge(df2, sort=True)
 
@@ -332,7 +332,7 @@ def test_sort():
 
 
 # tests suffixes cannot be specified
-def test_suffixes():
+def test_merge_suffixes():
     def impl(df1, df2):
         return df1.merge(df2, suffixes=("_x", "_y"))
 
@@ -341,7 +341,7 @@ def test_suffixes():
 
 
 # tests copy is of type bool
-def test_copy_bool():
+def test_merge_copy_bool():
     def impl(df1, df2):
         return df1.merge(df2, copy="break")
 
@@ -352,7 +352,7 @@ def test_copy_bool():
 
 
 # tests copy has default True
-def test_copy():
+def test_merge_copy():
     def impl(df1, df2):
         return df1.merge(df2, copy=False)
 
@@ -363,7 +363,7 @@ def test_copy():
 
 
 # tests indicator is of type bool
-def test_indicator_bool():
+def test_merge_indicator_bool():
     def impl(df1, df2):
         return df1.merge(df2, indicator="break")
 
@@ -374,7 +374,7 @@ def test_indicator_bool():
 
 
 # tests indicator has default False
-def test_indicator():
+def test_merge_indicator():
     def impl(df1, df2):
         return df1.merge(df2, indicator=True)
 
@@ -385,7 +385,7 @@ def test_indicator():
 
 
 # tests validate has default None
-def test_indicator_bool():
+def test_merge_indicator_bool():
     def impl(df1, df2):
         return df1.merge(df2, validate=["one_to_one"])
 
