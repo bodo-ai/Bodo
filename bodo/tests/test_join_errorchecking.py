@@ -450,7 +450,7 @@ def test_join_on_len():
         bodo.jit(impl)(df3, df4)
 
 
-# tests on length
+# tests on key is a column in left dataframe
 def test_join_on_key():
     def impl(df3, df4):
         return df3.join(df4, on=["B"])
