@@ -1327,9 +1327,9 @@ def validate_keys(keys, columns):
 @overload_method(DataFrameType, "join")
 def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort=False):
 
-    # make sure left and right are dataframes
-    if not isinstance(left, DataFrameType) or not isinstance(other, DataFrameType):
-        raise TypeError("join() requires dataframe inputs")
+    validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort)
+
+    how = get_overload_const_str(how)
 
     if not is_overload_none(on):
         left_keys = get_const_str_list(on)
@@ -1357,6 +1357,56 @@ def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort
     # print(func_text)
     _impl = loc_vars["_impl"]
     return _impl
+
+
+def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
+    # make sure left and other are dataframes
+    if not isinstance(other, DataFrameType):
+        raise BodoError("join() requires dataframe inputs")
+    # make sure how is of type str
+    if not is_overload_constant_str(how):
+        raise BodoError(
+            "join(): how parameter must be of type str, not "
+            "{how}".format(how=type(how))
+        )
+    how = get_overload_const_str(how)
+    # make sure how is one of ["left", "right", "outer", "inner"]
+    if how not in ["left", "right", "outer", "inner"]:
+        raise BodoError("join(): invalid key '{}' for how".format(how))
+    # make sure on is of type str or strlist
+    if (
+        (not is_overload_none(on))
+        and (not is_overload_constant_str_list(on))
+        and (not is_overload_constant_str(on))
+    ):
+        raise BodoError("join(): on must be of type str or str list")
+    # make sure 'on' has length 1 since we don't support Multiindex
+    if not is_overload_none(on) and len(get_const_str_list(on)) != 1:
+        raise BodoError("join(): len(on) must equals to 1 when specified.")
+    # make sure 'on' is a valid column in other
+    if not is_overload_none(on):
+        on_keys = get_const_str_list(on)
+        validate_keys(on_keys, left.columns)
+    # make sure suffixes is not passed in
+    if lsuffix != "" or rsuffix != "":
+        raise BodoError(
+            "join(): not supporting specifying 'lsuffix' or 'rsuffix', ",
+            "because we don't support joining on overlapping columns",
+            "Use DataFrame.merge() instead.",
+        )
+    # make sure sort is the default value, sort=True not supported
+    if not is_overload_false(sort):
+        raise BodoError("join(): sort parameter only supports default value False")
+
+    comm_cols = tuple(set(left.columns) & set(other.columns))
+    if len(comm_cols) > 0:
+        # make sure two dataframes do not have common columns
+        # because we are not supporting lsuffix and rsuffix
+        raise BodoError(
+            "join(): not supporting joining on overlapping columns:",
+            "{cols}".format(cols=comm_cols),
+            "Use DataFrame.merge() instead.",
+        )
 
 
 # a dummy join function that will be replace in dataframe_pass
@@ -1665,7 +1715,8 @@ class ConcatDummyTyper(AbstractTemplate):
                     arr_args.append(types.Array(types.float64, 1, "C"))
                 # use bodo.libs.array_kernels.concat() typer
                 concat_typ = self.context.resolve_function_type(
-                    bodo.libs.array_kernels.concat, (types.Tuple(arr_args),), {}).return_type
+                    bodo.libs.array_kernels.concat, (types.Tuple(arr_args),), {}
+                ).return_type
                 all_data.append(concat_typ)
 
             ret_typ = DataFrameType(tuple(all_data), None, tuple(all_colnames))
@@ -1676,7 +1727,8 @@ class ConcatDummyTyper(AbstractTemplate):
             assert all(isinstance(t, SeriesType) for t in objs.types)
             arr_args = [S.data for S in objs.types]
             concat_typ = self.context.resolve_function_type(
-                    bodo.libs.array_kernels.concat, (types.Tuple(arr_args),), {}).return_type
+                bodo.libs.array_kernels.concat, (types.Tuple(arr_args),), {}
+            ).return_type
             ret_typ = SeriesType(concat_typ.dtype, concat_typ)
             return signature(ret_typ, *args)
         # TODO: handle other iterables like arrays, lists, ...
@@ -1828,7 +1880,9 @@ class ItertuplesDummyTyper(AbstractTemplate):
         assert "Index" not in df.columns
         columns = ("Index",) + df.columns
         arr_types = (types.Array(types.int64, 1, "C"),) + df.data
-        iter_typ = bodo.hiframes.dataframe_impl.DataFrameTupleIterator(columns, arr_types)
+        iter_typ = bodo.hiframes.dataframe_impl.DataFrameTupleIterator(
+            columns, arr_types
+        )
         return signature(iter_typ, *args)
 
 
