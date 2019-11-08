@@ -1026,10 +1026,20 @@ def test_series_map_tup_map1():
 
 
 def test_series_map_str():
+    """test string output in map"""
     def test_impl(S):
         return S.map(lambda a: str(a))
 
     S = pd.Series([1, 211, 333, 43, 51])
+    check_func(test_impl, (S,))
+
+
+def test_series_map_dt_str():
+    """test string output in map with dt64/Timestamp input"""
+    def test_impl(S):
+        return S.map(lambda a: str(a.year))
+
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-27", periods=3))
     check_func(test_impl, (S,))
 
 
