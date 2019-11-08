@@ -1025,6 +1025,14 @@ def test_series_map_tup_map1():
     check_func(test_impl, (S,))
 
 
+def test_series_map_str():
+    def test_impl(S):
+        return S.map(lambda a: str(a))
+
+    S = pd.Series([1, 211, 333, 43, 51])
+    check_func(test_impl, (S,))
+
+
 @pytest.mark.parametrize(
     "S",
     [

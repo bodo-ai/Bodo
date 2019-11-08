@@ -52,6 +52,7 @@ from bodo.libs.str_arr_ext import (
     StringArrayType,
     is_str_arr_typ,
     pre_alloc_string_array,
+    get_utf8_size,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -1738,28 +1739,42 @@ class SeriesPass(object):
         name = self._get_series_name(series_var, nodes)
         out_typ = self.typemap[lhs.name].dtype
 
-        # TODO: handle non numpy alloc types like string array
-        # prange func to inline
-        func_text = "def f(A, index, name):\n"
-        func_text += "  numba.parfor.init_prange()\n"
-        func_text += "  n = len(A)\n"
-        # TODO: string alloc
-        func_text += "  S = np.empty(n, out_dtype)\n"
-        func_text += "  for i in numba.parfor.internal_prange(n):\n"
-        if dtype == types.NPDatetime("ns"):
-            func_text += "    t = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(np.int64(A[i]))\n"
-        elif isinstance(dtype, types.BaseTuple):
-            func_text += "    t = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
-        else:
+        # TODO: handle all array types like list(str)
+        if out_typ == string_type:
+            # prange func to inline
+            func_text = "def f(A, index, name):\n"
+            func_text += "  numba.parfor.init_prange()\n"
+            func_text += "  n = len(A)\n"
+            func_text += "  n_chars = 0\n"
+            func_text += "  for i in numba.parfor.internal_prange(n):\n"
             func_text += "    t = A[i]\n"
-        func_text += "    v = map_func(t)\n"
-        if isinstance(out_typ, types.BaseTuple):
-            func_text += "    S[i] = bodo.utils.typing.convert_tup_to_rec(v)\n"
-        else:
+            func_text += "    n_chars += get_utf8_size(map_func(t))\n"
+            func_text += "  S = pre_alloc_string_array(n, n_chars)\n"
+            func_text += "  for i in numba.parfor.internal_prange(n):\n"
+            func_text += "    t = A[i]\n"
+            func_text += "    v = map_func(t)\n"
             func_text += "    S[i] = v\n"
-        # func_text += "    print(S[i])\n"
-        func_text += "  return bodo.hiframes.pd_series_ext.init_series(S, index, name)\n"
-        # func_text += "  return ret\n"
+            # func_text += "    print(S[i])\n"
+            func_text += "  return bodo.hiframes.pd_series_ext.init_series(S, index, name)\n"
+        else:
+            func_text = "def f(A, index, name):\n"
+            func_text += "  numba.parfor.init_prange()\n"
+            func_text += "  n = len(A)\n"
+            func_text += "  S = np.empty(n, out_dtype)\n"
+            func_text += "  for i in numba.parfor.internal_prange(n):\n"
+            if dtype == types.NPDatetime("ns"):
+                func_text += "    t = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(np.int64(A[i]))\n"
+            elif isinstance(dtype, types.BaseTuple):
+                func_text += "    t = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
+            else:
+                func_text += "    t = A[i]\n"
+            func_text += "    v = map_func(t)\n"
+            if isinstance(out_typ, types.BaseTuple):
+                func_text += "    S[i] = bodo.utils.typing.convert_tup_to_rec(v)\n"
+            else:
+                func_text += "    S[i] = v\n"
+            # func_text += "    print(S[i])\n"
+            func_text += "  return bodo.hiframes.pd_series_ext.init_series(S, index, name)\n"
 
         loc_vars = {}
         exec(func_text, {}, loc_vars)
@@ -1772,7 +1787,10 @@ class SeriesPass(object):
         _globals = self.func_ir.func_id.func.__globals__
         f_ir = compile_to_numba_ir(
             f,
-            {"numba": numba, "np": np, "pd": pd, "bodo": bodo, "out_dtype": out_dtype},
+            {"numba": numba, "np": np, "pd": pd, "bodo": bodo, "out_dtype": out_dtype,
+                            "get_utf8_size": get_utf8_size,
+                "pre_alloc_string_array": pre_alloc_string_array,
+            },
         )
 
         # fix definitions to enable finding sentinel
@@ -1791,7 +1809,6 @@ class SeriesPass(object):
                     fdef = guard(get_definition, f_ir, stmt.value.func)
                     if isinstance(fdef, ir.Global) and fdef.name == "map_func":
                         inline_closure_call(f_ir, _globals, block, i, func)
-                        break
 
         # remove sentinel global to avoid type inference issues
         ir_utils.remove_dead(f_ir.blocks, f_ir.arg_names, f_ir)
