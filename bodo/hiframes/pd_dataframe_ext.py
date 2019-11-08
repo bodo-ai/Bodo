@@ -31,6 +31,7 @@ from numba.typing.templates import (
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.series_indexing import SeriesIlocType
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import (
     BodoError,
@@ -210,8 +211,9 @@ class DataFrameAttribute(AttributeTemplate):
         dtypes = []
         for arr_typ in df.data:
             series_typ = SeriesType(arr_typ.dtype, arr_typ, df.index, string_type)
+            # iloc necessary since Series getitem may not be supported for df.index
             el_typ = self.context.resolve_function_type(
-                operator.getitem, (series_typ, types.int64), {}
+                operator.getitem, (SeriesIlocType(series_typ), types.int64), {}
             ).return_type
             dtypes.append(el_typ)
 
