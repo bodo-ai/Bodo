@@ -26,36 +26,50 @@ from bodo.tests.utils import (
 @pytest.fixture(
     params=[
         # int and float columns
-        pytest.param(pd.DataFrame(
-            {
-                "A": [1, 8, 4, 11, -3],
-                "B": [1.1, np.nan, 4.2, 3.1, -1.3],
-                "C": [True, False, False, True, True],
-            }
-        ), marks=pytest.mark.slow),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 8, 4, 11, -3],
+                    "B": [1.1, np.nan, 4.2, 3.1, -1.3],
+                    "C": [True, False, False, True, True],
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
         pd.DataFrame(
             {
                 "A": pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
                 "B": [1.1, np.nan, 4.2, 3.1, -1.3],
                 "C": [True, False, False, np.nan, True],
-            }, ["A", "BA", "", "DD", "C"]
+            },
+            ["A", "BA", "", "DD", "C"],
         ),
         # uint8, float32 dtypes
-        pytest.param(pd.DataFrame(
-            {
-                "A": np.array([1, 8, 4, 0, 3], dtype=np.uint8),
-                "B": np.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype=np.float32),
-            }
-        ), marks=pytest.mark.slow),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": np.array([1, 8, 4, 0, 3], dtype=np.uint8),
+                    "B": np.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype=np.float32),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
         # string and int columns, float index
-        pytest.param(pd.DataFrame(
-            {"A": ["AA", np.nan, "", "D", "GG"], "B": [1, 8, 4, -1, 2]},
-            [-2.1, 0.1, 1.1, 7.1, 9.0],
-        ), marks=pytest.mark.slow),
+        pytest.param(
+            pd.DataFrame(
+                {"A": ["AA", np.nan, "", "D", "GG"], "B": [1, 8, 4, -1, 2]},
+                [-2.1, 0.1, 1.1, 7.1, 9.0],
+            ),
+            marks=pytest.mark.slow,
+        ),
         # range index
-        pytest.param(pd.DataFrame(
-            {"A": [1, 8, 4, 1, -2], "B": ["A", "B", "CG", "ACDE", "C"]}, range(0, 5, 1)
-        ), marks=pytest.mark.slow),
+        pytest.param(
+            pd.DataFrame(
+                {"A": [1, 8, 4, 1, -2], "B": ["A", "B", "CG", "ACDE", "C"]},
+                range(0, 5, 1),
+            ),
+            marks=pytest.mark.slow,
+        ),
         # TODO: parallel range index with start != 0 and stop != 1
         # int index
         pd.DataFrame(
@@ -63,16 +77,22 @@ from bodo.tests.utils import (
             [-2, 1, 3, 5, 9],
         ),
         # string index
-        pytest.param(pd.DataFrame({"A": [1, 2, 3, -1, 4]}, ["A", "BA", "", "DD", "C"]), marks=pytest.mark.slow),
+        pytest.param(
+            pd.DataFrame({"A": [1, 2, 3, -1, 4]}, ["A", "BA", "", "DD", "C"]),
+            marks=pytest.mark.slow,
+        ),
         # datetime column
         pd.DataFrame(
             {"A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)}
         ),
         # datetime index
-        pytest.param(pd.DataFrame(
-            {"A": [3, 5, 1, -1, 4]},
-            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
-        ), marks=pytest.mark.slow),
+        pytest.param(
+            pd.DataFrame(
+                {"A": [3, 5, 1, -1, 4]},
+                pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+            ),
+            marks=pytest.mark.slow,
+        ),
         # TODO: timedelta
     ]
 )
@@ -85,7 +105,10 @@ def df_value(request):
         # int
         pytest.param(pd.DataFrame({"A": [1, 8, 4, 11, -3]}), marks=pytest.mark.slow),
         # int and float columns
-        pytest.param(pd.DataFrame({"A": [1, 8, 4, 11, -3], "B": [1.1, np.nan, 4.2, 3.1, -1.1]}), marks=pytest.mark.slow),
+        pytest.param(
+            pd.DataFrame({"A": [1, 8, 4, 11, -3], "B": [1.1, np.nan, 4.2, 3.1, -1.1]}),
+            marks=pytest.mark.slow,
+        ),
         # uint8, float32 dtypes
         pd.DataFrame(
             {
@@ -96,18 +119,27 @@ def df_value(request):
         # pd.DataFrame({'A': np.array([1, 8, 4, 0], dtype=np.uint8),
         # }),
         # int column, float index
-        pytest.param(pd.DataFrame({"A": [1, 8, 4, -1, 3]}, [-2.1, 0.1, 1.1, 7.1, 9.0]), marks=pytest.mark.slow),
+        pytest.param(
+            pd.DataFrame({"A": [1, 8, 4, -1, 3]}, [-2.1, 0.1, 1.1, 7.1, 9.0]),
+            marks=pytest.mark.slow,
+        ),
         # range index
-        pytest.param(pd.DataFrame({"A": [1, 8, 4, 1, -2]}, range(0, 5, 1)), marks=pytest.mark.slow),
+        pytest.param(
+            pd.DataFrame({"A": [1, 8, 4, 1, -2]}, range(0, 5, 1)),
+            marks=pytest.mark.slow,
+        ),
         # datetime column
         pd.DataFrame(
             {"A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)}
         ),
         # datetime index
-        pytest.param(pd.DataFrame(
-            {"A": [3, 5, 1, -1, 2]},
-            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
-        ), marks=pytest.mark.slow),
+        pytest.param(
+            pd.DataFrame(
+                {"A": [3, 5, 1, -1, 2]},
+                pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+            ),
+            marks=pytest.mark.slow,
+        ),
         # TODO: timedelta
     ]
 )
@@ -912,6 +944,17 @@ def test_df_apply_bool():
 
     n = 121
     df = pd.DataFrame({"A": np.arange(n)})
+    check_func(test_impl, (df,))
+
+
+def test_df_apply_str():
+    """make sure string output can be handled in apply() properly
+    """
+
+    def test_impl(df):
+        return df.apply(lambda r: r.A if r.A == "AA" else "BB", axis=1)
+
+    df = pd.DataFrame({"A": ["AA", "B", "CC", "C", "AA"]}, index=[3, 1, 4, 6, 0])
     check_func(test_impl, (df,))
 
 
@@ -1823,8 +1866,13 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df):
             return df.dropna()
 
-        df = pd.DataFrame({"A": [1.0, 2.0, 4.0, 1.0], "B": ["aa", "b", None, "ccc"],
-            'C': [np.nan, ['AA', 'A'], ['B'], ['CC', 'D']]})
+        df = pd.DataFrame(
+            {
+                "A": [1.0, 2.0, 4.0, 1.0],
+                "B": ["aa", "b", None, "ccc"],
+                "C": [np.nan, ["AA", "A"], ["B"], ["CC", "D"]],
+            }
+        )
         bodo_func = bodo.jit(test_impl)
         out = test_impl(df).reset_index(drop=True)
         h_out = bodo_func(df)
