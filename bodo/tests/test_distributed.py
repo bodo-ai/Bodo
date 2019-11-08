@@ -425,5 +425,8 @@ def test_dist_warning():
         # should be changed when/if we support slogdet()
         return np.linalg.slogdet(A)
 
-    with pytest.warns(BodoWarning, match="No parallelism found for function"):
+    if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+        with pytest.warns(BodoWarning, match="No parallelism found for function"):
+            bodo.jit(impl)(10)
+    else:
         bodo.jit(impl)(10)
