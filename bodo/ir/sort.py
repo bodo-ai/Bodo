@@ -527,7 +527,8 @@ def parallel_sort(key_arrs, data, ascending=True):
     for i in range(n_local):
         val = key_arrs[0][i]
         # TODO: refactor
-        if node_id < (n_pes - 1) and (
+        # using 'while' since a partition can be empty which needs to be skipped
+        while node_id < (n_pes - 1) and (
             ascending
             and val >= bounds[node_id]
             or (not ascending)
