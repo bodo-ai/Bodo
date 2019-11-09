@@ -879,6 +879,10 @@ class TestIO(unittest.TestCase):
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
     def test_write_csv1(self):
+        # only run on single processor
+        if bodo.get_size() != 1:
+            return
+
         def test_impl(df, fname):
             df.to_csv(fname)
 
