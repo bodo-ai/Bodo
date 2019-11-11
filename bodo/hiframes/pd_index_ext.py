@@ -61,6 +61,8 @@ class DatetimeIndexType(types.IterableType):
             name="DatetimeIndex(name = {})".format(name_typ)
         )
 
+    ndim = 1
+
     def copy(self):
         return DatetimeIndexType(self.name_typ)
 
@@ -132,7 +134,6 @@ def unbox_datetime_index(typ, val, c):
     index_val.data = data
     index_val.name = name
     return NativeValue(index_val._getvalue())
-
 
 
 @intrinsic
@@ -637,6 +638,8 @@ class TimedeltaIndexType(types.IterableType):
             name="TimedeltaIndexType(named = {})".format(name_typ)
         )
 
+    ndim = 1
+
     def copy(self):
         return TimedeltaIndexType(self.name_typ)
 
@@ -855,6 +858,8 @@ class RangeIndexType(types.IterableType):
         self.name_typ = name_typ
         super(RangeIndexType, self).__init__(name="RangeIndexType({})".format(name_typ))
 
+    ndim = 1
+
     def copy(self):
         return RangeIndexType(self.name_typ)
 
@@ -1053,6 +1058,8 @@ class PeriodIndexType(types.IterableType):
             name="PeriodIndexType({}, {})".format(freq, name_typ)
         )
 
+    ndim = 1
+
     def copy(self):
         return PeriodIndexType(self.freq, self.name_typ)
 
@@ -1141,6 +1148,8 @@ class NumericIndexType(types.IterableType):
         super(NumericIndexType, self).__init__(
             name="NumericIndexType({}, {})".format(dtype, name_typ)
         )
+
+    ndim = 1
 
     def copy(self):
         return NumericIndexType(self.dtype, self.name_typ)
@@ -1307,6 +1316,8 @@ class StringIndexType(types.IterableType):
         super(StringIndexType, self).__init__(
             name="StringIndexType({})".format(name_typ)
         )
+
+    ndim = 1
 
     def copy(self):
         return StringIndexType(self.name_typ)

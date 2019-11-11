@@ -1023,7 +1023,8 @@ def test_init_dataframe_array_analysis():
     array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
         "preserved_array_analysis"
     ]
-    assert array_analysis.equiv_sets[0].is_equiv("df", "n")
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("df#0") == eq_set._get_ind("n")
 
 
 def test_get_dataframe_data_array_analysis():
@@ -1040,7 +1041,8 @@ def test_get_dataframe_data_array_analysis():
     array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
         "preserved_array_analysis"
     ]
-    assert array_analysis.equiv_sets[0].is_equiv("df", "B")
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("df#0") == eq_set._get_ind("B#0")
 
 
 ############################# old tests ###############################

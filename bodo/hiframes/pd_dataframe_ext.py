@@ -47,7 +47,7 @@ from bodo.utils.typing import (
 )
 
 
-class DataFrameType(types.Type):  # TODO: IterableType over column names
+class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column names
     """Temporary type class for DataFrame objects.
     """
 
@@ -76,6 +76,11 @@ class DataFrameType(types.Type):  # TODO: IterableType over column names
         if has_parent is None:
             has_parent = self.has_parent
         return DataFrameType(data, index, self.columns, has_parent)
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 2, "C")
 
     @property
     def key(self):
@@ -428,7 +433,7 @@ def init_dataframe_equiv(self, scope, equiv_set, args, kws):
         if len(data_shapes) > 1:
             equiv_set.insert_equiv(*data_shapes)
         if len(data_shapes) > 0:
-            return data_shapes[0], []
+            return (data_shapes[0], len(data_shapes)), []
     return None
 
 
@@ -444,7 +449,7 @@ def get_dataframe_data_equiv(self, scope, equiv_set, args, kws):
     assert len(args) == 2 and not kws
     var = args[0]
     if equiv_set.has_shape(var):
-        return var, []
+        return equiv_set.get_shape(var)[0], []
     return None
 
 

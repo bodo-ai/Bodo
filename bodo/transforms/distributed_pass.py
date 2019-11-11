@@ -407,9 +407,7 @@ class DistributedPass(object):
             starts_var = ir.Var(scope, mk_unique_var("$h5_starts"), loc)
             self.typemap[starts_var.name] = types.UniTuple(types.int64, ndims)
             prev_starts = self._get_tuple_varlist(rhs.args[2], nodes)
-            start_tuple_call = ir.Expr.build_tuple(
-                [start_var] + prev_starts[1:], loc
-            )
+            start_tuple_call = ir.Expr.build_tuple([start_var] + prev_starts[1:], loc)
             starts_assign = ir.Assign(start_tuple_call, starts_var, loc)
             rhs.args[2] = starts_var
 
@@ -417,9 +415,7 @@ class DistributedPass(object):
             counts_var = ir.Var(scope, mk_unique_var("$h5_counts"), loc)
             self.typemap[counts_var.name] = types.UniTuple(types.int64, ndims)
             prev_counts = self._get_tuple_varlist(rhs.args[3], nodes)
-            count_tuple_call = ir.Expr.build_tuple(
-                [count_var] + prev_counts[1:], loc
-            )
+            count_tuple_call = ir.Expr.build_tuple([count_var] + prev_counts[1:], loc)
             counts_assign = ir.Assign(count_tuple_call, counts_var, loc)
 
             nodes += [starts_assign, counts_assign, assign]
@@ -1389,12 +1385,7 @@ class DistributedPass(object):
         return new_size_var
 
     def _run_array_shape(self, lhs, arr, equiv_set):
-        # non-Arrays like Series, DataFrame etc. are all 1 dim
-        ndims = (
-            self.typemap[arr.name].ndim
-            if isinstance(self.typemap[arr.name], types.Array)
-            else 1
-        )
+        ndims = self.typemap[arr.name].ndim
 
         if arr.name not in self._T_arrs:
             nodes = []
@@ -2147,9 +2138,11 @@ class DistributedPass(object):
                     assert fdef == ("File", "h5py")
                     call_type = self.calltypes.pop(var_def)
                     arg_typs = tuple(call_type.args[:-1] + (types.IntegerLiteral(1),))
-                    self.calltypes[var_def] = self.typemap[var_def.func.name].get_call_type(self.typingctx, arg_typs, {})
+                    self.calltypes[var_def] = self.typemap[
+                        var_def.func.name
+                    ].get_call_type(self.typingctx, arg_typs, {})
                     kws = dict(var_def.kws)
-                    kws['_is_parallel'] = self._set1_var
+                    kws["_is_parallel"] = self._set1_var
                     var_def.kws = kws
                     return
             # TODO: handle control flow
