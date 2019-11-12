@@ -970,6 +970,81 @@ def test_df_drop_inplace_branch():
     check_func(test_impl, (True,), False)
 
 
+from numba.compiler_machinery import FunctionPass, register_pass
+
+
+@register_pass(analysis_only=False, mutates_CFG=True)
+class ArrayAnalysisPass(FunctionPass):
+    _name = "array_analysis_pass"
+
+    def __init__(self):
+        FunctionPass.__init__(self)
+
+    def run_pass(self, state):
+        array_analysis = numba.array_analysis.ArrayAnalysis(
+            state.typingctx,
+            state.func_ir,
+            state.type_annotation.typemap,
+            state.type_annotation.calltypes,
+        )
+        array_analysis.run(state.func_ir.blocks)
+        state.func_ir._definitions = numba.ir_utils.build_definitions(
+            state.func_ir.blocks
+        )
+        state.metadata["preserved_array_analysis"] = array_analysis
+        return False
+
+
+class AnalysisTestPipeline(bodo.compiler.BodoCompiler):
+    """
+    pipeleine used in test_dataframe_array_analysis()
+    additional ArrayAnalysis pass that preseves analysis object
+    """
+
+    def define_pipelines(self):
+        [pipeline] = self._create_bodo_pipeline(True)
+        pipeline._finalized = False
+        pipeline.add_pass_after(ArrayAnalysisPass, bodo.compiler.BodoSeriesPass)
+        pipeline.finalize()
+        return [pipeline]
+
+
+def test_init_dataframe_array_analysis():
+    """make sure shape equivalence for init_dataframe() is applied correctly
+    """
+    import numba.tests.test_array_analysis
+
+    def impl(n):
+        df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
+        return df
+
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline)(impl)
+    test_func(10)
+    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
+        "preserved_array_analysis"
+    ]
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("df#0") == eq_set._get_ind("n")
+
+
+def test_get_dataframe_data_array_analysis():
+    """make sure shape equivalence for get_dataframe_data() is applied correctly
+    """
+    import numba.tests.test_array_analysis
+
+    def impl(df):
+        B = df.A.values
+        return B
+
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline)(impl)
+    test_func(pd.DataFrame({"A": np.ones(10), "B": np.arange(10)}))
+    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
+        "preserved_array_analysis"
+    ]
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("df#0") == eq_set._get_ind("B#0")
+
+
 ############################# old tests ###############################
 
 
@@ -1161,7 +1236,7 @@ class TestDataFrame(unittest.TestCase):
         n = 11
         hres, res = bodo_func(n), test_impl(n)
         self.assertTrue(count_array_OneDs() >= 3)
-        self.assertEqual(count_parfor_OneDs(), 2)
+        self.assertTrue(count_parfor_OneDs() >= 1)
         dist_sum = bodo.jit(
             lambda a: bodo.libs.distributed_api.dist_reduce(
                 a, np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)

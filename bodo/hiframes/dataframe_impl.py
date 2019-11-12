@@ -38,7 +38,6 @@ from numba.extending import register_model, models
 import llvmlite.llvmpy.core as lc
 
 
-
 @overload_attribute(DataFrameType, "index")
 def overload_dataframe_index(df):
     # None index means full RangeIndex
@@ -102,7 +101,8 @@ def overload_dataframe_size(df):
 @overload_attribute(DataFrameType, "shape")
 def overload_dataframe_shape(df):
     ncols = len(df.columns)
-    return lambda df: (len(df), ncols)
+    # using types.int64 due to lowering error (a Numba tuple handling bug)
+    return lambda df: (len(df), types.int64(ncols))
 
 
 @overload_attribute(DataFrameType, "empty")
@@ -197,7 +197,8 @@ def overload_dataframe_isin(df, values):
             if c in values.columns:
                 v_name = "val{}".format(i)
                 func_text += "  {} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(values, {})\n".format(
-                    v_name, values.columns.index(c))
+                    v_name, values.columns.index(c)
+                )
                 other_colmap[c] = v_name
     else:
         # general iterable (e.g. list, set) case
@@ -207,7 +208,9 @@ def overload_dataframe_isin(df, values):
     data = []
     for i in range(len(df.columns)):
         v_name = "data{}".format(i)
-        func_text += "  {} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})\n".format(v_name, i)
+        func_text += "  {} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})\n".format(
+            v_name, i
+        )
         data.append(v_name)
 
     out_data = ["out{}".format(i) for i in range(len(df.columns))]
@@ -357,7 +360,9 @@ def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
 
     func_text = "def impl(df, axis=0, level=None, numeric_only=False):\n"
     func_text += "  data = np.array([{}])\n".format(data_args)
-    func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, {})\n".format(index)
+    func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, {})\n".format(
+        index
+    )
     # print(func_text)
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
@@ -374,7 +379,9 @@ def overload_dataframe_nunique(df, axis=0, dropna=True):
 
     func_text = "def impl(df, axis=0, dropna=True):\n"
     func_text += "  data = np.asarray(({},))\n".format(data_args)
-    func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, {})\n".format(index)
+    func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, {})\n".format(
+        index
+    )
     # print(func_text)
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
@@ -526,7 +533,9 @@ def _gen_reduce_impl(df, func_name, args=None):
         )
     else:
         func_text += "  data = np.asarray(({},){})\n".format(data_args, typ_cast)
-    func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, {})\n".format(index)
+    func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, {})\n".format(
+        index
+    )
     # print(func_text)
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)

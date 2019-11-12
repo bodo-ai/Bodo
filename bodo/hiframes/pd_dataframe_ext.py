@@ -47,7 +47,7 @@ from bodo.utils.typing import (
 )
 
 
-class DataFrameType(types.Type):  # TODO: IterableType over column names
+class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column names
     """Temporary type class for DataFrame objects.
     """
 
@@ -76,6 +76,11 @@ class DataFrameType(types.Type):  # TODO: IterableType over column names
         if has_parent is None:
             has_parent = self.has_parent
         return DataFrameType(data, index, self.columns, has_parent)
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 2, "C")
 
     @property
     def key(self):
@@ -409,6 +414,48 @@ numba.ir_utils.alias_func_extensions[
     ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext")
 ] = alias_ext_dummy_func
 # TODO: init_dataframe, get_dataframe_index?
+
+
+# array analysis extension
+from numba.array_analysis import ArrayAnalysis
+
+
+def init_dataframe_equiv(self, scope, equiv_set, args, kws):
+    """shape analysis for init_dataframe() calls. All input arrays have the same shape,
+    which is the same as output dataframe's shape.
+    """
+    assert len(args) == 3 and not kws
+    data_tup = args[0]
+    # TODO: add shape for index (requires full shape support for indices)
+    if equiv_set.has_shape(data_tup):
+        data_shapes = equiv_set.get_shape(data_tup)
+        # all data arrays have the same shape
+        if len(data_shapes) > 1:
+            equiv_set.insert_equiv(*data_shapes)
+        if len(data_shapes) > 0:
+            return (data_shapes[0], len(data_shapes)), []
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_init_dataframe = (
+    init_dataframe_equiv
+)
+
+
+def get_dataframe_data_equiv(self, scope, equiv_set, args, kws):
+    """array analysis for get_dataframe_data(). output array has the same shape as input
+    dataframe.
+    """
+    assert len(args) == 2 and not kws
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return equiv_set.get_shape(var)[0], []
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_data = (
+    get_dataframe_data_equiv
+)
 
 
 @intrinsic
