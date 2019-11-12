@@ -466,20 +466,6 @@ def is_series_type(typ):
     return isinstance(typ, SeriesType)
 
 
-def arr_to_series_type(arr):
-    series_type = None
-    if isinstance(arr, types.Array):
-        series_type = SeriesType(arr.dtype, arr)
-    elif arr == string_array_type:
-        # StringArray is readonly
-        series_type = SeriesType(string_type)
-    elif arr == list_string_array_type:
-        series_type = SeriesType(types.List(string_type))
-    elif arr == string_array_split_view_type:
-        series_type = SeriesType(types.List(string_type), string_array_split_view_type)
-    return series_type
-
-
 def if_series_to_array_type(typ):
     if isinstance(typ, SeriesType):
         return series_to_array_type(typ)
@@ -491,23 +477,6 @@ def if_series_to_array_type(typ):
     if isinstance(typ, types.Set):
         return types.Set(if_series_to_array_type(typ.dtype))
     # TODO: other types that can have Series inside?
-    return typ
-
-
-def if_arr_to_series_type(typ):
-    if isinstance(typ, types.Array) or typ in (
-        string_array_type,
-        list_string_array_type,
-        string_array_split_view_type,
-    ):
-        return arr_to_series_type(typ)
-    if isinstance(typ, (types.Tuple, types.UniTuple)):
-        return types.Tuple([if_arr_to_series_type(t) for t in typ.types])
-    if isinstance(typ, types.List):
-        return types.List(if_arr_to_series_type(typ.dtype))
-    if isinstance(typ, types.Set):
-        return types.Set(if_arr_to_series_type(typ.dtype))
-    # TODO: other types that can have Arrays inside?
     return typ
 
 
