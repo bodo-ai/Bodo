@@ -549,10 +549,6 @@ def cast_series(context, builder, fromty, toty, val):
 class SeriesAttribute(AttributeTemplate):
     key = SeriesType
 
-    def resolve_dt(self, ary):
-        assert ary.dtype == types.NPDatetime("ns")
-        return series_dt_methods_type
-
     @bound_function("series.rolling")
     def resolve_rolling(self, ary, args, kws):
         def rolling_stub(
@@ -721,33 +717,6 @@ str2bool_methods = (
     "isnumeric",
     "isdecimal",
 )
-
-
-class SeriesDtMethodType(types.Type):
-    def __init__(self):
-        name = "SeriesDtMethodType"
-        super(SeriesDtMethodType, self).__init__(name)
-
-
-series_dt_methods_type = SeriesDtMethodType()
-
-
-@infer_getattr
-class SeriesDtMethodAttribute(AttributeTemplate):
-    key = SeriesDtMethodType
-
-    def resolve_date(self, ary):
-        return SeriesType(datetime_date_type)  # TODO: name, index
-
-
-# all date fields return int64 same as Timestamp fields
-def resolve_date_field(self, ary):
-    return SeriesType(types.int64)
-
-
-for field in bodo.hiframes.pd_timestamp_ext.date_fields:
-    setattr(SeriesDtMethodAttribute, "resolve_" + field, resolve_date_field)
-
 
 class SeriesRollingType(types.Type):
     def __init__(self, stype):
