@@ -1263,8 +1263,8 @@ class ThreadedRetTyper(AbstractTemplate):
 
 
 @numba.njit
-def parallel_print(s):
-    print(s)
+def parallel_print(*args):
+    print(*args)
 
 
 @numba.njit
