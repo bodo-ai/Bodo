@@ -415,7 +415,7 @@ def test_dist_tuple2():
     assert count_array_OneDs() > 0
 
 
-def test_dist_warning():
+def test_dist_warning1():
     """Make sure BodoWarning is thrown when there is no parallelism discovered due
     to unsupported function
     """
@@ -424,6 +424,20 @@ def test_dist_warning():
         # using a function we are not likely to support for warning test
         # should be changed when/if we support slogdet()
         return np.linalg.slogdet(A)
+
+    if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+        with pytest.warns(BodoWarning, match="No parallelism found for function"):
+            bodo.jit(impl)(10)
+    else:
+        bodo.jit(impl)(10)
+
+
+def test_dist_warning2():
+    """Make sure BodoWarning is thrown when there is no parallelism discovered due
+    to return of dataframe
+    """
+    def impl(n):
+        return pd.DataFrame({'A': np.ones(n)})
 
     if bodo.get_rank() == 0:  # warning is thrown only on rank 0
         with pytest.warns(BodoWarning, match="No parallelism found for function"):

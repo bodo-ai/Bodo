@@ -226,7 +226,7 @@ class DistributedAnalysis(object):
         # parallel functionality other than parfors
         if (
             len(array_dists) > 0
-            and all(d == Distribution.REP for d in array_dists.values())
+            and all(is_REP(d) for d in array_dists.values())
         ) or (
             len(array_dists) == 0
             and len(parfor_dists) > 0
@@ -1635,6 +1635,12 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
                 if isinstance(inst, T):
                     f(inst, func_ir, typemap, accesses)
     return accesses
+
+
+def is_REP(d):
+    if isinstance(d, list):
+        return all(is_REP(a) for a in d)
+    return d == Distribution.REP
 
 
 def dprint(*s):
