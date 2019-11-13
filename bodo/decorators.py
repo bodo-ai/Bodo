@@ -15,6 +15,9 @@ def distributed_diagnostics(self, signature=None, level=1):
     and 2, 3, and 4 provide increasing levels of verbosity.
     """
 
+    if bodo.get_rank() != 0:  # only print on 1 process
+        return
+
     def dump(sig):
         ol = self.overloads[sig]
         pfdiag = ol.metadata.get("distributed_diagnostics", None)
