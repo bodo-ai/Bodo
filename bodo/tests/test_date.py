@@ -217,9 +217,7 @@ class TestDate(unittest.TestCase):
         df = self._gen_str_date_df()
         A = pd.DatetimeIndex(df["str_date"]).to_series()
         # TODO: fix index and name
-        pd.testing.assert_series_equal(
-            bodo_func(A), test_impl(A).reset_index(drop=True), check_names=False
-        )
+        pd.testing.assert_series_equal(bodo_func(A), test_impl(A))
 
     def test_datetime_series_dt_year(self):
         def test_impl(A):
@@ -229,9 +227,7 @@ class TestDate(unittest.TestCase):
         df = self._gen_str_date_df()
         A = pd.DatetimeIndex(df["str_date"]).to_series()
         # TODO: fix index and name
-        pd.testing.assert_series_equal(
-            bodo_func(A), test_impl(A).reset_index(drop=True), check_names=False
-        )
+        pd.testing.assert_series_equal(bodo_func(A), test_impl(A))
 
     def _gen_str_date_df(self):
         rows = 10

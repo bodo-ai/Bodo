@@ -466,20 +466,6 @@ def is_series_type(typ):
     return isinstance(typ, SeriesType)
 
 
-def arr_to_series_type(arr):
-    series_type = None
-    if isinstance(arr, types.Array):
-        series_type = SeriesType(arr.dtype, arr)
-    elif arr == string_array_type:
-        # StringArray is readonly
-        series_type = SeriesType(string_type)
-    elif arr == list_string_array_type:
-        series_type = SeriesType(types.List(string_type))
-    elif arr == string_array_split_view_type:
-        series_type = SeriesType(types.List(string_type), string_array_split_view_type)
-    return series_type
-
-
 def if_series_to_array_type(typ):
     if isinstance(typ, SeriesType):
         return series_to_array_type(typ)
@@ -491,23 +477,6 @@ def if_series_to_array_type(typ):
     if isinstance(typ, types.Set):
         return types.Set(if_series_to_array_type(typ.dtype))
     # TODO: other types that can have Series inside?
-    return typ
-
-
-def if_arr_to_series_type(typ):
-    if isinstance(typ, types.Array) or typ in (
-        string_array_type,
-        list_string_array_type,
-        string_array_split_view_type,
-    ):
-        return arr_to_series_type(typ)
-    if isinstance(typ, (types.Tuple, types.UniTuple)):
-        return types.Tuple([if_arr_to_series_type(t) for t in typ.types])
-    if isinstance(typ, types.List):
-        return types.List(if_arr_to_series_type(typ.dtype))
-    if isinstance(typ, types.Set):
-        return types.Set(if_arr_to_series_type(typ.dtype))
-    # TODO: other types that can have Arrays inside?
     return typ
 
 
@@ -548,10 +517,6 @@ def cast_series(context, builder, fromty, toty, val):
 @infer_getattr
 class SeriesAttribute(AttributeTemplate):
     key = SeriesType
-
-    def resolve_dt(self, ary):
-        assert ary.dtype == types.NPDatetime("ns")
-        return series_dt_methods_type
 
     @bound_function("series.rolling")
     def resolve_rolling(self, ary, args, kws):
@@ -721,33 +686,6 @@ str2bool_methods = (
     "isnumeric",
     "isdecimal",
 )
-
-
-class SeriesDtMethodType(types.Type):
-    def __init__(self):
-        name = "SeriesDtMethodType"
-        super(SeriesDtMethodType, self).__init__(name)
-
-
-series_dt_methods_type = SeriesDtMethodType()
-
-
-@infer_getattr
-class SeriesDtMethodAttribute(AttributeTemplate):
-    key = SeriesDtMethodType
-
-    def resolve_date(self, ary):
-        return SeriesType(datetime_date_type)  # TODO: name, index
-
-
-# all date fields return int64 same as Timestamp fields
-def resolve_date_field(self, ary):
-    return SeriesType(types.int64)
-
-
-for field in bodo.hiframes.pd_timestamp_ext.date_fields:
-    setattr(SeriesDtMethodAttribute, "resolve_" + field, resolve_date_field)
-
 
 class SeriesRollingType(types.Type):
     def __init__(self, stype):
