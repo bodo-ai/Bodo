@@ -422,6 +422,10 @@ class UntypedPass(object):
             if is_expr(func_def, "getattr"):
                 func_mod = func_def.value
                 func_name = func_def.attr
+            # ignore objmode block calls
+            elif isinstance(func_def, ir.Const) and isinstance(
+                    func_def.value, numba.dispatcher.ObjModeLiftedWith):
+                return [assign]
             else:
                 warnings.warn("function call couldn't be found for initial analysis")
                 return [assign]

@@ -820,6 +820,13 @@ def get_getsetitem_index_var(node, typemap, nodes):
     return index_var
 
 
+# don't copy value since it can fail
+# for example, deepcopy in get_parfor_reductions can fail for ObjModeLiftedWith const
+import copy
+ir.Const.__deepcopy__ = lambda self, memo: \
+    ir.Const(self.value, copy.deepcopy(self.loc))
+
+
 def is_call_assign(stmt):
     return (
         isinstance(stmt, ir.Assign)

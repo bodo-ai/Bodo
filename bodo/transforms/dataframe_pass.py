@@ -563,6 +563,10 @@ class DataFramePass(object):
             func_def = guard(get_definition, self.func_ir, rhs.func)
             if isinstance(func_def, ir.Expr) and func_def.op == "make_function":
                 return [assign]
+            # ignore objmode block calls
+            if isinstance(func_def, ir.Const) and isinstance(
+                    func_def.value, numba.dispatcher.ObjModeLiftedWith):
+                return [assign]
             if isinstance(func_def, ir.Global) and isinstance(
                 func_def.value, StencilFunc
             ):

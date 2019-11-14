@@ -444,3 +444,21 @@ def test_dist_warning2():
             bodo.jit(impl)(10)
     else:
         bodo.jit(impl)(10)
+
+
+def test_dist_objmode():
+    """Test use of objmode inside prange including a reduction.
+    Tests a previous issue where deepcopy in get_parfor_reductions failed for
+    ObjModeLiftedWith const.
+    """
+    import scipy.special as sc
+    def objmode_test(n):
+        A = np.arange(n)
+        s = 0
+        for i in bodo.prange(len(A)):
+            with bodo.objmode(y="float64"):
+                y = sc.entr(A[i])  # call entropy function on each data element
+            s += y
+        return s
+
+    assert bodo.jit(objmode_test)(10) == objmode_test(10)
