@@ -456,8 +456,9 @@ def test_dist_objmode():
         A = np.arange(n)
         s = 0
         for i in bodo.prange(len(A)):
+            x = A[i]
             with bodo.objmode(y="float64"):
-                y = sc.entr(A[i])  # call entropy function on each data element
+                y = sc.entr(x)  # call entropy function on each data element
             s += y
         return s
 
