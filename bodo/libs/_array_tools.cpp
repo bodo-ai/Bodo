@@ -849,13 +849,13 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype, char* ptrda
 }
 
 
-/* This is a function used by "PrintSetOfColumn"
+/* This is a function used by "DEBUG_PrintSetOfColumn"
  * It takes a column and returns a vector of string on output
  *
  * @param arr is the pointer.
  * @return The vector of strings to be used later.
  */
-std::vector<std::string> PrintColumn(array_info* arr)
+std::vector<std::string> DEBUG_PrintColumn(array_info* arr)
 {
   size_t nRow=arr->length;
   std::vector<std::string> ListStr(nRow);
@@ -912,7 +912,7 @@ std::vector<std::string> PrintColumn(array_info* arr)
 }
 
 
-/** The PrintSetOfColumn is printing the contents of the table to
+/** The DEBUG_PrintSetOfColumn is printing the contents of the table to
  * the output stream.
  * All cases are supported (NUMPY, SRING, NULLABLE_INT_BOOL) as well as
  * all integer and floating types.
@@ -923,7 +923,7 @@ std::vector<std::string> PrintColumn(array_info* arr)
  * @param ListArr the list of columns in input
  * @return Nothing. Everything is put in the stream
  */
-void PrintSetOfColumn(std::ostream & os, std::vector<array_info*> const& ListArr)
+void DEBUG_PrintSetOfColumn(std::ostream & os, std::vector<array_info*> const& ListArr)
 {
   int nCol=ListArr.size();
   if (nCol == 0) {
@@ -940,7 +940,7 @@ void PrintSetOfColumn(std::ostream & os, std::vector<array_info*> const& ListArr
   }
   std::vector<std::vector<std::string>> ListListStr;
   for (int iCol=0; iCol<nCol; iCol++) {
-    std::vector<std::string> LStr = PrintColumn(ListArr[iCol]);
+    std::vector<std::string> LStr = DEBUG_PrintColumn(ListArr[iCol]);
     for (int iRow=ListLen[iCol]; iRow<nRowMax; iRow++)
       LStr.push_back("");
     ListListStr.push_back(LStr);
@@ -980,7 +980,7 @@ void PrintSetOfColumn(std::ostream & os, std::vector<array_info*> const& ListArr
  * @param The list of columns in output
  * @return nothing. Everything is printed to the stream
  */
-void PrintRefct(std::ostream &os, std::vector<array_info*> const& ListArr)
+void DEBUG_PrintRefct(std::ostream &os, std::vector<array_info*> const& ListArr)
 {
   int nCol=ListArr.size();
   auto GetType=[](bodo_array_type::arr_type_enum arr_type) -> std::string {
@@ -996,7 +996,7 @@ void PrintRefct(std::ostream &os, std::vector<array_info*> const& ListArr)
     return "(refct=" + std::to_string(meminf->refct) + ")";
   };
   for (int iCol=0; iCol<nCol; iCol++) {
-    os << "iCol=" << iCol << " : " << GetType(ListArr[iCol]->arr_type) << " : meminfo=" << GetNRTinfo(ListArr[iCol]->meminfo) << " meminfo_bitmask=" << GetNRTinfo(ListArr[iCol]->meminfo_bitmask) << "\n";
+    os << "iCol=" << iCol << " : " << GetType(ListArr[iCol]->arr_type) << " dtype=" << ListArr[iCol]->dtype << " : meminfo=" << GetNRTinfo(ListArr[iCol]->meminfo) << " meminfo_bitmask=" << GetNRTinfo(ListArr[iCol]->meminfo_bitmask) << "\n";
   }
 }
 
@@ -1388,26 +1388,37 @@ int KeyComparison(table_info* in_table, size_t const& n_key, size_t const& shift
  * @param is_right : whether we do merging on the right.
  * @return the returned table used in the code.
  */
-table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_data_left_t, int64_t n_data_right_t, bool is_left, bool is_right)
+table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_data_left_t, int64_t n_data_right_t, int64_t* vect_same_key, bool is_left, bool is_right)
 {
-  //  std::cout << "IN_TABLE:\n";
-  //  PrintSetOfColumn(std::cout, in_table->columns);
+#undef DEBUG_JOIN
+#ifdef DEBUG_JOIN
+  std::cout << "IN_TABLE:\n";
+  DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+  DEBUG_PrintRefct(std::cout, in_table->columns);
+#endif
   size_t n_key = size_t(n_key_t);
   size_t n_data_left = size_t(n_data_left_t);
   size_t n_data_right = size_t(n_data_right_t);
+  size_t n_tot_left = n_key + n_data_left;
+  size_t n_tot_right = n_key + n_data_right;
   size_t sum_dim = 2*n_key + n_data_left + n_data_right;
   size_t n_col = in_table->columns.size();
   if (n_col != sum_dim) {
     PyErr_SetString(PyExc_RuntimeError, "incoherent dimensions");
     return NULL;
   }
-  /*
-  for (size_t i=0; i<n_col; i++)
-    std::cout << "1: i=" << i << " dtype=" << in_table->columns[i]->dtype << "\n";
-  */
+#ifdef DEBUG_JOIN
+  std::cout << "pointer=" << vect_same_key << "\n";
+  for (size_t iKey=0; iKey<n_key; iKey++) {
+    int64_t val = vect_same_key[iKey];
+    std::cout << "iKey=" << iKey << " vect_same_key[iKey]=" << val << "\n";
+  }
+#endif
+  // This is a hack because we may access vect_same_key_b above n_key
+  // even if that is irrelevant to the computation.
   //
   size_t n_rows_left = (size_t)in_table->columns[0]->length;
-  size_t n_rows_right = (size_t)in_table->columns[n_key]->length;
+  size_t n_rows_right = (size_t)in_table->columns[n_tot_left]->length;
   //
   //  std::cout << "hash_join_table, step 2\n";
   std::vector<array_info*> key_arrs_left = std::vector<array_info*>(in_table->columns.begin(), in_table->columns.begin() + n_key);
@@ -1415,26 +1426,29 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
   uint32_t* hashes_left = hash_keys(key_arrs_left, seed);
 
   //  std::cout << "hash_join_table, step 3\n";
-  std::vector<array_info*> key_arrs_right = std::vector<array_info*>(in_table->columns.begin()+n_key, in_table->columns.begin() + 2*n_key);
+  std::vector<array_info*> key_arrs_right = std::vector<array_info*>(in_table->columns.begin()+n_tot_left, in_table->columns.begin() + n_tot_left+n_key);
   uint32_t* hashes_right = hash_keys(key_arrs_right, seed);
-  //
-  //  for (size_t i=0; i<n_rows_left; i++)
-  //    std::cout << "i=" << i << " hashes_left=" << hashes_left[i] << "\n";
-  //  for (size_t i=0; i<n_rows_right; i++)
-  //    std::cout << "i=" << i << " hashes_right=" << hashes_right[i] << "\n";
+#ifdef DEBUG_JOIN
+  for (size_t i=0; i<n_rows_left; i++)
+    std::cout << "i=" << i << " hashes_left=" << hashes_left[i] << "\n";
+  for (size_t i=0; i<n_rows_right; i++)
+    std::cout << "i=" << i << " hashes_right=" << hashes_right[i] << "\n";
+#endif
   int ChoiceOpt;
   bool short_table_work, long_table_work; // This corresponds to is_left/is_right
   size_t short_table_shift, long_table_shift; // This corresponds to the shift for left and right.
   size_t short_table_rows, long_table_rows; // the number of rows
   uint32_t *short_table_hashes, *long_table_hashes;
-  //  std::cout << "n_rows_left=" << n_rows_left << " n_rows_right=" << n_rows_right << "\n";
+#ifdef DEBUG_JOIN
+  std::cout << "n_rows_left=" << n_rows_left << " n_rows_right=" << n_rows_right << "\n";
+#endif
   if (n_rows_left < n_rows_right) {
     ChoiceOpt=0;
-    // 1 = left and 2 = right
+    // short = left and long = right
     short_table_work   = is_left;
     long_table_work   = is_right;
     short_table_shift  = 0;
-    long_table_shift  = n_key;
+    long_table_shift  = n_tot_left;
     short_table_rows   = n_rows_left;
     long_table_rows   = n_rows_right;
     short_table_hashes = hashes_left;
@@ -1442,16 +1456,20 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
   }
   else {
     ChoiceOpt=1;
-    // 1 = right and 2 = left
+    // short = right and long = left
     short_table_work   = is_right;
     long_table_work   = is_left;
-    short_table_shift  = n_key;
+    short_table_shift  = n_tot_left;
     long_table_shift  = 0;
     short_table_rows   = n_rows_right;
     long_table_rows   = n_rows_left;
     short_table_hashes = hashes_right;
     long_table_hashes = hashes_left;
   }
+#ifdef DEBUG_JOIN
+  std::cout << "ChoiceOpt=" << ChoiceOpt << "\n";
+  std::cout << "short_table_rows=" << short_table_rows << " long_table_rows=" << long_table_rows << "\n";
+#endif
   /* This is a function for comparing the rows.
    * This is used as argument for the map function.
    * First level of comparison is by using the hash.
@@ -1466,60 +1484,52 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
    * @param iRowB is the second row index for the comparison
    * @return true/false depending on the case.
    */
-  auto row_cmp=[&](size_t const& iRowA, size_t const& iRowB) -> bool {
+  auto hash_fct=[&](size_t const& iRow) -> size_t {
+    if (iRow < short_table_rows)
+      return short_table_hashes[iRow];
+    else
+      return long_table_hashes[iRow - short_table_rows];
+  };
+  auto equal_fct=[&](size_t const& iRowA, size_t const& iRowB) -> bool {
     //    std::cout << "Beginning of function f\n";
-    uint32_t hash_A, hash_B;
     size_t jRowA, jRowB;
     size_t shift_A, shift_B;
     if (iRowA < short_table_rows) {
-      hash_A = short_table_hashes[iRowA];
       shift_A = short_table_shift;
       jRowA = iRowA;
     }
     else {
-      hash_A = long_table_hashes[iRowA - short_table_rows];
       shift_A = long_table_shift;
       jRowA = iRowA - short_table_rows;
     }
     //    std::cout << "hash_A=" << hash_A << "\n";
     if (iRowB < short_table_rows) {
-      hash_B = short_table_hashes[iRowB];
       shift_B = short_table_shift;
       jRowB = iRowB;
     }
     else {
-      hash_B = long_table_hashes[iRowB - short_table_rows];
       shift_B = long_table_shift;
       jRowB = iRowB - short_table_rows;
     }
-    //    std::cout << "hash_B=" << hash_B << "\n";
-    if (hash_A < hash_B)
-      return true;
-    if (hash_A > hash_B)
-      return false;
-    //    std::cout << "Before KeyComparison shift_A=" << shift_A << " shift_B=" << shift_B << "\n";
-    int val = KeyComparison(in_table, n_key, shift_A, jRowA, shift_B, jRowB);
-    //    std::cout << "val=" << val << "\n";
-    if (val == 1)
-      return true;
-    return false;
+    return TestEqual(in_table, n_key, shift_A, jRowA, shift_B, jRowB);
   };
   // The entList contains the hash of the short table.
   // We address the entry by the row index. We store all the rows which are identical
   // in the std::vector.
-  std::map<size_t, std::vector<size_t>, std::function<bool(size_t, size_t)> > entList(row_cmp);
+  std::unordered_map<size_t, std::vector<size_t>, decltype(hash_fct), decltype(equal_fct)> entList({}, hash_fct, equal_fct);
   // The loop over the short table.
   // entries are stored one by one and all of them are put even if identical in value.
   for (size_t i_short=0; i_short<short_table_rows; i_short++) {
-    if (entList.count(i_short) == 0) {
-      entList[i_short]={i_short};
-    }
-    else {
-      entList[i_short].push_back(i_short);
-    }
+#ifdef DEBUG_JOIN
+    std::cout << "i_short=" << i_short << "\n";
+#endif
+    std::vector<size_t>& group = entList[i_short];
+    group.push_back(i_short);
   }
   size_t nEnt=entList.size();
-  //  std::cout << "nEnt1=" << nEnt1 << "\n";
+#ifdef DEBUG_JOIN
+  std::cout << "nEnt=" << nEnt << "\n";
+#endif
   //
   // Now iterating and determining how many entries we have to do.
   //
@@ -1557,52 +1567,78 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
     size_t iter_s=0;
     while(iter != entList.end()) {
       if (ListStatus[iter_s] == 0) {
-        for (auto &j_short : iter ->second)
+        for (auto &j_short : iter ->second) {
           ListPairWrite.push_back({j_short,-1});
+        }
       }
       iter++;
       iter_s++;
     }
+#ifdef DEBUG_JOIN
+    std::cout << "AFTER : iter_s=" << iter_s << "\n";
+#endif
   }
-
+#ifdef DEBUG_JOIN
+  size_t nbPair=ListPairWrite.size();
+  for (size_t iPair=0; iPair<nbPair; iPair++)
+    std::cout << "iPair=" << iPair << " ePair=" << ListPairWrite[iPair].first << " , " << ListPairWrite[iPair].second << "\n";
+#endif
   std::vector<array_info*> out_arrs;
   // Inserting the left data
-  for (size_t i=0; i<n_data_left; i++) {
-    if (ChoiceOpt == 0) {
-      out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
-                                       i + 2*n_key, -1, 0));
+  for (size_t i=0; i<n_tot_left; i++) {
+    if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
+      if (ChoiceOpt == 0) {
+        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, n_tot_left + i, 2));
+      }
+      else {
+        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, n_tot_left + i, i, 2));
+      }
     }
     else {
-      out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
-                                       -1, i + 2*n_key, 1));
+      if (ChoiceOpt == 0) {
+        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, -1, 0));
+      }
+      else {
+        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, -1, i, 1));
+      }
     }
   }
   // Inserting the right data
-  for (size_t i=0; i<n_data_right; i++) {
-    if (ChoiceOpt == 0) {
-      out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, -1, i + 2*n_key + n_data_left, 1));
+  for (size_t i=0; i<n_tot_right; i++) {
+    if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
+      if (ChoiceOpt == 0) {
+        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, n_tot_left + i, 2));
+      }
+      else {
+        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, n_tot_left + i, i, 2));
+      }
     }
     else {
-      out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i + 2*n_key + n_data_left, -1, 0));
+      if (ChoiceOpt == 0) {
+        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, -1, n_tot_left + i, 1));
+      }
+      else {
+        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, n_tot_left + i, -1, 0));
+      }
     }
   }
   // Putting the key two times.
-  for (size_t u=0; u<2; u++) {
-    for (size_t i=0; i<n_key; i++) {
-      if (ChoiceOpt == 0) {
-        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, i+n_key, 2));
-      }
-      else {
-        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i+n_key, i, 2));
-      }
-    }
-  }
-  /*
-  std::cout << "hash_join_table, step 12\n";
-  PrintSetOfColumn(std::cout, out_arrs);
-  PrintRefct(std::cout, out_arrs);
-  std::cout << "hash_join_table, step 13\n";
-  */
+  //  for (size_t u=0; u<2; u++) {
+  //    for (size_t i=0; i<n_key; i++) {
+  //      if (ChoiceOpt == 0) {
+  //        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, i+n_key, 2));
+  //      }
+  //      else {
+  //        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i+n_key, i, 2));
+  //      }
+  //    }
+  //  }
+#ifdef DEBUG_JOIN
+  std::cout << "hash_join_table, output information\n";
+  DEBUG_PrintSetOfColumn(std::cout, out_arrs);
+  DEBUG_PrintRefct(std::cout, out_arrs);
+  std::cout << "Finally leaving\n";
+#endif
   //
   delete[] hashes_left;
   delete[] hashes_right;
