@@ -67,6 +67,14 @@ from bodo.utils.shuffle import (
     _get_data_tup,
 )
 from bodo.utils.typing import is_overload_true
+from bodo.libs.array_tools import (
+    array_to_info,
+    arr_info_list_to_table,
+    groupby_and_aggregate,
+    info_from_table,
+    info_to_array,
+    delete_table,
+)
 
 
 AggFuncStruct = namedtuple(
@@ -95,15 +103,23 @@ def get_agg_func(func_ir, func_name, rhs):
     if func_name == "cumsum":
         return func_name
     if func_name == "var":
-        return _column_var_impl_linear
+        func = _column_var_impl_linear
+        func.ftype = supported_agg_funcs.index(func_name)
+        func.builtin = True
+        return func
     if func_name == "std":
-        return _column_std_impl_linear
+        func = _column_std_impl_linear
+        func.ftype = supported_agg_funcs.index(func_name)
+        func.builtin = True
+        return func
     if func_name in supported_agg_funcs[:-2]:
         func = series_replace_funcs[func_name]
         # returning generic function
         # TODO: support type-specific funcs e.g. for dt64
         if isinstance(func, dict):
             func = func[types.float64]
+        func.ftype = supported_agg_funcs.index(func_name)
+        func.builtin = True
         return func
 
     assert func_name in ["agg", "aggregate"]
@@ -649,36 +665,56 @@ def agg_distributed_run(
         )
         glbs.update({"group_cumsum": group_cumsum})
     else:
-        agg_func_struct = get_agg_func_struct(
-            agg_node.agg_func,
-            in_col_typs,
-            out_col_typs,
-            typingctx,
-            targetctx,
-            pivot_typ,
-            agg_node.pivot_values,
-            agg_node.is_crosstab,
-        )
+        offload = (parallel and agg_node.pivot_arr is None
+                            and hasattr(agg_node.agg_func, 'builtin')
+                            and agg_node.agg_func.builtin)
+        if not offload:
+            agg_func_struct = get_agg_func_struct(
+                agg_node.agg_func,
+                in_col_typs,
+                out_col_typs,
+                typingctx,
+                targetctx,
+                pivot_typ,
+                agg_node.pivot_values,
+                agg_node.is_crosstab,
+            )
 
+        var_typs = None
+        if not offload:
+            var_typs = agg_func_struct.var_typs
         top_level_func = gen_top_level_agg_func(
             agg_node.key_names,
             return_key,
-            agg_func_struct.var_typs,
+            var_typs,
             out_typs,
             agg_node.df_in_vars.keys(),
             agg_node.df_out_vars.keys(),
+            agg_node.agg_func,
             parallel,
+            offload,
         )
         glbs.update(
             {
                 "agg_seq_iter": agg_seq_iter,
                 "parallel_agg": parallel_agg,
-                "__update_redvars": agg_func_struct.update_all_func,
-                "__init_func": agg_func_struct.init_func,
-                "__combine_redvars": agg_func_struct.combine_all_func,
-                "__eval_res": agg_func_struct.eval_all_func,
+                "array_to_info": array_to_info,
+                "arr_info_list_to_table": arr_info_list_to_table,
+                "groupby_and_aggregate": groupby_and_aggregate,
+                "info_from_table": info_from_table,
+                "info_to_array": info_to_array,
+                "delete_table": delete_table,
             }
         )
+        if not offload:
+            glbs.update(
+                {
+                    "__update_redvars": agg_func_struct.update_all_func,
+                    "__init_func": agg_func_struct.init_func,
+                    "__combine_redvars": agg_func_struct.combine_all_func,
+                    "__eval_res": agg_func_struct.eval_all_func,
+                }
+            )
 
     f_block = compile_to_numba_ir(
         top_level_func, glbs, typingctx, arg_typs, typemap, calltypes
@@ -1170,7 +1206,8 @@ def _get_np_dtype(t):
 
 
 def gen_top_level_agg_func(
-    key_names, return_key, red_var_typs, out_typs, in_col_names, out_col_names, parallel
+    key_names, return_key, red_var_typs, out_typs, in_col_names, out_col_names,
+    agg_func, parallel, offload
 ):
     """create the top level aggregation function by generating text
     """
@@ -1188,38 +1225,75 @@ def gen_top_level_agg_func(
     # alloc_agg_output()
     return_key_p = "True" if return_key else "None"
 
-    func_text = "def agg_top({}{}, pivot_arr):\n".format(key_args, in_args)
-    func_text += "    data_redvar_dummy = ({}{})\n".format(
-        ",".join(["np.empty(1, {})".format(_get_np_dtype(t)) for t in red_var_typs]),
-        "," if len(red_var_typs) == 1 else "",
-    )
-    func_text += "    out_dummy_tup = ({}{}{})\n".format(
-        ",".join(["np.empty(1, {})".format(_get_np_dtype(t)) for t in out_typs]),
-        "," if len(out_typs) != 0 else "",
-        "{},".format(key_args) if return_key else "",
-    )
-    func_text += "    data_in = ({}{})\n".format(
-        ",".join(in_names), "," if len(in_names) == 1 else ""
-    )
-    func_text += "    init_vals = __init_func()\n"
+    if not offload:
+        func_text = "def agg_top({}{}, pivot_arr):\n".format(key_args, in_args)
+        func_text += "    data_redvar_dummy = ({}{})\n".format(
+            ",".join(["np.empty(1, {})".format(_get_np_dtype(t)) for t in red_var_typs]),
+            "," if len(red_var_typs) == 1 else "",
+        )
+        func_text += "    out_dummy_tup = ({}{}{})\n".format(
+            ",".join(["np.empty(1, {})".format(_get_np_dtype(t)) for t in out_typs]),
+            "," if len(out_typs) != 0 else "",
+            "{},".format(key_args) if return_key else "",
+        )
+        func_text += "    data_in = ({}{})\n".format(
+            ",".join(in_names), "," if len(in_names) == 1 else ""
+        )
+        func_text += "    init_vals = __init_func()\n"
 
-    out_keys = tuple("out_key_{}".format(sanitize_varname(c)) for c in key_names)
-    out_tup = ", ".join(out_names + out_keys if return_key else out_names)
+        out_keys = tuple("out_key_{}".format(sanitize_varname(c)) for c in key_names)
+        out_tup = ", ".join(out_names + out_keys if return_key else out_names)
 
-    if parallel:
-        func_text += (
-            "    ({},) = parallel_agg(({},), data_redvar_dummy, "
-            "out_dummy_tup, data_in, init_vals, __update_redvars, "
-            "__combine_redvars, __eval_res, {}, pivot_arr)\n"
-        ).format(out_tup, key_args, return_key_p)
+        if parallel:
+            func_text += (
+                "    ({},) = parallel_agg(({},), data_redvar_dummy, "
+                "out_dummy_tup, data_in, init_vals, __update_redvars, "
+                "__combine_redvars, __eval_res, {}, pivot_arr)\n"
+            ).format(out_tup, key_args, return_key_p)
+        else:
+            func_text += (
+                "    ({},) = agg_seq_iter(({},), data_redvar_dummy, "
+                "out_dummy_tup, data_in, init_vals, __update_redvars, "
+                "__eval_res, {}, pivot_arr)\n"
+            ).format(out_tup, key_args, return_key_p)
+
+        func_text += "    return ({},)\n".format(out_tup)
     else:
-        func_text += (
-            "    ({},) = agg_seq_iter(({},), data_redvar_dummy, "
-            "out_dummy_tup, data_in, init_vals, __update_redvars, "
-            "__eval_res, {}, pivot_arr)\n"
-        ).format(out_tup, key_args, return_key_p)
+        all_arrs = tuple("key_{}".format(c) for c in key_names) + in_names
+        n_keys = len(key_names)
 
-    func_text += "    return ({},)\n".format(out_tup)
+        func_text = "def agg_top({}{}, pivot_arr):\n".format(key_args, in_args)
+
+        # convert arrays to table
+        func_text += "    info_list = [{}]\n".format(
+            ", ".join("array_to_info({})".format(a) for a in all_arrs)
+        )
+        func_text += "    table = arr_info_list_to_table(info_list)\n"
+
+        for i in range(len(out_names)):
+            out_name = out_names[i] + "_dummy"
+            func_text += "    {} = np.empty(1, {})\n".format(out_name, _get_np_dtype(out_typs[i]))
+
+        # groupby and aggregate
+        func_text += "    out_table = groupby_and_aggregate(table, {}, {})\n".format(n_keys, agg_func.ftype)
+
+        # extract arrays from output table
+        for i in range(len(out_names)):
+            out_name = out_names[i]
+            in_name = in_names[i]
+            func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+                            out_name, i + n_keys, out_name + "_dummy")
+
+        key_names = ['key_' + name for name in key_names]
+        for i, key_name in enumerate(key_names):
+            func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+                            key_name, i, key_name)
+
+        # clean up
+        func_text += "    delete_table(table)\n"
+        func_text += "    delete_table(out_table)\n"
+
+        func_text += "    return ({},)\n".format(", ".join(out_names + tuple(key_names)))
 
     # print(func_text)
 
