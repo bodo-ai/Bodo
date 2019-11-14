@@ -397,21 +397,21 @@ int h5_write(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
 
 int64_t h5g_get_num_objs(hid_t file_id) {
     H5G_info_t group_info;
-    herr_t err;
-    err = H5Gget_info(file_id, &group_info);
+    //    herr_t err;
+    //    err = H5Gget_info(file_id, &group_info);
+    (void)H5Gget_info(file_id, &group_info);
     // printf("num links:%lld\n", group_info.nlinks);
     return (int64_t)group_info.nlinks;
 }
 
 void* h5g_get_objname_by_idx(hid_t file_id, int64_t ind) {
-    herr_t err;
     // first call gets size:
     // https://support.hdfgroup.org/HDF5/doc1.8/RM/RM_H5L.html#Link-GetNameByIdx
     int size = H5Lget_name_by_idx(file_id, ".", H5_INDEX_NAME, H5_ITER_NATIVE,
                                   (hsize_t)ind, NULL, 0, H5P_DEFAULT);
     char* name = (char*)malloc(size + 1);
     if (name == NULL) return NULL;
-    err = H5Lget_name_by_idx(file_id, ".", H5_INDEX_NAME, H5_ITER_NATIVE,
+    (void)H5Lget_name_by_idx(file_id, ".", H5_INDEX_NAME, H5_ITER_NATIVE,
                              (hsize_t)ind, name, size + 1, H5P_DEFAULT);
     // printf("g name:%s\n", name);
     std::string* outstr = new std::string(name);
@@ -420,7 +420,7 @@ void* h5g_get_objname_by_idx(hid_t file_id, int64_t ind) {
     return outstr;
 }
 
-void h5g_close(hid_t group_id) { herr_t err = H5Gclose(group_id); }
+  void h5g_close(hid_t group_id) { (void)H5Gclose(group_id); }
 
 #undef CHECK
 

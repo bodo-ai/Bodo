@@ -274,7 +274,7 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
     index_offsets[0] = 0;
     // uint32_t curr_data_off = 0;
 
-    int data_ind = offsets[0];
+    uint32_t data_ind = offsets[0];
     int str_ind = 0;
     // while there are chars to consume, equal since the first if will consume
     // it
@@ -746,7 +746,7 @@ void list_string_array_from_sequence(PyObject* obj, int64_t* num_items,
            (n_all_strs + 1) * sizeof(uint32_t));
 
     char* outbuf = new char[n_chars];
-    for (Py_ssize_t i = 0; i < n_all_strs; ++i) {
+    for (size_t i = 0; i < n_all_strs; ++i) {
         memcpy(outbuf + data_offset_buff[i], tmp_store[i],
                data_offset_buff[i + 1] - data_offset_buff[i]);
     }
@@ -908,7 +908,7 @@ int is_bool_array(PyArrayObject* arr) {
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
-        return NULL;                   \
+        return false;                  \
     }
     auto gilstate = PyGILState_Ensure();
 
@@ -934,7 +934,7 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
     auto gilstate = PyGILState_Ensure();
     //
 
-    for (uint64_t i = 0; i < n; ++i) {
+    for (uint64_t i = 0; i < uint64_t(n); ++i) {
         auto p = PyArray_GETPTR1((PyArrayObject*)arr, i);
         CHECK(p, "getting offset in numpy array failed");
         PyObject* s = PyArray_GETITEM(arr, (const char*)p);
@@ -959,14 +959,14 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
 
 void print_str_arr(uint64_t n, uint64_t n_chars, uint32_t* offsets,
                    uint8_t* data) {
-    printf("n: %lld n_chars: %lld\n", n, n_chars);
-    for (uint64_t i = 0; i < n; i++) {
-        printf("offsets: %u %u  chars:", offsets[i], offsets[i + 1]);
-        for (uint64_t j = offsets[i]; j < offsets[i + 1]; j++) {
-            printf("%d ", data[j]);
-        }
-        printf("\n");
+  std::cout << "n: " << n << " n_chars: " << n_chars << "\n";
+  for (uint64_t i = 0; i < n; i++) {
+    std::cout << "offsets: " << offsets[i] << " " << offsets[i + 1] << "  chars:";
+    for (uint64_t j = offsets[i]; j < offsets[i + 1]; j++) {
+      std::cout << data[j] << " ";
     }
+    std::cout << "\n";
+  }
 }
 
 void print_list_str_arr(uint64_t n, const char* data,
@@ -975,16 +975,15 @@ void print_list_str_arr(uint64_t n, const char* data,
                         const uint8_t* null_bitmap) {
     uint64_t n_strs = index_offsets[n];
     uint64_t n_chars = data_offsets[n_strs];
-    printf("n: %lld n_strs: %lld n_chars: %lld\n", n, n_strs, n_chars);
+    std::cout << "n: " << n << " n_strs: " << n_strs << " n_chars: " << n_chars << "\n";
     for (uint64_t i = 0; i < n; i++) {
-        printf("index_offsets: %u %u  lists:", index_offsets[i],
-               index_offsets[i + 1]);
-        for (uint64_t j = index_offsets[i]; j < index_offsets[i + 1]; j++) {
-            for (uint64_t k = data_offsets[j]; k < data_offsets[j + 1]; k++)
-                printf("%c ", data[k]);
-            printf("\n");
-        }
-        printf("\n");
+      std::cout << "index_offsets: " << index_offsets[i] << " " << index_offsets[i + 1] << "  lists:";
+      for (uint64_t j = index_offsets[i]; j < index_offsets[i + 1]; j++) {
+        for (uint64_t k = data_offsets[j]; k < data_offsets[j + 1]; k++)
+          std::cout << data[k] << " ";
+        std::cout << "\n";
+      }
+      std::cout << "\n";
     }
 }
 
