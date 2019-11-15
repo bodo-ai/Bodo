@@ -541,6 +541,15 @@ class DistributedAnalysis(object):
         if fdef == ("parallel_print", "bodo"):
             return
 
+        # input of gatherv should not be REP (likely a user mistake),
+        # but the output is REP
+        if fdef == ("gatherv", "bodo") or fdef == ("allgatherv", "bodo"):
+            if is_REP(array_dists[rhs.args[0].name]):
+                # TODO: test
+                raise BodoWarning("Input to gatherv is not distributed array")
+            array_dists[lhs] = Distribution.REP
+            return
+
         if fdef == ("setitem_arr_nan", "bodo.ir.join"):
             return
 
