@@ -1467,6 +1467,16 @@ def test_series_index_cast():
     pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
 
 
+def test_series_value_counts():
+    """simple test for value_counts(). More comprehensive testing is necessary
+    """
+    def test_impl(S):
+        return S.value_counts()
+
+    S = pd.Series(["AA", "BB", "C", "AA", "C", "AA"])
+    check_func(test_impl, (S,))
+
+
 ############################### old tests ###############################
 
 

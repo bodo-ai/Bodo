@@ -1604,6 +1604,8 @@ class SeriesPass(object):
             out_data_var = ir.Var(lhs.scope, mk_unique_var(lhs.name + "_data"), lhs.loc)
             self.typemap[out_data_var.name] = self.typemap[lhs.name].data
             agg_func = series_replace_funcs["count"]
+            agg_func.ftype = bodo.ir.aggregate.supported_agg_funcs.index("count")
+            agg_func.builtin = True
             agg_node = bodo.ir.aggregate.Aggregate(
                 lhs.name,
                 "series",
