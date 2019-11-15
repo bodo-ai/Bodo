@@ -5,7 +5,7 @@ import pytest
 
 import numba
 import bodo
-from bodo.utils.typing import BodoWarning
+from bodo.utils.typing import BodoWarning, BodoError
 from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
@@ -430,3 +430,14 @@ def test_dist_warning():
             bodo.jit(impl)(10)
     else:
         bodo.jit(impl)(10)
+
+
+def test_diagnostics_not_compiled_error():
+    """make sure error is thrown when calling diagnostics for a function that is not
+    compiled yet
+    """
+    def test_impl():
+        return np.arange(10).sum()
+
+    with pytest.raises(BodoError, match="Distributed diagnostics not available for"):
+        bodo.jit(test_impl).distributed_diagnostics()
