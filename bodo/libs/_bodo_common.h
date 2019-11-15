@@ -37,6 +37,8 @@ struct Bodo_CTypes {
     };
 };
 
+#define BODO_NUMPY_ARRAY_NUM_DTYPES 10
+
 /**
  * @brief enum for array types supported by Bodo
  *
@@ -84,12 +86,23 @@ struct array_info {
           null_bitmask(_null_bitmask),
           meminfo(_meminfo),
           meminfo_bitmask(_meminfo_bitmask) {}
+
+    template<typename T>
+    T& at(size_t idx) { return ((T*)data1)[idx]; }
 };
 
 struct table_info {
     std::vector<array_info*> columns;
-    explicit table_info(std::vector<array_info*> _columns)
+    // this is set and used by groupby to avoid putting additional info in multi_col_key
+    // (which is only needed when key equality is checked but not for hashing)
+    // TODO consider passing 'num_keys' to the constructor
+    int64_t num_keys;
+    explicit table_info(std::vector<array_info*> &_columns)
         : columns(_columns) {}
+
+    int64_t nrows() const { return columns[0]->length; }
+    int64_t ncols() const { return columns.size(); }
+    array_info* operator[](size_t idx) { return columns[idx]; }
 };
 
 #define DEC_MOD_METHOD(func) \

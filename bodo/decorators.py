@@ -14,6 +14,10 @@ def distributed_diagnostics(self, signature=None, level=1):
     used to adjust the verbosity, level=1 (default) is minimal verbosity,
     and 2, 3, and 4 provide increasing levels of verbosity.
     """
+    if signature is None and len(self.signatures) == 0:
+        raise bodo.utils.typing.BodoError(
+            "Distributed diagnostics not available for a function that is"
+            " not compiled yet")
 
     if bodo.get_rank() != 0:  # only print on 1 process
         return

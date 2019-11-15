@@ -51,11 +51,11 @@ inline void copy_nulls(uint8_t* out_nulls, const uint8_t* null_bitmap_buff,
                        int64_t skip, int64_t num_values, int64_t null_offset) {
     if (out_nulls != nullptr) {
         if (null_bitmap_buff == nullptr) {
-            for (size_t i = 0; i < num_values; i++) {
+            for (size_t i = 0; i < size_t(num_values); i++) {
                 ::arrow::BitUtil::SetBit(out_nulls, null_offset + i);
             }
         } else {
-            for (size_t i = 0; i < num_values; i++) {
+            for (size_t i = 0; i < size_t(num_values); i++) {
                 auto bit = ::arrow::BitUtil::GetBit(null_bitmap_buff, skip + i);
                 SetBitTo(out_nulls, null_offset + i, bit);
             }
@@ -478,7 +478,6 @@ int pq_read_string_parallel_single_file(
         }
         std::shared_ptr<::arrow::Array> arr = chunked_arr->chunk(0);
         // std::cout << arr->ToString() << std::endl;
-        int64_t num_values = arr->length();
         auto buffers = arr->data()->buffers;
         // std::cout<<"num buffs: "<< buffers.size()<<std::endl;
         if (buffers.size() != 3) {

@@ -1,6 +1,6 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
-#ifndef _MEMINFO_INCLUDED
-#define _MEMINFO_INCLUDED
+#ifndef BODO_MEMINFO_INCLUDED
+#define BODO_MEMINFO_INCLUDED
 
 // #include "_import_py.h"
 // #include <numba/runtime/nrt.h>
@@ -52,12 +52,9 @@ void nrt_debug_print(char *fmt, ...) {
 }
 
 #if 0
-#define NRT_Debug(X) X
+# define BODO_DEBUG
 #else
-#define NRT_Debug(X) \
-    if (0) {         \
-        X;           \
-    }
+# undef BODO_DEBUG
 #endif
 
 #if !defined MIN
@@ -65,10 +62,12 @@ void nrt_debug_print(char *fmt, ...) {
 #endif
 
 void NRT_Free(void *ptr) {
-    NRT_Debug(nrt_debug_print("NRT_Free %p\n", ptr));
-    free(ptr);
-    // TheMSys.allocator.free(ptr);
-    // TheMSys.atomic_inc(&TheMSys.stats_free);
+#ifdef BODO_DEBUG
+  std::cerr << "NRT_Free " << ptr << "\n";
+#endif
+  free(ptr);
+  // TheMSys.allocator.free(ptr);
+  // TheMSys.atomic_inc(&TheMSys.stats_free);
 }
 
 void NRT_MemInfo_destroy(NRT_MemInfo *mi) {
@@ -77,7 +76,9 @@ void NRT_MemInfo_destroy(NRT_MemInfo *mi) {
 }
 
 void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
-    NRT_Debug(nrt_debug_print("NRT_MemInfo_call_dtor %p\n", mi));
+#ifdef BODO_DEBUG
+    std::cerr << "NRT_MemInfo_call_dtor " << mi << "\n";
+#endif
     if (mi->dtor)  // && !TheMSys.shutting)
         /* We have a destructor and the system is not shutting down */
         mi->dtor(mi->data, mi->size, mi->dtor_info);
@@ -88,7 +89,9 @@ void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
 void *NRT_Allocate(size_t size) {
     // void *ptr = TheMSys.allocator.malloc(size);
     void *ptr = malloc(size);
-    NRT_Debug(nrt_debug_print("NRT_Allocate bytes=%zu ptr=%p\n", size, ptr));
+#ifdef BODO_DEBUG
+    std::cerr << "NRT_Allocate bytes=" << size << " ptr=" << ptr << "\n";
+#endif
     // TheMSys.atomic_inc(&TheMSys.stats_alloc);
     return ptr;
 }
@@ -113,15 +116,18 @@ void NRT_MemInfo_init(NRT_MemInfo *mi, void *data, size_t size,
 }
 
 static void nrt_internal_dtor_safe(void *ptr, size_t size, void *info) {
-    NRT_Debug(nrt_debug_print("nrt_internal_dtor_safe %p, %p\n", ptr, info));
+#ifdef BODO_DEBUG
+    std::cerr << "nrt_internal_dtor_safe " << ptr << ", " << info << "\n";
+#endif
     /* See NRT_MemInfo_alloc_safe() */
     memset(ptr, 0xDE, MIN(size, 256));
 }
 
 static void nrt_internal_custom_dtor_safe(void *ptr, size_t size, void *info) {
     NRT_dtor_function dtor = (NRT_dtor_function)info;
-    NRT_Debug(
-        nrt_debug_print("nrt_internal_custom_dtor_safe %p, %p\n", ptr, info));
+#ifdef BODO_DEBUG
+    std::cerr << "nrt_internal_custom_dtor_safe " << ptr << ", " << info << "\n";
+#endif
     if (dtor) {
         dtor(ptr, size, NULL);
     }
@@ -135,8 +141,9 @@ NRT_MemInfo *NRT_MemInfo_alloc_dtor_safe(size_t size, NRT_dtor_function dtor) {
     /* Only fill up a couple cachelines with debug markers, to minimize
        overhead. */
     memset(data, 0xCB, MIN(size, 256));
-    NRT_Debug(
-        nrt_debug_print("NRT_MemInfo_alloc_dtor_safe %p %zu\n", data, size));
+#ifdef BODO_DEBUG
+    std::cerr << "NRT_MemInfo_alloc_dtor_safe " << data << " " << size << "\n";
+#endif
     NRT_MemInfo_init(mi, data, size, nrt_internal_custom_dtor_safe,
                      (void *)dtor);
     return mi;
@@ -164,7 +171,9 @@ static void *nrt_allocate_meminfo_and_data_align(size_t size, unsigned align,
 NRT_MemInfo *NRT_MemInfo_alloc_aligned(size_t size, unsigned align) {
     NRT_MemInfo *mi;
     void *data = nrt_allocate_meminfo_and_data_align(size, align, &mi);
-    NRT_Debug(nrt_debug_print("NRT_MemInfo_alloc_aligned %p\n", data));
+#ifdef BODO_DEBUG
+    std::cerr << "NRT_MemInfo_alloc_aligned " << data << "\n";
+#endif
     NRT_MemInfo_init(mi, data, size, NULL, NULL);
     return mi;
 }
@@ -175,10 +184,11 @@ NRT_MemInfo *NRT_MemInfo_alloc_safe_aligned(size_t size, unsigned align) {
     /* Only fill up a couple cachelines with debug markers, to minimize
        overhead. */
     memset(data, 0xCB, MIN(size, 256));
-    NRT_Debug(
-        nrt_debug_print("NRT_MemInfo_alloc_safe_aligned %p %zu\n", data, size));
+#ifdef BODO_DEBUG
+    std::cerr << "NRT_MemInfo_alloc_safe_aligned " << data << " " << size << "\n";
+#endif
     NRT_MemInfo_init(mi, data, size, nrt_internal_dtor_safe, (void *)size);
     return mi;
 }
 
-#endif  // #ifndef _MEMINFO_INCLUDED
+#endif  // #ifndef BODO_MEMINFO_INCLUDED

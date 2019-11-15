@@ -35,5 +35,7 @@ docs/development/gh-pages/
 
 # Jupyter checkpoints
 *.ipynb_checkpoints/
+
+# Tutorial material
 tutorial/test_bodo.py
 

@@ -155,14 +155,24 @@ class GetItemDataFrameGroupBy2(AbstractTemplate):
             return signature(ret_grp, *args)
 
 
+def get_groupby_output_dtype(in_dtype, func_name):
+    """
+    Return output dtype for groupby aggregation function based on the
+    function and the input dtype.
+    """
+    if func_name == 'count':
+        return types.int64
+    elif func_name in {'mean', 'var', 'std'}:
+        return types.float64
+    else:
+        return in_dtype  # default: return same dtype as input
+
+
 @infer_getattr
 class DataframeGroupByAttribute(AttributeTemplate):
     key = DataFrameGroupByType
 
-    def _get_agg_typ(self, grp, args, code):
-        f_ir = numba.ir_utils.get_ir_of_code(
-            {"np": np, "numba": numba, "bodo": bodo}, code
-        )
+    def _get_agg_typ(self, grp, args, func_name, code):
         index = types.none
         out_data = []
         out_columns = []
@@ -189,9 +199,15 @@ class DataframeGroupByAttribute(AttributeTemplate):
             out_columns.append(c)
             ind = grp.df_type.columns.index(c)
             data = grp.df_type.data[ind]
-            _, out_dtype, _ = numba.typed_passes.type_inference_stage(
-                self.context, f_ir, (data,), None
-            )
+            if func_name == "agg":
+                f_ir = numba.ir_utils.get_ir_of_code(
+                    {"np": np, "numba": numba, "bodo": bodo}, code
+                )
+                _, out_dtype, _ = numba.typed_passes.type_inference_stage(
+                    self.context, f_ir, (data,), None
+                )
+            else:
+                out_dtype = get_groupby_output_dtype(data.dtype, func_name)
             out_arr = _get_series_array_type(out_dtype)
             out_data.append(out_arr)
 
@@ -214,59 +230,59 @@ class DataframeGroupByAttribute(AttributeTemplate):
             for f in args[0].types:
                 code = f.literal_value.code
                 out_columns.append(code.co_name)
-                out_tp = self._get_agg_typ(grp, args, code).return_type
+                out_tp = self._get_agg_typ(grp, args, "agg", code).return_type
                 out_data.append(out_tp.data)
             index = out_tp.index
             out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
             return signature(out_res, *args)
 
         code = args[0].literal_value.code
-        return self._get_agg_typ(grp, args, code)
+        return self._get_agg_typ(grp, args, "agg", code)
 
     @bound_function("groupby.aggregate")
     def resolve_aggregate(self, grp, args, kws):
         code = args[0].literal_value.code
-        return self._get_agg_typ(grp, args, code)
+        return self._get_agg_typ(grp, args, "agg", code)
 
     @bound_function("groupby.sum")
     def resolve_sum(self, grp, args, kws):
         func = get_agg_func(None, "sum", None)
-        return self._get_agg_typ(grp, args, func.__code__)
+        return self._get_agg_typ(grp, args, "sum", func.__code__)
 
     @bound_function("groupby.count")
     def resolve_count(self, grp, args, kws):
         func = get_agg_func(None, "count", None)
-        return self._get_agg_typ(grp, args, func.__code__)
+        return self._get_agg_typ(grp, args, "count", func.__code__)
 
     @bound_function("groupby.mean")
     def resolve_mean(self, grp, args, kws):
         func = get_agg_func(None, "mean", None)
-        return self._get_agg_typ(grp, args, func.__code__)
+        return self._get_agg_typ(grp, args, "mean", func.__code__)
 
     @bound_function("groupby.min")
     def resolve_min(self, grp, args, kws):
         func = get_agg_func(None, "min", None)
-        return self._get_agg_typ(grp, args, func.__code__)
+        return self._get_agg_typ(grp, args, "min", func.__code__)
 
     @bound_function("groupby.max")
     def resolve_max(self, grp, args, kws):
         func = get_agg_func(None, "max", None)
-        return self._get_agg_typ(grp, args, func.__code__)
+        return self._get_agg_typ(grp, args, "max", func.__code__)
 
     @bound_function("groupby.prod")
     def resolve_prod(self, grp, args, kws):
         func = get_agg_func(None, "prod", None)
-        return self._get_agg_typ(grp, args, func.__code__)
+        return self._get_agg_typ(grp, args, "prod", func.__code__)
 
     @bound_function("groupby.var")
     def resolve_var(self, grp, args, kws):
         func = get_agg_func(None, "var", None)
-        return self._get_agg_typ(grp, args, func.__code__)
+        return self._get_agg_typ(grp, args, "var", func.__code__)
 
     @bound_function("groupby.std")
     def resolve_std(self, grp, args, kws):
         func = get_agg_func(None, "std", None)
-        return self._get_agg_typ(grp, args, func.__code__)
+        return self._get_agg_typ(grp, args, "std", func.__code__)
 
     # TODO: cumprod etc.
     @bound_function("groupby.cumsum")

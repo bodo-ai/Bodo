@@ -333,7 +333,7 @@ static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel
         mpi_reqs.push_back(dist_irecv(&my_off_end, 1, Bodo_CTypes::UINT64, MPI_ANY_SOURCE, END_OFFSET, ((rank<(nranks-1)) || nrows!=-1)));
 
         // check nrows argument
-        if (nrows != -1 && (nrows < 0 || nrows > tot_no_lines))
+        if (nrows != -1 && (nrows < 0 || size_t(nrows) > tot_no_lines))
         {
             std::cerr << "Invalid nrows argument: " << nrows << " for total number of lines: "<< tot_no_lines << std::endl;
             return NULL;
@@ -343,20 +343,20 @@ static PyObject* csv_chunk_reader(std::istream * f, size_t fsz, bool is_parallel
         size_t n_lines_to_read = nrows != -1 ? nrows : tot_no_lines - skiprows;
         // TODO skiprows and nrows need testing
         // send start offset of rank 0
-        if(skiprows > byte_first_line && skiprows <= byte_last_line) {
+        if(size_t(skiprows) > byte_first_line && size_t(skiprows) <= byte_last_line) {
             size_t i_off = byte_offset + line_offset[skiprows-byte_first_line-1]+1; // +1 to skip/include leading/trailing newline
             mpi_reqs.push_back(dist_isend(&i_off, 1, Bodo_CTypes::UINT64, 0, START_OFFSET, true));
         }
 
         // send end offset of rank n-1
-        if(nrows > byte_first_line && nrows <= byte_last_line) {
+        if(size_t(nrows) > byte_first_line && size_t(nrows) <= byte_last_line) {
             size_t i_off = byte_offset + line_offset[nrows-byte_first_line-1]+1; // +1 to skip/include leading/trailing newline
             mpi_reqs.push_back(dist_isend(&i_off, 1, Bodo_CTypes::UINT64, nranks-1, END_OFFSET, true));
         }
 
         // We iterate through chunk boundaries (defined by line-numbers)
         // we start with boundary 1 as 0 is the beginning of file
-        for(int i=1; i<nranks; ++i) {
+        for(int i=1; i<int(nranks); ++i) {
             size_t i_bndry = skiprows + dist_get_start(n_lines_to_read, (int)nranks, i);
             // Note our line_offsets mark the end of each line!
             // we check if boundary is on our byte-chunk

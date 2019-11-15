@@ -66,7 +66,6 @@ from bodo.hiframes.pd_series_ext import (
     if_series_to_array_type,
     is_series_type,
     SeriesRollingType,
-    series_dt_methods_type,
 )
 from bodo.hiframes.pd_index_ext import DatetimeIndexType, TimedeltaIndexType
 from bodo.io.h5_api import h5dataset_type
@@ -74,6 +73,8 @@ from bodo.hiframes.rolling import get_rolling_setup_args
 import bodo.hiframes.series_impl  # side effect: install Series overloads
 import bodo.hiframes.series_indexing  # side effect: install Series overloads
 import bodo.hiframes.series_str_impl  # side effect: install Series overloads
+import bodo.hiframes.series_dt_impl  # side effect: install Series overloads
+from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
 from bodo.hiframes.series_indexing import SeriesIatType
 from bodo.ir.aggregate import Aggregate
@@ -374,6 +375,22 @@ class SeriesPass(object):
             assign.value = rhs_def.value
             return [assign]
 
+        if isinstance(rhs_type, SeriesDatetimePropertiesType) and rhs.attr == "_obj":
+            rhs_def = guard(get_definition, self.func_ir, rhs.value)
+            if rhs_def is None:
+                raise ValueError("Invalid Series.dt, cannot handle conditional yet")
+            assert is_expr(rhs_def, "getattr")
+            assign.value = rhs_def.value
+            return [assign]
+
+        if isinstance(rhs_type, SeriesDatetimePropertiesType):
+            if rhs.attr == "date":
+                impl = bodo.hiframes.series_dt_impl.series_dt_date_overload(rhs_type)
+            else:
+                impl = bodo.hiframes.series_dt_impl.create_date_field_overload(rhs.attr)(rhs_type)
+            return self._replace_func(impl, [rhs.value])
+
+
         # replace arr.dtype for dt64 since PA replaces with
         # np.datetime64[ns] which invalid, TODO: fix PA
         if (
@@ -450,16 +467,6 @@ class SeriesPass(object):
             if rhs.attr in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
                 impl = bodo.hiframes.pd_index_ext.gen_tdi_field_impl(rhs.attr)
                 return self._replace_func(impl, [rhs.value])
-
-        if rhs_type == series_dt_methods_type:
-            dt_def = guard(get_definition, self.func_ir, rhs.value)
-            if dt_def is None:  # TODO: check for errors
-                raise ValueError("invalid series.dt")
-            rhs.value = dt_def.value
-            if rhs.attr in bodo.hiframes.pd_timestamp_ext.date_fields:
-                return self._run_DatetimeIndex_field(assign, assign.target, rhs)
-            if rhs.attr == "date":
-                return self._run_DatetimeIndex_date(assign, assign.target, rhs)
 
         if isinstance(rhs_type, SeriesType) and rhs.attr in ("size", "shape"):
             # simply return the column
@@ -1597,6 +1604,8 @@ class SeriesPass(object):
             out_data_var = ir.Var(lhs.scope, mk_unique_var(lhs.name + "_data"), lhs.loc)
             self.typemap[out_data_var.name] = self.typemap[lhs.name].data
             agg_func = series_replace_funcs["count"]
+            agg_func.ftype = bodo.ir.aggregate.supported_agg_funcs.index("count")
+            agg_func.builtin = True
             agg_node = bodo.ir.aggregate.Aggregate(
                 lhs.name,
                 "series",
@@ -2158,60 +2167,6 @@ class SeriesPass(object):
         impl_disp.compile(sig)
         numba.ir_utils._max_label += m
         return impl_disp
-
-    def _run_DatetimeIndex_field(self, assign, lhs, rhs):
-        """transform DatetimeIndex.<field> and Series.dt.<field>
-        """
-        nodes = []
-        in_typ = self.typemap[rhs.value.name]
-        arr = self._get_series_data(rhs.value, nodes)
-        field = rhs.attr
-
-        func_text = "def f(dti):\n"
-        func_text += "    numba.parfor.init_prange()\n"
-        func_text += "    n = len(dti)\n"
-        # func_text += '    S = numba.unsafe.ndarray.empty_inferred((n,))\n'
-        # TODO: why doesn't empty_inferred work for t4 mortgage test?
-        func_text += "    S = np.empty(n, np.int64)\n"
-        func_text += "    for i in numba.parfor.internal_prange(n):\n"
-        func_text += (
-            "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dti[i])\n"
-        )
-        func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
-        func_text += "        S[i] = ts." + field + "\n"
-        func_text += "    return bodo.hiframes.pd_series_ext.init_series(S)\n"
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        f = loc_vars["f"]
-
-        return self._replace_func(f, [arr], pre_nodes=nodes)
-
-    def _run_DatetimeIndex_date(self, assign, lhs, rhs):
-        """transform DatetimeIndex.date and Series.dt.date
-        """
-        nodes = []
-        in_typ = self.typemap[rhs.value.name]
-        arr = self._get_series_data(rhs.value, nodes)
-
-        func_text = "def f(dti):\n"
-        func_text += "    numba.parfor.init_prange()\n"
-        func_text += "    n = len(dti)\n"
-        func_text += "    S = numba.unsafe.ndarray.empty_inferred((n,))\n"
-        func_text += "    for i in numba.parfor.internal_prange(n):\n"
-        func_text += (
-            "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dti[i])\n"
-        )
-        func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
-        func_text += "        S[i] = bodo.hiframes.pd_timestamp_ext.datetime_date_ctor(ts.year, ts.month, ts.day)\n"
-        # func_text += '        S[i] = datetime.date(ts.year, ts.month, ts.day)\n'
-        # func_text += '        S[i] = ts.day + (ts.month << 16) + (ts.year << 32)\n'
-        # DatetimeIndex returns Array but Series.dt returns Series
-        func_text += "    return bodo.hiframes.pd_series_ext.init_series(S)\n"
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        f = loc_vars["f"]
-
-        return self._replace_func(f, [arr], pre_nodes=nodes)
 
     def _run_pd_DatetimeIndex(self, assign, lhs, rhs):
         """transform pd.DatetimeIndex() call with string array argument

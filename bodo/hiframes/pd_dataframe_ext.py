@@ -386,7 +386,6 @@ def _get_dataframe_index(typingctx, df_typ=None):
     return sig, codegen
 
 
-# TODO: alias analysis
 # this function should be used for getting df._data for alias analysis to work
 # no_cpython_wrapper since Array(DatetimeDate) cannot be boxed
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
@@ -413,7 +412,22 @@ def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
 numba.ir_utils.alias_func_extensions[
     ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext")
 ] = alias_ext_dummy_func
-# TODO: init_dataframe, get_dataframe_index?
+numba.ir_utils.alias_func_extensions[
+    ("get_dataframe_index", "bodo.hiframes.pd_dataframe_ext")
+] = alias_ext_dummy_func
+
+
+def alias_ext_init_dataframe(lhs_name, args, alias_map, arg_aliases):
+    assert len(args) == 3
+    # add alias for data tuple
+    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    # add alias for index
+    numba.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
+
+
+numba.ir_utils.alias_func_extensions[
+    ("init_dataframe", "bodo.hiframes.pd_dataframe_ext")
+] = alias_ext_init_dataframe
 
 
 # array analysis extension

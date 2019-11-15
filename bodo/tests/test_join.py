@@ -120,6 +120,47 @@ def test_merge_common_cols(df1, df2):
     )
 
 
+
+
+
+def test_merge_disjoint_keys1():
+    """
+    Test merge(): 'how' = inner on specified integer column
+    """
+
+    def test_impl(df1, df2):
+        df3 = pd.merge(df1, df2, left_on=["a","b"], right_on=["a", "d"], how="left")
+        return df3
+
+    bodo_func = bodo.jit(test_impl)
+    df1 = pd.DataFrame({"a": [0.0 , 1.0], "b": [1.0 , 4.0]})
+    df2 = pd.DataFrame({"a": [1.0 , 2.0], "d": [2.0 , 3.0]})
+
+    pd.testing.assert_frame_equal(
+        bodo_func(df1, df2).sort_values("a").reset_index(drop=True),
+        test_impl(df1, df2).sort_values("a").reset_index(drop=True),
+    )
+
+def test_merge_disjoint_keys2():
+    """
+    Test merge(): 'how' = inner on specified integer column
+    """
+
+    def test_impl(df1, df2):
+        df3 = pd.merge(df1, df2, left_on=["a","b"], right_on=["c", "d"], how="left")
+        return df3
+
+    bodo_func = bodo.jit(test_impl)
+    df1 = pd.DataFrame({"a": [0.0 , 1.0], "b": [1.0 , 4.0]})
+    df2 = pd.DataFrame({"c": [1.0 , 2.0], "d": [2.0 , 3.0]})
+
+    pd.testing.assert_frame_equal(
+        bodo_func(df1, df2).sort_values("a").reset_index(drop=True),
+        test_impl(df1, df2).sort_values("a").reset_index(drop=True),
+    )
+
+
+
 def test_merge_inner():
     """
     Test merge(): 'how' = inner on specified integer column
