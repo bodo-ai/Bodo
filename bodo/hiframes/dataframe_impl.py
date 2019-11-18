@@ -36,6 +36,16 @@ from numba.targets.imputils import lower_builtin, impl_ret_untracked
 from bodo.hiframes.pd_series_ext import if_series_to_array_type
 from numba.extending import register_model, models
 import llvmlite.llvmpy.core as lc
+from bodo.libs.array_tools import (
+    array_to_info,
+    arr_info_list_to_table,
+    drop_duplicates_table_outplace,
+    info_from_table,
+    info_to_array,
+    delete_table,
+)
+
+
 
 
 @overload_attribute(DataFrameType, "index")
@@ -661,7 +671,7 @@ def overload_dataframe_duplicated(df, subset=None, keep="first"):
 
 @overload_method(DataFrameType, "drop_duplicates")
 def overload_dataframe_drop_duplicates(df, subset=None, keep="first", inplace=False):
-    # TODO: support inplace, subset and first
+    # TODO: support inplace
     if not is_overload_none(subset):
         raise ValueError("drop_duplicates() subset argument not supported yet")
 
@@ -672,6 +682,7 @@ def overload_dataframe_drop_duplicates(df, subset=None, keep="first", inplace=Fa
     # may not match
 
     n_cols = len(df.columns)
+
     data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
 
     func_text = "def impl(df, subset=None, keep='first', inplace=False):\n"

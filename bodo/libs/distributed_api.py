@@ -400,7 +400,7 @@ def gatherv(data, allgather=False):
             displs = np.empty(1, np.int32)
             if rank == MPI_ROOT or allgather:
                 displs = bodo.ir.join.calc_disp(recv_counts)
-            #  print(rank, n_loc, n_total, recv_counts, displs)
+            # print(rank, n_loc, n_total, recv_counts, displs)
             c_gatherv(
                 data.ctypes,
                 np.int32(n_loc),

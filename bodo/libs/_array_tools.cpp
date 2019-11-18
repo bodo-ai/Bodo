@@ -319,7 +319,7 @@ void hash_array_combine(uint32_t* out_hashes, array_info* array,
     PyErr_SetString(PyExc_RuntimeError, "Invalid data type for hash combine");
 }
 
-uint32_t* hash_keys(std::vector<array_info*> &key_arrs, const uint32_t seed) {
+uint32_t* hash_keys(std::vector<array_info*> const& key_arrs, const uint32_t seed) {
     size_t n_rows = (size_t)key_arrs[0]->length;
     uint32_t* hashes = new uint32_t[n_rows];
     // hash first array
@@ -676,7 +676,7 @@ void free_array(array_info* arr) {
 
 table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
     // error checking
-    if (in_table->columns.size() <= 0 || n_keys <= 0) {
+    if (in_table->ncols() <= 0 || n_keys <= 0) {
         PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
         return NULL;
     }
@@ -687,8 +687,8 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     mpi_comm_info comm_info(n_pes, in_table->columns);
 
-    size_t n_rows = (size_t)in_table->columns[0]->length;
-    size_t n_cols = in_table->columns.size();
+    size_t n_rows = (size_t)in_table->nrows();
+    size_t n_cols = in_table->ncols();
     std::vector<array_info*> key_arrs = std::vector<array_info*>(
         in_table->columns.begin(), in_table->columns.begin() + n_keys);
 
@@ -1160,6 +1160,7 @@ array_info* RetrieveArray(table_info* const& in_table, std::vector<std::pair<std
 
 
 
+
 /** This code test if two keys are equal (Before that the hash should have been used)
  * It is used that way because we assume that the left key have the same type as the
  * right keys.
@@ -1178,22 +1179,22 @@ array_info* RetrieveArray(table_info* const& in_table, std::vector<std::pair<std
  * @param iRow2 the row of the second key
  * @return True if they are equal and false otherwise.
  */
-bool TestEqual(table_info* in_table, size_t const& n_key, size_t const& shift_key1, size_t const& iRow1, size_t const& shift_key2, size_t const& iRow2)
+bool TestEqual(std::vector<array_info*> const& columns, size_t const& n_key, size_t const& shift_key1, size_t const& iRow1, size_t const& shift_key2, size_t const& iRow2)
 {
   // iteration over the list of key for the comparison.
   for (size_t iKey=0; iKey<n_key; iKey++) {
-    if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::NUMPY) {
+    if (columns[shift_key1+iKey]->arr_type == bodo_array_type::NUMPY) {
       // In the case of NUMPY, we compare the values for concluding.
-      uint64_t siztype = get_item_size(in_table->columns[shift_key1+iKey]->dtype);
+      uint64_t siztype = get_item_size(columns[shift_key1+iKey]->dtype);
       for (uint64_t u=0; u<siztype; u++) {
-        if (in_table->columns[shift_key1+iKey]->data1[siztype*iRow1 + u] != in_table->columns[shift_key2+iKey]->data1[siztype*iRow2 + u])
+        if (columns[shift_key1+iKey]->data1[siztype*iRow1 + u] != columns[shift_key2+iKey]->data1[siztype*iRow2 + u])
           return false;
       }
     }
-    if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+    if (columns[shift_key1+iKey]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
       // NULLABLE case. We need to consider the bitmask and the values.
-      uint8_t* null_bitmask1 = (uint8_t*)in_table->columns[shift_key1+iKey]->null_bitmask;
-      uint8_t* null_bitmask2 = (uint8_t*)in_table->columns[shift_key2+iKey]->null_bitmask;
+      uint8_t* null_bitmask1 = (uint8_t*)columns[shift_key1+iKey]->null_bitmask;
+      uint8_t* null_bitmask2 = (uint8_t*)columns[shift_key2+iKey]->null_bitmask;
       bool bit1 = GetBit(null_bitmask1, iRow1);
       bool bit2 = GetBit(null_bitmask2, iRow2);
       // If one bitmask is T and the other the reverse then they are clearly not equal.
@@ -1202,17 +1203,17 @@ bool TestEqual(table_info* in_table, size_t const& n_key, size_t const& shift_ke
       // If both bitmasks are false, then it does not matter what value they are storing.
       // Comparison is the same as for NUMPY.
       if (bit1) {
-        uint64_t siztype = get_item_size(in_table->columns[shift_key1+iKey]->dtype);
+        uint64_t siztype = get_item_size(columns[shift_key1+iKey]->dtype);
         for (uint64_t u=0; u<siztype; u++) {
-          if (in_table->columns[shift_key1+iKey]->data1[siztype*iRow1 + u] != in_table->columns[shift_key2+iKey]->data1[siztype*iRow2 + u])
+          if (columns[shift_key1+iKey]->data1[siztype*iRow1 + u] != columns[shift_key2+iKey]->data1[siztype*iRow2 + u])
             return false;
         }
       }
     }
-    if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::STRING) {
+    if (columns[shift_key1+iKey]->arr_type == bodo_array_type::STRING) {
       // For STRING case we need to deal bitmask and the values.
-      uint8_t* null_bitmask1 = (uint8_t*)in_table->columns[shift_key1+iKey]->null_bitmask;
-      uint8_t* null_bitmask2 = (uint8_t*)in_table->columns[shift_key2+iKey]->null_bitmask;
+      uint8_t* null_bitmask1 = (uint8_t*)columns[shift_key1+iKey]->null_bitmask;
+      uint8_t* null_bitmask2 = (uint8_t*)columns[shift_key2+iKey]->null_bitmask;
       bool bit1 = GetBit(null_bitmask1, iRow1);
       bool bit2 = GetBit(null_bitmask2, iRow2);
       // If bitmasks are different then we conclude they are not equal.
@@ -1221,8 +1222,8 @@ bool TestEqual(table_info* in_table, size_t const& n_key, size_t const& shift_ke
       // If bitmasks are both false, then no need to compare the string values.
       if (bit1) {
         // Here we consider the shifts in data2 for the comparison.
-        uint32_t* data2_1 = (uint32_t*)in_table->columns[shift_key1+iKey]->data2;
-        uint32_t* data2_2 = (uint32_t*)in_table->columns[shift_key2+iKey]->data2;
+        uint32_t* data2_1 = (uint32_t*)columns[shift_key1+iKey]->data2;
+        uint32_t* data2_2 = (uint32_t*)columns[shift_key2+iKey]->data2;
         uint32_t len1 = data2_1[iRow1+1] - data2_1[iRow1];
         uint32_t len2 = data2_2[iRow2+1] - data2_2[iRow2];
         // If string lengths are different then they are different.
@@ -1231,8 +1232,8 @@ bool TestEqual(table_info* in_table, size_t const& n_key, size_t const& shift_ke
         // Now we iterate over the characters for the comparison.
         uint32_t pos1_prev = data2_1[iRow1];
         uint32_t pos2_prev = data2_2[iRow2];
-        char* data1_1 = (char*)in_table->columns[shift_key1+iKey]->data1;
-        char* data1_2 = (char*)in_table->columns[shift_key2+iKey]->data1;
+        char* data1_1 = (char*)columns[shift_key1+iKey]->data1;
+        char* data1_2 = (char*)columns[shift_key2+iKey]->data1;
         for (uint32_t pos=0; pos<len1; pos++) {
           uint32_t pos1=pos1_prev + pos;
           uint32_t pos2=pos2_prev + pos;
@@ -1264,26 +1265,26 @@ bool TestEqual(table_info* in_table, size_t const& n_key, size_t const& shift_ke
  * @param iRow2 the row of the second key
  * @return 1 if (shift_key1,iRow1) < (shift_key2,iRow2) , -1 is > and 0 if =
  */
-int KeyComparison(table_info* in_table, size_t const& n_key, size_t const& shift_key1, size_t const& iRow1, size_t const& shift_key2, size_t const& iRow2)
+int KeyComparison(std::vector<array_info*> const& columns, size_t const& n_key, size_t const& shift_key1, size_t const& iRow1, size_t const& shift_key2, size_t const& iRow2)
 {
   // iteration over the list of key for the comparison.
   for (size_t iKey=0; iKey<n_key; iKey++) {
-    if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::NUMPY) {
+    if (columns[shift_key1+iKey]->arr_type == bodo_array_type::NUMPY) {
       // In the case of NUMPY, we compare the values for concluding.
-      uint64_t siztype = get_item_size(in_table->columns[shift_key1+iKey]->dtype);
+      uint64_t siztype = get_item_size(columns[shift_key1+iKey]->dtype);
       for (uint64_t u=0; u<siztype; u++) {
-        char char1 = in_table->columns[shift_key1+iKey]->data1[siztype*iRow1 + u];
-        char char2 = in_table->columns[shift_key2+iKey]->data1[siztype*iRow2 + u];
+        char char1 = columns[shift_key1+iKey]->data1[siztype*iRow1 + u];
+        char char2 = columns[shift_key2+iKey]->data1[siztype*iRow2 + u];
         if (char1 < char2)
           return 1;
         if (char1 > char2)
           return -1;
       }
     }
-    if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+    if (columns[shift_key1+iKey]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
       // NULLABLE case. We need to consider the bitmask and the values.
-      uint8_t* null_bitmask1 = (uint8_t*)in_table->columns[shift_key1+iKey]->null_bitmask;
-      uint8_t* null_bitmask2 = (uint8_t*)in_table->columns[shift_key2+iKey]->null_bitmask;
+      uint8_t* null_bitmask1 = (uint8_t*)columns[shift_key1+iKey]->null_bitmask;
+      uint8_t* null_bitmask2 = (uint8_t*)columns[shift_key2+iKey]->null_bitmask;
       bool bit1 = GetBit(null_bitmask1, iRow1);
       bool bit2 = GetBit(null_bitmask2, iRow2);
       // If one bitmask is T and the other the reverse then they are clearly not equal.
@@ -1294,10 +1295,10 @@ int KeyComparison(table_info* in_table, size_t const& n_key, size_t const& shift
       // If both bitmasks are false, then it does not matter what value they are storing.
       // Comparison is the same as for NUMPY.
       if (bit1) {
-        uint64_t siztype = get_item_size(in_table->columns[shift_key1+iKey]->dtype);
+        uint64_t siztype = get_item_size(columns[shift_key1+iKey]->dtype);
         for (uint64_t u=0; u<siztype; u++) {
-          char char1 = in_table->columns[shift_key1+iKey]->data1[siztype*iRow1 + u];
-          char char2 = in_table->columns[shift_key2+iKey]->data1[siztype*iRow2 + u];
+          char char1 = columns[shift_key1+iKey]->data1[siztype*iRow1 + u];
+          char char2 = columns[shift_key2+iKey]->data1[siztype*iRow2 + u];
           if (char1 < char2)
             return 1;
           if (char1 > char2)
@@ -1305,10 +1306,10 @@ int KeyComparison(table_info* in_table, size_t const& n_key, size_t const& shift
         }
       }
     }
-    if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::STRING) {
+    if (columns[shift_key1+iKey]->arr_type == bodo_array_type::STRING) {
       // For STRING case we need to deal bitmask and the values.
-      uint8_t* null_bitmask1 = (uint8_t*)in_table->columns[shift_key1+iKey]->null_bitmask;
-      uint8_t* null_bitmask2 = (uint8_t*)in_table->columns[shift_key2+iKey]->null_bitmask;
+      uint8_t* null_bitmask1 = (uint8_t*)columns[shift_key1+iKey]->null_bitmask;
+      uint8_t* null_bitmask2 = (uint8_t*)columns[shift_key2+iKey]->null_bitmask;
       bool bit1 = GetBit(null_bitmask1, iRow1);
       bool bit2 = GetBit(null_bitmask2, iRow2);
       // If bitmasks are different then we can conclude the comparison
@@ -1319,8 +1320,8 @@ int KeyComparison(table_info* in_table, size_t const& n_key, size_t const& shift
       // If bitmasks are both false, then no need to compare the string values.
       if (bit1) {
         // Here we consider the shifts in data2 for the comparison.
-        uint32_t* data2_1 = (uint32_t*)in_table->columns[shift_key1+iKey]->data2;
-        uint32_t* data2_2 = (uint32_t*)in_table->columns[shift_key2+iKey]->data2;
+        uint32_t* data2_1 = (uint32_t*)columns[shift_key1+iKey]->data2;
+        uint32_t* data2_2 = (uint32_t*)columns[shift_key2+iKey]->data2;
         uint32_t len1 = data2_1[iRow1+1] - data2_1[iRow1];
         uint32_t len2 = data2_2[iRow2+1] - data2_2[iRow2];
         // If string lengths are different then we can conclude.
@@ -1331,8 +1332,8 @@ int KeyComparison(table_info* in_table, size_t const& n_key, size_t const& shift
         // Now we iterate over the characters for the comparison.
         uint32_t pos1_prev = data2_1[iRow1];
         uint32_t pos2_prev = data2_2[iRow2];
-        char* data1_1 = (char*)in_table->columns[shift_key1+iKey]->data1;
-        char* data1_2 = (char*)in_table->columns[shift_key2+iKey]->data1;
+        char* data1_1 = (char*)columns[shift_key1+iKey]->data1;
+        char* data1_2 = (char*)columns[shift_key2+iKey]->data1;
         for (uint32_t pos=0; pos<len1; pos++) {
           uint32_t pos1=pos1_prev + pos;
           uint32_t pos2=pos2_prev + pos;
@@ -1402,7 +1403,7 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
   size_t n_tot_left = n_key + n_data_left;
   size_t n_tot_right = n_key + n_data_right;
   size_t sum_dim = 2*n_key + n_data_left + n_data_right;
-  size_t n_col = in_table->columns.size();
+  size_t n_col = in_table->ncols();
   if (n_col != sum_dim) {
     PyErr_SetString(PyExc_RuntimeError, "incoherent dimensions");
     return NULL;
@@ -1471,17 +1472,16 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
   std::cout << "short_table_rows=" << short_table_rows << " long_table_rows=" << long_table_rows << "\n";
 #endif
   /* This is a function for comparing the rows.
-   * This is used as argument for the map function.
-   * First level of comparison is by using the hash.
-   * If failing then we go to the more complex value
-   * comparison.
+   * This is the first lambda used as argument for the unordered_map.
    *
    * rows can be in the left or the right tables.
    * If iRow < short_table_rows then it is in the first table.
    * If iRow >= short_table_rows then it is in the second table.
    *
-   * @param iRowA is the first row index for the comparison
-   * @param iRowB is the second row index for the comparison
+   * Note that the hash is size_t (so 8 bytes on x86-64) while
+   * the hashes array are int32_t (so 4 bytes)
+   *
+   * @param iRow is the first row index for the comparison
    * @return true/false depending on the case.
    */
   auto hash_fct=[&](size_t const& iRow) -> size_t {
@@ -1490,6 +1490,17 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
     else
       return long_table_hashes[iRow - short_table_rows];
   };
+  /* This is a function for testing equality of rows.
+   * This is used as second argument for the unordered_map.
+   *
+   * rows can be in the left or the right tables.
+   * If iRow < short_table_rows then it is in the first table.
+   * If iRow >= short_table_rows then it is in the second table.
+   *
+   * @param iRowA is the first row index for the comparison
+   * @param iRowB is the second row index for the comparison
+   * @return true/false depending on equality or not.
+   */
   auto equal_fct=[&](size_t const& iRowA, size_t const& iRowB) -> bool {
     //    std::cout << "Beginning of function f\n";
     size_t jRowA, jRowB;
@@ -1511,7 +1522,7 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
       shift_B = long_table_shift;
       jRowB = iRowB - short_table_rows;
     }
-    return TestEqual(in_table, n_key, shift_A, jRowA, shift_B, jRowB);
+    return TestEqual(in_table->columns, n_key, shift_A, jRowA, shift_B, jRowB);
   };
   // The entList contains the hash of the short table.
   // We address the entry by the row index. We store all the rows which are identical
@@ -1526,7 +1537,7 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
     std::vector<size_t>& group = entList[i_short];
     group.push_back(i_short);
   }
-  size_t nEnt=entList.size();
+  size_t nEnt = entList.size();
 #ifdef DEBUG_JOIN
   std::cout << "nEnt=" << nEnt << "\n";
 #endif
@@ -1622,17 +1633,6 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_dat
       }
     }
   }
-  // Putting the key two times.
-  //  for (size_t u=0; u<2; u++) {
-  //    for (size_t i=0; i<n_key; i++) {
-  //      if (ChoiceOpt == 0) {
-  //        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, i+n_key, 2));
-  //      }
-  //      else {
-  //        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i+n_key, i, 2));
-  //      }
-  //    }
-  //  }
 #ifdef DEBUG_JOIN
   std::cout << "hash_join_table, output information\n";
   DEBUG_PrintSetOfColumn(std::cout, out_arrs);
@@ -2906,6 +2906,127 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
     return out_table;
 }
 
+
+
+
+/** This function is the kernel function for the dropping of duplicated rows.
+ * This C++ code should provide following functionality of pandas drop_duplicates:
+ * ---possibility of selecting columns for the identification
+ * ---possibility of keeping first, last or removing all entries with duplicate
+ * inplace operation for keeping the data in the same place is another problem.
+ *
+ * As for the join, this relies on using hash keys for the partitionning.
+ *
+ * External function used are "RetrieveArray" and "TestEqual"
+ *
+ * @param in_table : the input table
+ * @param sum_value: the uint64_t containing all the values together.
+ * @param keep: integer specifying the expected behavior.
+ *        keep = 0 corresponds to the case of keep="first" keep first entry
+ *        keep = 1 corresponds to the case of keep="last" keep last entry
+ *        keep = 2 corresponds to the case of keep=False : remove all duplicates
+ * @param in_place: True for returning the entry to the same place and False for the
+ *                  opposite case.
+ * @return the vector of pointers to be used.
+ */
+table_info* drop_duplicates_table_outplace(table_info* in_table, int64_t* subset_vect, int64_t keep)
+{
+#undef DEBUG_DD
+  size_t n_col = in_table->ncols();
+  size_t n_rows = (size_t)in_table->nrows();
+  std::vector<array_info*> key_arrs;
+  for (size_t iCol=0; iCol<n_col; iCol++)
+    if (subset_vect[iCol] == 1)
+      key_arrs.push_back(in_table->columns[iCol]);
+  size_t n_key = key_arrs.size();
+#ifdef DEBUG_DD
+  std::cout << "INPUT:\n";
+  std::cout << "n_col=" << n_col << " n_rows=" << n_rows << " n_key=" << n_key << "\n";
+  DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+  DEBUG_PrintRefct(std::cout, in_table->columns);
+#endif
+
+  uint32_t seed = 0xb0d01287;
+  uint32_t* hashes = hash_keys(key_arrs, seed);
+  /* This is a function for computing the hash (here returning computed value)
+   * This is the first function passed as argument for the map function.
+   *
+   * Note that the hash is a size_t (as requested by standard and so 8 bytes on x86-64)
+   * but our hashes are int32_t
+   *
+   * @param iRow is the first row index for the comparison
+   * @return the hash itself
+   */
+  auto hash_fct=[&](size_t const& iRow) -> size_t {
+    return size_t(hashes[iRow]);
+  };
+  /* This is a function for testing equality of rows.
+   * This is the second lambda passed to the map function.
+   *
+   * We use the TestEqual function precedingly defined.
+   *
+   * @param iRowA is the first row index for the comparison
+   * @param iRowB is the second row index for the comparison
+   * @return true/false depending on the case.
+   */
+  auto equal_fct=[&](size_t const& iRowA, size_t const& iRowB) -> bool {
+    size_t shift_A=0, shift_B=0;
+    bool test = TestEqual(key_arrs, n_key, shift_A, iRowA, shift_B, iRowB);
+    return test;
+  };
+  // The entList contains the hash of the short table.
+  // We address the entry by the row index. We store all the rows which are identical
+  // in the std::vector.
+  std::unordered_map<size_t, size_t, decltype(hash_fct), decltype(equal_fct)> entSet({}, hash_fct, equal_fct);
+  // The loop over the short table.
+  // entries are stored one by one and all of them are put even if identical in value.
+  std::vector<int64_t> ListRow;
+  uint64_t next_ent = 0;
+  for (size_t i_row=0; i_row<n_rows; i_row++) {
+    size_t& group = entSet[i_row];
+    if (group == 0) {
+      next_ent++;
+      group = next_ent;
+      ListRow.push_back(i_row);
+    }
+    else {
+      size_t pos = group - 1;
+      if (keep == 0) { // keep first entry. So do nothing here
+      }
+      if (keep == 1) { // keep last entry. So update the list
+        ListRow[pos] = i_row;
+      }
+      if (keep == 2) { // Case of False. So put it to -1.
+        ListRow[pos] = -1;
+      }
+    }
+  }
+  std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
+  for (auto & eRow : ListRow) {
+    if (eRow != -1)
+      ListPairWrite.push_back({eRow,-1});
+  }
+#ifdef DEBUG_DD
+  std::cout << "|ListPairWrite|=" << ListPairWrite.size() << "\n";
+#endif
+  // Now building the out_arrs array.
+  std::vector<array_info*> out_arrs;
+  // Inserting the left data
+  for (size_t i_col=0; i_col<n_col; i_col++)
+    out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
+  //
+  delete[] hashes;
+#ifdef DEBUG_DD
+  std::cout << "OUTPUT:\n";
+  DEBUG_PrintSetOfColumn(std::cout, out_arrs);
+  DEBUG_PrintRefct(std::cout, out_arrs);
+#endif
+  return new table_info(out_arrs);
+}
+
+
+
+
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     PyObject* m;
     static struct PyModuleDef moduledef = {
@@ -2967,8 +3088,9 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                            PyLong_FromVoidPtr((void*)(&shuffle_table)));
     PyObject_SetAttrString(m, "hash_join_table",
                            PyLong_FromVoidPtr((void*)(&hash_join_table)));
+    PyObject_SetAttrString(m, "drop_duplicates_table_outplace",
+                           PyLong_FromVoidPtr((void*)(&drop_duplicates_table_outplace)));
     PyObject_SetAttrString(m, "groupby_and_aggregate",
                            PyLong_FromVoidPtr((void*)(&groupby_and_aggregate)));
-
     return m;
 }
