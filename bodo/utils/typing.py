@@ -187,34 +187,6 @@ def lower_to_const_tuple(context, builder, sig, args):
     return context.get_constant_null(sig.return_type)
 
 
-# dummy function to enable series flattening, replaced in series_pass
-def flatten_to_series(A):  # pragma: no cover
-    return A
-
-
-@infer_global(flatten_to_series)
-class FlattenTyp(AbstractTemplate):
-    def generic(self, args, kws):
-        from bodo.hiframes.pd_series_ext import SeriesType
-
-        assert not kws
-        assert len(args) == 1
-        # only list of lists supported
-        assert isinstance(args[0], (types.List, SeriesType))
-        l_dtype = args[0].dtype
-        assert isinstance(l_dtype, types.List)
-        dtype = l_dtype.dtype
-        return signature(SeriesType(dtype), *bodo.utils.utils.unliteral_all(args))
-
-
-@numba.generated_jit(nopython=True)
-def parallel_convert_to_array(c):  # pragma: no cover
-    """converts flattened list to array. Acts as a sentinel function to enable
-    parallelization
-    """
-    return lambda c: bodo.utils.conversion.coerce_to_array(c)
-
-
 # Type used to add constant values to constant lists to enable typing
 class ConstList(types.List):
     def __init__(self, dtype, consts):
