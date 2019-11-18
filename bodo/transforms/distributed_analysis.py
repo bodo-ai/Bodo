@@ -711,6 +711,10 @@ class DistributedAnalysis(object):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ("str_split", "bodo.libs.list_str_arr_ext"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if func_mod == "bodo.hiframes.pd_index_ext" and func_name in (
             "init_numeric_index",
             "init_string_index",
