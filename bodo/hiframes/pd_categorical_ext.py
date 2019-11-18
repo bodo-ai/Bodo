@@ -1,8 +1,20 @@
+# Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
 import numba
-from numba.extending import (box, unbox, typeof_impl, register_model, models,
-                             NativeValue, lower_builtin, lower_cast, overload,
-                             type_callable, overload_method, intrinsic)
+from numba.extending import (
+    box,
+    unbox,
+    typeof_impl,
+    register_model,
+    models,
+    NativeValue,
+    lower_builtin,
+    lower_cast,
+    overload,
+    type_callable,
+    overload_method,
+    intrinsic,
+)
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba import types, typing, cgutils
@@ -15,7 +27,7 @@ import pandas as pd
 class PDCategoricalDtype(types.Opaque):
     def __init__(self, _categories):
         self.categories = _categories
-        name = 'PDCategoricalDtype({})'.format(self.categories)
+        name = "PDCategoricalDtype({})".format(self.categories)
         super(PDCategoricalDtype, self).__init__(name=name)
 
 
@@ -23,7 +35,7 @@ class PDCategoricalClass(types.Opaque):
     # class for categorical dtype objects passed as types to astype() etc.
     def __init__(self, _categories):
         self.categories = _categories
-        name = 'PDCategoricalClass({})'.format(self.categories)
+        name = "PDCategoricalClass({})".format(self.categories)
         super(PDCategoricalClass, self).__init__(name=name)
 
 
@@ -46,14 +58,15 @@ class CategoricalArray(types.Array):
     def __init__(self, dtype):
         self.dtype = dtype
         super(CategoricalArray, self).__init__(
-            dtype, 1, 'C', name='CategoricalArray({})'.format(dtype))
+            dtype, 1, "C", name="CategoricalArray({})".format(dtype)
+        )
 
 
 @register_model(CategoricalArray)
 class CategoricalArrayModel(models.ArrayModel):
     def __init__(self, dmm, fe_type):
         int_dtype = get_categories_int_type(fe_type.dtype)
-        data_array = types.Array(int_dtype, 1, 'C')
+        data_array = types.Array(int_dtype, 1, "C")
         super(CategoricalArrayModel, self).__init__(dmm, data_array)
 
 
@@ -62,7 +75,7 @@ def unbox_categorical_array(typ, val, c):
     arr_obj = c.pyapi.object_getattr_string(val, "codes")
     # c.pyapi.print_object(arr_obj)
     dtype = get_categories_int_type(typ.dtype)
-    native_val = unbox_array(types.Array(dtype, 1, 'C'), arr_obj, c)
+    native_val = unbox_array(types.Array(dtype, 1, "C"), arr_obj, c)
     c.pyapi.decref(arr_obj)
     return native_val
 
@@ -94,7 +107,7 @@ def box_categorical_array(typ, val, c):
         c.pyapi.incref(item_objs[i])
         c.pyapi.list_setitem(list_obj, idx, item_objs[i])
     # TODO: why does list_pack crash for test_csv_cat2?
-    #list_obj = c.pyapi.list_pack(item_objs)
+    # list_obj = c.pyapi.list_pack(item_objs)
 
     # call pd.api.types.CategoricalDtype(['A', 'B', 'C'])
     # api_obj = c.pyapi.object_getattr_string(pd_class_obj, "api")
@@ -104,7 +117,7 @@ def box_categorical_array(typ, val, c):
     # c.pyapi.decref(types_obj)
 
     int_dtype = get_categories_int_type(dtype)
-    arr = box_array(types.Array(int_dtype, 1, 'C'), val, c)
+    arr = box_array(types.Array(int_dtype, 1, "C"), val, c)
 
     pdcat_cls_obj = c.pyapi.object_getattr_string(pd_class_obj, "Categorical")
     cat_arr = c.pyapi.call_method(pdcat_cls_obj, "from_codes", (arr, list_obj))
@@ -123,6 +136,7 @@ def box_categorical_array(typ, val, c):
 def overload_cat_arr_eq_str(A, other):
     if isinstance(A, CategoricalArray) and isinstance(other, types.StringLiteral):
         other_idx = list(A.dtype.categories).index(other.literal_value)
+
         def impl(A, other):
             out_arr = cat_array_to_int(A) == other_idx
             return out_arr
@@ -143,6 +157,7 @@ def _get_cat_obj_items(categories, c):
 
     dtype = numba.typeof(val)
     return [c.box(dtype, c.context.get_constant(dtype, item)) for item in categories]
+
 
 # HACK: dummy overload for CategoricalDtype to avoid type inference errors
 # TODO: implement dtype properly
@@ -172,7 +187,7 @@ def cat_array_to_int(typingctx, arr=None):
     out_arr = arr
     if isinstance(arr.dtype, PDCategoricalDtype):
         int_dtype = get_categories_int_type(arr.dtype)
-        out_arr = types.Array(int_dtype, 1, 'C')
+        out_arr = types.Array(int_dtype, 1, "C")
 
     def codegen(context, builder, sig, args):
         return impl_ret_borrowed(context, builder, sig.return_type, args[0])
@@ -180,7 +195,7 @@ def cat_array_to_int(typingctx, arr=None):
     return out_arr(arr), codegen
 
 
-@overload_method(CategoricalArray, 'copy')
+@overload_method(CategoricalArray, "copy")
 def cat_arr_copy_overload(arr):
     return lambda arr: set_cat_dtype(cat_array_to_int(arr).copy(), arr)
 

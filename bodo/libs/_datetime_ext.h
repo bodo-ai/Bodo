@@ -1,3 +1,4 @@
+// Copyright (C) 2019 Bodo Inc. All rights reserved.
 #ifndef _DATETIME_EXT_H_INCLUDED
 #define _DATETIME_EXT_H_INCLUDED
 
@@ -6,7 +7,7 @@
 #include <numpy/arrayobject.h>
 #include <iostream>
 
-#include "_hpat_common.h"
+#include "_bodo_common.h"
 
 extern "C" {
 
@@ -27,41 +28,40 @@ extern "C" {
 
 // TODO: call Pandas C libs directly and remove copy paste
 
-
 typedef struct {
-        npy_int64 year;
-        npy_int32 month, day, hour, min, sec, us, ps, as;
+    npy_int64 year;
+    npy_int32 month, day, hour, min, sec, us, ps, as;
 } pandas_datetimestruct;
 
 static int parse_iso_8601_datetime(char *str, int len,
-                            pandas_datetimestruct *out,
-                            int *out_local, int *out_tzoffset) __UNUSED__;
+                                   pandas_datetimestruct *out, int *out_local,
+                                   int *out_tzoffset) __UNUSED__;
 
 typedef enum {
-        PANDAS_FR_Y = 0,  // Years
-        PANDAS_FR_M = 1,  // Months
-        PANDAS_FR_W = 2,  // Weeks
-        // Gap where NPY_FR_B was
-        PANDAS_FR_D = 4,  // Days
-        PANDAS_FR_h = 5,  // hours
-        PANDAS_FR_m = 6,  // minutes
-        PANDAS_FR_s = 7,  // seconds
-        PANDAS_FR_ms = 8,  // milliseconds
-        PANDAS_FR_us = 9,  // microseconds
-        PANDAS_FR_ns = 10,  // nanoseconds
-        PANDAS_FR_ps = 11,  // picoseconds
-        PANDAS_FR_fs = 12,  // femtoseconds
-        PANDAS_FR_as = 13,  // attoseconds
-        PANDAS_FR_GENERIC = 14  // Generic, unbound units, can
-                                // convert to anything
+    PANDAS_FR_Y = 0,  // Years
+    PANDAS_FR_M = 1,  // Months
+    PANDAS_FR_W = 2,  // Weeks
+    // Gap where NPY_FR_B was
+    PANDAS_FR_D = 4,        // Days
+    PANDAS_FR_h = 5,        // hours
+    PANDAS_FR_m = 6,        // minutes
+    PANDAS_FR_s = 7,        // seconds
+    PANDAS_FR_ms = 8,       // milliseconds
+    PANDAS_FR_us = 9,       // microseconds
+    PANDAS_FR_ns = 10,      // nanoseconds
+    PANDAS_FR_ps = 11,      // picoseconds
+    PANDAS_FR_fs = 12,      // femtoseconds
+    PANDAS_FR_as = 13,      // attoseconds
+    PANDAS_FR_GENERIC = 14  // Generic, unbound units, can
+                            // convert to anything
 } PANDAS_DATETIMEUNIT;
 
 static int convert_datetimestruct_to_datetime(PANDAS_DATETIMEUNIT base,
-                                       const pandas_datetimestruct *dts,
-                                       npy_datetime *out) __UNUSED__;
+                                              const pandas_datetimestruct *dts,
+                                              npy_datetime *out) __UNUSED__;
 
-static void* np_datetime_date_array_from_packed_ints(uint64_t *dt_data,
-                                    int64_t n_elems, PyObject* dt_date_class) __UNUSED__;
+static void *np_datetime_date_array_from_packed_ints(
+    uint64_t *dt_data, int64_t n_elems, PyObject *dt_date_class) __UNUSED__;
 
 // void dt_to_timestamp(int64_t val, pd_timestamp *ts) {
 //     pandas_datetimestruct out;
@@ -76,32 +76,40 @@ static void* np_datetime_date_array_from_packed_ints(uint64_t *dt_data,
 //     ts->nanosecond = out.ps * 1000;
 // }
 
-static inline PyObject* py_datetime_date_from_packed_int(uint64_t dt, PyObject* dt_date_class)
-{
+static inline PyObject *py_datetime_date_from_packed_int(
+    uint64_t dt, PyObject *dt_date_class) {
     uint64_t year = dt >> 32;
     uint64_t month = (dt >> 16) & 0xFFFF;
     uint64_t day = dt & 0xFFFF;
     return PyObject_CallFunction(dt_date_class, "iii", year, month, day);
 }
 
-// given an array of packed integers for datetime.date (pd_timestamp_ext format),
+// given an array of packed integers for datetime.date (pd_timestamp_ext
+// format),
 // create and return a pd.Series of datetime.date() objects
-static void* np_datetime_date_array_from_packed_ints(uint64_t *dt_data, int64_t n_elems, PyObject* dt_date_class)
-{
-#define CHECK(expr, msg) if(!(expr)){std::cerr << msg << std::endl; PyGILState_Release(gilstate); return NULL;}
+static void *np_datetime_date_array_from_packed_ints(uint64_t *dt_data,
+                                                     int64_t n_elems,
+                                                     PyObject *dt_date_class) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return NULL;                   \
+    }
     auto gilstate = PyGILState_Ensure();
 
     npy_intp dims[] = {n_elems};
-    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
+    PyObject *ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
     CHECK(ret, "allocating numpy array failed");
 
-    for(int64_t i = 0; i < n_elems; ++i) {
-        PyObject * s = py_datetime_date_from_packed_int(dt_data[i], dt_date_class);
+    for (int64_t i = 0; i < n_elems; ++i) {
+        PyObject *s =
+            py_datetime_date_from_packed_int(dt_data[i], dt_date_class);
         CHECK(s, "creating Python datetime.date object failed");
-        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
+        auto p = PyArray_GETPTR1((PyArrayObject *)ret, i);
         CHECK(p, "getting offset in numpy array failed");
-        int err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, s);
-        CHECK(err==0, "setting item in numpy array failed");
+        int err = PyArray_SETITEM((PyArrayObject *)ret, (char *)p, s);
+        CHECK(err == 0, "setting item in numpy array failed");
         Py_DECREF(s);
     }
 
@@ -122,8 +130,8 @@ static const int days_per_month_table[2][12] = {
     {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}};
 
 static int parse_iso_8601_datetime(char *str, int len,
-                            pandas_datetimestruct *out,
-                            int *out_local, int *out_tzoffset) {
+                                   pandas_datetimestruct *out, int *out_local,
+                                   int *out_tzoffset) {
     int year_leap = 0;
     int i, numdigits;
     char *substr, sublen;
@@ -487,9 +495,10 @@ parse_timezone:
             substr += 2;
             sublen -= 2;
             if (offset_hour >= 24) {
-                printf("Timezone hours offset out of range "
-                             "in datetime string \"%s\"",
-                             str);
+                printf(
+                    "Timezone hours offset out of range "
+                    "in datetime string \"%s\"",
+                    str);
                 goto error;
             }
         } else if (sublen >= 1 && isdigit(substr[0])) {
@@ -514,9 +523,10 @@ parse_timezone:
                 substr += 2;
                 sublen -= 2;
                 if (offset_minute >= 60) {
-                    printf("Timezone minutes offset out of range "
-                                 "in datetime string \"%s\"",
-                                 str);
+                    printf(
+                        "Timezone minutes offset out of range "
+                        "in datetime string \"%s\"",
+                        str);
                     goto error;
                 }
             } else if (sublen >= 1 && isdigit(substr[0])) {
@@ -555,7 +565,7 @@ finish:
 
 parse_error:
     printf("Error parsing datetime string \"%s\" at position %d", str,
-                 (int)(substr - str));
+           (int)(substr - str));
     return -1;
 
 error:
@@ -621,8 +631,8 @@ static npy_int64 get_datetimestruct_days(const pandas_datetimestruct *dts) {
 }
 
 static int convert_datetimestruct_to_datetime(PANDAS_DATETIMEUNIT base,
-                                       const pandas_datetimestruct *dts,
-                                       npy_datetime *out) {
+                                              const pandas_datetimestruct *dts,
+                                              npy_datetime *out) {
     npy_datetime ret;
 
     if (base == PANDAS_FR_Y) {
@@ -720,6 +730,6 @@ static int convert_datetimestruct_to_datetime(PANDAS_DATETIMEUNIT base,
     return 0;
 }
 
-} // extern "C"
+}  // extern "C"
 
-#endif // _DATETIME_EXT_H_INCLUDED
+#endif  // _DATETIME_EXT_H_INCLUDED

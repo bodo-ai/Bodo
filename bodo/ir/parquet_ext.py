@@ -1,10 +1,15 @@
+# Copyright (C) 2019 Bodo Inc. All rights reserved.
 from collections import defaultdict
 import numba
 from numba import typeinfer, ir, ir_utils, config, types, cgutils
 from numba.typing.templates import signature
 from numba.extending import overload, intrinsic, register_model, models, box
-from numba.ir_utils import (visit_vars_inner, replace_vars_inner,
-                            compile_to_numba_ir, replace_arg_nodes)
+from numba.ir_utils import (
+    visit_vars_inner,
+    replace_vars_inner,
+    compile_to_numba_ir,
+    replace_arg_nodes,
+)
 import bodo
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.utils.utils import debug_prints, alloc_arr_tup
@@ -17,13 +22,13 @@ from bodo import objmode
 import pandas as pd
 import numpy as np
 
-from bodo.hiframes.pd_categorical_ext import (PDCategoricalDtype,
-    CategoricalArray)
+from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 
 
 class ParquetReader(ir.Stmt):
-    def __init__(self, file_name, df_out, col_names, col_indices, out_types,
-                 out_vars, loc):
+    def __init__(
+        self, file_name, df_out, col_names, col_indices, out_types, out_vars, loc
+    ):
         self.file_name = file_name
         self.df_out = df_out  # used only for printing
         self.col_names = col_names
@@ -34,9 +39,14 @@ class ParquetReader(ir.Stmt):
 
     def __repr__(self):  # pragma: no cover
         # TODO
-        return "({}) = ReadParquet({}, {}, {}, {}, {})".format(self.df_out,
-            self.file_name.name, self.col_names, self.col_indices,
-            self.out_types, self.out_vars)
+        return "({}) = ReadParquet({}, {}, {}, {}, {})".format(
+            self.df_out,
+            self.file_name.name,
+            self.col_names,
+            self.col_indices,
+            self.out_types,
+            self.out_vars,
+        )
 
 
 def pq_array_analysis(pq_node, equiv_set, typemap, array_analysis):
@@ -51,7 +61,8 @@ def pq_array_analysis(pq_node, equiv_set, typemap, array_analysis):
     for col_var in pq_node.out_vars:
         typ = typemap[col_var.name]
         (shape, c_post) = array_analysis._gen_shape_call(
-            equiv_set, col_var, typ.ndim, None)
+            equiv_set, col_var, typ.ndim, None
+        )
         equiv_set.insert_equiv(col_var, shape)
         post.extend(c_post)
         all_shapes.append(shape[0])
@@ -74,7 +85,9 @@ def pq_distributed_analysis(pq_node, array_dists):
     return
 
 
-distributed_analysis.distributed_analysis_extensions[ParquetReader] = pq_distributed_analysis
+distributed_analysis.distributed_analysis_extensions[
+    ParquetReader
+] = pq_distributed_analysis
 
 
 def pq_typeinfer(pq_node, typeinferer):
@@ -159,8 +172,7 @@ def get_copies_pq(pq_node, typemap):
 ir_utils.copy_propagate_extensions[ParquetReader] = get_copies_pq
 
 
-def apply_copies_pq(pq_node, var_dict, name_var_table,
-                      typemap, calltypes, save_copies):
+def apply_copies_pq(pq_node, var_dict, name_var_table, typemap, calltypes, save_copies):
     """apply copy propagate in pq node"""
 
     # update output_vars
@@ -185,5 +197,6 @@ def build_pq_definitions(pq_node, definitions=None):
         definitions[col_var.name].append(pq_node)
 
     return definitions
+
 
 ir_utils.build_defs_extensions[ParquetReader] = build_pq_definitions

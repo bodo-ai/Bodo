@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc. All rights reserved.
 """
 Implement pd.Series typing and data model handling.
 """
@@ -5,35 +6,65 @@ import operator
 import pandas as pd
 import numpy as np
 import numba
-from numba import types
-from numba.extending import (models, register_model, lower_cast, infer_getattr,
-    type_callable, infer, overload, make_attribute_wrapper)
-from numba.typing.templates import (infer_global, AbstractTemplate, signature,
-    AttributeTemplate, bound_function)
-from numba.typing.arraydecl import (get_array_index_type, _expand_integer,
-    ArrayAttribute, SetItemBuffer)
-from numba.typing.npydecl import (Numpy_rules_ufunc, NumpyRulesArrayOperator,
-    NumpyRulesInplaceArrayOperator)
+from numba import types, cgutils
+from numba.extending import (
+    models,
+    register_model,
+    lower_cast,
+    infer_getattr,
+    type_callable,
+    infer,
+    overload,
+    make_attribute_wrapper,
+    intrinsic,
+)
+from numba.typing.templates import (
+    infer_global,
+    AbstractTemplate,
+    signature,
+    AttributeTemplate,
+    bound_function,
+)
+from numba.typing.arraydecl import (
+    get_array_index_type,
+    _expand_integer,
+    ArrayAttribute,
+    SetItemBuffer,
+)
+from numba.typing.npydecl import (
+    Numpy_rules_ufunc,
+    NumpyRulesArrayOperator,
+    NumpyRulesInplaceArrayOperator,
+)
+from numba.targets.imputils import impl_ret_borrowed
 import bodo
-from bodo.libs.str_ext import string_type, list_string_array_type
-from bodo.libs.str_arr_ext import (string_array_type, offset_typ, char_typ,
-    str_arr_payload_type, StringArrayType, GetItemStringArray)
+from bodo.libs.str_ext import string_type
+from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.libs.str_arr_ext import (
+    string_array_type,
+    offset_typ,
+    char_typ,
+    str_arr_payload_type,
+    StringArrayType,
+    GetItemStringArray,
+)
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type, datetime_date_type
-from bodo.hiframes.pd_categorical_ext import (PDCategoricalDtype,
-    CategoricalArray)
+from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 from bodo.hiframes.rolling import supported_rolling_funcs
 import datetime
-from bodo.hiframes.split_impl import (string_array_split_view_type,
-    GetItemStringArraySplitView)
-from bodo.utils.typing import (is_overload_none, is_overload_true,
-    is_overload_false)
+from bodo.hiframes.split_impl import (
+    string_array_split_view_type,
+    GetItemStringArraySplitView,
+)
+from bodo.utils.typing import is_overload_none, is_overload_true, is_overload_false
 
 
 class SeriesType(types.IterableType, types.ArrayCompatible):
     """Temporary type class for Series objects.
     """
+
     def __init__(self, dtype, data=None, index=None, name_typ=None):
         # keeping data array in type since operators can make changes such
         # as making array unaligned etc.
@@ -43,8 +74,11 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         dtype = dtype.dtype if isinstance(dtype, IntDtype) else dtype
         # convert Record to tuple (for tuple output of map)
         # TODO: handle actual Record objects in Series?
-        dtype = (types.Tuple(list(dict(dtype.members).values()))
-                if isinstance(dtype, types.Record) else dtype)
+        dtype = (
+            types.Tuple(list(dict(dtype.members).values()))
+            if isinstance(dtype, types.Record)
+            else dtype
+        )
         self.dtype = dtype
         self.data = data
         name_typ = types.none if name_typ is None else name_typ
@@ -52,12 +86,13 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         self.index = index  # index should be an Index type (not Array)
         self.name_typ = name_typ
         super(SeriesType, self).__init__(
-            name="series({}, {}, {}, {})".format(dtype, data, index, name_typ))
+            name="series({}, {}, {}, {})".format(dtype, data, index, name_typ)
+        )
 
     @property
     def as_array(self):
         # using types.undefined to avoid Array templates for binary ops
-        return types.Array(types.undefined, 1, 'C')
+        return types.Array(types.undefined, 1, "C")
 
     def copy(self, dtype=None, index=None):
         # XXX is copy necessary?
@@ -85,9 +120,8 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
             # If dtype matches or other.dtype is undefined (inferred)
             if other.dtype == self.dtype or not other.dtype.is_precise():
                 return SeriesType(
-                    self.dtype,
-                    self.data.unify(typingctx, other.data),
-                    new_index)
+                    self.dtype, self.data.unify(typingctx, other.data), new_index
+                )
 
         # XXX: unify Series/Array as Array
         return super(SeriesType, self).unify(typingctx, other)
@@ -140,9 +174,10 @@ def _get_series_array_type(dtype):
     if isinstance(dtype, types.BaseTuple):
         if any(not isinstance(t, types.Number) for t in dtype.types):
             # TODO: support more types. what types can be in recarrays?
-            raise ValueError("series tuple dtype {} includes non-numerics".format(dtype))
-        np_dtype = np.dtype(
-            ','.join(str(t) for t in dtype.types), align=True)
+            raise ValueError(
+                "series tuple dtype {} includes non-numerics".format(dtype)
+            )
+        np_dtype = np.dtype(",".join(str(t) for t in dtype.types), align=True)
         dtype = numba.numpy_support.from_dtype(np_dtype)
 
     if dtype == datetime_date_type:
@@ -150,7 +185,7 @@ def _get_series_array_type(dtype):
 
     # TODO: other types?
     # regular numpy array
-    return types.Array(dtype, 1, 'C')
+    return types.Array(dtype, 1, "C")
 
 
 def is_bool_series_typ(t):
@@ -162,11 +197,11 @@ def is_str_series_typ(t):
 
 
 def is_dt64_series_typ(t):
-    return isinstance(t, SeriesType) and t.dtype == types.NPDatetime('ns')
+    return isinstance(t, SeriesType) and t.dtype == types.NPDatetime("ns")
 
 
 def is_timedelta64_series_typ(t):
-    return isinstance(t, SeriesType) and t.dtype == types.NPTimedelta('ns')
+    return isinstance(t, SeriesType) and t.dtype == types.NPTimedelta("ns")
 
 
 def is_datetime_date_series_typ(t):
@@ -178,16 +213,17 @@ class SeriesPayloadType(types.Type):
     def __init__(self, series_type):
         self.series_type = series_type
         super(SeriesPayloadType, self).__init__(
-            name='SeriesPayloadType({})'.format(series_type))
+            name="SeriesPayloadType({})".format(series_type)
+        )
 
 
 @register_model(SeriesPayloadType)
 class SeriesPayloadModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
-            ('data', fe_type.series_type.data),
-            ('index', fe_type.series_type.index),
-            ('name', fe_type.series_type.name_typ),
+            ("data", fe_type.series_type.data),
+            ("index", fe_type.series_type.index),
+            ("name", fe_type.series_type.name_typ),
         ]
         super(SeriesPayloadModel, self).__init__(dmm, fe_type, members)
 
@@ -196,15 +232,229 @@ class SeriesPayloadModel(models.StructModel):
 class SeriesModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         payload_type = SeriesPayloadType(fe_type)
-        #payload_type = types.Opaque('Opaque.Series')
+        # payload_type = types.Opaque('Opaque.Series')
         # TODO: does meminfo decref content when object is deallocated?
         members = [
-            ('meminfo', types.MemInfoPointer(payload_type)),
+            ("meminfo", types.MemInfoPointer(payload_type)),
             # for boxed Series, enables updating original Series object
-            ('parent', types.pyobject),
+            ("parent", types.pyobject),
         ]
         super(SeriesModel, self).__init__(dmm, fe_type, members)
 
+
+def construct_series(context, builder, series_type, data_val, index_val, name_val):
+    # create payload struct and store values
+    payload_type = SeriesPayloadType(series_type)
+    series_payload = cgutils.create_struct_proxy(payload_type)(context, builder)
+    series_payload.data = data_val
+    series_payload.index = index_val
+    series_payload.name = name_val
+
+    # create meminfo and store payload
+    payload_ll_type = context.get_data_type(payload_type)
+    payload_size = context.get_abi_sizeof(payload_ll_type)
+    meminfo = context.nrt.meminfo_alloc(
+        builder, context.get_constant(types.uintp, payload_size)
+    )
+    meminfo_data_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_data_ptr, payload_ll_type.as_pointer())
+    builder.store(series_payload._getvalue(), meminfo_data_ptr)
+
+    # create Series struct
+    series = cgutils.create_struct_proxy(series_type)(context, builder)
+    series.meminfo = meminfo
+    # Set parent to NULL
+    series.parent = cgutils.get_null_value(series.parent.type)
+    return series._getvalue()
+
+
+@intrinsic
+def init_series(typingctx, data, index=None, name=None):
+    """Create a Series with provided data, index and name values.
+    Used as a single constructor for Series and assigning its data, so that
+    optimization passes can look for init_series() to see if underlying
+    data has changed, and get the array variables from init_series() args if
+    not changed.
+    """
+
+    index = types.none if index is None else index
+    name = types.none if name is None else name
+    name = types.unliteral(name)
+
+    def codegen(context, builder, signature, args):
+        data_val, index_val, name_val = args
+        series_type = signature.return_type
+
+        series_val = construct_series(
+            context, builder, series_type, data_val, index_val, name_val
+        )
+
+        # increase refcount of stored values
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[0], data_val)
+            context.nrt.incref(builder, signature.args[1], index_val)
+            context.nrt.incref(builder, signature.args[2], name_val)
+
+        return series_val
+
+    dtype = data.dtype
+    # XXX pd.DataFrame() calls init_series for even Series since it's untyped
+    data = if_series_to_array_type(data)
+    ret_typ = SeriesType(dtype, data, index, name)
+    sig = signature(ret_typ, data, index, name)
+    return sig, codegen
+
+
+def init_series_equiv(self, scope, equiv_set, args, kws):
+    assert len(args) >= 1 and not kws
+    # TODO: add shape for index
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return var, []
+    return None
+
+from numba.array_analysis import ArrayAnalysis
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_series_ext_init_series = init_series_equiv
+
+
+def get_series_payload(context, builder, series_type, value):
+    meminfo = cgutils.create_struct_proxy(series_type)(context, builder, value).meminfo
+    payload_type = SeriesPayloadType(series_type)
+    payload = context.nrt.meminfo_data(builder, meminfo)
+    ptrty = context.get_data_type(payload_type).as_pointer()
+    payload = builder.bitcast(payload, ptrty)
+    return context.make_data_helper(builder, payload_type, ref=payload)
+
+
+@intrinsic
+def _get_series_data(typingctx, series_typ=None):
+    def codegen(context, builder, signature, args):
+        series_payload = get_series_payload(
+            context, builder, signature.args[0], args[0]
+        )
+        return impl_ret_borrowed(context, builder, series_typ.data, series_payload.data)
+
+    ret_typ = series_typ.data
+    sig = signature(ret_typ, series_typ)
+    return sig, codegen
+
+
+@intrinsic
+def update_series_data(typingctx, series_typ, arr_typ=None):
+    def codegen(context, builder, signature, args):
+        series_payload = get_series_payload(
+            context, builder, signature.args[0], args[0]
+        )
+        series_payload.data = args[1]
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[1], args[1])
+        return
+
+    sig = types.none(series_typ, arr_typ)
+    return sig, codegen
+
+
+@intrinsic
+def update_series_index(typingctx, series_typ, arr_typ=None):
+    def codegen(context, builder, signature, args):
+        series_payload = get_series_payload(
+            context, builder, signature.args[0], args[0]
+        )
+        series_payload.index = args[1]
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[1], args[1])
+        return
+
+    sig = types.none(series_typ, arr_typ)
+    return sig, codegen
+
+
+@intrinsic
+def _get_series_index(typingctx, series_typ=None):
+    def codegen(context, builder, signature, args):
+        series_payload = get_series_payload(
+            context, builder, signature.args[0], args[0]
+        )
+        return impl_ret_borrowed(
+            context, builder, series_typ.index, series_payload.index
+        )
+
+    ret_typ = series_typ.index
+    sig = signature(ret_typ, series_typ)
+    return sig, codegen
+
+
+@intrinsic
+def _get_series_name(typingctx, series_typ=None):
+    def codegen(context, builder, signature, args):
+        series_payload = get_series_payload(
+            context, builder, signature.args[0], args[0]
+        )
+        # TODO: is borrowing None reference ok here?
+        return impl_ret_borrowed(
+            context, builder, signature.return_type, series_payload.name
+        )
+
+    sig = signature(series_typ.name_typ, series_typ)
+    return sig, codegen
+
+
+# this function should be used for getting S._data for alias analysis to work
+# no_cpython_wrapper since Array(DatetimeDate) cannot be boxed
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_series_data(S):
+    return lambda S: _get_series_data(S)
+
+
+# TODO: use separate index type instead of just storing array
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_series_index(S):
+    return lambda S: _get_series_index(S)
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_series_name(S):
+    return lambda S: _get_series_name(S)
+
+
+# array analysis extension
+def get_series_data_equiv(self, scope, equiv_set, args, kws):
+    assert len(args) == 1 and not kws
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return var, []
+    return None
+
+
+from numba.array_analysis import ArrayAnalysis
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_series_ext_get_series_data = get_series_data_equiv
+
+
+def alias_ext_init_series(lhs_name, args, alias_map, arg_aliases):
+    assert len(args) >= 1
+    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    if len(args) > 1:  # has index
+        numba.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
+
+
+numba.ir_utils.alias_func_extensions[
+    ("init_series", "bodo.hiframes.pd_series_ext")
+] = alias_ext_init_series
+
+
+def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
+    assert len(args) >= 1
+    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+
+
+numba.ir_utils.alias_func_extensions[
+    ("get_series_data", "bodo.hiframes.pd_series_ext")
+] = alias_ext_dummy_func
+numba.ir_utils.alias_func_extensions[
+    ("get_series_index", "bodo.hiframes.pd_series_ext")
+] = alias_ext_dummy_func
 
 
 def series_to_array_type(typ):
@@ -216,28 +466,12 @@ def is_series_type(typ):
     return isinstance(typ, SeriesType)
 
 
-def arr_to_series_type(arr):
-    series_type = None
-    if isinstance(arr, types.Array):
-        series_type = SeriesType(arr.dtype, arr)
-    elif arr == string_array_type:
-        # StringArray is readonly
-        series_type = SeriesType(string_type)
-    elif arr == list_string_array_type:
-        series_type = SeriesType(types.List(string_type))
-    elif arr == string_array_split_view_type:
-        series_type = SeriesType(types.List(string_type),
-                        string_array_split_view_type)
-    return series_type
-
-
 def if_series_to_array_type(typ):
     if isinstance(typ, SeriesType):
         return series_to_array_type(typ)
 
     if isinstance(typ, (types.Tuple, types.UniTuple)):
-        return types.Tuple(
-            [if_series_to_array_type(t) for t in typ.types])
+        return types.Tuple([if_series_to_array_type(t) for t in typ.types])
     if isinstance(typ, types.List) and isinstance(typ.dtype, SeriesType):
         return types.List(if_series_to_array_type(typ.dtype))
     if isinstance(typ, types.Set):
@@ -246,30 +480,15 @@ def if_series_to_array_type(typ):
     return typ
 
 
-def if_arr_to_series_type(typ):
-    if isinstance(typ, types.Array) or typ in (string_array_type,
-            list_string_array_type, string_array_split_view_type):
-        return arr_to_series_type(typ)
-    if isinstance(typ, (types.Tuple, types.UniTuple)):
-        return types.Tuple([if_arr_to_series_type(t) for t in typ.types])
-    if isinstance(typ, types.List):
-        return types.List(if_arr_to_series_type(typ.dtype))
-    if isinstance(typ, types.Set):
-        return types.Set(if_arr_to_series_type(typ.dtype))
-    # TODO: other types that can have Arrays inside?
-    return typ
-
-
 @numba.njit
 def convert_index_to_int64(S):
     # convert Series with none index to numeric index
-    data = bodo.hiframes.api.get_series_data(S)
+    data = bodo.hiframes.pd_series_ext.get_series_data(S)
     index_arr = np.arange(len(data))
-    name = bodo.hiframes.api.get_series_name(S)
-    return bodo.hiframes.api.init_series(
-        data,
-        bodo.utils.conversion.convert_to_index(index_arr),
-        name)
+    name = bodo.hiframes.pd_series_ext.get_series_name(S)
+    return bodo.hiframes.pd_series_ext.init_series(
+        data, bodo.utils.conversion.convert_to_index(index_arr), name
+    )
 
 
 # cast Series(int8) to Series(cat) for init_series() in test_csv_cat1
@@ -277,13 +496,14 @@ def convert_index_to_int64(S):
 @lower_cast(SeriesType, SeriesType)
 def cast_series(context, builder, fromty, toty, val):
     # convert None index to Integer index if everything else is same
-    if (fromty.copy(index=toty.index) == toty and fromty.index == types.none
-            and toty.index == bodo.hiframes.pd_index_ext.NumericIndexType(
-                types.int64, types.none)):
-        cn_typ = context.typing_context.resolve_value_type(
-            convert_index_to_int64)
-        cn_sig = cn_typ.get_call_type(
-            context.typing_context, (fromty,), {})
+    if (
+        fromty.copy(index=toty.index) == toty
+        and fromty.index == types.none
+        and toty.index
+        == bodo.hiframes.pd_index_ext.NumericIndexType(types.int64, types.none)
+    ):
+        cn_typ = context.typing_context.resolve_value_type(convert_index_to_int64)
+        cn_sig = cn_typ.get_call_type(context.typing_context, (fromty,), {})
         cn_impl = context.get_function(cn_typ, cn_sig)
         return cn_impl(builder, (val,))
 
@@ -298,15 +518,19 @@ def cast_series(context, builder, fromty, toty, val):
 class SeriesAttribute(AttributeTemplate):
     key = SeriesType
 
-    def resolve_dt(self, ary):
-        assert ary.dtype == types.NPDatetime('ns')
-        return series_dt_methods_type
-
     @bound_function("series.rolling")
     def resolve_rolling(self, ary, args, kws):
-        def rolling_stub(window, min_periods=None, center=False, win_type=None,
-                on=None, axis=0, closed=None):
+        def rolling_stub(
+            window,
+            min_periods=None,
+            center=False,
+            win_type=None,
+            on=None,
+            axis=0,
+            closed=None,
+        ):
             pass
+
         pysig = numba.utils.pysignature(rolling_stub)
         return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
 
@@ -314,27 +538,28 @@ class SeriesAttribute(AttributeTemplate):
 
         dtype = ary.dtype
         # getitem returns Timestamp for dt_index and series(dt64)
-        if dtype == types.NPDatetime('ns'):
+        if dtype == types.NPDatetime("ns"):
             dtype = pandas_timestamp_type
         code = func.literal_value.code
-        _globals = {'np': np, 'pd': pd}
+        _globals = {"np": np, "pd": pd}
         # XXX hack in series_pass to make globals available
-        if hasattr(func.literal_value, 'globals'):
+        if hasattr(func.literal_value, "globals"):
             # TODO: use code.co_names to find globals actually used?
             _globals = func.literal_value.globals
 
         f_ir = numba.ir_utils.get_ir_of_code(_globals, code)
         _, f_return_type, _ = numba.typed_passes.type_inference_stage(
-                self.context, f_ir, (dtype,), None)
+            self.context, f_ir, (dtype,), None
+        )
 
         return signature(
-            SeriesType(f_return_type, index=ary.index, name_typ=ary.name_typ),
-            (func,)).replace(pysig=pysig)
+            SeriesType(f_return_type, index=ary.index, name_typ=ary.name_typ), (func,)
+        ).replace(pysig=pysig)
 
     @bound_function("series.map")
     def resolve_map(self, ary, args, kws):
         kwargs = dict(kws)
-        func = args[0] if len(args) > 0 else kwargs['arg']
+        func = args[0] if len(args) > 0 else kwargs["arg"]
 
         def map_stub(arg, na_action=None):
             pass
@@ -345,7 +570,7 @@ class SeriesAttribute(AttributeTemplate):
     @bound_function("series.apply")
     def resolve_apply(self, ary, args, kws):
         kwargs = dict(kws)
-        func = args[0] if len(args) > 0 else kwargs['func']
+        func = args[0] if len(args) > 0 else kwargs["func"]
 
         def apply_stub(func, convert_dtype=True, args=()):
             pass
@@ -357,32 +582,38 @@ class SeriesAttribute(AttributeTemplate):
     def _resolve_combine_func(self, ary, args, kws):
         # handle kwargs
         kwargs = dict(kws)
-        other = args[0] if len(args) > 0 else types.unliteral(kwargs['other'])
-        func = args[1] if len(args) > 1 else kwargs['func']
-        fill_value = args[2] if len(args) > 2 else types.unliteral(
-                                          kwargs.get('fill_value', types.none))
+        other = args[0] if len(args) > 0 else types.unliteral(kwargs["other"])
+        func = args[1] if len(args) > 1 else kwargs["func"]
+        fill_value = (
+            args[2]
+            if len(args) > 2
+            else types.unliteral(kwargs.get("fill_value", types.none))
+        )
 
         def combine_stub(other, func, fill_value=None):
             pass
+
         pysig = numba.utils.pysignature(combine_stub)
 
         # get return type
         dtype1 = ary.dtype
         # getitem returns Timestamp for dt_index and series(dt64)
-        if dtype1 == types.NPDatetime('ns'):
+        if dtype1 == types.NPDatetime("ns"):
             dtype1 = pandas_timestamp_type
         dtype2 = other.dtype
-        if dtype2 == types.NPDatetime('ns'):
+        if dtype2 == types.NPDatetime("ns"):
             dtype2 = pandas_timestamp_type
         code = func.literal_value.code
-        f_ir = numba.ir_utils.get_ir_of_code({'np': np, 'pd': pd}, code)
+        f_ir = numba.ir_utils.get_ir_of_code({"np": np, "pd": pd}, code)
         _, f_return_type, _ = numba.typed_passes.type_inference_stage(
-                self.context, f_ir, (dtype1,dtype2,), None)
+            self.context, f_ir, (dtype1, dtype2), None
+        )
 
         # TODO: output name is always None in Pandas?
-        sig = signature(SeriesType(f_return_type, index=ary.index,
-            name_typ=types.none),
-            (other, func, fill_value))
+        sig = signature(
+            SeriesType(f_return_type, index=ary.index, name_typ=types.none),
+            (other, func, fill_value),
+        )
         return sig.replace(pysig=pysig)
 
     @bound_function("series.combine")
@@ -395,14 +626,15 @@ class SeriesAttribute(AttributeTemplate):
         # output is int series with original data as index
         index_typ = bodo.hiframes.pd_index_ext.array_typ_to_index(ary.data)
         out = SeriesType(
-            types.int64, types.Array(types.int64, 1, 'C'), index_typ,
-            ary.name_typ)
+            types.int64, types.Array(types.int64, 1, "C"), index_typ, ary.name_typ
+        )
         return signature(out, *args)
 
 
 # pd.Series supports all operators except << and >>
 series_binary_ops = tuple(
-    op for op in numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
+    op
+    for op in numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
     if op not in (operator.lshift, operator.rshift)
 )
 
@@ -410,8 +642,8 @@ series_binary_ops = tuple(
 # TODO: support itruediv, Numpy doesn't support it, and output can have
 # a different type (output of integer division is float)
 series_inplace_binary_ops = tuple(
-    op for op in \
-        numba.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+    op
+    for op in numba.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
     if op not in (operator.ilshift, operator.irshift, operator.itruediv)
 )
 
@@ -431,33 +663,29 @@ inplace_binop_to_imm = {
 series_unary_ops = (operator.neg, operator.invert, operator.pos)
 
 
-str2str_methods = ('capitalize', 'lower', 'lstrip', 'rstrip',
-            'strip', 'swapcase', 'title', 'upper')
+str2str_methods = (
+    "capitalize",
+    "lower",
+    "lstrip",
+    "rstrip",
+    "strip",
+    "swapcase",
+    "title",
+    "upper",
+)
 
 
-class SeriesDtMethodType(types.Type):
-    def __init__(self):
-        name = "SeriesDtMethodType"
-        super(SeriesDtMethodType, self).__init__(name)
-
-series_dt_methods_type = SeriesDtMethodType()
-
-
-@infer_getattr
-class SeriesDtMethodAttribute(AttributeTemplate):
-    key = SeriesDtMethodType
-
-    def resolve_date(self, ary):
-        return SeriesType(datetime_date_type)  # TODO: name, index
-
-
-# all date fields return int64 same as Timestamp fields
-def resolve_date_field(self, ary):
-    return SeriesType(types.int64)
-
-for field in bodo.hiframes.pd_timestamp_ext.date_fields:
-    setattr(SeriesDtMethodAttribute, "resolve_" + field, resolve_date_field)
-
+str2bool_methods = (
+    "isalnum",
+    "isalpha",
+    "isdigit",
+    "isspace",
+    "islower",
+    "isupper",
+    "istitle",
+    "isnumeric",
+    "isdecimal",
+)
 
 class SeriesRollingType(types.Type):
     def __init__(self, stype):
@@ -473,18 +701,30 @@ class SeriesRollingAttribute(AttributeTemplate):
     @bound_function("rolling.apply")
     def resolve_apply(self, ary, args, kws):
         # result is always float64 (see Pandas window.pyx:roll_generic)
-        return signature(SeriesType(types.float64, index=ary.stype.index,
-            name_typ=ary.stype.name_typ), *args)
+        return signature(
+            SeriesType(
+                types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
+            ),
+            *args
+        )
 
     @bound_function("rolling.cov")
     def resolve_cov(self, ary, args, kws):
-        return signature(SeriesType(types.float64, index=ary.stype.index,
-            name_typ=ary.stype.name_typ), *args)
+        return signature(
+            SeriesType(
+                types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
+            ),
+            *args
+        )
 
     @bound_function("rolling.corr")
     def resolve_corr(self, ary, args, kws):
-        return signature(SeriesType(types.float64, index=ary.stype.index,
-            name_typ=ary.stype.name_typ), *args)
+        return signature(
+            SeriesType(
+                types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
+            ),
+            *args
+        )
 
 
 # similar to install_array_method in arraydecl.py
@@ -492,14 +732,18 @@ def install_rolling_method(name):
     def rolling_attribute_attachment(self, ary):
         def rolling_generic(self, args, kws):
             # output is always float64
-            return signature(SeriesType(types.float64, index=ary.stype.index,
-                name_typ=ary.stype.name_typ), *args)
+            return signature(
+                SeriesType(
+                    types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
+                ),
+                *args
+            )
+
         my_attr = {"key": "rolling." + name, "generic": rolling_generic}
         temp_class = type("Rolling_" + name, (AbstractTemplate,), my_attr)
         return types.BoundFunction(temp_class, ary)
 
-    setattr(SeriesRollingAttribute, "resolve_" + name,
-        rolling_attribute_attachment)
+    setattr(SeriesRollingAttribute, "resolve_" + name, rolling_attribute_attachment)
 
 
 for fname in supported_rolling_funcs:
@@ -514,9 +758,11 @@ for fname in supported_rolling_funcs:
 @infer_global(operator.le)
 @infer_global(operator.lt)
 class SeriesCompEqual(AbstractTemplate):
-    key = '=='
+    key = "=="
+
     def generic(self, args, kws):
         from bodo.libs.str_arr_ext import is_str_arr_typ
+
         assert not kws
         [va, vb] = args
         # if one of the inputs is string array
@@ -526,8 +772,9 @@ class SeriesCompEqual(AbstractTemplate):
             assert is_str_arr_typ(vb) or vb == string_type
             return signature(SeriesType(types.boolean, boolean_array), va, vb)
 
-        if ((is_dt64_series_typ(va) and vb in (string_type, types.NPDatetime('ns')))
-                or (is_dt64_series_typ(vb) and va in (string_type, types.NPDatetime('ns')))):
+        if (is_dt64_series_typ(va) and vb in (string_type, types.NPDatetime("ns"))) or (
+            is_dt64_series_typ(vb) and va in (string_type, types.NPDatetime("ns"))
+        ):
             return signature(SeriesType(types.boolean, boolean_array), va, vb)
 
         if is_dt64_series_typ(va) and is_dt64_series_typ(vb):
@@ -536,40 +783,46 @@ class SeriesCompEqual(AbstractTemplate):
 
 @infer
 class CmpOpNEqSeries(SeriesCompEqual):
-    key = '!='
+    key = "!="
+
 
 @infer
 class CmpOpGESeries(SeriesCompEqual):
-    key = '>='
+    key = ">="
+
 
 @infer
 class CmpOpGTSeries(SeriesCompEqual):
-    key = '>'
+    key = ">"
+
 
 @infer
 class CmpOpLESeries(SeriesCompEqual):
-    key = '<='
+    key = "<="
+
 
 @infer
 class CmpOpLTSeries(SeriesCompEqual):
-    key = '<'
+    key = "<"
 
 
 # TODO: handle all timedelta args
 def type_sub(context):
     def typer(val1, val2):
         if is_dt64_series_typ(val1) and val2 == pandas_timestamp_type:
-            return SeriesType(types.NPTimedelta('ns'))
+            return SeriesType(types.NPTimedelta("ns"))
 
     return typer
 
-type_callable('-')(type_sub)
+
+type_callable("-")(type_sub)
 type_callable(operator.sub)(type_sub)
 
 
 @overload(pd.Series)
-def pd_series_overload(data=None, index=None, dtype=None, name=None,
-                                                   copy=False, fastpath=False):
+def pd_series_overload(
+    data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
+):
 
     # TODO: support isinstance in branch pruning pass
     # cases: dict, np.ndarray, Series, Index, arraylike (list, ...)
@@ -582,9 +835,7 @@ def pd_series_overload(data=None, index=None, dtype=None, name=None,
     if not is_overload_false(fastpath):
         raise ValueError("pd.Series(): 'fastpath' argument not supported.")
 
-
-    def impl(data=None, index=None, dtype=None, name=None, copy=False,
-                                                               fastpath=False):
+    def impl(data=None, index=None, dtype=None, name=None, copy=False, fastpath=False):
         # extract name if data is has name (Series/Index) and name is None
         name_t = bodo.utils.conversion.extract_name_if_none(data, name)
         index_t = bodo.utils.conversion.extract_index_if_none(data, index)
@@ -605,8 +856,27 @@ def pd_series_overload(data=None, index=None, dtype=None, name=None,
         # if copy:
         #     data_t2 = data_t1.copy()
 
-        return bodo.hiframes.api.init_series(
-                data_t2,
-                bodo.utils.conversion.convert_to_index(index_t),
-                name_t)
+        return bodo.hiframes.pd_series_ext.init_series(
+            data_t2, bodo.utils.conversion.convert_to_index(index_t), name_t
+        )
+
+    return impl
+
+
+def get_series_data_tup(series_tup):
+    return tuple(get_series_data(s) for s in series_tup)
+
+
+@overload(get_series_data_tup)
+def overload_get_series_data_tup(series_tup):
+    n_series = len(series_tup.types)
+    func_text = "def f(series_tup):\n"
+    res = ",".join(
+        "bodo.hiframes.pd_series_ext.get_series_data(series_tup[{}])".format(i)
+        for i in range(n_series)
+    )
+    func_text += "  return ({}{})\n".format(res, "," if n_series == 1 else "")
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    impl = loc_vars["f"]
     return impl

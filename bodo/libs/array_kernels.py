@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc. All rights reserved.
 """
 Implements array kernels such as median and quantile.
 """
@@ -17,30 +18,96 @@ from numba.numpy_support import as_dtype
 
 import bodo
 from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
-from bodo.libs.str_arr_ext import (string_array_type, pre_alloc_string_array,
-    get_str_arr_item_length)
+from bodo.libs.str_arr_ext import (
+    string_array_type,
+    pre_alloc_string_array,
+    get_str_arr_item_length,
+)
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.bool_arr_ext import BooleanArrayType
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.utils.shuffle import getitem_arr_tup_single
+from bodo.utils.utils import build_set
+from bodo.ir.sort import (
+    alltoallv_tup,
+    finalize_shuffle_meta,
+    update_shuffle_meta,
+    alloc_pre_shuffle_metadata,
+)
+from bodo.ir.join import write_send_buff
+from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.hiframes.split_impl import string_array_split_view_type
 
 import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
 from bodo.libs import quantile_alg
 import llvmlite.binding as ll
-ll.add_symbol('quantile_sequential', quantile_alg.quantile_sequential)
-ll.add_symbol('quantile_parallel', quantile_alg.quantile_parallel)
-ll.add_symbol('nth_sequential', quantile_alg.nth_sequential)
-ll.add_symbol('nth_parallel', quantile_alg.nth_parallel)
+
+from bodo.libs.array_tools import (
+    array_to_info,
+    arr_info_list_to_table,
+    shuffle_table,
+    info_from_table,
+    info_to_array,
+    delete_table,
+)
+
+ll.add_symbol("quantile_sequential", quantile_alg.quantile_sequential)
+ll.add_symbol("quantile_parallel", quantile_alg.quantile_parallel)
+ll.add_symbol("nth_sequential", quantile_alg.nth_sequential)
+ll.add_symbol("nth_parallel", quantile_alg.nth_parallel)
 
 
-nth_sequential = types.ExternalFunction("nth_sequential",
-    types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.int32))
+nth_sequential = types.ExternalFunction(
+    "nth_sequential",
+    types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.int32),
+)
 
-nth_parallel = types.ExternalFunction("nth_parallel",
-    types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.int32))
+nth_parallel = types.ExternalFunction(
+    "nth_parallel",
+    types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.int32),
+)
 
 MPI_ROOT = 0
 sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
+
+
+def isna(arr, i):
+    return False
+
+
+@overload(isna)
+def isna_overload(arr, i):
+    # String array
+    if arr == string_array_type:
+        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
+
+    # masked Integer array, boolean array
+    if isinstance(arr, IntegerArrayType) or arr == boolean_array:
+        return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+            arr._null_bitmap, i
+        )
+
+    if arr == list_string_array_type:
+        # reuse string array function
+        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
+
+    if arr == string_array_split_view_type:
+        return lambda arr, i: False
+
+    # TODO: extend to other types
+    assert isinstance(arr, types.Array)
+    dtype = arr.dtype
+    if isinstance(dtype, types.Float):
+        return lambda arr, i: np.isnan(arr[i])
+
+    # NaT for dt64
+    if isinstance(dtype, (types.NPDatetime, types.NPTimedelta)):
+        nat = dtype("NaT")
+        # TODO: replace with np.isnat
+        return lambda arr, i: arr[i] == nat
+
+    # XXX integers don't have nans, extend to boolean
+    return lambda arr, i: False
 
 
 ################################ median ####################################
@@ -70,7 +137,7 @@ def median(arr, parallel=False):
     if n % 2 == 1:
         return nth_element(arr, k, parallel)
 
-    v1 = nth_element(arr, k-1, parallel)
+    v1 = nth_element(arr, k - 1, parallel)
     v2 = nth_element(arr, k, parallel)
     return (v1 + v2) / 2
 
@@ -103,29 +170,36 @@ def lower_dist_quantile_seq(context, builder, sig, args):
     # store an int to specify data type
     typ_enum = _numba_to_c_type_map[sig.args[0].dtype]
     typ_arg = cgutils.alloca_once_value(
-        builder, lir.Constant(lir.IntType(32), typ_enum))
+        builder, lir.Constant(lir.IntType(32), typ_enum)
+    )
 
     arr_val = args[0]
     arr_typ = sig.args[0]
     if isinstance(arr_typ, (IntegerArrayType, BooleanArrayType)):
-        arr_val = cgutils.create_struct_proxy(arr_typ)(
-            context, builder, arr_val).data
-        arr_typ = types.Array(arr_typ.dtype, 1, 'C')
+        arr_val = cgutils.create_struct_proxy(arr_typ)(context, builder, arr_val).data
+        arr_typ = types.Array(arr_typ.dtype, 1, "C")
 
     assert arr_typ.ndim == 1
 
     arr = make_array(arr_typ)(context, builder, arr_val)
     local_size = builder.extract_value(arr.shape, 0)
 
-    call_args = [builder.bitcast(arr.data, lir.IntType(8).as_pointer()),
-                 local_size, args[1], builder.load(typ_arg)]
+    call_args = [
+        builder.bitcast(arr.data, lir.IntType(8).as_pointer()),
+        local_size,
+        args[1],
+        builder.load(typ_arg),
+    ]
 
     # array, size,  quantile, type enum
-    arg_typs = [lir.IntType(8).as_pointer(), lir.IntType(64),
-                lir.DoubleType(), lir.IntType(32)]
+    arg_typs = [
+        lir.IntType(8).as_pointer(),
+        lir.IntType(64),
+        lir.DoubleType(),
+        lir.IntType(32),
+    ]
     fnty = lir.FunctionType(lir.DoubleType(), arg_typs)
-    fn = builder.module.get_or_insert_function(
-        fnty, name="quantile_sequential")
+    fn = builder.module.get_or_insert_function(fnty, name="quantile_sequential")
     return builder.call(fn, call_args)
 
 
@@ -137,14 +211,14 @@ def lower_dist_quantile_parallel(context, builder, sig, args):
     # store an int to specify data type
     typ_enum = _numba_to_c_type_map[sig.args[0].dtype]
     typ_arg = cgutils.alloca_once_value(
-        builder, lir.Constant(lir.IntType(32), typ_enum))
+        builder, lir.Constant(lir.IntType(32), typ_enum)
+    )
 
     arr_val = args[0]
     arr_typ = sig.args[0]
     if isinstance(arr_typ, (IntegerArrayType, BooleanArrayType)):
-        arr_val = cgutils.create_struct_proxy(arr_typ)(
-            context, builder, arr_val).data
-        arr_typ = types.Array(arr_typ.dtype, 1, 'C')
+        arr_val = cgutils.create_struct_proxy(arr_typ)(context, builder, arr_val).data
+        arr_typ = types.Array(arr_typ.dtype, 1, "C")
 
     assert arr_typ.ndim == 1
 
@@ -157,12 +231,22 @@ def lower_dist_quantile_parallel(context, builder, sig, args):
         # sequential case
         total_size = local_size
 
-    call_args = [builder.bitcast(arr.data, lir.IntType(8).as_pointer()),
-                 local_size, total_size, args[1], builder.load(typ_arg)]
+    call_args = [
+        builder.bitcast(arr.data, lir.IntType(8).as_pointer()),
+        local_size,
+        total_size,
+        args[1],
+        builder.load(typ_arg),
+    ]
 
     # array, size, total_size, quantile, type enum
-    arg_typs = [lir.IntType(8).as_pointer(), lir.IntType(64), lir.IntType(64),
-                lir.DoubleType(), lir.IntType(32)]
+    arg_typs = [
+        lir.IntType(8).as_pointer(),
+        lir.IntType(64),
+        lir.IntType(64),
+        lir.DoubleType(),
+        lir.IntType(32),
+    ]
     fnty = lir.FunctionType(lir.DoubleType(), arg_typs)
     fn = builder.module.get_or_insert_function(fnty, name="quantile_parallel")
     return builder.call(fn, call_args)
@@ -200,9 +284,7 @@ def select_k_nonan_overload(A, index_arr, m, k):
     # TODO: handle NA in integer
     if isinstance(dtype, types.Integer):
         # ints don't have nans
-        return lambda A, index_arr, m, k: (
-            A[:k].copy(), index_arr[:k].copy(), k)
-
+        return lambda A, index_arr, m, k: (A[:k].copy(), index_arr[:k].copy(), k)
 
     def select_k_nonan_float(A, index_arr, m, k):
         # select the first k elements but ignore NANs
@@ -211,7 +293,7 @@ def select_k_nonan_overload(A, index_arr, m, k):
         i = 0
         ind = 0
         while i < m and ind < k:
-            if not bodo.hiframes.api.isna(A, i):
+            if not bodo.libs.array_kernels.isna(A, i):
                 min_heap_vals[ind] = A[i]
                 min_heap_inds[ind] = index_arr[i]
                 ind += 1
@@ -266,8 +348,7 @@ def nlargest(A, index_arr, k, is_largest, cmp_f):
     if is_largest:
         min_heap_vals = min_heap_vals[::-1]
         min_heap_inds = min_heap_inds[::-1]
-    return (np.ascontiguousarray(min_heap_vals),
-            np.ascontiguousarray(min_heap_inds))
+    return (np.ascontiguousarray(min_heap_vals), np.ascontiguousarray(min_heap_inds))
 
 
 @numba.njit
@@ -282,8 +363,7 @@ def nlargest_parallel(A, I, k, is_largest, cmp_f):
 
     # TODO: handle len(res) < k case
     if my_rank == MPI_ROOT:
-        res, res_ind = nlargest(
-            all_largest, all_largest_ind, k, is_largest, cmp_f)
+        res, res_ind = nlargest(all_largest, all_largest_ind, k, is_largest, cmp_f)
     else:
         res = np.empty(k, A.dtype)
         res_ind = np.empty(k, I.dtype)  # TODO: string array
@@ -390,16 +470,26 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
 
     func_text = "def impl(data, ind_arr, parallel=False):\n"
     func_text += "  if parallel:\n"
-    func_text += "    data, (ind_arr,) = bodo.ir.join.parallel_shuffle(data, (ind_arr,))\n"
+    key_names = tuple(["data[" + str(i) + "]" for i in range(len(data))])
+    func_text += bodo.ir.join._gen_par_shuffle(
+        key_names, ("ind_arr",), "data", "data_ind", data.types, data.types
+    )
+    func_text += "    (ind_arr,) = data_ind\n"
     func_text += "  n = len(data[0])\n"
 
     for i in range(count):
         if data.types[i] == string_array_type:
-            func_text += "  out_arr_{0} = pre_alloc_string_array(n, data[{0}]._num_total_chars)\n".format(i)
+            func_text += "  out_arr_{0} = pre_alloc_string_array(n, data[{0}]._num_total_chars)\n".format(
+                i
+            )
         else:
-            func_text += "  out_arr_{0} = bodo.utils.utils.alloc_type(n, data[{0}])\n".format(i)
+            func_text += "  out_arr_{0} = bodo.utils.utils.alloc_type(n, data[{0}])\n".format(
+                i
+            )
     if ind_arr == string_array_type:
-        func_text += "  out_arr_index = pre_alloc_string_array(n, ind_arr._num_total_chars)\n"
+        func_text += (
+            "  out_arr_index = pre_alloc_string_array(n, ind_arr._num_total_chars)\n"
+        )
     else:
         func_text += "  out_arr_index = bodo.utils.utils.alloc_type(n, ind_arr)\n"
     # func_text += "  uniqs = set()\n"
@@ -419,16 +509,170 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
         func_text += "  out_arr_{0} = trim_arr(out_arr_{0}, w_ind)\n".format(i)
     func_text += "  out_arr_index = trim_arr(out_arr_index, w_ind)\n"
     func_text += "  return ({},), out_arr_index\n".format(
-        ", ".join("out_arr_{}".format(i) for i in range(count)))
+        ", ".join("out_arr_{}".format(i) for i in range(count))
+    )
     # print(func_text)
     loc_vars = {}
-    exec(func_text, {'bodo': bodo,
-        'pre_alloc_string_array': pre_alloc_string_array,
-        'getitem_arr_tup_single': getitem_arr_tup_single,
-        'get_str_arr_item_length': get_str_arr_item_length,
-        'trim_arr': bodo.ir.join.trim_arr}, loc_vars)
-    impl = loc_vars['impl']
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "pre_alloc_string_array": pre_alloc_string_array,
+            "getitem_arr_tup_single": getitem_arr_tup_single,
+            "get_str_arr_item_length": get_str_arr_item_length,
+            "trim_arr": bodo.ir.join.trim_arr,
+            "array_to_info": array_to_info,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "shuffle_table": shuffle_table,
+            "info_from_table": info_from_table,
+            "info_to_array": info_to_array,
+            "delete_table": delete_table,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
     return impl
+
+
+def concat(arr_list):
+    return pd.concat(arr_list)
+
+
+@overload(concat)
+def concat_overload(arr_list):
+    # all string input case
+    # TODO: handle numerics to string casting case
+    if isinstance(arr_list, types.UniTuple) and arr_list.dtype == string_array_type:
+
+        def string_concat_impl(arr_list):
+            # preallocate the output
+            num_strs = 0
+            num_chars = 0
+            for A in arr_list:
+                arr = A
+                num_strs += len(arr)
+                num_chars += bodo.libs.str_arr_ext.num_total_chars(arr)
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(num_strs, num_chars)
+            # copy data to output
+            curr_str_ind = 0
+            curr_chars_ind = 0
+            for A in arr_list:
+                arr = A
+                bodo.libs.str_arr_ext.set_string_array_range(
+                    out_arr, arr, curr_str_ind, curr_chars_ind
+                )
+                curr_str_ind += len(arr)
+                curr_chars_ind += bodo.libs.str_arr_ext.num_total_chars(arr)
+            return out_arr
+
+        return string_concat_impl
+
+    if isinstance(arr_list, types.UniTuple) and isinstance(
+        arr_list.dtype, IntegerArrayType
+    ):
+        return lambda arr_list: bodo.libs.int_arr_ext.init_integer_array(
+            np.concatenate(bodo.libs.int_arr_ext.get_int_arr_data_tup(arr_list)),
+            bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list),
+        )
+
+    if isinstance(arr_list, types.UniTuple) and arr_list.dtype == boolean_array:
+        # reusing int arr concat functions
+        # TODO: test
+        return lambda arr_list: bodo.libs.bool_arr_ext.init_bool_array(
+            np.concatenate(bodo.libs.int_arr_ext.get_int_arr_data_tup(arr_list)),
+            bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list),
+        )
+
+    for typ in arr_list:
+        if not isinstance(typ, types.Array):
+            raise ValueError("concat supports only numerical and string arrays")
+    # numerical input
+    return lambda arr_list: np.concatenate(arr_list)
+
+
+def nunique(A):  # pragma: no cover
+    return len(set(A))
+
+
+def nunique_parallel(A):  # pragma: no cover
+    return len(set(A))
+
+
+@overload(nunique)
+def nunique_overload(A):
+    if A == boolean_array:
+        return lambda A: len(A.unique())
+    # TODO: extend to other types like datetime?
+    def nunique_seq(A):
+        return len(build_set(A))
+
+    return nunique_seq
+
+
+@overload(nunique_parallel)
+def nunique_overload_parallel(A):
+    sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
+
+    def nunique_par(A):
+        uniq_A = bodo.libs.array_kernels.unique_parallel(A)
+        loc_nuniq = len(uniq_A)
+        return bodo.libs.distributed_api.dist_reduce(loc_nuniq, np.int32(sum_op))
+
+    return nunique_par
+
+
+def unique(A):  # pragma: no cover
+    return np.array([a for a in set(A)]).astype(A.dtype)
+
+
+def unique_parallel(A):  # pragma: no cover
+    return np.array([a for a in set(A)]).astype(A.dtype)
+
+
+@overload(unique)
+def unique_overload(A):
+    # TODO: extend to other types like datetime?
+    def unique_seq(A):
+        return bodo.utils.utils.unique(A)
+
+    return unique_seq
+
+
+@overload(unique_parallel)
+def unique_overload_parallel(A):
+    def unique_par(A):
+        uniq_A = bodo.utils.utils.unique(A)
+        key_arrs = (uniq_A,)
+        n = len(uniq_A)
+        node_ids = np.empty(n, np.int32)
+
+        n_pes = bodo.libs.distributed_api.get_size()
+        pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, (), n_pes, False)
+
+        # calc send/recv counts
+        for i in range(n):
+            val = uniq_A[i]
+            node_id = hash(val) % n_pes
+            node_ids[i] = node_id
+            update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs, (), False)
+
+        shuffle_meta = finalize_shuffle_meta(
+            key_arrs, (), pre_shuffle_meta, n_pes, False
+        )
+
+        # write send buffers
+        for i in range(n):
+            node_id = node_ids[i]
+            write_send_buff(shuffle_meta, node_id, i, key_arrs, ())
+            # update last since it is reused in data
+            shuffle_meta.tmp_offset[node_id] += 1
+
+        # shuffle
+        out_arr, = alltoallv_tup(key_arrs, shuffle_meta, ())
+
+        return bodo.utils.utils.unique(out_arr)
+
+    return unique_par
 
 
 # np.arange implementation is copied from parfor.py and range length
@@ -454,6 +698,7 @@ def arange_parallel_impl(return_type, *args):
         return np.arange(start, stop, step, dtype)
 
     if any(isinstance(a, types.Complex) for a in args):
+
         def arange_4(start, stop, step, dtype):
             numba.parfor.init_prange()
             nitems_c = (stop - start) / step
@@ -464,7 +709,9 @@ def arange_parallel_impl(return_type, *args):
             for i in numba.parfor.internal_prange(nitems):
                 arr[i] = start + i * step
             return arr
+
     else:
+
         def arange_4(start, stop, step, dtype):
             numba.parfor.init_prange()
             nitems = bodo.libs.array_kernels.calc_nitems(start, stop, step)
@@ -485,4 +732,4 @@ def arange_parallel_impl(return_type, *args):
         raise ValueError("parallel arange with types {}".format(args))
 
 
-numba.parfor.replace_functions_map[('arange', 'numpy')] = arange_parallel_impl
+numba.parfor.replace_functions_map[("arange", "numpy")] = arange_parallel_impl

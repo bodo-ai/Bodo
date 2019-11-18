@@ -1,3 +1,4 @@
+// Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
 #include <iostream>
 #include "_meminfo.h"
@@ -31,7 +32,7 @@ typedef struct {
     /* If readonly is 1, buffer is a shared string (cannot be modified)
        and size is set to 0. */
     unsigned char readonly;
-} _C_UnicodeWriter ;
+} _C_UnicodeWriter;
 
 
 void
@@ -307,11 +308,11 @@ ascii_decode(const char *start, const char *end, Py_UCS1 *dest)
 void decode_utf8(const char *s, Py_ssize_t size, int* kind, int *is_ascii, int* length, NRT_MemInfo** meminfo)
 {
     _C_UnicodeWriter writer;
-    const char *starts = s;
+    //    const char *starts = s;
     const char *end = s + size;
 
-    Py_ssize_t startinpos;
-    Py_ssize_t endinpos;
+    //    Py_ssize_t startinpos;
+    //    Py_ssize_t endinpos;
     const char *errmsg = "";
     *is_ascii = 0;
 
@@ -364,13 +365,13 @@ void decode_utf8(const char *s, Py_ssize_t size, int* kind, int *is_ascii, int* 
             if (s == end)
                 goto End;
             errmsg = "unexpected end of data";
-            startinpos = s - starts;
-            endinpos = end - starts;
+            //            startinpos = s - starts;
+            //            endinpos = end - starts;
             break;
         case 1:
             errmsg = "invalid start byte";
-            startinpos = s - starts;
-            endinpos = startinpos + 1;
+            //            startinpos = s - starts;
+            //            endinpos = startinpos + 1;
             break;
         case 2:
         case 3:
@@ -379,8 +380,8 @@ void decode_utf8(const char *s, Py_ssize_t size, int* kind, int *is_ascii, int* 
                 goto End;
             }
             errmsg = "invalid continuation byte";
-            startinpos = s - starts;
-            endinpos = startinpos + ch - 1;
+            //            startinpos = s - starts;
+            //            endinpos = startinpos + ch - 1;
             break;
         default:
             if (_C_UnicodeWriter_WriteCharInline(&writer, ch) < 0)

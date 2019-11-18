@@ -1,51 +1,96 @@
+# Copyright (C) 2019 Bodo Inc. All rights reserved.
 """
 Helper functions to enable typing.
 """
 import numpy as np
 import pandas as pd
 import numba
-from numba import types
+from numba import types, cgutils
 from numba.extending import register_model, models, overload
-from numba.typing.templates import (infer_global, AbstractTemplate,
-    CallableTemplate)
+from numba.typing.templates import infer_global, AbstractTemplate, CallableTemplate
 from numba.typing import signature
-from numba.targets.imputils import lower_builtin, impl_ret_borrowed
+from numba.targets.imputils import lower_builtin, impl_ret_borrowed, impl_ret_new_ref
 import bodo
 
 
+# error used to avoid numba's error checking
+class BodoError(BaseException):
+    pass
+
+
+class BodoWarning(Warning):
+    """
+    Warning class for Bodo-related potential issues such as prevention of
+    parallelization by unsupported functions.
+    """
+    pass
+
+
+
 def is_overload_none(val):
-    return (val is None or val == types.none
-            or getattr(val, 'value', False) is None)
+    return val is None or val == types.none or getattr(val, "value", False) is None
+
+
+def is_overload_constant_bool(val):
+    return (
+        isinstance(val, bool)
+        or isinstance(val, bodo.utils.utils.BooleanLiteral)
+        or ((isinstance(val, types.Omitted) and isinstance(val.value, bool)))
+    )
+
+
+def is_overload_constant_str(val):
+    return (
+        isinstance(val, str)
+        or (isinstance(val, types.StringLiteral) and isinstance(val.literal_value, str))
+        or ((isinstance(val, types.Omitted) and isinstance(val.value, str)))
+    )
+
+
+def is_overload_constant_str_list(val):
+    return (
+        isinstance(val, bodo.utils.typing.ConstList)
+        and isinstance(val.consts, tuple)
+        and isinstance(val.consts[0], str)
+    )
 
 
 def is_overload_true(val):
-    return (val == True or val == bodo.utils.utils.BooleanLiteral(True)
-            or getattr(val, 'value', False) is True)
+    return (
+        val == True
+        or val == bodo.utils.utils.BooleanLiteral(True)
+        or getattr(val, "value", False) is True
+    )
 
 
 def is_overload_false(val):
-    return (val == False or val == bodo.utils.utils.BooleanLiteral(False)
-            or getattr(val, 'value', True) is False)
+    return (
+        val == False
+        or val == bodo.utils.utils.BooleanLiteral(False)
+        or getattr(val, "value", True) is False
+    )
 
 
 def is_overload_zero(val):
-    return (val == 0 or val == types.IntegerLiteral(0)
-            or getattr(val, 'value', -1) == 0)
+    return val == 0 or val == types.IntegerLiteral(0) or getattr(val, "value", -1) == 0
 
 
 def is_overload_str(val, const):
-    return (val == const or val == types.StringLiteral(const)
-            or getattr(val, 'value', -1) == const)
+    return (
+        val == const
+        or val == types.StringLiteral(const)
+        or getattr(val, "value", -1) == const
+    )
 
 
 def get_const_str_list(val):
     # 'ommited' case
-    if getattr(val, 'value', None) is not None:
+    if getattr(val, "value", None) is not None:
         return [val.value]
     # literal case
-    if hasattr(val, 'literal_value'):
+    if hasattr(val, "literal_value"):
         return [val.literal_value]
-    if hasattr(val, 'consts'):
+    if hasattr(val, "consts"):
         return val.consts
 
 
@@ -53,7 +98,7 @@ def get_overload_const_str(val):
     if isinstance(val, str):
         return val
     # 'ommited' case
-    if getattr(val, 'value', None) is not None:
+    if getattr(val, "value", None) is not None:
         assert isinstance(val.value, str)
         return val.value
     # literal case
@@ -70,9 +115,10 @@ def parse_dtype(dtype):
 
     try:
         d_str = get_overload_const_str(dtype)
-        if d_str.startswith('Int') or d_str.startswith('UInt'):
+        if d_str.startswith("Int") or d_str.startswith("UInt"):
             return bodo.libs.int_arr_ext.typeof_pd_int_dtype(
-                pd.api.types.pandas_dtype(d_str), None)
+                pd.api.types.pandas_dtype(d_str), None
+            )
         return numba.numpy_support.from_dtype(np.dtype(d_str))
     except:
         pass
@@ -85,12 +131,15 @@ def is_list_like_index_type(t):
     """
     from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
     from bodo.hiframes.pd_series_ext import SeriesType
+
     # TODO: include datetimeindex/timedeltaindex?
 
-    return (isinstance(t, types.List)
+    return (
+        isinstance(t, types.List)
         or (isinstance(t, types.Array) and t.ndim == 1)
         or isinstance(t, (NumericIndexType, RangeIndexType))
-        or isinstance(t, SeriesType))
+        or isinstance(t, SeriesType)
+    )
 
 
 # type used to pass metadata to type inference functions
@@ -136,26 +185,6 @@ class ToConstTupleTyper(AbstractTemplate):
 @lower_builtin(to_const_tuple, types.Any)
 def lower_to_const_tuple(context, builder, sig, args):
     return context.get_constant_null(sig.return_type)
-
-
-# dummy function to enable series flattening, replaced in series_pass
-def flatten_to_series(A):  # pragma: no cover
-    return A
-
-
-@infer_global(flatten_to_series)
-class FlattenTyp(AbstractTemplate):
-    def generic(self, args, kws):
-        from bodo.hiframes.pd_series_ext import SeriesType
-        assert not kws
-        assert len(args) == 1
-        # only list of lists supported
-        assert isinstance(args[0], (types.List, SeriesType))
-        l_dtype = args[0].dtype
-        assert isinstance(l_dtype, types.List)
-        dtype = l_dtype.dtype
-        return signature(
-            SeriesType(dtype), *bodo.utils.utils.unliteral_all(args))
 
 
 # Type used to add constant values to constant lists to enable typing
@@ -219,6 +248,8 @@ def lower_add_consts_to_type(context, builder, sig, args):
 # dummy empty itertools implementation to avoid typing errors for series str
 # flatten case
 import itertools
+
+
 @overload(itertools.chain)
 def chain_overload():
     return lambda: [0]
@@ -227,7 +258,6 @@ def chain_overload():
 # taken from numba/typing/listdecl.py
 @infer_global(sorted)
 class SortedBuiltinLambda(CallableTemplate):
-
     def generic(self):
         # TODO: reverse=None
         def typer(iterable, key=None):
@@ -236,3 +266,87 @@ class SortedBuiltinLambda(CallableTemplate):
             return types.List(iterable.iterator_type.yield_type)
 
         return typer
+
+
+def convert_tup_to_rec(val):
+    return val
+
+
+@infer_global(convert_tup_to_rec)
+class ConvertTupRecType(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 1
+        in_dtype = args[0]
+        out_dtype = in_dtype
+
+        if isinstance(in_dtype, types.BaseTuple):
+            np_dtype = np.dtype(",".join(str(t) for t in in_dtype.types), align=True)
+            out_dtype = numba.numpy_support.from_dtype(np_dtype)
+
+        return signature(out_dtype, in_dtype)
+
+
+@lower_builtin(convert_tup_to_rec, types.Any)
+def lower_convert_impl(context, builder, sig, args):
+    val, = args
+    in_typ = sig.args[0]
+    rec_typ = sig.return_type
+
+    if not isinstance(in_typ, types.BaseTuple):
+        return impl_ret_borrowed(context, builder, sig.return_type, val)
+
+    res = cgutils.alloca_once(builder, context.get_data_type(rec_typ))
+
+    func_text = "def _set_rec(r, val):\n"
+    for i in range(len(rec_typ.members)):
+        func_text += "  r.f{} = val[{}]\n".format(i, i)
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    set_rec = loc_vars["_set_rec"]
+
+    context.compile_internal(builder, set_rec, types.void(rec_typ, in_typ), [res, val])
+    return impl_ret_new_ref(context, builder, sig.return_type, res)
+
+
+def convert_rec_to_tup(val):
+    return val
+
+
+@infer_global(convert_rec_to_tup)
+class ConvertRecTupType(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 1
+        in_dtype = args[0]
+        out_dtype = in_dtype
+
+        if isinstance(in_dtype, types.Record):
+            out_dtype = types.Tuple([m[1] for m in in_dtype.members])
+
+        return signature(out_dtype, in_dtype)
+
+
+@lower_builtin(convert_rec_to_tup, types.Any)
+def lower_convert_rec_tup_impl(context, builder, sig, args):
+    val, = args
+    rec_typ = sig.args[0]
+    tup_typ = sig.return_type
+
+    if not isinstance(rec_typ, types.Record):
+        return impl_ret_borrowed(context, builder, sig.return_type, val)
+
+    n_fields = len(rec_typ.members)
+
+    func_text = "def _rec_to_tup(r):\n"
+    func_text += "  return ({},)\n".format(
+        ", ".join("r.f{}".format(i) for i in range(n_fields))
+    )
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    _rec_to_tup = loc_vars["_rec_to_tup"]
+
+    res = context.compile_internal(builder, _rec_to_tup, tup_typ(rec_typ), [val])
+    return impl_ret_borrowed(context, builder, sig.return_type, res)

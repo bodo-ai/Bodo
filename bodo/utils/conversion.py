@@ -1,3 +1,4 @@
+# Copyright (C) 2019 Bodo Inc. All rights reserved.
 """
 Utility functions for conversion of data such as list to array.
 Need to be inlined for better optimization.
@@ -11,8 +12,8 @@ import bodo
 from bodo.utils.typing import is_overload_none, is_overload_true
 
 
-NS_DTYPE = np.dtype('M8[ns]')  # similar pandas/_libs/tslibs/conversion.pyx
-TD_DTYPE = np.dtype('m8[ns]')
+NS_DTYPE = np.dtype("M8[ns]")  # similar pandas/_libs/tslibs/conversion.pyx
+TD_DTYPE = np.dtype("m8[ns]")
 
 
 # TODO: use generated_jit with IR inlining
@@ -21,66 +22,77 @@ def coerce_to_ndarray(data, error_on_nonarray=True, bool_arr_convert=None):
 
 
 @overload(coerce_to_ndarray)
-def overload_coerce_to_ndarray(data, error_on_nonarray=True,
-                                                        bool_arr_convert=None):
+def overload_coerce_to_ndarray(data, error_on_nonarray=True, bool_arr_convert=None):
     # TODO: other cases handled by this function in Pandas like scalar
     """
     Coerces data to ndarray. Data should be numeric.
     """
     from bodo.hiframes.pd_series_ext import SeriesType
-    from bodo.hiframes.pd_index_ext import (RangeIndexType, NumericIndexType,
-        DatetimeIndexType, TimedeltaIndexType)
+    from bodo.hiframes.pd_index_ext import (
+        RangeIndexType,
+        NumericIndexType,
+        DatetimeIndexType,
+        TimedeltaIndexType,
+    )
 
     # TODO: handle NAs?
     if isinstance(data, bodo.libs.int_arr_ext.IntegerArrayType):
-        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
-            bodo.libs.int_arr_ext.get_int_arr_data(data)
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.libs.int_arr_ext.get_int_arr_data(
+            data
+        )
 
     if data == bodo.libs.bool_arr_ext.boolean_array:
-        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
-            bodo.libs.bool_arr_ext.get_bool_arr_data(data)
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.libs.bool_arr_ext.get_bool_arr_data(
+            data
+        )
 
     if isinstance(data, types.Array):
-        if (not is_overload_none(bool_arr_convert)
-                and data.dtype == types.bool_):
-            return (lambda data, error_on_nonarray=True, bool_arr_convert=None:
-                bodo.libs.bool_arr_ext.init_bool_array(
-                    data, np.full((len(data) + 7) >> 3, 255, np.uint8)))
+        if not is_overload_none(bool_arr_convert) and data.dtype == types.bool_:
+            return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.libs.bool_arr_ext.init_bool_array(
+                data, np.full((len(data) + 7) >> 3, 255, np.uint8)
+            )
         return lambda data, error_on_nonarray=True, bool_arr_convert=None: data
 
     if isinstance(data, (types.List, types.UniTuple)):
         # convert Timestamp() back to dt64
         if data.dtype == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+
             def impl(data, error_on_nonarray=True, bool_arr_convert=None):
                 vals = []
                 for d in data:
                     vals.append(
                         bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-                            bodo.hiframes.pd_timestamp_ext.convert_timestamp_to_datetime64(d)))
+                            bodo.hiframes.pd_timestamp_ext.convert_timestamp_to_datetime64(
+                                d
+                            )
+                        )
+                    )
                 return np.asarray(vals)
+
             return impl
-        if (not is_overload_none(bool_arr_convert)
-                and data.dtype == types.bool_):
-            return (lambda data, error_on_nonarray=True, bool_arr_convert=None:
-                bodo.libs.bool_arr_ext.init_bool_array(
-                    np.asarray(data),
-                    np.full((len(data) + 7) >> 3, 255, np.uint8)))
-        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
-            np.asarray(data)
+        if not is_overload_none(bool_arr_convert) and data.dtype == types.bool_:
+            return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.libs.bool_arr_ext.init_bool_array(
+                np.asarray(data), np.full((len(data) + 7) >> 3, 255, np.uint8)
+            )
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: np.asarray(
+            data
+        )
 
     if isinstance(data, SeriesType):
-        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
-            bodo.hiframes.api.get_series_data(data)
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.hiframes.pd_series_ext.get_series_data(
+            data
+        )
 
     # index types
-    if isinstance(data, (NumericIndexType, DatetimeIndexType,
-                         TimedeltaIndexType)):
-        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
-            bodo.hiframes.api.get_index_data(data)
+    if isinstance(data, (NumericIndexType, DatetimeIndexType, TimedeltaIndexType)):
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.hiframes.pd_index_ext.get_index_data(
+            data
+        )
 
     if isinstance(data, RangeIndexType):
-        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
-            np.arange(data._start, data._stop, data._step)
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: np.arange(
+            data._start, data._stop, data._step
+        )
 
     if is_overload_true(error_on_nonarray):
         raise TypeError("cannot coerce {} to array".format(data))
@@ -94,8 +106,7 @@ def coerce_to_array(data, error_on_nonarray=True, bool_arr_convert=None):
 
 
 @overload(coerce_to_array)
-def overload_coerce_to_array(data, error_on_nonarray=True,
-                                                        bool_arr_convert=None):
+def overload_coerce_to_array(data, error_on_nonarray=True, bool_arr_convert=None):
     """
     convert data to bodo arrays.
     bool_arr_convert=True converts boolean arrays to nullable BooleanArray
@@ -106,12 +117,14 @@ def overload_coerce_to_array(data, error_on_nonarray=True,
 
     # string series
     if is_str_series_typ(data):
-        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
-            bodo.hiframes.api.get_series_data(data)
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.hiframes.pd_series_ext.get_series_data(
+            data
+        )
 
     if isinstance(data, StringIndexType):
-        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
-            bodo.hiframes.api.get_index_data(data)
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.hiframes.pd_index_ext.get_index_data(
+            data
+        )
 
     # string array
     if data == bodo.string_array_type:
@@ -119,21 +132,23 @@ def overload_coerce_to_array(data, error_on_nonarray=True,
 
     # string list
     if isinstance(data, types.List) and data.dtype == bodo.string_type:
-        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
-            bodo.libs.str_arr_ext.StringArray(data)
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.libs.str_arr_ext.StringArray(
+            data
+        )
 
     # string tuple
     if isinstance(data, types.UniTuple) and data.dtype == bodo.string_type:
-        return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
-            bodo.libs.str_arr_ext.StringArray(list(data))
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.libs.str_arr_ext.StringArray(
+            list(data)
+        )
 
     if data == bodo.libs.bool_arr_ext.boolean_array:
         return lambda data, error_on_nonarray=True, bool_arr_convert=None: data
 
     # assuming can be ndarray
-    return lambda data, error_on_nonarray=True, bool_arr_convert=None: \
-        bodo.utils.conversion.coerce_to_ndarray(
-            data, error_on_nonarray, bool_arr_convert)
+    return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.utils.conversion.coerce_to_ndarray(
+        data, error_on_nonarray, bool_arr_convert
+    )
 
 
 # TODO: use generated_jit with IR inlining
@@ -159,6 +174,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
     if isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype):
         _dtype = nb_dtype.dtype
         if isinstance(data.dtype, types.Float):
+
             def impl_float(data, new_dtype, copy=None):
                 n = len(data)
                 n_bytes = (n + 7) >> 3
@@ -167,20 +183,24 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
                 for i in numba.parfor.internal_prange(n):
                     arr[i] = data[i]
                     bodo.libs.int_arr_ext.set_bit_to_arr(
-                        bitmap, i, not np.isnan(data[i]))
+                        bitmap, i, not np.isnan(data[i])
+                    )
                 return bodo.libs.int_arr_ext.init_integer_array(arr, bitmap)
+
             return impl_float
         else:
+
             def impl(data, new_dtype, copy=None):
                 n = len(data)
                 n_bytes = (n + 7) >> 3
                 bitmap = np.empty(n_bytes, np.uint8)
                 for i in numba.parfor.internal_prange(n):
                     # TODO: use simple set_bit
-                    bodo.libs.int_arr_ext.set_bit_to_arr(
-                        bitmap, i, 1)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 1)
                 return bodo.libs.int_arr_ext.init_integer_array(
-                    data.astype(_dtype), bitmap)
+                    data.astype(_dtype), bitmap
+                )
+
             return impl
 
     # Array case
@@ -188,6 +208,18 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
         return lambda data, new_dtype, copy=None: data.astype(nb_dtype)
 
     return lambda data, new_dtype, copy=None: data
+
+
+@numba.jit
+def flatten_array(A):
+    flat_list = []
+    n = len(A)
+    for i in range(n):
+        l = A[i]
+        for s in l:
+            flat_list.append(s)
+
+    return bodo.utils.conversion.coerce_to_array(flat_list)
 
 
 # TODO: use generated_jit with IR inlining
@@ -222,15 +254,14 @@ def overload_convert_to_dt64ns(data):
     # see pd.core.arrays.datetimes.sequence_to_dt64ns for constructor types
     # TODO: support datetime.date, datetime.datetime
     # TODO: support dayfirst, yearfirst, tz
-    if data == types.Array(types.int64, 1, 'C'):
+    if data == types.Array(types.int64, 1, "C"):
         return lambda data: data.view(bodo.utils.conversion.NS_DTYPE)
 
-    if data == types.Array(types.NPDatetime('ns'), 1, 'C'):
+    if data == types.Array(types.NPDatetime("ns"), 1, "C"):
         return lambda data: data
 
     if data == bodo.string_array_type:
-        return (lambda data:
-                bodo.utils.conversion.parse_datetimes_from_strings(data))
+        return lambda data: bodo.utils.conversion.parse_datetimes_from_strings(data)
 
     raise TypeError("invalid data type {} for dt64 conversion".format(data))
 
@@ -247,19 +278,17 @@ def overload_convert_to_td64ns(data):
     # TODO: array of strings
     # see pd.core.arrays.timedeltas.sequence_to_td64ns for constructor types
     # TODO: support datetime.timedelta
-    if data == types.Array(types.int64, 1, 'C'):
+    if data == types.Array(types.int64, 1, "C"):
         return lambda data: data.view(bodo.utils.conversion.TD_DTYPE)
 
-    if data == types.Array(types.NPTimedelta('ns'), 1, 'C'):
+    if data == types.Array(types.NPTimedelta("ns"), 1, "C"):
         return lambda data: data
 
     if data == bodo.string_array_type:
         # TODO: support
-        raise ValueError(
-            "conversion to timedelta from string not supported yet")
+        raise ValueError("conversion to timedelta from string not supported yet")
 
     raise TypeError("invalid data type {} for dt64 conversion".format(data))
-
 
 
 def convert_to_index(data):
@@ -271,12 +300,26 @@ def overload_convert_to_index(data):
     """
     convert data to Index object if necessary.
     """
-    from bodo.hiframes.pd_index_ext import (RangeIndexType, NumericIndexType,
-        DatetimeIndexType, TimedeltaIndexType, StringIndexType)
+    from bodo.hiframes.pd_index_ext import (
+        RangeIndexType,
+        NumericIndexType,
+        DatetimeIndexType,
+        TimedeltaIndexType,
+        StringIndexType,
+    )
 
     # already Index
-    if isinstance(data, (RangeIndexType, NumericIndexType, DatetimeIndexType,
-                         TimedeltaIndexType, StringIndexType, types.NoneType)):
+    if isinstance(
+        data,
+        (
+            RangeIndexType,
+            NumericIndexType,
+            DatetimeIndexType,
+            TimedeltaIndexType,
+            StringIndexType,
+            types.NoneType,
+        ),
+    ):
         return lambda data: data
 
     def impl(data):
@@ -313,12 +356,13 @@ def overload_index_from_array(data, name=None):
     convert data array to Index object.
     """
     if data == bodo.string_array_type:
-        return lambda data, name=None: bodo.hiframes.pd_index_ext.init_string_index(data, name)
+        return lambda data, name=None: bodo.hiframes.pd_index_ext.init_string_index(
+            data, name
+        )
 
-    assert isinstance(
-        data, (types.Array, bodo.libs.int_arr_ext.IntegerArrayType))
+    assert isinstance(data, (types.Array, bodo.libs.int_arr_ext.IntegerArrayType))
 
-    if data.dtype == types.NPDatetime('ns'):
+    if data.dtype == types.NPDatetime("ns"):
         return lambda data, name=None: pd.DatetimeIndex(data, name=name)
 
     if isinstance(data.dtype, types.Integer):
@@ -355,13 +399,14 @@ def overload_index_to_array(I, l=0):
             for i in numba.parfor.internal_prange(l):
                 arr[i] = i
             return arr
+
         return impl
 
     if isinstance(I, RangeIndexType):
         return lambda I, l=0: np.arange(I._start, I._stop, I._step)
 
     # other indices have data
-    return lambda I, l=0: bodo.hiframes.api.get_index_data(I)
+    return lambda I, l=0: bodo.hiframes.pd_index_ext.get_index_data(I)
 
 
 def extract_name_if_none(data, name):
@@ -372,20 +417,26 @@ def extract_name_if_none(data, name):
 def overload_extract_name_if_none(data, name):
     """Extract name if `data` is has name (Series/Index) and `name` is None
     """
-    from bodo.hiframes.pd_index_ext import (RangeIndexType, NumericIndexType,
-        DatetimeIndexType, TimedeltaIndexType, PeriodIndexType)
+    from bodo.hiframes.pd_index_ext import (
+        RangeIndexType,
+        NumericIndexType,
+        DatetimeIndexType,
+        TimedeltaIndexType,
+        PeriodIndexType,
+    )
     from bodo.hiframes.pd_series_ext import SeriesType
 
     if not is_overload_none(name):
         return lambda data, name: name
 
     # Index type, TODO: other indices like Range?
-    if isinstance(data, (NumericIndexType, DatetimeIndexType,
-                         TimedeltaIndexType, PeriodIndexType)):
-        return lambda data, name: bodo.hiframes.api.get_index_name(data)
+    if isinstance(
+        data, (NumericIndexType, DatetimeIndexType, TimedeltaIndexType, PeriodIndexType)
+    ):
+        return lambda data, name: bodo.hiframes.pd_index_ext.get_index_name(data)
 
     if isinstance(data, SeriesType):
-        return lambda data, name: bodo.hiframes.api.get_series_name(data)
+        return lambda data, name: bodo.hiframes.pd_series_ext.get_series_name(data)
 
     return lambda data, name: name
 
@@ -404,7 +455,7 @@ def overload_extract_index_if_none(data, index):
         return lambda data, index: index
 
     if isinstance(data, SeriesType):
-        return lambda data, index: bodo.hiframes.api.get_series_index(data)
+        return lambda data, index: bodo.hiframes.pd_series_ext.get_series_index(data)
 
     return lambda data, index: index
 
@@ -417,10 +468,10 @@ def box_if_dt64(val):
 def overload_box_if_dt64(val):
     """If 'val' is dt64, box it to Timestamp otherwise just return 'val'
     """
-    if val == types.NPDatetime('ns'):
-        return lambda val: \
-            bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
-                np.int64(val))
+    if val == types.NPDatetime("ns"):
+        return lambda val: bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
+            np.int64(val)
+        )
 
     return lambda val: val
 
@@ -432,11 +483,12 @@ def get_array_if_series_or_index(data):
 @overload(get_array_if_series_or_index)
 def overload_get_array_if_series_or_index(data):
     from bodo.hiframes.pd_series_ext import SeriesType
+
     if isinstance(data, SeriesType):
-        return lambda data: bodo.hiframes.api.get_series_data(data)
+        return lambda data: bodo.hiframes.pd_series_ext.get_series_data(data)
 
     if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
-        return lambda data: bodo.hiframes.api.get_index_data(data)
+        return lambda data: bodo.hiframes.pd_index_ext.get_index_data(data)
 
     return lambda data: data
 
@@ -466,12 +518,15 @@ def overload_extract_index_array(A):
     if Series, return it's index array. Otherwise, create an index array.
     """
     from bodo.hiframes.pd_series_ext import SeriesType
+
     if isinstance(A, SeriesType):
+
         def impl(A):
-            index = bodo.hiframes.api.get_series_index(A)
+            index = bodo.hiframes.pd_series_ext.get_series_index(A)
             index_t = bodo.utils.conversion.fix_none_index(index, len(A))
             index_arr = bodo.utils.conversion.coerce_to_array(index_t)
             return index_arr
+
         return impl
 
     return lambda A: np.arange(len(A))
@@ -485,11 +540,14 @@ def extract_index_array_tup(series_tup):
 def overload_extract_index_array_tup(series_tup):
     n_series = len(series_tup.types)
     func_text = "def f(series_tup):\n"
-    res = ",".join("bodo.utils.conversion.extract_index_array(series_tup[{}])".format(i) for i in range(n_series))
-    func_text += "  return ({}{})\n".format(res, "," if n_series==1 else "")
+    res = ",".join(
+        "bodo.utils.conversion.extract_index_array(series_tup[{}])".format(i)
+        for i in range(n_series)
+    )
+    func_text += "  return ({}{})\n".format(res, "," if n_series == 1 else "")
     loc_vars = {}
-    exec(func_text, {'bodo': bodo}, loc_vars)
-    impl = loc_vars['f']
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    impl = loc_vars["f"]
     return impl
 
 
