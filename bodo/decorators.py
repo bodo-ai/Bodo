@@ -19,6 +19,9 @@ def distributed_diagnostics(self, signature=None, level=1):
             "Distributed diagnostics not available for a function that is"
             " not compiled yet")
 
+    if bodo.get_rank() != 0:  # only print on 1 process
+        return
+
     def dump(sig):
         ol = self.overloads[sig]
         pfdiag = ol.metadata.get("distributed_diagnostics", None)

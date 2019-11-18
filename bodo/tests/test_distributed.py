@@ -415,7 +415,7 @@ def test_dist_tuple2():
     assert count_array_OneDs() > 0
 
 
-def test_dist_warning():
+def test_dist_warning1():
     """Make sure BodoWarning is thrown when there is no parallelism discovered due
     to unsupported function
     """
@@ -432,6 +432,39 @@ def test_dist_warning():
         bodo.jit(impl)(10)
 
 
+def test_dist_warning2():
+    """Make sure BodoWarning is thrown when there is no parallelism discovered due
+    to return of dataframe
+    """
+    def impl(n):
+        return pd.DataFrame({'A': np.ones(n)})
+
+    if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+        with pytest.warns(BodoWarning, match="No parallelism found for function"):
+            bodo.jit(impl)(10)
+    else:
+        bodo.jit(impl)(10)
+
+
+def test_dist_objmode():
+    """Test use of objmode inside prange including a reduction.
+    Tests a previous issue where deepcopy in get_parfor_reductions failed for
+    ObjModeLiftedWith const.
+    """
+    import scipy.special as sc
+    def objmode_test(n):
+        A = np.arange(n)
+        s = 0
+        for i in bodo.prange(len(A)):
+            x = A[i]
+            with bodo.objmode(y="float64"):
+                y = sc.entr(x)  # call entropy function on each data element
+            s += y
+        return s
+
+    assert bodo.jit(objmode_test)(10) == objmode_test(10)
+
+
 def test_diagnostics_not_compiled_error():
     """make sure error is thrown when calling diagnostics for a function that is not
     compiled yet
@@ -441,3 +474,4 @@ def test_diagnostics_not_compiled_error():
 
     with pytest.raises(BodoError, match="Distributed diagnostics not available for"):
         bodo.jit(test_impl).distributed_diagnostics()
+

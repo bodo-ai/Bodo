@@ -226,7 +226,7 @@ class DistributedAnalysis(object):
         # parallel functionality other than parfors
         if (
             len(array_dists) > 0
-            and all(d == Distribution.REP for d in array_dists.values())
+            and all(is_REP(d) for d in array_dists.values())
         ) or (
             len(array_dists) == 0
             and len(parfor_dists) > 0
@@ -539,6 +539,15 @@ class DistributedAnalysis(object):
             return
 
         if fdef == ("parallel_print", "bodo"):
+            return
+
+        # input of gatherv should not be REP (likely a user mistake),
+        # but the output is REP
+        if fdef == ("gatherv", "bodo") or fdef == ("allgatherv", "bodo"):
+            if is_REP(array_dists[rhs.args[0].name]):
+                # TODO: test
+                raise BodoWarning("Input to gatherv is not distributed array")
+            array_dists[lhs] = Distribution.REP
             return
 
         if fdef == ("setitem_arr_nan", "bodo.ir.join"):
@@ -1635,6 +1644,12 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
                 if isinstance(inst, T):
                     f(inst, func_ir, typemap, accesses)
     return accesses
+
+
+def is_REP(d):
+    if isinstance(d, list):
+        return all(is_REP(a) for a in d)
+    return d == Distribution.REP
 
 
 def dprint(*s):
