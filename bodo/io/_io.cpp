@@ -91,8 +91,8 @@ void file_read_parallel(char* file_name, char* buff, int64_t start,
     // printf("MPI READ %lld %lld\n", start, count);
     char err_string[MPI_MAX_ERROR_STRING];
     err_string[MPI_MAX_ERROR_STRING - 1] = '\0';
-    int err_len, err_class;
     MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
+    int err_len, err_class;
 
     MPI_File fh;
     int ierr = MPI_File_open(MPI_COMM_WORLD, (const char*)file_name,
@@ -109,12 +109,12 @@ void file_read_parallel(char* file_name, char* buff, int64_t start,
         ierr = MPI_File_read_at_all(fh, (MPI_Offset)start, buff, read_size,
                                     large_dtype, MPI_STATUS_IGNORE);
         if (ierr != 0) {
-            MPI_Error_class(ierr, &err_class);
-            std::cerr << "File large read error: " << err_class << " "
-                      << file_name << '\n';
-            MPI_Error_string(ierr, err_string, &err_len);
-            printf("Error %s\n", err_string);
-            fflush(stdout);
+	  MPI_Error_class(ierr, &err_class);
+	  std::cerr << "File large read error: " << err_class << " "
+		    << file_name << '\n';
+	  MPI_Error_string(ierr, err_string, &err_len);
+	  printf("Error %s\n", err_string);
+	  fflush(stdout);
         }
         MPI_Type_free(&large_dtype);
         int64_t left_over = count % LARGE_DTYPE_SIZE;
@@ -148,23 +148,41 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
     // std::cout << file_name;
     // printf(" MPI WRITE %lld %lld %lld\n", start, count, elem_size);
 
-    // TODO: handle large write count
-    if (count >= (int64_t)INT_MAX) {
-        std::cerr << "write count too large: " << count << " file name:" << file_name << '\n';
-        return;
-    }
-
     char err_string[MPI_MAX_ERROR_STRING];
     err_string[MPI_MAX_ERROR_STRING - 1] = '\0';
     int err_len, err_class;
     MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
 
     MPI_File fh;
-    int ierr =
-        MPI_File_open(MPI_COMM_WORLD, (const char*)file_name,
-                      MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &fh);
-    if (ierr != 0)
-        std::cerr << "File open error (write): " << file_name << '\n';
+    int ierr = MPI_File_open(MPI_COMM_WORLD, (const char*)file_name,
+			     MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &fh);
+    if (ierr != 0) std::cerr << "File open error (write): " << file_name << '\n';
+    
+    // work around MPI count limit by using a large dtype
+    if (count >= (int64_t)INT_MAX) {
+        MPI_Datatype large_dtype;
+	int64_t eProd = LARGE_DTYPE_SIZE * elem_size;
+        MPI_Type_contiguous(eProd, MPI_CHAR, &large_dtype);
+        MPI_Type_commit(&large_dtype);
+        int read_size = (int)(count / LARGE_DTYPE_SIZE);
+
+        ierr = MPI_File_write_at_all(fh, (MPI_Offset)(start * elem_size), buff, 
+				     read_size, large_dtype, MPI_STATUS_IGNORE);
+        if (ierr != 0) {
+	  MPI_Error_class(ierr, &err_class);
+	  std::cerr << "File large write error: " << err_class << " " << file_name << '\n';
+	  MPI_Error_string(ierr, err_string, &err_len);
+	  printf("Error %s\n", err_string);
+	  fflush(stdout);
+        }
+        MPI_Type_free(&large_dtype);
+        int64_t left_over = count % LARGE_DTYPE_SIZE;
+        int64_t read_byte_size = count - left_over;
+        // printf("VAL leftover %lld read %lld\n", left_over, read_byte_size);
+        start += read_byte_size;
+        buff += read_byte_size * elem_size;
+        count = left_over;
+    }
 
     MPI_Datatype elem_dtype;
     MPI_Type_contiguous(elem_size, MPI_CHAR, &elem_dtype);
@@ -177,8 +195,7 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
     // if (ierr!=0) std::cerr << "File write error: " << file_name << '\n';
     if (ierr != 0) {
         MPI_Error_class(ierr, &err_class);
-        std::cerr << "File write error: " << err_class << " " << file_name
-                  << '\n';
+        std::cerr << "File write error: " << err_class << " " << file_name << '\n';
         MPI_Error_string(ierr, err_string, &err_len);
         printf("Error %s\n", err_string);
         fflush(stdout);
