@@ -528,7 +528,6 @@ GroupBy
 * :meth:`GroupBy.cumsum`
 * :meth:`GroupBy.max`
 * :meth:`GroupBy.mean`
-* :meth:`GroupBy.median`
 * :meth:`GroupBy.min`
 * :meth:`GroupBy.prod`
 * :meth:`GroupBy.std`
