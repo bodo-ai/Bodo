@@ -1332,31 +1332,8 @@ class SeriesPass(object):
             )
             return [assign]
 
-        if fdef == ("flatten_to_series", "bodo.utils.typing"):
-            arg = rhs.args[0]
-            in_typ = self.typemap[arg.name]
-            nodes = []
-            if isinstance(in_typ, SeriesType):
-                arg = self._get_series_data(arg, nodes)
-
-            def _flatten_impl(A):
-                numba.parfor.init_prange()
-                flat_list = []
-                n = len(A)
-                for i in numba.parfor.internal_prange(n):
-                    l = A[i]
-                    for s in l:
-                        flat_list.append(s)
-
-                return bodo.hiframes.pd_series_ext.init_series(
-                    bodo.utils.typing.parallel_convert_to_array(flat_list)
-                )
-
-            # TODO: index and name?
-            return self._replace_func(_flatten_impl, [arg], pre_nodes=nodes)
-
         # inline conversion functions to enable optimization
-        if func_mod == "bodo.utils.conversion":
+        if func_mod == "bodo.utils.conversion" and func_name != "flatten_array":
             # TODO: use overload IR inlining when available
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}

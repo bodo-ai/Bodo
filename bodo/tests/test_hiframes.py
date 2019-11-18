@@ -478,30 +478,6 @@ class TestHiFrames(unittest.TestCase):
         bodo_func = bodo.jit(locals={"C": bodo.int64[:]})(test_impl)
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
 
-    def test_str_flatten(self):
-        def test_impl(df):
-            A = df.A.str.split(",")
-            return pd.Series(list(itertools.chain(*A)))
-
-        df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D"]})
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
-
-    def test_str_flatten_parallel(self):
-        def test_impl(df):
-            A = df.A.str.split(",")
-            B = pd.Series(list(itertools.chain(*A)))
-            return B
-
-        n = 5
-        start, end = get_start_end(n)
-        A = ["AB,CC", "C,ABB,D", "CAD", "CA,D", "AA,,D"]
-        df = pd.DataFrame({"A": A[start:end]})
-        bodo_func = bodo.jit(distributed={"df", "B"})(test_impl)
-        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
-        self.assertEqual(count_array_REPs(), 0)
-        self.assertEqual(count_parfor_REPs(), 0)
-
     def test_to_numeric(self):
         def test_impl(df):
             B = pd.to_numeric(df.A, errors="coerce")

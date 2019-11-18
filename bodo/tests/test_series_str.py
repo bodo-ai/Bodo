@@ -1,5 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
+import itertools
 import pandas as pd
 import numpy as np
 import pytest
@@ -312,3 +313,29 @@ def test_copy(list_str_arr_value):
         return A.copy()
 
     _test_equal(bodo.jit(test_impl)(list_str_arr_value), list_str_arr_value)
+
+
+def test_flatten1():
+    """tests flattening array of string lists after split call when split view
+    optimization is applied
+    """
+    def impl(S):
+        A = S.str.split(",")
+        return pd.Series(list(itertools.chain(*A)))
+
+    S = pd.Series(["AB,CC", "C,ABB,D", "CAD", "CA,D", "AA,,D"],
+        [3, 1, 2, 0, 4], name="A")
+    check_func(impl, (S,))
+
+
+def test_flatten2():
+    """tests flattening array of string lists after split call when split view
+    optimization is not applied
+    """
+    def impl(S):
+        A = S.str.split()
+        return pd.Series(list(itertools.chain(*A)))
+
+    S = pd.Series(["AB  CC", "C ABB  D", "CAD", "CA\tD", "AA\t\tD"],
+        [3, 1, 2, 0, 4], name="A")
+    check_func(impl, (S,))

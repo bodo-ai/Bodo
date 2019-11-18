@@ -716,10 +716,12 @@ class DistributedAnalysis(object):
             return
 
         # from flat map pattern: pd.Series(list(itertools.chain(*A)))
-        # TODO: associate input/output distributions
-        if fdef == ("parallel_convert_to_array", "bodo.utils.typing"):
-            if lhs not in array_dists:
-                array_dists[lhs] = Distribution.OneD
+        if fdef == ("flatten_array", "bodo.utils.conversion"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        if fdef == ("str_split", "bodo.libs.list_str_arr_ext"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
         if func_mod == "bodo.hiframes.pd_index_ext" and func_name in (

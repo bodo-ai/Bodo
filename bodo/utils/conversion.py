@@ -210,6 +210,18 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
     return lambda data, new_dtype, copy=None: data
 
 
+@numba.jit
+def flatten_array(A):
+    flat_list = []
+    n = len(A)
+    for i in range(n):
+        l = A[i]
+        for s in l:
+            flat_list.append(s)
+
+    return bodo.utils.conversion.coerce_to_array(flat_list)
+
+
 # TODO: use generated_jit with IR inlining
 def parse_datetimes_from_strings(data):
     return data
