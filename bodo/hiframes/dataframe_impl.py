@@ -28,6 +28,10 @@ from bodo.utils.typing import (
     is_overload_false,
     is_overload_zero,
     get_overload_const_str,
+    is_overload_constant_str,
+    is_overload_constant_bool,
+    BodoError,
+    ConstDictType,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -147,6 +151,53 @@ def overload_dataframe_copy(df, deep=True):
 
     header = "def impl(df, deep=True):\n"
     return _gen_init_df(header, df.columns, ", ".join(data_outs))
+
+
+@overload_method(DataFrameType, "rename")
+def overload_dataframe_rename(
+        df,
+        mapper=None,
+        index=None,
+        columns=None,
+        axis=None,
+        copy=True,
+        inplace=False,
+        level=None,
+        errors='ignore'):
+
+    # check unsupported arguments
+    if not (is_overload_none(mapper)
+            and is_overload_none(index)
+            and is_overload_none(axis)
+            and is_overload_false(inplace)
+            and is_overload_none(level)
+            and is_overload_constant_str(errors)
+            and get_overload_const_str(errors) == "ignore"):
+        raise BodoError("Only 'columns' and copy arguments of df.rename() supported")
+
+    # columns should be constant dictionary
+    if not isinstance(columns, ConstDictType):
+        raise BodoError(
+            "'columns' argument to df.rename() should be a constant dictionary")
+
+    col_map = {columns.consts[2*i]: columns.consts[2*i+1]
+                for i in range(len(columns.consts)//2)}
+    new_cols = [col_map.get(df.columns[i], df.columns[i])
+        for i in range(len(df.columns))]
+
+    data_outs = []
+    for i in range(len(df.columns)):
+        arr = "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(i)
+        if is_overload_true(copy):
+            data_outs.append(arr + ".copy()")
+        elif is_overload_false(copy):
+            data_outs.append(arr)
+        else:
+            data_outs.append("{arr}.copy() if copy else {arr}".format(arr=arr))
+
+    header = ("def impl(df, mapper=None, index=None, columns=None, axis=None, "
+              "copy=True, inplace=False, level=None, errors='ignore'):\n")
+    return _gen_init_df(header, new_cols, ", ".join(data_outs))
 
 
 @overload_method(DataFrameType, "isna")

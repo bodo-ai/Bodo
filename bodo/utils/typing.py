@@ -232,17 +232,45 @@ class AddConstsTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         ret_typ = args[0]
-        # assert isinstance(ret_typ, types.List)  # TODO: other types
         # TODO: FloatLiteral e.g. test_fillna
         if all(isinstance(v, types.Literal) for v in args[1:]):
             consts = tuple(v.literal_value for v in args[1:])
-            ret_typ = ConstList(ret_typ.dtype, consts)
+            if isinstance(ret_typ, types.DictType):
+                ret_typ = ConstDictType(ret_typ.key_type, ret_typ.value_type, consts)
+            else:
+                ret_typ = ConstList(ret_typ.dtype, consts)
         return signature(ret_typ, *args)
 
 
 @lower_builtin(add_consts_to_type, types.VarArg(types.Any))
 def lower_add_consts_to_type(context, builder, sig, args):
     return impl_ret_borrowed(context, builder, sig.return_type, args[0])
+
+
+class ConstDictType(types.DictType):
+    """Dictionary type with constant keys and values
+    """
+    def __init__(self, keyty, valty, consts):
+        keyty = types.unliteral(keyty)
+        valty = types.unliteral(valty)
+        self.key_type = keyty
+        self.value_type = valty
+        self.keyvalue_type = types.Tuple([keyty, valty])
+        self.consts = consts
+        name = '{}[{},{}][{}]'.format(
+            self.__class__.__name__,
+            keyty,
+            valty,
+            consts
+        )
+        super(types.DictType, self).__init__(name)
+
+
+@register_model(ConstDictType)
+class ConstDictModel(numba.dictobject.DictModel):
+    def __init__(self, dmm, fe_type):
+        l_type = types.DictType(fe_type.key_type, fe_type.value_type)
+        super(ConstDictModel, self).__init__(dmm, l_type)
 
 
 # dummy empty itertools implementation to avoid typing errors for series str

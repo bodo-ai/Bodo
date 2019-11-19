@@ -771,6 +771,7 @@ class DataFramePass(object):
             "set_index",
             "duplicated",
             "drop_duplicates",
+            "rename",
         ):
             if func_name == "isnull":
                 func_name = "isna"

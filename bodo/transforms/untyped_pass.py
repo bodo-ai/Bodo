@@ -334,16 +334,21 @@ class UntypedPass(object):
                 return []
 
             # if rhs.op in ('build_list', 'build_tuple'): TODO: test tuple
-            if rhs.op == "build_list":
+            if rhs.op in ("build_list", "build_map"):
                 # if build_list items are constant, add the constant values
                 # to the returned list type as metadata. This enables type
                 # inference for calls like pd.merge() where the values
                 # determine output dataframe type
+                # build_map is similarly handled (useful in df.rename)
                 # TODO: add proper metadata to Numba types
                 # XXX: when constants are used, all the uses of the list object
                 # have to be checked since lists are mutable
                 try:
-                    vals = tuple(find_const(self.func_ir, v) for v in rhs.items)
+                    if rhs.op == "build_map":
+                        items = itertools.chain(*rhs.items)
+                    else:
+                        items = rhs.items
+                    vals = tuple(find_const(self.func_ir, v) for v in items)
                     # a = ['A', 'B'] ->
                     # tmp = ['A', 'B']
                     # a = add_consts_to_type(tmp, 'A', 'B')

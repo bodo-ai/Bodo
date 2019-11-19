@@ -309,6 +309,20 @@ def test_df_copy_shallow(df_value):
     check_func(impl, (df_value,))
 
 
+def test_df_rename():
+    def impl(df):
+        return df.rename(columns={"B": "bb", "C": "cc"})
+
+    df = pd.DataFrame(
+                {
+                    "A": [1, 8, 4, 11, -3],
+                    "B": [1.1, np.nan, 4.2, 3.1, -1.3],
+                    "C": [True, False, False, True, True],
+                }
+            )
+    check_func(impl, (df,))
+
+
 def test_df_isna(df_value):
     # TODO: test dt64 NAT, categorical, etc.
     def impl(df):
