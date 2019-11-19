@@ -23,8 +23,8 @@ class BodoWarning(Warning):
     Warning class for Bodo-related potential issues such as prevention of
     parallelization by unsupported functions.
     """
-    pass
 
+    pass
 
 
 def is_overload_none(val):
@@ -250,6 +250,7 @@ def lower_add_consts_to_type(context, builder, sig, args):
 class ConstDictType(types.DictType):
     """Dictionary type with constant keys and values
     """
+
     def __init__(self, keyty, valty, consts):
         keyty = types.unliteral(keyty)
         valty = types.unliteral(valty)
@@ -257,12 +258,7 @@ class ConstDictType(types.DictType):
         self.value_type = valty
         self.keyvalue_type = types.Tuple([keyty, valty])
         self.consts = consts
-        name = '{}[{},{}][{}]'.format(
-            self.__class__.__name__,
-            keyty,
-            valty,
-            consts
-        )
+        name = "{}[{},{}][{}]".format(self.__class__.__name__, keyty, valty, consts)
         super(types.DictType, self).__init__(name)
 
 

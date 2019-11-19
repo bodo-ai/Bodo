@@ -73,30 +73,26 @@ def remove_hiframes(rhs, lives, call_list):
     if (
         len(call_list) == 4
         and call_list[1:] == ["pd_series_ext", "hiframes", bodo]
-        and call_list[0]
-        in [
-            "get_series_data",
-            "get_series_index",
-            "get_series_name",
-        ]
+        and call_list[0] in ["get_series_data", "get_series_index", "get_series_name"]
     ):
         return True
     if (
         len(call_list) == 4
         and call_list[1:] == ["typing", "utils", bodo]
-        and call_list[0]
-        in [
-            "convert_tup_to_rec",
-            "convert_rec_to_tup",
-        ]
+        and call_list[0] in ["convert_tup_to_rec", "convert_rec_to_tup"]
     ):
         return True
     if (
         len(call_list) == 4
         and call_list[1:] == ["pd_index_ext", "hiframes", bodo]
         and call_list[0]
-        in ("init_string_index", "init_numeric_index", "_dti_val_finalize",
-            "init_datetime_index", "init_timedelta_index")
+        in (
+            "init_string_index",
+            "init_numeric_index",
+            "_dti_val_finalize",
+            "init_datetime_index",
+            "init_timedelta_index",
+        )
     ):
         return True
     if (
@@ -139,14 +135,7 @@ def remove_hiframes(rhs, lives, call_list):
     if (
         len(call_list) == 4
         and call_list[1:] == ["array_kernels", "libs", bodo]
-        and call_list[0]
-        in [
-            "calc_nitems",
-            "concat",
-            "unique",
-            "nunique",
-            "quantile",
-        ]
+        and call_list[0] in ["calc_nitems", "concat", "unique", "nunique", "quantile"]
     ):
         return True
     if call_list == ["add_consts_to_type", "typing", "utils", bodo]:
@@ -429,7 +418,8 @@ class UntypedPass(object):
                 func_name = func_def.attr
             # ignore objmode block calls
             elif isinstance(func_def, ir.Const) and isinstance(
-                    func_def.value, numba.dispatcher.ObjModeLiftedWith):
+                func_def.value, numba.dispatcher.ObjModeLiftedWith
+            ):
                 return [assign]
             else:
                 warnings.warn("function call couldn't be found for initial analysis")
@@ -960,14 +950,17 @@ class UntypedPass(object):
                 new_arr = ir.Var(in_data.scope, mk_unique_var("flat_arr"), in_data.loc)
                 nodes = _compile_func_single_block(
                     lambda A: bodo.utils.conversion.flatten_array(
-                        bodo.utils.conversion.coerce_to_array(A)), (in_data,), new_arr
+                        bodo.utils.conversion.coerce_to_array(A)
+                    ),
+                    (in_data,),
+                    new_arr,
                 )
                 # put the new array back to pd.Series call
                 if len(rhs.args) > 0:
                     rhs.args[0] = new_arr
                 else:  # kw case
                     # TODO: test
-                    kws['data'] = new_arr
+                    kws["data"] = new_arr
                     rhs.kws = tuple(kws.items())
                 nodes.append(assign)
                 return nodes

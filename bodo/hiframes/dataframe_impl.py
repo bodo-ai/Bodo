@@ -50,8 +50,6 @@ from bodo.libs.array_tools import (
 )
 
 
-
-
 @overload_attribute(DataFrameType, "index")
 def overload_dataframe_index(df):
     # None index means full RangeIndex
@@ -155,35 +153,42 @@ def overload_dataframe_copy(df, deep=True):
 
 @overload_method(DataFrameType, "rename")
 def overload_dataframe_rename(
-        df,
-        mapper=None,
-        index=None,
-        columns=None,
-        axis=None,
-        copy=True,
-        inplace=False,
-        level=None,
-        errors='ignore'):
+    df,
+    mapper=None,
+    index=None,
+    columns=None,
+    axis=None,
+    copy=True,
+    inplace=False,
+    level=None,
+    errors="ignore",
+):
 
     # check unsupported arguments
-    if not (is_overload_none(mapper)
-            and is_overload_none(index)
-            and is_overload_none(axis)
-            and is_overload_false(inplace)
-            and is_overload_none(level)
-            and is_overload_constant_str(errors)
-            and get_overload_const_str(errors) == "ignore"):
+    if not (
+        is_overload_none(mapper)
+        and is_overload_none(index)
+        and is_overload_none(axis)
+        and is_overload_false(inplace)
+        and is_overload_none(level)
+        and is_overload_constant_str(errors)
+        and get_overload_const_str(errors) == "ignore"
+    ):
         raise BodoError("Only 'columns' and copy arguments of df.rename() supported")
 
     # columns should be constant dictionary
     if not isinstance(columns, ConstDictType):
         raise BodoError(
-            "'columns' argument to df.rename() should be a constant dictionary")
+            "'columns' argument to df.rename() should be a constant dictionary"
+        )
 
-    col_map = {columns.consts[2*i]: columns.consts[2*i+1]
-                for i in range(len(columns.consts)//2)}
-    new_cols = [col_map.get(df.columns[i], df.columns[i])
-        for i in range(len(df.columns))]
+    col_map = {
+        columns.consts[2 * i]: columns.consts[2 * i + 1]
+        for i in range(len(columns.consts) // 2)
+    }
+    new_cols = [
+        col_map.get(df.columns[i], df.columns[i]) for i in range(len(df.columns))
+    ]
 
     data_outs = []
     for i in range(len(df.columns)):
@@ -195,8 +200,10 @@ def overload_dataframe_rename(
         else:
             data_outs.append("{arr}.copy() if copy else {arr}".format(arr=arr))
 
-    header = ("def impl(df, mapper=None, index=None, columns=None, axis=None, "
-              "copy=True, inplace=False, level=None, errors='ignore'):\n")
+    header = (
+        "def impl(df, mapper=None, index=None, columns=None, axis=None, "
+        "copy=True, inplace=False, level=None, errors='ignore'):\n"
+    )
     return _gen_init_df(header, new_cols, ", ".join(data_outs))
 
 
