@@ -28,6 +28,7 @@ from bodo.utils.typing import (
     is_overload_false,
     is_overload_zero,
     get_overload_const_str,
+    BodoError,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -92,6 +93,17 @@ def overload_dataframe_values(df):
 @overload_method(DataFrameType, "get_values")
 def overload_dataframe_get_values(df):
     def impl(df):
+        return df.values
+
+    return impl
+
+
+@overload_method(DataFrameType, "to_numpy")
+def overload_dataframe_to_numpy(df, dtype=None, copy=False):
+    if not is_overload_none(dtype):
+        raise BodoError("'dtype' argument of to_numpy() not supported yet")
+
+    def impl(df, dtype=None, copy=False):
         return df.values
 
     return impl

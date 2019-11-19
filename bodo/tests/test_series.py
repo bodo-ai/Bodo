@@ -392,6 +392,13 @@ def test_series_get_values(series_val):
     check_func(test_impl, (series_val,))
 
 
+def test_series_to_numpy(numeric_series_val):
+    def test_impl(S):
+        return S.to_numpy()
+
+    check_func(test_impl, (numeric_series_val,))
+
+
 def test_series_iat_getitem(series_val):
     def test_impl(S):
         return S.iat[2]

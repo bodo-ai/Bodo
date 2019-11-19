@@ -737,6 +737,7 @@ class DataFramePass(object):
     def _run_call_dataframe(self, assign, lhs, rhs, df_var, func_name):
         if func_name in (
             "get_values",
+            "to_numpy",
             "astype",
             "copy",
             "isna",
