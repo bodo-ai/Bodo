@@ -756,8 +756,10 @@ class UntypedPass(object):
             dtype_map = guard(get_definition, self.func_ir, dtype_var)
 
             # handle converted constant dictionaries
-            if is_call(dtype_map) and (guard(find_callname, self.func_ir, dtype_map)
-                    == ('add_consts_to_type', 'bodo.utils.typing')):
+            if is_call(dtype_map) and (
+                guard(find_callname, self.func_ir, dtype_map)
+                == ("add_consts_to_type", "bodo.utils.typing")
+            ):
                 dtype_map = guard(get_definition, self.func_ir, dtype_map.args[0])
 
             if (
@@ -1151,8 +1153,10 @@ class UntypedPass(object):
             ):
                 var_def = guard(get_definition, self.func_ir, call_name[1])
                 # handle converted constant dictionaries
-                if is_call(var_def) and (guard(find_callname, self.func_ir, var_def)
-                        == ('add_consts_to_type', 'bodo.utils.typing')):
+                if is_call(var_def) and (
+                    guard(find_callname, self.func_ir, var_def)
+                    == ("add_consts_to_type", "bodo.utils.typing")
+                ):
                     var_def = guard(get_definition, self.func_ir, var_def.args[0])
 
                 if isinstance(var_def, ir.Expr) and var_def.op == "build_map":
