@@ -754,6 +754,12 @@ class UntypedPass(object):
         # handle dtype arg if provided
         if dtype_var != "":
             dtype_map = guard(get_definition, self.func_ir, dtype_var)
+
+            # handle converted constant dictionaries
+            if is_call(dtype_map) and (guard(find_callname, self.func_ir, dtype_map)
+                    == ('add_consts_to_type', 'bodo.utils.typing')):
+                dtype_map = guard(get_definition, self.func_ir, dtype_map.args[0])
+
             if (
                 not isinstance(dtype_map, ir.Expr) or dtype_map.op != "build_map"
             ):  # pragma: no cover
@@ -1144,6 +1150,11 @@ class UntypedPass(object):
                 and isinstance(call_name[1], ir.Var)
             ):
                 var_def = guard(get_definition, self.func_ir, call_name[1])
+                # handle converted constant dictionaries
+                if is_call(var_def) and (guard(find_callname, self.func_ir, var_def)
+                        == ('add_consts_to_type', 'bodo.utils.typing')):
+                    var_def = guard(get_definition, self.func_ir, var_def.args[0])
+
                 if isinstance(var_def, ir.Expr) and var_def.op == "build_map":
                     by_arg_def = [v[0] for v in var_def.items], "build_map"
                     # HACK replace dict.keys getattr to avoid typing errors
