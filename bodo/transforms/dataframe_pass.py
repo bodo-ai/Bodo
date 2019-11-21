@@ -565,7 +565,8 @@ class DataFramePass(object):
                 return [assign]
             # ignore objmode block calls
             if isinstance(func_def, ir.Const) and isinstance(
-                    func_def.value, numba.dispatcher.ObjModeLiftedWith):
+                func_def.value, numba.dispatcher.ObjModeLiftedWith
+            ):
                 return [assign]
             if isinstance(func_def, ir.Global) and isinstance(
                 func_def.value, StencilFunc
@@ -772,6 +773,7 @@ class DataFramePass(object):
             "set_index",
             "duplicated",
             "drop_duplicates",
+            "rename",
         ):
             if func_name == "isnull":
                 func_name = "isna"

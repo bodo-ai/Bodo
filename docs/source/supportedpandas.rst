@@ -349,6 +349,7 @@ Reindexing / Selection / Label manipulation:
 * :meth:`DataFrame.head` (including `n` argument)
 * :meth:`DataFrame.idxmax`
 * :meth:`DataFrame.idxmin`
+* :meth:`DataFrame.rename` (only `columns` argument with a constant dictionary)
 * :meth:`DataFrame.reset_index` (only `drop=True` supported)
 * :meth:`DataFrame.set_index` `keys` can only be a column label
   (a constant string).
