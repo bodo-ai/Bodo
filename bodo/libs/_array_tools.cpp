@@ -1249,7 +1249,7 @@ bool TestEqual(std::vector<array_info*> const& columns, size_t const& n_key, siz
 
 
 
-/** This code test keys if two keys are equal (Before that the hash should have been used)
+/** This code test keys if two keys are greater or equal (Before that the hash should have been used)
  * It is used that way because we assume that the left key have the same type as the
  * right keys.
  * The shift is used to precise whether we use the left keys or the right keys.
@@ -1335,11 +1335,11 @@ int KeyComparison(std::vector<array_info*> const& columns, size_t const& n_key, 
         char* data1_1 = (char*)columns[shift_key1+iKey]->data1;
         char* data1_2 = (char*)columns[shift_key2+iKey]->data1;
         for (uint32_t pos=0; pos<len1; pos++) {
-          uint32_t pos1=pos1_prev + pos;
-          uint32_t pos2=pos2_prev + pos;
-          if (data1_1[pos1] < data1_2[pos2])
+          char char1 = data1_1[pos1_prev + pos];
+          char char2 = data1_2[pos2_prev + pos];
+          if (char1 < char2)
             return 1;
-          if (data1_1[pos1] > data1_2[pos2])
+          if (char1 > char2)
             return -1;
         }
       }
@@ -1348,6 +1348,154 @@ int KeyComparison(std::vector<array_info*> const& columns, size_t const& n_key, 
   // If all keys are equal then we return 0
   return 0;
 };
+
+
+template<typename T>
+int NumericComparison_T(char* ptr1, char* ptr2)
+{
+  T* ptr1_T = (T*)ptr1;
+  T* ptr2_T = (T*)ptr2;
+  if (*ptr1_T > *ptr2_T)
+    return 1;
+  if (*ptr1_T < *ptr2_T)
+    return -1;
+  return 0;
+}
+
+
+int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1, char* ptr2)
+{
+  if (dtype == Bodo_CTypes::INT8)
+    return NumericComparison_T<int8_t>(ptr1, ptr2);
+  if (dtype == Bodo_CTypes::UINT8)
+    return NumericComparison_T<uint8_t>(ptr1, ptr2);
+  if (dtype == Bodo_CTypes::INT16)
+    return NumericComparison_T<int16_t>(ptr1, ptr2);
+  if (dtype == Bodo_CTypes::UINT16)
+    return NumericComparison_T<uint16_t>(ptr1, ptr2);
+  if (dtype == Bodo_CTypes::INT32)
+    return NumericComparison_T<int32_t>(ptr1, ptr2);
+  if (dtype == Bodo_CTypes::UINT32)
+    return NumericComparison_T<uint32_t>(ptr1, ptr2);
+  if (dtype == Bodo_CTypes::INT64)
+    return NumericComparison_T<int64_t>(ptr1, ptr2);
+  if (dtype == Bodo_CTypes::UINT64)
+    return NumericComparison_T<uint64_t>(ptr1, ptr2);
+  if (dtype == Bodo_CTypes::FLOAT32)
+    return NumericComparison_T<float>(ptr1, ptr2);
+  if (dtype == Bodo_CTypes::FLOAT64)
+    return NumericComparison_T<double>(ptr1, ptr2);
+  return 0;
+}
+
+
+
+
+/** This code test keys if two keys are greater or equal (Before that the hash should have been used)
+ * The code is done so as to give identical results.
+ * It is used that way because we assume that the left key have the same type as the
+ * right keys.
+ * The shift is used to precise whether we use the left keys or the right keys.
+ * 0 means that the columns are equals and 1,-1 that the keys are different.
+ * Thus the test iterates over the columns and if one is different then we can conclude.
+ * We consider all types of bodo_array_type.
+ *
+ * @param in_table the input table
+ * @param n_key the number of keys considered for the comparison
+ * @param shift_key1 the column shift for the first key
+ * @param iRow1 the row of the first key
+ * @param shift_key2 the column for the second key
+ * @param iRow2 the row of the second key
+ * @return 1 if (shift_key1,iRow1) < (shift_key2,iRow2) , -1 is > and 0 if =
+ */
+int KeyComparisonAsPython(std::vector<array_info*> const& columns, size_t const& n_key, size_t const& shift_key1, size_t const& iRow1, size_t const& shift_key2, size_t const& iRow2)
+{
+  // iteration over the list of key for the comparison.
+  for (size_t iKey=0; iKey<n_key; iKey++) {
+    if (columns[shift_key1+iKey]->arr_type == bodo_array_type::NUMPY) {
+      // In the case of NUMPY, we compare the values for concluding.
+      uint64_t siztype = get_item_size(columns[shift_key1+iKey]->dtype);
+      char* ptr1 = columns[shift_key1+iKey]->data1 + (siztype*iRow1);
+      char* ptr2 = columns[shift_key2+iKey]->data1 + (siztype*iRow2);
+      int test = NumericComparison(columns[shift_key1+iKey]->dtype, ptr1, ptr2);
+      if (test != 0)
+        return test;
+    }
+    if (columns[shift_key1+iKey]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+      // NULLABLE case. We need to consider the bitmask and the values.
+      uint8_t* null_bitmask1 = (uint8_t*)columns[shift_key1+iKey]->null_bitmask;
+      uint8_t* null_bitmask2 = (uint8_t*)columns[shift_key2+iKey]->null_bitmask;
+      bool bit1 = GetBit(null_bitmask1, iRow1);
+      bool bit2 = GetBit(null_bitmask2, iRow2);
+      // If one bitmask is T and the other the reverse then they are clearly not equal.
+      if (bit1 && !bit2)
+        return 1;
+      if (!bit1 && bit2)
+        return -1;
+      // If both bitmasks are false, then it does not matter what value they are storing.
+      // Comparison is the same as for NUMPY.
+      if (bit1) {
+        uint64_t siztype = get_item_size(columns[shift_key1+iKey]->dtype);
+        char* ptr1 = columns[shift_key1+iKey]->data1 + (siztype*iRow1);
+        char* ptr2 = columns[shift_key2+iKey]->data1 + (siztype*iRow2);
+        int test = NumericComparison(columns[shift_key1+iKey]->dtype, ptr1, ptr2);
+        if (test != 0)
+          return test;
+      }
+    }
+    if (columns[shift_key1+iKey]->arr_type == bodo_array_type::STRING) {
+      // For STRING case we need to deal bitmask and the values.
+      uint8_t* null_bitmask1 = (uint8_t*)columns[shift_key1+iKey]->null_bitmask;
+      uint8_t* null_bitmask2 = (uint8_t*)columns[shift_key2+iKey]->null_bitmask;
+      bool bit1 = GetBit(null_bitmask1, iRow1);
+      bool bit2 = GetBit(null_bitmask2, iRow2);
+      // If bitmasks are different then we can conclude the comparison
+      if (bit1 && !bit2)
+        return 1;
+      if (!bit1 && bit2)
+        return -1;
+      // If bitmasks are both false, then no need to compare the string values.
+      if (bit1) {
+        // Here we consider the shifts in data2 for the comparison.
+        uint32_t* data2_1 = (uint32_t*)columns[shift_key1+iKey]->data2;
+        uint32_t* data2_2 = (uint32_t*)columns[shift_key2+iKey]->data2;
+        uint32_t len1 = data2_1[iRow1+1] - data2_1[iRow1];
+        uint32_t len2 = data2_2[iRow2+1] - data2_2[iRow2];
+        // Compute minimal length
+        uint32_t minlen = len1;
+        if (len2 < len1)
+          minlen=len2;
+        // From the common characters, we may be able to conclude.
+        uint32_t pos1_prev = data2_1[iRow1];
+        uint32_t pos2_prev = data2_2[iRow2];
+        char* data1_1 = (char*)columns[shift_key1+iKey]->data1;
+        char* data1_2 = (char*)columns[shift_key2+iKey]->data1;
+        for (uint32_t pos=0; pos<minlen; pos++) {
+          char char1 = data1_1[pos1_prev + pos];
+          char char2 = data1_2[pos2_prev + pos];
+          if (char1 < char2)
+            return 1;
+          if (char1 > char2)
+            return -1;
+        }
+        // If not, we may be able to conclude via the string length.
+        if (len1 < len2)
+          return 1;
+        if (len1 > len2)
+          return -1;
+      }
+    }
+  }
+  // If all keys are equal then we return 0
+  return 0;
+};
+
+
+
+
+
+
+
 
 
 
