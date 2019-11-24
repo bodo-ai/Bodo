@@ -87,9 +87,30 @@ the Bodo scope. For example, the data can come from other jitted functions::
     def example_arg(B):
         return B.sum()
 
-    n = 100
+    n = 10000
     A = example_return(n)
+    print(A)
     s = example_arg(A)
+    print(s)
+
+
+Here is the output of this example when run on two cores::
+
+    $ mpiexec -n 2 python ../example.py
+    [   0    1    2 ... 4997 4998 4999]
+    [5000 5001 5002 ... 9997 9998 9999]
+    49995000
+    49995000
+
+In each process, `example_return` returns a chunk of `A` and `example_arg`
+receives the same chunk. Data chunks can also be transformed before passing
+back to Bodo, but the data set size cannot change since
+Bodo expects equal chunks on different cores.
+
+The `distributed` flag is only applicable to input argument variables
+and return variables currently. In addition, only distributable data structures
+are allowed (e.g. dataframes and arrays, but not lists).
+
 
 Distribution Report
 ~~~~~~~~~~~~~~~~~~~
