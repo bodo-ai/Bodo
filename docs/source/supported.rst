@@ -48,8 +48,10 @@ The sequential computation on other data structures can be any code that
 Data Distribution
 ~~~~~~~~~~~~~~~~~~
 
-Data is distributed in one-dimensional block (`1D_Block`) manner
-among processors by default. This means that processors own equal
+Bodo chooses data distribution automatically.
+Data is either distributed in one-dimensional block (called `1D_Block`) manner
+among processors, or fully replicated (called `REP`) on all processors.
+`1D_Block` means that processors own equal
 chunks of each distributed array, DataFrame or Series,
 except possibly the last processor.
 Dataframes and multi-dimensional arrays are distributed along their
@@ -66,8 +68,6 @@ as a 9 by 2 array, on three processors:
     :alt: distribution of 1D array
     :align: center
 
-Bodo replicates the arrays that are not distributed.
-This is called `REP` distribution for consistency.
 
 Argument and Return Variables
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

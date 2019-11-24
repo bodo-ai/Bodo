@@ -37,7 +37,8 @@ and edge devices.
 Automatic parallelization is performed by taking advantage
 of Python APIs (Pandas, Numpy, ...) that have data-parallel semantics.
 For example, output elements of `x**2` operation in the example above can be
-computed independently. More complex operations such as join and rolling window
+computed independently on different processor nodes and cores.
+More complex operations such as join and rolling window
 computation can also be parallelized.
 
 The speed up achieved using Bodo depends on various factors such problem size,
