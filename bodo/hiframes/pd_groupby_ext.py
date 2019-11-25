@@ -222,14 +222,14 @@ def lower_groupby_dummy(context, builder, sig, args):
 
 
 @infer
-class GetItemDataFrameGroupBy2(AbstractTemplate):
+class GetItemDataFrameGroupBy(AbstractTemplate):
     key = "static_getitem"
 
     def generic(self, args, kws):
         grpby, idx = args
         # df.groupby('A')['B', 'C']
         if isinstance(grpby, DataFrameGroupByType):
-            if isinstance(idx, tuple):
+            if isinstance(idx, (tuple, list)):
                 assert all(isinstance(c, str) for c in idx)
                 selection = idx
             elif isinstance(idx, str):

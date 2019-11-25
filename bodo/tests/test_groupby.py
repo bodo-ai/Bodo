@@ -922,6 +922,25 @@ def test_groupby_multiselect_sum():
     check_func(impl, (df,), sort_output=True)
 
 
+def test_groupby_multiselect_list():
+    """
+    Test groupy on explicitely selected columns using a constant list (#198)
+    """
+
+    def impl(df):
+        df2 = df.groupby("A")[["B", "C"]].sum()
+        return df2
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [-8, 2, 3, 1, 5, 6, 7],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        }
+    )
+    check_func(impl, (df,), sort_output=True)
+
+
 def test_agg_multikey_parallel():
     """
     Test groupby multikey with distributed df
