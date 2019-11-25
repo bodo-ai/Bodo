@@ -20,6 +20,7 @@
 #include "_distributed.h"
 #include "_murmurhash3.cpp"
 #include "mpi.h"
+#include "gfx/timsort.hpp"
 #define ALIGNMENT 64  // preferred alignment for AVX512
 
 array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
@@ -382,6 +383,10 @@ void fill_send_array_null_inner(uint8_t* send_null_bitmask,
     }
     return;
 }
+
+
+
+
 
 void fill_send_array(array_info* send_arr, array_info* array, uint32_t* hashes,
                      std::vector<int>& send_disp,
@@ -3054,6 +3059,49 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
     return out_table;
 }
 
+
+table_info* sort_table(table_info* in_table, int64_t n_key_t, bool ascending)
+{
+
+  size_t n_rows = (size_t)in_table->nrows();
+  size_t n_cols = (size_t)in_table->ncols();
+  size_t n_key = size_t(n_key_t);
+#undef DEBUG_SORT
+#ifdef DEBUG_SORT
+  std::cout << "INPUT:\n";
+  DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+  DEBUG_PrintRefct(std::cout, in_table->columns);
+  std::cout << "n_rows=" << n_rows << " n_cols=" << n_cols << " n_key=" << n_key << "\n";
+#endif
+  std::vector<size_t> V(n_rows);
+  for (size_t i=0; i<n_rows; i++)
+    V[i]=i;
+  std::function<bool(size_t,size_t)> f=[&](size_t const& iRow1, size_t const& iRow2) -> bool {
+    size_t shift_key1=0, shift_key2=0;
+    int value = KeyComparisonAsPython(in_table->columns, n_key, shift_key1, iRow1, shift_key2, iRow2);
+    if (ascending) {
+      return value == 1;
+    }
+    return value == -1;
+  };
+  gfx::timsort(V.begin(), V.end(), f);
+  std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(n_rows);
+  for (size_t i=0; i<n_rows; i++)
+    ListPairWrite[i] = {i,-1};
+  //
+  std::vector<array_info*> out_arrs;
+  // Inserting the left data
+  for (size_t i_col=0; i_col<n_cols; i_col++)
+    out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
+  //
+#ifdef DEBUG_SORT
+  std::cout << "OUTPUT:\n";
+  DEBUG_PrintSetOfColumn(std::cout, out_arrs);
+  DEBUG_PrintRefct(std::cout, out_arrs);
+#endif
+  return new table_info(out_arrs);
+  
+}
 
 
 

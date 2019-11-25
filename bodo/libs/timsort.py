@@ -147,8 +147,8 @@ def binarySort(key_arrs, lo, hi, start, data):  # pragma: no cover
 
     while start < hi:
         # pivotStore = key_arrs[start]  # TODO: copy data to pivot
-        pivot = getitem_arr_tup(key_arrs, start)
-        pivot_data = getitem_arr_tup(data, start)
+        pivot      = getitem_arr_tup(key_arrs, start)
+        pivot_data = getitem_arr_tup(data    , start)
 
         # Set left (and right) to the index where key_arrs[start] (pivot) belongs
         left = lo
@@ -180,11 +180,11 @@ def binarySort(key_arrs, lo, hi, start, data):  # pragma: no cover
         # FIXME: is slicing ok?
         # key_arrs[left+1:left+1+n] = key_arrs[left:left+n]
         copyRange_tup(key_arrs, left, key_arrs, left + 1, n)
-        copyRange_tup(data, left, data, left + 1, n)
+        copyRange_tup(data    , left, data    , left + 1, n)
 
         # copyElement(pivotStore, 0, key_arrs, left)
         setitem_arr_tup(key_arrs, left, pivot)
-        setitem_arr_tup(data, left, pivot_data)
+        setitem_arr_tup(data    , left, pivot_data)
         start += 1
 
 
