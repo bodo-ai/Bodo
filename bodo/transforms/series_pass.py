@@ -1497,6 +1497,7 @@ class SeriesPass(object):
             "count",
             "unique",
             "get_values",
+            "to_numpy",
             "min",
             "max",
             "median",
