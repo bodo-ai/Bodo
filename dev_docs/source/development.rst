@@ -129,12 +129,17 @@ Test Suite
 ----------
 
 
-We use `pytest` for testing and run the test suite on different
+We use `pytest` for testing. The tests are designed for up to
+3 processors. Run the test suite on different
 number of processors (should run in Bodo repo's main directory)::
 
     pytest -s -v -m "not slow" -W ignore
     mpiexec -n 2 pytest -s -v -m "not slow" -W ignore
     mpiexec -n 3 pytest -s -v -m "not slow" -W ignore
+
+The `not slow` flag skips some less necessary tests,
+which allows for faster testing.
+The nightly CI build runs the full test suite.
 
 
 Debugging
