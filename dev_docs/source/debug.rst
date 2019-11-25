@@ -1,4 +1,4 @@
-.. _install:
+.. _debug:
 
 
 Debugging the C++ code

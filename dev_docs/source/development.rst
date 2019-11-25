@@ -3,11 +3,23 @@
 Bodo Development
 ================
 
-Technology Overview and Architecture
-------------------------------------
+Getting Started
+---------------
 
-This `slide deck <https://drive.google.com/file/d/1mHrbjAEfP6p-o-bWJOVdtmKNEA7lreDt/view?usp=sharing>`_
-provides an overview of Bodo technology and software architecture.
+#. This `company slide deck <https://drive.google.com/open?id=1Vtbw-k9okgEc870Ad1wmKwUZQ0wJQEXc>`_ provides an overview of the company.
+#. This `tech slide deck <https://drive.google.com/file/d/1mHrbjAEfP6p-o-bWJOVdtmKNEA7lreDt/view?usp=sharing>`_
+   provides an overview of Bodo technology and software architecture.
+#. Go over `a basic Pandas tutorial <https://pandas.pydata.org/pandas-docs/stable/getting_started/10min.html#min>`_.
+#. Go over `a basic SQL tutorial <https://mode.com/sql-tutorial/introduction-to-sql>`_.
+#. Read the rest of this page.
+#. Install Bodo for development, see :ref:`install`.
+#. Go over `getting started tutorial <https://github.com/Bodo-inc/Bodo/blob/master/tutorial/bodo_getting_started.ipynb>`_.
+#. Go over `training tutorial <https://github.com/Bodo-inc/Bodo/blob/master/tutorial/bodo_tutorial.ipynb>`_.
+#. Go over `Bodo user documentation <http://docs.bodo.ai/>`_.
+
+
+Overview
+--------
 
 Bodo implements Pandas and Numpy APIs as an embedded DSL.
 Data structures are implemented as Numba extensions, and
@@ -117,33 +129,39 @@ Test Suite
 ----------
 
 
-We use `pytest` for testing and run the test suite on different
+We use `pytest` for testing. The tests are designed for up to
+3 processors. Run the test suite on different
 number of processors (should run in Bodo repo's main directory)::
 
     pytest -s -v -m "not slow" -W ignore
     mpiexec -n 2 pytest -s -v -m "not slow" -W ignore
     mpiexec -n 3 pytest -s -v -m "not slow" -W ignore
 
+The `not slow` flag skips some less necessary tests,
+which allows for faster testing.
+The nightly CI build runs the full test suite.
+
 
 Debugging
 ---------
 - `pdb <https://docs.python.org/3/library/pdb.html>`_: :code:`import pdb; pdb.set_trace()` for breakpoints
 
-- `NUMBA_DEBUG_PRINT_AFTER <https://numba.pydata.org/numba-doc/dev/reference/envvars.html?highlight=numba_debug_print#envvar-NUMBA_DEBUG_PRINT_AFTER>`_ enviroment variable: 
-  ::
-      # example of printing after parfor pass
-      export NUMBA_DEBUG_PRINT_AFTER='parfor_pass'
-      # other common ones: 'bodo_distributed_pass', 'bodo_series_pass'
+- `NUMBA_DEBUG_PRINT_AFTER <https://numba.pydata.org/numba-doc/dev/reference/envvars.html?highlight=numba_debug_print#envvar-NUMBA_DEBUG_PRINT_AFTER>`_
+  enviroment variable::
 
-- mpiexec redirect stdout from differet processes to different files:
-  ::
-      export PYTHONUNBUFFERED=1 # set the enviroment variable 
-      mpiexec -outfile-pattern="out_%r.log" -n 8 python small_test01.py
+    # example of printing after parfor pass
+    export NUMBA_DEBUG_PRINT_AFTER='parfor_pass'
+    # other common ones: 'bodo_distributed_pass', 'bodo_series_pass'
 
-  or :
-  ::
-      # use the flag instead of setting the enviroment variable
-      mpiexec -outfile-pattern="out_%r.log" -n 8 python -u small_test01.py
+- mpiexec redirect stdout from differet processes to different files::
+
+    export PYTHONUNBUFFERED=1 # set the enviroment variable
+    mpiexec -outfile-pattern="out_%r.log" -n 8 python small_test01.py
+
+  or::
+
+    # use the flag instead of setting the enviroment variable
+    mpiexec -outfile-pattern="out_%r.log" -n 8 python -u small_test01.py
 
 
 Code Style
