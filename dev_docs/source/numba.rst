@@ -1,3 +1,5 @@
+.. _numba:
+
 Numba Development
 -----------------
 

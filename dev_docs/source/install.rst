@@ -27,7 +27,9 @@ such as Numba on Ubuntu Linux::
 A command line for running the Pi example on 4 cores::
 
     mpiexec -n 4 python examples/pi.py
-If you run into gethostbyname failed error, try `this fix <https://stackoverflow.com/questions/23112515/mpich2-gethostbyname-failed>`_.
+
+If you run into gethostbyname failed error, try
+`this fix <https://stackoverflow.com/questions/23112515/mpich2-gethostbyname-failed>`_.
 
 Running unit tests::
 
