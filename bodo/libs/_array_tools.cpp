@@ -3284,6 +3284,8 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                            PyLong_FromVoidPtr((void*)(&shuffle_table)));
     PyObject_SetAttrString(m, "hash_join_table",
                            PyLong_FromVoidPtr((void*)(&hash_join_table)));
+    PyObject_SetAttrString(m, "sort_table",
+                           PyLong_FromVoidPtr((void*)(&sort_table)));
     PyObject_SetAttrString(m, "drop_duplicates_table_outplace",
                            PyLong_FromVoidPtr((void*)(&drop_duplicates_table_outplace)));
     PyObject_SetAttrString(m, "groupby_and_aggregate",
