@@ -45,6 +45,8 @@ used for distributed datasets and computations.
 The sequential computation on other data structures can be any code that
 `Numba supports <http://numba.pydata.org/numba-doc/latest/index.html>`_.
 
+.. _distribution:
+
 Data Distribution
 ~~~~~~~~~~~~~~~~~~
 

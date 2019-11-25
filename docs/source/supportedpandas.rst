@@ -1,3 +1,5 @@
+.. _pandas:
+
 Supported Pandas Operations
 ---------------------------
 

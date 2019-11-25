@@ -1,3 +1,5 @@
+.. _decorator:
+
 @bodo.jit Decorator
 ===================
 
@@ -9,10 +11,10 @@ using the `@bodo.jit` decorator.
 It replaces the decorated Python functions with an optimized and parallelized
 native binary version using advanced compilation methods.
 
-Bodo uses `Numba <http://numba.pydata.org/>`_ for Python JIT workflow. The decorated function is replaced
-with a dispatcher object, which is compiled the first time it is called.
-The function is recompiled only if the argument data types
-change (not often in practice).
+Bodo uses `Numba <http://numba.pydata.org/>`_ for Python JIT workflow.
+The decorated function is replaced with a dispatcher object,
+which is compiled the first time it is called with a new combination of
+argument types.
 For example, the program below prints the dispatcher `f`,
 and calls it twice with an integer as input::
 
@@ -42,7 +44,8 @@ but the second call will reuse the compiled binary. The output is as follows::
 ~~~~~~~~~~~~~~~~~~
 
 Bodo assumes argument and return variables to jitted functions are
-replicated. However, the `distributed` flag can be used to indicate
+:ref:`replicated <distribution>`.
+However, the `distributed` flag can be used to indicate
 distributed data. For example, the variable `df` is replicated
 in the following program::
 

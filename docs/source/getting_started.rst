@@ -1,7 +1,11 @@
+.. _gettingstarted:
+
 Getting Started
 ===============
 
-Bodo provides the `@bodo.jit` decorator which automatically optimizes and
+Bodo allows writing analytics programs in Python using the same style
+and API of popular frameworks like Pandas and NumPy.
+Bodo's :ref:`@bodo.jit decorator <decorator>` automatically optimizes and
 parallelizes analytics programs.
 For example, the following program creates a distributed data frame and
 prints the first three rows::

@@ -1,3 +1,6 @@
+.. _numpy:
+
+
 Supported Numpy Operations
 --------------------------
 
