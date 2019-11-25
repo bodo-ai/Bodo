@@ -19,6 +19,7 @@ from bodo.utils.typing import (
     is_overload_false,
     is_overload_zero,
     is_overload_str,
+    BodoError,
 )
 from numba.typing.templates import infer_global, AbstractTemplate
 
@@ -155,6 +156,17 @@ def overload_series_to_list(S):
 @overload_method(SeriesType, "get_values")
 def overload_series_get_values(S):
     def impl(S):
+        return S.values
+
+    return impl
+
+
+@overload_method(SeriesType, "to_numpy")
+def overload_series_to_numpy(S, dtype=None, copy=False):
+    if not is_overload_none(dtype) or not is_overload_false(copy):
+        raise BodoError("'dtype' and 'copy' arguments of to_numpy() not supported yet")
+
+    def impl(S, dtype=None, copy=False):
         return S.values
 
     return impl

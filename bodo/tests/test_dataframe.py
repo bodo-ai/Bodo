@@ -235,6 +235,13 @@ def test_df_get_values(numeric_df_value):
     check_func(impl, (numeric_df_value,))
 
 
+def test_df_to_numpy(numeric_df_value):
+    def impl(df):
+        return df.to_numpy()
+
+    check_func(impl, (numeric_df_value,))
+
+
 def test_df_ndim(df_value):
     def impl(df):
         return df.ndim

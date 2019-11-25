@@ -99,6 +99,21 @@ def overload_dataframe_get_values(df):
     return impl
 
 
+@overload_method(DataFrameType, "to_numpy")
+def overload_dataframe_to_numpy(df, dtype=None, copy=False):
+    # The copy argument can be ignored here since we always copy the data
+    # (our underlying structures are fully columnar which should be copied to get a
+    # matrix). This is consistent with Pandas since copy=False doesn't guarantee it
+    # won't be copied.
+    if not is_overload_none(dtype):
+        raise BodoError("'dtype' argument of to_numpy() not supported yet")
+
+    def impl(df, dtype=None, copy=False):
+        return df.values
+
+    return impl
+
+
 @overload_attribute(DataFrameType, "ndim")
 def overload_dataframe_ndim(df):
     return lambda df: 2
