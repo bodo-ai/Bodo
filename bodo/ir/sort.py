@@ -472,14 +472,47 @@ def to_string_list_typ(typ):
 @numba.njit(no_cpython_wrapper=True, cache=False)
 def local_sort(key_arrs, data, ascending=True):
     # convert StringArray to list(string) to enable swapping in sort
-    l_key_arrs = to_string_list(key_arrs)
-    l_data = to_string_list(data, True)
-    n_out = len(key_arrs[0])
-    bodo.libs.timsort.sort(l_key_arrs, 0, n_out, l_data)
-    if not ascending:
-        bodo.libs.timsort.reverseRange(l_key_arrs, 0, n_out, l_data)
-    cp_str_list_to_array(key_arrs, l_key_arrs)
-    cp_str_list_to_array(data, l_data, True)
+    if use_cpp_sort:
+        key_count = key_arrs.count
+        data_count = data.count
+        func_text  = "def f(key_arrs,data,ascending):\n"
+        total_list = ["array_to_info(key_arrs[{}])".format(i) for i in range(key_count)] + ["array_to_info(data[{}])".format(i) for i in range(data_count)]
+        func_text += "    info_list_total = [{}]\n".format(",".join(total_list))
+        func_text += "    table_total = arr_info_list_to_table(info_list_total)\n";
+        func_text += "    out_table = sort_table(table_total, {}, {})\n".format(key_count, ascending)
+        idx=0;
+        for i_key in range(key_count):
+            func_text += "    key_arr[{}] = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(i_key, idx, i_key)
+            idx += 1
+        for i_data in range(data_count):
+            func_text += "    data[{}] = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(i_data, idx, i_data)
+            idx += 1
+        func_text += "    delete_table(out_table)\n";
+        func_text += "    delete_table(table_total)\n"
+        loc_vars = {}
+        exec(func_text,
+             {"np": np,
+              "bodo": bodo,
+              "pre_alloc_string_array": pre_alloc_string_array,
+              "sort_table": sort_table,
+              "array_to_info": array_to_info,
+              "arr_info_list_to_table": arr_info_list_to_table,
+              "info_from_table": info_from_table,
+              "info_to_array": info_to_array,
+              "delete_table": delete_table,
+	     },
+             loc_vars,)
+        impl = loc_vars["f"]
+        return impl(key_arrs, data, ascending=True)
+    else:
+        l_key_arrs = to_string_list(key_arrs)
+        l_data = to_string_list(data, True)
+        n_out = len(key_arrs[0])
+        bodo.libs.timsort.sort(l_key_arrs, 0, n_out, l_data)
+        if not ascending:
+            bodo.libs.timsort.reverseRange(l_key_arrs, 0, n_out, l_data)
+        cp_str_list_to_array(key_arrs, l_key_arrs)
+        cp_str_list_to_array(data, l_data, True)
 
 
 @numba.njit(no_cpython_wrapper=True, cache=True)
