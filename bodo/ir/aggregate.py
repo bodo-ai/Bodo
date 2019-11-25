@@ -14,6 +14,7 @@ from numba.ir_utils import (
     replace_arg_nodes,
     replace_vars_stmt,
     find_callname,
+    find_const,
     guard,
     mk_unique_var,
     find_topo_order,
@@ -129,10 +130,17 @@ def get_agg_func(func_ir, func_name, rhs):
         raise ValueError("agg expects 1 argument")
 
     agg_func = guard(get_definition, func_ir, rhs.args[0])
-    # multi-function case
+
+    # multi-function tuple case
     if isinstance(agg_func, ir.Expr) and agg_func.op == "build_tuple":
         return [
             _get_agg_code(guard(get_definition, func_ir, v)) for v in agg_func.items
+        ]
+
+    # multi-function const dict case
+    if isinstance(agg_func, ir.Expr) and agg_func.op == "build_map":
+        return [
+            guard(find_const, func_ir, v[1]) for v in agg_func.items
         ]
 
     return _get_agg_code(agg_func)

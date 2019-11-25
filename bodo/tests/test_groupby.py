@@ -256,6 +256,25 @@ def test_aggregate_select_col():
     check_func(test_impl, (11,), sort_output=True)
 
 
+def test_groupby_agg_const_dict():
+    """
+    Test groupy.agg with function spec passed as constant dictionary
+    """
+
+    def impl(df):
+        df2 = df.groupby("A").agg({"B": "count", "C": "sum"})
+        return df2
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [-8.1, 2.1, 3.1, 1.1, 5.1, 6.1, 7.1],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        }
+    )
+    check_func(impl, (df,), sort_output=True)
+
+
 def test_count():
     """
     Test Groupby.count()

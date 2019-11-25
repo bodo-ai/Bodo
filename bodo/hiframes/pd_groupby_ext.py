@@ -40,6 +40,7 @@ from bodo.utils.typing import (
     is_overload_constant_bool,
     is_overload_constant_str,
     is_overload_constant_str_list,
+    ConstDictType,
 )
 
 
@@ -351,16 +352,48 @@ class DataframeGroupByAttribute(AttributeTemplate):
     def _resolve_agg(self, grp, args, kws):
         if len(args) == 0:
             raise BodoError("Goupby.agg()/aggregate(): Must provide 'func'")
-        # multi-function case
-        if isinstance(args[0], types.BaseTuple):
+
+        func = args[0]
+
+        # multi-function constant dictionary case
+        if isinstance(func, ConstDictType):
+            # get mapping of column names to functions (string -> string)
+            col_map = {
+                func.consts[2 * i]: func.consts[2 * i + 1]
+                for i in range(len(func.consts) // 2)
+            }
+
+            # make sure selected columns exist in dataframe
+            out_columns = tuple(col_map.keys())
+            if any(c not in grp.selection for c in out_columns):
+                raise BodoError(
+                    "Selected column names {} not all available in dataframe column names {}".format(
+                        out_columns, grp.selection))
+
+            # get output data types
+            out_data = []
+            for k, f in col_map.items():
+                # run typer on a groupby with just column k
+                code = get_agg_func(None, f, None).__code__
+                ret_grp = DataFrameGroupByType(
+                    grp.df_type, grp.keys, (k,), True, True
+                )
+                out_tp = self._get_agg_typ(ret_grp, args, f, code).return_type
+                out_data.append(out_tp.data)
+
+            out_res = DataFrameType(tuple(out_data), out_tp.index, out_columns)
+            return signature(out_res, *args)
+
+        # multi-function tuple case
+        if isinstance(func, types.BaseTuple):
             if not (len(grp.selection) == 1 and grp.explicit_select):
                 raise BodoError(
                     "Goupby.agg()/aggregate(): must select exactly one column when more than one functions supplied"
                 )
-            assert len(args[0]) > 0
+            assert len(func) > 0
             out_data = []
             out_columns = []
-            for f in args[0].types:
+            for f in func.types:
                 code = f.literal_value.code
                 validate_udf("agg", f)
                 out_columns.append(code.co_name)
@@ -370,8 +403,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
             out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
             return signature(out_res, *args)
 
-        validate_udf("agg", args[0])
-        code = args[0].literal_value.code
+        validate_udf("agg", func)
+        code = func.literal_value.code
         return self._get_agg_typ(grp, args, "agg", code)
 
     @bound_function("groupby.agg")
