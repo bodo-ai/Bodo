@@ -52,15 +52,21 @@ the reStructuredText format.
 It is built with `Sphinx <http://www.sphinx-doc.org>`_ and the read the doc theme::
 
     conda install sphinx
-    pip install alabaster
+    conda install alabaster
 
-After updating documentation, run :code:`make html` in the `docs` folder to build.
+After updating documentation,
+run :code:`make html` in the `docs` folder to build.
 Open `index.html` to view the documentation.
-To upload the documentation, use the :code:`gh-pages.py` script under :code:`docs`:
-::
-    python gh-pages.py
-Then verify the repository under the :code:`gh-pages` directory and :code:`git push` to `Bodo-doc <https://github.com/Bodo-inc/Bodo-doc>`_ repo :code:`gh-pages` branch.
+To upload the documentation, use the :code:`gh-pages.py`
+script under :code:`docs`::
 
+    python gh-pages.py
+
+Then verify the repository under the :code:`gh-pages` directory and
+:code:`git push` to `Bodo-doc <https://github.com/Bodo-inc/Bodo-doc>`_ repo :code:`gh-pages` branch.
+
+The developer documentation is under the `dev_docs` directory
+and can be built with :code:`make html` as well.
 
 
 Develop using Docker
