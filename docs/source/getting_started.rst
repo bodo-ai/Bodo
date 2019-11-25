@@ -1,10 +1,10 @@
 Getting Started
 ===============
 
-Bodo provides the `@bodo.jit` decorator which automatically optimizes and parallelizes
-analytics programs.
-For example, the following program creates a distributed data frame and prints the first
-three rows::
+Bodo provides the `@bodo.jit` decorator which automatically optimizes and
+parallelizes analytics programs.
+For example, the following program creates a distributed data frame and
+prints the first three rows::
 
     import numpy as np
     import pandas as pd
@@ -38,6 +38,7 @@ This Bodo program can be launched on four parallel cores as follows::
     2  2
 
 
-In this example, each core owns a chunk of the distributed data frame (25 rows in this case).
+In this example, each core owns a chunk of the distributed data frame
+(25 rows in this case).
 However, output of `head` is not distributed
 and will be available on all processors.
