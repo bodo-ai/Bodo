@@ -13,8 +13,8 @@ Bodo is orders of magnitude faster than
 alternatives like [Apache Spark](http://spark.apache.org).
 
 
-Development guide: https://github.com/Bodo-inc/Bodo/blob/master/dev_docs/development.rst
+Development guide: https://github.com/Bodo-inc/Bodo/blob/master/dev_docs/source/development.rst
 
-Install from source: https://github.com/Bodo-inc/Bodo/blob/master/dev_docs/install.rst
+Install from source: https://github.com/Bodo-inc/Bodo/blob/master/dev_docs/source/install.rst
 
 Bodo Documentation: https://docs.bodo.ai

@@ -34,7 +34,7 @@ from subprocess import Popen, PIPE, CalledProcessError, check_call
 pages_dir = "gh-pages"
 html_dir = "_build/html"
 pdf_dir = "_build/latex"
-pages_repo = "https://github.com/IntelLabs/bodo-doc.git"
+pages_repo = "https://github.com/Bodo-inc/Bodo-doc.git"
 
 # -----------------------------------------------------------------------------
 # Functions
