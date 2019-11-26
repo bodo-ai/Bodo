@@ -740,43 +740,34 @@ def _gen_local_hash_join(
         n_keys, len(left_other_names), len(right_other_names), is_left, is_right
     )
     func_text += "    delete_table(table_total)\n"
-    use_cpp_code = True
-    if not use_cpp_code:
-        func_text += (
-            "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
-            " = bodo.ir.join.local_hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
-                is_left, is_right
-            )
+    idx = 0
+    for i, t in enumerate(left_key_names):
+        func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), t1_keys[{}]){}\n".format(
+            i,
+            idx,
+            i,
+            _gen_reverse_type_match(left_key_types[i], right_key_types[i]),
         )
-    if use_cpp_code:
-        idx = 0
-        for i, t in enumerate(left_key_names):
-            func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), t1_keys[{}]){}\n".format(
-                i,
-                idx,
-                i,
-                _gen_reverse_type_match(left_key_types[i], right_key_types[i]),
-            )
-            idx += 1
-        for i, t in enumerate(left_other_names):
-            func_text += "    left_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                i, idx, t
-            )
-            idx += 1
-        for i, t in enumerate(right_key_names):
-            func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), t2_keys[{}]){}\n".format(
-                i,
-                idx,
-                i,
-                _gen_reverse_type_match(right_key_types[i], left_key_types[i]),
-            )
-            idx += 1
-        for i, t in enumerate(right_other_names):
-            func_text += "    right_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                i, idx, t
-            )
-            idx += 1
-        func_text += "    delete_table(out_table)\n"
+        idx += 1
+    for i, t in enumerate(left_other_names):
+        func_text += "    left_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+            i, idx, t
+        )
+        idx += 1
+    for i, t in enumerate(right_key_names):
+        func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), t2_keys[{}]){}\n".format(
+            i,
+            idx,
+            i,
+            _gen_reverse_type_match(right_key_types[i], left_key_types[i]),
+        )
+        idx += 1
+    for i, t in enumerate(right_other_names):
+        func_text += "    right_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+            i, idx, t
+        )
+        idx += 1
+    func_text += "    delete_table(out_table)\n"
     return func_text
 
 

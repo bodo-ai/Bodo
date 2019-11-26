@@ -11,6 +11,16 @@ from numba.ir_utils import (
     replace_arg_nodes,
     mk_unique_var,
 )
+from bodo.libs.array_tools import (
+    array_to_info,
+    arr_info_list_to_table,
+    sort_table,
+    info_from_table,
+    info_to_array,
+    delete_table,
+)
+
+
 from numba.typing import signature
 from numba.extending import overload
 import bodo
@@ -341,19 +351,25 @@ def sort_distributed_run(
             new_in_vars.append(v_cp)
         in_vars = new_in_vars
 
-    key_name_args = ", ".join("key" + str(i) for i in range(len(key_arrs)))
-    col_name_args = ", ".join(["c" + str(i) for i in range(len(in_vars))])
+    key_name_args = ["key" + str(i) for i in range(len(key_arrs))]
+    key_name_args_join = ", ".join(key_name_args)
+    col_name_args = ["c" + str(i) for i in range(len(in_vars))]
+    col_name_args_join = ", ".join(col_name_args)
     # TODO: use *args
-    func_text = "def f({}, {}):\n".format(key_name_args, col_name_args)
-    func_text += "  key_arrs = ({},)\n".format(key_name_args)
-    func_text += "  data = ({}{})\n".format(
-        col_name_args, "," if len(in_vars) == 1 else ""
-    )  # single value needs comma to become tuple
-    func_text += "  bodo.ir.sort.local_sort(key_arrs, data, {})\n".format(
-        sort_node.ascending
-    )
+    func_text = "def f({}, {}):\n".format(key_name_args_join, col_name_args_join)
+    if bodo.use_cpp_sort:
+        func_text += local_sort_cpp(key_name_args, col_name_args, sort_node.ascending)
+    else:
+        func_text += "  key_arrs = ({},)\n".format(key_name_args_join)
+        func_text += "  data = ({}{})\n".format(
+            col_name_args, "," if len(in_vars) == 1 else ""
+        )  # single value needs comma to become tuple
+        func_text += "  bodo.ir.sort.local_sort(key_arrs, data, {})\n".format(
+            sort_node.ascending
+        )
     func_text += "  return key_arrs, data\n"
 
+    print("func_text=", func_text)
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     sort_impl = loc_vars["f"]
@@ -361,12 +377,19 @@ def sort_distributed_run(
     key_typ = types.Tuple([typemap[v.name] for v in key_arrs])
     data_tup_typ = types.Tuple([typemap[v.name] for v in in_vars])
 
+
     f_block = compile_to_numba_ir(
         sort_impl,
         {
             "bodo": bodo,
             "to_string_list": to_string_list,
             "cp_str_list_to_array": cp_str_list_to_array,
+            "delete_table": delete_table,
+            "info_to_array": info_to_array,
+            "info_from_table": info_from_table,
+            "sort_table": sort_table,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "array_to_info": array_to_info,
         },
         typingctx,
         tuple(list(key_typ.types) + list(data_tup_typ.types)),
@@ -468,51 +491,46 @@ def to_string_list_typ(typ):
     return typ
 
 
+
+
+def local_sort_cpp(key_name_args, col_name_args, ascending=True):
+    func_text  = "  # beginning of local_sort_cpp\n"
+    key_count = len(key_name_args)
+    data_count = len(col_name_args)
+    total_list = ["array_to_info({})".format(name) for name in key_name_args] + ["array_to_info({})".format(name) for name in col_name_args]
+    func_text += "  info_list_total = [{}]\n".format(",".join(total_list))
+    func_text += "  table_total = arr_info_list_to_table(info_list_total)\n";
+    func_text += "  out_table = sort_table(table_total, {}, {})\n".format(key_count, ascending)
+    idx=0;
+    list_key_str = []
+    for name in key_name_args:
+        list_key_str.append("info_to_array(info_from_table(out_table, {}), {})\n".format(idx, name))
+        idx += 1
+    func_text += "  key_arrs = ({},)\n".format(",".join(list_key_str))
+    
+    list_data_str = []
+    for name in col_name_args:
+        list_data_str.append("info_to_array(info_from_table(out_table, {}), {})\n".format(idx, name))
+        idx += 1
+    func_text += "  data = ({},)\n".format(",".join(list_data_str))
+    func_text += "  delete_table(out_table)\n";
+    func_text += "  delete_table(table_total)\n"
+    return func_text
+
+
+
 # TODO: fix cache issue
 @numba.njit(no_cpython_wrapper=True, cache=False)
 def local_sort(key_arrs, data, ascending=True):
     # convert StringArray to list(string) to enable swapping in sort
-    if use_cpp_sort:
-        key_count = key_arrs.count
-        data_count = data.count
-        func_text  = "def f(key_arrs,data,ascending):\n"
-        total_list = ["array_to_info(key_arrs[{}])".format(i) for i in range(key_count)] + ["array_to_info(data[{}])".format(i) for i in range(data_count)]
-        func_text += "    info_list_total = [{}]\n".format(",".join(total_list))
-        func_text += "    table_total = arr_info_list_to_table(info_list_total)\n";
-        func_text += "    out_table = sort_table(table_total, {}, {})\n".format(key_count, ascending)
-        idx=0;
-        for i_key in range(key_count):
-            func_text += "    key_arr[{}] = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(i_key, idx, i_key)
-            idx += 1
-        for i_data in range(data_count):
-            func_text += "    data[{}] = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(i_data, idx, i_data)
-            idx += 1
-        func_text += "    delete_table(out_table)\n";
-        func_text += "    delete_table(table_total)\n"
-        loc_vars = {}
-        exec(func_text,
-             {"np": np,
-              "bodo": bodo,
-              "pre_alloc_string_array": pre_alloc_string_array,
-              "sort_table": sort_table,
-              "array_to_info": array_to_info,
-              "arr_info_list_to_table": arr_info_list_to_table,
-              "info_from_table": info_from_table,
-              "info_to_array": info_to_array,
-              "delete_table": delete_table,
-	     },
-             loc_vars,)
-        impl = loc_vars["f"]
-        return impl(key_arrs, data, ascending=True)
-    else:
-        l_key_arrs = to_string_list(key_arrs)
-        l_data = to_string_list(data, True)
-        n_out = len(key_arrs[0])
-        bodo.libs.timsort.sort(l_key_arrs, 0, n_out, l_data)
-        if not ascending:
-            bodo.libs.timsort.reverseRange(l_key_arrs, 0, n_out, l_data)
-        cp_str_list_to_array(key_arrs, l_key_arrs)
-        cp_str_list_to_array(data, l_data, True)
+    l_key_arrs = to_string_list(key_arrs)
+    l_data = to_string_list(data, True)
+    n_out = len(key_arrs[0])
+    bodo.libs.timsort.sort(l_key_arrs, 0, n_out, l_data)
+    if not ascending:
+        bodo.libs.timsort.reverseRange(l_key_arrs, 0, n_out, l_data)
+    cp_str_list_to_array(key_arrs, l_key_arrs)
+    cp_str_list_to_array(data, l_data, True)
 
 
 @numba.njit(no_cpython_wrapper=True, cache=True)
