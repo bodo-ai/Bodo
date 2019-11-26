@@ -3077,7 +3077,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t, bool ascend
   size_t n_rows = (size_t)in_table->nrows();
   size_t n_cols = (size_t)in_table->ncols();
   size_t n_key = size_t(n_key_t);
-#undef DEBUG_SORT
+#define DEBUG_SORT
 #ifdef DEBUG_SORT
   std::cout << "INPUT:\n";
   DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
@@ -3091,14 +3091,14 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t, bool ascend
     size_t shift_key1=0, shift_key2=0;
     int value = KeyComparisonAsPython(in_table->columns, n_key, shift_key1, iRow1, shift_key2, iRow2);
     if (ascending) {
-      return value == 1;
+      return value == -1;
     }
-    return value == -1;
+    return value == 1;
   };
   gfx::timsort(V.begin(), V.end(), f);
   std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(n_rows);
   for (size_t i=0; i<n_rows; i++)
-    ListPairWrite[i] = {i,-1};
+    ListPairWrite[i] = {V[i],-1};
   //
   std::vector<array_info*> out_arrs;
   // Inserting the left data

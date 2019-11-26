@@ -23,7 +23,7 @@ def test_sort_values_1col():
             eVal = i*i % 34
             eListA.append(eVal)
         return pd.DataFrame({"A": eListA})
-    check_func(test_impl, (get_quasi_random(100),), sort_output=False)
+    check_func(test_impl, (get_quasi_random(7),), sort_output=False)
 
 
 def test_sort_values_1col_np_array():
@@ -99,16 +99,16 @@ def test_sort_values_1col_np_array():
             eVal = i*i % 34
             eListA[i] = eVal
         return pd.DataFrame({"A": eListA})
-
-    check_func(test_impl, (get_quasi_random_int8(100),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_uint8(100),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_int16(100),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_uint16(100),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_int32(100),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_uint32(100),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_int64(100),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_uint64(100),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_float32(100),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_float64(100),), sort_output=False)
+    n=7
+    check_func(test_impl, (get_quasi_random_int8(n),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_uint8(n),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_int16(n),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_uint16(n),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_int32(n),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_uint32(n),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_int64(n),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_uint64(n),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_float32(n),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_float64(n),), sort_output=False)
 
 
