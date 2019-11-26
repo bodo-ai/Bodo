@@ -2178,6 +2178,25 @@ def lower_drop_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
+def query_dummy(df, expr):
+    return df.eval(expr)
+
+
+@infer_global(query_dummy)
+class QueryDummyTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        # Pandas returns boolean Series in eval() inside query implementation, but
+        # boolean array is simpler and is equivalent in df getitem
+        return signature(types.Array(types.bool_, 1, 'C'), *args)
+
+
+@lower_builtin(query_dummy, types.VarArg(types.Any))
+def lower_query_dummy(context, builder, sig, args):
+    out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
+    return out_obj._getvalue()
+
+
 @overload_method(DataFrameType, "append")
 def append_overload(df, other, ignore_index=False, verify_integrity=False, sort=None):
     if isinstance(other, DataFrameType):

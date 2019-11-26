@@ -718,6 +718,19 @@ def test_df_duplicated():
     check_func(impl, (df,), sort_output=True)
 
 
+def test_df_query():
+    def impl(df):
+        return df.query("B > 2")
+
+    df = pd.DataFrame(
+                {
+                    "A": [1, 8, 4, 11, -3],
+                    "B": [1.1, np.nan, 4.2, 3.1, -1.3],
+                }
+            )
+    check_func(impl, (df,))
+
+
 @pytest.mark.parametrize(
     "test_df",
     [

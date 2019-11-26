@@ -710,6 +710,9 @@ class DataFramePass(object):
         if fdef == ("reset_index_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_reset_index(assign, lhs, rhs)
 
+        if fdef == ("query_dummy", "bodo.hiframes.pd_dataframe_ext"):
+            return self._run_call_query(assign, lhs, rhs)
+
         if fdef == ("drop_inplace", "bodo.hiframes.dataframe_impl"):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
@@ -774,6 +777,7 @@ class DataFramePass(object):
             "duplicated",
             "drop_duplicates",
             "rename",
+            "query",
         ):
             if func_name == "isnull":
                 func_name = "isna"
@@ -1463,6 +1467,34 @@ class DataFramePass(object):
             return self._replace_func(_reset_index_impl, args, pre_nodes=nodes)
         else:
             return self._set_df_inplace(_reset_index_impl, args, df_var, lhs.loc, nodes)
+
+    def _run_call_query(self, assign, lhs, rhs):
+        """Transform query expr to Numba IR using the expr parser in Pandas.
+        """
+        df_var, expr_var = rhs.args
+        df_typ = self.typemap[df_var.name]
+        expr = guard(find_const, self.func_ir, expr_var)
+
+        # create fake environment for Expr that just includes the symbol names to
+        # enable parsing
+        glbs = self.func_ir.func_id.func.__globals__
+        lcls = {a: 0 for a in self.func_ir.func_id.code.co_varnames}
+        resolver = {c: 0 for c in df_typ.columns}
+        resolver['index'] = 0
+        env = pd.core.computation.scope._ensure_scope(2, glbs, lcls, (resolver,))
+        parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
+        used_cols = {c for c in df_typ.columns if c in parsed_expr.names}
+
+        func_text = "def _query_impl({}):\n".format(", ".join(used_cols))
+        func_text += "  return {}".format(str(parsed_expr))
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        _query_impl = loc_vars["_query_impl"]
+
+        nodes = []
+        data = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
+        # import pdb; pdb.set_trace()
+        return nodes + compile_func_single_block(_query_impl, data, lhs, self)
 
     def _run_call_drop(self, assign, lhs, rhs):
         df_var, labels_var, axis_var, columns_var, inplace_var = rhs.args
