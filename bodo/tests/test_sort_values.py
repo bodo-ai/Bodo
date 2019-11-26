@@ -112,3 +112,19 @@ def test_sort_values_1col_np_array():
     check_func(test_impl, (get_quasi_random_float64(n),), sort_output=False)
 
 
+def test_sort_values_1col_descending():
+    """
+    Test drop_duplicates(): with just one column
+    """
+
+    def test_impl(df1):
+        df2 = df1.sort_values(by="A", ascending=False)
+        return df2
+
+    def get_quasi_random(n):
+        eListA = []
+        for i in range(n):
+            eVal = i*i % 34
+            eListA.append(eVal)
+        return pd.DataFrame({"A": eListA})
+    check_func(test_impl, (get_quasi_random(7),), sort_output=False)
