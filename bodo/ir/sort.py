@@ -420,12 +420,43 @@ def sort_distributed_run(
     nodes.append(ir.Assign(ir.Const(sort_node.ascending, loc), ascending_var, loc))
 
     # parallel case
-    def par_sort_impl(key_arrs, data, ascending):
-        out_key, out_data = parallel_sort(key_arrs, data, ascending)
+    if bodo.use_cpp_sort:
+        func_text  = "def par_sort_impl(key_arrs, data, ascending):\n"
+        func_text += "  out_key, out_data = parallel_sort(key_arrs, data, ascending)\n"
+        key_count = len(key_name_args)
+        data_count = len(col_name_args)
+        total_list = ["array_to_info(out_key[{}])".format(i) for i in range(len(key_name_args))] + ["array_to_info(out_data[{}])".format(i) for i in range(len(col_name_args))]
+        func_text += "  info_list_total = [{}]\n".format(",".join(total_list))
+        func_text += "  table_total = arr_info_list_to_table(info_list_total)\n";
+        func_text += "  out_table = sort_values_table(table_total, {}, ascending)\n".format(key_count)
+        func_text += "  delete_table(table_total)\n"
+        #
+        idx = 0
+        list_key_str = []
+        for i_key in range(key_count):
+            list_key_str.append("info_to_array(info_from_table(out_table, {}), out_key[{}])".format(idx, i_key))
+            idx += 1
+        func_text += "  out_key_ret = ({},)\n".format(",".join(list_key_str))
+        #
+        list_data_str = []
+        for i_data in range(data_count):
+            list_data_str.append("info_to_array(info_from_table(out_table, {}), out_data[{}])".format(idx, i_data))
+            idx += 1
+        func_text += "  out_data_ret = ({},)\n".format(",".join(list_data_str))
+        func_text += "  delete_table(out_table)\n"
+        func_text += "  return out_key_ret, out_data_ret\n"
+    else:
         # TODO: use k-way merge instead of sort
         # sort output
-        bodo.ir.sort.local_sort(out_key, out_data, ascending)
-        return out_key, out_data
+        func_text  = "def par_sort_impl(key_arrs, data, ascending):\n"
+        func_text += "  out_key, out_data = parallel_sort(key_arrs, data, ascending)\n"
+        func_text += "  bodo.ir.sort.local_sort(out_key, out_data, ascending)\n"
+        func_text += "  return out_key, out_data\n"
+
+    print("func_text=", func_text)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    par_sort_impl = loc_vars["par_sort_impl"]
 
     f_block = compile_to_numba_ir(
         par_sort_impl,
@@ -434,6 +465,12 @@ def sort_distributed_run(
             "parallel_sort": parallel_sort,
             "to_string_list": to_string_list,
             "cp_str_list_to_array": cp_str_list_to_array,
+            "delete_table": delete_table,
+            "info_to_array": info_to_array,
+            "info_from_table": info_from_table,
+            "sort_values_table": sort_values_table,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "array_to_info": array_to_info,
         },
         typingctx,
         (key_typ, data_tup_typ, types.bool_),
@@ -504,13 +541,13 @@ def local_sort_cpp(key_name_args, col_name_args, ascending=True):
     idx=0;
     list_key_str = []
     for name in key_name_args:
-        list_key_str.append("info_to_array(info_from_table(out_table, {}), {})\n".format(idx, name))
+        list_key_str.append("info_to_array(info_from_table(out_table, {}), {})".format(idx, name))
         idx += 1
     func_text += "  key_arrs = ({},)\n".format(",".join(list_key_str))
     
     list_data_str = []
     for name in col_name_args:
-        list_data_str.append("info_to_array(info_from_table(out_table, {}), {})\n".format(idx, name))
+        list_data_str.append("info_to_array(info_from_table(out_table, {}), {})".format(idx, name))
         idx += 1
     func_text += "  data = ({},)\n".format(",".join(list_data_str))
     func_text += "  delete_table(out_table)\n";
