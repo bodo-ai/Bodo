@@ -44,7 +44,7 @@ ll.add_symbol("delete_table", array_tools_ext.delete_table)
 ll.add_symbol("shuffle_table", array_tools_ext.shuffle_table)
 ll.add_symbol("hash_join_table", array_tools_ext.hash_join_table)
 ll.add_symbol("drop_duplicates_table_outplace", array_tools_ext.drop_duplicates_table_outplace)
-ll.add_symbol("sort_table", array_tools_ext.sort_table)
+ll.add_symbol("sort_values_table", array_tools_ext.sort_values_table)
 ll.add_symbol("groupby_and_aggregate", array_tools_ext.groupby_and_aggregate)
 
 
@@ -490,7 +490,7 @@ def hash_join_table(typingctx, table_t, n_keys_t, n_data_left_t, n_data_right_t,
 
 
 @intrinsic
-def sort_table(typingctx, table_t, n_keys_t, ascending_t):
+def sort_values_table(typingctx, table_t, n_keys_t, ascending_t):
     """
     """
     assert table_t == table_type
@@ -500,7 +500,7 @@ def sort_table(typingctx, table_t, n_keys_t, ascending_t):
                                 [lir.IntType(8).as_pointer(),
                                  lir.IntType(64),
                                  lir.IntType(1)])
-        fn_tp = builder.module.get_or_insert_function(fnty, name="sort_table")
+        fn_tp = builder.module.get_or_insert_function(fnty, name="sort_values_table")
         return builder.call(fn_tp, args)
 
     return table_type(table_t, types.int64, types.boolean), codegen

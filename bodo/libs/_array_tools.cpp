@@ -3060,9 +3060,20 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
 }
 
 
-table_info* sort_table(table_info* in_table, int64_t n_key_t, bool ascending)
+/**
+ * Implementation of the sort_values functionality in C++
+ * Notes:
+ * - We depend on the timsort code from https://github.com/timsort/cpp-TimSort
+ *   which provides stable sort taking care of already sorted parts.
+ * - We use lambda for the call functions.
+ * - The KeyComparisonAsPython is used for having the comparison as in Python.
+ *
+ * @param input table
+ * @param number of key columns in the table used for the comparison
+ * @param ascending, whether to sort ascending or not
+ */
+table_info* sort_values_table(table_info* in_table, int64_t n_key_t, bool ascending)
 {
-
   size_t n_rows = (size_t)in_table->nrows();
   size_t n_cols = (size_t)in_table->ncols();
   size_t n_key = size_t(n_key_t);
@@ -3284,8 +3295,8 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                            PyLong_FromVoidPtr((void*)(&shuffle_table)));
     PyObject_SetAttrString(m, "hash_join_table",
                            PyLong_FromVoidPtr((void*)(&hash_join_table)));
-    PyObject_SetAttrString(m, "sort_table",
-                           PyLong_FromVoidPtr((void*)(&sort_table)));
+    PyObject_SetAttrString(m, "sort_values_table",
+                           PyLong_FromVoidPtr((void*)(&sort_values_table)));
     PyObject_SetAttrString(m, "drop_duplicates_table_outplace",
                            PyLong_FromVoidPtr((void*)(&drop_duplicates_table_outplace)));
     PyObject_SetAttrString(m, "groupby_and_aggregate",

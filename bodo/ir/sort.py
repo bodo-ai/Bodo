@@ -14,7 +14,7 @@ from numba.ir_utils import (
 from bodo.libs.array_tools import (
     array_to_info,
     arr_info_list_to_table,
-    sort_table,
+    sort_values_table,
     info_from_table,
     info_to_array,
     delete_table,
@@ -387,7 +387,7 @@ def sort_distributed_run(
             "delete_table": delete_table,
             "info_to_array": info_to_array,
             "info_from_table": info_from_table,
-            "sort_table": sort_table,
+            "sort_values_table": sort_values_table,
             "arr_info_list_to_table": arr_info_list_to_table,
             "array_to_info": array_to_info,
         },
@@ -500,7 +500,7 @@ def local_sort_cpp(key_name_args, col_name_args, ascending=True):
     total_list = ["array_to_info({})".format(name) for name in key_name_args] + ["array_to_info({})".format(name) for name in col_name_args]
     func_text += "  info_list_total = [{}]\n".format(",".join(total_list))
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n";
-    func_text += "  out_table = sort_table(table_total, {}, {})\n".format(key_count, ascending)
+    func_text += "  out_table = sort_values_table(table_total, {}, {})\n".format(key_count, ascending)
     idx=0;
     list_key_str = []
     for name in key_name_args:
