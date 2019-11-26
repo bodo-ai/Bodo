@@ -23,7 +23,8 @@ def test_sort_values_1col():
             eVal = i*i % 34
             eListA.append(eVal)
         return pd.DataFrame({"A": eListA})
-    check_func(test_impl, (get_quasi_random(7),), sort_output=False)
+    n=20
+    check_func(test_impl, (get_quasi_random(n),), sort_output=False)
 
 
 def test_sort_values_1col_np_array():
@@ -99,7 +100,7 @@ def test_sort_values_1col_np_array():
             eVal = i*i % 34
             eListA[i] = eVal
         return pd.DataFrame({"A": eListA})
-    n=7
+    n=100
     check_func(test_impl, (get_quasi_random_int8(n),), sort_output=False)
     check_func(test_impl, (get_quasi_random_uint8(n),), sort_output=False)
     check_func(test_impl, (get_quasi_random_int16(n),), sort_output=False)
@@ -127,4 +128,5 @@ def test_sort_values_1col_descending():
             eVal = i*i % 34
             eListA.append(eVal)
         return pd.DataFrame({"A": eListA})
-    check_func(test_impl, (get_quasi_random(7),), sort_output=False)
+    n=100
+    check_func(test_impl, (get_quasi_random(n),), sort_output=False)

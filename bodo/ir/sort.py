@@ -419,6 +419,8 @@ def sort_distributed_run(
     typemap[ascending_var.name] = types.bool_
     nodes.append(ir.Assign(ir.Const(sort_node.ascending, loc), ascending_var, loc))
 
+    # TODO: use k-way merge instead of sort
+    # sort output
     # parallel case
     if bodo.use_cpp_sort:
         func_text  = "def par_sort_impl(key_arrs, data, ascending):\n"
@@ -446,8 +448,6 @@ def sort_distributed_run(
         func_text += "  delete_table(out_table)\n"
         func_text += "  return out_key_ret, out_data_ret\n"
     else:
-        # TODO: use k-way merge instead of sort
-        # sort output
         func_text  = "def par_sort_impl(key_arrs, data, ascending):\n"
         func_text += "  out_key, out_data = parallel_sort(key_arrs, data, ascending)\n"
         func_text += "  bodo.ir.sort.local_sort(out_key, out_data, ascending)\n"
