@@ -78,9 +78,14 @@ from bodo.libs.array_tools import (
 )
 
 
+AggFuncTemplateStruct = namedtuple(
+    "AggFuncTemplateStruct",
+    ["var_typs", "init_func", "update_all_func", "combine_all_func", "eval_all_func"],
+)
+
 AggFuncStruct = namedtuple(
     "AggFuncStruct",
-    ["var_typs", "init_func", "update_all_func", "combine_all_func", "eval_all_func"],
+    ["func", "ftype", "builtin"],
 )
 
 supported_agg_funcs = [
@@ -139,9 +144,13 @@ def get_agg_func(func_ir, func_name, rhs):
 
     # multi-function const dict case
     if isinstance(agg_func, ir.Expr) and agg_func.op == "build_map":
-        return [
+        func = [
             guard(find_const, func_ir, v[1]) for v in agg_func.items
         ]
+        # TODO: support multi-function in C++ backend
+        # ftype = [supported_agg_funcs.index(f) for f in func]
+        # return AggFuncStruct(func, ftype, True)
+        return [get_agg_func(func_ir, f, rhs) for f in func]
 
     return _get_agg_code(agg_func)
 
@@ -1457,9 +1466,13 @@ def get_agg_func_struct(
 
     typ_and_func = [(t, agg_func) for t in in_col_types]
     if isinstance(agg_func, list):
-        assert len(in_col_types) == 1
-        in_typ = in_col_types[0]
-        typ_and_func = [(in_typ, f) for f in agg_func]
+        # tuple function case
+        if len(in_col_types) == 1:
+            in_typ = in_col_types[0]
+            typ_and_func = [(in_typ, f) for f in agg_func]
+        # constant dict case
+        else:
+            typ_and_func = [(in_typ, f) for in_typ, f in zip(in_col_types, agg_func)]
 
     for in_col_typ, func in typ_and_func:
         f_ir, pm = compile_to_optimized_ir(func, tuple([in_col_typ]), typingctx)
@@ -1583,7 +1596,7 @@ def get_agg_func_struct(
         pivot_values,
     )
 
-    return AggFuncStruct(
+    return AggFuncTemplateStruct(
         all_vartypes, init_func, update_all_func, combine_all_func, eval_all_func
     )
 
