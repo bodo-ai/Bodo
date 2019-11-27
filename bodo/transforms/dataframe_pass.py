@@ -1473,7 +1473,10 @@ class DataFramePass(object):
         """
         df_var, expr_var = rhs.args
         df_typ = self.typemap[df_var.name]
-        expr = guard(find_const, self.func_ir, expr_var)
+
+        # get expression string
+        err_msg = "df.query() expr arg should be constant string or argument to jit function"
+        expr = self._get_const_value(expr_var, err_msg)
 
         # create fake environment for Expr that just includes the symbol names to
         # enable parsing
@@ -2189,6 +2192,26 @@ class DataFramePass(object):
         df_var = call_def[1]
 
         return df_var
+
+    def _get_const_value(self, var, err_msg):
+        """Get constant value of a variable if possible, otherwise raise error.
+        If the variable is argument to the function, force recompilation with literal
+        typing of the argument.
+        """
+        # literal type
+        typ = self.typemap[var.name]
+        if isinstance(typ, types.Literal):
+            return typ.literal_value
+
+        try:
+            return find_const(self.func_ir, var)
+        except GuardException:
+            # if variable is argument, force literal
+            var_def = guard(get_definition, self.func_ir, var)
+            if isinstance(var_def, ir.Arg):
+                raise numba.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
+
+        raise bodo.utils.typing.BodoError(err_msg)
 
     def _get_const_tup(self, tup_var):
         tup_def = guard(get_definition, self.func_ir, tup_var)

@@ -725,8 +725,8 @@ def overload_dataframe_query(df, expr, inplace=False):
     if not is_overload_false(inplace):
         raise BodoError("query() inplace argument not supported yet")
 
-    if not is_overload_constant_str(expr):
-        raise BodoError("query() expr argument expects a constant string")
+    if not isinstance(expr, (types.StringLiteral, types.UnicodeType)):
+        raise BodoError("query() expr argument should be a string")
 
     # TODO: support df.loc for normal case and getitem for multi-dim case similar to
     # Pandas
