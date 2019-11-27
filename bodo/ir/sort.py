@@ -369,7 +369,7 @@ def sort_distributed_run(
         )
     func_text += "  return key_arrs, data\n"
 
-#    print("func_text=", func_text)
+    print("func_text=", func_text)
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     sort_impl = loc_vars["f"]
@@ -444,7 +444,10 @@ def sort_distributed_run(
         for i_data in range(data_count):
             list_data_str.append("info_to_array(info_from_table(out_table, {}), out_data[{}])".format(idx, i_data))
             idx += 1
-        func_text += "  out_data_ret = ({},)\n".format(",".join(list_data_str))
+        if len(list_data_str)>0:
+            func_text += "  out_data_ret = ({},)\n".format(",".join(list_data_str))
+        else:
+            func_text += "  out_data_ret = ()\n"
         func_text += "  delete_table(out_table)\n"
         func_text += "  return out_key_ret, out_data_ret\n"
     else:
@@ -453,7 +456,7 @@ def sort_distributed_run(
         func_text += "  bodo.ir.sort.local_sort(out_key, out_data, ascending)\n"
         func_text += "  return out_key, out_data\n"
 
-#    print("func_text=", func_text)
+    print("func_text=", func_text)
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     par_sort_impl = loc_vars["par_sort_impl"]
@@ -549,7 +552,10 @@ def local_sort_cpp(key_name_args, col_name_args, ascending=True):
     for name in col_name_args:
         list_data_str.append("info_to_array(info_from_table(out_table, {}), {})".format(idx, name))
         idx += 1
-    func_text += "  data = ({},)\n".format(",".join(list_data_str))
+    if len(list_data_str)>0:
+        func_text += "  data = ({},)\n".format(",".join(list_data_str))
+    else:
+        func_text += "  data = ()\n"
     func_text += "  delete_table(out_table)\n";
     func_text += "  delete_table(table_total)\n"
     return func_text
