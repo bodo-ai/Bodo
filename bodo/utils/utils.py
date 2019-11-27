@@ -392,9 +392,10 @@ def is_distributable_typ(var_typ):
 
 
 def is_distributable_tuple_typ(var_typ):
-    return isinstance(var_typ, types.BaseTuple) and any(
+    return (isinstance(var_typ, types.BaseTuple) and any(
         is_distributable_typ(t) or is_distributable_tuple_typ(t) for t in var_typ.types
-    )
+    )) or (isinstance(var_typ, (types.List, types.Set))
+        and is_distributable_tuple_typ(var_typ.dtype))
 
 
 @numba.generated_jit(nopython=True, cache=True)

@@ -342,6 +342,19 @@ class DistributedAnalysis(object):
             return
         elif (
             isinstance(rhs, ir.Expr)
+            and rhs.op == "build_list"
+            and is_distributable_tuple_typ(lhs_typ)
+        ):
+            # dist vars can be in lists
+            # meet all distributions
+            for v in rhs.items:
+                self._meet_array_dists(lhs, v.name, array_dists)
+            # second round to propagate info fully
+            for v in rhs.items:
+                self._meet_array_dists(lhs, v.name, array_dists)
+            return
+        elif (
+            isinstance(rhs, ir.Expr)
             and rhs.op == "exhaust_iter"
             and is_distributable_tuple_typ(lhs_typ)
         ):
@@ -363,6 +376,15 @@ class DistributedAnalysis(object):
             and rhs.op == "getattr"
             and isinstance(self.typemap[rhs.value.name], DataFrameType)
             and rhs.attr == "to_csv"
+        ):
+            return
+        # list methods
+        elif (
+            isinstance(rhs, ir.Expr)
+            and rhs.op == "getattr"
+            and isinstance(self.typemap[rhs.value.name], types.List)
+            and rhs.attr in ("append", "clear", "copy", "count", "extend", "index",
+                "insert", "pop", "remove", "reverse", "sort")
         ):
             return
         elif (
@@ -555,12 +577,27 @@ class DistributedAnalysis(object):
 
         # bodo.libs.distributed_api functions
         if isinstance(func_mod, str) and func_mod == "bodo.libs.distributed_api":
-            self._analyze_call_hpat_dist(lhs, func_name, args, array_dists)
+            self._analyze_call_bodo_dist(lhs, func_name, args, array_dists)
             return
 
         # len()
         if func_name == "len" and func_mod in ("__builtin__", "builtins"):
             return
+
+        # handle list.func calls
+        if isinstance(func_mod, ir.Var) and isinstance(
+                self.typemap[func_mod.name], types.List):
+            dtype = self.typemap[func_mod.name].dtype
+            if is_distributable_typ(dtype) or is_distributable_tuple_typ(dtype):
+                if func_name in ("append", "count", "extend", "index", "remove"):
+                    self._meet_array_dists(func_mod.name, rhs.args[0].name, array_dists)
+                    return
+                if func_name == "insert":
+                    self._meet_array_dists(func_mod.name, rhs.args[1].name, array_dists)
+                    return
+                if func_name in ("copy", "pop"):
+                    self._meet_array_dists(lhs, func_mod.name, array_dists)
+                    return
 
         if bodo.config._has_h5py and (
             func_mod == "bodo.io.h5_api"
@@ -1026,7 +1063,7 @@ class DistributedAnalysis(object):
         # set REP if not found
         self._analyze_call_set_REP(lhs, args, array_dists, "df." + func_name)
 
-    def _analyze_call_hpat_dist(self, lhs, func_name, args, array_dists):
+    def _analyze_call_bodo_dist(self, lhs, func_name, args, array_dists):
         """analyze distributions of bodo distributed functions
         (bodo.libs.distributed_api.func_name)
         """
@@ -1037,7 +1074,7 @@ class DistributedAnalysis(object):
         if func_name == "dist_return":
             arr_name = args[0].name
             assert arr_name in array_dists, "array distribution not found"
-            if array_dists[arr_name] == Distribution.REP:
+            if is_REP(array_dists[arr_name]):
                 raise ValueError(
                     "distributed return of array {} not valid"
                     " since it is replicated".format(arr_name)
@@ -1047,7 +1084,7 @@ class DistributedAnalysis(object):
         if func_name == "threaded_return":
             arr_name = args[0].name
             assert arr_name in array_dists, "array distribution not found"
-            if array_dists[arr_name] == Distribution.REP:
+            if is_REP(array_dists[arr_name]):
                 raise ValueError(
                     "threaded return of array {} not valid" " since it is replicated"
                 )
@@ -1183,26 +1220,28 @@ class DistributedAnalysis(object):
         index_var = get_getsetitem_index_var(rhs, self.typemap, [])
         index_typ = self.typemap[index_var.name]
 
-        # selecting an array from a tuple
+        # selecting a value from a distributable tuple does not make it REP
         # nested tuples are also possible
         if (
             isinstance(in_typ, types.BaseTuple)
+            and is_distributable_tuple_typ(in_typ)
             and isinstance(index_typ, types.IntegerLiteral)
-            and (
+        ):
+            # meet distributions if returned value is distributable
+            if (
                 is_distributable_typ(self.typemap[lhs])
                 or is_distributable_tuple_typ(self.typemap[lhs])
-            )
-        ):
-            # meet distributions
-            ind_val = index_typ.literal_value
-            tup = rhs.value.name
-            if tup not in array_dists:
-                self._set_var_dist(tup, array_dists, Distribution.OneD)
-            if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
-            new_dist = self._min_dist(array_dists[tup][ind_val], array_dists[lhs])
-            array_dists[tup][ind_val] = new_dist
-            array_dists[lhs] = new_dist
+            ):
+                # meet distributions
+                ind_val = index_typ.literal_value
+                tup = rhs.value.name
+                if tup not in array_dists:
+                    self._set_var_dist(tup, array_dists, Distribution.OneD)
+                if lhs not in array_dists:
+                    self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                new_dist = self._min_dist(array_dists[tup][ind_val], array_dists[lhs])
+                array_dists[tup][ind_val] = new_dist
+                array_dists[lhs] = new_dist
             return
 
         # indexing into arrays from this point only, check for array type
@@ -1404,6 +1443,8 @@ class DistributedAnalysis(object):
 
     def _get_dist(self, typ, dist):
         if is_distributable_tuple_typ(typ):
+            if isinstance(typ, (types.List, types.Set)):
+                typ = typ.dtype
             return [
                 self._get_dist(t, dist)
                 if (is_distributable_typ(t) or is_distributable_tuple_typ(t))
@@ -1649,8 +1690,12 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
 
 
 def is_REP(d):
+    """Check whether a distribution is REP. Supports regular distributables
+    like arrays, as well as tuples with some distributable element
+    (distribution is a list object with possible None values)
+    """
     if isinstance(d, list):
-        return all(is_REP(a) for a in d)
+        return all(a is None or is_REP(a) for a in d)
     return d == Distribution.REP
 
 
