@@ -555,7 +555,7 @@ class DistributedAnalysis(object):
 
         # bodo.libs.distributed_api functions
         if isinstance(func_mod, str) and func_mod == "bodo.libs.distributed_api":
-            self._analyze_call_hpat_dist(lhs, func_name, args, array_dists)
+            self._analyze_call_bodo_dist(lhs, func_name, args, array_dists)
             return
 
         # len()
@@ -1026,7 +1026,7 @@ class DistributedAnalysis(object):
         # set REP if not found
         self._analyze_call_set_REP(lhs, args, array_dists, "df." + func_name)
 
-    def _analyze_call_hpat_dist(self, lhs, func_name, args, array_dists):
+    def _analyze_call_bodo_dist(self, lhs, func_name, args, array_dists):
         """analyze distributions of bodo distributed functions
         (bodo.libs.distributed_api.func_name)
         """
@@ -1649,8 +1649,12 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
 
 
 def is_REP(d):
+    """Check whether a distribution is REP. Supports regular distributables
+    like arrays, as well as tuples with some distributable element
+    (distribution is a list object with possible None values)
+    """
     if isinstance(d, list):
-        return all(is_REP(a) for a in d)
+        return all(a is None or is_REP(a) for a in d)
     return d == Distribution.REP
 
 

@@ -446,6 +446,21 @@ def test_dist_warning2():
         bodo.jit(impl)(10)
 
 
+def test_dist_warning3():
+    """Make sure BodoWarning is thrown when a tuple variable with both distributable
+    and non-distributable elemets is returned
+    """
+    def impl(n):
+        df = pd.DataFrame({'A': np.ones(n)})
+        return (n, df)
+
+    if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+        with pytest.warns(BodoWarning, match="No parallelism found for function"):
+            bodo.jit(impl)(10)
+    else:
+        bodo.jit(impl)(10)
+
+
 def test_dist_objmode():
     """Test use of objmode inside prange including a reduction.
     Tests a previous issue where deepcopy in get_parfor_reductions failed for
