@@ -378,6 +378,15 @@ class DistributedAnalysis(object):
             and rhs.attr == "to_csv"
         ):
             return
+        # list methods
+        elif (
+            isinstance(rhs, ir.Expr)
+            and rhs.op == "getattr"
+            and isinstance(self.typemap[rhs.value.name], types.List)
+            and rhs.attr in ("append", "clear", "copy", "count", "extend", "index",
+                "insert", "pop", "remove", "reverse", "sort")
+        ):
+            return
         elif (
             isinstance(rhs, ir.Expr)
             and rhs.op == "getattr"
@@ -574,6 +583,21 @@ class DistributedAnalysis(object):
         # len()
         if func_name == "len" and func_mod in ("__builtin__", "builtins"):
             return
+
+        # handle list.func calls
+        if isinstance(func_mod, ir.Var) and isinstance(
+                self.typemap[func_mod.name], types.List):
+            dtype = self.typemap[func_mod.name].dtype
+            if is_distributable_typ(dtype) or is_distributable_tuple_typ(dtype):
+                if func_name in ("append", "count", "extend", "index", "remove"):
+                    self._meet_array_dists(func_mod.name, rhs.args[0].name, array_dists)
+                    return
+                if func_name == "insert":
+                    self._meet_array_dists(func_mod.name, rhs.args[1].name, array_dists)
+                    return
+                if func_name in ("copy", "pop"):
+                    self._meet_array_dists(lhs, func_mod.name, array_dists)
+                    return
 
         if bodo.config._has_h5py and (
             func_mod == "bodo.io.h5_api"
@@ -1050,7 +1074,7 @@ class DistributedAnalysis(object):
         if func_name == "dist_return":
             arr_name = args[0].name
             assert arr_name in array_dists, "array distribution not found"
-            if array_dists[arr_name] == Distribution.REP:
+            if is_REP(array_dists[arr_name]):
                 raise ValueError(
                     "distributed return of array {} not valid"
                     " since it is replicated".format(arr_name)
@@ -1060,7 +1084,7 @@ class DistributedAnalysis(object):
         if func_name == "threaded_return":
             arr_name = args[0].name
             assert arr_name in array_dists, "array distribution not found"
-            if array_dists[arr_name] == Distribution.REP:
+            if is_REP(array_dists[arr_name]):
                 raise ValueError(
                     "threaded return of array {} not valid" " since it is replicated"
                 )
