@@ -342,6 +342,19 @@ class DistributedAnalysis(object):
             return
         elif (
             isinstance(rhs, ir.Expr)
+            and rhs.op == "build_list"
+            and is_distributable_tuple_typ(lhs_typ)
+        ):
+            # dist vars can be in lists
+            # meet all distributions
+            for v in rhs.items:
+                self._meet_array_dists(lhs, v.name, array_dists)
+            # second round to propagate info fully
+            for v in rhs.items:
+                self._meet_array_dists(lhs, v.name, array_dists)
+            return
+        elif (
+            isinstance(rhs, ir.Expr)
             and rhs.op == "exhaust_iter"
             and is_distributable_tuple_typ(lhs_typ)
         ):
@@ -1406,6 +1419,8 @@ class DistributedAnalysis(object):
 
     def _get_dist(self, typ, dist):
         if is_distributable_tuple_typ(typ):
+            if isinstance(typ, (types.List, types.Set)):
+                typ = typ.dtype
             return [
                 self._get_dist(t, dist)
                 if (is_distributable_typ(t) or is_distributable_tuple_typ(t))
