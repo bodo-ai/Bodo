@@ -1183,26 +1183,28 @@ class DistributedAnalysis(object):
         index_var = get_getsetitem_index_var(rhs, self.typemap, [])
         index_typ = self.typemap[index_var.name]
 
-        # selecting an array from a tuple
+        # selecting a value from a distributable tuple does not make it REP
         # nested tuples are also possible
         if (
             isinstance(in_typ, types.BaseTuple)
+            and is_distributable_tuple_typ(in_typ)
             and isinstance(index_typ, types.IntegerLiteral)
-            and (
+        ):
+            # meet distributions if returned value is distributable
+            if (
                 is_distributable_typ(self.typemap[lhs])
                 or is_distributable_tuple_typ(self.typemap[lhs])
-            )
-        ):
-            # meet distributions
-            ind_val = index_typ.literal_value
-            tup = rhs.value.name
-            if tup not in array_dists:
-                self._set_var_dist(tup, array_dists, Distribution.OneD)
-            if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
-            new_dist = self._min_dist(array_dists[tup][ind_val], array_dists[lhs])
-            array_dists[tup][ind_val] = new_dist
-            array_dists[lhs] = new_dist
+            ):
+                # meet distributions
+                ind_val = index_typ.literal_value
+                tup = rhs.value.name
+                if tup not in array_dists:
+                    self._set_var_dist(tup, array_dists, Distribution.OneD)
+                if lhs not in array_dists:
+                    self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                new_dist = self._min_dist(array_dists[tup][ind_val], array_dists[lhs])
+                array_dists[tup][ind_val] = new_dist
+                array_dists[lhs] = new_dist
             return
 
         # indexing into arrays from this point only, check for array type
