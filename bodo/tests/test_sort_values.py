@@ -1,5 +1,8 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-"""Test drop_duplicate opration as called as df.drop_duplicates()
+"""Test sort_values opration as called as df.sort_values()
+   The C++ implementation uses the timsort which is a stable sort algorithm.
+   Therefore, in the test we use mergesort, which guarantees that the equality
+   tests can be made sensibly.
 """
 import pandas as pd
 import numpy as np
@@ -14,7 +17,7 @@ def test_sort_values_1col():
     """
 
     def test_impl(df1):
-        df2 = df1.sort_values("A")
+        df2 = df1.sort_values(by="A", kind="mergesort")
         return df2
 
     def get_quasi_random(n):
@@ -23,7 +26,7 @@ def test_sort_values_1col():
             eVal = i*i % 34
             eListA.append(eVal)
         return pd.DataFrame({"A": eListA})
-    n=20
+    n=100
     check_func(test_impl, (get_quasi_random(n),), sort_output=False)
 
 
@@ -33,7 +36,7 @@ def test_sort_values_1col_np_array():
     """
 
     def test_impl(df1):
-        df2 = df1.sort_values("A")
+        df2 = df1.sort_values(by="A", kind="mergesort")
         return df2
 
     def get_quasi_random_int8(n):
@@ -119,7 +122,7 @@ def test_sort_values_1col_descending():
     """
 
     def test_impl(df1):
-        df2 = df1.sort_values(by="A", ascending=False)
+        df2 = df1.sort_values(by="A", ascending=False, kind="mergesort")
         return df2
 
     def get_quasi_random(n):
@@ -130,3 +133,29 @@ def test_sort_values_1col_descending():
         return pd.DataFrame({"A": eListA})
     n=100
     check_func(test_impl, (get_quasi_random(n),), sort_output=False)
+
+def test_sort_values_2col():
+    """
+    Test drop_duplicates(): with just one column
+    """
+
+    def test_impl1(df1):
+        df2 = df1.sort_values(by="A", kind="mergesort")
+        return df2
+
+    def test_impl2(df1):
+        df2 = df1.sort_values(by=["A","B"], kind="mergesort")
+        return df2
+
+    def get_quasi_random(n):
+        eListA = np.array([0]*n, dtype=np.uint64)
+        eListB = np.array([0]*n, dtype=np.uint64)
+        for i in range(n):
+            eValA = i*i % 34
+            eValB = i*i*i % 34
+            eListA[i] = eValA
+            eListB[i] = eValB
+        return pd.DataFrame({"A": eListA, "B": eListB})
+    n=100
+    check_func(test_impl1, (get_quasi_random(n),), sort_output=False)
+    check_func(test_impl2, (get_quasi_random(n),), sort_output=False)

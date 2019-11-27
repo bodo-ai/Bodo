@@ -3077,7 +3077,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t, bool ascend
   size_t n_rows = (size_t)in_table->nrows();
   size_t n_cols = (size_t)in_table->ncols();
   size_t n_key = size_t(n_key_t);
-#define DEBUG_SORT
+#undef DEBUG_SORT
 #ifdef DEBUG_SORT
   std::cout << "INPUT:\n";
   DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
@@ -3111,7 +3111,6 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t, bool ascend
   DEBUG_PrintRefct(std::cout, out_arrs);
 #endif
   return new table_info(out_arrs);
-  
 }
 
 
