@@ -1482,22 +1482,35 @@ class DataFramePass(object):
         # enable parsing
         glbs = self.func_ir.func_id.func.__globals__
         lcls = {a: 0 for a in self.func_ir.func_id.code.co_varnames}
-        resolver = {c: 0 for c in df_typ.columns}
+        clean_name = pd.core.computation.common._remove_spaces_column_name
+        resolver = {clean_name(c): 0 for c in df_typ.columns}
         resolver['index'] = 0
         env = pd.core.computation.scope._ensure_scope(2, glbs, lcls, (resolver,))
         parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
-        used_cols = {c for c in df_typ.columns if c in parsed_expr.names}
+        used_cols = {c: clean_name(c) for c in df_typ.columns
+                     if clean_name(c) in parsed_expr.names}
+        # local variables
+        sentinel = pd.core.computation.ops._LOCAL_TAG
+        loc_ref_vars = {c: c.replace(sentinel, "") for c in parsed_expr.names
+                        if isinstance(c, str) and c.startswith(sentinel)}
+        in_args = list(used_cols.values()) + ['index'] + list(loc_ref_vars.keys())
 
-        func_text = "def _query_impl({}):\n".format(", ".join(used_cols))
+        func_text = "def _query_impl({}):\n".format(", ".join(in_args))
         func_text += "  return {}".format(str(parsed_expr))
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _query_impl = loc_vars["_query_impl"]
 
+        # data frame column inputs
         nodes = []
-        data = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
-        # import pdb; pdb.set_trace()
-        return nodes + compile_func_single_block(_query_impl, data, lhs, self)
+        args = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols.keys()]
+        # index
+        arr = args[0] if len(args) > 0 else self._get_dataframe_data(
+            df_var, df_typ.columns[0], nodes)
+        args.append(self._gen_array_from_index(df_var, arr, nodes))
+        # local referenced variables
+        args += [ir.Var(lhs.scope, v, lhs.loc) for v in loc_ref_vars.values()]
+        return nodes + compile_func_single_block(_query_impl, args, lhs, self)
 
     def _run_call_drop(self, assign, lhs, rhs):
         df_var, labels_var, axis_var, columns_var, inplace_var = rhs.args

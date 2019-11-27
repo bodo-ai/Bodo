@@ -719,17 +719,18 @@ def test_df_duplicated():
 
 
 def test_df_query():
-    def impl(df, expr):
+    def impl(df, expr, a):
         return df.query(expr)
 
     df = pd.DataFrame(
                 {
                     "A": [1, 8, 4, 11, -3],
-                    "B": [1.1, np.nan, 4.2, 3.1, -1.3],
-                }
+                    "B B": [1.1, np.nan, 4.2, 3.1, -1.3],
+                },
+                index = [3, 1, 2, 4, 5]
             )
-    expr = "B > 2"
-    check_func(impl, (df, expr))
+    expr = "`B B` > @a + 1 & index > 1"
+    check_func(impl, (df, expr, 1))
 
 
 @pytest.mark.parametrize(
