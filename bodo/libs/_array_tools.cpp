@@ -1478,15 +1478,15 @@ int KeyComparisonAsPython(std::vector<array_info*> const& columns, size_t const&
         for (uint32_t pos=0; pos<minlen; pos++) {
           char char1 = data1_1[pos1_prev + pos];
           char char2 = data1_2[pos2_prev + pos];
-          if (char1 < char2)
-            return 1;
           if (char1 > char2)
+            return 1;
+          if (char1 < char2)
             return -1;
         }
         // If not, we may be able to conclude via the string length.
-        if (len1 < len2)
-          return 1;
         if (len1 > len2)
+          return 1;
+        if (len1 < len2)
           return -1;
       }
     }
