@@ -665,9 +665,9 @@ def agg_distributed_run(
         )
         glbs.update({"group_cumsum": group_cumsum})
     else:
-        offload = (parallel and agg_node.pivot_arr is None
-                            and hasattr(agg_node.agg_func, 'builtin')
-                            and agg_node.agg_func.builtin)
+        offload = (agg_node.pivot_arr is None
+                   and hasattr(agg_node.agg_func, 'builtin')
+                   and agg_node.agg_func.builtin)
         if not offload:
             agg_func_struct = get_agg_func_struct(
                 agg_node.agg_func,
@@ -1275,7 +1275,7 @@ def gen_top_level_agg_func(
             func_text += "    {} = np.empty(1, {})\n".format(out_name, _get_np_dtype(out_typs[i]))
 
         # groupby and aggregate
-        func_text += "    out_table = groupby_and_aggregate(table, {}, {})\n".format(n_keys, agg_func.ftype)
+        func_text += "    out_table = groupby_and_aggregate(table, {}, {}, {})\n".format(n_keys, agg_func.ftype, parallel)
 
         # extract arrays from output table
         for i in range(len(out_names)):

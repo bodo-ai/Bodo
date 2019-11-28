@@ -2893,16 +2893,21 @@ std::vector<Bodo_FTypes::FTypeEnum> combine_funcs(Bodo_FTypes::num_funcs);
  * @param function to apply (see Bodo_FTypes::FTypeEnum)
  */
 table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
-                                  int32_t ftype) {
+                                  int32_t ftype, bool is_parallel) {
     int64_t num_data_cols = in_table->ncols() - num_keys;
     table_info* aggr_local =
         groupby_and_aggregate_local(*in_table, num_keys, num_data_cols, ftype);
-    table_info* shuf_table = shuffle_table(aggr_local, num_keys);
-    delete aggr_local;
-    table_info* out_table = groupby_and_aggregate_local(
-        *shuf_table, num_keys, num_data_cols, combine_funcs[ftype]);
+    table_info* out_table;
+    if (is_parallel) {
+        table_info* shuf_table = shuffle_table(aggr_local, num_keys);
+        delete aggr_local;
+        out_table = groupby_and_aggregate_local(
+            *shuf_table, num_keys, num_data_cols, combine_funcs[ftype]);
+        delete shuf_table;
+    } else {
+        out_table = aggr_local;
+    }
     agg_func_eval(*out_table, num_keys, num_data_cols, ftype);
-    delete shuf_table;
     return out_table;
 }
 
