@@ -1471,6 +1471,9 @@ class DataFramePass(object):
     def _run_call_query(self, assign, lhs, rhs):
         """Transform query expr to Numba IR using the expr parser in Pandas.
         """
+        # FIXME: local variables could be renamed by previous passes, including initial
+        # renaming of Numba (e.g. a -> a.1 in some cases).
+        # we need to develop a way to preserve initial variable names
         df_var, expr_var = rhs.args
         df_typ = self.typemap[df_var.name]
 
