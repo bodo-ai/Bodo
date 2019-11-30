@@ -127,7 +127,7 @@ ll.add_symbol("multimap_int64_it_inc", hdict_ext.multimap_int64_it_inc)
 
 @lower_builtin("getiter", MultiMapRangeIteratorType)
 def iterator_getiter(context, builder, sig, args):
-    it, = args
+    (it,) = args
     # return impl_ret_borrowed(context, builder, sig.return_type, it)
     return it
 
@@ -154,7 +154,7 @@ def iternext_listiter(context, builder, sig, args, result):
     fnty = lir.FunctionType(lir.VoidType(), [ll_voidp])
     inc_it = builder.module.get_or_insert_function(fnty, name="multimap_int64_it_inc")
 
-    range_it, = args
+    (range_it,) = args
 
     # it != range.second
     is_valid = builder.call(it_is_valid, [range_it])

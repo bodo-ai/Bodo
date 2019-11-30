@@ -167,7 +167,9 @@ def create_binary_op_overload(op):
                 n = len(A)
                 out_arr = np.empty(n, np.bool_)
                 for i in numba.parfor.internal_prange(n):
-                    if bodo.libs.array_kernels.isna(A, i) or bodo.libs.array_kernels.isna(B, i):
+                    if bodo.libs.array_kernels.isna(
+                        A, i
+                    ) or bodo.libs.array_kernels.isna(B, i):
                         val = na_fill
                     else:
                         val = op(A[i], B[i])
@@ -305,7 +307,7 @@ def num_total_chars(typingctx, str_arr_typ=None):
     assert is_str_arr_typ(str_arr_typ)
 
     def codegen(context, builder, sig, args):
-        in_str_arr, = args
+        (in_str_arr,) = args
         string_array = context.make_helper(builder, string_array_type, in_str_arr)
         return string_array.num_total_chars
 
@@ -317,7 +319,7 @@ def get_offset_ptr(typingctx, str_arr_typ=None):
     assert is_str_arr_typ(str_arr_typ)
 
     def codegen(context, builder, sig, args):
-        in_str_arr, = args
+        (in_str_arr,) = args
 
         string_array = context.make_helper(builder, string_array_type, in_str_arr)
         # return string_array.offsets
@@ -338,7 +340,7 @@ def get_data_ptr(typingctx, str_arr_typ=None):
     assert is_str_arr_typ(str_arr_typ)
 
     def codegen(context, builder, sig, args):
-        in_str_arr, = args
+        (in_str_arr,) = args
 
         string_array = context.make_helper(builder, string_array_type, in_str_arr)
         # return string_array.data
@@ -377,7 +379,7 @@ def get_null_bitmap_ptr(typingctx, str_arr_typ=None):
     assert is_str_arr_typ(str_arr_typ)
 
     def codegen(context, builder, sig, args):
-        in_str_arr, = args
+        (in_str_arr,) = args
         string_array = context.make_helper(builder, string_array_type, in_str_arr)
         ctinfo = context.make_helper(builder, data_ctypes_type)
         ctinfo.data = string_array.null_bitmap
@@ -1286,7 +1288,7 @@ def set_null_bits(typingctx, str_arr_typ=None):
     assert is_str_arr_typ(str_arr_typ)
 
     def codegen(context, builder, sig, args):
-        in_str_arr, = args
+        (in_str_arr,) = args
         string_array = context.make_helper(builder, string_array_type, in_str_arr)
         # n_bytes = (num_strings+sizeof(uint8_t)-1)/sizeof(uint8_t);
         n_bytes = builder.udiv(

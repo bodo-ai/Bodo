@@ -376,7 +376,6 @@ def sort_distributed_run(
     key_typ = types.Tuple([typemap[v.name] for v in key_arrs])
     data_tup_typ = types.Tuple([typemap[v.name] for v in in_vars])
 
-
     f_block = compile_to_numba_ir(
         sort_impl,
         {
@@ -418,39 +417,50 @@ def sort_distributed_run(
     typemap[ascending_var.name] = types.bool_
     nodes.append(ir.Assign(ir.Const(sort_node.ascending, loc), ascending_var, loc))
 
-    # TODO: use k-way merge instead of sort
     # sort output
     # parallel case
     if bodo.use_cpp_sort:
-        func_text  = "def par_sort_impl(key_arrs, data, ascending):\n"
+        func_text = "def par_sort_impl(key_arrs, data, ascending):\n"
         func_text += "  out_key, out_data = parallel_sort(key_arrs, data, ascending)\n"
         key_count = len(key_name_args)
         data_count = len(col_name_args)
-        total_list = ["array_to_info(out_key[{}])".format(i) for i in range(len(key_name_args))] + ["array_to_info(out_data[{}])".format(i) for i in range(len(col_name_args))]
+        total_list = [
+            "array_to_info(out_key[{}])".format(i) for i in range(len(key_name_args))
+        ] + ["array_to_info(out_data[{}])".format(i) for i in range(len(col_name_args))]
         func_text += "  info_list_total = [{}]\n".format(",".join(total_list))
-        func_text += "  table_total = arr_info_list_to_table(info_list_total)\n";
-        func_text += "  out_table = sort_values_table(table_total, {}, ascending)\n".format(key_count)
+        func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
+        func_text += "  out_table = sort_values_table(table_total, {}, ascending)\n".format(
+            key_count
+        )
         func_text += "  delete_table(table_total)\n"
         #
         idx = 0
         list_key_str = []
         for i_key in range(key_count):
-            list_key_str.append("info_to_array(info_from_table(out_table, {}), out_key[{}])".format(idx, i_key))
+            list_key_str.append(
+                "info_to_array(info_from_table(out_table, {}), out_key[{}])".format(
+                    idx, i_key
+                )
+            )
             idx += 1
         func_text += "  out_key_ret = ({},)\n".format(",".join(list_key_str))
         #
         list_data_str = []
         for i_data in range(data_count):
-            list_data_str.append("info_to_array(info_from_table(out_table, {}), out_data[{}])".format(idx, i_data))
+            list_data_str.append(
+                "info_to_array(info_from_table(out_table, {}), out_data[{}])".format(
+                    idx, i_data
+                )
+            )
             idx += 1
-        if len(list_data_str)>0:
+        if len(list_data_str) > 0:
             func_text += "  out_data_ret = ({},)\n".format(",".join(list_data_str))
         else:
             func_text += "  out_data_ret = ()\n"
         func_text += "  delete_table(out_table)\n"
         func_text += "  return out_key_ret, out_data_ret\n"
     else:
-        func_text  = "def par_sort_impl(key_arrs, data, ascending):\n"
+        func_text = "def par_sort_impl(key_arrs, data, ascending):\n"
         func_text += "  out_key, out_data = parallel_sort(key_arrs, data, ascending)\n"
         func_text += "  bodo.ir.sort.local_sort(out_key, out_data, ascending)\n"
         func_text += "  return out_key, out_data\n"
@@ -529,35 +539,40 @@ def to_string_list_typ(typ):
     return typ
 
 
-
-
 def local_sort_cpp(key_name_args, col_name_args, ascending=True):
-    func_text  = "  # beginning of local_sort_cpp\n"
+    func_text = "  # beginning of local_sort_cpp\n"
     key_count = len(key_name_args)
     data_count = len(col_name_args)
-    total_list = ["array_to_info({})".format(name) for name in key_name_args] + ["array_to_info({})".format(name) for name in col_name_args]
+    total_list = ["array_to_info({})".format(name) for name in key_name_args] + [
+        "array_to_info({})".format(name) for name in col_name_args
+    ]
     func_text += "  info_list_total = [{}]\n".format(",".join(total_list))
-    func_text += "  table_total = arr_info_list_to_table(info_list_total)\n";
-    func_text += "  out_table = sort_values_table(table_total, {}, {})\n".format(key_count, ascending)
-    idx=0;
+    func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
+    func_text += "  out_table = sort_values_table(table_total, {}, {})\n".format(
+        key_count, ascending
+    )
+    idx = 0
     list_key_str = []
     for name in key_name_args:
-        list_key_str.append("info_to_array(info_from_table(out_table, {}), {})".format(idx, name))
+        list_key_str.append(
+            "info_to_array(info_from_table(out_table, {}), {})".format(idx, name)
+        )
         idx += 1
     func_text += "  key_arrs = ({},)\n".format(",".join(list_key_str))
-    
+
     list_data_str = []
     for name in col_name_args:
-        list_data_str.append("info_to_array(info_from_table(out_table, {}), {})".format(idx, name))
+        list_data_str.append(
+            "info_to_array(info_from_table(out_table, {}), {})".format(idx, name)
+        )
         idx += 1
-    if len(list_data_str)>0:
+    if len(list_data_str) > 0:
         func_text += "  data = ({},)\n".format(",".join(list_data_str))
     else:
         func_text += "  data = ()\n"
-    func_text += "  delete_table(out_table)\n";
+    func_text += "  delete_table(out_table)\n"
     func_text += "  delete_table(table_total)\n"
     return func_text
-
 
 
 # TODO: fix cache issue
