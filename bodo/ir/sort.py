@@ -369,7 +369,6 @@ def sort_distributed_run(
         )
     func_text += "  return key_arrs, data\n"
 
-    print("func_text=", func_text)
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     sort_impl = loc_vars["f"]
@@ -456,7 +455,6 @@ def sort_distributed_run(
         func_text += "  bodo.ir.sort.local_sort(out_key, out_data, ascending)\n"
         func_text += "  return out_key, out_data\n"
 
-    print("func_text=", func_text)
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     par_sort_impl = loc_vars["par_sort_impl"]

@@ -1361,9 +1361,9 @@ int NumericComparison_T(char* ptr1, char* ptr2)
   T* ptr1_T = (T*)ptr1;
   T* ptr2_T = (T*)ptr2;
   if (*ptr1_T > *ptr2_T)
-    return 1;
-  if (*ptr1_T < *ptr2_T)
     return -1;
+  if (*ptr1_T < *ptr2_T)
+    return 1;
   return 0;
 }
 
@@ -1479,15 +1479,15 @@ int KeyComparisonAsPython(std::vector<array_info*> const& columns, size_t const&
           char char1 = data1_1[pos1_prev + pos];
           char char2 = data1_2[pos2_prev + pos];
           if (char1 > char2)
-            return 1;
-          if (char1 < char2)
             return -1;
+          if (char1 < char2)
+            return 1;
         }
         // If not, we may be able to conclude via the string length.
         if (len1 > len2)
-          return 1;
-        if (len1 < len2)
           return -1;
+        if (len1 < len2)
+          return 1;
       }
     }
   }
@@ -3077,7 +3077,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t, bool ascend
   size_t n_rows = (size_t)in_table->nrows();
   size_t n_cols = (size_t)in_table->ncols();
   size_t n_key = size_t(n_key_t);
-#define DEBUG_SORT
+#undef DEBUG_SORT
 #ifdef DEBUG_SORT
   std::cout << "INPUT:\n";
   DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
@@ -3091,9 +3091,9 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t, bool ascend
     size_t shift_key1=0, shift_key2=0;
     int value = KeyComparisonAsPython(in_table->columns, n_key, shift_key1, iRow1, shift_key2, iRow2);
     if (ascending) {
-      return value == -1;
+      return value == 1;
     }
-    return value == 1;
+    return value == -1;
   };
   gfx::timsort(V.begin(), V.end(), f);
   std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(n_rows);
