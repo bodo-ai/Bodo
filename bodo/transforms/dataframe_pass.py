@@ -1481,15 +1481,12 @@ class DataFramePass(object):
         err_msg = "df.query() expr arg should be constant string or argument to jit function"
         expr = self._get_const_value(expr_var, err_msg)
 
-        # create fake environment for Expr that just includes the symbol names to
-        # enable parsing
-        glbs = self.func_ir.func_id.func.__globals__
-        lcls = {a: 0 for a in self.func_ir.func_id.code.co_varnames}
+        # parse expression
         clean_name = pd.core.computation.common._remove_spaces_column_name
         resolver = {clean_name(c): 0 for c in df_typ.columns}
         resolver['index'] = 0
-        env = pd.core.computation.scope._ensure_scope(2, glbs, lcls, (resolver,))
-        parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
+        parsed_expr, parsed_expr_str = self._parse_query_expr(resolver, expr)
+
         used_cols = {c: clean_name(c) for c in df_typ.columns
                      if clean_name(c) in parsed_expr.names}
         # local variables
@@ -1499,7 +1496,7 @@ class DataFramePass(object):
         in_args = list(used_cols.values()) + ['index'] + list(loc_ref_vars.keys())
 
         func_text = "def _query_impl({}):\n".format(", ".join(in_args))
-        func_text += "  return {}".format(str(parsed_expr))
+        func_text += "  return {}".format(parsed_expr_str)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _query_impl = loc_vars["_query_impl"]
@@ -1514,6 +1511,59 @@ class DataFramePass(object):
         # local referenced variables
         args += [ir.Var(lhs.scope, v, lhs.loc) for v in loc_ref_vars.values()]
         return nodes + compile_func_single_block(_query_impl, args, lhs, self)
+
+    def _parse_query_expr(self, resolver, expr):
+        """Parses query expression using Pandas parser but avoids issues such as
+        evaluation of string expressions by Pandas.
+        """
+        # create fake environment for Expr that just includes the symbol names to
+        # enable parsing
+        glbs = self.func_ir.func_id.func.__globals__
+        lcls = {a: 0 for a in self.func_ir.func_id.code.co_varnames}
+        env = pd.core.computation.scope._ensure_scope(2, glbs, lcls, (resolver,))
+
+        # avoid rewrite of operations in Pandas such as early evaluation of string exprs
+        def _rewrite_membership_op(self, node, left, right):
+            op_instance = node.op
+            op = self.visit(op_instance)
+            return op, op_instance, left, right
+
+        def _maybe_evaluate_binop(
+            self,
+            op,
+            op_class,
+            lhs,
+            rhs,
+            eval_in_python=("in", "not in"),
+            maybe_eval_in_python=("==", "!=", "<", ">", "<=", ">="),
+        ):
+            res = op(lhs, rhs)
+            return res
+
+        # make sure string literals are printed correctly in expression
+        def __str__(self):
+            if isinstance(self.value, list):
+                return "{}".format(self.value)
+            if isinstance(self.value, str):
+                return "'{}'".format(self.value)
+            return pd.io.formats.printing.pprint_thing(self.name)
+
+        saved_rewrite_membership_op = pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op
+        saved_maybe_evaluate_binop = pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop
+        saved__str__ = pd.core.computation.ops.Term.__str__
+
+        try:
+            pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = _rewrite_membership_op
+            pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = _maybe_evaluate_binop
+            pd.core.computation.ops.Term.__str__ = __str__
+            parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
+            parsed_expr_str = str(parsed_expr)
+        finally:
+            pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = saved_rewrite_membership_op
+            pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = saved_maybe_evaluate_binop
+            pd.core.computation.ops.Term.__str__ = saved__str__
+
+        return parsed_expr, parsed_expr_str
 
     def _run_call_drop(self, assign, lhs, rhs):
         df_var, labels_var, axis_var, columns_var, inplace_var = rhs.args

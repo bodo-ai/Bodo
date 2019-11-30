@@ -718,7 +718,15 @@ def test_df_duplicated():
     check_func(impl, (df,), sort_output=True)
 
 
-def test_df_query():
+@pytest.mark.parametrize(
+    "expr", [
+    "`B B` > @a + 1 & 5 > index > 1",
+    "(A == @a) | (C == 'AA')",
+    # TODO: support string 'in' and contains
+    # "C in ['AA', 'C']",
+    # "C.str.contains('C')",
+])
+def test_df_query(expr):
     def impl(df, expr, a):
         return df.query(expr)
 
@@ -726,10 +734,10 @@ def test_df_query():
                 {
                     "A": [1, 8, 4, 11, -3],
                     "B B": [1.1, np.nan, 4.2, 3.1, -1.3],
+                    "C": ["AA", "BBB", "C", "AA", "C"],
                 },
                 index = [3, 1, 2, 4, 5]
             )
-    expr = "`B B` > @a + 1 & index > 1"
     check_func(impl, (df, expr, 1))
 
 
