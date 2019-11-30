@@ -29,10 +29,11 @@ def test_sort_values_1col():
     def get_quasi_random(n):
         eListA = []
         for i in range(n):
-            eVal = i*i % 34
+            eVal = i * i % 34
             eListA.append(eVal)
         return pd.DataFrame({"A": eListA})
-    n=100
+
+    n = 100
     check_func(test_impl1, (get_quasi_random(n),), sort_output=False)
     check_func(test_impl2, (get_quasi_random(n),), sort_output=False)
 
@@ -47,23 +48,23 @@ def test_sort_values_1col_np_array():
         return df2
 
     def get_quasi_random_dtype(n, dtype):
-        eListA = np.array([0]*n, dtype=dtype)
+        eListA = np.array([0] * n, dtype=dtype)
         for i in range(n):
-            eVal = i*i % 34
+            eVal = i * i % 34
             eListA[i] = eVal
         return pd.DataFrame({"A": eListA})
-    n=100
-    check_func(test_impl, (get_quasi_random_dtype(n,np.int8),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_dtype(n,np.uint8),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_dtype(n,np.int16),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_dtype(n,np.uint16),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_dtype(n,np.int32),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_dtype(n,np.uint32),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_dtype(n,np.int64),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_dtype(n,np.uint64),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_dtype(n,np.float32),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_dtype(n,np.float64),), sort_output=False)
 
+    n = 100
+    check_func(test_impl, (get_quasi_random_dtype(n, np.int8),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_dtype(n, np.uint8),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_dtype(n, np.int16),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_dtype(n, np.uint16),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_dtype(n, np.int32),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_dtype(n, np.uint32),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_dtype(n, np.int64),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_dtype(n, np.uint64),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_dtype(n, np.float32),), sort_output=False)
+    check_func(test_impl, (get_quasi_random_dtype(n, np.float64),), sort_output=False)
 
 
 def test_sort_values_2col():
@@ -76,22 +77,22 @@ def test_sort_values_2col():
         return df2
 
     def test_impl2(df1):
-        df2 = df1.sort_values(by=["A","B"], kind="mergesort")
+        df2 = df1.sort_values(by=["A", "B"], kind="mergesort")
         return df2
 
     def get_quasi_random(n):
-        eListA = np.array([0]*n, dtype=np.uint64)
-        eListB = np.array([0]*n, dtype=np.uint64)
+        eListA = np.array([0] * n, dtype=np.uint64)
+        eListB = np.array([0] * n, dtype=np.uint64)
         for i in range(n):
-            eValA = i*i % 34
-            eValB = i*i*i % 34
+            eValA = i * i % 34
+            eValB = i * i * i % 34
             eListA[i] = eValA
             eListB[i] = eValB
         return pd.DataFrame({"A": eListA, "B": eListB})
-    n=100
+
+    n = 100
     check_func(test_impl1, (get_quasi_random(n),), sort_output=False)
     check_func(test_impl2, (get_quasi_random(n),), sort_output=False)
-
 
 
 def test_sort_values_2col_np_array():
@@ -104,20 +105,30 @@ def test_sort_values_2col_np_array():
         return df2
 
     def get_quasi_random_dtype(n, dtype1, dtype2):
-        eListA = np.array([0]*n, dtype=dtype1)
-        eListB = np.array([0]*n, dtype=dtype2)
+        eListA = np.array([0] * n, dtype=dtype1)
+        eListB = np.array([0] * n, dtype=dtype2)
         for i in range(n):
-            eValA = i*i % 34
-            eValB = i*(i-1) % 23
+            eValA = i * i % 34
+            eValB = i * (i - 1) % 23
             eListA[i] = eValA
             eListB[i] = eValB
         return pd.DataFrame({"A": eListA, "B": eListB})
-    n=1000
-    check_func(test_impl, (get_quasi_random_dtype(n,np.int8, np.int16),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_dtype(n,np.uint8, np.int32),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_dtype(n,np.int16, np.float64),), sort_output=False)
-    check_func(test_impl, (get_quasi_random_dtype(n,np.uint16, np.float32),), sort_output=False)
 
+    n = 1000
+    check_func(
+        test_impl, (get_quasi_random_dtype(n, np.int8, np.int16),), sort_output=False
+    )
+    check_func(
+        test_impl, (get_quasi_random_dtype(n, np.uint8, np.int32),), sort_output=False
+    )
+    check_func(
+        test_impl, (get_quasi_random_dtype(n, np.int16, np.float64),), sort_output=False
+    )
+    check_func(
+        test_impl,
+        (get_quasi_random_dtype(n, np.uint16, np.float32),),
+        sort_output=False,
+    )
 
 
 def test_sort_values_strings_constant_length():
@@ -137,10 +148,11 @@ def test_sort_values_strings_constant_length():
         df = pd.DataFrame({"A": str_vals})
         return df
 
-    check_func(test_impl, (get_random_strings_array(1000,2),), sort_output=False)
-    check_func(test_impl, (get_random_strings_array(100,1),), sort_output=False)
-    check_func(test_impl, (get_random_strings_array(300,2),), sort_output=False)
-    check_func(test_impl, (get_random_strings_array(100,1),), sort_output=False)
+    check_func(test_impl, (get_random_strings_array(1000, 2),), sort_output=False)
+    check_func(test_impl, (get_random_strings_array(100, 1),), sort_output=False)
+    check_func(test_impl, (get_random_strings_array(300, 2),), sort_output=False)
+    check_func(test_impl, (get_random_strings_array(100, 1),), sort_output=False)
+
 
 def test_sort_values_strings_variable_length():
     """
@@ -160,10 +172,19 @@ def test_sort_values_strings_variable_length():
         df = pd.DataFrame({"A": str_vals})
         return df
 
-    check_func(test_impl, (get_random_var_length_strings_array(100,30),), sort_output=False)
-    check_func(test_impl, (get_random_var_length_strings_array(1000,10),), sort_output=False)
-    check_func(test_impl, (get_random_var_length_strings_array(10,30),), sort_output=False)
-    check_func(test_impl, (get_random_var_length_strings_array(100,30),), sort_output=False)
+    check_func(
+        test_impl, (get_random_var_length_strings_array(100, 30),), sort_output=False
+    )
+    check_func(
+        test_impl, (get_random_var_length_strings_array(1000, 10),), sort_output=False
+    )
+    check_func(
+        test_impl, (get_random_var_length_strings_array(10, 30),), sort_output=False
+    )
+    check_func(
+        test_impl, (get_random_var_length_strings_array(100, 30),), sort_output=False
+    )
+
 
 def test_sort_values_strings():
     """
@@ -183,7 +204,7 @@ def test_sort_values_strings():
         df = pd.DataFrame({"A": str_vals})
         return df
 
-    check_func(test_impl, (get_random_strings_array(100,30),), sort_output=False)
-    check_func(test_impl, (get_random_strings_array(1000,10),), sort_output=False)
-    check_func(test_impl, (get_random_strings_array(10,30),), sort_output=False)
-    check_func(test_impl, (get_random_strings_array(100,30),), sort_output=False)
+    check_func(test_impl, (get_random_strings_array(100, 30),), sort_output=False)
+    check_func(test_impl, (get_random_strings_array(1000, 10),), sort_output=False)
+    check_func(test_impl, (get_random_strings_array(10, 30),), sort_output=False)
+    check_func(test_impl, (get_random_strings_array(100, 30),), sort_output=False)
