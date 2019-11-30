@@ -43,9 +43,7 @@ ll.add_symbol("info_from_table", array_tools_ext.info_from_table)
 ll.add_symbol("delete_table", array_tools_ext.delete_table)
 ll.add_symbol("shuffle_table", array_tools_ext.shuffle_table)
 ll.add_symbol("hash_join_table", array_tools_ext.hash_join_table)
-ll.add_symbol(
-    "drop_duplicates_table_outplace", array_tools_ext.drop_duplicates_table_outplace
-)
+ll.add_symbol("drop_duplicates_table_outplace", array_tools_ext.drop_duplicates_table_outplace)
 ll.add_symbol("sort_values_table", array_tools_ext.sort_values_table)
 ll.add_symbol("groupby_and_aggregate", array_tools_ext.groupby_and_aggregate)
 
@@ -71,7 +69,7 @@ register_model(TableType)(models.OpaqueModel)
 @intrinsic
 def array_to_info(typingctx, arr_type):
     def codegen(context, builder, sig, args):
-        (in_arr,) = args
+        in_arr, = args
         # arr_info struct keeps a reference
         if context.enable_nrt:
             context.nrt.incref(builder, arr_type, in_arr)
@@ -409,7 +407,7 @@ def arr_info_list_to_table(typingctx, list_arr_info_typ):
     assert list_arr_info_typ == types.List(array_info_type)
 
     def codegen(context, builder, sig, args):
-        (info_list,) = args
+        info_list, = args
         inst = numba.targets.listobj.ListInstance(
             context, builder, sig.args[0], info_list
         )
@@ -470,48 +468,25 @@ def shuffle_table(typingctx, table_t, n_keys_t):
 
 
 @intrinsic
-def hash_join_table(
-    typingctx,
-    table_t,
-    n_keys_t,
-    n_data_left_t,
-    n_data_right_t,
-    same_vect_t,
-    is_left_t,
-    is_right_t,
-):
+def hash_join_table(typingctx, table_t, n_keys_t, n_data_left_t, n_data_right_t, same_vect_t, is_left_t, is_right_t):
     """
     """
     assert table_t == table_type
 
     def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(1),
-            ],
-        )
+        fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
+                                [lir.IntType(8).as_pointer(),
+                                 lir.IntType(64),
+                                 lir.IntType(64),
+                                 lir.IntType(64),
+                                 lir.IntType(8).as_pointer(),
+                                 lir.IntType(1),
+                                 lir.IntType(1)])
         fn_tp = builder.module.get_or_insert_function(fnty, name="hash_join_table")
         return builder.call(fn_tp, args)
 
-    return (
-        table_type(
-            table_t,
-            types.int64,
-            types.int64,
-            types.int64,
-            types.voidptr,
-            types.boolean,
-            types.boolean,
-        ),
-        codegen,
-    )
+    return table_type(table_t, types.int64, types.int64, types.int64, types.voidptr, types.boolean, types.boolean), codegen
+
 
 
 @intrinsic
@@ -521,14 +496,18 @@ def sort_values_table(typingctx, table_t, n_keys_t, ascending_t):
     assert table_t == table_type
 
     def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer(), lir.IntType(64), lir.IntType(1)],
-        )
+        fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
+                                [lir.IntType(8).as_pointer(),
+                                 lir.IntType(64),
+                                 lir.IntType(1)])
         fn_tp = builder.module.get_or_insert_function(fnty, name="sort_values_table")
         return builder.call(fn_tp, args)
 
     return table_type(table_t, types.int64, types.boolean), codegen
+
+
+
+
 
 
 @intrinsic
@@ -539,17 +518,14 @@ def drop_duplicates_table_outplace(typingctx, table_t, subset_vect_t, keep_t):
     assert table_t == table_type
 
     def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer(), lir.IntType(64)],
-        )
-        fn_tp = builder.module.get_or_insert_function(
-            fnty, name="drop_duplicates_table_outplace"
-        )
+        fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
+                                [lir.IntType(8).as_pointer(),
+                                 lir.IntType(8).as_pointer(),
+                                 lir.IntType(64)])
+        fn_tp = builder.module.get_or_insert_function(fnty, name="drop_duplicates_table_outplace")
         return builder.call(fn_tp, args)
 
     return table_type(table_t, types.voidptr, types.int64), codegen
-
 
 @intrinsic
 def groupby_and_aggregate(typingctx, table_t, n_keys_t, ftype):
@@ -561,12 +537,9 @@ def groupby_and_aggregate(typingctx, table_t, n_keys_t, ftype):
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer(), lir.IntType(64), lir.IntType(32)],
+            lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(), lir.IntType(64), lir.IntType(32)]
         )
-        fn_tp = builder.module.get_or_insert_function(
-            fnty, name="groupby_and_aggregate"
-        )
+        fn_tp = builder.module.get_or_insert_function(fnty, name="groupby_and_aggregate")
         return builder.call(fn_tp, args)
 
     return table_type(table_t, types.int64, types.int32), codegen

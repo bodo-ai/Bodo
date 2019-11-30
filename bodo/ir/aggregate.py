@@ -665,12 +665,9 @@ def agg_distributed_run(
         )
         glbs.update({"group_cumsum": group_cumsum})
     else:
-        offload = (
-            parallel
-            and agg_node.pivot_arr is None
-            and hasattr(agg_node.agg_func, "builtin")
-            and agg_node.agg_func.builtin
-        )
+        offload = (parallel and agg_node.pivot_arr is None
+                            and hasattr(agg_node.agg_func, 'builtin')
+                            and agg_node.agg_func.builtin)
         if not offload:
             agg_func_struct = get_agg_func_struct(
                 agg_node.agg_func,
@@ -1209,15 +1206,8 @@ def _get_np_dtype(t):
 
 
 def gen_top_level_agg_func(
-    key_names,
-    return_key,
-    red_var_typs,
-    out_typs,
-    in_col_names,
-    out_col_names,
-    agg_func,
-    parallel,
-    offload,
+    key_names, return_key, red_var_typs, out_typs, in_col_names, out_col_names,
+    agg_func, parallel, offload
 ):
     """create the top level aggregation function by generating text
     """
@@ -1238,9 +1228,7 @@ def gen_top_level_agg_func(
     if not offload:
         func_text = "def agg_top({}{}, pivot_arr):\n".format(key_args, in_args)
         func_text += "    data_redvar_dummy = ({}{})\n".format(
-            ",".join(
-                ["np.empty(1, {})".format(_get_np_dtype(t)) for t in red_var_typs]
-            ),
+            ",".join(["np.empty(1, {})".format(_get_np_dtype(t)) for t in red_var_typs]),
             "," if len(red_var_typs) == 1 else "",
         )
         func_text += "    out_dummy_tup = ({}{}{})\n".format(
@@ -1284,36 +1272,28 @@ def gen_top_level_agg_func(
 
         for i in range(len(out_names)):
             out_name = out_names[i] + "_dummy"
-            func_text += "    {} = np.empty(1, {})\n".format(
-                out_name, _get_np_dtype(out_typs[i])
-            )
+            func_text += "    {} = np.empty(1, {})\n".format(out_name, _get_np_dtype(out_typs[i]))
 
         # groupby and aggregate
-        func_text += "    out_table = groupby_and_aggregate(table, {}, {})\n".format(
-            n_keys, agg_func.ftype
-        )
+        func_text += "    out_table = groupby_and_aggregate(table, {}, {})\n".format(n_keys, agg_func.ftype)
 
         # extract arrays from output table
         for i in range(len(out_names)):
             out_name = out_names[i]
             in_name = in_names[i]
             func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                out_name, i + n_keys, out_name + "_dummy"
-            )
+                            out_name, i + n_keys, out_name + "_dummy")
 
-        key_names = ["key_" + name for name in key_names]
+        key_names = ['key_' + name for name in key_names]
         for i, key_name in enumerate(key_names):
             func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                key_name, i, key_name
-            )
+                            key_name, i, key_name)
 
         # clean up
         func_text += "    delete_table(table)\n"
         func_text += "    delete_table(out_table)\n"
 
-        func_text += "    return ({},)\n".format(
-            ", ".join(out_names + tuple(key_names))
-        )
+        func_text += "    return ({},)\n".format(", ".join(out_names + tuple(key_names)))
 
     # print(func_text)
 
@@ -2486,8 +2466,7 @@ def isna_tup_overload(arr_tup, ind):
     func_text = "def f(arr_tup, ind):\n"
     func_text += "  return {}\n".format(
         " or ".join(
-            "bodo.libs.array_kernels.isna(arr_tup[{}], ind)".format(i)
-            for i in range(count)
+            "bodo.libs.array_kernels.isna(arr_tup[{}], ind)".format(i) for i in range(count)
         )
     )
 
@@ -2517,9 +2496,7 @@ def set_nan_zero_tup_overload(arr_tup, ind, val):
     func_text = "def f(arr_tup, ind, val):\n"
     func_text += "  return {}\n".format(
         ", ".join(
-            "0 if bodo.libs.array_kernels.isna(arr_tup[{0}], ind) else val[{0}]".format(
-                i
-            )
+            "0 if bodo.libs.array_kernels.isna(arr_tup[{0}], ind) else val[{0}]".format(i)
             for i in range(count)
         )
     )
