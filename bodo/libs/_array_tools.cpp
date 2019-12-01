@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <iostream>
 #include <numeric>
+#include <cstring>
 #include <functional>
 #include <map>
 #include <unordered_map>
@@ -1390,6 +1391,8 @@ int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1, char* ptr
     return NumericComparison_T<float>(ptr1, ptr2);
   if (dtype == Bodo_CTypes::FLOAT64)
     return NumericComparison_T<double>(ptr1, ptr2);
+  PyErr_SetString(PyExc_RuntimeError,
+                  "Invalid dtype put on input to NumericComparison");
   return 0;
 }
 
@@ -1473,16 +1476,11 @@ int KeyComparisonAsPython(std::vector<array_info*> const& columns, size_t const&
         // From the common characters, we may be able to conclude.
         uint32_t pos1_prev = data2_1[iRow1];
         uint32_t pos2_prev = data2_2[iRow2];
-        char* data1_1 = (char*)columns[shift_key1+iKey]->data1;
-        char* data1_2 = (char*)columns[shift_key2+iKey]->data1;
-        for (uint32_t pos=0; pos<minlen; pos++) {
-          char char1 = data1_1[pos1_prev + pos];
-          char char2 = data1_2[pos2_prev + pos];
-          if (char1 > char2)
-            return -1;
-          if (char1 < char2)
-            return 1;
-        }
+        char* data1_1 = (char*)columns[shift_key1+iKey]->data1 + pos1_prev;
+        char* data1_2 = (char*)columns[shift_key2+iKey]->data1 + pos2_prev;
+        int test = std::strncmp(data1_2, data1_1, minlen);
+        if (test != 0)
+          return test;
         // If not, we may be able to conclude via the string length.
         if (len1 > len2)
           return -1;
@@ -3091,9 +3089,9 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t, bool ascend
     size_t shift_key1=0, shift_key2=0;
     int value = KeyComparisonAsPython(in_table->columns, n_key, shift_key1, iRow1, shift_key2, iRow2);
     if (ascending) {
-      return value == 1;
+      return value > 0;
     }
-    return value == -1;
+    return value < 0;
   };
   gfx::timsort(V.begin(), V.end(), f);
   std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(n_rows);
