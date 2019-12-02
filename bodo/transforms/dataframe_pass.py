@@ -1482,13 +1482,9 @@ class DataFramePass(object):
         expr = self._get_const_value(expr_var, err_msg)
 
         # parse expression
-        clean_name = pd.core.computation.common._remove_spaces_column_name
-        resolver = {clean_name(c): 0 for c in df_typ.columns}
-        resolver['index'] = 0
-        parsed_expr, parsed_expr_str = self._parse_query_expr(resolver, expr)
+        parsed_expr, parsed_expr_str, used_cols = self._parse_query_expr(
+            expr, df_typ.columns)
 
-        used_cols = {c: clean_name(c) for c in df_typ.columns
-                     if clean_name(c) in parsed_expr.names}
         # local variables
         sentinel = pd.core.computation.ops._LOCAL_TAG
         loc_ref_vars = {c: c.replace(sentinel, "") for c in parsed_expr.names
@@ -1496,6 +1492,9 @@ class DataFramePass(object):
         in_args = list(used_cols.values()) + ['index'] + list(loc_ref_vars.keys())
 
         func_text = "def _query_impl({}):\n".format(", ".join(in_args))
+        # convert array to Series to support cases such as C.str.contains
+        for c, c_var in used_cols.items():
+            func_text += "  {0} = bodo.hiframes.pd_series_ext.init_series({0})\n".format(c_var)
         func_text += "  return {}".format(parsed_expr_str)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
@@ -1512,10 +1511,15 @@ class DataFramePass(object):
         args += [ir.Var(lhs.scope, v, lhs.loc) for v in loc_ref_vars.values()]
         return nodes + compile_func_single_block(_query_impl, args, lhs, self)
 
-    def _parse_query_expr(self, resolver, expr):
+    def _parse_query_expr(self, expr, columns):
         """Parses query expression using Pandas parser but avoids issues such as
-        evaluation of string expressions by Pandas.
+        early evaluation of string expressions by Pandas.
         """
+        clean_name = pd.core.computation.common._remove_spaces_column_name
+        cleaned_columns = [clean_name(c) for c in columns]
+        resolver = {c: 0 for c in cleaned_columns}
+        resolver['index'] = 0
+        used_cols = {}
         # create fake environment for Expr that just includes the symbol names to
         # enable parsing
         glbs = self.func_ir.func_id.func.__globals__
@@ -1540,6 +1544,59 @@ class DataFramePass(object):
             res = op(lhs, rhs)
             return res
 
+        # avoid early evaluation of getattr such as C.str.contains().
+        # functions like C.str.contains are saved and handled similar to
+        # intrinsic functions like sqrt instead of evaluation.
+        new_funcs = []
+
+        class NewFuncNode(pd.core.computation.ops.FuncNode):
+            def __init__(self, name):
+
+                if name not in pd.core.computation.ops._mathops or (
+                    pd.core.computation.check._NUMEXPR_INSTALLED
+                    and pd.core.computation.check_NUMEXPR_VERSION < pd.core.computation.ops.LooseVersion("2.6.9")
+                    and name in ("floor", "ceil")
+                ):
+                    if name not in new_funcs:
+                        raise ValueError('"{0}" is not a supported function'.format(name))
+
+                self.name = name
+                if name in new_funcs:
+                    self.func = name
+                else:
+                    self.func = getattr(np, name)
+
+            def __call__(self, *args):
+                return pd.core.computation.ops.MathCall(self, args)
+
+        def visit_Attribute(self, node, **kwargs):
+            """handles value.attr cases such as C.str.contains()
+            functions are turned into NewFuncNode. Intermediate values like C.str
+            are added to local scope as local variable to avoid evaluation.
+            """
+            attr = node.attr
+            value = node.value
+            sentinel = pd.core.computation.ops._LOCAL_TAG
+            value_str = str(self.visit(value))
+            name = value_str + "." + attr
+            if name.startswith(sentinel):
+                name = name[len(sentinel):]
+
+            # make local variable in case of C.str
+            if attr == 'str':
+                if value_str not in cleaned_columns:
+                    raise bodo.utils.typing.BodoError(
+                        "column {} not found in dataframe columns {}".format(
+                            value_str, columns))
+                orig_col_name = columns[cleaned_columns.index(value_str)]
+                used_cols[orig_col_name] = value_str
+                self.env.scope[name] = 0
+                return self.term_type(sentinel + name, self.env)
+
+            # make function node
+            new_funcs.append(name)
+            return NewFuncNode(name)
+
         # make sure string literals are printed correctly in expression
         def __str__(self):
             if isinstance(self.value, list):
@@ -1550,20 +1607,25 @@ class DataFramePass(object):
 
         saved_rewrite_membership_op = pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op
         saved_maybe_evaluate_binop = pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop
+        saved_visit_Attribute = pd.core.computation.expr.BaseExprVisitor.visit_Attribute
         saved__str__ = pd.core.computation.ops.Term.__str__
 
         try:
             pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = _rewrite_membership_op
             pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = _maybe_evaluate_binop
+            pd.core.computation.expr.BaseExprVisitor.visit_Attribute = visit_Attribute
             pd.core.computation.ops.Term.__str__ = __str__
             parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
             parsed_expr_str = str(parsed_expr)
         finally:
             pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = saved_rewrite_membership_op
             pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = saved_maybe_evaluate_binop
+            pd.core.computation.expr.BaseExprVisitor.visit_Attribute = saved_visit_Attribute
             pd.core.computation.ops.Term.__str__ = saved__str__
 
-        return parsed_expr, parsed_expr_str
+        used_cols.update({c: clean_name(c) for c in columns
+                         if clean_name(c) in parsed_expr.names})
+        return parsed_expr, parsed_expr_str, used_cols
 
     def _run_call_drop(self, assign, lhs, rhs):
         df_var, labels_var, axis_var, columns_var, inplace_var = rhs.args

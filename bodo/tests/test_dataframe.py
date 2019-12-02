@@ -724,7 +724,7 @@ def test_df_duplicated():
     "(A == @a) | (C == 'AA')",
     # TODO: support string 'in' and contains
     # "C in ['AA', 'C']",
-    # "C.str.contains('C')",
+    "C.str.contains('C')",
 ])
 def test_df_query(expr):
     def impl(df, expr, a):

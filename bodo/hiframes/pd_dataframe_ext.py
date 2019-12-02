@@ -2186,9 +2186,7 @@ def query_dummy(df, expr):
 class QueryDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        # Pandas returns boolean Series in eval() inside query implementation, but
-        # boolean array is simpler and is equivalent in df getitem
-        return signature(types.Array(types.bool_, 1, 'C'), *args)
+        return signature(SeriesType(types.bool_), *args)
 
 
 @lower_builtin(query_dummy, types.VarArg(types.Any))
