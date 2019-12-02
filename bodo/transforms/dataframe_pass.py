@@ -1622,11 +1622,24 @@ class DataFramePass(object):
                 "bodo.hiframes.pd_series_ext.init_series({0}({1}))".format(
                     op, ",".join(operands)))
 
+        # replace 'in' operator with dummy function to convert to prange later
+        def op__str__(self):
+            parened = ("({0})".format(pd.io.formats.printing.pprint_thing(opr))
+                for opr in self.operands)
+            if self.op == 'in':
+                return pd.io.formats.printing.pprint_thing(
+                    "bodo.hiframes.pd_dataframe_ext.val_isin_dummy({})".format(", ".join(parened)))
+            if self.op == 'not in':
+                return pd.io.formats.printing.pprint_thing(
+                    "bodo.hiframes.pd_dataframe_ext.val_notin_dummy({})".format(", ".join(parened)))
+            return pd.io.formats.printing.pprint_thing(" {0} ".format(self.op).join(parened))
+
         saved_rewrite_membership_op = pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op
         saved_maybe_evaluate_binop = pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop
         saved_visit_Attribute = pd.core.computation.expr.BaseExprVisitor.visit_Attribute
         saved__str__ = pd.core.computation.ops.Term.__str__
         saved_math__str__ = pd.core.computation.ops.MathCall.__str__
+        saved_op__str__ = pd.core.computation.ops.Op.__str__
 
         try:
             pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = _rewrite_membership_op
@@ -1634,6 +1647,7 @@ class DataFramePass(object):
             pd.core.computation.expr.BaseExprVisitor.visit_Attribute = visit_Attribute
             pd.core.computation.ops.Term.__str__ = __str__
             pd.core.computation.ops.MathCall.__str__ = math__str__
+            pd.core.computation.ops.Op.__str__ = op__str__
             parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
             parsed_expr_str = str(parsed_expr)
         finally:
@@ -1642,6 +1656,7 @@ class DataFramePass(object):
             pd.core.computation.expr.BaseExprVisitor.visit_Attribute = saved_visit_Attribute
             pd.core.computation.ops.Term.__str__ = saved__str__
             pd.core.computation.ops.MathCall.__str__ = saved_math__str__
+            pd.core.computation.ops.Op.__str__ = saved_op__str__
 
         used_cols.update({c: clean_name(c) for c in columns
                          if clean_name(c) in parsed_expr.names})

@@ -722,10 +722,12 @@ def test_df_duplicated():
     "expr", [
     "`B B` > @a + 1 & 5 > index > 1",
     "(A == @a) | (C == 'AA')",
-    # TODO: support string 'in' and contains
-    # "C in ['AA', 'C']",
+    "C in ['AA', 'C']",
+    "C not in ['AA', 'C']",
     "C.str.contains('C')",
     "abs(A) > @a",
+    "A in [1, 4]",
+    "A not in [1, 4]",
 ])
 def test_df_query(expr):
     def impl(df, expr, a):

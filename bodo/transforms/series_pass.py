@@ -1349,6 +1349,33 @@ class SeriesPass(object):
         ):
             return [assign]
 
+        if fdef == ("val_isin_dummy", "bodo.hiframes.pd_dataframe_ext"):
+            def impl(S, vals):
+                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+                numba.parfor.init_prange()
+                n = len(arr)
+                out = np.empty(n, np.bool_)
+                for i in numba.parfor.internal_prange(n):
+                    out[i] = arr[i] in vals
+                return bodo.hiframes.pd_series_ext.init_series(out)
+            return self._replace_func(impl, rhs.args)
+
+        if fdef == ("val_notin_dummy", "bodo.hiframes.pd_dataframe_ext"):
+            def impl(S, vals):
+                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+                numba.parfor.init_prange()
+                n = len(arr)
+                out = np.empty(n, np.bool_)
+                for i in numba.parfor.internal_prange(n):
+                    # TODO: why don't these work?
+                    # out[i] = (arr[i] not in vals)
+                    # out[i] = not (arr[i] in vals)
+                    _in = (arr[i] in vals)
+                    out[i] = not _in
+                return bodo.hiframes.pd_series_ext.init_series(out)
+            # import pdb; pdb.set_trace()
+            return self._replace_func(impl, rhs.args)
+
         # convert Series to Array for unhandled calls
         # TODO check all the functions that get here and handle if necessary
         # e.g. np.sum, prod, min, max, argmin, argmax, mean, var, and std
