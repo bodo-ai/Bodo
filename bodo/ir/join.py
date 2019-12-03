@@ -124,10 +124,6 @@ class Join(ir.Stmt):
         for eVar in other_right:
             NatureLR[eVar] = [eVar, 'R']
 
-        print("setvar_left  =", setvar_left)
-        print("setvar_right =", setvar_right)
-        print("NatureLR=", NatureLR)
-
         self.column_origins = {
             (c + suffix_x if c in add_suffix else c): ("left", c) for c in left_vars.keys()
         }
@@ -258,7 +254,6 @@ distributed_analysis.distributed_analysis_extensions[Join] = join_distributed_an
 
 
 def join_typeinfer(join_node, typeinferer):
-
     for out_col_name, out_col_var in join_node.df_out_vars.items():
         # left suffix
         ePair = join_node.NatureLR[out_col_name]
