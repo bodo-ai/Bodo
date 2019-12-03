@@ -1603,7 +1603,6 @@ class DataFramePass(object):
         how = guard(find_const, self.func_ir, how_var)
         suffix_x = guard(find_const, self.func_ir, suffix_x_var)
         suffix_y = guard(find_const, self.func_ir, suffix_y_var)
-#        pdb.set_trace()
         out_typ = self.typemap[lhs.name]
 
         # convert right join to left join

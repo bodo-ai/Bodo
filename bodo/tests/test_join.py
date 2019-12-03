@@ -95,7 +95,7 @@ def test_merge_suffixes_basic():
     """
     import pdb
     def test_impl(df1, df2):
-        o1 = df1.merge(df2, on='key', how='inner', suffixes=["_a", "_b"])
+        o1 = df1.merge(df2, on='key', how='inner', suffixes=["", "_"])
 #        o1 = df1.merge(df2, on='key', how='inner')
         return o1
 
