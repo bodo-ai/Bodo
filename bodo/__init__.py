@@ -46,6 +46,7 @@ use_pandas_join = False
 use_legacy_shuffle = False
 use_cpp_hash_join = True
 use_cpp_drop_duplicates = True
+use_cpp_sort = True
 from bodo.decorators import jit
 
 if bodo.config._has_xenon:
