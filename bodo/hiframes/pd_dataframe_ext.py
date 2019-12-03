@@ -1404,7 +1404,7 @@ def validate_keys(keys, columns):
 
 @overload_method(DataFrameType, "join")
 def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort=False):
-
+    import pdb
     validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort)
 
     how = get_overload_const_str(how)
@@ -1422,19 +1422,20 @@ def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort
     right_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
         ", ".join("'{}'".format(c) for c in right_keys)
     )
-
+    
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, other, on=None, how='left',\n"
     func_text += "    lsuffix='', rsuffix='', sort=False):\n"
-    func_text += "    suffixes = ('_x', '_y')\n"
-    func_text += "    suffix_x = '_x'\n"
-    func_text += "    suffix_y = '_y'\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}', suffix_x, suffix_y)\n".format(
-        left_keys, right_keys, how
+#    func_text += "    suffixes = ('_x', '_y')\n"
+#    func_text += "    suffix_x = '_x'\n"
+#    func_text += "    suffix_y = '_y'\n"
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}', '{}', '{}')\n".format(
+        left_keys, right_keys, how, lsuffix, rsuffix
     )
 
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
+#    pdb.set_trace()
     # print(func_text)
     _impl = loc_vars["_impl"]
     return _impl
@@ -1605,14 +1606,25 @@ def merge_asof_overload(
     right_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
         ", ".join("'{}'".format(c) for c in right_keys)
     )
+    # The suffixes
+    if isinstance(suffixes, tuple):
+        suffixes_val = suffixes
+    if is_overload_constant_str_list(suffixes):
+        suffixes_val = list(get_const_str_list(suffixes))
+    if is_overload_none(suffixes):
+        suffixes_val = ["_x", "_y"]
+    suffix_x = suffixes_val[0]
+    suffix_y = suffixes_val[1]
 
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, right, on=None, left_on=None, right_on=None,\n"
     func_text += "    left_index=False, right_index=False, by=None, left_by=None,\n"
     func_text += "    right_by=None, suffixes=('_x', '_y'), tolerance=None,\n"
     func_text += "    allow_exact_matches=True, direction='backward'):\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, 'asof')\n".format(
-        left_keys, right_keys
+    func_text += "  suffix_x = suffixes[0]\n"
+    func_text += "  suffix_y = suffixes[1]\n"
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, 'asof', '{}', '{}')\n".format(
+        left_keys, right_keys, suffix_x, suffix_y
     )
 
     loc_vars = {}
