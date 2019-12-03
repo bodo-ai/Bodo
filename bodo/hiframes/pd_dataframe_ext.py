@@ -1424,17 +1424,12 @@ def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, other, on=None, how='left',\n"
     func_text += "    lsuffix='', rsuffix='', sort=False):\n"
-#    func_text += "    suffixes = ('_x', '_y')\n"
-#    func_text += "    suffix_x = '_x'\n"
-#    func_text += "    suffix_y = '_y'\n"
     func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}', '{}', '{}')\n".format(
         left_keys, right_keys, how, lsuffix, rsuffix
     )
 
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
-#    pdb.set_trace()
-    # print(func_text)
     _impl = loc_vars["_impl"]
     return _impl
 
@@ -1469,11 +1464,10 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
         validate_keys(on_keys, left.columns)
     # make sure suffixes is not passed in
     if lsuffix != "" or rsuffix != "":
-        raise BodoError(
-            "join(): not supporting specifying 'lsuffix' or 'rsuffix', ",
-            "because we don't support joining on overlapping columns",
-            "Use DataFrame.merge() instead.",
-        )
+        if lsuffix == rsuffix:
+            raise BodoError(
+                "join(): if suffixes are used then they must be different.",
+            )
     # make sure sort is the default value, sort=True not supported
     if not is_overload_false(sort):
         raise BodoError("join(): sort parameter only supports default value False")
