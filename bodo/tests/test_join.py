@@ -99,10 +99,15 @@ def test_merge_suffixes_basic():
 #        o1 = df1.merge(df2, on='key', how='inner')
         return o1
 
+    def test_impl_B(df1, df2):
+        return True
     bodo_func = bodo.jit(test_impl)
     df1 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [1, 2, 3, 5]})
     df2 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [5, 6, 7, 8]})
 #    pdb.set_trace()
+#    pd.testing.assert_frame_equal(
+#        bodo_func(df1, df2), bodo_func(df1, df2)
+#    )
     check_func(test_impl, (df1, df2), sort_output=True)
 
 

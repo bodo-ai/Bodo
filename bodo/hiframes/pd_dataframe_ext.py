@@ -1133,11 +1133,12 @@ def merge_overload(
     )
     # The suffixes
     if isinstance(suffixes, tuple):
+        print("Case 1")
         suffixes_val = suffixes
     if is_overload_constant_str_list(suffixes):
+        print("Case 2")
         suffixes_val = list(get_const_str_list(suffixes))
-    if is_overload_none(suffixes):
-        suffixes_val = ["_x", "_y"]
+    print("suffixes_val=", suffixes_val)
     suffix_x = suffixes_val[0]
     suffix_y = suffixes_val[1]
 #    pdb.set_trace()
@@ -1253,16 +1254,16 @@ def validate_merge_spec(
         raise BodoError("merge(): sort parameter only supports default value False")
     # make sure suffixes is not passed in
     # make sure on is of type str or strlist
-#    if ((not is_overload_none(suffixes)) and (not is_overload_constant_str_list(suffixes))):
-#        raise BodoError("merge(): suffixes must be None or an array")
-#    if is_overload_constant_str_list(suffixes):
-#        suffixes_val = get_const_str_list(suffixes)
-#        if len(suffixes_val) != 2:
-#            raise BodoError("merge(): suffixes must be of length 2")
-#    print("SUFF: suffixes=", suffixes)
-#    print("SUFF: is_overload_constant_str_list(suffixes)=", is_overload_constant_str_list(suffixes))
-#    print("SUFF: isinstance(suffixes, tuple)=", isinstance(suffixes, tuple))
-#    print("SUFF: isinstance(suffixes, list)=", isinstance(suffixes, list))
+    if (not isinstance(suffixes, tuple)) and (not is_overload_constant_str_list(suffixes)):
+        raise BodoError("merge(): suffixes parameters are passed as ['_left', '_right']")
+    if isinstance(suffixes, tuple):
+        suffixes_val = suffixes
+    if is_overload_constant_str_list(suffixes):
+        suffixes_val = list(get_const_str_list(suffixes))
+    if len(suffixes_val) != 2:
+        raise BodoError("merge(): The number of suffixes to be put should be exactly 2")
+    if suffixes_val[0] == suffixes_val[1]:
+        raise BodoError("merge(): The suffixes on the left should be different from the one on the right")
     # make sure copy is the default value, copy=False not supported
     if not is_overload_true(copy):
         raise BodoError("merge(): copy parameter only supports default value True")
