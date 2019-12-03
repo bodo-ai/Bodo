@@ -1566,6 +1566,23 @@ def merge_asof_overload(
     allow_exact_matches=True,
     direction="backward",
 ):
+    validate_asof_merge_spec(
+        left,
+        right,
+        on,
+        left_on,
+        right_on,
+        left_index,
+        right_index,
+        by,
+        left_by,
+        right_by,
+        suffixes,
+        tolerance,
+        allow_exact_matches,
+        direction,
+    )
+
 
     # TODO: support 'by' argument
 
@@ -1609,8 +1626,6 @@ def merge_asof_overload(
         suffixes_val = suffixes
     if is_overload_constant_str_list(suffixes):
         suffixes_val = list(get_const_str_list(suffixes))
-    if is_overload_none(suffixes):
-        suffixes_val = ["_x", "_y"]
     suffix_x = suffixes_val[0]
     suffix_y = suffixes_val[1]
 
@@ -1642,6 +1657,105 @@ def merge_asof_overload(
     #         left, right, left_on, right_on, 'asof')
 
     # return _impl
+
+def validate_asof_merge_spec(
+    left,
+    right,
+    on,
+    left_on,
+    right_on,
+    left_index,
+    right_index,
+    by,
+    left_by,
+    right_by,
+    suffixes,
+    tolerance,
+    allow_exact_matches,
+    direction,
+):
+    # make sure left and right are dataframes
+    if not isinstance(left, DataFrameType) or not isinstance(right, DataFrameType):
+        raise BodoError("merge() requires dataframe inputs")
+    if (
+        (not is_overload_none(on))
+        and (not is_overload_constant_str_list(on))
+        and (not is_overload_constant_str(on))
+    ):
+        raise BodoError("merge(): on must be of type str or str list")
+    # make sure left_on is of type str or strlist
+    if (
+        (not is_overload_none(left_on))
+        and (not is_overload_constant_str_list(left_on))
+        and (not is_overload_constant_str(left_on))
+    ):
+        raise BodoError("merge(): left_on must be of type str or str list")
+    # make sure right_on is of type str or strlist
+    if (
+        (not is_overload_none(right_on))
+        and (not is_overload_constant_str_list(right_on))
+        and (not is_overload_constant_str(right_on))
+    ):
+        raise BodoError("merge(): right_on must be of type str or str list")
+    # make sure leftindex is of type bool
+    if not is_overload_constant_bool(left_index):
+        raise BodoError(
+            "merge(): left_index parameter must be of type bool, not "
+            "{left_index}".format(left_index=type(left_index))
+        )
+    # make sure rightindex is of type bool
+    if not is_overload_constant_bool(right_index):
+        raise BodoError(
+            "merge(): right_index parameter must be of type bool, not "
+            "{right_index}".format(right_index=type(right_index))
+        )
+    # make sure suffixes is not passed in
+    # make sure on is of type str or strlist
+    if (not isinstance(suffixes, tuple)) and (not is_overload_constant_str_list(suffixes)):
+        raise BodoError("merge(): suffixes parameters are passed as ['_left', '_right']")
+    if isinstance(suffixes, tuple):
+        suffixes_val = suffixes
+    if is_overload_constant_str_list(suffixes):
+        suffixes_val = list(get_const_str_list(suffixes))
+    if len(suffixes_val) != 2:
+        raise BodoError("merge(): The number of suffixes to be put should be exactly 2")
+    if suffixes_val[0] == suffixes_val[1]:
+        raise BodoError("merge(): The suffixes on the left should be different from the one on the right")
+
+    comm_cols = tuple(set(left.columns) & set(right.columns))
+    if not is_overload_none(on):
+        # make sure two dataframes have common columns
+        if len(comm_cols) == 0:
+            raise BodoError(
+                "merge(): No common columns to perform merge on. "
+                "Merge options: left_on={lon}, right_on={ron}, "
+                "left_index={lidx}, right_index={ridx}".format(
+                    lon=is_overload_true(left_on),
+                    ron=is_overload_true(right_on),
+                    lidx=is_overload_true(left_index),
+                    ridx=is_overload_true(right_index),
+                )
+            )
+        # make sure "on" does not coexist with left_on or right_on
+        if (not is_overload_none(left_on)) or (not is_overload_none(right_on)):
+            raise BodoError(
+                'merge(): Can only pass argument "on" OR "left_on" '
+                'and "right_on", not a combination of both.'
+            )
+
+    # make sure right_on, right_index, left_on, left_index are speciefied properly
+    if (
+        (is_overload_true(left_index) or not is_overload_none(left_on))
+        and is_overload_none(right_on)
+        and not is_overload_true(right_index)
+    ):
+        raise BodoError("merge(): Must pass right_on or right_index=True")
+    if (
+        (is_overload_true(right_index) or not is_overload_none(right_on))
+        and is_overload_none(left_on)
+        and not is_overload_true(left_index)
+    ):
+        raise BodoError("merge(): Must pass left_on or left_index=True")
 
 
 @overload_method(DataFrameType, "pivot_table")
