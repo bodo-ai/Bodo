@@ -1133,12 +1133,9 @@ def merge_overload(
     )
     # The suffixes
     if isinstance(suffixes, tuple):
-        print("Case 1")
         suffixes_val = suffixes
     if is_overload_constant_str_list(suffixes):
-        print("Case 2")
         suffixes_val = list(get_const_str_list(suffixes))
-    print("suffixes_val=", suffixes_val)
     suffix_x = suffixes_val[0]
     suffix_y = suffixes_val[1]
 #    pdb.set_trace()
