@@ -1,0 +1,52 @@
+parameters:
+  name: ''
+  vmImage: ''
+  matrix: []
+  
+jobs:
+- job: ${{ parameters.name }}
+  timeoutInMinutes: 240
+  pool:
+    vmImage: ${{ parameters.vmImage }}
+  strategy:
+    maxParallel: 11
+    matrix:
+      ${{ insert }}: ${{ parameters.matrix }}
+
+  steps: 
+  - task: DownloadBuildArtifacts@0
+    inputs:
+      artifactName: bodo-inc
+      downloadPath: '$(HOME)'
+    displayName: 'Download Bodo'
+  - task: ExtractFiles@1
+    inputs:
+      archiveFilePatterns: '$(HOME)/bodo-inc/bodo-inc.zip'
+      destinationFolder: '$(HOME)/bodo-inc/bodo-inc'
+    displayName: 'Extract Bodo' 
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.7'
+    displayName: 'Use Python $(python.version)'
+  - script: |
+      wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+      chmod +x miniconda.sh
+      ./miniconda.sh -b
+      export PATH=$HOME/miniconda3/bin:${PATH}
+      conda create -y -n BODOENV
+      source activate BODOENV
+      conda install -y h5py scipy bodo -c file://$(HOME)/bodo-inc/bodo-inc/ -c defaults -c numba -c conda-forge
+    displayName: 'Install Bodo from conda'
+  - script: |
+      cd $HOME/bodo-inc
+      mkdir bodo
+      mkdir bodo/tests
+      cp -avr /home/vsts/work/1/s/bodo/tests/data bodo/tests/
+    displayName: 'Copy test data'
+  - script: |
+      export PATH=$HOME/miniconda3/bin:${PATH}
+      source activate BODOENV
+      pip install pytest pytest-azurepipelines
+      cd $HOME/bodo-inc
+      mpiexec -n $NP pytest --pyargs bodo -x -s -v -W ignore
+    displayName: 'Test Bodo'
