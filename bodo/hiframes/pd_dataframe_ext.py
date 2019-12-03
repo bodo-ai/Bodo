@@ -1072,7 +1072,7 @@ def merge_overload(
     indicator=False,
     validate=None,
 ):
-
+    import pdb
     validate_merge_spec(
         left,
         right,
@@ -1131,15 +1131,25 @@ def merge_overload(
     right_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
         ", ".join("'{}'".format(c) for c in right_keys)
     )
-
+    # The suffixes
+    if isinstance(suffixes, tuple):
+        suffixes_val = suffixes
+    if is_overload_constant_str_list(suffixes):
+        suffixes_val = list(get_const_str_list(suffixes))
+    if is_overload_none(suffixes):
+        suffixes_val = ["_x", "_y"]
+    suffix_x = suffixes_val[0]
+    suffix_y = suffixes_val[1]
+#    pdb.set_trace()
     # generating code since typers can't find constants easily
+
     func_text = "def _impl(left, right, how='inner', on=None, left_on=None,\n"
     func_text += "    right_on=None, left_index=False, right_index=False, sort=False,\n"
     func_text += (
         "    suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):\n"
     )
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, '{}')\n".format(
-        left_keys, right_keys, how
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, '{}', '{}', '{}')\n".format(
+        left_keys, right_keys, how, suffix_x, suffix_y
     )
 
     loc_vars = {}
@@ -1206,7 +1216,6 @@ def validate_merge_spec(
     # make sure how is one of ["left", "right", "outer", "inner"]
     if how not in ["left", "right", "outer", "inner"]:
         raise BodoError("merge(): invalid key '{}' for how".format(how))
-    # make sure on is of type str or strlist
     if (
         (not is_overload_none(on))
         and (not is_overload_constant_str_list(on))
@@ -1243,11 +1252,17 @@ def validate_merge_spec(
     if not is_overload_false(sort):
         raise BodoError("merge(): sort parameter only supports default value False")
     # make sure suffixes is not passed in
-    if suffixes != ("_x", "_y"):
-        raise BodoError(
-            "merge(): suffixes parameter cannot be specified. "
-            "Default value is ('_x', '_y')"
-        )
+    # make sure on is of type str or strlist
+#    if ((not is_overload_none(suffixes)) and (not is_overload_constant_str_list(suffixes))):
+#        raise BodoError("merge(): suffixes must be None or an array")
+#    if is_overload_constant_str_list(suffixes):
+#        suffixes_val = get_const_str_list(suffixes)
+#        if len(suffixes_val) != 2:
+#            raise BodoError("merge(): suffixes must be of length 2")
+#    print("SUFF: suffixes=", suffixes)
+#    print("SUFF: is_overload_constant_str_list(suffixes)=", is_overload_constant_str_list(suffixes))
+#    print("SUFF: isinstance(suffixes, tuple)=", isinstance(suffixes, tuple))
+#    print("SUFF: isinstance(suffixes, list)=", isinstance(suffixes, list))
     # make sure copy is the default value, copy=False not supported
     if not is_overload_true(copy):
         raise BodoError("merge(): copy parameter only supports default value True")
@@ -1411,7 +1426,10 @@ def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, other, on=None, how='left',\n"
     func_text += "    lsuffix='', rsuffix='', sort=False):\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}')\n".format(
+    func_text += "    suffixes = ('_x', '_y')\n"
+    func_text += "    suffix_x = '_x'\n"
+    func_text += "    suffix_y = '_y'\n"
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}', suffix_x, suffix_y)\n".format(
         left_keys, right_keys, how
     )
 
@@ -1473,7 +1491,7 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
 
 
 # a dummy join function that will be replace in dataframe_pass
-def join_dummy(left_df, right_df, left_on, right_on, how):
+def join_dummy(left_df, right_df, left_on, right_on, how, suffix_x, suffix_y):
     return left_df
 
 
@@ -1484,17 +1502,19 @@ class JoinTyper(AbstractTemplate):
         from bodo.utils.typing import is_overload_str
 
         assert not kws
-        left_df, right_df, left_on, right_on, how = args
+        import pdb
+        left_df, right_df, left_on, right_on, how, suffix_x, suffix_y = args
+#        pdb.set_trace()
 
         # columns with common name that are not common keys will get a suffix
         comm_keys = set(left_on.consts) & set(right_on.consts)
         comm_data = set(left_df.columns) & set(right_df.columns)
         add_suffix = comm_data - comm_keys
 
-        columns = [(c + "_x" if c in add_suffix else c) for c in left_df.columns]
+        columns = [(c + suffix_x.literal_value if c in add_suffix else c) for c in left_df.columns]
         # common keys are added only once so avoid adding them
         columns += [
-            (c + "_y" if c in add_suffix else c)
+            (c + suffix_y.literal_value if c in add_suffix else c)
             for c in right_df.columns
             if c not in comm_keys
         ]

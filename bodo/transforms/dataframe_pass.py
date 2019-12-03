@@ -1595,11 +1595,15 @@ class DataFramePass(object):
         return self._replace_func(f, [arr], pre_nodes=nodes)
 
     def _run_call_join(self, assign, lhs, rhs):
-        left_df, right_df, left_on_var, right_on_var, how_var = rhs.args
+        import pdb
+        left_df, right_df, left_on_var, right_on_var, how_var, suffix_x_var, suffix_y_var = rhs.args
 
         left_on = self._get_const_or_list(left_on_var)
         right_on = self._get_const_or_list(right_on_var)
         how = guard(find_const, self.func_ir, how_var)
+        suffix_x = guard(find_const, self.func_ir, suffix_x_var)
+        suffix_y = guard(find_const, self.func_ir, suffix_y_var)
+#        pdb.set_trace()
         out_typ = self.typemap[lhs.name]
 
         # convert right join to left join
@@ -1659,6 +1663,7 @@ class DataFramePass(object):
                 left_arrs,
                 right_arrs,
                 how,
+                suffix_x, suffix_y,
                 lhs.loc,
             )
         )

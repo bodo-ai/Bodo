@@ -79,6 +79,7 @@ class Join(ir.Stmt):
         left_vars,
         right_vars,
         how,
+        suffix_x, suffix_y,
         loc,
     ):
         self.df_out = df_out
@@ -90,6 +91,8 @@ class Join(ir.Stmt):
         self.left_vars = left_vars
         self.right_vars = right_vars
         self.how = how
+        self.suffix_x = suffix_x
+        self.suffix_y = suffix_y
         self.loc = loc
 
         # keep the origin of output columns to enable proper dead code elimination
@@ -99,11 +102,11 @@ class Join(ir.Stmt):
         add_suffix = comm_data - comm_keys
 
         self.column_origins = {
-            (c + "_x" if c in add_suffix else c): ("left", c) for c in left_vars.keys()
+            (c + suffix_x if c in add_suffix else c): ("left", c) for c in left_vars.keys()
         }
         self.column_origins.update(
             {
-                (c + "_y" if c in add_suffix else c): ("right", c)
+                (c + suffix_y if c in add_suffix else c): ("right", c)
                 for c in right_vars.keys()
             }
         )
@@ -231,10 +234,10 @@ def join_typeinfer(join_node, typeinferer):
 
     for out_col_name, out_col_var in join_node.df_out_vars.items():
         # left suffix
-        if out_col_name.endswith("_x"):
+        if out_col_name.endswith(join_node.suffix_x):
             col_var = join_node.left_vars[out_col_name[:-2]]
         # right suffix
-        elif out_col_name.endswith("_y"):
+        elif out_col_name.endswith(join_node.suffix_y):
             col_var = join_node.right_vars[out_col_name[:-2]]
         elif out_col_name in join_node.left_vars:
             col_var = join_node.left_vars[out_col_name]
@@ -503,10 +506,10 @@ def join_distributed_run(
         func_text += "    bodo.ir.sort.local_sort(t2_keys, data_right)\n"
 
     def _get_out_col_var(cname, is_left):
-        if is_left and cname + "_x" in join_node.df_out_vars:
-            return join_node.df_out_vars[cname + "_x"]
-        if not is_left and cname + "_y" in join_node.df_out_vars:
-            return join_node.df_out_vars[cname + "_y"]
+        if is_left and cname + join_node.suffix_x in join_node.df_out_vars:
+            return join_node.df_out_vars[cname + join_node.suffix_x]
+        if not is_left and cname + join_node.suffix_y in join_node.df_out_vars:
+            return join_node.df_out_vars[cname + join_node.suffix_y]
 
         return join_node.df_out_vars[cname]
 
