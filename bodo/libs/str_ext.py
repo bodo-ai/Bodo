@@ -36,6 +36,7 @@ import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 import bodo
+import bodo.libs.re_ext  # side-effect: initialize Numba extensions
 
 # from bodo.utils.utils import unliteral_all
 # TODO: resolve import conflict
