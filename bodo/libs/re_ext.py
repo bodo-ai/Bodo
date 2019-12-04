@@ -1,5 +1,6 @@
 """Support re module using object mode of Numba
 """
+import operator
 import re
 import numba
 from numba import types, cgutils
@@ -13,6 +14,7 @@ from numba.extending import (
     overload_method,
     intrinsic,
     typeof_impl,
+    lower_cast,
 )
 from llvmlite import ir as lir
 
@@ -74,6 +76,23 @@ def unbox_re_match(typ, obj, c):
     # TODO: fix refcounting
     c.pyapi.incref(obj)
     return NativeValue(obj)
+
+
+# implement casting to boolean to support conditions like "if match:" which are
+# commonly used to see if there are matches.
+# NOTE: numba may need operator.truth and bool() at some point
+@lower_cast(ReMatchType, types.Boolean)
+def cast_match_obj_bool(context, builder, fromty, toty, val):
+    """cast match object (which could be None also) to boolean.
+    Output is False if match object is actually a None object, otherwise True.
+    """
+    out = cgutils.alloca_once_value(builder, context.get_constant(types.bool_, True))
+    pyapi = context.get_python_api(builder)
+    # check for None, equality is enough for None since it is singleton
+    is_none = builder.icmp_signed('==', val, pyapi.borrow_none())
+    with builder.if_then(is_none):
+        builder.store(context.get_constant(types.bool_, False), out)
+    return builder.load(out)
 
 
 @overload(re.search)
