@@ -231,8 +231,18 @@ class GetItemDataFrameGroupBy2(AbstractTemplate):
         if isinstance(grpby, DataFrameGroupByType):
             if isinstance(idx, tuple):
                 assert all(isinstance(c, str) for c in idx)
+                if len(set(idx).difference(set(grpby.df_type.columns))) > 0:
+                    raise BodoError(
+                        "groupby: selected column {} not found in dataframe".format(
+                            set(idx).difference(set(grpby.df_type.columns))
+                        )
+                    )
                 selection = idx
             elif isinstance(idx, str):
+                if idx not in grpby.df_type.columns:
+                    raise BodoError(
+                        "groupby: selected column {} not found in dataframe".format(idx)
+                    )
                 selection = (idx,)
             else:
                 raise ValueError("invalid groupby selection {}".format(idx))
