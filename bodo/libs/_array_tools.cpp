@@ -102,40 +102,8 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
 // get_item_size() function call
 std::vector<size_t> numpy_item_size(BODO_NUMPY_ARRAY_NUM_DTYPES);
 
-int64_t get_item_size(Bodo_CTypes::CTypeEnum typ_enum) {
-    switch (typ_enum) {
-        case Bodo_CTypes::INT8:
-            return sizeof(int8_t);
-        case Bodo_CTypes::UINT8:
-            return sizeof(uint8_t);
-        case Bodo_CTypes::INT16:
-            return sizeof(int16_t);
-        case Bodo_CTypes::UINT16:
-            return sizeof(uint16_t);
-        case Bodo_CTypes::INT32:
-            return sizeof(int32_t);
-        case Bodo_CTypes::UINT32:
-            return sizeof(uint32_t);
-        case Bodo_CTypes::INT64:
-            return sizeof(int64_t);
-        case Bodo_CTypes::UINT64:
-            return sizeof(uint64_t);
-        case Bodo_CTypes::FLOAT32:
-            return sizeof(float);
-        case Bodo_CTypes::FLOAT64:
-            return sizeof(double);
-        case Bodo_CTypes::STRING:
-            PyErr_SetString(PyExc_RuntimeError,
-                            "Invalid item size call on string type");
-            return 0;
-    }
-    PyErr_SetString(PyExc_RuntimeError,
-                    "Invalid item size call on unknown type");
-    return 0;
-}
-
 array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
-    int64_t size = length * get_item_size(typ_enum);
+    int64_t size = length * numpy_item_size[typ_enum];
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
     return new array_info(bodo_array_type::NUMPY, typ_enum, length, -1, data,
@@ -146,7 +114,7 @@ array_info* alloc_nullable_array(int64_t length,
                                  Bodo_CTypes::CTypeEnum typ_enum,
                                  int64_t extra_null_bytes) {
     int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
-    int64_t size = length * get_item_size(typ_enum);
+    int64_t size = length * numpy_item_size[typ_enum];
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
     NRT_MemInfo* meminfo_bitmask =
@@ -855,7 +823,7 @@ std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
     std::string strOut;
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
-        uint64_t siztype = get_item_size(arr->dtype);
+        uint64_t siztype = numpy_item_size[arr->dtype];
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             bool bit = GetBit(null_bitmask, iRow);
             if (bit) {
@@ -868,7 +836,7 @@ std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
         }
     }
     if (arr->arr_type == bodo_array_type::NUMPY) {
-        uint64_t siztype = get_item_size(arr->dtype);
+        uint64_t siztype = numpy_item_size[arr->dtype];
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             char* ptrdata1 = &(arr->data1[siztype * iRow]);
             strOut = GetStringExpression(arr->dtype, ptrdata1);
@@ -1103,7 +1071,7 @@ array_info* RetrieveArray(
         out_arr = alloc_array(nRowOut, -1, in_table->columns[eshift]->arr_type,
                               in_table->columns[eshift]->dtype, 0);
         uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
-        uint64_t siztype = get_item_size(in_table->columns[eshift]->dtype);
+        uint64_t siztype = numpy_item_size[in_table->columns[eshift]->dtype];
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
             bool bit = false;
@@ -1131,7 +1099,7 @@ array_info* RetrieveArray(
         // ---floating point: std::nan as here both notions match.
         out_arr = alloc_array(nRowOut, -1, in_table->columns[eshift]->arr_type,
                               in_table->columns[eshift]->dtype, 0);
-        uint64_t siztype = get_item_size(in_table->columns[eshift]->dtype);
+        uint64_t siztype = numpy_item_size[in_table->columns[eshift]->dtype];
         //    std::cout << "siztype=" << siztype << "\n";
         std::vector<char> vectNaN =
             RetrieveNaNentry(in_table->columns[eshift]->dtype);
@@ -1176,7 +1144,7 @@ bool TestEqual(std::vector<array_info*> const& columns, size_t const& n_key,
     for (size_t iKey = 0; iKey < n_key; iKey++) {
         if (columns[shift_key1 + iKey]->arr_type == bodo_array_type::NUMPY) {
             // In the case of NUMPY, we compare the values for concluding.
-            uint64_t siztype = get_item_size(columns[shift_key1 + iKey]->dtype);
+            uint64_t siztype = numpy_item_size[columns[shift_key1 + iKey]->dtype];
             for (uint64_t u = 0; u < siztype; u++) {
                 if (columns[shift_key1 + iKey]->data1[siztype * iRow1 + u] !=
                     columns[shift_key2 + iKey]->data1[siztype * iRow2 + u])
@@ -1199,7 +1167,7 @@ bool TestEqual(std::vector<array_info*> const& columns, size_t const& n_key,
             // they are storing. Comparison is the same as for NUMPY.
             if (bit1) {
                 uint64_t siztype =
-                    get_item_size(columns[shift_key1 + iKey]->dtype);
+                    numpy_item_size[columns[shift_key1 + iKey]->dtype];
                 for (uint64_t u = 0; u < siztype; u++) {
                     if (columns[shift_key1 + iKey]
                             ->data1[siztype * iRow1 + u] !=
@@ -1307,7 +1275,7 @@ int KeyComparisonAsPython(std::vector<array_info*> const& columns,
     for (size_t iKey = 0; iKey < n_key; iKey++) {
         if (columns[shift_key1 + iKey]->arr_type == bodo_array_type::NUMPY) {
             // In the case of NUMPY, we compare the values for concluding.
-            uint64_t siztype = get_item_size(columns[shift_key1 + iKey]->dtype);
+            uint64_t siztype = numpy_item_size[columns[shift_key1 + iKey]->dtype];
             char* ptr1 = columns[shift_key1 + iKey]->data1 + (siztype * iRow1);
             char* ptr2 = columns[shift_key2 + iKey]->data1 + (siztype * iRow2);
             int test = NumericComparison(columns[shift_key1 + iKey]->dtype,
@@ -1331,7 +1299,7 @@ int KeyComparisonAsPython(std::vector<array_info*> const& columns,
             // they are storing. Comparison is the same as for NUMPY.
             if (bit1) {
                 uint64_t siztype =
-                    get_item_size(columns[shift_key1 + iKey]->dtype);
+                    numpy_item_size[columns[shift_key1 + iKey]->dtype];
                 char* ptr1 =
                     columns[shift_key1 + iKey]->data1 + (siztype * iRow1);
                 char* ptr2 =
@@ -2399,7 +2367,6 @@ struct multi_col_key {
         : hash(_hash), table(_table), row(_row) {}
 
     bool operator==(const multi_col_key& other) const {
-        // TODO I think get_item_size should be a vector instead of a function
         for (int64_t i = 0; i < table->num_keys; i++) {
             array_info* c1 = table->columns[i];
             array_info* c2 = other.table->columns[i];
@@ -2654,9 +2621,8 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
             }
         default:
             // zero initialize
-            // TODO I think get_item_size should be a vector
             memset(out_col->data1, 0,
-                   get_item_size(out_col->dtype) * out_col->length);
+                   numpy_item_size[out_col->dtype] * out_col->length);
     }
 }
 
@@ -2811,7 +2777,7 @@ table_info* groupby_and_aggregate_local(table_info& in_table, int64_t num_keys,
         array_info* in_col = in_table[j];
         array_info* out_col = (*out_table)[j];
         if (in_col->arr_type == bodo_array_type::NUMPY) {
-            int64_t dtype_size = get_item_size(out_col->dtype);
+            int64_t dtype_size = numpy_item_size[out_col->dtype];
             for (int64_t i = 0; i < num_groups; i++)
                 memcpy(out_col->data1 + i * dtype_size,
                        in_col->data1 + group_to_first_row[i] * dtype_size,
