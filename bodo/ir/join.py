@@ -108,8 +108,8 @@ class Join(ir.Stmt):
 #        print("add_suffix=", add_suffix)
 
         # The variables that do not require a suffix to be added.
-        other_left = set(left_vars.keys()) - add_suffix - comm_keys
-        other_right = set(right_vars.keys()) - add_suffix - comm_keys
+        other_left = set(left_vars.keys()) - comm_data
+        other_right = set(right_vars.keys()) - comm_data
 #        print("other_left=", other_left)
 #        print("other_right=", other_right)
 #        print("suffix_x=", suffix_x, "  suffix_y=", suffix_y)

@@ -66,12 +66,12 @@ def test_merge_on_invalid_index_left():
 # Unfortunately this test fails already at compilation
 # and so we cannot have a clean error message here
 
-#def test_merge_unicity_of_column_names():
-#    def impl(df1, df2):
-#        return df1.merge(df2, left_on="C", right_on="E", suffixes = ['a', 'a'])
-#
-#    with pytest.raises(BodoError, match="two columns happen to have the same name"):
-#        bodo.jit(impl)(df3, df4)
+def test_merge_unicity_of_column_names():
+    def impl(df1, df2):
+        return df1.merge(df2, left_on="C", right_on="E", suffixes = ['a', 'a'])
+
+    with pytest.raises(BodoError, match="two columns happen to have the same name"):
+        bodo.jit(impl)(df3, df4)
 
 
 # tests invalid on key in right dataframe
@@ -357,6 +357,7 @@ def test_merge_suffixes_format():
     with pytest.raises(BodoError, match="suffixes parameters are passed as"):
         bodo.jit(impl)(df1, df2)
 
+
 def test_merge_suffixes_number():
     def impl(df1, df2):
         return df1.merge(df2, suffixes=["_x", "_y", "_z"])
@@ -501,17 +502,6 @@ def test_join_sort():
         BodoError, match="sort parameter only supports default value False"
     ):
         bodo.jit(impl)(df3, df4)
-
-
-# tests suffixes cannot be specified
-#def test_join_suffixes():
-#    def impl(df3, df4):
-#        return df3.join(df4, lsuffix="_x", rsuffix="_y")
-#
-#    with pytest.raises(
-#        BodoError, match="not supporting specifying 'lsuffix' or 'rsuffix'"
-#    ):
-#        bodo.jit(impl)(df3, df4)
 
 
 # tests left and other dataframes cannot have common columns
