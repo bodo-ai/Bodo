@@ -13,6 +13,10 @@ df1 = pd.DataFrame({"A": [1, 2, 3], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc
 df2 = pd.DataFrame({"A": [1, 2, 5], "B": ["aa", "b", "c"], "C": ["aa", "bb", "cc"]})
 
 
+df3 = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
+df4 = pd.DataFrame({"A": [1, 2, 3], "C": ["aa", "bb", "c"], "E": ["aa", "bb", "cc"]})
+
+
 # tests left is of type dataframe
 def test_merge_left_dataframe():
     def impl(df1):
@@ -56,6 +60,18 @@ def test_merge_on_invalid_index_left():
 
     with pytest.raises(BodoError, match="invalid key .* for on/left_on/right_on"):
         bodo.jit(impl)(df1, df2)
+
+
+
+# Unfortunately this test fails already at compilation
+# and so we cannot have a clean error message here
+
+#def test_merge_unicity_of_column_names():
+#    def impl(df1, df2):
+#        return df1.merge(df2, left_on="C", right_on="E", suffixes = ['a', 'a'])
+#
+#    with pytest.raises(BodoError, match="two columns happen to have the same name"):
+#        bodo.jit(impl)(df3, df4)
 
 
 # tests invalid on key in right dataframe
@@ -343,7 +359,7 @@ def test_merge_suffixes_format():
 
 def test_merge_suffixes_number():
     def impl(df1, df2):
-        return df1.merge(df2, suffixes=["_x", "_y", "_z"))
+        return df1.merge(df2, suffixes=["_x", "_y", "_z"])
 
     with pytest.raises(BodoError, match="number of suffixes to be put should be exactly 2"):
         bodo.jit(impl)(df1, df2)

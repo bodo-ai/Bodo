@@ -1548,7 +1548,7 @@ def merge_asof_overload(
     allow_exact_matches=True,
     direction="backward",
 ):
-    validate_asof_merge_spec(
+    validate_merge_asof_spec(
         left,
         right,
         on,
@@ -1592,11 +1592,20 @@ def merge_asof_overload(
             left_keys = ["$_bodo_index_"]
         else:
             left_keys = get_const_str_list(left_on)
+            validate_keys(left_keys, left.columns)
+
         if is_overload_true(right_index):
             right_keys = ["$_bodo_index_"]
         else:
             right_keys = get_const_str_list(right_on)
+            validate_keys(right_keys, right.columns)
 
+    validate_keys_length(
+        left_on, right_on, left_index, right_index, left_keys, right_keys
+    )
+    validate_keys_dtypes(
+        left, right, left_on, right_on, left_index, right_index, left_keys, right_keys
+    )
     left_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
         ", ".join("'{}'".format(c) for c in left_keys)
     )
@@ -1628,7 +1637,7 @@ def merge_asof_overload(
     _impl = loc_vars["_impl"]
     return _impl
 
-def validate_asof_merge_spec(
+def validate_merge_asof_spec(
     left,
     right,
     on,

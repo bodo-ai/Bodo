@@ -123,7 +123,7 @@ class Join(ir.Stmt):
 #            print("InsertPair key=", key, " val=", val)
             if key in NatureLR:
 #                print("Error for inserting key=", key)
-                raise BodoError('join(): one variable is defined two times in the output')
+                raise BodoError('join(): two columns happen to have the same name')
             NatureLR[key] = val
 
 #        print("Insertion step 1")
