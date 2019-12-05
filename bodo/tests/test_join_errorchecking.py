@@ -335,12 +335,12 @@ def test_merge_sort():
 
 
 # tests suffixes cannot be specified
-def test_merge_suffixes():
-    def impl(df1, df2):
-        return df1.merge(df2, suffixes=("_x", "_y"))
-
-    with pytest.raises(BodoError, match="suffixes parameter cannot be specified"):
-        bodo.jit(impl)(df1, df2)
+#def test_merge_suffixes():
+#    def impl(df1, df2):
+#        return df1.merge(df2, suffixes=("_x", "_y"))
+#
+#    with pytest.raises(BodoError, match="suffixes parameter cannot be specified"):
+#        bodo.jit(impl)(df1, df2)
 
 
 # tests copy is of type bool
@@ -482,14 +482,14 @@ def test_join_sort():
 
 
 # tests suffixes cannot be specified
-def test_join_suffixes():
-    def impl(df3, df4):
-        return df3.join(df4, lsuffix="_x", rsuffix="_y")
-
-    with pytest.raises(
-        BodoError, match="not supporting specifying 'lsuffix' or 'rsuffix'"
-    ):
-        bodo.jit(impl)(df3, df4)
+#def test_join_suffixes():
+#    def impl(df3, df4):
+#        return df3.join(df4, lsuffix="_x", rsuffix="_y")
+#
+#    with pytest.raises(
+#        BodoError, match="not supporting specifying 'lsuffix' or 'rsuffix'"
+#    ):
+#        bodo.jit(impl)(df3, df4)
 
 
 # tests left and other dataframes cannot have common columns

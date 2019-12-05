@@ -4,6 +4,7 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
+from bodo.utils.typing import BodoError
 import numba
 from numba import typeinfer, ir, ir_utils, config, types, generated_jit
 from numba.extending import overload
@@ -101,9 +102,14 @@ class Join(ir.Stmt):
         comm_data = set(left_vars.keys()) & set(right_vars.keys())
         add_suffix = comm_data - comm_keys
 
+        # The variables that do not require a suffix to be added.
         other_left = set(left_vars.keys()) - add_suffix
         other_right = set(right_vars.keys()) - add_suffix
 
+        # Computation of the full set of variables on output.
+        # For each variable on output, we specify:
+        # --- The original variable name on the left or right.
+        # --- Whether the variable is from the left or right.
         NatureLR = {}
         def InsertPair(key, val):
             if key in NatureLR:
