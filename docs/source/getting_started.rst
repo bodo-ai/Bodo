@@ -46,3 +46,6 @@ In this example, each core owns a chunk of the distributed data frame
 (25 rows in this case).
 However, output of `head` is not distributed
 and will be available on all processors.
+
+
+For more in-depth **tutorials**, visit `here <https://github.com/Bodo-inc/Bodo-tutorial>`_.
