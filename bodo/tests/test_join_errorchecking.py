@@ -334,13 +334,19 @@ def test_merge_sort():
         bodo.jit(impl)(df1, df2)
 
 
-# tests suffixes cannot be specified
-#def test_merge_suffixes():
-#    def impl(df1, df2):
-#        return df1.merge(df2, suffixes=("_x", "_y"))
-#
-#    with pytest.raises(BodoError, match="suffixes parameter cannot be specified"):
-#        bodo.jit(impl)(df1, df2)
+def test_merge_suffixes_format():
+    def impl(df1, df2):
+        return df1.merge(df2, suffixes=("_x", "_y"))
+
+    with pytest.raises(BodoError, match="suffixes parameters are passed as"):
+        bodo.jit(impl)(df1, df2)
+
+def test_merge_suffixes_number():
+    def impl(df1, df2):
+        return df1.merge(df2, suffixes=["_x", "_y", "_z"))
+
+    with pytest.raises(BodoError, match="number of suffixes to be put should be exactly 2"):
+        bodo.jit(impl)(df1, df2)
 
 
 # tests copy is of type bool

@@ -1457,12 +1457,7 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
     if not is_overload_none(on):
         on_keys = get_const_str_list(on)
         validate_keys(on_keys, left.columns)
-    # make sure suffixes is not passed in
-    if lsuffix != "" or rsuffix != "":
-        if lsuffix == rsuffix:
-            raise BodoError(
-                "join(): if suffixes are used then they must be different.",
-            )
+
     # make sure sort is the default value, sort=True not supported
     if not is_overload_false(sort):
         raise BodoError("join(): sort parameter only supports default value False")
