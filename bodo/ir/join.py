@@ -101,10 +101,18 @@ class Join(ir.Stmt):
         comm_keys = set(left_keys) & set(right_keys)
         comm_data = set(left_vars.keys()) & set(right_vars.keys())
         add_suffix = comm_data - comm_keys
+#        print("left_keys=", left_keys, " right_keys=", right_keys)
+#        print("left_vars=", left_vars.keys(), " right_vars=", right_vars.keys())
+#        print("comm_keys=", comm_keys)
+#        print("comm_data=", comm_data)
+#        print("add_suffix=", add_suffix)
 
         # The variables that do not require a suffix to be added.
-        other_left = set(left_vars.keys()) - add_suffix
-        other_right = set(right_vars.keys()) - add_suffix
+        other_left = set(left_vars.keys()) - add_suffix - comm_keys
+        other_right = set(right_vars.keys()) - add_suffix - comm_keys
+#        print("other_left=", other_left)
+#        print("other_right=", other_right)
+#        print("suffix_x=", suffix_x, "  suffix_y=", suffix_y)
 
         # Computation of the full set of variables on output.
         # For each variable on output, we specify:
@@ -112,21 +120,36 @@ class Join(ir.Stmt):
         # --- Whether the variable is from the left or right.
         NatureLR = {}
         def InsertPair(key, val):
+#            print("InsertPair key=", key, " val=", val)
             if key in NatureLR:
+#                print("Error for inserting key=", key)
                 raise BodoError('join(): one variable is defined two times in the output')
             NatureLR[key] = val
 
+#        print("Insertion step 1")
         for eVar in add_suffix:
             eVarX = eVar + suffix_x
             eVarY = eVar + suffix_y
             InsertPair(eVarX, [eVar, 'L'])
             InsertPair(eVarY, [eVar, 'R'])
+
+#        print("Insertion step 2")
         for eVar in comm_keys:
             InsertPair(eVar, [eVar, 'L'])
+
+#        print("Insertion step 3")
         for eVar in other_left:
             InsertPair(eVar, [eVar, 'L'])
+
+#        print("Insertion step 4")
         for eVar in other_right:
             InsertPair(eVar, [eVar, 'R'])
+
+        if False:
+            print("PRES")
+            print("left_keys=", left_keys, " right_keys=", right_keys)
+            print("left_vars=", set(left_vars.keys()), " right_vars=", set(right_vars.keys()))
+            print("NatureLR=", set(NatureLR.keys()))
 
         self.column_origins = {
             (c + suffix_x if c in add_suffix else c): ("left", c) for c in left_vars.keys()
