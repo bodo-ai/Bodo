@@ -93,21 +93,13 @@ def test_merge_suffixes_basic():
     """
     Test merge(): make sure const list typing doesn't replace const key values
     """
-    import pdb
     def test_impl(df1, df2):
-        o1 = df1.merge(df2, on='key', how='inner', suffixes=["", "_"])
-#        o1 = df1.merge(df2, on='key', how='inner')
+        o1 = df1.merge(df2, on='key', how='inner', suffixes=["_a", "_b"])
         return o1
 
-    def test_impl_B(df1, df2):
-        return True
     bodo_func = bodo.jit(test_impl)
     df1 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [1, 2, 3, 5]})
     df2 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [5, 6, 7, 8]})
-#    pdb.set_trace()
-#    pd.testing.assert_frame_equal(
-#        bodo_func(df1, df2), bodo_func(df1, df2)
-#    )
     check_func(test_impl, (df1, df2), sort_output=True)
 
 

@@ -1072,7 +1072,6 @@ def merge_overload(
     indicator=False,
     validate=None,
 ):
-    import pdb
     validate_merge_spec(
         left,
         right,
@@ -1258,8 +1257,6 @@ def validate_merge_spec(
         suffixes_val = list(get_const_str_list(suffixes))
     if len(suffixes_val) != 2:
         raise BodoError("merge(): The number of suffixes to be put should be exactly 2")
-    if suffixes_val[0] == suffixes_val[1]:
-        raise BodoError("merge(): The suffixes on the left should be different from the one on the right")
     # make sure copy is the default value, copy=False not supported
     if not is_overload_true(copy):
         raise BodoError("merge(): copy parameter only supports default value True")
@@ -1401,7 +1398,6 @@ def validate_keys(keys, columns):
 
 @overload_method(DataFrameType, "join")
 def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort=False):
-    import pdb
     validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort)
 
     how = get_overload_const_str(how)
@@ -1494,7 +1490,6 @@ class JoinTyper(AbstractTemplate):
         from bodo.utils.typing import is_overload_str
 
         assert not kws
-        import pdb
         left_df, right_df, left_on, right_on, how, suffix_x, suffix_y = args
 
         # columns with common name that are not common keys will get a suffix

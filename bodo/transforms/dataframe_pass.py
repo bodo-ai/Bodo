@@ -1595,7 +1595,6 @@ class DataFramePass(object):
         return self._replace_func(f, [arr], pre_nodes=nodes)
 
     def _run_call_join(self, assign, lhs, rhs):
-        import pdb
         left_df, right_df, left_on_var, right_on_var, how_var, suffix_x_var, suffix_y_var = rhs.args
 
         left_on = self._get_const_or_list(left_on_var)

@@ -94,35 +94,33 @@ class Join(ir.Stmt):
         self.suffix_x = suffix_x
         self.suffix_y = suffix_y
         self.loc = loc
-        #
 
         # keep the origin of output columns to enable proper dead code elimination
         # columns with common name that are not common keys will get a suffix
         comm_keys = set(left_keys) & set(right_keys)
         comm_data = set(left_vars.keys()) & set(right_vars.keys())
         add_suffix = comm_data - comm_keys
-        #
-        setvar_left = set(left_vars.keys())
-        setvar_right = set(right_vars.keys())
-        setvar_int = setvar_left & setvar_right
 
-        comm_keys = set(left_keys) & set(right_keys)
-        add_suffix = setvar_int - comm_keys
-        other_left = setvar_left - add_suffix
-        other_right = setvar_right - add_suffix
+        other_left = set(left_vars.keys()) - add_suffix
+        other_right = set(right_vars.keys()) - add_suffix
 
         NatureLR = {}
+        def InsertPair(key, val):
+            if key in NatureLR:
+                raise BodoError('join(): one variable is defined two times in the output')
+            NatureLR[key] = val
+
         for eVar in add_suffix:
             eVarX = eVar + suffix_x
             eVarY = eVar + suffix_y
-            NatureLR[eVarX] = [eVar, 'L']
-            NatureLR[eVarY] = [eVar, 'R']
+            InsertPair(eVarX, [eVar, 'L'])
+            InsertPair(eVarY, [eVar, 'R'])
         for eVar in comm_keys:
-            NatureLR[eVar] = [eVar, 'L']
+            InsertPair(eVar, [eVar, 'L'])
         for eVar in other_left:
-            NatureLR[eVar] = [eVar, 'L']
+            InsertPair(eVar, [eVar, 'L'])
         for eVar in other_right:
-            NatureLR[eVar] = [eVar, 'R']
+            InsertPair(eVar, [eVar, 'R'])
 
         self.column_origins = {
             (c + suffix_x if c in add_suffix else c): ("left", c) for c in left_vars.keys()
@@ -256,6 +254,8 @@ distributed_analysis.distributed_analysis_extensions[Join] = join_distributed_an
 def join_typeinfer(join_node, typeinferer):
     for out_col_name, out_col_var in join_node.df_out_vars.items():
         # left suffix
+        if not out_col_name in join_node.NatureLR:
+            raise BodoError("join(): The variable out_col_name is absent from the output")
         ePair = join_node.NatureLR[out_col_name]
         if ePair[1] == 'L':
             col_var = join_node.left_vars[ePair[0]]
