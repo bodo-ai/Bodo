@@ -160,6 +160,24 @@ def overload_re_subn(pattern, repl, string, count=0, flags=0):
     return _re_subn_impl
 
 
+@overload(re.escape)
+def overload_re_escape(pattern):
+    def _re_escape_impl(pattern):
+        with numba.objmode(m="unicode_type"):
+            m = re.escape(pattern)
+        return m
+    return _re_escape_impl
+
+
+@overload(re.purge)
+def overload_re_purge():
+    def _re_purge_impl():
+        with numba.objmode():
+            re.purge()
+        return
+    return _re_purge_impl
+
+
 @overload(re.compile)
 def re_compile_overload(pattern, flags=0):
     def _re_compile_impl(pattern, flags=0):

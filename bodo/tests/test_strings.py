@@ -191,6 +191,27 @@ def test_re_subn():
     assert py_out == bodo_out
 
 
+def test_re_escape():
+    """make sure re.escape returns proper output (a string)
+    """
+    def test_impl(pat):
+        return re.escape(pat)
+
+    pat = "http://www.python.org"
+    py_out = test_impl(pat)
+    bodo_out = bodo.jit(test_impl)(pat)
+    assert py_out == bodo_out
+
+
+def test_re_purge():
+    """make sure re.purge call works (can't see internal cache of re to fully test)
+    """
+    def test_impl():
+        return re.purge()
+
+    bodo.jit(test_impl)()
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):
