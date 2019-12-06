@@ -246,3 +246,13 @@ def re_sub_overload(p, repl, string, count=0):
         return out
 
     return _re_sub_impl
+
+
+@overload_method(RePatternType, "subn")
+def re_subn_overload(p, repl, string, count=0):
+    def _re_subn_impl(p, repl, string, count=0):
+        with numba.objmode(out="unicode_type", s="int64"):
+            out, s = p.subn(repl, string, count)
+        return out, s
+
+    return _re_subn_impl

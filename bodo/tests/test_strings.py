@@ -271,6 +271,20 @@ def test_re_subn():
     assert py_out == bodo_out
 
 
+def test_pat_subn():
+    """make sure Pattern.subn returns proper output (a string and integer)
+    """
+    def test_impl(pat, repl, in_str):
+        return pat.subn(repl, in_str)
+
+    pat = re.compile(r'\w+')
+    repl = "PP"
+    in_str = "Words, words, words."
+    py_out = test_impl(pat, repl, in_str)
+    bodo_out = bodo.jit(test_impl)(pat, repl, in_str)
+    assert py_out == bodo_out
+
+
 def test_re_escape():
     """make sure re.escape returns proper output (a string)
     """
