@@ -270,10 +270,27 @@ def overload_pattern_flags(p):
 
 
 @overload_attribute(RePatternType, "groups")
-def overload_pattern_flags(p):
+def overload_pattern_groups(p):
     def _pat_flags_impl(p):
         with numba.objmode(groups="int64"):
             groups = p.groups
         return groups
 
     return _pat_flags_impl
+
+
+@overload_attribute(RePatternType, "groupindex")
+def overload_pattern_groupindex(p):
+    """overload Pattern.groupindex. Python returns mappingproxy object but Bodo returns
+    a Numba TypedDict with essentially the same functionality
+    """
+    types.dict_string_int = types.DictType(string_type, types.int64)
+    def _pat_groupindex_impl(p):
+        with numba.objmode(d="dict_string_int"):
+            groupindex = dict(p.groupindex)
+            d = numba.typed.Dict.empty(
+                key_type=numba.types.unicode_type, value_type=numba.int64)
+            d.update(groupindex)
+        return d
+
+    return _pat_groupindex_impl

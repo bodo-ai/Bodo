@@ -330,6 +330,19 @@ def test_pat_groups():
     assert py_out == bodo_out
 
 
+def test_pat_groupindex():
+    """test Pattern.groupindex. Python returns mappingproxy object but Bodo returns
+    a Numba TypedDict
+    """
+    def test_impl(pat):
+        return pat.groupindex
+
+    pat = re.compile(r"(?P<first_name>\w+) (?P<last_name>\w+)")
+    py_out = test_impl(pat)
+    bodo_out = bodo.jit(test_impl)(pat)
+    assert dict(py_out) == dict(bodo_out)
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):
