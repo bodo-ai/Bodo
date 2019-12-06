@@ -177,6 +177,20 @@ def test_re_sub():
     assert py_out == bodo_out
 
 
+def test_re_subn():
+    """make sure re.subn returns proper output (a string and integer)
+    """
+    def test_impl(pat, repl, in_str):
+        return re.subn(pat, repl, in_str)
+
+    pat = r'\w+'
+    repl = "PP"
+    in_str = "Words, words, words."
+    py_out = test_impl(pat, repl, in_str)
+    bodo_out = bodo.jit(test_impl)(pat, repl, in_str)
+    assert py_out == bodo_out
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):
