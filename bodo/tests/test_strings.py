@@ -119,6 +119,23 @@ def test_re_match(in_str):
     assert (py_out is None and bodo_out is None) or py_out.span() == bodo_out.span()
 
 
+@pytest.mark.parametrize(
+    "in_str", ["AB", "A_B", "AB_C"
+    ],
+)
+def test_re_fullmatch(in_str):
+    """make sure re.match returns None or a proper re.Match
+    """
+    def test_impl(pat, in_str):
+        return re.fullmatch(pat, in_str)
+
+    pat = "AB"
+    py_out = test_impl(pat, in_str)
+    bodo_out = bodo.jit(test_impl)(pat, in_str)
+    # output is None or re.Match
+    # just testing span of re.Match should be enough
+    assert (py_out is None and bodo_out is None) or py_out.span() == bodo_out.span()
+
 
 class TestString(unittest.TestCase):
     def test_pass_return(self):

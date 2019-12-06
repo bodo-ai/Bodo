@@ -113,6 +113,15 @@ def overload_re_match(pattern, string, flags=0):
     return _re_match_impl
 
 
+@overload(re.fullmatch)
+def overload_re_fullmatch(pattern, string, flags=0):
+    def _re_fullmatch_impl(pattern, string, flags=0):
+        with numba.objmode(m="re_match_type"):
+            m = re.fullmatch(pattern, string, flags)
+        return m
+    return _re_fullmatch_impl
+
+
 @overload(re.compile)
 def re_compile_overload(pattern, flags=0):
     def _re_compile_impl(pattern, flags=0):
