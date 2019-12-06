@@ -105,6 +105,23 @@ def test_re_match_cast_bool(in_str):
     "in_str", ["AB", "A_B", "A_B_C"
     ],
 )
+def test_re_match_check_none(in_str):
+    """make sure re.Match object can be checked for None
+    """
+    def test_impl(pat, in_str):
+        m = re.search(pat, in_str)
+        if m is None:
+            return 1
+        return 0
+
+    pat = "_"
+    assert test_impl(pat, in_str) == bodo.jit(test_impl)(pat, in_str)
+
+
+@pytest.mark.parametrize(
+    "in_str", ["AB", "A_B", "A_B_C"
+    ],
+)
 def test_re_pat_search(in_str):
     """make sure Pattern.search returns None or a proper re.Match
     """

@@ -16,6 +16,7 @@ from numba.extending import (
     intrinsic,
     typeof_impl,
     lower_cast,
+    lower_builtin,
 )
 from bodo.libs.str_ext import string_type
 from llvmlite import ir as lir
@@ -101,6 +102,17 @@ def cast_match_obj_bool(context, builder, fromty, toty, val):
     with builder.if_then(is_none):
         builder.store(context.get_constant(types.bool_, False), out)
     return builder.load(out)
+
+
+@lower_builtin(operator.is_, ReMatchType, types.NoneType)
+def lower_match_is_none(context, builder, sig, args):
+    """
+    implementation for "match is None"
+    """
+    match = args[0]
+    # reuse cast to bool implementation
+    return builder.not_(
+        cast_match_obj_bool(context, builder, sig.args[0], sig.args[1], match))
 
 
 @overload(re.search)
