@@ -137,13 +137,26 @@ def test_re_fullmatch(in_str):
     assert (py_out is None and bodo_out is None) or py_out.span() == bodo_out.span()
 
 
-def test_re_split(in_str):
+def test_re_split():
     """make sure re.split returns proper output (list of strings)
     """
     def test_impl(pat, in_str):
         return re.split(pat, in_str)
 
     pat = r'\W+'
+    in_str = "Words, words, words."
+    py_out = test_impl(pat, in_str)
+    bodo_out = bodo.jit(test_impl)(pat, in_str)
+    assert py_out == bodo_out
+
+
+def test_re_findall():
+    """make sure re.findall returns proper output (list of strings)
+    """
+    def test_impl(pat, in_str):
+        return re.findall(pat, in_str)
+
+    pat = r'\w+'
     in_str = "Words, words, words."
     py_out = test_impl(pat, in_str)
     bodo_out = bodo.jit(test_impl)(pat, in_str)

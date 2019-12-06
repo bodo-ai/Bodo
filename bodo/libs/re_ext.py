@@ -55,6 +55,7 @@ class ReMatchType(types.Type):
 
 re_match_type = ReMatchType()
 types.re_match_type = re_match_type
+types.list_str_type = types.List(string_type)
 
 
 register_model(ReMatchType)(models.OpaqueModel)
@@ -125,12 +126,20 @@ def overload_re_fullmatch(pattern, string, flags=0):
 
 @overload(re.split)
 def overload_re_split(pattern, string, maxsplit=0, flags=0):
-    types.list_str_type = types.List(string_type)
     def _re_split_impl(pattern, string, maxsplit=0, flags=0):
         with numba.objmode(m="list_str_type"):
             m = re.split(pattern, string, maxsplit, flags)
         return m
     return _re_split_impl
+
+
+@overload(re.findall)
+def overload_re_findall(pattern, string, flags=0):
+    def _re_findall_impl(pattern, string, flags=0):
+        with numba.objmode(m="list_str_type"):
+            m = re.findall(pattern, string, flags)
+        return m
+    return _re_findall_impl
 
 
 @overload(re.compile)
