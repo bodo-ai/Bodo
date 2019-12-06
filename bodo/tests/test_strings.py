@@ -306,6 +306,18 @@ def test_re_purge():
     bodo.jit(test_impl)()
 
 
+def test_pat_flags():
+    """test Pattern.flags
+    """
+    def test_impl(pat):
+        return pat.flags
+
+    pat = re.compile("AA", flags=re.IGNORECASE)
+    py_out = test_impl(pat)
+    bodo_out = bodo.jit(test_impl)(pat)
+    assert py_out == bodo_out
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):

@@ -12,6 +12,7 @@ from numba.extending import (
     NativeValue,
     overload,
     overload_method,
+    overload_attribute,
     intrinsic,
     typeof_impl,
     lower_cast,
@@ -256,3 +257,13 @@ def re_subn_overload(p, repl, string, count=0):
         return out, s
 
     return _re_subn_impl
+
+
+@overload_attribute(RePatternType, "flags")
+def overload_pattern_flags(p):
+    def _pat_flags_impl(p):
+        with numba.objmode(flags="int64"):
+            flags = p.flags
+        return flags
+
+    return _pat_flags_impl
