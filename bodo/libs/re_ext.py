@@ -31,6 +31,11 @@ types.re_pattern_type = re_pattern_type
 register_model(RePatternType)(models.OpaqueModel)
 
 
+@typeof_impl.register(re.Pattern)
+def typeof_re_pattern(val, c):
+    return re_pattern_type
+
+
 @box(RePatternType)
 def box_re_pattern(typ, val, c):
     # TODO: fix
@@ -62,7 +67,7 @@ register_model(ReMatchType)(models.OpaqueModel)
 
 
 @typeof_impl.register(re.Match)
-def typeof_pd_dataframe(val, c):
+def typeof_re_match(val, c):
     return re_match_type
 
 
@@ -186,6 +191,15 @@ def re_compile_overload(pattern, flags=0):
         return pat
 
     return _re_compile_impl
+
+
+@overload_method(RePatternType, "search")
+def overload_pat_search(p, string, pos=0, endpos=9223372036854775807):
+    def _pat_search_impl(p, string, pos=0, endpos=9223372036854775807):
+        with numba.objmode(m="re_match_type"):
+            m = p.search(string, pos, endpos)
+        return m
+    return _pat_search_impl
 
 
 @overload_method(RePatternType, "sub")
