@@ -163,6 +163,20 @@ def test_re_findall():
     assert py_out == bodo_out
 
 
+def test_re_sub():
+    """make sure re.sub returns proper output (a string)
+    """
+    def test_impl(pat, repl, in_str):
+        return re.sub(pat, repl, in_str)
+
+    pat = r'\w+'
+    repl = "PP"
+    in_str = "Words, words, words."
+    py_out = test_impl(pat, repl, in_str)
+    bodo_out = bodo.jit(test_impl)(pat, repl, in_str)
+    assert py_out == bodo_out
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):

@@ -142,6 +142,15 @@ def overload_re_findall(pattern, string, flags=0):
     return _re_findall_impl
 
 
+@overload(re.sub)
+def overload_re_sub(pattern, repl, string, count=0, flags=0):
+    def _re_sub_impl(pattern, repl, string, count=0, flags=0):
+        with numba.objmode(m="unicode_type"):
+            m = re.sub(pattern, repl, string, count, flags)
+        return m
+    return _re_sub_impl
+
+
 @overload(re.compile)
 def re_compile_overload(pattern, flags=0):
     def _re_compile_impl(pattern, flags=0):
