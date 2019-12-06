@@ -104,6 +104,15 @@ def overload_re_search(pattern, string, flags=0):
     return _re_search_impl
 
 
+@overload(re.match)
+def overload_re_match(pattern, string, flags=0):
+    def _re_match_impl(pattern, string, flags=0):
+        with numba.objmode(m="re_match_type"):
+            m = re.match(pattern, string, flags)
+        return m
+    return _re_match_impl
+
+
 @overload(re.compile)
 def re_compile_overload(pattern, flags=0):
     def _re_compile_impl(pattern, flags=0):
