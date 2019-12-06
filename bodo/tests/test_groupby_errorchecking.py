@@ -200,6 +200,32 @@ def test_groupby_observed_false():
 # ------------------------------ Groupby._() ------------------------------ #
 
 
+def test_groupby_column_selection():
+    """
+    Test Groupby[]: selceted column must exist in the Dataframe
+    """
+
+    def impl(df):
+        return df.groupby(by=["A"])["B"]
+
+    df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
+    with pytest.raises(BodoError, match="selected column .* not found in dataframe"):
+        bodo.jit(impl)(df)
+
+
+def test_groupby_columns_selection():
+    """
+    Test Groupby[]: selceted column(s) must exist in the Dataframe
+    """
+
+    def impl(df):
+        return df.groupby(by=["A"])["B", "C"]
+
+    df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
+    with pytest.raises(BodoError, match="selected column .* not found in dataframe"):
+        bodo.jit(impl)(df)
+
+
 def test_groupby_agg_func():
     """
     Test Groupby.agg(): func must be specified
