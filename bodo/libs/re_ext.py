@@ -16,6 +16,7 @@ from numba.extending import (
     typeof_impl,
     lower_cast,
 )
+from bodo.libs.str_ext import string_type
 from llvmlite import ir as lir
 
 
@@ -120,6 +121,16 @@ def overload_re_fullmatch(pattern, string, flags=0):
             m = re.fullmatch(pattern, string, flags)
         return m
     return _re_fullmatch_impl
+
+
+@overload(re.split)
+def overload_re_split(pattern, string, maxsplit=0, flags=0):
+    types.list_str_type = types.List(string_type)
+    def _re_split_impl(pattern, string, maxsplit=0, flags=0):
+        with numba.objmode(m="list_str_type"):
+            m = re.split(pattern, string, maxsplit, flags)
+        return m
+    return _re_split_impl
 
 
 @overload(re.compile)
