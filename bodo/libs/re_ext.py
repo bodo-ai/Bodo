@@ -220,6 +220,15 @@ def overload_pat_fullmatch(p, string, pos=0, endpos=9223372036854775807):
     return _pat_fullmatch_impl
 
 
+@overload_method(RePatternType, "split")
+def overload_pat_split(pattern, string, maxsplit=0):
+    def _pat_split_impl(pattern, string, maxsplit=0):
+        with numba.objmode(m="list_str_type"):
+            m = pattern.split(string, maxsplit)
+        return m
+    return _pat_split_impl
+
+
 @overload_method(RePatternType, "sub")
 def re_sub_overload(p, repl, string, count=0):
     def _re_sub_impl(p, repl, string, count=0):

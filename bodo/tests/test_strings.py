@@ -204,6 +204,19 @@ def test_re_split():
     assert py_out == bodo_out
 
 
+def test_pat_split():
+    """make sure Pattern.split returns proper output (list of strings)
+    """
+    def test_impl(pat, in_str):
+        return re.split(pat, in_str)
+
+    pat = re.compile(r'\W+')
+    in_str = "Words, words, words."
+    py_out = test_impl(pat, in_str)
+    bodo_out = bodo.jit(test_impl)(pat, in_str)
+    assert py_out == bodo_out
+
+
 def test_re_findall():
     """make sure re.findall returns proper output (list of strings)
     """
