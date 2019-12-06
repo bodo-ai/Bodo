@@ -229,6 +229,15 @@ def overload_pat_split(pattern, string, maxsplit=0):
     return _pat_split_impl
 
 
+@overload_method(RePatternType, "findall")
+def overload_pat_findall(p, string, pos=0, endpos=9223372036854775807):
+    def _pat_findall_impl(p, string, pos=0, endpos=9223372036854775807):
+        with numba.objmode(m="list_str_type"):
+            m = p.findall(string, pos, endpos)
+        return m
+    return _pat_findall_impl
+
+
 @overload_method(RePatternType, "sub")
 def re_sub_overload(p, repl, string, count=0):
     def _re_sub_impl(p, repl, string, count=0):

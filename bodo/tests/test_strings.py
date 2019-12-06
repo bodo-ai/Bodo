@@ -230,6 +230,19 @@ def test_re_findall():
     assert py_out == bodo_out
 
 
+def test_pat_findall():
+    """make sure Pattern.findall returns proper output (list of strings)
+    """
+    def test_impl(pat, in_str):
+        return pat.findall(in_str)
+
+    pat = re.compile(r'\w+')
+    in_str = "Words, words, words."
+    py_out = test_impl(pat, in_str)
+    bodo_out = bodo.jit(test_impl)(pat, in_str)
+    assert py_out == bodo_out
+
+
 def test_re_sub():
     """make sure re.sub returns proper output (a string)
     """
