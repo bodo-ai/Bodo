@@ -1067,24 +1067,25 @@ def validate_unicity_output_column_names(
 
     NatureLR = {}
     def insertOutColumn(col_name):
+        print("col_name=", col_name)
         if col_name in NatureLR:
             raise BodoError('join(): two columns happen to have the same name')
         NatureLR[col_name] = 0
 
+    for eVar in comm_keys:
+        insertOutColumn(eVar)
+
     for eVar in add_suffix:
         eVarX = eVar + suffix_x
         eVarY = eVar + suffix_y
-        InsertPair(eVarX)
-        InsertPair(eVarY)
-
-    for eVar in comm_keys:
-        InsertPair(eVar)
+        insertOutColumn(eVarX)
+        insertOutColumn(eVarY)
 
     for eVar in other_left:
-        InsertPair(eVar)
+        insertOutColumn(eVar)
 
     for eVar in other_right:
-        InsertPair(eVar)
+        insertOutColumn(eVar)
 
 
 @overload_method(DataFrameType, "merge")
@@ -1156,12 +1157,6 @@ def merge_overload(
         left, right, left_on, right_on, left_index, right_index, left_keys, right_keys
     )
 
-    left_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
-        ", ".join("'{}'".format(c) for c in left_keys)
-    )
-    right_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
-        ", ".join("'{}'".format(c) for c in right_keys)
-    )
     # The suffixes
     if isinstance(suffixes, tuple):
         suffixes_val = suffixes
@@ -1169,9 +1164,16 @@ def merge_overload(
         suffixes_val = list(get_const_str_list(suffixes))
     suffix_x = suffixes_val[0]
     suffix_y = suffixes_val[1]
-#    validate_unicity_output_column_names(
-#        suffix_x, suffix_y, left_on, right_on, left.columns, right.columns
-#    )
+    validate_unicity_output_column_names(
+        suffix_x, suffix_y, left_keys, right_keys, left.columns, right.columns
+    )
+
+    left_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
+        ", ".join("'{}'".format(c) for c in left_keys)
+    )
+    right_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
+        ", ".join("'{}'".format(c) for c in right_keys)
+    )
 
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, right, how='inner', on=None, left_on=None,\n"

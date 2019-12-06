@@ -66,12 +66,12 @@ def test_merge_on_invalid_index_left():
 # Unfortunately this test fails already at compilation
 # and so we cannot have a clean error message here
 
-def test_merge_unicity_of_column_names():
-    def impl(df1, df2):
-        return df1.merge(df2, left_on="C", right_on="E", suffixes = ['a', 'a'])
-
-    with pytest.raises(BodoError, match="two columns happen to have the same name"):
-        bodo.jit(impl)(df3, df4)
+#def test_merge_unicity_of_column_names():
+#    def impl(df1, df2):
+#        return df1.merge(df2, left_on="C", right_on="E", suffixes = ['a', 'a'])
+#
+#    with pytest.raises(BodoError, match="two columns happen to have the same name"):
+#        bodo.jit(impl)(df3, df4)
 
 
 # tests invalid on key in right dataframe
