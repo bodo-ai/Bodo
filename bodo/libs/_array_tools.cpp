@@ -2064,9 +2064,8 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                             aggfunc<T, ftype>::apply(
                                 out_col->at<T>(row_to_group[i]),
                                 in_col->at<T>(i));
-                            // output array is not nullable currently
-                            // SetBitTo((uint8_t*)out_col->null_bitmask,
-                            // row_to_group[i], true);
+                            SetBitTo((uint8_t*)out_col->null_bitmask,
+                                     row_to_group[i], true);
                         }
                     }
                     return;
@@ -2447,8 +2446,14 @@ void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
  * @param function identifier
  */
 void aggfunc_output_initialize(array_info* out_col, int ftype) {
-    if (out_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL)
-        memset(out_col->null_bitmask, 0, out_col->length);
+    if (out_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max)
+            // if input is all nulls, max and min output will be null
+            InitializeBitMask((uint8_t*)out_col->null_bitmask, out_col->length, false);
+        else
+            // for other functions (count, sum, etc.) output will never be null
+            InitializeBitMask((uint8_t*)out_col->null_bitmask, out_col->length, true);
+    }
     switch (ftype) {
         case Bodo_FTypes::prod:
             switch (out_col->dtype) {
@@ -2700,10 +2705,6 @@ void get_groupby_output_dtype(int ftype,
                               bodo_array_type::arr_type_enum& array_type,
                               Bodo_CTypes::CTypeEnum& dtype, bool is_key) {
     if (is_key) return;
-    // FIXME for now, converting output to non-nullable, but if input is
-    // nullable output should be too (in pandas it is)
-    if (array_type == bodo_array_type::NULLABLE_INT_BOOL)
-        array_type = bodo_array_type::NUMPY;
     switch (ftype) {
         case Bodo_FTypes::count:
             array_type = bodo_array_type::NUMPY;
@@ -2894,19 +2895,24 @@ std::vector<Bodo_FTypes::FTypeEnum> combine_funcs(Bodo_FTypes::num_funcs);
  */
 table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                                   int32_t ftype, bool is_parallel) {
+    // perform initial local aggregation
     int64_t num_data_cols = in_table->ncols() - num_keys;
     table_info* aggr_local =
         groupby_and_aggregate_local(*in_table, num_keys, num_data_cols, ftype);
-    table_info* out_table;
+
+    // shuffle step
+    table_info* shuf_table = aggr_local;
     if (is_parallel) {
-        table_info* shuf_table = shuffle_table(aggr_local, num_keys);
+        shuf_table = shuffle_table(aggr_local, num_keys);
         delete aggr_local;
-        out_table = groupby_and_aggregate_local(
-            *shuf_table, num_keys, num_data_cols, combine_funcs[ftype]);
-        delete shuf_table;
-    } else {
-        out_table = aggr_local;
     }
+
+    // combine step
+    table_info* out_table = groupby_and_aggregate_local(
+        *shuf_table, num_keys, num_data_cols, combine_funcs[ftype]);
+    delete shuf_table;
+
+    // eval step
     agg_func_eval(*out_table, num_keys, num_data_cols, ftype);
     return out_table;
 }

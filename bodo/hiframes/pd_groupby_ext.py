@@ -25,6 +25,7 @@ from numba.typing.templates import (
     bound_function,
 )
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
+from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.libs.str_ext import string_type
@@ -253,12 +254,12 @@ class GetItemDataFrameGroupBy(AbstractTemplate):
             return signature(ret_grp, *args)
 
 
-def get_groupby_output_dtype(in_dtype, func_name):
+def get_groupby_output_dtype(arr_type, func_name):
     """
     Return output dtype for groupby aggregation function based on the
-    function and the input dtype.
+    function and the input array type and dtype.
     """
-
+    in_dtype = arr_type.dtype
     if (
         not isinstance(in_dtype, types.Integer)
         and not isinstance(in_dtype, types.Float)
@@ -291,6 +292,8 @@ def get_groupby_output_dtype(in_dtype, func_name):
     elif func_name in {"mean", "var", "std"}:
         return types.float64
     else:
+        if isinstance(arr_type, IntegerArrayType):
+            return IntDtype(in_dtype)
         return in_dtype  # default: return same dtype as input
 
 
@@ -346,7 +349,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                         )
                     )
             else:
-                out_dtype = get_groupby_output_dtype(data.dtype, func_name)
+                out_dtype = get_groupby_output_dtype(data, func_name)
 
             out_arr = _get_series_array_type(out_dtype)
             out_data.append(out_arr)
@@ -354,8 +357,12 @@ class DataframeGroupByAttribute(AttributeTemplate):
         out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
         # XXX output becomes series if single output and explicitly selected
         if len(grp.selection) == 1 and grp.explicit_select and grp.as_index:
+            if isinstance(out_data[0], IntegerArrayType):
+                dtype = IntDtype(out_data[0].dtype)
+            else:
+                dtype = out_data[0].dtype
             out_res = SeriesType(
-                out_data[0].dtype, index=index, name_typ=bodo.string_type
+                dtype, index=index, name_typ=bodo.string_type
             )
         return signature(out_res, *args)
 

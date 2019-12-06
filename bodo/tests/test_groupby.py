@@ -84,6 +84,44 @@ def test_df_int_no_null(request):
     return request.param
 
 
+def test_nullable_int():
+
+    def impl(df):
+        A = df.groupby("A").sum()
+        return A
+
+    def impl_select_colB(df):
+        A = df.groupby("A")['B'].sum()
+        return A
+
+    def impl_select_colE(df):
+        A = df.groupby("A")['E'].sum()
+        return A
+
+    def impl_select_colH(df):
+        A = df.groupby("A")['H'].sum()
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int8"),
+            "C": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int16"),
+            "D": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int32"),
+            "E": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int64"),
+            "F": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt8"),
+            "G": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt16"),
+            "H": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt32"),
+            "I": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt64"),
+        }
+    )
+
+    check_func(impl, (df,), sort_output=True)
+    check_func(impl_select_colB, (df,), sort_output=True)
+    check_func(impl_select_colE, (df,), sort_output=True)
+    check_func(impl_select_colH, (df,), sort_output=True)
+
+
 def test_agg():
     """
     Test Groupby.agg(): one user defined func and all cols
@@ -540,7 +578,7 @@ def test_cumsum_all_nulls_col():
     check_func(impl, (df,))
 
 
-def test_max(test_df_int_no_null):
+def test_max(test_df):
     """
     Test Groupby.max()
     """
@@ -554,11 +592,11 @@ def test_max(test_df_int_no_null):
         A = df.groupby("A").max()
         return A
 
-    check_func(impl1, (test_df_int_no_null,), sort_output=True)
+    check_func(impl1, (test_df,), sort_output=True)
     check_func(impl2, (11,))
 
 
-def test_max_one_col(test_df_int_no_null):
+def test_max_one_col(test_df):
     """
     Test Groupby.max() with one column selected
     """
@@ -572,7 +610,7 @@ def test_max_one_col(test_df_int_no_null):
         A = df.groupby("A")["B"].max()
         return A
 
-    check_func(impl1, (test_df_int_no_null,), sort_output=True)
+    check_func(impl1, (test_df,), sort_output=True)
     check_func(impl2, (11,))
 
 
@@ -596,7 +634,7 @@ def test_groupby_as_index_max():
     check_func(impl2, (11,))
 
 
-def test_mean(test_df_int_no_null):
+def test_mean(test_df):
     """
     Test Groupby.mean()
     """
@@ -610,11 +648,11 @@ def test_mean(test_df_int_no_null):
         A = df.groupby("A").mean()
         return A
 
-    check_func(impl1, (test_df_int_no_null,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
-def test_mean_one_col(test_df_int_no_null):
+def test_mean_one_col(test_df):
     """
     Test Groupby.mean() with one column selected
     """
@@ -628,7 +666,7 @@ def test_mean_one_col(test_df_int_no_null):
         A = df.groupby("A")["B"].mean()
         return A
 
-    check_func(impl1, (test_df_int_no_null,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
@@ -652,7 +690,7 @@ def test_groupby_as_index_mean():
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
-def test_min(test_df_int_no_null):
+def test_min(test_df):
     """
     Test Groupby.min()
     """
@@ -666,11 +704,11 @@ def test_min(test_df_int_no_null):
         A = df.groupby("A").min()
         return A
 
-    check_func(impl1, (test_df_int_no_null,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
-def test_min_one_col(test_df_int_no_null):
+def test_min_one_col(test_df):
     """
     Test Groupby.min() with one column selected
     """
@@ -684,7 +722,7 @@ def test_min_one_col(test_df_int_no_null):
         A = df.groupby("A")["B"].min()
         return A
 
-    check_func(impl1, (test_df_int_no_null,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
@@ -791,6 +829,8 @@ def test_std(test_df_int_no_null):
     """
 
     def impl1(df):
+        # NOTE: pandas fails here if one of the data columns is Int64 with all
+        # nulls. That is why this test uses test_df_int_no_null
         A = df.groupby("A").std()
         return A
 
@@ -803,7 +843,7 @@ def test_std(test_df_int_no_null):
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
-def test_std_one_col(test_df_int_no_null):
+def test_std_one_col(test_df):
     """
     Test Groupby.std() with one column selected
     """
@@ -817,7 +857,7 @@ def test_std_one_col(test_df_int_no_null):
         A = df.groupby("A")["B"].std()
         return A
 
-    check_func(impl1, (test_df_int_no_null,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
@@ -841,7 +881,7 @@ def test_groupby_as_index_std():
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
-def test_sum(test_df_int_no_null):
+def test_sum(test_df):
     """
     Test Groupby.sum()
     """
@@ -855,11 +895,11 @@ def test_sum(test_df_int_no_null):
         A = df.groupby("A").sum()
         return A
 
-    check_func(impl1, (test_df_int_no_null,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
-def test_sum_one_col(test_df_int_no_null):
+def test_sum_one_col(test_df):
     """
     Test Groupby.sum() with one column selected
     """
@@ -873,7 +913,7 @@ def test_sum_one_col(test_df_int_no_null):
         A = df.groupby("A")["B"].sum()
         return A
 
-    check_func(impl1, (test_df_int_no_null,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
@@ -985,7 +1025,7 @@ def test_agg_multikey_parallel():
     assert h_res == p_res
 
 
-def test_var(test_df_int_no_null):
+def test_var(test_df):
     """
     Test Groupby.var()
     """
@@ -999,11 +1039,11 @@ def test_var(test_df_int_no_null):
         A = df.groupby("A").var()
         return A
 
-    check_func(impl1, (test_df_int_no_null,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
-def test_var_one_col(test_df_int_no_null):
+def test_var_one_col(test_df):
     """
     Test Groupby.var() with one column selected
     """
@@ -1017,7 +1057,7 @@ def test_var_one_col(test_df_int_no_null):
         A = df.groupby("A")["B"].var()
         return A
 
-    check_func(impl1, (test_df_int_no_null,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 

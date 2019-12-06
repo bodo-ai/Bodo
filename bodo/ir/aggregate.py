@@ -4,6 +4,7 @@ from collections import namedtuple, defaultdict
 from functools import reduce
 import copy
 import numpy as np
+import pandas as pd
 import numba
 from numba import typeinfer, ir, ir_utils, config, types, compiler
 from numba.ir_utils import (
@@ -46,6 +47,7 @@ from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
 from bodo.libs.str_ext import string_type
+from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from bodo.utils.utils import build_set
 from bodo.libs.str_arr_ext import (
     string_array_type,
@@ -669,7 +671,6 @@ def agg_distributed_run(
     kind = "transform" if agg_node.agg_func == "cumsum" else "aggregate"
 
     return_key = agg_node.out_key_vars is not None
-    out_typs = [t.dtype for t in out_col_typs]
 
     glbs = {"bodo": bodo, "np": np, "dt64_dtype": np.dtype("datetime64[ns]")}
 
@@ -704,7 +705,7 @@ def agg_distributed_run(
             agg_node.key_names,
             return_key,
             var_typs,
-            out_typs,
+            out_col_typs,
             agg_node.df_in_vars.keys(),
             agg_node.df_out_vars.keys(),
             agg_node.agg_func,
@@ -713,6 +714,7 @@ def agg_distributed_run(
         )
         glbs.update(
             {
+                "pd": pd,
                 "agg_seq_iter": agg_seq_iter,
                 "parallel_agg": parallel_agg,
                 "array_to_info": array_to_info,
@@ -1223,11 +1225,12 @@ def _get_np_dtype(t):
 
 
 def gen_top_level_agg_func(
-    key_names, return_key, red_var_typs, out_typs, in_col_names, out_col_names,
+    key_names, return_key, red_var_typs, out_col_typs, in_col_names, out_col_names,
     agg_func, parallel, offload
 ):
     """create the top level aggregation function by generating text
     """
+    out_typs = [t.dtype for t in out_col_typs]
 
     # arg names
     in_names = tuple("in_{}".format(c) for c in in_col_names)
@@ -1289,7 +1292,13 @@ def gen_top_level_agg_func(
 
         for i in range(len(out_names)):
             out_name = out_names[i] + "_dummy"
-            func_text += "    {} = np.empty(1, {})\n".format(out_name, _get_np_dtype(out_typs[i]))
+            if isinstance(out_col_typs[i], IntegerArrayType):
+                int_typ_name = IntDtype(out_typs[i]).name
+                assert int_typ_name.endswith('Dtype()')
+                int_typ_name = int_typ_name[:-7]  # remove trailing "Dtype()"
+                func_text += "    {} = pd.Series([1], dtype=\"{}\").values\n".format(out_name, int_typ_name)
+            else:
+                func_text += "    {} = np.empty(1, {})\n".format(out_name, _get_np_dtype(out_typs[i]))
 
         # groupby and aggregate
         func_text += "    out_table = groupby_and_aggregate(table, {}, {}, {})\n".format(n_keys, agg_func.ftype, parallel)
