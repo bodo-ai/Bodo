@@ -271,12 +271,12 @@ def overload_pattern_flags(p):
 
 @overload_attribute(RePatternType, "groups")
 def overload_pattern_groups(p):
-    def _pat_flags_impl(p):
+    def _pat_groups_impl(p):
         with numba.objmode(groups="int64"):
             groups = p.groups
         return groups
 
-    return _pat_flags_impl
+    return _pat_groups_impl
 
 
 @overload_attribute(RePatternType, "groupindex")
@@ -294,3 +294,13 @@ def overload_pattern_groupindex(p):
         return d
 
     return _pat_groupindex_impl
+
+
+@overload_attribute(RePatternType, "pattern")
+def overload_pattern_pattern(p):
+    def _pat_pattern_impl(p):
+        with numba.objmode(pattern="unicode_type"):
+            pattern = p.pattern
+        return pattern
+
+    return _pat_pattern_impl

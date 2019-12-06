@@ -343,6 +343,18 @@ def test_pat_groupindex():
     assert dict(py_out) == dict(bodo_out)
 
 
+def test_pat_pattern():
+    """test Pattern.pattern
+    """
+    def test_impl(pat):
+        return pat.pattern
+
+    pat = re.compile("(AA) (\w+)")
+    py_out = test_impl(pat)
+    bodo_out = bodo.jit(test_impl)(pat)
+    assert py_out == bodo_out
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):
