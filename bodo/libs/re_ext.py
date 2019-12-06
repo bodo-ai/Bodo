@@ -202,6 +202,24 @@ def overload_pat_search(p, string, pos=0, endpos=9223372036854775807):
     return _pat_search_impl
 
 
+@overload_method(RePatternType, "match")
+def overload_pat_match(p, string, pos=0, endpos=9223372036854775807):
+    def _pat_match_impl(p, string, pos=0, endpos=9223372036854775807):
+        with numba.objmode(m="re_match_type"):
+            m = p.match(string, pos, endpos)
+        return m
+    return _pat_match_impl
+
+
+@overload_method(RePatternType, "fullmatch")
+def overload_pat_fullmatch(p, string, pos=0, endpos=9223372036854775807):
+    def _pat_fullmatch_impl(p, string, pos=0, endpos=9223372036854775807):
+        with numba.objmode(m="re_match_type"):
+            m = p.fullmatch(string, pos, endpos)
+        return m
+    return _pat_fullmatch_impl
+
+
 @overload_method(RePatternType, "sub")
 def re_sub_overload(p, repl, string, count=0):
     def _re_sub_impl(p, repl, string, count=0):
