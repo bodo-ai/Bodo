@@ -63,6 +63,44 @@ def test_string_array_getitem_na(ind):
     pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind))
 
 
+##########################  Test re support  ##########################
+
+
+@pytest.mark.parametrize(
+    "in_str", ["AB", "A_B", "A_B_C"
+    ],
+)
+def test_re_search(in_str):
+    """make sure re.search returns None or a proper re.Match
+    """
+    def test_impl(pat, in_str):
+        return re.search(pat, in_str)
+
+    pat = "_"
+    py_out = test_impl(pat, in_str)
+    bodo_out = bodo.jit(test_impl)(pat, in_str)
+    # output is None or re.Match
+    # just testing span of re.Match should be enough
+    assert (py_out is None and bodo_out is None) or py_out.span() == bodo_out.span()
+
+
+@pytest.mark.parametrize(
+    "in_str", ["AB", "A_B", "A_B_C"
+    ],
+)
+def test_re_match_cast_bool(in_str):
+    """make sure re.search() output can behave like None in conditionals
+    """
+    def test_impl(pat, in_str):
+        m = re.search(pat, in_str)
+        if m:
+            return 1
+        return 0
+
+    pat = "_"
+    assert test_impl(pat, in_str) == bodo.jit(test_impl)(pat, in_str)
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):
