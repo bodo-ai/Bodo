@@ -267,3 +267,13 @@ def overload_pattern_flags(p):
         return flags
 
     return _pat_flags_impl
+
+
+@overload_attribute(RePatternType, "groups")
+def overload_pattern_flags(p):
+    def _pat_flags_impl(p):
+        with numba.objmode(groups="int64"):
+            groups = p.groups
+        return groups
+
+    return _pat_flags_impl

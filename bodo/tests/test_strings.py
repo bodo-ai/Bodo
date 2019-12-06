@@ -318,6 +318,18 @@ def test_pat_flags():
     assert py_out == bodo_out
 
 
+def test_pat_groups():
+    """test Pattern.groups
+    """
+    def test_impl(pat):
+        return pat.groups
+
+    pat = re.compile("(AA) (\w+)")
+    py_out = test_impl(pat)
+    bodo_out = bodo.jit(test_impl)(pat)
+    assert py_out == bodo_out
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):
