@@ -393,3 +393,20 @@ def overload_match_groups(m, default=None):
         return out
 
     return _match_groups_impl
+
+
+@overload_method(ReMatchType, "groupdict")
+def overload_match_groupdict(m, default=None):
+    # TODO: support cases where a group is not matched and None should be returned
+    # for example: re.match(r"(?P<AA>\w+)? (\w+) (\w+)", " words word")
+
+    types.dict_string_string = types.DictType(string_type, string_type)
+    def _match_groupdict_impl(m, default=None):
+        with numba.objmode(d="dict_string_string"):
+            out = m.groupdict(default)
+            d = numba.typed.Dict.empty(
+                key_type=numba.types.unicode_type, value_type=numba.types.unicode_type)
+            d.update(out)
+        return d
+
+    return _match_groupdict_impl

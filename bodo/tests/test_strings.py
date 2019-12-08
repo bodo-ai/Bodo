@@ -434,6 +434,18 @@ def test_match_groups():
     assert list(test_impl(m)) == bodo.jit(test_impl)(m)
 
 
+def test_match_groupdict():
+    """test Match.groupdict(), which returns a dictionary of named groups
+    """
+    def test_impl(m):
+        return m.groupdict()
+
+    pat = re.compile("(?P<A>\w+) (\w+) (\w+)")
+    m = pat.search("words words etc")
+
+    assert test_impl(m) == bodo.jit(test_impl)(m)
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):
