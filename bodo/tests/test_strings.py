@@ -506,6 +506,30 @@ def test_match_endpos():
     assert test_impl(m) == bodo.jit(test_impl)(m)
 
 
+def test_match_lastindex():
+    """test Match.lastindex attribute
+    """
+    def test_impl(m):
+        return m.lastindex
+
+    pat = re.compile("(?P<A>\w+) (\w+)")
+    m = pat.search("  words words etc bcd bcd")
+
+    assert test_impl(m) == bodo.jit(test_impl)(m)
+
+
+def test_match_lastgroup():
+    """test Match.lastgroup attribute
+    """
+    def test_impl(m):
+        return m.lastgroup
+
+    pat = re.compile("(?P<A>\w+) (?P<BB>\w+)")
+    m = pat.search("  words words etc bcd bcd")
+
+    assert test_impl(m) == bodo.jit(test_impl)(m)
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):

@@ -465,3 +465,26 @@ def overload_match_endpos(p):
         return endpos
 
     return _match_endpos_impl
+
+
+@overload_attribute(ReMatchType, "lastindex")
+def overload_match_lastindex(p):
+    # TODO: support returning None if no group was matched
+    def _match_lastindex_impl(p):
+        with numba.objmode(lastindex="int64"):
+            lastindex = p.lastindex
+        return lastindex
+
+    return _match_lastindex_impl
+
+
+@overload_attribute(ReMatchType, "lastgroup")
+def overload_match_lastgroup(p):
+    # TODO: support returning None if last group didn't have a name or no group was
+    # matched
+    def _match_lastgroup_impl(p):
+        with numba.objmode(lastgroup="unicode_type"):
+            lastgroup = p.lastgroup
+        return lastgroup
+
+    return _match_lastgroup_impl
