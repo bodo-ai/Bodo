@@ -331,6 +331,8 @@ def overload_match_expand(m, template):
 
 @overload_method(ReMatchType, "group")
 def overload_match_group(m, *args):
+    # TODO: support cases where a group is not matched and None should be returned
+    # for example: re.match(r"(\w+)? (\w+) (\w+)", " words word")
     # NOTE: using *args in implementation throws an error in Numba lowering
     # TODO: use simpler implementation when Numba is fixed
     # def _match_group_impl(m, *args):
