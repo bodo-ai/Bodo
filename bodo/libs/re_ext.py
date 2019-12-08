@@ -372,3 +372,9 @@ def overload_match_group(m, *args):
     exec(func_text, {"numba": numba}, loc_vars)
     impl = loc_vars["_match_group_impl"]
     return impl
+
+
+@overload(operator.getitem)
+def overload_match_getitem(m, ind):
+    if m == re_match_type:
+        return lambda m, ind: m.group(ind)

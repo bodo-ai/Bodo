@@ -409,6 +409,18 @@ def test_match_group():
     assert test_impl_three(m, 2, 'A', 3) == bodo.jit(test_impl_three)(m, 2, 'A', 3)
 
 
+def test_match_getitem():
+    """test Match[g], which is shortcut for Match.group(g)
+    """
+    def test_impl(m, a):
+        return m[a]
+
+    pat = re.compile("(?P<A>\w+) (\w+) (\w+)")
+    m = pat.search("words words etc")
+
+    assert test_impl(m, 'A') == bodo.jit(test_impl)(m, 'A')
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):
