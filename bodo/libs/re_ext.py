@@ -445,3 +445,23 @@ def overload_match_span(m, group=0):
         return out
 
     return _match_span_impl
+
+
+@overload_attribute(ReMatchType, "pos")
+def overload_match_pos(p):
+    def _match_pos_impl(p):
+        with numba.objmode(pos="int64"):
+            pos = p.pos
+        return pos
+
+    return _match_pos_impl
+
+
+@overload_attribute(ReMatchType, "endpos")
+def overload_match_endpos(p):
+    def _match_endpos_impl(p):
+        with numba.objmode(endpos="int64"):
+            endpos = p.endpos
+        return endpos
+
+    return _match_endpos_impl

@@ -482,6 +482,30 @@ def test_match_span():
     assert test_impl(m, g) == bodo.jit(test_impl)(m, g)
 
 
+def test_match_pos():
+    """test Match.pos attribute
+    """
+    def test_impl(m):
+        return m.pos
+
+    pat = re.compile("(?P<A>\w+) (\w+) (\w+)")
+    m = pat.search("  words words etc", 2)
+
+    assert test_impl(m) == bodo.jit(test_impl)(m)
+
+
+def test_match_endpos():
+    """test Match.endpos attribute
+    """
+    def test_impl(m):
+        return m.endpos
+
+    pat = re.compile("(?P<A>\w+) (\w+)")
+    m = pat.search("  words words etc bcd bcd", 2, 14)
+
+    assert test_impl(m) == bodo.jit(test_impl)(m)
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):
