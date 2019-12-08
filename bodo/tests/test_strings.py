@@ -421,6 +421,19 @@ def test_match_getitem():
     assert test_impl(m, 'A') == bodo.jit(test_impl)(m, 'A')
 
 
+def test_match_groups():
+    """test Match.groups(). Python returns a tuple but we return a list since length
+    of tuple is not known in advance.
+    """
+    def test_impl(m):
+        return m.groups()
+
+    pat = re.compile("(?P<A>\w+) (\w+) (\w+)")
+    m = pat.search("words words etc")
+
+    assert list(test_impl(m)) == bodo.jit(test_impl)(m)
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):

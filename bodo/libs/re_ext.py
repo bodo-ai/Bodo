@@ -378,3 +378,18 @@ def overload_match_group(m, *args):
 def overload_match_getitem(m, ind):
     if m == re_match_type:
         return lambda m, ind: m.group(ind)
+
+
+@overload_method(ReMatchType, "groups")
+def overload_match_groups(m, default=None):
+    # TODO: support cases where a group is not matched and None should be returned
+    # for example: re.match(r"(\w+)? (\w+) (\w+)", " words word")
+
+    # NOTE: Python returns tuple of strings, but we don't know the length in advance
+    # which makes it not compilable. We return a list which is similar to tuple
+    def _match_groups_impl(m, default=None):
+        with numba.objmode(out="list_str_type"):
+            out = list(m.groups(default))
+        return out
+
+    return _match_groups_impl
