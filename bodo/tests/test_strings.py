@@ -470,6 +470,18 @@ def test_match_end():
     assert test_impl(m, g) == bodo.jit(test_impl)(m, g)
 
 
+def test_match_span():
+    """test Match.span()
+    """
+    def test_impl(m, g):
+        return m.span(g)
+
+    m = re.search("(?P<A>\w+) (\w+) (\w+)", "words words etc")
+    g = 2
+
+    assert test_impl(m, g) == bodo.jit(test_impl)(m, g)
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):

@@ -432,3 +432,16 @@ def overload_match_end(m, group=0):
         return out
 
     return _match_end_impl
+
+
+@overload_method(ReMatchType, "span")
+def overload_match_span(m, group=0):
+
+    # span() returns a tuple of int
+    types.tuple_int64_2 = types.Tuple([types.int64, types.int64])
+    def _match_span_impl(m, group=0):
+        with numba.objmode(out="tuple_int64_2"):
+            out = m.span(group)
+        return out
+
+    return _match_span_impl
