@@ -410,3 +410,25 @@ def overload_match_groupdict(m, default=None):
         return d
 
     return _match_groupdict_impl
+
+
+@overload_method(ReMatchType, "start")
+def overload_match_start(m, group=0):
+
+    def _match_start_impl(m, group=0):
+        with numba.objmode(out="int64"):
+            out = m.start(group)
+        return out
+
+    return _match_start_impl
+
+
+@overload_method(ReMatchType, "end")
+def overload_match_end(m, group=0):
+
+    def _match_end_impl(m, group=0):
+        with numba.objmode(out="int64"):
+            out = m.end(group)
+        return out
+
+    return _match_end_impl
