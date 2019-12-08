@@ -372,6 +372,19 @@ def test_pat_pattern():
     assert py_out == bodo_out
 
 
+def test_match_expand():
+    """test Match.expand()
+    """
+    def test_impl(m):
+        return m.expand(r"\1 WW \2")
+
+    pat = re.compile("(\w+) (\w+)")
+    m = pat.search("words words etc")
+    py_out = test_impl(m)
+    bodo_out = bodo.jit(test_impl)(m)
+    assert py_out == bodo_out
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):

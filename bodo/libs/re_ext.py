@@ -316,3 +316,13 @@ def overload_pattern_pattern(p):
         return pattern
 
     return _pat_pattern_impl
+
+
+@overload_method(ReMatchType, "expand")
+def overload_match_expand(m, template):
+    def _match_expand_impl(m, template):
+        with numba.objmode(out="unicode_type"):
+            out = m.expand(template)
+        return out
+
+    return _match_expand_impl
