@@ -61,6 +61,7 @@ class ReMatchType(types.Type):
 
 
 re_match_type = ReMatchType()
+# TODO: avoid setting attributes to "types" when object mode can handle actual types
 types.re_match_type = re_match_type
 types.list_str_type = types.List(string_type)
 
@@ -326,3 +327,46 @@ def overload_match_expand(m, template):
         return out
 
     return _match_expand_impl
+
+
+@overload_method(ReMatchType, "group")
+def overload_match_group(m, *args):
+    # NOTE: using *args in implementation throws an error in Numba lowering
+    # TODO: use simpler implementation when Numba is fixed
+    # def _match_group_impl(m, *args):
+    #     with numba.objmode(out="unicode_type"):
+    #         out = m.group(*args)
+    #     return out
+
+    # no argument case returns a string
+    if len(args) == 0:
+        def _match_group_impl_zero(m):
+            with numba.objmode(out="unicode_type"):
+                out = m.group()
+            return out
+
+        return _match_group_impl_zero
+
+    # one argument case returns a string
+    if len(args) == 1:
+        def _match_group_impl_one(m, group1):
+            with numba.objmode(out="unicode_type"):
+                out = m.group(group1)
+            return out
+
+        return _match_group_impl_one
+
+    # multi-argument case returns a tuple of strings
+    # TODO: avoid setting attributes to "types" when object mode can handle actual types
+    type_name = "tuple_str_{}".format(len(args))
+    setattr(types, type_name, types.Tuple([string_type] * len(args)))
+    arg_names = ", ".join("group{}".format(i + 1) for i in range(len(args)))
+    func_text = "def _match_group_impl(m, {}):\n".format(arg_names)
+    func_text += "  with numba.objmode(out='{}'):\n".format(type_name)
+    func_text += "    out = m.group({})\n".format(arg_names)
+    func_text += "  return out\n"
+
+    loc_vars = {}
+    exec(func_text, {"numba": numba}, loc_vars)
+    impl = loc_vars["_match_group_impl"]
+    return impl

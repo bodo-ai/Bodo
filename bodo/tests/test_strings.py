@@ -385,6 +385,30 @@ def test_match_expand():
     assert py_out == bodo_out
 
 
+def test_match_group():
+    """test Match.group(), the output is a string or tuple of strings
+    """
+    def test_impl_zero(m):
+        return m.group()
+
+    def test_impl_one(m, a):
+        return m.group(a)
+
+    def test_impl_two(m, a, b):
+        return m.group(a, b)
+
+    def test_impl_three(m, a, b, c):
+        return m.group(a, b, c)
+
+    pat = re.compile("(?P<A>\w+) (\w+) (\w+)")
+    m = pat.search("words words etc")
+
+    assert test_impl_zero(m) == bodo.jit(test_impl_zero)(m)
+    assert test_impl_one(m, 'A') == bodo.jit(test_impl_one)(m, 'A')
+    assert test_impl_two(m, 'A', 3) == bodo.jit(test_impl_two)(m, 'A', 3)
+    assert test_impl_three(m, 2, 'A', 3) == bodo.jit(test_impl_three)(m, 2, 'A', 3)
+
+
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):
