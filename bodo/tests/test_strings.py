@@ -66,13 +66,11 @@ def test_string_array_getitem_na(ind):
 ##########################  Test re support  ##########################
 
 
-@pytest.mark.parametrize(
-    "in_str", ["AB", "A_B", "A_B_C"
-    ],
-)
+@pytest.mark.parametrize("in_str", ["AB", "A_B", "A_B_C"])
 def test_re_search(in_str):
     """make sure re.search returns None or a proper re.Match
     """
+
     def test_impl(pat, in_str):
         return re.search(pat, in_str)
 
@@ -84,13 +82,11 @@ def test_re_search(in_str):
     assert (py_out is None and bodo_out is None) or py_out.span() == bodo_out.span()
 
 
-@pytest.mark.parametrize(
-    "in_str", ["AB", "A_B", "A_B_C"
-    ],
-)
+@pytest.mark.parametrize("in_str", ["AB", "A_B", "A_B_C"])
 def test_re_match_cast_bool(in_str):
     """make sure re.search() output can behave like None in conditionals
     """
+
     def test_impl(pat, in_str):
         m = re.search(pat, in_str)
         if m:
@@ -101,13 +97,11 @@ def test_re_match_cast_bool(in_str):
     assert test_impl(pat, in_str) == bodo.jit(test_impl)(pat, in_str)
 
 
-@pytest.mark.parametrize(
-    "in_str", ["AB", "A_B", "A_B_C"
-    ],
-)
+@pytest.mark.parametrize("in_str", ["AB", "A_B", "A_B_C"])
 def test_re_match_check_none(in_str):
     """make sure re.Match object can be checked for None
     """
+
     def test_impl(pat, in_str):
         m = re.search(pat, in_str)
         if m is None:
@@ -118,13 +112,11 @@ def test_re_match_check_none(in_str):
     assert test_impl(pat, in_str) == bodo.jit(test_impl)(pat, in_str)
 
 
-@pytest.mark.parametrize(
-    "in_str", ["AB", "A_B", "A_B_C"
-    ],
-)
+@pytest.mark.parametrize("in_str", ["AB", "A_B", "A_B_C"])
 def test_re_pat_search(in_str):
     """make sure Pattern.search returns None or a proper re.Match
     """
+
     def test_impl(pat, in_str):
         return pat.search(in_str)
 
@@ -136,13 +128,11 @@ def test_re_pat_search(in_str):
     assert (py_out is None and bodo_out is None) or py_out.span() == bodo_out.span()
 
 
-@pytest.mark.parametrize(
-    "in_str", ["AB", "A_B", "AB_C"
-    ],
-)
+@pytest.mark.parametrize("in_str", ["AB", "A_B", "AB_C"])
 def test_re_match(in_str):
     """make sure re.match returns None or a proper re.Match
     """
+
     def test_impl(pat, in_str):
         return re.match(pat, in_str)
 
@@ -154,13 +144,11 @@ def test_re_match(in_str):
     assert (py_out is None and bodo_out is None) or py_out.span() == bodo_out.span()
 
 
-@pytest.mark.parametrize(
-    "in_str", ["AB", "AB_", "A_B_C"
-    ],
-)
+@pytest.mark.parametrize("in_str", ["AB", "AB_", "A_B_C"])
 def test_re_pat_match(in_str):
     """make sure Pattern.match returns None or a proper re.Match
     """
+
     def test_impl(pat, in_str):
         return pat.match(in_str)
 
@@ -172,13 +160,11 @@ def test_re_pat_match(in_str):
     assert (py_out is None and bodo_out is None) or py_out.span() == bodo_out.span()
 
 
-@pytest.mark.parametrize(
-    "in_str", ["AB", "A_B", "AB_C"
-    ],
-)
+@pytest.mark.parametrize("in_str", ["AB", "A_B", "AB_C"])
 def test_re_fullmatch(in_str):
     """make sure re.fullmatch returns None or a proper re.Match
     """
+
     def test_impl(pat, in_str):
         return re.fullmatch(pat, in_str)
 
@@ -190,13 +176,11 @@ def test_re_fullmatch(in_str):
     assert (py_out is None and bodo_out is None) or py_out.span() == bodo_out.span()
 
 
-@pytest.mark.parametrize(
-    "in_str", ["AB", "AB_", "A_B_C"
-    ],
-)
+@pytest.mark.parametrize("in_str", ["AB", "AB_", "A_B_C"])
 def test_re_pat_fullmatch(in_str):
     """make sure Pattern.fullmatch returns None or a proper re.Match
     """
+
     def test_impl(pat, in_str):
         return pat.fullmatch(in_str)
 
@@ -211,10 +195,11 @@ def test_re_pat_fullmatch(in_str):
 def test_re_split():
     """make sure re.split returns proper output (list of strings)
     """
+
     def test_impl(pat, in_str):
         return re.split(pat, in_str)
 
-    pat = r'\W+'
+    pat = r"\W+"
     in_str = "Words, words, words."
     py_out = test_impl(pat, in_str)
     bodo_out = bodo.jit(test_impl)(pat, in_str)
@@ -224,10 +209,11 @@ def test_re_split():
 def test_pat_split():
     """make sure Pattern.split returns proper output (list of strings)
     """
+
     def test_impl(pat, in_str):
         return re.split(pat, in_str)
 
-    pat = re.compile(r'\W+')
+    pat = re.compile(r"\W+")
     in_str = "Words, words, words."
     py_out = test_impl(pat, in_str)
     bodo_out = bodo.jit(test_impl)(pat, in_str)
@@ -237,10 +223,11 @@ def test_pat_split():
 def test_re_findall():
     """make sure re.findall returns proper output (list of strings)
     """
+
     def test_impl(pat, in_str):
         return re.findall(pat, in_str)
 
-    pat = r'\w+'
+    pat = r"\w+"
     in_str = "Words, words, words."
     py_out = test_impl(pat, in_str)
     bodo_out = bodo.jit(test_impl)(pat, in_str)
@@ -250,10 +237,11 @@ def test_re_findall():
 def test_pat_findall():
     """make sure Pattern.findall returns proper output (list of strings)
     """
+
     def test_impl(pat, in_str):
         return pat.findall(in_str)
 
-    pat = re.compile(r'\w+')
+    pat = re.compile(r"\w+")
     in_str = "Words, words, words."
     py_out = test_impl(pat, in_str)
     bodo_out = bodo.jit(test_impl)(pat, in_str)
@@ -263,10 +251,11 @@ def test_pat_findall():
 def test_re_sub():
     """make sure re.sub returns proper output (a string)
     """
+
     def test_impl(pat, repl, in_str):
         return re.sub(pat, repl, in_str)
 
-    pat = r'\w+'
+    pat = r"\w+"
     repl = "PP"
     in_str = "Words, words, words."
     py_out = test_impl(pat, repl, in_str)
@@ -277,10 +266,11 @@ def test_re_sub():
 def test_re_subn():
     """make sure re.subn returns proper output (a string and integer)
     """
+
     def test_impl(pat, repl, in_str):
         return re.subn(pat, repl, in_str)
 
-    pat = r'\w+'
+    pat = r"\w+"
     repl = "PP"
     in_str = "Words, words, words."
     py_out = test_impl(pat, repl, in_str)
@@ -291,10 +281,11 @@ def test_re_subn():
 def test_pat_subn():
     """make sure Pattern.subn returns proper output (a string and integer)
     """
+
     def test_impl(pat, repl, in_str):
         return pat.subn(repl, in_str)
 
-    pat = re.compile(r'\w+')
+    pat = re.compile(r"\w+")
     repl = "PP"
     in_str = "Words, words, words."
     py_out = test_impl(pat, repl, in_str)
@@ -305,6 +296,7 @@ def test_pat_subn():
 def test_re_escape():
     """make sure re.escape returns proper output (a string)
     """
+
     def test_impl(pat):
         return re.escape(pat)
 
@@ -317,6 +309,7 @@ def test_re_escape():
 def test_re_purge():
     """make sure re.purge call works (can't see internal cache of re to fully test)
     """
+
     def test_impl():
         return re.purge()
 
@@ -326,6 +319,7 @@ def test_re_purge():
 def test_pat_flags():
     """test Pattern.flags
     """
+
     def test_impl(pat):
         return pat.flags
 
@@ -338,6 +332,7 @@ def test_pat_flags():
 def test_pat_groups():
     """test Pattern.groups
     """
+
     def test_impl(pat):
         return pat.groups
 
@@ -351,6 +346,7 @@ def test_pat_groupindex():
     """test Pattern.groupindex. Python returns mappingproxy object but Bodo returns
     a Numba TypedDict
     """
+
     def test_impl(pat):
         return pat.groupindex
 
@@ -363,6 +359,7 @@ def test_pat_groupindex():
 def test_pat_pattern():
     """test Pattern.pattern
     """
+
     def test_impl(pat):
         return pat.pattern
 
@@ -375,6 +372,7 @@ def test_pat_pattern():
 def test_match_expand():
     """test Match.expand()
     """
+
     def test_impl(m):
         return m.expand(r"\1 WW \2")
 
@@ -388,6 +386,7 @@ def test_match_expand():
 def test_match_group():
     """test Match.group(), the output is a string or tuple of strings
     """
+
     def test_impl_zero(m):
         return m.group()
 
@@ -404,27 +403,29 @@ def test_match_group():
     m = pat.search("words words etc")
 
     assert test_impl_zero(m) == bodo.jit(test_impl_zero)(m)
-    assert test_impl_one(m, 'A') == bodo.jit(test_impl_one)(m, 'A')
-    assert test_impl_two(m, 'A', 3) == bodo.jit(test_impl_two)(m, 'A', 3)
-    assert test_impl_three(m, 2, 'A', 3) == bodo.jit(test_impl_three)(m, 2, 'A', 3)
+    assert test_impl_one(m, "A") == bodo.jit(test_impl_one)(m, "A")
+    assert test_impl_two(m, "A", 3) == bodo.jit(test_impl_two)(m, "A", 3)
+    assert test_impl_three(m, 2, "A", 3) == bodo.jit(test_impl_three)(m, 2, "A", 3)
 
 
 def test_match_getitem():
     """test Match[g], which is shortcut for Match.group(g)
     """
+
     def test_impl(m, a):
         return m[a]
 
     pat = re.compile("(?P<A>\w+) (\w+) (\w+)")
     m = pat.search("words words etc")
 
-    assert test_impl(m, 'A') == bodo.jit(test_impl)(m, 'A')
+    assert test_impl(m, "A") == bodo.jit(test_impl)(m, "A")
 
 
 def test_match_groups():
     """test Match.groups(). Python returns a tuple but we return a list since length
     of tuple is not known in advance.
     """
+
     def test_impl(m):
         return m.groups()
 
@@ -437,6 +438,7 @@ def test_match_groups():
 def test_match_groupdict():
     """test Match.groupdict(), which returns a dictionary of named groups
     """
+
     def test_impl(m):
         return m.groupdict()
 
@@ -449,6 +451,7 @@ def test_match_groupdict():
 def test_match_start():
     """test Match.start()
     """
+
     def test_impl(m, g):
         return m.start(g)
 
@@ -461,6 +464,7 @@ def test_match_start():
 def test_match_end():
     """test Match.end()
     """
+
     def test_impl(m, g):
         return m.end(g)
 
@@ -473,6 +477,7 @@ def test_match_end():
 def test_match_span():
     """test Match.span()
     """
+
     def test_impl(m, g):
         return m.span(g)
 
@@ -485,6 +490,7 @@ def test_match_span():
 def test_match_pos():
     """test Match.pos attribute
     """
+
     def test_impl(m):
         return m.pos
 
@@ -497,6 +503,7 @@ def test_match_pos():
 def test_match_endpos():
     """test Match.endpos attribute
     """
+
     def test_impl(m):
         return m.endpos
 
@@ -509,6 +516,7 @@ def test_match_endpos():
 def test_match_lastindex():
     """test Match.lastindex attribute
     """
+
     def test_impl(m):
         return m.lastindex
 
@@ -521,6 +529,7 @@ def test_match_lastindex():
 def test_match_lastgroup():
     """test Match.lastgroup attribute
     """
+
     def test_impl(m):
         return m.lastgroup
 
@@ -533,6 +542,7 @@ def test_match_lastgroup():
 def test_match_re():
     """test Match.re attribute
     """
+
     def test_impl(m):
         return m.re
 
@@ -545,6 +555,7 @@ def test_match_re():
 def test_match_string():
     """test Match.string attribute
     """
+
     def test_impl(m):
         return m.string
 
