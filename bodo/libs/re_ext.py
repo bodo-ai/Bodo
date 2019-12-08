@@ -488,3 +488,23 @@ def overload_match_lastgroup(p):
         return lastgroup
 
     return _match_lastgroup_impl
+
+
+@overload_attribute(ReMatchType, "re")
+def overload_match_re(m):
+    def _match_re_impl(m):
+        with numba.objmode(m_re="re_pattern_type"):
+            m_re = m.re
+        return m_re
+
+    return _match_re_impl
+
+
+@overload_attribute(ReMatchType, "string")
+def overload_match_string(m):
+    def _match_string_impl(m):
+        with numba.objmode(out="unicode_type"):
+            out = m.string
+        return out
+
+    return _match_string_impl
