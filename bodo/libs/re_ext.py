@@ -40,14 +40,12 @@ def typeof_re_pattern(val, c):
 
 @box(RePatternType)
 def box_re_pattern(typ, val, c):
-    # TODO: fix
-    c.pyapi.incref(val)
     return val
 
 
 @unbox(RePatternType)
 def unbox_re_pattern(typ, obj, c):
-    # TODO: fix
+    # borrow a reference from Python
     c.pyapi.incref(obj)
     return NativeValue(obj)
 
@@ -76,14 +74,12 @@ def typeof_re_match(val, c):
 
 @box(ReMatchType)
 def box_re_match(typ, val, c):
-    # TODO: fix refcounting
-    c.pyapi.incref(val)
     return val
 
 
 @unbox(ReMatchType)
 def unbox_re_match(typ, obj, c):
-    # TODO: fix refcounting
+    # borrow a reference from Python
     c.pyapi.incref(obj)
     return NativeValue(obj)
 
