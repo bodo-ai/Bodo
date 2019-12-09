@@ -263,6 +263,21 @@ def test_re_sub():
     assert py_out == bodo_out
 
 
+def test_pat_sub():
+    """make sure Pattern.sub returns proper output (a string)
+    """
+
+    def test_impl(pat, repl, in_str):
+        return pat.sub(repl, in_str)
+
+    pat = re.compile(r"ab*")
+    repl = "ff"
+    in_str = "aabbcc"
+    py_out = test_impl(pat, repl, in_str)
+    bodo_out = bodo.jit(test_impl)(pat, repl, in_str)
+    assert py_out == bodo_out
+
+
 def test_re_subn():
     """make sure re.subn returns proper output (a string and integer)
     """
@@ -712,15 +727,6 @@ class TestString(unittest.TestCase):
             h_res = bodo_func(arg)
             # XXX: use startswith since bodo output can have extra characters
             self.assertTrue(h_res.startswith(py_res))
-
-    def test_re_sub(self):
-        def test_impl(_str):
-            p = re.compile("ab*")
-            return p.sub("ff", _str)
-
-        bodo_func = bodo.jit(test_impl)
-        arg = "aabbcc"
-        self.assertEqual(bodo_func(arg), test_impl(arg))
 
     # def test_str_findall_count(self):
     #     def bodo_test_impl(_str):
