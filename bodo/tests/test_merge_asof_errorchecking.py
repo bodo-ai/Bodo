@@ -272,13 +272,13 @@ def test_merge_asof_suffixes_format():
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, suffixes=("_x", "_y"))
 
-    with pytest.raises(BodoError, match="suffixes parameters are passed as"):
+    with pytest.raises(BodoError, match="suffixes parameters should be"):
         bodo.jit(impl)(df1, df2)
 
 def test_merge_asof_suffixes_number():
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, suffixes=["_x", "_y", "_z"])
 
-    with pytest.raises(BodoError, match="number of suffixes to be put should be exactly 2"):
+    with pytest.raises(BodoError, match="number of suffixes should be exactly 2"):
         bodo.jit(impl)(df1, df2)
 
