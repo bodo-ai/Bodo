@@ -1401,11 +1401,6 @@ def validate_merge_asof_spec(
     )
     if not is_overload_true(allow_exact_matches):
         raise BodoError("merge_asof(): allow_exact_matches parameter only supports default value True")
-    # make sure copy is the default value, copy=False not supported
-    if not is_overload_false(direction):
-        raise BodoError(
-            "merge_asof(): indicator parameter only supports default value False"
-        )
     # make sure validate is None
     if not is_overload_none(tolerance):
         raise BodoError("merge_asof(): tolerance parameter only supports default value None")
