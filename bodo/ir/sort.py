@@ -11,11 +11,20 @@ from numba.ir_utils import (
     replace_arg_nodes,
     mk_unique_var,
 )
+from bodo.libs.array_tools import (
+    array_to_info,
+    arr_info_list_to_table,
+    sort_values_table,
+    info_from_table,
+    info_to_array,
+    delete_table,
+)
+
+
 from numba.typing import signature
 from numba.extending import overload
 import bodo
 import bodo.libs.timsort
-from bodo.libs.timsort import getitem_arr_tup
 from bodo.utils.utils import _numba_to_c_type_map
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.libs.distributed_api import Reduce_Type
@@ -342,17 +351,22 @@ def sort_distributed_run(
             new_in_vars.append(v_cp)
         in_vars = new_in_vars
 
-    key_name_args = ", ".join("key" + str(i) for i in range(len(key_arrs)))
-    col_name_args = ", ".join(["c" + str(i) for i in range(len(in_vars))])
+    key_name_args = ["key" + str(i) for i in range(len(key_arrs))]
+    key_name_args_join = ", ".join(key_name_args)
+    col_name_args = ["c" + str(i) for i in range(len(in_vars))]
+    col_name_args_join = ", ".join(col_name_args)
     # TODO: use *args
-    func_text = "def f({}, {}):\n".format(key_name_args, col_name_args)
-    func_text += "  key_arrs = ({},)\n".format(key_name_args)
-    func_text += "  data = ({}{})\n".format(
-        col_name_args, "," if len(in_vars) == 1 else ""
-    )  # single value needs comma to become tuple
-    func_text += "  bodo.ir.sort.local_sort(key_arrs, data, {})\n".format(
-        sort_node.ascending
-    )
+    func_text = "def f({}, {}):\n".format(key_name_args_join, col_name_args_join)
+    if bodo.use_cpp_sort:
+        func_text += local_sort_cpp(key_name_args, col_name_args, sort_node.ascending)
+    else:
+        func_text += "  key_arrs = ({},)\n".format(key_name_args_join)
+        func_text += "  data = ({}{})\n".format(
+            col_name_args, "," if len(in_vars) == 1 else ""
+        )  # single value needs comma to become tuple
+        func_text += "  bodo.ir.sort.local_sort(key_arrs, data, {})\n".format(
+            sort_node.ascending
+        )
     func_text += "  return key_arrs, data\n"
 
     loc_vars = {}
@@ -368,6 +382,12 @@ def sort_distributed_run(
             "bodo": bodo,
             "to_string_list": to_string_list,
             "cp_str_list_to_array": cp_str_list_to_array,
+            "delete_table": delete_table,
+            "info_to_array": info_to_array,
+            "info_from_table": info_from_table,
+            "sort_values_table": sort_values_table,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "array_to_info": array_to_info,
         },
         typingctx,
         tuple(list(key_typ.types) + list(data_tup_typ.types)),
@@ -397,13 +417,57 @@ def sort_distributed_run(
     typemap[ascending_var.name] = types.bool_
     nodes.append(ir.Assign(ir.Const(sort_node.ascending, loc), ascending_var, loc))
 
+    # sort output
     # parallel case
-    def par_sort_impl(key_arrs, data, ascending):
-        out_key, out_data = parallel_sort(key_arrs, data, ascending)
-        # TODO: use k-way merge instead of sort
-        # sort output
-        bodo.ir.sort.local_sort(out_key, out_data, ascending)
-        return out_key, out_data
+    if bodo.use_cpp_sort:
+        func_text = "def par_sort_impl(key_arrs, data, ascending):\n"
+        func_text += "  out_key, out_data = parallel_sort(key_arrs, data, ascending)\n"
+        key_count = len(key_name_args)
+        data_count = len(col_name_args)
+        total_list = [
+            "array_to_info(out_key[{}])".format(i) for i in range(len(key_name_args))
+        ] + ["array_to_info(out_data[{}])".format(i) for i in range(len(col_name_args))]
+        func_text += "  info_list_total = [{}]\n".format(",".join(total_list))
+        func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
+        func_text += "  out_table = sort_values_table(table_total, {}, ascending)\n".format(
+            key_count
+        )
+        func_text += "  delete_table(table_total)\n"
+        #
+        idx = 0
+        list_key_str = []
+        for i_key in range(key_count):
+            list_key_str.append(
+                "info_to_array(info_from_table(out_table, {}), out_key[{}])".format(
+                    idx, i_key
+                )
+            )
+            idx += 1
+        func_text += "  out_key_ret = ({},)\n".format(",".join(list_key_str))
+        #
+        list_data_str = []
+        for i_data in range(data_count):
+            list_data_str.append(
+                "info_to_array(info_from_table(out_table, {}), out_data[{}])".format(
+                    idx, i_data
+                )
+            )
+            idx += 1
+        if len(list_data_str) > 0:
+            func_text += "  out_data_ret = ({},)\n".format(",".join(list_data_str))
+        else:
+            func_text += "  out_data_ret = ()\n"
+        func_text += "  delete_table(out_table)\n"
+        func_text += "  return out_key_ret, out_data_ret\n"
+    else:
+        func_text = "def par_sort_impl(key_arrs, data, ascending):\n"
+        func_text += "  out_key, out_data = parallel_sort(key_arrs, data, ascending)\n"
+        func_text += "  bodo.ir.sort.local_sort(out_key, out_data, ascending)\n"
+        func_text += "  return out_key, out_data\n"
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    par_sort_impl = loc_vars["par_sort_impl"]
 
     f_block = compile_to_numba_ir(
         par_sort_impl,
@@ -412,6 +476,12 @@ def sort_distributed_run(
             "parallel_sort": parallel_sort,
             "to_string_list": to_string_list,
             "cp_str_list_to_array": cp_str_list_to_array,
+            "delete_table": delete_table,
+            "info_to_array": info_to_array,
+            "info_from_table": info_from_table,
+            "sort_values_table": sort_values_table,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "array_to_info": array_to_info,
         },
         typingctx,
         (key_typ, data_tup_typ, types.bool_),
@@ -467,6 +537,42 @@ def to_string_list_typ(typ):
         return types.Tuple(new_typs)
 
     return typ
+
+
+def local_sort_cpp(key_name_args, col_name_args, ascending=True):
+    func_text = "  # beginning of local_sort_cpp\n"
+    key_count = len(key_name_args)
+    data_count = len(col_name_args)
+    total_list = ["array_to_info({})".format(name) for name in key_name_args] + [
+        "array_to_info({})".format(name) for name in col_name_args
+    ]
+    func_text += "  info_list_total = [{}]\n".format(",".join(total_list))
+    func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
+    func_text += "  out_table = sort_values_table(table_total, {}, {})\n".format(
+        key_count, ascending
+    )
+    idx = 0
+    list_key_str = []
+    for name in key_name_args:
+        list_key_str.append(
+            "info_to_array(info_from_table(out_table, {}), {})".format(idx, name)
+        )
+        idx += 1
+    func_text += "  key_arrs = ({},)\n".format(",".join(list_key_str))
+
+    list_data_str = []
+    for name in col_name_args:
+        list_data_str.append(
+            "info_to_array(info_from_table(out_table, {}), {})".format(idx, name)
+        )
+        idx += 1
+    if len(list_data_str) > 0:
+        func_text += "  data = ({},)\n".format(",".join(list_data_str))
+    else:
+        func_text += "  data = ()\n"
+    func_text += "  delete_table(out_table)\n"
+    func_text += "  delete_table(table_total)\n"
+    return func_text
 
 
 # TODO: fix cache issue

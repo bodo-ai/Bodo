@@ -2315,6 +2315,46 @@ def lower_drop_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
+def query_dummy(df, expr):
+    return df.eval(expr)
+
+
+@infer_global(query_dummy)
+class QueryDummyTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        return signature(SeriesType(types.bool_), *args)
+
+
+@lower_builtin(query_dummy, types.VarArg(types.Any))
+def lower_query_dummy(context, builder, sig, args):
+    out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
+    return out_obj._getvalue()
+
+
+def val_isin_dummy(S, vals):
+    return S in vals
+
+
+def val_notin_dummy(S, vals):
+    return S not in vals
+
+
+@infer_global(val_isin_dummy)
+@infer_global(val_notin_dummy)
+class ValIsinTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        return signature(SeriesType(types.bool_), *args)
+
+
+@lower_builtin(val_isin_dummy, types.VarArg(types.Any))
+@lower_builtin(val_notin_dummy, types.VarArg(types.Any))
+def lower_val_isin_dummy(context, builder, sig, args):
+    out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
+    return out_obj._getvalue()
+
+
 @overload_method(DataFrameType, "append")
 def append_overload(df, other, ignore_index=False, verify_integrity=False, sort=None):
     if isinstance(other, DataFrameType):

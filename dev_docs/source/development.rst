@@ -171,10 +171,22 @@ Bodo uses the PEP8 standard for Python code style.
 We use `black <https://github.com/psf/black>`_ as formatter
 and check format with `flake8 <http://flake8.pycqa.org/en/latest/>`_.
 
+Currently our :code:`.flake8` config ignores a number of files, so whenever you are done working on a python file, run  `black <https://github.com/psf/black>`_, remove the file from :code:`.flake8`, and ensure `flake8 <http://flake8.pycqa.org/en/latest/>`_ does not raise any error.
+
 We use the Google C++ code style guide
 and enforce with `cpplint <https://github.com/cpplint/cpplint>`_.
 We use `clang-format` as the formatter.
 See `instructions in Pandas <https://pandas.pydata.org/pandas-docs/stable/development/contributing.html#c-cpplint>`_.
+
+
+DevOps
+----------
+
+We currently have two build pipelines on `Azure DevOps <https://dev.azure.com/bodo-inc/Bodo/_build>`_:
+
+1. Bodo-inc.Bodo: This pipeline is triggered whenever a pull request whose target branch is set to :code:`master` is created and following commits. This does not test on the full test suite in order to save time. A `codecov <https://codecov.io/gh/Bodo-inc/Bodo>`_ code coverage report is generated and uploaded for testing on Linux with one processor.
+
+2. Bodo-build-binary: This pipeline is used for release and automatic nightly testing on full test suite, triggered by pushing tags. It has two stages. The first stage removes docstrings, builds the bodo binary and makes the artifact(:code:`bodo-inc.zip`) available for downloads. The second stage runs the full test suite with the binary we just built on Linux with 1, 2, and 3 processors. It is structured this way so that in case of emergency bug fix release, we can still download the binary without waiting for the tests to finish. The default TRIAL_PERIOD is 14(days) set through Azure's UI, and this enviroment variable can be changed before manually triggering the build.
 
 
 Papers
