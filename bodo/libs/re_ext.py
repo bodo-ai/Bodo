@@ -40,6 +40,12 @@ def typeof_re_pattern(val, c):
 
 @box(RePatternType)
 def box_re_pattern(typ, val, c):
+    # NOTE: we can't just let Python steal a reference since boxing can happen at any
+    # point and even in a loop, which can make refcount invalid.
+    # see implementation of str.contains and test_contains_regex
+    # TODO: investigate refcount semantics of boxing in Numba when variable is returned
+    # from function versus not returned
+    c.pyapi.incref(val)
     return val
 
 
@@ -74,6 +80,7 @@ def typeof_re_match(val, c):
 
 @box(ReMatchType)
 def box_re_match(typ, val, c):
+    c.pyapi.incref(val)
     return val
 
 
