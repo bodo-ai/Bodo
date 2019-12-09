@@ -1,0 +1,59 @@
+[flake8]
+max-line-length = 80
+select = 
+	B950,	# B950 warning instead of E501 recommended by Black
+
+ignore = 
+	E501,   # Line too long
+	E203,	# whitespace before ':' not PEP 8 compliant
+	W503,	# line break before binary operator not PEP 8 compliant
+
+exclude =
+	__pycache__
+	.git
+	*.pyc
+	*~
+	*.o
+	*.so
+	*.cpp
+	*.c
+	*.h
+	__init__.py
+	# Grandfather in existing failing files.  This list should shrink over time
+	bodo/transforms/dataframe_pass.py
+	bodo/transforms/distributed_analysis.py
+	bodo/transforms/distributed_pass.py
+	bodo/transforms/untyped_pass.py
+	bodo/transforms/series_pass.py
+	bodo/libs/array_tools.py
+	bodo/libs/timsort.py
+	bodo/libs/distributed_api.py
+	bodo/libs/int_arr_ext.py
+	bodo/libs/array_kernels.py
+	bodo/libs/str_arr_ext.py
+	bodo/libs/str_ext.py
+	bodo/libs/list_str_arr_ext.py
+	bodo/utils/conversion.py
+	bodo/utils/shuffle.py
+	bodo/utils/utils.py
+	bodo/tests/test_series_str.py
+	bodo/tests/test_rolling.py
+	bodo/tests/test_d4p.py
+	bodo/tests/test_series.py
+	bodo/io/xenon_ext.py
+	bodo/io/np_io.py
+	bodo/io/parquet_pio.py
+	bodo/io/h5.py
+	bodo/io/h5_api.py
+	bodo/ir/aggregate.py
+	bodo/ir/csv_ext.py
+	bodo/ir/join.py
+	bodo/hiframes/pd_index_ext.py
+	bodo/hiframes/pd_dataframe_ext.py
+	bodo/hiframes/series_impl.py
+	bodo/hiframes/pd_series_ext.py
+	bodo/hiframes/series_dt_impl.py
+	bodo/hiframes/series_str_impl.py
+	bodo/hiframes/rolling.py
+	bodo/hiframes/pd_timestamp_ext.py
+	bodo/hiframes/dataframe_impl.py

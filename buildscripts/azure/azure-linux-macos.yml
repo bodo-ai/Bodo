@@ -29,6 +29,13 @@ jobs:
       source activate $CONDA_ENV
       HDF5_DIR=$CONDA_PREFIX python setup.py develop
     displayName: 'Build'
+    
+  - script: |
+      export PATH=$HOME/miniconda3/bin:$PATH
+      source activate $CONDA_ENV
+      conda install -y flake8
+      flake8 bodo
+    displayName: 'Flake8'
 
   - script: |
       export PATH=$HOME/miniconda3/bin:$PATH
@@ -38,7 +45,6 @@ jobs:
         if [[ "${{ parameters.name }}" == "Linux" ]]; then
           pip install codecov
           pytest -s -v -m "not slow" -W ignore --cov-report=xml --cov=./ bodo/tests/
-          codecov -t $(CODECOV_TOKEN)
         else
           pytest -s -v -m "not slow" -W ignore bodo/tests/
         fi
@@ -46,3 +52,12 @@ jobs:
         mpiexec -n $NP pytest -s -v -m "not slow" -W ignore bodo/tests/
       fi
     displayName: 'Test'
+    
+  - script: |
+      export PATH=$HOME/miniconda3/bin:$PATH
+      source activate $CONDA_ENV
+      if [[ "$NP" -eq 1 ]] && [[ "${{ parameters.name }}" == "Linux" ]]; then
+        codecov -t $(CODECOV_TOKEN)
+      fi
+    displayName: 'codecov report upload'
+    

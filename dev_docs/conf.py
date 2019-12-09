@@ -2,7 +2,7 @@
 #
 # This file only contains a selection of the most common options. For a full
 # list see the documentation:
-# http://www.sphinx-doc.org/en/master/config
+# https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 # -- Path setup --------------------------------------------------------------
 
@@ -17,12 +17,9 @@
 
 # -- Project information -----------------------------------------------------
 
-project = "Bodo Developer Guide"
-copyright = "2019, Bodo Inc"
-author = "Ehsan Totoni"
-
-# The full version, including alpha/beta/rc tags
-release = "0.1"
+project = "Bodo Development"
+copyright = "2019, Bodo, Inc."
+author = "Bodo, Inc."
 
 
 # -- General configuration ---------------------------------------------------

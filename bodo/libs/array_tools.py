@@ -44,6 +44,7 @@ ll.add_symbol("delete_table", array_tools_ext.delete_table)
 ll.add_symbol("shuffle_table", array_tools_ext.shuffle_table)
 ll.add_symbol("hash_join_table", array_tools_ext.hash_join_table)
 ll.add_symbol("drop_duplicates_table_outplace", array_tools_ext.drop_duplicates_table_outplace)
+ll.add_symbol("sort_values_table", array_tools_ext.sort_values_table)
 ll.add_symbol("groupby_and_aggregate", array_tools_ext.groupby_and_aggregate)
 
 
@@ -488,6 +489,24 @@ def hash_join_table(typingctx, table_t, n_keys_t, n_data_left_t, n_data_right_t,
 
 
 
+@intrinsic
+def sort_values_table(typingctx, table_t, n_keys_t, ascending_t):
+    """
+    """
+    assert table_t == table_type
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
+                                [lir.IntType(8).as_pointer(),
+                                 lir.IntType(64),
+                                 lir.IntType(1)])
+        fn_tp = builder.module.get_or_insert_function(fnty, name="sort_values_table")
+        return builder.call(fn_tp, args)
+
+    return table_type(table_t, types.int64, types.boolean), codegen
+
+
+
 
 
 
@@ -509,7 +528,7 @@ def drop_duplicates_table_outplace(typingctx, table_t, subset_vect_t, keep_t):
     return table_type(table_t, types.voidptr, types.int64), codegen
 
 @intrinsic
-def groupby_and_aggregate(typingctx, table_t, n_keys_t, ftype):
+def groupby_and_aggregate(typingctx, table_t, n_keys_t, ftype, is_parallel):
     """
     Interface to groupby_and_aggregate function in C++ library for groupby
     offloading.
@@ -518,9 +537,9 @@ def groupby_and_aggregate(typingctx, table_t, n_keys_t, ftype):
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(), lir.IntType(64), lir.IntType(32)]
+            lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(), lir.IntType(64), lir.IntType(32), lir.IntType(1)]
         )
         fn_tp = builder.module.get_or_insert_function(fnty, name="groupby_and_aggregate")
         return builder.call(fn_tp, args)
 
-    return table_type(table_t, types.int64, types.int32), codegen
+    return table_type(table_t, types.int64, types.int32, types.boolean), codegen

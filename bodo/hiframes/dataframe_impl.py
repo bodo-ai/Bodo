@@ -99,6 +99,21 @@ def overload_dataframe_get_values(df):
     return impl
 
 
+@overload_method(DataFrameType, "to_numpy")
+def overload_dataframe_to_numpy(df, dtype=None, copy=False):
+    # The copy argument can be ignored here since we always copy the data
+    # (our underlying structures are fully columnar which should be copied to get a
+    # matrix). This is consistent with Pandas since copy=False doesn't guarantee it
+    # won't be copied.
+    if not is_overload_none(dtype):
+        raise BodoError("'dtype' argument of to_numpy() not supported yet")
+
+    def impl(df, dtype=None, copy=False):
+        return df.values
+
+    return impl
+
+
 @overload_attribute(DataFrameType, "ndim")
 def overload_dataframe_ndim(df):
     return lambda df: 2
@@ -699,6 +714,27 @@ def overload_dataframe_set_index(
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}), '{}')"
     ).format(col_ind, col_name)
     return _gen_init_df(header, columns, data_args, index)
+
+
+@overload_method(DataFrameType, "query")
+def overload_dataframe_query(df, expr, inplace=False):
+    """Support query only for the case where expr is a constant string and expr output
+    is a 1D boolean array. Refering to named index by name is not supported.
+    """
+    # check unsupported "inplace"
+    if not is_overload_false(inplace):
+        raise BodoError("query() inplace argument not supported yet")
+
+    if not isinstance(expr, (types.StringLiteral, types.UnicodeType)):
+        raise BodoError("query() expr argument should be a string")
+
+    # TODO: support df.loc for normal case and getitem for multi-dim case similar to
+    # Pandas
+    def impl(df, expr, inplace=False):
+        b = bodo.hiframes.pd_dataframe_ext.query_dummy(df, expr)
+        return df[b]
+
+    return impl
 
 
 @overload_method(DataFrameType, "duplicated")

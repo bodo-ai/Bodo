@@ -11,9 +11,12 @@ Bodo documentation
    :caption: Contents:
 
    source/overview
-   source/supported
-   source/supportedpandas
-   source/numpy_supported
-   source/notsupported
+   source/install
+   source/getting_started
+   source/decorator
+   source/user_guide
+   source/pandas
+   source/numpy
+   source/not_supported
    source/aws
    source/jupyter

@@ -3,11 +3,23 @@
 Bodo Development
 ================
 
-Technology Overview and Architecture
-------------------------------------
+Getting Started
+---------------
 
-This `slide deck <https://drive.google.com/file/d/1mHrbjAEfP6p-o-bWJOVdtmKNEA7lreDt/view?usp=sharing>`_
-provides an overview of Bodo technology and software architecture.
+#. This `company slide deck <https://drive.google.com/open?id=1Vtbw-k9okgEc870Ad1wmKwUZQ0wJQEXc>`_ provides an overview of the company.
+#. This `tech slide deck <https://drive.google.com/file/d/1mHrbjAEfP6p-o-bWJOVdtmKNEA7lreDt/view?usp=sharing>`_
+   provides an overview of Bodo technology and software architecture.
+#. Go over `a basic Pandas tutorial <https://pandas.pydata.org/pandas-docs/stable/getting_started/10min.html#min>`_.
+#. Go over `a basic SQL tutorial <https://mode.com/sql-tutorial/introduction-to-sql>`_.
+#. Read the rest of this page.
+#. Install Bodo for development, see :ref:`install`.
+#. Go over `getting started tutorial <https://github.com/Bodo-inc/Bodo/blob/master/tutorial/bodo_getting_started.ipynb>`_.
+#. Go over `training tutorial <https://github.com/Bodo-inc/Bodo/blob/master/tutorial/bodo_tutorial.ipynb>`_.
+#. Go over `Bodo user documentation <http://docs.bodo.ai/>`_.
+
+
+Overview
+--------
 
 Bodo implements Pandas and Numpy APIs as an embedded DSL.
 Data structures are implemented as Numba extensions, and
@@ -117,33 +129,39 @@ Test Suite
 ----------
 
 
-We use `pytest` for testing and run the test suite on different
+We use `pytest` for testing. The tests are designed for up to
+3 processors. Run the test suite on different
 number of processors (should run in Bodo repo's main directory)::
 
     pytest -s -v -m "not slow" -W ignore
     mpiexec -n 2 pytest -s -v -m "not slow" -W ignore
     mpiexec -n 3 pytest -s -v -m "not slow" -W ignore
 
+The `not slow` flag skips some less necessary tests,
+which allows for faster testing.
+The nightly CI build runs the full test suite.
+
 
 Debugging
 ---------
 - `pdb <https://docs.python.org/3/library/pdb.html>`_: :code:`import pdb; pdb.set_trace()` for breakpoints
 
-- `NUMBA_DEBUG_PRINT_AFTER <https://numba.pydata.org/numba-doc/dev/reference/envvars.html?highlight=numba_debug_print#envvar-NUMBA_DEBUG_PRINT_AFTER>`_ enviroment variable: 
-  ::
-      # example of printing after parfor pass
-      export NUMBA_DEBUG_PRINT_AFTER='parfor_pass'
-      # other common ones: 'bodo_distributed_pass', 'bodo_series_pass'
+- `NUMBA_DEBUG_PRINT_AFTER <https://numba.pydata.org/numba-doc/dev/reference/envvars.html?highlight=numba_debug_print#envvar-NUMBA_DEBUG_PRINT_AFTER>`_
+  enviroment variable::
 
-- mpiexec redirect stdout from differet processes to different files:
-  ::
-      export PYTHONUNBUFFERED=1 # set the enviroment variable 
-      mpiexec -outfile-pattern="out_%r.log" -n 8 python small_test01.py
+    # example of printing after parfor pass
+    export NUMBA_DEBUG_PRINT_AFTER='parfor_pass'
+    # other common ones: 'bodo_distributed_pass', 'bodo_series_pass'
 
-  or :
-  ::
-      # use the flag instead of setting the enviroment variable
-      mpiexec -outfile-pattern="out_%r.log" -n 8 python -u small_test01.py
+- mpiexec redirect stdout from differet processes to different files::
+
+    export PYTHONUNBUFFERED=1 # set the enviroment variable
+    mpiexec -outfile-pattern="out_%r.log" -n 8 python small_test01.py
+
+  or::
+
+    # use the flag instead of setting the enviroment variable
+    mpiexec -outfile-pattern="out_%r.log" -n 8 python -u small_test01.py
 
 
 Code Style
@@ -153,10 +171,22 @@ Bodo uses the PEP8 standard for Python code style.
 We use `black <https://github.com/psf/black>`_ as formatter
 and check format with `flake8 <http://flake8.pycqa.org/en/latest/>`_.
 
+Currently our :code:`.flake8` config ignores a number of files, so whenever you are done working on a python file, run  `black <https://github.com/psf/black>`_, remove the file from :code:`.flake8`, and ensure `flake8 <http://flake8.pycqa.org/en/latest/>`_ does not raise any error.
+
 We use the Google C++ code style guide
 and enforce with `cpplint <https://github.com/cpplint/cpplint>`_.
 We use `clang-format` as the formatter.
 See `instructions in Pandas <https://pandas.pydata.org/pandas-docs/stable/development/contributing.html#c-cpplint>`_.
+
+
+DevOps
+----------
+
+We currently have two build pipelines on `Azure DevOps <https://dev.azure.com/bodo-inc/Bodo/_build>`_:
+
+1. Bodo-inc.Bodo: This pipeline is triggered whenever a pull request whose target branch is set to :code:`master` is created and following commits. This does not test on the full test suite in order to save time. A `codecov <https://codecov.io/gh/Bodo-inc/Bodo>`_ code coverage report is generated and uploaded for testing on Linux with one processor.
+
+2. Bodo-build-binary: This pipeline is used for release and automatic nightly testing on full test suite, triggered by pushing tags. It has two stages. The first stage removes docstrings, builds the bodo binary and makes the artifact(:code:`bodo-inc.zip`) available for downloads. The second stage runs the full test suite with the binary we just built on Linux with 1, 2, and 3 processors. It is structured this way so that in case of emergency bug fix release, we can still download the binary without waiting for the tests to finish. The default TRIAL_PERIOD is 14(days) set through Azure's UI, and this enviroment variable can be changed before manually triggering the build.
 
 
 Papers

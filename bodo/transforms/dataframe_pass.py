@@ -710,6 +710,9 @@ class DataFramePass(object):
         if fdef == ("reset_index_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_reset_index(assign, lhs, rhs)
 
+        if fdef == ("query_dummy", "bodo.hiframes.pd_dataframe_ext"):
+            return self._run_call_query(assign, lhs, rhs)
+
         if fdef == ("drop_inplace", "bodo.hiframes.dataframe_impl"):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
@@ -738,6 +741,7 @@ class DataFramePass(object):
     def _run_call_dataframe(self, assign, lhs, rhs, df_var, func_name):
         if func_name in (
             "get_values",
+            "to_numpy",
             "astype",
             "copy",
             "isna",
@@ -773,6 +777,7 @@ class DataFramePass(object):
             "duplicated",
             "drop_duplicates",
             "rename",
+            "query",
         ):
             if func_name == "isnull":
                 func_name = "isna"
@@ -1462,6 +1467,200 @@ class DataFramePass(object):
             return self._replace_func(_reset_index_impl, args, pre_nodes=nodes)
         else:
             return self._set_df_inplace(_reset_index_impl, args, df_var, lhs.loc, nodes)
+
+    def _run_call_query(self, assign, lhs, rhs):
+        """Transform query expr to Numba IR using the expr parser in Pandas.
+        """
+        # FIXME: local variables could be renamed by previous passes, including initial
+        # renaming of Numba (e.g. a -> a.1 in some cases).
+        # we need to develop a way to preserve initial variable names
+        df_var, expr_var = rhs.args
+        df_typ = self.typemap[df_var.name]
+
+        # get expression string
+        err_msg = "df.query() expr arg should be constant string or argument to jit function"
+        expr = self._get_const_value(expr_var, err_msg)
+
+        # parse expression
+        parsed_expr, parsed_expr_str, used_cols = self._parse_query_expr(
+            expr, df_typ.columns)
+
+        # local variables
+        sentinel = pd.core.computation.ops._LOCAL_TAG
+        loc_ref_vars = {c: c.replace(sentinel, "") for c in parsed_expr.names
+                        if isinstance(c, str) and c.startswith(sentinel)}
+        in_args = list(used_cols.values()) + ['index'] + list(loc_ref_vars.keys())
+
+        func_text = "def _query_impl({}):\n".format(", ".join(in_args))
+        # convert array to Series to support cases such as C.str.contains
+        for c, c_var in used_cols.items():
+            func_text += "  {0} = bodo.hiframes.pd_series_ext.init_series({0})\n".format(c_var)
+        func_text += "  return {}".format(parsed_expr_str)
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        _query_impl = loc_vars["_query_impl"]
+
+        # data frame column inputs
+        nodes = []
+        args = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols.keys()]
+        # index
+        arr = args[0] if len(args) > 0 else self._get_dataframe_data(
+            df_var, df_typ.columns[0], nodes)
+        args.append(self._gen_array_from_index(df_var, arr, nodes))
+        # local referenced variables
+        args += [ir.Var(lhs.scope, v, lhs.loc) for v in loc_ref_vars.values()]
+        return nodes + compile_func_single_block(_query_impl, args, lhs, self)
+
+    def _parse_query_expr(self, expr, columns):
+        """Parses query expression using Pandas parser but avoids issues such as
+        early evaluation of string expressions by Pandas.
+        """
+        clean_name = pd.core.computation.common._remove_spaces_column_name
+        cleaned_columns = [clean_name(c) for c in columns]
+        resolver = {c: 0 for c in cleaned_columns}
+        resolver['index'] = 0
+        used_cols = {}
+        # create fake environment for Expr that just includes the symbol names to
+        # enable parsing
+        glbs = self.func_ir.func_id.func.__globals__
+        lcls = {a: 0 for a in self.func_ir.func_id.code.co_varnames}
+        env = pd.core.computation.scope._ensure_scope(2, glbs, lcls, (resolver,))
+
+        # avoid rewrite of operations in Pandas such as early evaluation of string exprs
+        def _rewrite_membership_op(self, node, left, right):
+            op_instance = node.op
+            op = self.visit(op_instance)
+            return op, op_instance, left, right
+
+        def _maybe_evaluate_binop(
+            self,
+            op,
+            op_class,
+            lhs,
+            rhs,
+            eval_in_python=("in", "not in"),
+            maybe_eval_in_python=("==", "!=", "<", ">", "<=", ">="),
+        ):
+            res = op(lhs, rhs)
+            return res
+
+        # avoid early evaluation of getattr such as C.str.contains().
+        # functions like C.str.contains are saved and handled similar to
+        # intrinsic functions like sqrt instead of evaluation.
+        new_funcs = []
+
+        class NewFuncNode(pd.core.computation.ops.FuncNode):
+            def __init__(self, name):
+
+                if name not in pd.core.computation.ops._mathops or (
+                    pd.core.computation.check._NUMEXPR_INSTALLED
+                    and pd.core.computation.check_NUMEXPR_VERSION < pd.core.computation.ops.LooseVersion("2.6.9")
+                    and name in ("floor", "ceil")
+                ):
+                    if name not in new_funcs:
+                        raise ValueError('"{0}" is not a supported function'.format(name))
+
+                self.name = name
+                if name in new_funcs:
+                    self.func = name
+                else:
+                    self.func = getattr(np, name)
+
+            def __call__(self, *args):
+                return pd.core.computation.ops.MathCall(self, args)
+
+        def visit_Attribute(self, node, **kwargs):
+            """handles value.attr cases such as C.str.contains()
+            functions are turned into NewFuncNode. Intermediate values like C.str
+            are added to local scope as local variable to avoid evaluation.
+            """
+            attr = node.attr
+            value = node.value
+            sentinel = pd.core.computation.ops._LOCAL_TAG
+            value_str = str(self.visit(value))
+            name = value_str + "." + attr
+            if name.startswith(sentinel):
+                name = name[len(sentinel):]
+
+            # make local variable in case of C.str
+            if attr == 'str':
+                if value_str not in cleaned_columns:
+                    raise bodo.utils.typing.BodoError(
+                        "column {} not found in dataframe columns {}".format(
+                            value_str, columns))
+                orig_col_name = columns[cleaned_columns.index(value_str)]
+                used_cols[orig_col_name] = value_str
+                self.env.scope[name] = 0
+                return self.term_type(sentinel + name, self.env)
+
+            # make function node
+            new_funcs.append(name)
+            return NewFuncNode(name)
+
+        # make sure string literals are printed correctly in expression
+        def __str__(self):
+            if isinstance(self.value, list):
+                return "{}".format(self.value)
+            if isinstance(self.value, str):
+                return "'{}'".format(self.value)
+            return pd.io.formats.printing.pprint_thing(self.name)
+
+        # handle math calls
+        def math__str__(self):
+            """makes math calls compilable by adding "np." and Series functions
+            """
+            # avoid change if it is a dummy attribute call
+            if self.op in new_funcs:
+                return pd.io.formats.printing.pprint_thing(
+                    "{0}({1})".format(self.op, ",".join(map(str, self.operands))))
+
+            operands = map(
+                lambda a: "bodo.hiframes.pd_series_ext.get_series_data({})".format(
+                    str(a)), self.operands)
+            op = "np.{}".format(self.op)
+            return pd.io.formats.printing.pprint_thing(
+                "bodo.hiframes.pd_series_ext.init_series({0}({1}))".format(
+                    op, ",".join(operands)))
+
+        # replace 'in' operator with dummy function to convert to prange later
+        def op__str__(self):
+            parened = ("({0})".format(pd.io.formats.printing.pprint_thing(opr))
+                for opr in self.operands)
+            if self.op == 'in':
+                return pd.io.formats.printing.pprint_thing(
+                    "bodo.hiframes.pd_dataframe_ext.val_isin_dummy({})".format(", ".join(parened)))
+            if self.op == 'not in':
+                return pd.io.formats.printing.pprint_thing(
+                    "bodo.hiframes.pd_dataframe_ext.val_notin_dummy({})".format(", ".join(parened)))
+            return pd.io.formats.printing.pprint_thing(" {0} ".format(self.op).join(parened))
+
+        saved_rewrite_membership_op = pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op
+        saved_maybe_evaluate_binop = pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop
+        saved_visit_Attribute = pd.core.computation.expr.BaseExprVisitor.visit_Attribute
+        saved__str__ = pd.core.computation.ops.Term.__str__
+        saved_math__str__ = pd.core.computation.ops.MathCall.__str__
+        saved_op__str__ = pd.core.computation.ops.Op.__str__
+
+        try:
+            pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = _rewrite_membership_op
+            pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = _maybe_evaluate_binop
+            pd.core.computation.expr.BaseExprVisitor.visit_Attribute = visit_Attribute
+            pd.core.computation.ops.Term.__str__ = __str__
+            pd.core.computation.ops.MathCall.__str__ = math__str__
+            pd.core.computation.ops.Op.__str__ = op__str__
+            parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
+            parsed_expr_str = str(parsed_expr)
+        finally:
+            pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = saved_rewrite_membership_op
+            pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = saved_maybe_evaluate_binop
+            pd.core.computation.expr.BaseExprVisitor.visit_Attribute = saved_visit_Attribute
+            pd.core.computation.ops.Term.__str__ = saved__str__
+            pd.core.computation.ops.MathCall.__str__ = saved_math__str__
+            pd.core.computation.ops.Op.__str__ = saved_op__str__
+
+        used_cols.update({c: clean_name(c) for c in columns
+                         if clean_name(c) in parsed_expr.names})
+        return parsed_expr, parsed_expr_str, used_cols
 
     def _run_call_drop(self, assign, lhs, rhs):
         df_var, labels_var, axis_var, columns_var, inplace_var = rhs.args
@@ -2156,6 +2355,26 @@ class DataFramePass(object):
         df_var = call_def[1]
 
         return df_var
+
+    def _get_const_value(self, var, err_msg):
+        """Get constant value of a variable if possible, otherwise raise error.
+        If the variable is argument to the function, force recompilation with literal
+        typing of the argument.
+        """
+        # literal type
+        typ = self.typemap[var.name]
+        if isinstance(typ, types.Literal):
+            return typ.literal_value
+
+        try:
+            return find_const(self.func_ir, var)
+        except GuardException:
+            # if variable is argument, force literal
+            var_def = guard(get_definition, self.func_ir, var)
+            if isinstance(var_def, ir.Arg):
+                raise numba.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
+
+        raise bodo.utils.typing.BodoError(err_msg)
 
     def _get_const_tup(self, tup_var):
         tup_def = guard(get_definition, self.func_ir, tup_var)

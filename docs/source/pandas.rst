@@ -1,3 +1,5 @@
+.. _pandas:
+
 Supported Pandas Operations
 ---------------------------
 
@@ -133,6 +135,7 @@ Conversion:
 * :meth:`Series.copy` (including ``deep`` argument)
 * :meth:`Series.to_list`
 * :meth:`Series.get_values`
+* :meth:`Series.to_numpy`
 
 
 Indexing, iteration:
@@ -285,6 +288,7 @@ Attributes and underlying data:
 * :attr:`DataFrame.columns`  (can access but not set new columns yet)
 * :attr:`DataFrame.values` (only for numeric dataframes)
 * :meth:`DataFrame.get_values` (only for numeric dataframes)
+* :meth:`DataFrame.to_numpy` (only for numeric dataframes)
 * :attr:`DataFrame.ndim`
 * :attr:`DataFrame.size`
 * :attr:`DataFrame.shape`
@@ -307,6 +311,8 @@ Indexing, iteration:
 * :meth:`DataFrame.tail` (including `n` argument)
 * :meth:`DataFrame.isin` (`values` can be a dataframe with matching index
   or a list or a set)
+* :meth:`DataFrame.query` (`expr` can be a constant string or an argument
+  to the jit function)
 
 Function application, GroupBy & Window:
 
