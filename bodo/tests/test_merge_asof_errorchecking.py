@@ -282,3 +282,52 @@ def test_merge_asof_suffixes_number():
     with pytest.raises(BodoError, match="number of suffixes should be exactly 2"):
         bodo.jit(impl)(df1, df2)
 
+
+def test_merge_asof_direction():
+    def impl(df1, df2):
+        return pd.merge_asof(df1, df2, direction="break")
+
+    with pytest.raises(BodoError, match="direction parameter only supports default value"):
+        bodo.jit(impl)(df1, df2)
+
+
+def test_merge_asof_by():
+    def impl(df1, df2):
+        return pd.merge_asof(df1, df2, by="break")
+
+    with pytest.raises(BodoError, match="by parameter only supports default value None"):
+        bodo.jit(impl)(df1, df2)
+
+
+def test_merge_asof_left_by():
+    def impl(df1, df2):
+        return pd.merge_asof(df1, df2, left_by="break")
+
+    with pytest.raises(BodoError, match="left_by parameter only supports default value None"):
+        bodo.jit(impl)(df1, df2)
+
+
+def test_merge_asof_right_by():
+    def impl(df1, df2):
+        return pd.merge_asof(df1, df2, right_by="break")
+
+    with pytest.raises(BodoError, match="right_by parameter only supports default value None"):
+        bodo.jit(impl)(df1, df2)
+
+
+def test_merge_asof_tolerance():
+    def impl(df1, df2):
+        return pd.merge_asof(df1, df2, tolerance="break")
+
+    with pytest.raises(BodoError, match="tolerance parameter only supports default value None"):
+        bodo.jit(impl)(df1, df2)
+
+
+def test_merge_asof_allow_exact_matches():
+    def impl(df1, df2):
+        return pd.merge_asof(df1, df2, allow_exact_matches=False)
+
+    with pytest.raises(BodoError, match="allow_exact_matches parameter only supports default value True"):
+        bodo.jit(impl)(df1, df2)
+
+
