@@ -372,19 +372,20 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
             # get output data types
             out_data = []
-            for k, f in col_map.items():
-                if f == "cumsum":
+            for k, func_name in col_map.items():
+                if func_name == "cumsum":
                     raise BodoError(
                         "only groupby aggregation supported in dictionary-based"
                         "groupby, not transform like cumsum")
-                if f not in bodo.ir.aggregate.supported_agg_funcs[:-2]:
-                    raise BodoError("unsupported aggregate function {}".format(f))
+                if func_name not in bodo.ir.aggregate.supported_agg_funcs[:-2]:
+                    raise BodoError(
+                        "unsupported aggregate function {}".format(func_name))
                 # run typer on a groupby with just column k
-                code = get_agg_func(None, f, None).__code__
+                code = get_agg_func(None, func_name, None).__code__
                 ret_grp = DataFrameGroupByType(
                     grp.df_type, grp.keys, (k,), True, True
                 )
-                out_tp = self._get_agg_typ(ret_grp, args, f, code).return_type
+                out_tp = self._get_agg_typ(ret_grp, args, func_name, code).return_type
                 out_data.append(out_tp.data)
 
             out_res = DataFrameType(tuple(out_data), out_tp.index, out_columns)
