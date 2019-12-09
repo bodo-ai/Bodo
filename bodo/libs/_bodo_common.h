@@ -214,6 +214,15 @@ static inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
         static_cast<uint8_t>(-static_cast<uint8_t>(bit_is_set) ^ bits[i / 8]) &
         kBitmask[i % 8];
 }
+
+static inline void InitializeBitMask(uint8_t* bits, size_t length, bool val) {
+    size_t n_bytes = (length + 7) >> 3;
+    if (!val)
+        memset(bits, 0, n_bytes);
+    else
+        memset(bits, 0xff, n_bytes);
+}
+
 }
 
 #endif /* BODO_COMMON_H_ */
