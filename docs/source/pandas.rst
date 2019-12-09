@@ -311,6 +311,8 @@ Indexing, iteration:
 * :meth:`DataFrame.tail` (including `n` argument)
 * :meth:`DataFrame.isin` (`values` can be a dataframe with matching index
   or a list or a set)
+* :meth:`DataFrame.query` (`expr` can be a constant string or an argument
+  to the jit function)
 
 Function application, GroupBy & Window:
 

@@ -614,7 +614,7 @@ def join_distributed_run(
         )
 
     loc_vars = {}
-#    print("func_text=", func_text)
+    #    print("func_text=", func_text)
     exec(func_text, {}, loc_vars)
     join_impl = loc_vars["f"]
 
@@ -735,48 +735,35 @@ def _gen_local_hash_join(
         ",".join("array_to_info({})".format(a) for a in eList)
     )
     func_text += "    table_total = arr_info_list_to_table(info_list_total)\n"
-    func_text += "    vect_same_key = np.array([{}])\n".format(",".join("1" if x else "0" for x in vect_same_key))
+    func_text += "    vect_same_key = np.array([{}])\n".format(
+        ",".join("1" if x else "0" for x in vect_same_key)
+    )
     func_text += "    out_table = hash_join_table(table_total, {}, {}, {}, vect_same_key.ctypes, {}, {})\n".format(
         n_keys, len(left_other_names), len(right_other_names), is_left, is_right
     )
     func_text += "    delete_table(table_total)\n"
-    use_cpp_code = True
-    if not use_cpp_code:
-        func_text += (
-            "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
-            " = bodo.ir.join.local_hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
-                is_left, is_right
-            )
+    idx = 0
+    for i, t in enumerate(left_key_names):
+        func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), t1_keys[{}]){}\n".format(
+            i, idx, i, _gen_reverse_type_match(left_key_types[i], right_key_types[i]),
         )
-    if use_cpp_code:
-        idx = 0
-        for i, t in enumerate(left_key_names):
-            func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), t1_keys[{}]){}\n".format(
-                i,
-                idx,
-                i,
-                _gen_reverse_type_match(left_key_types[i], right_key_types[i]),
-            )
-            idx += 1
-        for i, t in enumerate(left_other_names):
-            func_text += "    left_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                i, idx, t
-            )
-            idx += 1
-        for i, t in enumerate(right_key_names):
-            func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), t2_keys[{}]){}\n".format(
-                i,
-                idx,
-                i,
-                _gen_reverse_type_match(right_key_types[i], left_key_types[i]),
-            )
-            idx += 1
-        for i, t in enumerate(right_other_names):
-            func_text += "    right_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                i, idx, t
-            )
-            idx += 1
-        func_text += "    delete_table(out_table)\n"
+        idx += 1
+    for i, t in enumerate(left_other_names):
+        func_text += "    left_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+            i, idx, t
+        )
+        idx += 1
+    for i, t in enumerate(right_key_names):
+        func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), t2_keys[{}]){}\n".format(
+            i, idx, i, _gen_reverse_type_match(right_key_types[i], left_key_types[i]),
+        )
+        idx += 1
+    for i, t in enumerate(right_other_names):
+        func_text += "    right_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+            i, idx, t
+        )
+        idx += 1
+    func_text += "    delete_table(out_table)\n"
     return func_text
 
 

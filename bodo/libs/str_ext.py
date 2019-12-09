@@ -208,7 +208,7 @@ def unicode_to_utf8_and_len(typingctx, str_typ=None):
     ret_typ = types.Tuple([utf8_str_type, types.int64])
 
     def codegen(context, builder, sig, args):
-        str_in, = args
+        (str_in,) = args
 
         uni_str = cgutils.create_struct_proxy(string_type)(
             context, builder, value=str_in

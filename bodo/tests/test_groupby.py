@@ -259,7 +259,6 @@ def test_aggregate_select_col():
 def test_count():
     """
     Test Groupby.count()
-    TODO: after groupby.count() properly ignores nulls, adds np.nan to df_str
     """
 
     def impl1(df):
@@ -281,8 +280,15 @@ def test_count():
     df_str = pd.DataFrame(
         {
             "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
-            "B": ["ccc", "a", "bb", "aa", "dd", "ggg", "rr"],
+            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
             "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
+        }
+    )
+    df_bool = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [True, np.nan, False, True, np.nan, False, False],
+            "C": [True, True, False, True, True, False, False],
         }
     )
     df_dt = pd.DataFrame(
@@ -290,6 +296,7 @@ def test_count():
     )
     check_func(impl1, (df_int,), sort_output=True)
     check_func(impl1, (df_str,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl1, (df_dt,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
@@ -297,7 +304,6 @@ def test_count():
 def test_count_select_col():
     """
     Test Groupby.count() with explicitely select one column
-    TODO: after groupby.count() properly ignores nulls, adds np.nan to df_str
     """
 
     def impl1(df):
@@ -319,8 +325,15 @@ def test_count_select_col():
     df_str = pd.DataFrame(
         {
             "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
-            "B": ["ccc", "a", "bb", "aa", "dd", "ggg", "rr"],
+            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
             "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
+        }
+    )
+    df_bool = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [True, np.nan, False, True, np.nan, False, False],
+            "C": [True, True, False, True, True, False, False],
         }
     )
     df_dt = pd.DataFrame(
@@ -328,6 +341,7 @@ def test_count_select_col():
     )
     check_func(impl1, (df_int,), sort_output=True)
     check_func(impl1, (df_str,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl1, (df_dt,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
