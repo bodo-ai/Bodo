@@ -615,7 +615,7 @@ def to_string_list_overload(data, str_null_bools=None):
 
         return to_string_impl
 
-    if isinstance(data, (types.Tuple, types.UniTuple)):
+    if isinstance(data, types.BaseTuple):
         count = data.count
         out = ["to_string_list(data[{}])".format(i) for i in range(count)]
         if is_overload_true(str_null_bools):
@@ -681,7 +681,7 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
 
             return cp_str_list_impl_null
 
-    if isinstance(str_arr, (types.Tuple, types.UniTuple)):
+    if isinstance(str_arr, types.BaseTuple):
         count = str_arr.count
 
         str_ind = 0

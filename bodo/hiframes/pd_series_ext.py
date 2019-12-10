@@ -470,7 +470,7 @@ def if_series_to_array_type(typ):
     if isinstance(typ, SeriesType):
         return series_to_array_type(typ)
 
-    if isinstance(typ, (types.Tuple, types.UniTuple)):
+    if isinstance(typ, types.BaseTuple):
         return types.Tuple([if_series_to_array_type(t) for t in typ.types])
     if isinstance(typ, types.List) and isinstance(typ.dtype, SeriesType):
         return types.List(if_series_to_array_type(typ.dtype))
