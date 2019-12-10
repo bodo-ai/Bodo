@@ -106,31 +106,6 @@ class Join(ir.Stmt):
         other_left = set(left_vars.keys()) - comm_data
         other_right = set(right_vars.keys()) - comm_data
 
-        # Computation of the full set of variables on output.
-        # For each variable on output, we specify:
-        # --- The original variable name on the left or right.
-        # --- Whether the variable is from the left or right.
-        NatureLR = {}
-        def InsertPair(key, val):
-            if key in NatureLR:
-                raise BodoError('join(): two columns happen to have the same name')
-            NatureLR[key] = val
-
-        for eVar in add_suffix:
-            eVarX = eVar + suffix_x
-            eVarY = eVar + suffix_y
-            InsertPair(eVarX, [eVar, 'L'])
-            InsertPair(eVarY, [eVar, 'R'])
-
-        for eVar in comm_keys:
-            InsertPair(eVar, [eVar, 'L'])
-
-        for eVar in other_left:
-            InsertPair(eVar, [eVar, 'L'])
-
-        for eVar in other_right:
-            InsertPair(eVar, [eVar, 'R'])
-
         self.column_origins = {
             (c + suffix_x if c in add_suffix else c): ("left", c) for c in left_vars.keys()
         }
@@ -261,15 +236,18 @@ distributed_analysis.distributed_analysis_extensions[Join] = join_distributed_an
 
 
 def join_typeinfer(join_node, typeinferer):
+    comm_keys = set(join_node.left_keys) & set(join_node.right_keys)
+    comm_data = set(join_node.left_vars.keys()) & set(join_node.right_vars.keys())
+    add_suffix = comm_data - comm_keys
     for out_col_name, out_col_var in join_node.df_out_vars.items():
         # left suffix
-        if not out_col_name in join_node.NatureLR:
-            raise BodoError("join(): The variable out_col_name is absent from the output")
-        ePair = join_node.NatureLR[out_col_name]
-        if ePair[1] == 'L':
-            col_var = join_node.left_vars[ePair[0]]
+        if not out_col_name in join_node.column_origins:
+            raise BodoError("join(): The variable " + out_col_name + " is absent from the output")
+        ePair = join_node.column_origins[out_col_name]
+        if ePair[0] == 'left':
+            col_var = join_node.left_vars[ePair[1]]
         else:
-            col_var = join_node.right_vars[ePair[0]]
+            col_var = join_node.right_vars[ePair[1]]
         typeinferer.constraints.append(
             typeinfer.Propagate(
                 dst=out_col_var.name, src=col_var.name, loc=join_node.loc
