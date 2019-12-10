@@ -22,6 +22,13 @@ from bodo.libs.str_ext import string_type
 from llvmlite import ir as lir
 
 
+# re.Pattern and re.Match classes are exposed starting Python 3.7, so we get the type
+# class using type() call to support <=3.6
+_dummy_pat = "_BODO_DUMMY_PATTERN_"
+Pattern = type(re.compile(_dummy_pat))
+Match = type(re.match(_dummy_pat, _dummy_pat))
+
+
 class RePatternType(types.Opaque):
     def __init__(self):
         super(RePatternType, self).__init__(name="RePatternType")
@@ -33,7 +40,7 @@ types.re_pattern_type = re_pattern_type
 register_model(RePatternType)(models.OpaqueModel)
 
 
-@typeof_impl.register(re.Pattern)
+@typeof_impl.register(Pattern)
 def typeof_re_pattern(val, c):
     return re_pattern_type
 
@@ -73,7 +80,7 @@ types.list_str_type = types.List(string_type)
 register_model(ReMatchType)(models.OpaqueModel)
 
 
-@typeof_impl.register(re.Match)
+@typeof_impl.register(Match)
 def typeof_re_match(val, c):
     return re_match_type
 
