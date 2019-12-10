@@ -264,3 +264,14 @@ support advanced cases that may need them.
   (same as `MPI_Gatherv`).
 * :func:`bodo.allgatherv` Gathers all data chunks and delivers to all processes
   (same as `MPI_Allgatherv`).
+
+
+Regular Expressions Support
+---------------------------
+
+Bodo supports regular expressions using `Python's standard re library <https://docs.python.org/3/library/re.html>`_.
+All functions and attributes except `finditer()` are supported.
+However, cases where the output could be `None` to designate unmatched
+groups are not supported yet. The APIs where this case is possible are
+`Match.group()`, `Match.groups()`, `Match.groupdict()`, `Match.lastindex`
+and `Match.lastgroup`.
