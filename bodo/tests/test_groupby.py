@@ -132,7 +132,7 @@ def test_agg_as_index():
 
 def test_agg_select_col():
     """
-    Test Groupby.agg() with explicitely select one column
+    Test Groupby.agg() with explicitly select one column
     """
 
     def impl_num(df):
@@ -227,7 +227,7 @@ def test_aggregate_as_index():
 
 def test_aggregate_select_col():
     """
-    Test Groupby.aggregate() with explicitely select one column
+    Test Groupby.aggregate() with explicitly select one column
     """
 
     def impl_num(df):
@@ -303,7 +303,8 @@ def test_count():
 
 def test_count_select_col():
     """
-    Test Groupby.count() with explicitely select one column
+    Test Groupby.count() with explicitly select one column
+    TODO: after groupby.count() properly ignores nulls, adds np.nan to df_str
     """
 
     def impl1(df):
@@ -919,11 +920,16 @@ def test_groupby_multi_strlabels():
 
 def test_groupby_multiselect_sum():
     """
-    Test groupy.sum() on explicitely selected columns
+    Test groupy.sum() on explicitly selected columns using a tuple and using a constant
+    list (#198)
     """
 
-    def impl(df):
+    def impl1(df):
         df2 = df.groupby("A")["B", "C"].sum()
+        return df2
+
+    def impl2(df):
+        df2 = df.groupby("A")[["B", "C"]].sum()
         return df2
 
     df = pd.DataFrame(
@@ -933,7 +939,8 @@ def test_groupby_multiselect_sum():
             "C": [3, 5, 6, 5, 4, 4, 3],
         }
     )
-    check_func(impl, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
 
 
 def test_agg_multikey_parallel():
