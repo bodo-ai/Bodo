@@ -319,7 +319,7 @@ def test_merge_multi_int_key():
     """
 
     def test_impl1(df1, df2):
-        df3 = df1.merge(df2, on=("A", "B"))
+        df3 = df1.merge(df2, on=["A", "B"])
         return df3
 
     # test multiple column names passed as a tuple
