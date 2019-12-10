@@ -102,10 +102,6 @@ class Join(ir.Stmt):
         comm_data = set(left_vars.keys()) & set(right_vars.keys())
         add_suffix = comm_data - comm_keys
 
-        # The variables that do not require a suffix to be added.
-        other_left = set(left_vars.keys()) - comm_data
-        other_right = set(right_vars.keys()) - comm_data
-
         self.column_origins = {
             (c + suffix_x if c in add_suffix else c): ("left", c) for c in left_vars.keys()
         }
