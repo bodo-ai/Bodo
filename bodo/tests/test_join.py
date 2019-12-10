@@ -318,11 +318,15 @@ def test_merge_multi_int_key():
     Test merge(): sequentially merge on more than one integer key columns
     """
 
-    def test_impl(df1, df2):
-        df3 = df1.merge(df2, on=["A", "B"])
+    def test_impl1(df1, df2):
+        df3 = df1.merge(df2, on=("A", "B"))
         return df3
 
-    bodo_func = bodo.jit(test_impl)
+    # test multiple column names passed as a tuple
+    def test_impl2(df1, df2):
+        df3 = df1.merge(df2, on=("A", "B"))
+        return df3
+
     df1 = pd.DataFrame(
         {"A": [3, 1, 1, 3, 4], "B": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}
     )
@@ -332,8 +336,12 @@ def test_merge_multi_int_key():
     )
 
     pd.testing.assert_frame_equal(
-        bodo_func(df1, df2).sort_values("A").reset_index(drop=True),
-        test_impl(df1, df2).sort_values("A").reset_index(drop=True),
+        bodo.jit(test_impl1)(df1, df2).sort_values("A").reset_index(drop=True),
+        test_impl1(df1, df2).sort_values("A").reset_index(drop=True),
+    )
+    pd.testing.assert_frame_equal(
+        bodo.jit(test_impl2)(df1, df2).sort_values("A").reset_index(drop=True),
+        test_impl2(df1, df2).sort_values("A").reset_index(drop=True),
     )
 
 
