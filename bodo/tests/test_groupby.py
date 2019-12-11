@@ -17,13 +17,11 @@ from bodo.tests.utils import (
 import pytest
 
 
-# TODO: when groupby null keys are properly ignored
-#       adds np.nan in column "A"
 @pytest.fixture(
     params=[
         pd.DataFrame(
             {
-                "A": [2, 1, 1, 1, 2, 2, 1],
+                "A": [2, 1, np.nan, 1, 2, 2, 1],
                 "B": [-8, 2, 3, 1, 5, 6, 7],
                 "C": [3, 5, 6, 5, 4, 4, 3],
             }
@@ -52,7 +50,7 @@ def test_df(request):
     params=[
         pd.DataFrame(
             {
-                "A": [2, 1, 1, 1, 2, 2, 1],
+                "A": [2, 1, np.nan, 1, 2, 2, 1],
                 "B": [-8, 2, 3, 1, 5, 6, 7],
                 "C": [3, 5, 6, 5, 4, 4, 3],
             }
@@ -120,6 +118,25 @@ def test_nullable_int():
     check_func(impl_select_colB, (df,), sort_output=True)
     check_func(impl_select_colE, (df,), sort_output=True)
     check_func(impl_select_colH, (df,), sort_output=True)
+
+
+def test_all_null_keys():
+    """
+    Test Groupby when all rows have null keys (returns empty dataframe)
+    """
+
+    def impl(df):
+        A = df.groupby("A").count()
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(np.full(7, np.nan), dtype="Int64"),
+            "B": [2, 1, 1, 1, 2, 2, 1],
+        }
+    )
+
+    check_func(impl, (df,), sort_output=True)
 
 
 def test_agg():
@@ -534,7 +551,8 @@ def test_groupby_as_index_cumsum():
     """
     Test Groupby.cumsum() on groupby() as_index=False
     for both dataframe and series returns
-    TODO: adds np.nan to "A" after groupby null keys are properly ignored
+    TODO: add np.nan to "A" after groupby null keys are properly ignored
+          for cumsum
     """
 
     def impl1(df):
@@ -559,8 +577,9 @@ def test_groupby_as_index_cumsum():
 
 def test_cumsum_all_nulls_col():
     """
-    Test Groupby.cumsum() on column with all null entrieS
+    Test Groupby.cumsum() on column with all null entries
     TODO: change by to "A" after groupby null keys are properly ignored
+          for cumsum
     """
 
     def impl(df):

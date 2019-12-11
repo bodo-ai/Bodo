@@ -1922,7 +1922,7 @@ struct var_agg<
 void var_combine(array_info* count_col_in, array_info* mean_col_in,
                  array_info* m2_col_in, array_info* count_col_out,
                  array_info* mean_col_out, array_info* m2_col_out,
-                 std::vector<int64_t>& row_to_group) {
+                 const std::vector<int64_t>& row_to_group) {
     for (int64_t i = 0; i < count_col_in->length; i++) {
         uint64_t& count_a = count_col_out->at<uint64_t>(row_to_group[i]);
         uint64_t& count_b = count_col_in->at<uint64_t>(i);
@@ -1981,15 +1981,17 @@ static void std_eval(double& result, uint64_t& count, double& m2) {
 template <typename T, int ftype>
 void apply_to_column(array_info* in_col, array_info* out_col,
                      std::vector<array_info*>& aux_cols,
-                     std::vector<int64_t>& row_to_group) {
+                     const std::vector<int64_t>& row_to_group) {
     switch (in_col->arr_type) {
         case bodo_array_type::NUMPY:
             if (ftype == Bodo_FTypes::mean) {
                 array_info* count_col = aux_cols[0];
                 for (int64_t i = 0; i < in_col->length; i++)
-                    mean_agg<T>::apply(
-                        out_col->at<double>(row_to_group[i]), in_col->at<T>(i),
-                        count_col->at<uint64_t>(row_to_group[i]));
+                    if (row_to_group[i] != -1)
+                        mean_agg<T>::apply(
+                            out_col->at<double>(row_to_group[i]),
+                            in_col->at<T>(i),
+                            count_col->at<uint64_t>(row_to_group[i]));
             } else if (ftype == Bodo_FTypes::mean_eval) {
                 for (int64_t i = 0; i < in_col->length; i++)
                     mean_eval(out_col->at<double>(i), in_col->at<uint64_t>(i));
@@ -1998,10 +2000,12 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                 array_info* mean_col = aux_cols[1];
                 array_info* m2_col = aux_cols[2];
                 for (int64_t i = 0; i < in_col->length; i++)
-                    var_agg<T>::apply(in_col->at<T>(i),
-                                      count_col->at<uint64_t>(row_to_group[i]),
-                                      mean_col->at<double>(row_to_group[i]),
-                                      m2_col->at<double>(row_to_group[i]));
+                    if (row_to_group[i] != -1)
+                        var_agg<T>::apply(
+                            in_col->at<T>(i),
+                            count_col->at<uint64_t>(row_to_group[i]),
+                            mean_col->at<double>(row_to_group[i]),
+                            m2_col->at<double>(row_to_group[i]));
             } else if (ftype == Bodo_FTypes::var_eval) {
                 array_info* count_col = aux_cols[0];
                 array_info* m2_col = aux_cols[2];
@@ -2016,12 +2020,15 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                              m2_col->at<double>(i));
             } else if (ftype == Bodo_FTypes::count) {
                 for (int64_t i = 0; i < in_col->length; i++)
-                    count_agg<T>::apply(out_col->at<int64_t>(row_to_group[i]),
-                                        in_col->at<T>(i));
+                    if (row_to_group[i] != -1)
+                        count_agg<T>::apply(
+                            out_col->at<int64_t>(row_to_group[i]),
+                            in_col->at<T>(i));
             } else {
                 for (int64_t i = 0; i < in_col->length; i++)
-                    aggfunc<T, ftype>::apply(out_col->at<T>(row_to_group[i]),
-                                             in_col->at<T>(i));
+                    if (row_to_group[i] != -1)
+                        aggfunc<T, ftype>::apply(
+                            out_col->at<T>(row_to_group[i]), in_col->at<T>(i));
             }
             return;
         // for strings, we are only supporting count for now, and count function
@@ -2032,7 +2039,8 @@ void apply_to_column(array_info* in_col, array_info* out_col,
             switch (ftype) {
                 case Bodo_FTypes::count:
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if (GetBit((uint8_t*)in_col->null_bitmask, i))
+                        if ((row_to_group[i] != -1) &&
+                            GetBit((uint8_t*)in_col->null_bitmask, i))
                             count_agg<T>::apply(
                                 out_col->at<int64_t>(row_to_group[i]),
                                 in_col->at<T>(i));
@@ -2040,7 +2048,8 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     return;
                 case Bodo_FTypes::mean:
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if (GetBit((uint8_t*)in_col->null_bitmask, i)) {
+                        if ((row_to_group[i] != -1) &&
+                            GetBit((uint8_t*)in_col->null_bitmask, i)) {
                             mean_agg<T>::apply(
                                 out_col->at<double>(row_to_group[i]),
                                 in_col->at<T>(i),
@@ -2050,7 +2059,8 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     return;
                 case Bodo_FTypes::var:
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if (GetBit((uint8_t*)in_col->null_bitmask, i))
+                        if ((row_to_group[i] != -1) &&
+                            GetBit((uint8_t*)in_col->null_bitmask, i))
                             var_agg<T>::apply(
                                 in_col->at<T>(i),
                                 aux_cols[0]->at<uint64_t>(row_to_group[i]),
@@ -2060,7 +2070,8 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     return;
                 default:
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if (GetBit((uint8_t*)in_col->null_bitmask, i)) {
+                        if ((row_to_group[i] != -1) &&
+                            GetBit((uint8_t*)in_col->null_bitmask, i)) {
                             aggfunc<T, ftype>::apply(
                                 out_col->at<T>(row_to_group[i]),
                                 in_col->at<T>(i));
@@ -2090,7 +2101,7 @@ void apply_to_column(array_info* in_col, array_info* out_col,
  */
 void do_apply_to_column(array_info* in_col, array_info* out_col,
                         std::vector<array_info*>& aux_cols,
-                        std::vector<int64_t>& row_to_group, int ftype) {
+                        const std::vector<int64_t>& row_to_group, int ftype) {
     if (ftype == Bodo_FTypes::count) {
         switch (in_col->dtype) {
             case Bodo_CTypes::FLOAT32:
@@ -2369,24 +2380,31 @@ struct multi_col_key {
         for (int64_t i = 0; i < table->num_keys; i++) {
             array_info* c1 = table->columns[i];
             array_info* c2 = other.table->columns[i];
-            if (c1->arr_type == bodo_array_type::NUMPY) {
-                size_t siztype = numpy_item_size[c1->dtype];
-                if (memcmp(c1->data1 + siztype * row,
-                           c2->data1 + siztype * other.row, siztype) != 0) {
-                    return false;
-                }
-            } else if (c1->arr_type == bodo_array_type::STRING) {
-                uint32_t* c1_offsets = (uint32_t*)c1->data2;
-                uint32_t* c2_offsets = (uint32_t*)c2->data2;
-                uint32_t c1_str_len = c1_offsets[row + 1] - c1_offsets[row];
-                uint32_t c2_str_len =
-                    c2_offsets[other.row + 1] - c2_offsets[other.row];
-                if (c1_str_len != c2_str_len) return false;
-                char* c1_str = c1->data1 + c1_offsets[row];
-                char* c2_str = c2->data1 + c2_offsets[other.row];
-                if (strncmp(c1_str, c2_str, c1_str_len) != 0) return false;
+            size_t siztype;
+            switch (c1->arr_type) {
+                case bodo_array_type::NULLABLE_INT_BOOL:
+                    if (GetBit((uint8_t*)c1->null_bitmask, row) !=
+                        GetBit((uint8_t*)c2->null_bitmask, other.row))
+                        return false;
+                    if (!GetBit((uint8_t*)c1->null_bitmask, row)) continue;
+                case bodo_array_type::NUMPY:
+                    siztype = numpy_item_size[c1->dtype];
+                    if (memcmp(c1->data1 + siztype * row,
+                               c2->data1 + siztype * other.row, siztype) != 0) {
+                        return false;
+                    }
+                    continue;
+                case bodo_array_type::STRING:
+                    uint32_t* c1_offsets = (uint32_t*)c1->data2;
+                    uint32_t* c2_offsets = (uint32_t*)c2->data2;
+                    uint32_t c1_str_len = c1_offsets[row + 1] - c1_offsets[row];
+                    uint32_t c2_str_len =
+                        c2_offsets[other.row + 1] - c2_offsets[other.row];
+                    if (c1_str_len != c2_str_len) return false;
+                    char* c1_str = c1->data1 + c1_offsets[row];
+                    char* c2_str = c2->data1 + c2_offsets[other.row];
+                    if (strncmp(c1_str, c2_str, c1_str_len) != 0) return false;
             }
-            // TODO other array types?
         }
         return true;
     }
@@ -2407,7 +2425,8 @@ struct key_hash : public std::unary_function<multi_col_key, std::size_t> {
  *                that belongs to that group
  */
 void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
-                    std::vector<int64_t>& group_to_first_row) {
+                    std::vector<int64_t>& group_to_first_row,
+                    bool check_for_null_keys) {
     std::vector<array_info*> key_cols = std::vector<array_info*>(
         table.columns.begin(), table.columns.begin() + table.num_keys);
     uint32_t seed = 0xb0d01288;
@@ -2419,7 +2438,44 @@ void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
     // 0 to num_groups - 1)
     int next_group = 1;
     std::unordered_map<multi_col_key, int64_t, key_hash> key_to_group;
+    bool key_is_nullable = false;
+    if (check_for_null_keys) {
+        for (auto key_col : key_cols) {
+            if ((key_col->arr_type == bodo_array_type::NUMPY &&
+                 (key_col->dtype == Bodo_CTypes::FLOAT32 ||
+                  key_col->dtype == Bodo_CTypes::FLOAT64)) ||
+                key_col->arr_type == bodo_array_type::STRING ||
+                key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+                key_is_nullable = true;
+                break;
+            }
+        }
+    }
     for (int64_t i = 0; i < table.nrows(); i++) {
+        if (key_is_nullable) {
+            bool key_has_nulls = false;
+            for (auto key_col : key_cols) {
+                if (key_col->arr_type == bodo_array_type::STRING ||
+                    key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+                    if (!GetBit((uint8_t*)key_col->null_bitmask, i)) {
+                        key_has_nulls = true;
+                        break;
+                    }
+                } else if (key_col->arr_type == bodo_array_type::NUMPY) {
+                    if ((key_col->dtype == Bodo_CTypes::FLOAT32 &&
+                         isnan(key_col->at<float>(i))) ||
+                        (key_col->dtype == Bodo_CTypes::FLOAT64 &&
+                         isnan(key_col->at<double>(i)))) {
+                        key_has_nulls = true;
+                        break;
+                    }
+                }
+            }
+            if (key_has_nulls) {
+                row_to_group.push_back(-1);
+                continue;
+            }
+        }
         multi_col_key key(hashes[i], &table, i);
         int64_t& group = key_to_group[key];  // this inserts 0 into the map if
                                              // key doesn't exist
@@ -2732,12 +2788,14 @@ void get_groupby_output_dtype(int ftype,
  * @param function to apply
  */
 table_info* groupby_and_aggregate_local(table_info& in_table, int64_t num_keys,
-                                        int64_t num_data_cols, int ftype) {
+                                        int64_t num_data_cols, int ftype,
+                                        bool check_for_null_keys) {
     const int64_t ncols = in_table.ncols();
     std::vector<int64_t> inrows_to_group;
     std::vector<int64_t> group_to_first_row;
     in_table.num_keys = num_keys;
-    get_group_info(in_table, inrows_to_group, group_to_first_row);
+    get_group_info(in_table, inrows_to_group, group_to_first_row,
+                   check_for_null_keys);
     int64_t num_groups = group_to_first_row.size();
 
     // create output table with *uninitialized* columns
@@ -2777,7 +2835,8 @@ table_info* groupby_and_aggregate_local(table_info& in_table, int64_t num_keys,
     for (int j = 0; j < num_keys; j++) {
         array_info* in_col = in_table[j];
         array_info* out_col = (*out_table)[j];
-        if (in_col->arr_type == bodo_array_type::NUMPY) {
+        if (in_col->arr_type == bodo_array_type::NUMPY ||
+            in_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             int64_t dtype_size = numpy_item_size[out_col->dtype];
             for (int64_t i = 0; i < num_groups; i++)
                 memcpy(out_col->data1 + i * dtype_size,
@@ -2897,8 +2956,8 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                                   int32_t ftype, bool is_parallel) {
     // perform initial local aggregation
     int64_t num_data_cols = in_table->ncols() - num_keys;
-    table_info* aggr_local =
-        groupby_and_aggregate_local(*in_table, num_keys, num_data_cols, ftype);
+    table_info* aggr_local = groupby_and_aggregate_local(
+        *in_table, num_keys, num_data_cols, ftype, true);
 
     // shuffle step
     table_info* shuf_table = aggr_local;
@@ -2909,7 +2968,7 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
 
     // combine step
     table_info* out_table = groupby_and_aggregate_local(
-        *shuf_table, num_keys, num_data_cols, combine_funcs[ftype]);
+        *shuf_table, num_keys, num_data_cols, combine_funcs[ftype], false);
     delete shuf_table;
 
     // eval step

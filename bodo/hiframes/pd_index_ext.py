@@ -38,6 +38,7 @@ from bodo.hiframes.datetime_date_ext import array_datetime_date
 import bodo.utils.conversion
 from bodo.utils.utils import BooleanLiteral
 from bodo.utils.typing import is_overload_none, is_overload_true, is_overload_false
+from bodo.libs.int_arr_ext import IntegerArrayType
 
 
 _dt_index_data_typ = types.Array(types.NPDatetime("ns"), 1, "C")
@@ -1408,7 +1409,7 @@ def array_typ_to_index(arr_typ, name_typ=None):
     if arr_typ == bodo.string_array_type:
         return StringIndexType(name_typ)
 
-    assert isinstance(arr_typ, types.Array)
+    assert isinstance(arr_typ, types.Array) or isinstance(arr_typ, IntegerArrayType)
     if arr_typ.dtype == types.NPDatetime("ns"):
         return DatetimeIndexType(name_typ)
 
