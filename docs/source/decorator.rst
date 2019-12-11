@@ -50,8 +50,8 @@ distributed data. For example, the variable `df` is replicated
 in the following program::
 
     @bodo.jit
-    def example():
-        df = pd.DataFrame({'A': np.arange(100)})
+    def example(n):
+        df = pd.DataFrame({'A': np.arange(n)})
         return df
 
     print(example(1000))
@@ -96,13 +96,13 @@ distributed chunks returned::
 
 
     @bodo.jit(distributed={'df'})
-    def example():
-        df = pd.DataFrame({'A': np.arange(100)})
+    def example(n):
+        df = pd.DataFrame({'A': np.arange(n)})
         return df
 
     print(example(1000))
 
-The output indicates that the code is not parallelized::
+The output indicates that the code is parallelized::
 
     $ mpiexec -n 2 python ../example.py
            A
