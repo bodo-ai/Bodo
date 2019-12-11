@@ -1,5 +1,3 @@
-.. _eula:
-
 End User License Agreement
 ======================================
 
