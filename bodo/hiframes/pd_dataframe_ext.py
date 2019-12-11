@@ -1069,7 +1069,7 @@ def validate_unicity_output_column_names(
     NatureLR = {}
     def insertOutColumn(col_name):
         if col_name in NatureLR:
-            raise BodoError('join(): two columns happen to have the same name')
+            raise BodoError('join(): two columns happen to have the same name : {}'.format(col_name))
         NatureLR[col_name] = 0
 
     for eVar in comm_keys:
