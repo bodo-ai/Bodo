@@ -23,7 +23,6 @@
 
 import sys
 import os
-import sphinx_bootstrap_theme
 import bodo
 import alabaster
 
