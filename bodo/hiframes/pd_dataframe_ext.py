@@ -724,7 +724,7 @@ def _get_df_args(data, index, columns, dtype, copy):
     index_arg = "bodo.utils.conversion.convert_to_index(index)"
 
     # data is sentinel tuple (converted from dictionary)
-    if isinstance(data, types.Tuple):
+    if isinstance(data, types.BaseTuple):
         # first element is sentinel
         if not data.types[0] == types.StringLiteral("__bodo_tup"):
             raise ValueError("pd.DataFrame tuple input data not supported yet")
@@ -968,7 +968,7 @@ class GetItemDataFrameIat(AbstractTemplate):
         if isinstance(df, DataFrameIatType):
             # df.iat[n,1]
             if (
-                isinstance(idx, types.Tuple)
+                isinstance(idx, types.BaseTuple)
                 and len(idx) == 2
                 and isinstance(idx.types[1], types.IntegerLiteral)
             ):
@@ -987,7 +987,7 @@ class SetItemDataFrameIat(AbstractTemplate):
         if isinstance(df, DataFrameIatType):
             # df.iat[n,1] = 3
             if (
-                isinstance(idx, types.Tuple)
+                isinstance(idx, types.BaseTuple)
                 and len(idx) == 2
                 and isinstance(idx.types[1], types.IntegerLiteral)
             ):
@@ -1015,7 +1015,7 @@ class GetItemDataFrameLoc(AbstractTemplate):
                 return signature(df.df_type, *args)
             # df.loc[1:n,'A']
             if (
-                isinstance(idx, types.Tuple)
+                isinstance(idx, types.BaseTuple)
                 and len(idx) == 2
                 and isinstance(idx.types[1], types.StringLiteral)
             ):
@@ -1044,7 +1044,7 @@ class GetItemDataFrameILoc(AbstractTemplate):
                 return signature(df.df_type, *args)
             # df.iloc[1:n,0]
             if (
-                isinstance(idx, types.Tuple)
+                isinstance(idx, types.BaseTuple)
                 and len(idx) == 2
                 and isinstance(idx.types[1], types.IntegerLiteral)
             ):

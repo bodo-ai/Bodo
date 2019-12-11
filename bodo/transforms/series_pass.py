@@ -2720,7 +2720,7 @@ def _fix_typ_undefs(new_typ, old_typ):
         )
         if new_typ.dtype == types.undefined:
             return new_typ.copy(old_typ.dtype)
-    if isinstance(old_typ, (types.Tuple, types.UniTuple)):
+    if isinstance(old_typ, types.BaseTuple):
         return types.Tuple(
             [_fix_typ_undefs(t, u) for t, u in zip(new_typ.types, old_typ.types)]
         )

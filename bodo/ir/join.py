@@ -1022,7 +1022,7 @@ def ensure_capacity(arr, new_size):
 def ensure_capacity_overload(arr, new_size):
     if isinstance(arr, types.Array) or arr == boolean_array:
         return ensure_capacity
-    assert isinstance(arr, (types.Tuple, types.UniTuple))
+    assert isinstance(arr, types.BaseTuple)
     count = arr.count
 
     func_text = "def f(arr, new_size):\n"
@@ -1068,7 +1068,7 @@ def trim_arr_tup(data, new_size):  # pragma: no cover
 
 @overload(trim_arr_tup)
 def trim_arr_tup_overload(data, new_size):
-    assert isinstance(data, (types.Tuple, types.UniTuple))
+    assert isinstance(data, types.BaseTuple)
     count = data.count
 
     func_text = "def f(data, new_size):\n"
@@ -1123,7 +1123,7 @@ def copy_elem_buff_tup(arr, ind, val):  # pragma: no cover
 
 @overload(copy_elem_buff_tup)
 def copy_elem_buff_tup_overload(data, ind, val):
-    assert isinstance(data, (types.Tuple, types.UniTuple))
+    assert isinstance(data, types.BaseTuple)
     count = data.count
 
     func_text = "def f(data, ind, val):\n"
@@ -1192,7 +1192,7 @@ def setnan_elem_buff_tup(arr, ind):  # pragma: no cover
 
 @overload(setnan_elem_buff_tup)
 def setnan_elem_buff_tup_overload(data, ind):
-    assert isinstance(data, (types.Tuple, types.UniTuple))
+    assert isinstance(data, types.BaseTuple)
     count = data.count
 
     func_text = "def f(data, ind):\n"

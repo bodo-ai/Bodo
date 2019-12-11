@@ -2,6 +2,7 @@
 """
 Helper functions to enable typing.
 """
+import itertools
 import numpy as np
 import pandas as pd
 import numba
@@ -49,7 +50,7 @@ def is_overload_constant_str(val):
 
 def is_overload_constant_str_list(val):
     return (
-        isinstance(val, bodo.utils.typing.ConstList)
+        isinstance(val, (bodo.utils.typing.ConstList, bodo.utils.typing.ConstUniTuple))
         and isinstance(val.consts, tuple)
         and isinstance(val.consts[0], str)
     )
@@ -237,6 +238,9 @@ class AddConstsTyper(AbstractTemplate):
             consts = tuple(v.literal_value for v in args[1:])
             if isinstance(ret_typ, types.DictType):
                 ret_typ = ConstDictType(ret_typ.key_type, ret_typ.value_type, consts)
+            elif isinstance(ret_typ, types.UniTuple):
+                assert ret_typ.count == len(consts)
+                ret_typ = ConstUniTuple(ret_typ.dtype, ret_typ.count, consts)
             else:
                 ret_typ = ConstList(ret_typ.dtype, consts)
         return signature(ret_typ, *args)
@@ -269,11 +273,41 @@ class ConstDictModel(numba.dictobject.DictModel):
         super(ConstDictModel, self).__init__(dmm, l_type)
 
 
+# Type used to add constant values to constant uniform tuples to enable typing of calls
+# such as df.merge() with tuple of str as "on" argument
+class ConstUniTuple(types.UniTuple):
+    def __init__(self, dtype, count, consts):
+        dtype = types.unliteral(dtype)
+        self.dtype = dtype
+        self.count = count
+        self.consts = consts
+        cls_name = "tuple[{}]".format(consts)
+        name = "%s(%s x %d)" % (cls_name, self.dtype, self.count)
+        super(types.UniTuple, self).__init__(name=name)
+
+    def copy(self):
+        return ConstUniTuple(self.dtype, self.count, self.consts)
+
+    def unify(self, typingctx, other):
+        if isinstance(other, ConstUniTuple) and self.consts == other.consts:
+            dtype = typingctx.unify_pairs(self.dtype, other.dtype)
+            if dtype is not None:
+                return ConstUniTuple(dtype, self.count, self.consts)
+
+    @property
+    def key(self):
+        return self.dtype, self.count, self.consts
+
+
+@register_model(ConstUniTuple)
+class ConstUniTupleModel(models.UniTupleModel):
+    def __init__(self, dmm, fe_type):
+        l_type = types.UniTuple(fe_type.dtype, fe_type.count)
+        super(ConstUniTupleModel, self).__init__(dmm, l_type)
+
+
 # dummy empty itertools implementation to avoid typing errors for series str
 # flatten case
-import itertools
-
-
 @overload(itertools.chain)
 def chain_overload():
     return lambda: [0]

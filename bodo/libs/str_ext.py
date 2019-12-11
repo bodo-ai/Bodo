@@ -178,55 +178,6 @@ def string_to_char_ptr(typingctx, str_tp=None):
     return types.voidptr(str_tp), codegen
 
 
-#####################  re support  ###################
-
-
-class RePatternType(types.Opaque):
-    def __init__(self):
-        super(RePatternType, self).__init__(name="RePatternType")
-
-
-re_pattern_type = RePatternType()
-types.re_pattern_type = re_pattern_type
-
-register_model(RePatternType)(models.OpaqueModel)
-
-
-@box(RePatternType)
-def box_re_pattern(typ, val, c):
-    # TODO: fix
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(RePatternType)
-def unbox_re_pattern(typ, obj, c):
-    # TODO: fix
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
-
-
-# jitoptions until numba #4020 is resolved
-@overload(re.compile, jit_options={"no_cpython_wrapper": False})
-def re_compile_overload(pattern, flags=0):
-    def _re_compile_impl(pattern, flags=0):
-        with numba.objmode(pat="re_pattern_type"):
-            pat = re.compile(pattern, flags)
-        return pat
-
-    return _re_compile_impl
-
-
-@overload_method(RePatternType, "sub")
-def re_sub_overload(p, repl, string, count=0):
-    def _re_sub_impl(p, repl, string, count=0):
-        with numba.objmode(out="unicode_type"):
-            out = p.sub(repl, string, count)
-        return out
-
-    return _re_sub_impl
-
-
 @numba.njit
 def contains_regex(e, in_str):
     with numba.objmode(res="bool_"):
@@ -397,15 +348,6 @@ def overload_str(val):
     ):
         return lambda val: str(np.int64(val))
 
-
-class RegexType(types.Opaque):
-    def __init__(self):
-        super(RegexType, self).__init__(name="RegexType")
-
-
-regex_type = RegexType()
-
-register_model(RegexType)(models.OpaqueModel)
 
 ll.add_symbol("init_string_const", hstr_ext.init_string_const)
 ll.add_symbol("get_c_str", hstr_ext.get_c_str)

@@ -185,9 +185,11 @@ def _test_equal(
 
     if isinstance(py_out, pd.Series):
         if sort_output:
-            py_out.sort_values(inplace=True)
+            # pandas fails if all null integer column is sorted
+            if not py_out.isnull().all():
+                py_out.sort_values(inplace=True)
+                bodo_out.sort_values(inplace=True)
             py_out.reset_index(inplace=True, drop=True)
-            bodo_out.sort_values(inplace=True)
             bodo_out.reset_index(inplace=True, drop=True)
         # fix dtype for bool Series with no NA
         if is_bool_object_series(py_out) and not py_out.hasnans:

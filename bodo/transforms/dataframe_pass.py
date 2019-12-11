@@ -331,7 +331,7 @@ class DataFramePass(object):
         # df.iloc[1:n,0], df.loc[1:n,'A']
         if (
             (self._is_df_loc_var(rhs.value) or self._is_df_iloc_var(rhs.value))
-            and isinstance(index_typ, types.Tuple)
+            and isinstance(index_typ, types.BaseTuple)
             and len(index_typ) == 2
         ):
             #
@@ -396,7 +396,7 @@ class DataFramePass(object):
                 )
 
             # df.iat[n,1]
-            if isinstance(index_typ, types.Tuple) and len(index_typ) == 2:
+            if isinstance(index_typ, types.BaseTuple) and len(index_typ) == 2:
                 ind_def = guard(get_definition, self.func_ir, index_var)
                 col_ind = guard(find_const, self.func_ir, ind_def.items[1])
                 col_name = df_typ.columns[col_ind]
@@ -459,7 +459,7 @@ class DataFramePass(object):
             df_typ = self.typemap[df_var.name]
             val = inst.value
             # df.iat[n,1] = 3
-            if isinstance(index_typ, types.Tuple) and len(index_typ) == 2:
+            if isinstance(index_typ, types.BaseTuple) and len(index_typ) == 2:
                 ind_def = guard(get_definition, self.func_ir, index_var)
                 col_ind = guard(find_const, self.func_ir, ind_def.items[1])
                 col_name = df_typ.columns[col_ind]
