@@ -530,7 +530,7 @@ def to_string_list_typ(typ):
     if typ == string_array_type:
         return types.List(bodo.libs.str_ext.string_type)
 
-    if isinstance(typ, (types.Tuple, types.UniTuple)):
+    if isinstance(typ, types.BaseTuple):
         new_typs = []
         for i in range(typ.count):
             new_typs.append(to_string_list_typ(typ.types[i]))

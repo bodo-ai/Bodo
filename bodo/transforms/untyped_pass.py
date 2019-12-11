@@ -341,25 +341,14 @@ class UntypedPass(object):
                     # a = ['A', 'B'] ->
                     # tmp = ['A', 'B']
                     # a = add_consts_to_type(tmp, 'A', 'B')
-                    vals_expr = ", ".join(
-                        "'{}'".format(c) if isinstance(c, str) else "{}".format(c)
-                        for c in vals
-                    )
-                    func_text = "def _build_f(a):\n"
-                    func_text += "  return bodo.utils.typing.add_consts_to_type(a, {})\n".format(
-                        vals_expr
-                    )
-                    loc_vars = {}
-                    exec(func_text, {"bodo": bodo}, loc_vars)
-                    _build_f = loc_vars["_build_f"]
                     target = assign.target
                     tmp_target = ir.Var(
                         target.scope, mk_unique_var(target.name), rhs.loc
                     )
                     tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
                     nodes = [tmp_assign]
-                    nodes += _compile_func_single_block(
-                        _build_f, (tmp_target,), assign.target
+                    nodes += self._gen_add_consts_to_type(
+                        vals, tmp_target, assign.target
                     )
                     return nodes
                 except numba.ir_utils.GuardException:
@@ -488,19 +477,11 @@ class UntypedPass(object):
                 # a = list('AB') ->
                 # tmp = ['A', 'B']
                 # a = add_consts_to_type(tmp, 'A', 'B')
-                vals_expr = ", ".join("'{}'".format(c) for c in arg_val)
-                func_text = "def _build_f(a):\n"
-                func_text += "  return bodo.utils.typing.add_consts_to_type(a, {})\n".format(
-                    vals_expr
-                )
-                loc_vars = {}
-                exec(func_text, {"bodo": bodo}, loc_vars)
-                _build_f = loc_vars["_build_f"]
                 target = assign.target
                 tmp_target = ir.Var(target.scope, mk_unique_var(target.name), rhs.loc)
                 tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
                 nodes = [tmp_assign]
-                nodes += _compile_func_single_block(_build_f, (tmp_target,), lhs)
+                nodes += self._gen_add_consts_to_type(list(arg_val), tmp_target, lhs)
                 return nodes
 
         # TODO: update Xenon handling code
@@ -511,7 +492,63 @@ class UntypedPass(object):
         #     nodes += df_nodes
         #     return nodes
 
+        # replace constant tuple argument with ConstUniTuple to provide constant values
+        # to typers. Safe to be applied to all calls, but only done for these calls
+        # to avoid making the IR messy for cases that don't need it
+        if func_name in ("merge", "join", "merge_asof", "groupby"):
+            return self._handle_const_tup_call_args(assign, lhs, rhs)
+
         return [assign]
+
+    def _handle_const_tup_call_args(self, assign, lhs, rhs):
+        """replace call argument variables that are constant tuples with ConstUniTuple
+        types that include the constant values. This is a workaround since Numba needs
+        to support something like TupleLiteral properly.
+        This transformation is done only for call arguments since changing constant
+        tuples for things like getitem can cause issues in Numba's rewrite and type
+        inference passes.
+        """
+        nodes = []
+        rhs.args = [self._replace_const_tup(arg, nodes) for arg in rhs.args]
+        rhs.kws = [(key, self._replace_const_tup(arg, nodes)) for key, arg in rhs.kws]
+        return nodes + [assign]
+
+    def _replace_const_tup(self, var, nodes):
+        """generate code for creating ConstUniTuple variable if var is a constant tuple
+        with same value types.
+        """
+        try:
+            var_def = get_definition(self.func_ir, var)
+            require(isinstance(var_def, ir.Const))
+            vals = var_def.value
+            require(isinstance(vals, tuple))
+            require(len(vals) > 0)
+            val_typ = type(vals[0])
+            require(all(isinstance(v, val_typ) for v in vals))
+            tmp_target = ir.Var(
+                var.scope, mk_unique_var(var.name + '_const'), var.loc
+            )
+            nodes.extend(self._gen_add_consts_to_type(vals, var, tmp_target))
+            return tmp_target
+        except numba.ir_utils.GuardException:
+            return var
+
+    def _gen_add_consts_to_type(self, vals, var, ret_var):
+        vals_expr = ", ".join(
+            "'{}'".format(c) if isinstance(c, str) else "{}".format(c)
+            for c in vals
+        )
+        func_text = "def _build_f(a):\n"
+        func_text += "  return bodo.utils.typing.add_consts_to_type(a, {})\n".format(
+            vals_expr
+        )
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+        _build_f = loc_vars["_build_f"]
+        nodes = _compile_func_single_block(
+            _build_f, (var,), ret_var
+        )
+        return nodes
 
     def _handle_df_inplace_func(
         self, assign, lhs, rhs, df_var, inplace_var, replace_func, label
