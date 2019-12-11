@@ -268,12 +268,6 @@ def test_merge_asof_leftindex_righton():
 
 
 
-def test_merge_asof_suffixes_format():
-    def impl(df1, df2):
-        return pd.merge_asof(df1, df2, suffixes=("_x", "_y"))
-
-    with pytest.raises(BodoError, match="suffixes parameters should be"):
-        bodo.jit(impl)(df1, df2)
 
 def test_merge_asof_suffixes_number():
     def impl(df1, df2):

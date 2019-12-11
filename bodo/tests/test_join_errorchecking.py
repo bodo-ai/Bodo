@@ -68,7 +68,7 @@ def test_merge_on_invalid_index_left():
 
 #def test_merge_unicity_of_column_names():
 #    def impl(df1, df2):
-#        return df1.merge(df2, left_on="C", right_on="E", suffixes = ['a', 'a'])
+#        return df1.merge(df2, left_on="C", right_on="E", suffixes = ['a', 'a'])s
 #
 #    with pytest.raises(BodoError, match="two columns happen to have the same name"):
 #        bodo.jit(impl)(df3, df4)
@@ -349,13 +349,6 @@ def test_merge_sort():
     ):
         bodo.jit(impl)(df1, df2)
 
-
-def test_merge_suffixes_format():
-    def impl(df1, df2):
-        return df1.merge(df2, suffixes=("_x", "_y"))
-
-    with pytest.raises(BodoError, match="suffixes parameters should be"):
-        bodo.jit(impl)(df1, df2)
 
 
 def test_merge_suffixes_number():
