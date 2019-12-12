@@ -3,6 +3,7 @@
 Implement pd.DataFrame typing and data model handling.
 """
 import operator
+import warnings
 from collections import namedtuple
 import pandas as pd
 import numpy as np
@@ -34,9 +35,11 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.series_indexing import SeriesIlocType
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import (
+    BodoWarning,
     BodoError,
     is_overload_none,
     is_overload_constant_bool,
+    is_overload_bool,
     is_overload_constant_str,
     is_overload_constant_str_list,
     is_overload_true,
@@ -44,6 +47,7 @@ from bodo.utils.typing import (
     is_overload_zero,
     get_overload_const_str,
     get_const_str_list,
+    is_overload_bool_list,
 )
 
 
@@ -1571,7 +1575,6 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
     if not is_overload_none(on):
         on_keys = get_const_str_list(on)
         validate_keys(on_keys, left.columns)
-
     # make sure sort is the default value, sort=True not supported
     if not is_overload_false(sort):
         raise BodoError("join(): sort parameter only supports default value False")
@@ -1581,9 +1584,8 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
         # make sure two dataframes do not have common columns
         # because we are not supporting lsuffix and rsuffix
         raise BodoError(
-            "join(): not supporting joining on overlapping columns:",
-            "{cols}".format(cols=comm_cols),
-            "Use DataFrame.merge() instead.",
+            "join(): not supporting joining on overlapping columns:"
+            "{cols} Use DataFrame.merge() instead.".format(cols=comm_cols)
         )
 
 
@@ -1946,6 +1948,8 @@ def lower_concat_dummy(context, builder, sig, args):
 def sort_values_overload(
     df, by, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last"
 ):
+    validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position)
+
     def _impl(
         df,
         by,
@@ -1961,6 +1965,68 @@ def sort_values_overload(
         )
 
     return _impl
+
+
+def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position):
+    """validates sort_values spec
+    Note that some checks are due to unsupported functionalities
+    """
+
+    # whether 'by' is supplied is checked by numba
+    # make sure 'by' is a const str or str list
+    if not is_overload_constant_str(by) and not is_overload_constant_str_list(by):
+        raise BodoError(
+            "sort_values(): 'by' parameter only supports "
+            "a constant column label or column labels."
+        )
+
+    # make sure by has valid label(s)
+    if len(set(get_const_str_list(by)).difference(set(df.columns))) > 0:
+        raise BodoError(
+            "sort_values(): invalid key {} for by.".format(
+                set(df.columns).difference(set(get_const_str_list(by)))
+            )
+        )
+
+    # make sure axis has default value 0
+    if not is_overload_zero(axis):
+        raise BodoError(
+            "sort_values(): 'axis' parameter only " "supports integer value 0."
+        )
+
+    # 'ascending': not supporting multiple sort orders
+    if is_overload_bool_list(ascending):
+        raise BodoError(
+            "sort_values(): multiple sort orders are not supported."
+            "'ascending' parameter must be of type bool"
+        )
+
+    # make sure 'ascending' is of type bool
+    if not is_overload_bool(ascending):
+        raise BodoError(
+            "sort_values(): 'ascending' parameter must be of type bool, "
+            "not {}.".format(ascending)
+        )
+
+    # make sure 'inplace' is of type bool
+    if not is_overload_bool(inplace):
+        raise BodoError(
+            "sort_values(): 'inplace' parameter must be of type bool, "
+            "not {}.".format(inplace)
+        )
+
+    # make sure 'kind' is not specified
+    if kind != "quicksort":
+        warnings.warn(
+            BodoWarning(
+                "sort_values(): specifying sorting algorithm "
+                "is not supported in Bodo. Bodo uses stable sort."
+            )
+        )
+
+    # make sure 'na_position' is not specified
+    if na_position != "last":
+        raise BodoError("sort_values(): na_position is not currently supported.")
 
 
 def sort_values_dummy(df, by, ascending, inplace):

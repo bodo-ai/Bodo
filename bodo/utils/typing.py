@@ -40,6 +40,10 @@ def is_overload_constant_bool(val):
     )
 
 
+def is_overload_bool(val):
+    return isinstance(val, types.Boolean) or is_overload_constant_bool(val)
+
+
 def is_overload_constant_str(val):
     return (
         isinstance(val, str)
@@ -54,6 +58,10 @@ def is_overload_constant_str_list(val):
         and isinstance(val.consts, tuple)
         and isinstance(val.consts[0], str)
     )
+
+
+def is_overload_bool_list(val):
+    return isinstance(val, numba.types.List) and isinstance(val.dtype, types.Boolean)
 
 
 def is_overload_true(val):

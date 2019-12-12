@@ -48,6 +48,7 @@ from bodo.libs.array_tools import (
     info_to_array,
     delete_table,
 )
+from bodo.hiframes.pd_dataframe_ext import validate_sort_values_spec
 
 
 @overload_attribute(DataFrameType, "index")
@@ -1120,11 +1121,13 @@ def sort_values_inplace(df):
 def sort_values_inplace_overload(
     df, by, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last"
 ):
-
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
-    assert isinstance(df, DataFrameType)
-    # TODO: support recovery when object is not df
+    # make sure 'df' is of type DataFrame
+    if not isinstance(df, DataFrameType):
+        raise BodoError("sort_values(): requires dataframe inputs")
+    validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position)
+
     def _impl(
         df,
         by,
