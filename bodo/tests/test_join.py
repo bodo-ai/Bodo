@@ -87,6 +87,49 @@ def test_merge_key_change():
     )
 
 
+
+
+def test_merge_suffixes_bracket():
+    """
+    Test merge(): test the suffixes functionality with bracket
+    """
+    def test_impl(df1, df2):
+        o1 = df1.merge(df2, on='key', how='inner', suffixes=["_a", "_b"])
+        return o1
+
+    bodo_func = bodo.jit(test_impl)
+    df1 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [1, 2, 3, 5]})
+    df2 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [5, 6, 7, 8]})
+    check_func(test_impl, (df1, df2), sort_output=True)
+
+def test_merge_suffixes_parenthesis():
+    """
+    Test merge(): test the suffixes functionality with parenthesis
+    """
+    def test_impl(df1, df2):
+        o1 = df1.merge(df2, on='key', how='inner', suffixes=("_a", "_b"))
+        return o1
+
+    bodo_func = bodo.jit(test_impl)
+    df1 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [1, 2, 3, 5]})
+    df2 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [5, 6, 7, 8]})
+    check_func(test_impl, (df1, df2), sort_output=True)
+
+
+def test_merge_empty_suffix_underscore():
+    """
+    Test merge(): test the suffixes functionality with a pathological example
+    """
+    def test_impl(df1, df2):
+        o1 = df1.merge(df2, on='key', how='inner', suffixes=["", "_"])
+        return o1
+
+    bodo_func = bodo.jit(test_impl)
+    df1 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [1, 2, 3, 5]})
+    df2 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [5, 6, 7, 8]})
+    check_func(test_impl, (df1, df2), sort_output=True)
+
+
 @pytest.mark.parametrize(
     "df1",
     [
