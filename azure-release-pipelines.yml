@@ -14,71 +14,61 @@ stages:
 - stage: Build_Bodo_Binary
   displayName: 'Build Bodo Binary'
   jobs:
-  - job: Build_Bodo_Binary
-    pool:
+  - template: buildscripts/azure/azure-build-binary-linux-macos.yml
+    parameters:
+      name: Linux
       vmImage: ubuntu-latest
-    steps:
-    - task: UsePythonVersion@0
-      inputs:
-        versionSpec: '3.7'
-      displayName: 'Use Python $(python.version)'
-    - script: |
-        pip install astunparse
-        chmod +x buildscripts/remove_docstring.py
-      displayName: 'Prepare to build'
-    - script: |
-        wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
-        chmod +x miniconda.sh
-        ./miniconda.sh -b
-        export PATH=$HOME/miniconda3/bin:${PATH}
-      displayName: 'Setup Miniconda'
-    - script: |
-        export PATH=$HOME/miniconda3/bin:$PATH
-        source activate bodo_build
-        conda install -y flake8
-        flake8 bodo
-      displayName: 'Flake8'
-    - script: |
-        export PATH=$HOME/miniconda3/bin:${PATH}
-        conda create -y -n bodo_build conda-build anaconda-client conda-verify
-        source activate bodo_build
-        cd buildscripts/bodo-conda-recipe/
-        export TRIAL_PERIOD=$(TRIAL_PERIOD)
-        conda-build . -c defaults -c numba -c conda-forge --no-test
-      displayName: 'Conda build Bodo'
-    - script: |
-        export PATH=$HOME/miniconda3/bin:${PATH}
-        source activate bodo_build
-        cd $HOME
-        mkdir bodo-inc
-        mkdir bodo-inc/linux-64
-        cp $(HOME)/miniconda3/envs/bodo_build/conda-bld/linux-64/bodo*.tar.bz2 bodo-inc/linux-64/
-        conda index bodo-inc/
-      displayName: 'index bodo-inc'
-    - task: ArchiveFiles@2
-      inputs:
-        rootFolderOrFile: '$(HOME)/bodo-inc'
-        includeRootFolder: false
-        archiveFile: '$(Build.ArtifactStagingDirectory)/bodo-inc.zip'
-        replaceExistingArchive: true 
-      displayName: "Archive files"
-    - task: PublishBuildArtifacts@1
-      inputs:
-        pathtoPublish: '$(Build.ArtifactStagingDirectory)/bodo-inc.zip'
-        artifactName: bodo-inc
-      displayName: "Publish Artifact"
+  - template: buildscripts/azure/azure-build-binary-linux-macos.yml
+    parameters:
+      name: Mac
+      vmImage: xcode9-macos10.13
 
 - stage: Test_Bodo_Binary
   displayName: Test Bodo Binary
   jobs:
-  - template: buildscripts/azure/azure-test-binary-linux.yml
+  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
-      name: Test
+      name: Mac
+      vmImage: xcode9-macos10.13
+      matrix:
+        TEST_1P_SLOW:
+          NP: 1
+          PYTEST_MARKER: slow
+        TEST_2P_SLOW:
+          NP: 2
+          PYTEST_MARKER: slow
+        TEST_3P_SLOW:
+          NP: 3
+          PYTEST_MARKER: slow
+        TEST_1P_NOT_SLOW:
+          NP: 1
+          PYTEST_MARKER: not slow
+        TEST_2P_NOT SLOW:
+          NP: 2
+          PYTEST_MARKER: not slow
+        TEST_3P_NOT_SLOW:
+          NP: 3
+          PYTEST_MARKER: not slow  
+  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      name: Linux
       vmImage: ubuntu-latest
       matrix:
-        TEST_1P:
+        TEST_1P_SLOW:
           NP: 1
-        TEST_2P:
+          PYTEST_MARKER: slow
+        TEST_2P_SLOW:
           NP: 2
-        Test_3P:
+          PYTEST_MARKER: slow
+        TEST_3P_SLOW:
           NP: 3
+          PYTEST_MARKER: slow
+        TEST_1P_NOT_SLOW:
+          NP: 1
+          PYTEST_MARKER: not slow
+        TEST_2P_NOT SLOW:
+          NP: 2
+          PYTEST_MARKER: not slow
+        TEST_3P_NOT_SLOW:
+          NP: 3
+          PYTEST_MARKER: not slow
