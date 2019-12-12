@@ -20,3 +20,4 @@ Bodo documentation
    source/not_supported
    source/aws
    source/jupyter
+   source/eula
