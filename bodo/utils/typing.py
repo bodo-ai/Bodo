@@ -84,6 +84,15 @@ def is_overload_str(val, const):
     )
 
 
+def get_overload_const_str_len(val):
+    if isinstance(val, str):
+        return len(val)
+    if isinstance(val, types.StringLiteral) and isinstance(val.literal_value, str):
+        return len(val.literal_value)
+    if isinstance(val, types.Omitted) and isinstance(val.value, str):
+        return len(val.value)
+
+
 def get_const_str_list(val):
     # 'ommited' case
     if getattr(val, "value", None) is not None:
@@ -106,7 +115,7 @@ def get_overload_const_str(val):
     if isinstance(val, types.StringLiteral):
         assert isinstance(val.literal_value, str)
         return val.literal_value
-    raise ValueError("{} not constant string".format(val))
+    raise BodoError("{} not constant string".format(val))
 
 
 # TODO: move to Numba
@@ -123,7 +132,7 @@ def parse_dtype(dtype):
         return numba.numpy_support.from_dtype(np.dtype(d_str))
     except:
         pass
-    raise ValueError("invalid dtype {}".format(dtype))
+    raise BodoError("invalid dtype {}".format(dtype))
 
 
 def is_list_like_index_type(t):

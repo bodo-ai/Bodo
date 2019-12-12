@@ -52,6 +52,20 @@ from bodo.hiframes.split_impl import (
     get_split_view_index,
     get_split_view_data_ptr,
 )
+from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.utils.typing import (
+    BodoError,
+    is_overload_none,
+    get_const_str_list,
+    is_overload_true,
+    is_overload_false,
+    is_overload_zero,
+    is_overload_constant_bool,
+    is_overload_constant_str,
+    is_overload_constant_str_list,
+    get_overload_const_str,
+    get_overload_const_str_len,
+)
 
 
 class SeriesStrMethodType(types.Type):
@@ -90,6 +104,75 @@ def init_series_str_method(typingctx, obj=None):
     return SeriesStrMethodType(obj)(obj), codegen
 
 
+def str_arg_check(func_name, arg_name, arg):
+    """
+    Helper function to raise BodoError 
+    when the argument is NOT a string(UnicodeType) or const string
+    """
+    if not isinstance(arg, types.UnicodeType) and not is_overload_constant_str(arg):
+        raise BodoError(
+            "Series.str.{}(): parameter '{}' expected a string object, not {}".format(
+                func_name, arg_name, arg
+            )
+        )
+
+
+def int_arg_check(func_name, arg_name, arg):
+    """
+    Helper function to raise BodoError 
+    when the argument is NOT an Integer type
+    """
+    if not isinstance(arg, types.Integer):
+        raise BodoError(
+            "Series.str.{}(): parameter '{}' expected an int object, not {}".format(
+                func_name, arg_name, arg
+            )
+        )
+
+
+def not_supported_arg_check(func_name, arg_name, arg, defval):
+    """
+    Helper function to raise BodoError 
+    when not supported argument is provided by users
+    """
+    if arg_name == "na":
+        if not isinstance(arg, float) or not np.isnan(arg):
+            raise BodoError(
+                "Series.str.{}(): parameter '{}' is not supported, default: np.nan".format(
+                    func_name, arg_name
+                )
+            )
+    else:
+        if not isinstance(arg, types.Omitted) and arg != defval:
+            raise BodoError(
+                "Series.str.{}(): parameter '{}' is not supported, default: {}".format(
+                    func_name, arg_name, defval
+                )
+            )
+
+
+def common_validate_padding(func_name, width, fillchar):
+    """
+    Helper function to raise BodoError 
+    for checking arguments' types of ljust,rjust,center,padding
+    """
+    if is_overload_constant_str(fillchar):
+        if get_overload_const_str_len(fillchar) != 1:
+            raise BodoError(
+                "Series.str.{}(): fillchar must be a character, not str".format(
+                    func_name
+                )
+            )
+    elif not isinstance(fillchar, types.UnicodeType):
+        raise BodoError(
+            "Series.str.{}(): fillchar must be a character, not {}".format(
+                func_name, fillchar
+            )
+        )
+
+    int_arg_check(func_name, "width", width)
+
+
 @overload_attribute(SeriesType, "str")
 def overload_series_str(s):
     return lambda s: bodo.hiframes.series_str_impl.init_series_str_method(s)
@@ -126,6 +209,11 @@ def overload_str_method_len(S_str):
 @overload_method(SeriesStrMethodType, "split")
 def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
     # TODO: support or just check n and expand arguments
+    if not is_overload_none(pat):
+        str_arg_check("split", "pat", pat)
+    not_supported_arg_check("split", "n", n, -1)
+    not_supported_arg_check("split", "expand", expand, False)
+
     # TODO: support distributed
     # TODO: support regex
 
@@ -158,12 +246,11 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
 @overload_method(SeriesStrMethodType, "get")
 def overload_str_method_get(S_str, i):
     arr_typ = S_str.stype.data
-    # XXX only supports get for list(list(str)) input and split view
-    assert (
-        arr_typ == types.List(types.List(string_type))
-        or arr_typ == string_array_split_view_type
-    )
-
+    if arr_typ != string_array_split_view_type and arr_typ != list_string_array_type:
+        raise BodoError(
+            "Series.str.get(): only supports input type of Series(list(str))"
+        )
+    int_arg_check("get", "i", i)
     # TODO: support and test NA
     # TODO: support distributed
 
@@ -216,7 +303,11 @@ def overload_str_method_get(S_str, i):
 
 
 @overload_method(SeriesStrMethodType, "replace")
-def overload_str_method_replace(pat, repl, n=-1, case=None, flags=0, regex=True):
+def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, regex=True):
+    not_supported_arg_check("replace", "n", n, -1)
+    not_supported_arg_check("replace", "case", case, None)
+    str_arg_check("replace", "pat", pat)
+    str_arg_check("replace", "repl", repl)
     # TODO: support other arguments
     # TODO: support dynamic values for regex
     if is_overload_true(regex):
@@ -229,7 +320,7 @@ def overload_str_method_replace(pat, repl, n=-1, case=None, flags=0, regex=True)
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
             numba.parfor.init_prange()
-            e = re.compile(pat)
+            e = re.compile(pat, flags)
             l = len(arr)
             n_total_chars = 0
             str_list = bodo.libs.str_ext.alloc_str_list(l)
@@ -253,7 +344,7 @@ def overload_str_method_replace(pat, repl, n=-1, case=None, flags=0, regex=True)
         return _str_replace_regex_impl
 
     if not is_overload_false(regex):
-        raise ValueError("regex argument for Series.str.replace should be constant")
+        raise BodoError("Series.str.replace(): regex argument should be bool")
 
     def _str_replace_noregex_impl(
         S_str, pat, repl, n=-1, case=None, flags=0, regex=True
@@ -288,6 +379,9 @@ def overload_str_method_replace(pat, repl, n=-1, case=None, flags=0, regex=True)
 
 @overload_method(SeriesStrMethodType, "contains")
 def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, regex=True):
+    not_supported_arg_check("contains", "case", case, True)
+    not_supported_arg_check("contains", "na", na, np.nan)
+    str_arg_check("contains", "pat", pat)
     # TODO: support other arguments
     # TODO: support dynamic values for regex
     if is_overload_true(regex):
@@ -300,7 +394,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
             numba.parfor.init_prange()
-            e = re.compile(pat)
+            e = re.compile(pat, flags)
             l = len(arr)
             out_arr = np.empty(l, dtype=np.bool_)
             nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
@@ -318,7 +412,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
         return _str_contains_regex_impl
 
     if not is_overload_false(regex):
-        raise ValueError("regex argument for Series.str.replace should be constant")
+        raise BodoError("Series.str.contains(): regex argument should be bool")
 
     def _str_contains_noregex_impl(
         S_str, pat, case=True, flags=0, na=np.nan, regex=True
@@ -348,6 +442,8 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
 @overload_method(SeriesStrMethodType, "count")
 def overload_str_method_count(S_str, pat, flags=0):
     # python str.count() and pandas str.count() are different
+    str_arg_check("count", "pat", pat)
+
     def impl(S_str, pat, flags=0):
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -375,6 +471,8 @@ def overload_str_method_count(S_str, pat, flags=0):
 @overload_method(SeriesStrMethodType, "find")
 def overload_str_method_find(S_str, sub):
     # not supporting start,end as arguments
+    str_arg_check("find", "sub", sub)
+
     def impl(S_str, sub):
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -400,6 +498,12 @@ def overload_str_method_find(S_str, sub):
 
 @overload_method(SeriesStrMethodType, "rfind")
 def overload_str_method_rfind(S_str, sub, start=0, end=None):
+    str_arg_check("rfind", "sub", sub)
+    if start != 0:
+        int_arg_check("rfind", "start", start)
+    if not is_overload_none(end):
+        int_arg_check("rfind", "end", end)
+
     def impl(S_str, sub, start=0, end=None):
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -425,6 +529,8 @@ def overload_str_method_rfind(S_str, sub, start=0, end=None):
 
 @overload_method(SeriesStrMethodType, "center")
 def overload_str_method_center(S_str, width, fillchar=" "):
+    common_validate_padding("center", width, fillchar)
+
     def impl(S_str, width, fillchar=" "):
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -455,6 +561,8 @@ def overload_str_method_center(S_str, width, fillchar=" "):
 
 @overload_method(SeriesStrMethodType, "ljust")
 def overload_str_method_ljust(S_str, width, fillchar=" "):
+    common_validate_padding("ljust", width, fillchar)
+
     def impl(S_str, width, fillchar=" "):
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -485,6 +593,8 @@ def overload_str_method_ljust(S_str, width, fillchar=" "):
 
 @overload_method(SeriesStrMethodType, "rjust")
 def overload_str_method_rjust(S_str, width, fillchar=" "):
+    common_validate_padding("rjust", width, fillchar)
+
     def impl(S_str, width, fillchar=" "):
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -515,6 +625,17 @@ def overload_str_method_rjust(S_str, width, fillchar=" "):
 
 @overload_method(SeriesStrMethodType, "pad")
 def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
+    common_validate_padding("pad", width, fillchar)
+    if is_overload_constant_str(side):
+        if get_overload_const_str(side) not in [
+            "left",
+            "right",
+            "both",
+        ]:  # numba does not catch this case. Causes SegFault
+            raise BodoError("Series.str.pad(): Invalid Side")
+    else:
+        raise BodoError("Series.str.pad(): Invalid Side")
+
     def impl(S_str, width, side="left", fillchar=" "):
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -559,6 +680,8 @@ def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
 
 @overload_method(SeriesStrMethodType, "zfill")
 def overload_str_method_zfill(S_str, width):
+    int_arg_check("zfill", "width", width)
+
     def impl(S_str, width):
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -587,6 +710,13 @@ def overload_str_method_zfill(S_str, width):
 
 @overload_method(SeriesStrMethodType, "slice")
 def overload_str_method_slice(S_str, start=None, stop=None, step=None):
+    if not is_overload_none(start):
+        int_arg_check("slice", "start", start)
+    if not is_overload_none(stop):
+        int_arg_check("slice", "stop", stop)
+    if not is_overload_none(step):
+        int_arg_check("slice", "step", step)
+
     def impl(S_str, start=None, stop=None, step=None):
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -615,6 +745,10 @@ def overload_str_method_slice(S_str, start=None, stop=None, step=None):
 
 @overload_method(SeriesStrMethodType, "startswith")
 def overload_str_method_startswith(S_str, pat, na=np.nan):
+
+    not_supported_arg_check("startswith", "na", na, np.nan)
+    str_arg_check("startswith", "pat", pat)
+
     def impl(S_str, pat, na=np.nan):
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -640,6 +774,9 @@ def overload_str_method_startswith(S_str, pat, na=np.nan):
 
 @overload_method(SeriesStrMethodType, "endswith")
 def overload_str_method_endswith(S_str, pat, na=np.nan):
+    not_supported_arg_check("endswith", "na", na, np.nan)
+    str_arg_check("endswith", "pat", pat)
+
     def impl(S_str, pat, na=np.nan):
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -694,7 +831,9 @@ def create_str2str_methods_overload(func_name):
         func_text += "            bodo.ir.join.setitem_arr_nan(out_arr, j)\n"
         func_text += "        else:\n"
         func_text += "            out_arr[j] = str_arr[j].{}()\n".format(func_name)
-        func_text += "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
+        func_text += (
+            "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
+        )
         loc_vars = {}
         # print(func_text)
         exec(
