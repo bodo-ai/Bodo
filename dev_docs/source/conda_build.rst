@@ -22,7 +22,7 @@ Conda Build Bodo
     cd buildscripts/bodo-conda-recipe/
     # if trial version
     # export TRIAL_PERIOD=14
-    conda-build . -c defaults -c numba -c conda-forge --no-test
+    conda-build . -c defaults -c conda-forge --no-test
 
 Open a new terminal window (replace yourContainerID :code:`docker container ls`
 and the name of `.tar.bz2` File)::
@@ -36,4 +36,4 @@ and the name of `.tar.bz2` File)::
 
 To build :code:`bodo` from the file bodo-inc::
 
-    conda install bodo -c file:///bodo-inc/ -c defaults -c numba -c conda-forge
+    conda install bodo -c file:///bodo-inc/ -c defaults -c conda-forge

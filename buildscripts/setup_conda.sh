@@ -34,7 +34,7 @@ else
     echo "Error in compiler install"
 fi
 
-$CONDA_INSTALL -c numba numba=0.46.0
+$CONDA_INSTALL numba=0.46.0
 $CONDA_INSTALL -c defaults -c conda-forge hdf5=*=*mpich*
 
 if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi
