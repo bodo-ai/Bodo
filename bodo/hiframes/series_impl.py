@@ -9,7 +9,10 @@ import numba
 from numba import types
 from numba.extending import overload, overload_attribute, overload_method
 import bodo
-from bodo.libs.str_arr_ext import get_str_arr_item_length
+from bodo.libs.str_ext import string_type
+from bodo.libs.str_arr_ext import (get_str_arr_item_length, get_utf8_size,
+    pre_alloc_string_array
+)
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_index_ext import is_pd_index_type
 from bodo.hiframes.pd_categorical_ext import PDCategoricalClass
@@ -20,6 +23,7 @@ from bodo.utils.typing import (
     is_overload_zero,
     is_overload_str,
     BodoError,
+    is_overload_constant_str,
 )
 from numba.typing.templates import infer_global, AbstractTemplate
 
@@ -1398,3 +1402,81 @@ class SeriesFilterBoolInfer(AbstractTemplate):
         if isinstance(ret.dtype, types.Integer):
             ret = SeriesType(types.float64)
         return ret(*args)
+
+
+def where_impl(c, x, y):
+    return np.where(c, x, y)
+
+
+@overload(where_impl)
+def overload_where_unsupported(condition, x, y):
+    if not isinstance(condition, (SeriesType, types.Array)) or condition.ndim != 1:
+        return lambda condition, x, y: np.where(condition, x, y)
+
+
+@overload(where_impl)
+@overload(np.where)
+def overload_np_where(condition, x, y):
+    """implement parallelizable np.where() for Series and 1D arrays
+    """
+    # this overload only supports 1D arrays
+    if not isinstance(condition, (SeriesType, types.Array)) or condition.ndim != 1:
+        return
+
+    assert condition.dtype == types.bool_
+
+    is_x_arr = isinstance(x, (SeriesType, types.Array))
+    is_y_arr = isinstance(y, (SeriesType, types.Array))
+
+    func_text = "def _impl(condition, x, y):\n"
+    # get array data of Series inputs
+    if isinstance(condition, SeriesType):
+        func_text += "  condition = bodo.hiframes.pd_series_ext.get_series_data(condition)\n"
+    if isinstance(x, SeriesType):
+        func_text += "  x = bodo.hiframes.pd_series_ext.get_series_data(x)\n"
+    if isinstance(y, SeriesType):
+        func_text += "  y = bodo.hiframes.pd_series_ext.get_series_data(y)\n"
+    func_text += "  n = len(condition)\n"
+    out_dtype = None
+
+    # output is string if any input is string, and requires extra pass for allocation
+    if (is_overload_constant_str(x) or x == string_type
+            or is_overload_constant_str(y) or y == string_type
+            or (isinstance(x, (SeriesType, types.Array)) and x.dtype == string_type)
+            or (isinstance(y, (SeriesType, types.Array)) and y.dtype == string_type)):
+
+        func_text += "  n_chars = 0\n"
+        func_text += "  for i in numba.parfor.internal_prange(n):\n"
+        func_text += "    if condition[i]:\n"
+        func_text += "      l = get_utf8_size({})\n".format("x[i]" if is_x_arr else "x")
+        func_text += "    else:\n"
+        func_text += "      l = get_utf8_size({})\n".format("y[i]" if is_y_arr else "y")
+        func_text += "    n_chars += l\n"
+        func_text += "  out_arr = pre_alloc_string_array(n, n_chars)\n"
+    else:
+        # similar to np.where typer of Numba
+        out_dtype = numba.from_dtype(np.promote_types(
+                        numba.numpy_support.as_dtype(getattr(x, 'dtype', x)),
+                        numba.numpy_support.as_dtype(getattr(y, 'dtype', y))))
+        func_text += "  out_arr = np.empty(n, out_dtype)\n"
+
+    func_text += "  for j in numba.parfor.internal_prange(n):\n"
+    func_text += "    if condition[j]:\n"
+    func_text += "      out_arr[j] = {}\n".format("x[j]" if is_x_arr else "x")
+    if is_x_arr:
+        func_text += "      if bodo.libs.array_kernels.isna(x, j): setitem_arr_nan(out_arr, j)\n"
+    func_text += "    else:\n"
+    func_text += "      out_arr[j] = {}\n".format("y[j]" if is_y_arr else "y")
+    if is_y_arr:
+        func_text += "      if bodo.libs.array_kernels.isna(y, j): setitem_arr_nan(out_arr, j)\n"
+    func_text += "  return out_arr\n"
+    # print(func_text)
+    loc_vars = {}
+    exec(func_text,
+        {"bodo": bodo, "numba": numba, "get_utf8_size": get_utf8_size,
+        "pre_alloc_string_array": pre_alloc_string_array,
+        "setitem_arr_nan": bodo.ir.join.setitem_arr_nan, "np": np,
+        "out_dtype": out_dtype}, loc_vars
+    )
+    _impl = loc_vars["_impl"]
+    return _impl

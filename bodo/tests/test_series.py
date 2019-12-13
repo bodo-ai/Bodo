@@ -1484,6 +1484,38 @@ def test_series_value_counts():
     check_func(test_impl, (S,))
 
 
+def test_series_np_where_str():
+    """Tests np.where() called on Series with string input (#223).
+    """
+    def test_impl1(S):
+        return np.where(S=='aa', S, "d")
+    def test_impl2(S, a):
+        return np.where(S=='aa', a, S)
+
+    S = pd.Series(['aa', 'b', 'aa', 'cc', np.nan, 'aa', 'DD'],
+        [5, 1, 2, 0, 3, 4, 9],
+        name="AA"
+    )
+    check_func(test_impl1, (S,))
+    check_func(test_impl2, (S, "ddd"))
+
+
+def test_series_np_where_num():
+    """Tests np.where() called on Series with numeric input.
+    """
+    def test_impl1(S):
+        return np.where((S==2.0), S, 11.0)
+    def test_impl2(S, a):
+        return np.where((S==2.0).values, a, S.values)
+
+    S = pd.Series([4.0, 2.0, 1.1, 9.1, 2.0, np.nan, 2.5],
+        [5, 1, 2, 0, 3, 4, 9],
+        name="AA"
+    )
+    check_func(test_impl1, (S,))
+    check_func(test_impl2, (S, 12))
+
+
 ############################### old tests ###############################
 
 

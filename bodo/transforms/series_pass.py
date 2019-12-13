@@ -1376,6 +1376,17 @@ class SeriesPass(object):
             # import pdb; pdb.set_trace()
             return self._replace_func(impl, rhs.args)
 
+        # inline np.where() for 3 arg case with 1D input
+        if (fdef == ("where", "numpy")
+                or fdef == ("where_impl", "bodo.hiframes.series_impl")) and (
+                len(rhs.args) == 3 and self.typemap[rhs.args[0].name].ndim == 1):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+            impl = bodo.hiframes.series_impl.overload_np_where(*arg_typs, **kw_typs)
+            return self._replace_func(
+                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+            )
+
         # convert Series to Array for unhandled calls
         # TODO check all the functions that get here and handle if necessary
         # e.g. np.sum, prod, min, max, argmin, argmax, mean, var, and std

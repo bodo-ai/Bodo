@@ -492,6 +492,9 @@ class UntypedPass(object):
         #     nodes += df_nodes
         #     return nodes
 
+        if fdef == ("where", "numpy") and len(rhs.args) == 3:
+            return self._handle_np_where(assign, lhs, rhs)
+
         # replace constant tuple argument with ConstUniTuple to provide constant values
         # to typers. Safe to be applied to all calls, but only done for these calls
         # to avoid making the IR messy for cases that don't need it
@@ -549,6 +552,15 @@ class UntypedPass(object):
             _build_f, (var,), ret_var
         )
         return nodes
+
+
+    def _handle_np_where(self, assign, lhs, rhs):
+        """replace np.where() calls with Bodo's version since Numba's typer assumes
+        non-Array types like Series are scalars and produces wrong output type.
+        """
+        return _compile_func_single_block(
+            lambda c, x, y: bodo.hiframes.series_impl.where_impl(c, x, y), rhs.args, lhs
+        )
 
     def _handle_df_inplace_func(
         self, assign, lhs, rhs, df_var, inplace_var, replace_func, label
