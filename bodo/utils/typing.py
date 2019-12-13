@@ -60,6 +60,15 @@ def is_overload_constant_str_list(val):
     )
 
 
+def is_overload_constant_int(val):
+    return (
+        isinstance(val, int)
+        or (isinstance(val, types.IntegerLiteral)
+            and isinstance(val.literal_value, int))
+        or ((isinstance(val, types.Omitted) and isinstance(val.value, int)))
+    )
+
+
 def is_overload_bool_list(val):
     return isinstance(val, numba.types.List) and isinstance(val.dtype, types.Boolean)
 
@@ -124,6 +133,20 @@ def get_overload_const_str(val):
         assert isinstance(val.literal_value, str)
         return val.literal_value
     raise BodoError("{} not constant string".format(val))
+
+
+def get_overload_const_int(val):
+    if isinstance(val, int):
+        return val
+    # 'ommited' case
+    if getattr(val, "value", None) is not None:
+        assert isinstance(val.value, int)
+        return val.value
+    # literal case
+    if isinstance(val, types.IntegerLiteral):
+        assert isinstance(val.literal_value, int)
+        return val.literal_value
+    raise ValueError("{} not constant integer".format(val))
 
 
 # TODO: move to Numba

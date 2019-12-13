@@ -92,6 +92,35 @@ def test_contains_noregex():
     check_func(test_impl, (S,))
 
 
+def test_extract():
+    def test_impl(S):
+        return S.str.extract(r"(?P<BBB>[abd])(?P<C>\d+)")
+
+    S = pd.Series(
+        ["a1", "b1", np.nan, "a2", "c2", "ddd", "d1", "d222"],
+        [4, 3, 5, 1, 0, 2, 6, 11],
+        name="AA",
+    )
+    check_func(test_impl, (S,))
+
+
+def test_extract_noexpand():
+    def test_impl(S):
+        return S.str.extract(r"(?P<BBB>[abd]+)\d+", expand=False)
+
+    # when regex group has no name, Series name should be used
+    def test_impl_noname(S):
+        return S.str.extract(r"([abd]+)\d+", expand=False)
+
+    S = pd.Series(
+        ["a1", "b1", np.nan, "a2", "cc2", "ddd", "ddd1", "d222"],
+        [4, 3, 5, 1, 0, 2, 6, 11],
+        name="AA",
+    )
+    check_func(test_impl, (S,))
+    check_func(test_impl_noname, (S,))
+
+
 def test_count_noflag():
     def test_impl(S):
         return S.str.count("A")

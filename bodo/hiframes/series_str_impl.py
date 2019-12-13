@@ -65,6 +65,8 @@ from bodo.utils.typing import (
     is_overload_constant_str_list,
     get_overload_const_str,
     get_overload_const_str_len,
+    is_overload_constant_int,
+    get_overload_const_int,
 )
 
 
@@ -797,6 +799,111 @@ def overload_str_method_endswith(S_str, pat, na=np.nan):
             bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls), index, name
         )
 
+    return impl
+
+
+@overload_method(SeriesStrMethodType, "extract")
+def overload_str_method_extract(S_str, pat, flags=0, expand=True):
+    # error checking
+    # regex arguments have to be constant for "extract", since evaluation of regex in
+    # compilation time is required for determining output type.
+    if not is_overload_constant_str(pat):
+        raise BodoError(
+            "Series.str.extract(): 'pat' argument should be a constant string")
+
+    if not is_overload_constant_int(flags):
+        raise BodoError(
+            "Series.str.extract(): 'flags' argument should be a constant int")
+
+    if not is_overload_constant_bool(expand):
+        raise BodoError(
+            "Series.str.extract(): 'expand' argument should be a constant bool")
+
+    # get column names similar to pd.core.strings._str_extract_frame()
+    pat = get_overload_const_str(pat)
+    flags = get_overload_const_int(flags)
+    regex = re.compile(pat, flags=flags)
+    if regex.groups == 0:
+        raise BodoError(
+            "Series.str.extract(): pattern {} contains no capture groups".format(pat))
+    names = dict(zip(regex.groupindex.values(), regex.groupindex.keys()))
+    # using str(i) since Bodo only supports string column names
+    # TODO: use integer when supported
+    columns = [names.get(1 + i, str(i)) for i in range(regex.groups)]
+    n_cols = len(columns)
+
+    # generate one loop for finding character count and another for computation
+    # TODO: avoid multiple loops if possible, or even avoid inlined loops if needed
+    func_text = "def impl(S_str, pat, flags=0, expand=True):\n"
+    func_text += "  regex = re.compile(pat, flags=flags)\n"
+    func_text += "  S = S_str._obj\n"
+    func_text += "  str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+    func_text += "  index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+    func_text += "  name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+    func_text += "  numba.parfor.init_prange()\n"
+    func_text += "  n = len(str_arr)\n"
+    for i in range(n_cols):
+        func_text += "  num_chars_{} = 0\n".format(i)
+    func_text += "  for i in numba.parfor.internal_prange(n):\n"
+    func_text += "      if bodo.libs.array_kernels.isna(str_arr, i):\n"
+    for i in range(n_cols):
+        func_text += "          l_{} = 0\n".format(i)
+    func_text += "      else:\n"
+    func_text += "          m = regex.search(str_arr[i])\n"
+    func_text += "          if not m:\n"
+    for i in range(n_cols):
+        func_text += "            l_{} = 0\n".format(i)
+    func_text += "          else:\n"
+    func_text += "            g = m.groups()\n"
+    for i in range(n_cols):
+        func_text += "            l_{0} = get_utf8_size(g[{0}])\n".format(i)
+    for i in range(n_cols):
+        func_text += "      num_chars_{0} += l_{0}\n".format(i)
+    for i in range(n_cols):
+        func_text += (
+        "  out_arr_{0} = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars_{0})\n".format(i)
+        )
+    func_text += "  for j in numba.parfor.internal_prange(n):\n"
+    func_text += "      if bodo.libs.array_kernels.isna(str_arr, j):\n"
+    for i in range(n_cols):
+        func_text += "          out_arr_{}[j] = ''\n".format(i)
+        func_text += "          bodo.ir.join.setitem_arr_nan(out_arr_{}, j)\n".format(i)
+    func_text += "      else:\n"
+    func_text += "          m = regex.search(str_arr[j])\n"
+    func_text += "          if m:\n"
+    func_text += "            g = m.groups()\n"
+    for i in range(n_cols):
+        func_text += "            out_arr_{0}[j] = g[{0}]\n".format(i)
+    func_text += "          else:\n"
+    for i in range(n_cols):
+        func_text += "            out_arr_{}[j] = ''\n".format(i)
+        func_text += "            bodo.ir.join.setitem_arr_nan(out_arr_{}, j)\n".format(i)
+
+    # no expand case
+    if is_overload_false(expand) and regex.groups == 1:
+        name = ("'{}'".format(list(regex.groupindex.keys()).pop())
+                if len(regex.groupindex.keys()) > 0
+                else "name"
+        )
+        func_text += "  return bodo.hiframes.pd_series_ext.init_series(out_arr_0, index, {})\n".format(name)
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "re": re,
+                "bodo": bodo,
+                "numba": numba,
+                "get_utf8_size": get_utf8_size,
+            },
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
+
+    data_args = ", ".join("out_arr_{}".format(i) for i in range(n_cols))
+    impl = bodo.hiframes.dataframe_impl._gen_init_df(func_text, columns, data_args,
+        "index", extra_globals={"get_utf8_size": get_utf8_size, "re": re}
+    )
     return impl
 
 
