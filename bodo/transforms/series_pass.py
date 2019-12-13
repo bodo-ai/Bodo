@@ -1538,6 +1538,7 @@ class SeriesPass(object):
             "put",
             "isna",
             "isnull",
+            "isin",
             "quantile",
             "fillna",
             "dropna",

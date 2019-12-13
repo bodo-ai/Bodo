@@ -1221,6 +1221,21 @@ def test_series_tail(series_val):
     check_func(test_impl, (series_val,), False)
 
 
+@pytest.mark.parametrize(
+    "S,values",
+    [
+        (pd.Series([3, 2, np.nan, 2, 7], [3, 4, 2, 1, 0], name="A"), [2.0, 3.0]),
+        (pd.Series(["aa", "b", np.nan, "ccc", "b"], [3, 4, 2, 1, 0], name="A"), ["aa", "b"]),
+    ],
+)
+def test_series_isin(S, values):
+
+    def test_impl(S, values):
+        return S.isin(values)
+
+    check_func(test_impl, (S, values))
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("k", [0, 1, 2, 3])
 def test_series_nlargest(numeric_series_val, k):
