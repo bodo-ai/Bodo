@@ -38,7 +38,7 @@ jobs:
       source activate bodo_build
       cd buildscripts/bodo-conda-recipe/
       export TRIAL_PERIOD=$(TRIAL_PERIOD)
-      conda-build . -c defaults -c numba -c conda-forge --no-test
+      conda-build . -c defaults -c conda-forge --no-test
     displayName: 'Conda build Bodo'
   - script: |
       export PATH=$HOME/miniconda3/bin:${PATH}
