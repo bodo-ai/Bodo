@@ -277,6 +277,17 @@ def test_isupper():
     check_func(test_impl, (S,))
 
 
+@pytest.mark.parametrize("ind", [slice(2), 2])
+def test_getitem(ind):
+    def test_impl(S, ind):
+        return S.str[ind]
+
+    S = pd.Series(
+        ["ABCDDCABABAAB", "ABBD", "AA", "C,ABB, D", np.nan], [3, 5, 1, 0, 2], name="A"
+    )
+    check_func(test_impl, (S, ind))
+
+
 ##############  list of string array tests  #################
 
 

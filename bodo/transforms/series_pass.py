@@ -333,6 +333,12 @@ class SeriesPass(object):
         #     series_var = val_def.value
         #     rhs.value = series_var
 
+        if isinstance(target_typ, SeriesStrMethodType):
+            impl = bodo.hiframes.series_str_impl.overload_str_method_getitem(
+                target_typ, idx_typ
+            )
+            return self._replace_func(impl, (target, idx), pre_nodes=nodes)
+
         nodes.append(assign)
         return nodes
 

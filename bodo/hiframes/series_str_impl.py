@@ -248,9 +248,11 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
 @overload_method(SeriesStrMethodType, "get")
 def overload_str_method_get(S_str, i):
     arr_typ = S_str.stype.data
-    if arr_typ != string_array_split_view_type and arr_typ != list_string_array_type:
+    if (arr_typ != string_array_split_view_type and arr_typ != list_string_array_type
+            and arr_typ != string_array_type):
         raise BodoError(
-            "Series.str.get(): only supports input type of Series(list(str))"
+            "Series.str.get(): only supports input type of Series(list(str)) "
+            "and Series(str)"
         )
     int_arg_check("get", "i", i)
     # TODO: support and test NA
@@ -288,17 +290,30 @@ def overload_str_method_get(S_str, i):
         n = len(arr)
         n_total_chars = 0
         str_list = bodo.libs.str_ext.alloc_str_list(n)
+        na_map = np.empty(n, np.bool_)
         for k in numba.parfor.internal_prange(n):
-            # TODO: support NAN
+            if bodo.libs.array_kernels.isna(arr, k):
+                na_map[k] = True
+                str_list[k] = ""
+                continue
             in_list_str = arr[k]
+            if not (len(in_list_str) > i >= -len(in_list_str)):
+                na_map[k] = True
+                str_list[k] = ""
+                continue
             out_str = in_list_str[i]
             str_list[k] = out_str
+            na_map[k] = False
             n_total_chars += get_utf8_size(out_str)
         numba.parfor.init_prange()
         out_arr = pre_alloc_string_array(n, n_total_chars)
         for j in numba.parfor.internal_prange(n):
-            _str = str_list[j]
-            out_arr[j] = _str
+            if na_map[j]:
+                out_arr[j] = ""
+                bodo.ir.join.setitem_arr_nan(out_arr, j)
+            else:
+                _str = str_list[j]
+                out_arr[j] = _str
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return _str_get_impl
@@ -800,6 +815,21 @@ def overload_str_method_endswith(S_str, pat, na=np.nan):
         )
 
     return impl
+
+
+@overload(operator.getitem)
+def overload_str_method_getitem(S_str, ind):
+    if not isinstance(S_str, SeriesStrMethodType):
+        return
+
+    if not isinstance(ind, (types.SliceType, types.Integer)):
+        raise BodoError("index input to Series.str[] should be a slice or an integer")
+
+    if isinstance(ind, types.SliceType):
+        return lambda S_str, ind: S_str.slice(ind.start, ind.stop, ind.step)
+
+    if isinstance(ind, types.Integer):
+        return lambda S_str, ind: S_str.get(ind)
 
 
 @overload_method(SeriesStrMethodType, "extract")
