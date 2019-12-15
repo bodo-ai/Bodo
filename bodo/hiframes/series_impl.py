@@ -776,7 +776,7 @@ def overload_series_isin(S, values):
         raise BodoError("Series.isin(): 'values' parameter should be a set or a list")
 
     # TODO: use hash table for 'values' for faster check similar to Pandas
-    def impl(S, values):
+    def impl(S, values):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
