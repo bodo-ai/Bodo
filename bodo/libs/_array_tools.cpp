@@ -12,7 +12,6 @@
 #include <numpy/arrayobject.h>
 #include <cstdio>
 #include <cstring>
-#include <functional>
 #include <iostream>
 #include <map>
 #include <numeric>
@@ -2410,7 +2409,7 @@ struct multi_col_key {
     }
 };
 
-struct key_hash : public std::unary_function<multi_col_key, std::size_t> {
+struct key_hash {
     std::size_t operator()(const multi_col_key& k) const { return k.hash; }
 };
 
