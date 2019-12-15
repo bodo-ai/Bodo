@@ -223,21 +223,14 @@ def test_rfind_start_end(test_sr):
 @pytest.mark.parametrize(
     "input",
     [
-        pd.Series(
-            [
-                "String",
-                (1, 2, 3),
-                ["a", "b", "c"],
-                123,
-                -456,
-                {1: "Hello", "2": "World"},
-            ]
-        )
+        pd.Series([1, 2, 3]),
+        # pd.Series([(1, 2, 3), (3, 4, 5)])  # TODO: support unboxing Series of tuples
     ],
 )
 def test_get_input(input):
     """
-    tests error for get with the input series not being ListStringArrayType
+    tests error for get with the input series not being ListStringArrayType or
+    StringArrayType
     """
 
     def impl(input):
@@ -258,6 +251,25 @@ def test_get_i(input):
 
     with pytest.raises(BodoError, match="expected an int object, not"):
         bodo.jit(impl)(input)
+
+
+# ------------------------------ getitem ------------------------------ #
+
+
+@pytest.mark.parametrize(
+    "ind",
+    ["3", 1.2],
+)
+def test_getitem_ind(ind):
+    """
+    tests error for getitem for index inputs other than slice and int
+    """
+
+    def impl(S, ind):
+        return S.str[ind]
+
+    with pytest.raises(BodoError, match="index input to Series.str"):
+        bodo.jit(impl)(pd.Series(["AA", "BB"]), ind)
 
 
 # ------------------------------ split() ------------------------------ #
