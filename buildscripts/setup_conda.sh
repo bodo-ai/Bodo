@@ -34,7 +34,8 @@ else
     echo "Error in compiler install"
 fi
 
-$CONDA_INSTALL numba=0.46.0
+# TODO: remove dev channel when 0.47 is fully released
+$CONDA_INSTALL numba=0.47.* -c numba/label/dev
 $CONDA_INSTALL -c defaults -c conda-forge hdf5=*=*mpich*
 
 if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi
