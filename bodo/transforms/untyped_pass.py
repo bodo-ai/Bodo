@@ -156,6 +156,8 @@ def remove_hiframes(rhs, lives, call_list):
     # TODO: handle copy properly, copy of some types can have side effects?
     if call_list == ["copy"]:
         return True
+    if len(call_list) == 2 and call_list[0] == "copy":
+        return True
     return False
 
 
