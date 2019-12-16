@@ -1844,9 +1844,10 @@ class DistributedPass(object):
         loc = parfor.init_block.loc
         pre = []
         out = []
-        _, reductions = get_parfor_reductions(parfor, parfor.params, self.calltypes)
+        _, reductions = get_parfor_reductions(
+            self.func_ir, parfor, parfor.params, self.calltypes)
 
-        for reduce_varname, (_init_val, reduce_nodes) in reductions.items():
+        for reduce_varname, (_init_val, reduce_nodes, _op) in reductions.items():
             reduce_op = guard(self._get_reduce_op, reduce_nodes)
             reduce_var = reduce_nodes[-1].target
             assert reduce_var.name == reduce_varname
