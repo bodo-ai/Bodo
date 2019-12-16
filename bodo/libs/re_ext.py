@@ -356,7 +356,7 @@ def overload_match_expand(m, template):
     return _match_expand_impl
 
 
-@overload_method(ReMatchType, "group")
+@overload_method(ReMatchType, "group", strict=False)
 def overload_match_group(m, *args):
     # TODO: support cases where a group is not matched and None should be returned
     # for example: re.match(r"(\w+)? (\w+) (\w+)", " words word")
