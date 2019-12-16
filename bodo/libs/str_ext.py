@@ -115,7 +115,6 @@ for method in str2str_methods:
 # string methods that just return another boolean
 # 'isupper' is in numba
 str2bool_methods = (
-    "isalnum",
     "isalpha",
     "isdigit",
     "isspace",
