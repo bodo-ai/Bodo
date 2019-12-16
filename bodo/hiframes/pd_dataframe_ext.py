@@ -1491,18 +1491,28 @@ def validate_keys_dtypes(
             if lk_arr_type == rk_arr_type:
                 continue
 
+            msg = ("merge: You are trying to merge on column {lk} of {lk_dtype} and "
+                   "column {rk} of {rk_dtype}. If you wish to proceed "
+                   "you should use pd.concat").format(
+                        lk=lk, lk_dtype=lk_type, rk=rk, rk_dtype=rk_type
+            )
+
+            # Make sure non-string columns are not merged with string columns.
+            # As of Numba 0.47, string comparison with non-string works and is always
+            # False, so using type inference below doesn't work
+            # TODO: check all incompatible key types similar to Pandas in
+            # _maybe_coerce_merge_keys
+            l_is_str = lk_type == string_type
+            r_is_str = rk_type == string_type
+            if l_is_str ^ r_is_str:
+                raise BodoError(msg)
+
             try:
                 ret_dtype = typing_context.resolve_function_type(
                     operator.eq, (lk_type, rk_type), {}
                 )
             except:
-                raise BodoError(
-                    "merge: You are trying to merge on column {lk} of {lk_dtype} and "
-                    "column {rk} of {rk_dtype}. If you wish to proceed "
-                    "you should use pd.concat".format(
-                        lk=lk, lk_dtype=lk_type, rk=rk, rk_dtype=rk_type
-                    )
-                )
+                raise BodoError(msg)
 
 
 def validate_keys(keys, columns):
