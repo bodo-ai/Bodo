@@ -907,7 +907,7 @@ def impl_string_array_single(context, builder, sig, args):
         return res
 
     if isinstance(args[0], types.UniTuple):
-        assert args[0].dtype == string_type
+        assert isinstance (args[0].dtype, (types.UnicodeType, types.StringLiteral))
 
     def str_arr_from_list(in_list):
         n_strs = len(in_list)

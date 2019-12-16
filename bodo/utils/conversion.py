@@ -137,7 +137,8 @@ def overload_coerce_to_array(data, error_on_nonarray=True, bool_arr_convert=None
         )
 
     # string tuple
-    if isinstance(data, types.UniTuple) and data.dtype == bodo.string_type:
+    if isinstance(data, types.UniTuple) and isinstance(
+            data.dtype, (types.UnicodeType, types.StringLiteral)):
         return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.libs.str_arr_ext.StringArray(
             list(data)
         )
