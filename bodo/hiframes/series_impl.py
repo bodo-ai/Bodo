@@ -773,6 +773,28 @@ def overload_series_append(S, to_append, ignore_index=False, verify_integrity=Fa
     return impl_single
 
 
+@overload_method(SeriesType, "isin")
+def overload_series_isin(S, values):
+    # 'values' should be a set or list, TODO: support other list-likes such as Array
+    if not isinstance(values, (types.Set, types.List)):
+        raise BodoError("Series.isin(): 'values' parameter should be a set or a list")
+
+    # TODO: use hash table for 'values' for faster check similar to Pandas
+    def impl(S, values):  # pragma: no cover
+        A = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        numba.parfor.init_prange()
+        n = len(A)
+        out_arr = np.empty(n, np.bool_)
+        for i in numba.parfor.internal_prange(n):
+            out_arr[i] = A[i] in values
+
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+    return impl
+
+
 @overload_method(SeriesType, "quantile")
 def overload_series_quantile(S, q=0.5, interpolation="linear"):
     # TODO: datetime support
