@@ -772,7 +772,7 @@ def is_str_arr_typ(typ):
 
 
 @overload_method(StringArrayType, "copy")
-def str_arr_copy_overload(str_arr):
+def str_arr_copy_overload(arr):
     def copy_impl(arr):
         n = len(arr)
         n_chars = num_total_chars(arr)
