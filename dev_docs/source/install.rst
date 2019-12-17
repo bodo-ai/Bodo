@@ -16,7 +16,7 @@ such as Numba on Ubuntu Linux::
     source activate DEV
     # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64
-    conda install -c numba/label/dev numba
+    conda install -c defaults numba
     conda install -c defaults -c conda-forge hdf5=*=*mpich*
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
@@ -160,30 +160,32 @@ To remove all stopped containers:
 Building from Source on Windows
 -------------------------------
 
-Building Bodo on Windows requires Build Tools for Visual Studio 2017 (14.0):
+* Install Visual Studio Community 2017 (15.9.18)
+* From the Visual Studio installer, install following individual components::
 
-* Install `Build Tools for Visual Studio 2017 (14.0) <https://www.visualstudio.com/downloads/#build-tools-for-visual-studio-2017>`_.
+    Windows 10 SDK (10.0.17763.0)
+    Windows Universal CRT SDK
+    VC++ 2015.3 v14.00 (v140) toolset for desktop
+
 * Install `Miniconda for Windows <https://repo.continuum.io/miniconda/Miniconda3-latest-Windows-x86_64.exe>`_.
-* Start 'Anaconda prompt'
+* Start 'Anaconda (Miniconda3) prompt'
 * Setup the Conda environment in Anaconda Prompt::
 
-    conda create -n Bodo -c ehsantn -c numba/label/dev -c anaconda -c conda-forge python=3.7 pandas pyarrow h5py numba scipy boost libboost tbb-devel mkl-devel
-    activate Bodo
+    conda create -n DEV numpy scipy pandas boost cmake h5py pyarrow
+    source activate DEV
+    conda install -c defaults numba
     conda install vc vs2015_runtime vs2015_win-64
-    conda install -c intel impi_rt impi-devel
-    git clone https://github.com/IntelLabs/bodo.git
-    cd bodo
-    set HDF5_DIR=%CONDA_PREFIX%\Library
+    conda install -c defaults -c intel impi_rt impi-devel
+    git clone https://github.com/Bodo-inc/Bodo.git
+    cd Bodo
+    # build Bodo 
+    # For later HDF5 support: set HDF5_DIR=%CONDA_PREFIX%\Library
     python setup.py develop
 
-.. "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" amd64
 
 Troubleshooting Windows Build
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* If the ``cl`` compiler throws the error fatal ``error LNK1158: cannot run ‘rc.exe’``,
-  add Windows Kits to your PATH (e.g. ``C:\Program Files (x86)\Windows Kits\8.0\bin\x86``).
-* Some errors can be mitigated by ``set DISTUTILS_USE_SDK=1``.
-* For setting up Visual Studio, one might need go to registry at
-  ``HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\VisualStudio\SxS\VS7``,
-  and add a string value named ``14.0`` whose data is ``C:\Program Files (x86)\Microsoft Visual Studio 14.0\``.
+* HDF5 is currently not supported for windows version of Bodo.
+* Testing for windows version is currently not available due to package conflicts.
+* It might be necessary to remove all the different visual studio versions installed and fresh start above instruction.
