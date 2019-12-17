@@ -1,4 +1,4 @@
-set HDF5_DIR="%LIBRARY_PREFIX%"
+REM set HDF5_DIR="%LIBRARY_PREFIX%"
 REM set OPENCV_DIR="%LIBRARY_PREFIX%"
 REM set DAALROOT="%LIBRARY_PREFIX%"
 "%PYTHON%" setup.py build install --single-version-externally-managed --record=record.txt

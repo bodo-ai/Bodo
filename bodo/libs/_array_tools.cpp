@@ -16,6 +16,7 @@
 #include <numeric>
 #include <unordered_map>
 #include <unordered_set>
+#include <string>
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_murmurhash3.cpp"

@@ -58,7 +58,10 @@ ind = [PREFIX_DIR + "/include"]
 lid = [PREFIX_DIR + "/lib"]
 #eca = ["-std=c++11", "-fsanitize=address"]
 #ela = ["-std=c++11", "-fsanitize=address"]
-eca = ["-std=c++11", "-g0", "-O3"]
+if is_win:
+    eca = ["/std=c++latest", "/O2"]
+else:
+    eca = ["-std=c++11", "-g0", "-O3"]
 ela = ["-std=c++11"]
 
 MPI_LIBS = ["mpi"]

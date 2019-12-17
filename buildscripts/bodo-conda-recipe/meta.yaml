@@ -24,12 +24,15 @@ requirements:
     - pyarrow >=0.11
     - arrow-cpp
     - boost
-    - hdf5 * mpi_mpich_*
+    - hdf5 * mpi_mpich_* # [not win]
     - h5py
     - mpich # [not win]
     - impi-devel # [win]
     - impi_rt # [win]
-
+    - vc # [win]
+    - vs2015_runtime # [win]
+    - vs2015_win-64 # [win]
+    
   run:
     - python
     - {{ pin_compatible('numpy') }}
@@ -40,6 +43,9 @@ requirements:
     - numba 0.46.*
     - mpich # [not win]
     - impi_rt # [win]
+    - vs2015_runtime # [win]
+    - vs2015_win-64 # [win]
+
 
 test:
   requires:
