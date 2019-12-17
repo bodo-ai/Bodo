@@ -433,6 +433,82 @@ def test_count_select_col():
     check_func(impl2, (11,), sort_output=True)
 
 
+
+def test_nunique_select_col():
+    """
+    Test Groupby.nunique() with explicitly selected one column. Boolean are broken in pandas so the
+    test is removed.
+    TODO: Implementation of Boolean test when pandas is corrected.
+    """
+
+    def impl1(df):
+        A = df.groupby("A")["B"].nunique()
+        return A
+
+    def impl2(n):
+        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+        A = df.groupby("A")["B"].nunique()
+        return A
+
+    df_int = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [-8, np.nan, 3, 1, np.nan, 6, 7],
+            "C": [1.1, 2.4, 3.1, -1.9, 2.3, 3.0, -2.4],
+        }
+    )
+    df_str = pd.DataFrame(
+        {
+            "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
+            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+            "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
+        }
+    )
+    df_bool = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [True, np.nan, False, True, np.nan, False, False],
+            "C": [True, True, False, True, True, False, False],
+        }
+    )
+    df_dt = pd.DataFrame(
+        {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
+    )
+    check_func(impl1, (df_int,), sort_output=True)
+    check_func(impl1, (df_str,), sort_output=True)
+#    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl1, (df_dt,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
+
+
+
+def test_nunique_select_col_missing_keys():
+    """
+    Test Groupby.nunique() with explicitly select one column. Some keys are missing
+    for this test
+    """
+
+    def impl1(df):
+        A = df.groupby("A")["B"].nunique()
+        return A
+
+    df_int = pd.DataFrame(
+        {
+            "A": [np.nan, 1, np.nan, 1, 2, 2, 1],
+            "B": [-8, np.nan, 3, 1, np.nan, 6, 7],
+        }
+    )
+    df_str = pd.DataFrame(
+        {
+            "A": [np.nan, "b", "b", "b", "aa", "aa", "b"],
+            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+        }
+    )
+    check_func(impl1, (df_int,), sort_output=True)
+    check_func(impl1, (df_str,), sort_output=True)
+
+
+
 def test_filtered_count():
     """
     Test Groupby.count() with filtered dataframe
@@ -456,6 +532,9 @@ def test_filtered_count():
     h_res = bodo_func(df, cond)
     pd.testing.assert_frame_equal(res[0], h_res[0])
     pd.testing.assert_frame_equal(res[1], h_res[1])
+
+
+
 
 
 def test_as_index_count():

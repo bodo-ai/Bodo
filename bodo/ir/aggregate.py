@@ -74,6 +74,7 @@ from bodo.libs.array_tools import (
     array_to_info,
     arr_info_list_to_table,
     groupby_and_aggregate,
+    groupby_and_aggregate_nunique,
     info_from_table,
     info_to_array,
     delete_table,
@@ -90,6 +91,7 @@ AggFuncStruct = namedtuple("AggFuncStruct", ["func", "ftype", "builtin"])
 supported_agg_funcs = [
     "sum",
     "count",
+    "nunique",
     "mean",
     "min",
     "max",
@@ -717,6 +719,7 @@ def agg_distributed_run(
                 "array_to_info": array_to_info,
                 "arr_info_list_to_table": arr_info_list_to_table,
                 "groupby_and_aggregate": groupby_and_aggregate,
+                "groupby_and_aggregate_nunique": groupby_and_aggregate_nunique,
                 "info_from_table": info_from_table,
                 "info_to_array": info_to_array,
                 "delete_table": delete_table,
@@ -1313,9 +1316,10 @@ def gen_top_level_agg_func(
                 )
 
         # groupby and aggregate
-        func_text += "    out_table = groupby_and_aggregate(table, {}, {}, {})\n".format(
-            n_keys, agg_func.ftype, parallel
-        )
+        if agg_func.ftype == supported_agg_funcs.index('nunique'):
+            func_text += "    out_table = groupby_and_aggregate_nunique(table, {}, {})\n".format(n_keys, parallel)
+        else:
+            func_text += "    out_table = groupby_and_aggregate(table, {}, {}, {})\n".format(n_keys, agg_func.ftype, parallel)
 
         # extract arrays from output table
         for i in range(len(out_names)):
@@ -1339,7 +1343,7 @@ def gen_top_level_agg_func(
             ", ".join(out_names + tuple(key_names))
         )
 
-    # print(func_text)
+    #print(func_text)
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)

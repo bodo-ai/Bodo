@@ -343,7 +343,7 @@ Computations / Descriptive Stats:
 * :meth:`DataFrame.sum`
 * :meth:`DataFrame.std`
 * :meth:`DataFrame.var`
-* :meth:`DataFrame.nunique`
+* :meth:`DataFrame.nunique` (`dropna` argument not supported)
 
 
 Reindexing / Selection / Label manipulation:

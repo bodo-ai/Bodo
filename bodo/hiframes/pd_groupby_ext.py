@@ -265,13 +265,17 @@ def get_groupby_output_dtype(arr_type, func_name):
         and not isinstance(in_dtype, types.Float)
         and not isinstance(in_dtype, types.Boolean)
     ):
-        if func_name not in {"count", "min"}:
+        if func_name not in {"count", "nunique", "min"}:
             raise BodoError(
                 "column type of {} is not supported in groupby built-in functions".format(
                     in_dtype
                 )
             )
-        if func_name != "count" and in_dtype == types.unicode_type:
+        if (
+            func_name != "count"
+            and func_name != "nunique"
+            and in_dtype == types.unicode_type
+        ):
             raise BodoError(
                 "groupby built-in functions {}"
                 " does not support string column".format(func_name)
@@ -288,6 +292,8 @@ def get_groupby_output_dtype(arr_type, func_name):
             " does not support boolean column".format(func_name)
         )
     if func_name == "count":
+        return types.int64
+    elif func_name == "nunique":
         return types.int64
     elif func_name in {"mean", "var", "std"}:
         return types.float64
@@ -448,6 +454,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
     def resolve_count(self, grp, args, kws):
         func = get_agg_func(None, "count", None)
         return self._get_agg_typ(grp, args, "count", func.__code__)
+
+    @bound_function("groupby.nunique")
+    def resolve_nunique(self, grp, args, kws):
+        func = get_agg_func(None, "nunique", None)
+        return self._get_agg_typ(grp, args, "nunique", func.__code__)
 
     @bound_function("groupby.mean")
     def resolve_mean(self, grp, args, kws):

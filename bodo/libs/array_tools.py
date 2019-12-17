@@ -48,6 +48,7 @@ ll.add_symbol(
 )
 ll.add_symbol("sort_values_table", array_tools_ext.sort_values_table)
 ll.add_symbol("groupby_and_aggregate", array_tools_ext.groupby_and_aggregate)
+ll.add_symbol("groupby_and_aggregate_nunique", array_tools_ext.groupby_and_aggregate_nunique)
 
 
 class ArrayInfoType(types.Type):
@@ -575,3 +576,20 @@ def groupby_and_aggregate(typingctx, table_t, n_keys_t, ftype, is_parallel):
         return builder.call(fn_tp, args)
 
     return table_type(table_t, types.int64, types.int32, types.boolean), codegen
+
+@intrinsic
+def groupby_and_aggregate_nunique(typingctx, table_t, n_keys_t, is_parallel):
+    """
+    Interface to groupby_and_aggregate_nunique function in C++ library for groupby
+    offloading.
+    """
+    assert table_t == table_type
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(), lir.IntType(64), lir.IntType(1)]
+        )
+        fn_tp = builder.module.get_or_insert_function(fnty, name="groupby_and_aggregate_nunique")
+        return builder.call(fn_tp, args)
+
+    return table_type(table_t, types.int64, types.boolean), codegen

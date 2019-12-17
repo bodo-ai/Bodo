@@ -13,9 +13,9 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
-#include <map>
 #include <numeric>
 #include <unordered_map>
+#include <unordered_set>
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_murmurhash3.cpp"
@@ -1653,6 +1653,11 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
     return new table_info(out_arrs);
 }
 
+
+
+
+
+
 /**
  * Enum of aggregation, combine and eval functions used by groubpy.
  * Some functions like sum can be used for multiple purposes, like aggregation
@@ -1664,6 +1669,7 @@ struct Bodo_FTypes {
     enum FTypeEnum {
         sum,
         count,
+        nunique,
         mean,
         min,
         max,
@@ -1966,6 +1972,14 @@ static void std_eval(double& result, uint64_t& count, double& m2) {
     result = sqrt(m2 / (count - 1));
 }
 
+
+
+
+
+
+
+
+
 /**
  * Apply a function to a column(s), save result to (possibly reduced) output
  * column(s) Semantics of this function right now vary depending on function
@@ -2087,6 +2101,9 @@ void apply_to_column(array_info* in_col, array_info* out_col,
     }
 }
 
+
+
+
 /**
  * Invokes the correct template instance of apply_to_column depending on
  * function (ftype) and dtype. See 'apply_to_column'
@@ -2117,7 +2134,6 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     in_col, out_col, aux_cols, row_to_group);
         }
     }
-
     switch (in_col->dtype) {
         case Bodo_CTypes::INT8:
             switch (ftype) {
@@ -2413,6 +2429,39 @@ struct key_hash {
     std::size_t operator()(const multi_col_key& k) const { return k.hash; }
 };
 
+
+
+bool does_keys_have_nulls(std::vector<array_info*> const& key_cols)
+{
+  for (auto key_col : key_cols) {
+    if ((key_col->arr_type == bodo_array_type::NUMPY &&
+         (key_col->dtype == Bodo_CTypes::FLOAT32 ||
+          key_col->dtype == Bodo_CTypes::FLOAT64)) ||
+        key_col->arr_type == bodo_array_type::STRING ||
+        key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+      return true;
+    }
+  }
+  return false;
+}
+
+
+bool does_row_has_nulls(std::vector<array_info*> const& key_cols, int64_t const& i)
+{
+  for (auto key_col : key_cols) {
+    if (key_col->arr_type == bodo_array_type::STRING ||
+        key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+      if (!GetBit((uint8_t*)key_col->null_bitmask, i)) return true;
+    } else if (key_col->arr_type == bodo_array_type::NUMPY) {
+      if ((key_col->dtype == Bodo_CTypes::FLOAT32 &&
+           isnan(key_col->at<float>(i))) ||
+          (key_col->dtype == Bodo_CTypes::FLOAT64 &&
+           isnan(key_col->at<double>(i)))) return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Given a table with n key columns, this function calculates the row to group
  * mapping for every row based on its key.
@@ -2439,38 +2488,11 @@ void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
     std::unordered_map<multi_col_key, int64_t, key_hash> key_to_group;
     bool key_is_nullable = false;
     if (check_for_null_keys) {
-        for (auto key_col : key_cols) {
-            if ((key_col->arr_type == bodo_array_type::NUMPY &&
-                 (key_col->dtype == Bodo_CTypes::FLOAT32 ||
-                  key_col->dtype == Bodo_CTypes::FLOAT64)) ||
-                key_col->arr_type == bodo_array_type::STRING ||
-                key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-                key_is_nullable = true;
-                break;
-            }
-        }
+      key_is_nullable = does_keys_have_nulls(key_cols);
     }
     for (int64_t i = 0; i < table.nrows(); i++) {
         if (key_is_nullable) {
-            bool key_has_nulls = false;
-            for (auto key_col : key_cols) {
-                if (key_col->arr_type == bodo_array_type::STRING ||
-                    key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-                    if (!GetBit((uint8_t*)key_col->null_bitmask, i)) {
-                        key_has_nulls = true;
-                        break;
-                    }
-                } else if (key_col->arr_type == bodo_array_type::NUMPY) {
-                    if ((key_col->dtype == Bodo_CTypes::FLOAT32 &&
-                         isnan(key_col->at<float>(i))) ||
-                        (key_col->dtype == Bodo_CTypes::FLOAT64 &&
-                         isnan(key_col->at<double>(i)))) {
-                        key_has_nulls = true;
-                        break;
-                    }
-                }
-            }
-            if (key_has_nulls) {
+            if (does_row_has_nulls(key_cols, i)) {
                 row_to_group.push_back(-1);
                 continue;
             }
@@ -2486,6 +2508,67 @@ void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
         row_to_group.push_back(group - 1);
     }
     delete[] hashes;
+}
+
+
+struct grouping_info {
+    std::vector<int64_t> row_to_group;
+    std::vector<int64_t> group_to_first_row;
+    std::vector<int64_t> next_row_in_group;
+};
+
+/**
+ * Given a table with n key columns, this function calculates the row to group
+ * mapping for every row based on its key.
+ * For every row in the table, this only does *one* lookup in the hash map.
+ *
+ * @param the table
+ * @param[out] vector that maps row number in the table to a group number
+ * @param[out] vector that maps group number to the first row in the table
+ *                that belongs to that group
+ */
+grouping_info get_group_info_iterate(table_info* table) {
+    std::vector<int64_t> row_to_group;
+    std::vector<int64_t> group_to_first_row;
+    std::vector<int64_t> next_row_in_group(table->nrows(), -1);
+    std::vector<int64_t> active_group_repr;
+
+    std::vector<array_info*> key_cols = std::vector<array_info*>(
+        table->columns.begin(), table->columns.begin() + table->num_keys);
+    uint32_t seed = 0xb0d01288;
+    uint32_t* hashes = hash_keys(key_cols, seed);
+
+    bool key_is_nullable = does_keys_have_nulls(key_cols);
+    row_to_group.reserve(table->nrows());
+    // start at 1 because I'm going to use 0 to mean nothing was inserted yet
+    // in the map (but note that the group values I record in the output go from
+    // 0 to num_groups - 1)
+    int next_group = 1;
+    std::unordered_map<multi_col_key, int64_t, key_hash> key_to_group;
+    for (int64_t i = 0; i < table->nrows(); i++) {
+        if (key_is_nullable) {
+            if (does_row_has_nulls(key_cols, i)) {
+                row_to_group.push_back(-1);
+                continue;
+            }
+        }
+        multi_col_key key(hashes[i], table, i);
+        int64_t& group = key_to_group[key];  // this inserts 0 into the map if
+                                             // key doesn't exist
+        if (group == 0) {
+            group = next_group++;  // this updates the value in the map without
+                                   // another lookup
+            group_to_first_row.push_back(i);
+            active_group_repr.push_back(i);
+        } else {
+            int64_t prev_elt = active_group_repr[group - 1];
+            next_row_in_group[prev_elt] = i;
+            active_group_repr[group - 1] = i;
+        }
+        row_to_group.push_back(group - 1);
+    }
+    delete[] hashes;
+    return {std::move(row_to_group), std::move(group_to_first_row), std::move(next_row_in_group)};
 }
 
 /**
@@ -2761,6 +2844,7 @@ void get_groupby_output_dtype(int ftype,
                               Bodo_CTypes::CTypeEnum& dtype, bool is_key) {
     if (is_key) return;
     switch (ftype) {
+        case Bodo_FTypes::nunique:
         case Bodo_FTypes::count:
             array_type = bodo_array_type::NUMPY;
             dtype = Bodo_CTypes::INT64;
@@ -2775,6 +2859,16 @@ void get_groupby_output_dtype(int ftype,
             return;
     }
 }
+
+
+
+
+
+
+
+
+
+
 
 /**
  * Groups the rows in a table based on key, applies a function to the rows in
@@ -2884,9 +2978,207 @@ table_info* groupby_and_aggregate_local(table_info& in_table, int64_t num_keys,
                         mean_col_out, m2_col_out, inrows_to_group);
         }
     }
-
     return out_table;
 }
+
+
+
+
+/**
+ * The nunique_computation function. It uses the symbolic information to compute
+ * the nunique results.
+ *
+ * @param The column on which we do the computation
+ * @param The array containing information on how the rows are organized
+ * @param The boolean dropna indicating whether we drop or not the NaN values from the
+ *   nunique computation.
+ */
+array_info* nunique_computation(array_info* arr, grouping_info const& grp_inf,
+                                bool const& dropna) {
+    size_t num_group = grp_inf.group_to_first_row.size();
+    array_info* out_arr = alloc_array(num_group, 1, bodo_array_type::NUMPY,
+                                      Bodo_CTypes::INT64, 0);
+    if (arr->arr_type == bodo_array_type::NUMPY) {
+        /**
+         * Check if a pointer points to a NaN or not
+         *
+         * @param the char* pointer
+         * @param the type of the data in input
+         */
+        auto isnan_entry=[&](char* ptr) -> bool {
+          if (arr->dtype == Bodo_CTypes::FLOAT32) {
+            float* ptr_f = (float*)ptr;
+            return isnan(*ptr_f);
+          }
+          if (arr->dtype == Bodo_CTypes::FLOAT64) {
+            double* ptr_d = (double*)ptr;
+            return isnan(*ptr_d);
+          }
+          return false;
+        };
+        size_t siztype = numpy_item_size[arr->dtype];
+        for (size_t igrp = 0; igrp < num_group; igrp++) {
+            auto hash_fct=[&](int64_t i) -> size_t {
+              char *ptr = arr->data1 + i * siztype;
+              size_t retval = 0;
+              memcpy(&retval, ptr, std::min(siztype, sizeof(size_t)));
+              return retval;
+            };
+            auto equal_fct=[&](int64_t i1, int64_t i2) -> bool {
+              char *ptr1 = arr->data1 + i1 * siztype;
+              char *ptr2 = arr->data1 + i2 * siztype;
+              return memcmp(ptr1, ptr2, siztype) == 0;
+            };
+            std::unordered_set<int64_t, decltype(hash_fct), decltype(equal_fct)> eset({}, hash_fct, equal_fct);
+            int64_t i = grp_inf.group_to_first_row[igrp];
+            bool HasNullRow = false;
+            while (true) {
+                char* ptr = arr->data1 + (i * siztype);
+                if (!isnan_entry(ptr)) {
+                    eset.insert(i);
+                } else {
+                    HasNullRow = true;
+                }
+                i = grp_inf.next_row_in_group[i];
+                if (i == -1) break;
+            }
+            int64_t size = eset.size();
+            if (HasNullRow && !dropna) size++;
+            out_arr->at<int64_t>(igrp) = size;
+        }
+    }
+    if (arr->arr_type == bodo_array_type::STRING) {
+        uint32_t* in_offsets = (uint32_t*)arr->data2;
+        uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+        uint32_t seed = 0xb0d01280;
+
+        for (size_t igrp = 0; igrp < num_group; igrp++) {
+            auto hash_fct=[&](int64_t i) -> size_t {
+              char* val_chars = arr->data1 + in_offsets[i];
+              int len = in_offsets[i + 1] - in_offsets[i];
+              uint32_t val;
+              hash_string_32(val_chars, len, seed, &val);
+              return size_t(val);
+            };
+            auto equal_fct=[&](int64_t i1, int64_t i2) -> bool {
+              size_t len1 = in_offsets[i1 + 1] - in_offsets[i1];
+              size_t len2 = in_offsets[i2 + 1] - in_offsets[i2];
+              if (len1 != len2) return false;
+              char *ptr1 = arr->data1 + in_offsets[i1];
+              char *ptr2 = arr->data1 + in_offsets[i2];
+              return strncmp(ptr1, ptr2, len1) == 0;
+            };
+            std::unordered_set<int64_t, decltype(hash_fct), decltype(equal_fct)> eset({}, hash_fct, equal_fct);
+            int64_t i = grp_inf.group_to_first_row[igrp];
+            bool HasNullRow = false;
+            while (true) {
+                if (GetBit(null_bitmask, i)) {
+                    eset.insert(i);
+                } else {
+                    HasNullRow = true;
+                }
+                i = grp_inf.next_row_in_group[i];
+                if (i == -1) break;
+            }
+            int64_t size = eset.size();
+            if (HasNullRow && !dropna) size++;
+            out_arr->at<int64_t>(igrp) = size;
+        }
+    }
+    if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+        size_t siztype = numpy_item_size[arr->dtype];
+        for (size_t igrp = 0; igrp < num_group; igrp++) {
+            auto hash_fct=[&](int64_t i) -> size_t {
+              char *ptr = arr->data1 + i * siztype;
+              size_t retval = 0;
+              size_t *size_t_ptrA = &retval;
+              char* size_t_ptrB = (char*)size_t_ptrA;
+              for (size_t i=0; i<std::min(siztype, sizeof(size_t)); i++)
+                size_t_ptrB[i] = ptr[i];
+              return retval;
+            };
+            auto equal_fct=[&](int64_t i1, int64_t i2) -> bool {
+              char *ptr1 = arr->data1 + i1 * siztype;
+              char *ptr2 = arr->data1 + i2 * siztype;
+              return memcmp(ptr1, ptr2, siztype) == 0;
+            };
+            std::unordered_set<int64_t, decltype(hash_fct), decltype(equal_fct)> eset({}, hash_fct, equal_fct);
+            int64_t i = grp_inf.group_to_first_row[igrp];
+            bool HasNullRow = false;
+            while (true) {
+                if (GetBit(null_bitmask, i)) {
+                    eset.insert(i);
+                } else {
+                    HasNullRow = true;
+                }
+                i = grp_inf.next_row_in_group[i];
+                if (i == -1) break;
+            }
+            int64_t size = eset.size();
+            if (HasNullRow && !dropna) size++;
+            out_arr->at<int64_t>(igrp) = size;
+        }
+    }
+    return out_arr;
+}
+
+
+
+
+
+
+/**
+ * Groups the rows in a table based on key, applies the nunique operation to the rows in
+ * each group, writes the result to a new output table containing one row per
+ * group.
+ *
+ * @param input table
+ * @param number of key columns in the table
+ * @param number of data columns
+ * @param whether to drop NaN values or not from the computation
+ */
+table_info* groupby_and_nunique(table_info* in_table, int64_t num_keys,
+                                int64_t num_data_cols, bool const& dropna) {
+#undef DEBUG_NUNIQUE
+#ifdef DEBUG_NUNIQUE
+    std::cout << "IN_TABLE:\n";
+    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+    DEBUG_PrintRefct(std::cout, in_table->columns);
+#endif
+    const int64_t ncols = in_table->ncols();
+    in_table->num_keys = num_keys;
+    grouping_info grp_inf = get_group_info_iterate(in_table);
+    size_t num_groups = grp_inf.group_to_first_row.size();
+    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(
+        num_groups);
+    for (size_t igrp = 0; igrp < num_groups; igrp++) {
+        ListPairWrite[igrp] = {grp_inf.group_to_first_row[igrp], -1};
+    }
+
+    std::vector<array_info*> out_arrs;
+    for (int64_t i_col = 0; i_col < num_keys; i_col++) {
+        out_arrs.push_back(
+            RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
+    }
+    for (int64_t i_col = num_keys; i_col < ncols; i_col++) {
+        out_arrs.push_back(
+            nunique_computation(in_table->columns[i_col], grp_inf, dropna));
+    }
+#ifdef DEBUG_NUNIQUE
+    std::cout << "OUT_TABLE:\n";
+    DEBUG_PrintSetOfColumn(std::cout, out_arrs);
+    DEBUG_PrintRefct(std::cout, out_arrs);
+#endif
+    return new table_info(out_arrs);
+}
+
+
+
+
+
+
+
 
 /**
  * Applies an evaluation function to each row in input table
@@ -2940,6 +3232,26 @@ void agg_func_eval(table_info& in_table, int64_t num_keys, int64_t n_data_cols,
 
 std::vector<Bodo_FTypes::FTypeEnum> combine_funcs(Bodo_FTypes::num_funcs);
 
+
+table_info* groupby_and_aggregate_nunique(table_info* in_table, int64_t num_keys,
+                                          bool is_parallel) {
+    // perform initial local aggregation
+    int64_t num_data_cols = in_table->ncols() - num_keys;
+    table_info* work_table;
+    if (is_parallel) {
+      work_table = shuffle_table(in_table, num_keys);
+    } else {
+      work_table = in_table;
+    }
+    bool dropna=true;
+    // TODO: implement correct use of dropna in the computation.
+    // See https://github.com/Bodo-inc/Bodo/issues/270
+    table_info* out_table = groupby_and_nunique(work_table, num_keys, num_data_cols, dropna);
+    if (is_parallel) delete work_table;
+    return out_table;
+}
+
+
 /**
  * Groups the rows in a table based on key, applies a function to the rows in
  * each group, writes the result to a new output table containing one row per
@@ -2953,6 +3265,7 @@ std::vector<Bodo_FTypes::FTypeEnum> combine_funcs(Bodo_FTypes::num_funcs);
  */
 table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                                   int32_t ftype, bool is_parallel) {
+
     // perform initial local aggregation
     int64_t num_data_cols = in_table->ncols() - num_keys;
     table_info* aggr_local = groupby_and_aggregate_local(
@@ -3030,6 +3343,10 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 #endif
     return new table_info(out_arrs);
 }
+
+
+
+
 
 /** This function is the kernel function for the dropping of duplicated rows.
  * This C++ code should provide following functionality of pandas
@@ -3148,6 +3465,7 @@ table_info* drop_duplicates_table_outplace(table_info* in_table,
     return new table_info(out_arrs);
 }
 
+
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     PyObject* m;
     static struct PyModuleDef moduledef = {
@@ -3217,5 +3535,7 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
         PyLong_FromVoidPtr((void*)(&drop_duplicates_table_outplace)));
     PyObject_SetAttrString(m, "groupby_and_aggregate",
                            PyLong_FromVoidPtr((void*)(&groupby_and_aggregate)));
+    PyObject_SetAttrString(m, "groupby_and_aggregate_nunique",
+                           PyLong_FromVoidPtr((void*)(&groupby_and_aggregate_nunique)));
     return m;
 }

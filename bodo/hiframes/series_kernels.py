@@ -38,6 +38,17 @@ def _column_count_impl(A):  # pragma: no cover
     return res
 
 
+def _column_nunique_impl(A):  # pragma: no cover
+    numba.parfor.init_prange()
+    set_value = {}
+    for i in numba.parfor.internal_prange(len(A)):
+        if not bodo.libs.array_kernels.isna(A, i):
+            set_value[A[i]] = 0
+
+    res = len(set_value)
+    return res
+
+
 def _column_fillna_impl(A, B, fill):  # pragma: no cover
     for i in numba.parfor.internal_prange(len(A)):
         s = B[i]
@@ -391,6 +402,7 @@ series_replace_funcs = {
     "sum": _column_sum_impl_basic,
     "prod": _column_prod_impl_basic,
     "count": _column_count_impl,
+    "nunique": _column_nunique_impl,
     "mean": _column_mean_impl,
     "max": defaultdict(
         lambda: _column_max_impl, [(types.NPDatetime("ns"), _column_max_impl_dt64)]
