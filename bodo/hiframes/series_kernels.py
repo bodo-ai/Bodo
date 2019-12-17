@@ -104,7 +104,7 @@ def _series_dropna_str_alloc_impl(B, name):  # pragma: no cover
 
 
 # return the nan value for the type (handle dt64)
-def _get_nan(val):
+def _get_nan(val):  # pragma: no cover
     return np.nan
 
 
@@ -117,7 +117,7 @@ def _get_nan_overload(val):
     return lambda val: np.nan
 
 
-def _get_type_max_value(dtype):
+def _get_type_max_value(dtype):  # pragma: no cover
     return 0
 
 
@@ -140,7 +140,7 @@ def _get_type_max_value_overload(dtype):
     return lambda dtype: numba.targets.builtins.get_type_max_value(dtype)
 
 
-def _get_type_min_value(dtype):
+def _get_type_min_value(dtype):  # pragma: no cover
     return 0
 
 
@@ -167,7 +167,7 @@ def _get_type_min_value_overload(dtype):
 def indval_min(a1, a2):
     if a1 == types.bool_ and a2 == types.bool_:
 
-        def min_impl(a1, a2):
+        def min_impl(a1, a2):  # pragma: no cover
             if a1 > a2:
                 return a2
             return a1
@@ -179,7 +179,7 @@ def indval_min(a1, a2):
 def indval_max(a1, a2):
     if a1 == types.bool_ and a2 == types.bool_:
 
-        def max_impl(a1, a2):
+        def max_impl(a1, a2):  # pragma: no cover
             if a2 > a1:
                 return a2
             return a1
@@ -329,7 +329,7 @@ def _column_max_impl(in_arr):  # pragma: no cover
     return res
 
 
-def _column_max_impl_dt64(in_arr):
+def _column_max_impl_dt64(in_arr):  # pragma: no cover
     numba.parfor.init_prange()
     s = numba.targets.builtins.get_type_min_value(np.int64)
     count = 0
@@ -341,7 +341,7 @@ def _column_max_impl_dt64(in_arr):
     return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
 
 
-def _column_min_impl_dt64(in_arr):
+def _column_min_impl_dt64(in_arr):  # pragma: no cover
     numba.parfor.init_prange()
     s = numba.targets.builtins.get_type_max_value(np.int64)
     count = 0
@@ -378,12 +378,12 @@ def _column_fillna_alloc_impl(B, fill, index, name):  # pragma: no cover
 
 
 @numba.njit
-def lt_f(a, b):
+def lt_f(a, b):  # pragma: no cover
     return a < b
 
 
 @numba.njit
-def gt_f(a, b):
+def gt_f(a, b):  # pragma: no cover
     return a > b
 
 

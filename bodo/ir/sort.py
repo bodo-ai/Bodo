@@ -515,7 +515,7 @@ distributed_pass.distributed_run_extensions[Sort] = sort_distributed_run
 
 
 def _copy_array_nodes(var, nodes, typingctx, typemap, calltypes):
-    def _impl(arr):
+    def _impl(arr):  # pragma: no cover
         return arr.copy()
 
     f_block = compile_to_numba_ir(
@@ -577,7 +577,7 @@ def local_sort_cpp(key_name_args, col_name_args, ascending=True):
 
 # TODO: fix cache issue
 @numba.njit(no_cpython_wrapper=True, cache=False)
-def local_sort(key_arrs, data, ascending=True):
+def local_sort(key_arrs, data, ascending=True):  # pragma: no cover
     # convert StringArray to list(string) to enable swapping in sort
     l_key_arrs = to_string_list(key_arrs)
     l_data = to_string_list(data, True)
@@ -590,7 +590,7 @@ def local_sort(key_arrs, data, ascending=True):
 
 
 @numba.njit(no_cpython_wrapper=True, cache=True)
-def parallel_sort(key_arrs, data, ascending=True):
+def parallel_sort(key_arrs, data, ascending=True):  # pragma: no cover
     n_local = len(key_arrs[0])
     n_total = bodo.libs.distributed_api.dist_reduce(
         n_local, np.int32(Reduce_Type.Sum.value)

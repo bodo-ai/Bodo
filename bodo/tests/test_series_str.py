@@ -293,9 +293,15 @@ def test_getitem(ind):
 
 @pytest.fixture(
     params=[
-        pytest.param(np.array([["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2), marks=pytest.mark.slow),
+        pytest.param(
+            np.array([["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2),
+            marks=pytest.mark.slow,
+        ),
         # empty strings, empty lists, NA
-        pytest.param(np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 2), marks=pytest.mark.slow),
+        pytest.param(
+            np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 2),
+            marks=pytest.mark.slow,
+        ),
         # large array
         np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 1000),
     ]
@@ -359,12 +365,14 @@ def test_flatten1():
     """tests flattening array of string lists after split call when split view
     optimization is applied
     """
+
     def impl(S):
         A = S.str.split(",")
         return pd.Series(list(itertools.chain(*A)))
 
-    S = pd.Series(["AB,CC", "C,ABB,D", "CAD", "CA,D", "AA,,D"],
-        [3, 1, 2, 0, 4], name="A")
+    S = pd.Series(
+        ["AB,CC", "C,ABB,D", "CAD", "CA,D", "AA,,D"], [3, 1, 2, 0, 4], name="A"
+    )
     check_func(impl, (S,))
 
 
@@ -372,10 +380,12 @@ def test_flatten2():
     """tests flattening array of string lists after split call when split view
     optimization is not applied
     """
+
     def impl(S):
         A = S.str.split()
         return pd.Series(list(itertools.chain(*A)))
 
-    S = pd.Series(["AB  CC", "C ABB  D", "CAD", "CA\tD", "AA\t\tD"],
-        [3, 1, 2, 0, 4], name="A")
+    S = pd.Series(
+        ["AB  CC", "C ABB  D", "CAD", "CA\tD", "AA\t\tD"], [3, 1, 2, 0, 4], name="A"
+    )
     check_func(impl, (S,))

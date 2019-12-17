@@ -83,34 +83,49 @@ def test_df_int_no_null(request):
 
 
 def test_nullable_int():
-
     def impl(df):
         A = df.groupby("A").sum()
         return A
 
     def impl_select_colB(df):
-        A = df.groupby("A")['B'].sum()
+        A = df.groupby("A")["B"].sum()
         return A
 
     def impl_select_colE(df):
-        A = df.groupby("A")['E'].sum()
+        A = df.groupby("A")["E"].sum()
         return A
 
     def impl_select_colH(df):
-        A = df.groupby("A")['H'].sum()
+        A = df.groupby("A")["H"].sum()
         return A
 
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int8"),
-            "C": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int16"),
-            "D": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int32"),
-            "E": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int64"),
-            "F": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt8"),
-            "G": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt16"),
-            "H": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt32"),
-            "I": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt64"),
+            "B": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int8"
+            ),
+            "C": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int16"
+            ),
+            "D": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int32"
+            ),
+            "E": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int64"
+            ),
+            "F": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt8"
+            ),
+            "G": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt16"
+            ),
+            "H": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt32"
+            ),
+            "I": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt64"
+            ),
         }
     )
 
@@ -130,10 +145,7 @@ def test_all_null_keys():
         return A
 
     df = pd.DataFrame(
-        {
-            "A": pd.Series(np.full(7, np.nan), dtype="Int64"),
-            "B": [2, 1, 1, 1, 2, 2, 1],
-        }
+        {"A": pd.Series(np.full(7, np.nan), dtype="Int64"), "B": [2, 1, 1, 1, 2, 2, 1]}
     )
 
     check_func(impl, (df,), sort_output=True)

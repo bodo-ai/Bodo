@@ -137,7 +137,7 @@ def overload_cat_arr_eq_str(A, other):
     if isinstance(A, CategoricalArray) and isinstance(other, types.StringLiteral):
         other_idx = list(A.dtype.categories).index(other.literal_value)
 
-        def impl(A, other):
+        def impl(A, other):  # pragma: no cover
             out_arr = cat_array_to_int(A) == other_idx
             return out_arr
 

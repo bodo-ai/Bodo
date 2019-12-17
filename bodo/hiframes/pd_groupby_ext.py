@@ -103,7 +103,7 @@ def df_groupby_overload(
         group_keys=True,
         squeeze=False,
         observed=False,
-    ):
+    ):  # pragma: no cover
         return bodo.hiframes.pd_groupby_ext.groupby_dummy(df, by, as_index)
 
     return _impl
@@ -185,7 +185,7 @@ def validate_udf(func_name, func):
 
 
 # a dummy groupby function that will be replace in dataframe_pass
-def groupby_dummy(df, by, as_index):
+def groupby_dummy(df, by, as_index):  # pragma: no cover
     return 0
 
 
@@ -361,9 +361,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 dtype = IntDtype(out_data[0].dtype)
             else:
                 dtype = out_data[0].dtype
-            out_res = SeriesType(
-                dtype, index=index, name_typ=bodo.string_type
-            )
+            out_res = SeriesType(dtype, index=index, name_typ=bodo.string_type)
         return signature(out_res, *args)
 
     def _resolve_agg(self, grp, args, kws):
@@ -385,7 +383,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
             if any(c not in grp.selection for c in out_columns):
                 raise BodoError(
                     "Selected column names {} not all available in dataframe column names {}".format(
-                        out_columns, grp.selection))
+                        out_columns, grp.selection
+                    )
+                )
 
             # get output data types
             out_data = []
@@ -393,15 +393,15 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 if func_name == "cumsum":
                     raise BodoError(
                         "only groupby aggregation supported in dictionary-based"
-                        "groupby, not transform like cumsum")
+                        "groupby, not transform like cumsum"
+                    )
                 if func_name not in bodo.ir.aggregate.supported_agg_funcs[:-2]:
                     raise BodoError(
-                        "unsupported aggregate function {}".format(func_name))
+                        "unsupported aggregate function {}".format(func_name)
+                    )
                 # run typer on a groupby with just column k
                 code = get_agg_func(None, func_name, None).__code__
-                ret_grp = DataFrameGroupByType(
-                    grp.df_type, grp.keys, (k,), True, True
-                )
+                ret_grp = DataFrameGroupByType(grp.df_type, grp.keys, (k,), True, True)
                 out_tp = self._get_agg_typ(ret_grp, args, func_name, code).return_type
                 out_data.append(out_tp.data)
 
@@ -509,7 +509,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
 
 # a dummy pivot_table function that will be replace in dataframe_pass
-def pivot_table_dummy(df, values, index, columns, aggfunc, _pivot_values):
+def pivot_table_dummy(
+    df, values, index, columns, aggfunc, _pivot_values
+):  # pragma: no cover
     return 0
 
 
@@ -559,7 +561,7 @@ def lower_pivot_table_dummy(context, builder, sig, args):
 
 
 # a dummy crosstab function that will be replace in dataframe_pass
-def crosstab_dummy(index, columns, _pivot_values):
+def crosstab_dummy(index, columns, _pivot_values):  # pragma: no cover
     return 0
 
 

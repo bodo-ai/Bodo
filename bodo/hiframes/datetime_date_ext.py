@@ -37,7 +37,7 @@ def box_df_dummy(typ, val, c):
 
 # dummy function use to change type of Array(datetime_date) to
 # array_datetime_date
-def np_arr_to_array_datetime_date(A):
+def np_arr_to_array_datetime_date(A):  # pragma: no cover
     return A
 
 

@@ -126,23 +126,32 @@ def test_series_constructor_int_arr():
 @pytest.fixture(
     params=[
         pytest.param(pd.Series([1, 8, 4, 11, -3]), marks=pytest.mark.slow),
-        pytest.param(pd.Series([True, False, False, True, True]), marks=pytest.mark.slow),  # bool array without NA
+        pytest.param(
+            pd.Series([True, False, False, True, True]), marks=pytest.mark.slow
+        ),  # bool array without NA
         pd.Series([True, False, False, np.nan, True]),  # bool array with NA
-        pytest.param(pd.Series([1, 8, 4, 0, 3], dtype=np.uint8), marks=pytest.mark.slow),
+        pytest.param(
+            pd.Series([1, 8, 4, 0, 3], dtype=np.uint8), marks=pytest.mark.slow
+        ),
         pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
         pytest.param(pd.Series([1, 8, 4, -1, 2], name="ACD"), marks=pytest.mark.slow),
-        pytest.param(pd.Series([1, 8, 4, 1, -3], [3, 7, 9, 2, 1]), marks=pytest.mark.slow),
+        pytest.param(
+            pd.Series([1, 8, 4, 1, -3], [3, 7, 9, 2, 1]), marks=pytest.mark.slow
+        ),
         pd.Series([1.1, np.nan, 4.2, 3.1, -3.5], [3, 7, 9, 2, 1], name="AAC"),
         pd.Series([1, 2, 3, -1, 6], ["A", "BA", "", "DD", "GGG"]),
-        pytest.param(pd.Series(
-            ["A", "B", "CDD", "AA", "GGG"]
-        ), marks=pytest.mark.slow),  # TODO: string with Null (np.testing fails)
+        pytest.param(
+            pd.Series(["A", "B", "CDD", "AA", "GGG"]), marks=pytest.mark.slow
+        ),  # TODO: string with Null (np.testing fails)
         pd.Series(["A", "B", "CG", "ACDE", "C"], [4, 7, 0, 1, -2]),
         pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)),
-        pytest.param(pd.Series(
-            [3, 5, 1, -1, 2],
-            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
-        ), marks=pytest.mark.slow),
+        pytest.param(
+            pd.Series(
+                [3, 5, 1, -1, 2],
+                pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+            ),
+            marks=pytest.mark.slow,
+        ),
         # TODO: timedelta
     ]
 )
@@ -155,9 +164,14 @@ def series_val(request):
     params=[
         pytest.param(pd.Series([1, 8, 4, 11, -3]), marks=pytest.mark.slow),
         pd.Series([1.1, np.nan, 4.1, 1.4, -2.1]),
-        pytest.param(pd.Series([1, 8, 4, 10, 3], dtype=np.uint8), marks=pytest.mark.slow),
+        pytest.param(
+            pd.Series([1, 8, 4, 10, 3], dtype=np.uint8), marks=pytest.mark.slow
+        ),
         pd.Series([1, 8, 4, 10, 3], [3, 7, 9, 2, 1], dtype="Int32"),
-        pytest.param(pd.Series([1, 8, 4, -1, 2], [3, 7, 9, 2, 1], name="AAC"), marks=pytest.mark.slow),
+        pytest.param(
+            pd.Series([1, 8, 4, -1, 2], [3, 7, 9, 2, 1], name="AAC"),
+            marks=pytest.mark.slow,
+        ),
         pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)),
     ]
 )
@@ -1034,6 +1048,7 @@ def test_series_map_tup_map1():
 
 def test_series_map_str():
     """test string output in map"""
+
     def test_impl(S):
         return S.map(lambda a: str(a))
 
@@ -1043,6 +1058,7 @@ def test_series_map_str():
 
 def test_series_map_dt_str():
     """test string output in map with dt64/Timestamp input"""
+
     def test_impl(S):
         return S.map(lambda a: str(a.year))
 
@@ -1492,6 +1508,7 @@ def test_series_index_cast():
 def test_series_value_counts():
     """simple test for value_counts(). More comprehensive testing is necessary
     """
+
     def test_impl(S):
         return S.value_counts()
 

@@ -94,7 +94,7 @@ def overload_dataframe_values(df):
 
 @overload_method(DataFrameType, "get_values")
 def overload_dataframe_get_values(df):
-    def impl(df):
+    def impl(df):  # pragma: no cover
         return df.values
 
     return impl
@@ -109,7 +109,7 @@ def overload_dataframe_to_numpy(df, dtype=None, copy=False):
     if not is_overload_none(dtype):
         raise BodoError("'dtype' argument of to_numpy() not supported yet")
 
-    def impl(df, dtype=None, copy=False):
+    def impl(df, dtype=None, copy=False):  # pragma: no cover
         return df.values
 
     return impl
@@ -731,7 +731,7 @@ def overload_dataframe_query(df, expr, inplace=False):
 
     # TODO: support df.loc for normal case and getitem for multi-dim case similar to
     # Pandas
-    def impl(df, expr, inplace=False):
+    def impl(df, expr, inplace=False):  # pragma: no cover
         b = bodo.hiframes.pd_dataframe_ext.query_dummy(df, expr)
         return df[b]
 
@@ -991,7 +991,7 @@ def overload_isna(obj):
     # TODO: other string array data structures
     if obj == bodo.string_array_type:
 
-        def impl(obj):
+        def impl(obj):  # pragma: no cover
             numba.parfor.init_prange()
             n = len(obj)
             out_arr = np.empty(n, np.bool_)
@@ -1037,7 +1037,7 @@ def overload_notna(obj):
     return lambda obj: not pd.isna(obj)
 
 
-def set_df_col(df, cname, arr, inplace):
+def set_df_col(df, cname, arr, inplace):  # pragma: no cover
     df[cname] = arr
 
 
@@ -1073,7 +1073,7 @@ class SetDfColInfer(AbstractTemplate):
         return ret(*args)
 
 
-def drop_inplace(df):
+def drop_inplace(df):  # pragma: no cover
     res = None
     return df, res
 
@@ -1103,7 +1103,7 @@ def drop_inplace_overload(
         level=None,
         inplace=False,
         errors="raise",
-    ):
+    ):  # pragma: no cover
         new_df = bodo.hiframes.pd_dataframe_ext.drop_dummy(
             df, labels, axis, columns, inplace
         )
@@ -1112,7 +1112,7 @@ def drop_inplace_overload(
     return _impl
 
 
-def sort_values_inplace(df):
+def sort_values_inplace(df):  # pragma: no cover
     res = None
     return df, res
 

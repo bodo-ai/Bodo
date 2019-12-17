@@ -72,7 +72,7 @@ MPI_ROOT = 0
 sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
 
 
-def isna(arr, i):
+def isna(arr, i):  # pragma: no cover
     return False
 
 
@@ -115,7 +115,7 @@ def isna_overload(arr, i):
 
 
 @numba.njit
-def nth_element(arr, k, parallel=False):
+def nth_element(arr, k, parallel=False):  # pragma: no cover
     res = np.empty(1, arr.dtype)
     type_enum = bodo.libs.distributed_api.get_type_enum(arr)
     if parallel:
@@ -126,7 +126,7 @@ def nth_element(arr, k, parallel=False):
 
 
 @numba.njit
-def median(arr, parallel=False):
+def median(arr, parallel=False):  # pragma: no cover
     # similar to numpy/lib/function_base.py:_median
     # TODO: check return types, e.g. float32 -> float32
     n = len(arr)
@@ -257,7 +257,7 @@ def lower_dist_quantile_parallel(context, builder, sig, args):
 
 
 @numba.njit
-def min_heapify(arr, ind_arr, n, start, cmp_f):
+def min_heapify(arr, ind_arr, n, start, cmp_f):  # pragma: no cover
     min_ind = start
     left = 2 * start + 1
     right = 2 * start + 2
@@ -287,7 +287,7 @@ def select_k_nonan_overload(A, index_arr, m, k):
         # ints don't have nans
         return lambda A, index_arr, m, k: (A[:k].copy(), index_arr[:k].copy(), k)
 
-    def select_k_nonan_float(A, index_arr, m, k):
+    def select_k_nonan_float(A, index_arr, m, k):  # pragma: no cover
         # select the first k elements but ignore NANs
         min_heap_vals = np.empty(k, A.dtype)
         min_heap_inds = np.empty(k, index_arr.dtype)
@@ -311,7 +311,7 @@ def select_k_nonan_overload(A, index_arr, m, k):
 
 
 @numba.njit
-def nlargest(A, index_arr, k, is_largest, cmp_f):
+def nlargest(A, index_arr, k, is_largest, cmp_f):  # pragma: no cover
     # algorithm: keep a min heap of k largest values, if a value is greater
     # than the minimum (root) in heap, replace the minimum and rebuild the heap
     m = len(A)
@@ -353,7 +353,7 @@ def nlargest(A, index_arr, k, is_largest, cmp_f):
 
 
 @numba.njit
-def nlargest_parallel(A, I, k, is_largest, cmp_f):
+def nlargest_parallel(A, I, k, is_largest, cmp_f):  # pragma: no cover
     # parallel algorithm: assuming k << len(A), just call nlargest on chunks
     # of A, gather the result and return the largest k
     # TODO: support cases where k is not too small
@@ -375,7 +375,7 @@ def nlargest_parallel(A, I, k, is_largest, cmp_f):
 
 # adapted from pandas/_libs/algos.pyx/nancorr()
 @numba.njit(no_cpython_wrapper=True, cache=True)
-def nancorr(mat, cov=0, minpv=1, parallel=False):
+def nancorr(mat, cov=0, minpv=1, parallel=False):  # pragma: no cover
     N, K = mat.shape
     result = np.empty((K, K), dtype=np.float64)
 
@@ -430,7 +430,7 @@ def nancorr(mat, cov=0, minpv=1, parallel=False):
 
 
 @numba.njit(no_cpython_wrapper=True)
-def duplicated(data, ind_arr, parallel=False):
+def duplicated(data, ind_arr, parallel=False):  # pragma: no cover
     # TODO: inline for optimization?
     # TODO: handle NAs better?
 
@@ -458,7 +458,7 @@ def duplicated(data, ind_arr, parallel=False):
     return out, ind_arr
 
 
-def drop_duplicates(data, ind_arr, parallel=False):
+def drop_duplicates(data, ind_arr, parallel=False):  # pragma: no cover
     return data, ind_arr
 
 
@@ -558,7 +558,7 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     return impl
 
 
-def concat(arr_list):
+def concat(arr_list):  # pragma: no cover
     return pd.concat(arr_list)
 
 
@@ -568,7 +568,7 @@ def concat_overload(arr_list):
     # TODO: handle numerics to string casting case
     if isinstance(arr_list, types.UniTuple) and arr_list.dtype == string_array_type:
 
-        def string_concat_impl(arr_list):
+        def string_concat_impl(arr_list):  # pragma: no cover
             # preallocate the output
             num_strs = 0
             num_chars = 0
@@ -637,7 +637,7 @@ def nunique_overload(A):
 def nunique_overload_parallel(A):
     sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
 
-    def nunique_par(A):
+    def nunique_par(A):  # pragma: no cover
         uniq_A = bodo.libs.array_kernels.unique_parallel(A)
         loc_nuniq = len(uniq_A)
         return bodo.libs.distributed_api.dist_reduce(loc_nuniq, np.int32(sum_op))
@@ -664,7 +664,7 @@ def unique_overload(A):
 
 @overload(unique_parallel)
 def unique_overload_parallel(A):
-    def unique_par(A):
+    def unique_par(A):  # pragma: no cover
         uniq_A = bodo.utils.utils.unique(A)
         key_arrs = (uniq_A,)
         n = len(uniq_A)
@@ -704,7 +704,7 @@ def unique_overload_parallel(A):
 # (e.g. for handling 1D_Var RangeIndex)
 # TODO: move this to upstream Numba
 @numba.njit
-def calc_nitems(start, stop, step):
+def calc_nitems(start, stop, step):  # pragma: no cover
     nitems_r = math.ceil((stop - start) / step)
     return int(max(nitems_r, 0))
 
@@ -712,18 +712,18 @@ def calc_nitems(start, stop, step):
 def arange_parallel_impl(return_type, *args):
     dtype = as_dtype(return_type.dtype)
 
-    def arange_1(stop):
+    def arange_1(stop):  # pragma: no cover
         return np.arange(0, stop, 1, dtype)
 
-    def arange_2(start, stop):
+    def arange_2(start, stop):  # pragma: no cover
         return np.arange(start, stop, 1, dtype)
 
-    def arange_3(start, stop, step):
+    def arange_3(start, stop, step):  # pragma: no cover
         return np.arange(start, stop, step, dtype)
 
     if any(isinstance(a, types.Complex) for a in args):
 
-        def arange_4(start, stop, step, dtype):
+        def arange_4(start, stop, step, dtype):  # pragma: no cover
             numba.parfor.init_prange()
             nitems_c = (stop - start) / step
             nitems_r = math.ceil(nitems_c.real)
@@ -736,7 +736,7 @@ def arange_parallel_impl(return_type, *args):
 
     else:
 
-        def arange_4(start, stop, step, dtype):
+        def arange_4(start, stop, step, dtype):  # pragma: no cover
             numba.parfor.init_prange()
             nitems = bodo.libs.array_kernels.calc_nitems(start, stop, step)
             arr = np.empty(nitems, dtype)

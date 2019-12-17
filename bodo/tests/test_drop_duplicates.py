@@ -57,17 +57,16 @@ def test_drop_duplicates_2col_int_nullable_bool():
         return df2
 
     def get_array(n):
-        e_list_a = np.array([0]*n)
+        e_list_a = np.array([0] * n)
         e_list_b = []
         choice = [True, False, np.nan]
         for i in range(n):
             e_list_a[i] = i % 40
             e_list_b.append(choice[i % 3])
-        df1 = pd.DataFrame({"A" : e_list_a, "B": e_list_b})
+        df1 = pd.DataFrame({"A": e_list_a, "B": e_list_b})
         return df1
 
     check_func(test_impl, (get_array(150),), sort_output=True)
-
 
 
 def test_drop_duplicates_1col_nullable_int():
@@ -86,8 +85,9 @@ def test_drop_duplicates_1col_nullable_int():
             if e_val == 39:
                 e_val = np.nan
             e_list.append(e_val)
-        df1 = pd.DataFrame({"A" : e_list})
+        df1 = pd.DataFrame({"A": e_list})
         return df1
+
     check_func(test_impl, (get_array(150),), sort_output=True)
 
 

@@ -182,7 +182,7 @@ def overload_series_str(s):
 
 @overload_method(SeriesStrMethodType, "len")
 def overload_str_method_len(S_str):
-    def impl(S_str):
+    def impl(S_str):  # pragma: no cover
         S = S_str._obj
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -222,7 +222,9 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
     # use split view if sep is a string of length 1
     if isinstance(pat, types.StringLiteral) and len(pat.literal_value) == 1:
 
-        def _str_split_view_impl(S_str, pat=None, n=-1, expand=False):
+        def _str_split_view_impl(
+            S_str, pat=None, n=-1, expand=False
+        ):  # pragma: no cover
             S = S_str._obj
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -233,7 +235,7 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
         return _str_split_view_impl
 
     # TODO: optimize!
-    def _str_split_impl(S_str, pat=None, n=-1, expand=False):
+    def _str_split_impl(S_str, pat=None, n=-1, expand=False):  # pragma: no cover
         S = S_str._obj
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -260,7 +262,7 @@ def overload_str_method_get(S_str, i):
 
     if arr_typ == string_array_split_view_type:
         # TODO: refactor and enable distributed
-        def _str_get_split_impl(S_str, i):
+        def _str_get_split_impl(S_str, i):  # pragma: no cover
             S = S_str._obj
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -281,7 +283,7 @@ def overload_str_method_get(S_str, i):
 
         return _str_get_split_impl
 
-    def _str_get_impl(S_str, i):
+    def _str_get_impl(S_str, i):  # pragma: no cover
         S = S_str._obj
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -331,7 +333,7 @@ def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, rege
 
         def _str_replace_regex_impl(
             S_str, pat, repl, n=-1, case=None, flags=0, regex=True
-        ):
+        ):  # pragma: no cover
             S = S_str._obj
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -365,7 +367,7 @@ def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, rege
 
     def _str_replace_noregex_impl(
         S_str, pat, repl, n=-1, case=None, flags=0, regex=True
-    ):
+    ):  # pragma: no cover
         S = S_str._obj
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -461,7 +463,7 @@ def overload_str_method_count(S_str, pat, flags=0):
     # python str.count() and pandas str.count() are different
     str_arg_check("count", "pat", pat)
 
-    def impl(S_str, pat, flags=0):
+    def impl(S_str, pat, flags=0):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -490,7 +492,7 @@ def overload_str_method_find(S_str, sub):
     # not supporting start,end as arguments
     str_arg_check("find", "sub", sub)
 
-    def impl(S_str, sub):
+    def impl(S_str, sub):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -521,7 +523,7 @@ def overload_str_method_rfind(S_str, sub, start=0, end=None):
     if not is_overload_none(end):
         int_arg_check("rfind", "end", end)
 
-    def impl(S_str, sub, start=0, end=None):
+    def impl(S_str, sub, start=0, end=None):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -548,7 +550,7 @@ def overload_str_method_rfind(S_str, sub, start=0, end=None):
 def overload_str_method_center(S_str, width, fillchar=" "):
     common_validate_padding("center", width, fillchar)
 
-    def impl(S_str, width, fillchar=" "):
+    def impl(S_str, width, fillchar=" "):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -580,7 +582,7 @@ def overload_str_method_center(S_str, width, fillchar=" "):
 def overload_str_method_ljust(S_str, width, fillchar=" "):
     common_validate_padding("ljust", width, fillchar)
 
-    def impl(S_str, width, fillchar=" "):
+    def impl(S_str, width, fillchar=" "):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -612,7 +614,7 @@ def overload_str_method_ljust(S_str, width, fillchar=" "):
 def overload_str_method_rjust(S_str, width, fillchar=" "):
     common_validate_padding("rjust", width, fillchar)
 
-    def impl(S_str, width, fillchar=" "):
+    def impl(S_str, width, fillchar=" "):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -653,7 +655,7 @@ def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
     else:
         raise BodoError("Series.str.pad(): Invalid Side")
 
-    def impl(S_str, width, side="left", fillchar=" "):
+    def impl(S_str, width, side="left", fillchar=" "):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -699,7 +701,7 @@ def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
 def overload_str_method_zfill(S_str, width):
     int_arg_check("zfill", "width", width)
 
-    def impl(S_str, width):
+    def impl(S_str, width):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -734,7 +736,7 @@ def overload_str_method_slice(S_str, start=None, stop=None, step=None):
     if not is_overload_none(step):
         int_arg_check("slice", "step", step)
 
-    def impl(S_str, start=None, stop=None, step=None):
+    def impl(S_str, start=None, stop=None, step=None):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -766,7 +768,7 @@ def overload_str_method_startswith(S_str, pat, na=np.nan):
     not_supported_arg_check("startswith", "na", na, np.nan)
     str_arg_check("startswith", "pat", pat)
 
-    def impl(S_str, pat, na=np.nan):
+    def impl(S_str, pat, na=np.nan):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -794,7 +796,7 @@ def overload_str_method_endswith(S_str, pat, na=np.nan):
     not_supported_arg_check("endswith", "na", na, np.nan)
     str_arg_check("endswith", "pat", pat)
 
-    def impl(S_str, pat, na=np.nan):
+    def impl(S_str, pat, na=np.nan):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)

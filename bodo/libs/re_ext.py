@@ -129,7 +129,7 @@ def lower_match_is_none(context, builder, sig, args):
 
 @overload(re.search)
 def overload_re_search(pattern, string, flags=0):
-    def _re_search_impl(pattern, string, flags=0):
+    def _re_search_impl(pattern, string, flags=0):  # pragma: no cover
         with numba.objmode(m="re_match_type"):
             m = re.search(pattern, string, flags)
         return m
@@ -139,7 +139,7 @@ def overload_re_search(pattern, string, flags=0):
 
 @overload(re.match)
 def overload_re_match(pattern, string, flags=0):
-    def _re_match_impl(pattern, string, flags=0):
+    def _re_match_impl(pattern, string, flags=0):  # pragma: no cover
         with numba.objmode(m="re_match_type"):
             m = re.match(pattern, string, flags)
         return m
@@ -149,7 +149,7 @@ def overload_re_match(pattern, string, flags=0):
 
 @overload(re.fullmatch)
 def overload_re_fullmatch(pattern, string, flags=0):
-    def _re_fullmatch_impl(pattern, string, flags=0):
+    def _re_fullmatch_impl(pattern, string, flags=0):  # pragma: no cover
         with numba.objmode(m="re_match_type"):
             m = re.fullmatch(pattern, string, flags)
         return m
@@ -159,7 +159,7 @@ def overload_re_fullmatch(pattern, string, flags=0):
 
 @overload(re.split)
 def overload_re_split(pattern, string, maxsplit=0, flags=0):
-    def _re_split_impl(pattern, string, maxsplit=0, flags=0):
+    def _re_split_impl(pattern, string, maxsplit=0, flags=0):  # pragma: no cover
         with numba.objmode(m="list_str_type"):
             m = re.split(pattern, string, maxsplit, flags)
         return m
@@ -169,7 +169,7 @@ def overload_re_split(pattern, string, maxsplit=0, flags=0):
 
 @overload(re.findall)
 def overload_re_findall(pattern, string, flags=0):
-    def _re_findall_impl(pattern, string, flags=0):
+    def _re_findall_impl(pattern, string, flags=0):  # pragma: no cover
         with numba.objmode(m="list_str_type"):
             m = re.findall(pattern, string, flags)
         return m
@@ -179,7 +179,7 @@ def overload_re_findall(pattern, string, flags=0):
 
 @overload(re.sub)
 def overload_re_sub(pattern, repl, string, count=0, flags=0):
-    def _re_sub_impl(pattern, repl, string, count=0, flags=0):
+    def _re_sub_impl(pattern, repl, string, count=0, flags=0):  # pragma: no cover
         with numba.objmode(m="unicode_type"):
             m = re.sub(pattern, repl, string, count, flags)
         return m
@@ -189,7 +189,7 @@ def overload_re_sub(pattern, repl, string, count=0, flags=0):
 
 @overload(re.subn)
 def overload_re_subn(pattern, repl, string, count=0, flags=0):
-    def _re_subn_impl(pattern, repl, string, count=0, flags=0):
+    def _re_subn_impl(pattern, repl, string, count=0, flags=0):  # pragma: no cover
         with numba.objmode(m="unicode_type", s="int64"):
             m, s = re.subn(pattern, repl, string, count, flags)
         return m, s
@@ -199,7 +199,7 @@ def overload_re_subn(pattern, repl, string, count=0, flags=0):
 
 @overload(re.escape)
 def overload_re_escape(pattern):
-    def _re_escape_impl(pattern):
+    def _re_escape_impl(pattern):  # pragma: no cover
         with numba.objmode(m="unicode_type"):
             m = re.escape(pattern)
         return m
@@ -209,7 +209,7 @@ def overload_re_escape(pattern):
 
 @overload(re.purge)
 def overload_re_purge():
-    def _re_purge_impl():
+    def _re_purge_impl():  # pragma: no cover
         with numba.objmode():
             re.purge()
         return
@@ -219,7 +219,7 @@ def overload_re_purge():
 
 @overload(re.compile)
 def re_compile_overload(pattern, flags=0):
-    def _re_compile_impl(pattern, flags=0):
+    def _re_compile_impl(pattern, flags=0):  # pragma: no cover
         with numba.objmode(pat="re_pattern_type"):
             pat = re.compile(pattern, flags)
         return pat
@@ -229,7 +229,9 @@ def re_compile_overload(pattern, flags=0):
 
 @overload_method(RePatternType, "search")
 def overload_pat_search(p, string, pos=0, endpos=9223372036854775807):
-    def _pat_search_impl(p, string, pos=0, endpos=9223372036854775807):
+    def _pat_search_impl(
+        p, string, pos=0, endpos=9223372036854775807
+    ):  # pragma: no cover
         with numba.objmode(m="re_match_type"):
             m = p.search(string, pos, endpos)
         return m
@@ -239,7 +241,9 @@ def overload_pat_search(p, string, pos=0, endpos=9223372036854775807):
 
 @overload_method(RePatternType, "match")
 def overload_pat_match(p, string, pos=0, endpos=9223372036854775807):
-    def _pat_match_impl(p, string, pos=0, endpos=9223372036854775807):
+    def _pat_match_impl(
+        p, string, pos=0, endpos=9223372036854775807
+    ):  # pragma: no cover
         with numba.objmode(m="re_match_type"):
             m = p.match(string, pos, endpos)
         return m
@@ -249,7 +253,9 @@ def overload_pat_match(p, string, pos=0, endpos=9223372036854775807):
 
 @overload_method(RePatternType, "fullmatch")
 def overload_pat_fullmatch(p, string, pos=0, endpos=9223372036854775807):
-    def _pat_fullmatch_impl(p, string, pos=0, endpos=9223372036854775807):
+    def _pat_fullmatch_impl(
+        p, string, pos=0, endpos=9223372036854775807
+    ):  # pragma: no cover
         with numba.objmode(m="re_match_type"):
             m = p.fullmatch(string, pos, endpos)
         return m
@@ -259,7 +265,7 @@ def overload_pat_fullmatch(p, string, pos=0, endpos=9223372036854775807):
 
 @overload_method(RePatternType, "split")
 def overload_pat_split(pattern, string, maxsplit=0):
-    def _pat_split_impl(pattern, string, maxsplit=0):
+    def _pat_split_impl(pattern, string, maxsplit=0):  # pragma: no cover
         with numba.objmode(m="list_str_type"):
             m = pattern.split(string, maxsplit)
         return m
@@ -269,7 +275,9 @@ def overload_pat_split(pattern, string, maxsplit=0):
 
 @overload_method(RePatternType, "findall")
 def overload_pat_findall(p, string, pos=0, endpos=9223372036854775807):
-    def _pat_findall_impl(p, string, pos=0, endpos=9223372036854775807):
+    def _pat_findall_impl(
+        p, string, pos=0, endpos=9223372036854775807
+    ):  # pragma: no cover
         with numba.objmode(m="list_str_type"):
             m = p.findall(string, pos, endpos)
         return m
@@ -279,7 +287,7 @@ def overload_pat_findall(p, string, pos=0, endpos=9223372036854775807):
 
 @overload_method(RePatternType, "sub")
 def re_sub_overload(p, repl, string, count=0):
-    def _re_sub_impl(p, repl, string, count=0):
+    def _re_sub_impl(p, repl, string, count=0):  # pragma: no cover
         with numba.objmode(out="unicode_type"):
             out = p.sub(repl, string, count)
         return out
@@ -289,7 +297,7 @@ def re_sub_overload(p, repl, string, count=0):
 
 @overload_method(RePatternType, "subn")
 def re_subn_overload(p, repl, string, count=0):
-    def _re_subn_impl(p, repl, string, count=0):
+    def _re_subn_impl(p, repl, string, count=0):  # pragma: no cover
         with numba.objmode(out="unicode_type", s="int64"):
             out, s = p.subn(repl, string, count)
         return out, s
@@ -299,7 +307,7 @@ def re_subn_overload(p, repl, string, count=0):
 
 @overload_attribute(RePatternType, "flags")
 def overload_pattern_flags(p):
-    def _pat_flags_impl(p):
+    def _pat_flags_impl(p):  # pragma: no cover
         with numba.objmode(flags="int64"):
             flags = p.flags
         return flags
@@ -309,7 +317,7 @@ def overload_pattern_flags(p):
 
 @overload_attribute(RePatternType, "groups")
 def overload_pattern_groups(p):
-    def _pat_groups_impl(p):
+    def _pat_groups_impl(p):  # pragma: no cover
         with numba.objmode(groups="int64"):
             groups = p.groups
         return groups
@@ -324,7 +332,7 @@ def overload_pattern_groupindex(p):
     """
     types.dict_string_int = types.DictType(string_type, types.int64)
 
-    def _pat_groupindex_impl(p):
+    def _pat_groupindex_impl(p):  # pragma: no cover
         with numba.objmode(d="dict_string_int"):
             groupindex = dict(p.groupindex)
             d = numba.typed.Dict.empty(
@@ -338,7 +346,7 @@ def overload_pattern_groupindex(p):
 
 @overload_attribute(RePatternType, "pattern")
 def overload_pattern_pattern(p):
-    def _pat_pattern_impl(p):
+    def _pat_pattern_impl(p):  # pragma: no cover
         with numba.objmode(pattern="unicode_type"):
             pattern = p.pattern
         return pattern
@@ -348,7 +356,7 @@ def overload_pattern_pattern(p):
 
 @overload_method(ReMatchType, "expand")
 def overload_match_expand(m, template):
-    def _match_expand_impl(m, template):
+    def _match_expand_impl(m, template):  # pragma: no cover
         with numba.objmode(out="unicode_type"):
             out = m.expand(template)
         return out
@@ -370,7 +378,7 @@ def overload_match_group(m, *args):
     # no argument case returns a string
     if len(args) == 0:
 
-        def _match_group_impl_zero(m):
+        def _match_group_impl_zero(m):  # pragma: no cover
             with numba.objmode(out="unicode_type"):
                 out = m.group()
             return out
@@ -380,7 +388,7 @@ def overload_match_group(m, *args):
     # one argument case returns a string
     if len(args) == 1:
 
-        def _match_group_impl_one(m, group1):
+        def _match_group_impl_one(m, group1):  # pragma: no cover
             with numba.objmode(out="unicode_type"):
                 out = m.group(group1)
             return out
@@ -416,7 +424,7 @@ def overload_match_groups(m, default=None):
 
     # NOTE: Python returns tuple of strings, but we don't know the length in advance
     # which makes it not compilable. We return a list which is similar to tuple
-    def _match_groups_impl(m, default=None):
+    def _match_groups_impl(m, default=None):  # pragma: no cover
         with numba.objmode(out="list_str_type"):
             out = list(m.groups(default))
         return out
@@ -431,7 +439,7 @@ def overload_match_groupdict(m, default=None):
 
     types.dict_string_string = types.DictType(string_type, string_type)
 
-    def _match_groupdict_impl(m, default=None):
+    def _match_groupdict_impl(m, default=None):  # pragma: no cover
         with numba.objmode(d="dict_string_string"):
             out = m.groupdict(default)
             d = numba.typed.Dict.empty(
@@ -445,7 +453,7 @@ def overload_match_groupdict(m, default=None):
 
 @overload_method(ReMatchType, "start")
 def overload_match_start(m, group=0):
-    def _match_start_impl(m, group=0):
+    def _match_start_impl(m, group=0):  # pragma: no cover
         with numba.objmode(out="int64"):
             out = m.start(group)
         return out
@@ -455,7 +463,7 @@ def overload_match_start(m, group=0):
 
 @overload_method(ReMatchType, "end")
 def overload_match_end(m, group=0):
-    def _match_end_impl(m, group=0):
+    def _match_end_impl(m, group=0):  # pragma: no cover
         with numba.objmode(out="int64"):
             out = m.end(group)
         return out
@@ -469,7 +477,7 @@ def overload_match_span(m, group=0):
     # span() returns a tuple of int
     types.tuple_int64_2 = types.Tuple([types.int64, types.int64])
 
-    def _match_span_impl(m, group=0):
+    def _match_span_impl(m, group=0):  # pragma: no cover
         with numba.objmode(out="tuple_int64_2"):
             out = m.span(group)
         return out
@@ -479,7 +487,7 @@ def overload_match_span(m, group=0):
 
 @overload_attribute(ReMatchType, "pos")
 def overload_match_pos(p):
-    def _match_pos_impl(p):
+    def _match_pos_impl(p):  # pragma: no cover
         with numba.objmode(pos="int64"):
             pos = p.pos
         return pos
@@ -489,7 +497,7 @@ def overload_match_pos(p):
 
 @overload_attribute(ReMatchType, "endpos")
 def overload_match_endpos(p):
-    def _match_endpos_impl(p):
+    def _match_endpos_impl(p):  # pragma: no cover
         with numba.objmode(endpos="int64"):
             endpos = p.endpos
         return endpos
@@ -500,7 +508,7 @@ def overload_match_endpos(p):
 @overload_attribute(ReMatchType, "lastindex")
 def overload_match_lastindex(p):
     # TODO: support returning None if no group was matched
-    def _match_lastindex_impl(p):
+    def _match_lastindex_impl(p):  # pragma: no cover
         with numba.objmode(lastindex="int64"):
             lastindex = p.lastindex
         return lastindex
@@ -512,7 +520,7 @@ def overload_match_lastindex(p):
 def overload_match_lastgroup(p):
     # TODO: support returning None if last group didn't have a name or no group was
     # matched
-    def _match_lastgroup_impl(p):
+    def _match_lastgroup_impl(p):  # pragma: no cover
         with numba.objmode(lastgroup="unicode_type"):
             lastgroup = p.lastgroup
         return lastgroup
@@ -522,7 +530,7 @@ def overload_match_lastgroup(p):
 
 @overload_attribute(ReMatchType, "re")
 def overload_match_re(m):
-    def _match_re_impl(m):
+    def _match_re_impl(m):  # pragma: no cover
         with numba.objmode(m_re="re_pattern_type"):
             m_re = m.re
         return m_re
@@ -532,7 +540,7 @@ def overload_match_re(m):
 
 @overload_attribute(ReMatchType, "string")
 def overload_match_string(m):
-    def _match_string_impl(m):
+    def _match_string_impl(m):  # pragma: no cover
         with numba.objmode(out="unicode_type"):
             out = m.string
         return out

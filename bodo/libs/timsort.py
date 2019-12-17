@@ -304,7 +304,7 @@ INITIAL_TMP_STORAGE_LENGTH = 256
 
 
 @numba.njit(no_cpython_wrapper=True, cache=True)
-def init_sort_start(key_arrs, data):
+def init_sort_start(key_arrs, data):  # pragma: no cover
 
     # This controls when we get *into* galloping mode.  It is initialized
     # to MIN_GALLOP.  The mergeLo and mergeHi methods nudge it higher for
@@ -356,7 +356,7 @@ def init_sort_start(key_arrs, data):
 # @param runBase index of the first element in the run
 # @param runLen  the number of elements in the run
 @numba.njit(no_cpython_wrapper=True, cache=True)
-def pushRun(stackSize, runBase, runLen, runBase_val, runLen_val):
+def pushRun(stackSize, runBase, runLen, runBase_val, runLen_val):  # pragma: no cover
     runBase[stackSize] = runBase_val
     runLen[stackSize] = runLen_val
     stackSize += 1
@@ -375,7 +375,7 @@ def pushRun(stackSize, runBase, runLen, runBase_val, runLen_val):
 @numba.njit(no_cpython_wrapper=True, cache=True)
 def mergeCollapse(
     stackSize, runBase, runLen, key_arrs, data, tmpLength, tmp, tmp_data, minGallop
-):
+):  # pragma: no cover
     while stackSize > 1:
         n = stackSize - 2
         if (n >= 1 and runLen[n - 1] <= runLen[n] + runLen[n + 1]) or (
@@ -407,7 +407,7 @@ def mergeCollapse(
 @numba.njit(no_cpython_wrapper=True, cache=True)
 def mergeForceCollapse(
     stackSize, runBase, runLen, key_arrs, data, tmpLength, tmp, tmp_data, minGallop
-):
+):  # pragma: no cover
     while stackSize > 1:
         n = stackSize - 2
         if n > 0 and runLen[n - 1] < runLen[n + 1]:
@@ -436,7 +436,7 @@ def mergeForceCollapse(
 @numba.njit(no_cpython_wrapper=True, cache=True)
 def mergeAt(
     stackSize, runBase, runLen, key_arrs, data, tmpLength, tmp, tmp_data, minGallop, i
-):
+):  # pragma: no cover
     assert stackSize >= 2
     assert i >= 0
     assert i == stackSize - 2 or i == stackSize - 3
@@ -515,7 +515,7 @@ def mergeAt(
 #   the first k elements of a should precede key, and the last n - k
 #   should follow it.
 @numba.njit(no_cpython_wrapper=True, cache=True)
-def gallopLeft(key, arr, base, _len, hint):
+def gallopLeft(key, arr, base, _len, hint):  # pragma: no cover
     assert _len > 0 and hint >= 0 and hint < _len
     lastOfs = 0
     ofs = 1
@@ -583,7 +583,7 @@ def gallopLeft(key, arr, base, _len, hint):
 # @param c the comparator used to order the range, and to search
 # @return the k,  0 <= k <= n such that a[b + k - 1] <= key < a[b + k]
 @numba.njit(no_cpython_wrapper=True, cache=True)
-def gallopRight(key, arr, base, _len, hint):
+def gallopRight(key, arr, base, _len, hint):  # pragma: no cover
     assert _len > 0 and hint >= 0 and hint < _len
 
     ofs = 1
@@ -655,7 +655,9 @@ def gallopRight(key, arr, base, _len, hint):
 #       (must be aBase + aLen)
 # @param len2  length of second run to be merged (must be > 0)
 @numba.njit(no_cpython_wrapper=True, cache=True)
-def mergeLo(key_arrs, data, tmp, tmp_data, minGallop, base1, len1, base2, len2):
+def mergeLo(
+    key_arrs, data, tmp, tmp_data, minGallop, base1, len1, base2, len2
+):  # pragma: no cover
     assert len1 > 0 and len2 > 0 and base1 + len1 == base2
 
     # Copy first run into temp array
@@ -722,7 +724,7 @@ def mergeLo(key_arrs, data, tmp, tmp_data, minGallop, base1, len1, base2, len2):
 @numba.njit(no_cpython_wrapper=True, cache=True)
 def mergeLo_inner(
     arr, arr_data, tmp_data, len1, len2, tmp, cursor1, cursor2, dest, minGallop
-):
+):  # pragma: no cover
 
     while True:
         count1 = 0  # Number of times in a row that first run won
@@ -821,7 +823,9 @@ def mergeLo_inner(
 #       (must be aBase + aLen)
 # @param len2  length of second run to be merged (must be > 0)
 @numba.njit(no_cpython_wrapper=True, cache=True)
-def mergeHi(key_arrs, data, tmp, tmp_data, minGallop, base1, len1, base2, len2):
+def mergeHi(
+    key_arrs, data, tmp, tmp_data, minGallop, base1, len1, base2, len2
+):  # pragma: no cover
     assert len1 > 0 and len2 > 0 and base1 + len1 == base2
 
     # Copy second run into temp array
@@ -897,7 +901,7 @@ def mergeHi(key_arrs, data, tmp, tmp_data, minGallop, base1, len1, base2, len2):
 @numba.njit(no_cpython_wrapper=True, cache=True)
 def mergeHi_inner(
     arr, arr_data, tmp_data, base1, len1, len2, tmp, cursor1, cursor2, dest, minGallop
-):
+):  # pragma: no cover
 
     while True:
         count1 = 0  # Number of times in a row that first run won
@@ -997,7 +1001,9 @@ def mergeHi_inner(
 
 
 @numba.njit(no_cpython_wrapper=True, cache=True)
-def ensureCapacity(tmpLength, tmp, tmp_data, key_arrs, data, minCapacity):
+def ensureCapacity(
+    tmpLength, tmp, tmp_data, key_arrs, data, minCapacity
+):  # pragma: no cover
     aLength = len(key_arrs[0])
     if tmpLength < minCapacity:
         # Compute smallest power of 2 > minCapacity

@@ -430,4 +430,3 @@ def test_endswith_pat(test_sr):
 
     with pytest.raises(BodoError, match="expected a string object"):
         bodo.jit(impl)(test_sr)
-

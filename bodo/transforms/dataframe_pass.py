@@ -466,7 +466,7 @@ class DataFramePass(object):
                 in_arr = self._get_dataframe_data(df_var, col_name, nodes)
                 row_ind = ind_def.items[0]
 
-                def _impl(A, row_ind, val):
+                def _impl(A, row_ind, val):  # pragma: no cover
                     A[row_ind] = val
 
                 return self._replace_func(
@@ -1167,7 +1167,7 @@ class DataFramePass(object):
             return self._set_df_inplace(_init_df, out_arrs, df_var, lhs.loc, nodes)
 
     def _gen_array_from_index(self, df_var, arr, nodes):
-        def _get_index(df, arr):
+        def _get_index(df, arr):  # pragma: no cover
             return bodo.utils.conversion.index_to_array(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(arr)
             )
@@ -1176,7 +1176,7 @@ class DataFramePass(object):
         return nodes[-1].target
 
     def _gen_index_from_array(self, arr_var, name_var, nodes):
-        def _get_index(arr, name):
+        def _get_index(arr, name):  # pragma: no cover
             return bodo.utils.conversion.index_from_array(arr, name)
 
         nodes += compile_func_single_block(_get_index, (arr_var, name_var), None, self)
@@ -1478,23 +1478,31 @@ class DataFramePass(object):
         df_typ = self.typemap[df_var.name]
 
         # get expression string
-        err_msg = "df.query() expr arg should be constant string or argument to jit function"
+        err_msg = (
+            "df.query() expr arg should be constant string or argument to jit function"
+        )
         expr = self._get_const_value(expr_var, err_msg)
 
         # parse expression
         parsed_expr, parsed_expr_str, used_cols = self._parse_query_expr(
-            expr, df_typ.columns)
+            expr, df_typ.columns
+        )
 
         # local variables
         sentinel = pd.core.computation.ops._LOCAL_TAG
-        loc_ref_vars = {c: c.replace(sentinel, "") for c in parsed_expr.names
-                        if isinstance(c, str) and c.startswith(sentinel)}
-        in_args = list(used_cols.values()) + ['index'] + list(loc_ref_vars.keys())
+        loc_ref_vars = {
+            c: c.replace(sentinel, "")
+            for c in parsed_expr.names
+            if isinstance(c, str) and c.startswith(sentinel)
+        }
+        in_args = list(used_cols.values()) + ["index"] + list(loc_ref_vars.keys())
 
         func_text = "def _query_impl({}):\n".format(", ".join(in_args))
         # convert array to Series to support cases such as C.str.contains
         for c, c_var in used_cols.items():
-            func_text += "  {0} = bodo.hiframes.pd_series_ext.init_series({0})\n".format(c_var)
+            func_text += "  {0} = bodo.hiframes.pd_series_ext.init_series({0})\n".format(
+                c_var
+            )
         func_text += "  return {}".format(parsed_expr_str)
         loc_vars = {}
         exec(func_text, {}, loc_vars)
@@ -1504,8 +1512,11 @@ class DataFramePass(object):
         nodes = []
         args = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols.keys()]
         # index
-        arr = args[0] if len(args) > 0 else self._get_dataframe_data(
-            df_var, df_typ.columns[0], nodes)
+        arr = (
+            args[0]
+            if len(args) > 0
+            else self._get_dataframe_data(df_var, df_typ.columns[0], nodes)
+        )
         args.append(self._gen_array_from_index(df_var, arr, nodes))
         # local referenced variables
         args += [ir.Var(lhs.scope, v, lhs.loc) for v in loc_ref_vars.values()]
@@ -1518,7 +1529,7 @@ class DataFramePass(object):
         clean_name = pd.core.computation.common._remove_spaces_column_name
         cleaned_columns = [clean_name(c) for c in columns]
         resolver = {c: 0 for c in cleaned_columns}
-        resolver['index'] = 0
+        resolver["index"] = 0
         used_cols = {}
         # create fake environment for Expr that just includes the symbol names to
         # enable parsing
@@ -1554,11 +1565,14 @@ class DataFramePass(object):
 
                 if name not in pd.core.computation.ops._mathops or (
                     pd.core.computation.check._NUMEXPR_INSTALLED
-                    and pd.core.computation.check_NUMEXPR_VERSION < pd.core.computation.ops.LooseVersion("2.6.9")
+                    and pd.core.computation.check_NUMEXPR_VERSION
+                    < pd.core.computation.ops.LooseVersion("2.6.9")
                     and name in ("floor", "ceil")
                 ):
                     if name not in new_funcs:
-                        raise ValueError('"{0}" is not a supported function'.format(name))
+                        raise ValueError(
+                            '"{0}" is not a supported function'.format(name)
+                        )
 
                 self.name = name
                 if name in new_funcs:
@@ -1580,14 +1594,16 @@ class DataFramePass(object):
             value_str = str(self.visit(value))
             name = value_str + "." + attr
             if name.startswith(sentinel):
-                name = name[len(sentinel):]
+                name = name[len(sentinel) :]
 
             # make local variable in case of C.str
-            if attr == 'str':
+            if attr == "str":
                 if value_str not in cleaned_columns:
                     raise bodo.utils.typing.BodoError(
                         "column {} not found in dataframe columns {}".format(
-                            value_str, columns))
+                            value_str, columns
+                        )
+                    )
                 orig_col_name = columns[cleaned_columns.index(value_str)]
                 used_cols[orig_col_name] = value_str
                 self.env.scope[name] = 0
@@ -1612,38 +1628,62 @@ class DataFramePass(object):
             # avoid change if it is a dummy attribute call
             if self.op in new_funcs:
                 return pd.io.formats.printing.pprint_thing(
-                    "{0}({1})".format(self.op, ",".join(map(str, self.operands))))
+                    "{0}({1})".format(self.op, ",".join(map(str, self.operands)))
+                )
 
             operands = map(
                 lambda a: "bodo.hiframes.pd_series_ext.get_series_data({})".format(
-                    str(a)), self.operands)
+                    str(a)
+                ),
+                self.operands,
+            )
             op = "np.{}".format(self.op)
             return pd.io.formats.printing.pprint_thing(
                 "bodo.hiframes.pd_series_ext.init_series({0}({1}))".format(
-                    op, ",".join(operands)))
+                    op, ",".join(operands)
+                )
+            )
 
         # replace 'in' operator with dummy function to convert to prange later
         def op__str__(self):
-            parened = ("({0})".format(pd.io.formats.printing.pprint_thing(opr))
-                for opr in self.operands)
-            if self.op == 'in':
+            parened = (
+                "({0})".format(pd.io.formats.printing.pprint_thing(opr))
+                for opr in self.operands
+            )
+            if self.op == "in":
                 return pd.io.formats.printing.pprint_thing(
-                    "bodo.hiframes.pd_dataframe_ext.val_isin_dummy({})".format(", ".join(parened)))
-            if self.op == 'not in':
+                    "bodo.hiframes.pd_dataframe_ext.val_isin_dummy({})".format(
+                        ", ".join(parened)
+                    )
+                )
+            if self.op == "not in":
                 return pd.io.formats.printing.pprint_thing(
-                    "bodo.hiframes.pd_dataframe_ext.val_notin_dummy({})".format(", ".join(parened)))
-            return pd.io.formats.printing.pprint_thing(" {0} ".format(self.op).join(parened))
+                    "bodo.hiframes.pd_dataframe_ext.val_notin_dummy({})".format(
+                        ", ".join(parened)
+                    )
+                )
+            return pd.io.formats.printing.pprint_thing(
+                " {0} ".format(self.op).join(parened)
+            )
 
-        saved_rewrite_membership_op = pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op
-        saved_maybe_evaluate_binop = pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop
+        saved_rewrite_membership_op = (
+            pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op
+        )
+        saved_maybe_evaluate_binop = (
+            pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop
+        )
         saved_visit_Attribute = pd.core.computation.expr.BaseExprVisitor.visit_Attribute
         saved__str__ = pd.core.computation.ops.Term.__str__
         saved_math__str__ = pd.core.computation.ops.MathCall.__str__
         saved_op__str__ = pd.core.computation.ops.Op.__str__
 
         try:
-            pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = _rewrite_membership_op
-            pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = _maybe_evaluate_binop
+            pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (
+                _rewrite_membership_op
+            )
+            pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = (
+                _maybe_evaluate_binop
+            )
             pd.core.computation.expr.BaseExprVisitor.visit_Attribute = visit_Attribute
             pd.core.computation.ops.Term.__str__ = __str__
             pd.core.computation.ops.MathCall.__str__ = math__str__
@@ -1651,15 +1691,22 @@ class DataFramePass(object):
             parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
             parsed_expr_str = str(parsed_expr)
         finally:
-            pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = saved_rewrite_membership_op
-            pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = saved_maybe_evaluate_binop
-            pd.core.computation.expr.BaseExprVisitor.visit_Attribute = saved_visit_Attribute
+            pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (
+                saved_rewrite_membership_op
+            )
+            pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = (
+                saved_maybe_evaluate_binop
+            )
+            pd.core.computation.expr.BaseExprVisitor.visit_Attribute = (
+                saved_visit_Attribute
+            )
             pd.core.computation.ops.Term.__str__ = saved__str__
             pd.core.computation.ops.MathCall.__str__ = saved_math__str__
             pd.core.computation.ops.Op.__str__ = saved_op__str__
 
-        used_cols.update({c: clean_name(c) for c in columns
-                         if clean_name(c) in parsed_expr.names})
+        used_cols.update(
+            {c: clean_name(c) for c in columns if clean_name(c) in parsed_expr.names}
+        )
         return parsed_expr, parsed_expr_str, used_cols
 
     def _run_call_drop(self, assign, lhs, rhs):
@@ -1684,7 +1731,7 @@ class DataFramePass(object):
         # TODO: test non-df case
         if not self._is_df_var(rhs.args[0]):
 
-            def _impl(target, index, val, _inplace):
+            def _impl(target, index, val, _inplace):  # pragma: no cover
                 target[index] = val
                 return target
 
@@ -1793,7 +1840,9 @@ class DataFramePass(object):
         return self._replace_func(f, [arr], pre_nodes=nodes)
 
     def _run_call_join(self, assign, lhs, rhs):
-        left_df, right_df, left_on_var, right_on_var, how_var, suffix_x_var, suffix_y_var = rhs.args
+        left_df, right_df, left_on_var, right_on_var, how_var, suffix_x_var, suffix_y_var = (
+            rhs.args
+        )
 
         left_on = self._get_const_or_list(left_on_var)
         right_on = self._get_const_or_list(right_on_var)
@@ -1859,7 +1908,8 @@ class DataFramePass(object):
                 left_arrs,
                 right_arrs,
                 how,
-                suffix_x, suffix_y,
+                suffix_x,
+                suffix_y,
                 lhs.loc,
             )
         )
@@ -2168,7 +2218,7 @@ class DataFramePass(object):
             len_arr = list(in_vars.values())[0]
             for cname in nan_cols:
 
-                def f(arr):
+                def f(arr):  # pragma: no cover
                     return np.full(len(arr), np.nan)
 
                 nodes += compile_func_single_block(f, [len_arr], None, self)

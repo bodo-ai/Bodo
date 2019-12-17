@@ -80,14 +80,14 @@ def df_rolling_overload(
         on=None,
         axis=0,
         closed=None,
-    ):
+    ):  # pragma: no cover
         return bodo.hiframes.pd_rolling_ext.rolling_dummy(df, window, center, on)
 
     return _impl
 
 
 # a dummy rolling function that will be replace in dataframe_pass
-def rolling_dummy(df, window, center, on):
+def rolling_dummy(df, window, center, on):  # pragma: no cover
     return 0
 
 

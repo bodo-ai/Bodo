@@ -87,32 +87,33 @@ def test_merge_key_change():
     )
 
 
-
-
 def test_merge_suffixes_bracket():
     """
     Test merge(): test the suffixes functionality with bracket
     """
+
     def test_impl(df1, df2):
-        o1 = df1.merge(df2, on='key', how='inner', suffixes=["_a", "_b"])
+        o1 = df1.merge(df2, on="key", how="inner", suffixes=["_a", "_b"])
         return o1
 
     bodo_func = bodo.jit(test_impl)
-    df1 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [1, 2, 3, 5]})
-    df2 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [5, 6, 7, 8]})
+    df1 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [1, 2, 3, 5]})
+    df2 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [5, 6, 7, 8]})
     check_func(test_impl, (df1, df2), sort_output=True)
+
 
 def test_merge_suffixes_parenthesis():
     """
     Test merge(): test the suffixes functionality with parenthesis
     """
+
     def test_impl(df1, df2):
-        o1 = df1.merge(df2, on='key', how='inner', suffixes=("_a", "_b"))
+        o1 = df1.merge(df2, on="key", how="inner", suffixes=("_a", "_b"))
         return o1
 
     bodo_func = bodo.jit(test_impl)
-    df1 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [1, 2, 3, 5]})
-    df2 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [5, 6, 7, 8]})
+    df1 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [1, 2, 3, 5]})
+    df2 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [5, 6, 7, 8]})
     check_func(test_impl, (df1, df2), sort_output=True)
 
 
@@ -120,13 +121,14 @@ def test_merge_empty_suffix_underscore():
     """
     Test merge(): test the suffixes functionality with a pathological example
     """
+
     def test_impl(df1, df2):
-        o1 = df1.merge(df2, on='key', how='inner', suffixes=["", "_"])
+        o1 = df1.merge(df2, on="key", how="inner", suffixes=["", "_"])
         return o1
 
     bodo_func = bodo.jit(test_impl)
-    df1 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [1, 2, 3, 5]})
-    df2 = pd.DataFrame({'key': [0, 1, 2, 0], 'value': [5, 6, 7, 8]})
+    df1 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [1, 2, 3, 5]})
+    df2 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [5, 6, 7, 8]})
     check_func(test_impl, (df1, df2), sort_output=True)
 
 
@@ -163,26 +165,24 @@ def test_merge_common_cols(df1, df2):
     )
 
 
-
-
-
 def test_merge_disjoint_keys1():
     """
     Test merge(): 'how' = inner on specified integer column
     """
 
     def test_impl(df1, df2):
-        df3 = pd.merge(df1, df2, left_on=["a","b"], right_on=["a", "d"], how="left")
+        df3 = pd.merge(df1, df2, left_on=["a", "b"], right_on=["a", "d"], how="left")
         return df3
 
     bodo_func = bodo.jit(test_impl)
-    df1 = pd.DataFrame({"a": [0.0 , 1.0], "b": [1.0 , 4.0]})
-    df2 = pd.DataFrame({"a": [1.0 , 2.0], "d": [2.0 , 3.0]})
+    df1 = pd.DataFrame({"a": [0.0, 1.0], "b": [1.0, 4.0]})
+    df2 = pd.DataFrame({"a": [1.0, 2.0], "d": [2.0, 3.0]})
 
     pd.testing.assert_frame_equal(
         bodo_func(df1, df2).sort_values("a").reset_index(drop=True),
         test_impl(df1, df2).sort_values("a").reset_index(drop=True),
     )
+
 
 def test_merge_disjoint_keys2():
     """
@@ -190,18 +190,17 @@ def test_merge_disjoint_keys2():
     """
 
     def test_impl(df1, df2):
-        df3 = pd.merge(df1, df2, left_on=["a","b"], right_on=["c", "d"], how="left")
+        df3 = pd.merge(df1, df2, left_on=["a", "b"], right_on=["c", "d"], how="left")
         return df3
 
     bodo_func = bodo.jit(test_impl)
-    df1 = pd.DataFrame({"a": [0.0 , 1.0], "b": [1.0 , 4.0]})
-    df2 = pd.DataFrame({"c": [1.0 , 2.0], "d": [2.0 , 3.0]})
+    df1 = pd.DataFrame({"a": [0.0, 1.0], "b": [1.0, 4.0]})
+    df2 = pd.DataFrame({"c": [1.0, 2.0], "d": [2.0, 3.0]})
 
     pd.testing.assert_frame_equal(
         bodo_func(df1, df2).sort_values("a").reset_index(drop=True),
         test_impl(df1, df2).sort_values("a").reset_index(drop=True),
     )
-
 
 
 def test_merge_inner():
