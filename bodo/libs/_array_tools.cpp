@@ -13,9 +13,9 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <map>
 #include <numeric>
 #include <unordered_map>
-#include <unordered_set>
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_murmurhash3.cpp"
@@ -1653,11 +1653,6 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
     return new table_info(out_arrs);
 }
 
-
-
-
-
-
 /**
  * Enum of aggregation, combine and eval functions used by groubpy.
  * Some functions like sum can be used for multiple purposes, like aggregation
@@ -1669,7 +1664,6 @@ struct Bodo_FTypes {
     enum FTypeEnum {
         sum,
         count,
-        nunique,
         mean,
         min,
         max,
@@ -1972,104 +1966,6 @@ static void std_eval(double& result, uint64_t& count, double& m2) {
     result = sqrt(m2 / (count - 1));
 }
 
-
-
-
-
-
-
-
-struct grouping_info {
-    std::vector<int64_t> row_to_group;
-    std::vector<int64_t> group_to_first_row;
-    std::vector<int64_t> next_row_in_group;
-};
-
-/**
- * Given a table with n key columns, this function calculates the row to group
- * mapping for every row based on its key.
- * For every row in the table, this only does *one* lookup in the hash map.
- *
- * @param the table
- * @param[out] vector that maps row number in the table to a group number
- * @param[out] vector that maps group number to the first row in the table
- *                that belongs to that group
- */
-grouping_info get_group_info_iterate(table_info* table) {
-    std::vector<int64_t> row_to_group;
-    std::vector<int64_t> group_to_first_row;
-    std::vector<int64_t> next_row_in_group(table->nrows(), -1);
-    std::vector<int64_t> active_group_repr;
-
-    std::vector<array_info*> key_cols = std::vector<array_info*>(
-        table->columns.begin(), table->columns.begin() + table->num_keys);
-    uint32_t seed = 0xb0d01288;
-    uint32_t* hashes = hash_keys(key_cols, seed);
-
-    bool check_for_null_keys= true;
-    bool key_is_nullable = false;
-    if (check_for_null_keys) {
-        for (auto key_col : key_cols) {
-            if ((key_col->arr_type == bodo_array_type::NUMPY &&
-                 (key_col->dtype == Bodo_CTypes::FLOAT32 ||
-                  key_col->dtype == Bodo_CTypes::FLOAT64)) ||
-                key_col->arr_type == bodo_array_type::STRING ||
-                key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-                key_is_nullable = true;
-                break;
-            }
-        }
-    }
-    row_to_group.reserve(table->nrows());
-    // start at 1 because I'm going to use 0 to mean nothing was inserted yet
-    // in the map (but note that the group values I record in the output go from
-    // 0 to num_groups - 1)
-    int next_group = 1;
-    std::unordered_map<multi_col_key, int64_t, key_hash> key_to_group;
-    for (int64_t i = 0; i < table->nrows(); i++) {
-        if (key_is_nullable) {
-            bool key_has_nulls = false;
-            for (auto key_col : key_cols) {
-                if (key_col->arr_type == bodo_array_type::STRING ||
-                    key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-                    if (!GetBit((uint8_t*)key_col->null_bitmask, i)) {
-                        key_has_nulls = true;
-                        break;
-                    }
-                } else if (key_col->arr_type == bodo_array_type::NUMPY) {
-                    if ((key_col->dtype == Bodo_CTypes::FLOAT32 &&
-                         isnan(key_col->at<float>(i))) ||
-                        (key_col->dtype == Bodo_CTypes::FLOAT64 &&
-                         isnan(key_col->at<double>(i)))) {
-                        key_has_nulls = true;
-                        break;
-                    }
-                }
-            }
-            if (key_has_nulls) {
-                row_to_group.push_back(-1);
-                continue;
-            }
-        }
-        multi_col_key key(hashes[i], table, i);
-        int64_t& group = key_to_group[key];  // this inserts 0 into the map if
-                                             // key doesn't exist
-        if (group == 0) {
-            group = next_group++;  // this updates the value in the map without
-                                   // another lookup
-            group_to_first_row.push_back(i);
-            active_group_repr.push_back(i);
-        } else {
-            int64_t prev_elt = active_group_repr[group - 1];
-            next_row_in_group[prev_elt] = i;
-            active_group_repr[group - 1] = i;
-        }
-        row_to_group.push_back(group - 1);
-    }
-    delete[] hashes;
-    return {std::move(row_to_group), std::move(group_to_first_row), std::move(next_row_in_group)};
-}
-
 /**
  * Apply a function to a column(s), save result to (possibly reduced) output
  * column(s) Semantics of this function right now vary depending on function
@@ -2190,9 +2086,6 @@ void apply_to_column(array_info* in_col, array_info* out_col,
             return;
     }
 }
-
-
-
 
 /**
  * Invokes the correct template instance of apply_to_column depending on
@@ -2519,8 +2412,6 @@ struct multi_col_key {
 struct key_hash {
     std::size_t operator()(const multi_col_key& k) const { return k.hash; }
 };
-
-
 
 /**
  * Given a table with n key columns, this function calculates the row to group
@@ -3049,26 +2940,6 @@ void agg_func_eval(table_info& in_table, int64_t num_keys, int64_t n_data_cols,
 
 std::vector<Bodo_FTypes::FTypeEnum> combine_funcs(Bodo_FTypes::num_funcs);
 
-
-table_info* groupby_and_aggregate_nunique(table_info* in_table, int64_t num_keys,
-                                          bool is_parallel) {
-    // perform initial local aggregation
-    int64_t num_data_cols = in_table->ncols() - num_keys;
-    table_info* work_table;
-    if (is_parallel) {
-      work_table = shuffle_table(in_table, num_keys);
-    } else {
-      work_table = in_table;
-    }
-    bool dropna=true;
-    // TODO: implement correct use of dropna in the computation.
-    // See https://github.com/Bodo-inc/Bodo/issues/270
-    table_info* out_table = groupby_and_nunique(work_table, num_keys, num_data_cols, dropna);
-    if (is_parallel) delete work_table;
-    return out_table;
-}
-
-
 /**
  * Groups the rows in a table based on key, applies a function to the rows in
  * each group, writes the result to a new output table containing one row per
@@ -3082,7 +2953,6 @@ table_info* groupby_and_aggregate_nunique(table_info* in_table, int64_t num_keys
  */
 table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                                   int32_t ftype, bool is_parallel) {
-
     // perform initial local aggregation
     int64_t num_data_cols = in_table->ncols() - num_keys;
     table_info* aggr_local = groupby_and_aggregate_local(
@@ -3347,7 +3217,5 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
         PyLong_FromVoidPtr((void*)(&drop_duplicates_table_outplace)));
     PyObject_SetAttrString(m, "groupby_and_aggregate",
                            PyLong_FromVoidPtr((void*)(&groupby_and_aggregate)));
-    PyObject_SetAttrString(m, "groupby_and_aggregate_nunique",
-                           PyLong_FromVoidPtr((void*)(&groupby_and_aggregate_nunique)));
     return m;
 }
