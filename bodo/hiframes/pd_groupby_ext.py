@@ -307,7 +307,7 @@ def get_groupby_output_dtype(arr_type, func_name):
 class DataframeGroupByAttribute(AttributeTemplate):
     key = DataFrameGroupByType
 
-    def _get_agg_typ(self, grp, args, func_name, code):
+    def _get_agg_typ(self, grp, args, func_name, code=None):
         index = types.none
         out_data = []
         out_columns = []
@@ -340,8 +340,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     {"np": np, "numba": numba, "bodo": bodo}, code
                 )
                 try:
+                    # input to UDFs is a Series
+                    in_series_typ = SeriesType(
+                        data.dtype, data, None, string_type)
                     _, out_dtype, _ = numba.typed_passes.type_inference_stage(
-                        self.context, f_ir, (data,), None
+                        self.context, f_ir, (in_series_typ,), None
                     )
                 except:
                     raise BodoError(
@@ -406,9 +409,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
                         "unsupported aggregate function {}".format(func_name)
                     )
                 # run typer on a groupby with just column k
-                code = get_agg_func(None, func_name, None).__code__
                 ret_grp = DataFrameGroupByType(grp.df_type, grp.keys, (k,), True, True)
-                out_tp = self._get_agg_typ(ret_grp, args, func_name, code).return_type
+                out_tp = self._get_agg_typ(ret_grp, args, func_name).return_type
                 out_data.append(out_tp.data)
 
             out_res = DataFrameType(tuple(out_data), out_tp.index, out_columns)
@@ -447,13 +449,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.sum")
     def resolve_sum(self, grp, args, kws):
-        func = get_agg_func(None, "sum", None)
-        return self._get_agg_typ(grp, args, "sum", func.__code__)
+        return self._get_agg_typ(grp, args, "sum")
 
     @bound_function("groupby.count")
     def resolve_count(self, grp, args, kws):
-        func = get_agg_func(None, "count", None)
-        return self._get_agg_typ(grp, args, "count", func.__code__)
+        return self._get_agg_typ(grp, args, "count")
 
     @bound_function("groupby.nunique")
     def resolve_nunique(self, grp, args, kws):
@@ -462,33 +462,27 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.mean")
     def resolve_mean(self, grp, args, kws):
-        func = get_agg_func(None, "mean", None)
-        return self._get_agg_typ(grp, args, "mean", func.__code__)
+        return self._get_agg_typ(grp, args, "mean")
 
     @bound_function("groupby.min")
     def resolve_min(self, grp, args, kws):
-        func = get_agg_func(None, "min", None)
-        return self._get_agg_typ(grp, args, "min", func.__code__)
+        return self._get_agg_typ(grp, args, "min")
 
     @bound_function("groupby.max")
     def resolve_max(self, grp, args, kws):
-        func = get_agg_func(None, "max", None)
-        return self._get_agg_typ(grp, args, "max", func.__code__)
+        return self._get_agg_typ(grp, args, "max")
 
     @bound_function("groupby.prod")
     def resolve_prod(self, grp, args, kws):
-        func = get_agg_func(None, "prod", None)
-        return self._get_agg_typ(grp, args, "prod", func.__code__)
+        return self._get_agg_typ(grp, args, "prod")
 
     @bound_function("groupby.var")
     def resolve_var(self, grp, args, kws):
-        func = get_agg_func(None, "var", None)
-        return self._get_agg_typ(grp, args, "var", func.__code__)
+        return self._get_agg_typ(grp, args, "var")
 
     @bound_function("groupby.std")
     def resolve_std(self, grp, args, kws):
-        func = get_agg_func(None, "std", None)
-        return self._get_agg_typ(grp, args, "std", func.__code__)
+        return self._get_agg_typ(grp, args, "std")
 
     # TODO: cumprod etc.
     @bound_function("groupby.cumsum")
@@ -537,8 +531,8 @@ class PivotTyper(AbstractTemplate):
             and isinstance(index, types.StringLiteral)
             and isinstance(columns, types.StringLiteral)
         ):
-            raise ValueError(
-                "pivot_table() only support string constants for"
+            raise BodoError(
+                "pivot_table() only support string constants for "
                 "'values', 'index' and 'columns' arguments"
             )
 
@@ -550,10 +544,12 @@ class PivotTyper(AbstractTemplate):
         data = df.data[df.columns.index(values)]
         func = get_agg_func(None, aggfunc.literal_value, None)
         f_ir = numba.ir_utils.get_ir_of_code(
-            {"np": np, "numba": numba, "bodo": bodo}, func.__code__
+            func.__globals__, func.__code__
         )
+        in_series_typ = SeriesType(data.dtype, data, None, string_type)
+        bodo.ir.aggregate.replace_closures(f_ir, func.__closure__, func.__code__)
         _, out_dtype, _ = numba.typed_passes.type_inference_stage(
-            self.context, f_ir, (data,), None
+            self.context, f_ir, (in_series_typ,), None
         )
         out_arr_typ = _get_series_array_type(out_dtype)
 

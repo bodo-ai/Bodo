@@ -1025,7 +1025,7 @@ class SeriesPass(object):
                     nat = arr_typ.dtype("NaT")
                     # TODO: replace with np.isnat
                     return self._replace_func(lambda arr, i: arr[i] == nat, [arr, ind])
-                elif isinstance(arr_typ.dtype, types.Integer):
+                elif isinstance(arr_typ.dtype, (types.Integer, types.Boolean)):
                     return self._replace_func(lambda arr, i: False, [arr, ind])
             return [assign]
 
@@ -1631,7 +1631,9 @@ class SeriesPass(object):
             self.typemap[out_key_var.name] = self.typemap[data.name]
             out_data_var = ir.Var(lhs.scope, mk_unique_var(lhs.name + "_data"), lhs.loc)
             self.typemap[out_data_var.name] = self.typemap[lhs.name].data
-            agg_func = series_replace_funcs["count"]
+            agg_func = bodo.hiframes.series_impl.overload_series_count(
+                self.typemap[series_var.name]
+            )
             agg_func.ftype = bodo.ir.aggregate.supported_agg_funcs.index("count")
             agg_func.builtin = True
             agg_node = bodo.ir.aggregate.Aggregate(

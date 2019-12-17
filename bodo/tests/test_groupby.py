@@ -151,6 +151,15 @@ def test_all_null_keys():
     check_func(impl, (df,), sort_output=True)
 
 
+udf_in_df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [-8, 2, 3, 1, 5, 6, 7],
+            "C": [1.2, 2.4, np.nan, 2.2, 5.3, 3.3, 7.2],
+        }
+    )
+
+
 def test_agg():
     """
     Test Groupby.agg(): one user defined func and all cols
@@ -160,15 +169,22 @@ def test_agg():
         A = df.groupby("A").agg(lambda x: x.max() - x.min())
         return A
 
-    df = pd.DataFrame(
-        {
-            "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [-8, 2, 3, 1, 5, 6, 7],
-            "C": [1.2, 2.4, np.nan, 2.2, 5.3, 3.3, 7.2],
-        }
-    )
+    # check_dtype=False since Bodo returns float for Series.min/max. TODO: fix min/max
+    check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
 
-    check_func(impl, (df,), sort_output=True)
+
+def test_agg_series_input():
+    """
+    Test Groupby.agg(): make sure input to UDF is a Series, not Array
+    """
+
+    def impl(df):
+        # using `count` since Arrays don't support it
+        A = df.groupby("A").agg(lambda x: x.count())
+        return A
+
+    # check_dtype=False since Pandas returns float64 for count sometimes for some reason
+    check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
 
 
 def test_agg_as_index():
@@ -193,7 +209,7 @@ def test_agg_as_index():
         }
     )
 
-    check_func(impl1, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True, check_dtype=False)
     check_func(impl2, (df,), sort_output=True, check_dtype=False)
 
 
@@ -207,7 +223,10 @@ def test_agg_select_col():
         return A
 
     def impl_str(df):
-        A = df.groupby("A")["B"].agg(lambda x: (x == "a").sum())
+        # using .values since the UDF won't be a single Parfor with Series string
+        # comparison because of nullable boolean array allocation after compute
+        # TODO: use boolean array allocation before compute
+        A = df.groupby("A")["B"].agg(lambda x: (x.values == "a").sum())
         return A
 
     def test_impl(n):
@@ -222,10 +241,10 @@ def test_agg_select_col():
     df_str = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
     )
-    check_func(impl_num, (df_int,), sort_output=True)
-    check_func(impl_num, (df_float,), sort_output=True)
-    check_func(impl_str, (df_str,), sort_output=True)
-    check_func(test_impl, (11,), sort_output=True)
+    check_func(impl_num, (df_int,), sort_output=True, check_dtype=False)
+    check_func(impl_num, (df_float,), sort_output=True, check_dtype=False)
+    check_func(impl_str, (df_str,), sort_output=True, check_dtype=False)
+    check_func(test_impl, (11,), sort_output=True, check_dtype=False)
 
 
 def test_agg_multi_udf():
@@ -263,7 +282,7 @@ def test_aggregate():
         }
     )
 
-    check_func(impl, (df,), sort_output=True)
+    check_func(impl, (df,), sort_output=True, check_dtype=False)
 
 
 def test_aggregate_as_index():
@@ -288,7 +307,7 @@ def test_aggregate_as_index():
         }
     )
 
-    check_func(impl1, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True, check_dtype=False)
     check_func(impl2, (df,), sort_output=True, check_dtype=False)
 
 
@@ -302,7 +321,7 @@ def test_aggregate_select_col():
         return A
 
     def impl_str(df):
-        A = df.groupby("A")["B"].aggregate(lambda x: (x == "a").sum())
+        A = df.groupby("A")["B"].aggregate(lambda x: (x.values == "a").sum())
         return A
 
     def test_impl(n):
@@ -317,10 +336,10 @@ def test_aggregate_select_col():
     df_str = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
     )
-    check_func(impl_num, (df_int,), sort_output=True)
-    check_func(impl_num, (df_float,), sort_output=True)
-    check_func(impl_str, (df_str,), sort_output=True)
-    check_func(test_impl, (11,), sort_output=True)
+    check_func(impl_num, (df_int,), sort_output=True, check_dtype=False)
+    check_func(impl_num, (df_float,), sort_output=True, check_dtype=False)
+    check_func(impl_str, (df_str,), sort_output=True, check_dtype=False)
+    check_func(test_impl, (11,), sort_output=True, check_dtype=False)
 
 
 def test_groupby_agg_const_dict():
