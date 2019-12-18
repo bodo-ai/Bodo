@@ -38,9 +38,7 @@ class FileReader
 public:
     const char *fname;
     FileReader(const char *_fname) : fname(_fname) {}
-    uint64_t getSize() {
-        return boost::filesystem::file_size(fname);
-    }
+    virtual uint64_t getSize() = 0;
     virtual bool seek(int64_t pos) = 0;
     virtual bool ok() = 0;
     virtual bool read(char *s, int64_t size) = 0;
@@ -55,6 +53,9 @@ public:
     LocalFileReader(const char *_fname) : FileReader(_fname) {
         this->fstream = new std::ifstream(fname);
         CHECK(fstream->good() && !fstream->eof() && fstream->is_open(), "could not open file.");
+    }
+    uint64_t getSize() {
+        return boost::filesystem::file_size(fname);
     }
     bool seek(int64_t pos) {
         this->fstream->seekg(pos, std::ios_base::beg);
