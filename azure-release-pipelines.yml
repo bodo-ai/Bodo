@@ -1,79 +1,14 @@
-trigger:
-- refs/tags/*
-
 pr: none
-
-schedules:
-- cron: "0 0 * * *"
-  displayName: 'Daily midnight build'
-  branches:
-    include:
-    - master
 
 stages:
 - stage: Build_Bodo_Binary
   displayName: 'Build Bodo Binary'
   jobs:
-  - template: buildscripts/azure/azure-build-binary-linux-macos.yml
+  - template: buildscripts/azure/azure-arrow-cpp-build-mac-linux.yml
     parameters:
       name: Linux
       vmImage: ubuntu-latest
-  - template: buildscripts/azure/azure-build-binary-linux-macos.yml
+  - template: buildscripts/azure/azure-arrow-cpp-build-mac-linux.yml
     parameters:
       name: Mac
       vmImage: xcode9-macos10.13
-  - template: buildscripts/azure/azure-build-binary-windows.yml
-    parameters:
-      name: Windows
-      vmImage: vs2017-win2016
-
-- stage: Test_Bodo_Binary
-  displayName: Test Bodo Binary
-  jobs:
-  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
-    parameters:
-      name: Mac
-      vmImage: xcode9-macos10.13
-      matrix:
-        TEST_1P_SLOW:
-          NP: 1
-          PYTEST_MARKER: slow
-        TEST_2P_SLOW:
-          NP: 2
-          PYTEST_MARKER: slow
-        TEST_3P_SLOW:
-          NP: 3
-          PYTEST_MARKER: slow
-        TEST_1P_NOT_SLOW:
-          NP: 1
-          PYTEST_MARKER: not slow
-        TEST_2P_NOT SLOW:
-          NP: 2
-          PYTEST_MARKER: not slow
-        TEST_3P_NOT_SLOW:
-          NP: 3
-          PYTEST_MARKER: not slow  
-  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
-    parameters:
-      name: Linux
-      vmImage: ubuntu-latest
-      matrix:
-        TEST_1P_SLOW:
-          NP: 1
-          PYTEST_MARKER: slow
-        TEST_2P_SLOW:
-          NP: 2
-          PYTEST_MARKER: slow
-        TEST_3P_SLOW:
-          NP: 3
-          PYTEST_MARKER: slow
-        TEST_1P_NOT_SLOW:
-          NP: 1
-          PYTEST_MARKER: not slow
-        TEST_2P_NOT SLOW:
-          NP: 2
-          PYTEST_MARKER: not slow
-        TEST_3P_NOT_SLOW:
-          NP: 3
-          PYTEST_MARKER: not slow
-
