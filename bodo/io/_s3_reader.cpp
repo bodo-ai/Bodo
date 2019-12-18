@@ -29,6 +29,8 @@ public:
         // TODO: issue warning when region is not specified?
         if (default_region)
             options.region = std::string(default_region);
+        else
+            std::cerr << "Warning: AWS_DEFAULT_REGION environment variable not found. Region defaults to 'us-east-1' currently." <<std::endl;
         status = arrow::fs::S3FileSystem::Make(options, &fs);
         CHECK_ARROW(status, "S3FileSystem::Make");
 
