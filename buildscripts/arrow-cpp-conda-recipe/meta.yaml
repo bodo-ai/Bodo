@@ -1,18 +1,21 @@
-{% set version = "0.15.0" %}
-
+{% set version = "0.15.1" %}
+{% set filename = "apache-arrow-" + version + ".tar.gz" %}
+{% set checksum = "9a2c58c72310eafebb4997244cbeeb8c26696320d0ae3eb3e8512f75ef856fc9" %}
 
 package:
   name: arrow-cpp
   version: {{ version }}
 
 source:
-   path: /Users/ehsan/dev/sw/arrow
+  fn: {{ filename }}
+  url: https://dist.apache.org/repos/dist/release/arrow/arrow-{{ version }}/{{ filename }}
+  sha256: {{ checksum }}
 
 build:
-  number: 1
+  number: 6
   skip: true  # [win and vc<14]
   run_exports:
-    - {{ pin_subpackage("arrow-cpp", max_pin="x.x") }}
+    - {{ pin_subpackage("arrow-cpp", max_pin="x.x.x") }}
 
 requirements:
   build:
@@ -25,6 +28,7 @@ requirements:
     - aws-sdk-cpp
     - boost-cpp
     - brotli
+    - bzip2
     - c-ares
     - double-conversion
     - flatbuffers
@@ -35,7 +39,7 @@ requirements:
     - clangdev 7.*
     - llvmdev 7.*
     - lz4-c
-    - numpy 1.14.*
+    - numpy 1.16.*
     - orc  # [unix]
     - python
     - rapidjson
@@ -47,8 +51,8 @@ requirements:
     - zstd
 
   run:
-    - {{ pin_compatible('numpy', lower_bound='1.14') }}
     - aws-sdk-cpp
+    - {{ pin_compatible('numpy', lower_bound='1.16') }}
     - boost-cpp
     - brotli
     - c-ares
@@ -114,5 +118,6 @@ test:
 about:
   home: http://github.com/apache/arrow
   license: Apache 2.0
-  license_file: LICENSE.txt
+  license_file:
+    - LICENSE.txt
   summary: 'C++ libraries for Apache Arrow'
