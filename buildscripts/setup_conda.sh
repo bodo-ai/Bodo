@@ -22,7 +22,7 @@ source deactivate
 
 conda remove --all -q -y -n $CONDA_ENV
 
-conda create -n $CONDA_ENV -q -y numpy scipy pandas boost cmake h5py pyarrow mpich mpi
+conda create -n $CONDA_ENV -q -y numpy scipy pandas boost-cpp cmake h5py pyarrow mpich mpi
 source activate $CONDA_ENV
 
 # install compilers
