@@ -93,6 +93,7 @@ ext_io = Extension(
         "bodo/libs/_distributed.h",
         "bodo/libs/_import_py.h",
         "bodo/io/_csv.h",
+        "bodo/io/_file_reader.h",
         "bodo/libs/_datetime_ext.h",
     ],
     libraries=io_libs,

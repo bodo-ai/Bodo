@@ -27,22 +27,11 @@
 
 #include <Python.h>
 #include "structmember.h"
-
+#include "_file_reader.h"
 
 
 #define CHECK(expr, msg) if(!(expr)){std::cerr << "Error in csv_read: " << msg << std::endl;}
 
-// File reader abstraction to enable pluging in multiple data sources and file formats
-class FileReader
-{
-public:
-    const char *fname;
-    FileReader(const char *_fname) : fname(_fname) {}
-    virtual uint64_t getSize() = 0;
-    virtual bool seek(int64_t pos) = 0;
-    virtual bool ok() = 0;
-    virtual bool read(char *s, int64_t size) = 0;
-};
 
 // read local files
 // currently using ifstream, TODO: benchmark Arrow's LocalFS
