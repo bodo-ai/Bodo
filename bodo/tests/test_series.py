@@ -6,7 +6,6 @@ import pandas as pd
 import numpy as np
 import random
 import string
-import pyarrow.parquet as pq
 import numba
 import numba.targets.ufunc_db
 import bodo
@@ -2456,7 +2455,7 @@ class TestSeries(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "kde.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             S = df.points
             return S.nlargest(4)
 
@@ -2495,7 +2494,7 @@ class TestSeries(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "kde.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             S = df.points
             return S.nsmallest(4)
 
@@ -2570,7 +2569,7 @@ class TestSeries(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "kde.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             S = df.points
             return S.median()
 
@@ -2581,7 +2580,7 @@ class TestSeries(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "kde.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             S = df.points
             return S.argsort().values
 
@@ -2636,7 +2635,7 @@ class TestSeries(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "kde.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             S = df.points
             return S.sort_values()
 

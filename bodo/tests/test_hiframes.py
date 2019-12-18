@@ -6,7 +6,6 @@ import pandas as pd
 import numpy as np
 import random
 import string
-import pyarrow.parquet as pq
 import numba
 import bodo
 from bodo import hiframes
@@ -232,7 +231,7 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             return df.four.nunique()
 
         bodo_func = bodo.jit(test_impl)
@@ -260,7 +259,7 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             return df.two.nunique()
 
         bodo_func = bodo.jit(test_impl)
@@ -286,7 +285,7 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             return (df.four.unique() == 3.0).sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -307,7 +306,7 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             return (df.two.unique() == "foo").sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -642,8 +641,8 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df1 = pq.read_table(fname).to_pandas()
-            df2 = pq.read_table(fname).to_pandas()
+            df1 = pd.read_parquet(fname)
+            df2 = pd.read_parquet(fname)
             A3 = pd.concat([df1, df2])
             return (A3.two == "foo").sum()
 
@@ -671,8 +670,8 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df1 = pq.read_table(fname).to_pandas()
-            df2 = pq.read_table(fname).to_pandas()
+            df1 = pd.read_parquet(fname)
+            df2 = pd.read_parquet(fname)
             A3 = pd.concat([df1.two, df2.two])
             return (A3 == "foo").sum()
 
