@@ -105,6 +105,21 @@ ext_io = Extension(
     language="c++",
 )
 
+
+ext_s3 = Extension(
+    name="bodo.io.s3_reader",
+    sources=["bodo/io/_s3_reader.cpp"],
+    depends=["bodo/io/_file_reader.h"],
+    libraries=["arrow"],
+    include_dirs=ind + np_compile_args["include_dirs"],
+    library_dirs=lid,
+    define_macros=[],
+    extra_compile_args=eca,
+    extra_link_args=ela,
+    language="c++",
+)
+
+
 ext_hdf5 = Extension(
     name="bodo.io._hdf5",
     sources=["bodo/io/_hdf5.cpp"],
@@ -238,7 +253,9 @@ ext_xenon_wrapper = Extension(
     extra_link_args=ela,
 )
 
-_ext_mods = [ext_hdist, ext_dict, ext_str, ext_quantile, ext_dt, ext_io, ext_arr]
+_ext_mods = [ext_hdist, ext_dict, ext_str, ext_quantile, ext_dt, ext_io, ext_arr,
+    ext_s3
+]
 
 if _has_h5py:
     _ext_mods.append(ext_hdf5)

@@ -447,15 +447,37 @@ static PyObject* csv_chunk_reader(FileReader * f, size_t fsz, bool is_parallel, 
 }
 
 
+typedef FileReader* (*s3_reader_init_t)(const char*);
+
+
 // taking a file to create a istream and calling csv_chunk_reader
 extern "C" PyObject* csv_file_chunk_reader(const char * fname, bool is_parallel, int64_t skiprows, int64_t nrows)
 {
     CHECK(fname != NULL, "NULL filename provided.");
-    // get total file-size
-    LocalFileReader *lf_reader = new LocalFileReader(fname);
-    auto fsz = lf_reader->getSize();
-    CHECK(lf_reader->ok(), "could not open file.");
-    return csv_chunk_reader(lf_reader, fsz, is_parallel, skiprows, nrows);
+    uint64_t fsz = -1;
+
+    // get reader and total file-size
+    FileReader *f_reader;
+
+    // load s3_reader module if path starts with s3://
+    char* s3_prefix = "s3://";
+    if (strncmp(s3_prefix, fname, strlen(s3_prefix)) == 0)
+    {
+        PyObject* s3_mod = PyImport_ImportModule("bodo.io.s3_reader");
+        CHECK(s3_mod, "importing bodo.io.s3_reader module failed");
+        PyObject* func_obj = PyObject_GetAttrString(s3_mod, "init_s3_reader");
+        CHECK(func_obj, "getting s3_reader func_obj failed");
+        s3_reader_init_t func = (s3_reader_init_t)PyNumber_AsSsize_t(func_obj, NULL);
+        f_reader = func(fname + strlen(s3_prefix));
+    }
+    else
+    {
+        f_reader = new LocalFileReader(fname);
+        CHECK(f_reader->ok(), "could not open file.");
+    }
+    // TODO: support other file systems like HDFS
+    fsz = f_reader->getSize();
+    return csv_chunk_reader(f_reader, fsz, is_parallel, skiprows, nrows);
 }
 
 
