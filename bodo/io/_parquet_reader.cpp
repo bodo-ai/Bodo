@@ -1,4 +1,5 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
+#include <Python.h>
 #include <cmath>
 #include <cstring>
 #include <iostream>
@@ -36,6 +37,11 @@ inline void convertArrowToDT64(const uint8_t* buff, uint8_t* out_data,
                                int64_t rows_to_skip, int64_t rows_to_read);
 void append_bits_to_vec(std::vector<bool>* null_vec, const uint8_t* null_buff,
                         int64_t null_size, int64_t offset, int64_t num_values);
+
+#define CHECK(expr, msg) if(!(expr)){std::cerr << "Error in parquet reader: " << msg << std::endl;}
+
+typedef void (*s3_opener_t)(const char*, std::shared_ptr<::arrow::io::RandomAccessFile>*);
+
 
 #define PQ_DT64_TYPE 3  // using INT96 value as dt64, TODO: refactor
 #define kNanosecondsInDay 86400000000000LL  // TODO: reuse from type_traits.h
@@ -548,6 +554,22 @@ void pq_init_reader(const char* file_name,
         std::unique_ptr<FileReader> arrow_reader;
         FileReader::Make(pool, ParquetFileReader::Open(file), &arrow_reader);
         *a_reader = std::move(arrow_reader);
+    } else if (f_name.find("s3://") == 0) {
+        std::unique_ptr<FileReader> arrow_reader;
+        std::shared_ptr<::arrow::io::RandomAccessFile> file;
+        // remove s3://
+        f_name = f_name.substr(strlen("s3://"));
+        // get s3 opener function
+        PyObject* s3_mod = PyImport_ImportModule("bodo.io.s3_reader");
+        CHECK(s3_mod, "importing bodo.io.s3_reader module failed");
+        PyObject* func_obj = PyObject_GetAttrString(s3_mod, "s3_open_file");
+        CHECK(func_obj, "getting s3_reader func_obj failed");
+        s3_opener_t s3_open_file = (s3_opener_t)PyNumber_AsSsize_t(func_obj, NULL);
+        // open Parquet file
+        s3_open_file(f_name.c_str(), &file);
+        // create Arrow reader
+        FileReader::Make(pool, ParquetFileReader::Open(file), &arrow_reader);
+        *a_reader = std::move(arrow_reader);
     } else  // regular file system
     {
         std::unique_ptr<FileReader> arrow_reader;
@@ -635,3 +657,5 @@ void pack_null_bitmap(uint8_t** out_nulls, std::vector<bool>& null_vec,
     } else
         *out_nulls = nullptr;
 }
+
+#undef CHECK
