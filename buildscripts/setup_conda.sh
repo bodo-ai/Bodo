@@ -34,8 +34,8 @@ else
     echo "Error in compiler install"
 fi
 
-$CONDA_INSTALL -c conda-forge pyarrow=0.15.* 
-$CONDA_INSTALL numba=0.46.0
+$CONDA_INSTALL -c bodo.ai -c conda-forge pyarrow=0.15.1 arrow-cpp=0.15.1=*transfer_s3*
+$CONDA_INSTALL -c conda-forge numba=0.46.0
 $CONDA_INSTALL -c conda-forge hdf5=*=*mpich*
 
 if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi

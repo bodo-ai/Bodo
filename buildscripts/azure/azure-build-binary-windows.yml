@@ -36,7 +36,7 @@ jobs:
       source activate bodo_build
       cd buildscripts/bodo-conda-recipe/
       export TRIAL_PERIOD=$(TRIAL_PERIOD)
-      conda build . -c defaults -c conda-forge -c intel --no-test
+      conda build . -c bodo.ai -c conda-forge -c intel --no-test
     displayName: 'Conda build Bodo'
 
   - bash: |

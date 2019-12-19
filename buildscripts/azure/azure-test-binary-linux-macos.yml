@@ -39,7 +39,7 @@ jobs:
       export PATH=$HOME/miniconda3/bin:${PATH}
       conda create -y -n BODOENV
       source activate BODOENV
-      conda install -y h5py scipy bodo -c file://$(HOME)/bodo-inc/bodo-inc/ -c defaults -c conda-forge
+      conda install -y h5py scipy bodo -c file://$(HOME)/bodo-inc/bodo-inc/ -c bodo.ai -c conda-forge
     displayName: 'Install Bodo from conda'
   - script: |
       cd $HOME/bodo-inc
