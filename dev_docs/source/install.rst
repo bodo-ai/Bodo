@@ -12,11 +12,11 @@ such as Numba on Ubuntu Linux::
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
-    conda create -n DEV numpy scipy pandas boost cmake h5py pyarrow mpich mpi
+    conda create -n DEV numpy scipy pandas boost-cpp cmake h5py pyarrow mpich mpi
     source activate DEV
     # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64
-    conda install -c defaults numba
+    conda install numba
     conda install -c defaults -c conda-forge hdf5=*=*mpich*
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
@@ -171,14 +171,14 @@ Building from Source on Windows
 * Start 'Anaconda (Miniconda3) prompt'
 * Setup the Conda environment in Anaconda Prompt::
 
-    conda create -n DEV numpy scipy pandas boost cmake h5py pyarrow
+    conda create -n DEV numpy scipy pandas boost-cpp cmake h5py pyarrow
     source activate DEV
     conda install -c defaults numba
     conda install vc vs2015_runtime vs2015_win-64
     conda install -c defaults -c intel impi_rt impi-devel
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
-    # build Bodo 
+    # build Bodo
     # For later HDF5 support: set HDF5_DIR=%CONDA_PREFIX%\Library
     python setup.py develop
 
