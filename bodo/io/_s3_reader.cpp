@@ -9,6 +9,33 @@
 
 #define CHECK_ARROW(expr, msg) if(!(expr.ok())){std::cerr << "Error in arrow s3 csv_read: " << msg << " " << expr <<std::endl;}
 
+
+
+std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs()
+{
+    std::shared_ptr<arrow::fs::S3FileSystem> fs;
+    arrow::Status status;
+
+    // initialize S3 APIs
+    arrow::fs::S3GlobalOptions g_options;
+    // g_options.log_level = arrow::fs::S3LogLevel::Trace;
+    status = arrow::fs::InitializeS3(g_options);
+    CHECK_ARROW(status, "InitializeS3");
+
+    // get S3FileSystem
+    arrow::fs::S3Options options = arrow::fs::S3Options::Defaults();
+    char* default_region = std::getenv("AWS_DEFAULT_REGION");
+    // TODO: handle regions properly
+    if (default_region)
+        options.region = std::string(default_region);
+    else
+        std::cerr << "Warning: AWS_DEFAULT_REGION environment variable not found. Region defaults to 'us-east-1' currently." <<std::endl;
+    status = arrow::fs::S3FileSystem::Make(options, &fs);
+    CHECK_ARROW(status, "S3FileSystem::Make");
+    return std::move(fs);
+}
+
+
 // read S3 files using Arrow 0.15
 class S3FileReader : public FileReader
 {
@@ -17,23 +44,7 @@ public:
     std::shared_ptr<arrow::fs::S3FileSystem> fs;
     arrow::Status status;
     S3FileReader(const char *_fname) : FileReader(_fname) {
-        // initialize S3 APIs
-        arrow::fs::S3GlobalOptions g_options;
-        // g_options.log_level = arrow::fs::S3LogLevel::Trace;
-        status = arrow::fs::InitializeS3(g_options);
-        CHECK_ARROW(status, "InitializeS3");
-
-        // get S3FileSystem
-        arrow::fs::S3Options options = arrow::fs::S3Options::Defaults();
-        char* default_region = std::getenv("AWS_DEFAULT_REGION");
-        // TODO: issue warning when region is not specified?
-        if (default_region)
-            options.region = std::string(default_region);
-        else
-            std::cerr << "Warning: AWS_DEFAULT_REGION environment variable not found. Region defaults to 'us-east-1' currently." <<std::endl;
-        status = arrow::fs::S3FileSystem::Make(options, &fs);
-        CHECK_ARROW(status, "S3FileSystem::Make");
-
+        fs = get_s3_fs();
         // open file
         status = fs->OpenInputFile(std::string(_fname), &s3_file);
         CHECK_ARROW(status, "S3FileSystem::OpenInputFile");
@@ -73,6 +84,13 @@ FileReader *init_s3_reader(const char *fname)
 }
 
 
+std::shared_ptr<arrow::fs::S3FileSystem> init_s3_fs(const char *fname)
+{
+    std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs();
+    return std::move(fs);
+}
+
+
 PyMODINIT_FUNC PyInit_s3_reader(void) {
     PyObject *m;
     static struct PyModuleDef moduledef = {
@@ -83,6 +101,8 @@ PyMODINIT_FUNC PyInit_s3_reader(void) {
 
     PyObject_SetAttrString(m, "init_s3_reader",
                            PyLong_FromVoidPtr((void *)(&init_s3_reader)));
+    PyObject_SetAttrString(m, "init_s3_fs",
+                        PyLong_FromVoidPtr((void *)(&init_s3_fs)));
 
     return m;
 }
