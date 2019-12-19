@@ -1009,8 +1009,6 @@ array_info* RetrieveArray(
         if (pairLRcolumn.first != -1) return {shift1, pairLRcolumn.first};
         return {shift2, pairLRcolumn.second};
     };
-    //  std::cout << "shift1=" << shift1 << " shift2=" << shift2 << "
-    //  ChoiceColumn=" << ChoiceColumn << "\n";
     // eshift is the in_table index used for the determination
     // of arr_type and dtype of the returned column.
     size_t eshift;
@@ -1037,8 +1035,6 @@ array_info* RetrieveArray(
             ListSizes[iRow] = size;
             n_chars += size;
         }
-        //    std::cout << "RetrieveArray, step 2.1 nRowOut=" << nRowOut << "
-        //    n_chars=" << n_chars << "\n";
         out_arr =
             alloc_array(nRowOut, n_chars, in_table->columns[eshift]->arr_type,
                         in_table->columns[eshift]->dtype, 0);
@@ -1109,7 +1105,6 @@ array_info* RetrieveArray(
         out_arr = alloc_array(nRowOut, -1, in_table->columns[eshift]->arr_type,
                               in_table->columns[eshift]->dtype, 0);
         uint64_t siztype = numpy_item_size[in_table->columns[eshift]->dtype];
-        //    std::cout << "siztype=" << siztype << "\n";
         std::vector<char> vectNaN =
             RetrieveNaNentry(in_table->columns[eshift]->dtype);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
@@ -1224,8 +1219,16 @@ bool TestEqual(std::vector<array_info*> const& columns, size_t const& n_key,
     return true;
 };
 
+/**
+ * The comparison function for integer types.
+ *
+ * @param ptr1: char* pointer to the first value
+ * @param ptr2: char* pointer to the second value
+ * @param na_position: true for NaN being last, false for NaN being first (not used)
+ * @return 1 if *ptr1 < *ptr2
+ */
 template <typename T>
-int NumericComparison_T(char* ptr1, char* ptr2) {
+inline typename std::enable_if<!std::is_floating_point<T>::value,int>::type NumericComparison_T(char* ptr1, char* ptr2, bool const& na_position) {
     T* ptr1_T = (T*)ptr1;
     T* ptr2_T = (T*)ptr2;
     if (*ptr1_T > *ptr2_T) return -1;
@@ -1233,28 +1236,69 @@ int NumericComparison_T(char* ptr1, char* ptr2) {
     return 0;
 }
 
+/**
+ * The comparison function for floating points.
+ * If na_position = True then the NaN are considered larger than any other.
+ *
+ * @param ptr1: char* pointer to the first value
+ * @param ptr2: char* pointer to the second value
+ * @param na_position: true for NaN being larger, false for NaN being smallest
+ * @return 1 if *ptr1 < *ptr2
+ */
+template <typename T>
+inline typename std::enable_if<std::is_floating_point<T>::value,int>::type NumericComparison_T(char* ptr1, char* ptr2, bool const& na_position) {
+    T* ptr1_T = (T*)ptr1;
+    T* ptr2_T = (T*)ptr2;
+    T val1 = *ptr1_T;
+    T val2 = *ptr2_T;
+    if (isnan(val1) && isnan(val2)) return 0;
+    if (isnan(val2)) {
+      if (na_position)
+        return 1;
+      return -1;
+    }
+    if (isnan(val1)) {
+      if (na_position)
+        return -1;
+      return 1;
+    }
+    if (val1 > val2) return -1;
+    if (val1 < val2) return 1;
+    return 0;
+}
+
+
+/**
+ * The comparison function for innteger/floating point
+ * If na_position = True then the NaN are considered larger than any other.
+ *
+ * @param ptr1: char* pointer to the first value
+ * @param ptr2: char* pointer to the second value
+ * @param na_position: true for NaN being last, false for NaN being first
+ * @return 1 if *ptr1 < *ptr2
+ */
 int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
-                      char* ptr2) {
+                      char* ptr2, bool const& na_position) {
     if (dtype == Bodo_CTypes::INT8)
-        return NumericComparison_T<int8_t>(ptr1, ptr2);
+        return NumericComparison_T<int8_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT8)
-        return NumericComparison_T<uint8_t>(ptr1, ptr2);
+        return NumericComparison_T<uint8_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::INT16)
-        return NumericComparison_T<int16_t>(ptr1, ptr2);
+        return NumericComparison_T<int16_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT16)
-        return NumericComparison_T<uint16_t>(ptr1, ptr2);
+        return NumericComparison_T<uint16_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::INT32)
-        return NumericComparison_T<int32_t>(ptr1, ptr2);
+        return NumericComparison_T<int32_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT32)
-        return NumericComparison_T<uint32_t>(ptr1, ptr2);
+        return NumericComparison_T<uint32_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::INT64)
-        return NumericComparison_T<int64_t>(ptr1, ptr2);
+        return NumericComparison_T<int64_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT64)
-        return NumericComparison_T<uint64_t>(ptr1, ptr2);
+        return NumericComparison_T<uint64_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::FLOAT32)
-        return NumericComparison_T<float>(ptr1, ptr2);
+        return NumericComparison_T<float>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::FLOAT64)
-        return NumericComparison_T<double>(ptr1, ptr2);
+        return NumericComparison_T<double>(ptr1, ptr2, na_position);
     PyErr_SetString(PyExc_RuntimeError,
                     "Invalid dtype put on input to NumericComparison");
     return 0;
@@ -1274,12 +1318,13 @@ int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
  * @param iRow1 the row of the first key
  * @param shift_key2 the column for the second key
  * @param iRow2 the row of the second key
+ * @param na_position: if true NaN values are largest, if false smallest.
  * @return 1 if (shift_key1,iRow1) < (shift_key2,iRow2) , -1 is > and 0 if =
  */
 int KeyComparisonAsPython(std::vector<array_info*> const& columns,
                           size_t const& n_key, size_t const& shift_key1,
                           size_t const& iRow1, size_t const& shift_key2,
-                          size_t const& iRow2) {
+                          size_t const& iRow2, bool const& na_position) {
     // iteration over the list of key for the comparison.
     for (size_t iKey = 0; iKey < n_key; iKey++) {
         if (columns[shift_key1 + iKey]->arr_type == bodo_array_type::NUMPY) {
@@ -1288,7 +1333,7 @@ int KeyComparisonAsPython(std::vector<array_info*> const& columns,
             char* ptr1 = columns[shift_key1 + iKey]->data1 + (siztype * iRow1);
             char* ptr2 = columns[shift_key2 + iKey]->data1 + (siztype * iRow2);
             int test = NumericComparison(columns[shift_key1 + iKey]->dtype,
-                                         ptr1, ptr2);
+                                         ptr1, ptr2, na_position);
             if (test != 0) return test;
         }
         if (columns[shift_key1 + iKey]->arr_type ==
@@ -1302,8 +1347,14 @@ int KeyComparisonAsPython(std::vector<array_info*> const& columns,
             bool bit2 = GetBit(null_bitmask2, iRow2);
             // If one bitmask is T and the other the reverse then they are
             // clearly not equal.
-            if (bit1 && !bit2) return 1;
-            if (!bit1 && bit2) return -1;
+            if (bit1 && !bit2) {
+              if (na_position) return 1;
+              return -1;
+            }
+            if (!bit1 && bit2) {
+              if (na_position) return -1;
+              return 1;
+            }
             // If both bitmasks are false, then it does not matter what value
             // they are storing. Comparison is the same as for NUMPY.
             if (bit1) {
@@ -1314,7 +1365,7 @@ int KeyComparisonAsPython(std::vector<array_info*> const& columns,
                 char* ptr2 =
                     columns[shift_key2 + iKey]->data1 + (siztype * iRow2);
                 int test = NumericComparison(columns[shift_key1 + iKey]->dtype,
-                                             ptr1, ptr2);
+                                             ptr1, ptr2, na_position);
                 if (test != 0) return test;
             }
         }
@@ -1327,8 +1378,14 @@ int KeyComparisonAsPython(std::vector<array_info*> const& columns,
             bool bit1 = GetBit(null_bitmask1, iRow1);
             bool bit2 = GetBit(null_bitmask2, iRow2);
             // If bitmasks are different then we can conclude the comparison
-            if (bit1 && !bit2) return 1;
-            if (!bit1 && bit2) return -1;
+            if (bit1 && !bit2) {
+              if (na_position) return 1;
+              return -1;
+            }
+            if (!bit1 && bit2) {
+              if (na_position) return -1;
+              return 1;
+            }
             // If bitmasks are both false, then no need to compare the string
             // values.
             if (bit1) {
@@ -1428,13 +1485,11 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
     size_t n_rows_left = (size_t)in_table->columns[0]->length;
     size_t n_rows_right = (size_t)in_table->columns[n_tot_left]->length;
     //
-    //  std::cout << "hash_join_table, step 2\n";
     std::vector<array_info*> key_arrs_left = std::vector<array_info*>(
         in_table->columns.begin(), in_table->columns.begin() + n_key);
     uint32_t seed = 0xb0d01288;
     uint32_t* hashes_left = hash_keys(key_arrs_left, seed);
 
-    //  std::cout << "hash_join_table, step 3\n";
     std::vector<array_info*> key_arrs_right = std::vector<array_info*>(
         in_table->columns.begin() + n_tot_left,
         in_table->columns.begin() + n_tot_left + n_key);
@@ -1515,7 +1570,6 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
      * @return true/false depending on equality or not.
      */
     auto equal_fct = [&](size_t const& iRowA, size_t const& iRowB) -> bool {
-        //    std::cout << "Beginning of function f\n";
         size_t jRowA, jRowB;
         size_t shift_A, shift_B;
         if (iRowA < short_table_rows) {
@@ -1525,7 +1579,6 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
             shift_A = long_table_shift;
             jRowA = iRowA - short_table_rows;
         }
-        //    std::cout << "hash_A=" << hash_A << "\n";
         if (iRowB < short_table_rows) {
             shift_B = short_table_shift;
             jRowB = iRowB;
@@ -3309,14 +3362,16 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
  * @param input table
  * @param number of key columns in the table used for the comparison
  * @param ascending, whether to sort ascending or not
+ * @param na_position, true corresponds to last, false to first
  */
 table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
-                              bool ascending) {
+                              bool ascending, bool na_position) {
     size_t n_rows = (size_t)in_table->nrows();
     size_t n_cols = (size_t)in_table->ncols();
     size_t n_key = size_t(n_key_t);
 #undef DEBUG_SORT
 #ifdef DEBUG_SORT
+    std::cout << "ascending=" << ascending << " na_position=" << na_position << "\n";
     std::cout << "INPUT:\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     DEBUG_PrintRefct(std::cout, in_table->columns);
@@ -3325,11 +3380,15 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 #endif
     std::vector<size_t> V(n_rows);
     for (size_t i = 0; i < n_rows; i++) V[i] = i;
+    na_position = (!na_position) ^ ascending;
+#ifdef DEBUG_SORT
+    std::cout << "PROCESS: na_position=" << na_position << "\n";
+#endif
     std::function<bool(size_t, size_t)> f = [&](size_t const& iRow1,
                                                 size_t const& iRow2) -> bool {
         size_t shift_key1 = 0, shift_key2 = 0;
         int value = KeyComparisonAsPython(in_table->columns, n_key, shift_key1,
-                                          iRow1, shift_key2, iRow2);
+                                          iRow1, shift_key2, iRow2, na_position);
         if (ascending) {
             return value > 0;
         }

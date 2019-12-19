@@ -1961,7 +1961,7 @@ def sort_values_overload(
     ):  # pragma: no cover
 
         return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
-            df, by, ascending, inplace
+            df, by, ascending, inplace, na_position
         )
 
     return _impl
@@ -2024,20 +2024,27 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
             )
         )
 
-    # make sure 'na_position' is not specified
-    if na_position != "last":
-        raise BodoError("sort_values(): na_position is not currently supported.")
+    # make sure 'na_position' is correctly specified
+    if not is_overload_constant_str(na_position):
+        raise BodoError(
+            "sort_values(): na_position parameter must be a literal constant of type str, not "
+            "{na_position}".format(na_position=type(na_position))
+        )
+
+    na_position = get_overload_const_str(na_position)
+    if na_position not in ["first", "last"]:
+        raise BodoError("sort_values(): na_position should either be 'first' or 'last'")
 
 
-def sort_values_dummy(df, by, ascending, inplace):  # pragma: no cover
-    return df.sort_values(by, ascending=ascending, inplace=inplace)
+def sort_values_dummy(df, by, ascending, inplace, na_position):  # pragma: no cover
+    return df.sort_values(by, ascending=ascending, inplace=inplace, na_position=na_position)
 
 
 @infer_global(sort_values_dummy)
 class SortDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        df, by, ascending, inplace = args
+        df, by, ascending, inplace, na_position = args
 
         # inplace value
         if isinstance(inplace, bodo.utils.utils.BooleanLiteral):
@@ -2097,7 +2104,7 @@ def sort_index_overload(
     ):  # pragma: no cover
 
         return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
-            df, "$_bodo_index_", ascending, inplace
+            df, "$_bodo_index_", ascending, inplace, na_position
         )
 
     return _impl

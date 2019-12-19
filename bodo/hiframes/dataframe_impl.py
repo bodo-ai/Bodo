@@ -1139,7 +1139,7 @@ def sort_values_inplace_overload(
     ):
 
         new_df = bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
-            df, by, ascending, inplace
+            df, by, ascending, inplace, na_position
         )
         return new_df, None
 

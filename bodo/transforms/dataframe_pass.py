@@ -1079,10 +1079,11 @@ class DataFramePass(object):
         return f_ir.blocks
 
     def _run_call_df_sort_values(self, assign, lhs, rhs):
-        df_var, by_var, ascending_var, inplace_var = rhs.args
+        df_var, by_var, ascending_var, inplace_var, na_position_var = rhs.args
         df_typ = self.typemap[df_var.name]
         ascending = guard(find_const, self.func_ir, ascending_var)
         inplace = guard(find_const, self.func_ir, inplace_var)
+        na_position = guard(find_const, self.func_ir, na_position_var)
 
         # find key array for sort ('by' arg)
         key_names = self._get_const_or_list(by_var)
@@ -1140,6 +1141,7 @@ class DataFramePass(object):
                 inplace,
                 lhs.loc,
                 ascending,
+                na_position,
             )
         )
 
