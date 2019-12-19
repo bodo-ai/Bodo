@@ -389,3 +389,68 @@ def test_flatten2():
         ["AB  CC", "C ABB  D", "CAD", "CA\tD", "AA\t\tD"], [3, 1, 2, 0, 4], name="A"
     )
     check_func(impl, (S,))
+
+
+def test_join():
+    """test the functionality of bodo's join with NaN
+    """
+
+    def test_impl(S):
+        return S.str.join("-")
+
+    S = pd.Series(
+        [
+            [
+                "AAAAAA",
+                "BERQBBBBB",
+                "1111ASDDDDDDD11",
+                "222222TTTTTTT",
+                "CCCQWEQWEQWEQWEWQEQWEQWECCC",
+            ],
+            np.nan,
+            ["KKKKKK", "LALLLLL", "MMMQWEMMM", "APPQWEQWEPPP", "!@###@@^%$%$#"],
+            np.nan,
+            ["1234567", "QWERQWER", "HAPPYCODING", "%)(*&&*())", "{}_)(*#(#))"],
+        ]
+    )
+    check_func(test_impl, (S,))
+
+
+@pytest.fixture(
+    params=[
+        pd.Series(["ABCDEFGH"]),
+        pd.Series(["A)(*&@#$)"]),
+        pd.Series("ABCDEFGH"),
+        pd.Series("123456789" * 5),
+        pd.Series(["ABCDEFGH"] * 1000),
+    ]
+)
+def test_sr(request):
+    return request.param
+
+
+def test_join_string(test_sr):
+    """test the functionality of bodo's join with just a string
+    """
+
+    def test_impl(test_sr):
+        return test_sr.str.join("-")
+
+    def test_impl2(test_sr):
+        return test_sr.str.join("*****************")
+
+    check_func(test_impl, (test_sr,))
+    check_func(test_impl2, (test_sr,))
+
+
+def test_join_splitview():
+    """test the functionality of bodo's join with split view type as an input
+    """
+
+    def test_impl(S):
+        B = S.str.split(",")
+        return B.str.join("-")
+
+    S = pd.Series(["AB,CC", "C,ABB,D", "LLL,JJ", "C,D", "C,ABB,D"], name="A")
+
+    check_func(test_impl, (S,))

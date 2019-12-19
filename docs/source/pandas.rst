@@ -242,6 +242,7 @@ String handling:
 * :meth:`Series.str.endswith`
 * :meth:`Series.str.find`
 * :meth:`Series.str.get`
+* :meth:`Series.str.join`
 * :meth:`Series.str.len`
 * :meth:`Series.str.ljust`
 * :meth:`Series.str.lower`
