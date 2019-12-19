@@ -1,0 +1,432 @@
+import pandas as pd
+import numpy as np
+import numba
+import bodo
+from bodo.utils.typing import BodoError
+import pytest
+
+
+@pytest.fixture(params=[pd.Series(["New_York", "Lisbon", "Tokyo", "Paris", "Munich"])])
+def test_sr(request):
+    return request.param
+
+
+# ------------------------------ center() ------------------------------ #
+def test_center_fillchar_nonchar(test_sr):
+    """
+    tests error for center with the argument 'fillchar' being non-char type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.center(width=13, fillchar=1)
+
+    def impl2(test_sr):
+        return test_sr.str.center(width=13, fillchar="**")
+
+    with pytest.raises(BodoError, match="fillchar must be a character, not"):
+        bodo.jit(impl)(test_sr)
+    with pytest.raises(BodoError, match="fillchar must be a character, not"):
+        bodo.jit(impl2)(test_sr)
+
+
+def test_center_width_noint(test_sr):
+    """
+    tests error for center with the argument 'width' being non-integer type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.center(width="1", fillchar="*")
+
+    with pytest.raises(BodoError, match="expected an int object"):
+        bodo.jit(impl)(test_sr)
+
+
+# ------------------------------ ljust() ------------------------------ #
+def test_ljust_fillchar_nonchar(test_sr):
+    """
+    tests error for ljust with the argument 'fillchar' being non-char type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.ljust(width=13, fillchar=1)
+
+    def impl2(test_sr):
+        return test_sr.str.ljust(width=13, fillchar="**")
+
+    with pytest.raises(BodoError, match="fillchar must be a character, not"):
+        bodo.jit(impl)(test_sr)
+    with pytest.raises(BodoError, match="fillchar must be a character, not"):
+        bodo.jit(impl2)(test_sr)
+
+
+def test_ljust_width_noint(test_sr):
+    """
+    tests error for ljust with the argument 'width' being non-integer type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.ljust(width="1", fillchar="*")
+
+    with pytest.raises(BodoError, match="expected an int object"):
+        bodo.jit(impl)(test_sr)
+
+
+# ------------------------------ rjust() ------------------------------ #
+def test_rjust_fillchar_nonchar(test_sr):
+    """
+    tests error for rjust with the argument 'fillchar' being non-char type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.rjust(width=13, fillchar=1)
+
+    def impl2(test_sr):
+        return test_sr.str.rjust(width=13, fillchar="**")
+
+    with pytest.raises(BodoError, match="fillchar must be a character, not"):
+        bodo.jit(impl)(test_sr)
+    with pytest.raises(BodoError, match="fillchar must be a character, not"):
+        bodo.jit(impl2)(test_sr)
+
+
+def test_rjust_width_noint(test_sr):
+    """
+    tests error for rjust with the argument 'width' being non-integer type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.rjust(width="1", fillchar="*")
+
+    with pytest.raises(BodoError, match="expected an int object"):
+        bodo.jit(impl)(test_sr)
+
+
+# ------------------------------ zfill() ------------------------------ #
+def test_zfill_width_noint(test_sr):
+    """
+    tests error for zfill with the argument 'width' being non-integer type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.zfill(width="1")
+
+    with pytest.raises(BodoError, match="expected an int object"):
+        bodo.jit(impl)(test_sr)
+
+
+# ------------------------------ pad() ------------------------------ #
+def test_pad_fillchar_nonchar(test_sr):
+    """
+    tests error for pad with the argument 'fillchar' being non-char type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.pad(width=13, fillchar=1)
+
+    def impl2(test_sr):
+        return test_sr.str.pad(width=13, fillchar="**")
+
+    with pytest.raises(BodoError, match="fillchar must be a character, not"):
+        bodo.jit(impl)(test_sr)
+    with pytest.raises(BodoError, match="fillchar must be a character, not"):
+        bodo.jit(impl2)(test_sr)
+
+
+def test_pad_width_noint(test_sr):
+    """
+    tests error for pad with the argument 'width' being non-integer type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.pad(width="1", fillchar="*")
+
+    with pytest.raises(BodoError, match="expected an int object"):
+        bodo.jit(impl)(test_sr)
+
+
+def test_pad_side_invalid(test_sr):
+    """
+    tests error for pad with the argument 'side' being invalid
+    """
+
+    def impl(test_sr):
+        return test_sr.str.pad(width=13, side="123", fillchar="*")
+
+    def impl2(test_sr):
+        return test_sr.str.pad(width=13, side=123, fillchar="*")
+
+    with pytest.raises(BodoError, match="Invalid Side"):
+        bodo.jit(impl)(test_sr)
+    with pytest.raises(BodoError, match="Invalid Side"):
+        bodo.jit(impl2)(test_sr)
+
+
+# ------------------------------ find() ------------------------------ #
+def test_find_sub(test_sr):
+    """
+    tests error for find with the argument 'sub' being non-str type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.find(123)
+
+    def impl2(test_sr):
+        return test_sr.str.find(None)
+
+    with pytest.raises(BodoError, match="expected a string object, not"):
+        bodo.jit(impl)(test_sr)
+    with pytest.raises(BodoError, match="expected a string object, not"):
+        bodo.jit(impl2)(test_sr)
+
+
+# ------------------------------ rfind() ------------------------------ #
+def test_rfind_sub(test_sr):
+    """
+    tests error for rfind with the argument 'sub' being non-str type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.rfind(123)
+
+    def impl2(test_sr):
+        return test_sr.str.rfind(None)
+
+    with pytest.raises(BodoError, match="expected a string object, not"):
+        bodo.jit(impl)(test_sr)
+    with pytest.raises(BodoError, match="expected a string object, not"):
+        bodo.jit(impl2)(test_sr)
+
+
+def test_rfind_start_end(test_sr):
+    """
+    tests error for rfind with the argument start/end NOT being integer or None type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.rfind("123", "x", 5)
+
+    def impl2(test_sr):
+        return test_sr.str.rfind("123", 5, "x")
+
+    def impl3(test_sr):
+        return test_sr.str.rfind("123", "x", "x")
+
+    with pytest.raises(BodoError, match="expected an int object, not"):
+        bodo.jit(impl)(test_sr)
+    with pytest.raises(BodoError, match="expected an int object, not"):
+        bodo.jit(impl2)(test_sr)
+    with pytest.raises(BodoError, match="expected an int object, not"):
+        bodo.jit(impl3)(test_sr)
+
+
+# ------------------------------ get() ------------------------------ #
+@pytest.mark.parametrize(
+    "input",
+    [
+        pd.Series([1, 2, 3]),
+        # pd.Series([(1, 2, 3), (3, 4, 5)])  # TODO: support unboxing Series of tuples
+    ],
+)
+def test_get_input(input):
+    """
+    tests error for get with the input series not being ListStringArrayType or
+    StringArrayType
+    """
+
+    def impl(input):
+        return input.str.get(1)
+
+    with pytest.raises(BodoError, match="only supports input type of"):
+        bodo.jit(impl)(input)
+
+
+@pytest.mark.parametrize("input", [pd.Series([["a", "b", "c"], ["aa", "bb", "cc"]])])
+def test_get_i(input):
+    """
+    tests error for get with the argument i not being int type
+    """
+
+    def impl(input):
+        return input.str.get("2")
+
+    with pytest.raises(BodoError, match="expected an int object, not"):
+        bodo.jit(impl)(input)
+
+
+# ------------------------------ getitem ------------------------------ #
+
+
+@pytest.mark.parametrize(
+    "ind",
+    ["3", 1.2],
+)
+def test_getitem_ind(ind):
+    """
+    tests error for getitem for index inputs other than slice and int
+    """
+
+    def impl(S, ind):
+        return S.str[ind]
+
+    with pytest.raises(BodoError, match="index input to Series.str"):
+        bodo.jit(impl)(pd.Series(["AA", "BB"]), ind)
+
+
+# ------------------------------ split() ------------------------------ #
+@pytest.fixture(
+    params=[
+        pd.Series(
+            [
+                "this is a regular sentence",
+                "https://docs.python.org/3/tutorial/index.html",
+                np.nan,
+            ]
+        )
+    ]
+)
+def test_sr_split(request):
+    return request.param
+
+
+def test_split_args(test_sr_split):
+    """
+    tests error for split arguments that are not supported
+    """
+
+    def impl(test_sr_split):
+        return test_sr_split.str.split(pat=None, n=2)
+
+    def impl2(test_sr_split):
+        return test_sr_split.str.split(expand=True)
+
+    with pytest.raises(BodoError, match="is not supported"):
+        bodo.jit(impl)(test_sr_split)
+    with pytest.raises(BodoError, match="is not supported"):
+        bodo.jit(impl2)(test_sr_split)
+
+
+def test_split_pat(test_sr_split):
+    """
+    tests error for split argument pat being non-str type
+    """
+
+    def impl(test_sr_split):
+        return test_sr_split.str.split(pat=123)
+
+    with pytest.raises(BodoError, match="expected a string object"):
+        bodo.jit(impl)(test_sr_split)
+
+
+# ------------------------------ replace() ------------------------------ #
+def test_replace_args(test_sr):
+    """
+    tests error for replace arguments that are not supported
+    """
+
+    def impl(test_sr):
+        return test_sr.str.replace("New", "hi", n=2)
+
+    def impl2(test_sr):
+        return test_sr.str.replace("New", "hi", case=True)
+
+    with pytest.raises(BodoError, match="is not supported"):
+        bodo.jit(impl)(test_sr)
+    with pytest.raises(BodoError, match="is not supported"):
+        bodo.jit(impl2)(test_sr)
+
+
+def test_replace_pat(test_sr):
+    """
+    tests error for replace argument pat/repl being non-str type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.replace(pat=123, repl="asdf")
+
+    def impl2(test_sr):
+        return test_sr.str.replace(pat="asdf", repl=123)
+
+    with pytest.raises(BodoError, match="expected a string object"):
+        bodo.jit(impl)(test_sr)
+    with pytest.raises(BodoError, match="expected a string object"):
+        bodo.jit(impl2)(test_sr)
+
+
+# ------------------------------ contains() ------------------------------ #
+def test_contains_args(test_sr):
+    """
+    tests error for contains arguments that are not supported
+    """
+
+    def impl(test_sr):
+        return test_sr.str.contains("New", na=np.nan)
+
+    def impl2(test_sr):
+        return test_sr.str.contains("New", case=False)
+
+    with pytest.raises(BodoError, match="is not supported"):
+        bodo.jit(impl)(test_sr)
+    with pytest.raises(BodoError, match="is not supported"):
+        bodo.jit(impl2)(test_sr)
+
+
+def test_contains_pat(test_sr):
+    """
+    tests error for contains argument pat being non-str type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.contains(pat=123)
+
+    with pytest.raises(BodoError, match="expected a string object"):
+        bodo.jit(impl)(test_sr)
+
+
+# ------------------------------ startswith() ------------------------------ #
+def test_startswith_args(test_sr):
+    """
+    tests error for startswith argument that is not supported
+    """
+
+    def impl(test_sr):
+        return test_sr.str.startswith("New", na=1)
+
+    with pytest.raises(BodoError, match="is not supported"):
+        bodo.jit(impl)(test_sr)
+
+
+def test_startswith_pat(test_sr):
+    """
+    tests error for startswith argument pat being non-str type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.startswith(123)
+
+    with pytest.raises(BodoError, match="expected a string object"):
+        bodo.jit(impl)(test_sr)
+
+
+# ------------------------------ endswith() ------------------------------ #
+def test_endswith_args(test_sr):
+    """
+    tests error for endswith argument that is not supported
+    """
+
+    def impl(test_sr):
+        return test_sr.str.endswith("New", na=1)
+
+    with pytest.raises(BodoError, match="is not supported"):
+        bodo.jit(impl)(test_sr)
+
+
+def test_endswith_pat(test_sr):
+    """
+    tests error for endswith argument pat being non-str type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.endswith(123)
+
+    with pytest.raises(BodoError, match="expected a string object"):
+        bodo.jit(impl)(test_sr)

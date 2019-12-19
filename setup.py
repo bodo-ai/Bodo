@@ -58,7 +58,10 @@ ind = [PREFIX_DIR + "/include"]
 lid = [PREFIX_DIR + "/lib"]
 #eca = ["-std=c++11", "-fsanitize=address"]
 #ela = ["-std=c++11", "-fsanitize=address"]
-eca = ["-std=c++11", "-g0", "-O3"]
+if is_win:
+    eca = ["/std=c++latest", "/O2"]
+else:
+    eca = ["-std=c++11", "-g0", "-O3"]
 ela = ["-std=c++11"]
 
 MPI_LIBS = ["mpi"]
@@ -284,6 +287,9 @@ setup(
     url="https://bodo-inc.com",
     author="Bodo",
     packages=find_packages(),
+    package_data={
+        "bodo.tests": ["data/*", "data/int_nulls_multi.pq/*", "data/sdf_dt.pq/*"]
+    },
     install_requires=["numba"],
     extras_require={"HDF5": ["h5py"], "Parquet": ["pyarrow"]},
     cmdclass=versioneer.get_cmdclass(),

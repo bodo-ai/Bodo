@@ -21,30 +21,45 @@ np.random.seed(0)
 
 @pytest.fixture(
     params=[
-        pytest.param(pd.arrays.IntegerArray(
-            np.array([1, -3, 2, 3, 10], np.int8),
-            np.array([False, True, True, False, False]),
-        ), marks=pytest.mark.slow),
+        pytest.param(
+            pd.arrays.IntegerArray(
+                np.array([1, -3, 2, 3, 10], np.int8),
+                np.array([False, True, True, False, False]),
+            ),
+            marks=pytest.mark.slow,
+        ),
         pd.arrays.IntegerArray(
             np.array([1, -3, 2, 3, 10], np.int32),
             np.array([False, True, True, False, False]),
         ),
-        pytest.param(pd.arrays.IntegerArray(
-            np.array([1, -3, 2, 3, 10], np.int64),
-            np.array([False, True, True, False, False]),
-        ), marks=pytest.mark.slow),
-        pytest.param(pd.arrays.IntegerArray(
-            np.array([1, 4, 2, 3, 10], np.uint8),
-            np.array([False, True, True, False, False]),
-        ), marks=pytest.mark.slow),
-        pytest.param(pd.arrays.IntegerArray(
-            np.array([1, 4, 2, 3, 10], np.uint32),
-            np.array([False, True, True, False, False]),
-        ), marks=pytest.mark.slow),
-        pytest.param(pd.arrays.IntegerArray(
-            np.array([1, 4, 2, 3, 10], np.uint64),
-            np.array([False, True, True, False, False]),
-        ), marks=pytest.mark.slow),
+        pytest.param(
+            pd.arrays.IntegerArray(
+                np.array([1, -3, 2, 3, 10], np.int64),
+                np.array([False, True, True, False, False]),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.arrays.IntegerArray(
+                np.array([1, 4, 2, 3, 10], np.uint8),
+                np.array([False, True, True, False, False]),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.arrays.IntegerArray(
+                np.array([1, 4, 2, 3, 10], np.uint32),
+                np.array([False, True, True, False, False]),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.arrays.IntegerArray(
+                np.array([1, 4, 2, 3, 10], np.uint64),
+                np.array([False, True, True, False, False]),
+            ),
+            marks=pytest.mark.slow,
+        ),
         # large array
         pd.arrays.IntegerArray(
             np.random.randint(0, 100, 1211), np.random.ranf(1211) < 0.3

@@ -428,6 +428,7 @@ def test_np_io4():
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
         fname = "lr_w.hdf5"
+
         def test_impl(N, D):
             points = np.ones((N, D))
             responses = np.arange(N) + 1.0

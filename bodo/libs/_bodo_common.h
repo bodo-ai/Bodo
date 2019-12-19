@@ -166,11 +166,10 @@ void allocate_string_array(uint32_t** offsets, char** data,
     (*offsets)[num_strings] =
         (uint32_t)total_size;  // in case total chars is read from here
     // allocate nulls
-    int64_t n_bytes = (num_strings + sizeof(uint8_t) - 1) / sizeof(uint8_t) +
-                      extra_null_bytes;
+    int64_t n_bytes = ((num_strings + 7) >> 3) + extra_null_bytes;
     *null_bitmap = new uint8_t[(size_t)n_bytes];
     // set all bits to 1 indicating non-null as default
-    memset(*null_bitmap, -1, n_bytes);
+    memset(*null_bitmap, 0xff, n_bytes);
     // *data = (char*) new std::string("gggg");
     return;
 }
@@ -194,11 +193,10 @@ void allocate_list_string_array(char** data, uint32_t** data_offsets, uint32_t**
         (uint32_t)num_strings;  // in case total strings is read from here
 
     // allocate nulls
-    int64_t n_bytes = (num_lists + sizeof(uint8_t) - 1) / sizeof(uint8_t) +
-                      extra_null_bytes;
+    int64_t n_bytes = ((num_lists + 7) >> 3) + extra_null_bytes;
     *null_bitmap = new uint8_t[(size_t)n_bytes];
     // set all bits to 1 indicating non-null as default
-    memset(*null_bitmap, -1, n_bytes);
+    memset(*null_bitmap, 0xff, n_bytes);
     return;
 }
 
@@ -216,6 +214,15 @@ static inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
         static_cast<uint8_t>(-static_cast<uint8_t>(bit_is_set) ^ bits[i / 8]) &
         kBitmask[i % 8];
 }
+
+static inline void InitializeBitMask(uint8_t* bits, size_t length, bool val) {
+    size_t n_bytes = (length + 7) >> 3;
+    if (!val)
+        memset(bits, 0, n_bytes);
+    else
+        memset(bits, 0xff, n_bytes);
+}
+
 }
 
 #endif /* BODO_COMMON_H_ */

@@ -42,23 +42,23 @@ _type_to_pq_dtype_number = {
 use_nullable_int_arr = False
 
 
-def read_parquet():
+def read_parquet():  # pragma: no cover
     return 0
 
 
-def read_parquet_str():
+def read_parquet_str():  # pragma: no cover
     return 0
 
 
-def read_parquet_str_parallel():
+def read_parquet_str_parallel():  # pragma: no cover
     return 0
 
 
-def read_parquet_parallel():
+def read_parquet_parallel():  # pragma: no cover
     return 0
 
 
-def get_column_size_parquet():
+def get_column_size_parquet():  # pragma: no cover
     return 0
 
 

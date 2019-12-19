@@ -26,8 +26,8 @@ bodo/utils/__pycache__
 build/
 docs/_build/
 docs/gh-pages/
-docs/development/_build/
-docs/development/gh-pages/
+dev_docs/_build/
+dev_docs/gh-pages/
 *.DS_Store
 
 # VS Code config
@@ -39,3 +39,6 @@ docs/development/gh-pages/
 # Tutorial material
 tutorial/test_bodo.py
 
+# Coverage report
+coverage.xml
+.coverage

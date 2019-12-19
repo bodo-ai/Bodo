@@ -185,9 +185,11 @@ def _test_equal(
 
     if isinstance(py_out, pd.Series):
         if sort_output:
-            py_out.sort_values(inplace=True)
+            # pandas fails if all null integer column is sorted
+            if not py_out.isnull().all():
+                py_out.sort_values(inplace=True)
+                bodo_out.sort_values(inplace=True)
             py_out.reset_index(inplace=True, drop=True)
-            bodo_out.sort_values(inplace=True)
             bodo_out.reset_index(inplace=True, drop=True)
         # fix dtype for bool Series with no NA
         if is_bool_object_series(py_out) and not py_out.hasnans:
@@ -221,20 +223,10 @@ def _test_equal(
         if sort_output:
             py_out.sort()
             bodo_out.sort()
-        # assert_array_equal throws Zero Division error for bool arrays with NA
-        # also, does not handle nan in list of string arrays for some reason
-        # using custom code instead
-        if is_bool_object_series(py_out) or is_list_str_object_series(py_out):
-            assert is_bool_object_series(bodo_out) or is_list_str_object_series(
-                bodo_out
-            )
-            assert len(py_out) == len(bodo_out)
-            for i in range(len(py_out)):
-                assert (
-                    isinstance(py_out[i], float)
-                    and np.isnan(py_out[i])
-                    and np.isnan(bodo_out[i])
-                ) or py_out[i] == bodo_out[i]
+        # use tester of Pandas for array of objects since Numpy doesn't handle np.nan
+        # properly
+        if py_out.dtype == np.dtype("O") and bodo_out.dtype == np.dtype("O"):
+            pd.testing.assert_series_equal(pd.Series(py_out), pd.Series(bodo_out))
         else:
             np.testing.assert_array_equal(bodo_out, py_out)
     elif isinstance(py_out, pd.arrays.IntegerArray):

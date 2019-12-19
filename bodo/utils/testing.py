@@ -5,12 +5,12 @@ import bodo
 
 
 @bodo.jit
-def get_rank():
+def get_rank():  # pragma: no cover
     return bodo.libs.distributed_api.get_rank()
 
 
 @bodo.jit
-def barrier():
+def barrier():  # pragma: no cover
     return bodo.libs.distributed_api.barrier()
 
 

@@ -415,10 +415,55 @@ def test_dist_tuple2():
     assert count_array_OneDs() > 0
 
 
+def test_dist_tuple3():
+    """Make sure passing a dist tuple with non-dist elements doesn't cause REP
+    """
+
+    def impl1(v):
+        (_, df) = v
+        return df
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    v = (n, df)
+    bodo.jit(distributed={"v", "df"})(impl1)(v)
+    assert count_array_OneDs() > 0
+
+
+def test_dist_list1():
+    """Test support for build_list of dist data
+    """
+
+    def impl1(df):
+        v = [(1, df)]
+        return v
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    bodo.jit(distributed={"v", "df"})(impl1)(df)
+    assert count_array_OneDs() > 0
+
+
+def test_dist_list_append():
+    """Test support for list.append of dist data
+    """
+
+    def impl1(df):
+        v = [(1, df)]
+        v.append((1, df))
+        return v
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    bodo.jit(distributed={"v", "df"})(impl1)(df)
+    assert count_array_OneDs() > 0
+
+
 def test_dist_warning1():
     """Make sure BodoWarning is thrown when there is no parallelism discovered due
     to unsupported function
     """
+
     def impl(n):
         A = np.ones((n, n))
         # using a function we are not likely to support for warning test
@@ -436,8 +481,25 @@ def test_dist_warning2():
     """Make sure BodoWarning is thrown when there is no parallelism discovered due
     to return of dataframe
     """
+
     def impl(n):
-        return pd.DataFrame({'A': np.ones(n)})
+        return pd.DataFrame({"A": np.ones(n)})
+
+    if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+        with pytest.warns(BodoWarning, match="No parallelism found for function"):
+            bodo.jit(impl)(10)
+    else:
+        bodo.jit(impl)(10)
+
+
+def test_dist_warning3():
+    """Make sure BodoWarning is thrown when a tuple variable with both distributable
+    and non-distributable elemets is returned
+    """
+
+    def impl(n):
+        df = pd.DataFrame({"A": np.ones(n)})
+        return (n, df)
 
     if bodo.get_rank() == 0:  # warning is thrown only on rank 0
         with pytest.warns(BodoWarning, match="No parallelism found for function"):
@@ -452,6 +514,7 @@ def test_dist_objmode():
     ObjModeLiftedWith const.
     """
     import scipy.special as sc
+
     def objmode_test(n):
         A = np.arange(n)
         s = 0
@@ -469,9 +532,9 @@ def test_diagnostics_not_compiled_error():
     """make sure error is thrown when calling diagnostics for a function that is not
     compiled yet
     """
+
     def test_impl():
         return np.arange(10).sum()
 
     with pytest.raises(BodoError, match="Distributed diagnostics not available for"):
         bodo.jit(test_impl).distributed_diagnostics()
-

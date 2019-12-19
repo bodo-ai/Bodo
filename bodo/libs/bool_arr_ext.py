@@ -84,7 +84,7 @@ make_attribute_wrapper(BooleanArrayType, "null_bitmap", "_null_bitmap")
 
 
 @numba.njit
-def gen_full_bitmap(n):
+def gen_full_bitmap(n):  # pragma: no cover
     n_bytes = (n + 7) >> 3
     return np.full(n_bytes, 255, np.uint8)
 
@@ -295,7 +295,7 @@ def bool_arr_getitem(A, ind):
     # bool arr indexing
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
-        def impl_bool(A, ind):
+        def impl_bool(A, ind):  # pragma: no cover
             ind = bodo.utils.conversion.coerce_to_ndarray(ind)
             old_mask = A._null_bitmap
             new_data = A._data[ind]
@@ -315,7 +315,7 @@ def bool_arr_getitem(A, ind):
     # int arr indexing
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
 
-        def impl(A, ind):
+        def impl(A, ind):  # pragma: no cover
             ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
             old_mask = A._null_bitmap
             new_data = A._data[ind_t]
@@ -334,7 +334,7 @@ def bool_arr_getitem(A, ind):
     # slice case
     if isinstance(ind, types.SliceType):
 
-        def impl_slice(A, ind):
+        def impl_slice(A, ind):  # pragma: no cover
             n = len(A._data)
             old_mask = A._null_bitmap
             new_data = np.ascontiguousarray(A._data[ind])
@@ -363,7 +363,7 @@ def bool_arr_setitem(A, idx, val):
     if isinstance(idx, types.Integer):
         assert val == types.bool_
 
-        def impl_scalar(A, idx, val):
+        def impl_scalar(A, idx, val):  # pragma: no cover
             A._data[idx] = val
             bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
 
@@ -374,7 +374,7 @@ def bool_arr_setitem(A, idx, val):
         # value is BooleanArray
         if val == boolean_array:
 
-            def impl_arr_ind_mask(A, idx, val):
+            def impl_arr_ind_mask(A, idx, val):  # pragma: no cover
                 n = len(val._data)
                 for i in range(n):
                     A._data[idx[i]] = val._data[i]
@@ -383,7 +383,7 @@ def bool_arr_setitem(A, idx, val):
 
             return impl_arr_ind_mask
         # value is Array/List
-        def impl_arr_ind(A, idx, val):
+        def impl_arr_ind(A, idx, val):  # pragma: no cover
             for i in range(len(val)):
                 A._data[idx[i]] = val[i]
                 bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], 1)
@@ -395,7 +395,7 @@ def bool_arr_setitem(A, idx, val):
         # value is BooleanArray
         if val == boolean_array:
 
-            def impl_bool_ind_mask(A, idx, val):
+            def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
                 n = len(idx)
                 val_ind = 0
                 for i in range(n):
@@ -409,7 +409,7 @@ def bool_arr_setitem(A, idx, val):
 
             return impl_bool_ind_mask
         # value is Array/List
-        def impl_bool_ind(A, idx, val):
+        def impl_bool_ind(A, idx, val):  # pragma: no cover
             n = len(idx)
             val_ind = 0
             for i in range(n):
@@ -425,7 +425,7 @@ def bool_arr_setitem(A, idx, val):
         # value is BooleanArray
         if val == boolean_array:
 
-            def impl_slice_mask(A, idx, val):
+            def impl_slice_mask(A, idx, val):  # pragma: no cover
                 n = len(A._data)
                 # using setitem directly instead of copying in loop since
                 # Array setitem checks for memory overlap and copies source
@@ -442,7 +442,7 @@ def bool_arr_setitem(A, idx, val):
 
             return impl_slice_mask
 
-        def impl_slice(A, idx, val):
+        def impl_slice(A, idx, val):  # pragma: no cover
             n = len(A._data)
             A._data[idx] = val
             slice_idx = numba.unicode._normalize_slice(idx, n)
@@ -496,7 +496,7 @@ def overload_bool_arr_astype(A, dtype, copy=True):
         # copy value is dynamic
         else:
 
-            def impl(A, dtype, copy=True):
+            def impl(A, dtype, copy=True):  # pragma: no cover
                 if copy:
                     return A.copy()
                 else:
@@ -509,7 +509,7 @@ def overload_bool_arr_astype(A, dtype, copy=True):
     # NA positions are assigned np.nan for float output
     if isinstance(nb_dtype, types.Float):
 
-        def impl_float(A, dtype, copy=True):
+        def impl_float(A, dtype, copy=True):  # pragma: no cover
             data = bodo.libs.bool_arr_ext.get_bool_arr_data(A)
             n = len(data)
             B = np.empty(n, nb_dtype)
@@ -531,7 +531,7 @@ def overload_bool_arr_astype(A, dtype, copy=True):
 def overload_str_bool(val):
     if val == types.bool_:
 
-        def impl(val):
+        def impl(val):  # pragma: no cover
             if val:
                 return "True"
             return "False"
@@ -544,7 +544,7 @@ def overload_str_bool(val):
 ############################### numpy ufuncs #################################
 
 
-def set_cmp_out_for_nan(out_arr, bitmap, handle_na, na_val):
+def set_cmp_out_for_nan(out_arr, bitmap, handle_na, na_val):  # pragma: no cover
     pass
 
 
@@ -553,7 +553,7 @@ def overload_set_cmp_out_for_nan(out_arr, bitmap, handle_na, na_val):
     if out_arr != types.Array(types.bool_, 1, "C") or is_overload_false(handle_na):
         return lambda out_arr, bitmap, handle_na, na_val: None
 
-    def impl(out_arr, bitmap, handle_na, na_val):
+    def impl(out_arr, bitmap, handle_na, na_val):  # pragma: no cover
         n = len(out_arr)
         for i in numba.parfor.internal_prange(n):
             if not bodo.libs.int_arr_ext.get_bit_bitmap_arr(bitmap, i):
@@ -587,7 +587,7 @@ def create_op_overload(op, n_inputs):
         def overload_bool_arr_op_nin_1(A):
             if isinstance(A, BooleanArrayType):
 
-                def impl(A):
+                def impl(A):  # pragma: no cover
                     arr = bodo.libs.bool_arr_ext.get_bool_arr_data(A)
                     out_arr = op(arr)
                     return out_arr
@@ -601,7 +601,7 @@ def create_op_overload(op, n_inputs):
             # both are BooleanArray
             if A1 == boolean_array and A2 == boolean_array:
 
-                def impl_both(A1, A2):
+                def impl_both(A1, A2):  # pragma: no cover
                     arr1 = bodo.libs.bool_arr_ext.get_bool_arr_data(A1)
                     bitmap1 = bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A1)
                     arr2 = bodo.libs.bool_arr_ext.get_bool_arr_data(A2)
@@ -619,7 +619,7 @@ def create_op_overload(op, n_inputs):
             # left arg is BooleanArray
             if A1 == boolean_array:
 
-                def impl_left(A1, A2):
+                def impl_left(A1, A2):  # pragma: no cover
                     arr1 = bodo.libs.bool_arr_ext.get_bool_arr_data(A1)
                     bitmap1 = bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A1)
                     out_arr = op(arr1, A2)
@@ -632,7 +632,7 @@ def create_op_overload(op, n_inputs):
             # right arg is BooleanArray
             if A2 == boolean_array:
 
-                def impl_right(A1, A2):
+                def impl_right(A1, A2):  # pragma: no cover
                     arr2 = bodo.libs.bool_arr_ext.get_bool_arr_data(A2)
                     bitmap2 = bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A2)
                     out_arr = op(A1, arr2)
@@ -702,7 +702,7 @@ _install_unary_ops()
 
 @overload_method(BooleanArrayType, "unique")
 def overload_unique(A):
-    def impl_bool_arr(A):
+    def impl_bool_arr(A):  # pragma: no cover
         # preserve order
         data = []
         mask = []

@@ -25,6 +25,7 @@ from numba.typing.templates import (
     bound_function,
 )
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
+from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.libs.str_ext import string_type
@@ -40,6 +41,7 @@ from bodo.utils.typing import (
     is_overload_constant_bool,
     is_overload_constant_str,
     is_overload_constant_str_list,
+    ConstDictType,
 )
 
 
@@ -101,7 +103,7 @@ def df_groupby_overload(
         group_keys=True,
         squeeze=False,
         observed=False,
-    ):
+    ):  # pragma: no cover
         return bodo.hiframes.pd_groupby_ext.groupby_dummy(df, by, as_index)
 
     return _impl
@@ -183,7 +185,7 @@ def validate_udf(func_name, func):
 
 
 # a dummy groupby function that will be replace in dataframe_pass
-def groupby_dummy(df, by, as_index):
+def groupby_dummy(df, by, as_index):  # pragma: no cover
     return 0
 
 
@@ -222,17 +224,27 @@ def lower_groupby_dummy(context, builder, sig, args):
 
 
 @infer
-class GetItemDataFrameGroupBy2(AbstractTemplate):
+class GetItemDataFrameGroupBy(AbstractTemplate):
     key = "static_getitem"
 
     def generic(self, args, kws):
         grpby, idx = args
         # df.groupby('A')['B', 'C']
         if isinstance(grpby, DataFrameGroupByType):
-            if isinstance(idx, tuple):
+            if isinstance(idx, (tuple, list)):
                 assert all(isinstance(c, str) for c in idx)
+                if len(set(idx).difference(set(grpby.df_type.columns))) > 0:
+                    raise BodoError(
+                        "groupby: selected column {} not found in dataframe".format(
+                            set(idx).difference(set(grpby.df_type.columns))
+                        )
+                    )
                 selection = idx
             elif isinstance(idx, str):
+                if idx not in grpby.df_type.columns:
+                    raise BodoError(
+                        "groupby: selected column {} not found in dataframe".format(idx)
+                    )
                 selection = (idx,)
             else:
                 raise ValueError("invalid groupby selection {}".format(idx))
@@ -242,24 +254,28 @@ class GetItemDataFrameGroupBy2(AbstractTemplate):
             return signature(ret_grp, *args)
 
 
-def get_groupby_output_dtype(in_dtype, func_name):
+def get_groupby_output_dtype(arr_type, func_name):
     """
     Return output dtype for groupby aggregation function based on the
-    function and the input dtype.
+    function and the input array type and dtype.
     """
-
+    in_dtype = arr_type.dtype
     if (
         not isinstance(in_dtype, types.Integer)
         and not isinstance(in_dtype, types.Float)
         and not isinstance(in_dtype, types.Boolean)
     ):
-        if func_name not in {"count", "min"}:
+        if func_name not in {"count", "nunique", "min"}:
             raise BodoError(
                 "column type of {} is not supported in groupby built-in functions".format(
                     in_dtype
                 )
             )
-        if func_name != "count" and in_dtype == types.unicode_type:
+        if (
+            func_name != "count"
+            and func_name != "nunique"
+            and in_dtype == types.unicode_type
+        ):
             raise BodoError(
                 "groupby built-in functions {}"
                 " does not support string column".format(func_name)
@@ -277,9 +293,13 @@ def get_groupby_output_dtype(in_dtype, func_name):
         )
     if func_name == "count":
         return types.int64
+    elif func_name == "nunique":
+        return types.int64
     elif func_name in {"mean", "var", "std"}:
         return types.float64
     else:
+        if isinstance(arr_type, IntegerArrayType):
+            return IntDtype(in_dtype)
         return in_dtype  # default: return same dtype as input
 
 
@@ -287,7 +307,7 @@ def get_groupby_output_dtype(in_dtype, func_name):
 class DataframeGroupByAttribute(AttributeTemplate):
     key = DataFrameGroupByType
 
-    def _get_agg_typ(self, grp, args, func_name, code):
+    def _get_agg_typ(self, grp, args, func_name, code=None):
         index = types.none
         out_data = []
         out_columns = []
@@ -320,8 +340,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     {"np": np, "numba": numba, "bodo": bodo}, code
                 )
                 try:
+                    # input to UDFs is a Series
+                    in_series_typ = SeriesType(
+                        data.dtype, data, None, string_type)
                     _, out_dtype, _ = numba.typed_passes.type_inference_stage(
-                        self.context, f_ir, (data,), None
+                        self.context, f_ir, (in_series_typ,), None
                     )
                 except:
                     raise BodoError(
@@ -335,7 +358,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                         )
                     )
             else:
-                out_dtype = get_groupby_output_dtype(data.dtype, func_name)
+                out_dtype = get_groupby_output_dtype(data, func_name)
 
             out_arr = _get_series_array_type(out_dtype)
             out_data.append(out_arr)
@@ -343,24 +366,66 @@ class DataframeGroupByAttribute(AttributeTemplate):
         out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
         # XXX output becomes series if single output and explicitly selected
         if len(grp.selection) == 1 and grp.explicit_select and grp.as_index:
-            out_res = SeriesType(
-                out_data[0].dtype, index=index, name_typ=bodo.string_type
-            )
+            if isinstance(out_data[0], IntegerArrayType):
+                dtype = IntDtype(out_data[0].dtype)
+            else:
+                dtype = out_data[0].dtype
+            out_res = SeriesType(dtype, index=index, name_typ=bodo.string_type)
         return signature(out_res, *args)
 
     def _resolve_agg(self, grp, args, kws):
         if len(args) == 0:
             raise BodoError("Goupby.agg()/aggregate(): Must provide 'func'")
-        # multi-function case
-        if isinstance(args[0], types.BaseTuple):
+
+        func = args[0]
+
+        # multi-function constant dictionary case
+        if isinstance(func, ConstDictType):
+            # get mapping of column names to functions (string -> string)
+            col_map = {
+                func.consts[2 * i]: func.consts[2 * i + 1]
+                for i in range(len(func.consts) // 2)
+            }
+
+            # make sure selected columns exist in dataframe
+            out_columns = tuple(col_map.keys())
+            if any(c not in grp.selection for c in out_columns):
+                raise BodoError(
+                    "Selected column names {} not all available in dataframe column names {}".format(
+                        out_columns, grp.selection
+                    )
+                )
+
+            # get output data types
+            out_data = []
+            for k, func_name in col_map.items():
+                if func_name == "cumsum":
+                    raise BodoError(
+                        "only groupby aggregation supported in dictionary-based"
+                        "groupby, not transform like cumsum"
+                    )
+                if func_name not in bodo.ir.aggregate.supported_agg_funcs[:-2]:
+                    raise BodoError(
+                        "unsupported aggregate function {}".format(func_name)
+                    )
+                # run typer on a groupby with just column k
+                ret_grp = DataFrameGroupByType(grp.df_type, grp.keys, (k,), True, True)
+                out_tp = self._get_agg_typ(ret_grp, args, func_name).return_type
+                out_data.append(out_tp.data)
+
+            out_res = DataFrameType(tuple(out_data), out_tp.index, out_columns)
+            return signature(out_res, *args)
+
+        # multi-function tuple case
+        if isinstance(func, types.BaseTuple):
             if not (len(grp.selection) == 1 and grp.explicit_select):
                 raise BodoError(
                     "Goupby.agg()/aggregate(): must select exactly one column when more than one functions supplied"
                 )
-            assert len(args[0]) > 0
+            assert len(func) > 0
             out_data = []
             out_columns = []
-            for f in args[0].types:
+            for f in func.types:
                 code = f.literal_value.code
                 validate_udf("agg", f)
                 out_columns.append(code.co_name)
@@ -370,8 +435,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
             out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
             return signature(out_res, *args)
 
-        validate_udf("agg", args[0])
-        code = args[0].literal_value.code
+        validate_udf("agg", func)
+        code = func.literal_value.code
         return self._get_agg_typ(grp, args, "agg", code)
 
     @bound_function("groupby.agg")
@@ -384,43 +449,40 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.sum")
     def resolve_sum(self, grp, args, kws):
-        func = get_agg_func(None, "sum", None)
-        return self._get_agg_typ(grp, args, "sum", func.__code__)
+        return self._get_agg_typ(grp, args, "sum")
 
     @bound_function("groupby.count")
     def resolve_count(self, grp, args, kws):
-        func = get_agg_func(None, "count", None)
-        return self._get_agg_typ(grp, args, "count", func.__code__)
+        return self._get_agg_typ(grp, args, "count")
+
+    @bound_function("groupby.nunique")
+    def resolve_nunique(self, grp, args, kws):
+        func = get_agg_func(None, "nunique", None)
+        return self._get_agg_typ(grp, args, "nunique", func.__code__)
 
     @bound_function("groupby.mean")
     def resolve_mean(self, grp, args, kws):
-        func = get_agg_func(None, "mean", None)
-        return self._get_agg_typ(grp, args, "mean", func.__code__)
+        return self._get_agg_typ(grp, args, "mean")
 
     @bound_function("groupby.min")
     def resolve_min(self, grp, args, kws):
-        func = get_agg_func(None, "min", None)
-        return self._get_agg_typ(grp, args, "min", func.__code__)
+        return self._get_agg_typ(grp, args, "min")
 
     @bound_function("groupby.max")
     def resolve_max(self, grp, args, kws):
-        func = get_agg_func(None, "max", None)
-        return self._get_agg_typ(grp, args, "max", func.__code__)
+        return self._get_agg_typ(grp, args, "max")
 
     @bound_function("groupby.prod")
     def resolve_prod(self, grp, args, kws):
-        func = get_agg_func(None, "prod", None)
-        return self._get_agg_typ(grp, args, "prod", func.__code__)
+        return self._get_agg_typ(grp, args, "prod")
 
     @bound_function("groupby.var")
     def resolve_var(self, grp, args, kws):
-        func = get_agg_func(None, "var", None)
-        return self._get_agg_typ(grp, args, "var", func.__code__)
+        return self._get_agg_typ(grp, args, "var")
 
     @bound_function("groupby.std")
     def resolve_std(self, grp, args, kws):
-        func = get_agg_func(None, "std", None)
-        return self._get_agg_typ(grp, args, "std", func.__code__)
+        return self._get_agg_typ(grp, args, "std")
 
     # TODO: cumprod etc.
     @bound_function("groupby.cumsum")
@@ -452,7 +514,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
 
 # a dummy pivot_table function that will be replace in dataframe_pass
-def pivot_table_dummy(df, values, index, columns, aggfunc, _pivot_values):
+def pivot_table_dummy(
+    df, values, index, columns, aggfunc, _pivot_values
+):  # pragma: no cover
     return 0
 
 
@@ -467,8 +531,8 @@ class PivotTyper(AbstractTemplate):
             and isinstance(index, types.StringLiteral)
             and isinstance(columns, types.StringLiteral)
         ):
-            raise ValueError(
-                "pivot_table() only support string constants for"
+            raise BodoError(
+                "pivot_table() only support string constants for "
                 "'values', 'index' and 'columns' arguments"
             )
 
@@ -480,10 +544,12 @@ class PivotTyper(AbstractTemplate):
         data = df.data[df.columns.index(values)]
         func = get_agg_func(None, aggfunc.literal_value, None)
         f_ir = numba.ir_utils.get_ir_of_code(
-            {"np": np, "numba": numba, "bodo": bodo}, func.__code__
+            func.__globals__, func.__code__
         )
+        in_series_typ = SeriesType(data.dtype, data, None, string_type)
+        bodo.ir.aggregate.replace_closures(f_ir, func.__closure__, func.__code__)
         _, out_dtype, _ = numba.typed_passes.type_inference_stage(
-            self.context, f_ir, (data,), None
+            self.context, f_ir, (in_series_typ,), None
         )
         out_arr_typ = _get_series_array_type(out_dtype)
 
@@ -502,7 +568,7 @@ def lower_pivot_table_dummy(context, builder, sig, args):
 
 
 # a dummy crosstab function that will be replace in dataframe_pass
-def crosstab_dummy(index, columns, _pivot_values):
+def crosstab_dummy(index, columns, _pivot_values):  # pragma: no cover
     return 0
 
 

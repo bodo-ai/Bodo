@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y wget bzip2 git vim make curl\
 	&& chmod +x miniconda.sh\
 	&& ./miniconda.sh -b
 ENV PATH /root/miniconda3/bin/:${PATH}
-RUN conda create -n BODODEV numpy scipy pandas boost cmake h5py pyarrow mpich mpi gcc_linux-64 gxx_linux-64 gfortran_linux-64
+RUN conda create -n BODODEV numpy scipy pandas boost-cpp cmake h5py pyarrow mpich mpi gcc_linux-64 gxx_linux-64 gfortran_linux-64
 RUN echo "source activate BODODEV" > ~/.bashrc
-RUN conda install -c numba numba=0.46.0
+RUN conda install numba=0.46.0
 RUN conda install -c defaults -c conda-forge hdf5=*=*mpich*

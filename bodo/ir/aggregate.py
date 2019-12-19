@@ -2,8 +2,11 @@
 import operator
 from collections import namedtuple, defaultdict
 from functools import reduce
+import ctypes
+import types as pytypes
 import copy
 import numpy as np
+import pandas as pd
 import numba
 from numba import typeinfer, ir, ir_utils, config, types, compiler
 from numba.ir_utils import (
@@ -14,6 +17,7 @@ from numba.ir_utils import (
     replace_arg_nodes,
     replace_vars_stmt,
     find_callname,
+    find_const,
     guard,
     mk_unique_var,
     find_topo_order,
@@ -45,6 +49,7 @@ from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
 from bodo.libs.str_ext import string_type
+from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from bodo.utils.utils import build_set
 from bodo.libs.str_arr_ext import (
     string_array_type,
@@ -53,7 +58,8 @@ from bodo.libs.str_arr_ext import (
     get_data_ptr,
     get_utf8_size,
 )
-
+from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes import series_impl
 from bodo.ir.join import write_send_buff, setitem_arr_tup_nan, setitem_arr_nan
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.utils.shuffle import (
@@ -71,20 +77,24 @@ from bodo.libs.array_tools import (
     array_to_info,
     arr_info_list_to_table,
     groupby_and_aggregate,
+    groupby_and_aggregate_nunique,
     info_from_table,
     info_to_array,
     delete_table,
 )
 
 
-AggFuncStruct = namedtuple(
-    "AggFuncStruct",
+AggFuncTemplateStruct = namedtuple(
+    "AggFuncTemplateStruct",
     ["var_typs", "init_func", "update_all_func", "combine_all_func", "eval_all_func"],
 )
+
+AggFuncStruct = namedtuple("AggFuncStruct", ["func", "ftype", "builtin"])
 
 supported_agg_funcs = [
     "sum",
     "count",
+    "nunique",
     "mean",
     "min",
     "max",
@@ -96,8 +106,11 @@ supported_agg_funcs = [
 ]
 
 
-def get_agg_func(func_ir, func_name, rhs):
-    from bodo.hiframes.series_kernels import series_replace_funcs
+def get_agg_func(func_ir, func_name, rhs, series_type=None):
+    # FIXME: using float64 type as default to be compatible with old code
+    # TODO: make groupby functions typed properly everywhere
+    if series_type is None:
+        series_type = SeriesType(types.float64)
 
     # TODO: cumprod etc.
     if func_name == "cumsum":
@@ -113,11 +126,7 @@ def get_agg_func(func_ir, func_name, rhs):
         func.builtin = True
         return func
     if func_name in supported_agg_funcs[:-2]:
-        func = series_replace_funcs[func_name]
-        # returning generic function
-        # TODO: support type-specific funcs e.g. for dt64
-        if isinstance(func, dict):
-            func = func[types.float64]
+        func = getattr(series_impl, "overload_series_" + func_name)(series_type)
         func.ftype = supported_agg_funcs.index(func_name)
         func.builtin = True
         return func
@@ -129,11 +138,20 @@ def get_agg_func(func_ir, func_name, rhs):
         raise ValueError("agg expects 1 argument")
 
     agg_func = guard(get_definition, func_ir, rhs.args[0])
-    # multi-function case
+
+    # multi-function tuple case
     if isinstance(agg_func, ir.Expr) and agg_func.op == "build_tuple":
         return [
             _get_agg_code(guard(get_definition, func_ir, v)) for v in agg_func.items
         ]
+
+    # multi-function const dict case
+    if isinstance(agg_func, ir.Expr) and agg_func.op == "build_map":
+        func = [guard(find_const, func_ir, v[1]) for v in agg_func.items]
+        # TODO: support multi-function in C++ backend
+        # ftype = [supported_agg_funcs.index(f) for f in func]
+        # return AggFuncStruct(func, ftype, True)
+        return [get_agg_func(func_ir, f, rhs, series_type) for f in func]
 
     return _get_agg_code(agg_func)
 
@@ -176,7 +194,7 @@ def _var_combine(ssqdm_a, mean_a, nobs_a, ssqdm_b, mean_b, nobs_b):  # pragma: n
 
 # XXX: njit doesn't work when bodo.jit() is used for agg_func in hiframes
 # @numba.njit
-def __special_combine(*args):
+def __special_combine(*args):  # pragma: no cover
     return
 
 
@@ -193,7 +211,8 @@ def lower_special_combine(context, builder, sig, args):
 
 
 # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
-def _column_var_impl_linear(A):  # pragma: no cover
+def _column_var_impl_linear(S):  # pragma: no cover
+    A = bodo.hiframes.pd_series_ext.get_series_data(S)
     nobs = 0
     mean_x = 0.0
     ssqdm_x = 0.0
@@ -215,7 +234,8 @@ def _column_var_impl_linear(A):  # pragma: no cover
 
 
 # TODO: avoid code duplication
-def _column_std_impl_linear(A):  # pragma: no cover
+def _column_std_impl_linear(S):  # pragma: no cover
+    A = bodo.hiframes.pd_series_ext.get_series_data(S)
     nobs = 0
     mean_x = 0.0
     ssqdm_x = 0.0
@@ -652,7 +672,6 @@ def agg_distributed_run(
     kind = "transform" if agg_node.agg_func == "cumsum" else "aggregate"
 
     return_key = agg_node.out_key_vars is not None
-    out_typs = [t.dtype for t in out_col_typs]
 
     glbs = {"bodo": bodo, "np": np, "dt64_dtype": np.dtype("datetime64[ns]")}
 
@@ -665,9 +684,11 @@ def agg_distributed_run(
         )
         glbs.update({"group_cumsum": group_cumsum})
     else:
-        offload = (parallel and agg_node.pivot_arr is None
-                            and hasattr(agg_node.agg_func, 'builtin')
-                            and agg_node.agg_func.builtin)
+        offload = (
+            agg_node.pivot_arr is None
+            and hasattr(agg_node.agg_func, "builtin")
+            and agg_node.agg_func.builtin
+        )
         if not offload:
             agg_func_struct = get_agg_func_struct(
                 agg_node.agg_func,
@@ -687,7 +708,7 @@ def agg_distributed_run(
             agg_node.key_names,
             return_key,
             var_typs,
-            out_typs,
+            out_col_typs,
             agg_node.df_in_vars.keys(),
             agg_node.df_out_vars.keys(),
             agg_node.agg_func,
@@ -696,11 +717,13 @@ def agg_distributed_run(
         )
         glbs.update(
             {
+                "pd": pd,
                 "agg_seq_iter": agg_seq_iter,
                 "parallel_agg": parallel_agg,
                 "array_to_info": array_to_info,
                 "arr_info_list_to_table": arr_info_list_to_table,
                 "groupby_and_aggregate": groupby_and_aggregate,
+                "groupby_and_aggregate_nunique": groupby_and_aggregate_nunique,
                 "info_from_table": info_from_table,
                 "info_to_array": info_to_array,
                 "delete_table": delete_table,
@@ -756,7 +779,9 @@ distributed_pass.distributed_run_extensions[Aggregate] = agg_distributed_run
 
 
 @numba.njit(no_cpython_wrapper=True, cache=True)
-def par_agg_get_shuffle_meta(key_arrs, data_redvar_dummy, init_vals):
+def par_agg_get_shuffle_meta(
+    key_arrs, data_redvar_dummy, init_vals
+):  # pragma: no cover
     # alloc shuffle meta
     n_pes = bodo.libs.distributed_api.get_size()
     pre_shuffle_meta = alloc_pre_shuffle_metadata(
@@ -982,7 +1007,7 @@ def get_key_dict_overload(arr):
     if isinstance(arr, types.BaseTuple) and len(arr.types) != 1:
         key_typ = types.Tuple([a.dtype for a in arr.types])
 
-        def _impl(arr):
+        def _impl(arr):  # pragma: no cover
             return numba.typed.Dict.empty(key_type=key_typ, value_type=types.int64)
 
         return _impl
@@ -992,7 +1017,7 @@ def get_key_dict_overload(arr):
     return lambda arr: numba.typed.Dict.empty(dtype, types.int64)
 
 
-def _set_out_keys(out_arrs, w_ind, key_arrs, i, k):
+def _set_out_keys(out_arrs, w_ind, key_arrs, i, k):  # pragma: no cover
     setitem_array_with_str(out_arrs[-1], w_ind, k)
 
 
@@ -1183,7 +1208,7 @@ def setitem_array_with_str(arr, i, v):  # pragma: no cover
 def setitem_array_with_str_overload(arr, i, val):
     if arr == string_array_type:
 
-        def setitem_str_arr(arr, i, val):
+        def setitem_str_arr(arr, i, val):  # pragma: no cover
             arr[i] = val
 
         return setitem_str_arr
@@ -1193,7 +1218,7 @@ def setitem_array_with_str_overload(arr, i, val):
     if val == string_type:
         return lambda arr, i, val: None
 
-    def setitem_impl(arr, i, val):
+    def setitem_impl(arr, i, val):  # pragma: no cover
         arr[i] = val
 
     return setitem_impl
@@ -1206,11 +1231,19 @@ def _get_np_dtype(t):
 
 
 def gen_top_level_agg_func(
-    key_names, return_key, red_var_typs, out_typs, in_col_names, out_col_names,
-    agg_func, parallel, offload
+    key_names,
+    return_key,
+    red_var_typs,
+    out_col_typs,
+    in_col_names,
+    out_col_names,
+    agg_func,
+    parallel,
+    offload,
 ):
     """create the top level aggregation function by generating text
     """
+    out_typs = [t.dtype for t in out_col_typs]
 
     # arg names
     in_names = tuple("in_{}".format(c) for c in in_col_names)
@@ -1228,7 +1261,9 @@ def gen_top_level_agg_func(
     if not offload:
         func_text = "def agg_top({}{}, pivot_arr):\n".format(key_args, in_args)
         func_text += "    data_redvar_dummy = ({}{})\n".format(
-            ",".join(["np.empty(1, {})".format(_get_np_dtype(t)) for t in red_var_typs]),
+            ",".join(
+                ["np.empty(1, {})".format(_get_np_dtype(t)) for t in red_var_typs]
+            ),
             "," if len(red_var_typs) == 1 else "",
         )
         func_text += "    out_dummy_tup = ({}{}{})\n".format(
@@ -1272,30 +1307,47 @@ def gen_top_level_agg_func(
 
         for i in range(len(out_names)):
             out_name = out_names[i] + "_dummy"
-            func_text += "    {} = np.empty(1, {})\n".format(out_name, _get_np_dtype(out_typs[i]))
+            if isinstance(out_col_typs[i], IntegerArrayType):
+                int_typ_name = IntDtype(out_typs[i]).name
+                assert int_typ_name.endswith("Dtype()")
+                int_typ_name = int_typ_name[:-7]  # remove trailing "Dtype()"
+                func_text += '    {} = pd.Series([1], dtype="{}").values\n'.format(
+                    out_name, int_typ_name
+                )
+            else:
+                func_text += "    {} = np.empty(1, {})\n".format(
+                    out_name, _get_np_dtype(out_typs[i])
+                )
 
         # groupby and aggregate
-        func_text += "    out_table = groupby_and_aggregate(table, {}, {})\n".format(n_keys, agg_func.ftype)
+        if agg_func.ftype == supported_agg_funcs.index('nunique'):
+            func_text += "    out_table = groupby_and_aggregate_nunique(table, {}, {})\n".format(n_keys, parallel)
+        else:
+            func_text += "    out_table = groupby_and_aggregate(table, {}, {}, {})\n".format(n_keys, agg_func.ftype, parallel)
 
         # extract arrays from output table
         for i in range(len(out_names)):
             out_name = out_names[i]
             in_name = in_names[i]
             func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                            out_name, i + n_keys, out_name + "_dummy")
+                out_name, i + n_keys, out_name + "_dummy"
+            )
 
-        key_names = ['key_' + name for name in key_names]
+        key_names = ["key_" + name for name in key_names]
         for i, key_name in enumerate(key_names):
             func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                            key_name, i, key_name)
+                key_name, i, key_name
+            )
 
         # clean up
         func_text += "    delete_table(table)\n"
         func_text += "    delete_table(out_table)\n"
 
-        func_text += "    return ({},)\n".format(", ".join(out_names + tuple(key_names)))
+        func_text += "    return ({},)\n".format(
+            ", ".join(out_names + tuple(key_names))
+        )
 
-    # print(func_text)
+    #print(func_text)
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -1350,7 +1402,9 @@ def gen_top_level_transform_func(key_names, in_col_names, out_col_names, paralle
 def compile_to_optimized_ir(func, arg_typs, typingctx):
     # XXX are outside function's globals needed?
     code = func.code if hasattr(func, "code") else func.__code__
-    f_ir = get_ir_of_code({"numba": numba, "np": np, "bodo": bodo}, code)
+    closure = func.closure if hasattr(func, 'closure') else func.__closure__
+    f_ir = get_ir_of_code(func.__globals__, code)
+    replace_closures(f_ir, closure, code)
 
     # rename all variables to avoid conflict (init and eval nodes)
     var_table = get_name_var_table(f_ir.blocks)
@@ -1361,11 +1415,11 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     f_ir._definitions = build_definitions(f_ir.blocks)
 
     assert f_ir.arg_count == 1, "agg function should have one input"
-    df_pass = bodo.transforms.untyped_pass.UntypedPass(
+    untyped_pass = bodo.transforms.untyped_pass.UntypedPass(
         f_ir, typingctx, arg_typs, {}, {}
     )
-    df_pass.run()
-    remove_dead(f_ir.blocks, f_ir.arg_names, f_ir)
+    untyped_pass.run()
+    f_ir._definitions = build_definitions(f_ir.blocks)
     typemap, return_type, calltypes = numba.typed_passes.type_inference_stage(
         typingctx, f_ir, arg_typs, None
     )
@@ -1389,15 +1443,26 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     pm = DummyPipeline(
         typingctx, targetctx, None, f_ir, typemap, return_type, calltypes
     )
+    series_pass = bodo.transforms.series_pass.SeriesPass(
+        f_ir, typingctx, typemap, calltypes
+    )
+    series_pass.run()
+    # change the input type to UDF from Series to Array since Bodo passes Arrays to UDFs
+    # Series functions should be handled by SeriesPass and there should be only
+    # `get_series_data` Series function left to remove
+    for block in f_ir.blocks.values():
+        for stmt in block.body:
+            if is_assign(stmt) and isinstance(stmt.value, (ir.Arg, ir.Var)) and isinstance(typemap[stmt.target.name], SeriesType):
+                typ = typemap.pop(stmt.target.name)
+                typemap[stmt.target.name] = typ.data
+            if is_call_assign(stmt) and find_callname(f_ir, stmt.value) == ('get_series_data', 'bodo.hiframes.pd_series_ext'):
+                stmt.value = stmt.value.args[0]
+
     preparfor_pass = numba.parfor.PreParforPass(
         f_ir, typemap, calltypes, typingctx, options
     )
     preparfor_pass.run()
     f_ir._definitions = build_definitions(f_ir.blocks)
-    df_t_pass = bodo.transforms.series_pass.SeriesPass(
-        f_ir, typingctx, typemap, calltypes
-    )
-    df_t_pass.run()
     state = numba.compiler.StateDict()
     state.func_ir = f_ir
     state.typemap = typemap
@@ -1415,6 +1480,24 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     # TODO: extract an eval func more robustly
     numba.parfor.maximize_fusion(f_ir, f_ir.blocks, typemap, False)
     return f_ir, pm
+
+
+def replace_closures(f_ir, closure, code):
+    """replace closure variables similar to inline_closure_call
+    """
+    if closure:
+        closure = f_ir.get_definition(closure)
+        if isinstance(closure, tuple):
+            cellget = ctypes.pythonapi.PyCell_Get
+            cellget.restype = ctypes.py_object
+            cellget.argtypes = (ctypes.py_object,)
+            items = tuple(cellget(x) for x in closure)
+        else:
+            assert(isinstance(closure, ir.Expr)
+                   and closure.op == 'build_tuple')
+            items = closure.items
+        assert(len(code.co_freevars) == len(items))
+        numba.inline_closurecall._replace_freevars(f_ir.blocks, items)
 
 
 def get_agg_func_struct(
@@ -1449,12 +1532,18 @@ def get_agg_func_struct(
 
     typ_and_func = [(t, agg_func) for t in in_col_types]
     if isinstance(agg_func, list):
-        assert len(in_col_types) == 1
-        in_typ = in_col_types[0]
-        typ_and_func = [(in_typ, f) for f in agg_func]
+        # tuple function case
+        if len(in_col_types) == 1:
+            in_typ = in_col_types[0]
+            typ_and_func = [(in_typ, f) for f in agg_func]
+        # constant dict case
+        else:
+            typ_and_func = [(in_typ, f) for in_typ, f in zip(in_col_types, agg_func)]
 
     for in_col_typ, func in typ_and_func:
-        f_ir, pm = compile_to_optimized_ir(func, tuple([in_col_typ]), typingctx)
+        in_series_typ = SeriesType(
+            in_col_typ.dtype, in_col_typ, None, string_type)
+        f_ir, pm = compile_to_optimized_ir(func, (in_series_typ,), typingctx)
 
         f_ir._definitions = build_definitions(f_ir.blocks)
         # TODO: support multiple top-level blocks
@@ -1575,7 +1664,7 @@ def get_agg_func_struct(
         pivot_values,
     )
 
-    return AggFuncStruct(
+    return AggFuncTemplateStruct(
         all_vartypes, init_func, update_all_func, combine_all_func, eval_all_func
     )
 
@@ -1646,6 +1735,7 @@ def gen_init_func(init_nodes, reduce_vars, var_types, typingctx, targetctx):
         if (
             is_assign(stmt)
             and isinstance(stmt.value, ir.Global)
+            and isinstance(stmt.value.value, pytypes.FunctionType)
             and stmt.value.value in _checker_calls
         ):
             checker_vars.add(stmt.target.name)
@@ -2299,7 +2389,7 @@ def get_parfor_reductions(
     return reduce_varnames, var_to_param
 
 
-def _build_set_tup(arr_tup):
+def _build_set_tup(arr_tup):  # pragma: no cover
     return build_set(arr_tup[0])
 
 
@@ -2308,7 +2398,7 @@ def _build_set_tup_overload(arr_tup):
     # TODO: support string in tuple set
     if isinstance(arr_tup, types.BaseTuple) and len(arr_tup.types) != 1:
 
-        def _impl(arr_tup):
+        def _impl(arr_tup):  # pragma: no cover
             n = len(arr_tup[0])
             s = dict()
             for i in range(n):
@@ -2320,7 +2410,7 @@ def _build_set_tup_overload(arr_tup):
     return _build_set_tup
 
 
-def num_total_chars_set(s):
+def num_total_chars_set(s):  # pragma: no cover
     return (0,)
 
 
@@ -2392,7 +2482,7 @@ def group_cumsum(key_arrs, data):  # pragma: no cover
     return out
 
 
-def get_zero_tup(arr_tup):
+def get_zero_tup(arr_tup):  # pragma: no cover
     zeros = []
     for in_arr in arr_tup:
         zeros.append(in_arr.dtype(0))
@@ -2448,7 +2538,7 @@ def add_tup_overload(val1_tup, val2_tup):
     return impl
 
 
-def isna_tup(arr_tup, ind):
+def isna_tup(arr_tup, ind):  # pragma: no cover
     for arr in arr_tup:
         if np.isnan(arr[ind]):
             return True
@@ -2466,7 +2556,8 @@ def isna_tup_overload(arr_tup, ind):
     func_text = "def f(arr_tup, ind):\n"
     func_text += "  return {}\n".format(
         " or ".join(
-            "bodo.libs.array_kernels.isna(arr_tup[{}], ind)".format(i) for i in range(count)
+            "bodo.libs.array_kernels.isna(arr_tup[{}], ind)".format(i)
+            for i in range(count)
         )
     )
 
@@ -2476,7 +2567,7 @@ def isna_tup_overload(arr_tup, ind):
     return impl
 
 
-def set_nan_zero_tup(arr_tup, ind, val):
+def set_nan_zero_tup(arr_tup, ind, val):  # pragma: no cover
     return tuple((0.0 if np.isnan(arr[ind]) else val[ind]) for arr in arr_tup)
 
 
@@ -2496,7 +2587,9 @@ def set_nan_zero_tup_overload(arr_tup, ind, val):
     func_text = "def f(arr_tup, ind, val):\n"
     func_text += "  return {}\n".format(
         ", ".join(
-            "0 if bodo.libs.array_kernels.isna(arr_tup[{0}], ind) else val[{0}]".format(i)
+            "0 if bodo.libs.array_kernels.isna(arr_tup[{0}], ind) else val[{0}]".format(
+                i
+            )
             for i in range(count)
         )
     )
@@ -2507,7 +2600,7 @@ def set_nan_zero_tup_overload(arr_tup, ind, val):
     return impl
 
 
-def setitem_arr_tup_na_match(arr_tup1, arr_tup2, ind):
+def setitem_arr_tup_na_match(arr_tup1, arr_tup2, ind):  # pragma: no cover
     pass
 
 

@@ -11,11 +11,20 @@ from numba.ir_utils import (
     replace_arg_nodes,
     mk_unique_var,
 )
+from bodo.libs.array_tools import (
+    array_to_info,
+    arr_info_list_to_table,
+    sort_values_table,
+    info_from_table,
+    info_to_array,
+    delete_table,
+)
+
+
 from numba.typing import signature
 from numba.extending import overload
 import bodo
 import bodo.libs.timsort
-from bodo.libs.timsort import getitem_arr_tup
 from bodo.utils.utils import _numba_to_c_type_map
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.libs.distributed_api import Reduce_Type
@@ -64,6 +73,7 @@ class Sort(ir.Stmt):
         inplace,
         loc,
         ascending=True,
+        na_position="last",
     ):
         # for printing only
         self.df_in = df_in
@@ -73,6 +83,10 @@ class Sort(ir.Stmt):
         self.df_in_vars = df_in_vars
         self.df_out_vars = df_out_vars
         self.inplace = inplace
+        if na_position == "last":
+            self.na_position_b = True
+        else:
+            self.na_position_b = False
         # HACK make sure ascending is boolean (seen error for none in CI)
         # TODO: fix source of issue
         if not isinstance(ascending, bool):
@@ -342,17 +356,24 @@ def sort_distributed_run(
             new_in_vars.append(v_cp)
         in_vars = new_in_vars
 
-    key_name_args = ", ".join("key" + str(i) for i in range(len(key_arrs)))
-    col_name_args = ", ".join(["c" + str(i) for i in range(len(in_vars))])
+    key_name_args = ["key" + str(i) for i in range(len(key_arrs))]
+    key_name_args_join = ", ".join(key_name_args)
+    col_name_args = ["c" + str(i) for i in range(len(in_vars))]
+    col_name_args_join = ", ".join(col_name_args)
     # TODO: use *args
-    func_text = "def f({}, {}):\n".format(key_name_args, col_name_args)
-    func_text += "  key_arrs = ({},)\n".format(key_name_args)
-    func_text += "  data = ({}{})\n".format(
-        col_name_args, "," if len(in_vars) == 1 else ""
-    )  # single value needs comma to become tuple
-    func_text += "  bodo.ir.sort.local_sort(key_arrs, data, {})\n".format(
-        sort_node.ascending
-    )
+    func_text = "def f({}, {}):\n".format(key_name_args_join, col_name_args_join)
+    if bodo.use_cpp_sort:
+        func_text += local_sort_cpp(
+            key_name_args, col_name_args, sort_node.ascending, sort_node.na_position_b
+        )
+    else:
+        func_text += "  key_arrs = ({},)\n".format(key_name_args_join)
+        func_text += "  data = ({}{})\n".format(
+            col_name_args, "," if len(in_vars) == 1 else ""
+        )  # single value needs comma to become tuple
+        func_text += "  bodo.ir.sort.local_sort(key_arrs, data, {})\n".format(
+            sort_node.ascending
+        )
     func_text += "  return key_arrs, data\n"
 
     loc_vars = {}
@@ -368,6 +389,12 @@ def sort_distributed_run(
             "bodo": bodo,
             "to_string_list": to_string_list,
             "cp_str_list_to_array": cp_str_list_to_array,
+            "delete_table": delete_table,
+            "info_to_array": info_to_array,
+            "info_from_table": info_from_table,
+            "sort_values_table": sort_values_table,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "array_to_info": array_to_info,
         },
         typingctx,
         tuple(list(key_typ.types) + list(data_tup_typ.types)),
@@ -397,13 +424,61 @@ def sort_distributed_run(
     typemap[ascending_var.name] = types.bool_
     nodes.append(ir.Assign(ir.Const(sort_node.ascending, loc), ascending_var, loc))
 
+    # sort output
     # parallel case
-    def par_sort_impl(key_arrs, data, ascending):
-        out_key, out_data = parallel_sort(key_arrs, data, ascending)
-        # TODO: use k-way merge instead of sort
-        # sort output
-        bodo.ir.sort.local_sort(out_key, out_data, ascending)
-        return out_key, out_data
+    if bodo.use_cpp_sort:
+        func_text = "def par_sort_impl(key_arrs, data, ascending):\n"
+        func_text += "  out_key, out_data = parallel_sort(key_arrs, data, ascending, {})\n".format(
+            sort_node.na_position_b
+        )
+        key_count = len(key_name_args)
+        data_count = len(col_name_args)
+        total_list = [
+            "array_to_info(out_key[{}])".format(i) for i in range(len(key_name_args))
+        ] + ["array_to_info(out_data[{}])".format(i) for i in range(len(col_name_args))]
+        func_text += "  info_list_total = [{}]\n".format(",".join(total_list))
+        func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
+        func_text += "  out_table = sort_values_table(table_total, {}, ascending, {})\n".format(
+            key_count, sort_node.na_position_b
+        )
+        func_text += "  delete_table(table_total)\n"
+        #
+        idx = 0
+        list_key_str = []
+        for i_key in range(key_count):
+            list_key_str.append(
+                "info_to_array(info_from_table(out_table, {}), out_key[{}])".format(
+                    idx, i_key
+                )
+            )
+            idx += 1
+        func_text += "  out_key_ret = ({},)\n".format(",".join(list_key_str))
+        #
+        list_data_str = []
+        for i_data in range(data_count):
+            list_data_str.append(
+                "info_to_array(info_from_table(out_table, {}), out_data[{}])".format(
+                    idx, i_data
+                )
+            )
+            idx += 1
+        if len(list_data_str) > 0:
+            func_text += "  out_data_ret = ({},)\n".format(",".join(list_data_str))
+        else:
+            func_text += "  out_data_ret = ()\n"
+        func_text += "  delete_table(out_table)\n"
+        func_text += "  return out_key_ret, out_data_ret\n"
+    else:
+        func_text = "def par_sort_impl(key_arrs, data, ascending):\n"
+        func_text += "  out_key, out_data = parallel_sort(key_arrs, data, ascending, {})\n".format(
+            sort_node.na_position_b
+        )
+        func_text += "  bodo.ir.sort.local_sort(out_key, out_data, ascending)\n"
+        func_text += "  return out_key, out_data\n"
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    par_sort_impl = loc_vars["par_sort_impl"]
 
     f_block = compile_to_numba_ir(
         par_sort_impl,
@@ -412,6 +487,12 @@ def sort_distributed_run(
             "parallel_sort": parallel_sort,
             "to_string_list": to_string_list,
             "cp_str_list_to_array": cp_str_list_to_array,
+            "delete_table": delete_table,
+            "info_to_array": info_to_array,
+            "info_from_table": info_from_table,
+            "sort_values_table": sort_values_table,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "array_to_info": array_to_info,
         },
         typingctx,
         (key_typ, data_tup_typ, types.bool_),
@@ -445,7 +526,7 @@ distributed_pass.distributed_run_extensions[Sort] = sort_distributed_run
 
 
 def _copy_array_nodes(var, nodes, typingctx, typemap, calltypes):
-    def _impl(arr):
+    def _impl(arr):  # pragma: no cover
         return arr.copy()
 
     f_block = compile_to_numba_ir(
@@ -460,7 +541,7 @@ def to_string_list_typ(typ):
     if typ == string_array_type:
         return types.List(bodo.libs.str_ext.string_type)
 
-    if isinstance(typ, (types.Tuple, types.UniTuple)):
+    if isinstance(typ, types.BaseTuple):
         new_typs = []
         for i in range(typ.count):
             new_typs.append(to_string_list_typ(typ.types[i]))
@@ -469,9 +550,45 @@ def to_string_list_typ(typ):
     return typ
 
 
+def local_sort_cpp(key_name_args, col_name_args, ascending, na_position_b):
+    func_text = "  # beginning of local_sort_cpp\n"
+    key_count = len(key_name_args)
+    data_count = len(col_name_args)
+    total_list = ["array_to_info({})".format(name) for name in key_name_args] + [
+        "array_to_info({})".format(name) for name in col_name_args
+    ]
+    func_text += "  info_list_total = [{}]\n".format(",".join(total_list))
+    func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
+    func_text += "  out_table = sort_values_table(table_total, {}, {}, {})\n".format(
+        key_count, ascending, na_position_b
+    )
+    idx = 0
+    list_key_str = []
+    for name in key_name_args:
+        list_key_str.append(
+            "info_to_array(info_from_table(out_table, {}), {})".format(idx, name)
+        )
+        idx += 1
+    func_text += "  key_arrs = ({},)\n".format(",".join(list_key_str))
+
+    list_data_str = []
+    for name in col_name_args:
+        list_data_str.append(
+            "info_to_array(info_from_table(out_table, {}), {})".format(idx, name)
+        )
+        idx += 1
+    if len(list_data_str) > 0:
+        func_text += "  data = ({},)\n".format(",".join(list_data_str))
+    else:
+        func_text += "  data = ()\n"
+    func_text += "  delete_table(out_table)\n"
+    func_text += "  delete_table(table_total)\n"
+    return func_text
+
+
 # TODO: fix cache issue
 @numba.njit(no_cpython_wrapper=True, cache=False)
-def local_sort(key_arrs, data, ascending=True):
+def local_sort(key_arrs, data, ascending=True):  # pragma: no cover
     # convert StringArray to list(string) to enable swapping in sort
     l_key_arrs = to_string_list(key_arrs)
     l_data = to_string_list(data, True)
@@ -484,7 +601,9 @@ def local_sort(key_arrs, data, ascending=True):
 
 
 @numba.njit(no_cpython_wrapper=True, cache=True)
-def parallel_sort(key_arrs, data, ascending=True):
+def parallel_sort(
+    key_arrs, data, ascending=True, na_position_b=True
+):  # pragma: no cover
     n_local = len(key_arrs[0])
     n_total = bodo.libs.distributed_api.dist_reduce(
         n_local, np.int32(Reduce_Type.Sum.value)
@@ -524,15 +643,43 @@ def parallel_sort(key_arrs, data, ascending=True):
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, True)
     node_id = 0
     padded_bits = 0
+
+    na_position_b = (not na_position_b) ^ ascending
+
+    def compar_fct(isnan1, val1, isnan2, val2):
+        if isnan2 and (not isnan1):
+            if na_position_b:
+                return 1
+            else:
+                return -1
+        if isnan1 and (not isnan2):
+            if na_position_b:
+                return -1
+            else:
+                return 1
+        if (not isnan1) and (not isnan2):
+            if val1 < val2:
+                return 1
+            if val2 < val1:
+                return -1
+        return 0
+
+    def compar_fct_ascend(isnan1, val1, isnan2, val2):
+        test = compar_fct(isnan1, val1, isnan2, val2)
+        if ascending:
+            return test != 1
+        if not ascending:
+            return test != -1
+
     for i in range(n_local):
         val = key_arrs[0][i]
         # TODO: refactor
         # using 'while' since a partition can be empty which needs to be skipped
-        while node_id < (n_pes - 1) and (
-            ascending
-            and val >= bounds[node_id]
-            or (not ascending)
-            and val <= bounds[node_id]
+        while node_id < (n_pes - 1) and compar_fct_ascend(
+            bodo.libs.array_kernels.isna(key_arrs[0], i),
+            val,
+            bodo.libs.array_kernels.isna(bounds, node_id),
+            bounds[node_id],
         ):
             node_id += 1
             padded_bits += -(padded_bits + i) % 8

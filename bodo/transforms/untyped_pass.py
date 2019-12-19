@@ -73,30 +73,26 @@ def remove_hiframes(rhs, lives, call_list):
     if (
         len(call_list) == 4
         and call_list[1:] == ["pd_series_ext", "hiframes", bodo]
-        and call_list[0]
-        in [
-            "get_series_data",
-            "get_series_index",
-            "get_series_name",
-        ]
+        and call_list[0] in ["get_series_data", "get_series_index", "get_series_name"]
     ):
         return True
     if (
         len(call_list) == 4
         and call_list[1:] == ["typing", "utils", bodo]
-        and call_list[0]
-        in [
-            "convert_tup_to_rec",
-            "convert_rec_to_tup",
-        ]
+        and call_list[0] in ["convert_tup_to_rec", "convert_rec_to_tup"]
     ):
         return True
     if (
         len(call_list) == 4
         and call_list[1:] == ["pd_index_ext", "hiframes", bodo]
         and call_list[0]
-        in ("init_string_index", "init_numeric_index", "_dti_val_finalize",
-            "init_datetime_index", "init_timedelta_index")
+        in (
+            "init_string_index",
+            "init_numeric_index",
+            "_dti_val_finalize",
+            "init_datetime_index",
+            "init_timedelta_index",
+        )
     ):
         return True
     if (
@@ -139,14 +135,7 @@ def remove_hiframes(rhs, lives, call_list):
     if (
         len(call_list) == 4
         and call_list[1:] == ["array_kernels", "libs", bodo]
-        and call_list[0]
-        in [
-            "calc_nitems",
-            "concat",
-            "unique",
-            "nunique",
-            "quantile",
-        ]
+        and call_list[0] in ["calc_nitems", "concat", "unique", "nunique", "quantile"]
     ):
         return True
     if call_list == ["add_consts_to_type", "typing", "utils", bodo]:
@@ -334,38 +323,32 @@ class UntypedPass(object):
                 return []
 
             # if rhs.op in ('build_list', 'build_tuple'): TODO: test tuple
-            if rhs.op == "build_list":
+            if rhs.op in ("build_list", "build_map"):
                 # if build_list items are constant, add the constant values
                 # to the returned list type as metadata. This enables type
                 # inference for calls like pd.merge() where the values
                 # determine output dataframe type
+                # build_map is similarly handled (useful in df.rename)
                 # TODO: add proper metadata to Numba types
                 # XXX: when constants are used, all the uses of the list object
                 # have to be checked since lists are mutable
                 try:
-                    vals = tuple(find_const(self.func_ir, v) for v in rhs.items)
+                    if rhs.op == "build_map":
+                        items = itertools.chain(*rhs.items)
+                    else:
+                        items = rhs.items
+                    vals = tuple(find_const(self.func_ir, v) for v in items)
                     # a = ['A', 'B'] ->
                     # tmp = ['A', 'B']
                     # a = add_consts_to_type(tmp, 'A', 'B')
-                    vals_expr = ", ".join(
-                        "'{}'".format(c) if isinstance(c, str) else "{}".format(c)
-                        for c in vals
-                    )
-                    func_text = "def _build_f(a):\n"
-                    func_text += "  return bodo.utils.typing.add_consts_to_type(a, {})\n".format(
-                        vals_expr
-                    )
-                    loc_vars = {}
-                    exec(func_text, {"bodo": bodo}, loc_vars)
-                    _build_f = loc_vars["_build_f"]
                     target = assign.target
                     tmp_target = ir.Var(
                         target.scope, mk_unique_var(target.name), rhs.loc
                     )
                     tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
                     nodes = [tmp_assign]
-                    nodes += _compile_func_single_block(
-                        _build_f, (tmp_target,), assign.target
+                    nodes += self._gen_add_consts_to_type(
+                        vals, tmp_target, assign.target
                     )
                     return nodes
                 except numba.ir_utils.GuardException:
@@ -424,7 +407,8 @@ class UntypedPass(object):
                 func_name = func_def.attr
             # ignore objmode block calls
             elif isinstance(func_def, ir.Const) and isinstance(
-                    func_def.value, numba.dispatcher.ObjModeLiftedWith):
+                func_def.value, numba.dispatcher.ObjModeLiftedWith
+            ):
                 return [assign]
             else:
                 warnings.warn("function call couldn't be found for initial analysis")
@@ -493,19 +477,11 @@ class UntypedPass(object):
                 # a = list('AB') ->
                 # tmp = ['A', 'B']
                 # a = add_consts_to_type(tmp, 'A', 'B')
-                vals_expr = ", ".join("'{}'".format(c) for c in arg_val)
-                func_text = "def _build_f(a):\n"
-                func_text += "  return bodo.utils.typing.add_consts_to_type(a, {})\n".format(
-                    vals_expr
-                )
-                loc_vars = {}
-                exec(func_text, {"bodo": bodo}, loc_vars)
-                _build_f = loc_vars["_build_f"]
                 target = assign.target
                 tmp_target = ir.Var(target.scope, mk_unique_var(target.name), rhs.loc)
                 tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
                 nodes = [tmp_assign]
-                nodes += _compile_func_single_block(_build_f, (tmp_target,), lhs)
+                nodes += self._gen_add_consts_to_type(list(arg_val), tmp_target, lhs)
                 return nodes
 
         # TODO: update Xenon handling code
@@ -516,7 +492,70 @@ class UntypedPass(object):
         #     nodes += df_nodes
         #     return nodes
 
+        if fdef == ("where", "numpy") and len(rhs.args) == 3:
+            return self._handle_np_where(assign, lhs, rhs)
+
+        # replace constant tuple argument with ConstUniTuple to provide constant values
+        # to typers. Safe to be applied to all calls, but only done for these calls
+        # to avoid making the IR messy for cases that don't need it
+        if func_name in ("merge", "join", "merge_asof", "groupby"):
+            return self._handle_const_tup_call_args(assign, lhs, rhs)
+
         return [assign]
+
+    def _handle_const_tup_call_args(self, assign, lhs, rhs):
+        """replace call argument variables that are constant tuples with ConstUniTuple
+        types that include the constant values. This is a workaround since Numba needs
+        to support something like TupleLiteral properly.
+        This transformation is done only for call arguments since changing constant
+        tuples for things like getitem can cause issues in Numba's rewrite and type
+        inference passes.
+        """
+        nodes = []
+        rhs.args = [self._replace_const_tup(arg, nodes) for arg in rhs.args]
+        rhs.kws = [(key, self._replace_const_tup(arg, nodes)) for key, arg in rhs.kws]
+        return nodes + [assign]
+
+    def _replace_const_tup(self, var, nodes):
+        """generate code for creating ConstUniTuple variable if var is a constant tuple
+        with same value types.
+        """
+        try:
+            var_def = get_definition(self.func_ir, var)
+            require(isinstance(var_def, ir.Const))
+            vals = var_def.value
+            require(isinstance(vals, tuple))
+            require(len(vals) > 0)
+            val_typ = type(vals[0])
+            require(all(isinstance(v, val_typ) for v in vals))
+            tmp_target = ir.Var(var.scope, mk_unique_var(var.name + "_const"), var.loc)
+            nodes.extend(self._gen_add_consts_to_type(vals, var, tmp_target))
+            return tmp_target
+        except numba.ir_utils.GuardException:
+            return var
+
+    def _gen_add_consts_to_type(self, vals, var, ret_var):
+        vals_expr = ", ".join(
+            "'{}'".format(c) if isinstance(c, str) else "{}".format(c) for c in vals
+        )
+        func_text = "def _build_f(a):\n"
+        func_text += "  return bodo.utils.typing.add_consts_to_type(a, {})\n".format(
+            vals_expr
+        )
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+        _build_f = loc_vars["_build_f"]
+        nodes = _compile_func_single_block(_build_f, (var,), ret_var)
+        return nodes
+
+
+    def _handle_np_where(self, assign, lhs, rhs):
+        """replace np.where() calls with Bodo's version since Numba's typer assumes
+        non-Array types like Series are scalars and produces wrong output type.
+        """
+        return _compile_func_single_block(
+            lambda c, x, y: bodo.hiframes.series_impl.where_impl(c, x, y), rhs.args, lhs
+        )
 
     def _handle_df_inplace_func(
         self, assign, lhs, rhs, df_var, inplace_var, replace_func, label
@@ -759,6 +798,14 @@ class UntypedPass(object):
         # handle dtype arg if provided
         if dtype_var != "":
             dtype_map = guard(get_definition, self.func_ir, dtype_var)
+
+            # handle converted constant dictionaries
+            if is_call(dtype_map) and (
+                guard(find_callname, self.func_ir, dtype_map)
+                == ("add_consts_to_type", "bodo.utils.typing")
+            ):
+                dtype_map = guard(get_definition, self.func_ir, dtype_map.args[0])
+
             if (
                 not isinstance(dtype_map, ir.Expr) or dtype_map.op != "build_map"
             ):  # pragma: no cover
@@ -955,14 +1002,17 @@ class UntypedPass(object):
                 new_arr = ir.Var(in_data.scope, mk_unique_var("flat_arr"), in_data.loc)
                 nodes = _compile_func_single_block(
                     lambda A: bodo.utils.conversion.flatten_array(
-                        bodo.utils.conversion.coerce_to_array(A)), (in_data,), new_arr
+                        bodo.utils.conversion.coerce_to_array(A)
+                    ),
+                    (in_data,),
+                    new_arr,
                 )
                 # put the new array back to pd.Series call
                 if len(rhs.args) > 0:
                     rhs.args[0] = new_arr
                 else:  # kw case
                     # TODO: test
-                    kws['data'] = new_arr
+                    kws["data"] = new_arr
                     rhs.kws = tuple(kws.items())
                 nodes.append(assign)
                 return nodes
@@ -1146,6 +1196,13 @@ class UntypedPass(object):
                 and isinstance(call_name[1], ir.Var)
             ):
                 var_def = guard(get_definition, self.func_ir, call_name[1])
+                # handle converted constant dictionaries
+                if is_call(var_def) and (
+                    guard(find_callname, self.func_ir, var_def)
+                    == ("add_consts_to_type", "bodo.utils.typing")
+                ):
+                    var_def = guard(get_definition, self.func_ir, var_def.args[0])
+
                 if isinstance(var_def, ir.Expr) and var_def.op == "build_map":
                     by_arg_def = [v[0] for v in var_def.items], "build_map"
                     # HACK replace dict.keys getattr to avoid typing errors

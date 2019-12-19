@@ -92,6 +92,35 @@ def test_contains_noregex():
     check_func(test_impl, (S,))
 
 
+def test_extract():
+    def test_impl(S):
+        return S.str.extract(r"(?P<BBB>[abd])(?P<C>\d+)")
+
+    S = pd.Series(
+        ["a1", "b1", np.nan, "a2", "c2", "ddd", "d1", "d222"],
+        [4, 3, 5, 1, 0, 2, 6, 11],
+        name="AA",
+    )
+    check_func(test_impl, (S,))
+
+
+def test_extract_noexpand():
+    def test_impl(S):
+        return S.str.extract(r"(?P<BBB>[abd]+)\d+", expand=False)
+
+    # when regex group has no name, Series name should be used
+    def test_impl_noname(S):
+        return S.str.extract(r"([abd]+)\d+", expand=False)
+
+    S = pd.Series(
+        ["a1", "b1", np.nan, "a2", "cc2", "ddd", "ddd1", "d222"],
+        [4, 3, 5, 1, 0, 2, 6, 11],
+        name="AA",
+    )
+    check_func(test_impl, (S,))
+    check_func(test_impl_noname, (S,))
+
+
 def test_count_noflag():
     def test_impl(S):
         return S.str.count("A")
@@ -248,14 +277,31 @@ def test_isupper():
     check_func(test_impl, (S,))
 
 
+@pytest.mark.parametrize("ind", [slice(2), 2])
+def test_getitem(ind):
+    def test_impl(S, ind):
+        return S.str[ind]
+
+    S = pd.Series(
+        ["ABCDDCABABAAB", "ABBD", "AA", "C,ABB, D", np.nan], [3, 5, 1, 0, 2], name="A"
+    )
+    check_func(test_impl, (S, ind))
+
+
 ##############  list of string array tests  #################
 
 
 @pytest.fixture(
     params=[
-        pytest.param(np.array([["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2), marks=pytest.mark.slow),
+        pytest.param(
+            np.array([["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2),
+            marks=pytest.mark.slow,
+        ),
         # empty strings, empty lists, NA
-        pytest.param(np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 2), marks=pytest.mark.slow),
+        pytest.param(
+            np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 2),
+            marks=pytest.mark.slow,
+        ),
         # large array
         np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 1000),
     ]
@@ -319,12 +365,14 @@ def test_flatten1():
     """tests flattening array of string lists after split call when split view
     optimization is applied
     """
+
     def impl(S):
         A = S.str.split(",")
         return pd.Series(list(itertools.chain(*A)))
 
-    S = pd.Series(["AB,CC", "C,ABB,D", "CAD", "CA,D", "AA,,D"],
-        [3, 1, 2, 0, 4], name="A")
+    S = pd.Series(
+        ["AB,CC", "C,ABB,D", "CAD", "CA,D", "AA,,D"], [3, 1, 2, 0, 4], name="A"
+    )
     check_func(impl, (S,))
 
 
@@ -332,10 +380,12 @@ def test_flatten2():
     """tests flattening array of string lists after split call when split view
     optimization is not applied
     """
+
     def impl(S):
         A = S.str.split()
         return pd.Series(list(itertools.chain(*A)))
 
-    S = pd.Series(["AB  CC", "C ABB  D", "CAD", "CA\tD", "AA\t\tD"],
-        [3, 1, 2, 0, 4], name="A")
+    S = pd.Series(
+        ["AB  CC", "C ABB  D", "CAD", "CA\tD", "AA\t\tD"], [3, 1, 2, 0, 4], name="A"
+    )
     check_func(impl, (S,))

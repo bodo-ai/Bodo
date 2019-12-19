@@ -141,7 +141,7 @@ for method in str2bool_methods:
 
 @overload_method(types.UnicodeType, "replace")
 def str_replace_overload(in_str, old, new, count=-1):
-    def _str_replace_impl(in_str, old, new, count=-1):
+    def _str_replace_impl(in_str, old, new, count=-1):  # pragma: no cover
         with numba.objmode(out="unicode_type"):
             out = in_str.replace(old, new, count)
         return out
@@ -151,7 +151,7 @@ def str_replace_overload(in_str, old, new, count=-1):
 
 @overload_method(types.UnicodeType, "rfind")
 def str_rfind_overload(in_str, sub, start=0, end=None):
-    def _str_rfind_impl(in_str, sub, start=0, end=None):
+    def _str_rfind_impl(in_str, sub, start=0, end=None):  # pragma: no cover
         with numba.objmode(out="int64"):
             out = in_str.rfind(sub, start, end)
         return out
@@ -178,57 +178,8 @@ def string_to_char_ptr(typingctx, str_tp=None):
     return types.voidptr(str_tp), codegen
 
 
-#####################  re support  ###################
-
-
-class RePatternType(types.Opaque):
-    def __init__(self):
-        super(RePatternType, self).__init__(name="RePatternType")
-
-
-re_pattern_type = RePatternType()
-types.re_pattern_type = re_pattern_type
-
-register_model(RePatternType)(models.OpaqueModel)
-
-
-@box(RePatternType)
-def box_re_pattern(typ, val, c):
-    # TODO: fix
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(RePatternType)
-def unbox_re_pattern(typ, obj, c):
-    # TODO: fix
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
-
-
-# jitoptions until numba #4020 is resolved
-@overload(re.compile, jit_options={"no_cpython_wrapper": False})
-def re_compile_overload(pattern, flags=0):
-    def _re_compile_impl(pattern, flags=0):
-        with numba.objmode(pat="re_pattern_type"):
-            pat = re.compile(pattern, flags)
-        return pat
-
-    return _re_compile_impl
-
-
-@overload_method(RePatternType, "sub")
-def re_sub_overload(p, repl, string, count=0):
-    def _re_sub_impl(p, repl, string, count=0):
-        with numba.objmode(out="unicode_type"):
-            out = p.sub(repl, string, count)
-        return out
-
-    return _re_sub_impl
-
-
 @numba.njit
-def contains_regex(e, in_str):
+def contains_regex(e, in_str):  # pragma: no cover
     with numba.objmode(res="bool_"):
         res = bool(e.search(in_str))
     return res
@@ -257,7 +208,7 @@ def unicode_to_utf8_and_len(typingctx, str_typ=None):
     ret_typ = types.Tuple([utf8_str_type, types.int64])
 
     def codegen(context, builder, sig, args):
-        str_in, = args
+        (str_in,) = args
 
         uni_str = cgutils.create_struct_proxy(string_type)(
             context, builder, value=str_in
@@ -339,7 +290,7 @@ get_c_str = types.ExternalFunction("get_c_str", types.voidptr(std_str_type))
 def int_str_overload(in_str):
     if in_str == string_type:
 
-        def _str_to_int_impl(in_str):
+        def _str_to_int_impl(in_str):  # pragma: no cover
             return _str_to_int64(in_str._data, in_str._length)
 
         return _str_to_int_impl
@@ -398,15 +349,6 @@ def overload_str(val):
         return lambda val: str(np.int64(val))
 
 
-class RegexType(types.Opaque):
-    def __init__(self):
-        super(RegexType, self).__init__(name="RegexType")
-
-
-regex_type = RegexType()
-
-register_model(RegexType)(models.OpaqueModel)
-
 ll.add_symbol("init_string_const", hstr_ext.init_string_const)
 ll.add_symbol("get_c_str", hstr_ext.get_c_str)
 ll.add_symbol("str_to_int64", hstr_ext.str_to_int64)
@@ -444,7 +386,7 @@ def gen_unicode_to_std_str(context, builder, unicode_val):
 def gen_std_str_to_unicode(context, builder, std_str_val, del_str=False):
     kind = numba.unicode.PY_UNICODE_1BYTE_KIND
 
-    def _std_str_to_unicode(std_str):
+    def _std_str_to_unicode(std_str):  # pragma: no cover
         length = bodo.libs.str_ext.get_std_str_len(std_str)
         ret = numba.unicode._empty_string(kind, length)
         bodo.libs.str_arr_ext._memcpy(
@@ -470,7 +412,7 @@ def gen_get_unicode_chars(context, builder, unicode_val):
     return uni_str.data
 
 
-def unicode_to_char_ptr(in_str):
+def unicode_to_char_ptr(in_str):  # pragma: no cover
     return in_str
 
 

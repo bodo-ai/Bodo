@@ -100,19 +100,19 @@ _barrier = types.ExternalFunction("c_barrier", types.int32())
 
 
 @numba.njit
-def get_rank():
+def get_rank():  # pragma: no cover
     """wrapper for getting process rank (MPI rank currently)"""
     return _get_rank()
 
 
 @numba.njit
-def get_size():
+def get_size():  # pragma: no cover
     """wrapper for getting number of processes (MPI COMM size currently)"""
     return _get_size()
 
 
 @numba.njit
-def barrier():
+def barrier():  # pragma: no cover
     """wrapper for barrier (MPI barrier currently)"""
     return _barrier()
 
@@ -146,7 +146,7 @@ _send = types.ExternalFunction(
 
 
 @numba.njit
-def send(val, rank, tag):
+def send(val, rank, tag):  # pragma: no cover
     # dummy array for val
     send_arr = np.full(1, val)
     type_enum = get_type_enum(send_arr)
@@ -160,7 +160,7 @@ _recv = types.ExternalFunction(
 
 
 @numba.njit
-def recv(dtype, rank, tag):
+def recv(dtype, rank, tag):  # pragma: no cover
     # dummy array for val
     recv_arr = np.empty(1, dtype)
     type_enum = get_type_enum(recv_arr)
@@ -180,7 +180,7 @@ _isend = types.ExternalFunction(
 def isend(arr, size, pe, tag, cond=True):
     if isinstance(arr, types.Array):
 
-        def impl(arr, size, pe, tag, cond=True):
+        def impl(arr, size, pe, tag, cond=True):  # pragma: no cover
             type_enum = get_type_enum(arr)
             return _isend(arr.ctypes, size, type_enum, pe, tag, cond)
 
@@ -189,7 +189,7 @@ def isend(arr, size, pe, tag, cond=True):
     # voidptr input, pointer to bytes
     typ_enum = _numba_to_c_type_map[types.uint8]
 
-    def impl_voidptr(arr, size, pe, tag, cond=True):
+    def impl_voidptr(arr, size, pe, tag, cond=True):  # pragma: no cover
         return _isend(arr, size, typ_enum, pe, tag, cond)
 
     return impl_voidptr
@@ -204,7 +204,7 @@ _irecv = types.ExternalFunction(
 
 
 @numba.njit
-def irecv(arr, size, pe, tag, cond=True):
+def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
     type_enum = get_type_enum(arr)
     return _irecv(arr.ctypes, size, type_enum, pe, tag, cond)
 
@@ -215,7 +215,7 @@ _alltoall = types.ExternalFunction(
 
 
 @numba.njit
-def alltoall(send_arr, recv_arr, count):
+def alltoall(send_arr, recv_arr, count):  # pragma: no cover
     # TODO: handle int64 counts
     assert count < INT_MAX
     type_enum = get_type_enum(send_arr)
@@ -294,7 +294,7 @@ def dist_reduce(value, reduce_op):
     if isinstance(value, types.Array):
         typ_enum = np.int32(_numba_to_c_type_map[value.dtype])
 
-        def impl_arr(value, reduce_op):
+        def impl_arr(value, reduce_op):  # pragma: no cover
             A = np.ascontiguousarray(value)
             _dist_arr_reduce(A.ctypes, A.size, reduce_op, typ_enum)
             return A
@@ -318,7 +318,7 @@ def dist_reduce(value, reduce_op):
 
     typ_enum = np.int32(_numba_to_c_type_map[target_typ])
 
-    def impl(value, reduce_op):
+    def impl(value, reduce_op):  # pragma: no cover
         in_ptr = value_to_ptr(value)
         out_ptr = value_to_ptr(value)
         _dist_reduce(in_ptr, out_ptr, reduce_op, typ_enum)
@@ -338,7 +338,7 @@ def dist_exscan(value, reduce_op):
     typ_enum = np.int32(_numba_to_c_type_map[target_typ])
     zero = target_typ(0)
 
-    def impl(value, reduce_op):
+    def impl(value, reduce_op):  # pragma: no cover
         in_ptr = value_to_ptr(value)
         out_ptr = value_to_ptr(zero)
         _dist_exscan(in_ptr, out_ptr, reduce_op, typ_enum)
@@ -349,14 +349,14 @@ def dist_exscan(value, reduce_op):
 
 # from GetBit() in Arrow
 @numba.njit
-def get_bit(bits, i):
+def get_bit(bits, i):  # pragma: no cover
     return (bits[i >> 3] >> (i & 0x07)) & 1
 
 
 @numba.njit
 def copy_gathered_null_bytes(
     null_bitmap_ptr, tmp_null_bytes, recv_counts_nulls, recv_counts
-):
+):  # pragma: no cover
     curr_tmp_byte = 0  # current location in buffer with all data
     curr_str = 0  # current string in output bitmap
     # for each chunk
@@ -377,7 +377,7 @@ def gatherv(data, allgather=False):
 
     if isinstance(data, CategoricalArray):
 
-        def impl_cat(data, allgather=False):
+        def impl_cat(data, allgather=False):  # pragma: no cover
             int_arr = bodo.hiframes.pd_categorical_ext.cat_array_to_int(data)
             return bodo.hiframes.pd_categorical_ext.set_cat_dtype(
                 bodo.gatherv(int_arr, allgather), data
@@ -388,7 +388,7 @@ def gatherv(data, allgather=False):
     if isinstance(data, types.Array):
         typ_val = _numba_to_c_type_map[data.dtype]
 
-        def gatherv_impl(data, allgather=False):
+        def gatherv_impl(data, allgather=False):  # pragma: no cover
             data = np.ascontiguousarray(data)
             rank = bodo.libs.distributed_api.get_rank()
             # size to handle multi-dim arrays
@@ -400,7 +400,7 @@ def gatherv(data, allgather=False):
             displs = np.empty(1, np.int32)
             if rank == MPI_ROOT or allgather:
                 displs = bodo.ir.join.calc_disp(recv_counts)
-            #  print(rank, n_loc, n_total, recv_counts, displs)
+            # print(rank, n_loc, n_total, recv_counts, displs)
             c_gatherv(
                 data.ctypes,
                 np.int32(n_loc),
@@ -419,7 +419,7 @@ def gatherv(data, allgather=False):
         int32_typ_enum = np.int32(_numba_to_c_type_map[types.int32])
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
 
-        def gatherv_str_arr_impl(data, allgather=False):
+        def gatherv_str_arr_impl(data, allgather=False):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
             n_loc = len(data)
             n_all_chars = num_total_chars(data)
@@ -502,7 +502,7 @@ def gatherv(data, allgather=False):
         typ_val = _numba_to_c_type_map[data.dtype]
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
 
-        def gatherv_impl_int_arr(data, allgather=False):
+        def gatherv_impl_int_arr(data, allgather=False):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
             n_loc = len(data)
             n_bytes = (n_loc + 7) >> 3
@@ -552,7 +552,7 @@ def gatherv(data, allgather=False):
 
     if isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
 
-        def impl(data, allgather=False):
+        def impl(data, allgather=False):  # pragma: no cover
             # get data and index arrays
             arr = bodo.hiframes.pd_series_ext.get_series_data(data)
             index = bodo.hiframes.pd_series_ext.get_series_index(data)
@@ -567,7 +567,7 @@ def gatherv(data, allgather=False):
 
     if isinstance(data, bodo.hiframes.pd_index_ext.RangeIndexType):
 
-        def impl_range_index(data, allgather=False):
+        def impl_range_index(data, allgather=False):  # pragma: no cover
             # XXX: assuming global range starts from zero
             # and each process has a chunk, and step is 1
             local_n = data._stop - data._start
@@ -584,7 +584,7 @@ def gatherv(data, allgather=False):
 
     if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
 
-        def impl_pd_index(data, allgather=False):
+        def impl_pd_index(data, allgather=False):  # pragma: no cover
             arr = bodo.libs.distributed_api.gatherv(data._data, allgather)
             return bodo.utils.conversion.index_from_array(arr, data._name)
 
@@ -619,7 +619,7 @@ def gatherv(data, allgather=False):
         int32_typ_enum = np.int32(_numba_to_c_type_map[types.int32])
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
 
-        def gatherv_list_str_arr_impl(data, allgather=False):
+        def gatherv_list_str_arr_impl(data, allgather=False):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
             n_loc = len(data)
             n_all_strs = data._num_total_strings
@@ -752,7 +752,7 @@ def bcast(data):  # pragma: no cover
 def bcast_overload(data):
     if isinstance(data, types.Array):
 
-        def bcast_impl(data):
+        def bcast_impl(data):  # pragma: no cover
             typ_enum = get_type_enum(data)
             count = data.size
             assert count < INT_MAX
@@ -763,7 +763,7 @@ def bcast_overload(data):
 
     if isinstance(data, IntegerArrayType) or data == boolean_array:
 
-        def bcast_impl_int_arr(data):
+        def bcast_impl_int_arr(data):  # pragma: no cover
             bcast(data._data)
             bcast(data._null_bitmap)
             return
@@ -774,7 +774,7 @@ def bcast_overload(data):
         int32_typ_enum = np.int32(_numba_to_c_type_map[types.int32])
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
 
-        def bcast_str_impl(data):
+        def bcast_str_impl(data):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
             n_loc = len(data)
             n_all_chars = num_total_chars(data)
@@ -844,7 +844,7 @@ def bcast_scalar_overload(val):
 
 
 # if arr is string array, pre-allocate on non-root the same size as root
-def prealloc_str_for_bcast(arr):
+def prealloc_str_for_bcast(arr):  # pragma: no cover
     return arr
 
 
@@ -852,7 +852,7 @@ def prealloc_str_for_bcast(arr):
 def prealloc_str_for_bcast_overload(arr):
     if arr == string_array_type:
 
-        def prealloc_impl(arr):
+        def prealloc_impl(arr):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
             n_loc = bcast_scalar(len(arr))
             n_all_char = bcast_scalar(np.int64(num_total_chars(arr)))
@@ -865,13 +865,13 @@ def prealloc_str_for_bcast_overload(arr):
     return lambda arr: arr
 
 
-def slice_getitem(arr, slice_index, arr_start, total_len, is_1D):
+def slice_getitem(arr, slice_index, arr_start, total_len, is_1D):  # pragma: no cover
     return arr[slice_index]
 
 
 @overload(slice_getitem)
 def slice_getitem_overload(arr, slice_index, arr_start, total_len, is_1D):
-    def getitem_impl(arr, slice_index, arr_start, total_len, is_1D):
+    def getitem_impl(arr, slice_index, arr_start, total_len, is_1D):  # pragma: no cover
         # normalize slice
         slice_index = numba.unicode._normalize_slice(slice_index, total_len)
         start = slice_index.start
@@ -899,7 +899,7 @@ def slice_getitem_overload(arr, slice_index, arr_start, total_len, is_1D):
 
 
 # assuming start and step are None
-def slice_getitem_from_start(arr, slice_index):
+def slice_getitem_from_start(arr, slice_index):  # pragma: no cover
     return arr[slice_index]
 
 
@@ -907,7 +907,7 @@ def slice_getitem_from_start(arr, slice_index):
 def slice_getitem_from_start_overload(arr, slice_index):
     if arr == string_array_type:
 
-        def getitem_str_impl(arr, slice_index):
+        def getitem_str_impl(arr, slice_index):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
             k = slice_index.stop
             # get total characters for allocation
@@ -927,7 +927,7 @@ def slice_getitem_from_start_overload(arr, slice_index):
 
     arr_type = arr
 
-    def getitem_impl(arr, slice_index):
+    def getitem_impl(arr, slice_index):  # pragma: no cover
         rank = bodo.libs.distributed_api.get_rank()
         k = slice_index.stop
         out_arr = bodo.utils.utils.alloc_type((k,) + arr.shape[1:], arr_type)
@@ -942,7 +942,7 @@ def slice_getitem_from_start_overload(arr, slice_index):
 dummy_use = numba.njit(lambda a: None)
 
 
-def int_getitem(arr, ind, arr_start, total_len, is_1D):
+def int_getitem(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
     return arr[ind]
 
 
@@ -953,7 +953,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
         kind = numba.unicode.PY_UNICODE_1BYTE_KIND
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
 
-        def str_getitem_impl(arr, ind, arr_start, total_len, is_1D):
+        def str_getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
             if ind >= total_len:
                 raise IndexError("index out of bounds")
 
@@ -993,7 +993,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return str_getitem_impl
 
-    def getitem_impl(arr, ind, arr_start, total_len, is_1D):
+    def getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
         # TODO: multi-dim array support
 
         if ind >= total_len:
@@ -1101,7 +1101,7 @@ def alltoallv_tup_overload(
 
 
 @numba.njit
-def get_start_count(n):
+def get_start_count(n):  # pragma: no cover
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
     start = bodo.libs.distributed_api.get_start(n, n_pes, rank)
@@ -1121,21 +1121,21 @@ numba.ir_utils.remove_call_handlers.append(remove_dist_calls)
 
 
 @numba.njit
-def get_start(total_size, pes, rank):
+def get_start(total_size, pes, rank):  # pragma: no cover
     """get start index in 1D distribution"""
     chunk = math.ceil(total_size / pes)
     return min(total_size, rank * chunk)
 
 
 @numba.njit
-def get_end(total_size, pes, rank):
+def get_end(total_size, pes, rank):  # pragma: no cover
     """get end point of range for parfor division"""
     chunk = math.ceil(total_size / pes)
     return min(total_size, (rank + 1) * chunk)
 
 
 @numba.njit
-def get_node_portion(total_size, pes, rank):
+def get_node_portion(total_size, pes, rank):  # pragma: no cover
     """get portion of size for alloc division"""
     chunk = math.ceil(total_size / pes)
     return min(total_size, (rank + 1) * chunk) - min(total_size, rank * chunk)
@@ -1192,7 +1192,7 @@ def rebalance_array(A):
 
 
 @numba.njit
-def rebalance_array_parallel(in_arr, count):
+def rebalance_array_parallel(in_arr, count):  # pragma: no cover
     n_pes = bodo.libs.distributed_api.get_size()
     my_rank = bodo.libs.distributed_api.get_rank()
     out_arr = np.empty((count,) + in_arr.shape[1:], in_arr.dtype)
@@ -1263,12 +1263,12 @@ class ThreadedRetTyper(AbstractTemplate):
 
 
 @numba.njit
-def parallel_print(*args):
+def parallel_print(*args):  # pragma: no cover
     print(*args)
 
 
 @numba.njit
-def single_print(*args):
+def single_print(*args):  # pragma: no cover
     if bodo.libs.distributed_api.get_rank() == 0:
         print(*args)
 
@@ -1339,7 +1339,7 @@ def _root_rank_select(old_val, new_val):  # pragma: no cover
     return new_val
 
 
-def get_tuple_prod(t):
+def get_tuple_prod(t):  # pragma: no cover
     return np.prod(t)
 
 
@@ -1349,7 +1349,7 @@ def get_tuple_prod_overload(t):
     if t == numba.types.containers.Tuple(()):
         return lambda t: 1
 
-    def get_tuple_prod_impl(t):
+    def get_tuple_prod_impl(t):  # pragma: no cover
         res = 1
         for a in t:
             res *= a
@@ -1396,7 +1396,7 @@ permutation_int = types.ExternalFunction(
 
 
 @numba.njit
-def dist_permutation_int(lhs, n):
+def dist_permutation_int(lhs, n):  # pragma: no cover
     permutation_int(lhs.ctypes, n)
 
 
@@ -1409,7 +1409,9 @@ permutation_array_index = types.ExternalFunction(
 
 
 @numba.njit
-def dist_permutation_array_index(lhs, lhs_len, dtype_size, rhs, p, p_len):
+def dist_permutation_array_index(
+    lhs, lhs_len, dtype_size, rhs, p, p_len
+):  # pragma: no cover
     c_rhs = np.ascontiguousarray(rhs)
     lower_dims_size = get_tuple_prod(c_rhs.shape[1:])
     elem_size = dtype_size * lower_dims_size
@@ -1426,7 +1428,7 @@ finalize = types.ExternalFunction("finalize", types.int32())
 
 
 @numba.njit
-def call_finalize():
+def call_finalize():  # pragma: no cover
     finalize()
 
 

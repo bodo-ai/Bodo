@@ -250,14 +250,14 @@ def datetime_get_day(context, builder, typ, val):
 
 
 @numba.njit
-def convert_datetime_date_array_to_native(x):
+def convert_datetime_date_array_to_native(x):  # pragma: no cover
     return np.array(
         [(val.day + (val.month << 16) + (val.year << 32)) for val in x], dtype=np.int64
     )
 
 
 @numba.njit
-def datetime_date_ctor(y, m, d):
+def datetime_date_ctor(y, m, d):  # pragma: no cover
     return datetime.date(y, m, d)
 
 
@@ -592,7 +592,7 @@ make_attribute_wrapper(PandasTimestampType, "nanosecond", "nanosecond")
 
 @overload_method(PandasTimestampType, "date")
 def overload_pd_timestamp_date(ptt):
-    def pd_timestamp_date_impl(ptt):
+    def pd_timestamp_date_impl(ptt):  # pragma: no cover
         return datetime.date(ptt.year, ptt.month, ptt.day)
 
     return pd_timestamp_date_impl
@@ -602,7 +602,7 @@ def overload_pd_timestamp_date(ptt):
 def overload_pd_timestamp_isoformat(ts_typ, sep=None):
     if sep is None:
 
-        def timestamp_isoformat_impl(ts):
+        def timestamp_isoformat_impl(ts):  # pragma: no cover
             assert ts.nanosecond == 0  # TODO: handle nanosecond (timestamps.pyx)
             _time = str_2d(ts.hour) + ":" + str_2d(ts.minute) + ":" + str_2d(ts.second)
             res = (
@@ -618,7 +618,7 @@ def overload_pd_timestamp_isoformat(ts_typ, sep=None):
 
     else:
 
-        def timestamp_isoformat_impl(ts, sep):
+        def timestamp_isoformat_impl(ts, sep):  # pragma: no cover
             assert ts.nanosecond == 0  # TODO: handle nanosecond (timestamps.pyx)
             _time = str_2d(ts.hour) + ":" + str_2d(ts.minute) + ":" + str_2d(ts.second)
             res = (
@@ -637,7 +637,7 @@ def overload_pd_timestamp_isoformat(ts_typ, sep=None):
 
 # TODO: support general string formatting
 @numba.njit
-def str_2d(a):
+def str_2d(a):  # pragma: no cover
     res = str(a)
     if len(res) == 1:
         return "0" + res
@@ -789,7 +789,7 @@ def impl_ctor_ts_ts(context, builder, sig, args):
 def overload_pd_timestamp(ts_input):
     if ts_input == bodo.string_type:
 
-        def impl(ts_input):
+        def impl(ts_input):  # pragma: no cover
             dt64 = bodo.hiframes.pd_timestamp_ext.parse_datetime_str(ts_input)
             idt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dt64)
             return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(idt64)
@@ -831,14 +831,14 @@ def dt64_to_integer(context, builder, fromty, toty, val):
 
 @overload_attribute(PandasTimestampType, "value")
 def overload_timestamp_value(t):
-    def impl(t):
+    def impl(t):  # pragma: no cover
         return convert_timestamp_to_datetime64(t)
 
     return impl
 
 
 @numba.njit
-def convert_timestamp_to_datetime64(ts):
+def convert_timestamp_to_datetime64(ts):  # pragma: no cover
     year = ts.year - 1970
     days = year * 365
     if days >= 0:
@@ -871,7 +871,7 @@ def convert_timestamp_to_datetime64(ts):
 
 
 @numba.njit
-def convert_datetime64_to_timestamp(dt64):
+def convert_datetime64_to_timestamp(dt64):  # pragma: no cover
     # pandas 0.23 np_datetime.c:762
     perday = 24 * 60 * 60 * 1000 * 1000 * 1000
 
@@ -934,7 +934,7 @@ def convert_datetime64_to_timestamp(dt64):
 # -----------------------------------------------------------
 
 
-def myref(val):
+def myref(val):  # pragma: no cover
     pass
 
 
@@ -949,7 +949,7 @@ def type_myref(context):
 # -----------------------------------------------------------
 
 
-def integer_to_timedelta64(val):
+def integer_to_timedelta64(val):  # pragma: no cover
     return np.timedelta64(val)
 
 
@@ -969,7 +969,7 @@ def impl_int_to_timedelta64(context, builder, sig, args):
 # -----------------------------------------------------------
 
 
-def integer_to_dt64(val):
+def integer_to_dt64(val):  # pragma: no cover
     return np.datetime64(val)
 
 
@@ -991,7 +991,7 @@ def impl_int_to_dt64(context, builder, sig, args):
 # -----------------------------------------------------------
 
 
-def dt64_to_integer(val):
+def dt64_to_integer(val):  # pragma: no cover
     return int(val)
 
 
@@ -1015,7 +1015,7 @@ def dt64_hash(val):
 
 
 # -----------------------------------------------------------
-def timedelta64_to_integer(val):
+def timedelta64_to_integer(val):  # pragma: no cover
     return int(val)
 
 
@@ -1084,7 +1084,7 @@ iNaT = np.iinfo(np.int64).min
 
 
 @numba.njit(locals={"arg1": numba.int32, "arg3": numba.int32, "arg4": numba.int32})
-def parse_datetime_str(_str):
+def parse_datetime_str(_str):  # pragma: no cover
     nat_strings = ("NaT", "nat", "NAT", "nan", "NaN", "NAN")
     if len(_str) == 0 or _str in nat_strings:
         return integer_to_dt64(iNaT)

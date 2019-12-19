@@ -9,7 +9,7 @@
 #if _MSC_VER >= 1900
 #undef timezone
 #endif
-
+#include "arrow/record_batch.h"
 #include "parquet/arrow/reader.h"
 using parquet::arrow::FileReader;
 #include "_parquet_reader.h"

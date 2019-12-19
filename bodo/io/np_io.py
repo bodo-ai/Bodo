@@ -67,7 +67,7 @@ def _handle_np_fromfile(assign, lhs, rhs):
     _fname = rhs.args[0]
     _dtype = rhs.args[1]
 
-    def fromfile_impl(fname, dtype):
+    def fromfile_impl(fname, dtype):  # pragma: no cover
         size = get_file_size(fname)
         dtype_size = get_dtype_size(dtype)
         A = np.empty(size // dtype_size, dtype=dtype)
@@ -111,7 +111,7 @@ def tofile_overload(arr_ty, fname_ty):
     # TODO: fix Numba to convert literal
     if fname_ty == string_type or isinstance(fname_ty, types.StringLiteral):
 
-        def tofile_impl(arr, fname):
+        def tofile_impl(arr, fname):  # pragma: no cover
             A = np.ascontiguousarray(arr)
             dtype_size = get_dtype_size(A.dtype)
             # TODO: unicode name
@@ -132,7 +132,7 @@ def tofile_overload(arr_ty, fname_ty):
 #     return types.void(arr_ty), codegen
 
 
-def file_write_parallel(fname, arr, start, count):
+def file_write_parallel(fname, arr, start, count):  # pragma: no cover
     pass
 
 
@@ -141,7 +141,7 @@ def file_write_parallel(fname, arr, start, count):
 def file_write_parallel_overload(fname, arr, start, count):
     if fname == string_type:  # avoid str literal
 
-        def _impl(fname, arr, start, count):
+        def _impl(fname, arr, start, count):  # pragma: no cover
             A = np.ascontiguousarray(arr)
             dtype_size = get_dtype_size(A.dtype)
             elem_size = dtype_size * bodo.libs.distributed_api.get_tuple_prod(
@@ -154,7 +154,7 @@ def file_write_parallel_overload(fname, arr, start, count):
         return _impl
 
 
-def file_read_parallel(fname, arr, start, count):
+def file_read_parallel(fname, arr, start, count):  # pragma: no cover
     return
 
 
@@ -162,7 +162,7 @@ def file_read_parallel(fname, arr, start, count):
 def file_read_parallel_overload(fname, arr, start, count):
     if fname == string_type:
 
-        def _impl(fname, arr, start, count):
+        def _impl(fname, arr, start, count):  # pragma: no cover
             dtype_size = get_dtype_size(arr.dtype)
             _file_read_parallel(
                 fname._data, arr.ctypes, start * dtype_size, count * dtype_size
@@ -171,7 +171,7 @@ def file_read_parallel_overload(fname, arr, start, count):
         return _impl
 
 
-def file_read(fname, arr, size):
+def file_read(fname, arr, size):  # pragma: no cover
     return
 
 
@@ -182,7 +182,7 @@ def file_read_overload(fname, arr, size):
         return lambda fname, arr, size: _file_read(fname._data, arr.ctypes, size)
 
 
-def get_file_size(fname):
+def get_file_size(fname):  # pragma: no cover
     return 0
 
 

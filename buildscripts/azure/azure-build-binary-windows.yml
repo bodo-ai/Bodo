@@ -1,0 +1,63 @@
+parameters:
+  name: ''
+  vmImage: ''
+
+jobs:
+- job: ${{ parameters.name }}
+  pool:
+    vmImage: ${{ parameters.vmImage }}
+  
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.7'
+    displayName: 'Use Python $(python.version)'
+
+  - script: |
+      pip install astunparse
+      chmod +x buildscripts/remove_docstring.py
+    displayName: 'Prepare to build'
+
+  - powershell: |
+        Write-Host "##vso[task.prependpath]$env:CONDA\Scripts"
+        Write-Host "##vso[task.prependpath]$HOME/miniconda3/bin"
+    displayName: 'Add conda to PATH'
+
+  - script: conda update -q -n base conda
+    displayName: 'Update conda'
+
+  - script: |
+      conda install -y flake8
+      flake8 bodo
+    displayName: 'Flake8'
+
+  - bash: |
+      conda create -y -n bodo_build conda-build anaconda-client conda-verify
+      source activate bodo_build
+      cd buildscripts/bodo-conda-recipe/
+      export TRIAL_PERIOD=$(TRIAL_PERIOD)
+      conda build . -c defaults -c conda-forge -c intel --no-test
+    displayName: 'Conda build Bodo'
+
+  - bash: |
+      source activate bodo_build
+      cd $(System.DefaultWorkingDirectory)
+      mkdir bodo-inc
+      mkdir bodo-inc/windows-64
+      cp $HOME/miniconda3/envs/bodo_build/conda-bld/windows-64/bodo*.tar.bz2 bodo-inc/windows-64/
+      conda index bodo-inc/
+    displayName: 'index bodo-inc'
+
+  - task: ArchiveFiles@2
+    inputs:
+      rootFolderOrFile: '$(System.DefaultWorkingDirectory)/bodo-inc'
+      includeRootFolder: false
+      archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.name }}bodo-inc.zip'
+      replaceExistingArchive: true 
+    displayName: "Archive files"
+    
+  - task: PublishBuildArtifacts@1
+    inputs:
+      pathtoPublish: '$(Build.ArtifactStagingDirectory)/${{ parameters.name }}bodo-inc.zip'
+      artifactName: bodo-inc
+    displayName: "Publish Artifact"

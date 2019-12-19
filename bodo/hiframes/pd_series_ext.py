@@ -313,9 +313,12 @@ def init_series_equiv(self, scope, equiv_set, args, kws):
         return var, []
     return None
 
+
 from numba.array_analysis import ArrayAnalysis
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_series_ext_init_series = init_series_equiv
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_series_ext_init_series = (
+    init_series_equiv
+)
 
 
 def get_series_payload(context, builder, series_type, value):
@@ -429,7 +432,9 @@ def get_series_data_equiv(self, scope, equiv_set, args, kws):
 
 from numba.array_analysis import ArrayAnalysis
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_series_ext_get_series_data = get_series_data_equiv
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_series_ext_get_series_data = (
+    get_series_data_equiv
+)
 
 
 def alias_ext_init_series(lhs_name, args, alias_map, arg_aliases):
@@ -470,7 +475,7 @@ def if_series_to_array_type(typ):
     if isinstance(typ, SeriesType):
         return series_to_array_type(typ)
 
-    if isinstance(typ, (types.Tuple, types.UniTuple)):
+    if isinstance(typ, types.BaseTuple):
         return types.Tuple([if_series_to_array_type(t) for t in typ.types])
     if isinstance(typ, types.List) and isinstance(typ.dtype, SeriesType):
         return types.List(if_series_to_array_type(typ.dtype))
@@ -481,7 +486,7 @@ def if_series_to_array_type(typ):
 
 
 @numba.njit
-def convert_index_to_int64(S):
+def convert_index_to_int64(S):  # pragma: no cover
     # convert Series with none index to numeric index
     data = bodo.hiframes.pd_series_ext.get_series_data(S)
     index_arr = np.arange(len(data))
@@ -528,7 +533,7 @@ class SeriesAttribute(AttributeTemplate):
             on=None,
             axis=0,
             closed=None,
-        ):
+        ):  # pragma: no cover
             pass
 
         pysig = numba.utils.pysignature(rolling_stub)
@@ -561,7 +566,7 @@ class SeriesAttribute(AttributeTemplate):
         kwargs = dict(kws)
         func = args[0] if len(args) > 0 else kwargs["arg"]
 
-        def map_stub(arg, na_action=None):
+        def map_stub(arg, na_action=None):  # pragma: no cover
             pass
 
         pysig = numba.utils.pysignature(map_stub)
@@ -572,7 +577,7 @@ class SeriesAttribute(AttributeTemplate):
         kwargs = dict(kws)
         func = args[0] if len(args) > 0 else kwargs["func"]
 
-        def apply_stub(func, convert_dtype=True, args=()):
+        def apply_stub(func, convert_dtype=True, args=()):  # pragma: no cover
             pass
 
         pysig = numba.utils.pysignature(apply_stub)
@@ -590,7 +595,7 @@ class SeriesAttribute(AttributeTemplate):
             else types.unliteral(kwargs.get("fill_value", types.none))
         )
 
-        def combine_stub(other, func, fill_value=None):
+        def combine_stub(other, func, fill_value=None):  # pragma: no cover
             pass
 
         pysig = numba.utils.pysignature(combine_stub)
@@ -686,6 +691,7 @@ str2bool_methods = (
     "isnumeric",
     "isdecimal",
 )
+
 
 class SeriesRollingType(types.Type):
     def __init__(self, stype):
@@ -835,7 +841,9 @@ def pd_series_overload(
     if not is_overload_false(fastpath):
         raise ValueError("pd.Series(): 'fastpath' argument not supported.")
 
-    def impl(data=None, index=None, dtype=None, name=None, copy=False, fastpath=False):
+    def impl(
+        data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
+    ):  # pragma: no cover
         # extract name if data is has name (Series/Index) and name is None
         name_t = bodo.utils.conversion.extract_name_if_none(data, name)
         index_t = bodo.utils.conversion.extract_index_if_none(data, index)
@@ -863,7 +871,7 @@ def pd_series_overload(
     return impl
 
 
-def get_series_data_tup(series_tup):
+def get_series_data_tup(series_tup):  # pragma: no cover
     return tuple(get_series_data(s) for s in series_tup)
 
 

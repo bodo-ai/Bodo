@@ -2,6 +2,7 @@
 """
 Helper functions to enable typing.
 """
+import itertools
 import numpy as np
 import pandas as pd
 import numba
@@ -23,8 +24,8 @@ class BodoWarning(Warning):
     Warning class for Bodo-related potential issues such as prevention of
     parallelization by unsupported functions.
     """
-    pass
 
+    pass
 
 
 def is_overload_none(val):
@@ -39,6 +40,10 @@ def is_overload_constant_bool(val):
     )
 
 
+def is_overload_bool(val):
+    return isinstance(val, types.Boolean) or is_overload_constant_bool(val)
+
+
 def is_overload_constant_str(val):
     return (
         isinstance(val, str)
@@ -49,10 +54,23 @@ def is_overload_constant_str(val):
 
 def is_overload_constant_str_list(val):
     return (
-        isinstance(val, bodo.utils.typing.ConstList)
+        isinstance(val, (bodo.utils.typing.ConstList, bodo.utils.typing.ConstUniTuple))
         and isinstance(val.consts, tuple)
         and isinstance(val.consts[0], str)
     )
+
+
+def is_overload_constant_int(val):
+    return (
+        isinstance(val, int)
+        or (isinstance(val, types.IntegerLiteral)
+            and isinstance(val.literal_value, int))
+        or ((isinstance(val, types.Omitted) and isinstance(val.value, int)))
+    )
+
+
+def is_overload_bool_list(val):
+    return isinstance(val, numba.types.List) and isinstance(val.dtype, types.Boolean)
 
 
 def is_overload_true(val):
@@ -83,6 +101,15 @@ def is_overload_str(val, const):
     )
 
 
+def get_overload_const_str_len(val):
+    if isinstance(val, str):
+        return len(val)
+    if isinstance(val, types.StringLiteral) and isinstance(val.literal_value, str):
+        return len(val.literal_value)
+    if isinstance(val, types.Omitted) and isinstance(val.value, str):
+        return len(val.value)
+
+
 def get_const_str_list(val):
     # 'ommited' case
     if getattr(val, "value", None) is not None:
@@ -105,7 +132,21 @@ def get_overload_const_str(val):
     if isinstance(val, types.StringLiteral):
         assert isinstance(val.literal_value, str)
         return val.literal_value
-    raise ValueError("{} not constant string".format(val))
+    raise BodoError("{} not constant string".format(val))
+
+
+def get_overload_const_int(val):
+    if isinstance(val, int):
+        return val
+    # 'ommited' case
+    if getattr(val, "value", None) is not None:
+        assert isinstance(val.value, int)
+        return val.value
+    # literal case
+    if isinstance(val, types.IntegerLiteral):
+        assert isinstance(val.literal_value, int)
+        return val.literal_value
+    raise ValueError("{} not constant integer".format(val))
 
 
 # TODO: move to Numba
@@ -122,7 +163,7 @@ def parse_dtype(dtype):
         return numba.numpy_support.from_dtype(np.dtype(d_str))
     except:
         pass
-    raise ValueError("invalid dtype {}".format(dtype))
+    raise BodoError("invalid dtype {}".format(dtype))
 
 
 def is_list_like_index_type(t):
@@ -232,11 +273,16 @@ class AddConstsTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         ret_typ = args[0]
-        # assert isinstance(ret_typ, types.List)  # TODO: other types
         # TODO: FloatLiteral e.g. test_fillna
         if all(isinstance(v, types.Literal) for v in args[1:]):
             consts = tuple(v.literal_value for v in args[1:])
-            ret_typ = ConstList(ret_typ.dtype, consts)
+            if isinstance(ret_typ, types.DictType):
+                ret_typ = ConstDictType(ret_typ.key_type, ret_typ.value_type, consts)
+            elif isinstance(ret_typ, types.UniTuple):
+                assert ret_typ.count == len(consts)
+                ret_typ = ConstUniTuple(ret_typ.dtype, ret_typ.count, consts)
+            else:
+                ret_typ = ConstList(ret_typ.dtype, consts)
         return signature(ret_typ, *args)
 
 
@@ -245,11 +291,63 @@ def lower_add_consts_to_type(context, builder, sig, args):
     return impl_ret_borrowed(context, builder, sig.return_type, args[0])
 
 
+class ConstDictType(types.DictType):
+    """Dictionary type with constant keys and values
+    """
+
+    def __init__(self, keyty, valty, consts):
+        keyty = types.unliteral(keyty)
+        valty = types.unliteral(valty)
+        self.key_type = keyty
+        self.value_type = valty
+        self.keyvalue_type = types.Tuple([keyty, valty])
+        self.consts = consts
+        name = "{}[{},{}][{}]".format(self.__class__.__name__, keyty, valty, consts)
+        super(types.DictType, self).__init__(name)
+
+
+@register_model(ConstDictType)
+class ConstDictModel(numba.dictobject.DictModel):
+    def __init__(self, dmm, fe_type):
+        l_type = types.DictType(fe_type.key_type, fe_type.value_type)
+        super(ConstDictModel, self).__init__(dmm, l_type)
+
+
+# Type used to add constant values to constant uniform tuples to enable typing of calls
+# such as df.merge() with tuple of str as "on" argument
+class ConstUniTuple(types.UniTuple):
+    def __init__(self, dtype, count, consts):
+        dtype = types.unliteral(dtype)
+        self.dtype = dtype
+        self.count = count
+        self.consts = consts
+        cls_name = "tuple[{}]".format(consts)
+        name = "%s(%s x %d)" % (cls_name, self.dtype, self.count)
+        super(types.UniTuple, self).__init__(name=name)
+
+    def copy(self):
+        return ConstUniTuple(self.dtype, self.count, self.consts)
+
+    def unify(self, typingctx, other):
+        if isinstance(other, ConstUniTuple) and self.consts == other.consts:
+            dtype = typingctx.unify_pairs(self.dtype, other.dtype)
+            if dtype is not None:
+                return ConstUniTuple(dtype, self.count, self.consts)
+
+    @property
+    def key(self):
+        return self.dtype, self.count, self.consts
+
+
+@register_model(ConstUniTuple)
+class ConstUniTupleModel(models.UniTupleModel):
+    def __init__(self, dmm, fe_type):
+        l_type = types.UniTuple(fe_type.dtype, fe_type.count)
+        super(ConstUniTupleModel, self).__init__(dmm, l_type)
+
+
 # dummy empty itertools implementation to avoid typing errors for series str
 # flatten case
-import itertools
-
-
 @overload(itertools.chain)
 def chain_overload():
     return lambda: [0]
@@ -268,7 +366,7 @@ class SortedBuiltinLambda(CallableTemplate):
         return typer
 
 
-def convert_tup_to_rec(val):
+def convert_tup_to_rec(val):  # pragma: no cover
     return val
 
 

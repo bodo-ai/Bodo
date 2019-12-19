@@ -235,6 +235,13 @@ def test_df_get_values(numeric_df_value):
     check_func(impl, (numeric_df_value,))
 
 
+def test_df_to_numpy(numeric_df_value):
+    def impl(df):
+        return df.to_numpy()
+
+    check_func(impl, (numeric_df_value,))
+
+
 def test_df_ndim(df_value):
     def impl(df):
         return df.ndim
@@ -307,6 +314,20 @@ def test_df_copy_shallow(df_value):
         return df.copy(deep=False)
 
     check_func(impl, (df_value,))
+
+
+def test_df_rename():
+    def impl(df):
+        return df.rename(columns={"B": "bb", "C": "cc"})
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 8, 4, 11, -3],
+            "B": [1.1, np.nan, 4.2, 3.1, -1.3],
+            "C": [True, False, False, True, True],
+        }
+    )
+    check_func(impl, (df,))
 
 
 def test_df_isna(df_value):
@@ -695,6 +716,34 @@ def test_df_duplicated():
         {"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]}, index=[3, 1, 2, 4, 6]
     )
     check_func(impl, (df,), sort_output=True)
+
+
+@pytest.mark.parametrize(
+    "expr",
+    [
+        "`B B` > @a + 1 & 5 > index > 1",
+        "(A == @a) | (C == 'AA')",
+        "C in ['AA', 'C']",
+        "C not in ['AA', 'C']",
+        "C.str.contains('C')",
+        "abs(A) > @a",
+        "A in [1, 4]",
+        "A not in [1, 4]",
+    ],
+)
+def test_df_query(expr):
+    def impl(df, expr, a):
+        return df.query(expr)
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 8, 4, 11, -3],
+            "B B": [1.1, np.nan, 4.2, 3.1, -1.3],
+            "C": ["AA", "BBB", "C", "AA", "C"],
+        },
+        index=[3, 1, 2, 4, 5],
+    )
+    check_func(impl, (df, expr, 1))
 
 
 @pytest.mark.parametrize(

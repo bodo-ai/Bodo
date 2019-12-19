@@ -66,7 +66,6 @@ inline void copy_nulls(uint8_t* out_nulls, const uint8_t* null_bitmap_buff,
 int64_t pq_get_size_single_file(std::shared_ptr<FileReader> arrow_reader,
                                 int64_t column_idx) {
     int64_t nrows = arrow_reader->parquet_reader()->metadata()->num_rows();
-    // std::cout << nrows << std::endl;
     return nrows;
 }
 
@@ -74,23 +73,19 @@ int64_t pq_read_single_file(std::shared_ptr<FileReader> arrow_reader,
                             int64_t column_idx, uint8_t* out_data,
                             int out_dtype, uint8_t* out_nulls,
                             int64_t null_offset) {
-    std::shared_ptr<::arrow::Array> arr;
-    arrow_reader->ReadColumn(column_idx, &arr);
-    if (arr == NULL) return 0;
-
+    
+    std::shared_ptr<::arrow::ChunkedArray> chunked_array;
+    arrow_reader->ReadColumn(column_idx, &chunked_array);
+    if (chunked_array == NULL) return 0;
+    auto arr = chunked_array->chunk(0);
     int64_t num_values = arr->length();
-    // std::cout << "arr: " << arr->ToString() << std::endl;
     std::shared_ptr<arrow::DataType> arrow_type =
         get_arrow_type(arrow_reader, column_idx);
-    // printf("out_dtype %d dtype_size %d\n", out_dtype, dtype_size);
-    // std::cout << arrow_type->name() << "\n";
 
     auto buffers = arr->data()->buffers;
-    // std::cout<<"num buffs: "<< buffers.size()<<std::endl;
     if (buffers.size() != 2) {
         std::cerr << "invalid parquet number of array buffers" << std::endl;
     }
-    // int64_t buff_size = buffers[1]->size();
     const uint8_t* buff = buffers[1]->data();
     const uint8_t* null_bitmap_buff =
         arr->null_count() == 0 ? nullptr : arr->null_bitmap_data();
@@ -99,7 +94,6 @@ int64_t pq_read_single_file(std::shared_ptr<FileReader> arrow_reader,
               out_dtype);
     copy_nulls(out_nulls, null_bitmap_buff, 0, num_values, null_offset);
 
-    // memcpy(out_data, buffers[1]->data(), buff_size);
     return num_values;
 }
 
@@ -138,23 +132,16 @@ int pq_read_parallel_single_file(std::shared_ptr<FileReader> arrow_reader,
         nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
     }
 
-    // printf("first row group: %d skipped_rows: %lld nrows_in_group: %lld\n",
-    // row_group_index, skipped_rows, nrows_in_group);
-
     while (read_rows < count) {
         /* -------- read row group ---------- */
         std::shared_ptr<::arrow::Table> table;
         arrow_reader->ReadRowGroup(row_group_index, column_indices, &table);
-        std::shared_ptr<::arrow::Column> column = table->column(0);
-        std::shared_ptr<::arrow::ChunkedArray> chunked_arr = column->data();
-        // std::cout << chunked_arr->num_chunks() << std::endl;
+        std::shared_ptr<::arrow::ChunkedArray> chunked_arr = table->column(0);
         if (chunked_arr->num_chunks() != 1) {
             std::cerr << "invalid parquet number of array chunks" << std::endl;
         }
         std::shared_ptr<::arrow::Array> arr = chunked_arr->chunk(0);
-        // std::cout << arr->ToString() << std::endl;
         auto buffers = arr->data()->buffers;
-        // std::cout<<"num buffs: "<< buffers.size()<<std::endl;
         if (buffers.size() != 2) {
             std::cerr << "invalid parquet number of array buffers" << std::endl;
         }
@@ -166,15 +153,11 @@ int pq_read_parallel_single_file(std::shared_ptr<FileReader> arrow_reader,
         int64_t rows_to_skip = start - skipped_rows;
         int64_t rows_to_read =
             std::min(count - read_rows, nrows_in_group - rows_to_skip);
-        // printf("rows_to_skip: %ld rows_to_read: %ld\n", rows_to_skip,
-        // rows_to_read);
 
         copy_data(out_data + read_rows * dtype_size, buff, rows_to_skip,
                   rows_to_read, arrow_type, null_bitmap_buff, out_dtype);
         copy_nulls(out_nulls, null_bitmap_buff, rows_to_skip, rows_to_read,
                    read_rows + null_offset);
-        // memcpy(out_data+read_rows*dtype_size, buff+rows_to_skip*dtype_size,
-        // rows_to_read*dtype_size);
 
         skipped_rows += rows_to_skip;
         read_rows += rows_to_read;
@@ -310,8 +293,6 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
             std::cerr << "boolean type error" << '\n';
 
         for (int64_t i = 0; i < rows_to_read; i++) {
-            // std::cout << ::arrow::BitUtil::GetBit(buff, i+rows_to_skip) <<
-            // std::endl;
             out_data[i] =
                 (uint8_t)::arrow::BitUtil::GetBit(buff, i + rows_to_skip);
         }
@@ -332,7 +313,6 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
         double* double_data = (double*)out_data;
         for (int64_t i = 0; i < rows_to_read; i++) {
             if (!::arrow::BitUtil::GetBit(null_bitmap_buff, i + rows_to_skip)) {
-                // std::cout << "NULL found" << std::endl;
                 // TODO: use NPY_NAN
                 double_data[i] = std::nan("");
             }
@@ -343,7 +323,6 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
         float* float_data = (float*)out_data;
         for (int64_t i = 0; i < rows_to_read; i++) {
             if (!::arrow::BitUtil::GetBit(null_bitmap_buff, i + rows_to_skip)) {
-                // std::cout << "NULL found" << std::endl;
                 // TODO: use NPY_NAN
                 float_data[i] = std::nanf("");
             }
@@ -358,20 +337,18 @@ int64_t pq_read_string_single_file(std::shared_ptr<FileReader> arrow_reader,
                                    std::vector<uint32_t>* offset_vec,
                                    std::vector<uint8_t>* data_vec,
                                    std::vector<bool>* null_vec) {
-    // std::cout << "string read file" << '\n';
-    //
-    std::shared_ptr<::arrow::Array> arr;
-    arrow_reader->ReadColumn(column_idx, &arr);
-    if (arr == NULL) return -1;
+
+    std::shared_ptr<::arrow::ChunkedArray> chunked_arr;
+    arrow_reader->ReadColumn(column_idx, &chunked_arr);
+    if (chunked_arr == NULL) return -1;
+    auto arr = chunked_arr->chunk(0);
     int64_t num_values = arr->length();
-    // std::cout << arr->ToString() << std::endl;
     std::shared_ptr<arrow::DataType> arrow_type =
         get_arrow_type(arrow_reader, column_idx);
     if (arrow_type->id() != Type::STRING)
         std::cerr << "Invalid Parquet string data type" << '\n';
 
     auto buffers = arr->data()->buffers;
-    // std::cout<<"num buffs: "<< buffers.size()<<std::endl;
     if (buffers.size() != 3) {
         std::cerr << "invalid parquet string number of array buffers"
                   << std::endl;
@@ -380,8 +357,6 @@ int64_t pq_read_string_single_file(std::shared_ptr<FileReader> arrow_reader,
     int64_t null_size = buffers[0]->size();
     int64_t offsets_size = buffers[1]->size();
     int64_t data_size = buffers[2]->size();
-    // std::cout << "offsets: " << offsets_size << " chars: " << data_size <<
-    // std::endl;
 
     const uint32_t* offsets_buff = (const uint32_t*)buffers[1]->data();
     const uint8_t* data_buff = buffers[2]->data();
@@ -394,11 +369,9 @@ int64_t pq_read_string_single_file(std::shared_ptr<FileReader> arrow_reader,
         *out_offsets = new uint32_t[offsets_size / sizeof(uint32_t)];
         *out_data = new uint8_t[data_size];
 
-        // printf("null size %p %d\n", null_buff, null_size);
         if (null_buff != nullptr && null_size > 0) {
             *out_nulls = new uint8_t[null_size];
             memcpy(*out_nulls, null_buff, null_size);
-            // printf("bitmap %d\n", (*out_nulls)[0]);
         } else
             *out_nulls = nullptr;
 
@@ -460,8 +433,6 @@ int pq_read_string_parallel_single_file(
         nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
     }
 
-    // printf("first row group: %d skipped_rows: %lld nrows_in_group: %lld\n",
-    // row_group_index, skipped_rows, nrows_in_group);
 
     uint32_t curr_offset = 0;
 
@@ -470,16 +441,12 @@ int pq_read_string_parallel_single_file(
         /* -------- read row group ---------- */
         std::shared_ptr<::arrow::Table> table;
         arrow_reader->ReadRowGroup(row_group_index, column_indices, &table);
-        std::shared_ptr<::arrow::Column> column = table->column(0);
-        std::shared_ptr<::arrow::ChunkedArray> chunked_arr = column->data();
-        // std::cout << chunked_arr->num_chunks() << std::endl;
+        std::shared_ptr<::arrow::ChunkedArray> chunked_arr = table->column(0);
         if (chunked_arr->num_chunks() != 1) {
             std::cerr << "invalid parquet number of array chunks" << std::endl;
         }
         std::shared_ptr<::arrow::Array> arr = chunked_arr->chunk(0);
-        // std::cout << arr->ToString() << std::endl;
         auto buffers = arr->data()->buffers;
-        // std::cout<<"num buffs: "<< buffers.size()<<std::endl;
         if (buffers.size() != 3) {
             std::cerr << "invalid parquet string number of array buffers"
                       << std::endl;
@@ -495,8 +462,6 @@ int pq_read_string_parallel_single_file(
         int64_t rows_to_skip = start - skipped_rows;
         int64_t rows_to_read =
             std::min(count - read_rows, nrows_in_group - rows_to_skip);
-        // printf("rows_to_skip: %ld rows_to_read: %ld\n", rows_to_skip,
-        // rows_to_read);
 
         for (int64_t i = 0; i < rows_to_read; i++) {
             uint32_t str_size = offsets_buff[rows_to_skip + i + 1] -
@@ -534,8 +499,6 @@ int pq_read_string_parallel_single_file(
     if (offset_vec == NULL) {
         (*out_offsets)[count] = curr_offset;
         *out_data = new uint8_t[curr_offset];
-        // printf("buffer size:%d curr_offset:%d\n", data_vec->size(),
-        // curr_offset);
         memcpy(*out_data, data_vec->data(), curr_offset);
         pack_null_bitmap(out_nulls, *null_vec, count);
         delete data_vec;
@@ -543,12 +506,6 @@ int pq_read_string_parallel_single_file(
     } else
         offset_vec->push_back(curr_offset);
 
-    // printf("offsets: ");
-    // for(int i=0; i<=count; i++)
-    // {
-    //     printf("%d ", (*out_offsets)[i]);
-    // }
-    // printf("\n");
     return 0;
 }
 
@@ -576,9 +533,6 @@ void pq_init_reader(const char* file_name,
             hfs_config.port = std::stoi(
                 f_name.substr(col_char + 1, slash_char - col_char - 1));
             f_name = f_name.substr(slash_char);
-            // std::cout << "host: " << hfs_config.host << std::endl;
-            // std::cout << "port: " << hfs_config.port << std::endl;
-            // std::cout << "file_name: " << f_name << std::endl;
         } else {
             hfs_config.host = std::string("default");
             hfs_config.port = 0;
@@ -591,14 +545,15 @@ void pq_init_reader(const char* file_name,
         ::arrow::io::HadoopFileSystem::Connect(&hfs_config, &fs);
         std::shared_ptr<::arrow::io::HdfsReadableFile> file;
         fs->OpenReadable(f_name, &file);
-        a_reader->reset(new FileReader(pool, ParquetFileReader::Open(file)));
+        std::unique_ptr<FileReader> arrow_reader;
+        FileReader::Make(pool, ParquetFileReader::Open(file), &arrow_reader);
+        *a_reader = std::move(arrow_reader);
     } else  // regular file system
     {
-        a_reader->reset(
-            new FileReader(pool, ParquetFileReader::OpenFile(f_name, false)));
+        std::unique_ptr<FileReader> arrow_reader;
+        FileReader::Make(pool, ParquetFileReader::OpenFile(f_name, false), &arrow_reader);
+        *a_reader = std::move(arrow_reader);
     }
-    // printf("file open for arrow reader done\n");
-    // fflush(stdout);
     return;
 }
 
@@ -607,19 +562,10 @@ void pq_init_reader(const char* file_name,
 std::shared_ptr<arrow::DataType> get_arrow_type(
     std::shared_ptr<FileReader> arrow_reader, int64_t column_idx) {
     // TODO: error checking
-    std::vector<int> column_indices;
-    column_indices.push_back(column_idx);
-
+    //GetSchema supported as of arrow version=0.15.1
     std::shared_ptr<::arrow::Schema> col_schema;
-    auto descr = arrow_reader->parquet_reader()->metadata()->schema();
-    auto parquet_key_value_metadata =
-        arrow_reader->parquet_reader()->metadata()->key_value_metadata();
-    parquet::arrow::FromParquetSchema(descr, column_indices,
-                                      parquet_key_value_metadata, &col_schema);
-    // std::cout<< col_schema->ToString() << std::endl;
-    std::shared_ptr<::arrow::DataType> arrow_dtype =
-        col_schema->field(0)->type();
-    return arrow_dtype;
+    arrow_reader->GetSchema(&col_schema);
+    return col_schema->field(column_idx)->type();
 }
 
 bool arrowPqTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
@@ -670,7 +616,6 @@ void append_bits_to_vec(std::vector<bool>* null_vec, const uint8_t* null_buff,
         // unpacked format then repack
         for (int64_t i = offset; i < offset + num_values; i++) {
             bool val = ::arrow::BitUtil::GetBit(null_buff, i);
-            // printf("packing %d %d\n", i, (int)val);
             null_vec->push_back(val);
         }
         // null_vec->insert(null_vec->end(), null_buff, null_buff+null_size);
@@ -685,7 +630,6 @@ void pack_null_bitmap(uint8_t** out_nulls, std::vector<bool>& null_vec,
         *out_nulls = new uint8_t[n_bytes];
         memset(*out_nulls, 0, n_bytes);
         for (int64_t i = 0; i < n_all_vals; i++) {
-            // printf("null %d %d\n", i, (int)null_vec[i]);
             if (null_vec[i]) ::arrow::BitUtil::SetBit(*out_nulls, i);
         }
     } else

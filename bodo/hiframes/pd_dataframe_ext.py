@@ -3,6 +3,7 @@
 Implement pd.DataFrame typing and data model handling.
 """
 import operator
+import warnings
 from collections import namedtuple
 import pandas as pd
 import numpy as np
@@ -34,9 +35,11 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.series_indexing import SeriesIlocType
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import (
+    BodoWarning,
     BodoError,
     is_overload_none,
     is_overload_constant_bool,
+    is_overload_bool,
     is_overload_constant_str,
     is_overload_constant_str_list,
     is_overload_true,
@@ -44,6 +47,7 @@ from bodo.utils.typing import (
     is_overload_zero,
     get_overload_const_str,
     get_const_str_list,
+    is_overload_bool_list,
 )
 
 
@@ -390,7 +394,7 @@ def _get_dataframe_index(typingctx, df_typ=None):
 # no_cpython_wrapper since Array(DatetimeDate) cannot be boxed
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_dataframe_data(df, i):
-    def _impl(df, i):
+    def _impl(df, i):  # pragma: no cover
         if has_parent(df) and _get_dataframe_unboxed(df)[i] == 0:
             bodo.hiframes.boxing.unbox_dataframe_column(df, i)
         return _get_dataframe_data(df)[i]
@@ -724,7 +728,7 @@ def _get_df_args(data, index, columns, dtype, copy):
     index_arg = "bodo.utils.conversion.convert_to_index(index)"
 
     # data is sentinel tuple (converted from dictionary)
-    if isinstance(data, types.Tuple):
+    if isinstance(data, types.BaseTuple):
         # first element is sentinel
         if not data.types[0] == types.StringLiteral("__bodo_tup"):
             raise ValueError("pd.DataFrame tuple input data not supported yet")
@@ -968,7 +972,7 @@ class GetItemDataFrameIat(AbstractTemplate):
         if isinstance(df, DataFrameIatType):
             # df.iat[n,1]
             if (
-                isinstance(idx, types.Tuple)
+                isinstance(idx, types.BaseTuple)
                 and len(idx) == 2
                 and isinstance(idx.types[1], types.IntegerLiteral)
             ):
@@ -987,7 +991,7 @@ class SetItemDataFrameIat(AbstractTemplate):
         if isinstance(df, DataFrameIatType):
             # df.iat[n,1] = 3
             if (
-                isinstance(idx, types.Tuple)
+                isinstance(idx, types.BaseTuple)
                 and len(idx) == 2
                 and isinstance(idx.types[1], types.IntegerLiteral)
             ):
@@ -1015,7 +1019,7 @@ class GetItemDataFrameLoc(AbstractTemplate):
                 return signature(df.df_type, *args)
             # df.loc[1:n,'A']
             if (
-                isinstance(idx, types.Tuple)
+                isinstance(idx, types.BaseTuple)
                 and len(idx) == 2
                 and isinstance(idx.types[1], types.StringLiteral)
             ):
@@ -1044,7 +1048,7 @@ class GetItemDataFrameILoc(AbstractTemplate):
                 return signature(df.df_type, *args)
             # df.iloc[1:n,0]
             if (
-                isinstance(idx, types.Tuple)
+                isinstance(idx, types.BaseTuple)
                 and len(idx) == 2
                 and isinstance(idx.types[1], types.IntegerLiteral)
             ):
@@ -1053,6 +1057,41 @@ class GetItemDataFrameILoc(AbstractTemplate):
                 # TODO: index
                 ret_typ = SeriesType(data_typ.dtype, data_typ, None, bodo.string_type)
                 return signature(ret_typ, *args)
+
+
+def validate_unicity_output_column_names(
+    suffix_x, suffix_y, left_keys, right_keys, left_columns, right_columns
+):
+    """Raise a BodoError if the column in output of the join operation collide """
+    comm_keys = set(left_keys) & set(right_keys)
+    comm_data = set(left_columns) & set(right_columns)
+    add_suffix = comm_data - comm_keys
+    other_left = set(left_columns) - comm_data
+    other_right = set(right_columns) - comm_data
+
+    NatureLR = {}
+
+    def insertOutColumn(col_name):
+        if col_name in NatureLR:
+            raise BodoError(
+                "join(): two columns happen to have the same name : {}".format(col_name)
+            )
+        NatureLR[col_name] = 0
+
+    for eVar in comm_keys:
+        insertOutColumn(eVar)
+
+    for eVar in add_suffix:
+        eVarX = eVar + suffix_x
+        eVarY = eVar + suffix_y
+        insertOutColumn(eVarX)
+        insertOutColumn(eVarY)
+
+    for eVar in other_left:
+        insertOutColumn(eVar)
+
+    for eVar in other_right:
+        insertOutColumn(eVar)
 
 
 @overload_method(DataFrameType, "merge")
@@ -1072,7 +1111,6 @@ def merge_overload(
     indicator=False,
     validate=None,
 ):
-
     validate_merge_spec(
         left,
         right,
@@ -1125,6 +1163,17 @@ def merge_overload(
         left, right, left_on, right_on, left_index, right_index, left_keys, right_keys
     )
 
+    # The suffixes
+    if isinstance(suffixes, tuple):
+        suffixes_val = suffixes
+    if is_overload_constant_str_list(suffixes):
+        suffixes_val = list(get_const_str_list(suffixes))
+    suffix_x = suffixes_val[0]
+    suffix_y = suffixes_val[1]
+    validate_unicity_output_column_names(
+        suffix_x, suffix_y, left_keys, right_keys, left.columns, right.columns
+    )
+
     left_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
         ", ".join("'{}'".format(c) for c in left_keys)
     )
@@ -1138,8 +1187,8 @@ def merge_overload(
     func_text += (
         "    suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):\n"
     )
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, '{}')\n".format(
-        left_keys, right_keys, how
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, '{}', '{}', '{}')\n".format(
+        left_keys, right_keys, how, suffix_x, suffix_y
     )
 
     loc_vars = {}
@@ -1178,6 +1227,96 @@ def merge_overload(
     # return _impl
 
 
+def common_validate_merge_merge_asof_spec(
+    name_func, left, right, on, left_on, right_on, left_index, right_index, suffixes
+):
+    """Validate checks that are common to merge and merge_asof"""
+    # make sure left and right are dataframes
+    if not isinstance(left, DataFrameType) or not isinstance(right, DataFrameType):
+        raise BodoError(name_func + "() requires dataframe inputs")
+    if (
+        (not is_overload_none(on))
+        and (not is_overload_constant_str_list(on))
+        and (not is_overload_constant_str(on))
+    ):
+        raise BodoError(name_func + "(): on must be of type str or str list")
+    # make sure left_on is of type str or strlist
+    if (
+        (not is_overload_none(left_on))
+        and (not is_overload_constant_str_list(left_on))
+        and (not is_overload_constant_str(left_on))
+    ):
+        raise BodoError(name_func + "(): left_on must be of type str or str list")
+    # make sure right_on is of type str or strlist
+    if (
+        (not is_overload_none(right_on))
+        and (not is_overload_constant_str_list(right_on))
+        and (not is_overload_constant_str(right_on))
+    ):
+        raise BodoError(name_func + "(): right_on must be of type str or str list")
+    # make sure leftindex is of type bool
+    if not is_overload_constant_bool(left_index):
+        raise BodoError(
+            name_func + "(): left_index parameter must be of type bool, not "
+            "{left_index}".format(left_index=type(left_index))
+        )
+    # make sure rightindex is of type bool
+    if not is_overload_constant_bool(right_index):
+        raise BodoError(
+            name_func + "(): right_index parameter must be of type bool, not "
+            "{right_index}".format(right_index=type(right_index))
+        )
+    # make sure suffixes is not passed in
+    # make sure on is of type str or strlist
+    if (not isinstance(suffixes, tuple)) and (
+        not is_overload_constant_str_list(suffixes)
+    ):
+        raise BodoError(
+            name_func + "(): suffixes parameters should be ['_left', '_right']"
+        )
+    if isinstance(suffixes, tuple):
+        suffixes_val = suffixes
+    if is_overload_constant_str_list(suffixes):
+        suffixes_val = list(get_const_str_list(suffixes))
+    if len(suffixes_val) != 2:
+        raise BodoError(name_func + "(): The number of suffixes should be exactly 2")
+
+    comm_cols = tuple(set(left.columns) & set(right.columns))
+    if not is_overload_none(on):
+        # make sure two dataframes have common columns
+        if len(comm_cols) == 0:
+            raise BodoError(
+                name_func + "(): No common columns to perform merge on. "
+                "Merge options: left_on={lon}, right_on={ron}, "
+                "left_index={lidx}, right_index={ridx}".format(
+                    lon=is_overload_true(left_on),
+                    ron=is_overload_true(right_on),
+                    lidx=is_overload_true(left_index),
+                    ridx=is_overload_true(right_index),
+                )
+            )
+        # make sure "on" does not coexist with left_on or right_on
+        if (not is_overload_none(left_on)) or (not is_overload_none(right_on)):
+            raise BodoError(
+                name_func + '(): Can only pass argument "on" OR "left_on" '
+                'and "right_on", not a combination of both.'
+            )
+
+    # make sure right_on, right_index, left_on, left_index are speciefied properly
+    if (
+        (is_overload_true(left_index) or not is_overload_none(left_on))
+        and is_overload_none(right_on)
+        and not is_overload_true(right_index)
+    ):
+        raise BodoError(name_func + "(): Must pass right_on or right_index=True")
+    if (
+        (is_overload_true(right_index) or not is_overload_none(right_on))
+        and is_overload_none(left_on)
+        and not is_overload_true(left_index)
+    ):
+        raise BodoError(name_func + "(): Must pass left_on or left_index=True")
+
+
 def validate_merge_spec(
     left,
     right,
@@ -1193,9 +1332,10 @@ def validate_merge_spec(
     indicator,
     validate,
 ):
-    # make sure left and right are dataframes
-    if not isinstance(left, DataFrameType) or not isinstance(right, DataFrameType):
-        raise BodoError("merge() requires dataframe inputs")
+    """validate checks of the merge() function"""
+    common_validate_merge_merge_asof_spec(
+        "merge", left, right, on, left_on, right_on, left_index, right_index, suffixes
+    )
     # make sure how is of type str
     if not is_overload_constant_str(how):
         raise BodoError(
@@ -1206,48 +1346,9 @@ def validate_merge_spec(
     # make sure how is one of ["left", "right", "outer", "inner"]
     if how not in ["left", "right", "outer", "inner"]:
         raise BodoError("merge(): invalid key '{}' for how".format(how))
-    # make sure on is of type str or strlist
-    if (
-        (not is_overload_none(on))
-        and (not is_overload_constant_str_list(on))
-        and (not is_overload_constant_str(on))
-    ):
-        raise BodoError("merge(): on must be of type str or str list")
-    # make sure left_on is of type str or strlist
-    if (
-        (not is_overload_none(left_on))
-        and (not is_overload_constant_str_list(left_on))
-        and (not is_overload_constant_str(left_on))
-    ):
-        raise BodoError("merge(): left_on must be of type str or str list")
-    # make sure right_on is of type str or strlist
-    if (
-        (not is_overload_none(right_on))
-        and (not is_overload_constant_str_list(right_on))
-        and (not is_overload_constant_str(right_on))
-    ):
-        raise BodoError("merge(): right_on must be of type str or str list")
-    # make sure leftindex is of type bool
-    if not is_overload_constant_bool(left_index):
-        raise BodoError(
-            "merge(): left_index parameter must be of type bool, not "
-            "{left_index}".format(left_index=type(left_index))
-        )
-    # make sure rightindex is of type bool
-    if not is_overload_constant_bool(right_index):
-        raise BodoError(
-            "merge(): right_index parameter must be of type bool, not "
-            "{right_index}".format(right_index=type(right_index))
-        )
     # make sure sort is the default value, sort=True not supported
     if not is_overload_false(sort):
         raise BodoError("merge(): sort parameter only supports default value False")
-    # make sure suffixes is not passed in
-    if suffixes != ("_x", "_y"):
-        raise BodoError(
-            "merge(): suffixes parameter cannot be specified. "
-            "Default value is ('_x', '_y')"
-        )
     # make sure copy is the default value, copy=False not supported
     if not is_overload_true(copy):
         raise BodoError("merge(): copy parameter only supports default value True")
@@ -1260,40 +1361,62 @@ def validate_merge_spec(
     if not is_overload_none(validate):
         raise BodoError("merge(): validate parameter only supports default value None")
 
-    comm_cols = tuple(set(left.columns) & set(right.columns))
-    if not is_overload_none(on):
-        # make sure two dataframes have common columns
-        if len(comm_cols) == 0:
-            raise BodoError(
-                "merge(): No common columns to perform merge on. "
-                "Merge options: left_on={lon}, right_on={ron}, "
-                "left_index={lidx}, right_index={ridx}".format(
-                    lon=is_overload_true(left_on),
-                    ron=is_overload_true(right_on),
-                    lidx=is_overload_true(left_index),
-                    ridx=is_overload_true(right_index),
-                )
-            )
-        # make sure "on" does not coexist with left_on or right_on
-        if (not is_overload_none(left_on)) or (not is_overload_none(right_on)):
-            raise BodoError(
-                'merge(): Can only pass argument "on" OR "left_on" '
-                'and "right_on", not a combination of both.'
-            )
 
-    # make sure right_on, right_index, left_on, left_index are speciefied properly
-    if (
-        (is_overload_true(left_index) or not is_overload_none(left_on))
-        and is_overload_none(right_on)
-        and not is_overload_true(right_index)
-    ):
-        raise BodoError("merge(): Must pass right_on or right_index=True")
-    if (
-        (is_overload_true(right_index) or not is_overload_none(right_on))
-        and is_overload_none(left_on)
-        and not is_overload_true(left_index)
-    ):
-        raise BodoError("merge(): Must pass left_on or left_index=True")
+def validate_merge_asof_spec(
+    left,
+    right,
+    on,
+    left_on,
+    right_on,
+    left_index,
+    right_index,
+    by,
+    left_by,
+    right_by,
+    suffixes,
+    tolerance,
+    allow_exact_matches,
+    direction,
+):
+    """validate checks of the merge_asof() function"""
+    common_validate_merge_merge_asof_spec(
+        "merge_asof",
+        left,
+        right,
+        on,
+        left_on,
+        right_on,
+        left_index,
+        right_index,
+        suffixes,
+    )
+    if not is_overload_true(allow_exact_matches):
+        raise BodoError(
+            "merge_asof(): allow_exact_matches parameter only supports default value True"
+        )
+    # make sure validate is None
+    if not is_overload_none(tolerance):
+        raise BodoError(
+            "merge_asof(): tolerance parameter only supports default value None"
+        )
+    if not is_overload_none(by):
+        raise BodoError("merge_asof(): by parameter only supports default value None")
+    if not is_overload_none(left_by):
+        raise BodoError(
+            "merge_asof(): left_by parameter only supports default value None"
+        )
+    if not is_overload_none(right_by):
+        raise BodoError(
+            "merge_asof(): right_by parameter only supports default value None"
+        )
+    if not is_overload_constant_str(direction):
+        raise BodoError("merge_asof(): direction parameter should be of type str")
+    else:
+        direction = get_overload_const_str(direction)
+        if direction != "backward":
+            raise BodoError(
+                "merge_asof(): direction parameter only supports default value 'backward'"
+            )
 
 
 def validate_keys_length(
@@ -1389,7 +1512,6 @@ def validate_keys(keys, columns):
 
 @overload_method(DataFrameType, "join")
 def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort=False):
-
     validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort)
 
     how = get_overload_const_str(how)
@@ -1411,13 +1533,12 @@ def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, other, on=None, how='left',\n"
     func_text += "    lsuffix='', rsuffix='', sort=False):\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}')\n".format(
-        left_keys, right_keys, how
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}', '{}', '{}')\n".format(
+        left_keys, right_keys, how, lsuffix, rsuffix
     )
 
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
-    # print(func_text)
     _impl = loc_vars["_impl"]
     return _impl
 
@@ -1450,13 +1571,6 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
     if not is_overload_none(on):
         on_keys = get_const_str_list(on)
         validate_keys(on_keys, left.columns)
-    # make sure suffixes is not passed in
-    if lsuffix != "" or rsuffix != "":
-        raise BodoError(
-            "join(): not supporting specifying 'lsuffix' or 'rsuffix', ",
-            "because we don't support joining on overlapping columns",
-            "Use DataFrame.merge() instead.",
-        )
     # make sure sort is the default value, sort=True not supported
     if not is_overload_false(sort):
         raise BodoError("join(): sort parameter only supports default value False")
@@ -1466,14 +1580,15 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
         # make sure two dataframes do not have common columns
         # because we are not supporting lsuffix and rsuffix
         raise BodoError(
-            "join(): not supporting joining on overlapping columns:",
-            "{cols}".format(cols=comm_cols),
-            "Use DataFrame.merge() instead.",
+            "join(): not supporting joining on overlapping columns:"
+            "{cols} Use DataFrame.merge() instead.".format(cols=comm_cols)
         )
 
 
 # a dummy join function that will be replace in dataframe_pass
-def join_dummy(left_df, right_df, left_on, right_on, how):
+def join_dummy(
+    left_df, right_df, left_on, right_on, how, suffix_x, suffix_y
+):  # pragma: no cover
     return left_df
 
 
@@ -1484,17 +1599,20 @@ class JoinTyper(AbstractTemplate):
         from bodo.utils.typing import is_overload_str
 
         assert not kws
-        left_df, right_df, left_on, right_on, how = args
+        left_df, right_df, left_on, right_on, how, suffix_x, suffix_y = args
 
         # columns with common name that are not common keys will get a suffix
         comm_keys = set(left_on.consts) & set(right_on.consts)
         comm_data = set(left_df.columns) & set(right_df.columns)
         add_suffix = comm_data - comm_keys
 
-        columns = [(c + "_x" if c in add_suffix else c) for c in left_df.columns]
+        columns = [
+            (c + suffix_x.literal_value if c in add_suffix else c)
+            for c in left_df.columns
+        ]
         # common keys are added only once so avoid adding them
         columns += [
-            (c + "_y" if c in add_suffix else c)
+            (c + suffix_y.literal_value if c in add_suffix else c)
             for c in right_df.columns
             if c not in comm_keys
         ]
@@ -1547,6 +1665,22 @@ def merge_asof_overload(
     allow_exact_matches=True,
     direction="backward",
 ):
+    validate_merge_asof_spec(
+        left,
+        right,
+        on,
+        left_on,
+        right_on,
+        left_index,
+        right_index,
+        by,
+        left_by,
+        right_by,
+        suffixes,
+        tolerance,
+        allow_exact_matches,
+        direction,
+    )
 
     # TODO: support 'by' argument
 
@@ -1574,25 +1708,42 @@ def merge_asof_overload(
             left_keys = ["$_bodo_index_"]
         else:
             left_keys = get_const_str_list(left_on)
+            validate_keys(left_keys, left.columns)
         if is_overload_true(right_index):
             right_keys = ["$_bodo_index_"]
         else:
             right_keys = get_const_str_list(right_on)
+            validate_keys(right_keys, right.columns)
 
+    validate_keys_length(
+        left_on, right_on, left_index, right_index, left_keys, right_keys
+    )
+    validate_keys_dtypes(
+        left, right, left_on, right_on, left_index, right_index, left_keys, right_keys
+    )
     left_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
         ", ".join("'{}'".format(c) for c in left_keys)
     )
     right_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
         ", ".join("'{}'".format(c) for c in right_keys)
     )
+    # The suffixes
+    if isinstance(suffixes, tuple):
+        suffixes_val = suffixes
+    if is_overload_constant_str_list(suffixes):
+        suffixes_val = list(get_const_str_list(suffixes))
+    suffix_x = suffixes_val[0]
+    suffix_y = suffixes_val[1]
 
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, right, on=None, left_on=None, right_on=None,\n"
     func_text += "    left_index=False, right_index=False, by=None, left_by=None,\n"
     func_text += "    right_by=None, suffixes=('_x', '_y'), tolerance=None,\n"
     func_text += "    allow_exact_matches=True, direction='backward'):\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, 'asof')\n".format(
-        left_keys, right_keys
+    func_text += "  suffix_x = suffixes[0]\n"
+    func_text += "  suffix_y = suffixes[1]\n"
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, 'asof', '{}', '{}')\n".format(
+        left_keys, right_keys, suffix_x, suffix_y
     )
 
     loc_vars = {}
@@ -1600,18 +1751,6 @@ def merge_asof_overload(
     # print(func_text)
     _impl = loc_vars["_impl"]
     return _impl
-
-    # def _impl(left, right, on=None, left_on=None, right_on=None,
-    #         left_index=False, right_index=False, by=None, left_by=None,
-    #         right_by=None, suffixes=('_x', '_y'), tolerance=None,
-    #         allow_exact_matches=True, direction='backward'):
-    #     if on is not None:
-    #         left_on = right_on = on
-
-    #     return bodo.hiframes.pd_dataframe_ext.join_dummy(
-    #         left, right, left_on, right_on, 'asof')
-
-    # return _impl
 
 
 @overload_method(DataFrameType, "pivot_table")
@@ -1638,7 +1777,7 @@ def pivot_table_overload(
         dropna=True,
         margins_name="All",
         _pivot_values=None,
-    ):
+    ):  # pragma: no cover
 
         return bodo.hiframes.pd_groupby_ext.pivot_table_dummy(
             df, values, index, columns, aggfunc, _pivot_values
@@ -1675,7 +1814,7 @@ def crosstab_overload(
         dropna=True,
         normalize=False,
         _pivot_values=None,
-    ):
+    ):  # pragma: no cover
         return bodo.hiframes.pd_groupby_ext.crosstab_dummy(
             index, columns, _pivot_values
         )
@@ -1704,7 +1843,7 @@ def concat_overload(
     )
 
 
-def concat_dummy(objs):
+def concat_dummy(objs):  # pragma: no cover
     return pd.concat(objs)
 
 
@@ -1809,6 +1948,8 @@ def lower_concat_dummy(context, builder, sig, args):
 def sort_values_overload(
     df, by, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last"
 ):
+    validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position)
+
     def _impl(
         df,
         by,
@@ -1817,24 +1958,93 @@ def sort_values_overload(
         inplace=False,
         kind="quicksort",
         na_position="last",
-    ):
+    ):  # pragma: no cover
 
         return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
-            df, by, ascending, inplace
+            df, by, ascending, inplace, na_position
         )
 
     return _impl
 
 
-def sort_values_dummy(df, by, ascending, inplace):
-    return df.sort_values(by, ascending=ascending, inplace=inplace)
+def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position):
+    """validates sort_values spec
+    Note that some checks are due to unsupported functionalities
+    """
+
+    # whether 'by' is supplied is checked by numba
+    # make sure 'by' is a const str or str list
+    if not is_overload_constant_str(by) and not is_overload_constant_str_list(by):
+        raise BodoError(
+            "sort_values(): 'by' parameter only supports "
+            "a constant column label or column labels."
+        )
+
+    # make sure by has valid label(s)
+    if len(set(get_const_str_list(by)).difference(set(df.columns))) > 0:
+        raise BodoError(
+            "sort_values(): invalid key {} for by.".format(
+                set(df.columns).difference(set(get_const_str_list(by)))
+            )
+        )
+
+    # make sure axis has default value 0
+    if not is_overload_zero(axis):
+        raise BodoError(
+            "sort_values(): 'axis' parameter only " "supports integer value 0."
+        )
+
+    # 'ascending': not supporting multiple sort orders
+    if is_overload_bool_list(ascending):
+        raise BodoError(
+            "sort_values(): multiple sort orders are not supported."
+            "'ascending' parameter must be of type bool"
+        )
+
+    # make sure 'ascending' is of type bool
+    if not is_overload_bool(ascending):
+        raise BodoError(
+            "sort_values(): 'ascending' parameter must be of type bool, "
+            "not {}.".format(ascending)
+        )
+
+    # make sure 'inplace' is of type bool
+    if not is_overload_bool(inplace):
+        raise BodoError(
+            "sort_values(): 'inplace' parameter must be of type bool, "
+            "not {}.".format(inplace)
+        )
+
+    # make sure 'kind' is not specified
+    if kind != "quicksort":
+        warnings.warn(
+            BodoWarning(
+                "sort_values(): specifying sorting algorithm "
+                "is not supported in Bodo. Bodo uses stable sort."
+            )
+        )
+
+    # make sure 'na_position' is correctly specified
+    if not is_overload_constant_str(na_position):
+        raise BodoError(
+            "sort_values(): na_position parameter must be a literal constant of type str, not "
+            "{na_position}".format(na_position=type(na_position))
+        )
+
+    na_position = get_overload_const_str(na_position)
+    if na_position not in ["first", "last"]:
+        raise BodoError("sort_values(): na_position should either be 'first' or 'last'")
+
+
+def sort_values_dummy(df, by, ascending, inplace, na_position):  # pragma: no cover
+    return df.sort_values(by, ascending=ascending, inplace=inplace, na_position=na_position)
 
 
 @infer_global(sort_values_dummy)
 class SortDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        df, by, ascending, inplace = args
+        df, by, ascending, inplace, na_position = args
 
         # inplace value
         if isinstance(inplace, bodo.utils.utils.BooleanLiteral):
@@ -1891,10 +2101,10 @@ def sort_index_overload(
         na_position="last",
         sort_remaining=True,
         by=None,
-    ):
+    ):  # pragma: no cover
 
         return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
-            df, "$_bodo_index_", ascending, inplace
+            df, "$_bodo_index_", ascending, inplace, na_position
         )
 
     return _impl
@@ -1902,7 +2112,7 @@ def sort_index_overload(
 
 # dummy function to change the df type to have set_parent=True
 # used in sort_values(inplace=True) hack
-def set_parent_dummy(df):
+def set_parent_dummy(df):  # pragma: no cover
     return df
 
 
@@ -1924,13 +2134,13 @@ def lower_set_parent_dummy(context, builder, sig, args):
 # (no_cpython_wrapper to avoid error for iterator object)
 @overload_method(DataFrameType, "itertuples")
 def itertuples_overload(df, index=True, name="Pandas"):
-    def _impl(df, index=True, name="Pandas"):
+    def _impl(df, index=True, name="Pandas"):  # pragma: no cover
         return bodo.hiframes.pd_dataframe_ext.itertuples_dummy(df)
 
     return _impl
 
 
-def itertuples_dummy(df):
+def itertuples_dummy(df):  # pragma: no cover
     return df
 
 
@@ -1965,13 +2175,13 @@ def fillna_overload(
     # TODO: inplace of df with parent that has a string column (reflection)
     def _impl(
         df, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None
-    ):
+    ):  # pragma: no cover
         return bodo.hiframes.pd_dataframe_ext.fillna_dummy(df, value, inplace)
 
     return _impl
 
 
-def fillna_dummy(df, n):
+def fillna_dummy(df, n):  # pragma: no cover
     return df
 
 
@@ -2008,13 +2218,15 @@ def reset_index_overload(
 
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: inplace of df with parent (reflection)
-    def _impl(df, level=None, drop=False, inplace=False, col_level=0, col_fill=""):
+    def _impl(
+        df, level=None, drop=False, inplace=False, col_level=0, col_fill=""
+    ):  # pragma: no cover
         return bodo.hiframes.pd_dataframe_ext.reset_index_dummy(df, inplace)
 
     return _impl
 
 
-def reset_index_dummy(df, n):
+def reset_index_dummy(df, n):  # pragma: no cover
     return df
 
 
@@ -2048,13 +2260,15 @@ def dropna_overload(df, axis=0, how="any", thresh=None, subset=None, inplace=Fal
 
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: inplace of df with parent (reflection)
-    def _impl(df, axis=0, how="any", thresh=None, subset=None, inplace=False):
+    def _impl(
+        df, axis=0, how="any", thresh=None, subset=None, inplace=False
+    ):  # pragma: no cover
         return bodo.hiframes.pd_dataframe_ext.dropna_dummy(df, inplace)
 
     return _impl
 
 
-def dropna_dummy(df, n):
+def dropna_dummy(df, n):  # pragma: no cover
     return df
 
 
@@ -2108,7 +2322,7 @@ def drop_overload(
         level=None,
         inplace=False,
         errors="raise",
-    ):
+    ):  # pragma: no cover
         return bodo.hiframes.pd_dataframe_ext.drop_dummy(
             df, labels, axis, columns, inplace
         )
@@ -2116,7 +2330,7 @@ def drop_overload(
     return _impl
 
 
-def drop_dummy(df, labels, axis, columns, inplace):
+def drop_dummy(df, labels, axis, columns, inplace):  # pragma: no cover
     return df
 
 
@@ -2174,6 +2388,46 @@ class DropDummyTyper(AbstractTemplate):
 
 @lower_builtin(drop_dummy, types.VarArg(types.Any))
 def lower_drop_dummy(context, builder, sig, args):
+    out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
+    return out_obj._getvalue()
+
+
+def query_dummy(df, expr):  # pragma: no cover
+    return df.eval(expr)
+
+
+@infer_global(query_dummy)
+class QueryDummyTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        return signature(SeriesType(types.bool_), *args)
+
+
+@lower_builtin(query_dummy, types.VarArg(types.Any))
+def lower_query_dummy(context, builder, sig, args):
+    out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
+    return out_obj._getvalue()
+
+
+def val_isin_dummy(S, vals):  # pragma: no cover
+    return S in vals
+
+
+def val_notin_dummy(S, vals):  # pragma: no cover
+    return S not in vals
+
+
+@infer_global(val_isin_dummy)
+@infer_global(val_notin_dummy)
+class ValIsinTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        return signature(SeriesType(types.bool_), *args)
+
+
+@lower_builtin(val_isin_dummy, types.VarArg(types.Any))
+@lower_builtin(val_notin_dummy, types.VarArg(types.Any))
+def lower_val_isin_dummy(context, builder, sig, args):
     out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
     return out_obj._getvalue()
 
@@ -2247,7 +2501,7 @@ def to_csv_overload(
             doublequote=True,
             escapechar=None,
             decimal=".",
-        ):
+        ):  # pragma: no cover
             with numba.objmode(D="unicode_type"):
                 D = df.to_csv(
                     path_or_buf,
@@ -2295,7 +2549,7 @@ def to_csv_overload(
         doublequote=True,
         escapechar=None,
         decimal=".",
-    ):
+    ):  # pragma: no cover
         with numba.objmode:
             df.to_csv(
                 path_or_buf,

@@ -130,7 +130,7 @@ _install_date_fields()
 
 @overload_attribute(SeriesDatetimePropertiesType, "date")
 def series_dt_date_overload(S_dt):
-    def impl(S_dt):
+    def impl(S_dt):  # pragma: no cover
         S = S_dt._obj
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)

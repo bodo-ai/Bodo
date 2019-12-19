@@ -80,7 +80,7 @@ ShuffleMeta = namedtuple(
 
 # before shuffle, 'send_counts' is needed as well as
 # 'send_counts_char', 'send_arr_lens' and 'send_arr_nulls' for every string
-def alloc_pre_shuffle_metadata(arr, data, n_pes, is_contig):
+def alloc_pre_shuffle_metadata(arr, data, n_pes, is_contig):  # pragma: no cover
     return PreShuffleMeta(np.zeros(n_pes, np.int32), ())
 
 
@@ -145,7 +145,7 @@ def alloc_pre_shuffle_metadata_overload(key_arrs, data, n_pes, is_contig):
 # for every string type
 def update_shuffle_meta(
     pre_shuffle_meta, node_id, ind, key_arrs, data, is_contig=True, padded_bits=0
-):
+):  # pragma: no cover
     pre_shuffle_meta.send_counts[node_id] += 1
 
 
@@ -220,7 +220,7 @@ def update_shuffle_meta_overload(
 
 
 @numba.njit
-def calc_disp_nulls(arr):
+def calc_disp_nulls(arr):  # pragma: no cover
     disp = np.empty_like(arr)
     disp[0] = 0
     for i in range(1, len(arr)):
@@ -229,7 +229,9 @@ def calc_disp_nulls(arr):
     return disp
 
 
-def finalize_shuffle_meta(arrs, data, pre_shuffle_meta, n_pes, is_contig, init_vals=()):
+def finalize_shuffle_meta(
+    arrs, data, pre_shuffle_meta, n_pes, is_contig, init_vals=()
+):  # pragma: no cover
     return ShuffleMeta()
 
 
@@ -413,7 +415,7 @@ def finalize_shuffle_meta_overload(
     return finalize_impl
 
 
-def alltoallv_tup(arrs, shuffle_meta, key_arrs):
+def alltoallv_tup(arrs, shuffle_meta, key_arrs):  # pragma: no cover
     return arrs
 
 
@@ -508,7 +510,7 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
     return a2a_impl
 
 
-def shuffle_with_index_impl(key_arrs, data):
+def shuffle_with_index_impl(key_arrs, data):  # pragma: no cover
     # alloc shuffle meta
     n_pes = bodo.libs.distributed_api.get_size()
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, False)
@@ -549,7 +551,7 @@ def shuffle_with_index(key_arrs, data):
 
 
 @numba.njit(cache=True)
-def reverse_shuffle(data, orig_indices, shuffle_meta):
+def reverse_shuffle(data, orig_indices, shuffle_meta):  # pragma: no cover
     # TODO: handle strings
     # allocate output
     out_arrs = alloc_arr_tup(shuffle_meta.n_send, data)
@@ -586,7 +588,7 @@ def reverse_shuffle(data, orig_indices, shuffle_meta):
     return new_out
 
 
-def _get_keys_tup(recvs, key_arrs):
+def _get_keys_tup(recvs, key_arrs):  # pragma: no cover
     return recvs[: len(key_arrs)]
 
 
@@ -602,7 +604,7 @@ def _get_keys_tup_overload(recvs, key_arrs):
     return impl
 
 
-def _get_data_tup(recvs, key_arrs):
+def _get_data_tup(recvs, key_arrs):  # pragma: no cover
     return recvs[len(key_arrs) :]
 
 
@@ -621,7 +623,7 @@ def _get_data_tup_overload(recvs, key_arrs):
 
 
 # returns scalar instead of tuple if only one array
-def getitem_arr_tup_single(arrs, i):
+def getitem_arr_tup_single(arrs, i):  # pragma: no cover
     return arrs[0][i]
 
 
@@ -632,7 +634,7 @@ def getitem_arr_tup_single_overload(arrs, i):
     return lambda arrs, i: getitem_arr_tup(arrs, i)
 
 
-def val_to_tup(val):
+def val_to_tup(val):  # pragma: no cover
     return (val,)
 
 

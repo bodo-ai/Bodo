@@ -28,6 +28,10 @@ from bodo.utils.typing import (
     is_overload_false,
     is_overload_zero,
     get_overload_const_str,
+    is_overload_constant_str,
+    is_overload_constant_bool,
+    BodoError,
+    ConstDictType,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -36,6 +40,15 @@ from numba.targets.imputils import lower_builtin, impl_ret_untracked
 from bodo.hiframes.pd_series_ext import if_series_to_array_type
 from numba.extending import register_model, models
 import llvmlite.llvmpy.core as lc
+from bodo.libs.array_tools import (
+    array_to_info,
+    arr_info_list_to_table,
+    drop_duplicates_table_outplace,
+    info_from_table,
+    info_to_array,
+    delete_table,
+)
+from bodo.hiframes.pd_dataframe_ext import validate_sort_values_spec
 
 
 @overload_attribute(DataFrameType, "index")
@@ -81,7 +94,22 @@ def overload_dataframe_values(df):
 
 @overload_method(DataFrameType, "get_values")
 def overload_dataframe_get_values(df):
-    def impl(df):
+    def impl(df):  # pragma: no cover
+        return df.values
+
+    return impl
+
+
+@overload_method(DataFrameType, "to_numpy")
+def overload_dataframe_to_numpy(df, dtype=None, copy=False):
+    # The copy argument can be ignored here since we always copy the data
+    # (our underlying structures are fully columnar which should be copied to get a
+    # matrix). This is consistent with Pandas since copy=False doesn't guarantee it
+    # won't be copied.
+    if not is_overload_none(dtype):
+        raise BodoError("'dtype' argument of to_numpy() not supported yet")
+
+    def impl(df, dtype=None, copy=False):  # pragma: no cover
         return df.values
 
     return impl
@@ -137,6 +165,62 @@ def overload_dataframe_copy(df, deep=True):
 
     header = "def impl(df, deep=True):\n"
     return _gen_init_df(header, df.columns, ", ".join(data_outs))
+
+
+@overload_method(DataFrameType, "rename")
+def overload_dataframe_rename(
+    df,
+    mapper=None,
+    index=None,
+    columns=None,
+    axis=None,
+    copy=True,
+    inplace=False,
+    level=None,
+    errors="ignore",
+):
+
+    # check unsupported arguments
+    if not (
+        is_overload_none(mapper)
+        and is_overload_none(index)
+        and is_overload_none(axis)
+        and is_overload_false(inplace)
+        and is_overload_none(level)
+        and is_overload_constant_str(errors)
+        and get_overload_const_str(errors) == "ignore"
+    ):
+        raise BodoError("Only 'columns' and copy arguments of df.rename() supported")
+
+    # columns should be constant dictionary
+    if not isinstance(columns, ConstDictType):
+        raise BodoError(
+            "'columns' argument to df.rename() should be a constant dictionary"
+        )
+
+    col_map = {
+        columns.consts[2 * i]: columns.consts[2 * i + 1]
+        for i in range(len(columns.consts) // 2)
+    }
+    new_cols = [
+        col_map.get(df.columns[i], df.columns[i]) for i in range(len(df.columns))
+    ]
+
+    data_outs = []
+    for i in range(len(df.columns)):
+        arr = "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(i)
+        if is_overload_true(copy):
+            data_outs.append(arr + ".copy()")
+        elif is_overload_false(copy):
+            data_outs.append(arr)
+        else:
+            data_outs.append("{arr}.copy() if copy else {arr}".format(arr=arr))
+
+    header = (
+        "def impl(df, mapper=None, index=None, columns=None, axis=None, "
+        "copy=True, inplace=False, level=None, errors='ignore'):\n"
+    )
+    return _gen_init_df(header, new_cols, ", ".join(data_outs))
 
 
 @overload_method(DataFrameType, "isna")
@@ -633,6 +717,27 @@ def overload_dataframe_set_index(
     return _gen_init_df(header, columns, data_args, index)
 
 
+@overload_method(DataFrameType, "query")
+def overload_dataframe_query(df, expr, inplace=False):
+    """Support query only for the case where expr is a constant string and expr output
+    is a 1D boolean array. Refering to named index by name is not supported.
+    """
+    # check unsupported "inplace"
+    if not is_overload_false(inplace):
+        raise BodoError("query() inplace argument not supported yet")
+
+    if not isinstance(expr, (types.StringLiteral, types.UnicodeType)):
+        raise BodoError("query() expr argument should be a string")
+
+    # TODO: support df.loc for normal case and getitem for multi-dim case similar to
+    # Pandas
+    def impl(df, expr, inplace=False):  # pragma: no cover
+        b = bodo.hiframes.pd_dataframe_ext.query_dummy(df, expr)
+        return df[b]
+
+    return impl
+
+
 @overload_method(DataFrameType, "duplicated")
 def overload_dataframe_duplicated(df, subset=None, keep="first"):
     # TODO: support subset and first
@@ -661,7 +766,7 @@ def overload_dataframe_duplicated(df, subset=None, keep="first"):
 
 @overload_method(DataFrameType, "drop_duplicates")
 def overload_dataframe_drop_duplicates(df, subset=None, keep="first", inplace=False):
-    # TODO: support inplace, subset and first
+    # TODO: support inplace
     if not is_overload_none(subset):
         raise ValueError("drop_duplicates() subset argument not supported yet")
 
@@ -672,6 +777,7 @@ def overload_dataframe_drop_duplicates(df, subset=None, keep="first", inplace=Fa
     # may not match
 
     n_cols = len(df.columns)
+
     data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
 
     func_text = "def impl(df, subset=None, keep='first', inplace=False):\n"
@@ -885,7 +991,7 @@ def overload_isna(obj):
     # TODO: other string array data structures
     if obj == bodo.string_array_type:
 
-        def impl(obj):
+        def impl(obj):  # pragma: no cover
             numba.parfor.init_prange()
             n = len(obj)
             out_arr = np.empty(n, np.bool_)
@@ -931,7 +1037,7 @@ def overload_notna(obj):
     return lambda obj: not pd.isna(obj)
 
 
-def set_df_col(df, cname, arr, inplace):
+def set_df_col(df, cname, arr, inplace):  # pragma: no cover
     df[cname] = arr
 
 
@@ -967,7 +1073,7 @@ class SetDfColInfer(AbstractTemplate):
         return ret(*args)
 
 
-def drop_inplace(df):
+def drop_inplace(df):  # pragma: no cover
     res = None
     return df, res
 
@@ -997,7 +1103,7 @@ def drop_inplace_overload(
         level=None,
         inplace=False,
         errors="raise",
-    ):
+    ):  # pragma: no cover
         new_df = bodo.hiframes.pd_dataframe_ext.drop_dummy(
             df, labels, axis, columns, inplace
         )
@@ -1006,7 +1112,7 @@ def drop_inplace_overload(
     return _impl
 
 
-def sort_values_inplace(df):
+def sort_values_inplace(df):  # pragma: no cover
     res = None
     return df, res
 
@@ -1015,11 +1121,13 @@ def sort_values_inplace(df):
 def sort_values_inplace_overload(
     df, by, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last"
 ):
-
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
-    assert isinstance(df, DataFrameType)
-    # TODO: support recovery when object is not df
+    # make sure 'df' is of type DataFrame
+    if not isinstance(df, DataFrameType):
+        raise BodoError("sort_values(): requires dataframe inputs")
+    validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position)
+
     def _impl(
         df,
         by,
@@ -1031,7 +1139,7 @@ def sort_values_inplace_overload(
     ):
 
         new_df = bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
-            df, by, ascending, inplace
+            df, by, ascending, inplace, na_position
         )
         return new_df, None
 

@@ -11,14 +11,16 @@
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <numeric>
-#include <functional>
-#include <map>
 #include <unordered_map>
+#include <unordered_set>
+#include <string>
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_murmurhash3.cpp"
+#include "gfx/timsort.hpp"
 #include "mpi.h"
 #define ALIGNMENT 64  // preferred alignment for AVX512
 
@@ -100,40 +102,8 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
 // get_item_size() function call
 std::vector<size_t> numpy_item_size(BODO_NUMPY_ARRAY_NUM_DTYPES);
 
-int64_t get_item_size(Bodo_CTypes::CTypeEnum typ_enum) {
-    switch (typ_enum) {
-        case Bodo_CTypes::INT8:
-            return sizeof(int8_t);
-        case Bodo_CTypes::UINT8:
-            return sizeof(uint8_t);
-        case Bodo_CTypes::INT16:
-            return sizeof(int16_t);
-        case Bodo_CTypes::UINT16:
-            return sizeof(uint16_t);
-        case Bodo_CTypes::INT32:
-            return sizeof(int32_t);
-        case Bodo_CTypes::UINT32:
-            return sizeof(uint32_t);
-        case Bodo_CTypes::INT64:
-            return sizeof(int64_t);
-        case Bodo_CTypes::UINT64:
-            return sizeof(uint64_t);
-        case Bodo_CTypes::FLOAT32:
-            return sizeof(float);
-        case Bodo_CTypes::FLOAT64:
-            return sizeof(double);
-        case Bodo_CTypes::STRING:
-            PyErr_SetString(PyExc_RuntimeError,
-                            "Invalid item size call on string type");
-            return 0;
-    }
-    PyErr_SetString(PyExc_RuntimeError,
-                    "Invalid item size call on unknown type");
-    return 0;
-}
-
 array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
-    int64_t size = length * get_item_size(typ_enum);
+    int64_t size = length * numpy_item_size[typ_enum];
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
     return new array_info(bodo_array_type::NUMPY, typ_enum, length, -1, data,
@@ -144,7 +114,7 @@ array_info* alloc_nullable_array(int64_t length,
                                  Bodo_CTypes::CTypeEnum typ_enum,
                                  int64_t extra_null_bytes) {
     int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
-    int64_t size = length * get_item_size(typ_enum);
+    int64_t size = length * numpy_item_size[typ_enum];
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
     NRT_MemInfo* meminfo_bitmask =
@@ -186,13 +156,23 @@ void delete_table(table_info* table) {
         delete a;
     }
     delete table;
-    return;
+}
+
+void free_array(array_info* arr);
+
+void delete_table_free_arrays(table_info* table) {
+    for (array_info* a : table->columns) {
+        free_array(a);
+        delete a;
+    }
+    delete table;
 }
 
 template <class T>
-void hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows, const uint32_t seed) {
+void hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows,
+                      const uint32_t seed) {
     for (size_t i = 0; i < n_rows; i++) {
-      hash_inner_32<T>(&data[i], seed, &out_hashes[i]);
+        hash_inner_32<T>(&data[i], seed, &out_hashes[i]);
     }
 }
 
@@ -209,7 +189,8 @@ void hash_array_string(uint32_t* out_hashes, char* data, uint32_t* offsets,
     }
 }
 
-void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows, const uint32_t seed) {
+void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
+                const uint32_t seed) {
     // dispatch to proper function
     // TODO: general dispatcher
     // XXX: assumes nullable array data for nulls is always consistent
@@ -238,8 +219,8 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows, const ui
         return hash_array_inner<uint64_t>(out_hashes, (uint64_t*)array->data1,
                                           n_rows, seed);
     if (array->dtype == Bodo_CTypes::FLOAT32)
-        return hash_array_inner<float>(out_hashes, (float*)array->data1,
-                                       n_rows, seed);
+        return hash_array_inner<float>(out_hashes, (float*)array->data1, n_rows,
+                                       seed);
     if (array->dtype == Bodo_CTypes::FLOAT64)
         return hash_array_inner<double>(out_hashes, (double*)array->data1,
                                         n_rows, seed);
@@ -250,7 +231,8 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows, const ui
 }
 
 template <class T>
-void hash_array_combine_inner(uint32_t* out_hashes, T* data, size_t n_rows, const uint32_t seed) {
+void hash_array_combine_inner(uint32_t* out_hashes, T* data, size_t n_rows,
+                              const uint32_t seed) {
     // hash combine code from boost
     // https://github.com/boostorg/container_hash/blob/504857692148d52afe7110bcb96cf837b0ced9d7/include/boost/container_hash/hash.hpp#L313
     for (size_t i = 0; i < n_rows; i++) {
@@ -262,7 +244,8 @@ void hash_array_combine_inner(uint32_t* out_hashes, T* data, size_t n_rows, cons
 }
 
 void hash_array_combine_string(uint32_t* out_hashes, char* data,
-                               uint32_t* offsets, size_t n_rows, const uint32_t seed) {
+                               uint32_t* offsets, size_t n_rows,
+                               const uint32_t seed) {
     uint32_t start_offset = 0;
     for (size_t i = 0; i < n_rows; i++) {
         uint32_t end_offset = offsets[i + 1];
@@ -279,13 +262,13 @@ void hash_array_combine_string(uint32_t* out_hashes, char* data,
     }
 }
 
-void hash_array_combine(uint32_t* out_hashes, array_info* array,
-                        size_t n_rows, const uint32_t seed) {
+void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
+                        const uint32_t seed) {
     // dispatch to proper function
     // TODO: general dispatcher
     if (array->dtype == Bodo_CTypes::INT8)
-        return hash_array_combine_inner<int8_t>(out_hashes,
-                                                (int8_t*)array->data1, n_rows, seed);
+        return hash_array_combine_inner<int8_t>(
+            out_hashes, (int8_t*)array->data1, n_rows, seed);
     if (array->dtype == Bodo_CTypes::UINT8)
         return hash_array_combine_inner<uint8_t>(
             out_hashes, (uint8_t*)array->data1, n_rows, seed);
@@ -311,15 +294,16 @@ void hash_array_combine(uint32_t* out_hashes, array_info* array,
         return hash_array_combine_inner<float>(out_hashes, (float*)array->data1,
                                                n_rows, seed);
     if (array->dtype == Bodo_CTypes::FLOAT64)
-        return hash_array_combine_inner<double>(out_hashes,
-                                                (double*)array->data1, n_rows, seed);
+        return hash_array_combine_inner<double>(
+            out_hashes, (double*)array->data1, n_rows, seed);
     if (array->arr_type == bodo_array_type::STRING)
         return hash_array_combine_string(out_hashes, (char*)array->data1,
                                          (uint32_t*)array->data2, n_rows, seed);
     PyErr_SetString(PyExc_RuntimeError, "Invalid data type for hash combine");
 }
 
-uint32_t* hash_keys(std::vector<array_info*> &key_arrs, const uint32_t seed) {
+uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
+                    const uint32_t seed) {
     size_t n_rows = (size_t)key_arrs[0]->length;
     uint32_t* hashes = new uint32_t[n_rows];
     // hash first array
@@ -596,16 +580,20 @@ void copy_gathered_null_bytes(uint8_t* null_bitmask,
     return;
 }
 
-
-
-void shuffle_array(
-    array_info* send_arr, array_info* out_arr, std::vector<int> const& send_count,
-    std::vector<int> const& recv_count, std::vector<int> const& send_disp,
-    std::vector<int> const& recv_disp, std::vector<int> const& send_count_char,
-    std::vector<int> const& recv_count_char, std::vector<int> const& send_disp_char,
-    std::vector<int> const& recv_disp_char, std::vector<int> const& send_count_null,
-    std::vector<int> const& recv_count_null, std::vector<int> const& send_disp_null,
-    std::vector<int> const& recv_disp_null, std::vector<uint8_t>& tmp_null_bytes) {
+void shuffle_array(array_info* send_arr, array_info* out_arr,
+                   std::vector<int> const& send_count,
+                   std::vector<int> const& recv_count,
+                   std::vector<int> const& send_disp,
+                   std::vector<int> const& recv_disp,
+                   std::vector<int> const& send_count_char,
+                   std::vector<int> const& recv_count_char,
+                   std::vector<int> const& send_disp_char,
+                   std::vector<int> const& recv_disp_char,
+                   std::vector<int> const& send_count_null,
+                   std::vector<int> const& recv_count_null,
+                   std::vector<int> const& send_disp_null,
+                   std::vector<int> const& recv_disp_null,
+                   std::vector<uint8_t>& tmp_null_bytes) {
     // strings need data and length comm
     if (send_arr->arr_type == bodo_array_type::STRING) {
         // string lengths
@@ -676,7 +664,7 @@ void free_array(array_info* arr) {
 
 table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
     // error checking
-    if (in_table->columns.size() <= 0 || n_keys <= 0) {
+    if (in_table->ncols() <= 0 || n_keys <= 0) {
         PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
         return NULL;
     }
@@ -687,8 +675,8 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     mpi_comm_info comm_info(n_pes, in_table->columns);
 
-    size_t n_rows = (size_t)in_table->columns[0]->length;
-    size_t n_cols = in_table->columns.size();
+    size_t n_rows = (size_t)in_table->nrows();
+    size_t n_cols = in_table->ncols();
     std::vector<array_info*> key_arrs = std::vector<array_info*>(
         in_table->columns.begin(), in_table->columns.begin() + n_keys);
 
@@ -741,24 +729,20 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
     return new table_info(out_arrs);
 }
 
-
 /** Getting the expression of a T value as a vector of characters
  *
  * The template paramter is T.
  * @param val the value in the type T.
  * @return the vector of characters on output
  */
-template<typename T>
-std::vector<char> GetVector(T const& val)
-{
-  const T* valptr= &val;
-  const char* charptr = (char*)valptr;
-  std::vector<char> V(sizeof(T));
-  for (size_t u=0; u<sizeof(T); u++)
-    V[u] = charptr[u];
-  return V;
+template <typename T>
+std::vector<char> GetVector(T const& val) {
+    const T* valptr = &val;
+    const char* charptr = (char*)valptr;
+    std::vector<char> V(sizeof(T));
+    for (size_t u = 0; u < sizeof(T); u++) V[u] = charptr[u];
+    return V;
 }
-
 
 /* The NaN entry used in the case a normal value is not available.
  *
@@ -771,83 +755,70 @@ std::vector<char> GetVector(T const& val)
  * @param the dtype used.
  * @return the list of characters in output.
  */
-std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype)
-{
-  if (dtype == Bodo_CTypes::INT8)
-    return GetVector<int8_t>(-1);
-  if (dtype == Bodo_CTypes::UINT8)
-    return GetVector<uint8_t>(0);
-  if (dtype == Bodo_CTypes::INT16)
-    return GetVector<int16_t>(-1);
-  if (dtype == Bodo_CTypes::UINT16)
-    return GetVector<uint16_t>(0);
-  if (dtype == Bodo_CTypes::INT32)
-    return GetVector<int32_t>(-1);
-  if (dtype == Bodo_CTypes::UINT32)
-    return GetVector<uint32_t>(0);
-  if (dtype == Bodo_CTypes::INT64)
-    return GetVector<int64_t>(-1);
-  if (dtype == Bodo_CTypes::UINT64)
-    return GetVector<uint64_t>(0);
-  if (dtype == Bodo_CTypes::FLOAT32)
-    return GetVector<float>(std::nanf("1"));
-  if (dtype == Bodo_CTypes::FLOAT64)
-    return GetVector<double>(std::nan("1"));
-  return {};
+std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
+    if (dtype == Bodo_CTypes::INT8) return GetVector<int8_t>(-1);
+    if (dtype == Bodo_CTypes::UINT8) return GetVector<uint8_t>(0);
+    if (dtype == Bodo_CTypes::INT16) return GetVector<int16_t>(-1);
+    if (dtype == Bodo_CTypes::UINT16) return GetVector<uint16_t>(0);
+    if (dtype == Bodo_CTypes::INT32) return GetVector<int32_t>(-1);
+    if (dtype == Bodo_CTypes::UINT32) return GetVector<uint32_t>(0);
+    if (dtype == Bodo_CTypes::INT64) return GetVector<int64_t>(-1);
+    if (dtype == Bodo_CTypes::UINT64) return GetVector<uint64_t>(0);
+    if (dtype == Bodo_CTypes::FLOAT32) return GetVector<float>(std::nanf("1"));
+    if (dtype == Bodo_CTypes::FLOAT64) return GetVector<double>(std::nan("1"));
+    return {};
 }
 
-
 /** Printing the string expression of an entry in the column
- * 
+ *
  * @param dtype: the data type on input
  * @param ptrdata: The pointer to the data (its length is determined by dtype)
  * @return The string on output.
  */
-std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype, char* ptrdata)
-{
-  if (dtype == Bodo_CTypes::INT8) {
-    int8_t* ptr = (int8_t*)ptrdata;
-    return std::to_string(*ptr);
-  }
-  if (dtype == Bodo_CTypes::UINT8) {
-    uint8_t* ptr = (uint8_t*)ptrdata;
-    return std::to_string(*ptr);
-  }
-  if (dtype == Bodo_CTypes::INT16) {
-    int16_t* ptr = (int16_t*)ptrdata;
-    return std::to_string(*ptr);
-  }
-  if (dtype == Bodo_CTypes::UINT16) {
-    uint16_t* ptr = (uint16_t*)ptrdata;
-    return std::to_string(*ptr);
-  }
-  if (dtype == Bodo_CTypes::INT32) {
-    int32_t* ptr = (int32_t*)ptrdata;
-    return std::to_string(*ptr);
-  }
-  if (dtype == Bodo_CTypes::UINT32) {
-    uint32_t* ptr = (uint32_t*)ptrdata;
-    return std::to_string(*ptr);
-  }
-  if (dtype == Bodo_CTypes::INT64) {
-    int64_t* ptr = (int64_t*)ptrdata;
-    return std::to_string(*ptr);
-  }
-  if (dtype == Bodo_CTypes::UINT64) {
-    uint64_t* ptr = (uint64_t*)ptrdata;
-    return std::to_string(*ptr);
-  }
-  if (dtype == Bodo_CTypes::FLOAT32) {
-    float* ptr = (float*)ptrdata;
-    return std::to_string(*ptr);
-  }
-  if (dtype == Bodo_CTypes::FLOAT64) {
-    double* ptr = (double*)ptrdata;
-    return std::to_string(*ptr);
-  }
-  return "no matching type";
+std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
+                                char* ptrdata) {
+    if (dtype == Bodo_CTypes::INT8) {
+        int8_t* ptr = (int8_t*)ptrdata;
+        return std::to_string(*ptr);
+    }
+    if (dtype == Bodo_CTypes::UINT8) {
+        uint8_t* ptr = (uint8_t*)ptrdata;
+        return std::to_string(*ptr);
+    }
+    if (dtype == Bodo_CTypes::INT16) {
+        int16_t* ptr = (int16_t*)ptrdata;
+        return std::to_string(*ptr);
+    }
+    if (dtype == Bodo_CTypes::UINT16) {
+        uint16_t* ptr = (uint16_t*)ptrdata;
+        return std::to_string(*ptr);
+    }
+    if (dtype == Bodo_CTypes::INT32) {
+        int32_t* ptr = (int32_t*)ptrdata;
+        return std::to_string(*ptr);
+    }
+    if (dtype == Bodo_CTypes::UINT32) {
+        uint32_t* ptr = (uint32_t*)ptrdata;
+        return std::to_string(*ptr);
+    }
+    if (dtype == Bodo_CTypes::INT64) {
+        int64_t* ptr = (int64_t*)ptrdata;
+        return std::to_string(*ptr);
+    }
+    if (dtype == Bodo_CTypes::UINT64) {
+        uint64_t* ptr = (uint64_t*)ptrdata;
+        return std::to_string(*ptr);
+    }
+    if (dtype == Bodo_CTypes::FLOAT32) {
+        float* ptr = (float*)ptrdata;
+        return std::to_string(*ptr);
+    }
+    if (dtype == Bodo_CTypes::FLOAT64) {
+        double* ptr = (double*)ptrdata;
+        return std::to_string(*ptr);
+    }
+    return "no matching type";
 }
-
 
 /* This is a function used by "DEBUG_PrintSetOfColumn"
  * It takes a column and returns a vector of string on output
@@ -855,62 +826,58 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype, char* ptrda
  * @param arr is the pointer.
  * @return The vector of strings to be used later.
  */
-std::vector<std::string> DEBUG_PrintColumn(array_info* arr)
-{
-  size_t nRow=arr->length;
-  std::vector<std::string> ListStr(nRow);
-  std::string strOut;
-  if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-    uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
-    uint64_t siztype = get_item_size(arr->dtype);
-    for (size_t iRow=0; iRow<nRow; iRow++) {
-      bool bit=GetBit(null_bitmask, iRow);
-      if (bit) {
-        char* ptrdata1 = &(arr->data1[siztype*iRow]);
-        strOut = GetStringExpression(arr->dtype, ptrdata1);
-      }
-      else {
-        strOut="false";
-      }
-      ListStr[iRow] = strOut;
-    }
-  }
-  if (arr->arr_type == bodo_array_type::NUMPY) {
-    uint64_t siztype = get_item_size(arr->dtype);
-    for (size_t iRow=0; iRow<nRow; iRow++) {
-      char* ptrdata1 = &(arr->data1[siztype*iRow]);
-      strOut = GetStringExpression(arr->dtype, ptrdata1);
-      ListStr[iRow] = strOut;
-    }
-  }
-  if (arr->arr_type == bodo_array_type::STRING) {
-    uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
-    uint32_t* data2 = (uint32_t*)arr->data2;
-    char* data1 = arr->data1;
-    for (size_t iRow=0; iRow<nRow; iRow++) {
-      bool bit=GetBit(null_bitmask, iRow);
-      if (bit) {
-        uint32_t start_pos = data2[iRow];
-        uint32_t end_pos   = data2[iRow+1];
-        uint32_t len = end_pos - start_pos;
-        char* strname;
-        strname = new char[len+1];
-        for (uint32_t i=0; i<len; i++) {
-          strname[i] = data1[start_pos + i];
+std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
+    size_t nRow = arr->length;
+    std::vector<std::string> ListStr(nRow);
+    std::string strOut;
+    if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+        uint64_t siztype = numpy_item_size[arr->dtype];
+        for (size_t iRow = 0; iRow < nRow; iRow++) {
+            bool bit = GetBit(null_bitmask, iRow);
+            if (bit) {
+                char* ptrdata1 = &(arr->data1[siztype * iRow]);
+                strOut = GetStringExpression(arr->dtype, ptrdata1);
+            } else {
+                strOut = "false";
+            }
+            ListStr[iRow] = strOut;
         }
-        strname[len] = '\0';
-        strOut = strname;
-        delete [] strname;
-      }
-      else {
-        strOut="false";
-      }
-      ListStr[iRow] = strOut;
     }
-  }
-  return ListStr;
+    if (arr->arr_type == bodo_array_type::NUMPY) {
+        uint64_t siztype = numpy_item_size[arr->dtype];
+        for (size_t iRow = 0; iRow < nRow; iRow++) {
+            char* ptrdata1 = &(arr->data1[siztype * iRow]);
+            strOut = GetStringExpression(arr->dtype, ptrdata1);
+            ListStr[iRow] = strOut;
+        }
+    }
+    if (arr->arr_type == bodo_array_type::STRING) {
+        uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+        uint32_t* data2 = (uint32_t*)arr->data2;
+        char* data1 = arr->data1;
+        for (size_t iRow = 0; iRow < nRow; iRow++) {
+            bool bit = GetBit(null_bitmask, iRow);
+            if (bit) {
+                uint32_t start_pos = data2[iRow];
+                uint32_t end_pos = data2[iRow + 1];
+                uint32_t len = end_pos - start_pos;
+                char* strname;
+                strname = new char[len + 1];
+                for (uint32_t i = 0; i < len; i++) {
+                    strname[i] = data1[start_pos + i];
+                }
+                strname[len] = '\0';
+                strOut = strname;
+                delete[] strname;
+            } else {
+                strOut = "false";
+            }
+            ListStr[iRow] = strOut;
+        }
+    }
+    return ListStr;
 }
-
 
 /** The DEBUG_PrintSetOfColumn is printing the contents of the table to
  * the output stream.
@@ -923,55 +890,49 @@ std::vector<std::string> DEBUG_PrintColumn(array_info* arr)
  * @param ListArr the list of columns in input
  * @return Nothing. Everything is put in the stream
  */
-void DEBUG_PrintSetOfColumn(std::ostream & os, std::vector<array_info*> const& ListArr)
-{
-  int nCol=ListArr.size();
-  if (nCol == 0) {
-    os << "Nothing to print really\n";
-    return;
-  }
-  std::vector<int> ListLen(nCol);
-  int nRowMax=0;
-  for (int iCol=0; iCol<nCol; iCol++) {
-    int nRow=ListArr[iCol]->length;
-    if (nRow > nRowMax)
-      nRowMax = nRow;
-    ListLen[iCol] = nRow;
-  }
-  std::vector<std::vector<std::string>> ListListStr;
-  for (int iCol=0; iCol<nCol; iCol++) {
-    std::vector<std::string> LStr = DEBUG_PrintColumn(ListArr[iCol]);
-    for (int iRow=ListLen[iCol]; iRow<nRowMax; iRow++)
-      LStr.push_back("");
-    ListListStr.push_back(LStr);
-  }
-  std::vector<std::string> ListStrOut(nRowMax);
-  for (int iRow=0; iRow<nRowMax; iRow++) {
-    std::string str = std::to_string(iRow) + " :";
-    ListStrOut[iRow]=str;
-  }
-  for (int iCol=0; iCol<nCol; iCol++) {
-    std::vector<int> ListLen(nRowMax);
-    size_t maxlen=0;
-    for (int iRow=0; iRow<nRowMax; iRow++) {
-      size_t elen = ListListStr[iCol][iRow].size();
-      ListLen[iRow] = elen;
-      if (elen > maxlen)
-        maxlen = elen;
+void DEBUG_PrintSetOfColumn(std::ostream& os,
+                            std::vector<array_info*> const& ListArr) {
+    int nCol = ListArr.size();
+    if (nCol == 0) {
+        os << "Nothing to print really\n";
+        return;
     }
-    for (int iRow=0; iRow<nRowMax; iRow++) {
-      std::string str = ListStrOut[iRow] + " " + ListListStr[iCol][iRow];
-      size_t diff = maxlen - ListLen[iRow];
-      for (size_t u=0; u<diff; u++)
-        str += " ";
-      ListStrOut[iRow] = str;
+    std::vector<int> ListLen(nCol);
+    int nRowMax = 0;
+    for (int iCol = 0; iCol < nCol; iCol++) {
+        int nRow = ListArr[iCol]->length;
+        if (nRow > nRowMax) nRowMax = nRow;
+        ListLen[iCol] = nRow;
     }
-  }
-  for (int iRow=0; iRow<nRowMax; iRow++)
-    os << ListStrOut[iRow] << "\n";
+    std::vector<std::vector<std::string>> ListListStr;
+    for (int iCol = 0; iCol < nCol; iCol++) {
+        std::vector<std::string> LStr = DEBUG_PrintColumn(ListArr[iCol]);
+        for (int iRow = ListLen[iCol]; iRow < nRowMax; iRow++)
+            LStr.push_back("");
+        ListListStr.push_back(LStr);
+    }
+    std::vector<std::string> ListStrOut(nRowMax);
+    for (int iRow = 0; iRow < nRowMax; iRow++) {
+        std::string str = std::to_string(iRow) + " :";
+        ListStrOut[iRow] = str;
+    }
+    for (int iCol = 0; iCol < nCol; iCol++) {
+        std::vector<int> ListLen(nRowMax);
+        size_t maxlen = 0;
+        for (int iRow = 0; iRow < nRowMax; iRow++) {
+            size_t elen = ListListStr[iCol][iRow].size();
+            ListLen[iRow] = elen;
+            if (elen > maxlen) maxlen = elen;
+        }
+        for (int iRow = 0; iRow < nRowMax; iRow++) {
+            std::string str = ListStrOut[iRow] + " " + ListListStr[iCol][iRow];
+            size_t diff = maxlen - ListLen[iRow];
+            for (size_t u = 0; u < diff; u++) str += " ";
+            ListStrOut[iRow] = str;
+        }
+    }
+    for (int iRow = 0; iRow < nRowMax; iRow++) os << ListStrOut[iRow] << "\n";
 }
-
-
 
 /** This is a function used for debugging.
  * It prints the nature of the columns of the tables
@@ -980,193 +941,195 @@ void DEBUG_PrintSetOfColumn(std::ostream & os, std::vector<array_info*> const& L
  * @param The list of columns in output
  * @return nothing. Everything is printed to the stream
  */
-void DEBUG_PrintRefct(std::ostream &os, std::vector<array_info*> const& ListArr)
-{
-  int nCol=ListArr.size();
-  auto GetType=[](bodo_array_type::arr_type_enum arr_type) -> std::string {
-    if (arr_type == bodo_array_type::NULLABLE_INT_BOOL)
-      return "NULLABLE";
-    if (arr_type == bodo_array_type::NUMPY)
-      return "NUMPY";
-    return "STRING";
-  };
-  auto GetNRTinfo=[](NRT_MemInfo* meminf) -> std::string {
-    if (meminf == NULL)
-      return "NULL";
-    return "(refct=" + std::to_string(meminf->refct) + ")";
-  };
-  for (int iCol=0; iCol<nCol; iCol++) {
-    os << "iCol=" << iCol << " : " << GetType(ListArr[iCol]->arr_type) << " dtype=" << ListArr[iCol]->dtype << " : meminfo=" << GetNRTinfo(ListArr[iCol]->meminfo) << " meminfo_bitmask=" << GetNRTinfo(ListArr[iCol]->meminfo_bitmask) << "\n";
-  }
+void DEBUG_PrintRefct(std::ostream& os,
+                      std::vector<array_info*> const& ListArr) {
+    int nCol = ListArr.size();
+    auto GetType = [](bodo_array_type::arr_type_enum arr_type) -> std::string {
+        if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) return "NULLABLE";
+        if (arr_type == bodo_array_type::NUMPY) return "NUMPY";
+        return "STRING";
+    };
+    auto GetNRTinfo = [](NRT_MemInfo* meminf) -> std::string {
+        if (meminf == NULL) return "NULL";
+        return "(refct=" + std::to_string(meminf->refct) + ")";
+    };
+    for (int iCol = 0; iCol < nCol; iCol++) {
+        os << "iCol=" << iCol << " : " << GetType(ListArr[iCol]->arr_type)
+           << " dtype=" << ListArr[iCol]->dtype
+           << " : meminfo=" << GetNRTinfo(ListArr[iCol]->meminfo)
+           << " meminfo_bitmask=" << GetNRTinfo(ListArr[iCol]->meminfo_bitmask)
+           << "\n";
+    }
 }
 
-
-
-
-/** This function uses the combinatorial information computed in the "ListPairWrite"
- * array.
- * The other arguments shift1, shift2 and ChoiceColumn are for the choice of column
- * ---For inserting a left data, ChoiceColumn = 0 indicates retrieving column from the left.
- * ---For inserting a right data, ChoiceColumn = 1 indicates retrieving column from the right.
+/** This function uses the combinatorial information computed in the
+ * "ListPairWrite" array. The other arguments shift1, shift2 and ChoiceColumn
+ * are for the choice of column
+ * ---For inserting a left data, ChoiceColumn = 0 indicates retrieving column
+ * from the left.
+ * ---For inserting a right data, ChoiceColumn = 1 indicates retrieving column
+ * from the right.
  * ---For inserting a key, we need to access both to left and right columns.
  *    This corresponds to the columns shift1 and shift2.
  *
  * The code considers all the cases in turn and creates the new array from it.
  *
- * The keys in output re used twice: In the left and on the right and so they are
- * outputed twice.
+ * The keys in output re used twice: In the left and on the right and so they
+ * are outputed twice.
  *
  * No error is thrown but input is assumed to be coherent.
  *
  * @param in_table is the input table.
- * @param ListPairWrite is the vector of list of pairs for the writing of the output table
+ * @param ListPairWrite is the vector of list of pairs for the writing of the
+ * output table
  * @param shift1 is the first shift (of the left array)
  * @param shift2 is the second shift (of the left array)
  * @param ChoiceColumn is the chosen option
  * @return one column of the table output.
  */
-array_info* RetrieveArray(table_info* const& in_table, std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite, size_t const& shift1, size_t const& shift2, int const& ChoiceColumn)
-{
-  size_t nRowOut=ListPairWrite.size();
-  array_info* out_arr = NULL;
-  /* The function for computing the returning values
-   * In the output is the column index to use and the row index to use.
-   * The row index may be -1 though.
-   *
-   * @param the row index in the output
-   * @return the pair (column,row) to be used.
-   */
-  auto get_iRow=[&](size_t const& iRowIn) -> std::pair<size_t,std::ptrdiff_t> {
-    std::pair<std::ptrdiff_t, std::ptrdiff_t> pairLRcolumn = ListPairWrite[iRowIn];
-    if (ChoiceColumn == 0)
-      return {shift1, pairLRcolumn.first};
-    if (ChoiceColumn == 1)
-      return {shift2, pairLRcolumn.second};
-    if (pairLRcolumn.first != -1)
-      return {shift1, pairLRcolumn.first};
-    return {shift2, pairLRcolumn.second};
-  };
-  //  std::cout << "shift1=" << shift1 << " shift2=" << shift2 << " ChoiceColumn=" << ChoiceColumn << "\n";
-  // eshift is the in_table index used for the determination
-  // of arr_type and dtype of the returned column.
-  size_t eshift;
-  if (ChoiceColumn == 0)
-    eshift=shift1;
-  if (ChoiceColumn == 1)
-    eshift=shift2;
-  if (ChoiceColumn == 2)
-    eshift=shift1;
-  if (in_table->columns[eshift]->arr_type == bodo_array_type::STRING) {
-    // In the first case of STRING, we have to deal with offsets first so we need
-    // one first loop to determine the needed length.
-    // In the second loop, the assignation is made.
-    // If the entries are missing then the bitmask is set to false.
-    int64_t n_chars=0;
-    std::vector<uint32_t> ListSizes(nRowOut);
-    for (size_t iRow=0; iRow<nRowOut; iRow++) {
-      std::pair<size_t,std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
-      uint32_t size=0;
-      if (pairShiftRow.second >= 0) {
-        uint32_t* in_offsets = (uint32_t*)in_table->columns[pairShiftRow.first]->data2;
-        uint32_t end_offset = in_offsets[pairShiftRow.second + 1];
-        uint32_t start_offset = in_offsets[pairShiftRow.second];
-        size = end_offset - start_offset;
-      }
-      ListSizes[iRow] = size;
-      n_chars += size;
-    }
-    //    std::cout << "RetrieveArray, step 2.1 nRowOut=" << nRowOut << " n_chars=" << n_chars << "\n";
-    out_arr = alloc_array(nRowOut, n_chars,
-                          in_table->columns[eshift]->arr_type,
-                          in_table->columns[eshift]->dtype, 0);
-    uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
-    uint32_t pos = 0;
-    uint32_t* out_offsets = (uint32_t*)out_arr->data2;
-    for (size_t iRow=0; iRow<nRowOut; iRow++) {
-      std::pair<size_t,std::ptrdiff_t> pairShiftRow=get_iRow(iRow);
-      uint32_t size = ListSizes[iRow];
-      out_offsets[iRow] = pos;
-      bool bit=false;
-      if (pairShiftRow.second >= 0) {
-        uint8_t* in_null_bitmask = (uint8_t*)in_table->columns[pairShiftRow.first]->null_bitmask;
-        uint32_t* in_offsets = (uint32_t*)in_table->columns[pairShiftRow.first]->data2;
-        uint32_t start_offset = in_offsets[pairShiftRow.second];
-        for (uint32_t i=0; i<size; i++) {
-          out_arr->data1[pos] = in_table->columns[pairShiftRow.first]->data1[start_offset];
-          pos++;
-          start_offset++;
+array_info* RetrieveArray(
+    table_info* const& in_table,
+    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
+    size_t const& shift1, size_t const& shift2, int const& ChoiceColumn) {
+    size_t nRowOut = ListPairWrite.size();
+    array_info* out_arr = NULL;
+    /* The function for computing the returning values
+     * In the output is the column index to use and the row index to use.
+     * The row index may be -1 though.
+     *
+     * @param the row index in the output
+     * @return the pair (column,row) to be used.
+     */
+    auto get_iRow =
+        [&](size_t const& iRowIn) -> std::pair<size_t, std::ptrdiff_t> {
+        std::pair<std::ptrdiff_t, std::ptrdiff_t> pairLRcolumn =
+            ListPairWrite[iRowIn];
+        if (ChoiceColumn == 0) return {shift1, pairLRcolumn.first};
+        if (ChoiceColumn == 1) return {shift2, pairLRcolumn.second};
+        if (pairLRcolumn.first != -1) return {shift1, pairLRcolumn.first};
+        return {shift2, pairLRcolumn.second};
+    };
+    // eshift is the in_table index used for the determination
+    // of arr_type and dtype of the returned column.
+    size_t eshift;
+    if (ChoiceColumn == 0) eshift = shift1;
+    if (ChoiceColumn == 1) eshift = shift2;
+    if (ChoiceColumn == 2) eshift = shift1;
+    if (in_table->columns[eshift]->arr_type == bodo_array_type::STRING) {
+        // In the first case of STRING, we have to deal with offsets first so we
+        // need one first loop to determine the needed length. In the second
+        // loop, the assignation is made. If the entries are missing then the
+        // bitmask is set to false.
+        int64_t n_chars = 0;
+        std::vector<uint32_t> ListSizes(nRowOut);
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+            uint32_t size = 0;
+            if (pairShiftRow.second >= 0) {
+                uint32_t* in_offsets =
+                    (uint32_t*)in_table->columns[pairShiftRow.first]->data2;
+                uint32_t end_offset = in_offsets[pairShiftRow.second + 1];
+                uint32_t start_offset = in_offsets[pairShiftRow.second];
+                size = end_offset - start_offset;
+            }
+            ListSizes[iRow] = size;
+            n_chars += size;
         }
-        bit = GetBit(in_null_bitmask, pairShiftRow.second);
-      }
-      SetBitTo(out_null_bitmask, iRow, bit);
+        out_arr =
+            alloc_array(nRowOut, n_chars, in_table->columns[eshift]->arr_type,
+                        in_table->columns[eshift]->dtype, 0);
+        uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
+        uint32_t pos = 0;
+        uint32_t* out_offsets = (uint32_t*)out_arr->data2;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+            uint32_t size = ListSizes[iRow];
+            out_offsets[iRow] = pos;
+            bool bit = false;
+            if (pairShiftRow.second >= 0) {
+                uint8_t* in_null_bitmask =
+                    (uint8_t*)in_table->columns[pairShiftRow.first]
+                        ->null_bitmask;
+                uint32_t* in_offsets =
+                    (uint32_t*)in_table->columns[pairShiftRow.first]->data2;
+                uint32_t start_offset = in_offsets[pairShiftRow.second];
+                for (uint32_t i = 0; i < size; i++) {
+                    out_arr->data1[pos] = in_table->columns[pairShiftRow.first]
+                                              ->data1[start_offset];
+                    pos++;
+                    start_offset++;
+                }
+                bit = GetBit(in_null_bitmask, pairShiftRow.second);
+            }
+            SetBitTo(out_null_bitmask, iRow, bit);
+        }
+        out_offsets[nRowOut] = pos;
     }
-    out_offsets[nRowOut] = pos;
-  }
-  if (in_table->columns[eshift]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-    // In the case of NULLABLE array, we do a single loop for
-    // assigning the arrays.
-    // We do not need to reassign the pointers, only their size
-    // suffices for the copy.
-    // In the case of missing array a value of false is assigned
-    // to the bitmask.
-    out_arr = alloc_array(nRowOut, -1,
-                          in_table->columns[eshift]->arr_type,
-                          in_table->columns[eshift]->dtype, 0);
-    uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
-    uint64_t siztype = get_item_size(in_table->columns[eshift]->dtype);
-    for (size_t iRow=0; iRow<nRowOut; iRow++) {
-      std::pair<size_t,std::ptrdiff_t> pairShiftRow=get_iRow(iRow);
-      bool bit=false;
-      if (pairShiftRow.second >= 0) {
-        uint8_t* in_null_bitmask = (uint8_t*)in_table->columns[pairShiftRow.first]->null_bitmask;
-        for (uint64_t u=0; u<siztype; u++)
-          out_arr->data1[siztype*iRow + u] = in_table->columns[pairShiftRow.first]->data1[siztype*pairShiftRow.second + u];
-        bit = GetBit(in_null_bitmask, pairShiftRow.second);
-      }
-      SetBitTo(out_null_bitmask, iRow, bit);
+    if (in_table->columns[eshift]->arr_type ==
+        bodo_array_type::NULLABLE_INT_BOOL) {
+        // In the case of NULLABLE array, we do a single loop for
+        // assigning the arrays.
+        // We do not need to reassign the pointers, only their size
+        // suffices for the copy.
+        // In the case of missing array a value of false is assigned
+        // to the bitmask.
+        out_arr = alloc_array(nRowOut, -1, in_table->columns[eshift]->arr_type,
+                              in_table->columns[eshift]->dtype, 0);
+        uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
+        uint64_t siztype = numpy_item_size[in_table->columns[eshift]->dtype];
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+            bool bit = false;
+            if (pairShiftRow.second >= 0) {
+                uint8_t* in_null_bitmask =
+                    (uint8_t*)in_table->columns[pairShiftRow.first]
+                        ->null_bitmask;
+                for (uint64_t u = 0; u < siztype; u++)
+                    out_arr->data1[siztype * iRow + u] =
+                        in_table->columns[pairShiftRow.first]
+                            ->data1[siztype * pairShiftRow.second + u];
+                bit = GetBit(in_null_bitmask, pairShiftRow.second);
+            }
+            SetBitTo(out_null_bitmask, iRow, bit);
+        }
     }
-  }
-  if (in_table->columns[eshift]->arr_type == bodo_array_type::NUMPY) {
-    // In the case of NUMPY array we have only to put a single
-    // entry.
-    // In the case of missing data we have to assign a NaN and that is
-    // not easy in general and done in the RetrieveNaNentry.
-    // According to types:
-    // ---signed integer: value -1
-    // ---unsigned integer: value 0
-    // ---floating point: std::nan as here both notions match.
-    out_arr = alloc_array(nRowOut, -1,
-                          in_table->columns[eshift]->arr_type,
-                          in_table->columns[eshift]->dtype, 0);
-    uint64_t siztype = get_item_size(in_table->columns[eshift]->dtype);
-    //    std::cout << "siztype=" << siztype << "\n";
-    std::vector<char> vectNaN = RetrieveNaNentry(in_table->columns[eshift]->dtype);
-    for (size_t iRow=0; iRow<nRowOut; iRow++) {
-      std::pair<size_t,std::ptrdiff_t> pairShiftRow=get_iRow(iRow);
-      //
-      if (pairShiftRow.second >= 0) {
-        for (uint64_t u=0; u<siztype; u++)
-          out_arr->data1[siztype*iRow + u] = in_table->columns[pairShiftRow.first]->data1[siztype*pairShiftRow.second + u];
-      }
-      else {
-        for (uint64_t u=0; u<siztype; u++)
-          out_arr->data1[siztype*iRow + u] = vectNaN[u];
-      }
+    if (in_table->columns[eshift]->arr_type == bodo_array_type::NUMPY) {
+        // In the case of NUMPY array we have only to put a single
+        // entry.
+        // In the case of missing data we have to assign a NaN and that is
+        // not easy in general and done in the RetrieveNaNentry.
+        // According to types:
+        // ---signed integer: value -1
+        // ---unsigned integer: value 0
+        // ---floating point: std::nan as here both notions match.
+        out_arr = alloc_array(nRowOut, -1, in_table->columns[eshift]->arr_type,
+                              in_table->columns[eshift]->dtype, 0);
+        uint64_t siztype = numpy_item_size[in_table->columns[eshift]->dtype];
+        std::vector<char> vectNaN =
+            RetrieveNaNentry(in_table->columns[eshift]->dtype);
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+            //
+            if (pairShiftRow.second >= 0) {
+                for (uint64_t u = 0; u < siztype; u++)
+                    out_arr->data1[siztype * iRow + u] =
+                        in_table->columns[pairShiftRow.first]
+                            ->data1[siztype * pairShiftRow.second + u];
+            } else {
+                for (uint64_t u = 0; u < siztype; u++)
+                    out_arr->data1[siztype * iRow + u] = vectNaN[u];
+            }
+        }
     }
-  }
-  return out_arr;
+    return out_arr;
 };
 
-
-
-
-/** This code test if two keys are equal (Before that the hash should have been used)
- * It is used that way because we assume that the left key have the same type as the
- * right keys.
- * The shift is used to precise whether we use the left keys or the right keys.
- * Equality means that all the columns are the same.
- * Thus the test iterates over the columns and if one is different then result is false.
- * We consider all types of bodo_array_type
+/** This code test if two keys are equal (Before that the hash should have been
+ * used) It is used that way because we assume that the left key have the same
+ * type as the right keys. The shift is used to precise whether we use the left
+ * keys or the right keys. Equality means that all the columns are the same.
+ * Thus the test iterates over the columns and if one is different then result
+ * is false. We consider all types of bodo_array_type
  *
  * This function is currently unused but could be used in the future.
  *
@@ -1178,83 +1141,176 @@ array_info* RetrieveArray(table_info* const& in_table, std::vector<std::pair<std
  * @param iRow2 the row of the second key
  * @return True if they are equal and false otherwise.
  */
-bool TestEqual(table_info* in_table, size_t const& n_key, size_t const& shift_key1, size_t const& iRow1, size_t const& shift_key2, size_t const& iRow2)
-{
-  // iteration over the list of key for the comparison.
-  for (size_t iKey=0; iKey<n_key; iKey++) {
-    if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::NUMPY) {
-      // In the case of NUMPY, we compare the values for concluding.
-      uint64_t siztype = get_item_size(in_table->columns[shift_key1+iKey]->dtype);
-      for (uint64_t u=0; u<siztype; u++) {
-        if (in_table->columns[shift_key1+iKey]->data1[siztype*iRow1 + u] != in_table->columns[shift_key2+iKey]->data1[siztype*iRow2 + u])
-          return false;
-      }
-    }
-    if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-      // NULLABLE case. We need to consider the bitmask and the values.
-      uint8_t* null_bitmask1 = (uint8_t*)in_table->columns[shift_key1+iKey]->null_bitmask;
-      uint8_t* null_bitmask2 = (uint8_t*)in_table->columns[shift_key2+iKey]->null_bitmask;
-      bool bit1 = GetBit(null_bitmask1, iRow1);
-      bool bit2 = GetBit(null_bitmask2, iRow2);
-      // If one bitmask is T and the other the reverse then they are clearly not equal.
-      if (bit1 != bit2)
-        return false;
-      // If both bitmasks are false, then it does not matter what value they are storing.
-      // Comparison is the same as for NUMPY.
-      if (bit1) {
-        uint64_t siztype = get_item_size(in_table->columns[shift_key1+iKey]->dtype);
-        for (uint64_t u=0; u<siztype; u++) {
-          if (in_table->columns[shift_key1+iKey]->data1[siztype*iRow1 + u] != in_table->columns[shift_key2+iKey]->data1[siztype*iRow2 + u])
-            return false;
+bool TestEqual(std::vector<array_info*> const& columns, size_t const& n_key,
+               size_t const& shift_key1, size_t const& iRow1,
+               size_t const& shift_key2, size_t const& iRow2) {
+    // iteration over the list of key for the comparison.
+    for (size_t iKey = 0; iKey < n_key; iKey++) {
+        if (columns[shift_key1 + iKey]->arr_type == bodo_array_type::NUMPY) {
+            // In the case of NUMPY, we compare the values for concluding.
+            uint64_t siztype = numpy_item_size[columns[shift_key1 + iKey]->dtype];
+            for (uint64_t u = 0; u < siztype; u++) {
+                if (columns[shift_key1 + iKey]->data1[siztype * iRow1 + u] !=
+                    columns[shift_key2 + iKey]->data1[siztype * iRow2 + u])
+                    return false;
+            }
         }
-      }
-    }
-    if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::STRING) {
-      // For STRING case we need to deal bitmask and the values.
-      uint8_t* null_bitmask1 = (uint8_t*)in_table->columns[shift_key1+iKey]->null_bitmask;
-      uint8_t* null_bitmask2 = (uint8_t*)in_table->columns[shift_key2+iKey]->null_bitmask;
-      bool bit1 = GetBit(null_bitmask1, iRow1);
-      bool bit2 = GetBit(null_bitmask2, iRow2);
-      // If bitmasks are different then we conclude they are not equal.
-      if (bit1 != bit2)
-        return false;
-      // If bitmasks are both false, then no need to compare the string values.
-      if (bit1) {
-        // Here we consider the shifts in data2 for the comparison.
-        uint32_t* data2_1 = (uint32_t*)in_table->columns[shift_key1+iKey]->data2;
-        uint32_t* data2_2 = (uint32_t*)in_table->columns[shift_key2+iKey]->data2;
-        uint32_t len1 = data2_1[iRow1+1] - data2_1[iRow1];
-        uint32_t len2 = data2_2[iRow2+1] - data2_2[iRow2];
-        // If string lengths are different then they are different.
-        if (len1 != len2)
-          return false;
-        // Now we iterate over the characters for the comparison.
-        uint32_t pos1_prev = data2_1[iRow1];
-        uint32_t pos2_prev = data2_2[iRow2];
-        char* data1_1 = (char*)in_table->columns[shift_key1+iKey]->data1;
-        char* data1_2 = (char*)in_table->columns[shift_key2+iKey]->data1;
-        for (uint32_t pos=0; pos<len1; pos++) {
-          uint32_t pos1=pos1_prev + pos;
-          uint32_t pos2=pos2_prev + pos;
-          if (data1_1[pos1] != data1_2[pos2])
-            return false;
+        if (columns[shift_key1 + iKey]->arr_type ==
+            bodo_array_type::NULLABLE_INT_BOOL) {
+            // NULLABLE case. We need to consider the bitmask and the values.
+            uint8_t* null_bitmask1 =
+                (uint8_t*)columns[shift_key1 + iKey]->null_bitmask;
+            uint8_t* null_bitmask2 =
+                (uint8_t*)columns[shift_key2 + iKey]->null_bitmask;
+            bool bit1 = GetBit(null_bitmask1, iRow1);
+            bool bit2 = GetBit(null_bitmask2, iRow2);
+            // If one bitmask is T and the other the reverse then they are
+            // clearly not equal.
+            if (bit1 != bit2) return false;
+            // If both bitmasks are false, then it does not matter what value
+            // they are storing. Comparison is the same as for NUMPY.
+            if (bit1) {
+                uint64_t siztype =
+                    numpy_item_size[columns[shift_key1 + iKey]->dtype];
+                for (uint64_t u = 0; u < siztype; u++) {
+                    if (columns[shift_key1 + iKey]
+                            ->data1[siztype * iRow1 + u] !=
+                        columns[shift_key2 + iKey]->data1[siztype * iRow2 + u])
+                        return false;
+                }
+            }
         }
-      }
+        if (columns[shift_key1 + iKey]->arr_type == bodo_array_type::STRING) {
+            // For STRING case we need to deal bitmask and the values.
+            uint8_t* null_bitmask1 =
+                (uint8_t*)columns[shift_key1 + iKey]->null_bitmask;
+            uint8_t* null_bitmask2 =
+                (uint8_t*)columns[shift_key2 + iKey]->null_bitmask;
+            bool bit1 = GetBit(null_bitmask1, iRow1);
+            bool bit2 = GetBit(null_bitmask2, iRow2);
+            // If bitmasks are different then we conclude they are not equal.
+            if (bit1 != bit2) return false;
+            // If bitmasks are both false, then no need to compare the string
+            // values.
+            if (bit1) {
+                // Here we consider the shifts in data2 for the comparison.
+                uint32_t* data2_1 =
+                    (uint32_t*)columns[shift_key1 + iKey]->data2;
+                uint32_t* data2_2 =
+                    (uint32_t*)columns[shift_key2 + iKey]->data2;
+                uint32_t len1 = data2_1[iRow1 + 1] - data2_1[iRow1];
+                uint32_t len2 = data2_2[iRow2 + 1] - data2_2[iRow2];
+                // If string lengths are different then they are different.
+                if (len1 != len2) return false;
+                // Now we iterate over the characters for the comparison.
+                uint32_t pos1_prev = data2_1[iRow1];
+                uint32_t pos2_prev = data2_2[iRow2];
+                char* data1_1 = (char*)columns[shift_key1 + iKey]->data1;
+                char* data1_2 = (char*)columns[shift_key2 + iKey]->data1;
+                for (uint32_t pos = 0; pos < len1; pos++) {
+                    uint32_t pos1 = pos1_prev + pos;
+                    uint32_t pos2 = pos2_prev + pos;
+                    if (data1_1[pos1] != data1_2[pos2]) return false;
+                }
+            }
+        }
     }
-  }
-  // If all keys are equal then we are ok and the keys are equals.
-  return true;
+    // If all keys are equal then we are ok and the keys are equals.
+    return true;
 };
 
+/**
+ * The comparison function for integer types.
+ *
+ * @param ptr1: char* pointer to the first value
+ * @param ptr2: char* pointer to the second value
+ * @param na_position: true for NaN being last, false for NaN being first (not used)
+ * @return 1 if *ptr1 < *ptr2
+ */
+template <typename T>
+inline typename std::enable_if<!std::is_floating_point<T>::value,int>::type NumericComparison_T(char* ptr1, char* ptr2, bool const& na_position) {
+    T* ptr1_T = (T*)ptr1;
+    T* ptr2_T = (T*)ptr2;
+    if (*ptr1_T > *ptr2_T) return -1;
+    if (*ptr1_T < *ptr2_T) return 1;
+    return 0;
+}
+
+/**
+ * The comparison function for floating points.
+ * If na_position = True then the NaN are considered larger than any other.
+ *
+ * @param ptr1: char* pointer to the first value
+ * @param ptr2: char* pointer to the second value
+ * @param na_position: true for NaN being larger, false for NaN being smallest
+ * @return 1 if *ptr1 < *ptr2
+ */
+template <typename T>
+inline typename std::enable_if<std::is_floating_point<T>::value,int>::type NumericComparison_T(char* ptr1, char* ptr2, bool const& na_position) {
+    T* ptr1_T = (T*)ptr1;
+    T* ptr2_T = (T*)ptr2;
+    T val1 = *ptr1_T;
+    T val2 = *ptr2_T;
+    if (isnan(val1) && isnan(val2)) return 0;
+    if (isnan(val2)) {
+      if (na_position)
+        return 1;
+      return -1;
+    }
+    if (isnan(val1)) {
+      if (na_position)
+        return -1;
+      return 1;
+    }
+    if (val1 > val2) return -1;
+    if (val1 < val2) return 1;
+    return 0;
+}
 
 
-/** This code test keys if two keys are equal (Before that the hash should have been used)
- * It is used that way because we assume that the left key have the same type as the
- * right keys.
- * The shift is used to precise whether we use the left keys or the right keys.
- * 0 means that the columns are equals and 1,-1 that the keys are different.
- * Thus the test iterates over the columns and if one is different then we can conclude.
- * We consider all types of bodo_array_type.
+/**
+ * The comparison function for innteger/floating point
+ * If na_position = True then the NaN are considered larger than any other.
+ *
+ * @param ptr1: char* pointer to the first value
+ * @param ptr2: char* pointer to the second value
+ * @param na_position: true for NaN being last, false for NaN being first
+ * @return 1 if *ptr1 < *ptr2
+ */
+int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
+                      char* ptr2, bool const& na_position) {
+    if (dtype == Bodo_CTypes::INT8)
+        return NumericComparison_T<int8_t>(ptr1, ptr2, na_position);
+    if (dtype == Bodo_CTypes::UINT8)
+        return NumericComparison_T<uint8_t>(ptr1, ptr2, na_position);
+    if (dtype == Bodo_CTypes::INT16)
+        return NumericComparison_T<int16_t>(ptr1, ptr2, na_position);
+    if (dtype == Bodo_CTypes::UINT16)
+        return NumericComparison_T<uint16_t>(ptr1, ptr2, na_position);
+    if (dtype == Bodo_CTypes::INT32)
+        return NumericComparison_T<int32_t>(ptr1, ptr2, na_position);
+    if (dtype == Bodo_CTypes::UINT32)
+        return NumericComparison_T<uint32_t>(ptr1, ptr2, na_position);
+    if (dtype == Bodo_CTypes::INT64)
+        return NumericComparison_T<int64_t>(ptr1, ptr2, na_position);
+    if (dtype == Bodo_CTypes::UINT64)
+        return NumericComparison_T<uint64_t>(ptr1, ptr2, na_position);
+    if (dtype == Bodo_CTypes::FLOAT32)
+        return NumericComparison_T<float>(ptr1, ptr2, na_position);
+    if (dtype == Bodo_CTypes::FLOAT64)
+        return NumericComparison_T<double>(ptr1, ptr2, na_position);
+    PyErr_SetString(PyExc_RuntimeError,
+                    "Invalid dtype put on input to NumericComparison");
+    return 0;
+}
+
+/** This code test keys if two keys are greater or equal
+ * The code is done so as to give identical results to the Python comparison.
+ * It is used that way because we assume that the left key have the same type as
+ * the right keys. The shift is used to precise whether we use the left keys or
+ * the right keys. 0 means that the columns are equals and 1,-1 that the keys
+ * are different. Thus the test iterates over the columns and if one is
+ * different then we can conclude. We consider all types of bodo_array_type.
  *
  * @param in_table the input table
  * @param n_key the number of keys considered for the comparison
@@ -1262,98 +1318,105 @@ bool TestEqual(table_info* in_table, size_t const& n_key, size_t const& shift_ke
  * @param iRow1 the row of the first key
  * @param shift_key2 the column for the second key
  * @param iRow2 the row of the second key
+ * @param na_position: if true NaN values are largest, if false smallest.
  * @return 1 if (shift_key1,iRow1) < (shift_key2,iRow2) , -1 is > and 0 if =
  */
-int KeyComparison(table_info* in_table, size_t const& n_key, size_t const& shift_key1, size_t const& iRow1, size_t const& shift_key2, size_t const& iRow2)
-{
-  // iteration over the list of key for the comparison.
-  for (size_t iKey=0; iKey<n_key; iKey++) {
-    if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::NUMPY) {
-      // In the case of NUMPY, we compare the values for concluding.
-      uint64_t siztype = get_item_size(in_table->columns[shift_key1+iKey]->dtype);
-      for (uint64_t u=0; u<siztype; u++) {
-        char char1 = in_table->columns[shift_key1+iKey]->data1[siztype*iRow1 + u];
-        char char2 = in_table->columns[shift_key2+iKey]->data1[siztype*iRow2 + u];
-        if (char1 < char2)
-          return 1;
-        if (char1 > char2)
-          return -1;
-      }
-    }
-    if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-      // NULLABLE case. We need to consider the bitmask and the values.
-      uint8_t* null_bitmask1 = (uint8_t*)in_table->columns[shift_key1+iKey]->null_bitmask;
-      uint8_t* null_bitmask2 = (uint8_t*)in_table->columns[shift_key2+iKey]->null_bitmask;
-      bool bit1 = GetBit(null_bitmask1, iRow1);
-      bool bit2 = GetBit(null_bitmask2, iRow2);
-      // If one bitmask is T and the other the reverse then they are clearly not equal.
-      if (bit1 && !bit2)
-        return 1;
-      if (!bit1 && bit2)
-        return -1;
-      // If both bitmasks are false, then it does not matter what value they are storing.
-      // Comparison is the same as for NUMPY.
-      if (bit1) {
-        uint64_t siztype = get_item_size(in_table->columns[shift_key1+iKey]->dtype);
-        for (uint64_t u=0; u<siztype; u++) {
-          char char1 = in_table->columns[shift_key1+iKey]->data1[siztype*iRow1 + u];
-          char char2 = in_table->columns[shift_key2+iKey]->data1[siztype*iRow2 + u];
-          if (char1 < char2)
-            return 1;
-          if (char1 > char2)
-            return -1;
+int KeyComparisonAsPython(std::vector<array_info*> const& columns,
+                          size_t const& n_key, size_t const& shift_key1,
+                          size_t const& iRow1, size_t const& shift_key2,
+                          size_t const& iRow2, bool const& na_position) {
+    // iteration over the list of key for the comparison.
+    for (size_t iKey = 0; iKey < n_key; iKey++) {
+        if (columns[shift_key1 + iKey]->arr_type == bodo_array_type::NUMPY) {
+            // In the case of NUMPY, we compare the values for concluding.
+            uint64_t siztype = numpy_item_size[columns[shift_key1 + iKey]->dtype];
+            char* ptr1 = columns[shift_key1 + iKey]->data1 + (siztype * iRow1);
+            char* ptr2 = columns[shift_key2 + iKey]->data1 + (siztype * iRow2);
+            int test = NumericComparison(columns[shift_key1 + iKey]->dtype,
+                                         ptr1, ptr2, na_position);
+            if (test != 0) return test;
         }
-      }
-    }
-    if (in_table->columns[shift_key1+iKey]->arr_type == bodo_array_type::STRING) {
-      // For STRING case we need to deal bitmask and the values.
-      uint8_t* null_bitmask1 = (uint8_t*)in_table->columns[shift_key1+iKey]->null_bitmask;
-      uint8_t* null_bitmask2 = (uint8_t*)in_table->columns[shift_key2+iKey]->null_bitmask;
-      bool bit1 = GetBit(null_bitmask1, iRow1);
-      bool bit2 = GetBit(null_bitmask2, iRow2);
-      // If bitmasks are different then we can conclude the comparison
-      if (bit1 && !bit2)
-        return 1;
-      if (!bit1 && bit2)
-        return -1;
-      // If bitmasks are both false, then no need to compare the string values.
-      if (bit1) {
-        // Here we consider the shifts in data2 for the comparison.
-        uint32_t* data2_1 = (uint32_t*)in_table->columns[shift_key1+iKey]->data2;
-        uint32_t* data2_2 = (uint32_t*)in_table->columns[shift_key2+iKey]->data2;
-        uint32_t len1 = data2_1[iRow1+1] - data2_1[iRow1];
-        uint32_t len2 = data2_2[iRow2+1] - data2_2[iRow2];
-        // If string lengths are different then we can conclude.
-        if (len1 < len2)
-          return 1;
-        if (len1 > len2)
-          return -1;
-        // Now we iterate over the characters for the comparison.
-        uint32_t pos1_prev = data2_1[iRow1];
-        uint32_t pos2_prev = data2_2[iRow2];
-        char* data1_1 = (char*)in_table->columns[shift_key1+iKey]->data1;
-        char* data1_2 = (char*)in_table->columns[shift_key2+iKey]->data1;
-        for (uint32_t pos=0; pos<len1; pos++) {
-          uint32_t pos1=pos1_prev + pos;
-          uint32_t pos2=pos2_prev + pos;
-          if (data1_1[pos1] < data1_2[pos2])
-            return 1;
-          if (data1_1[pos1] > data1_2[pos2])
-            return -1;
+        if (columns[shift_key1 + iKey]->arr_type ==
+            bodo_array_type::NULLABLE_INT_BOOL) {
+            // NULLABLE case. We need to consider the bitmask and the values.
+            uint8_t* null_bitmask1 =
+                (uint8_t*)columns[shift_key1 + iKey]->null_bitmask;
+            uint8_t* null_bitmask2 =
+                (uint8_t*)columns[shift_key2 + iKey]->null_bitmask;
+            bool bit1 = GetBit(null_bitmask1, iRow1);
+            bool bit2 = GetBit(null_bitmask2, iRow2);
+            // If one bitmask is T and the other the reverse then they are
+            // clearly not equal.
+            if (bit1 && !bit2) {
+              if (na_position) return 1;
+              return -1;
+            }
+            if (!bit1 && bit2) {
+              if (na_position) return -1;
+              return 1;
+            }
+            // If both bitmasks are false, then it does not matter what value
+            // they are storing. Comparison is the same as for NUMPY.
+            if (bit1) {
+                uint64_t siztype =
+                    numpy_item_size[columns[shift_key1 + iKey]->dtype];
+                char* ptr1 =
+                    columns[shift_key1 + iKey]->data1 + (siztype * iRow1);
+                char* ptr2 =
+                    columns[shift_key2 + iKey]->data1 + (siztype * iRow2);
+                int test = NumericComparison(columns[shift_key1 + iKey]->dtype,
+                                             ptr1, ptr2, na_position);
+                if (test != 0) return test;
+            }
         }
-      }
+        if (columns[shift_key1 + iKey]->arr_type == bodo_array_type::STRING) {
+            // For STRING case we need to deal bitmask and the values.
+            uint8_t* null_bitmask1 =
+                (uint8_t*)columns[shift_key1 + iKey]->null_bitmask;
+            uint8_t* null_bitmask2 =
+                (uint8_t*)columns[shift_key2 + iKey]->null_bitmask;
+            bool bit1 = GetBit(null_bitmask1, iRow1);
+            bool bit2 = GetBit(null_bitmask2, iRow2);
+            // If bitmasks are different then we can conclude the comparison
+            if (bit1 && !bit2) {
+              if (na_position) return 1;
+              return -1;
+            }
+            if (!bit1 && bit2) {
+              if (na_position) return -1;
+              return 1;
+            }
+            // If bitmasks are both false, then no need to compare the string
+            // values.
+            if (bit1) {
+                // Here we consider the shifts in data2 for the comparison.
+                uint32_t* data2_1 =
+                    (uint32_t*)columns[shift_key1 + iKey]->data2;
+                uint32_t* data2_2 =
+                    (uint32_t*)columns[shift_key2 + iKey]->data2;
+                uint32_t len1 = data2_1[iRow1 + 1] - data2_1[iRow1];
+                uint32_t len2 = data2_2[iRow2 + 1] - data2_2[iRow2];
+                // Compute minimal length
+                uint32_t minlen = len1;
+                if (len2 < len1) minlen = len2;
+                // From the common characters, we may be able to conclude.
+                uint32_t pos1_prev = data2_1[iRow1];
+                uint32_t pos2_prev = data2_2[iRow2];
+                char* data1_1 =
+                    (char*)columns[shift_key1 + iKey]->data1 + pos1_prev;
+                char* data1_2 =
+                    (char*)columns[shift_key2 + iKey]->data1 + pos2_prev;
+                int test = std::strncmp(data1_2, data1_1, minlen);
+                if (test != 0) return test;
+                // If not, we may be able to conclude via the string length.
+                if (len1 > len2) return -1;
+                if (len1 < len2) return 1;
+            }
+        }
     }
-  }
-  // If all keys are equal then we return 0
-  return 0;
+    // If all keys are equal then we return 0
+    return 0;
 };
-
-
-
-
-
-
-
 
 /** This function does the joining of the table and returns the joined
  * table
@@ -1388,262 +1451,275 @@ int KeyComparison(table_info* in_table, size_t const& n_key, size_t const& shift
  * @param is_right : whether we do merging on the right.
  * @return the returned table used in the code.
  */
-table_info* hash_join_table(table_info* in_table, int64_t n_key_t, int64_t n_data_left_t, int64_t n_data_right_t, int64_t* vect_same_key, bool is_left, bool is_right)
-{
+table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
+                            int64_t n_data_left_t, int64_t n_data_right_t,
+                            int64_t* vect_same_key, bool is_left,
+                            bool is_right) {
 #undef DEBUG_JOIN
 #ifdef DEBUG_JOIN
-  std::cout << "IN_TABLE:\n";
-  DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-  DEBUG_PrintRefct(std::cout, in_table->columns);
+    std::cout << "IN_TABLE:\n";
+    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+    DEBUG_PrintRefct(std::cout, in_table->columns);
 #endif
-  size_t n_key = size_t(n_key_t);
-  size_t n_data_left = size_t(n_data_left_t);
-  size_t n_data_right = size_t(n_data_right_t);
-  size_t n_tot_left = n_key + n_data_left;
-  size_t n_tot_right = n_key + n_data_right;
-  size_t sum_dim = 2*n_key + n_data_left + n_data_right;
-  size_t n_col = in_table->columns.size();
-  if (n_col != sum_dim) {
-    PyErr_SetString(PyExc_RuntimeError, "incoherent dimensions");
-    return NULL;
-  }
+    size_t n_key = size_t(n_key_t);
+    size_t n_data_left = size_t(n_data_left_t);
+    size_t n_data_right = size_t(n_data_right_t);
+    size_t n_tot_left = n_key + n_data_left;
+    size_t n_tot_right = n_key + n_data_right;
+    size_t sum_dim = 2 * n_key + n_data_left + n_data_right;
+    size_t n_col = in_table->ncols();
+    if (n_col != sum_dim) {
+        PyErr_SetString(PyExc_RuntimeError, "incoherent dimensions");
+        return NULL;
+    }
 #ifdef DEBUG_JOIN
-  std::cout << "pointer=" << vect_same_key << "\n";
-  for (size_t iKey=0; iKey<n_key; iKey++) {
-    int64_t val = vect_same_key[iKey];
-    std::cout << "iKey=" << iKey << " vect_same_key[iKey]=" << val << "\n";
-  }
+    std::cout << "pointer=" << vect_same_key << "\n";
+    for (size_t iKey = 0; iKey < n_key; iKey++) {
+        int64_t val = vect_same_key[iKey];
+        std::cout << "iKey=" << iKey << " vect_same_key[iKey]=" << val << "\n";
+    }
 #endif
-  // This is a hack because we may access vect_same_key_b above n_key
-  // even if that is irrelevant to the computation.
-  //
-  size_t n_rows_left = (size_t)in_table->columns[0]->length;
-  size_t n_rows_right = (size_t)in_table->columns[n_tot_left]->length;
-  //
-  //  std::cout << "hash_join_table, step 2\n";
-  std::vector<array_info*> key_arrs_left = std::vector<array_info*>(in_table->columns.begin(), in_table->columns.begin() + n_key);
-  uint32_t seed = 0xb0d01288;
-  uint32_t* hashes_left = hash_keys(key_arrs_left, seed);
+    // This is a hack because we may access vect_same_key_b above n_key
+    // even if that is irrelevant to the computation.
+    //
+    size_t n_rows_left = (size_t)in_table->columns[0]->length;
+    size_t n_rows_right = (size_t)in_table->columns[n_tot_left]->length;
+    //
+    std::vector<array_info*> key_arrs_left = std::vector<array_info*>(
+        in_table->columns.begin(), in_table->columns.begin() + n_key);
+    uint32_t seed = 0xb0d01288;
+    uint32_t* hashes_left = hash_keys(key_arrs_left, seed);
 
-  //  std::cout << "hash_join_table, step 3\n";
-  std::vector<array_info*> key_arrs_right = std::vector<array_info*>(in_table->columns.begin()+n_tot_left, in_table->columns.begin() + n_tot_left+n_key);
-  uint32_t* hashes_right = hash_keys(key_arrs_right, seed);
+    std::vector<array_info*> key_arrs_right = std::vector<array_info*>(
+        in_table->columns.begin() + n_tot_left,
+        in_table->columns.begin() + n_tot_left + n_key);
+    uint32_t* hashes_right = hash_keys(key_arrs_right, seed);
 #ifdef DEBUG_JOIN
-  for (size_t i=0; i<n_rows_left; i++)
-    std::cout << "i=" << i << " hashes_left=" << hashes_left[i] << "\n";
-  for (size_t i=0; i<n_rows_right; i++)
-    std::cout << "i=" << i << " hashes_right=" << hashes_right[i] << "\n";
+    for (size_t i = 0; i < n_rows_left; i++)
+        std::cout << "i=" << i << " hashes_left=" << hashes_left[i] << "\n";
+    for (size_t i = 0; i < n_rows_right; i++)
+        std::cout << "i=" << i << " hashes_right=" << hashes_right[i] << "\n";
 #endif
-  int ChoiceOpt;
-  bool short_table_work, long_table_work; // This corresponds to is_left/is_right
-  size_t short_table_shift, long_table_shift; // This corresponds to the shift for left and right.
-  size_t short_table_rows, long_table_rows; // the number of rows
-  uint32_t *short_table_hashes, *long_table_hashes;
+    int ChoiceOpt;
+    bool short_table_work,
+        long_table_work;  // This corresponds to is_left/is_right
+    size_t short_table_shift,
+        long_table_shift;  // This corresponds to the shift for left and right.
+    size_t short_table_rows, long_table_rows;  // the number of rows
+    uint32_t *short_table_hashes, *long_table_hashes;
 #ifdef DEBUG_JOIN
-  std::cout << "n_rows_left=" << n_rows_left << " n_rows_right=" << n_rows_right << "\n";
+    std::cout << "n_rows_left=" << n_rows_left
+              << " n_rows_right=" << n_rows_right << "\n";
 #endif
-  if (n_rows_left < n_rows_right) {
-    ChoiceOpt=0;
-    // short = left and long = right
-    short_table_work   = is_left;
-    long_table_work   = is_right;
-    short_table_shift  = 0;
-    long_table_shift  = n_tot_left;
-    short_table_rows   = n_rows_left;
-    long_table_rows   = n_rows_right;
-    short_table_hashes = hashes_left;
-    long_table_hashes = hashes_right;
-  }
-  else {
-    ChoiceOpt=1;
-    // short = right and long = left
-    short_table_work   = is_right;
-    long_table_work   = is_left;
-    short_table_shift  = n_tot_left;
-    long_table_shift  = 0;
-    short_table_rows   = n_rows_right;
-    long_table_rows   = n_rows_left;
-    short_table_hashes = hashes_right;
-    long_table_hashes = hashes_left;
-  }
+    if (n_rows_left < n_rows_right) {
+        ChoiceOpt = 0;
+        // short = left and long = right
+        short_table_work = is_left;
+        long_table_work = is_right;
+        short_table_shift = 0;
+        long_table_shift = n_tot_left;
+        short_table_rows = n_rows_left;
+        long_table_rows = n_rows_right;
+        short_table_hashes = hashes_left;
+        long_table_hashes = hashes_right;
+    } else {
+        ChoiceOpt = 1;
+        // short = right and long = left
+        short_table_work = is_right;
+        long_table_work = is_left;
+        short_table_shift = n_tot_left;
+        long_table_shift = 0;
+        short_table_rows = n_rows_right;
+        long_table_rows = n_rows_left;
+        short_table_hashes = hashes_right;
+        long_table_hashes = hashes_left;
+    }
 #ifdef DEBUG_JOIN
-  std::cout << "ChoiceOpt=" << ChoiceOpt << "\n";
-  std::cout << "short_table_rows=" << short_table_rows << " long_table_rows=" << long_table_rows << "\n";
+    std::cout << "ChoiceOpt=" << ChoiceOpt << "\n";
+    std::cout << "short_table_rows=" << short_table_rows
+              << " long_table_rows=" << long_table_rows << "\n";
 #endif
-  /* This is a function for comparing the rows.
-   * This is used as argument for the map function.
-   * First level of comparison is by using the hash.
-   * If failing then we go to the more complex value
-   * comparison.
-   *
-   * rows can be in the left or the right tables.
-   * If iRow < short_table_rows then it is in the first table.
-   * If iRow >= short_table_rows then it is in the second table.
-   *
-   * @param iRowA is the first row index for the comparison
-   * @param iRowB is the second row index for the comparison
-   * @return true/false depending on the case.
-   */
-  auto hash_fct=[&](size_t const& iRow) -> size_t {
-    if (iRow < short_table_rows)
-      return short_table_hashes[iRow];
-    else
-      return long_table_hashes[iRow - short_table_rows];
-  };
-  auto equal_fct=[&](size_t const& iRowA, size_t const& iRowB) -> bool {
-    //    std::cout << "Beginning of function f\n";
-    size_t jRowA, jRowB;
-    size_t shift_A, shift_B;
-    if (iRowA < short_table_rows) {
-      shift_A = short_table_shift;
-      jRowA = iRowA;
-    }
-    else {
-      shift_A = long_table_shift;
-      jRowA = iRowA - short_table_rows;
-    }
-    //    std::cout << "hash_A=" << hash_A << "\n";
-    if (iRowB < short_table_rows) {
-      shift_B = short_table_shift;
-      jRowB = iRowB;
-    }
-    else {
-      shift_B = long_table_shift;
-      jRowB = iRowB - short_table_rows;
-    }
-    return TestEqual(in_table, n_key, shift_A, jRowA, shift_B, jRowB);
-  };
-  // The entList contains the hash of the short table.
-  // We address the entry by the row index. We store all the rows which are identical
-  // in the std::vector.
-  std::unordered_map<size_t, std::vector<size_t>, decltype(hash_fct), decltype(equal_fct)> entList({}, hash_fct, equal_fct);
-  // The loop over the short table.
-  // entries are stored one by one and all of them are put even if identical in value.
-  for (size_t i_short=0; i_short<short_table_rows; i_short++) {
-#ifdef DEBUG_JOIN
-    std::cout << "i_short=" << i_short << "\n";
-#endif
-    std::vector<size_t>& group = entList[i_short];
-    group.push_back(i_short);
-  }
-  size_t nEnt=entList.size();
-#ifdef DEBUG_JOIN
-  std::cout << "nEnt=" << nEnt << "\n";
-#endif
-  //
-  // Now iterating and determining how many entries we have to do.
-  //
-
-  //
-  // ListPairWrite is the table used for the output 
-  // It precises the index used for the writing of the output table.
-  std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
-  // This precise whether a short table entry has been used or not.
-  std::vector<int> ListStatus(nEnt,0);
-  // We now iterate over all entries of the long table in order to get
-  // the entries in the ListPairWrite.
-  for (size_t i_long=0; i_long<long_table_rows; i_long++) {
-    size_t i_long_shift = i_long + short_table_rows;
-    auto iter = entList.find(i_long_shift);
-    if (iter == entList.end()) {
-      if (long_table_work)
-        ListPairWrite.push_back({-1, i_long});
-    }
-    else {
-      // If the short table entry are present in output as well, then
-      // we need to keep track whether they are used or not by the long table.
-      if (short_table_work) {
-        auto index = std::distance(entList.begin(), iter);
-        ListStatus[index] = 1;
-      }
-      for (auto & j_short : iter->second)
-        ListPairWrite.push_back({j_short,i_long});
-    }
-  }
-  // if short_table is in output then we need to check
-  // if they are used by the long table and if so use them on output.
-  if (short_table_work) {
-    auto iter = entList.begin();
-    size_t iter_s=0;
-    while(iter != entList.end()) {
-      if (ListStatus[iter_s] == 0) {
-        for (auto &j_short : iter ->second) {
-          ListPairWrite.push_back({j_short,-1});
+    /* This is a function for comparing the rows.
+     * This is the first lambda used as argument for the unordered_map.
+     *
+     * rows can be in the left or the right tables.
+     * If iRow < short_table_rows then it is in the first table.
+     * If iRow >= short_table_rows then it is in the second table.
+     *
+     * Note that the hash is size_t (so 8 bytes on x86-64) while
+     * the hashes array are int32_t (so 4 bytes)
+     *
+     * @param iRow is the first row index for the comparison
+     * @return true/false depending on the case.
+     */
+    auto hash_fct = [&](size_t const& iRow) -> size_t {
+        if (iRow < short_table_rows)
+            return short_table_hashes[iRow];
+        else
+            return long_table_hashes[iRow - short_table_rows];
+    };
+    /* This is a function for testing equality of rows.
+     * This is used as second argument for the unordered_map.
+     *
+     * rows can be in the left or the right tables.
+     * If iRow < short_table_rows then it is in the first table.
+     * If iRow >= short_table_rows then it is in the second table.
+     *
+     * @param iRowA is the first row index for the comparison
+     * @param iRowB is the second row index for the comparison
+     * @return true/false depending on equality or not.
+     */
+    auto equal_fct = [&](size_t const& iRowA, size_t const& iRowB) -> bool {
+        size_t jRowA, jRowB;
+        size_t shift_A, shift_B;
+        if (iRowA < short_table_rows) {
+            shift_A = short_table_shift;
+            jRowA = iRowA;
+        } else {
+            shift_A = long_table_shift;
+            jRowA = iRowA - short_table_rows;
         }
-      }
-      iter++;
-      iter_s++;
+        if (iRowB < short_table_rows) {
+            shift_B = short_table_shift;
+            jRowB = iRowB;
+        } else {
+            shift_B = long_table_shift;
+            jRowB = iRowB - short_table_rows;
+        }
+        return TestEqual(in_table->columns, n_key, shift_A, jRowA, shift_B,
+                         jRowB);
+    };
+    // The entList contains the hash of the short table.
+    // We address the entry by the row index. We store all the rows which are
+    // identical in the std::vector.
+    std::unordered_map<size_t, std::vector<size_t>, decltype(hash_fct),
+                       decltype(equal_fct)>
+        entList({}, hash_fct, equal_fct);
+    // The loop over the short table.
+    // entries are stored one by one and all of them are put even if identical
+    // in value.
+    for (size_t i_short = 0; i_short < short_table_rows; i_short++) {
+#ifdef DEBUG_JOIN
+        std::cout << "i_short=" << i_short << "\n";
+#endif
+        std::vector<size_t>& group = entList[i_short];
+        group.push_back(i_short);
+    }
+    size_t nEnt = entList.size();
+#ifdef DEBUG_JOIN
+    std::cout << "nEnt=" << nEnt << "\n";
+#endif
+    //
+    // Now iterating and determining how many entries we have to do.
+    //
+
+    //
+    // ListPairWrite is the table used for the output
+    // It precises the index used for the writing of the output table.
+    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
+    // This precise whether a short table entry has been used or not.
+    std::vector<int> ListStatus(nEnt, 0);
+    // We now iterate over all entries of the long table in order to get
+    // the entries in the ListPairWrite.
+    for (size_t i_long = 0; i_long < long_table_rows; i_long++) {
+        size_t i_long_shift = i_long + short_table_rows;
+        auto iter = entList.find(i_long_shift);
+        if (iter == entList.end()) {
+            if (long_table_work) ListPairWrite.push_back({-1, i_long});
+        } else {
+            // If the short table entry are present in output as well, then
+            // we need to keep track whether they are used or not by the long
+            // table.
+            if (short_table_work) {
+                auto index = std::distance(entList.begin(), iter);
+                ListStatus[index] = 1;
+            }
+            for (auto& j_short : iter->second)
+                ListPairWrite.push_back({j_short, i_long});
+        }
+    }
+    // if short_table is in output then we need to check
+    // if they are used by the long table and if so use them on output.
+    if (short_table_work) {
+        auto iter = entList.begin();
+        size_t iter_s = 0;
+        while (iter != entList.end()) {
+            if (ListStatus[iter_s] == 0) {
+                for (auto& j_short : iter->second) {
+                    ListPairWrite.push_back({j_short, -1});
+                }
+            }
+            iter++;
+            iter_s++;
+        }
+#ifdef DEBUG_JOIN
+        std::cout << "AFTER : iter_s=" << iter_s << "\n";
+#endif
     }
 #ifdef DEBUG_JOIN
-    std::cout << "AFTER : iter_s=" << iter_s << "\n";
+    size_t nbPair = ListPairWrite.size();
+    for (size_t iPair = 0; iPair < nbPair; iPair++)
+        std::cout << "iPair=" << iPair
+                  << " ePair=" << ListPairWrite[iPair].first << " , "
+                  << ListPairWrite[iPair].second << "\n";
 #endif
-  }
+    std::vector<array_info*> out_arrs;
+    // Inserting the left data
+    for (size_t i = 0; i < n_tot_left; i++) {
+        if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
+            if (ChoiceOpt == 0) {
+                out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i,
+                                                 n_tot_left + i, 2));
+            } else {
+                out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
+                                                 n_tot_left + i, i, 2));
+            }
+        } else {
+            if (ChoiceOpt == 0) {
+                out_arrs.push_back(
+                    RetrieveArray(in_table, ListPairWrite, i, -1, 0));
+            } else {
+                out_arrs.push_back(
+                    RetrieveArray(in_table, ListPairWrite, -1, i, 1));
+            }
+        }
+    }
+    // Inserting the right data
+    for (size_t i = 0; i < n_tot_right; i++) {
+        if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
+            if (ChoiceOpt == 0) {
+                out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i,
+                                                 n_tot_left + i, 2));
+            } else {
+                out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
+                                                 n_tot_left + i, i, 2));
+            }
+        } else {
+            if (ChoiceOpt == 0) {
+                out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, -1,
+                                                 n_tot_left + i, 1));
+            } else {
+                out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
+                                                 n_tot_left + i, -1, 0));
+            }
+        }
+    }
 #ifdef DEBUG_JOIN
-  size_t nbPair=ListPairWrite.size();
-  for (size_t iPair=0; iPair<nbPair; iPair++)
-    std::cout << "iPair=" << iPair << " ePair=" << ListPairWrite[iPair].first << " , " << ListPairWrite[iPair].second << "\n";
+    std::cout << "hash_join_table, output information\n";
+    DEBUG_PrintSetOfColumn(std::cout, out_arrs);
+    DEBUG_PrintRefct(std::cout, out_arrs);
+    std::cout << "Finally leaving\n";
 #endif
-  std::vector<array_info*> out_arrs;
-  // Inserting the left data
-  for (size_t i=0; i<n_tot_left; i++) {
-    if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
-      if (ChoiceOpt == 0) {
-        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, n_tot_left + i, 2));
-      }
-      else {
-        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, n_tot_left + i, i, 2));
-      }
-    }
-    else {
-      if (ChoiceOpt == 0) {
-        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, -1, 0));
-      }
-      else {
-        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, -1, i, 1));
-      }
-    }
-  }
-  // Inserting the right data
-  for (size_t i=0; i<n_tot_right; i++) {
-    if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
-      if (ChoiceOpt == 0) {
-        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, n_tot_left + i, 2));
-      }
-      else {
-        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, n_tot_left + i, i, 2));
-      }
-    }
-    else {
-      if (ChoiceOpt == 0) {
-        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, -1, n_tot_left + i, 1));
-      }
-      else {
-        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, n_tot_left + i, -1, 0));
-      }
-    }
-  }
-  // Putting the key two times.
-  //  for (size_t u=0; u<2; u++) {
-  //    for (size_t i=0; i<n_key; i++) {
-  //      if (ChoiceOpt == 0) {
-  //        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i, i+n_key, 2));
-  //      }
-  //      else {
-  //        out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i+n_key, i, 2));
-  //      }
-  //    }
-  //  }
-#ifdef DEBUG_JOIN
-  std::cout << "hash_join_table, output information\n";
-  DEBUG_PrintSetOfColumn(std::cout, out_arrs);
-  DEBUG_PrintRefct(std::cout, out_arrs);
-  std::cout << "Finally leaving\n";
-#endif
-  //
-  delete[] hashes_left;
-  delete[] hashes_right;
-  return new table_info(out_arrs);
+    //
+    delete[] hashes_left;
+    delete[] hashes_right;
+    return new table_info(out_arrs);
 }
+
+
+
+
+
 
 /**
  * Enum of aggregation, combine and eval functions used by groubpy.
@@ -1656,6 +1732,7 @@ struct Bodo_FTypes {
     enum FTypeEnum {
         sum,
         count,
+        nunique,
         mean,
         min,
         max,
@@ -1845,9 +1922,7 @@ struct mean_agg<
  * @param[in,out] sum of observed values, will be modified to contain the mean
  * @param count: number of observations
  */
-static void mean_eval(double& result, uint64_t& count) {
-    result /= count;
-}
+static void mean_eval(double& result, uint64_t& count) { result /= count; }
 
 template <typename T, typename Enable = void>
 struct var_agg {
@@ -1915,7 +1990,7 @@ struct var_agg<
 void var_combine(array_info* count_col_in, array_info* mean_col_in,
                  array_info* m2_col_in, array_info* count_col_out,
                  array_info* mean_col_out, array_info* m2_col_out,
-                 std::vector<int64_t>& row_to_group) {
+                 const std::vector<int64_t>& row_to_group) {
     for (int64_t i = 0; i < count_col_in->length; i++) {
         uint64_t& count_a = count_col_out->at<uint64_t>(row_to_group[i]);
         uint64_t& count_b = count_col_in->at<uint64_t>(i);
@@ -1960,6 +2035,14 @@ static void std_eval(double& result, uint64_t& count, double& m2) {
     result = sqrt(m2 / (count - 1));
 }
 
+
+
+
+
+
+
+
+
 /**
  * Apply a function to a column(s), save result to (possibly reduced) output
  * column(s) Semantics of this function right now vary depending on function
@@ -1974,50 +2057,54 @@ static void std_eval(double& result, uint64_t& count, double& m2) {
 template <typename T, int ftype>
 void apply_to_column(array_info* in_col, array_info* out_col,
                      std::vector<array_info*>& aux_cols,
-                     std::vector<int64_t>& row_to_group) {
+                     const std::vector<int64_t>& row_to_group) {
     switch (in_col->arr_type) {
         case bodo_array_type::NUMPY:
             if (ftype == Bodo_FTypes::mean) {
                 array_info* count_col = aux_cols[0];
                 for (int64_t i = 0; i < in_col->length; i++)
-                    mean_agg<T>::apply(
-                        out_col->at<double>(row_to_group[i]), in_col->at<T>(i),
-                        count_col->at<uint64_t>(row_to_group[i]));
+                    if (row_to_group[i] != -1)
+                        mean_agg<T>::apply(
+                            out_col->at<double>(row_to_group[i]),
+                            in_col->at<T>(i),
+                            count_col->at<uint64_t>(row_to_group[i]));
             } else if (ftype == Bodo_FTypes::mean_eval) {
                 for (int64_t i = 0; i < in_col->length; i++)
-                    mean_eval(out_col->at<double>(i),
-                              in_col->at<uint64_t>(i));
+                    mean_eval(out_col->at<double>(i), in_col->at<uint64_t>(i));
             } else if (ftype == Bodo_FTypes::var) {
                 array_info* count_col = aux_cols[0];
                 array_info* mean_col = aux_cols[1];
                 array_info* m2_col = aux_cols[2];
                 for (int64_t i = 0; i < in_col->length; i++)
-                    var_agg<T>::apply(in_col->at<T>(i),
-                                      count_col->at<uint64_t>(row_to_group[i]),
-                                      mean_col->at<double>(row_to_group[i]),
-                                      m2_col->at<double>(row_to_group[i]));
+                    if (row_to_group[i] != -1)
+                        var_agg<T>::apply(
+                            in_col->at<T>(i),
+                            count_col->at<uint64_t>(row_to_group[i]),
+                            mean_col->at<double>(row_to_group[i]),
+                            m2_col->at<double>(row_to_group[i]));
             } else if (ftype == Bodo_FTypes::var_eval) {
                 array_info* count_col = aux_cols[0];
                 array_info* m2_col = aux_cols[2];
                 for (int64_t i = 0; i < in_col->length; i++)
-                    var_eval(out_col->at<double>(i),
-                             count_col->at<uint64_t>(i),
+                    var_eval(out_col->at<double>(i), count_col->at<uint64_t>(i),
                              m2_col->at<double>(i));
             } else if (ftype == Bodo_FTypes::std_eval) {
                 array_info* count_col = aux_cols[0];
                 array_info* m2_col = aux_cols[2];
                 for (int64_t i = 0; i < in_col->length; i++)
-                    std_eval(out_col->at<double>(i),
-                             count_col->at<uint64_t>(i),
+                    std_eval(out_col->at<double>(i), count_col->at<uint64_t>(i),
                              m2_col->at<double>(i));
             } else if (ftype == Bodo_FTypes::count) {
                 for (int64_t i = 0; i < in_col->length; i++)
-                    count_agg<T>::apply(out_col->at<int64_t>(row_to_group[i]),
-                                        in_col->at<T>(i));
+                    if (row_to_group[i] != -1)
+                        count_agg<T>::apply(
+                            out_col->at<int64_t>(row_to_group[i]),
+                            in_col->at<T>(i));
             } else {
                 for (int64_t i = 0; i < in_col->length; i++)
-                    aggfunc<T, ftype>::apply(out_col->at<T>(row_to_group[i]),
-                                             in_col->at<T>(i));
+                    if (row_to_group[i] != -1)
+                        aggfunc<T, ftype>::apply(
+                            out_col->at<T>(row_to_group[i]), in_col->at<T>(i));
             }
             return;
         // for strings, we are only supporting count for now, and count function
@@ -2028,7 +2115,8 @@ void apply_to_column(array_info* in_col, array_info* out_col,
             switch (ftype) {
                 case Bodo_FTypes::count:
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if (GetBit((uint8_t*)in_col->null_bitmask, i))
+                        if ((row_to_group[i] != -1) &&
+                            GetBit((uint8_t*)in_col->null_bitmask, i))
                             count_agg<T>::apply(
                                 out_col->at<int64_t>(row_to_group[i]),
                                 in_col->at<T>(i));
@@ -2036,7 +2124,8 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     return;
                 case Bodo_FTypes::mean:
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if (GetBit((uint8_t*)in_col->null_bitmask, i)) {
+                        if ((row_to_group[i] != -1) &&
+                            GetBit((uint8_t*)in_col->null_bitmask, i)) {
                             mean_agg<T>::apply(
                                 out_col->at<double>(row_to_group[i]),
                                 in_col->at<T>(i),
@@ -2046,7 +2135,8 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     return;
                 case Bodo_FTypes::var:
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if (GetBit((uint8_t*)in_col->null_bitmask, i))
+                        if ((row_to_group[i] != -1) &&
+                            GetBit((uint8_t*)in_col->null_bitmask, i))
                             var_agg<T>::apply(
                                 in_col->at<T>(i),
                                 aux_cols[0]->at<uint64_t>(row_to_group[i]),
@@ -2056,13 +2146,13 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     return;
                 default:
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if (GetBit((uint8_t*)in_col->null_bitmask, i)) {
+                        if ((row_to_group[i] != -1) &&
+                            GetBit((uint8_t*)in_col->null_bitmask, i)) {
                             aggfunc<T, ftype>::apply(
                                 out_col->at<T>(row_to_group[i]),
                                 in_col->at<T>(i));
-                            // output array is not nullable currently
-                            // SetBitTo((uint8_t*)out_col->null_bitmask,
-                            // row_to_group[i], true);
+                            SetBitTo((uint8_t*)out_col->null_bitmask,
+                                     row_to_group[i], true);
                         }
                     }
                     return;
@@ -2073,6 +2163,9 @@ void apply_to_column(array_info* in_col, array_info* out_col,
             return;
     }
 }
+
+
+
 
 /**
  * Invokes the correct template instance of apply_to_column depending on
@@ -2087,7 +2180,7 @@ void apply_to_column(array_info* in_col, array_info* out_col,
  */
 void do_apply_to_column(array_info* in_col, array_info* out_col,
                         std::vector<array_info*>& aux_cols,
-                        std::vector<int64_t>& row_to_group, int ftype) {
+                        const std::vector<int64_t>& row_to_group, int ftype) {
     if (ftype == Bodo_FTypes::count) {
         switch (in_col->dtype) {
             case Bodo_CTypes::FLOAT32:
@@ -2104,7 +2197,6 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     in_col, out_col, aux_cols, row_to_group);
         }
     }
-
     switch (in_col->dtype) {
         case Bodo_CTypes::INT8:
             switch (ftype) {
@@ -2363,36 +2455,75 @@ struct multi_col_key {
         : hash(_hash), table(_table), row(_row) {}
 
     bool operator==(const multi_col_key& other) const {
-        // TODO I think get_item_size should be a vector instead of a function
         for (int64_t i = 0; i < table->num_keys; i++) {
             array_info* c1 = table->columns[i];
             array_info* c2 = other.table->columns[i];
-            if (c1->arr_type == bodo_array_type::NUMPY) {
-                size_t siztype = numpy_item_size[c1->dtype];
-                if (memcmp(c1->data1 + siztype * row,
-                           c2->data1 + siztype * other.row, siztype) != 0) {
-                    return false;
-                }
-            } else if (c1->arr_type == bodo_array_type::STRING) {
-                uint32_t* c1_offsets = (uint32_t*)c1->data2;
-                uint32_t* c2_offsets = (uint32_t*)c2->data2;
-                uint32_t c1_str_len = c1_offsets[row + 1] - c1_offsets[row];
-                uint32_t c2_str_len =
-                    c2_offsets[other.row + 1] - c2_offsets[other.row];
-                if (c1_str_len != c2_str_len) return false;
-                char* c1_str = c1->data1 + c1_offsets[row];
-                char* c2_str = c2->data1 + c2_offsets[other.row];
-                if (strncmp(c1_str, c2_str, c1_str_len) != 0) return false;
+            size_t siztype;
+            switch (c1->arr_type) {
+                case bodo_array_type::NULLABLE_INT_BOOL:
+                    if (GetBit((uint8_t*)c1->null_bitmask, row) !=
+                        GetBit((uint8_t*)c2->null_bitmask, other.row))
+                        return false;
+                    if (!GetBit((uint8_t*)c1->null_bitmask, row)) continue;
+                case bodo_array_type::NUMPY:
+                    siztype = numpy_item_size[c1->dtype];
+                    if (memcmp(c1->data1 + siztype * row,
+                               c2->data1 + siztype * other.row, siztype) != 0) {
+                        return false;
+                    }
+                    continue;
+                case bodo_array_type::STRING:
+                    uint32_t* c1_offsets = (uint32_t*)c1->data2;
+                    uint32_t* c2_offsets = (uint32_t*)c2->data2;
+                    uint32_t c1_str_len = c1_offsets[row + 1] - c1_offsets[row];
+                    uint32_t c2_str_len =
+                        c2_offsets[other.row + 1] - c2_offsets[other.row];
+                    if (c1_str_len != c2_str_len) return false;
+                    char* c1_str = c1->data1 + c1_offsets[row];
+                    char* c2_str = c2->data1 + c2_offsets[other.row];
+                    if (strncmp(c1_str, c2_str, c1_str_len) != 0) return false;
             }
-            // TODO other array types?
         }
         return true;
     }
 };
 
-struct key_hash : public std::unary_function<multi_col_key, std::size_t> {
+struct key_hash {
     std::size_t operator()(const multi_col_key& k) const { return k.hash; }
 };
+
+
+
+bool does_keys_have_nulls(std::vector<array_info*> const& key_cols)
+{
+  for (auto key_col : key_cols) {
+    if ((key_col->arr_type == bodo_array_type::NUMPY &&
+         (key_col->dtype == Bodo_CTypes::FLOAT32 ||
+          key_col->dtype == Bodo_CTypes::FLOAT64)) ||
+        key_col->arr_type == bodo_array_type::STRING ||
+        key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+      return true;
+    }
+  }
+  return false;
+}
+
+
+bool does_row_has_nulls(std::vector<array_info*> const& key_cols, int64_t const& i)
+{
+  for (auto key_col : key_cols) {
+    if (key_col->arr_type == bodo_array_type::STRING ||
+        key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+      if (!GetBit((uint8_t*)key_col->null_bitmask, i)) return true;
+    } else if (key_col->arr_type == bodo_array_type::NUMPY) {
+      if ((key_col->dtype == Bodo_CTypes::FLOAT32 &&
+           isnan(key_col->at<float>(i))) ||
+          (key_col->dtype == Bodo_CTypes::FLOAT64 &&
+           isnan(key_col->at<double>(i)))) return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Given a table with n key columns, this function calculates the row to group
@@ -2405,7 +2536,8 @@ struct key_hash : public std::unary_function<multi_col_key, std::size_t> {
  *                that belongs to that group
  */
 void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
-                    std::vector<int64_t>& group_to_first_row) {
+                    std::vector<int64_t>& group_to_first_row,
+                    bool check_for_null_keys) {
     std::vector<array_info*> key_cols = std::vector<array_info*>(
         table.columns.begin(), table.columns.begin() + table.num_keys);
     uint32_t seed = 0xb0d01288;
@@ -2417,7 +2549,17 @@ void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
     // 0 to num_groups - 1)
     int next_group = 1;
     std::unordered_map<multi_col_key, int64_t, key_hash> key_to_group;
+    bool key_is_nullable = false;
+    if (check_for_null_keys) {
+      key_is_nullable = does_keys_have_nulls(key_cols);
+    }
     for (int64_t i = 0; i < table.nrows(); i++) {
+        if (key_is_nullable) {
+            if (does_row_has_nulls(key_cols, i)) {
+                row_to_group.push_back(-1);
+                continue;
+            }
+        }
         multi_col_key key(hashes[i], &table, i);
         int64_t& group = key_to_group[key];  // this inserts 0 into the map if
                                              // key doesn't exist
@@ -2429,6 +2571,67 @@ void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
         row_to_group.push_back(group - 1);
     }
     delete[] hashes;
+}
+
+
+struct grouping_info {
+    std::vector<int64_t> row_to_group;
+    std::vector<int64_t> group_to_first_row;
+    std::vector<int64_t> next_row_in_group;
+};
+
+/**
+ * Given a table with n key columns, this function calculates the row to group
+ * mapping for every row based on its key.
+ * For every row in the table, this only does *one* lookup in the hash map.
+ *
+ * @param the table
+ * @param[out] vector that maps row number in the table to a group number
+ * @param[out] vector that maps group number to the first row in the table
+ *                that belongs to that group
+ */
+grouping_info get_group_info_iterate(table_info* table) {
+    std::vector<int64_t> row_to_group;
+    std::vector<int64_t> group_to_first_row;
+    std::vector<int64_t> next_row_in_group(table->nrows(), -1);
+    std::vector<int64_t> active_group_repr;
+
+    std::vector<array_info*> key_cols = std::vector<array_info*>(
+        table->columns.begin(), table->columns.begin() + table->num_keys);
+    uint32_t seed = 0xb0d01288;
+    uint32_t* hashes = hash_keys(key_cols, seed);
+
+    bool key_is_nullable = does_keys_have_nulls(key_cols);
+    row_to_group.reserve(table->nrows());
+    // start at 1 because I'm going to use 0 to mean nothing was inserted yet
+    // in the map (but note that the group values I record in the output go from
+    // 0 to num_groups - 1)
+    int next_group = 1;
+    std::unordered_map<multi_col_key, int64_t, key_hash> key_to_group;
+    for (int64_t i = 0; i < table->nrows(); i++) {
+        if (key_is_nullable) {
+            if (does_row_has_nulls(key_cols, i)) {
+                row_to_group.push_back(-1);
+                continue;
+            }
+        }
+        multi_col_key key(hashes[i], table, i);
+        int64_t& group = key_to_group[key];  // this inserts 0 into the map if
+                                             // key doesn't exist
+        if (group == 0) {
+            group = next_group++;  // this updates the value in the map without
+                                   // another lookup
+            group_to_first_row.push_back(i);
+            active_group_repr.push_back(i);
+        } else {
+            int64_t prev_elt = active_group_repr[group - 1];
+            next_row_in_group[prev_elt] = i;
+            active_group_repr[group - 1] = i;
+        }
+        row_to_group.push_back(group - 1);
+    }
+    delete[] hashes;
+    return {std::move(row_to_group), std::move(group_to_first_row), std::move(next_row_in_group)};
 }
 
 /**
@@ -2444,8 +2647,14 @@ void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
  * @param function identifier
  */
 void aggfunc_output_initialize(array_info* out_col, int ftype) {
-    if (out_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL)
-        memset(out_col->null_bitmask, 0, out_col->length);
+    if (out_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max)
+            // if input is all nulls, max and min output will be null
+            InitializeBitMask((uint8_t*)out_col->null_bitmask, out_col->length, false);
+        else
+            // for other functions (count, sum, etc.) output will never be null
+            InitializeBitMask((uint8_t*)out_col->null_bitmask, out_col->length, true);
+    }
     switch (ftype) {
         case Bodo_FTypes::prod:
             switch (out_col->dtype) {
@@ -2618,9 +2827,8 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
             }
         default:
             // zero initialize
-            // TODO I think get_item_size should be a vector
             memset(out_col->data1, 0,
-                   get_item_size(out_col->dtype) * out_col->length);
+                   numpy_item_size[out_col->dtype] * out_col->length);
     }
 }
 
@@ -2698,11 +2906,8 @@ void get_groupby_output_dtype(int ftype,
                               bodo_array_type::arr_type_enum& array_type,
                               Bodo_CTypes::CTypeEnum& dtype, bool is_key) {
     if (is_key) return;
-    // FIXME for now, converting output to non-nullable, but if input is
-    // nullable output should be too (in pandas it is)
-    if (array_type == bodo_array_type::NULLABLE_INT_BOOL)
-        array_type = bodo_array_type::NUMPY;
     switch (ftype) {
+        case Bodo_FTypes::nunique:
         case Bodo_FTypes::count:
             array_type = bodo_array_type::NUMPY;
             dtype = Bodo_CTypes::INT64;
@@ -2718,6 +2923,16 @@ void get_groupby_output_dtype(int ftype,
     }
 }
 
+
+
+
+
+
+
+
+
+
+
 /**
  * Groups the rows in a table based on key, applies a function to the rows in
  * each group, writes the result to a new output table containing one row per
@@ -2729,12 +2944,14 @@ void get_groupby_output_dtype(int ftype,
  * @param function to apply
  */
 table_info* groupby_and_aggregate_local(table_info& in_table, int64_t num_keys,
-                                        int64_t num_data_cols, int ftype) {
+                                        int64_t num_data_cols, int ftype,
+                                        bool check_for_null_keys) {
     const int64_t ncols = in_table.ncols();
     std::vector<int64_t> inrows_to_group;
     std::vector<int64_t> group_to_first_row;
     in_table.num_keys = num_keys;
-    get_group_info(in_table, inrows_to_group, group_to_first_row);
+    get_group_info(in_table, inrows_to_group, group_to_first_row,
+                   check_for_null_keys);
     int64_t num_groups = group_to_first_row.size();
 
     // create output table with *uninitialized* columns
@@ -2751,8 +2968,8 @@ table_info* groupby_and_aggregate_local(table_info& in_table, int64_t num_keys,
             // in this case, output col will have num_groups rows
             // containing the string for each group
             assert(i < num_keys);  // assert that this is a key column
-            int64_t n_chars = 0;  // total number of chars of all keys for this
-                                  // column
+            int64_t n_chars = 0;   // total number of chars of all keys for this
+                                   // column
             uint32_t* in_offsets = (uint32_t*)in_arr->data2;
             for (int64_t j = 0; j < num_groups; j++) {
                 int64_t row = group_to_first_row[j];
@@ -2774,8 +2991,9 @@ table_info* groupby_and_aggregate_local(table_info& in_table, int64_t num_keys,
     for (int j = 0; j < num_keys; j++) {
         array_info* in_col = in_table[j];
         array_info* out_col = (*out_table)[j];
-        if (in_col->arr_type == bodo_array_type::NUMPY) {
-            int64_t dtype_size = get_item_size(out_col->dtype);
+        if (in_col->arr_type == bodo_array_type::NUMPY ||
+            in_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            int64_t dtype_size = numpy_item_size[out_col->dtype];
             for (int64_t i = 0; i < num_groups; i++)
                 memcpy(out_col->data1 + i * dtype_size,
                        in_col->data1 + group_to_first_row[i] * dtype_size,
@@ -2823,9 +3041,207 @@ table_info* groupby_and_aggregate_local(table_info& in_table, int64_t num_keys,
                         mean_col_out, m2_col_out, inrows_to_group);
         }
     }
-
     return out_table;
 }
+
+
+
+
+/**
+ * The nunique_computation function. It uses the symbolic information to compute
+ * the nunique results.
+ *
+ * @param The column on which we do the computation
+ * @param The array containing information on how the rows are organized
+ * @param The boolean dropna indicating whether we drop or not the NaN values from the
+ *   nunique computation.
+ */
+array_info* nunique_computation(array_info* arr, grouping_info const& grp_inf,
+                                bool const& dropna) {
+    size_t num_group = grp_inf.group_to_first_row.size();
+    array_info* out_arr = alloc_array(num_group, 1, bodo_array_type::NUMPY,
+                                      Bodo_CTypes::INT64, 0);
+    if (arr->arr_type == bodo_array_type::NUMPY) {
+        /**
+         * Check if a pointer points to a NaN or not
+         *
+         * @param the char* pointer
+         * @param the type of the data in input
+         */
+        auto isnan_entry=[&](char* ptr) -> bool {
+          if (arr->dtype == Bodo_CTypes::FLOAT32) {
+            float* ptr_f = (float*)ptr;
+            return isnan(*ptr_f);
+          }
+          if (arr->dtype == Bodo_CTypes::FLOAT64) {
+            double* ptr_d = (double*)ptr;
+            return isnan(*ptr_d);
+          }
+          return false;
+        };
+        size_t siztype = numpy_item_size[arr->dtype];
+        for (size_t igrp = 0; igrp < num_group; igrp++) {
+            auto hash_fct=[&](int64_t i) -> size_t {
+              char *ptr = arr->data1 + i * siztype;
+              size_t retval = 0;
+              memcpy(&retval, ptr, std::min(siztype, sizeof(size_t)));
+              return retval;
+            };
+            auto equal_fct=[&](int64_t i1, int64_t i2) -> bool {
+              char *ptr1 = arr->data1 + i1 * siztype;
+              char *ptr2 = arr->data1 + i2 * siztype;
+              return memcmp(ptr1, ptr2, siztype) == 0;
+            };
+            std::unordered_set<int64_t, decltype(hash_fct), decltype(equal_fct)> eset({}, hash_fct, equal_fct);
+            int64_t i = grp_inf.group_to_first_row[igrp];
+            bool HasNullRow = false;
+            while (true) {
+                char* ptr = arr->data1 + (i * siztype);
+                if (!isnan_entry(ptr)) {
+                    eset.insert(i);
+                } else {
+                    HasNullRow = true;
+                }
+                i = grp_inf.next_row_in_group[i];
+                if (i == -1) break;
+            }
+            int64_t size = eset.size();
+            if (HasNullRow && !dropna) size++;
+            out_arr->at<int64_t>(igrp) = size;
+        }
+    }
+    if (arr->arr_type == bodo_array_type::STRING) {
+        uint32_t* in_offsets = (uint32_t*)arr->data2;
+        uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+        uint32_t seed = 0xb0d01280;
+
+        for (size_t igrp = 0; igrp < num_group; igrp++) {
+            auto hash_fct=[&](int64_t i) -> size_t {
+              char* val_chars = arr->data1 + in_offsets[i];
+              int len = in_offsets[i + 1] - in_offsets[i];
+              uint32_t val;
+              hash_string_32(val_chars, len, seed, &val);
+              return size_t(val);
+            };
+            auto equal_fct=[&](int64_t i1, int64_t i2) -> bool {
+              size_t len1 = in_offsets[i1 + 1] - in_offsets[i1];
+              size_t len2 = in_offsets[i2 + 1] - in_offsets[i2];
+              if (len1 != len2) return false;
+              char *ptr1 = arr->data1 + in_offsets[i1];
+              char *ptr2 = arr->data1 + in_offsets[i2];
+              return strncmp(ptr1, ptr2, len1) == 0;
+            };
+            std::unordered_set<int64_t, decltype(hash_fct), decltype(equal_fct)> eset({}, hash_fct, equal_fct);
+            int64_t i = grp_inf.group_to_first_row[igrp];
+            bool HasNullRow = false;
+            while (true) {
+                if (GetBit(null_bitmask, i)) {
+                    eset.insert(i);
+                } else {
+                    HasNullRow = true;
+                }
+                i = grp_inf.next_row_in_group[i];
+                if (i == -1) break;
+            }
+            int64_t size = eset.size();
+            if (HasNullRow && !dropna) size++;
+            out_arr->at<int64_t>(igrp) = size;
+        }
+    }
+    if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+        size_t siztype = numpy_item_size[arr->dtype];
+        for (size_t igrp = 0; igrp < num_group; igrp++) {
+            auto hash_fct=[&](int64_t i) -> size_t {
+              char *ptr = arr->data1 + i * siztype;
+              size_t retval = 0;
+              size_t *size_t_ptrA = &retval;
+              char* size_t_ptrB = (char*)size_t_ptrA;
+              for (size_t i=0; i<std::min(siztype, sizeof(size_t)); i++)
+                size_t_ptrB[i] = ptr[i];
+              return retval;
+            };
+            auto equal_fct=[&](int64_t i1, int64_t i2) -> bool {
+              char *ptr1 = arr->data1 + i1 * siztype;
+              char *ptr2 = arr->data1 + i2 * siztype;
+              return memcmp(ptr1, ptr2, siztype) == 0;
+            };
+            std::unordered_set<int64_t, decltype(hash_fct), decltype(equal_fct)> eset({}, hash_fct, equal_fct);
+            int64_t i = grp_inf.group_to_first_row[igrp];
+            bool HasNullRow = false;
+            while (true) {
+                if (GetBit(null_bitmask, i)) {
+                    eset.insert(i);
+                } else {
+                    HasNullRow = true;
+                }
+                i = grp_inf.next_row_in_group[i];
+                if (i == -1) break;
+            }
+            int64_t size = eset.size();
+            if (HasNullRow && !dropna) size++;
+            out_arr->at<int64_t>(igrp) = size;
+        }
+    }
+    return out_arr;
+}
+
+
+
+
+
+
+/**
+ * Groups the rows in a table based on key, applies the nunique operation to the rows in
+ * each group, writes the result to a new output table containing one row per
+ * group.
+ *
+ * @param input table
+ * @param number of key columns in the table
+ * @param number of data columns
+ * @param whether to drop NaN values or not from the computation
+ */
+table_info* groupby_and_nunique(table_info* in_table, int64_t num_keys,
+                                int64_t num_data_cols, bool const& dropna) {
+#undef DEBUG_NUNIQUE
+#ifdef DEBUG_NUNIQUE
+    std::cout << "IN_TABLE:\n";
+    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+    DEBUG_PrintRefct(std::cout, in_table->columns);
+#endif
+    const int64_t ncols = in_table->ncols();
+    in_table->num_keys = num_keys;
+    grouping_info grp_inf = get_group_info_iterate(in_table);
+    size_t num_groups = grp_inf.group_to_first_row.size();
+    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(
+        num_groups);
+    for (size_t igrp = 0; igrp < num_groups; igrp++) {
+        ListPairWrite[igrp] = {grp_inf.group_to_first_row[igrp], -1};
+    }
+
+    std::vector<array_info*> out_arrs;
+    for (int64_t i_col = 0; i_col < num_keys; i_col++) {
+        out_arrs.push_back(
+            RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
+    }
+    for (int64_t i_col = num_keys; i_col < ncols; i_col++) {
+        out_arrs.push_back(
+            nunique_computation(in_table->columns[i_col], grp_inf, dropna));
+    }
+#ifdef DEBUG_NUNIQUE
+    std::cout << "OUT_TABLE:\n";
+    DEBUG_PrintSetOfColumn(std::cout, out_arrs);
+    DEBUG_PrintRefct(std::cout, out_arrs);
+#endif
+    return new table_info(out_arrs);
+}
+
+
+
+
+
+
+
 
 /**
  * Applies an evaluation function to each row in input table
@@ -2860,13 +3276,11 @@ void agg_func_eval(table_info& in_table, int64_t num_keys, int64_t n_data_cols,
                 aux_cols.push_back(in_table[idx + 1]);
                 aux_cols.push_back(in_table[idx + 2]);
                 if (ftype == Bodo_FTypes::var)
-                    do_apply_to_column(in_table[0], in_table[j],
-                                       aux_cols, row_to_group,
-                                       Bodo_FTypes::var_eval);
+                    do_apply_to_column(in_table[0], in_table[j], aux_cols,
+                                       row_to_group, Bodo_FTypes::var_eval);
                 else
-                    do_apply_to_column(in_table[0], in_table[j],
-                                       aux_cols, row_to_group,
-                                       Bodo_FTypes::std_eval);
+                    do_apply_to_column(in_table[0], in_table[j], aux_cols,
+                                       row_to_group, Bodo_FTypes::std_eval);
                 aux_cols.clear();
             }
             // remove auxiliary columns
@@ -2881,6 +3295,26 @@ void agg_func_eval(table_info& in_table, int64_t num_keys, int64_t n_data_cols,
 
 std::vector<Bodo_FTypes::FTypeEnum> combine_funcs(Bodo_FTypes::num_funcs);
 
+
+table_info* groupby_and_aggregate_nunique(table_info* in_table, int64_t num_keys,
+                                          bool is_parallel) {
+    // perform initial local aggregation
+    int64_t num_data_cols = in_table->ncols() - num_keys;
+    table_info* work_table;
+    if (is_parallel) {
+      work_table = shuffle_table(in_table, num_keys);
+    } else {
+      work_table = in_table;
+    }
+    bool dropna=true;
+    // TODO: implement correct use of dropna in the computation.
+    // See https://github.com/Bodo-inc/Bodo/issues/270
+    table_info* out_table = groupby_and_nunique(work_table, num_keys, num_data_cols, dropna);
+    if (is_parallel) delete_table_free_arrays(work_table);
+    return out_table;
+}
+
+
 /**
  * Groups the rows in a table based on key, applies a function to the rows in
  * each group, writes the result to a new output table containing one row per
@@ -2893,18 +3327,213 @@ std::vector<Bodo_FTypes::FTypeEnum> combine_funcs(Bodo_FTypes::num_funcs);
  * @param function to apply (see Bodo_FTypes::FTypeEnum)
  */
 table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
-                                  int32_t ftype) {
+                                  int32_t ftype, bool is_parallel) {
+
+    // perform initial local aggregation
     int64_t num_data_cols = in_table->ncols() - num_keys;
-    table_info* aggr_local =
-        groupby_and_aggregate_local(*in_table, num_keys, num_data_cols, ftype);
-    table_info* shuf_table = shuffle_table(aggr_local, num_keys);
-    delete aggr_local;
+    table_info* aggr_local = groupby_and_aggregate_local(
+        *in_table, num_keys, num_data_cols, ftype, true);
+
+    // shuffle step
+    table_info* shuf_table = aggr_local;
+    if (is_parallel) {
+        shuf_table = shuffle_table(aggr_local, num_keys);
+        delete_table_free_arrays(aggr_local);
+    }
+
+    // combine step
     table_info* out_table = groupby_and_aggregate_local(
-        *shuf_table, num_keys, num_data_cols, combine_funcs[ftype]);
+        *shuf_table, num_keys, num_data_cols, combine_funcs[ftype], false);
+    delete_table_free_arrays(shuf_table);
+
+    // eval step
     agg_func_eval(*out_table, num_keys, num_data_cols, ftype);
-    delete shuf_table;
     return out_table;
 }
+
+/**
+ * Implementation of the sort_values functionality in C++
+ * Notes:
+ * - We depend on the timsort code from https://github.com/timsort/cpp-TimSort
+ *   which provides stable sort taking care of already sorted parts.
+ * - We use lambda for the call functions.
+ * - The KeyComparisonAsPython is used for having the comparison as in Python.
+ *
+ * @param input table
+ * @param number of key columns in the table used for the comparison
+ * @param ascending, whether to sort ascending or not
+ * @param na_position, true corresponds to last, false to first
+ */
+table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
+                              bool ascending, bool na_position) {
+    size_t n_rows = (size_t)in_table->nrows();
+    size_t n_cols = (size_t)in_table->ncols();
+    size_t n_key = size_t(n_key_t);
+#undef DEBUG_SORT
+#ifdef DEBUG_SORT
+    std::cout << "ascending=" << ascending << " na_position=" << na_position << "\n";
+    std::cout << "INPUT:\n";
+    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+    DEBUG_PrintRefct(std::cout, in_table->columns);
+    std::cout << "n_rows=" << n_rows << " n_cols=" << n_cols
+              << " n_key=" << n_key << "\n";
+#endif
+    std::vector<size_t> V(n_rows);
+    for (size_t i = 0; i < n_rows; i++) V[i] = i;
+    na_position = (!na_position) ^ ascending;
+#ifdef DEBUG_SORT
+    std::cout << "PROCESS: na_position=" << na_position << "\n";
+#endif
+    std::function<bool(size_t, size_t)> f = [&](size_t const& iRow1,
+                                                size_t const& iRow2) -> bool {
+        size_t shift_key1 = 0, shift_key2 = 0;
+        int value = KeyComparisonAsPython(in_table->columns, n_key, shift_key1,
+                                          iRow1, shift_key2, iRow2, na_position);
+        if (ascending) {
+            return value > 0;
+        }
+        return value < 0;
+    };
+    gfx::timsort(V.begin(), V.end(), f);
+    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(
+        n_rows);
+    for (size_t i = 0; i < n_rows; i++) ListPairWrite[i] = {V[i], -1};
+    //
+    std::vector<array_info*> out_arrs;
+    // Inserting the left data
+    for (size_t i_col = 0; i_col < n_cols; i_col++)
+        out_arrs.push_back(
+            RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
+        //
+#ifdef DEBUG_SORT
+    std::cout << "OUTPUT:\n";
+    DEBUG_PrintSetOfColumn(std::cout, out_arrs);
+    DEBUG_PrintRefct(std::cout, out_arrs);
+#endif
+    return new table_info(out_arrs);
+}
+
+
+
+
+
+/** This function is the kernel function for the dropping of duplicated rows.
+ * This C++ code should provide following functionality of pandas
+ * drop_duplicates:
+ * ---possibility of selecting columns for the identification
+ * ---possibility of keeping first, last or removing all entries with duplicate
+ * inplace operation for keeping the data in the same place is another problem.
+ *
+ * As for the join, this relies on using hash keys for the partitionning.
+ *
+ * External function used are "RetrieveArray" and "TestEqual"
+ *
+ * @param in_table : the input table
+ * @param sum_value: the uint64_t containing all the values together.
+ * @param keep: integer specifying the expected behavior.
+ *        keep = 0 corresponds to the case of keep="first" keep first entry
+ *        keep = 1 corresponds to the case of keep="last" keep last entry
+ *        keep = 2 corresponds to the case of keep=False : remove all duplicates
+ * @param in_place: True for returning the entry to the same place and False for
+ * the opposite case.
+ * @return the vector of pointers to be used.
+ */
+table_info* drop_duplicates_table_outplace(table_info* in_table,
+                                           int64_t* subset_vect, int64_t keep) {
+#undef DEBUG_DD
+    size_t n_col = in_table->ncols();
+    size_t n_rows = (size_t)in_table->nrows();
+    std::vector<array_info*> key_arrs;
+    for (size_t iCol = 0; iCol < n_col; iCol++)
+        if (subset_vect[iCol] == 1) key_arrs.push_back(in_table->columns[iCol]);
+    size_t n_key = key_arrs.size();
+#ifdef DEBUG_DD
+    std::cout << "INPUT:\n";
+    std::cout << "n_col=" << n_col << " n_rows=" << n_rows << " n_key=" << n_key
+              << "\n";
+    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+    DEBUG_PrintRefct(std::cout, in_table->columns);
+#endif
+
+    uint32_t seed = 0xb0d01287;
+    uint32_t* hashes = hash_keys(key_arrs, seed);
+    /* This is a function for computing the hash (here returning computed value)
+     * This is the first function passed as argument for the map function.
+     *
+     * Note that the hash is a size_t (as requested by standard and so 8 bytes
+     * on x86-64) but our hashes are int32_t
+     *
+     * @param iRow is the first row index for the comparison
+     * @return the hash itself
+     */
+    auto hash_fct = [&](size_t const& iRow) -> size_t {
+        return size_t(hashes[iRow]);
+    };
+    /* This is a function for testing equality of rows.
+     * This is the second lambda passed to the map function.
+     *
+     * We use the TestEqual function precedingly defined.
+     *
+     * @param iRowA is the first row index for the comparison
+     * @param iRowB is the second row index for the comparison
+     * @return true/false depending on the case.
+     */
+    auto equal_fct = [&](size_t const& iRowA, size_t const& iRowB) -> bool {
+        size_t shift_A = 0, shift_B = 0;
+        bool test = TestEqual(key_arrs, n_key, shift_A, iRowA, shift_B, iRowB);
+        return test;
+    };
+    // The entList contains the hash of the short table.
+    // We address the entry by the row index. We store all the rows which are
+    // identical in the std::vector.
+    std::unordered_map<size_t, size_t, decltype(hash_fct), decltype(equal_fct)>
+        entSet({}, hash_fct, equal_fct);
+    // The loop over the short table.
+    // entries are stored one by one and all of them are put even if identical
+    // in value.
+    std::vector<int64_t> ListRow;
+    uint64_t next_ent = 0;
+    for (size_t i_row = 0; i_row < n_rows; i_row++) {
+        size_t& group = entSet[i_row];
+        if (group == 0) {
+            next_ent++;
+            group = next_ent;
+            ListRow.push_back(i_row);
+        } else {
+            size_t pos = group - 1;
+            if (keep == 0) {  // keep first entry. So do nothing here
+            }
+            if (keep == 1) {  // keep last entry. So update the list
+                ListRow[pos] = i_row;
+            }
+            if (keep == 2) {  // Case of False. So put it to -1.
+                ListRow[pos] = -1;
+            }
+        }
+    }
+    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
+    for (auto& eRow : ListRow) {
+        if (eRow != -1) ListPairWrite.push_back({eRow, -1});
+    }
+#ifdef DEBUG_DD
+    std::cout << "|ListPairWrite|=" << ListPairWrite.size() << "\n";
+#endif
+    // Now building the out_arrs array.
+    std::vector<array_info*> out_arrs;
+    // Inserting the left data
+    for (size_t i_col = 0; i_col < n_col; i_col++)
+        out_arrs.push_back(
+            RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
+    //
+    delete[] hashes;
+#ifdef DEBUG_DD
+    std::cout << "OUTPUT:\n";
+    DEBUG_PrintSetOfColumn(std::cout, out_arrs);
+    DEBUG_PrintRefct(std::cout, out_arrs);
+#endif
+    return new table_info(out_arrs);
+}
+
 
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     PyObject* m;
@@ -2930,7 +3559,8 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
 
     combine_funcs[Bodo_FTypes::sum] = Bodo_FTypes::sum;
     combine_funcs[Bodo_FTypes::count] = Bodo_FTypes::sum;
-    combine_funcs[Bodo_FTypes::mean] = Bodo_FTypes::sum;  // sum totals and counts
+    combine_funcs[Bodo_FTypes::mean] =
+        Bodo_FTypes::sum;  // sum totals and counts
     combine_funcs[Bodo_FTypes::min] = Bodo_FTypes::min;
     combine_funcs[Bodo_FTypes::max] = Bodo_FTypes::max;
     combine_funcs[Bodo_FTypes::prod] = Bodo_FTypes::prod;
@@ -2967,8 +3597,14 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                            PyLong_FromVoidPtr((void*)(&shuffle_table)));
     PyObject_SetAttrString(m, "hash_join_table",
                            PyLong_FromVoidPtr((void*)(&hash_join_table)));
+    PyObject_SetAttrString(m, "sort_values_table",
+                           PyLong_FromVoidPtr((void*)(&sort_values_table)));
+    PyObject_SetAttrString(
+        m, "drop_duplicates_table_outplace",
+        PyLong_FromVoidPtr((void*)(&drop_duplicates_table_outplace)));
     PyObject_SetAttrString(m, "groupby_and_aggregate",
                            PyLong_FromVoidPtr((void*)(&groupby_and_aggregate)));
-
+    PyObject_SetAttrString(m, "groupby_and_aggregate_nunique",
+                           PyLong_FromVoidPtr((void*)(&groupby_and_aggregate_nunique)));
     return m;
 }

@@ -145,7 +145,7 @@ for t in pd_int_dtype_classes:
 
 
 @numba.extending.register_jitable
-def mask_arr_to_bitmap(mask_arr):
+def mask_arr_to_bitmap(mask_arr):  # pragma: no cover
     n = len(mask_arr)
     n_bytes = (n + 7) >> 3
     bit_arr = np.empty(n_bytes, np.uint8)
@@ -376,12 +376,12 @@ numba.ir_utils.alias_func_extensions[
 
 
 @numba.extending.register_jitable
-def set_bit_to_arr(bits, i, bit_is_set):
+def set_bit_to_arr(bits, i, bit_is_set):  # pragma: no cover
     bits[i // 8] ^= np.uint8(-np.uint8(bit_is_set) ^ bits[i // 8]) & kBitmask[i % 8]
 
 
 @numba.extending.register_jitable
-def get_bit_bitmap_arr(bits, i):
+def get_bit_bitmap_arr(bits, i):  # pragma: no cover
     return (bits[i >> 3] >> (i & 0x07)) & 1
 
 
@@ -397,7 +397,7 @@ def int_arr_getitem(A, ind):
     # bool arr indexing
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
-        def impl_bool(A, ind):
+        def impl_bool(A, ind):  # pragma: no cover
             ind = bodo.utils.conversion.coerce_to_ndarray(ind)
             old_mask = A._null_bitmap
             new_data = A._data[ind]
@@ -417,7 +417,7 @@ def int_arr_getitem(A, ind):
     # int arr indexing
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
 
-        def impl(A, ind):
+        def impl(A, ind):  # pragma: no cover
             ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
             old_mask = A._null_bitmap
             new_data = A._data[ind_t]
@@ -436,7 +436,7 @@ def int_arr_getitem(A, ind):
     # slice case
     if isinstance(ind, types.SliceType):
 
-        def impl_slice(A, ind):
+        def impl_slice(A, ind):  # pragma: no cover
             n = len(A._data)
             old_mask = A._null_bitmap
             new_data = np.ascontiguousarray(A._data[ind])
@@ -463,7 +463,7 @@ def int_arr_setitem(A, idx, val):
     if isinstance(idx, types.Integer):
         assert isinstance(val, types.Integer)
 
-        def impl_scalar(A, idx, val):
+        def impl_scalar(A, idx, val):  # pragma: no cover
             A._data[idx] = val
             bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
 
@@ -474,7 +474,7 @@ def int_arr_setitem(A, idx, val):
         # value is IntegerArray
         if isinstance(val, IntegerArrayType):
 
-            def impl_arr_ind_mask(A, idx, val):
+            def impl_arr_ind_mask(A, idx, val):  # pragma: no cover
                 n = len(val._data)
                 for i in range(n):
                     A._data[idx[i]] = val._data[i]
@@ -483,7 +483,7 @@ def int_arr_setitem(A, idx, val):
 
             return impl_arr_ind_mask
         # value is Array/List
-        def impl_arr_ind(A, idx, val):
+        def impl_arr_ind(A, idx, val):  # pragma: no cover
             for i in range(len(val)):
                 A._data[idx[i]] = val[i]
                 bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], 1)
@@ -495,7 +495,7 @@ def int_arr_setitem(A, idx, val):
         # value is IntegerArray
         if isinstance(val, IntegerArrayType):
 
-            def impl_bool_ind_mask(A, idx, val):
+            def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
                 n = len(idx)
                 val_ind = 0
                 for i in range(n):
@@ -509,7 +509,7 @@ def int_arr_setitem(A, idx, val):
 
             return impl_bool_ind_mask
         # value is Array/List
-        def impl_bool_ind(A, idx, val):
+        def impl_bool_ind(A, idx, val):  # pragma: no cover
             n = len(idx)
             val_ind = 0
             for i in range(n):
@@ -525,7 +525,7 @@ def int_arr_setitem(A, idx, val):
         # value is IntegerArray
         if isinstance(val, IntegerArrayType):
 
-            def impl_slice_mask(A, idx, val):
+            def impl_slice_mask(A, idx, val):  # pragma: no cover
                 n = len(A._data)
                 # using setitem directly instead of copying in loop since
                 # Array setitem checks for memory overlap and copies source
@@ -542,7 +542,7 @@ def int_arr_setitem(A, idx, val):
 
             return impl_slice_mask
 
-        def impl_slice(A, idx, val):
+        def impl_slice(A, idx, val):  # pragma: no cover
             n = len(A._data)
             A._data[idx] = val
             slice_idx = numba.unicode._normalize_slice(idx, n)
@@ -599,7 +599,7 @@ def overload_int_arr_astype(A, dtype, copy=True):
         # copy value is dynamic
         else:
 
-            def impl(A, dtype, copy=True):
+            def impl(A, dtype, copy=True):  # pragma: no cover
                 if copy:
                     return A.copy()
                 else:
@@ -620,7 +620,7 @@ def overload_int_arr_astype(A, dtype, copy=True):
     # NA positions are assigned np.nan for float output
     if isinstance(nb_dtype, types.Float):
 
-        def impl_float(A, dtype, copy=True):
+        def impl_float(A, dtype, copy=True):  # pragma: no cover
             data = bodo.libs.int_arr_ext.get_int_arr_data(A)
             n = len(data)
             B = np.empty(n, nb_dtype)
@@ -659,7 +659,7 @@ def apply_null_mask(arr, bitmap, mask_fill, inplace):
     # NAs are applied to Float output
     if isinstance(arr.dtype, types.Float):
 
-        def impl(arr, bitmap, mask_fill, inplace):
+        def impl(arr, bitmap, mask_fill, inplace):  # pragma: no cover
             n = len(arr)
             for i in numba.parfor.internal_prange(n):
                 if not bodo.libs.int_arr_ext.get_bit_bitmap_arr(bitmap, i):
@@ -670,7 +670,7 @@ def apply_null_mask(arr, bitmap, mask_fill, inplace):
 
     if arr.dtype == types.bool_:
 
-        def impl_bool(arr, bitmap, mask_fill, inplace):
+        def impl_bool(arr, bitmap, mask_fill, inplace):  # pragma: no cover
             n = len(arr)
             for i in numba.parfor.internal_prange(n):
                 if not bodo.libs.int_arr_ext.get_bit_bitmap_arr(bitmap, i):
@@ -689,7 +689,7 @@ def merge_bitmaps(B1, B2, n, inplace):
 
     if not is_overload_none(inplace):
 
-        def impl_inplace(B1, B2, n, inplace):
+        def impl_inplace(B1, B2, n, inplace):  # pragma: no cover
             # looping over bits individually to hopefully enable more fusion
             # TODO: evaluate and improve
             for i in numba.parfor.internal_prange(n):
@@ -701,7 +701,7 @@ def merge_bitmaps(B1, B2, n, inplace):
 
         return impl_inplace
 
-    def impl(B1, B2, n, inplace):
+    def impl(B1, B2, n, inplace):  # pragma: no cover
         numba.parfor.init_prange()
         n_bytes = (n + 7) >> 3
         B = np.empty(n_bytes, np.uint8)
@@ -756,7 +756,7 @@ def create_op_overload(op, n_inputs):
         def overload_int_arr_op_nin_1(A):
             if isinstance(A, IntegerArrayType):
 
-                def impl(A):
+                def impl(A):  # pragma: no cover
                     arr = bodo.libs.int_arr_ext.get_int_arr_data(A)
                     bitmap = bodo.libs.int_arr_ext.get_int_arr_bitmap(A)
                     out_arr = op(arr)
@@ -773,7 +773,7 @@ def create_op_overload(op, n_inputs):
             # both are IntegerArray
             if isinstance(A1, IntegerArrayType) and isinstance(A2, IntegerArrayType):
 
-                def impl_both(A1, A2):
+                def impl_both(A1, A2):  # pragma: no cover
                     arr1 = bodo.libs.int_arr_ext.get_int_arr_data(A1)
                     bitmap1 = bodo.libs.int_arr_ext.get_int_arr_bitmap(A1)
                     arr2 = bodo.libs.int_arr_ext.get_int_arr_data(A2)
@@ -790,7 +790,7 @@ def create_op_overload(op, n_inputs):
             # left arg is IntegerArray
             if isinstance(A1, IntegerArrayType):
 
-                def impl_left(A1, A2):
+                def impl_left(A1, A2):  # pragma: no cover
                     arr1 = bodo.libs.int_arr_ext.get_int_arr_data(A1)
                     bitmap = bodo.libs.int_arr_ext.get_int_arr_bitmap(A1)
                     out_arr = op(arr1, A2)
@@ -802,7 +802,7 @@ def create_op_overload(op, n_inputs):
             # right arg is IntegerArray
             if isinstance(A2, IntegerArrayType):
 
-                def impl_right(A1, A2):
+                def impl_right(A1, A2):  # pragma: no cover
                     arr2 = bodo.libs.int_arr_ext.get_int_arr_data(A2)
                     bitmap = bodo.libs.int_arr_ext.get_int_arr_bitmap(A2)
                     out_arr = op(A1, arr2)
@@ -911,7 +911,7 @@ def concat_bitmap_tup(arrs):
 def overload_unique(A):
     dtype = A.dtype
 
-    def impl_int_arr(A):
+    def impl_int_arr(A):  # pragma: no cover
         # preserve order
         data = []
         mask = []
