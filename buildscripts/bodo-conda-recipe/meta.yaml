@@ -16,7 +16,7 @@ requirements:
     - {{ compiler('cxx') }}
 
   host:
-    - python
+    - python 3.7
     - setuptools
     - numba 0.46.*
     - numpy
@@ -34,7 +34,7 @@ requirements:
     - vs2015_win-64 # [win]
     
   run:
-    - python
+    - python 3.7
     - {{ pin_compatible('numpy') }}
     - pandas >=0.25
     - pyarrow >=0.11
