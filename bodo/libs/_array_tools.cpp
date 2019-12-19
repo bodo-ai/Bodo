@@ -156,7 +156,16 @@ void delete_table(table_info* table) {
         delete a;
     }
     delete table;
-    return;
+}
+
+void free_array(array_info* arr);
+
+void delete_table_free_arrays(table_info* table) {
+    for (array_info* a : table->columns) {
+        free_array(a);
+        delete a;
+    }
+    delete table;
 }
 
 template <class T>
@@ -3248,7 +3257,7 @@ table_info* groupby_and_aggregate_nunique(table_info* in_table, int64_t num_keys
     // TODO: implement correct use of dropna in the computation.
     // See https://github.com/Bodo-inc/Bodo/issues/270
     table_info* out_table = groupby_and_nunique(work_table, num_keys, num_data_cols, dropna);
-    if (is_parallel) delete work_table;
+    if (is_parallel) delete_table_free_arrays(work_table);
     return out_table;
 }
 
@@ -3276,13 +3285,13 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
     table_info* shuf_table = aggr_local;
     if (is_parallel) {
         shuf_table = shuffle_table(aggr_local, num_keys);
-        delete aggr_local;
+        delete_table_free_arrays(aggr_local);
     }
 
     // combine step
     table_info* out_table = groupby_and_aggregate_local(
         *shuf_table, num_keys, num_data_cols, combine_funcs[ftype], false);
-    delete shuf_table;
+    delete_table_free_arrays(shuf_table);
 
     // eval step
     agg_func_eval(*out_table, num_keys, num_data_cols, ftype);
