@@ -27,7 +27,7 @@
 
 #include <Python.h>
 #include "structmember.h"
-#include "_file_reader.h"
+#include "_bodo_csv_file_reader.h"
 
 
 #define CHECK(expr, msg) if(!(expr)){std::cerr << "Error in csv_read: " << msg << std::endl;}

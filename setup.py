@@ -96,7 +96,7 @@ ext_io = Extension(
         "bodo/libs/_distributed.h",
         "bodo/libs/_import_py.h",
         "bodo/io/_csv.h",
-        "bodo/io/_file_reader.h",
+        "bodo/io/_bodo_csv_file_reader.h",
         "bodo/libs/_datetime_ext.h",
     ],
     libraries=io_libs,
@@ -112,7 +112,7 @@ ext_io = Extension(
 ext_s3 = Extension(
     name="bodo.io.s3_reader",
     sources=["bodo/io/_s3_reader.cpp"],
-    depends=["bodo/io/_file_reader.h"],
+    depends=["bodo/io/_bodo_csv_file_reader.h"],
     libraries=["arrow"],
     include_dirs=ind + np_compile_args["include_dirs"],
     library_dirs=lid,
