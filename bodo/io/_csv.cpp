@@ -281,6 +281,9 @@ extern "C" void PyInit_csv(PyObject * m)
     PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
     PyObject_SetAttrString(m, "csv_file_chunk_reader",
                            PyLong_FromVoidPtr((void*)(&csv_file_chunk_reader)));
+    // NOTE: old testing code that is commented out due to
+    // introduction of FileReader interface.
+    // TODO: update testing code
     // PyObject_SetAttrString(m, "csv_string_chunk_reader",
     //                        PyLong_FromVoidPtr((void*)(&csv_string_chunk_reader)));
 }
@@ -484,6 +487,9 @@ extern "C" PyObject* csv_file_chunk_reader(const char * fname, bool is_parallel,
 }
 
 
+// NOTE: some old testing code that is commented out due to
+// introduction of FileReader interface.
+// TODO: update testing code
 // taking a string to create a istream and calling csv_chunk_reader
 // TODO: develop a StringReader class for testing
 // extern "C" PyObject* csv_string_chunk_reader(const std::string * str, bool is_parallel)
