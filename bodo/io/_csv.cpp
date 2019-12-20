@@ -297,7 +297,7 @@ extern "C" void PyInit_csv(PyObject * m)
 
 // 5MB buffer size to read from sources like AWS S3 in case they don't have buffering
 static constexpr size_t BUFF_SIZE = 5 * 1024 * 1024;
-// static constexpr size_t BUFF_SIZE = 5;
+
 
 /// return vector of offsets of newlines in first n bytes of given stream
 static std::vector<size_t> count_lines(FileReader * f, size_t n)
