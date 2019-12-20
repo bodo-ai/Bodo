@@ -47,13 +47,14 @@ def test_pq_spark_date(datapath):
 
 
 def test_pq_index(datapath):
-    fname = datapath("index_test1.pq")
 
-    def test_impl():
+    def test_impl(fname):
         return pd.read_parquet(fname)
 
+    # passing function name as value to test value-based dispatch
+    fname = datapath("index_test1.pq")
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_frame_equal(bodo_func(), test_impl())
+    pd.testing.assert_frame_equal(bodo_func(fname), test_impl(fname))
 
     # string index
     fname = datapath("index_test2.pq")
