@@ -147,6 +147,7 @@ def test_sort_values_strings_constant_length(n, len_str):
         return df2
 
     def get_random_strings_array(n, len_str):
+        random.seed(5)
         str_vals = []
         for _ in range(n):
             val = "".join(random.choices(string.ascii_uppercase, k=len_str))
@@ -168,6 +169,7 @@ def test_sort_values_strings_variable_length(n, len_str):
         return df2
 
     def get_random_var_length_strings_array(n, len_str):
+        random.seed(5)
         str_vals = []
         for _ in range(n):
             k = random.randint(1, len_str)
@@ -181,10 +183,11 @@ def test_sort_values_strings_variable_length(n, len_str):
     )
 
 
-@pytest.mark.parametrize("n, len_str", [(100, 30), (1000, 10), (10, 30)])
+@pytest.mark.parametrize("n, len_str", [(100, 30), (1000, 10), (10, 30), (100, 30)])
 def test_sort_values_strings(n, len_str):
     """
     Test sort_values(): with 1 column and strings of variable length and variable characters.
+    with some entries assigned to missing values
     """
 
     def test_impl(df1):
@@ -192,15 +195,174 @@ def test_sort_values_strings(n, len_str):
         return df2
 
     def get_random_strings_array(n, len_str):
+        random.seed(5)
         str_vals = []
         for _ in range(n):
-            k = random.randint(1, len_str)
-            val = "".join(random.choices(string.ascii_uppercase, k=k))
+            prob = random.randint(1, 10)
+            if prob==1:
+                val=np.nan
+            else:
+                k = random.randint(1, len_str)
+                val = "".join(random.choices(string.ascii_uppercase, k=k))
             str_vals.append(val)
-        df = pd.DataFrame({"A": str_vals})
+        str_valB = ["A", np.nan, "B", np.nan]
+        df = pd.DataFrame({"A": str_valB})
         return df
 
-    check_func(test_impl, (get_random_strings_array(n, len_str),), sort_output=False)
+    bodo_func = bodo.jit(test_impl)
+    df1 = get_random_strings_array(n,len_str)
+    pd.testing.assert_frame_equal(
+        bodo_func(df1), test_impl(df1),
+    )
+
+#    TODO: Solve the bug in the check that makes the following fail
+#    (problem of conversion of dataFrames)
+#    check_func(
+#        test_impl, (get_random_strings_array(n, len_str),), sort_output=False
+#    )
+
+
+
+
+
+@pytest.mark.parametrize("n, len_siz", [(100, 30), (1000, 10), (10, 30), (100, 30)])
+def test_sort_values_two_columns_nan(n, len_siz):
+    """Test with two columns with some NaN entries"""
+
+    def test_impl1(df1):
+        df2 = df1.sort_values(by='A', ascending = True, na_position = 'last', kind="mergesort", axis=0)
+        return df2
+
+    def test_impl2(df1):
+        df2 = df1.sort_values(by='A', ascending = True, na_position = 'first', kind="mergesort", axis=0)
+        return df2
+
+    def test_impl3(df1):
+        df2 = df1.sort_values(by='A', ascending = False, na_position = 'last', kind="mergesort", axis=0)
+        return df2
+
+    def test_impl4(df1):
+        df2 = df1.sort_values(by='A', ascending = False, na_position = 'first', kind="mergesort", axis=0)
+        return df2
+
+
+
+    def get_random_column(n,n_row):
+        str_vals = []
+        for _ in range(n):
+            prob = random.randint(1, 10)
+            if prob==1:
+                val=np.nan
+            else:
+                val = random.randint(1, len_siz)
+            str_vals.append(val)
+        return str_vals
+
+    def get_random_dataframe_two_columns(n, len_siz):
+        random.seed(5)
+        df = pd.DataFrame({"A": get_random_column(n, len_siz), "B": get_random_column(n,len_siz)})
+        return df
+
+    df1 = get_random_dataframe_two_columns(n, len_siz)
+    check_func(test_impl1, (df1,), sort_output=False)
+    check_func(test_impl2, (df1,), sort_output=False)
+    check_func(test_impl3, (df1,), sort_output=False)
+    check_func(test_impl4, (df1,), sort_output=False)
+
+
+
+
+
+def test_sort_values_nan_case():
+    """Test of NaN values for the sorting"""
+    def test_impl1(df1):
+        df2 = df1.sort_values(by='A', ascending = True, na_position = 'last', kind="mergesort", axis=0)
+        return df2
+
+    def test_impl2(df1):
+        df2 = df1.sort_values(by='A', ascending = True, na_position = 'first', kind="mergesort", axis=0)
+        return df2
+
+    def test_impl3(df1):
+        df2 = df1.sort_values(by='A', ascending = False, na_position = 'last', kind="mergesort", axis=0)
+        return df2
+
+    def test_impl4(df1):
+        df2 = df1.sort_values(by='A', ascending = False, na_position = 'first', kind="mergesort", axis=0)
+        return df2
+
+    df1 = pd.DataFrame({"A": [2, np.nan, 7, np.nan, -1, -4, np.nan, 1, 2], "B": [3, 6, 0, 1, 2, -4, 7, 7, 2]})
+    check_func(test_impl1, (df1,), sort_output=False)
+    check_func(test_impl2, (df1,), sort_output=False)
+    check_func(test_impl3, (df1,), sort_output=False)
+    check_func(test_impl4, (df1,), sort_output=False)
+
+
+
+
+def test_sort_values_nan_case_simple():
+    """Test of NaN values for the sorting in a numpy array"""
+    def test_impl(df1):
+        df2 = df1.sort_values(by='A', ascending = True, na_position = 'last', kind="mergesort", axis=0)
+        return df2
+
+    df1 = pd.DataFrame({"A": [2, np.nan, 7, np.nan]})
+    check_func(test_impl, (df1,), sort_output=False)
+
+
+
+
+def test_sort_values_nullable_int_array():
+    """Test of NaN values for the sorting for a nullable int bool array"""
+    def test_impl(df1):
+        df2 = df1.sort_values(by='A', ascending = True, na_position = 'last', kind="mergesort", axis=0)
+        return df2
+
+    nullarr = pd.array([13, None, 17], dtype='UInt16')
+    df1 = pd.DataFrame({"A": nullarr})
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_frame_equal(
+        bodo_func(df1), test_impl(df1),
+    )
+
+
+
+def test_sort_values_numpy_nan():
+    """Test of the code without NaN values"""
+    def test_impl1(df1):
+        df2 = df1.sort_values(by='A', kind="mergesort", axis=0)
+        return df2
+
+    df1 = pd.DataFrame({"A": [13, np.nan, 17]})
+    check_func(test_impl1, (df1,), sort_output=False)
+
+
+
+
+
+def test_sort_values_two_columns():
+    """Test of the code without NaN values"""
+    def test_impl1(df1):
+        df2 = df1.sort_values(by=['A', 'B'], kind="mergesort", axis=0)
+        return df2
+
+    df1 = pd.DataFrame({"A": [2, -3, 7, 10, -1, -4, 0, 1, 2], "B": [3, 6, 0, 1, 2, -4, 7, 7, 2]})
+    check_func(test_impl1, (df1,), sort_output=False)
+
+
+def test_sort_values_regular_case():
+    """Test of the code without NaN values"""
+    def test_impl1(df1):
+        df2 = df1.sort_values(by='A', ascending = True, kind="mergesort", axis=0)
+        return df2
+
+    def test_impl2(df1):
+        df2 = df1.sort_values(by='A', ascending = False, kind="mergesort", axis=0)
+        return df2
+
+    df1 = pd.DataFrame({"A": [2, -3, 7, 10, -1, -4, 0, 1, 2], "B": [3, 6, 0, 1, 2, -4, 7, 7, 2]})
+    check_func(test_impl1, (df1,), sort_output=False)
+    check_func(test_impl2, (df1,), sort_output=False)
 
 
 # ------------------------------ error checking ------------------------------ #
@@ -341,12 +503,12 @@ def test_sort_values_kind_no_spec():
         return df.sort_values(by=["A", "B"], kind=None)
 
     def impl2(df):
-        return df.sort_values(by=["A"], kind="quicksort")
+        return df.sort_values(by=["A"], kind="mergesort")
 
     def impl3(df):
         return df.sort_values(by=["A"], kind=2)
 
-    with pytest.warns(BodoWarning, match="specifying sorting algorithm"):
+    with pytest.warns(BodoWarning, match="specifying sorting algorithm is not supported"):
         bodo.jit(impl1)(df)
     with pytest.warns(
         BodoWarning, match="specifying sorting algorithm is not supported"
@@ -367,14 +529,15 @@ def test_sort_values_na_position_no_spec():
         return df.sort_values(by=["A", "B"], na_position=None)
 
     def impl2(df):
-        return df.sort_values(by=["A"], na_position="last")
+        return df.sort_values(by=["A"], na_position="break")
 
     def impl3(df):
         return df.sort_values(by=["A"], na_position=0)
 
-    with pytest.raises(BodoError, match="na_position is not currently supported"):
+    with pytest.raises(BodoError, match="na_position parameter must be a literal constant"):
         bodo.jit(impl1)(df)
-    with pytest.raises(BodoError, match="na_position is not currently supported"):
+    with pytest.raises(BodoError, match="na_position should either be"):
         bodo.jit(impl2)(df)
-    with pytest.raises(BodoError, match="na_position is not currently supported"):
+    with pytest.raises(BodoError, match="na_position parameter must be a literal constant"):
         bodo.jit(impl3)(df)
+

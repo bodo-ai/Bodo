@@ -18,45 +18,33 @@ jobs:
       chmod +x buildscripts/remove_docstring.py
     displayName: 'Prepare to build'
 
-  - script: |
-      if [[ "${{ parameters.name }}" == "Linux" ]]; then
-        wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
-      else
-        wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
-      fi
-      chmod +x miniconda.sh
-      ./miniconda.sh -b
-      export PATH=$HOME/miniconda3/bin:${PATH}
-    displayName: 'Setup Miniconda'
+  - powershell: |
+        Write-Host "##vso[task.prependpath]$env:CONDA\Scripts"
+        Write-Host "##vso[task.prependpath]$HOME/miniconda3/bin"
+    displayName: 'Add conda to PATH'
+
+  - script: conda update -q -n base conda
+    displayName: 'Update conda'
 
   - script: |
-      export PATH=$HOME/miniconda3/bin:$PATH
-      source activate bodo_build
       conda install -y flake8
       flake8 bodo
     displayName: 'Flake8'
 
-  - script: |
-      export PATH=$HOME/miniconda3/bin:${PATH}
+  - bash: |
       conda create -y -n bodo_build conda-build anaconda-client conda-verify
       source activate bodo_build
       cd buildscripts/bodo-conda-recipe/
       export TRIAL_PERIOD=$(TRIAL_PERIOD)
-      conda-build . -c defaults -c conda-forge --no-test
+      conda build . -c defaults -c conda-forge -c intel --no-test
     displayName: 'Conda build Bodo'
 
-  - script: |
-      export PATH=$HOME/miniconda3/bin:${PATH}
+  - bash: |
       source activate bodo_build
       cd $(System.DefaultWorkingDirectory)
       mkdir bodo-inc
-      if [[ "${{ parameters.name }}" == "Linux" ]]; then
-        mkdir bodo-inc/linux-64
-        cp $(HOME)/miniconda3/envs/bodo_build/conda-bld/linux-64/bodo*.tar.bz2 bodo-inc/linux-64/
-      else
-        mkdir bodo-inc/osx-64
-        cp $(HOME)/miniconda3/envs/bodo_build/conda-bld/osx-64/bodo*.tar.bz2 bodo-inc/osx-64/
-      fi
+      mkdir bodo-inc/windows-64
+      cp $HOME/miniconda3/envs/bodo_build/conda-bld/windows-64/bodo*.tar.bz2 bodo-inc/windows-64/
       conda index bodo-inc/
     displayName: 'index bodo-inc'
 

@@ -530,9 +530,7 @@ class UntypedPass(object):
             require(len(vals) > 0)
             val_typ = type(vals[0])
             require(all(isinstance(v, val_typ) for v in vals))
-            tmp_target = ir.Var(
-                var.scope, mk_unique_var(var.name + '_const'), var.loc
-            )
+            tmp_target = ir.Var(var.scope, mk_unique_var(var.name + "_const"), var.loc)
             nodes.extend(self._gen_add_consts_to_type(vals, var, tmp_target))
             return tmp_target
         except numba.ir_utils.GuardException:
@@ -540,8 +538,7 @@ class UntypedPass(object):
 
     def _gen_add_consts_to_type(self, vals, var, ret_var):
         vals_expr = ", ".join(
-            "'{}'".format(c) if isinstance(c, str) else "{}".format(c)
-            for c in vals
+            "'{}'".format(c) if isinstance(c, str) else "{}".format(c) for c in vals
         )
         func_text = "def _build_f(a):\n"
         func_text += "  return bodo.utils.typing.add_consts_to_type(a, {})\n".format(
@@ -550,9 +547,7 @@ class UntypedPass(object):
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
         _build_f = loc_vars["_build_f"]
-        nodes = _compile_func_single_block(
-            _build_f, (var,), ret_var
-        )
+        nodes = _compile_func_single_block(_build_f, (var,), ret_var)
         return nodes
 
 

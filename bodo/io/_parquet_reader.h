@@ -1,7 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #ifndef _PARQUET_READER_H_INCLUDED
 #define _PARQUET_READER_H_INCLUDED
-
+#include "arrow/record_batch.h"
 #include "parquet/arrow/reader.h"
 using parquet::arrow::FileReader;
 

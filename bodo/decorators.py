@@ -17,7 +17,8 @@ def distributed_diagnostics(self, signature=None, level=1):
     if signature is None and len(self.signatures) == 0:
         raise bodo.utils.typing.BodoError(
             "Distributed diagnostics not available for a function that is"
-            " not compiled yet")
+            " not compiled yet"
+        )
 
     if bodo.get_rank() != 0:  # only print on 1 process
         return

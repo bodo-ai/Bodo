@@ -39,3 +39,6 @@ dev_docs/gh-pages/
 # Tutorial material
 tutorial/test_bodo.py
 
+# Coverage report
+coverage.xml
+.coverage

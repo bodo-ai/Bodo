@@ -224,10 +224,7 @@ class DistributedAnalysis(object):
         # warn when there is no parallel array or parfor
         # only warn for parfor when there is no parallel array since there could be
         # parallel functionality other than parfors
-        if (
-            len(array_dists) > 0
-            and all(is_REP(d) for d in array_dists.values())
-        ) or (
+        if (len(array_dists) > 0 and all(is_REP(d) for d in array_dists.values())) or (
             len(array_dists) == 0
             and len(parfor_dists) > 0
             and all(d == Distribution.REP for d in parfor_dists.values())
@@ -383,8 +380,20 @@ class DistributedAnalysis(object):
             isinstance(rhs, ir.Expr)
             and rhs.op == "getattr"
             and isinstance(self.typemap[rhs.value.name], types.List)
-            and rhs.attr in ("append", "clear", "copy", "count", "extend", "index",
-                "insert", "pop", "remove", "reverse", "sort")
+            and rhs.attr
+            in (
+                "append",
+                "clear",
+                "copy",
+                "count",
+                "extend",
+                "index",
+                "insert",
+                "pop",
+                "remove",
+                "reverse",
+                "sort",
+            )
         ):
             return
         elif (
@@ -586,7 +595,8 @@ class DistributedAnalysis(object):
 
         # handle list.func calls
         if isinstance(func_mod, ir.Var) and isinstance(
-                self.typemap[func_mod.name], types.List):
+            self.typemap[func_mod.name], types.List
+        ):
             dtype = self.typemap[func_mod.name].dtype
             if is_distributable_typ(dtype) or is_distributable_tuple_typ(dtype):
                 if func_name in ("append", "count", "extend", "index", "remove"):
@@ -1051,7 +1061,10 @@ class DistributedAnalysis(object):
         # TODO: support 1D_Var reshape
         if array_dists[lhs] == Distribution.OneD_Var:
             # HACK support A.reshape(n, 1) for 1D_Var
-            if len(shape_vars) == 2 and guard(find_const, self.func_ir, shape_vars[1]) == 1:
+            if (
+                len(shape_vars) == 2
+                and guard(find_const, self.func_ir, shape_vars[1]) == 1
+            ):
                 return
             self._analyze_call_set_REP(lhs, [arr], array_dists, "reshape")
 
@@ -1228,9 +1241,8 @@ class DistributedAnalysis(object):
             and isinstance(index_typ, types.IntegerLiteral)
         ):
             # meet distributions if returned value is distributable
-            if (
-                is_distributable_typ(self.typemap[lhs])
-                or is_distributable_tuple_typ(self.typemap[lhs])
+            if is_distributable_typ(self.typemap[lhs]) or is_distributable_tuple_typ(
+                self.typemap[lhs]
             ):
                 # meet distributions
                 ind_val = index_typ.literal_value

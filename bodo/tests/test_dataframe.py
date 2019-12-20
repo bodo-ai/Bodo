@@ -719,28 +719,30 @@ def test_df_duplicated():
 
 
 @pytest.mark.parametrize(
-    "expr", [
-    "`B B` > @a + 1 & 5 > index > 1",
-    "(A == @a) | (C == 'AA')",
-    "C in ['AA', 'C']",
-    "C not in ['AA', 'C']",
-    "C.str.contains('C')",
-    "abs(A) > @a",
-    "A in [1, 4]",
-    "A not in [1, 4]",
-])
+    "expr",
+    [
+        "`B B` > @a + 1 & 5 > index > 1",
+        "(A == @a) | (C == 'AA')",
+        "C in ['AA', 'C']",
+        "C not in ['AA', 'C']",
+        "C.str.contains('C')",
+        "abs(A) > @a",
+        "A in [1, 4]",
+        "A not in [1, 4]",
+    ],
+)
 def test_df_query(expr):
     def impl(df, expr, a):
         return df.query(expr)
 
     df = pd.DataFrame(
-                {
-                    "A": [1, 8, 4, 11, -3],
-                    "B B": [1.1, np.nan, 4.2, 3.1, -1.3],
-                    "C": ["AA", "BBB", "C", "AA", "C"],
-                },
-                index = [3, 1, 2, 4, 5]
-            )
+        {
+            "A": [1, 8, 4, 11, -3],
+            "B B": [1.1, np.nan, 4.2, 3.1, -1.3],
+            "C": ["AA", "BBB", "C", "AA", "C"],
+        },
+        index=[3, 1, 2, 4, 5],
+    )
     check_func(impl, (df, expr, 1))
 
 

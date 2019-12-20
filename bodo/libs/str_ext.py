@@ -136,7 +136,7 @@ for method in str2bool_methods:
 
 @overload_method(types.UnicodeType, "replace")
 def str_replace_overload(in_str, old, new, count=-1):
-    def _str_replace_impl(in_str, old, new, count=-1):
+    def _str_replace_impl(in_str, old, new, count=-1):  # pragma: no cover
         with numba.objmode(out="unicode_type"):
             out = in_str.replace(old, new, count)
         return out
@@ -164,7 +164,7 @@ def string_to_char_ptr(typingctx, str_tp=None):
 
 
 @numba.njit
-def contains_regex(e, in_str):
+def contains_regex(e, in_str):  # pragma: no cover
     with numba.objmode(res="bool_"):
         res = bool(e.search(in_str))
     return res
@@ -275,7 +275,7 @@ get_c_str = types.ExternalFunction("get_c_str", types.voidptr(std_str_type))
 def int_str_overload(in_str):
     if in_str == string_type:
 
-        def _str_to_int_impl(in_str):
+        def _str_to_int_impl(in_str):  # pragma: no cover
             return _str_to_int64(in_str._data, in_str._length)
 
         return _str_to_int_impl
@@ -371,7 +371,7 @@ def gen_unicode_to_std_str(context, builder, unicode_val):
 def gen_std_str_to_unicode(context, builder, std_str_val, del_str=False):
     kind = numba.unicode.PY_UNICODE_1BYTE_KIND
 
-    def _std_str_to_unicode(std_str):
+    def _std_str_to_unicode(std_str):  # pragma: no cover
         length = bodo.libs.str_ext.get_std_str_len(std_str)
         ret = numba.unicode._empty_string(kind, length)
         bodo.libs.str_arr_ext._memcpy(
@@ -397,7 +397,7 @@ def gen_get_unicode_chars(context, builder, unicode_val):
     return uni_str.data
 
 
-def unicode_to_char_ptr(in_str):
+def unicode_to_char_ptr(in_str):  # pragma: no cover
     return in_str
 
 

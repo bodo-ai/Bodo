@@ -73,6 +73,7 @@ class Sort(ir.Stmt):
         inplace,
         loc,
         ascending=True,
+        na_position="last",
     ):
         # for printing only
         self.df_in = df_in
@@ -82,6 +83,10 @@ class Sort(ir.Stmt):
         self.df_in_vars = df_in_vars
         self.df_out_vars = df_out_vars
         self.inplace = inplace
+        if na_position == "last":
+            self.na_position_b = True
+        else:
+            self.na_position_b = False
         # HACK make sure ascending is boolean (seen error for none in CI)
         # TODO: fix source of issue
         if not isinstance(ascending, bool):
@@ -358,7 +363,9 @@ def sort_distributed_run(
     # TODO: use *args
     func_text = "def f({}, {}):\n".format(key_name_args_join, col_name_args_join)
     if bodo.use_cpp_sort:
-        func_text += local_sort_cpp(key_name_args, col_name_args, sort_node.ascending)
+        func_text += local_sort_cpp(
+            key_name_args, col_name_args, sort_node.ascending, sort_node.na_position_b
+        )
     else:
         func_text += "  key_arrs = ({},)\n".format(key_name_args_join)
         func_text += "  data = ({}{})\n".format(
@@ -421,7 +428,9 @@ def sort_distributed_run(
     # parallel case
     if bodo.use_cpp_sort:
         func_text = "def par_sort_impl(key_arrs, data, ascending):\n"
-        func_text += "  out_key, out_data = parallel_sort(key_arrs, data, ascending)\n"
+        func_text += "  out_key, out_data = parallel_sort(key_arrs, data, ascending, {})\n".format(
+            sort_node.na_position_b
+        )
         key_count = len(key_name_args)
         data_count = len(col_name_args)
         total_list = [
@@ -429,8 +438,8 @@ def sort_distributed_run(
         ] + ["array_to_info(out_data[{}])".format(i) for i in range(len(col_name_args))]
         func_text += "  info_list_total = [{}]\n".format(",".join(total_list))
         func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
-        func_text += "  out_table = sort_values_table(table_total, {}, ascending)\n".format(
-            key_count
+        func_text += "  out_table = sort_values_table(table_total, {}, ascending, {})\n".format(
+            key_count, sort_node.na_position_b
         )
         func_text += "  delete_table(table_total)\n"
         #
@@ -461,7 +470,9 @@ def sort_distributed_run(
         func_text += "  return out_key_ret, out_data_ret\n"
     else:
         func_text = "def par_sort_impl(key_arrs, data, ascending):\n"
-        func_text += "  out_key, out_data = parallel_sort(key_arrs, data, ascending)\n"
+        func_text += "  out_key, out_data = parallel_sort(key_arrs, data, ascending, {})\n".format(
+            sort_node.na_position_b
+        )
         func_text += "  bodo.ir.sort.local_sort(out_key, out_data, ascending)\n"
         func_text += "  return out_key, out_data\n"
 
@@ -515,7 +526,7 @@ distributed_pass.distributed_run_extensions[Sort] = sort_distributed_run
 
 
 def _copy_array_nodes(var, nodes, typingctx, typemap, calltypes):
-    def _impl(arr):
+    def _impl(arr):  # pragma: no cover
         return arr.copy()
 
     f_block = compile_to_numba_ir(
@@ -539,7 +550,7 @@ def to_string_list_typ(typ):
     return typ
 
 
-def local_sort_cpp(key_name_args, col_name_args, ascending=True):
+def local_sort_cpp(key_name_args, col_name_args, ascending, na_position_b):
     func_text = "  # beginning of local_sort_cpp\n"
     key_count = len(key_name_args)
     data_count = len(col_name_args)
@@ -548,8 +559,8 @@ def local_sort_cpp(key_name_args, col_name_args, ascending=True):
     ]
     func_text += "  info_list_total = [{}]\n".format(",".join(total_list))
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
-    func_text += "  out_table = sort_values_table(table_total, {}, {})\n".format(
-        key_count, ascending
+    func_text += "  out_table = sort_values_table(table_total, {}, {}, {})\n".format(
+        key_count, ascending, na_position_b
     )
     idx = 0
     list_key_str = []
@@ -577,7 +588,7 @@ def local_sort_cpp(key_name_args, col_name_args, ascending=True):
 
 # TODO: fix cache issue
 @numba.njit(no_cpython_wrapper=True, cache=False)
-def local_sort(key_arrs, data, ascending=True):
+def local_sort(key_arrs, data, ascending=True):  # pragma: no cover
     # convert StringArray to list(string) to enable swapping in sort
     l_key_arrs = to_string_list(key_arrs)
     l_data = to_string_list(data, True)
@@ -590,7 +601,9 @@ def local_sort(key_arrs, data, ascending=True):
 
 
 @numba.njit(no_cpython_wrapper=True, cache=True)
-def parallel_sort(key_arrs, data, ascending=True):
+def parallel_sort(
+    key_arrs, data, ascending=True, na_position_b=True
+):  # pragma: no cover
     n_local = len(key_arrs[0])
     n_total = bodo.libs.distributed_api.dist_reduce(
         n_local, np.int32(Reduce_Type.Sum.value)
@@ -630,15 +643,43 @@ def parallel_sort(key_arrs, data, ascending=True):
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, True)
     node_id = 0
     padded_bits = 0
+
+    na_position_b = (not na_position_b) ^ ascending
+
+    def compar_fct(isnan1, val1, isnan2, val2):
+        if isnan2 and (not isnan1):
+            if na_position_b:
+                return 1
+            else:
+                return -1
+        if isnan1 and (not isnan2):
+            if na_position_b:
+                return -1
+            else:
+                return 1
+        if (not isnan1) and (not isnan2):
+            if val1 < val2:
+                return 1
+            if val2 < val1:
+                return -1
+        return 0
+
+    def compar_fct_ascend(isnan1, val1, isnan2, val2):
+        test = compar_fct(isnan1, val1, isnan2, val2)
+        if ascending:
+            return test != 1
+        if not ascending:
+            return test != -1
+
     for i in range(n_local):
         val = key_arrs[0][i]
         # TODO: refactor
         # using 'while' since a partition can be empty which needs to be skipped
-        while node_id < (n_pes - 1) and (
-            ascending
-            and val >= bounds[node_id]
-            or (not ascending)
-            and val <= bounds[node_id]
+        while node_id < (n_pes - 1) and compar_fct_ascend(
+            bodo.libs.array_kernels.isna(key_arrs[0], i),
+            val,
+            bodo.libs.array_kernels.isna(bounds, node_id),
+            bounds[node_id],
         ):
             node_id += 1
             padded_bits += -(padded_bits + i) % 8

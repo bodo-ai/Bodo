@@ -350,7 +350,7 @@ def list_str_arr_getitem_array(arr, ind):
 
     if isinstance(ind, types.Integer):
         # XXX: cannot handle NA for scalar getitem since not type stable
-        def list_str_arr_getitem_impl(arr, ind):
+        def list_str_arr_getitem_impl(arr, ind):  # pragma: no cover
             l_start_offset = arr._index_offsets[ind]
             l_end_offset = arr._index_offsets[ind + 1]
             out = []
@@ -367,7 +367,7 @@ def list_str_arr_getitem_array(arr, ind):
     # bool arr indexing
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
-        def impl_bool(arr, ind):
+        def impl_bool(arr, ind):  # pragma: no cover
             n = len(arr)
             if n != len(ind):
                 raise IndexError(
@@ -423,7 +423,7 @@ def list_str_arr_getitem_array(arr, ind):
     # TODO: avoid code duplication
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
 
-        def impl_int(arr, ind):
+        def impl_int(arr, ind):  # pragma: no cover
             n = len(ind)
             n_lists = 0
             n_strs = 0
@@ -474,7 +474,7 @@ def list_str_arr_getitem_array(arr, ind):
     # slice case
     if isinstance(ind, types.SliceType):
 
-        def impl_slice(arr, ind):
+        def impl_slice(arr, ind):  # pragma: no cover
             n = len(arr)
             slice_idx = numba.unicode._normalize_slice(ind, n)
             # reusing integer array slicing above
@@ -488,7 +488,7 @@ def list_str_arr_getitem_array(arr, ind):
 def overload_list_str_arr_copy(A):
     from bodo.libs.distributed_api import cptr_to_voidptr
 
-    def copy_impl(A):
+    def copy_impl(A):  # pragma: no cover
         n_lists = A._num_items
         n_strs = A._num_total_strings
         n_chars = A._num_total_chars
@@ -546,12 +546,12 @@ numba.ir_utils.remove_call_handlers.append(remove_str_arr)
 # TODO: fix getattr aliasing
 # TODO: remove dead for these calls
 @numba.njit
-def get_index_offset_ptr(A):
+def get_index_offset_ptr(A):  # pragma: no cover
     return A._index_offsets
 
 
 @numba.njit
-def get_data_offset_ptr(A):
+def get_data_offset_ptr(A):  # pragma: no cover
     return A._data_offsets
 
 
@@ -570,7 +570,7 @@ numba.ir_utils.alias_func_extensions[
 
 
 @numba.njit
-def str_split(arr, pat, n):
+def str_split(arr, pat, n):  # pragma: no cover
     """spits string array's elements into lists and creates an array of string lists
     """
     # numba.parfor.init_prange()

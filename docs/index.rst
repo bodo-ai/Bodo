@@ -9,6 +9,7 @@ Bodo documentation
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
+   :numbered:
 
    source/overview
    source/install
@@ -18,6 +19,8 @@ Bodo documentation
    source/pandas
    source/numpy
    source/not_supported
+   source/performance
+   source/compilation
    source/aws
    source/jupyter
    source/eula

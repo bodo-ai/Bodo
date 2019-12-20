@@ -66,9 +66,7 @@ def test_string_array_getitem_na(ind):
 ##########################  Test re support  ##########################
 
 
-@pytest.fixture(
-    params= ["AB", "A_B", "A_B_C"]
-)
+@pytest.fixture(params=["AB", "A_B", "A_B_C"])
 def test_in_str(request):
     return request.param
 
@@ -861,7 +859,7 @@ class TestString(unittest.TestCase):
         A = np.array(["AA", "B"])
         self.assertEqual(bodo_func(A), test_impl(A))
 
-    @unittest.skip("TODO: support glob")    
+    @unittest.skip("TODO: support glob")
     def test_glob(self):
         def test_impl():
             glob.glob("*py")

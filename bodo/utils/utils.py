@@ -206,10 +206,7 @@ def is_alloc_callname(func_name, mod_name):
             func_name == "pre_alloc_string_array"
             and mod_name == "bodo.libs.str_arr_ext"
         )
-        or (
-            func_name ==  "alloc_str_list"
-            and mod_name == "bodo.libs.str_ext"
-        )
+        or (func_name == "alloc_str_list" and mod_name == "bodo.libs.str_ext")
         or (
             func_name == "pre_alloc_list_string_array"
             and mod_name == "bodo.libs.list_str_arr_ext"
@@ -392,10 +389,16 @@ def is_distributable_typ(var_typ):
 
 
 def is_distributable_tuple_typ(var_typ):
-    return (isinstance(var_typ, types.BaseTuple) and any(
-        is_distributable_typ(t) or is_distributable_tuple_typ(t) for t in var_typ.types
-    )) or (isinstance(var_typ, (types.List, types.Set))
-        and is_distributable_tuple_typ(var_typ.dtype))
+    return (
+        isinstance(var_typ, types.BaseTuple)
+        and any(
+            is_distributable_typ(t) or is_distributable_tuple_typ(t)
+            for t in var_typ.types
+        )
+    ) or (
+        isinstance(var_typ, (types.List, types.Set))
+        and is_distributable_tuple_typ(var_typ.dtype)
+    )
 
 
 @numba.generated_jit(nopython=True, cache=True)
@@ -419,7 +422,7 @@ def build_set(A):
     # avoid value if NA is not sentinel like np.nan
     if isinstance(A, IntegerArrayType) or A in (string_array_type, boolean_array):
 
-        def impl_int_arr(A):
+        def impl_int_arr(A):  # pragma: no cover
             s = dict()
             for i in range(len(A)):
                 if not bodo.libs.array_kernels.isna(A, i):
@@ -429,7 +432,7 @@ def build_set(A):
         return impl_int_arr
     else:
 
-        def impl(A):
+        def impl(A):  # pragma: no cover
             s = dict()
             for i in range(len(A)):
                 s[A[i]] = 0
@@ -441,7 +444,7 @@ def build_set(A):
 # converts an iterable to array, similar to np.array, but can support
 # other things like StringArray
 # TODO: other types like datetime?
-def to_array(A):
+def to_array(A):  # pragma: no cover
     return np.array(A)
 
 
@@ -452,7 +455,7 @@ def to_array_overload(A):
         dtype = A.key_type
         if dtype == string_type:
 
-            def impl_str(A):
+            def impl_str(A):  # pragma: no cover
                 n = len(A)
                 n_char = 0
                 for v in A.keys():
@@ -466,7 +469,7 @@ def to_array_overload(A):
 
             return impl_str
 
-        def impl(A):
+        def impl(A):  # pragma: no cover
             n = len(A)
             arr = np.empty(n, dtype)
             i = 0
@@ -477,7 +480,7 @@ def to_array_overload(A):
 
         return impl
     # try regular np.array and return it if it works
-    def to_array_impl(A):
+    def to_array_impl(A):  # pragma: no cover
         return np.array(A)
 
     try:
@@ -506,7 +509,7 @@ def np_array_array_overload(A):
         # be copied to array more efficienty
         dtype = A.dtype
 
-        def f(A):
+        def f(A):  # pragma: no cover
             n = len(A)
             arr = np.empty(n, dtype)
             i = 0
@@ -518,7 +521,7 @@ def np_array_array_overload(A):
         return f
 
 
-def empty_like_type(n, arr):
+def empty_like_type(n, arr):  # pragma: no cover
     return np.empty(n, arr.dtype)
 
 
@@ -565,7 +568,7 @@ def empty_like_type_overload(n, arr):
     # string array buffer for join
     assert arr == string_array_type
 
-    def empty_like_type_str_arr(n, arr):
+    def empty_like_type_str_arr(n, arr):  # pragma: no cover
         # average character heuristic
         avg_chars = 20  # heuristic
         if len(arr) != 0:
@@ -575,7 +578,7 @@ def empty_like_type_overload(n, arr):
     return empty_like_type_str_arr
 
 
-def alloc_arr_tup(n, arr_tup, init_vals=()):
+def alloc_arr_tup(n, arr_tup, init_vals=()):  # pragma: no cover
     arrs = []
     for in_arr in arr_tup:
         arrs.append(np.empty(n, in_arr.dtype))
@@ -615,7 +618,7 @@ def tuple_to_scalar(n):
     return lambda n: n
 
 
-def alloc_type(n, t):
+def alloc_type(n, t):  # pragma: no cover
     return np.empty(n, t.dtype)
 
 
@@ -657,7 +660,7 @@ def overload_alloc_type(n, t):
     return lambda n, t: np.empty(n, dtype)
 
 
-def full_type(n, val, t):
+def full_type(n, val, t):  # pragma: no cover
     return np.full(n, val, t.dtype)
 
 
@@ -824,8 +827,8 @@ def get_getsetitem_index_var(node, typemap, nodes):
 # don't copy value since it can fail
 # for example, deepcopy in get_parfor_reductions can fail for ObjModeLiftedWith const
 import copy
-ir.Const.__deepcopy__ = lambda self, memo: \
-    ir.Const(self.value, copy.deepcopy(self.loc))
+
+ir.Const.__deepcopy__ = lambda self, memo: ir.Const(self.value, copy.deepcopy(self.loc))
 
 
 def is_call_assign(stmt):

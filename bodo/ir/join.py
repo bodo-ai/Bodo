@@ -80,7 +80,8 @@ class Join(ir.Stmt):
         left_vars,
         right_vars,
         how,
-        suffix_x, suffix_y,
+        suffix_x,
+        suffix_y,
         loc,
     ):
         self.df_out = df_out
@@ -103,7 +104,8 @@ class Join(ir.Stmt):
         add_suffix = comm_data - comm_keys
 
         self.column_origins = {
-            (c + suffix_x if c in add_suffix else c): ("left", c) for c in left_vars.keys()
+            (c + suffix_x if c in add_suffix else c): ("left", c)
+            for c in left_vars.keys()
         }
         self.column_origins.update(
             {
@@ -238,9 +240,11 @@ def join_typeinfer(join_node, typeinferer):
     for out_col_name, out_col_var in join_node.df_out_vars.items():
         # left suffix
         if not out_col_name in join_node.column_origins:
-            raise BodoError("join(): The variable " + out_col_name + " is absent from the output")
+            raise BodoError(
+                "join(): The variable " + out_col_name + " is absent from the output"
+            )
         ePair = join_node.column_origins[out_col_name]
-        if ePair[0] == 'left':
+        if ePair[0] == "left":
             col_var = join_node.left_vars[ePair[1]]
         else:
             col_var = join_node.right_vars[ePair[1]]
@@ -620,7 +624,6 @@ def join_distributed_run(
     exec(func_text, {}, loc_vars)
     join_impl = loc_vars["f"]
 
-
     glbs = {
         "bodo": bodo,
         "np": np,
@@ -746,7 +749,7 @@ def _gen_local_hash_join(
     idx = 0
     for i, t in enumerate(left_key_names):
         func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), t1_keys[{}]){}\n".format(
-            i, idx, i, _gen_reverse_type_match(left_key_types[i], right_key_types[i]),
+            i, idx, i, _gen_reverse_type_match(left_key_types[i], right_key_types[i])
         )
         idx += 1
     for i, t in enumerate(left_other_names):
@@ -756,7 +759,7 @@ def _gen_local_hash_join(
         idx += 1
     for i, t in enumerate(right_key_names):
         func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), t2_keys[{}]){}\n".format(
-            i, idx, i, _gen_reverse_type_match(right_key_types[i], left_key_types[i]),
+            i, idx, i, _gen_reverse_type_match(right_key_types[i], left_key_types[i])
         )
         idx += 1
     for i, t in enumerate(right_other_names):
@@ -817,7 +820,7 @@ def _gen_par_shuffle(
 
 
 # @numba.njit
-def parallel_join_impl(key_arrs, data):
+def parallel_join_impl(key_arrs, data):  # pragma: no cover
     # alloc shuffle meta
     n_pes = bodo.libs.distributed_api.get_size()
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, False)
@@ -853,7 +856,7 @@ def parallel_shuffle(key_arrs, data):
 
 
 @numba.njit
-def parallel_asof_comm(left_key_arrs, right_key_arrs, right_data):
+def parallel_asof_comm(left_key_arrs, right_key_arrs, right_data):  # pragma: no cover
     # align the left and right intervals
     # allgather the boundaries of all left intervals and calculate overlap
     # rank = bodo.libs.distributed_api.get_rank()
@@ -908,7 +911,7 @@ def parallel_asof_comm(left_key_arrs, right_key_arrs, right_data):
 
 
 @numba.njit
-def _count_overlap(r_key_arr, start, end):
+def _count_overlap(r_key_arr, start, end):  # pragma: no cover
     # TODO: use binary search
     count = 0
     offset = 0
@@ -922,7 +925,7 @@ def _count_overlap(r_key_arr, start, end):
     return offset, count
 
 
-def write_send_buff(shuffle_meta, node_id, i, key_arrs, data):
+def write_send_buff(shuffle_meta, node_id, i, key_arrs, data):  # pragma: no cover
     return i
 
 
@@ -965,7 +968,6 @@ def write_data_buff_overload(meta, node_id, i, key_arrs, data):
 
     func_text += "  return w_ind\n"
 
-
     loc_vars = {}
     exec(
         func_text,
@@ -998,7 +1000,7 @@ ll.add_symbol("c_alltoallv", hdist.c_alltoallv)
 
 
 @numba.njit
-def calc_disp(arr):
+def calc_disp(arr):  # pragma: no cover
     disp = np.empty_like(arr)
     disp[0] = 0
     for i in range(1, len(arr)):
@@ -1006,7 +1008,7 @@ def calc_disp(arr):
     return disp
 
 
-def ensure_capacity(arr, new_size):
+def ensure_capacity(arr, new_size):  # pragma: no cover
     new_arr = arr
     curr_len = len(arr)
     if curr_len < new_size:
@@ -1040,7 +1042,7 @@ def ensure_capacity_overload(arr, new_size):
 
 
 @numba.njit
-def ensure_capacity_str(arr, new_size, n_chars):
+def ensure_capacity_str(arr, new_size, n_chars):  # pragma: no cover
     # new_size is right after write index
     new_arr = arr
     curr_len = len(arr)
@@ -1211,7 +1213,7 @@ def setnan_elem_buff_tup_overload(data, ind):
 # @numba.njit
 def local_hash_join_impl(
     left_keys, right_keys, data_left, data_right, is_left=False, is_right=False
-):
+):  # pragma: no cover
     l_len = len(left_keys[0])
     r_len = len(right_keys[0])
     # TODO: approximate output size properly
@@ -1360,7 +1362,9 @@ def _gen_pd_join(
     return jit_func
 
 
-def pd_join(t1_keys, t2_keys, data_left, data_right, how, same_keys):
+def pd_join(
+    t1_keys, t2_keys, data_left, data_right, how, same_keys
+):
     # construct dataframes and call join
     lk_prefix = "lk"
     rk_prefix = "rk"
@@ -1416,7 +1420,7 @@ def _get_pd_out_arr(out_series, in_arr):
 @numba.njit
 def local_merge_new(
     left_keys, right_keys, data_left, data_right, is_left=False, is_outer=False
-):
+):  # pragma: no cover
     l_len = len(left_keys[0])
     r_len = len(right_keys[0])
     # TODO: approximate output size properly
@@ -1523,7 +1527,7 @@ def local_merge_new(
 
 
 @numba.njit
-def local_merge_asof(left_keys, right_keys, data_left, data_right):
+def local_merge_asof(left_keys, right_keys, data_left, data_right):  # pragma: no cover
     # adapted from pandas/_libs/join_func_helper.pxi
     l_size = len(left_keys[0])
     r_size = len(right_keys[0])
@@ -1567,7 +1571,7 @@ def local_merge_asof(left_keys, right_keys, data_left, data_right):
     return out_left_keys, out_right_keys, out_data_left, out_data_right
 
 
-def setitem_arr_nan(arr, ind, int_nan_const=0):
+def setitem_arr_nan(arr, ind, int_nan_const=0):  # pragma: no cover
     arr[ind] = np.nan
 
 
@@ -1579,7 +1583,7 @@ def setitem_arr_nan_overload(arr, ind, int_nan_const=0):
     if isinstance(arr.dtype, (types.NPDatetime, types.NPTimedelta)):
         nat = arr.dtype("NaT")
 
-        def _setnan_impl(arr, ind, int_nan_const=0):
+        def _setnan_impl(arr, ind, int_nan_const=0):  # pragma: no cover
             arr[ind] = nat
 
         return _setnan_impl
@@ -1597,14 +1601,14 @@ def setitem_arr_nan_overload(arr, ind, int_nan_const=0):
     # FIXME: replace with proper NaN
     if arr.dtype == types.bool_:
 
-        def b_set(arr, ind, int_nan_const=0):
+        def b_set(arr, ind, int_nan_const=0):  # pragma: no cover
             arr[ind] = False
 
         return b_set
 
     if isinstance(arr, CategoricalArray):
 
-        def setitem_arr_nan_cat(arr, ind, int_nan_const=0):
+        def setitem_arr_nan_cat(arr, ind, int_nan_const=0):  # pragma: no cover
             int_arr = bodo.hiframes.pd_categorical_ext.cat_array_to_int(arr)
             int_arr[ind] = -1
 
@@ -1614,7 +1618,7 @@ def setitem_arr_nan_overload(arr, ind, int_nan_const=0):
     # TODO: convert integer to float if nan
     if isinstance(arr.dtype, types.Integer):
 
-        def setitem_arr_nan_int(arr, ind, int_nan_const=0):
+        def setitem_arr_nan_int(arr, ind, int_nan_const=0):  # pragma: no cover
             arr[ind] = int_nan_const
 
         return setitem_arr_nan_int
@@ -1642,7 +1646,7 @@ def setitem_arr_tup_nan_overload(arr_tup, ind, int_nan_const=0):
     return impl
 
 
-def copy_arr_tup(arrs):
+def copy_arr_tup(arrs):  # pragma: no cover
     return tuple(a.copy() for a in arrs)
 
 
@@ -1670,7 +1674,7 @@ def overload_get_nan_bits(arr, ind):
     """
     if arr == string_array_type:
 
-        def impl_str(arr, ind):
+        def impl_str(arr, ind):  # pragma: no cover
             in_null_bitmap_ptr = get_null_bitmap_ptr(arr)
             return get_bit_bitmap(in_null_bitmap_ptr, ind)
 
@@ -1678,7 +1682,7 @@ def overload_get_nan_bits(arr, ind):
 
     if isinstance(arr, IntegerArrayType) or arr == boolean_array:
 
-        def impl(arr, ind):
+        def impl(arr, ind):  # pragma: no cover
             return bodo.libs.int_arr_ext.get_bit_bitmap_arr(arr._null_bitmap, ind)
 
         return impl
@@ -1716,7 +1720,7 @@ def overload_set_nan_bits(arr, ind, na_val):
     """
     if arr == string_array_type:
 
-        def impl_str(arr, ind, na_val):
+        def impl_str(arr, ind, na_val):  # pragma: no cover
             in_null_bitmap_ptr = get_null_bitmap_ptr(arr)
             set_bit_to(in_null_bitmap_ptr, ind, na_val)
 
@@ -1724,7 +1728,7 @@ def overload_set_nan_bits(arr, ind, na_val):
 
     if isinstance(arr, IntegerArrayType) or arr == boolean_array:
 
-        def impl(arr, ind, na_val):
+        def impl(arr, ind, na_val):  # pragma: no cover
             bodo.libs.int_arr_ext.set_bit_to_arr(arr._null_bitmap, ind, na_val)
 
         return impl

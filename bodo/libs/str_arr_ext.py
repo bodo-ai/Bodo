@@ -162,7 +162,7 @@ def create_binary_op_overload(op):
         # both string array
         if A == string_array_type and B == string_array_type:
 
-            def impl_both(A, B):
+            def impl_both(A, B):  # pragma: no cover
                 numba.parfor.init_prange()
                 n = len(A)
                 out_arr = np.empty(n, np.bool_)
@@ -185,7 +185,7 @@ def create_binary_op_overload(op):
         # left arg is string array
         if A == string_array_type and types.unliteral(B) == string_type:
 
-            def impl_left(A, B):
+            def impl_left(A, B):  # pragma: no cover
                 numba.parfor.init_prange()
                 n = len(A)
                 out_arr = np.empty(n, np.bool_)
@@ -203,7 +203,7 @@ def create_binary_op_overload(op):
         # right arg is string array
         if types.unliteral(A) == string_type and B == string_array_type:
 
-            def impl_right(A, B):
+            def impl_right(A, B):  # pragma: no cover
                 numba.parfor.init_prange()
                 n = len(B)
                 out_arr = np.empty(n, np.bool_)
@@ -574,17 +574,17 @@ def str_copy_ptr(typingctx, ptr_typ, ind_typ, str_typ, len_typ=None):
 
 
 @numba.njit(no_cpython_wrapper=True)
-def get_str_arr_item_length(A, i):
+def get_str_arr_item_length(A, i):  # pragma: no cover
     return np.int64(getitem_str_offset(A, i + 1) - getitem_str_offset(A, i))
 
 
 @numba.njit(no_cpython_wrapper=True)
-def get_str_arr_item_ptr(A, i):
+def get_str_arr_item_ptr(A, i):  # pragma: no cover
     return get_data_ptr_ind(A, getitem_str_offset(A, i))
 
 
 @numba.njit(no_cpython_wrapper=True)
-def get_str_null_bools(str_arr):
+def get_str_null_bools(str_arr):  # pragma: no cover
     n = len(str_arr)
     null_bools = np.empty(n, np.bool_)
     for i in range(n):
@@ -594,7 +594,7 @@ def get_str_null_bools(str_arr):
 
 # convert array to list of strings if it is StringArray
 # just return it otherwise
-def to_string_list(arr, str_null_bools=None):
+def to_string_list(arr, str_null_bools=None):  # pragma: no cover
     return arr
 
 
@@ -606,7 +606,7 @@ def to_string_list_overload(data, str_null_bools=None):
     # TODO: create a StringRandomWriteArray
     if is_str_arr_typ(data):
 
-        def to_string_impl(data, str_null_bools=None):
+        def to_string_impl(data, str_null_bools=None):  # pragma: no cover
             n = len(data)
             l_str = []
             for i in range(n):
@@ -647,7 +647,7 @@ def to_string_list_overload(data, str_null_bools=None):
     return lambda data, str_null_bools=None: data
 
 
-def cp_str_list_to_array(str_arr, str_list, str_null_bools=None):
+def cp_str_list_to_array(str_arr, str_list, str_null_bools=None):  # pragma: no cover
     return
 
 
@@ -660,7 +660,9 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
     if is_str_arr_typ(str_arr):
         if is_overload_none(str_null_bools):
 
-            def cp_str_list_impl(str_arr, list_data, str_null_bools=None):
+            def cp_str_list_impl(
+                str_arr, list_data, str_null_bools=None
+            ):  # pragma: no cover
                 n = len(list_data)
                 for i in range(n):
                     _str = list_data[i]
@@ -669,7 +671,9 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
             return cp_str_list_impl
         else:
 
-            def cp_str_list_impl_null(str_arr, list_data, str_null_bools=None):
+            def cp_str_list_impl_null(
+                str_arr, list_data, str_null_bools=None
+            ):  # pragma: no cover
                 n = len(list_data)
                 for i in range(n):
                     _str = list_data[i]
@@ -717,7 +721,7 @@ def str_list_to_array_overload(str_list):
     """
     if str_list == types.List(string_type):
 
-        def str_list_impl(str_list):
+        def str_list_impl(str_list):  # pragma: no cover
             n = len(str_list)
             n_char = 0
             for i in range(n):
@@ -773,7 +777,7 @@ def is_str_arr_typ(typ):
 
 @overload_method(StringArrayType, "copy")
 def str_arr_copy_overload(arr):
-    def copy_impl(arr):
+    def copy_impl(arr):  # pragma: no cover
         n = len(arr)
         n_chars = num_total_chars(arr)
         new_arr = pre_alloc_string_array(n, np.int64(n_chars))
@@ -787,7 +791,7 @@ def str_arr_copy_overload(arr):
 def str_arr_len_overload(str_arr):
     if is_str_arr_typ(str_arr):
 
-        def str_arr_len(str_arr):
+        def str_arr_len(str_arr):  # pragma: no cover
             return str_arr.size
 
         return str_arr_len
@@ -909,7 +913,7 @@ def impl_string_array_single(context, builder, sig, args):
     if isinstance(args[0], types.UniTuple):
         assert isinstance (args[0].dtype, (types.UnicodeType, types.StringLiteral))
 
-    def str_arr_from_list(in_list):
+    def str_arr_from_list(in_list):  # pragma: no cover
         n_strs = len(in_list)
         total_chars = 0
         # TODO: use vector to avoid two passes?
@@ -1068,7 +1072,7 @@ kBitmask = np.array([1, 2, 4, 8, 16, 32, 64, 128], dtype=np.uint8)
 
 # from SetBitTo() in Arrow
 @numba.njit
-def set_bit_to(bits, i, bit_is_set):
+def set_bit_to(bits, i, bit_is_set):  # pragma: no cover
     b_ind = i // 8
     byte = getitem_str_bitmap(bits, b_ind)
     byte ^= np.uint8(-np.uint8(bit_is_set) ^ byte) & kBitmask[i % 8]
@@ -1076,12 +1080,12 @@ def set_bit_to(bits, i, bit_is_set):
 
 
 @numba.njit
-def get_bit_bitmap(bits, i):
+def get_bit_bitmap(bits, i):  # pragma: no cover
     return (getitem_str_bitmap(bits, i >> 3) >> (i & 0x07)) & 1
 
 
 @numba.njit
-def copy_nulls_range(out_str_arr, in_str_arr, out_start):
+def copy_nulls_range(out_str_arr, in_str_arr, out_start):  # pragma: no cover
     out_null_bitmap_ptr = get_null_bitmap_ptr(out_str_arr)
     in_null_bitmap_ptr = get_null_bitmap_ptr(in_str_arr)
 
@@ -1345,7 +1349,7 @@ def get_utf8_size(s):
         l = len(s.literal_value.encode())
         return lambda s: l
 
-    def impl(s):
+    def impl(s):  # pragma: no cover
         if s._is_ascii == 1:
             return len(s)
         return _get_utf8_size(s._data, s._length, s._kind)
@@ -1416,7 +1420,7 @@ def _memcpy(typingctx, dest_t, src_t, count_t, item_size_t=None):
 
 
 @numba.njit
-def print_str_arr(arr):
+def print_str_arr(arr):  # pragma: no cover
     _print_str_arr(arr._num_items, arr._num_total_chars, arr._offsets, arr._data)
 
 
@@ -1424,7 +1428,7 @@ def print_str_arr(arr):
 def str_arr_getitem_int(A, i):
     if A == string_array_type and isinstance(i, types.Integer):
         # kind = numba.unicode.PY_UNICODE_1BYTE_KIND
-        def str_arr_getitem_impl(A, i):
+        def str_arr_getitem_impl(A, i):  # pragma: no cover
             start_offset = getitem_str_offset(A, i)
             end_offset = getitem_str_offset(A, i + 1)
             length = end_offset - start_offset
@@ -1521,7 +1525,7 @@ def decode_utf8(typingctx, ptr_t, len_t=None):
 
 @lower_builtin(operator.getitem, StringArrayType, types.Array(types.bool_, 1, "C"))
 def lower_string_arr_getitem_bool(context, builder, sig, args):
-    def str_arr_bool_impl(str_arr, bool_arr):
+    def str_arr_bool_impl(str_arr, bool_arr):  # pragma: no cover
         n = len(str_arr)
         if n != len(bool_arr):
             raise IndexError(
@@ -1551,7 +1555,7 @@ def lower_string_arr_getitem_bool(context, builder, sig, args):
 
 @lower_builtin(operator.getitem, StringArrayType, types.Array(types.intp, 1, "C"))
 def lower_string_arr_getitem_arr(context, builder, sig, args):
-    def str_arr_arr_impl(str_arr, ind_arr):
+    def str_arr_arr_impl(str_arr, ind_arr):  # pragma: no cover
         n = len(ind_arr)
         # get lengths
         n_strs = 0
@@ -1577,7 +1581,7 @@ def lower_string_arr_getitem_arr(context, builder, sig, args):
 
 @lower_builtin(operator.getitem, StringArrayType, types.SliceType)
 def lower_string_arr_getitem_slice(context, builder, sig, args):
-    def str_arr_slice_impl(str_arr, idx):
+    def str_arr_slice_impl(str_arr, idx):  # pragma: no cover
         n = len(str_arr)
         slice_idx = numba.unicode._normalize_slice(idx, n)
         span = numba.unicode._slice_span(slice_idx)
@@ -1613,7 +1617,7 @@ def lower_string_arr_getitem_slice(context, builder, sig, args):
 
 
 @numba.njit(no_cpython_wrapper=True)
-def str_arr_item_to_numeric(out_arr, out_ind, str_arr, ind):
+def str_arr_item_to_numeric(out_arr, out_ind, str_arr, ind):  # pragma: no cover
     return _str_arr_item_to_numeric(
         bodo.hiframes.split_impl.get_c_arr_ptr(out_arr.ctypes, out_ind),
         str_arr,

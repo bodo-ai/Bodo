@@ -17,7 +17,9 @@ TD_DTYPE = np.dtype("m8[ns]")
 
 
 # TODO: use generated_jit with IR inlining
-def coerce_to_ndarray(data, error_on_nonarray=True, bool_arr_convert=None):
+def coerce_to_ndarray(
+    data, error_on_nonarray=True, bool_arr_convert=None
+):  # pragma: no cover
     return data
 
 
@@ -57,7 +59,9 @@ def overload_coerce_to_ndarray(data, error_on_nonarray=True, bool_arr_convert=No
         # convert Timestamp() back to dt64
         if data.dtype == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
 
-            def impl(data, error_on_nonarray=True, bool_arr_convert=None):
+            def impl(
+                data, error_on_nonarray=True, bool_arr_convert=None
+            ):  # pragma: no cover
                 vals = []
                 for d in data:
                     vals.append(
@@ -101,7 +105,9 @@ def overload_coerce_to_ndarray(data, error_on_nonarray=True, bool_arr_convert=No
 
 
 # TODO: use generated_jit with IR inlining
-def coerce_to_array(data, error_on_nonarray=True, bool_arr_convert=None):
+def coerce_to_array(
+    data, error_on_nonarray=True, bool_arr_convert=None
+):  # pragma: no cover
     return data
 
 
@@ -155,7 +161,7 @@ def overload_coerce_to_array(data, error_on_nonarray=True, bool_arr_convert=None
 
 
 # TODO: use generated_jit with IR inlining
-def fix_arr_dtype(data, new_dtype, copy=None):
+def fix_arr_dtype(data, new_dtype, copy=None):  # pragma: no cover
     return data
 
 
@@ -178,7 +184,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
         _dtype = nb_dtype.dtype
         if isinstance(data.dtype, types.Float):
 
-            def impl_float(data, new_dtype, copy=None):
+            def impl_float(data, new_dtype, copy=None):  # pragma: no cover
                 n = len(data)
                 n_bytes = (n + 7) >> 3
                 arr = np.empty(n, _dtype)
@@ -193,7 +199,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
             return impl_float
         else:
 
-            def impl(data, new_dtype, copy=None):
+            def impl(data, new_dtype, copy=None):  # pragma: no cover
                 n = len(data)
                 n_bytes = (n + 7) >> 3
                 bitmap = np.empty(n_bytes, np.uint8)
@@ -214,7 +220,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
 
 
 @numba.jit
-def flatten_array(A):
+def flatten_array(A):  # pragma: no cover
     flat_list = []
     n = len(A)
     for i in range(n):
@@ -226,7 +232,7 @@ def flatten_array(A):
 
 
 # TODO: use generated_jit with IR inlining
-def parse_datetimes_from_strings(data):
+def parse_datetimes_from_strings(data):  # pragma: no cover
     return data
 
 
@@ -234,7 +240,7 @@ def parse_datetimes_from_strings(data):
 def overload_parse_datetimes_from_strings(data):
     assert data == bodo.string_array_type
 
-    def parse_impl(data):
+    def parse_impl(data):  # pragma: no cover
         numba.parfor.init_prange()
         n = len(data)
         S = np.empty(n, bodo.utils.conversion.NS_DTYPE)
@@ -246,7 +252,7 @@ def overload_parse_datetimes_from_strings(data):
 
 
 # TODO: use generated_jit with IR inlining
-def convert_to_dt64ns(data):
+def convert_to_dt64ns(data):  # pragma: no cover
     return data
 
 
@@ -270,7 +276,7 @@ def overload_convert_to_dt64ns(data):
 
 
 # TODO: use generated_jit with IR inlining
-def convert_to_td64ns(data):
+def convert_to_td64ns(data):  # pragma: no cover
     return data
 
 
@@ -294,7 +300,7 @@ def overload_convert_to_td64ns(data):
     raise TypeError("invalid data type {} for dt64 conversion".format(data))
 
 
-def convert_to_index(data):
+def convert_to_index(data):  # pragma: no cover
     return data
 
 
@@ -325,14 +331,14 @@ def overload_convert_to_index(data):
     ):
         return lambda data: data
 
-    def impl(data):
+    def impl(data):  # pragma: no cover
         data_arr = bodo.utils.conversion.coerce_to_array(data)
         return bodo.utils.conversion.index_from_array(data_arr)
 
     return impl
 
 
-def force_convert_index(I1, I2):
+def force_convert_index(I1, I2):  # pragma: no cover
     return I2
 
 
@@ -349,7 +355,7 @@ def overload_force_convert_index(I1, I2):
     return lambda I1, I2: I1
 
 
-def index_from_array(data, name=None):
+def index_from_array(data, name=None):  # pragma: no cover
     return data
 
 
@@ -381,7 +387,7 @@ def overload_index_from_array(data, name=None):
     raise TypeError("invalid index type {}".format(data))
 
 
-def index_to_array(data, l):
+def index_to_array(data, l):  # pragma: no cover
     return data
 
 
@@ -396,7 +402,7 @@ def overload_index_to_array(I, l=0):
         # return lambda I, l=0: np.arange(l)
         # XXX use implementation of arange directly to avoid calc_nitems calls
         # TODO: remove calc_nitems() with trivial input
-        def impl(I, l=0):
+        def impl(I, l=0):  # pragma: no cover
             numba.parfor.init_prange()
             arr = np.empty(l, np.int64)
             for i in numba.parfor.internal_prange(l):
@@ -412,7 +418,7 @@ def overload_index_to_array(I, l=0):
     return lambda I, l=0: bodo.hiframes.pd_index_ext.get_index_data(I)
 
 
-def extract_name_if_none(data, name):
+def extract_name_if_none(data, name):  # pragma: no cover
     return name
 
 
@@ -444,7 +450,7 @@ def overload_extract_name_if_none(data, name):
     return lambda data, name: name
 
 
-def extract_index_if_none(data, index):
+def extract_index_if_none(data, index):  # pragma: no cover
     return index
 
 
@@ -463,7 +469,7 @@ def overload_extract_index_if_none(data, index):
     return lambda data, index: index
 
 
-def box_if_dt64(val):
+def box_if_dt64(val):  # pragma: no cover
     return val
 
 
@@ -479,7 +485,7 @@ def overload_box_if_dt64(val):
     return lambda val: val
 
 
-def get_array_if_series_or_index(data):
+def get_array_if_series_or_index(data):  # pragma: no cover
     return data
 
 
@@ -496,7 +502,7 @@ def overload_get_array_if_series_or_index(data):
     return lambda data: data
 
 
-def fix_none_index(I, n):
+def fix_none_index(I, n):  # pragma: no cover
     return I
 
 
@@ -511,7 +517,7 @@ def overload_fix_none_index(I, n):
     return lambda I, n: I
 
 
-def extract_index_array(A):
+def extract_index_array(A):  # pragma: no cover
     return np.arange(len(A))
 
 
@@ -524,7 +530,7 @@ def overload_extract_index_array(A):
 
     if isinstance(A, SeriesType):
 
-        def impl(A):
+        def impl(A):  # pragma: no cover
             index = bodo.hiframes.pd_series_ext.get_series_index(A)
             index_t = bodo.utils.conversion.fix_none_index(index, len(A))
             index_arr = bodo.utils.conversion.coerce_to_array(index_t)
@@ -535,7 +541,7 @@ def overload_extract_index_array(A):
     return lambda A: np.arange(len(A))
 
 
-def extract_index_array_tup(series_tup):
+def extract_index_array_tup(series_tup):  # pragma: no cover
     return tuple(extract_index_array(s) for s in series_tup)
 
 

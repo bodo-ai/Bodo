@@ -136,7 +136,9 @@ def cast_to_h5_dset(typingctx, tp=None):
     return h5dataset_type(tp), codegen
 
 
-h5_open = types.ExternalFunction("h5_open", h5file_type(types.voidptr, types.voidptr, types.int64))
+h5_open = types.ExternalFunction(
+    "h5_open", h5file_type(types.voidptr, types.voidptr, types.int64)
+)
 
 
 if bodo.config._has_h5py:
@@ -167,7 +169,7 @@ if bodo.config._has_h5py:
             rdcc_w0=None,
             track_order=None,
             _is_parallel=0,  # bodo internal flag
-        ):
+        ):  # pragma: no cover
             if mode is None:
                 mode = "a"  # TODO: support and test
             return h5_open(name._data, mode._data, _is_parallel)
@@ -189,7 +191,7 @@ def overload_h5_file(f):
 @overload_method(H5FileType, "keys")
 @overload_method(H5DatasetOrGroupType, "keys")
 def overload_h5_file_keys(obj_id):
-    def h5f_keys_impl(obj_id):
+    def h5f_keys_impl(obj_id):  # pragma: no cover
         obj_name_list = []
         nobjs = h5g_get_num_objs(obj_id)
         for i in range(nobjs):
@@ -215,7 +217,7 @@ def overload_h5_file_create_dataset(obj_id, name, shape=None, dtype=None, data=N
     typ_enum = np.int32(_numba_to_c_type_map[nb_dtype])
     ndim = np.int32(len(shape))
 
-    def impl(obj_id, name, shape=None, dtype=None, data=None):
+    def impl(obj_id, name, shape=None, dtype=None, data=None):  # pragma: no cover
         counts = np.asarray(shape)
         return h5_create_dset(
             unify_h5_id(obj_id), string_to_char_ptr(name), ndim, counts.ctypes, typ_enum
@@ -234,7 +236,7 @@ h5_create_group = types.ExternalFunction(
 def overload_h5_file_create_group(obj_id, name, track_order=None):
     assert is_overload_none(track_order)  # TODO: support?
 
-    def impl(obj_id, name, track_order=None):
+    def impl(obj_id, name, track_order=None):  # pragma: no cover
         return h5_create_group(unify_h5_id(obj_id), string_to_char_ptr(name))
 
     return impl
@@ -249,7 +251,7 @@ h5_open_dset_or_group_obj = types.ExternalFunction(
 def overload_getitem_file(in_f, in_idx):
     if in_f in (h5file_type, h5dataset_or_group_type) and in_idx == string_type:
 
-        def impl(in_f, in_idx):
+        def impl(in_f, in_idx):  # pragma: no cover
             return h5_open_dset_or_group_obj(unify_h5_id(in_f), in_idx._data)
 
         return impl
@@ -268,7 +270,7 @@ _h5g_get_num_objs = types.ExternalFunction("h5g_get_num_objs", types.int64(h5fil
 
 
 @numba.njit
-def h5g_get_num_objs(obj_id):
+def h5g_get_num_objs(obj_id):  # pragma: no cover
     return _h5g_get_num_objs(unify_h5_id(obj_id))
 
 
@@ -278,7 +280,7 @@ _h5g_get_objname_by_idx = types.ExternalFunction(
 
 
 @numba.njit
-def h5g_get_objname_by_idx(obj_id, ind):
+def h5g_get_objname_by_idx(obj_id, ind):  # pragma: no cover
     return std_str_to_unicode(_h5g_get_objname_by_idx(unify_h5_id(obj_id), ind))
 
 
@@ -297,7 +299,7 @@ _h5_read = types.ExternalFunction(
 
 
 @numba.njit
-def h5read(dset_id, ndim, starts, counts, is_parallel, out_arr):
+def h5read(dset_id, ndim, starts, counts, is_parallel, out_arr):  # pragma: no cover
     starts_ptr = tuple_to_ptr(starts)
     counts_ptr = tuple_to_ptr(counts)
     type_enum = bodo.libs.distributed_api.get_type_enum(out_arr)
@@ -327,7 +329,7 @@ _h5_write = types.ExternalFunction(
 
 
 @numba.njit
-def h5write(dset_id, ndim, starts, counts, is_parallel, out_arr):
+def h5write(dset_id, ndim, starts, counts, is_parallel, out_arr):  # pragma: no cover
     starts_ptr = tuple_to_ptr(starts)
     counts_ptr = tuple_to_ptr(counts)
     type_enum = bodo.libs.distributed_api.get_type_enum(out_arr)
@@ -366,7 +368,7 @@ _h5size = types.ExternalFunction("h5_size", types.int64(h5dataset_type, types.in
 
 
 @numba.njit
-def h5size(obj_id, dim_ind):
+def h5size(obj_id, dim_ind):  # pragma: no cover
     return _h5size(cast_to_h5_dset(obj_id), dim_ind)
 
 
@@ -374,7 +376,7 @@ sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
 
 
 @numba.njit
-def get_filter_read_indices(bool_arr):
+def get_filter_read_indices(bool_arr):  # pragma: no cover
     indices = bool_arr.nonzero()[0]
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
@@ -432,7 +434,9 @@ _h5read_filter = types.ExternalFunction(
 
 
 @numba.njit
-def h5read_filter(dset_id, ndim, starts, counts, is_parallel, out_arr, read_indices):
+def h5read_filter(
+    dset_id, ndim, starts, counts, is_parallel, out_arr, read_indices
+):  # pragma: no cover
     starts_ptr = tuple_to_ptr(starts)
     counts_ptr = tuple_to_ptr(counts)
     type_enum = bodo.libs.distributed_api.get_type_enum(out_arr)

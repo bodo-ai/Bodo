@@ -242,6 +242,7 @@ String handling:
 * :meth:`Series.str.endswith`
 * :meth:`Series.str.find`
 * :meth:`Series.str.get`
+* :meth:`Series.str.join`
 * :meth:`Series.str.len`
 * :meth:`Series.str.ljust`
 * :meth:`Series.str.lower`
@@ -343,7 +344,7 @@ Computations / Descriptive Stats:
 * :meth:`DataFrame.sum`
 * :meth:`DataFrame.std`
 * :meth:`DataFrame.var`
-* :meth:`DataFrame.nunique`
+* :meth:`DataFrame.nunique` (`dropna` argument not supported)
 
 
 Reindexing / Selection / Label manipulation:

@@ -768,7 +768,7 @@ class DistributedPass(object):
             in_arr_var = args[0]
             lhs_var = assign.target
             # TODO: compute inplace if input array is dead
-            def impl(A):
+            def impl(A):  # pragma: no cover
                 B = np.empty_like(A)
                 _func(A, B)
                 return B
@@ -949,7 +949,7 @@ class DistributedPass(object):
         return [assign]
 
     def _gen_is_root_and_cond(self, cond_var):
-        def f(cond):
+        def f(cond):  # pragma: no cover
             return cond & (bodo.libs.distributed_api.get_rank() == 0)
 
         f_block = compile_to_numba_ir(
@@ -988,7 +988,7 @@ class DistributedPass(object):
         lhs = assign.target
         n = args[0]
 
-        def f(lhs, n):
+        def f(lhs, n):  # pragma: no cover
             bodo.libs.distributed_api.dist_permutation_int(lhs, n)
 
         f_block = compile_to_numba_ir(
@@ -1579,7 +1579,7 @@ class DistributedPass(object):
                 start_var, out = self._get_dist_start_var(in_arr, equiv_set, avail_vars)
                 step = get_slice_step(self.typemap, self.func_ir, index_var)
 
-                def f(A, start, step):
+                def f(A, start, step):  # pragma: no cover
                     offset = abs(step - (start % step)) % step
                     return A[offset::step]
 
@@ -1795,7 +1795,7 @@ class DistributedPass(object):
                 prepend.append(ir.Assign(ir.Const(l_nest.start, loc), start_var, loc))
                 l_nest.start = start_var
 
-            def _fix_ind_bounds(start, stop):
+            def _fix_ind_bounds(start, stop):  # pragma: no cover
                 prefix = bodo.libs.distributed_api.dist_exscan(stop - start, _op)
                 # rank = bodo.libs.distributed_api.get_rank()
                 # print(rank, prefix, start, stop)
@@ -2044,7 +2044,7 @@ class DistributedPass(object):
         """get chunk size for size_var in 1D_Block distribution
         """
 
-        def impl(n, rank, n_pes):
+        def impl(n, rank, n_pes):  # pragma: no cover
             chunk = math.ceil(n / n_pes)
             return min(n, (rank + 1) * chunk) - min(n, rank * chunk)
 

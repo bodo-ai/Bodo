@@ -83,34 +83,49 @@ def test_df_int_no_null(request):
 
 
 def test_nullable_int():
-
     def impl(df):
         A = df.groupby("A").sum()
         return A
 
     def impl_select_colB(df):
-        A = df.groupby("A")['B'].sum()
+        A = df.groupby("A")["B"].sum()
         return A
 
     def impl_select_colE(df):
-        A = df.groupby("A")['E'].sum()
+        A = df.groupby("A")["E"].sum()
         return A
 
     def impl_select_colH(df):
-        A = df.groupby("A")['H'].sum()
+        A = df.groupby("A")["H"].sum()
         return A
 
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int8"),
-            "C": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int16"),
-            "D": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int32"),
-            "E": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int64"),
-            "F": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt8"),
-            "G": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt16"),
-            "H": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt32"),
-            "I": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt64"),
+            "B": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int8"
+            ),
+            "C": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int16"
+            ),
+            "D": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int32"
+            ),
+            "E": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int64"
+            ),
+            "F": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt8"
+            ),
+            "G": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt16"
+            ),
+            "H": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt32"
+            ),
+            "I": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="UInt64"
+            ),
         }
     )
 
@@ -130,13 +145,19 @@ def test_all_null_keys():
         return A
 
     df = pd.DataFrame(
-        {
-            "A": pd.Series(np.full(7, np.nan), dtype="Int64"),
-            "B": [2, 1, 1, 1, 2, 2, 1],
-        }
+        {"A": pd.Series(np.full(7, np.nan), dtype="Int64"), "B": [2, 1, 1, 1, 2, 2, 1]}
     )
 
     check_func(impl, (df,), sort_output=True)
+
+
+udf_in_df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [-8, 2, 3, 1, 5, 6, 7],
+            "C": [1.2, 2.4, np.nan, 2.2, 5.3, 3.3, 7.2],
+        }
+    )
 
 
 def test_agg():
@@ -148,15 +169,22 @@ def test_agg():
         A = df.groupby("A").agg(lambda x: x.max() - x.min())
         return A
 
-    df = pd.DataFrame(
-        {
-            "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [-8, 2, 3, 1, 5, 6, 7],
-            "C": [1.2, 2.4, np.nan, 2.2, 5.3, 3.3, 7.2],
-        }
-    )
+    # check_dtype=False since Bodo returns float for Series.min/max. TODO: fix min/max
+    check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
 
-    check_func(impl, (df,), sort_output=True)
+
+def test_agg_series_input():
+    """
+    Test Groupby.agg(): make sure input to UDF is a Series, not Array
+    """
+
+    def impl(df):
+        # using `count` since Arrays don't support it
+        A = df.groupby("A").agg(lambda x: x.count())
+        return A
+
+    # check_dtype=False since Pandas returns float64 for count sometimes for some reason
+    check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
 
 
 def test_agg_as_index():
@@ -181,7 +209,7 @@ def test_agg_as_index():
         }
     )
 
-    check_func(impl1, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True, check_dtype=False)
     check_func(impl2, (df,), sort_output=True, check_dtype=False)
 
 
@@ -195,7 +223,10 @@ def test_agg_select_col():
         return A
 
     def impl_str(df):
-        A = df.groupby("A")["B"].agg(lambda x: (x == "a").sum())
+        # using .values since the UDF won't be a single Parfor with Series string
+        # comparison because of nullable boolean array allocation after compute
+        # TODO: use boolean array allocation before compute
+        A = df.groupby("A")["B"].agg(lambda x: (x.values == "a").sum())
         return A
 
     def test_impl(n):
@@ -210,10 +241,10 @@ def test_agg_select_col():
     df_str = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
     )
-    check_func(impl_num, (df_int,), sort_output=True)
-    check_func(impl_num, (df_float,), sort_output=True)
-    check_func(impl_str, (df_str,), sort_output=True)
-    check_func(test_impl, (11,), sort_output=True)
+    check_func(impl_num, (df_int,), sort_output=True, check_dtype=False)
+    check_func(impl_num, (df_float,), sort_output=True, check_dtype=False)
+    check_func(impl_str, (df_str,), sort_output=True, check_dtype=False)
+    check_func(test_impl, (11,), sort_output=True, check_dtype=False)
 
 
 def test_agg_multi_udf():
@@ -251,7 +282,7 @@ def test_aggregate():
         }
     )
 
-    check_func(impl, (df,), sort_output=True)
+    check_func(impl, (df,), sort_output=True, check_dtype=False)
 
 
 def test_aggregate_as_index():
@@ -276,7 +307,7 @@ def test_aggregate_as_index():
         }
     )
 
-    check_func(impl1, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True, check_dtype=False)
     check_func(impl2, (df,), sort_output=True, check_dtype=False)
 
 
@@ -290,7 +321,7 @@ def test_aggregate_select_col():
         return A
 
     def impl_str(df):
-        A = df.groupby("A")["B"].aggregate(lambda x: (x == "a").sum())
+        A = df.groupby("A")["B"].aggregate(lambda x: (x.values == "a").sum())
         return A
 
     def test_impl(n):
@@ -305,10 +336,10 @@ def test_aggregate_select_col():
     df_str = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
     )
-    check_func(impl_num, (df_int,), sort_output=True)
-    check_func(impl_num, (df_float,), sort_output=True)
-    check_func(impl_str, (df_str,), sort_output=True)
-    check_func(test_impl, (11,), sort_output=True)
+    check_func(impl_num, (df_int,), sort_output=True, check_dtype=False)
+    check_func(impl_num, (df_float,), sort_output=True, check_dtype=False)
+    check_func(impl_str, (df_str,), sort_output=True, check_dtype=False)
+    check_func(test_impl, (11,), sort_output=True, check_dtype=False)
 
 
 def test_groupby_agg_const_dict():
@@ -421,6 +452,82 @@ def test_count_select_col():
     check_func(impl2, (11,), sort_output=True)
 
 
+
+def test_nunique_select_col():
+    """
+    Test Groupby.nunique() with explicitly selected one column. Boolean are broken in pandas so the
+    test is removed.
+    TODO: Implementation of Boolean test when pandas is corrected.
+    """
+
+    def impl1(df):
+        A = df.groupby("A")["B"].nunique()
+        return A
+
+    def impl2(n):
+        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+        A = df.groupby("A")["B"].nunique()
+        return A
+
+    df_int = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [-8, np.nan, 3, 1, np.nan, 6, 7],
+            "C": [1.1, 2.4, 3.1, -1.9, 2.3, 3.0, -2.4],
+        }
+    )
+    df_str = pd.DataFrame(
+        {
+            "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
+            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+            "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
+        }
+    )
+    df_bool = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [True, np.nan, False, True, np.nan, False, False],
+            "C": [True, True, False, True, True, False, False],
+        }
+    )
+    df_dt = pd.DataFrame(
+        {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
+    )
+    check_func(impl1, (df_int,), sort_output=True)
+    check_func(impl1, (df_str,), sort_output=True)
+#    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl1, (df_dt,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
+
+
+
+def test_nunique_select_col_missing_keys():
+    """
+    Test Groupby.nunique() with explicitly select one column. Some keys are missing
+    for this test
+    """
+
+    def impl1(df):
+        A = df.groupby("A")["B"].nunique()
+        return A
+
+    df_int = pd.DataFrame(
+        {
+            "A": [np.nan, 1, np.nan, 1, 2, 2, 1],
+            "B": [-8, np.nan, 3, 1, np.nan, 6, 7],
+        }
+    )
+    df_str = pd.DataFrame(
+        {
+            "A": [np.nan, "b", "b", "b", "aa", "aa", "b"],
+            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+        }
+    )
+    check_func(impl1, (df_int,), sort_output=True)
+    check_func(impl1, (df_str,), sort_output=True)
+
+
+
 def test_filtered_count():
     """
     Test Groupby.count() with filtered dataframe
@@ -444,6 +551,9 @@ def test_filtered_count():
     h_res = bodo_func(df, cond)
     pd.testing.assert_frame_equal(res[0], h_res[0])
     pd.testing.assert_frame_equal(res[1], h_res[1])
+
+
+
 
 
 def test_as_index_count():

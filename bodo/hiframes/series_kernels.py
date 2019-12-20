@@ -38,6 +38,17 @@ def _column_count_impl(A):  # pragma: no cover
     return res
 
 
+def _column_nunique_impl(A):  # pragma: no cover
+    numba.parfor.init_prange()
+    set_value = {}
+    for i in numba.parfor.internal_prange(len(A)):
+        if not bodo.libs.array_kernels.isna(A, i):
+            set_value[A[i]] = 0
+
+    res = len(set_value)
+    return res
+
+
 def _column_fillna_impl(A, B, fill):  # pragma: no cover
     for i in numba.parfor.internal_prange(len(A)):
         s = B[i]
@@ -104,7 +115,7 @@ def _series_dropna_str_alloc_impl(B, name):  # pragma: no cover
 
 
 # return the nan value for the type (handle dt64)
-def _get_nan(val):
+def _get_nan(val):  # pragma: no cover
     return np.nan
 
 
@@ -117,7 +128,7 @@ def _get_nan_overload(val):
     return lambda val: np.nan
 
 
-def _get_type_max_value(dtype):
+def _get_type_max_value(dtype):  # pragma: no cover
     return 0
 
 
@@ -140,7 +151,7 @@ def _get_type_max_value_overload(dtype):
     return lambda dtype: numba.targets.builtins.get_type_max_value(dtype)
 
 
-def _get_type_min_value(dtype):
+def _get_type_min_value(dtype):  # pragma: no cover
     return 0
 
 
@@ -167,7 +178,7 @@ def _get_type_min_value_overload(dtype):
 def indval_min(a1, a2):
     if a1 == types.bool_ and a2 == types.bool_:
 
-        def min_impl(a1, a2):
+        def min_impl(a1, a2):  # pragma: no cover
             if a1 > a2:
                 return a2
             return a1
@@ -179,7 +190,7 @@ def indval_min(a1, a2):
 def indval_max(a1, a2):
     if a1 == types.bool_ and a2 == types.bool_:
 
-        def max_impl(a1, a2):
+        def max_impl(a1, a2):  # pragma: no cover
             if a2 > a1:
                 return a2
             return a1
@@ -194,19 +205,6 @@ def _sum_handle_nan(s, count):  # pragma: no cover
     return s
 
 
-def _column_sum_impl_basic(A):  # pragma: no cover
-    numba.parfor.init_prange()
-    # TODO: fix output type
-    s = 0
-    for i in numba.parfor.internal_prange(len(A)):
-        val = A[i]
-        if not np.isnan(val):
-            s += val
-
-    res = s
-    return res
-
-
 def _column_sum_impl_count(A):  # pragma: no cover
     numba.parfor.init_prange()
     count = 0
@@ -218,19 +216,6 @@ def _column_sum_impl_count(A):  # pragma: no cover
             count += 1
 
     res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
-    return res
-
-
-def _column_prod_impl_basic(A):  # pragma: no cover
-    numba.parfor.init_prange()
-    # TODO: fix output type
-    s = 1
-    for i in numba.parfor.internal_prange(len(A)):
-        val = A[i]
-        if not np.isnan(val):
-            s *= val
-
-    res = s
     return res
 
 
@@ -251,20 +236,6 @@ def _mean_handle_nan(s, count):  # pragma: no cover
     return s
 
 
-def _column_mean_impl(A):  # pragma: no cover
-    numba.parfor.init_prange()
-    count = 0
-    s = 0
-    for i in numba.parfor.internal_prange(len(A)):
-        val = A[i]
-        if not np.isnan(val):
-            s += val
-            count += 1
-
-    res = bodo.hiframes.series_kernels._mean_handle_nan(s, count)
-    return res
-
-
 @numba.njit
 def _var_handle_nan(s, count):  # pragma: no cover
     if count <= 1:
@@ -272,86 +243,6 @@ def _var_handle_nan(s, count):  # pragma: no cover
     else:
         s = s / (count - 1)
     return s
-
-
-def _column_var_impl(A):  # pragma: no cover
-    numba.parfor.init_prange()
-    count_m = 0
-    m = 0
-    for i in numba.parfor.internal_prange(len(A)):
-        val = A[i]
-        if not np.isnan(val):
-            m += val
-            count_m += 1
-
-    numba.parfor.init_prange()
-    m = bodo.hiframes.series_kernels._mean_handle_nan(m, count_m)
-    s = 0
-    count = 0
-    for i in numba.parfor.internal_prange(len(A)):
-        val = A[i]
-        if not np.isnan(val):
-            s += (val - m) ** 2
-            count += 1
-
-    res = bodo.hiframes.series_kernels._var_handle_nan(s, count)
-    return res
-
-
-def _column_std_impl(A):  # pragma: no cover
-    var = bodo.hiframes.pd_series_ext.init_series(A).var()
-    return var ** 0.5
-
-
-def _column_min_impl(in_arr):  # pragma: no cover
-    numba.parfor.init_prange()
-    count = 0
-    s = bodo.hiframes.series_kernels._get_type_max_value(in_arr.dtype)
-    for i in numba.parfor.internal_prange(len(in_arr)):
-        val = in_arr[i]
-        if not bodo.libs.array_kernels.isna(in_arr, i):
-            s = min(s, val)
-            count += 1
-    res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
-    return res
-
-
-def _column_max_impl(in_arr):  # pragma: no cover
-    numba.parfor.init_prange()
-    count = 0
-    s = numba.targets.builtins.get_type_min_value(in_arr.dtype)
-    for i in numba.parfor.internal_prange(len(in_arr)):
-        val = in_arr[i]
-        if not bodo.libs.array_kernels.isna(in_arr, i):
-            s = max(s, val)
-            count += 1
-    res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
-    return res
-
-
-def _column_max_impl_dt64(in_arr):
-    numba.parfor.init_prange()
-    s = numba.targets.builtins.get_type_min_value(np.int64)
-    count = 0
-    for i in numba.parfor.internal_prange(len(in_arr)):
-        if not bodo.libs.array_kernels.isna(in_arr, i):
-            val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
-            s = max(s, val)
-            count += 1
-    return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
-
-
-def _column_min_impl_dt64(in_arr):
-    numba.parfor.init_prange()
-    s = numba.targets.builtins.get_type_max_value(np.int64)
-    count = 0
-    for i in numba.parfor.internal_prange(len(in_arr)):
-        if not bodo.libs.array_kernels.isna(in_arr, i):
-            val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
-            s = min(s, val)
-            count += 1
-    return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
-
 
 # TODO: handle index and name
 def _column_sub_impl_datetime_series_timestamp(in_arr, ts):  # pragma: no cover
@@ -378,28 +269,17 @@ def _column_fillna_alloc_impl(B, fill, index, name):  # pragma: no cover
 
 
 @numba.njit
-def lt_f(a, b):
+def lt_f(a, b):  # pragma: no cover
     return a < b
 
 
 @numba.njit
-def gt_f(a, b):
+def gt_f(a, b):  # pragma: no cover
     return a > b
 
 
 series_replace_funcs = {
-    "sum": _column_sum_impl_basic,
-    "prod": _column_prod_impl_basic,
-    "count": _column_count_impl,
-    "mean": _column_mean_impl,
-    "max": defaultdict(
-        lambda: _column_max_impl, [(types.NPDatetime("ns"), _column_max_impl_dt64)]
-    ),
-    "min": defaultdict(
-        lambda: _column_min_impl, [(types.NPDatetime("ns"), _column_min_impl_dt64)]
-    ),
-    "var": _column_var_impl,
-    "std": _column_std_impl,
+    "nunique": _column_nunique_impl,
     "fillna_alloc": _column_fillna_alloc_impl,
     "fillna_str_alloc": _series_fillna_str_alloc_impl,
     "dropna_float": _series_dropna_float_impl,

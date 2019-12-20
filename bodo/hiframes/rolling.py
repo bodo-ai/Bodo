@@ -172,7 +172,7 @@ def lower_rolling_fixed(context, builder, sig, args):
         exec(func_text, {"np": np}, loc_vars)
         kernel_func = numba.njit(loc_vars["kernel_func"])
 
-        def func(a, w, c, p):
+        def func(a, w, c, p):  # pragma: no cover
             return roll_fixed_apply(a, w, c, p, kernel_func)
 
     else:
@@ -239,7 +239,7 @@ def lower_rolling_variable(context, builder, sig, args):
         exec(func_text, {"np": np, "dropna": _dropna}, loc_vars)
         kernel_func = numba.njit(loc_vars["kernel_func"])
 
-        def func(a, o, w, c, p):
+        def func(a, o, w, c, p):  # pragma: no cover
             return roll_variable_apply(a, o, w, c, p, kernel_func)
 
     else:
@@ -556,7 +556,9 @@ def roll_var_linear_generic(
 
 
 @register_jitable(cache=True)
-def _get_var_recv_starts(on_arr, l_recv_t_buff, num_zero_starts, win):  # pragma: no cover
+def _get_var_recv_starts(
+    on_arr, l_recv_t_buff, num_zero_starts, win
+):  # pragma: no cover
     recv_starts = np.zeros(num_zero_starts, np.int64)
     halo_size = len(l_recv_t_buff)
     index = cast_dt64_arr_to_int(on_arr)
@@ -1426,7 +1428,7 @@ def _dropna(arr):  # pragma: no cover
     return A
 
 
-def alloc_shift(A):
+def alloc_shift(A):  # pragma: no cover
     return np.empty_like(A)
 
 
@@ -1437,7 +1439,7 @@ def alloc_shift_overload(A):
     return lambda A: np.empty(len(A), A.dtype)
 
 
-def shift_dtype(d):
+def shift_dtype(d):  # pragma: no cover
     return d
 
 

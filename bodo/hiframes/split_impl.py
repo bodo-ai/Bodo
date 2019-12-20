@@ -396,7 +396,7 @@ def get_array_ctypes_ptr(typingctx, arr_ctypes_t, ind_t=None):
 
 
 @numba.njit(no_cpython_wrapper=True)
-def get_split_view_index(arr, item_ind, str_ind):
+def get_split_view_index(arr, item_ind, str_ind):  # pragma: no cover
     start_index = getitem_c_arr(arr._index_offsets, item_ind)
     # TODO: check num strings and support NAN
     # end_index = getitem_c_arr(arr._index_offsets, item_ind+1)
@@ -410,7 +410,7 @@ def get_split_view_index(arr, item_ind, str_ind):
 
 
 @numba.njit(no_cpython_wrapper=True)
-def get_split_view_data_ptr(arr, data_start):
+def get_split_view_data_ptr(arr, data_start):  # pragma: no cover
     return get_array_ctypes_ptr(arr._data, data_start)
 
 
@@ -448,7 +448,7 @@ def str_arr_split_view_getitem_overload(A, ind):
     if A == string_array_split_view_type and isinstance(ind, types.Integer):
         kind = numba.unicode.PY_UNICODE_1BYTE_KIND
 
-        def _impl(A, ind):
+        def _impl(A, ind):  # pragma: no cover
             start_index = getitem_c_arr(A._index_offsets, ind)
             end_index = getitem_c_arr(A._index_offsets, ind + 1)
             n = end_index - start_index - 1
@@ -474,7 +474,7 @@ def str_arr_split_view_getitem_overload(A, ind):
 
     if A == string_array_split_view_type and ind == types.Array(types.bool_, 1, "C"):
 
-        def _impl(A, ind):
+        def _impl(A, ind):  # pragma: no cover
             n = len(A)
             if n != len(ind):
                 raise IndexError(

@@ -374,7 +374,7 @@ class SortedBuiltinLambda(CallableTemplate):
         return typer
 
 
-def convert_tup_to_rec(val):
+def convert_tup_to_rec(val):  # pragma: no cover
     return val
 
 

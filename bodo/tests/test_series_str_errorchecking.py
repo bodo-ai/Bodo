@@ -223,21 +223,14 @@ def test_rfind_start_end(test_sr):
 @pytest.mark.parametrize(
     "input",
     [
-        pd.Series(
-            [
-                "String",
-                (1, 2, 3),
-                ["a", "b", "c"],
-                123,
-                -456,
-                {1: "Hello", "2": "World"},
-            ]
-        )
+        pd.Series([1, 2, 3]),
+        # pd.Series([(1, 2, 3), (3, 4, 5)])  # TODO: support unboxing Series of tuples
     ],
 )
 def test_get_input(input):
     """
-    tests error for get with the input series not being ListStringArrayType
+    tests error for get with the input series not being ListStringArrayType or
+    StringArrayType
     """
 
     def impl(input):
@@ -258,6 +251,22 @@ def test_get_i(input):
 
     with pytest.raises(BodoError, match="expected an int object, not"):
         bodo.jit(impl)(input)
+
+
+# ------------------------------ getitem ------------------------------ #
+
+
+@pytest.mark.parametrize("ind", ["3", 1.2])
+def test_getitem_ind(ind):
+    """
+    tests error for getitem for index inputs other than slice and int
+    """
+
+    def impl(S, ind):
+        return S.str[ind]
+
+    with pytest.raises(BodoError, match="index input to Series.str"):
+        bodo.jit(impl)(pd.Series(["AA", "BB"]), ind)
 
 
 # ------------------------------ split() ------------------------------ #
@@ -325,19 +334,24 @@ def test_replace_args(test_sr):
 
 def test_replace_pat(test_sr):
     """
-    tests error for replace argument pat/repl being non-str type
+    tests error for replace argument pat/repl/flags being incorrect type
     """
 
     def impl(test_sr):
-        return test_sr.str.replace(pat=123, repl="asdf")
+        return test_sr.str.replace(pat=123, repl="asdf", flags=1)
 
     def impl2(test_sr):
-        return test_sr.str.replace(pat="asdf", repl=123)
+        return test_sr.str.replace(pat="asdf", repl=123, flags=1)
+
+    def impl3(test_sr):
+        return test_sr.str.replace(pat="asdf", repl="asdf", flags="x")
 
     with pytest.raises(BodoError, match="expected a string object"):
         bodo.jit(impl)(test_sr)
     with pytest.raises(BodoError, match="expected a string object"):
         bodo.jit(impl2)(test_sr)
+    with pytest.raises(BodoError, match="expected an int object"):
+        bodo.jit(impl3)(test_sr)
 
 
 # ------------------------------ contains() ------------------------------ #
@@ -358,16 +372,34 @@ def test_contains_args(test_sr):
         bodo.jit(impl2)(test_sr)
 
 
-def test_contains_pat(test_sr):
+def test_contains_flags(test_sr):
     """
-    tests error for contains argument pat being non-str type
+    tests error for contains argument flags being incorrect type
     """
 
     def impl(test_sr):
-        return test_sr.str.contains(pat=123)
+        return test_sr.str.contains("New", flags="x")
+
+    with pytest.raises(BodoError, match="expected an int object"):
+        bodo.jit(impl)(test_sr)
+
+
+# ------------------------------ count() ------------------------------ #
+def test_count_args(test_sr):
+    """
+    tests error for count argument pat, flags being incorrect type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.count(pat=123)
+
+    def impl2(test_sr):
+        return test_sr.str.count(pat="sdf", flags="x")
 
     with pytest.raises(BodoError, match="expected a string object"):
         bodo.jit(impl)(test_sr)
+    with pytest.raises(BodoError, match="expected an int object"):
+        bodo.jit(impl2)(test_sr)
 
 
 # ------------------------------ startswith() ------------------------------ #
@@ -418,4 +450,83 @@ def test_endswith_pat(test_sr):
 
     with pytest.raises(BodoError, match="expected a string object"):
         bodo.jit(impl)(test_sr)
+
+
+# ------------------------------ slice() ------------------------------ #
+def test_slice_args(test_sr):
+    """
+    tests error for slice arguments being non-int type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.slice("x", 1, 2)
+
+    def impl2(test_sr):
+        return test_sr.str.slice(1, "x", 2)
+
+    def impl3(test_sr):
+        return test_sr.str.slice(1, 2, "x")
+
+    with pytest.raises(BodoError, match="expected an int object, not"):
+        bodo.jit(impl)(test_sr)
+    with pytest.raises(BodoError, match="expected an int object, not"):
+        bodo.jit(impl2)(test_sr)
+    with pytest.raises(BodoError, match="expected an int object, not"):
+        bodo.jit(impl3)(test_sr)
+
+
+# ------------------------------ extract() ------------------------------ #
+def test_extract_args(test_sr):
+    """
+    tests error for extract arguments being non-int type
+    """
+
+    def impl(test_sr, pat, flags, expand):
+        return test_sr.str.extract(pat, 1, True)
+
+    def impl2(test_sr, pat, flags, expand):
+        return test_sr.str.extract("x", flags, True)
+
+    def impl3(test_sr, pat, flags, expand):
+        return test_sr.str.extract("x", 2, expand)
+
+    pat = "x"
+    flags = 1
+    expand = False
+    with pytest.raises(BodoError, match="argument should be a constant"):
+        bodo.jit(impl)(test_sr, pat, flags, expand)
+    with pytest.raises(BodoError, match="argument should be a constant"):
+        bodo.jit(impl2)(test_sr, pat, flags, expand)
+    with pytest.raises(BodoError, match="argument should be a constant"):
+        bodo.jit(impl3)(test_sr, pat, flags, expand)
+
+
+# ------------------------------ join() ------------------------------ #
+@pytest.mark.parametrize("input", [pd.Series([1, 2, 3])])
+def test_join_input(input):
+    """
+    tests error for join with the input series not being ListStringArrayType or
+    StringArrayType
+    """
+
+    def impl(input):
+        return input.str.join("-")
+
+    with pytest.raises(BodoError, match="only supports input type of"):
+        bodo.jit(impl)(input)
+
+
+@pytest.mark.parametrize(
+    "input", [pd.Series([["aaa", "bbb", "ccc"], ["ddd", "eee", "fff"]])]
+)
+def test_join_sep(input):
+    """
+    tests error for join's argument 'sep' being non-str type
+    """
+
+    def impl(input):
+        return input.str.join(1)
+
+    with pytest.raises(BodoError, match="expected a string object"):
+        bodo.jit(impl)(input)
 

@@ -62,11 +62,10 @@ def test_merge_on_invalid_index_left():
         bodo.jit(impl)(df1, df2)
 
 
-
 # Unfortunately this test fails already at compilation
 # and so we cannot have a clean error message here
 
-#def test_merge_unicity_of_column_names():
+# def test_merge_unicity_of_column_names():
 #    def impl(df1, df2):
 #        return df1.merge(df2, left_on="C", right_on="E", suffixes = ['a', 'a'])s
 #
@@ -348,7 +347,6 @@ def test_merge_sort():
         BodoError, match="sort parameter only supports default value False"
     ):
         bodo.jit(impl)(df1, df2)
-
 
 
 def test_merge_suffixes_number():

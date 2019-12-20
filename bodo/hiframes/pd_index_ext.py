@@ -198,7 +198,7 @@ _install_dti_date_fields()
 def overload_datetime_index_date(dti):
     # TODO: NaN
 
-    def impl(dti):
+    def impl(dti):  # pragma: no cover
         numba.parfor.init_prange()
         A = bodo.hiframes.pd_index_ext.get_index_data(dti)
         n = len(A)
@@ -227,7 +227,7 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
     if not is_overload_none(axis) or not is_overload_true(skipna):
         raise ValueError("Index.min(): axis and skipna arguments not supported yet")
 
-    def impl(dti, axis=None, skipna=True):
+    def impl(dti, axis=None, skipna=True):  # pragma: no cover
         numba.parfor.init_prange()
         in_arr = bodo.hiframes.pd_index_ext.get_index_data(dti)
         s = numba.targets.builtins.get_type_max_value(numba.types.int64)
@@ -249,7 +249,7 @@ def overload_datetime_index_max(dti, axis=None, skipna=True):
     if not is_overload_none(axis) or not is_overload_true(skipna):
         raise ValueError("Index.max(): axis and skipna arguments not supported yet")
 
-    def impl(dti, axis=None, skipna=True):
+    def impl(dti, axis=None, skipna=True):  # pragma: no cover
         numba.parfor.init_prange()
         in_arr = bodo.hiframes.pd_index_ext.get_index_data(dti)
         s = numba.targets.builtins.get_type_min_value(numba.types.int64)
@@ -314,7 +314,7 @@ def pd_datetimeindex_overload(
         copy=False,
         name=None,
         verify_integrity=True,
-    ):
+    ):  # pragma: no cover
         data_arr = bodo.utils.conversion.coerce_to_array(data)
         S = bodo.utils.conversion.convert_to_dt64ns(data_arr)
         return bodo.hiframes.pd_index_ext.init_datetime_index(S, name)
@@ -423,7 +423,7 @@ def overload_datetime_index_getitem(dti, ind):
     if isinstance(dti, DatetimeIndexType):
         if isinstance(ind, types.Integer):
 
-            def impl(dti, ind):
+            def impl(dti, ind):  # pragma: no cover
                 dti_arr = bodo.hiframes.pd_index_ext.get_index_data(dti)
                 dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dti_arr[ind])
                 return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
@@ -434,7 +434,7 @@ def overload_datetime_index_getitem(dti, ind):
         else:
             # slice, boolean array, etc.
             # TODO: other Index or Series objects as index?
-            def impl(dti, ind):
+            def impl(dti, ind):  # pragma: no cover
                 dti_arr = bodo.hiframes.pd_index_ext.get_index_data(dti)
                 name = bodo.hiframes.pd_index_ext.get_index_name(dti)
                 new_arr = dti_arr[ind]
@@ -445,7 +445,7 @@ def overload_datetime_index_getitem(dti, ind):
 
 # from pandas.core.arrays.datetimelike
 @numba.njit
-def validate_endpoints(closed):
+def validate_endpoints(closed):  # pragma: no cover
     """
     Check that the `closed` argument is among [None, "left", "right"]
 
@@ -479,7 +479,7 @@ def validate_endpoints(closed):
 
 
 @numba.njit
-def to_offset_value(freq):
+def to_offset_value(freq):  # pragma: no cover
     """Converts freq (string and integer) to offset nanoseconds.
     """
     if freq is None:
@@ -498,7 +498,7 @@ def _dummy_convert_none_to_int(val):
     """
     if is_overload_none(val):
 
-        def impl(val):
+        def impl(val):  # pragma: no cover
             assert 0
             return 0
 
@@ -544,7 +544,7 @@ def pd_date_range_overload(
         normalize=False,
         name=None,
         closed=None,
-    ):
+    ):  # pragma: no cover
 
         if freq is None and (start is None or end is None or periods is None):
             freq = "D"
@@ -839,7 +839,7 @@ def pd_timedelta_index_overload(
         copy=False,
         name=None,
         verify_integrity=None,
-    ):
+    ):  # pragma: no cover
         data_arr = bodo.utils.conversion.coerce_to_array(data)
         S = bodo.utils.conversion.convert_to_td64ns(data_arr)
         return bodo.hiframes.pd_index_ext.init_timedelta_index(S, name)
@@ -1019,7 +1019,7 @@ def overload_range_index_getitem(I, idx):
 
         if isinstance(idx, types.SliceType):
             # TODO: test
-            def impl(I, idx):
+            def impl(I, idx):  # pragma: no cover
                 slice_idx = numba.unicode._normalize_slice(idx, len(I))
                 start = I._start + I._step * slice_idx.start
                 stop = I._start + I._step * slice_idx.stop
@@ -1266,7 +1266,9 @@ def create_numeric_constructor(func, default_dtype):
     def overload_impl(data=None, dtype=None, copy=False, name=None, fastpath=None):
         if is_overload_false(copy):
             # if copy is False for sure, specialize to avoid branch
-            def impl(data=None, dtype=None, copy=False, name=None, fastpath=None):
+            def impl(
+                data=None, dtype=None, copy=False, name=None, fastpath=None
+            ):  # pragma: no cover
                 data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
                 data_res = bodo.utils.conversion.fix_arr_dtype(
                     data_arr, np.dtype(default_dtype)
@@ -1275,7 +1277,9 @@ def create_numeric_constructor(func, default_dtype):
 
         else:
 
-            def impl(data=None, dtype=None, copy=False, name=None, fastpath=None):
+            def impl(
+                data=None, dtype=None, copy=False, name=None, fastpath=None
+            ):  # pragma: no cover
                 data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
                 if copy:
                     data_arr = data_arr.copy()  # TODO: np.array() with copy
@@ -1469,7 +1473,7 @@ def overload_index_isna(I):
     if isinstance(I, RangeIndexType):
         # TODO: parallelize np.full in PA
         # return lambda I: np.full(len(I), False, np.bool_)
-        def impl(I):
+        def impl(I):  # pragma: no cover
             numba.parfor.init_prange()
             n = len(I)
             out_arr = np.empty(n, np.bool_)
@@ -1479,7 +1483,7 @@ def overload_index_isna(I):
 
         return impl
 
-    def impl(I):
+    def impl(I):  # pragma: no cover
         numba.parfor.init_prange()
         arr = bodo.hiframes.pd_index_ext.get_index_data(I)
         n = len(arr)
