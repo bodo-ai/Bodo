@@ -38,10 +38,13 @@ inline void convertArrowToDT64(const uint8_t* buff, uint8_t* out_data,
 void append_bits_to_vec(std::vector<bool>* null_vec, const uint8_t* null_buff,
                         int64_t null_size, int64_t offset, int64_t num_values);
 
-#define CHECK(expr, msg) if(!(expr)){std::cerr << "Error in parquet reader: " << msg << std::endl;}
+#define CHECK(expr, msg)                                              \
+    if (!(expr)) {                                                    \
+        std::cerr << "Error in parquet reader: " << msg << std::endl; \
+    }
 
-typedef void (*s3_opener_t)(const char*, std::shared_ptr<::arrow::io::RandomAccessFile>*);
-
+typedef void (*s3_opener_t)(const char*,
+                            std::shared_ptr<::arrow::io::RandomAccessFile>*);
 
 #define PQ_DT64_TYPE 3  // using INT96 value as dt64, TODO: refactor
 #define kNanosecondsInDay 86400000000000LL  // TODO: reuse from type_traits.h
@@ -79,7 +82,6 @@ int64_t pq_read_single_file(std::shared_ptr<FileReader> arrow_reader,
                             int64_t column_idx, uint8_t* out_data,
                             int out_dtype, uint8_t* out_nulls,
                             int64_t null_offset) {
-    
     std::shared_ptr<::arrow::ChunkedArray> chunked_array;
     arrow_reader->ReadColumn(column_idx, &chunked_array);
     if (chunked_array == NULL) return 0;
@@ -343,7 +345,6 @@ int64_t pq_read_string_single_file(std::shared_ptr<FileReader> arrow_reader,
                                    std::vector<uint32_t>* offset_vec,
                                    std::vector<uint8_t>* data_vec,
                                    std::vector<bool>* null_vec) {
-
     std::shared_ptr<::arrow::ChunkedArray> chunked_arr;
     arrow_reader->ReadColumn(column_idx, &chunked_arr);
     if (chunked_arr == NULL) return -1;
@@ -438,7 +439,6 @@ int pq_read_string_parallel_single_file(
             row_group_index);
         nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
     }
-
 
     uint32_t curr_offset = 0;
 
@@ -564,7 +564,8 @@ void pq_init_reader(const char* file_name,
         CHECK(s3_mod, "importing bodo.io.s3_reader module failed");
         PyObject* func_obj = PyObject_GetAttrString(s3_mod, "s3_open_file");
         CHECK(func_obj, "getting s3_reader func_obj failed");
-        s3_opener_t s3_open_file = (s3_opener_t)PyNumber_AsSsize_t(func_obj, NULL);
+        s3_opener_t s3_open_file =
+            (s3_opener_t)PyNumber_AsSsize_t(func_obj, NULL);
         // open Parquet file
         s3_open_file(f_name.c_str(), &file);
         // create Arrow reader
@@ -573,7 +574,8 @@ void pq_init_reader(const char* file_name,
     } else  // regular file system
     {
         std::unique_ptr<FileReader> arrow_reader;
-        FileReader::Make(pool, ParquetFileReader::OpenFile(f_name, false), &arrow_reader);
+        FileReader::Make(pool, ParquetFileReader::OpenFile(f_name, false),
+                         &arrow_reader);
         *a_reader = std::move(arrow_reader);
     }
     return;
@@ -584,7 +586,7 @@ void pq_init_reader(const char* file_name,
 std::shared_ptr<arrow::DataType> get_arrow_type(
     std::shared_ptr<FileReader> arrow_reader, int64_t column_idx) {
     // TODO: error checking
-    //GetSchema supported as of arrow version=0.15.1
+    // GetSchema supported as of arrow version=0.15.1
     std::shared_ptr<::arrow::Schema> col_schema;
     arrow_reader->GetSchema(&col_schema);
     return col_schema->field(column_idx)->type();
