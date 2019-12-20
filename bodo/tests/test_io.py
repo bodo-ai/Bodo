@@ -125,13 +125,14 @@ def test_pq_schema(datapath):
 
 
 def test_csv_bool1(datapath):
-    fname = datapath("csv_data_bool1.csv")
 
-    def test_impl():
+    def test_impl(fname):
         dtype = {"A": "int", "B": "bool", "C": "float"}
         return pd.read_csv(fname, names=dtype.keys(), dtype=dtype)
 
-    check_func(test_impl, ())
+    # passing file name as argument to exercize value-based dispatch
+    fname = datapath("csv_data_bool1.csv")
+    check_func(test_impl, (fname,))
 
 
 def test_csv_int_na1(datapath):
