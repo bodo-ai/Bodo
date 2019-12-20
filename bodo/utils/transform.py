@@ -7,7 +7,14 @@ import numpy as np
 import math
 import numba
 from numba import ir, ir_utils, types
-from numba.ir_utils import (compile_to_numba_ir, replace_arg_nodes, find_const, guard, GuardException, get_definition)
+from numba.ir_utils import (
+    compile_to_numba_ir,
+    replace_arg_nodes,
+    find_const,
+    guard,
+    GuardException,
+    get_definition,
+)
 import bodo
 from bodo.utils.utils import is_assign, is_expr
 from bodo.utils.typing import BodoError
@@ -93,7 +100,9 @@ def get_const_value(var, func_ir, err_msg, typemap=None, arg_types=None):
         var_def = guard(get_definition, func_ir, var)
         if isinstance(var_def, ir.Arg):
             # untyped passes can only pass arg_types, not typemap used above
-            if arg_types is not None and isinstance(arg_types[var_def.index], types.Literal):
+            if arg_types is not None and isinstance(
+                arg_types[var_def.index], types.Literal
+            ):
                 return arg_types[var_def.index].literal_value
             raise numba.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
 

@@ -47,7 +47,6 @@ def test_pq_spark_date(datapath):
 
 
 def test_pq_index(datapath):
-
     def test_impl(fname):
         return pd.read_parquet(fname)
 
@@ -125,7 +124,6 @@ def test_pq_schema(datapath):
 
 
 def test_csv_bool1(datapath):
-
     def test_impl(fname):
         dtype = {"A": "int", "B": "bool", "C": "float"}
         return pd.read_csv(fname, names=dtype.keys(), dtype=dtype)

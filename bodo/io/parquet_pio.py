@@ -116,7 +116,9 @@ class ParquetHandler(object):
                 "argument should be constant for Bodo to look at the file "
                 "at compile time or schema should be provided."
             )
-            file_name_str = get_const_value(file_name, self.func_ir, msg, arg_types=self.args)
+            file_name_str = get_const_value(
+                file_name, self.func_ir, msg, arg_types=self.args
+            )
             col_names, col_types, index_col = parquet_file_schema(file_name_str)
         else:
             col_names = list(table_types.keys())

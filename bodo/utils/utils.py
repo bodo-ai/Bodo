@@ -781,7 +781,9 @@ def find_str_const(func_ir, var, arg_types=None):
         require(isinstance(val, str))
         return val
     elif isinstance(var_def, ir.Arg):
-        if arg_types is not None and isinstance(arg_types[var_def.index], types.Literal):
+        if arg_types is not None and isinstance(
+            arg_types[var_def.index], types.Literal
+        ):
             val = arg_types[var_def.index].literal_value
             require(isinstance(val, str))
             return val

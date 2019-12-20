@@ -549,7 +549,6 @@ class UntypedPass(object):
         nodes = _compile_func_single_block(_build_f, (var,), ret_var)
         return nodes
 
-
     def _handle_np_where(self, assign, lhs, rhs):
         """replace np.where() calls with Bodo's version since Numba's typer assumes
         non-Array types like Series are scalars and produces wrong output type.

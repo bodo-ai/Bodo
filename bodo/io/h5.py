@@ -105,7 +105,9 @@ class H5_IO(object):
             val_index_var = (
                 val_def.index if val_def.op == "getitem" else val_def.index_var
             )
-            obj_name = find_str_const(self.func_ir, val_index_var, arg_types=self.arg_types)
+            obj_name = find_str_const(
+                self.func_ir, val_index_var, arg_types=self.arg_types
+            )
             obj_name_list.append(obj_name)
 
     def _get_h5_type_file(self, val_def, obj_name_list):
