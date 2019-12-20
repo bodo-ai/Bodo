@@ -57,6 +57,9 @@ public:
         this->fstream->read(s, size);
         return this->ok();
     }
+    ~LocalFileReader() {
+        if (fstream) delete fstream;
+    }
 };
 
 #undef CHECK
