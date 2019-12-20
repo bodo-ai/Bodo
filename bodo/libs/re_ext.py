@@ -356,7 +356,7 @@ def overload_match_expand(m, template):
     return _match_expand_impl
 
 
-@overload_method(ReMatchType, "group", strict=False)
+@overload_method(ReMatchType, "group")
 def overload_match_group(m, *args):
     # TODO: support cases where a group is not matched and None should be returned
     # for example: re.match(r"(\w+)? (\w+) (\w+)", " words word")
@@ -367,10 +367,16 @@ def overload_match_group(m, *args):
     #         out = m.group(*args)
     #     return out
 
+    # instead of the argument types, Numba passes a tuple with a StarArgTuple type at
+    # some point during lowering
+    if len(args) == 1 and isinstance(
+            args[0], (types.StarArgTuple, types.StarArgUniTuple)):
+        args = args[0].types
+
     # no argument case returns a string
     if len(args) == 0:
 
-        def _match_group_impl_zero(m):
+        def _match_group_impl_zero(m, *args):
             with numba.objmode(out="unicode_type"):
                 out = m.group()
             return out
@@ -380,7 +386,8 @@ def overload_match_group(m, *args):
     # one argument case returns a string
     if len(args) == 1:
 
-        def _match_group_impl_one(m, group1):
+        def _match_group_impl_one(m, *args):
+            group1 = args[0]
             with numba.objmode(out="unicode_type"):
                 out = m.group(group1)
             return out
@@ -392,7 +399,8 @@ def overload_match_group(m, *args):
     type_name = "tuple_str_{}".format(len(args))
     setattr(types, type_name, types.Tuple([string_type] * len(args)))
     arg_names = ", ".join("group{}".format(i + 1) for i in range(len(args)))
-    func_text = "def _match_group_impl(m, {}):\n".format(arg_names)
+    func_text = "def _match_group_impl(m, *args):\n"
+    func_text += "  ({}) = args\n".format(arg_names)
     func_text += "  with numba.objmode(out='{}'):\n".format(type_name)
     func_text += "    out = m.group({})\n".format(arg_names)
     func_text += "  return out\n"
