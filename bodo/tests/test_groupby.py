@@ -2,7 +2,6 @@
 import unittest
 import pandas as pd
 import numpy as np
-import pyarrow.parquet as pq
 import numba
 import bodo
 from bodo.tests.utils import (

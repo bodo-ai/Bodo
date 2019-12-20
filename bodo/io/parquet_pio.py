@@ -20,6 +20,7 @@ from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
 from bodo.utils.utils import unliteral_all, sanitize_varname
+from bodo.utils.typing import BodoError
 import bodo.ir.parquet_ext
 from bodo.transforms import distributed_pass
 
@@ -353,13 +354,27 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index):
     return arr_typ
 
 
-def parquet_file_schema(file_name):
+def get_parquet_dataset(file_name):
+    """create ParquetDataset instance from Parquet file name
+    """
     import pyarrow.parquet as pq
+    fs = None
+    if file_name.startswith("s3://"):
+        try:
+            import s3fs
+        except:
+            raise BodoError("Reading from s3 requires s3fs currently.")
+        fs = s3fs.S3FileSystem()
+
+    return pq.ParquetDataset(file_name, filesystem=fs)
+
+
+def parquet_file_schema(file_name):
 
     col_names = []
     col_types = []
 
-    pq_dataset = pq.ParquetDataset(file_name)
+    pq_dataset = get_parquet_dataset(file_name)
     col_names = pq_dataset.schema.names
     pa_schema = pq_dataset.schema.to_arrow_schema()
     index_col = None
@@ -382,7 +397,7 @@ def parquet_file_schema(file_name):
         index_col = index_col if isinstance(index_col, str) else None
 
     col_types = [
-        _get_numba_typ_from_pa_typ(pa_schema.field_by_name(c), c == index_col)
+        _get_numba_typ_from_pa_typ(pa_schema.field(c), c == index_col)
         for c in col_names
     ]
     # TODO: close file?
