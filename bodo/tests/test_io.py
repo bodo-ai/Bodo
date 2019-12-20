@@ -189,16 +189,16 @@ def test_write_csv_parallel_unicode():
 
 
 def test_h5_read_seq(datapath):
-    fname = datapath("lr.hdf5")
-
-    def test_impl():
+    def test_impl(fname):
         f = h5py.File(fname, "r")
         X = f["points"][:]
         f.close()
         return X
 
+    # passing function name as value to test value-based dispatch
+    fname = datapath("lr.hdf5")
     bodo_func = bodo.jit(test_impl)
-    np.testing.assert_allclose(bodo_func(), test_impl())
+    np.testing.assert_allclose(bodo_func(fname), test_impl(fname))
 
 
 def test_h5_read_const_infer_seq(datapath):
