@@ -56,7 +56,7 @@ from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 import bodo.hiframes.pd_rolling_ext
 from bodo.hiframes.pd_rolling_ext import RollingType
 from bodo.ir.aggregate import get_agg_func
-from bodo.utils.transform import compile_func_single_block, update_locs
+from bodo.utils.transform import compile_func_single_block, update_locs, get_const_value
 from bodo.libs.str_arr_ext import (
     string_array_type,
     get_utf8_size,
@@ -1483,7 +1483,7 @@ class DataFramePass(object):
         err_msg = (
             "df.query() expr arg should be constant string or argument to jit function"
         )
-        expr = self._get_const_value(expr_var, err_msg)
+        expr = get_const_value(expr_var, self.func_ir, err_msg, self.typemap)
 
         # parse expression
         parsed_expr, parsed_expr_str, used_cols = self._parse_query_expr(
@@ -2410,26 +2410,6 @@ class DataFramePass(object):
         df_var = call_def[1]
 
         return df_var
-
-    def _get_const_value(self, var, err_msg):
-        """Get constant value of a variable if possible, otherwise raise error.
-        If the variable is argument to the function, force recompilation with literal
-        typing of the argument.
-        """
-        # literal type
-        typ = self.typemap[var.name]
-        if isinstance(typ, types.Literal):
-            return typ.literal_value
-
-        try:
-            return find_const(self.func_ir, var)
-        except GuardException:
-            # if variable is argument, force literal
-            var_def = guard(get_definition, self.func_ir, var)
-            if isinstance(var_def, ir.Arg):
-                raise numba.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
-
-        raise bodo.utils.typing.BodoError(err_msg)
 
     def _get_const_tup(self, tup_var):
         tup_def = guard(get_definition, self.func_ir, tup_var)

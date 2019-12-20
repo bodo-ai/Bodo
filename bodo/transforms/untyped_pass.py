@@ -21,6 +21,7 @@ from numba.ir_utils import (
     remove_dels,
     replace_var_names,
     find_const,
+    GuardException,
     compile_to_numba_ir,
     replace_arg_nodes,
     find_callname,
