@@ -211,7 +211,7 @@ def unbox_int_array(typ, obj, c):
     mask_arr_struct = c.context.make_array(types.Array(types.bool_, 1, "C"))(
         c.context, c.builder, mask_arr
     )
-    bitmap_arr_struct = numba.targets.arrayobj._empty_nd_impl(
+    bitmap_arr_struct = bodo.utils.utils._empty_nd_impl(
         c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bytes]
     )
 

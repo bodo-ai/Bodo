@@ -138,7 +138,7 @@ def unbox_bool_array(typ, obj, c):
         with otherwise:
             # array is object
             # allocate data
-            bool_arr.data = numba.targets.arrayobj._empty_nd_impl(
+            bool_arr.data = bodo.utils.utils._empty_nd_impl(
                 c.context, c.builder, types.Array(types.bool_, 1, "C"), [n]
             )._getvalue()
             # allocate bitmap
@@ -146,7 +146,7 @@ def unbox_bool_array(typ, obj, c):
                 c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
                 lir.Constant(lir.IntType(64), 8),
             )
-            bool_arr.null_bitmap = numba.targets.arrayobj._empty_nd_impl(
+            bool_arr.null_bitmap = bodo.utils.utils._empty_nd_impl(
                 c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bytes]
             )._getvalue()
             # get array pointers for data and bitmap

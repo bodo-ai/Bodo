@@ -23,7 +23,6 @@ from numba.extending import (
 from numba import cgutils
 from numba.targets.arrayobj import (
     make_array,
-    _empty_nd_impl,
     store_item,
     basic_indexing,
 )
@@ -292,7 +291,7 @@ def unbox_datetime_date_array(typ, val, c):
     n = object_length(c, val)
     # cgutils.printf(c.builder, "len %d\n", n)
     arr_typ = types.Array(types.intp, 1, "C")
-    out_arr = _empty_nd_impl(c.context, c.builder, arr_typ, [n])
+    out_arr = bodo.utils.utils._empty_nd_impl(c.context, c.builder, arr_typ, [n])
 
     with cgutils.for_range(c.builder, n) as loop:
         dt_date = sequence_getitem(c, val, loop.index)
