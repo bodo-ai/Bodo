@@ -47,7 +47,7 @@ from bodo.utils.utils import (
 )
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
+from bodo.utils.utils import _numba_to_c_type_map, unliteral_all, incref
 from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from bodo.utils.utils import build_set
@@ -89,7 +89,8 @@ AggFuncTemplateStruct = namedtuple(
     ["var_typs", "init_func", "update_all_func", "combine_all_func", "eval_all_func"],
 )
 
-AggFuncStruct = namedtuple("AggFuncStruct", ["func", "ftype", "builtin"])
+AggFuncStruct = namedtuple("AggFuncStruct", ["func", "ftype"])
+
 
 supported_agg_funcs = [
     "sum",
@@ -118,17 +119,14 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None):
     if func_name == "var":
         func = _column_var_impl_linear
         func.ftype = supported_agg_funcs.index(func_name)
-        func.builtin = True
         return func
     if func_name == "std":
         func = _column_std_impl_linear
         func.ftype = supported_agg_funcs.index(func_name)
-        func.builtin = True
         return func
     if func_name in supported_agg_funcs[:-2]:
         func = getattr(series_impl, "overload_series_" + func_name)(series_type)
         func.ftype = supported_agg_funcs.index(func_name)
-        func.builtin = True
         return func
 
     assert func_name in ["agg", "aggregate"]
@@ -150,10 +148,12 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None):
         func = [guard(find_const, func_ir, v[1]) for v in agg_func.items]
         # TODO: support multi-function in C++ backend
         # ftype = [supported_agg_funcs.index(f) for f in func]
-        # return AggFuncStruct(func, ftype, True)
+        # return AggFuncStruct(func, ftype)
         return [get_agg_func(func_ir, f, rhs, series_type) for f in func]
 
-    return _get_agg_code(agg_func)
+    func = _get_agg_code(agg_func)
+    func.ftype = supported_agg_funcs.index("agg")
+    return func
 
 
 def _get_agg_code(agg_func):
@@ -684,12 +684,9 @@ def agg_distributed_run(
         )
         glbs.update({"group_cumsum": group_cumsum})
     else:
-        offload = (
-            agg_node.pivot_arr is None
-            and hasattr(agg_node.agg_func, "builtin")
-            and agg_node.agg_func.builtin
-        )
-        if not offload:
+        offload = agg_node.pivot_arr is None
+        agg_func_struct = None
+        if not offload or isinstance(agg_node.agg_func, list) or agg_node.agg_func.ftype == supported_agg_funcs.index('agg'):
             agg_func_struct = get_agg_func_struct(
                 agg_node.agg_func,
                 in_col_typs,
@@ -701,19 +698,17 @@ def agg_distributed_run(
                 agg_node.is_crosstab,
             )
 
-        var_typs = None
-        if not offload:
-            var_typs = agg_func_struct.var_typs
         top_level_func = gen_top_level_agg_func(
             agg_node.key_names,
             return_key,
-            var_typs,
+            in_col_typs,
             out_col_typs,
             agg_node.df_in_vars.keys(),
             agg_node.df_out_vars.keys(),
             agg_node.agg_func,
             parallel,
             offload,
+            agg_func_struct,
         )
         glbs.update(
             {
@@ -1230,16 +1225,245 @@ def _get_np_dtype(t):
     return "np.{}".format(t)
 
 
+def gen_update_cb(
+    agg_func_struct, n_keys, data_in_typs, out_data_typs, red_var_typs
+):
+    """
+    Generates a Python function (to be compiled into a numba cfunc) which
+    does the "update" step of an agg operation. The code is for a specific agg
+    operation. The update step performs the initial local aggregation.
+    """
+
+    n_red_vars = len(red_var_typs)
+    n_data_cols = len(data_in_typs)
+
+    # at what column index number do redvars start
+    redvar_idx_offset = n_keys + len(out_data_typs)
+
+    func_text = "def update_local(in_table, out_table, row_to_group):\n"
+
+    # get redvars data types
+    func_text += "    data_redvar_dummy = ({}{})\n".format(
+        ",".join(["np.empty(1, {})".format(_get_np_dtype(t)) for t in red_var_typs]),
+        "," if len(red_var_typs) == 1 else "",
+    )
+
+    # get input data types
+    data_in_dummy_text = []
+    for t in data_in_typs:
+        if t == string_array_type:
+            data_in_dummy_text.append("pre_alloc_string_array(1, 1)")
+        else:
+            data_in_dummy_text.append("np.empty(1, {})".format(_get_np_dtype(t.dtype)))
+    func_text += "    data_in_dummy = ({}{})\n".format(
+        ",".join(data_in_dummy_text),
+        "," if len(data_in_typs) == 1 else "",
+    )
+
+    func_text += "\n    # initialize redvar cols\n"
+    func_text += "    init_vals = __init_func()\n"
+    for i in range(n_red_vars):
+        func_text += "    redvar_arr_{} = info_to_array(info_from_table(out_table, {}), data_redvar_dummy[{}])\n".format(
+            i, redvar_idx_offset + i, i
+        )
+        # incref needed so that arrays aren't deleted after this function exits
+        func_text += "    incref(redvar_arr_{})\n".format(i)
+        func_text += "    redvar_arr_{}.fill(init_vals[{}])\n".format(i, i)
+    func_text += "    redvars = ({}{})\n".format(
+        ",".join(["redvar_arr_{}".format(i) for i in range(n_red_vars)]),
+        "," if n_red_vars == 1 else "",
+    )
+
+    func_text += "\n"
+    for i in range(n_data_cols):
+        func_text += "    data_in_{} = info_to_array(info_from_table(in_table, {}), data_in_dummy[{}])\n".format(
+            i, i + n_keys, i
+        )
+        # incref needed so that arrays aren't deleted after this function exits
+        func_text += "    incref(data_in_{})\n".format(i)
+    func_text += "    data_in = ({}{})\n".format(
+        ",".join(["data_in_{}".format(i) for i in range(n_data_cols)]),
+        "," if n_data_cols == 1 else "",
+    )
+
+    func_text += "\n"
+    func_text += "    for i in range(len(data_in_0)):\n"
+    func_text += "        w_ind = row_to_group[i]\n"
+    func_text += "        if w_ind != -1:\n"
+    func_text += (
+        "            __update_redvars(redvars, data_in, w_ind, i, pivot_arr=None)\n"
+    )
+
+    # print(func_text)
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "np": np,
+            "info_to_array": info_to_array,
+            "info_from_table": info_from_table,
+            "incref": incref,
+            "pre_alloc_string_array": pre_alloc_string_array,
+            "__init_func": agg_func_struct.init_func,
+            "__update_redvars": agg_func_struct.update_all_func,
+        },
+        loc_vars,
+    )
+    return loc_vars["update_local"]
+
+
+def gen_combine_cb(
+    agg_func_struct, n_keys, out_data_typs, red_var_typs
+):
+    """
+    Generates a Python function (to be compiled into a numba cfunc) which
+    does the "combine" step of an agg operation. The code is for a specific agg
+    operation. The combine step combines the received aggregated data from
+    other processes.
+    """
+
+    n_red_vars = len(red_var_typs)
+    redvar_idx_offset = n_keys + len(out_data_typs)
+
+    func_text = "def combine(in_table, out_table, row_to_group):\n"
+
+    # get redvars data types
+    func_text += "    data_redvar_dummy = ({}{})\n".format(
+        ",".join(["np.empty(1, {})".format(_get_np_dtype(t)) for t in red_var_typs]),
+        "," if len(red_var_typs) == 1 else "",
+    )
+
+    func_text += "\n    # initialize redvar cols\n"
+    func_text += "    init_vals = __init_func()\n"
+    for i in range(n_red_vars):
+        func_text += "    redvar_arr_{} = info_to_array(info_from_table(out_table, {}), data_redvar_dummy[{}])\n".format(
+            i, redvar_idx_offset + i, i
+        )
+        # incref needed so that arrays aren't deleted after this function exits
+        func_text += "    incref(redvar_arr_{})\n".format(i)
+        func_text += "    redvar_arr_{}.fill(init_vals[{}])\n".format(i, i)
+    func_text += "    redvars = ({}{})\n".format(
+        ",".join(["redvar_arr_{}".format(i) for i in range(n_red_vars)]),
+        "," if n_red_vars == 1 else "",
+    )
+
+    func_text += "\n"
+    for i in range(n_red_vars):
+        func_text += "    recv_redvar_arr_{} = info_to_array(info_from_table(in_table, {}), data_redvar_dummy[{}])\n".format(
+            i, redvar_idx_offset + i, i
+        )
+        # incref needed so that arrays aren't deleted after this function exits
+        func_text += "    incref(recv_redvar_arr_{})\n".format(i)
+    func_text += "    recv_redvars = ({}{})\n".format(
+        ",".join(["recv_redvar_arr_{}".format(i) for i in range(n_red_vars)]),
+        "," if n_red_vars == 1 else "",
+    )
+
+    func_text += "\n"
+    func_text += "    for i in range(len(recv_redvar_arr_0)):\n"
+    func_text += "        w_ind = row_to_group[i]\n"
+    func_text += (
+        "        __combine_redvars(redvars, recv_redvars, w_ind, i, pivot_arr=None)\n"
+    )
+
+    # print(func_text)
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "np": np,
+            "info_to_array": info_to_array,
+            "info_from_table": info_from_table,
+            "incref": incref,
+            "__init_func": agg_func_struct.init_func,
+            "__combine_redvars": agg_func_struct.combine_all_func,
+        },
+        loc_vars,
+    )
+    return loc_vars["combine"]
+
+
+def gen_eval_cb(agg_func_struct, n_keys, out_data_typs, red_var_typs):
+    """
+    Generates a Python function (to be compiled into a numba cfunc) which
+    does the "eval" step of an agg operation. The code is for a specific agg
+    operation. The eval step writes the final result to the output columns
+    for each group.
+    """
+
+    n_red_vars = len(red_var_typs)
+    n_data_cols = len(out_data_typs)
+
+    func_text = "def eval(table):\n"
+    func_text += "    data_redvar_dummy = ({}{})\n".format(
+        ",".join(["np.empty(1, {})".format(_get_np_dtype(t)) for t in red_var_typs]),
+        "," if len(red_var_typs) == 1 else "",
+    )
+
+    func_text += "    out_data_dummy = ({}{})\n".format(
+        ",".join(
+            ["np.empty(1, {})".format(_get_np_dtype(t.dtype)) for t in out_data_typs]
+        ),
+        "," if len(out_data_typs) == 1 else "",
+    )
+
+    for i in range(n_red_vars):
+        func_text += "    redvar_arr_{} = info_to_array(info_from_table(table, {}), data_redvar_dummy[{}])\n".format(
+            i, i + n_keys + n_data_cols, i
+        )
+        # incref needed so that arrays aren't deleted after this function exits
+        func_text += "    incref(redvar_arr_{})\n".format(i)
+    func_text += "    redvars = ({}{})\n".format(
+        ",".join(["redvar_arr_{}".format(i) for i in range(n_red_vars)]),
+        "," if n_red_vars == 1 else "",
+    )
+
+    func_text += "\n"
+    for i in range(n_data_cols):
+        func_text += "    data_out_{} = info_to_array(info_from_table(table, {}), out_data_dummy[{}])\n".format(
+            i, i + n_keys, i
+        )
+        # incref needed so that arrays aren't deleted after this function exits
+        func_text += "    incref(data_out_{})\n".format(i)
+    func_text += "    data_out = ({}{})\n".format(
+        ",".join(["data_out_{}".format(i) for i in range(n_data_cols)]),
+        "," if n_data_cols == 1 else "",
+    )
+
+    func_text += "\n"
+    func_text += "    for i in range(len(data_out_0)):\n"
+    func_text += "        __eval_res(redvars, data_out, i)\n"
+
+    # print(func_text)
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "np": np,
+            "info_to_array": info_to_array,
+            "info_from_table": info_from_table,
+            "incref": incref,
+            "__eval_res": agg_func_struct.eval_all_func,
+        },
+        loc_vars,
+    )
+    return loc_vars["eval"]
+
+
 def gen_top_level_agg_func(
     key_names,
     return_key,
-    red_var_typs,
+    in_col_typs,
     out_col_typs,
     in_col_names,
     out_col_names,
     agg_func,
     parallel,
     offload,
+    agg_func_struct,
 ):
     """create the top level aggregation function by generating text
     """
@@ -1259,6 +1483,8 @@ def gen_top_level_agg_func(
     return_key_p = "True" if return_key else "None"
 
     if not offload:
+        red_var_typs = agg_func_struct.var_typs
+
         func_text = "def agg_top({}{}, pivot_arr):\n".format(key_args, in_args)
         func_text += "    data_redvar_dummy = ({}{})\n".format(
             ",".join(
@@ -1319,16 +1545,95 @@ def gen_top_level_agg_func(
                     out_name, _get_np_dtype(out_typs[i])
                 )
 
-        # groupby and aggregate
-        if agg_func.ftype == supported_agg_funcs.index('nunique'):
-            func_text += "    out_table = groupby_and_aggregate_nunique(table, {}, {})\n".format(n_keys, parallel)
+        if isinstance(agg_func, list):
+            ftype = supported_agg_funcs.index("agg")
+            n_funcs = len(agg_func)
         else:
-            func_text += "    out_table = groupby_and_aggregate(table, {}, {}, {})\n".format(n_keys, agg_func.ftype, parallel)
+            ftype = agg_func.ftype
+            n_funcs = 1
+
+        if agg_func_struct is not None:
+            red_var_typs = agg_func_struct.var_typs
+
+            # generate update, combine and eval functions for this agg
+            # operation and compile them to numba cfuncs, to be called from C++
+            c_sig = types.void(
+                types.voidptr, types.voidptr, types.CPointer(types.int64)
+            )
+            cpp_cb_update = numba.cfunc(c_sig, nopython=True)(
+                gen_update_cb(
+                    agg_func_struct, n_keys, in_col_typs, out_col_typs, red_var_typs
+                )
+            )
+            cpp_cb_combine = numba.cfunc(c_sig, nopython=True)(
+                gen_combine_cb(agg_func_struct, n_keys, out_col_typs, red_var_typs)
+            )
+            cpp_cb_eval = numba.cfunc("void(voidptr)", nopython=True)(
+                gen_eval_cb(agg_func_struct, n_keys, out_col_typs, red_var_typs)
+            )
+
+            # generate a dummy (empty) output table with correct type info of
+            # for keys, output columns and reduction variables so that C++
+            # library can allocate output tables
+            key_names_dummy = tuple("key_{}_dummy".format(c) for c in key_names)
+            for key_name_dummy in key_names_dummy:
+                func_text += "    {} = np.empty(1, {}.dtype)\n".format(
+                    key_name_dummy, key_name_dummy[:-6]
+                )
+            out_names_dummy = tuple([out_name + "_dummy" for out_name in out_names])
+
+            redvar_names = tuple(
+                ["data_redvar_dummy_" + str(i) for i in range(len(red_var_typs))]
+            )
+            for i, t in enumerate(red_var_typs):
+                func_text += "    data_redvar_dummy_{} = np.empty(1, {})\n".format(
+                    i, _get_np_dtype(t)
+                )
+
+            dummy_arrays = (
+                tuple("key_{}_dummy".format(c) for c in key_names)
+                + out_names_dummy
+                + redvar_names
+            )
+
+            func_text += "    out_info_list_dummy = [{}]\n".format(
+                ", ".join("array_to_info({})".format(a) for a in dummy_arrays)
+            )
+            func_text += (
+                "    out_table_dummy = arr_info_list_to_table(out_info_list_dummy)\n"
+            )
+
+            # call C++ groupby
+            func_text += (
+                "    out_table = groupby_and_aggregate(table, {},"
+                " {}, {}, {}, {}, {}, {}, out_table_dummy)\n".format(
+                    n_keys,
+                    ftype,
+                    n_funcs,
+                    parallel,
+                    cpp_cb_update.address,
+                    cpp_cb_combine.address,
+                    cpp_cb_eval.address,
+                )
+            )
+        else:
+            if agg_func.ftype == supported_agg_funcs.index('nunique'):
+                func_text += "    out_table = groupby_and_aggregate_nunique(table, {}, {})\n".format(n_keys, parallel)
+            else:
+                # non-agg operations don't use dummy output table, so just
+                # create an empty one-column table
+                func_text += "    out_table_dummy = arr_info_list_to_table([array_to_info(np.empty(1))])\n"
+                # call C++ groupby
+                func_text += (
+                    "    out_table = groupby_and_aggregate(table, {},"
+                    " {}, {}, {}, 0, 0, 0, out_table_dummy)\n".format(
+                        n_keys, ftype, n_funcs, parallel
+                    )
+                )
 
         # extract arrays from output table
         for i in range(len(out_names)):
             out_name = out_names[i]
-            in_name = in_names[i]
             func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
                 out_name, i + n_keys, out_name + "_dummy"
             )

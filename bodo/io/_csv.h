@@ -31,7 +31,7 @@ extern "C" PyObject* csv_file_chunk_reader(const char* fname, bool is_parallel,
  * @return     HPATIO file-like object to read the owned chunk through
  *pandas.read_csv
  **/
-extern "C" PyObject* csv_string_chunk_reader(const std::string* str,
-                                             bool is_parallel);
+// extern "C" PyObject* csv_string_chunk_reader(const std::string * str, bool
+// is_parallel);
 
 #endif  // _CSV_H_INCLUDED

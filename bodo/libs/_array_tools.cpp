@@ -1739,6 +1739,7 @@ struct Bodo_FTypes {
         prod,
         var,
         std,
+        agg,
         num_funcs,  // num_funcs is used to know how many functions up to this
                     // point
         mean_eval,
@@ -1746,6 +1747,54 @@ struct Bodo_FTypes {
         var_eval,
         std_eval
     };
+};
+
+/**
+ * Function pointer for groupby update and combine operations that are
+ * executed in JIT-compiled code (also see agginfo_t).
+ *
+ * @param input table
+ * @param output table
+ * @param row to group mapping (tells to which group -row in output table-
+          the row i of input table goes to)
+ */
+typedef void (*agg_table_op_fn)(table_info* in_table, table_info* out_table,
+                                int64_t* row_to_group);
+/**
+ * Function pointer for groupby eval operation that is executed in JIT-compiled
+ * code (also see agginfo_t).
+ *
+ * @param table containing the output columns and reduction variables columns
+ */
+typedef void (*agg_eval_fn)(table_info*);
+
+/*
+ * This struct stores info that is currently used for groupby.agg() where
+ * code such as user-defined functions is JIT-compiled and used for
+ * aggregation. Such JIT-compiled code will be invoked by the C++ library
+ * via function pointers.
+ */
+struct agginfo_t {
+    /*
+     * This empty table is used to tell the C++ library the types to use
+     * to allocate the output table (also has the type for redvar columns)
+     */
+    table_info* out_table_dummy;
+    /*
+     * Function pointer to "update" code which performs the initial
+     * local groupby and aggregation.
+     */
+    agg_table_op_fn update;
+    /*
+     * Function pointer to "combine" code which combines the results
+     * after shuffle.
+     */
+    agg_table_op_fn combine;
+    /*
+     * Function pointer to "eval" code which performs post-processing and
+     * sets the final output value for each group.
+     */
+    agg_eval_fn eval;
 };
 
 /**
@@ -2833,7 +2882,8 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
 }
 
 /**
- * Create temporary auxiliary columns needed by mean, var and std
+ * Create temporary columns needed by mean, var, std and agg (to store
+ * reduction variables).
  *
  * @param[in,out] table output columns. The created columns are added to this
  * vector
@@ -2843,13 +2893,15 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
  * create
  * @param function identifier
  * @param[in,out] stores the created auxiliary columns
+ * @param info structure for agg operation
  */
-void create_auxiliary_cols(std::vector<array_info*>& out_cols, int num_keys,
-                           int ncols, int num_groups, int ftype,
-                           std::vector<std::vector<array_info*>>& aux_cols) {
+void create_auxiliary_cols(std::vector<array_info*>& out_cols, int64_t num_keys,
+                           int64_t ncols, int64_t num_groups, int ftype,
+                           std::vector<std::vector<array_info*>>& aux_cols,
+                           const agginfo_t& agginfo) {
     switch (ftype) {
         case Bodo_FTypes::mean:
-            for (int i = num_keys; i < ncols; i++) {
+            for (int64_t i = num_keys; i < ncols; i++) {
                 array_info* aux_col =
                     alloc_array(num_groups, 1, bodo_array_type::NUMPY,
                                 Bodo_CTypes::UINT64, 0);
@@ -2862,7 +2914,7 @@ void create_auxiliary_cols(std::vector<array_info*>& out_cols, int num_keys,
             return;
         case Bodo_FTypes::var:
         case Bodo_FTypes::std:
-            for (int i = num_keys; i < ncols; i++) {
+            for (int64_t i = num_keys; i < ncols; i++) {
                 array_info* count_col =
                     alloc_array(num_groups, 1, bodo_array_type::NUMPY,
                                 Bodo_CTypes::UINT64, 0);
@@ -2883,6 +2935,13 @@ void create_auxiliary_cols(std::vector<array_info*>& out_cols, int num_keys,
                 aggfunc_output_initialize(count_col, Bodo_FTypes::count);
                 aggfunc_output_initialize(mean_col, Bodo_FTypes::count);
                 aggfunc_output_initialize(m2_col, Bodo_FTypes::count);
+            }
+            return;
+        case Bodo_FTypes::agg:
+            for (int64_t i=ncols; i < agginfo.out_table_dummy->ncols(); i++) {
+                bodo_array_type::arr_type_enum arr_type = agginfo.out_table_dummy->columns[i]->arr_type;
+                Bodo_CTypes::CTypeEnum dtype = agginfo.out_table_dummy->columns[i]->dtype;
+                out_cols.push_back(alloc_array(num_groups, 1, arr_type, dtype, 0));
             }
             return;
         default:
@@ -2934,63 +2993,76 @@ void get_groupby_output_dtype(int ftype,
 
 
 /**
- * Groups the rows in a table based on key, applies a function to the rows in
- * each group, writes the result to a new output table containing one row per
- * group.
+ * Allocate output tables (intermediary or final) for groupby.
  *
  * @param input table
- * @param number of key columns in the table
- * @param number of data columns
- * @param function to apply
+ * @param number of keys in input table
+ * @param total number of output columns to allocate
+ * @param number of groups (number of rows in output table)
+ * @param groupby aggregation function type
+ * @param info structure for agg operation
+ * @param vector that maps group number to the first row in input table
+ *        that belongs to that group
+ * @return the newly allocated output table and columns
  */
-table_info* groupby_and_aggregate_local(table_info& in_table, int64_t num_keys,
-                                        int64_t num_data_cols, int ftype,
-                                        bool check_for_null_keys) {
-    const int64_t ncols = in_table.ncols();
-    std::vector<int64_t> inrows_to_group;
-    std::vector<int64_t> group_to_first_row;
-    in_table.num_keys = num_keys;
-    get_group_info(in_table, inrows_to_group, group_to_first_row,
-                   check_for_null_keys);
-    int64_t num_groups = group_to_first_row.size();
-
-    // create output table with *uninitialized* columns
-    // output table has one row per group
-    std::vector<array_info*> out_cols(ncols);
-    for (int64_t i = 0; i < ncols; i++) {
-        array_info* in_arr = in_table[i];
-        bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
-        Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
-        // calling this modifies arr_type and dtype
-        get_groupby_output_dtype(ftype, arr_type, dtype, i < num_keys);
-        if (arr_type == bodo_array_type::STRING) {
-            // this is a special case: key columns containing strings.
-            // in this case, output col will have num_groups rows
-            // containing the string for each group
-            assert(i < num_keys);  // assert that this is a key column
-            int64_t n_chars = 0;   // total number of chars of all keys for this
-                                   // column
-            uint32_t* in_offsets = (uint32_t*)in_arr->data2;
-            for (int64_t j = 0; j < num_groups; j++) {
-                int64_t row = group_to_first_row[j];
-                n_chars += in_offsets[row + 1] - in_offsets[row];
-            }
-            out_cols[i] = alloc_array(num_groups, n_chars, arr_type, dtype, 0);
-        } else {
+table_info* groupby_alloc_table(const table_info& in_table, int64_t n_keys,
+                                int64_t n_out_cols,
+                                int64_t num_groups, int ftype,
+                                const agginfo_t& agginfo,
+                                const std::vector<int64_t>& group_to_first_row) {
+    std::vector<array_info*> out_cols(n_out_cols);
+    for (int64_t i = 0; i < n_out_cols; i++) {
+        if (ftype == Bodo_FTypes::agg && i >= n_keys) {
+            // for output data columns in 'agg' case, we need to get the type
+            // from the dummy table that was passed to C++ library
+            bodo_array_type::arr_type_enum arr_type = agginfo.out_table_dummy->columns[i]->arr_type;
+            Bodo_CTypes::CTypeEnum dtype = agginfo.out_table_dummy->columns[i]->dtype;
             out_cols[i] = alloc_array(num_groups, 1, arr_type, dtype, 0);
+        } else {
+            const array_info* in_arr = in_table[i];
+            bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+            Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
+            // calling this modifies arr_type and dtype
+            get_groupby_output_dtype(ftype, arr_type, dtype, i < n_keys);
+            if (arr_type == bodo_array_type::STRING) {
+                // this is a special case: key columns containing strings.
+                // in this case, output col will have num_groups rows
+                // containing the string for each group
+                assert(i < n_keys);  // assert that this is a key column
+                int64_t n_chars = 0;   // total number of chars of all keys for this
+                                       // column
+                uint32_t* in_offsets = (uint32_t*)in_arr->data2;
+                for (int64_t j = 0; j < num_groups; j++) {
+                    int64_t row = group_to_first_row[j];
+                    n_chars += in_offsets[row + 1] - in_offsets[row];
+                }
+                out_cols[i] = alloc_array(num_groups, n_chars, arr_type, dtype, 0);
+            } else {
+                out_cols[i] = alloc_array(num_groups, 1, arr_type, dtype, 0);
+            }
         }
     }
-    // some aggregation functions like 'mean' need auxiliary columns to store
-    // quantities such as the count of valid elements
-    std::vector<std::vector<array_info*>> aux_cols;
-    create_auxiliary_cols(out_cols, num_keys, ncols, num_groups, ftype,
-                          aux_cols);
-    table_info* out_table = new table_info(out_cols);
 
-    // set key values in output table
-    for (int j = 0; j < num_keys; j++) {
-        array_info* in_col = in_table[j];
-        array_info* out_col = (*out_table)[j];
+    return new table_info(out_cols);
+}
+
+/**
+ * Initialize key columns in groupby output tables (intermediary or final
+ * tables).
+ *
+ * @param input table
+ * @param[in,out] output table
+ * @param number of keys in tables
+ * @param number of groups
+ * @param vector that maps group number to the first row in input table
+ *        that belongs to that group
+ */
+void groupby_init_keys(const table_info& in_table, table_info& out_table,
+                       int64_t n_keys, int64_t num_groups,
+                       const std::vector<int64_t>& group_to_first_row) {
+    for (int64_t j = 0; j < n_keys; j++) {
+        const array_info* in_col = in_table[j];
+        array_info* out_col = out_table[j];
         if (in_col->arr_type == bodo_array_type::NUMPY ||
             in_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             int64_t dtype_size = numpy_item_size[out_col->dtype];
@@ -3017,9 +3089,106 @@ table_info* groupby_and_aggregate_local(table_info& in_table, int64_t num_keys,
             out_offsets[num_groups] = pos;
         }
     }
+}
 
-    if (ftype != Bodo_FTypes::var_combine) {
-        for (int64_t j = num_keys; j < ncols; j++) {
+/**
+ * Groups the rows in a table based on key, applies a function to the rows in
+ * each group, writes the result to a new output table containing one row per
+ * group.
+ *
+ * @param input table (contains keys and input data columns)
+ * @param number of key columns in the table
+ * @param number of data columns
+ * @param function to apply
+ * @param number of functions to apply per data column (used in agg)
+ * @param info structure for agg operation
+ * @return output table which contains key columns, output data columns, and
+ * optionally redvar columns (depends on function to apply). Note that
+ * currently, which columns are populated and how depends on the function
+ */
+table_info* groupby_update(table_info& in_table, int64_t num_keys,
+                           int64_t num_data_cols,
+                           int ftype,
+                           int32_t num_funcs,
+                           const agginfo_t& agginfo) {
+
+    int64_t n_out_cols = num_keys + num_data_cols * num_funcs;
+    std::vector<int64_t> inrows_to_group;
+    std::vector<int64_t> group_to_first_row;
+    in_table.num_keys = num_keys;
+    get_group_info(in_table, inrows_to_group, group_to_first_row, true);
+    int64_t num_groups = group_to_first_row.size();
+
+    // create output table with *uninitialized* columns
+    // output table has one row per group
+    table_info* out_table = groupby_alloc_table(in_table, num_keys, n_out_cols,
+                                                num_groups, ftype, agginfo,
+                                                group_to_first_row);
+
+    // some aggregation functions like 'mean' need auxiliary columns to store
+    // reduction variables such as the count of valid elements
+    std::vector<std::vector<array_info*>> aux_cols;
+    create_auxiliary_cols(out_table->columns, num_keys, n_out_cols, num_groups,
+                          ftype, aux_cols, agginfo);
+
+    // set key values in output table
+    groupby_init_keys(in_table, *out_table, num_keys, num_groups,
+                      group_to_first_row);
+
+    if (ftype == Bodo_FTypes::agg) { // user defined function
+        agginfo.update(&in_table, out_table, inrows_to_group.data());
+    } else {
+        for (int64_t j = num_keys; j < n_out_cols; j++) {
+            aggfunc_output_initialize((*out_table)[j], ftype);
+            do_apply_to_column(in_table[j], (*out_table)[j],
+                               aux_cols[j - num_keys], inrows_to_group, ftype);
+        }
+    }
+
+    return out_table;
+}
+
+/**
+ * Combine operation. After shuffle, groups the rows in a table based on key,
+ * applies a combine function to the rows in each group, writes the result to a
+ * new output table containing one row per group.
+ *
+ * @param input table after shuffle (contains keys, output data columns and
+ * optionally redvar data columns resulting from 'update' operation)
+ * @param number of key columns in the table
+ * @param number of data columns
+ * @param function to apply
+ * @param info structure for agg operation
+ * @return output table which contains key columns, output data columns, and
+ * optionally redvar columns (if they were added in 'update'). Note that
+ * currently, which columns are populated and how depends on the function
+ */
+table_info* groupby_combine(table_info& in_table, int64_t num_keys,
+                            int64_t num_data_cols, int ftype,
+                            const agginfo_t& agginfo) {
+
+    int64_t n_out_cols = in_table.ncols();
+    std::vector<int64_t> inrows_to_group;
+    std::vector<int64_t> group_to_first_row;
+    in_table.num_keys = num_keys;
+    get_group_info(in_table, inrows_to_group, group_to_first_row, false);
+    int64_t num_groups = group_to_first_row.size();
+
+    // create output table with *uninitialized* columns
+    // output table has one row per group
+    table_info* out_table = groupby_alloc_table(in_table, num_keys, n_out_cols,
+                                                num_groups, ftype, agginfo,
+                                                group_to_first_row);
+    std::vector<std::vector<array_info*>> aux_cols;
+
+    // set key values in output table
+    groupby_init_keys(in_table, *out_table, num_keys, num_groups,
+                      group_to_first_row);
+
+    if (ftype == Bodo_FTypes::agg) { // user defined function
+        agginfo.combine(&in_table, out_table, inrows_to_group.data());
+    } else if (ftype != Bodo_FTypes::var_combine) {
+        for (int64_t j = num_keys; j < n_out_cols; j++) {
             aggfunc_output_initialize((*out_table)[j], ftype);
             do_apply_to_column(in_table[j], (*out_table)[j],
                                aux_cols[j - num_keys], inrows_to_group, ftype);
@@ -3244,17 +3413,22 @@ table_info* groupby_and_nunique(table_info* in_table, int64_t num_keys,
 
 
 /**
- * Applies an evaluation function to each row in input table
+ * Applies an evaluation function to each row in input table, writing the
+ * final result to output data columns. Removes redvar columns when done.
  *
- * @param input table
+ * @param input table (contains keys, output data columns and optionally
+ *        redvar columns if added during 'update')
  * @param number of key columns in the table
  * @param number of data columns
  * @param function to apply (see Bodo_FTypes::FTypeEnum)
+ * @param number of functions to apply per data column (used in agg)
+ * @param info structure for agg operation
  */
-void agg_func_eval(table_info& in_table, int64_t num_keys, int64_t n_data_cols,
-                   int32_t ftype) {
+void groupby_eval(table_info& in_table, int64_t num_keys, int64_t n_data_cols,
+                  int32_t ftype, int64_t num_funcs, const agginfo_t& agginfo) {
     std::vector<array_info*> aux_cols;
     std::vector<int64_t> row_to_group;
+    bool remove_aux_cols = false;
     switch (ftype) {
         case Bodo_FTypes::mean:
             for (int64_t i = num_keys; i < num_keys + n_data_cols; i++) {
@@ -3262,11 +3436,8 @@ void agg_func_eval(table_info& in_table, int64_t num_keys, int64_t n_data_cols,
                                    aux_cols, row_to_group,
                                    Bodo_FTypes::mean_eval);
             }
-            // remove auxiliary columns
-            for (int64_t i = num_keys + n_data_cols; i < in_table.ncols(); i++)
-                free_array(in_table[i]);
-            in_table.columns.resize(num_keys + n_data_cols);
-            return;
+            remove_aux_cols = true;
+            break;
         case Bodo_FTypes::std:
         case Bodo_FTypes::var:
             for (int64_t j = num_keys, z = 0; j < num_keys + n_data_cols;
@@ -3283,13 +3454,19 @@ void agg_func_eval(table_info& in_table, int64_t num_keys, int64_t n_data_cols,
                                        row_to_group, Bodo_FTypes::std_eval);
                 aux_cols.clear();
             }
-            // remove auxiliary columns
-            for (int64_t i = num_keys + n_data_cols; i < in_table.ncols(); i++)
-                free_array(in_table[i]);
-            in_table.columns.resize(num_keys + n_data_cols);
-            return;
+            remove_aux_cols = true;
+            break;
+        case Bodo_FTypes::agg:
+            agginfo.eval(&in_table);
+            remove_aux_cols = true;
+            break;
         default:
             return;
+    }
+    if (remove_aux_cols) {
+        for (int64_t i = num_keys + n_data_cols*num_funcs; i < in_table.ncols(); i++)
+            free_array(in_table[i]);
+        in_table.columns.resize(num_keys + n_data_cols*num_funcs);
     }
 }
 
@@ -3316,23 +3493,71 @@ table_info* groupby_and_aggregate_nunique(table_info* in_table, int64_t num_keys
 
 
 /**
- * Groups the rows in a table based on key, applies a function to the rows in
- * each group, writes the result to a new output table containing one row per
- * group. It then does a distributed shuffle so that a portion of rows that are
- * in the same group reside on the same process, combines the rows belonging to
- * the same group, and finally applies an evaluation function to each row.
+ * This operation groups rows in a distributed table based on keys, and applies
+ * a function(s) to a set of columns in each group (producing one row per
+ * group). For each input column for which a function is applied, there will be
+ * an output column with the result. The algorithm works as follows:
+ * a) Group and Update: Each process does the following with its local table:
+ *   - Determine to which group each row in the input table belongs to by using
+ *     a hash table on the key columns (obtaining a row to group mapping).
+ *   - Allocate output table (one row per group)
+ *   - Initialize output columns (depends on aggregation function)
+ *   - Update: apply function to input columns, write result to output (either
+ *     directly to output data column or to temporary reduction variable
+ *     columns). Uses the row_to_group mapping computed above.
+ * b) Shuffle: If the table is distributed, do a parallel shuffle of the
+ *    current output table to gather the rows that are part of the same group
+ *    on the same process.
+ * c) Group and Combine: after the shuffle, a process can end up with multiple
+ *    rows belonging to the same group, so we repeat the grouping of a) with
+ *    the new (shuffled) table, and apply a possibly different function
+ *    ("combine").
+ * d) Eval: for functions that required redvar columns, this computes the
+ *    final result from the value in the redvar columns and writes it to the
+ *    output data columns. This step is only needed for certain functions
+ *    like mean, var, std and agg. Redvar columns are deleted afterwards.
+ *
+ * IMPORTANT: Currently there are cases where multiple functions are applied
+ * to each column, but those functions run in numba-generated code (even if
+ * they are built-in functions like sum). This C++ code needs to know how many
+ * functions there are (passed via 'num_funcs'). But the number of
+ * functions could vary between columns. Currently this only supports the same
+ * number of functions per column.
+ *
+ * TODOs:
+ * - offload multi-function case with built-ins to C++
+ *   (https://github.com/Bodo-inc/Bodo/issues/277)
+ * - support variable number of functions per column
  *
  * @param input table
  * @param number of key columns in the table
  * @param function to apply (see Bodo_FTypes::FTypeEnum)
+ * @param Number of functions to apply per input data column (currently only
+ *        used with ftype=agg)
+ * @param true if needs to run in parallel (do a parallel shuffle)
+ * @param external 'update' function (a function pointer).
+ *        If ftype=agg, the update step happens in external JIT-compiled code,
+ *        which must initialize output and/or redvar columns and apply the
+ *        update function.
+ * @param external 'combine' function (a function pointer).
+ *        If ftype=agg, external code does the combine step (apply combine
+ *        function to current table)
+ * @param external 'eval' function (a function pointer).
+ *        If ftype=agg, external code does the eval step.
+ * @param dummy table containing type info for output table (for ftype=agg)
  */
 table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
-                                  int32_t ftype, bool is_parallel) {
+                                  int32_t ftype, int32_t num_funcs, bool is_parallel,
+                                  void* update_cb, void* combine_cb, void* eval_cb,
+                                  table_info* out_table_dummy) {
+
+    agginfo_t agginfo = {out_table_dummy, (agg_table_op_fn)update_cb,
+                         (agg_table_op_fn)combine_cb, (agg_eval_fn)eval_cb};
 
     // perform initial local aggregation
     int64_t num_data_cols = in_table->ncols() - num_keys;
-    table_info* aggr_local = groupby_and_aggregate_local(
-        *in_table, num_keys, num_data_cols, ftype, true);
+    table_info* aggr_local =
+        groupby_update(*in_table, num_keys, num_data_cols, ftype, num_funcs, agginfo);
 
     // shuffle step
     table_info* shuf_table = aggr_local;
@@ -3342,12 +3567,13 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
     }
 
     // combine step
-    table_info* out_table = groupby_and_aggregate_local(
-        *shuf_table, num_keys, num_data_cols, combine_funcs[ftype], false);
+    table_info* out_table = groupby_combine(
+        *shuf_table, num_keys, num_data_cols, combine_funcs[ftype], agginfo);
     delete_table_free_arrays(shuf_table);
 
     // eval step
-    agg_func_eval(*out_table, num_keys, num_data_cols, ftype);
+    groupby_eval(*out_table, num_keys, num_data_cols, ftype, num_funcs, agginfo);
+
     return out_table;
 }
 
@@ -3566,6 +3792,7 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     combine_funcs[Bodo_FTypes::prod] = Bodo_FTypes::prod;
     combine_funcs[Bodo_FTypes::var] = Bodo_FTypes::var_combine;
     combine_funcs[Bodo_FTypes::std] = Bodo_FTypes::var_combine;
+    combine_funcs[Bodo_FTypes::agg] = Bodo_FTypes::agg;
 
     // DEC_MOD_METHOD(string_array_to_info);
     PyObject_SetAttrString(m, "string_array_to_info",

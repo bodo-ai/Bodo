@@ -35,7 +35,7 @@ recommended for production usage due to security, performance and other consider
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
-    conda create -n Bodo -c ehsantn -c anaconda -c conda-forge bodo
+    conda create -n Bodo -c bodo.ai -c conda-forge bodo
     source activate Bodo
 
 

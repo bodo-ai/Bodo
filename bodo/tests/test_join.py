@@ -7,7 +7,6 @@ import pandas as pd
 import numpy as np
 import random
 import string
-import pyarrow.parquet as pq
 import numba
 from numba.untyped_passes import PreserveIR
 from numba.typed_passes import NopythonRewrites

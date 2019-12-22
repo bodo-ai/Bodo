@@ -96,6 +96,7 @@ ext_io = Extension(
         "bodo/libs/_distributed.h",
         "bodo/libs/_import_py.h",
         "bodo/io/_csv.h",
+        "bodo/io/_bodo_csv_file_reader.h",
         "bodo/libs/_datetime_ext.h",
     ],
     libraries=io_libs,
@@ -106,6 +107,21 @@ ext_io = Extension(
     extra_link_args=ela,
     language="c++",
 )
+
+
+ext_s3 = Extension(
+    name="bodo.io.s3_reader",
+    sources=["bodo/io/_s3_reader.cpp"],
+    depends=["bodo/io/_bodo_csv_file_reader.h"],
+    libraries=["arrow"],
+    include_dirs=ind + np_compile_args["include_dirs"],
+    library_dirs=lid,
+    define_macros=[],
+    extra_compile_args=eca,
+    extra_link_args=ela,
+    language="c++",
+)
+
 
 ext_hdf5 = Extension(
     name="bodo.io._hdf5",
@@ -222,7 +238,7 @@ ext_parquet = Extension(
     sources=["bodo/io/_parquet.cpp", "bodo/io/_parquet_reader.cpp"],
     libraries=pq_libs,
     include_dirs=["."] + ind,
-    define_macros=[("BUILTIN_PARQUET_READER", None)],
+    define_macros=[],
     extra_compile_args=eca,
     extra_link_args=ela,
     library_dirs=lid,
@@ -240,7 +256,9 @@ ext_xenon_wrapper = Extension(
     extra_link_args=ela,
 )
 
-_ext_mods = [ext_hdist, ext_dict, ext_str, ext_quantile, ext_dt, ext_io, ext_arr]
+_ext_mods = [ext_hdist, ext_dict, ext_str, ext_quantile, ext_dt, ext_io, ext_arr,
+    ext_s3
+]
 
 if _has_h5py:
     _ext_mods.append(ext_hdf5)
