@@ -127,7 +127,7 @@ def test_csv_bool1(datapath):
         dtype = {"A": "int", "B": "bool", "C": "float"}
         return pd.read_csv(fname, names=dtype.keys(), dtype=dtype)
 
-    # passing file name as argument to exercize value-based dispatch
+    # passing file name as argument to exercise value-based dispatch
     fname = datapath("csv_data_bool1.csv")
     check_func(test_impl, (fname,))
 
