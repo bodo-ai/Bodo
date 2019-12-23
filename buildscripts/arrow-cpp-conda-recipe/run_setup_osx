@@ -1,0 +1,16 @@
+#!/bin/bash
+
+export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-10.9}
+export CONDA_BUILD_SYSROOT="$(xcode-select -p)/Platforms/MacOSX.platform/Developer/SDKs/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk"
+
+echo "Downloading ${MACOSX_DEPLOYMENT_TARGET} sdk"
+curl -L -O https://github.com/phracker/MacOSX-SDKs/releases/download/10.13/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk.tar.xz
+sudo tar -xf MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk.tar.xz -C /opt
+
+# set minimum sdk version to our target
+echo "set minimum sdk version"
+plutil -replace MinimumSDKVersion -string ${MACOSX_DEPLOYMENT_TARGET} $(xcode-select -p)/Platforms/MacOSX.platform/Info.plist
+plutil -replace DTSDKName -string macosx${MACOSX_DEPLOYMENT_TARGET}internal $(xcode-select -p)/Platforms/MacOSX.platform/Info.plist
+
+# copy sdk10.9 to /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/
+sudo cp -R /opt/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs

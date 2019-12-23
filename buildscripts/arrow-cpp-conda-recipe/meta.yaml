@@ -14,6 +14,7 @@ source:
 build:
   number: 6
   skip: true  # [win and vc<14]
+  string: "transfer_s3_h{{ PKG_HASH }}"
   run_exports:
     - {{ pin_subpackage("arrow-cpp", max_pin="x.x.x") }}
 
@@ -49,6 +50,7 @@ requirements:
     - uriparser
     - zlib
     - zstd
+    - llvm-openmp  # [osx]
 
   run:
     - aws-sdk-cpp

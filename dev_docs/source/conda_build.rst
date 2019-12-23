@@ -37,3 +37,11 @@ and the name of `.tar.bz2` File)::
 To build :code:`bodo` from the file bodo-inc::
 
     conda install bodo -c file:///bodo-inc/ -c bodo.ai -c conda-forge
+    
+Conda Build :code:`arrow-cpp`
+-----------------------------
+
+We ship our own :code:`arrow-cpp` package on `bodo.ai Anaconda Cloud <https://anaconda.org/bodo.ai/arrow-cpp/files>`_.
+Deployment is done through `CI <https://dev.azure.com/bodo-inc/Bodo/_build?definitionId=4&_a=summary>`_. :code:`CONDA_UPLOAD_TOKEN` is a enviroment
+variable generated from bodo.ai Anaconda Cloud account and set through Azure Pipeline's UI. To update the package,
+change :code:`build/number` properly and manually run the `pipeline <https://dev.azure.com/bodo-inc/Bodo/_build?definitionId=4&_a=summary>`_.
