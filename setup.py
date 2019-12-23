@@ -56,8 +56,8 @@ if "BODO_XE_SUPPORT" in os.environ and os.environ["BODO_XE_SUPPORT"] != "0":
 
 ind = [PREFIX_DIR + "/include"]
 lid = [PREFIX_DIR + "/lib"]
-#eca = ["-std=c++11", "-fsanitize=address"]
-#ela = ["-std=c++11", "-fsanitize=address"]
+# eca = ["-std=c++11", "-fsanitize=address"]
+# ela = ["-std=c++11", "-fsanitize=address"]
 if is_win:
     eca = ["/std=c++latest", "/O2"]
 else:
@@ -259,8 +259,15 @@ ext_xenon_wrapper = Extension(
     extra_link_args=ela,
 )
 
-_ext_mods = [ext_hdist, ext_dict, ext_str, ext_quantile, ext_dt, ext_io, ext_arr,
-    ext_s3
+_ext_mods = [
+    ext_hdist,
+    ext_dict,
+    ext_str,
+    ext_quantile,
+    ext_dt,
+    ext_io,
+    ext_arr,
+    ext_s3,
 ]
 
 if _has_h5py:

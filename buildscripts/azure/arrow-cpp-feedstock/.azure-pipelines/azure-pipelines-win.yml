@@ -1,0 +1,59 @@
+# This file was generated automatically from conda-smithy. To update this configuration,
+# update the conda-forge.yml and/or the recipe/meta.yaml.
+# -*- mode: yaml -*-
+
+jobs:
+- job: win
+  pool:
+    vmImage: vs2017-win2016
+  timeoutInMinutes: 360
+  strategy:
+    maxParallel: 4
+    matrix:
+      windows:
+        CONFIG: win_c_compilervs2015cxx_compilervs2015python3.7vc14
+        CONDA_BLD_PATH: D:\\bld\\
+        UPLOAD_PACKAGES: False
+      # win_c_compilervs2015cxx_compilervs2015python3.8vc14:
+      #   CONFIG: win_c_compilervs2015cxx_compilervs2015python3.8vc14
+      #   CONDA_BLD_PATH: D:\\bld\\
+      #   UPLOAD_PACKAGES: True
+  steps:
+    - script: |
+        ECHO ON
+
+    - task: CondaEnvironment@1
+      inputs:
+        packageSpecs: 'python=3.6 conda-build conda anaconda-client conda-forge::conda-forge-ci-setup=2' # Optional
+        installOptions: "-c conda-forge"
+        updateConda: false
+      displayName: Install conda-build and activate environment
+
+    - script: set PYTHONUNBUFFERED=1
+
+    # Configure the VM
+    - script: setup_conda_rc buildscripts/azure/arrow-cpp-feedstock buildscripts/azure/arrow-cpp-feedstock\recipe buildscripts/azure/arrow-cpp-feedstock\.ci_support\%CONFIG%.yaml
+
+    # Configure the VM.
+    - script: |
+        set "CI=azure"
+        run_conda_forge_build_setup
+      displayName: conda-forge build setup
+    
+    - script: |
+        rmdir C:\strawberry /s /q
+      continueOnError: true
+      displayName: remove strawberryperl
+
+    - script: |
+        conda.exe build -c conda-forge buildscripts/azure/arrow-cpp-feedstock/recipe -m buildscripts/azure/arrow-cpp-feedstock/.ci_support\%CONFIG%.yaml --output-folder $(System.DefaultWorkingDirectory)/bld-dir
+      displayName: Build recipe
+      env:
+        PYTHONUNBUFFERED: 1
+      condition: not(contains(variables['CONFIG'], 'vs2008'))
+
+    - bash: |
+        export ANACONDA_API_TOKEN=$CONDA_UPLOAD_TOKEN
+        anaconda upload --force bld-dir/**/arrow-cpp-*.tar.bz2
+      displayName: 'Publish to anaconda bodo.ai channel'
+

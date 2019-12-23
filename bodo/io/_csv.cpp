@@ -20,7 +20,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
-
+#include <ciso646>
 #include "../libs/_datetime_ext.h"
 #include "../libs/_distributed.h"
 #include "_csv.h"
