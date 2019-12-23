@@ -780,14 +780,14 @@ def find_str_const(func_ir, var, arg_types=None):
         val = var_def.value
         require(isinstance(val, str))
         return val
-    elif isinstance(var_def, ir.Arg):
-        if arg_types is not None and isinstance(
-            arg_types[var_def.index], types.Literal
-        ):
-            val = arg_types[var_def.index].literal_value
-            require(isinstance(val, str))
+    elif isinstance(var_def, ir.Arg) and arg_types is not None:
+        arg_typ = arg_types[var_def.index]
+        if isinstance(arg_typ, types.StringLiteral):
+            val = arg_typ.literal_value
             return val
-        raise numba.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
+        # force literal only if argument is string
+        if arg_typ == string_type:
+            raise numba.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
 
     # only add supported (s1+s2), TODO: extend to other expressions
     require(
