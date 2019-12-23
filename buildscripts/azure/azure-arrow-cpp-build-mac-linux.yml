@@ -1,0 +1,50 @@
+parameters:
+  name: ''
+  vmImage: ''
+
+jobs:
+- job: ${{ parameters.name }}
+  pool:
+    vmImage: ${{ parameters.vmImage }}
+  
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.7'
+    displayName: 'Use Python $(python.version)'
+
+  - script: |
+      echo "##vso[task.prependpath]$CONDA/bin"
+      if [[ "${{ parameters.name }}" == "Mac" ]]; then
+        sudo chown -R $USER $CONDA
+      fi
+    displayName: 'Setup Miniconda'
+  
+  - script: |
+      conda update -y -q -n base conda
+    displayName: 'Update conda'
+
+  - script: |
+      conda create -y -n arrow_cpp_build conda-build anaconda-client conda-verify
+    displayName: 'Create conda enviroment'
+
+  - script: |
+      if [[ "${{ parameters.name }}" == "Mac" ]]; then
+        source activate arrow_cpp_build
+        sudo mkdir /opt
+        source $(System.DefaultWorkingDirectory)/buildscripts/arrow-cpp-conda-recipe/run_setup_osx
+      fi
+    displayName: 'Configure osx sdk'
+
+  - script: |
+      source activate arrow_cpp_build
+      cd buildscripts/arrow-cpp-conda-recipe/
+      conda-build . -c conda-forge --no-test --output-folder $(System.DefaultWorkingDirectory)/bld-dir
+    displayName: 'Conda build arrow-cpp'
+
+  - script: |
+      source activate arrow_cpp_build
+      export ANACONDA_API_TOKEN=$CONDA_UPLOAD_TOKEN
+      anaconda upload $(System.DefaultWorkingDirectory)/bld-dir/**/arrow-cpp-*.tar.bz2
+    displayName: 'publish to anaconda bodo.ai channel'
+

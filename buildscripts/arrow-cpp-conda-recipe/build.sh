@@ -35,7 +35,7 @@ cmake \
     -DARROW_PYTHON=ON \
     -DARROW_PARQUET=ON \
     -DARROW_S3=ON \
-    -DARROW_GANDIVA=ON \
+    -DARROW_GANDIVA=OFF \
     -DARROW_ORC=ON \
     -DARROW_WITH_BZ2=ON \
     -DCMAKE_AR=${AR} \
