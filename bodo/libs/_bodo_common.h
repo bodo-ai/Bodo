@@ -103,6 +103,7 @@ struct table_info {
     int64_t nrows() const { return columns[0]->length; }
     int64_t ncols() const { return columns.size(); }
     array_info* operator[](size_t idx) { return columns[idx]; }
+    const array_info* operator[](size_t idx) const { return columns[idx]; }
 };
 
 #define DEC_MOD_METHOD(func) \

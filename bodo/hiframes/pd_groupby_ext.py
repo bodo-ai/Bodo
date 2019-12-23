@@ -420,7 +420,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
         if isinstance(func, types.BaseTuple):
             if not (len(grp.selection) == 1 and grp.explicit_select):
                 raise BodoError(
-                    "Goupby.agg()/aggregate(): must select exactly one column when more than one functions supplied"
+                    "Groupby.agg()/aggregate(): must select exactly one column when more than one functions supplied"
                 )
             assert len(func) > 0
             out_data = []

@@ -8,16 +8,18 @@ We use `Anaconda <https://www.anaconda.com/download/>`_ distribution of
 Python for setting up Bodo. These commands install Bodo and its dependencies
 such as Numba on Ubuntu Linux::
 
-    wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+    # Linux: wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+    # Mac: wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
-    conda create -n DEV numpy scipy pandas boost-cpp cmake h5py pyarrow mpich mpi
+    conda create -n DEV numpy scipy pandas boost-cpp cmake h5py mpich mpi -c conda-forge
     source activate DEV
-    # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64
-    # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64
-    conda install numba
-    conda install -c defaults -c conda-forge hdf5=*=*mpich*
+    # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
+    # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64 -c conda-forge
+    conda install numba=0.46.0 -c conda-forge
+    conda install -c bodo.ai -c conda-forge hdf5=*=*mpich*
+    conda install -c bodo.ai -c conda-forge pyarrow=0.15.1 arrow-cpp=0.15.1=*transfer_s3*
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo

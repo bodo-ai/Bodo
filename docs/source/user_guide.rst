@@ -195,6 +195,13 @@ For Parquet and CSV, the syntax is the same as Pandas::
         df = pd.read_parquet('example.pq')
 
 
+Reading CSV and Parquet files from Amazon S3 is also supported.
+The file path should start with `s3://`, and the `s3fs` package should
+be available.
+Currently, specifying the region using the `AWS_DEFAULT_REGION` environment
+variable is required.
+
+
 For HDF5, the syntax is the same as the `h5py <http://www.h5py.org/>`_ package.
 For example::
 

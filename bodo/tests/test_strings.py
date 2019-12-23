@@ -11,7 +11,6 @@ import pandas as pd
 import glob
 import gc
 import re
-import pyarrow.parquet as pq
 from bodo.libs.str_arr_ext import StringArray
 from bodo.libs.str_ext import unicode_to_std_str, std_str_to_unicode, str_findall_count
 from bodo.tests.utils import check_func
@@ -793,7 +792,7 @@ class TestString(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             return df.five
 
         bodo_func = bodo.jit(test_impl)

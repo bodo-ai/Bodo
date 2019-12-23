@@ -5,7 +5,6 @@ import os
 import pandas as pd
 import numpy as np
 import h5py
-import pyarrow.parquet as pq
 import bodo
 from bodo.utils.testing import ensure_clean
 from bodo.tests.utils import (
@@ -477,8 +476,7 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "kde.parquet")
 
         def test_impl():
-            t = pq.read_table(fname)
-            df = t.to_pandas()
+            df = pd.read_parquet(fname)
             X = df["points"]
             return X.sum()
 
@@ -528,7 +526,7 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             A = df.two.values == "foo"
             return A.sum()
 
@@ -550,7 +548,7 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             A = df.five.values == "foo"
             return A
 
@@ -561,7 +559,7 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             A = df.five.values == "foo"
             return A.sum()
 
@@ -574,7 +572,7 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example2.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             A = df.five.values == "foo"
             return A.sum()
 
@@ -587,7 +585,7 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             return df.three.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -599,7 +597,7 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             return df.one.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -611,7 +609,7 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pq.read_table(fname).to_pandas()
+            df = pd.read_parquet(fname)
             return df.four.sum()
 
         bodo_func = bodo.jit(test_impl)

@@ -428,7 +428,9 @@ def arr_info_list_to_table(typingctx, list_arr_info_typ):
 
 @intrinsic
 def info_from_table(typingctx, table_t, ind_t):
-    assert table_t == table_type
+    # disabled assert because there are cfuncs that need to call info_from_table
+    # on void ptrs received from C++
+    # assert table_t == table_type
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
@@ -554,12 +556,24 @@ def drop_duplicates_table_outplace(typingctx, table_t, subset_vect_t, keep_t):
 
 
 @intrinsic
-def groupby_and_aggregate(typingctx, table_t, n_keys_t, ftype, is_parallel):
+def groupby_and_aggregate(
+    typingctx,
+    table_t,
+    n_keys_t,
+    ftype,
+    num_funcs,
+    is_parallel,
+    update_cb,
+    combine_cb,
+    eval_cb,
+    out_table_dummy_t,
+):
     """
     Interface to groupby_and_aggregate function in C++ library for groupby
     offloading.
     """
     assert table_t == table_type
+    assert out_table_dummy_t == table_type
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
@@ -568,7 +582,12 @@ def groupby_and_aggregate(typingctx, table_t, n_keys_t, ftype, is_parallel):
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(32),
+                lir.IntType(32),
                 lir.IntType(1),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
             ],
         )
         fn_tp = builder.module.get_or_insert_function(
@@ -576,7 +595,21 @@ def groupby_and_aggregate(typingctx, table_t, n_keys_t, ftype, is_parallel):
         )
         return builder.call(fn_tp, args)
 
-    return table_type(table_t, types.int64, types.int32, types.boolean), codegen
+    return (
+        table_type(
+            table_t,
+            types.int64,
+            types.int32,
+            types.int32,
+            types.boolean,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            table_t,
+        ),
+        codegen,
+    )
+
 
 @intrinsic
 def groupby_and_aggregate_nunique(typingctx, table_t, n_keys_t, is_parallel):
@@ -594,3 +627,4 @@ def groupby_and_aggregate_nunique(typingctx, table_t, n_keys_t, is_parallel):
         return builder.call(fn_tp, args)
 
     return table_type(table_t, types.int64, types.boolean), codegen
+

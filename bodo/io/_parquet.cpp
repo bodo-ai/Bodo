@@ -106,12 +106,12 @@ std::vector<std::string> get_pq_pieces(char *file_name) {
 
     auto gilstate = PyGILState_Ensure();
 
-    // import pyarrow.parquet, FIXME: is this import reliable?
-    PyObject *pq_mod = PyImport_ImportModule("pyarrow.parquet");
+    // import bodo.io.parquet_pio
+    PyObject *pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
 
-    // ds = pq.ParquetDataset(file_name)
+    // ds = bodo.io.parquet_pio.get_parquet_dataset(file_name)
     PyObject *ds =
-        PyObject_CallMethod(pq_mod, "ParquetDataset", "s", file_name);
+        PyObject_CallMethod(pq_mod, "get_parquet_dataset", "s", file_name);
     CHECK(!PyErr_Occurred(), "Python error during Parquet dataset metadata")
     Py_DECREF(pq_mod);
 
@@ -125,7 +125,6 @@ std::vector<std::string> get_pq_pieces(char *file_name) {
     PyObject *piece;
 
     if (iterator == NULL) {
-        // printf("empty\n");
         PyGILState_Release(gilstate);
         return paths;
     }
@@ -133,7 +132,6 @@ std::vector<std::string> get_pq_pieces(char *file_name) {
     while ((piece = PyIter_Next(iterator))) {
         PyObject *p = PyObject_GetAttrString(piece, "path");
         const char *c_path = PyUnicode_AsUTF8(p);
-        // printf("piece %s\n", c_path);
         paths.push_back(std::string(c_path));
         Py_DECREF(piece);
         Py_DECREF(p);
