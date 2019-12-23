@@ -46,13 +46,13 @@ def test_pq_spark_date(datapath):
 
 
 def test_pq_index(datapath):
-    fname = datapath("index_test1.pq")
-
-    def test_impl():
+    def test_impl(fname):
         return pd.read_parquet(fname)
 
+    # passing function name as value to test value-based dispatch
+    fname = datapath("index_test1.pq")
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_frame_equal(bodo_func(), test_impl())
+    pd.testing.assert_frame_equal(bodo_func(fname), test_impl(fname))
 
     # string index
     fname = datapath("index_test2.pq")
@@ -123,13 +123,13 @@ def test_pq_schema(datapath):
 
 
 def test_csv_bool1(datapath):
-    fname = datapath("csv_data_bool1.csv")
-
-    def test_impl():
+    def test_impl(fname):
         dtype = {"A": "int", "B": "bool", "C": "float"}
         return pd.read_csv(fname, names=dtype.keys(), dtype=dtype)
 
-    check_func(test_impl, ())
+    # passing file name as argument to exercise value-based dispatch
+    fname = datapath("csv_data_bool1.csv")
+    check_func(test_impl, (fname,))
 
 
 def test_csv_int_na1(datapath):
@@ -186,16 +186,16 @@ def test_write_csv_parallel_unicode():
 
 
 def test_h5_read_seq(datapath):
-    fname = datapath("lr.hdf5")
-
-    def test_impl():
+    def test_impl(fname):
         f = h5py.File(fname, "r")
         X = f["points"][:]
         f.close()
         return X
 
+    # passing function name as value to test value-based dispatch
+    fname = datapath("lr.hdf5")
     bodo_func = bodo.jit(test_impl)
-    np.testing.assert_allclose(bodo_func(), test_impl())
+    np.testing.assert_allclose(bodo_func(fname), test_impl(fname))
 
 
 def test_h5_read_const_infer_seq(datapath):

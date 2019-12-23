@@ -40,12 +40,13 @@ def remove_h5(rhs, lives, call_list):
 numba.ir_utils.remove_call_handlers.append(remove_h5)
 
 
-class PIO(object):
+class H5_IO(object):
     """analyze and transform hdf5 calls"""
 
-    def __init__(self, func_ir, _locals, reverse_copies):
+    def __init__(self, func_ir, _locals, arg_types, reverse_copies):
         self.func_ir = func_ir
         self.locals = _locals
+        self.arg_types = arg_types
         self.reverse_copies = reverse_copies
 
     def handle_possible_h5_read(self, assign, lhs, rhs):
@@ -104,14 +105,16 @@ class PIO(object):
             val_index_var = (
                 val_def.index if val_def.op == "getitem" else val_def.index_var
             )
-            obj_name = find_str_const(self.func_ir, val_index_var)
+            obj_name = find_str_const(
+                self.func_ir, val_index_var, arg_types=self.arg_types
+            )
             obj_name_list.append(obj_name)
 
     def _get_h5_type_file(self, val_def, obj_name_list):
         require(len(obj_name_list) > 0)
         require(find_callname(self.func_ir, val_def) == ("File", "h5py"))
         require(len(val_def.args) > 0)
-        f_name = find_str_const(self.func_ir, val_def.args[0])
+        f_name = find_str_const(self.func_ir, val_def.args[0], arg_types=self.arg_types)
         obj_name_list.reverse()
 
         import h5py

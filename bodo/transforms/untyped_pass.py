@@ -21,6 +21,7 @@ from numba.ir_utils import (
     remove_dels,
     replace_var_names,
     find_const,
+    GuardException,
     compile_to_numba_ir,
     replace_arg_nodes,
     find_callname,
@@ -53,7 +54,7 @@ from bodo.ir import csv_ext
 
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 import bodo.hiframes.pd_dataframe_ext
-from bodo.utils.transform import update_locs
+from bodo.utils.transform import update_locs, get_const_value
 
 
 def remove_hiframes(rhs, lives, call_list):
@@ -187,7 +188,7 @@ class UntypedPass(object):
         self.pq_handler = ParquetHandler(
             func_ir, typingctx, args, _locals, self.reverse_copies
         )
-        self.h5_handler = h5.PIO(self.func_ir, _locals, self.reverse_copies)
+        self.h5_handler = h5.H5_IO(self.func_ir, _locals, args, self.reverse_copies)
 
     def run(self):
         # XXX: the block structure shouldn't change in this pass since labels
@@ -548,7 +549,6 @@ class UntypedPass(object):
         nodes = _compile_func_single_block(_build_f, (var,), ret_var)
         return nodes
 
-
     def _handle_np_where(self, assign, lhs, rhs):
         """replace np.where() calls with Bodo's version since Numba's typer assumes
         non-Array types like Series are scalars and produces wrong output type.
@@ -762,12 +762,11 @@ class UntypedPass(object):
         # if inference is required
         if dtype_var is "" or col_names == 0:
             # infer column names and types from constant filename
-            fname_const = guard(find_const, self.func_ir, fname)
-            if fname_const is None:
-                raise ValueError(
-                    "pd.read_csv() requires explicit type"
-                    "annotation using 'dtype' if filename is not constant"
-                )
+            msg = (
+                "pd.read_csv() requires explicit type"
+                "annotation using 'dtype' if filename is not constant"
+            )
+            fname_const = get_const_value(fname, self.func_ir, msg, arg_types=self.args)
             rows_to_read = 100  # TODO: tune this
             df = pd.read_csv(
                 fname_const,

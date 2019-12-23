@@ -7,9 +7,17 @@ import numpy as np
 import math
 import numba
 from numba import ir, ir_utils, types
-from numba.ir_utils import compile_to_numba_ir, replace_arg_nodes
+from numba.ir_utils import (
+    compile_to_numba_ir,
+    replace_arg_nodes,
+    find_const,
+    guard,
+    GuardException,
+    get_definition,
+)
 import bodo
 from bodo.utils.utils import is_assign, is_expr
+from bodo.utils.typing import BodoError
 
 
 def compile_func_single_block(func, args, ret_var, typing_info, extra_globals=None):
@@ -72,3 +80,30 @@ def get_stmt_defs(stmt):
         return defs
 
     return set()
+
+
+def get_const_value(var, func_ir, err_msg, typemap=None, arg_types=None):
+    """Get constant value of a variable if possible, otherwise raise error.
+    If the variable is argument to the function, force recompilation with literal
+    typing of the argument.
+    """
+    # literal type
+    if typemap is not None:
+        typ = typemap[var.name]
+        if isinstance(typ, types.Literal):
+            return typ.literal_value
+
+    try:
+        return find_const(func_ir, var)
+    except GuardException:
+        # if variable is argument, force literal
+        var_def = guard(get_definition, func_ir, var)
+        if isinstance(var_def, ir.Arg):
+            # untyped passes can only pass arg_types, not typemap used above
+            if arg_types is not None and isinstance(
+                arg_types[var_def.index], types.Literal
+            ):
+                return arg_types[var_def.index].literal_value
+            raise numba.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
+
+    raise BodoError(err_msg)
