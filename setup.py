@@ -144,6 +144,9 @@ if "TRIAL_PERIOD" in os.environ and os.environ["TRIAL_PERIOD"] != "":
     dist_macros.append(("TRIAL_PERIOD", trial_period))
     dist_macros.append(("TRIAL_START", trial_start))
 
+if "MAX_CORE_COUNT" in os.environ and os.environ["MAX_CORE_COUNT"] != "":
+    max_core_count = os.environ["MAX_CORE_COUNT"]
+    dist_macros.append(("MAX_CORE_COUNT", max_core_count))
 
 ext_hdist = Extension(
     name="bodo.libs.hdist",

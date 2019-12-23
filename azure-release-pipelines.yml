@@ -14,6 +14,23 @@ stages:
 - stage: Build_Bodo_Binary
   displayName: 'Build Bodo Binary'
   jobs:
+  - job: find_suffix
+    pool:
+      vmImage: xcode9-macos10.13
+    steps:
+    - script: |
+        if [[ ! -z "${TRIAL_PERIOD}" ]]; then
+          export END_DATE=`date -v +${TRIAL_PERIOD}d  +"%m-%d-%y"`
+        fi
+        if [[ ! -z "${MAX_CORE_COUNT}" ]]; then
+          export FILE_SUFFIX=expires-${END_DATE}-max-core-count-${MAX_CORE_COUNT}
+        else
+          export FILE_SUFFIX=expires-${END_DATE}
+        fi
+        echo "##vso[task.setvariable variable=fileSuffix;isOutput=true]$FILE_SUFFIX"
+      displayName: 'write FILE_SUFFIX for future use'
+      name: suffix_step
+
   - template: buildscripts/azure/azure-build-binary-linux-macos.yml
     parameters:
       name: Linux

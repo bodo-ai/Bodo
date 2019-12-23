@@ -22,6 +22,8 @@ Conda Build Bodo
     cd buildscripts/bodo-conda-recipe/
     # if trial version
     # export TRIAL_PERIOD=14
+    # if core count limit
+    # export MAX_CORE_COUNT=1000
     conda-build . -c bodo.ai -c conda-forge --no-test
 
 Open a new terminal window (replace yourContainerID :code:`docker container ls`

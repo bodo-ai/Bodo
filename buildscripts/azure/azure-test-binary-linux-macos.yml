@@ -21,7 +21,7 @@ jobs:
     displayName: 'Download Bodo'
   - task: ExtractFiles@1
     inputs:
-      archiveFilePatterns: '$(HOME)/bodo-inc/${{ parameters.name }}bodo-inc.zip'
+      archiveFilePatterns: '$(HOME)/bodo-inc/${{ parameters.name }}bodo-inc*.zip'
       destinationFolder: '$(HOME)/bodo-inc/bodo-inc'
     displayName: 'Extract Bodo' 
   - task: UsePythonVersion@0
