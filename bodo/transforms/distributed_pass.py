@@ -1458,6 +1458,7 @@ class DistributedPass(object):
     def _run_getsetitem(self, arr, index_var, node, full_node, equiv_set, avail_vars):
         out = [full_node]
         index_var = self._fix_index_var(index_var)
+        full_index_var = index_var
 
         # adjust parallel access indices (in parfors)
         # 1D_Var arrays need adjustment if 1D_Var parfor has start adjusted
@@ -1595,7 +1596,6 @@ class DistributedPass(object):
 
             # general slice access like A[3:7]
             elif self._is_REP(lhs.name) and isinstance(index_typ, types.SliceType):
-                # TODO: handle multi-dim cases like A[:3, 4]
                 # cases like S.head()
                 # bcast if all in rank 0, otherwise gatherv
                 in_arr = full_node.value.value
@@ -1604,6 +1604,27 @@ class DistributedPass(object):
                 )
                 size_var = self._get_dist_var_len(in_arr, nodes, equiv_set)
                 is_1D = self._is_1D_arr(arr.name)
+                # for multi-dim case, perform selection in other dimensions then handle
+                # the first dimension
+                if is_multi_dim:
+                    # gen index with first dimension as full slice, other dimensions as
+                    # full getitem index
+                    nodes += compile_func_single_block(
+                        lambda ind: (slice(None),) + ind[1:],
+                        [full_index_var],
+                        None,
+                        self,
+                    )
+                    other_ind = nodes[-1].target
+                    return nodes + compile_func_single_block(
+                        lambda arr, slice_index, start, tot_len, other_ind: bodo.libs.distributed_api.slice_getitem(
+                            operator.getitem(arr, other_ind), slice_index, start, tot_len, _is_1D
+                        ),
+                        [in_arr, index_var, start_var, size_var, other_ind],
+                        lhs,
+                        self,
+                        extra_globals={"_is_1D": is_1D, "operator": operator},
+                    )
                 return nodes + compile_func_single_block(
                     lambda arr, slice_index, start, tot_len: bodo.libs.distributed_api.slice_getitem(
                         arr, slice_index, start, tot_len, _is_1D
