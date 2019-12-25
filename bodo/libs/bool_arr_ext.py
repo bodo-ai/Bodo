@@ -281,6 +281,24 @@ numba.ir_utils.alias_func_extensions[
 ] = alias_ext_dummy_func
 
 
+# high-level allocation function for boolean arrays
+@numba.njit(no_cpython_wrapper=True)
+def alloc_bool_array(n):
+    data_arr = np.empty(n, dtype=np.bool_)
+    nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
+    return init_bool_array(data_arr, nulls)
+
+
+def alloc_bool_array_equiv(self, scope, equiv_set, args, kws):
+    assert len(args) == 1 and not kws
+    return args[0], []
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_alloc_bool_array = (
+    alloc_bool_array_equiv
+)
+
+
 @overload(operator.getitem)
 def bool_arr_getitem(A, ind):
     if A != boolean_array:
