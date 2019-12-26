@@ -635,10 +635,16 @@ def create_op_overload(op, n_inputs):
                 ).return_type
                 access_str1 = "A1" if is_A1_scalar else "A1[i]"
                 access_str2 = "A2" if is_A2_scalar else "A2[i]"
-                na_str1 = "False" if is_A1_scalar else "bodo.libs.array_kernels.isna(A1, i)"
-                na_str2 = "False" if is_A2_scalar else "bodo.libs.array_kernels.isna(A2, i)"
+                na_str1 = (
+                    "False" if is_A1_scalar else "bodo.libs.array_kernels.isna(A1, i)"
+                )
+                na_str2 = (
+                    "False" if is_A2_scalar else "bodo.libs.array_kernels.isna(A2, i)"
+                )
                 func_text = "def impl(A1, A2):\n"
-                func_text += "  n = len({})\n".format("A1" if not is_A1_scalar else "A2")
+                func_text += "  n = len({})\n".format(
+                    "A1" if not is_A1_scalar else "A2"
+                )
                 func_text += "  out_arr = np.empty(n, ret_dtype)\n"
                 func_text += "  for i in numba.parfor.internal_prange(n):\n"
                 func_text += "    out_arr[i] = op({}, {})\n".format(
@@ -650,7 +656,17 @@ def create_op_overload(op, n_inputs):
                     func_text += "      out_arr[i] = {}\n".format(na_val)
                 func_text += "  return out_arr\n"
                 loc_vars = {}
-                exec(func_text, {"bodo": bodo, "numba": numba, "np": np, "ret_dtype": ret_dtype, "op": op}, loc_vars)
+                exec(
+                    func_text,
+                    {
+                        "bodo": bodo,
+                        "numba": numba,
+                        "np": np,
+                        "ret_dtype": ret_dtype,
+                        "op": op,
+                    },
+                    loc_vars,
+                )
                 impl = loc_vars["impl"]
                 return impl
 

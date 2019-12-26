@@ -21,6 +21,7 @@ np.random.seed(0)
 
 def test_unary_ufunc():
     ufunc = np.invert
+
     def test_impl(A):
         return ufunc(A.values)
 
@@ -28,9 +29,7 @@ def test_unary_ufunc():
     check_func(test_impl, (A,))
 
 
-@pytest.mark.parametrize(
-    "op", [operator.eq, operator.ne]
-)
+@pytest.mark.parametrize("op", [operator.eq, operator.ne])
 def test_cmp(op):
     """Test comparison of two boolean arrays
     """
@@ -49,8 +48,10 @@ def test_cmp(op):
 def test_cmp_scalar():
     """Test comparison of boolean array and a scalar
     """
+
     def test_impl1(A):
         return A.values == True
+
     def test_impl2(A):
         return True != A.values
 

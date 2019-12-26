@@ -686,7 +686,11 @@ def agg_distributed_run(
     else:
         offload = agg_node.pivot_arr is None
         agg_func_struct = None
-        if not offload or isinstance(agg_node.agg_func, list) or agg_node.agg_func.ftype == supported_agg_funcs.index('agg'):
+        if (
+            not offload
+            or isinstance(agg_node.agg_func, list)
+            or agg_node.agg_func.ftype == supported_agg_funcs.index("agg")
+        ):
             agg_func_struct = get_agg_func_struct(
                 agg_node.agg_func,
                 in_col_typs,
@@ -1225,9 +1229,7 @@ def _get_np_dtype(t):
     return "np.{}".format(t)
 
 
-def gen_update_cb(
-    agg_func_struct, n_keys, data_in_typs, out_data_typs, red_var_typs
-):
+def gen_update_cb(agg_func_struct, n_keys, data_in_typs, out_data_typs, red_var_typs):
     """
     Generates a Python function (to be compiled into a numba cfunc) which
     does the "update" step of an agg operation. The code is for a specific agg
@@ -1256,8 +1258,7 @@ def gen_update_cb(
         else:
             data_in_dummy_text.append("np.empty(1, {})".format(_get_np_dtype(t.dtype)))
     func_text += "    data_in_dummy = ({}{})\n".format(
-        ",".join(data_in_dummy_text),
-        "," if len(data_in_typs) == 1 else "",
+        ",".join(data_in_dummy_text), "," if len(data_in_typs) == 1 else ""
     )
 
     func_text += "\n    # initialize redvar cols\n"
@@ -1313,9 +1314,7 @@ def gen_update_cb(
     return loc_vars["update_local"]
 
 
-def gen_combine_cb(
-    agg_func_struct, n_keys, out_data_typs, red_var_typs
-):
+def gen_combine_cb(agg_func_struct, n_keys, out_data_typs, red_var_typs):
     """
     Generates a Python function (to be compiled into a numba cfunc) which
     does the "combine" step of an agg operation. The code is for a specific agg
@@ -1617,8 +1616,10 @@ def gen_top_level_agg_func(
                 )
             )
         else:
-            if agg_func.ftype == supported_agg_funcs.index('nunique'):
-                func_text += "    out_table = groupby_and_aggregate_nunique(table, {}, {})\n".format(n_keys, parallel)
+            if agg_func.ftype == supported_agg_funcs.index("nunique"):
+                func_text += "    out_table = groupby_and_aggregate_nunique(table, {}, {})\n".format(
+                    n_keys, parallel
+                )
             else:
                 # non-agg operations don't use dummy output table, so just
                 # create an empty one-column table
@@ -1652,7 +1653,7 @@ def gen_top_level_agg_func(
             ", ".join(out_names + tuple(key_names))
         )
 
-    #print(func_text)
+    # print(func_text)
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -1707,7 +1708,7 @@ def gen_top_level_transform_func(key_names, in_col_names, out_col_names, paralle
 def compile_to_optimized_ir(func, arg_typs, typingctx):
     # XXX are outside function's globals needed?
     code = func.code if hasattr(func, "code") else func.__code__
-    closure = func.closure if hasattr(func, 'closure') else func.__closure__
+    closure = func.closure if hasattr(func, "closure") else func.__closure__
     f_ir = get_ir_of_code(func.__globals__, code)
     replace_closures(f_ir, closure, code)
 
@@ -1757,14 +1758,24 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     # `get_series_data` Series function left to remove
     for block in f_ir.blocks.values():
         for stmt in block.body:
-            if is_assign(stmt) and isinstance(stmt.value, (ir.Arg, ir.Var)) and isinstance(typemap[stmt.target.name], SeriesType):
+            if (
+                is_assign(stmt)
+                and isinstance(stmt.value, (ir.Arg, ir.Var))
+                and isinstance(typemap[stmt.target.name], SeriesType)
+            ):
                 typ = typemap.pop(stmt.target.name)
                 typemap[stmt.target.name] = typ.data
-            if is_call_assign(stmt) and find_callname(f_ir, stmt.value) == ('get_series_data', 'bodo.hiframes.pd_series_ext'):
+            if is_call_assign(stmt) and find_callname(f_ir, stmt.value) == (
+                "get_series_data",
+                "bodo.hiframes.pd_series_ext",
+            ):
                 stmt.value = stmt.value.args[0]
             # remove isna() calls since NA cannot be handled in UDFs yet
             # TODO: support NA in UDFs
-            if is_call_assign(stmt) and find_callname(f_ir, stmt.value) == ("isna", "bodo.libs.array_kernels"):
+            if is_call_assign(stmt) and find_callname(f_ir, stmt.value) == (
+                "isna",
+                "bodo.libs.array_kernels",
+            ):
                 stmt.value = ir.Const(False, stmt.loc)
 
     preparfor_pass = numba.parfor.PreParforPass(
@@ -1802,10 +1813,9 @@ def replace_closures(f_ir, closure, code):
             cellget.argtypes = (ctypes.py_object,)
             items = tuple(cellget(x) for x in closure)
         else:
-            assert(isinstance(closure, ir.Expr)
-                   and closure.op == 'build_tuple')
+            assert isinstance(closure, ir.Expr) and closure.op == "build_tuple"
             items = closure.items
-        assert(len(code.co_freevars) == len(items))
+        assert len(code.co_freevars) == len(items)
         numba.inline_closurecall._replace_freevars(f_ir.blocks, items)
 
 
@@ -1850,8 +1860,7 @@ def get_agg_func_struct(
             typ_and_func = [(in_typ, f) for in_typ, f in zip(in_col_types, agg_func)]
 
     for in_col_typ, func in typ_and_func:
-        in_series_typ = SeriesType(
-            in_col_typ.dtype, in_col_typ, None, string_type)
+        in_series_typ = SeriesType(in_col_typ.dtype, in_col_typ, None, string_type)
         f_ir, pm = compile_to_optimized_ir(func, (in_series_typ,), typingctx)
 
         f_ir._definitions = build_definitions(f_ir.blocks)

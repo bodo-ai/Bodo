@@ -151,12 +151,12 @@ def test_all_null_keys():
 
 
 udf_in_df = pd.DataFrame(
-        {
-            "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [-8, 2, 3, 1, 5, 6, 7],
-            "C": [1.2, 2.4, np.nan, 2.2, 5.3, 3.3, 7.2],
-        }
-    )
+    {
+        "A": [2, 1, 1, 1, 2, 2, 1],
+        "B": [-8, 2, 3, 1, 5, 6, 7],
+        "C": [1.2, 2.4, np.nan, 2.2, 5.3, 3.3, 7.2],
+    }
+)
 
 
 def test_agg():
@@ -460,7 +460,6 @@ def test_count_select_col():
     check_func(impl2, (11,), sort_output=True)
 
 
-
 def test_nunique_select_col():
     """
     Test Groupby.nunique() with explicitly selected one column. Boolean are broken in pandas so the
@@ -503,10 +502,9 @@ def test_nunique_select_col():
     )
     check_func(impl1, (df_int,), sort_output=True)
     check_func(impl1, (df_str,), sort_output=True)
-#    check_func(impl1, (df_bool,), sort_output=True)
+    #    check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl1, (df_dt,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
-
 
 
 def test_nunique_select_col_missing_keys():
@@ -520,10 +518,7 @@ def test_nunique_select_col_missing_keys():
         return A
 
     df_int = pd.DataFrame(
-        {
-            "A": [np.nan, 1, np.nan, 1, 2, 2, 1],
-            "B": [-8, np.nan, 3, 1, np.nan, 6, 7],
-        }
+        {"A": [np.nan, 1, np.nan, 1, 2, 2, 1], "B": [-8, np.nan, 3, 1, np.nan, 6, 7]}
     )
     df_str = pd.DataFrame(
         {
@@ -533,7 +528,6 @@ def test_nunique_select_col_missing_keys():
     )
     check_func(impl1, (df_int,), sort_output=True)
     check_func(impl1, (df_str,), sort_output=True)
-
 
 
 def test_filtered_count():
@@ -559,9 +553,6 @@ def test_filtered_count():
     h_res = bodo_func(df, cond)
     pd.testing.assert_frame_equal(res[0], h_res[0])
     pd.testing.assert_frame_equal(res[1], h_res[1])
-
-
-
 
 
 def test_as_index_count():
