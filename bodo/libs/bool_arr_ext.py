@@ -622,54 +622,27 @@ def create_op_overload(op, n_inputs):
         return overload_bool_arr_op_nin_1
     elif n_inputs == 2:
 
-        def overload_series_op_nin_2(A1, A2):
-            # both are BooleanArray
-            if A1 == boolean_array and A2 == boolean_array:
-
+        def overload_bool_arr_op_nin_2(A1, A2):
+            # if any input is BooleanArray
+            if A1 == boolean_array or A2 == boolean_array:
+                # use type inference to get output dtype
+                ret_dtype = typing_context.resolve_function_type(
+                    op, (A1.dtype, A2.dtype), {}
+                ).return_type
                 def impl_both(A1, A2):  # pragma: no cover
-                    arr1 = bodo.libs.bool_arr_ext.get_bool_arr_data(A1)
-                    bitmap1 = bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A1)
-                    arr2 = bodo.libs.bool_arr_ext.get_bool_arr_data(A2)
-                    bitmap2 = bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A2)
-                    out_arr = op(arr1, arr2)
-                    bodo.libs.bool_arr_ext.set_cmp_out_for_nan(
-                        out_arr, bitmap1, handle_na, na_val
-                    )
-                    bodo.libs.bool_arr_ext.set_cmp_out_for_nan(
-                        out_arr, bitmap2, handle_na, na_val
-                    )
+                    n = len(A1)
+                    out_arr = np.empty(n, ret_dtype)
+                    for i in numba.parfor.internal_prange(n):
+                        out_arr[i] = op(A1[i], A2[i])
+                        if handle_na and (bodo.libs.array_kernels.isna(A1, i)
+                                or bodo.libs.array_kernels.isna(A2, i)):
+                            out_arr[i] = na_val
                     return out_arr
 
                 return impl_both
-            # left arg is BooleanArray
-            if A1 == boolean_array:
 
-                def impl_left(A1, A2):  # pragma: no cover
-                    arr1 = bodo.libs.bool_arr_ext.get_bool_arr_data(A1)
-                    bitmap1 = bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A1)
-                    out_arr = op(arr1, A2)
-                    bodo.libs.bool_arr_ext.set_cmp_out_for_nan(
-                        out_arr, bitmap1, handle_na, na_val
-                    )
-                    return out_arr
-
-                return impl_left
-            # right arg is BooleanArray
-            if A2 == boolean_array:
-
-                def impl_right(A1, A2):  # pragma: no cover
-                    arr2 = bodo.libs.bool_arr_ext.get_bool_arr_data(A2)
-                    bitmap2 = bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A2)
-                    out_arr = op(A1, arr2)
-                    bodo.libs.bool_arr_ext.set_cmp_out_for_nan(
-                        out_arr, bitmap2, handle_na, na_val
-                    )
-                    return out_arr
-
-                return impl_right
-
-        return overload_series_op_nin_2
-    else:
+        return overload_bool_arr_op_nin_2
+    else:  # pragma: no cover
         raise RuntimeError(
             "Don't know how to register ufuncs from ufunc_db with arity > 2"
         )

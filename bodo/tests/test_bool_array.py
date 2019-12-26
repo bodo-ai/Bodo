@@ -26,3 +26,19 @@ def test_unary_ufunc():
 
     A = pd.Series([False, True, True, False, False])
     check_func(test_impl, (A,))
+
+
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne]
+)
+def test_cmp(op):
+    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = "def test_impl(A1, A2):\n"
+    func_text += "  return A1.values {} A2.values\n".format(op_str)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    test_impl = loc_vars["test_impl"]
+
+    A1 = pd.Series([False, True, True, None, True, True, False])
+    A2 = pd.Series([True, True, None, False, False, False, True])
+    check_func(test_impl, (A1, A2))
