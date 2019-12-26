@@ -861,7 +861,7 @@ class UntypedPass(object):
         index_arg = "None"
 
         # one column is index
-        if index_col != -1:
+        if index_col != -1 and index_col != False:
             # convert column number to column name
             if isinstance(index_col, int):
                 index_col = columns[index_col]
