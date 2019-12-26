@@ -599,15 +599,22 @@ def create_op_overload(op, n_inputs):
     na_val = False
     if op_name == "ne":
         na_val = True
+    typing_context = numba.targets.registry.cpu_target.typing_context
 
     if n_inputs == 1:
 
         def overload_bool_arr_op_nin_1(A):
             if isinstance(A, BooleanArrayType):
+                # use type inference to get output dtype
+                ret_dtype = typing_context.resolve_function_type(
+                    op, (types.bool_,), {}
+                ).return_type
 
                 def impl(A):  # pragma: no cover
-                    arr = bodo.libs.bool_arr_ext.get_bool_arr_data(A)
-                    out_arr = op(arr)
+                    n = len(A)
+                    out_arr = np.empty(n, ret_dtype)
+                    for i in numba.parfor.internal_prange(n):
+                        out_arr[i] = op(A[i])
                     return out_arr
 
                 return impl
