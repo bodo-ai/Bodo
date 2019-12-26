@@ -186,6 +186,18 @@ def test_agg_series_input():
     check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
 
 
+def test_agg_bool_expr():
+    """
+    Test Groupby.agg(): make sure boolean expressions work (#326)
+    """
+
+    def impl(df):
+        return df.groupby("A")["B"].agg(lambda x: ((x == "A") | (x == "B")).sum())
+
+    df = pd.DataFrame({"A": [1, 2, 1, 2] * 2, "B": ["A", "B", "C", "D"] * 2})
+    check_func(impl, (df,), sort_output=True)
+
+
 def test_agg_as_index():
     """
     Test Groupby.agg() on groupby() as_index=False

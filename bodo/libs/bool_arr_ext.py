@@ -629,17 +629,25 @@ def create_op_overload(op, n_inputs):
                 ret_dtype = typing_context.resolve_function_type(
                     op, (A1.dtype, A2.dtype), {}
                 ).return_type
-                def impl_both(A1, A2):  # pragma: no cover
-                    n = len(A1)
-                    out_arr = np.empty(n, ret_dtype)
-                    for i in numba.parfor.internal_prange(n):
-                        out_arr[i] = op(A1[i], A2[i])
-                        if handle_na and (bodo.libs.array_kernels.isna(A1, i)
-                                or bodo.libs.array_kernels.isna(A2, i)):
-                            out_arr[i] = na_val
-                    return out_arr
-
-                return impl_both
+                if handle_na:
+                    def impl_both_na(A1, A2):  # pragma: no cover
+                        n = len(A1)
+                        out_arr = np.empty(n, ret_dtype)
+                        for i in numba.parfor.internal_prange(n):
+                            out_arr[i] = op(A1[i], A2[i])
+                            if (bodo.libs.array_kernels.isna(A1, i)
+                                    or bodo.libs.array_kernels.isna(A2, i)):
+                                out_arr[i] = na_val
+                        return out_arr
+                    return impl_both_na
+                else:
+                    def impl_both(A1, A2):  # pragma: no cover
+                        n = len(A1)
+                        out_arr = np.empty(n, ret_dtype)
+                        for i in numba.parfor.internal_prange(n):
+                            out_arr[i] = op(A1[i], A2[i])
+                        return out_arr
+                    return impl_both
 
         return overload_bool_arr_op_nin_2
     else:  # pragma: no cover
