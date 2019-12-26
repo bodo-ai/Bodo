@@ -1762,6 +1762,10 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
                 typemap[stmt.target.name] = typ.data
             if is_call_assign(stmt) and find_callname(f_ir, stmt.value) == ('get_series_data', 'bodo.hiframes.pd_series_ext'):
                 stmt.value = stmt.value.args[0]
+            # remove isna() calls since NA cannot be handled in UDFs yet
+            # TODO: support NA in UDFs
+            if is_call_assign(stmt) and find_callname(f_ir, stmt.value) == ("isna", "bodo.libs.array_kernels"):
+                stmt.value = ir.Const(False, stmt.loc)
 
     preparfor_pass = numba.parfor.PreParforPass(
         f_ir, typemap, calltypes, typingctx, options

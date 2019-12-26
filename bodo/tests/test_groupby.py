@@ -234,10 +234,7 @@ def test_agg_select_col():
         return A
 
     def impl_str(df):
-        # using .values since the UDF won't be a single Parfor with Series string
-        # comparison because of nullable boolean array allocation after compute
-        # TODO: use boolean array allocation before compute
-        A = df.groupby("A")["B"].agg(lambda x: (x.values == "a").sum())
+        A = df.groupby("A")["B"].agg(lambda x: (x == "a").sum())
         return A
 
     def test_impl(n):
@@ -332,7 +329,7 @@ def test_aggregate_select_col():
         return A
 
     def impl_str(df):
-        A = df.groupby("A")["B"].aggregate(lambda x: (x.values == "a").sum())
+        A = df.groupby("A")["B"].aggregate(lambda x: (x == "a").sum())
         return A
 
     def test_impl(n):
