@@ -268,6 +268,11 @@ def box_dataframe(typ, val, c):
                 pyapi.object_setitem(df_obj, cname_obj, arr_obj)
 
             with orelse:
+                # NOTE: adding extra incref() since boxing could be called twice on
+                # a dataframe and not having incref can cause crashes.
+                # see test_csv_double_box.
+                # TODO: Find the right solution to refcounting in @box functions
+                context.nrt.incref(builder, arr_typ, arr)
                 arr_obj = pyapi.from_native_value(arr_typ, arr, c.env_manager)
                 pyapi.object_setitem(df_obj, cname_obj, arr_obj)
 
@@ -276,6 +281,8 @@ def box_dataframe(typ, val, c):
 
     # set df.index if necessary
     if typ.index != types.none:
+        # NOTE: see comment on incref above
+        context.nrt.incref(builder, typ.index, dataframe_payload.index)
         arr_obj = c.pyapi.from_native_value(
             typ.index, dataframe_payload.index, c.env_manager
         )

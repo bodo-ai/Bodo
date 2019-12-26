@@ -425,6 +425,21 @@ def test_np_io4():
         np.testing.assert_almost_equal(A, B)
 
 
+def test_csv_double_box(datapath):
+    """Make sure boxing the output of read_csv() twice doesn't cause crashes
+    See dataframe boxing function for extra incref of native arrays.
+    """
+    fname = datapath("csv_data1.csv")
+
+    def test_impl():
+        df = pd.read_csv(fname)
+        print(df)
+        return df
+
+    bodo_func = bodo.jit(test_impl)
+    print(bodo_func())
+
+
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
         fname = "lr_w.hdf5"
