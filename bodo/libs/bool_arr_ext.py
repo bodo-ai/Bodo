@@ -625,29 +625,34 @@ def create_op_overload(op, n_inputs):
         def overload_bool_arr_op_nin_2(A1, A2):
             # if any input is BooleanArray
             if A1 == boolean_array or A2 == boolean_array:
+                is_A1_scalar = isinstance(A1, (types.Number, types.Boolean))
+                is_A2_scalar = isinstance(A2, (types.Number, types.Boolean))
                 # use type inference to get output dtype
+                dtype1 = getattr(A1, "dtype", A1)
+                dtype2 = getattr(A2, "dtype", A2)
                 ret_dtype = typing_context.resolve_function_type(
-                    op, (A1.dtype, A2.dtype), {}
+                    op, (dtype1, dtype2), {}
                 ).return_type
+                access_str1 = "A1" if is_A1_scalar else "A1[i]"
+                access_str2 = "A2" if is_A2_scalar else "A2[i]"
+                na_str1 = "False" if is_A1_scalar else "bodo.libs.array_kernels.isna(A1, i)"
+                na_str2 = "False" if is_A2_scalar else "bodo.libs.array_kernels.isna(A2, i)"
+                func_text = "def impl(A1, A2):\n"
+                func_text += "  n = len({})\n".format("A1" if not is_A1_scalar else "A2")
+                func_text += "  out_arr = np.empty(n, ret_dtype)\n"
+                func_text += "  for i in numba.parfor.internal_prange(n):\n"
+                func_text += "    out_arr[i] = op({}, {})\n".format(
+                    access_str1, access_str2
+                )
                 if handle_na:
-                    def impl_both_na(A1, A2):  # pragma: no cover
-                        n = len(A1)
-                        out_arr = np.empty(n, ret_dtype)
-                        for i in numba.parfor.internal_prange(n):
-                            out_arr[i] = op(A1[i], A2[i])
-                            if (bodo.libs.array_kernels.isna(A1, i)
-                                    or bodo.libs.array_kernels.isna(A2, i)):
-                                out_arr[i] = na_val
-                        return out_arr
-                    return impl_both_na
-                else:
-                    def impl_both(A1, A2):  # pragma: no cover
-                        n = len(A1)
-                        out_arr = np.empty(n, ret_dtype)
-                        for i in numba.parfor.internal_prange(n):
-                            out_arr[i] = op(A1[i], A2[i])
-                        return out_arr
-                    return impl_both
+                    func_text += "    if ({}\n".format(na_str1)
+                    func_text += "        or {}):\n".format(na_str2)
+                    func_text += "      out_arr[i] = {}\n".format(na_val)
+                func_text += "  return out_arr\n"
+                loc_vars = {}
+                exec(func_text, {"bodo": bodo, "numba": numba, "np": np, "ret_dtype": ret_dtype, "op": op}, loc_vars)
+                impl = loc_vars["impl"]
+                return impl
 
         return overload_bool_arr_op_nin_2
     else:  # pragma: no cover

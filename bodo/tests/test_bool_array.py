@@ -32,6 +32,8 @@ def test_unary_ufunc():
     "op", [operator.eq, operator.ne]
 )
 def test_cmp(op):
+    """Test comparison of two boolean arrays
+    """
     op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A1, A2):\n"
     func_text += "  return A1.values {} A2.values\n".format(op_str)
@@ -42,3 +44,16 @@ def test_cmp(op):
     A1 = pd.Series([False, True, True, None, True, True, False])
     A2 = pd.Series([True, True, None, False, False, False, True])
     check_func(test_impl, (A1, A2))
+
+
+def test_cmp_scalar():
+    """Test comparison of boolean array and a scalar
+    """
+    def test_impl1(A):
+        return A.values == True
+    def test_impl2(A):
+        return True != A.values
+
+    A = pd.Series([False, True, True, None, True, True, False])
+    check_func(test_impl1, (A,))
+    check_func(test_impl2, (A,))
