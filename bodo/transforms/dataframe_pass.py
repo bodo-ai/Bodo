@@ -1858,6 +1858,7 @@ class DataFramePass(object):
             how = "left"
             left_df, right_df = right_df, left_df
             left_on, right_on = right_on, left_on
+            suffix_x, suffix_y = suffix_y, suffix_x
 
         nodes = []
         out_data_vars = {
