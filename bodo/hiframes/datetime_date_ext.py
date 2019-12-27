@@ -65,11 +65,18 @@ def typeof_datetime_date(val, c):
 register_model(DatetimeDateType)(models.IntegerModel)
 
 
+# extraction of year/month/day attributes
 @infer_getattr
 class DatetimeAttribute(AttributeTemplate):
     key = DatetimeDateType
 
-    def generic_resolve(self, typ, attr):
+    def resolve_year(self, typ):
+        return types.int64
+
+    def resolve_month(self, typ):
+        return types.int64
+
+    def resolve_day(self, typ):
         return types.int64
 
 
