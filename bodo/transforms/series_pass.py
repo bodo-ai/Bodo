@@ -1227,9 +1227,7 @@ class SeriesPass(object):
         if fdef == ("alloc_type", "bodo.utils.utils"):
             typ = self.typemap[rhs.args[1].name].instance_type
             if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
-                impl = lambda n, t: bodo.hiframes.datetime_date_ext.np_arr_to_array_datetime_date(
-                    np.empty(n, np.int64)
-                )
+                impl = lambda n, t: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
             elif isinstance(typ, IntegerArrayType):
                 impl = lambda n, t: bodo.libs.int_arr_ext.init_integer_array(
                     np.empty(n, _dtype), np.empty((n + 7) >> 3, np.uint8)

@@ -28,11 +28,7 @@ from bodo.hiframes.pd_dataframe_ext import (
     construct_dataframe,
     DataFramePayloadType,
 )
-from bodo.hiframes.datetime_date_ext import (
-    datetime_date_type,
-    unbox_datetime_date_array,
-    box_datetime_date_array,
-)
+from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import typeof_pd_int_dtype
 from bodo.hiframes.pd_categorical_ext import (
@@ -363,9 +359,7 @@ def unbox_series(typ, val, c):
 
 
 def _unbox_series_data(dtype, data_typ, arr_obj, c):
-    if dtype == datetime_date_type:
-        return unbox_datetime_date_array(data_typ, arr_obj, c)
-    elif data_typ == string_array_split_view_type:
+    if data_typ == string_array_split_view_type:
         # XXX dummy unboxing to avoid errors in _get_dataframe_data()
         out_view = c.context.make_helper(c.builder, string_array_split_view_type)
         return NativeValue(out_view._getvalue())
@@ -405,11 +399,7 @@ def _box_series_data(dtype, data_typ, val, c):
         np_dtype = np.dtype(",".join(str(t) for t in dtype.types), align=True)
         dtype = numba.numpy_support.from_dtype(np_dtype)
 
-    # TODO: make proper array for datetime.date()
-    if dtype == datetime_date_type:
-        arr = box_datetime_date_array(data_typ, val, c)
-    else:
-        arr = c.pyapi.from_native_value(data_typ, val, c.env_manager)
+    arr = c.pyapi.from_native_value(data_typ, val, c.env_manager)
 
     if isinstance(dtype, types.Record):
         o_str = c.context.insert_const_string(c.builder.module, "O")

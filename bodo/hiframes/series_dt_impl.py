@@ -138,7 +138,7 @@ def series_dt_date_overload(S_dt):
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         numba.parfor.init_prange()
         n = len(arr)
-        out_arr = numba.unsafe.ndarray.empty_inferred((n,))
+        out_arr = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
         for i in numba.parfor.internal_prange(n):
             dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
             ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)

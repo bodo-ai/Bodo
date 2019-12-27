@@ -182,7 +182,7 @@ def _get_series_array_type(dtype):
         dtype = numba.numpy_support.from_dtype(np_dtype)
 
     if dtype == datetime_date_type:
-        return bodo.hiframes.datetime_date_ext.array_datetime_date
+        return bodo.hiframes.datetime_date_ext.datetime_date_array_type
 
     # TODO: other types?
     # regular numpy array

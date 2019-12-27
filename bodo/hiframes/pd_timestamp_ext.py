@@ -23,7 +23,6 @@ from numba.extending import (
 from numba import cgutils
 from numba.targets.arrayobj import (
     make_array,
-    _empty_nd_impl,
     store_item,
     basic_indexing,
 )

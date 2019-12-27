@@ -35,7 +35,6 @@ from bodo.libs.str_ext import string_type
 import bodo.hiframes
 from bodo.hiframes.pd_series_ext import is_str_series_typ, string_array_type, SeriesType
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
-from bodo.hiframes.datetime_date_ext import array_datetime_date
 import bodo.utils.conversion
 from bodo.utils.utils import BooleanLiteral
 from bodo.utils.typing import is_overload_none, is_overload_true, is_overload_false
@@ -203,12 +202,12 @@ def overload_datetime_index_date(dti):
         numba.parfor.init_prange()
         A = bodo.hiframes.pd_index_ext.get_index_data(dti)
         n = len(A)
-        S = numba.unsafe.ndarray.empty_inferred((n,))
+        S = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
         for i in numba.parfor.internal_prange(n):
             dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])
             ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)
             S[i] = datetime.date(ts.year, ts.month, ts.day)
-        return bodo.hiframes.datetime_date_ext.np_arr_to_array_datetime_date(S)
+        return S
 
     return impl
 
