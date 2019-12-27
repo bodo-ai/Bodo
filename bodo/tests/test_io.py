@@ -169,6 +169,25 @@ def test_csv_bool_na(datapath):
     check_func(test_impl, ())
 
 
+def test_csv_fname_comp(datapath):
+    """Test CSV read with filename computed across Bodo functions
+    """
+
+    @bodo.jit
+    def test_impl(data_folder):
+        return load_func(data_folder)
+
+
+    @bodo.jit
+    def load_func(data_folder):
+        fname = data_folder + "/csv_data1.csv"
+        return pd.read_csv(fname)
+
+    data_folder = os.path.join("bodo", "tests", "data")
+    # should not raise exception
+    test_impl(data_folder)
+
+
 def test_write_csv_parallel_unicode():
     def test_impl(df, fname):
         df.to_csv(fname, index=False)

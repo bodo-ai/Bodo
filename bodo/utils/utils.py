@@ -770,37 +770,6 @@ def include_new_blocks(
     return label
 
 
-def find_str_const(func_ir, var, arg_types=None):
-    """Check if a variable can be inferred as a string constant, and return
-    the constant value, or raise GuardException otherwise.
-    """
-    # TODO: refactor this function to use get_const_value
-    require(isinstance(var, ir.Var))
-    var_def = get_definition(func_ir, var)
-    if isinstance(var_def, (ir.Const, ir.Global, ir.FreeVar)):
-        val = var_def.value
-        require(isinstance(val, str))
-        return val
-    elif isinstance(var_def, ir.Arg) and arg_types is not None:
-        arg_typ = arg_types[var_def.index]
-        if isinstance(arg_typ, types.StringLiteral):
-            val = arg_typ.literal_value
-            return val
-        # force literal only if argument is string
-        if arg_typ == string_type:
-            raise numba.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
-
-    # only add supported (s1+s2), TODO: extend to other expressions
-    require(
-        isinstance(var_def, ir.Expr)
-        and var_def.op == "binop"
-        and var_def.fn == operator.add
-    )
-    arg1 = find_str_const(func_ir, var_def.lhs)
-    arg2 = find_str_const(func_ir, var_def.rhs)
-    return arg1 + arg2
-
-
 def gen_getitem(out_var, in_var, ind, calltypes, nodes):
     loc = out_var.loc
     getitem = ir.Expr.static_getitem(in_var, ind, None, loc)

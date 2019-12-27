@@ -2,6 +2,7 @@
 """
 Helper functions for transformations.
 """
+import operator
 import pandas as pd
 import numpy as np
 import math
@@ -14,9 +15,11 @@ from numba.ir_utils import (
     guard,
     GuardException,
     get_definition,
+    require,
 )
 import bodo
 from bodo.utils.utils import is_assign, is_expr
+from bodo.libs.str_ext import string_type
 from bodo.utils.typing import BodoError
 
 
@@ -82,28 +85,50 @@ def get_stmt_defs(stmt):
     return set()
 
 
-def get_const_value(var, func_ir, err_msg, typemap=None, arg_types=None):
+def get_str_const_value(var, func_ir, err_msg, typemap=None, arg_types=None):
     """Get constant value of a variable if possible, otherwise raise error.
     If the variable is argument to the function, force recompilation with literal
     typing of the argument.
     """
-    # literal type
+    val = guard(find_str_const, func_ir, var, arg_types, typemap)
+    if val is None:
+        raise BodoError(err_msg)
+    return val
+
+
+def find_str_const(func_ir, var, arg_types=None, typemap=None):
+    """Check if a variable can be inferred as a string constant, and return
+    the constant value, or raise GuardException otherwise.
+    """
+    require(isinstance(var, ir.Var))
+    var_def = get_definition(func_ir, var)
+
+    # get type of variable if possible
+    typ = None
     if typemap is not None:
         typ = typemap[var.name]
-        if isinstance(typ, types.Literal):
-            return typ.literal_value
+    if isinstance(var_def, ir.Arg) and arg_types is not None:
+        typ = arg_types[var_def.index]
 
-    try:
-        return find_const(func_ir, var)
-    except GuardException:
-        # if variable is argument, force literal
-        var_def = guard(get_definition, func_ir, var)
-        if isinstance(var_def, ir.Arg):
-            # untyped passes can only pass arg_types, not typemap used above
-            if arg_types is not None and isinstance(
-                arg_types[var_def.index], types.Literal
-            ):
-                return arg_types[var_def.index].literal_value
-            raise numba.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
+    # literal type
+    if isinstance(typ, types.StringLiteral):
+        return typ.literal_value
 
-    raise BodoError(err_msg)
+    # constant value
+    if isinstance(var_def, (ir.Const, ir.Global, ir.FreeVar)):
+        val = var_def.value
+        require(isinstance(val, str))
+        return val
+    # argument dispatch, force literal only if argument is string
+    elif isinstance(var_def, ir.Arg) and typ == string_type:
+        raise numba.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
+
+    # only add supported (s1+s2), TODO: extend to other expressions
+    require(
+        isinstance(var_def, ir.Expr)
+        and var_def.op == "binop"
+        and var_def.fn == operator.add
+    )
+    arg1 = find_str_const(func_ir, var_def.lhs, arg_types, typemap)
+    arg2 = find_str_const(func_ir, var_def.rhs, arg_types, typemap)
+    return arg1 + arg2

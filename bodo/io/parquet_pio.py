@@ -23,7 +23,7 @@ from bodo.utils.utils import unliteral_all, sanitize_varname
 from bodo.utils.typing import BodoError
 import bodo.ir.parquet_ext
 from bodo.transforms import distributed_pass
-from bodo.utils.transform import get_const_value
+from bodo.utils.transform import get_str_const_value
 
 
 # from parquet/types.h
@@ -117,7 +117,7 @@ class ParquetHandler(object):
                 "argument should be constant for Bodo to look at the file "
                 "at compile time or schema should be provided."
             )
-            file_name_str = get_const_value(
+            file_name_str = get_str_const_value(
                 file_name, self.func_ir, msg, arg_types=self.args
             )
             col_names, col_types, index_col = parquet_file_schema(file_name_str)

@@ -56,7 +56,7 @@ from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 import bodo.hiframes.pd_rolling_ext
 from bodo.hiframes.pd_rolling_ext import RollingType
 from bodo.ir.aggregate import get_agg_func
-from bodo.utils.transform import compile_func_single_block, update_locs, get_const_value
+from bodo.utils.transform import compile_func_single_block, update_locs, get_str_const_value
 from bodo.libs.str_arr_ext import (
     string_array_type,
     get_utf8_size,
@@ -1483,7 +1483,7 @@ class DataFramePass(object):
         err_msg = (
             "df.query() expr arg should be constant string or argument to jit function"
         )
-        expr = get_const_value(expr_var, self.func_ir, err_msg, self.typemap)
+        expr = get_str_const_value(expr_var, self.func_ir, err_msg, self.typemap)
 
         # parse expression
         parsed_expr, parsed_expr_str, used_cols = self._parse_query_expr(
