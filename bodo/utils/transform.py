@@ -100,26 +100,28 @@ def find_str_const(func_ir, var, arg_types=None, typemap=None):
     """Check if a variable can be inferred as a string constant, and return
     the constant value, or raise GuardException otherwise.
     """
-    # literal type
-    if typemap is not None:
-        typ = typemap[var.name]
-        if isinstance(typ, types.StringLiteral):
-            return typ.literal_value
-
     require(isinstance(var, ir.Var))
     var_def = get_definition(func_ir, var)
+
+    # get type of variable if possible
+    typ = None
+    if typemap is not None:
+        typ = typemap[var.name]
+    if isinstance(var_def, ir.Arg) and arg_types is not None:
+        typ = arg_types[var_def.index]
+
+    # literal type
+    if isinstance(typ, types.StringLiteral):
+        return typ.literal_value
+
+    # constant value
     if isinstance(var_def, (ir.Const, ir.Global, ir.FreeVar)):
         val = var_def.value
         require(isinstance(val, str))
         return val
-    elif isinstance(var_def, ir.Arg) and arg_types is not None:
-        arg_typ = arg_types[var_def.index]
-        if isinstance(arg_typ, types.StringLiteral):
-            val = arg_typ.literal_value
-            return val
-        # force literal only if argument is string
-        if arg_typ == string_type:
-            raise numba.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
+    # argument dispatch, force literal only if argument is string
+    elif isinstance(var_def, ir.Arg) and typ == string_type:
+        raise numba.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
 
     # only add supported (s1+s2), TODO: extend to other expressions
     require(
