@@ -514,14 +514,10 @@ class SeriesPass(object):
                 arr1 = bodo.hiframes.pd_series_ext.get_series_data(S1)
                 arr2 = bodo.hiframes.pd_series_ext.get_series_data(S2)
                 l = len(arr1)
-                S = np.empty(l, dtype=np.bool_)
-                nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
+                S = bodo.libs.bool_arr_ext.alloc_bool_array(l)
                 for i in numba.parfor.internal_prange(l):
                     S[i] = func(arr1[i], arr2[i])
-                    bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
-                return bodo.hiframes.pd_series_ext.init_series(
-                    bodo.libs.bool_arr_ext.init_bool_array(S, nulls)
-                )
+                return bodo.hiframes.pd_series_ext.init_series(S)
 
             return self._replace_func(impl, [arg1, arg2])
 
@@ -2293,12 +2289,10 @@ class SeriesPass(object):
             )
         else:
             func_text += "  other = _str\n"
-        func_text += "  S = np.empty(l, dtype=np.bool_)\n"
-        func_text += "  nulls = np.empty((l + 7) >> 3, dtype=np.uint8)\n"
+        func_text += "  S = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
         func_text += "  for i in numba.parfor.internal_prange(l):\n"
         func_text += "    S[i] = {}\n".format(comp)
-        func_text += "    bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)\n"
-        func_text += "  return bodo.hiframes.pd_series_ext.init_series(bodo.libs.bool_arr_ext.init_bool_array(S, nulls))\n"
+        func_text += "  return bodo.hiframes.pd_series_ext.init_series(S)\n"
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         f = loc_vars["f"]
@@ -2350,17 +2344,16 @@ class SeriesPass(object):
 
             func_text = "def f(A, B):\n"
             func_text += "  l = {}\n".format(len_call)
-            func_text += "  S = np.empty(l, dtype=np.bool_)\n"
             if is_series:
-                func_text += "  nulls = np.empty((l + 7) >> 3, dtype=np.uint8)\n"
+                func_text += "  S = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
+            else:
+                func_text += "  S = np.empty(l, dtype=np.bool_)\n"
             func_text += "  for i in numba.parfor.internal_prange(l):\n"
             func_text += "    S[i] = {} {} {}\n".format(
                 arg1_access, op_str, arg2_access
             )
-            # TODO: proper NAs
             if is_series:
-                func_text += "    bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)\n"
-                func_text += "  return bodo.hiframes.pd_series_ext.init_series(bodo.libs.bool_arr_ext.init_bool_array(S, nulls))\n"
+                func_text += "  return bodo.hiframes.pd_series_ext.init_series(S)\n"
             else:
                 func_text += "  return S\n"
 
