@@ -290,6 +290,9 @@ def alloc_bool_array(n):
 
 
 def alloc_bool_array_equiv(self, scope, equiv_set, args, kws):
+    """Array analysis function for alloc_bool_array() passed to Numba's array analysis
+    extension. Assigns output array's size as equivalent to the input size variable.
+    """
     assert len(args) == 1 and not kws
     return args[0], []
 
@@ -633,6 +636,16 @@ def create_op_overload(op, n_inputs):
                 ret_dtype = typing_context.resolve_function_type(
                     op, (dtype1, dtype2), {}
                 ).return_type
+                # generate implementation function. Example:
+                # def impl(A1, A2):
+                # n = len(A1)
+                # out_arr = np.empty(n, ret_dtype)
+                # for i in numba.parfor.internal_prange(n):
+                #     out_arr[i] = op(A1[i], A2[i])
+                #     if (bodo.libs.array_kernels.isna(A1, i)
+                #         or bodo.libs.array_kernels.isna(A2, i)):
+                #     out_arr[i] = True
+                # return out_arr
                 access_str1 = "A1" if is_A1_scalar else "A1[i]"
                 access_str2 = "A2" if is_A2_scalar else "A2[i]"
                 na_str1 = (

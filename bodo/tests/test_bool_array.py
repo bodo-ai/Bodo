@@ -6,17 +6,7 @@ import pytest
 
 import numba
 import bodo
-from bodo.tests.utils import (
-    count_array_REPs,
-    count_parfor_REPs,
-    count_parfor_OneDs,
-    count_array_OneDs,
-    dist_IR_contains,
-    get_start_end,
-    check_func,
-)
-
-np.random.seed(0)
+from bodo.tests.utils import check_func
 
 
 def test_unary_ufunc():
