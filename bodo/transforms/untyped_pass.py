@@ -771,7 +771,7 @@ class UntypedPass(object):
         if dtype_var is "" or col_names == 0:
             # infer column names and types from constant filename
             msg = (
-                "pd.read_csv() requires explicit type"
+                "pd.read_csv() requires explicit type "
                 "annotation using 'dtype' if filename is not constant"
             )
             fname_const = get_const_value(fname, self.func_ir, msg, arg_types=self.args)
