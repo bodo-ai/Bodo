@@ -25,7 +25,8 @@ import numpy as np
 import bodo
 import bodo.io
 from bodo.io import h5_api
-from bodo.utils.utils import find_str_const, debug_prints
+from bodo.utils.utils import debug_prints
+from bodo.utils.transform import find_str_const
 
 
 def remove_h5(rhs, lives, call_list):
