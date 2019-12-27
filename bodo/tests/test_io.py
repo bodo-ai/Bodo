@@ -123,9 +123,13 @@ def test_pq_schema(datapath):
 
 
 def test_csv_bool1(datapath):
+    """Test boolean data in CSV files.
+    Also test extra separator at the end of the file
+    which requires index_col=False.
+    """
     def test_impl(fname):
         dtype = {"A": "int", "B": "bool", "C": "float"}
-        return pd.read_csv(fname, names=dtype.keys(), dtype=dtype)
+        return pd.read_csv(fname, names=dtype.keys(), dtype=dtype, index_col=False)
 
     # passing file name as argument to exercise value-based dispatch
     fname = datapath("csv_data_bool1.csv")
