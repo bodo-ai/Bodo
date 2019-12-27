@@ -54,7 +54,7 @@ from bodo.ir import csv_ext
 
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 import bodo.hiframes.pd_dataframe_ext
-from bodo.utils.transform import update_locs, get_const_value
+from bodo.utils.transform import update_locs, get_str_const_value
 
 
 def remove_hiframes(rhs, lives, call_list):
@@ -771,7 +771,7 @@ class UntypedPass(object):
                 "pd.read_csv() requires explicit type"
                 "annotation using 'dtype' if filename is not constant"
             )
-            fname_const = get_const_value(fname, self.func_ir, msg, arg_types=self.args)
+            fname_const = get_str_const_value(fname, self.func_ir, msg, arg_types=self.args)
             rows_to_read = 100  # TODO: tune this
             df = pd.read_csv(
                 fname_const,

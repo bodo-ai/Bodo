@@ -85,7 +85,7 @@ def get_stmt_defs(stmt):
     return set()
 
 
-def get_const_value(var, func_ir, err_msg, typemap=None, arg_types=None):
+def get_str_const_value(var, func_ir, err_msg, typemap=None, arg_types=None):
     """Get constant value of a variable if possible, otherwise raise error.
     If the variable is argument to the function, force recompilation with literal
     typing of the argument.
@@ -116,7 +116,7 @@ def find_str_const(func_ir, var, arg_types=None):
     """Check if a variable can be inferred as a string constant, and return
     the constant value, or raise GuardException otherwise.
     """
-    # TODO: refactor this function to use get_const_value
+    # TODO: refactor this function to use get_str_const_value
     require(isinstance(var, ir.Var))
     var_def = get_definition(func_ir, var)
     if isinstance(var_def, (ir.Const, ir.Global, ir.FreeVar)):
