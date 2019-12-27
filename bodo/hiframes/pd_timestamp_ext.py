@@ -63,10 +63,6 @@ ll.add_symbol(
     "convert_datetimestruct_to_datetime",
     hdatetime_ext.convert_datetimestruct_to_datetime,
 )
-ll.add_symbol(
-    "np_datetime_date_array_from_packed_ints",
-    hdatetime_ext.np_datetime_date_array_from_packed_ints,
-)
 
 date_fields = [
     "year",

@@ -60,63 +60,6 @@ static int convert_datetimestruct_to_datetime(PANDAS_DATETIMEUNIT base,
                                               const pandas_datetimestruct *dts,
                                               npy_datetime *out) __UNUSED__;
 
-static void *np_datetime_date_array_from_packed_ints(
-    uint64_t *dt_data, int64_t n_elems, PyObject *dt_date_class) __UNUSED__;
-
-// void dt_to_timestamp(int64_t val, pd_timestamp *ts) {
-//     pandas_datetimestruct out;
-//     pandas_datetime_to_datetimestruct(val, PANDAS_FR_ns, &out);
-//     ts->year = out.year;
-//     ts->month = out.month;
-//     ts->day = out.day;
-//     ts->hour = out.hour;
-//     ts->minute = out.min;
-//     ts->second = out.sec;
-//     ts->microsecond = out.us;
-//     ts->nanosecond = out.ps * 1000;
-// }
-
-static inline PyObject *py_datetime_date_from_packed_int(
-    uint64_t dt, PyObject *dt_date_class) {
-    uint64_t year = dt >> 32;
-    uint64_t month = (dt >> 16) & 0xFFFF;
-    uint64_t day = dt & 0xFFFF;
-    return PyObject_CallFunction(dt_date_class, "iii", year, month, day);
-}
-
-// given an array of packed integers for datetime.date (pd_timestamp_ext
-// format),
-// create and return a pd.Series of datetime.date() objects
-static void *np_datetime_date_array_from_packed_ints(uint64_t *dt_data,
-                                                     int64_t n_elems,
-                                                     PyObject *dt_date_class) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return NULL;                   \
-    }
-    auto gilstate = PyGILState_Ensure();
-
-    npy_intp dims[] = {n_elems};
-    PyObject *ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
-    CHECK(ret, "allocating numpy array failed");
-
-    for (int64_t i = 0; i < n_elems; ++i) {
-        PyObject *s =
-            py_datetime_date_from_packed_int(dt_data[i], dt_date_class);
-        CHECK(s, "creating Python datetime.date object failed");
-        auto p = PyArray_GETPTR1((PyArrayObject *)ret, i);
-        CHECK(p, "getting offset in numpy array failed");
-        int err = PyArray_SETITEM((PyArrayObject *)ret, (char *)p, s);
-        CHECK(err == 0, "setting item in numpy array failed");
-        Py_DECREF(s);
-    }
-
-    PyGILState_Release(gilstate);
-    return ret;
-#undef CHECK
-}
 
 // XXX copy paste from Pandas for parse_iso_8601_datetime
 
