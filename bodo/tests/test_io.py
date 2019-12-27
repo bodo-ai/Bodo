@@ -429,6 +429,38 @@ def test_np_io4():
         np.testing.assert_almost_equal(A, B)
 
 
+def test_csv_double_box(datapath):
+    """Make sure boxing the output of read_csv() twice doesn't cause crashes
+    See dataframe boxing function for extra incref of native arrays.
+    """
+    fname = datapath("csv_data1.csv")
+
+    def test_impl():
+        df = pd.read_csv(fname)
+        print(df)
+        return df
+
+    bodo_func = bodo.jit(test_impl)
+    print(bodo_func())
+
+
+def test_csv_header_none(datapath):
+    """Test header=None in read_csv() when column names are not provided, so numbers
+    should be assigned as column names.
+    """
+    fname = datapath("csv_data1.csv")
+
+    def test_impl():
+        return pd.read_csv(fname, header=None)
+
+    bodo_func = bodo.jit(test_impl)
+    b_df = bodo_func()
+    p_df = test_impl()
+    # convert column names from integer to string since Bodo only supports string names
+    p_df.columns = [str(c) for c in p_df.columns]
+    pd.testing.assert_frame_equal(b_df, p_df)
+
+
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
         fname = "lr_w.hdf5"
