@@ -1144,6 +1144,9 @@ class UntypedPass(object):
     def _get_const_arg(
         self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None, typ=None
     ):
+        """Get constant value for a function call argument. Raise error if the value is
+        not constant.
+        """
         typ = str if typ is None else typ
         arg = CONST_NOT_FOUND
         try:

@@ -222,6 +222,10 @@ def _infer_series_list_dtype(A, name):
 
 @box(DataFrameType)
 def box_dataframe(typ, val, c):
+    """Boxes native dataframe value into Python dataframe object, required for function
+    return, printing, object mode, etc.
+    Works by boxing individual data arrays.
+    """
     context = c.context
     builder = c.builder
 
