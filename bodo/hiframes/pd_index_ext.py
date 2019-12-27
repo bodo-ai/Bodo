@@ -33,7 +33,7 @@ import bodo
 from bodo.libs.str_ext import string_type
 import bodo.hiframes
 from bodo.hiframes.pd_series_ext import is_str_series_typ, string_array_type, SeriesType
-from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type, datetime_date_type
+from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 from bodo.hiframes.datetime_date_ext import array_datetime_date
 import bodo.utils.conversion
 from bodo.utils.utils import BooleanLiteral
@@ -206,7 +206,7 @@ def overload_datetime_index_date(dti):
         for i in numba.parfor.internal_prange(n):
             dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])
             ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)
-            S[i] = bodo.hiframes.pd_timestamp_ext.datetime_date_ctor(
+            S[i] = bodo.hiframes.datetime_date_ext.datetime_date_ctor(
                 ts.year, ts.month, ts.day
             )
         return bodo.hiframes.datetime_date_ext.np_arr_to_array_datetime_date(S)

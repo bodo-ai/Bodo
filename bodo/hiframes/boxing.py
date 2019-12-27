@@ -28,7 +28,7 @@ from bodo.hiframes.pd_dataframe_ext import (
     construct_dataframe,
     DataFramePayloadType,
 )
-from bodo.hiframes.pd_timestamp_ext import (
+from bodo.hiframes.datetime_date_ext import (
     datetime_date_type,
     unbox_datetime_date_array,
     box_datetime_date_array,

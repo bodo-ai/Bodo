@@ -632,7 +632,7 @@ def overload_alloc_type(n, t):
 
         return lambda n, t: fix_cat_array_type(np.empty(n, t.dtype))
 
-    if typ.dtype == bodo.hiframes.pd_timestamp_ext.datetime_date_type:
+    if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
         return lambda n, t: bodo.hiframes.datetime_date_ext.np_arr_to_array_datetime_date(
             np.empty(n, np.int64)
         )
