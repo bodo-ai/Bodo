@@ -98,18 +98,6 @@ def datetime_get_day(context, builder, typ, val):
     return builder.and_(val, lir.Constant(lir.IntType(64), 0xFFFF))
 
 
-@numba.njit
-def convert_datetime_date_array_to_native(x):  # pragma: no cover
-    return np.array(
-        [(val.day + (val.month << 16) + (val.year << 32)) for val in x], dtype=np.int64
-    )
-
-
-@numba.njit
-def datetime_date_ctor(y, m, d):  # pragma: no cover
-    return datetime.date(y, m, d)
-
-
 @unbox(DatetimeDateType)
 def unbox_datetime_date(typ, val, c):
     year_obj = c.pyapi.object_getattr_string(val, "year")
@@ -134,6 +122,51 @@ def unbox_datetime_date(typ, val, c):
 
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(nopython_date, is_error=is_error)
+
+
+@box(DatetimeDateType)
+def box_datetime_date(typ, val, c):
+    year_obj = c.pyapi.long_from_longlong(
+        c.builder.lshr(val, lir.Constant(lir.IntType(64), 32))
+    )
+    month_obj = c.pyapi.long_from_longlong(
+        c.builder.and_(
+            c.builder.lshr(val, lir.Constant(lir.IntType(64), 16)),
+            lir.Constant(lir.IntType(64), 0xFFFF),
+        )
+    )
+    day_obj = c.pyapi.long_from_longlong(
+        c.builder.and_(val, lir.Constant(lir.IntType(64), 0xFFFF))
+    )
+
+    dt_obj = c.pyapi.unserialize(c.pyapi.serialize_object(datetime.date))
+    res = c.pyapi.call_function_objargs(dt_obj, (year_obj, month_obj, day_obj))
+    c.pyapi.decref(year_obj)
+    c.pyapi.decref(month_obj)
+    c.pyapi.decref(day_obj)
+    return res
+
+
+@type_callable(datetime.date)
+def type_datetime_date(context):
+    def typer(year, month, day):
+        # TODO: check types
+        return datetime_date_type
+
+    return typer
+
+
+@lower_builtin(datetime.date, types.int64, types.int64, types.int64)
+def impl_ctor_datetime_date(context, builder, sig, args):
+    year, month, day = args
+    nopython_date = builder.add(
+        day,
+        builder.add(
+            builder.shl(year, lir.Constant(lir.IntType(64), 32)),
+            builder.shl(month, lir.Constant(lir.IntType(64), 16)),
+        ),
+    )
+    return nopython_date
 
 
 def unbox_datetime_date_array(typ, val, c):
@@ -197,51 +230,6 @@ def sequence_getitem(c, obj, ind):
     fnty = lir.FunctionType(pyobj_lltyp, [pyobj_lltyp, lir.IntType(64)])
     fn = c.builder.module.get_or_insert_function(fnty, name="PySequence_GetItem")
     return c.builder.call(fn, (obj, ind))
-
-
-@box(DatetimeDateType)
-def box_datetime_date(typ, val, c):
-    year_obj = c.pyapi.long_from_longlong(
-        c.builder.lshr(val, lir.Constant(lir.IntType(64), 32))
-    )
-    month_obj = c.pyapi.long_from_longlong(
-        c.builder.and_(
-            c.builder.lshr(val, lir.Constant(lir.IntType(64), 16)),
-            lir.Constant(lir.IntType(64), 0xFFFF),
-        )
-    )
-    day_obj = c.pyapi.long_from_longlong(
-        c.builder.and_(val, lir.Constant(lir.IntType(64), 0xFFFF))
-    )
-
-    dt_obj = c.pyapi.unserialize(c.pyapi.serialize_object(datetime.date))
-    res = c.pyapi.call_function_objargs(dt_obj, (year_obj, month_obj, day_obj))
-    c.pyapi.decref(year_obj)
-    c.pyapi.decref(month_obj)
-    c.pyapi.decref(day_obj)
-    return res
-
-
-@type_callable(datetime.date)
-def type_datetime_date(context):
-    def typer(year, month, day):
-        # TODO: check types
-        return datetime_date_type
-
-    return typer
-
-
-@lower_builtin(datetime.date, types.int64, types.int64, types.int64)
-def impl_ctor_datetime_date(context, builder, sig, args):
-    year, month, day = args
-    nopython_date = builder.add(
-        day,
-        builder.add(
-            builder.shl(year, lir.Constant(lir.IntType(64), 32)),
-            builder.shl(month, lir.Constant(lir.IntType(64), 16)),
-        ),
-    )
-    return nopython_date
 
 
 @intrinsic

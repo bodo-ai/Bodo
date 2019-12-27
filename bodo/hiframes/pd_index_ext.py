@@ -1,5 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
+import datetime
 import pandas as pd
 import numpy as np
 import numba
@@ -206,9 +207,7 @@ def overload_datetime_index_date(dti):
         for i in numba.parfor.internal_prange(n):
             dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])
             ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)
-            S[i] = bodo.hiframes.datetime_date_ext.datetime_date_ctor(
-                ts.year, ts.month, ts.day
-            )
+            S[i] = datetime.date(ts.year, ts.month, ts.day)
         return bodo.hiframes.datetime_date_ext.np_arr_to_array_datetime_date(S)
 
     return impl

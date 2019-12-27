@@ -3,6 +3,7 @@
 Support for Series.dt methods
 """
 import operator
+import datetime
 import numpy as np
 import pandas as pd
 import numba
@@ -141,9 +142,7 @@ def series_dt_date_overload(S_dt):
         for i in numba.parfor.internal_prange(n):
             dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
             ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)
-            out_arr[i] = bodo.hiframes.datetime_date_ext.datetime_date_ctor(
-                ts.year, ts.month, ts.day
-            )
+            out_arr[i] = datetime.date(ts.year, ts.month, ts.day)
         #        S[i] = datetime.date(ts.year, ts.month, ts.day)\n'
         #        S[i] = ts.day + (ts.month << 16) + (ts.year << 32)\n'
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
