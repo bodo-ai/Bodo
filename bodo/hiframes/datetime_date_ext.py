@@ -354,3 +354,9 @@ def dt_date_arr_setitem(A, ind, val):
         def impl(A, ind, val):
             A._data[ind] = cast_datetime_date_to_int(val)
         return impl
+
+
+@overload(len)
+def overload_len_datetime_date_arr(A):
+    if A == datetime_date_array_type:
+        return lambda A: len(A._data)

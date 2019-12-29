@@ -36,6 +36,7 @@ from bodo.ir.sort import (
 from bodo.ir.join import write_send_buff
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.hiframes.split_impl import string_array_split_view_type
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 
 import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
@@ -92,7 +93,12 @@ def isna_overload(arr, i):
         # reuse string array function
         return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
 
+    # TODO: support NAs in split view
     if arr == string_array_split_view_type:
+        return lambda arr, i: False
+
+    # TODO: support NAs in datetime.date array
+    if arr == datetime_date_array_type:
         return lambda arr, i: False
 
     # TODO: extend to other types
