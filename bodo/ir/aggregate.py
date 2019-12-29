@@ -1557,7 +1557,16 @@ def gen_top_level_agg_func(
 
         if isinstance(agg_func, list):
             ftype = supported_agg_funcs.index("agg")
-            n_funcs = len(agg_func)
+            # tuple function case
+            if len(in_col_typs) == 1:
+                # multiple funcs are applied to the input column
+                n_funcs = len(agg_func)
+            # constant dict case
+            else:
+                # dictionary specifies one function for each input column
+                # TODO: support more flexible cases where a different function
+                # or list of functions are applied to each input column
+                n_funcs = 1
         else:
             ftype = agg_func.ftype
             n_funcs = 1
