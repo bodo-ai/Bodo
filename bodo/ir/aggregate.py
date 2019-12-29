@@ -1266,10 +1266,7 @@ def gen_update_cb(agg_func_struct, n_keys, data_in_typs, out_data_typs, red_var_
     # get input data types
     data_in_dummy_text = []
     for t in data_in_typs:
-        if t == string_array_type:
-            data_in_dummy_text.append("pre_alloc_string_array(1, 1)")
-        else:
-            data_in_dummy_text.append("np.empty(1, {})".format(_get_np_dtype(t.dtype)))
+        data_in_dummy_text.append(_gen_dummy_alloc(t))
     func_text += "    data_in_dummy = ({}{})\n".format(
         ",".join(data_in_dummy_text), "," if len(data_in_typs) == 1 else ""
     )
