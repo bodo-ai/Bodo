@@ -106,8 +106,15 @@ def create_date_field_overload(field):
         func_text += (
             "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])\n"
         )
-        func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
-        func_text += "        out_arr[i] = ts." + field + "\n"
+        # extract year, month, day faster without conversion to Timestamp
+        if field in ("year", "month", "day"):
+            func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
+            if field in ("month", "day"):
+                func_text += "        month, day = bodo.hiframes.pd_timestamp_ext.get_month_day(year, days)\n"
+            func_text += "        out_arr[i] = {}\n".format(field)
+        else:
+            func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
+            func_text += "        out_arr[i] = ts." + field + "\n"
         func_text += (
             "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
         )
