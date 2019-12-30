@@ -40,6 +40,16 @@ def test_series_dt64_cmp():
     check_func(test_impl, (S1, S2))
 
 
+def test_dt_year_before_2000():
+    """Test Series.dt.year for values less than 2000 (issue #343)
+    """
+    def test_impl(S):
+        return S.dt.year
+
+    S = pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=5))
+    check_func(test_impl, (S,))
+
+
 class TestDate(unittest.TestCase):
     def test_datetime_index(self):
         def test_impl(df):

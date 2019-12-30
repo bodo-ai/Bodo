@@ -67,6 +67,8 @@ ll.add_symbol(
     "np_datetime_date_array_from_packed_ints",
     hdatetime_ext.np_datetime_date_array_from_packed_ints,
 )
+ll.add_symbol("extract_year_days", hdatetime_ext.extract_year_days)
+ll.add_symbol("get_month_day", hdatetime_ext.get_month_day)
 
 date_fields = [
     "year",
@@ -870,64 +872,77 @@ def convert_timestamp_to_datetime64(ts):  # pragma: no cover
     ) * 1000 + ts.nanosecond
 
 
+@intrinsic
+def extract_year_days(typingctx, dt64_t=None):
+    """Extracts year and days from dt64 value.
+    Returns a 3-tuple of (leftover_dt64_values, year, days)
+    """
+    assert dt64_t in (types.int64, types.NPDatetime("ns"))
+
+    def codegen(context, builder, sig, args):
+        dt = cgutils.alloca_once(builder, lir.IntType(64))
+        builder.store(args[0], dt)
+        year = cgutils.alloca_once(builder, lir.IntType(64))
+        days = cgutils.alloca_once(builder, lir.IntType(64))
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
+            ],
+        )
+        fn_tp = builder.module.get_or_insert_function(fnty, name="extract_year_days")
+        builder.call(fn_tp, [dt, year, days])
+        return cgutils.pack_array(
+            builder, [builder.load(dt), builder.load(year), builder.load(days)]
+        )
+
+    return types.Tuple([types.int64, types.int64, types.int64])(dt64_t), codegen
+
+
+@intrinsic
+def get_month_day(typingctx, year_t, days_t=None):
+    """Converts number of days within a year to month and day, returned as a 2-tuple.
+    """
+    assert year_t == types.int64
+    assert days_t == types.int64
+
+    def codegen(context, builder, sig, args):
+        month = cgutils.alloca_once(builder, lir.IntType(64))
+        day = cgutils.alloca_once(builder, lir.IntType(64))
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
+            ],
+        )
+        fn_tp = builder.module.get_or_insert_function(fnty, name="get_month_day")
+        builder.call(fn_tp, [args[0], args[1], month, day])
+        return cgutils.pack_array(builder, [builder.load(month), builder.load(day)])
+
+    return types.Tuple([types.int64, types.int64])(types.int64, types.int64), codegen
+
+
 @numba.njit
 def convert_datetime64_to_timestamp(dt64):  # pragma: no cover
-    # pandas 0.23 np_datetime.c:762
-    perday = 24 * 60 * 60 * 1000 * 1000 * 1000
-
-    if dt64 >= 0:
-        in_day = dt64 % perday
-        dt64 = dt64 // perday
-    else:
-        in_day = (perday - 1) + (dt64 + 1) % perday
-        dt64 = dt64 // perday - (0 if (dt64 % perday == 0) else 1)
-
-    # pandas 0.23np_datetime.c:173
-    days400years = 146097
-    days = dt64 - 10957
-    if days >= 0:
-        year = 400 * (days // days400years)
-        days = days % days400years
-    else:
-        year = 400 * ((days - (days400years - 1)) // days400years)
-        days = days % days400years
-        if days < 0:
-            days += days400years
-
-    if days >= 366:
-        year += 100 * ((days - 1) // 36524)
-        days = (days - 1) % 36524
-        if days >= 365:
-            year += 4 * ((days + 1) // 1461)
-            days = (days + 1) % 1461
-            if days >= 366:
-                year += (days - 1) // 365
-                days = (days - 1) % 365
-
-    year = year + 2000
-    # pandas 0.23 np_datetime.c:237
-    leapyear = (year % 400 == 0) or (year % 4 == 0 and year % 100 != 0)
-    month_len = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    if leapyear:
-        month_len[1] = 29
-
-    for i in range(12):
-        if days < month_len[i]:
-            month = i + 1
-            day = days + 1
-            break
-        else:
-            days = days - month_len[i]
+    """Converts dt64 value to pd.Timestamp
+    """
+    dt, year, days = extract_year_days(dt64)
+    month, day = get_month_day(year, days)
 
     return pd.Timestamp(
         year,
         month,
         day,
-        in_day // (60 * 60 * 1000000000),  # hour
-        (in_day // (60 * 1000000000)) % 60,  # minute
-        (in_day // 1000000000) % 60,  # second
-        (in_day // 1000) % 1000000,  # microsecond
-        in_day % 1000,
+        dt // (60 * 60 * 1000000000),  # hour
+        (dt // (60 * 1000000000)) % 60,  # minute
+        (dt // 1000000000) % 60,  # second
+        (dt // 1000) % 1000000,  # microsecond
+        dt % 1000,
     )  # nanosecond
 
 
