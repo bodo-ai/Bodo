@@ -114,3 +114,9 @@ The output is as follows::
 	Initializing x,y takes:  3.0611653940286487
 	calculation takes: 0.35728363902308047
 	result: 3.14155538
+
+
+Note that Bodo execution took longer in the last example than previous ones,
+since the presence of timers in the middle of computation can inhibit some code
+optimizations (e.g. code reordering and fusion). Therefore, one should be
+cautious about adding timers in the middle of computation.
