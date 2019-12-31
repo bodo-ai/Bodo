@@ -258,12 +258,12 @@ example::
 Print
 -----
 
-Bodo assigns `REP` to distributable arguments of ``print`` functions
-(to make sure values are identical on all processors) and prints values
-only once instead of one print per process. The intention is to avoid
-unexpected behavior, especially when running on large number of processors.
-Programmers can use `bodo.parallel_print` for printing distributed chunks of
-data or parallel prints of other values.
+Bodo avoids repeated prints of replicated data by printing
+them only once (on rank 0) instead of one print per process.
+However, chunks of distributed data are
+printed on all processes as expected.
+Programmers can use `bodo.parallel_print` for printing
+replicated data on all processes if desired.
 
 
 Parallel APIs

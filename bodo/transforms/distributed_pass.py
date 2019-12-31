@@ -206,7 +206,9 @@ class DistributedPass(object):
                     )
                 elif isinstance(inst, ir.Return):
                     out_nodes = self._gen_barrier() + [inst]
-                elif isinstance(inst, ir.Print):
+                # avoid replicated prints, print on all PEs only when there is dist arg
+                elif isinstance(inst, ir.Print) and all(
+                        self._is_REP(v.name) for v in inst.args):
                     out_nodes = self._run_print(inst)
 
                 if out_nodes is None:
