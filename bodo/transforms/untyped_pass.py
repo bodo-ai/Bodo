@@ -123,6 +123,8 @@ def remove_hiframes(rhs, lives, call_list):
         ]
     ):
         return True
+    if call_list == ["alloc_datetime_date_array", "datetime_date_ext", "hiframes", bodo]:
+        return True
     if len(call_list) == 4 and call_list[1:] == ["conversion", "utils", bodo]:
         # all conversion functions are side effect-free
         return True

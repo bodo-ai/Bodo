@@ -212,6 +212,8 @@ def is_alloc_callname(func_name, mod_name):
             and mod_name == "bodo.libs.list_str_arr_ext"
         )
         or (func_name == "alloc_bool_array" and mod_name == "bodo.libs.bool_arr_ext")
+        or (func_name == "alloc_datetime_date_array"
+            and mod_name == "bodo.hiframes.datetime_date_ext")
     )
 
 
@@ -361,6 +363,7 @@ def is_array_typ(var_typ):
             string_array_type,
             list_string_array_type,
             bodo.hiframes.split_impl.string_array_split_view_type,
+            bodo.hiframes.datetime_date_ext.datetime_date_array_type,
         )
         or isinstance(var_typ, bodo.hiframes.pd_series_ext.SeriesType)
         or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
@@ -632,10 +635,8 @@ def overload_alloc_type(n, t):
 
         return lambda n, t: fix_cat_array_type(np.empty(n, t.dtype))
 
-    if typ.dtype == bodo.hiframes.pd_timestamp_ext.datetime_date_type:
-        return lambda n, t: bodo.hiframes.datetime_date_ext.np_arr_to_array_datetime_date(
-            np.empty(n, np.int64)
-        )
+    if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
+        return lambda n, t: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
 
     dtype = numba.numpy_support.as_dtype(typ.dtype)
 
