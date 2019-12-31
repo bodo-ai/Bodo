@@ -123,6 +123,8 @@ The output is as follows::
     cautious about adding timers in the middle of computation.
 
 
+.. _disable-jit:
+
 Disabling JIT Compilation
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
