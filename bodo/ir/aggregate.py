@@ -704,6 +704,7 @@ def agg_distributed_run(
 
         top_level_func = gen_top_level_agg_func(
             agg_node.key_names,
+            key_typs,
             return_key,
             in_col_typs,
             out_col_typs,
@@ -717,6 +718,7 @@ def agg_distributed_run(
         glbs.update(
             {
                 "pd": pd,
+                "pre_alloc_string_array": pre_alloc_string_array,
                 "agg_seq_iter": agg_seq_iter,
                 "parallel_agg": parallel_agg,
                 "array_to_info": array_to_info,
@@ -1223,6 +1225,17 @@ def setitem_array_with_str_overload(arr, i, val):
     return setitem_impl
 
 
+def _gen_dummy_alloc(t):
+    """generate dummy allocation text for type `t`, used for creating dummy arrays that
+    just pass data type to functions.
+    """
+    # TODO: support other types
+    if t == string_array_type:
+        return "pre_alloc_string_array(1, 1)"
+    else:
+        return "np.empty(1, {})".format(_get_np_dtype(t.dtype))
+
+
 def _get_np_dtype(t):
     if t == types.NPDatetime("ns"):
         return "dt64_dtype"
@@ -1253,10 +1266,7 @@ def gen_update_cb(agg_func_struct, n_keys, data_in_typs, out_data_typs, red_var_
     # get input data types
     data_in_dummy_text = []
     for t in data_in_typs:
-        if t == string_array_type:
-            data_in_dummy_text.append("pre_alloc_string_array(1, 1)")
-        else:
-            data_in_dummy_text.append("np.empty(1, {})".format(_get_np_dtype(t.dtype)))
+        data_in_dummy_text.append(_gen_dummy_alloc(t))
     func_text += "    data_in_dummy = ({}{})\n".format(
         ",".join(data_in_dummy_text), "," if len(data_in_typs) == 1 else ""
     )
@@ -1454,6 +1464,7 @@ def gen_eval_cb(agg_func_struct, n_keys, out_data_typs, red_var_typs):
 
 def gen_top_level_agg_func(
     key_names,
+    key_types,
     return_key,
     in_col_typs,
     out_col_typs,
@@ -1546,7 +1557,16 @@ def gen_top_level_agg_func(
 
         if isinstance(agg_func, list):
             ftype = supported_agg_funcs.index("agg")
-            n_funcs = len(agg_func)
+            # tuple function case
+            if len(in_col_typs) == 1:
+                # multiple funcs are applied to the input column
+                n_funcs = len(agg_func)
+            # constant dict case
+            else:
+                # dictionary specifies one function for each input column
+                # TODO: support more flexible cases where a different function
+                # or list of functions are applied to each input column
+                n_funcs = 1
         else:
             ftype = agg_func.ftype
             n_funcs = 1
@@ -1574,10 +1594,9 @@ def gen_top_level_agg_func(
             # generate a dummy (empty) output table with correct type info of
             # for keys, output columns and reduction variables so that C++
             # library can allocate output tables
-            key_names_dummy = tuple("key_{}_dummy".format(c) for c in key_names)
-            for key_name_dummy in key_names_dummy:
-                func_text += "    {} = np.empty(1, {}.dtype)\n".format(
-                    key_name_dummy, key_name_dummy[:-6]
+            for key_name, key_typ in zip(key_names, key_types):
+                func_text += "    key_{}_dummy = {}\n".format(
+                    key_name, _gen_dummy_alloc(key_typ)
                 )
             out_names_dummy = tuple([out_name + "_dummy" for out_name in out_names])
 

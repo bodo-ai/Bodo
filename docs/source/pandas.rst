@@ -351,6 +351,8 @@ Reindexing / Selection / Label manipulation:
 
 * :meth:`DataFrame.drop` (only dropping columns supported,
   either using `columns` argument or setting `axis=1`)
+* :meth:`DataFrame.drop_duplicates`
+* :meth:`DataFrame.duplicated`
 * :meth:`DataFrame.head` (including `n` argument)
 * :meth:`DataFrame.idxmax`
 * :meth:`DataFrame.idxmin`

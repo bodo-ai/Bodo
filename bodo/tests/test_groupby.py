@@ -172,6 +172,24 @@ def test_agg():
     check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
 
 
+def test_agg_str_key():
+    """
+    Test Groupby.agg() with string keys
+    """
+
+    def impl(df):
+        A = df.groupby("A").agg(lambda x: x.sum())
+        return A
+
+    df = pd.DataFrame(
+    {
+        "A": ["AA", "B", "B", "B", "AA", "AA", "B"],
+        "B": [-8, 2, 3, 1, 5, 6, 7],
+    }
+    )
+    check_func(impl, (df,), sort_output=True)
+
+
 def test_agg_series_input():
     """
     Test Groupby.agg(): make sure input to UDF is a Series, not Array

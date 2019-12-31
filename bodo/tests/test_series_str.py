@@ -418,10 +418,8 @@ def test_join():
 
 @pytest.fixture(
     params=[
-        pd.Series(["ABCDEFGH"]),
-        pd.Series(["A)(*&@#$)"]),
-        pd.Series("ABCDEFGH"),
-        pd.Series("123456789" * 5),
+        pd.Series(["ABCDEFGH", "1", "AB", "ABC", "!@##@!##!@#!@#@!#!$!@$"]),
+        pd.Series(["123456789"] * 5),
         pd.Series(["ABCDEFGH"] * 1000),
     ]
 )
