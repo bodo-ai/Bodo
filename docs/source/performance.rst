@@ -18,7 +18,7 @@ Since Bodo decorated functions are `JIT-compiled <https://numba.pydata.org/numba
 	import time
 
 	n = 2 * 10**8
-	
+
 	def calc_pi(n):
 	    t1 = time.time()
 	    x = 2 * np.random.ranf(n) - 1
@@ -66,7 +66,7 @@ Bodo's parallel speedup can be measured similarly::
 	calc_pi(2 * 10**8)
 
 Launched on four parallel cores::
-	
+
     $ mpiexec -n 4 python calc_pi.py
 	Execution time: 0.5736249439651147
 	result: 3.14161474
@@ -116,10 +116,11 @@ The output is as follows::
 	result: 3.14155538
 
 
-Note that Bodo execution took longer in the last example than previous ones,
-since the presence of timers in the middle of computation can inhibit some code
-optimizations (e.g. code reordering and fusion). Therefore, one should be
-cautious about adding timers in the middle of computation.
+.. note::
+    Note that Bodo execution took longer in the last example than previous ones,
+    since the presence of timers in the middle of computation can inhibit some code
+    optimizations (e.g. code reordering and fusion). Therefore, one should be
+    cautious about adding timers in the middle of computation.
 
 
 Disabling JIT Compilation
