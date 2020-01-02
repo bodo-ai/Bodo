@@ -1,5 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
+import numpy as np
+import pandas as pd
 import numba
 from numba import types
 from numba.extending import (
@@ -35,23 +37,12 @@ from numba.typing.templates import (
     AbstractTemplate,
     ConcreteTemplate,
 )
-
-import numpy as np
 import ctypes
-import inspect
 import bodo.libs.str_ext
 import bodo.utils.utils
 
 from llvmlite import ir as lir
 
-import pandas as pd
-
-# TODO: make pandas optional, not import this file if no pandas
-# pandas_present = True
-# try:
-#     import pandas as pd
-# except ImportError:
-#     pandas_present = False
 
 import datetime
 from bodo.libs import hdatetime_ext
@@ -722,15 +713,6 @@ def impl_myref_pandas_dts_type(context, builder, sig, args):
     assert isinstance(val, lir.instructions.LoadInstr)
     return builder.bitcast(val.operands[0], lir.IntType(8).as_pointer())
 
-
-# tslib_so = inspect.getfile(pd._libs.tslib)
-# tslib_cdll = ctypes.CDLL(tslib_so)
-# func_parse_iso = tslib_cdll.parse_iso_8601_datetime
-# func_parse_iso.restype = ctypes.c_int32
-# func_parse_iso.argtypes = [ctypes.c_void_p, ctypes.c_int32, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
-# func_dts_to_dt = tslib_cdll.pandas_datetimestruct_to_datetime
-# func_dts_to_dt.restype = ctypes.c_int64
-# func_dts_to_dt.argtypes = [ctypes.c_int, ctypes.c_void_p]
 
 sig = types.intp(
     types.voidptr,  # C str
