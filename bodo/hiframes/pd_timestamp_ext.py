@@ -38,7 +38,6 @@ from numba.typing.templates import (
     AbstractTemplate,
     ConcreteTemplate,
 )
-import ctypes
 import bodo.libs.str_ext
 import bodo.utils.utils
 from bodo.utils.typing import is_overload_constant_str
@@ -93,73 +92,6 @@ def _typ_no_input(val, c):
 @lower_constant(NoInputType)
 def constant_no_input(context, builder, ty, pyval):
     return context.get_dummy_value()
-
-
-# --------------------------------------------------------------
-
-
-class PANDAS_DATETIMESTRUCT(ctypes.Structure):
-    _fields_ = [
-        ("year", ctypes.c_longlong),
-        ("month", ctypes.c_int),
-        ("day", ctypes.c_int),
-        ("hour", ctypes.c_int),
-        ("min", ctypes.c_int),
-        ("sec", ctypes.c_int),
-        ("us", ctypes.c_int),
-        ("ps", ctypes.c_int),
-        ("as", ctypes.c_int),
-    ]
-
-
-class PandasDtsType(types.Type):
-    def __init__(self):
-        super(PandasDtsType, self).__init__(name="PandasDtsType()")
-
-
-pandas_dts_type = PandasDtsType()
-
-
-@typeof_impl.register(PANDAS_DATETIMESTRUCT)
-def typeof_pandas_dts(val, c):
-    return pandas_dts_type
-
-
-@register_model(PandasDtsType)
-class PandasDtsModel(models.StructModel):
-    def __init__(self, dmm, fe_type):
-        members = [
-            ("year", types.int64),
-            ("month", types.int32),
-            ("day", types.int32),
-            ("hour", types.int32),
-            ("min", types.int32),
-            ("sec", types.int32),
-            ("us", types.int32),
-            ("ps", types.int32),
-            ("as", types.int32),
-        ]
-        models.StructModel.__init__(self, dmm, fe_type, members)
-
-
-make_attribute_wrapper(PandasDtsType, "year", "year")
-make_attribute_wrapper(PandasDtsType, "month", "month")
-make_attribute_wrapper(PandasDtsType, "day", "day")
-
-
-@type_callable(PANDAS_DATETIMESTRUCT)
-def type_pandas_dts(context):
-    def typer():
-        return pandas_dts_type
-
-    return typer
-
-
-@lower_builtin(PANDAS_DATETIMESTRUCT)
-def impl_ctor_pandas_dts(context, builder, sig, args):
-    typ = sig.return_type
-    ts = cgutils.create_struct_proxy(typ)(context, builder)
-    return ts._getvalue()
 
 
 # -- builtin operators for dt64 ----------------------------------------------
@@ -533,7 +465,7 @@ def impl_ctor_datetime(context, builder, sig, args):
 
 
 @lower_cast(types.NPDatetime("ns"), types.int64)
-def dt64_to_integer(context, builder, fromty, toty, val):
+def cast_dt64_to_integer(context, builder, fromty, toty, val):
     # dt64 is stored as int64 so just return value
     return val
 
@@ -653,81 +585,34 @@ def convert_datetime64_to_timestamp(dt64):  # pragma: no cover
     )  # nanosecond
 
 
-# -----------------------------------------------------------
+@intrinsic
+def integer_to_timedelta64(typingctx, val=None):
+    """Cast an int value to timedelta64
+    """
+    def codegen(context, builder, sig, args):
+        return args[0]
+
+    return types.NPTimedelta("ns")(val), codegen
 
 
-def myref(val):  # pragma: no cover
-    pass
+@intrinsic
+def integer_to_dt64(typingctx, val=None):
+    """Cast an int value to datetime64
+    """
+    def codegen(context, builder, sig, args):
+        return args[0]
+
+    return types.NPDatetime("ns")(val), codegen
 
 
-@type_callable(myref)
-def type_myref(context):
-    def typer(val):
-        return types.voidptr
+@intrinsic
+def dt64_to_integer(typingctx, val=None):
+    """Cast a datetime64 value to integer
+    """
+    def codegen(context, builder, sig, args):
+        return args[0]
 
-    return typer
-
-
-# -----------------------------------------------------------
-
-
-def integer_to_timedelta64(val):  # pragma: no cover
-    return np.timedelta64(val)
-
-
-@type_callable(integer_to_timedelta64)
-def type_int_to_timedelta64(context):
-    def typer(val):
-        return types.NPTimedelta("ns")
-
-    return typer
-
-
-@lower_builtin(integer_to_timedelta64, types.int64)
-def impl_int_to_timedelta64(context, builder, sig, args):
-    return args[0]
-
-
-# -----------------------------------------------------------
-
-
-def integer_to_dt64(val):  # pragma: no cover
-    return np.datetime64(val)
-
-
-@type_callable(integer_to_dt64)
-def type_int_to_dt64(context):
-    def typer(val):
-        return types.NPDatetime("ns")
-
-    return typer
-
-
-@lower_builtin(integer_to_dt64, types.int64)
-@lower_builtin(integer_to_dt64, types.uint64)
-@lower_builtin(integer_to_dt64, types.IntegerLiteral)
-def impl_int_to_dt64(context, builder, sig, args):
-    return args[0]
-
-
-# -----------------------------------------------------------
-
-
-def dt64_to_integer(val):  # pragma: no cover
-    return int(val)
-
-
-@type_callable(dt64_to_integer)
-def type_dt64_to_int(context):
-    def typer(val):
-        return types.int64
-
-    return typer
-
-
-@lower_builtin(dt64_to_integer, types.NPDatetime("ns"))
-def impl_dt64_to_int(context, builder, sig, args):
-    return args[0]
+    return types.int64(val), codegen
 
 
 # TODO: fix in Numba
@@ -736,43 +621,14 @@ def dt64_hash(val):
     return lambda val: hash(dt64_to_integer(val))
 
 
-# -----------------------------------------------------------
-def timedelta64_to_integer(val):  # pragma: no cover
-    return int(val)
+@intrinsic
+def timedelta64_to_integer(typingctx, val=None):
+    """Cast a timedelta64 value to integer
+    """
+    def codegen(context, builder, sig, args):
+        return args[0]
 
-
-@type_callable(timedelta64_to_integer)
-def type_dt64_to_int(context):
-    def typer(val):
-        return types.int64
-
-    return typer
-
-
-@lower_builtin(timedelta64_to_integer, types.NPTimedelta("ns"))
-def impl_dt64_to_int(context, builder, sig, args):
-    return args[0]
-
-
-# -----------------------------------------------------------
-
-
-@lower_builtin(myref, types.int32)
-@lower_builtin(myref, types.int64)
-@lower_builtin(myref, types.IntegerLiteral)
-def impl_myref_int32(context, builder, sig, args):
-    typ = types.voidptr
-    val = args[0]
-    assert isinstance(val, lir.instructions.LoadInstr)
-    return builder.bitcast(val.operands[0], lir.IntType(8).as_pointer())
-
-
-@lower_builtin(myref, PandasDtsType)
-def impl_myref_pandas_dts_type(context, builder, sig, args):
-    typ = types.voidptr
-    val = args[0]
-    assert isinstance(val, lir.instructions.LoadInstr)
-    return builder.bitcast(val.operands[0], lir.IntType(8).as_pointer())
+    return types.int64(val), codegen
 
 
 @numba.njit
