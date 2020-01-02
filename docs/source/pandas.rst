@@ -427,8 +427,6 @@ boxed/unboxed, and set as index to dataframes and series.
 
   * Only ``data`` argument is supported, and can be array-like
     of ``datetime64['ns']``, ``int64`` or strings.
-    Strings should be in ISO 8601 format,
-    YYYY-MM-DDT[HH[:MM[:SS[.mmm[uuu]]]]][+HH:MM] (e.g. '2017-09-27').
 
 Date fields of DatetimeIndex are supported:
 
@@ -457,7 +455,7 @@ Subtraction of ``Timestamp`` from ``DatetimeIndex`` and vice versa
 is supported.
 
 Comparison operators ``==``, ``!=``, ``>=``, ``>``, ``<=``, ``<`` between
-``DatetimeIndex`` and a string containing datetime in ISO 8601 format
+``DatetimeIndex`` and a string of datetime
 are supported.
 
 
