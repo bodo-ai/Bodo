@@ -1994,17 +1994,10 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
             "sort_values(): 'axis' parameter only " "supports integer value 0."
         )
 
-    # 'ascending': not supporting multiple sort orders
-    if is_overload_bool_list(ascending):
-        raise BodoError(
-            "sort_values(): multiple sort orders are not supported."
-            "'ascending' parameter must be of type bool"
-        )
-
     # make sure 'ascending' is of type bool
-    if not is_overload_bool(ascending):
+    if not is_overload_bool(ascending) and not is_overload_bool_list(ascending):
         raise BodoError(
-            "sort_values(): 'ascending' parameter must be of type bool, "
+            "sort_values(): 'ascending' parameter must be of type bool or list of bool, "
             "not {}.".format(ascending)
         )
 

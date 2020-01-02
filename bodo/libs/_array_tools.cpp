@@ -1314,27 +1314,37 @@ int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
  *
  * @param in_table the input table
  * @param n_key the number of keys considered for the comparison
+ * @param vect_ascending the vector of ascending values for the comparison
  * @param shift_key1 the column shift for the first key
  * @param iRow1 the row of the first key
  * @param shift_key2 the column for the second key
  * @param iRow2 the row of the second key
  * @param na_position: if true NaN values are largest, if false smallest.
- * @return 1 if (shift_key1,iRow1) < (shift_key2,iRow2) , -1 is > and 0 if =
+ * @return true if (shift_key1,iRow1) < (shift_key2,iRow2) , false otherwise
  */
-int KeyComparisonAsPython(std::vector<array_info*> const& columns,
-                          size_t const& n_key, size_t const& shift_key1,
-                          size_t const& iRow1, size_t const& shift_key2,
-                          size_t const& iRow2, bool const& na_position) {
+bool KeyComparisonAsPython(std::vector<array_info*> const& columns,
+                           size_t const& n_key, int64_t* vect_ascending,
+                           size_t const& shift_key1, size_t const& iRow1,
+                           size_t const& shift_key2, size_t const& iRow2,
+                           bool const& na_position) {
     // iteration over the list of key for the comparison.
     for (size_t iKey = 0; iKey < n_key; iKey++) {
+        bool ascending = vect_ascending[iKey];
+        auto ProcessOutput=[&](int const& value) -> bool {
+            if (ascending) {
+                return value > 0;
+            }
+            return value < 0;
+        };
+        bool na_position_bis = (!na_position) ^ ascending;
         if (columns[shift_key1 + iKey]->arr_type == bodo_array_type::NUMPY) {
             // In the case of NUMPY, we compare the values for concluding.
             uint64_t siztype = numpy_item_size[columns[shift_key1 + iKey]->dtype];
             char* ptr1 = columns[shift_key1 + iKey]->data1 + (siztype * iRow1);
             char* ptr2 = columns[shift_key2 + iKey]->data1 + (siztype * iRow2);
             int test = NumericComparison(columns[shift_key1 + iKey]->dtype,
-                                         ptr1, ptr2, na_position);
-            if (test != 0) return test;
+                                         ptr1, ptr2, na_position_bis);
+            if (test != 0) return ProcessOutput(test);
         }
         if (columns[shift_key1 + iKey]->arr_type ==
             bodo_array_type::NULLABLE_INT_BOOL) {
@@ -1348,12 +1358,12 @@ int KeyComparisonAsPython(std::vector<array_info*> const& columns,
             // If one bitmask is T and the other the reverse then they are
             // clearly not equal.
             if (bit1 && !bit2) {
-              if (na_position) return 1;
-              return -1;
+              if (na_position_bis) return ProcessOutput(1);
+              return ProcessOutput(-1);
             }
             if (!bit1 && bit2) {
-              if (na_position) return -1;
-              return 1;
+              if (na_position_bis) return ProcessOutput(-1);
+              return ProcessOutput(1);
             }
             // If both bitmasks are false, then it does not matter what value
             // they are storing. Comparison is the same as for NUMPY.
@@ -1365,8 +1375,8 @@ int KeyComparisonAsPython(std::vector<array_info*> const& columns,
                 char* ptr2 =
                     columns[shift_key2 + iKey]->data1 + (siztype * iRow2);
                 int test = NumericComparison(columns[shift_key1 + iKey]->dtype,
-                                             ptr1, ptr2, na_position);
-                if (test != 0) return test;
+                                             ptr1, ptr2, na_position_bis);
+                if (test != 0) return ProcessOutput(test);
             }
         }
         if (columns[shift_key1 + iKey]->arr_type == bodo_array_type::STRING) {
@@ -1379,12 +1389,12 @@ int KeyComparisonAsPython(std::vector<array_info*> const& columns,
             bool bit2 = GetBit(null_bitmask2, iRow2);
             // If bitmasks are different then we can conclude the comparison
             if (bit1 && !bit2) {
-              if (na_position) return 1;
-              return -1;
+              if (na_position_bis) return ProcessOutput(1);
+              return ProcessOutput(-1);
             }
             if (!bit1 && bit2) {
-              if (na_position) return -1;
-              return 1;
+              if (na_position_bis) return ProcessOutput(-1);
+              return ProcessOutput(1);
             }
             // If bitmasks are both false, then no need to compare the string
             // values.
@@ -1407,15 +1417,15 @@ int KeyComparisonAsPython(std::vector<array_info*> const& columns,
                 char* data1_2 =
                     (char*)columns[shift_key2 + iKey]->data1 + pos2_prev;
                 int test = std::strncmp(data1_2, data1_1, minlen);
-                if (test != 0) return test;
+                if (test != 0) return ProcessOutput(test);
                 // If not, we may be able to conclude via the string length.
-                if (len1 > len2) return -1;
-                if (len1 < len2) return 1;
+                if (len1 > len2) return ProcessOutput(-1);
+                if (len1 < len2) return ProcessOutput(1);
             }
         }
     }
-    // If all keys are equal then we return 0
-    return 0;
+    // If all keys are equal then we return false
+    return false;
 };
 
 /** This function does the joining of the table and returns the joined
@@ -3591,7 +3601,7 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
  * @param na_position, true corresponds to last, false to first
  */
 table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
-                              bool ascending, bool na_position) {
+                              int64_t* vect_ascending, bool na_position) {
     size_t n_rows = (size_t)in_table->nrows();
     size_t n_cols = (size_t)in_table->ncols();
     size_t n_key = size_t(n_key_t);
@@ -3606,19 +3616,12 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 #endif
     std::vector<size_t> V(n_rows);
     for (size_t i = 0; i < n_rows; i++) V[i] = i;
-    na_position = (!na_position) ^ ascending;
-#ifdef DEBUG_SORT
-    std::cout << "PROCESS: na_position=" << na_position << "\n";
-#endif
     std::function<bool(size_t, size_t)> f = [&](size_t const& iRow1,
                                                 size_t const& iRow2) -> bool {
         size_t shift_key1 = 0, shift_key2 = 0;
-        int value = KeyComparisonAsPython(in_table->columns, n_key, shift_key1,
-                                          iRow1, shift_key2, iRow2, na_position);
-        if (ascending) {
-            return value > 0;
-        }
-        return value < 0;
+        return KeyComparisonAsPython(in_table->columns, n_key, vect_ascending,
+                                     shift_key1, iRow1,
+                                     shift_key2, iRow2, na_position);
     };
     gfx::timsort(V.begin(), V.end(), f);
     std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(

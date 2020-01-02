@@ -72,7 +72,7 @@ class Sort(ir.Stmt):
         df_out_vars,
         inplace,
         loc,
-        ascending=True,
+        ascending_list=True,
         na_position="last",
     ):
         # for printing only
@@ -87,11 +87,9 @@ class Sort(ir.Stmt):
             self.na_position_b = True
         else:
             self.na_position_b = False
-        # HACK make sure ascending is boolean (seen error for none in CI)
-        # TODO: fix source of issue
-        if not isinstance(ascending, bool):
-            ascending = True
-        self.ascending = ascending
+        if isinstance(ascending_list, bool):
+            ascending_list = (ascending_list,) * len(key_arrs)
+        self.ascending_list = ascending_list
         self.loc = loc
 
     def __repr__(self):  # pragma: no cover
@@ -364,7 +362,7 @@ def sort_distributed_run(
     func_text = "def f({}, {}):\n".format(key_name_args_join, col_name_args_join)
     if bodo.use_cpp_sort:
         func_text += local_sort_cpp(
-            key_name_args, col_name_args, sort_node.ascending, sort_node.na_position_b
+            key_name_args, col_name_args, sort_node.ascending_list, sort_node.na_position_b
         )
     else:
         func_text += "  key_arrs = ({},)\n".format(key_name_args_join)
@@ -372,7 +370,7 @@ def sort_distributed_run(
             col_name_args, "," if len(in_vars) == 1 else ""
         )  # single value needs comma to become tuple
         func_text += "  bodo.ir.sort.local_sort(key_arrs, data, {})\n".format(
-            sort_node.ascending
+            sort_node.ascending_list[0]
         )
     func_text += "  return key_arrs, data\n"
 
@@ -387,6 +385,7 @@ def sort_distributed_run(
         sort_impl,
         {
             "bodo": bodo,
+            "np": np,
             "to_string_list": to_string_list,
             "cp_str_list_to_array": cp_str_list_to_array,
             "delete_table": delete_table,
@@ -420,16 +419,12 @@ def sort_distributed_run(
             gen_getitem(var, data_tup_var, i, calltypes, nodes)
         return nodes
 
-    ascending_var = ir.Var(scope, mk_unique_var("ascending"), loc)
-    typemap[ascending_var.name] = types.bool_
-    nodes.append(ir.Assign(ir.Const(sort_node.ascending, loc), ascending_var, loc))
-
     # sort output
     # parallel case
     if bodo.use_cpp_sort:
-        func_text = "def par_sort_impl(key_arrs, data, ascending):\n"
-        func_text += "  out_key, out_data = parallel_sort(key_arrs, data, ascending, {})\n".format(
-            sort_node.na_position_b
+        func_text = "def par_sort_impl(key_arrs, data):\n"
+        func_text += "  out_key, out_data = parallel_sort(key_arrs, data, {}, {})\n".format(
+            sort_node.ascending_list[0], sort_node.na_position_b
         )
         key_count = len(key_name_args)
         data_count = len(col_name_args)
@@ -438,7 +433,10 @@ def sort_distributed_run(
         ] + ["array_to_info(out_data[{}])".format(i) for i in range(len(col_name_args))]
         func_text += "  info_list_total = [{}]\n".format(",".join(total_list))
         func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
-        func_text += "  out_table = sort_values_table(table_total, {}, ascending, {})\n".format(
+        func_text += "  vect_ascending = np.array([{}])\n".format(
+            ",".join("1" if x else "0" for x in sort_node.ascending_list)
+        )
+        func_text += "  out_table = sort_values_table(table_total, {}, vect_ascending.ctypes, {})\n".format(
             key_count, sort_node.na_position_b
         )
         func_text += "  delete_table(table_total)\n"
@@ -469,11 +467,11 @@ def sort_distributed_run(
         func_text += "  delete_table(out_table)\n"
         func_text += "  return out_key_ret, out_data_ret\n"
     else:
-        func_text = "def par_sort_impl(key_arrs, data, ascending):\n"
-        func_text += "  out_key, out_data = parallel_sort(key_arrs, data, ascending, {})\n".format(
-            sort_node.na_position_b
+        func_text = "def par_sort_impl(key_arrs, data):\n"
+        func_text += "  out_key, out_data = parallel_sort(key_arrs, data, {}, {})\n".format(
+            sort_node.ascending_list[0], sort_node.na_position_b
         )
-        func_text += "  bodo.ir.sort.local_sort(out_key, out_data, ascending)\n"
+        func_text += "  bodo.ir.sort.local_sort(out_key, out_data, {})\n".format(sort_node.ascending_list[0])
         func_text += "  return out_key, out_data\n"
 
     loc_vars = {}
@@ -484,6 +482,7 @@ def sort_distributed_run(
         par_sort_impl,
         {
             "bodo": bodo,
+            "np": np,
             "parallel_sort": parallel_sort,
             "to_string_list": to_string_list,
             "cp_str_list_to_array": cp_str_list_to_array,
@@ -495,11 +494,11 @@ def sort_distributed_run(
             "array_to_info": array_to_info,
         },
         typingctx,
-        (key_typ, data_tup_typ, types.bool_),
+        (key_typ, data_tup_typ),
         typemap,
         calltypes,
     ).blocks.popitem()[1]
-    replace_arg_nodes(f_block, [key_arrs_tup_var, data_tup_var, ascending_var])
+    replace_arg_nodes(f_block, [key_arrs_tup_var, data_tup_var])
     nodes += f_block.body[:-2]
     ret_var = nodes[-1].target
     # get output key
@@ -550,7 +549,7 @@ def to_string_list_typ(typ):
     return typ
 
 
-def local_sort_cpp(key_name_args, col_name_args, ascending, na_position_b):
+def local_sort_cpp(key_name_args, col_name_args, ascending_list, na_position_b):
     func_text = "  # beginning of local_sort_cpp\n"
     key_count = len(key_name_args)
     data_count = len(col_name_args)
@@ -559,8 +558,11 @@ def local_sort_cpp(key_name_args, col_name_args, ascending, na_position_b):
     ]
     func_text += "  info_list_total = [{}]\n".format(",".join(total_list))
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
-    func_text += "  out_table = sort_values_table(table_total, {}, {}, {})\n".format(
-        key_count, ascending, na_position_b
+    func_text += "  vect_ascending = np.array([{}])\n".format(
+        ",".join("1" if x else "0" for x in ascending_list)
+    )
+    func_text += "  out_table = sort_values_table(table_total, {}, vect_ascending.ctypes, {})\n".format(
+        key_count, na_position_b
     )
     idx = 0
     list_key_str = []

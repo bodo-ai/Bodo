@@ -1081,13 +1081,12 @@ class DataFramePass(object):
     def _run_call_df_sort_values(self, assign, lhs, rhs):
         df_var, by_var, ascending_var, inplace_var, na_position_var = rhs.args
         df_typ = self.typemap[df_var.name]
-        ascending = guard(find_const, self.func_ir, ascending_var)
         inplace = guard(find_const, self.func_ir, inplace_var)
         na_position = guard(find_const, self.func_ir, na_position_var)
 
         # find key array for sort ('by' arg)
         key_names = self._get_const_or_list(by_var)
-
+        ascending_list = self._get_list_value_spec_length(ascending_var, len(key_names), err_msg="ascending should be bool or a list of bool of the number of keys")
         if not (
             key_names == ("$_bodo_index_",)
             or all(k in df_typ.columns for k in key_names)
@@ -1140,7 +1139,7 @@ class DataFramePass(object):
                 out_vars,
                 inplace,
                 lhs.loc,
-                ascending,
+                ascending_list,
                 na_position,
             )
         )
@@ -2655,6 +2654,26 @@ class DataFramePass(object):
                 if default is not None:
                     return default
                 raise ValueError(err_msg)
+        return key_colnames
+
+    def _get_list_value_spec_length(
+        self, by_arg, n_key, err_msg=None
+    ):
+        """Used to returning a list of values of length n_key.
+        If by_arg is a list of values then check that the list of length n_key.
+        If by_arg is just a single value, then return the list of length n_key of this value.
+        """
+        var_typ = self.typemap[by_arg.name]
+        if hasattr(var_typ, "consts"):
+            n_arg = len(var_typ.consts)
+            if n_key != n_arg:
+                raise ValueError(err_msg)
+            return var_typ.consts
+        # try single key column
+        by_arg_def = guard(find_const, self.func_ir, by_arg)
+        if by_arg_def is None:
+            raise ValueError(err_msg)
+        key_colnames = (by_arg_def,) * n_key
         return key_colnames
 
 
