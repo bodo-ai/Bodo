@@ -52,7 +52,9 @@ import llvmlite.binding as ll
 
 ll.add_symbol("extract_year_days", hdatetime_ext.extract_year_days)
 ll.add_symbol("get_month_day", hdatetime_ext.get_month_day)
-ll.add_symbol("npy_datetimestruct_to_datetime", hdatetime_ext.npy_datetimestruct_to_datetime)
+ll.add_symbol(
+    "npy_datetimestruct_to_datetime", hdatetime_ext.npy_datetimestruct_to_datetime
+)
 npy_datetimestruct_to_datetime = types.ExternalFunction(
     "npy_datetimestruct_to_datetime",
     types.int64(
@@ -199,7 +201,18 @@ def box_pandas_timestamp(typ, val, c):
 
 
 @intrinsic
-def init_timestamp(typingctx, year, month, day, hour, minute, second, microsecond, nanosecond, value=None):
+def init_timestamp(
+    typingctx,
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+    microsecond,
+    nanosecond,
+    value=None,
+):
     """Create a PandasTimestampType with provided data values.
     """
 
@@ -217,9 +230,20 @@ def init_timestamp(typingctx, year, month, day, hour, minute, second, microsecon
         ts.value = value
         return ts._getvalue()
 
-    return pandas_timestamp_type(types.int64, types.int64, types.int64, types.int64,
-        types.int64, types.int64, types.int64, types.int64, types.int64), codegen
-
+    return (
+        pandas_timestamp_type(
+            types.int64,
+            types.int64,
+            types.int64,
+            types.int64,
+            types.int64,
+            types.int64,
+            types.int64,
+            types.int64,
+            types.int64,
+        ),
+        codegen,
+    )
 
 
 @numba.generated_jit
@@ -243,7 +267,7 @@ _no_input = NoInput()
 
 class NoInputType(types.Type):
     def __init__(self):
-        super(NoInputType, self).__init__(name='NoInput')
+        super(NoInputType, self).__init__(name="NoInput")
 
 
 register_model(NoInputType)(models.OpaqueModel)
@@ -251,7 +275,7 @@ register_model(NoInputType)(models.OpaqueModel)
 
 @typeof_impl.register(NoInput)
 def _typ_no_input(val, c):
-  return NoInputType()
+    return NoInputType()
 
 
 @lower_constant(NoInputType)
@@ -263,11 +287,21 @@ def constant_no_input(context, builder, ty, pyval):
 
 
 @overload(pd.Timestamp)
-def overload_pd_timestamp(ts_input=_no_input,
-                freq=None, tz=None, unit=None,
-                year=None, month=None, day=None,
-                hour=None, minute=None, second=None, microsecond=None,
-                nanosecond=None, tzinfo=None):
+def overload_pd_timestamp(
+    ts_input=_no_input,
+    freq=None,
+    tz=None,
+    unit=None,
+    year=None,
+    month=None,
+    day=None,
+    hour=None,
+    minute=None,
+    second=None,
+    microsecond=None,
+    nanosecond=None,
+    tzinfo=None,
+):
 
     # The code for creating Timestamp from year/month/... is complex in Pandas but it
     # eventually just sets year/month/... values, and calculates dt64 "value" attribute
@@ -282,36 +316,88 @@ def overload_pd_timestamp(ts_input=_no_input,
 
     # User passed keyword arguments
     if ts_input == _no_input or getattr(ts_input, "value", None) == _no_input:
-        def impl_kw(ts_input=_no_input,
-                freq=None, tz=None, unit=None,
-                year=None, month=None, day=None,
-                hour=None, minute=None, second=None, microsecond=None,
-                nanosecond=None, tzinfo=None):  # pragma: no cover
-            value = npy_datetimestruct_to_datetime(year, month, day, zero_if_none(hour),
-                zero_if_none(minute), zero_if_none(second), zero_if_none(microsecond))
-            value += zero_if_none(nanosecond)
-            return init_timestamp(year, month, day, zero_if_none(hour),
-                zero_if_none(minute), zero_if_none(second), zero_if_none(microsecond),
-                zero_if_none(nanosecond), value
+
+        def impl_kw(
+            ts_input=_no_input,
+            freq=None,
+            tz=None,
+            unit=None,
+            year=None,
+            month=None,
+            day=None,
+            hour=None,
+            minute=None,
+            second=None,
+            microsecond=None,
+            nanosecond=None,
+            tzinfo=None,
+        ):  # pragma: no cover
+            value = npy_datetimestruct_to_datetime(
+                year,
+                month,
+                day,
+                zero_if_none(hour),
+                zero_if_none(minute),
+                zero_if_none(second),
+                zero_if_none(microsecond),
             )
+            value += zero_if_none(nanosecond)
+            return init_timestamp(
+                year,
+                month,
+                day,
+                zero_if_none(hour),
+                zero_if_none(minute),
+                zero_if_none(second),
+                zero_if_none(microsecond),
+                zero_if_none(nanosecond),
+                value,
+            )
+
         return impl_kw
 
     # User passed positional arguments:
     # Timestamp(year, month, day[, hour[, minute[, second[,
     # microsecond[, nanosecond[, tzinfo]]]]]])
     if isinstance(freq, types.Integer):
-        def impl_pos(ts_input=_no_input,
-                freq=None, tz=None, unit=None,
-                year=None, month=None, day=None,
-                hour=None, minute=None, second=None, microsecond=None,
-                nanosecond=None, tzinfo=None):  # pragma: no cover
-            value = npy_datetimestruct_to_datetime(ts_input, freq, tz, zero_if_none(unit),
-                zero_if_none(year), zero_if_none(month), zero_if_none(day))
-            value += zero_if_none(hour)
-            return init_timestamp(ts_input, freq, tz, zero_if_none(unit),
-                zero_if_none(year), zero_if_none(month), zero_if_none(day),
-                zero_if_none(hour), value
+
+        def impl_pos(
+            ts_input=_no_input,
+            freq=None,
+            tz=None,
+            unit=None,
+            year=None,
+            month=None,
+            day=None,
+            hour=None,
+            minute=None,
+            second=None,
+            microsecond=None,
+            nanosecond=None,
+            tzinfo=None,
+        ):  # pragma: no cover
+            value = npy_datetimestruct_to_datetime(
+                ts_input,
+                freq,
+                tz,
+                zero_if_none(unit),
+                zero_if_none(year),
+                zero_if_none(month),
+                zero_if_none(day),
             )
+            value += zero_if_none(hour)
+            return init_timestamp(
+                ts_input,
+                freq,
+                tz,
+                zero_if_none(unit),
+                zero_if_none(year),
+                zero_if_none(month),
+                zero_if_none(day),
+                zero_if_none(hour),
+                value,
+            )
+
         return impl_pos
 
     # parse string input
@@ -319,11 +405,22 @@ def overload_pd_timestamp(ts_input=_no_input,
         # just call Pandas in this case since the string parsing code is complex and
         # handles several possible cases
         types.pandas_timestamp_type = pandas_timestamp_type
-        def impl_str(ts_input=_no_input,
-                freq=None, tz=None, unit=None,
-                year=None, month=None, day=None,
-                hour=None, minute=None, second=None, microsecond=None,
-                nanosecond=None, tzinfo=None):  # pragma: no cover
+
+        def impl_str(
+            ts_input=_no_input,
+            freq=None,
+            tz=None,
+            unit=None,
+            year=None,
+            month=None,
+            day=None,
+            hour=None,
+            minute=None,
+            second=None,
+            microsecond=None,
+            nanosecond=None,
+            tzinfo=None,
+        ):  # pragma: no cover
             with numba.objmode(res="pandas_timestamp_type"):
                 res = pd.Timestamp(ts_input)
             return res
@@ -332,10 +429,9 @@ def overload_pd_timestamp(ts_input=_no_input,
 
     # for pd.Timestamp(), just return input
     if ts_input == pandas_timestamp_type:
-        return lambda ts_input=_no_input, freq=None, tz=None, unit=None, \
-                year=None, month=None, day=None, \
-                hour=None, minute=None, second=None, microsecond=None, \
-                nanosecond=None, tzinfo=None: ts_input
+        return (
+            lambda ts_input=_no_input, freq=None, tz=None, unit=None, year=None, month=None, day=None, hour=None, minute=None, second=None, microsecond=None, nanosecond=None, tzinfo=None: ts_input
+        )
 
 
 @overload_method(PandasTimestampType, "date")
@@ -476,6 +572,7 @@ def convert_datetime64_to_timestamp(dt64):  # pragma: no cover
 def integer_to_timedelta64(typingctx, val=None):
     """Cast an int value to timedelta64
     """
+
     def codegen(context, builder, sig, args):
         return args[0]
 
@@ -486,6 +583,7 @@ def integer_to_timedelta64(typingctx, val=None):
 def integer_to_dt64(typingctx, val=None):
     """Cast an int value to datetime64
     """
+
     def codegen(context, builder, sig, args):
         return args[0]
 
@@ -496,6 +594,7 @@ def integer_to_dt64(typingctx, val=None):
 def dt64_to_integer(typingctx, val=None):
     """Cast a datetime64 value to integer
     """
+
     def codegen(context, builder, sig, args):
         return args[0]
 
@@ -518,6 +617,7 @@ def dt64_hash(val):
 def timedelta64_to_integer(typingctx, val=None):
     """Cast a timedelta64 value to integer
     """
+
     def codegen(context, builder, sig, args):
         return args[0]
 
