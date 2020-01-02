@@ -182,6 +182,7 @@ class TestDate(unittest.TestCase):
         allequal = df["std"].equals(df["bodo"])
         self.assertTrue(allequal)
 
+    @unittest.skip("pending proper datatime.datetime() support")
     def test_timestamp(self):
         def test_impl():
             dt = datetime(2017, 4, 26)

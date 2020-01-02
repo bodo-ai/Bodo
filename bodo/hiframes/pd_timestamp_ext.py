@@ -93,11 +93,6 @@ def typeof_pd_timestamp(val, c):
     return pandas_timestamp_type
 
 
-@typeof_impl.register(datetime.datetime)
-def typeof_datetime_datetime(val, c):
-    return pandas_timestamp_type
-
-
 ts_field_typ = types.int64
 
 
@@ -201,15 +196,6 @@ def box_pandas_timestamp(typ, val, c):
     c.pyapi.decref(us_obj)
     c.pyapi.decref(ns_obj)
     return res
-
-
-@type_callable(datetime.datetime)
-def type_datetime_datetime(context):
-    def typer(year, month, day):  # how to handle optional hour, minute, second, us, ns?
-        # TODO: check types
-        return pandas_timestamp_type
-
-    return typer
 
 
 @intrinsic
@@ -350,31 +336,6 @@ def overload_pd_timestamp(ts_input=_no_input,
                 year=None, month=None, day=None, \
                 hour=None, minute=None, second=None, microsecond=None, \
                 nanosecond=None, tzinfo=None: ts_input
-
-
-@lower_builtin(datetime.datetime, types.int64, types.int64, types.int64)
-@lower_builtin(
-    datetime.datetime, types.IntegerLiteral, types.IntegerLiteral, types.IntegerLiteral
-)
-def impl_ctor_datetime(context, builder, sig, args):
-    typ = sig.return_type
-    year, month, day = args
-    # year, month, day, hour, minute, second, us, ns = args
-    ts = cgutils.create_struct_proxy(typ)(context, builder)
-    ts.year = year
-    ts.month = month
-    ts.day = day
-    ts.hour = lir.Constant(lir.IntType(64), 0)
-    ts.minute = lir.Constant(lir.IntType(64), 0)
-    ts.second = lir.Constant(lir.IntType(64), 0)
-    ts.microsecond = lir.Constant(lir.IntType(64), 0)
-    ts.nanosecond = lir.Constant(lir.IntType(64), 0)
-    # ts.hour = hour
-    # ts.minute = minute
-    # ts.second = second
-    # ts.microsecond = us
-    # ts.nanosecond = ns
-    return ts._getvalue()
 
 
 @overload_method(PandasTimestampType, "date")
