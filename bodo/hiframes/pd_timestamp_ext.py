@@ -66,90 +66,6 @@ date_fields = [
 timedelta_fields = ["days", "seconds", "microseconds", "nanoseconds"]
 
 
-# sentinel type representing no first input to pd.Timestamp() constructor
-# similar to _no_input object of Pandas in timestamps.pyx
-# https://github.com/pandas-dev/pandas/blob/8806ed7120fed863b3cd7d3d5f377ec4c81739d0/pandas/_libs/tslibs/timestamps.pyx#L38
-class NoInput:
-    pass
-
-
-_no_input = NoInput()
-
-
-class NoInputType(types.Type):
-    def __init__(self):
-        super(NoInputType, self).__init__(name='NoInput')
-
-
-register_model(NoInputType)(models.OpaqueModel)
-
-
-@typeof_impl.register(NoInput)
-def _typ_no_input(val, c):
-  return NoInputType()
-
-
-@lower_constant(NoInputType)
-def constant_no_input(context, builder, ty, pyval):
-    return context.get_dummy_value()
-
-
-# -- builtin operators for dt64 ----------------------------------------------
-# TODO: move to Numba
-
-
-class CompDT64(ConcreteTemplate):
-    cases = signature(types.boolean, types.NPDatetime("ns"), types.NPDatetime("ns"))
-
-
-@infer_global(operator.lt)
-class CmpOpLt(CompDT64):
-    key = operator.lt
-
-
-@infer_global(operator.le)
-class CmpOpLe(CompDT64):
-    key = operator.le
-
-
-@infer_global(operator.gt)
-class CmpOpGt(CompDT64):
-    key = operator.gt
-
-
-@infer_global(operator.ge)
-class CmpOpGe(CompDT64):
-    key = operator.ge
-
-
-@infer_global(operator.eq)
-class CmpOpEq(CompDT64):
-    key = operator.eq
-
-
-@infer_global(operator.ne)
-class CmpOpNe(CompDT64):
-    key = operator.ne
-
-
-class MinMaxBaseDT64(numba.typing.builtins.MinMaxBase):
-    def _unify_minmax(self, tys):
-        for ty in tys:
-            if not ty == types.NPDatetime("ns"):
-                return
-        return self.context.unify_types(*tys)
-
-
-@infer_global(max)
-class Max(MinMaxBaseDT64):
-    pass
-
-
-@infer_global(min)
-class Min(MinMaxBaseDT64):
-    pass
-
-
 class PandasTimestampType(types.Type):
     def __init__(self):
         super(PandasTimestampType, self).__init__(name="PandasTimestampType()")
@@ -195,66 +111,6 @@ make_attribute_wrapper(PandasTimestampType, "minute", "minute")
 make_attribute_wrapper(PandasTimestampType, "second", "second")
 make_attribute_wrapper(PandasTimestampType, "microsecond", "microsecond")
 make_attribute_wrapper(PandasTimestampType, "nanosecond", "nanosecond")
-
-
-@overload_method(PandasTimestampType, "date")
-def overload_pd_timestamp_date(ptt):
-    def pd_timestamp_date_impl(ptt):  # pragma: no cover
-        return datetime.date(ptt.year, ptt.month, ptt.day)
-
-    return pd_timestamp_date_impl
-
-
-@overload_method(PandasTimestampType, "isoformat")
-def overload_pd_timestamp_isoformat(ts_typ, sep=None):
-    if sep is None:
-
-        def timestamp_isoformat_impl(ts):  # pragma: no cover
-            assert ts.nanosecond == 0  # TODO: handle nanosecond (timestamps.pyx)
-            _time = str_2d(ts.hour) + ":" + str_2d(ts.minute) + ":" + str_2d(ts.second)
-            res = (
-                str(ts.year)
-                + "-"
-                + str_2d(ts.month)
-                + "-"
-                + str_2d(ts.day)
-                + "T"
-                + _time
-            )
-            return res
-
-    else:
-
-        def timestamp_isoformat_impl(ts, sep):  # pragma: no cover
-            assert ts.nanosecond == 0  # TODO: handle nanosecond (timestamps.pyx)
-            _time = str_2d(ts.hour) + ":" + str_2d(ts.minute) + ":" + str_2d(ts.second)
-            res = (
-                str(ts.year)
-                + "-"
-                + str_2d(ts.month)
-                + "-"
-                + str_2d(ts.day)
-                + sep
-                + _time
-            )
-            return res
-
-    return timestamp_isoformat_impl
-
-
-# TODO: support general string formatting
-@numba.njit
-def str_2d(a):  # pragma: no cover
-    res = str(a)
-    if len(res) == 1:
-        return "0" + res
-    return res
-
-
-@overload(str)
-def ts_str_overload(a):
-    if a == pandas_timestamp_type:
-        return lambda a: a.isoformat(" ")
 
 
 @unbox(PandasTimestampType)
@@ -369,6 +225,37 @@ def zero_if_none(value):
     return lambda value: value
 
 
+# sentinel type representing no first input to pd.Timestamp() constructor
+# similar to _no_input object of Pandas in timestamps.pyx
+# https://github.com/pandas-dev/pandas/blob/8806ed7120fed863b3cd7d3d5f377ec4c81739d0/pandas/_libs/tslibs/timestamps.pyx#L38
+class NoInput:
+    pass
+
+
+_no_input = NoInput()
+
+
+class NoInputType(types.Type):
+    def __init__(self):
+        super(NoInputType, self).__init__(name='NoInput')
+
+
+register_model(NoInputType)(models.OpaqueModel)
+
+
+@typeof_impl.register(NoInput)
+def _typ_no_input(val, c):
+  return NoInputType()
+
+
+@lower_constant(NoInputType)
+def constant_no_input(context, builder, ty, pyval):
+    return context.get_dummy_value()
+
+
+# -------------------------------------------------------------------------------
+
+
 @overload(pd.Timestamp)
 def overload_pd_timestamp(ts_input=_no_input,
                 freq=None, tz=None, unit=None,
@@ -464,10 +351,65 @@ def impl_ctor_datetime(context, builder, sig, args):
     return ts._getvalue()
 
 
-@lower_cast(types.NPDatetime("ns"), types.int64)
-def cast_dt64_to_integer(context, builder, fromty, toty, val):
-    # dt64 is stored as int64 so just return value
-    return val
+@overload_method(PandasTimestampType, "date")
+def overload_pd_timestamp_date(ptt):
+    def pd_timestamp_date_impl(ptt):  # pragma: no cover
+        return datetime.date(ptt.year, ptt.month, ptt.day)
+
+    return pd_timestamp_date_impl
+
+
+@overload_method(PandasTimestampType, "isoformat")
+def overload_pd_timestamp_isoformat(ts_typ, sep=None):
+    if sep is None:
+
+        def timestamp_isoformat_impl(ts):  # pragma: no cover
+            assert ts.nanosecond == 0  # TODO: handle nanosecond (timestamps.pyx)
+            _time = str_2d(ts.hour) + ":" + str_2d(ts.minute) + ":" + str_2d(ts.second)
+            res = (
+                str(ts.year)
+                + "-"
+                + str_2d(ts.month)
+                + "-"
+                + str_2d(ts.day)
+                + "T"
+                + _time
+            )
+            return res
+
+    else:
+
+        def timestamp_isoformat_impl(ts, sep):  # pragma: no cover
+            assert ts.nanosecond == 0  # TODO: handle nanosecond (timestamps.pyx)
+            _time = str_2d(ts.hour) + ":" + str_2d(ts.minute) + ":" + str_2d(ts.second)
+            res = (
+                str(ts.year)
+                + "-"
+                + str_2d(ts.month)
+                + "-"
+                + str_2d(ts.day)
+                + sep
+                + _time
+            )
+            return res
+
+    return timestamp_isoformat_impl
+
+
+# TODO: support general string formatting
+@numba.njit
+def str_2d(a):  # pragma: no cover
+    res = str(a)
+    if len(res) == 1:
+        return "0" + res
+    return res
+
+
+@overload(str)
+def ts_str_overload(a):
+    if a == pandas_timestamp_type:
+        return lambda a: a.isoformat(" ")
+
 
 
 @overload_attribute(PandasTimestampType, "value")
@@ -615,6 +557,12 @@ def dt64_to_integer(typingctx, val=None):
     return types.int64(val), codegen
 
 
+@lower_cast(types.NPDatetime("ns"), types.int64)
+def cast_dt64_to_integer(context, builder, fromty, toty, val):
+    # dt64 is stored as int64 so just return value
+    return val
+
+
 # TODO: fix in Numba
 @overload_method(types.NPDatetime, "__hash__")
 def dt64_hash(val):
@@ -639,3 +587,41 @@ def parse_datetime_str(val):  # pragma: no cover
     with numba.objmode(res="int64"):
         res = pd.Timestamp(val).value
     return integer_to_dt64(res)
+
+
+# -- builtin operators for dt64 ----------------------------------------------
+# TODO: move to Numba
+
+
+class CompDT64(ConcreteTemplate):
+    cases = signature(types.boolean, types.NPDatetime("ns"), types.NPDatetime("ns"))
+
+
+@infer_global(operator.lt)
+class CmpOpLt(CompDT64):
+    key = operator.lt
+
+
+@infer_global(operator.le)
+class CmpOpLe(CompDT64):
+    key = operator.le
+
+
+@infer_global(operator.gt)
+class CmpOpGt(CompDT64):
+    key = operator.gt
+
+
+@infer_global(operator.ge)
+class CmpOpGe(CompDT64):
+    key = operator.ge
+
+
+@infer_global(operator.eq)
+class CmpOpEq(CompDT64):
+    key = operator.eq
+
+
+@infer_global(operator.ne)
+class CmpOpNe(CompDT64):
+    key = operator.ne
