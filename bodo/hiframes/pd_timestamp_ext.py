@@ -470,6 +470,7 @@ def overload_pd_timestamp(ts_input=_no_input,
                 zero_if_none(nanosecond)
             )
         return impl_kw
+
     # User passed positional arguments:
     # Timestamp(year, month, day[, hour[, minute[, second[,
     # microsecond[, nanosecond[, tzinfo]]]]]])
@@ -484,15 +485,20 @@ def overload_pd_timestamp(ts_input=_no_input,
                 zero_if_none(hour)
             )
         return impl_pos
-    if ts_input == bodo.string_type:
 
+    # parse string input
+    if ts_input == bodo.string_type:
+        # just call Pandas in this case since the string parsing code is complex and
+        # handles several possible cases
+        types.pandas_timestamp_type = pandas_timestamp_type
         def impl(ts_input):  # pragma: no cover
-            dt64 = bodo.hiframes.pd_timestamp_ext.parse_datetime_str(ts_input)
-            idt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dt64)
-            return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(idt64)
+            with numba.objmode(res="pandas_timestamp_type"):
+                res = pd.Timestamp(ts_input)
+            return res
 
         return impl
 
+    # for pd.Timestamp(), just return input
     if ts_input == pandas_timestamp_type:
         return lambda ts_input=_no_input, freq=None, tz=None, unit=None, \
                 year=None, month=None, day=None, \
@@ -786,27 +792,11 @@ convert_datetimestruct_to_datetime = types.ExternalFunction(
 )
 
 
-iNaT = np.iinfo(np.int64).min
-
-
-@numba.njit(locals={"arg1": numba.int32, "arg3": numba.int32, "arg4": numba.int32})
-def parse_datetime_str(_str):  # pragma: no cover
-    nat_strings = ("NaT", "nat", "NAT", "nan", "NaN", "NAN")
-    if len(_str) == 0 or _str in nat_strings:
-        return integer_to_dt64(iNaT)
-    arg0 = bodo.libs.str_ext.unicode_to_char_ptr(_str)
-    arg1 = len(_str)
-    arg2 = PANDAS_DATETIMESTRUCT()
-    arg3 = np.int32(13)
-    arg4 = np.int32(13)
-    arg2ref = myref(arg2)
-    retval = parse_iso_8601_datetime(arg0, arg1, arg2ref, myref(arg3), myref(arg4))
-    out = 0
-    retval2 = convert_datetimestruct_to_datetime(10, arg2ref, myref(out))
-    return integer_to_dt64(out)
-
-
-#     retval = func_parse_iso(arg0, arg1, arg2ref, myref(arg3), myref(arg4))
-#     # "10" is magic enum value for PANDAS_FR_ns (nanosecond date time unit)
-# #        return func_dts_to_dt(10, arg2ref)
-#     return integer_to_dt64(func_dts_to_dt(10, arg2ref))
+@numba.njit
+def parse_datetime_str(val):  # pragma: no cover
+    """Parse datetime string value to dt64
+    Just calling Pandas since the Pandas code is complex
+    """
+    with numba.objmode(res="int64"):
+        res = pd.Timestamp(val).value
+    return integer_to_dt64(res)
