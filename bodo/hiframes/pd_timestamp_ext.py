@@ -41,6 +41,7 @@ from numba.typing.templates import (
 import ctypes
 import bodo.libs.str_ext
 import bodo.utils.utils
+from bodo.utils.typing import is_overload_constant_str
 
 from llvmlite import ir as lir
 
@@ -464,7 +465,7 @@ def overload_pd_timestamp(ts_input=_no_input,
                 freq=None, tz=None, unit=None,
                 year=None, month=None, day=None,
                 hour=None, minute=None, second=None, microsecond=None,
-                nanosecond=None, tzinfo=None):
+                nanosecond=None, tzinfo=None):  # pragma: no cover
             return init_timestamp(year, month, day, zero_if_none(hour),
                 zero_if_none(minute), zero_if_none(second), zero_if_none(microsecond),
                 zero_if_none(nanosecond)
@@ -479,7 +480,7 @@ def overload_pd_timestamp(ts_input=_no_input,
                 freq=None, tz=None, unit=None,
                 year=None, month=None, day=None,
                 hour=None, minute=None, second=None, microsecond=None,
-                nanosecond=None, tzinfo=None):
+                nanosecond=None, tzinfo=None):  # pragma: no cover
             return init_timestamp(ts_input, freq, tz, zero_if_none(unit),
                 zero_if_none(year), zero_if_none(month), zero_if_none(day),
                 zero_if_none(hour)
@@ -487,16 +488,20 @@ def overload_pd_timestamp(ts_input=_no_input,
         return impl_pos
 
     # parse string input
-    if ts_input == bodo.string_type:
+    if ts_input == bodo.string_type or is_overload_constant_str(ts_input):
         # just call Pandas in this case since the string parsing code is complex and
         # handles several possible cases
         types.pandas_timestamp_type = pandas_timestamp_type
-        def impl(ts_input):  # pragma: no cover
+        def impl_str(ts_input=_no_input,
+                freq=None, tz=None, unit=None,
+                year=None, month=None, day=None,
+                hour=None, minute=None, second=None, microsecond=None,
+                nanosecond=None, tzinfo=None):  # pragma: no cover
             with numba.objmode(res="pandas_timestamp_type"):
                 res = pd.Timestamp(ts_input)
             return res
 
-        return impl
+        return impl_str
 
     # for pd.Timestamp(), just return input
     if ts_input == pandas_timestamp_type:
