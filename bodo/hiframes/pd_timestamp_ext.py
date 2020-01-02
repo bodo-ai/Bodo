@@ -22,6 +22,7 @@ from numba.extending import (
     intrinsic,
     overload_attribute,
 )
+from numba.targets.imputils import lower_constant
 from numba import cgutils
 from numba.targets.arrayobj import (
     make_array,
@@ -67,6 +68,35 @@ date_fields = [
     "nanosecond",
 ]
 timedelta_fields = ["days", "seconds", "microseconds", "nanoseconds"]
+
+
+# sentinel type representing no first input to pd.Timestamp() constructor
+# similar to _no_input object of Pandas in timestamps.pyx
+# https://github.com/pandas-dev/pandas/blob/8806ed7120fed863b3cd7d3d5f377ec4c81739d0/pandas/_libs/tslibs/timestamps.pyx#L38
+class NoInput:
+    pass
+
+
+_no_input = NoInput()
+
+
+class NoInputType(types.Type):
+    def __init__(self):
+        super(NoInputType, self).__init__(name='NoInput')
+
+
+register_model(NoInputType)(models.OpaqueModel)
+
+
+@typeof_impl.register(NoInput)
+def _typ_no_input(val, c):
+  return NoInputType()
+
+
+@lower_constant(NoInputType)
+def constant_no_input(context, builder, ty, pyval):
+    return context.get_dummy_value()
+
 
 # --------------------------------------------------------------
 
@@ -369,24 +399,6 @@ def box_pandas_timestamp(typ, val, c):
     return res
 
 
-@type_callable(pd.Timestamp)
-def type_timestamp(context):
-    def typer(year, month, day, hour, minute, second, us, ns):
-        # TODO: check types
-        return pandas_timestamp_type
-
-    return typer
-
-
-@type_callable(pd.Timestamp)
-def type_timestamp(context):
-    def typer(data):
-        if data == pandas_timestamp_type:
-            return pandas_timestamp_type
-
-    return typer
-
-
 @type_callable(datetime.datetime)
 def type_datetime_datetime(context):
     def typer(year, month, day):  # how to handle optional hour, minute, second, us, ns?
@@ -396,45 +408,82 @@ def type_datetime_datetime(context):
     return typer
 
 
-@lower_builtin(
-    pd.Timestamp,
-    types.int64,
-    types.int64,
-    types.int64,
-    types.int64,
-    types.int64,
-    types.int64,
-    types.int64,
-    types.int64,
-)
-def impl_ctor_timestamp(context, builder, sig, args):
-    typ = sig.return_type
-    year, month, day, hour, minute, second, us, ns = args
-    ts = cgutils.create_struct_proxy(typ)(context, builder)
-    ts.year = year
-    ts.month = month
-    ts.day = day
-    ts.hour = hour
-    ts.minute = minute
-    ts.second = second
-    ts.microsecond = us
-    ts.nanosecond = ns
-    return ts._getvalue()
+@intrinsic
+def init_timestamp(typingctx, year, month, day, hour, minute, second, microsecond, nanosecond=None):
+    """Create a PandasTimestampType with provided data values.
+    """
+
+    def codegen(context, builder, sig, args):
+        year, month, day, hour, minute, second, us, ns = args
+        ts = cgutils.create_struct_proxy(pandas_timestamp_type)(context, builder)
+        ts.year = year
+        ts.month = month
+        ts.day = day
+        ts.hour = hour
+        ts.minute = minute
+        ts.second = second
+        ts.microsecond = us
+        ts.nanosecond = ns
+        return ts._getvalue()
+
+    return pandas_timestamp_type(types.int64, types.int64, types.int64, types.int64,
+        types.int64, types.int64, types.int64, types.int64), codegen
 
 
-@lower_builtin(pd.Timestamp, pandas_timestamp_type)
-def impl_ctor_ts_ts(context, builder, sig, args):
-    typ = sig.return_type
-    rhs = args[0]
-    ts = cgutils.create_struct_proxy(typ)(context, builder)
-    rhsproxy = cgutils.create_struct_proxy(typ)(context, builder)
-    rhsproxy._setvalue(rhs)
-    cgutils.copy_struct(ts, rhsproxy)
-    return ts._getvalue()
+
+@numba.generated_jit
+def zero_if_none(value):
+    """return zero if value is None. Otherwise, return value
+    """
+    if value == types.none:
+        return lambda value: 0
+    return lambda value: value
 
 
 @overload(pd.Timestamp)
-def overload_pd_timestamp(ts_input):
+def overload_pd_timestamp(ts_input=_no_input,
+                freq=None, tz=None, unit=None,
+                year=None, month=None, day=None,
+                hour=None, minute=None, second=None, microsecond=None,
+                nanosecond=None, tzinfo=None):
+
+    # The code for creating Timestamp from year/month/... is complex in Pandas but it
+    # eventually just sets year/month/... values, and calculates dt64 "value" attribute
+    # Timestamp.__new__()
+    # https://github.com/pandas-dev/pandas/blob/8806ed7120fed863b3cd7d3d5f377ec4c81739d0/pandas/_libs/tslibs/timestamps.pyx#L399
+    # convert_to_tsobject()
+    # https://github.com/pandas-dev/pandas/blob/8806ed7120fed863b3cd7d3d5f377ec4c81739d0/pandas/_libs/tslibs/conversion.pyx#L267
+    # convert_datetime_to_tsobject()
+    # pydatetime_to_dt64()
+    # https://github.com/pandas-dev/pandas/blob/8806ed7120fed863b3cd7d3d5f377ec4c81739d0/pandas/_libs/tslibs/np_datetime.pyx#L145
+    # create_timestamp_from_ts()
+
+    # User passed keyword arguments
+    if ts_input == _no_input or getattr(ts_input, "value", None) == _no_input:
+        def impl_kw(ts_input=_no_input,
+                freq=None, tz=None, unit=None,
+                year=None, month=None, day=None,
+                hour=None, minute=None, second=None, microsecond=None,
+                nanosecond=None, tzinfo=None):
+            return init_timestamp(year, month, day, zero_if_none(hour),
+                zero_if_none(minute), zero_if_none(second), zero_if_none(microsecond),
+                zero_if_none(nanosecond)
+            )
+        return impl_kw
+    # User passed positional arguments:
+    # Timestamp(year, month, day[, hour[, minute[, second[,
+    # microsecond[, nanosecond[, tzinfo]]]]]])
+    if isinstance(freq, types.Integer):
+        def impl_pos(ts_input=_no_input,
+                freq=None, tz=None, unit=None,
+                year=None, month=None, day=None,
+                hour=None, minute=None, second=None, microsecond=None,
+                nanosecond=None, tzinfo=None):
+            return init_timestamp(ts_input, freq, tz, zero_if_none(unit),
+                zero_if_none(year), zero_if_none(month), zero_if_none(day),
+                zero_if_none(hour)
+            )
+        return impl_pos
     if ts_input == bodo.string_type:
 
         def impl(ts_input):  # pragma: no cover
@@ -444,8 +493,13 @@ def overload_pd_timestamp(ts_input):
 
         return impl
 
+    if ts_input == pandas_timestamp_type:
+        return lambda ts_input=_no_input, freq=None, tz=None, unit=None, \
+                year=None, month=None, day=None, \
+                hour=None, minute=None, second=None, microsecond=None, \
+                nanosecond=None, tzinfo=None: ts_input
 
-#              , types.int64, types.int64, types.int64, types.int64, types.int64)
+
 @lower_builtin(datetime.datetime, types.int64, types.int64, types.int64)
 @lower_builtin(
     datetime.datetime, types.IntegerLiteral, types.IntegerLiteral, types.IntegerLiteral

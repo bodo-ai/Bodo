@@ -50,6 +50,28 @@ def test_dt_year_before_2000():
     check_func(test_impl, (S,))
 
 
+################################## Timestamp tests ###################################
+
+
+def test_timestamp_constructor_kw():
+    """Test pd.Timestamp() constructor with year/month/day passed as keyword arguments
+    """
+    def test_impl():
+        return pd.Timestamp(year=1998, month=2, day=3)
+
+    assert bodo.jit(test_impl)() == test_impl()
+
+
+def test_timestamp_constructor_pos():
+    """Test pd.Timestamp() constructor with year/month/day passed as positional
+    arguments
+    """
+    def test_impl():
+        return pd.Timestamp(1998, 2, 3)
+
+    assert bodo.jit(test_impl)() == test_impl()
+
+
 class TestDate(unittest.TestCase):
     def test_datetime_index(self):
         def test_impl(df):
