@@ -41,7 +41,6 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import (
     pandas_timestamp_type,
     convert_datetime64_to_timestamp,
-    convert_timestamp_to_datetime64,
     integer_to_dt64,
 )
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
@@ -121,7 +120,7 @@ def overload_series_iat_setitem(I, idx, val):
         if I.stype.dtype == types.NPDatetime("ns") and val == pandas_timestamp_type:
 
             def impl_dt(I, idx, val):  # pragma: no cover
-                s = integer_to_dt64(convert_timestamp_to_datetime64(val))
+                s = integer_to_dt64(val.value)
                 bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx] = s
 
             return impl_dt
@@ -234,7 +233,7 @@ def overload_series_iloc_setitem(I, idx, val):
             if I.stype.dtype == types.NPDatetime("ns") and val == pandas_timestamp_type:
 
                 def impl_dt(I, idx, val):  # pragma: no cover
-                    s = integer_to_dt64(convert_timestamp_to_datetime64(val))
+                    s = integer_to_dt64(val.value)
                     bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx] = s
 
                 return impl_dt
@@ -368,7 +367,7 @@ def overload_series_setitem(S, idx, val):
             if S.dtype == types.NPDatetime("ns") and val == pandas_timestamp_type:
 
                 def impl_dt(S, idx, val):  # pragma: no cover
-                    s = integer_to_dt64(convert_timestamp_to_datetime64(val))
+                    s = integer_to_dt64(val.value)
                     bodo.hiframes.pd_series_ext.get_series_data(S)[idx] = s
 
                 return impl_dt

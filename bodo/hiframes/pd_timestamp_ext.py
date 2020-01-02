@@ -52,6 +52,20 @@ import llvmlite.binding as ll
 
 ll.add_symbol("extract_year_days", hdatetime_ext.extract_year_days)
 ll.add_symbol("get_month_day", hdatetime_ext.get_month_day)
+ll.add_symbol("npy_datetimestruct_to_datetime", hdatetime_ext.npy_datetimestruct_to_datetime)
+npy_datetimestruct_to_datetime = types.ExternalFunction(
+    "npy_datetimestruct_to_datetime",
+    types.int64(
+        types.int64,
+        types.int32,
+        types.int32,
+        types.int32,
+        types.int32,
+        types.int32,
+        types.int32,
+    ),
+)
+
 
 date_fields = [
     "year",
@@ -99,6 +113,7 @@ class PandasTimestampModel(models.StructModel):
             ("second", ts_field_typ),
             ("microsecond", ts_field_typ),
             ("nanosecond", ts_field_typ),
+            ("value", ts_field_typ),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
@@ -111,6 +126,7 @@ make_attribute_wrapper(PandasTimestampType, "minute", "minute")
 make_attribute_wrapper(PandasTimestampType, "second", "second")
 make_attribute_wrapper(PandasTimestampType, "microsecond", "microsecond")
 make_attribute_wrapper(PandasTimestampType, "nanosecond", "nanosecond")
+make_attribute_wrapper(PandasTimestampType, "value", "value")
 
 
 @unbox(PandasTimestampType)
@@ -123,6 +139,7 @@ def unbox_pandas_timestamp(typ, val, c):
     second_obj = c.pyapi.object_getattr_string(val, "second")
     microsecond_obj = c.pyapi.object_getattr_string(val, "microsecond")
     nanosecond_obj = c.pyapi.object_getattr_string(val, "nanosecond")
+    value_obj = c.pyapi.object_getattr_string(val, "value")
 
     pd_timestamp = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     pd_timestamp.year = c.pyapi.long_as_longlong(year_obj)
@@ -133,6 +150,7 @@ def unbox_pandas_timestamp(typ, val, c):
     pd_timestamp.second = c.pyapi.long_as_longlong(second_obj)
     pd_timestamp.microsecond = c.pyapi.long_as_longlong(microsecond_obj)
     pd_timestamp.nanosecond = c.pyapi.long_as_longlong(nanosecond_obj)
+    pd_timestamp.value = c.pyapi.long_as_longlong(value_obj)
 
     c.pyapi.decref(year_obj)
     c.pyapi.decref(month_obj)
@@ -142,6 +160,7 @@ def unbox_pandas_timestamp(typ, val, c):
     c.pyapi.decref(second_obj)
     c.pyapi.decref(microsecond_obj)
     c.pyapi.decref(nanosecond_obj)
+    c.pyapi.decref(value_obj)
 
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(pd_timestamp._getvalue(), is_error=is_error)
@@ -194,12 +213,12 @@ def type_datetime_datetime(context):
 
 
 @intrinsic
-def init_timestamp(typingctx, year, month, day, hour, minute, second, microsecond, nanosecond=None):
+def init_timestamp(typingctx, year, month, day, hour, minute, second, microsecond, nanosecond, value=None):
     """Create a PandasTimestampType with provided data values.
     """
 
     def codegen(context, builder, sig, args):
-        year, month, day, hour, minute, second, us, ns = args
+        year, month, day, hour, minute, second, us, ns, value = args
         ts = cgutils.create_struct_proxy(pandas_timestamp_type)(context, builder)
         ts.year = year
         ts.month = month
@@ -209,10 +228,11 @@ def init_timestamp(typingctx, year, month, day, hour, minute, second, microsecon
         ts.second = second
         ts.microsecond = us
         ts.nanosecond = ns
+        ts.value = value
         return ts._getvalue()
 
     return pandas_timestamp_type(types.int64, types.int64, types.int64, types.int64,
-        types.int64, types.int64, types.int64, types.int64), codegen
+        types.int64, types.int64, types.int64, types.int64, types.int64), codegen
 
 
 
@@ -281,9 +301,12 @@ def overload_pd_timestamp(ts_input=_no_input,
                 year=None, month=None, day=None,
                 hour=None, minute=None, second=None, microsecond=None,
                 nanosecond=None, tzinfo=None):  # pragma: no cover
+            value = npy_datetimestruct_to_datetime(year, month, day, zero_if_none(hour),
+                zero_if_none(minute), zero_if_none(second), zero_if_none(microsecond))
+            value += zero_if_none(nanosecond)
             return init_timestamp(year, month, day, zero_if_none(hour),
                 zero_if_none(minute), zero_if_none(second), zero_if_none(microsecond),
-                zero_if_none(nanosecond)
+                zero_if_none(nanosecond), value
             )
         return impl_kw
 
@@ -296,9 +319,12 @@ def overload_pd_timestamp(ts_input=_no_input,
                 year=None, month=None, day=None,
                 hour=None, minute=None, second=None, microsecond=None,
                 nanosecond=None, tzinfo=None):  # pragma: no cover
+            value = npy_datetimestruct_to_datetime(ts_input, freq, tz, zero_if_none(unit),
+                zero_if_none(year), zero_if_none(month), zero_if_none(day))
+            value += zero_if_none(hour)
             return init_timestamp(ts_input, freq, tz, zero_if_none(unit),
                 zero_if_none(year), zero_if_none(month), zero_if_none(day),
-                zero_if_none(hour)
+                zero_if_none(hour), value
             )
         return impl_pos
 
@@ -409,48 +435,6 @@ def str_2d(a):  # pragma: no cover
 def ts_str_overload(a):
     if a == pandas_timestamp_type:
         return lambda a: a.isoformat(" ")
-
-
-
-@overload_attribute(PandasTimestampType, "value")
-def overload_timestamp_value(t):
-    def impl(t):  # pragma: no cover
-        return convert_timestamp_to_datetime64(t)
-
-    return impl
-
-
-@numba.njit
-def convert_timestamp_to_datetime64(ts):  # pragma: no cover
-    year = ts.year - 1970
-    days = year * 365
-    if days >= 0:
-        year += 1
-        days += year // 4
-        year += 68
-        days -= year // 100
-        year += 300
-        days += year // 400
-    else:
-        year -= 2
-        days += year // 4
-        year -= 28
-        days -= year // 100
-        days += year // 400
-    leapyear = (ts.year % 400 == 0) or (ts.year % 4 == 0 and ts.year % 100 != 0)
-    month_len = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    if leapyear:
-        month_len[1] = 29
-
-    for i in range(ts.month - 1):
-        days += month_len[i]
-
-    days += ts.day - 1
-
-    return (
-        (((days * 24 + ts.hour) * 60 + ts.minute) * 60 + ts.second) * 1000000
-        + ts.microsecond
-    ) * 1000 + ts.nanosecond
 
 
 @intrinsic
