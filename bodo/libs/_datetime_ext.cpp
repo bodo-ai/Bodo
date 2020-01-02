@@ -1,7 +1,23 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
-#include "_datetime_ext.h"
+#include <Python.h>
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/arrayobject.h>
+#include <iostream>
+
+#include "_bodo_common.h"
+
 
 extern "C" {
+
+static int is_leapyear(npy_int64 year) {
+    return (year & 0x3) == 0 && /* year % 4 == 0 */
+           ((year % 100) != 0 || (year % 400) == 0);
+}
+
+static const int days_per_month_table[2][12] = {
+    {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},
+    {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}};
+
 
 /**
  * @brief Computes the python `ret, d = divmod(d, unit)`.
@@ -121,16 +137,6 @@ PyMODINIT_FUNC PyInit_hdatetime_ext(void) {
 
     // init numpy
     import_array();
-    //
-    // PyObject_SetAttrString(m, "dt_to_timestamp",
-    //                         PyLong_FromVoidPtr((void*)(&dt_to_timestamp)));
-
-    PyObject_SetAttrString(
-        m, "parse_iso_8601_datetime",
-        PyLong_FromVoidPtr((void *)(&parse_iso_8601_datetime)));
-    PyObject_SetAttrString(
-        m, "convert_datetimestruct_to_datetime",
-        PyLong_FromVoidPtr((void *)(&convert_datetimestruct_to_datetime)));
 
     PyObject_SetAttrString(
         m, "extract_year_days",

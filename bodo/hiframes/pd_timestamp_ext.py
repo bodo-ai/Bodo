@@ -50,11 +50,7 @@ import datetime
 from bodo.libs import hdatetime_ext
 import llvmlite.binding as ll
 
-ll.add_symbol("parse_iso_8601_datetime", hdatetime_ext.parse_iso_8601_datetime)
-ll.add_symbol(
-    "convert_datetimestruct_to_datetime",
-    hdatetime_ext.convert_datetimestruct_to_datetime,
-)
+
 ll.add_symbol("extract_year_days", hdatetime_ext.extract_year_days)
 ll.add_symbol("get_month_day", hdatetime_ext.get_month_day)
 
@@ -777,24 +773,6 @@ def impl_myref_pandas_dts_type(context, builder, sig, args):
     val = args[0]
     assert isinstance(val, lir.instructions.LoadInstr)
     return builder.bitcast(val.operands[0], lir.IntType(8).as_pointer())
-
-
-sig = types.intp(
-    types.voidptr,  # C str
-    types.intp,  # len(str)
-    types.voidptr,  # struct ptr
-    types.voidptr,  # int ptr
-    types.voidptr,  # int ptr
-)
-parse_iso_8601_datetime = types.ExternalFunction("parse_iso_8601_datetime", sig)
-sig = types.intp(
-    types.intp,  # fr magic number
-    types.voidptr,  # struct ptr
-    types.voidptr,  # out int ptr
-)
-convert_datetimestruct_to_datetime = types.ExternalFunction(
-    "convert_datetimestruct_to_datetime", sig
-)
 
 
 @numba.njit
