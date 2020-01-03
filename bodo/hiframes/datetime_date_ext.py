@@ -102,6 +102,7 @@ def datetime_get_day(context, builder, typ, val):
 
 @unbox(DatetimeDateType)
 def unbox_datetime_date(typ, val, c):
+
     year_obj = c.pyapi.object_getattr_string(val, "year")
     month_obj = c.pyapi.object_getattr_string(val, "month")
     day_obj = c.pyapi.object_getattr_string(val, "day")
@@ -221,9 +222,7 @@ datetime_date_array_type = DatetimeDateArrayType()
 @register_model(DatetimeDateArrayType)
 class DatetimeDateArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        members = [
-            ("data", types.Array(types.int64, 1, "C")),
-        ]
+        members = [("data", types.Array(types.int64, 1, "C"))]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
@@ -303,7 +302,9 @@ def init_datetime_date_array(typingctx, data=None):
     def codegen(context, builder, signature, args):
         data_val, = args
         # create arr struct and store values
-        dt_date_arr = cgutils.create_struct_proxy(signature.return_type)(context, builder)
+        dt_date_arr = cgutils.create_struct_proxy(signature.return_type)(
+            context, builder
+        )
         dt_date_arr.data = data_val
 
         # increase refcount of stored values
@@ -351,8 +352,10 @@ def dt_date_arr_setitem(A, ind, val):
         return
 
     if isinstance(ind, types.Integer):
+
         def impl(A, ind, val):
             A._data[ind] = cast_datetime_date_to_int(val)
+
         return impl
 
 

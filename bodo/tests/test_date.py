@@ -15,9 +15,57 @@ from bodo.tests.utils import (
     dist_IR_contains,
     check_func,
 )
-from datetime import datetime
+import datetime
 import random
 import pytest
+
+
+# ------------------------- Testing datetime.timedelta ------------------------- #
+def test_timedelta_construct():
+    """
+    Testing construction of datetime.timedelta object in Bodo
+    """
+
+    def test_impl():
+        dt_obj = datetime.timedelta(34535, 34959834, 948583858)
+        return dt_obj
+
+    check_func(test_impl, ())
+
+
+def test_timedelta_boxing():
+    """
+    Testing boxing and unboxing of datetime.timedelta object in Bodo
+    """
+
+    def test_impl(dt_obj):
+        return dt_obj
+
+    dt_obj = datetime.timedelta(34535, 34959834, 948583858)
+    check_func(test_impl, (dt_obj,))
+
+
+def test_timedelta_getattr():
+    """
+    Testing getting attributes from datetime.timedelta object in Bodo
+    """
+
+    def test_days(dt_obj):
+        return dt_obj.days
+
+    def test_seconds(dt_obj):
+        return dt_obj.seconds
+
+    def test_microseconds(dt_obj):
+        return dt_obj.microseconds
+
+    dt_obj = datetime.timedelta(2, 55, 34)
+    check_func(test_days, (dt_obj,))
+    check_func(test_seconds, (dt_obj,))
+    check_func(test_microseconds, (dt_obj,))
+
+
+# ---------------------------------------------------------------------------- #
 
 
 def test_series_dt64_scalar_cmp():
@@ -43,6 +91,7 @@ def test_series_dt64_cmp():
 def test_dt_year_before_2000():
     """Test Series.dt.year for values less than 2000 (issue #343)
     """
+
     def test_impl(S):
         return S.dt.year
 
@@ -162,7 +211,7 @@ class TestDate(unittest.TestCase):
 
     def test_timestamp(self):
         def test_impl():
-            dt = datetime(2017, 4, 26)
+            dt = datetime.datetime(2017, 4, 26)
             ts = pd.Timestamp(dt)
             return (
                 ts.day
@@ -182,7 +231,7 @@ class TestDate(unittest.TestCase):
             return s.month
 
         bodo_func = bodo.jit(test_impl)
-        ts = pd.Timestamp(datetime(2017, 4, 26).isoformat())
+        ts = pd.Timestamp(datetime.datetime(2017, 4, 26).isoformat())
         month = bodo_func(ts)
         self.assertEqual(month, 4)
 
@@ -191,7 +240,7 @@ class TestDate(unittest.TestCase):
             return s.date()
 
         bodo_func = bodo.jit(test_impl)
-        ts = pd.Timestamp(datetime(2017, 4, 26).isoformat())
+        ts = pd.Timestamp(datetime.datetime(2017, 4, 26).isoformat())
         self.assertEqual(bodo_func(ts), test_impl(ts))
 
     def test_datetimeindex_str_comp(self):
@@ -244,7 +293,9 @@ class TestDate(unittest.TestCase):
         data = []
         for row in range(rows):
             data.append(
-                datetime(2017, random.randint(1, 12), random.randint(1, 28)).isoformat()
+                datetime.datetime(
+                    2017, random.randint(1, 12), random.randint(1, 28)
+                ).isoformat()
             )
         return pd.DataFrame({"str_date": data})
 
