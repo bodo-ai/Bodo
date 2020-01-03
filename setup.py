@@ -97,7 +97,6 @@ ext_io = Extension(
         "bodo/libs/_import_py.h",
         "bodo/io/_csv.h",
         "bodo/io/_bodo_csv_file_reader.h",
-        "bodo/libs/_datetime_ext.h",
     ],
     libraries=io_libs,
     include_dirs=ind + np_compile_args["include_dirs"],

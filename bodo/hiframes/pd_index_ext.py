@@ -334,7 +334,7 @@ def overload_datetime_index_sub(arg1, arg2):
             name = bodo.hiframes.pd_index_ext.get_index_name(arg1)
             n = len(in_arr)
             S = numba.unsafe.ndarray.empty_inferred((n,))
-            tsint = bodo.hiframes.pd_timestamp_ext.convert_timestamp_to_datetime64(arg2)
+            tsint = arg2.value
             for i in numba.parfor.internal_prange(n):
                 S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
                     bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i]) - tsint
@@ -355,7 +355,7 @@ def overload_datetime_index_sub(arg1, arg2):
             name = bodo.hiframes.pd_index_ext.get_index_name(arg2)
             n = len(in_arr)
             S = numba.unsafe.ndarray.empty_inferred((n,))
-            tsint = bodo.hiframes.pd_timestamp_ext.convert_timestamp_to_datetime64(arg1)
+            tsint = arg1.value
             for i in numba.parfor.internal_prange(n):
                 S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
                     tsint - bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
