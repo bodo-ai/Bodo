@@ -65,6 +65,92 @@ def test_timedelta_getattr():
     check_func(test_microseconds, (dt_obj,))
 
 
+def test_timedelta_total_seconds():
+    """
+    Testing total_seconds method of datetime.timedelta object in Bodo
+    """
+
+    def test_impl(dt_obj):
+        return dt_obj.total_seconds()
+
+    dt_obj = datetime.timedelta(1, 1, 1)
+    check_func(test_impl, (dt_obj,))
+
+
+def test_timedelta_operations():
+    """
+    Testing operations of datetime.timedelta objects in Bodo
+    """
+
+    def test_add(dt_obj1, dt_obj2):
+        return dt_obj1 + dt_obj2
+
+    def test_sub(dt_obj1, dt_obj2):
+        return dt_obj1 - dt_obj2
+
+    def test_mul(dt_obj1, m):
+        return dt_obj1 * m
+
+    def test_floordiv(dt_obj1, dt_obj2):
+        return dt_obj1 // dt_obj2
+
+    def test_truediv(dt_obj1, dt_obj2):
+        return dt_obj1 / dt_obj2
+
+    def test_mod(dt_obj1, dt_obj2):
+        return dt_obj1 % dt_obj2
+
+    def test_eq(dt_obj1, dt_obj2):
+        return dt_obj1 == dt_obj2
+
+    def test_ne(dt_obj1, dt_obj2):
+        return dt_obj1 != dt_obj2
+
+    def test_le(dt_obj1, dt_obj2):
+        return dt_obj1 <= dt_obj2
+
+    def test_lt(dt_obj1, dt_obj2):
+        return dt_obj1 < dt_obj2
+
+    def test_ge(dt_obj1, dt_obj2):
+        return dt_obj1 >= dt_obj2
+
+    def test_gt(dt_obj1, dt_obj2):
+        return dt_obj1 > dt_obj2
+
+    def test_neg(dt_obj1):
+        return -dt_obj1
+
+    def test_pos(dt_obj1):
+        return +dt_obj1
+
+    def test_divmod(dt_obj1, dt_obj2):
+        return divmod(dt_obj1, dt_obj2)
+
+    def test_abs(dt_obj1):
+        return abs(dt_obj1)
+
+    dt_obj1 = datetime.timedelta(7, 7, 7)
+    dt_obj2 = datetime.timedelta(2, 2, 2)
+    check_func(test_add, (dt_obj1, dt_obj2))
+    check_func(test_sub, (dt_obj1, dt_obj2))
+    check_func(test_mul, (dt_obj1, 5))
+    check_func(test_floordiv, (dt_obj1, dt_obj2))
+    check_func(test_floordiv, (dt_obj1, 2))
+    check_func(test_truediv, (dt_obj1, dt_obj2))
+    check_func(test_truediv, (dt_obj1, 2))
+    check_func(test_mod, (dt_obj1, dt_obj2))
+    check_func(test_eq, (dt_obj1, dt_obj2))
+    check_func(test_ne, (dt_obj1, dt_obj2))
+    check_func(test_le, (dt_obj1, dt_obj2))
+    check_func(test_lt, (dt_obj1, dt_obj2))
+    check_func(test_ge, (dt_obj1, dt_obj2))
+    check_func(test_gt, (dt_obj1, dt_obj2))
+    check_func(test_neg, (dt_obj1,))
+    check_func(test_pos, (dt_obj1,))
+    check_func(test_divmod, (dt_obj1, dt_obj2))
+
+
 # ---------------------------------------------------------------------------- #
 
 
