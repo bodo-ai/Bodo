@@ -95,7 +95,7 @@ numba.targets.hashing._hashsecret = _build_hashsecret()
 ## use objmode for string methods for now
 
 # string methods that just return another string
-# 'lstrip', 'rstrip', 'strip' are in Numba now
+# 'lstrip', 'rstrip', 'strip', 'lower', 'title', and 'upper' are in Numba now
 str2str_methods = ("capitalize", "casefold", "swapcase")
 
 
