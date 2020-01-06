@@ -273,8 +273,11 @@ def test_sort_values_two_columns_nan(n, len_siz):
 
 
 
+
+
+
 def test_sort_values_nan_case():
-    """Test of NaN values for the sorting"""
+    """Test of NaN values for the sorting with all possible values of ascending and na_position"""
     def test_impl1(df1):
         df2 = df1.sort_values(by='A', ascending = True, na_position = 'last', kind="mergesort", axis=0)
         return df2
@@ -297,6 +300,46 @@ def test_sort_values_nan_case():
     check_func(test_impl3, (df1,), sort_output=False)
     check_func(test_impl4, (df1,), sort_output=False)
 
+
+
+def test_sort_values_bool_list():
+    """Test of NaN values for the sorting with vector of ascending"""
+    def test_impl1(df1):
+        df2 = df1.sort_values(by=['A','B'], kind="mergesort", axis=0)
+        return df2
+
+    def test_impl2(df1):
+        df2 = df1.sort_values(by=['A','B'], ascending = True, kind="mergesort", axis=0)
+        return df2
+
+    def test_impl3(df1):
+        df2 = df1.sort_values(by=['A','B'], ascending = [True,True], kind="mergesort", axis=0)
+        return df2
+
+    def test_impl4(df1):
+        df2 = df1.sort_values(by=['A','B'], ascending = False, kind="mergesort", axis=0)
+        return df2
+
+    def test_impl5(df1):
+        df2 = df1.sort_values(by=['A','B'], ascending = [False,False], kind="mergesort", axis=0)
+        return df2
+
+    def test_impl6(df1):
+        df2 = df1.sort_values(by=['A','B'], ascending = [True,False], kind="mergesort", axis=0)
+        return df2
+
+    def test_impl7(df1):
+        df2 = df1.sort_values(by=['A','B'], ascending = [False,True], kind="mergesort", axis=0)
+        return df2
+
+    df1 = pd.DataFrame({"A": [2, np.nan, 7, np.nan, -1, -4, np.nan, 1, 2], "B": [3, 6, 0, 1, 2, -4, 7, 7, 2]})
+    check_func(test_impl1, (df1,), sort_output=False)
+    check_func(test_impl2, (df1,), sort_output=False)
+    check_func(test_impl3, (df1,), sort_output=False)
+    check_func(test_impl4, (df1,), sort_output=False)
+    check_func(test_impl5, (df1,), sort_output=False)
+    check_func(test_impl6, (df1,), sort_output=False)
+    check_func(test_impl7, (df1,), sort_output=False)
 
 
 
@@ -439,24 +482,6 @@ def test_sort_values_axis_default():
         bodo.jit(impl3)(df)
 
 
-def test_sort_values_ascending_bool_list():
-    """
-    Test sort_values(): 'ascending' bool list is not supported
-    """
-
-    def impl1(df):
-        return df.sort_values(by=["A", "B"], ascending=[True, False])
-
-    def impl2(df, ascending):
-        return df.sort_values(by=["A", "B"], ascending=ascending)
-
-    ascending = [True, False]
-    with pytest.raises(BodoError, match="multiple sort orders are not supported"):
-        bodo.jit(impl1)(df)
-    with pytest.raises(BodoError, match="multiple sort orders are not supported"):
-        bodo.jit(impl2)(df, ascending)
-
-
 def test_sort_values_ascending_bool():
     """
     Test sort_values(): 'ascending' must be of type bool
@@ -471,10 +496,27 @@ def test_sort_values_ascending_bool():
     def impl3(df, ascending):
         return df.sort_values(by=["A", "B"], ascending=ascending)
 
-    with pytest.raises(BodoError, match="'ascending' parameter must be of type bool"):
+    def impl4(df):
+        return df.sort_values(by=["A", "B"], ascending=[True])
+
+    def impl5(df):
+        return df.sort_values(by=["A", "B"], ascending=[True,False,True])
+
+    def impl6(df):
+        return df.sort_values(by=["A", "B"], ascending=(True, False))
+
+    with pytest.raises(BodoError, match="'ascending' parameter must be of type bool or list of bool"):
         bodo.jit(impl1)(df)
-    with pytest.raises(BodoError, match="'ascending' parameter must be of type bool"):
+    with pytest.raises(BodoError, match="'ascending' parameter must be of type bool or list of bool"):
         bodo.jit(impl2)(df)
+    with pytest.raises(ValueError, match="ascending should be bool or a list of bool of the number of keys"):
+        bodo.jit(impl3)(df, True)
+    with pytest.raises(ValueError, match="ascending should be bool or a list of bool of the number of keys"):
+        bodo.jit(impl4)(df)
+    with pytest.raises(ValueError, match="ascending should be bool or a list of bool of the number of keys"):
+        bodo.jit(impl5)(df)
+    with pytest.raises(BodoError, match="parameter must be of type bool or list of bool"):
+        bodo.jit(impl6)(df)
 
 
 def test_sort_values_inplace_bool():

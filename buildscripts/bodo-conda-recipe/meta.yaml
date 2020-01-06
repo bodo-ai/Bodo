@@ -9,6 +9,7 @@ build:
   number: {{ GIT_DESCRIBE_NUMBER|int }}
   script_env:
   - TRIAL_PERIOD
+  - MAX_CORE_COUNT
 
 requirements:
   build:

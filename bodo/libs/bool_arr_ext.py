@@ -281,6 +281,27 @@ numba.ir_utils.alias_func_extensions[
 ] = alias_ext_dummy_func
 
 
+# high-level allocation function for boolean arrays
+@numba.njit(no_cpython_wrapper=True)
+def alloc_bool_array(n):
+    data_arr = np.empty(n, dtype=np.bool_)
+    nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
+    return init_bool_array(data_arr, nulls)
+
+
+def alloc_bool_array_equiv(self, scope, equiv_set, args, kws):
+    """Array analysis function for alloc_bool_array() passed to Numba's array analysis
+    extension. Assigns output array's size as equivalent to the input size variable.
+    """
+    assert len(args) == 1 and not kws
+    return args[0], []
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_alloc_bool_array = (
+    alloc_bool_array_equiv
+)
+
+
 @overload(operator.getitem)
 def bool_arr_getitem(A, ind):
     if A != boolean_array:
@@ -581,15 +602,22 @@ def create_op_overload(op, n_inputs):
     na_val = False
     if op_name == "ne":
         na_val = True
+    typing_context = numba.targets.registry.cpu_target.typing_context
 
     if n_inputs == 1:
 
         def overload_bool_arr_op_nin_1(A):
             if isinstance(A, BooleanArrayType):
+                # use type inference to get output dtype
+                ret_dtype = typing_context.resolve_function_type(
+                    op, (types.bool_,), {}
+                ).return_type
 
                 def impl(A):  # pragma: no cover
-                    arr = bodo.libs.bool_arr_ext.get_bool_arr_data(A)
-                    out_arr = op(arr)
+                    n = len(A)
+                    out_arr = np.empty(n, ret_dtype)
+                    for i in numba.parfor.internal_prange(n):
+                        out_arr[i] = op(A[i])
                     return out_arr
 
                 return impl
@@ -597,54 +625,66 @@ def create_op_overload(op, n_inputs):
         return overload_bool_arr_op_nin_1
     elif n_inputs == 2:
 
-        def overload_series_op_nin_2(A1, A2):
-            # both are BooleanArray
-            if A1 == boolean_array and A2 == boolean_array:
+        def overload_bool_arr_op_nin_2(A1, A2):
+            # if any input is BooleanArray
+            if A1 == boolean_array or A2 == boolean_array:
+                is_A1_scalar = isinstance(A1, (types.Number, types.Boolean))
+                is_A2_scalar = isinstance(A2, (types.Number, types.Boolean))
+                # use type inference to get output dtype
+                dtype1 = getattr(A1, "dtype", A1)
+                dtype2 = getattr(A2, "dtype", A2)
+                ret_dtype = typing_context.resolve_function_type(
+                    op, (dtype1, dtype2), {}
+                ).return_type
+                # generate implementation function. Example:
+                # def impl(A1, A2):
+                # n = len(A1)
+                # out_arr = np.empty(n, ret_dtype)
+                # for i in numba.parfor.internal_prange(n):
+                #     out_arr[i] = op(A1[i], A2[i])
+                #     if (bodo.libs.array_kernels.isna(A1, i)
+                #         or bodo.libs.array_kernels.isna(A2, i)):
+                #     out_arr[i] = True
+                # return out_arr
+                access_str1 = "A1" if is_A1_scalar else "A1[i]"
+                access_str2 = "A2" if is_A2_scalar else "A2[i]"
+                na_str1 = (
+                    "False" if is_A1_scalar else "bodo.libs.array_kernels.isna(A1, i)"
+                )
+                na_str2 = (
+                    "False" if is_A2_scalar else "bodo.libs.array_kernels.isna(A2, i)"
+                )
+                func_text = "def impl(A1, A2):\n"
+                func_text += "  n = len({})\n".format(
+                    "A1" if not is_A1_scalar else "A2"
+                )
+                func_text += "  out_arr = np.empty(n, ret_dtype)\n"
+                func_text += "  for i in numba.parfor.internal_prange(n):\n"
+                func_text += "    out_arr[i] = op({}, {})\n".format(
+                    access_str1, access_str2
+                )
+                if handle_na:
+                    func_text += "    if ({}\n".format(na_str1)
+                    func_text += "        or {}):\n".format(na_str2)
+                    func_text += "      out_arr[i] = {}\n".format(na_val)
+                func_text += "  return out_arr\n"
+                loc_vars = {}
+                exec(
+                    func_text,
+                    {
+                        "bodo": bodo,
+                        "numba": numba,
+                        "np": np,
+                        "ret_dtype": ret_dtype,
+                        "op": op,
+                    },
+                    loc_vars,
+                )
+                impl = loc_vars["impl"]
+                return impl
 
-                def impl_both(A1, A2):  # pragma: no cover
-                    arr1 = bodo.libs.bool_arr_ext.get_bool_arr_data(A1)
-                    bitmap1 = bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A1)
-                    arr2 = bodo.libs.bool_arr_ext.get_bool_arr_data(A2)
-                    bitmap2 = bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A2)
-                    out_arr = op(arr1, arr2)
-                    bodo.libs.bool_arr_ext.set_cmp_out_for_nan(
-                        out_arr, bitmap1, handle_na, na_val
-                    )
-                    bodo.libs.bool_arr_ext.set_cmp_out_for_nan(
-                        out_arr, bitmap2, handle_na, na_val
-                    )
-                    return out_arr
-
-                return impl_both
-            # left arg is BooleanArray
-            if A1 == boolean_array:
-
-                def impl_left(A1, A2):  # pragma: no cover
-                    arr1 = bodo.libs.bool_arr_ext.get_bool_arr_data(A1)
-                    bitmap1 = bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A1)
-                    out_arr = op(arr1, A2)
-                    bodo.libs.bool_arr_ext.set_cmp_out_for_nan(
-                        out_arr, bitmap1, handle_na, na_val
-                    )
-                    return out_arr
-
-                return impl_left
-            # right arg is BooleanArray
-            if A2 == boolean_array:
-
-                def impl_right(A1, A2):  # pragma: no cover
-                    arr2 = bodo.libs.bool_arr_ext.get_bool_arr_data(A2)
-                    bitmap2 = bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A2)
-                    out_arr = op(A1, arr2)
-                    bodo.libs.bool_arr_ext.set_cmp_out_for_nan(
-                        out_arr, bitmap2, handle_na, na_val
-                    )
-                    return out_arr
-
-                return impl_right
-
-        return overload_series_op_nin_2
-    else:
+        return overload_bool_arr_op_nin_2
+    else:  # pragma: no cover
         raise RuntimeError(
             "Don't know how to register ufuncs from ufunc_db with arity > 2"
         )

@@ -29,6 +29,17 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     MPI_Initialized(&is_initialized);
     if (!is_initialized) MPI_Init(NULL, NULL);
 
+#ifdef MAX_CORE_COUNT
+    int num_pes;
+    MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
+    // printf("max core count %d\n", MAX_CORE_COUNT);
+    // printf("number of processors %d\n", num_pes);
+    if (num_pes>MAX_CORE_COUNT) {
+        PyErr_SetString(PyExc_RuntimeError, "Exceeded the max core count!");
+          return NULL;
+    }
+#endif
+
     PyObject_SetAttrString(m, "dist_get_rank",
                            PyLong_FromVoidPtr((void *)(&dist_get_rank)));
     PyObject_SetAttrString(m, "dist_get_size",

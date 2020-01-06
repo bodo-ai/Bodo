@@ -3,6 +3,7 @@
 Support for Series.dt methods
 """
 import operator
+import datetime
 import numpy as np
 import pandas as pd
 import numba
@@ -29,7 +30,6 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import (
     pandas_timestamp_type,
     convert_datetime64_to_timestamp,
-    convert_timestamp_to_datetime64,
     integer_to_dt64,
 )
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
@@ -106,8 +106,15 @@ def create_date_field_overload(field):
         func_text += (
             "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])\n"
         )
-        func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
-        func_text += "        out_arr[i] = ts." + field + "\n"
+        # extract year, month, day faster without conversion to Timestamp
+        if field in ("year", "month", "day"):
+            func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
+            if field in ("month", "day"):
+                func_text += "        month, day = bodo.hiframes.pd_timestamp_ext.get_month_day(year, days)\n"
+            func_text += "        out_arr[i] = {}\n".format(field)
+        else:
+            func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
+            func_text += "        out_arr[i] = ts." + field + "\n"
         func_text += (
             "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
         )
@@ -137,13 +144,11 @@ def series_dt_date_overload(S_dt):
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         numba.parfor.init_prange()
         n = len(arr)
-        out_arr = numba.unsafe.ndarray.empty_inferred((n,))
+        out_arr = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
         for i in numba.parfor.internal_prange(n):
             dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
             ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)
-            out_arr[i] = bodo.hiframes.pd_timestamp_ext.datetime_date_ctor(
-                ts.year, ts.month, ts.day
-            )
+            out_arr[i] = datetime.date(ts.year, ts.month, ts.day)
         #        S[i] = datetime.date(ts.year, ts.month, ts.day)\n'
         #        S[i] = ts.day + (ts.month << 16) + (ts.year << 32)\n'
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)

@@ -48,6 +48,7 @@ import bodo.libs
 import bodo.libs.array_kernels  # side effect: install Numba functions
 import bodo.libs.int_arr_ext  # side effect
 import bodo.libs.re_ext  # side effect: initialize Numba extensions
+import bodo.hiframes.datetime_timedelta_ext  # side effect: initialize Numba extensions
 import bodo.utils
 import bodo.utils.typing
 import bodo.io

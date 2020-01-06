@@ -1,0 +1,6 @@
+migration_ts: 1568247249
+pin_run_as_build:
+    grpc-cpp:
+        max_pin: x.x
+grpc_cpp:
+    - 1.23

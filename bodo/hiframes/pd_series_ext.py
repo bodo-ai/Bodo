@@ -50,7 +50,8 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from bodo.libs.bool_arr_ext import boolean_array
-from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type, datetime_date_type
+from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
+from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 from bodo.hiframes.rolling import supported_rolling_funcs
 import datetime
@@ -181,7 +182,7 @@ def _get_series_array_type(dtype):
         dtype = numba.numpy_support.from_dtype(np_dtype)
 
     if dtype == datetime_date_type:
-        return bodo.hiframes.datetime_date_ext.array_datetime_date
+        return bodo.hiframes.datetime_date_ext.datetime_date_array_type
 
     # TODO: other types?
     # regular numpy array

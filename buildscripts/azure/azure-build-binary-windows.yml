@@ -4,6 +4,9 @@ parameters:
 
 jobs:
 - job: ${{ parameters.name }}
+  dependsOn: find_suffix
+  variables:
+    suffix: $[ dependencies.find_suffix.outputs['suffix_step.fileSuffix'] ]
   pool:
     vmImage: ${{ parameters.vmImage }}
   
@@ -36,6 +39,7 @@ jobs:
       source activate bodo_build
       cd buildscripts/bodo-conda-recipe/
       export TRIAL_PERIOD=$(TRIAL_PERIOD)
+      export MAX_CORE_COUNT=$(MAX_CORE_COUNT)
       conda build . -c bodo.ai -c conda-forge -c intel --no-test
     displayName: 'Conda build Bodo'
 
@@ -52,12 +56,12 @@ jobs:
     inputs:
       rootFolderOrFile: '$(System.DefaultWorkingDirectory)/bodo-inc'
       includeRootFolder: false
-      archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.name }}bodo-inc.zip'
+      archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.name }}bodo-inc-$(suffix).zip'
       replaceExistingArchive: true 
     displayName: "Archive files"
     
   - task: PublishBuildArtifacts@1
     inputs:
-      pathtoPublish: '$(Build.ArtifactStagingDirectory)/${{ parameters.name }}bodo-inc.zip'
+      pathtoPublish: '$(Build.ArtifactStagingDirectory)/${{ parameters.name }}bodo-inc-$(suffix).zip'
       artifactName: bodo-inc
     displayName: "Publish Artifact"

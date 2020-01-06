@@ -56,8 +56,8 @@ if "BODO_XE_SUPPORT" in os.environ and os.environ["BODO_XE_SUPPORT"] != "0":
 
 ind = [PREFIX_DIR + "/include"]
 lid = [PREFIX_DIR + "/lib"]
-#eca = ["-std=c++11", "-fsanitize=address"]
-#ela = ["-std=c++11", "-fsanitize=address"]
+# eca = ["-std=c++11", "-fsanitize=address"]
+# ela = ["-std=c++11", "-fsanitize=address"]
 if is_win:
     eca = ["/std=c++latest", "/O2"]
 else:
@@ -97,7 +97,6 @@ ext_io = Extension(
         "bodo/libs/_import_py.h",
         "bodo/io/_csv.h",
         "bodo/io/_bodo_csv_file_reader.h",
-        "bodo/libs/_datetime_ext.h",
     ],
     libraries=io_libs,
     include_dirs=ind + np_compile_args["include_dirs"],
@@ -144,6 +143,9 @@ if "TRIAL_PERIOD" in os.environ and os.environ["TRIAL_PERIOD"] != "":
     dist_macros.append(("TRIAL_PERIOD", trial_period))
     dist_macros.append(("TRIAL_START", trial_start))
 
+if "MAX_CORE_COUNT" in os.environ and os.environ["MAX_CORE_COUNT"] != "":
+    max_core_count = os.environ["MAX_CORE_COUNT"]
+    dist_macros.append(("MAX_CORE_COUNT", max_core_count))
 
 ext_hdist = Extension(
     name="bodo.libs.hdist",
@@ -256,8 +258,15 @@ ext_xenon_wrapper = Extension(
     extra_link_args=ela,
 )
 
-_ext_mods = [ext_hdist, ext_dict, ext_str, ext_quantile, ext_dt, ext_io, ext_arr,
-    ext_s3
+_ext_mods = [
+    ext_hdist,
+    ext_dict,
+    ext_str,
+    ext_quantile,
+    ext_dt,
+    ext_io,
+    ext_arr,
+    ext_s3,
 ]
 
 if _has_h5py:

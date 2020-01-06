@@ -518,7 +518,7 @@ def hash_join_table(
 
 
 @intrinsic
-def sort_values_table(typingctx, table_t, n_keys_t, ascending_t, na_position_b_t):
+def sort_values_table(typingctx, table_t, n_keys_t, vect_ascending_t, na_position_b_t):
     """
     """
     assert table_t == table_type
@@ -527,12 +527,12 @@ def sort_values_table(typingctx, table_t, n_keys_t, ascending_t, na_position_b_t
         fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
                                 [lir.IntType(8).as_pointer(),
                                  lir.IntType(64),
-                                 lir.IntType(1),
+                                 lir.IntType(8).as_pointer(),
                                  lir.IntType(1)])
         fn_tp = builder.module.get_or_insert_function(fnty, name="sort_values_table")
         return builder.call(fn_tp, args)
 
-    return table_type(table_t, types.int64, types.boolean, types.boolean), codegen
+    return table_type(table_t, types.int64, types.voidptr, types.boolean), codegen
 
 
 @intrinsic

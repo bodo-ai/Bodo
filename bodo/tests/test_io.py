@@ -46,13 +46,13 @@ def test_pq_spark_date(datapath):
 
 
 def test_pq_index(datapath):
-    fname = datapath("index_test1.pq")
-
-    def test_impl():
+    def test_impl(fname):
         return pd.read_parquet(fname)
 
+    # passing function name as value to test value-based dispatch
+    fname = datapath("index_test1.pq")
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_frame_equal(bodo_func(), test_impl())
+    pd.testing.assert_frame_equal(bodo_func(fname), test_impl(fname))
 
     # string index
     fname = datapath("index_test2.pq")
@@ -123,13 +123,17 @@ def test_pq_schema(datapath):
 
 
 def test_csv_bool1(datapath):
-    fname = datapath("csv_data_bool1.csv")
-
-    def test_impl():
+    """Test boolean data in CSV files.
+    Also test extra separator at the end of the file
+    which requires index_col=False.
+    """
+    def test_impl(fname):
         dtype = {"A": "int", "B": "bool", "C": "float"}
-        return pd.read_csv(fname, names=dtype.keys(), dtype=dtype)
+        return pd.read_csv(fname, names=dtype.keys(), dtype=dtype, index_col=False)
 
-    check_func(test_impl, ())
+    # passing file name as argument to exercise value-based dispatch
+    fname = datapath("csv_data_bool1.csv")
+    check_func(test_impl, (fname,))
 
 
 def test_csv_int_na1(datapath):
@@ -165,6 +169,25 @@ def test_csv_bool_na(datapath):
     check_func(test_impl, ())
 
 
+def test_csv_fname_comp(datapath):
+    """Test CSV read with filename computed across Bodo functions
+    """
+
+    @bodo.jit
+    def test_impl(data_folder):
+        return load_func(data_folder)
+
+
+    @bodo.jit
+    def load_func(data_folder):
+        fname = data_folder + "/csv_data1.csv"
+        return pd.read_csv(fname)
+
+    data_folder = os.path.join("bodo", "tests", "data")
+    # should not raise exception
+    test_impl(data_folder)
+
+
 def test_write_csv_parallel_unicode():
     def test_impl(df, fname):
         df.to_csv(fname, index=False)
@@ -186,16 +209,16 @@ def test_write_csv_parallel_unicode():
 
 
 def test_h5_read_seq(datapath):
-    fname = datapath("lr.hdf5")
-
-    def test_impl():
+    def test_impl(fname):
         f = h5py.File(fname, "r")
         X = f["points"][:]
         f.close()
         return X
 
+    # passing function name as value to test value-based dispatch
+    fname = datapath("lr.hdf5")
     bodo_func = bodo.jit(test_impl)
-    np.testing.assert_allclose(bodo_func(), test_impl())
+    np.testing.assert_allclose(bodo_func(fname), test_impl(fname))
 
 
 def test_h5_read_const_infer_seq(datapath):
@@ -423,6 +446,38 @@ def test_np_io4():
         bodo_func(n)
         B = np.fromfile("np_file_3.dat", np.int64)
         np.testing.assert_almost_equal(A, B)
+
+
+def test_csv_double_box(datapath):
+    """Make sure boxing the output of read_csv() twice doesn't cause crashes
+    See dataframe boxing function for extra incref of native arrays.
+    """
+    fname = datapath("csv_data1.csv")
+
+    def test_impl():
+        df = pd.read_csv(fname)
+        print(df)
+        return df
+
+    bodo_func = bodo.jit(test_impl)
+    print(bodo_func())
+
+
+def test_csv_header_none(datapath):
+    """Test header=None in read_csv() when column names are not provided, so numbers
+    should be assigned as column names.
+    """
+    fname = datapath("csv_data1.csv")
+
+    def test_impl():
+        return pd.read_csv(fname, header=None)
+
+    bodo_func = bodo.jit(test_impl)
+    b_df = bodo_func()
+    p_df = test_impl()
+    # convert column names from integer to string since Bodo only supports string names
+    p_df.columns = [str(c) for c in p_df.columns]
+    pd.testing.assert_frame_equal(b_df, p_df)
 
 
 class TestIO(unittest.TestCase):

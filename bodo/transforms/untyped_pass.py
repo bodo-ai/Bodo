@@ -21,6 +21,7 @@ from numba.ir_utils import (
     remove_dels,
     replace_var_names,
     find_const,
+    GuardException,
     compile_to_numba_ir,
     replace_arg_nodes,
     find_callname,
@@ -53,7 +54,15 @@ from bodo.ir import csv_ext
 
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 import bodo.hiframes.pd_dataframe_ext
-from bodo.utils.transform import update_locs
+from bodo.utils.transform import update_locs, get_str_const_value
+
+
+# dummy sentinel singleton to designate constant value not found for variable
+class ConstNotFound:
+    pass
+
+
+CONST_NOT_FOUND = ConstNotFound()
 
 
 def remove_hiframes(rhs, lives, call_list):
@@ -106,8 +115,15 @@ def remove_hiframes(rhs, lives, call_list):
         len(call_list) == 4
         and call_list[1:] == ["bool_arr_ext", "libs", bodo]
         and call_list[0]
-        in ["get_bool_arr_data", "get_bool_arr_bitmap", "init_bool_array"]
+        in [
+            "get_bool_arr_data",
+            "get_bool_arr_bitmap",
+            "init_bool_array",
+            "alloc_bool_array",
+        ]
     ):
+        return True
+    if call_list == ["alloc_datetime_date_array", "datetime_date_ext", "hiframes", bodo]:
         return True
     if len(call_list) == 4 and call_list[1:] == ["conversion", "utils", bodo]:
         # all conversion functions are side effect-free
@@ -189,7 +205,7 @@ class UntypedPass(object):
         self.pq_handler = ParquetHandler(
             func_ir, typingctx, args, _locals, self.reverse_copies
         )
-        self.h5_handler = h5.PIO(self.func_ir, _locals, self.reverse_copies)
+        self.h5_handler = h5.H5_IO(self.func_ir, _locals, args, self.reverse_copies)
 
     def run(self):
         # XXX: the block structure shouldn't change in this pass since labels
@@ -550,7 +566,6 @@ class UntypedPass(object):
         nodes = _compile_func_single_block(_build_f, (var,), ret_var)
         return nodes
 
-
     def _handle_np_where(self, assign, lhs, rhs):
         """replace np.where() calls with Bodo's version since Numba's typer assumes
         non-Array types like Series are scalars and produces wrong output type.
@@ -717,14 +732,14 @@ class UntypedPass(object):
 
         kws = dict(rhs.kws)
         fname = self._get_arg("read_csv", rhs.args, kws, 0, "filepath_or_buffer")
-        sep = self._get_str_arg("read_csv", rhs.args, kws, 1, "sep", ",")
-        sep = self._get_str_arg("read_csv", rhs.args, kws, 2, "delimiter", sep)
-        header = self._get_str_arg("read_csv", rhs.args, kws, 3, "header", "infer")
+        sep = self._get_const_arg("read_csv", rhs.args, kws, 1, "sep", ",")
+        sep = self._get_const_arg("read_csv", rhs.args, kws, 2, "delimiter", sep)
+        header = self._get_const_arg("read_csv", rhs.args, kws, 3, "header", "infer")
         names_var = self._get_arg("read_csv", rhs.args, kws, 4, "names", "")
-        index_col = self._get_str_arg("read_csv", rhs.args, kws, 5, "index_col", -1)
+        index_col = self._get_const_arg("read_csv", rhs.args, kws, 5, "index_col", -1)
         usecols_var = self._get_arg("read_csv", rhs.args, kws, 6, "usecols", "")
         dtype_var = self._get_arg("read_csv", rhs.args, kws, 10, "dtype", "")
-        skiprows = self._get_str_arg("read_csv", rhs.args, kws, 16, "skiprows", 0)
+        skiprows = self._get_const_arg("read_csv", rhs.args, kws, 16, "skiprows", 0)
 
         # check unsupported arguments
         supported_args = (
@@ -764,12 +779,11 @@ class UntypedPass(object):
         # if inference is required
         if dtype_var is "" or col_names == 0:
             # infer column names and types from constant filename
-            fname_const = guard(find_const, self.func_ir, fname)
-            if fname_const is None:
-                raise ValueError(
-                    "pd.read_csv() requires explicit type"
-                    "annotation using 'dtype' if filename is not constant"
-                )
+            msg = (
+                "pd.read_csv() requires explicit type "
+                "annotation using 'dtype' if filename is not constant"
+            )
+            fname_const = get_str_const_value(fname, self.func_ir, msg, arg_types=self.args)
             rows_to_read = 100  # TODO: tune this
             df = pd.read_csv(
                 fname_const,
@@ -864,7 +878,7 @@ class UntypedPass(object):
         index_arg = "None"
 
         # one column is index
-        if index_col != -1:
+        if index_col != -1 and index_col != False:
             # convert column number to column name
             if isinstance(index_col, int):
                 index_col = columns[index_col]
@@ -1136,21 +1150,28 @@ class UntypedPass(object):
 
         return [assign]
 
-    def _get_str_arg(
-        self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None
+    def _get_const_arg(
+        self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None, typ=None
     ):
-        arg = None
-        if len(args) > arg_no:
-            arg = guard(find_const, self.func_ir, args[arg_no])
-        elif arg_name in kws:
-            arg = guard(find_const, self.func_ir, kws[arg_name])
+        """Get constant value for a function call argument. Raise error if the value is
+        not constant.
+        """
+        typ = str if typ is None else typ
+        arg = CONST_NOT_FOUND
+        try:
+            if len(args) > arg_no:
+                arg = find_const(self.func_ir, args[arg_no])
+            elif arg_name in kws:
+                arg = find_const(self.func_ir, kws[arg_name])
+        except GuardException:
+            pass
 
-        if arg is None:
+        if arg is CONST_NOT_FOUND:
             if default is not None:
                 return default
             if err_msg is None:
-                err_msg = ("{} requires '{}' argument as a " "constant string").format(
-                    f_name, arg_name
+                err_msg = ("{} requires '{}' argument as a constant {}").format(
+                    f_name, arg_name, typ
                 )
             raise ValueError(err_msg)
         return arg

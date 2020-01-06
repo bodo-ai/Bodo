@@ -88,17 +88,29 @@ def test_merge_key_change():
 
 def test_merge_suffixes_bracket():
     """
-    Test merge(): test the suffixes functionality with bracket
+    Test merge(): test the suffixes functionality for inner/left/right/outer with bracket
     """
 
-    def test_impl(df1, df2):
+    def test_impl1(df1, df2):
         o1 = df1.merge(df2, on="key", how="inner", suffixes=["_a", "_b"])
         return o1
+    def test_impl2(df1, df2):
+        df3 = df1.merge(df2, on="key", how="left", suffixes=["_a", "_b"])
+        return df3
+    def test_impl3(df1, df2):
+        df3 = df1.merge(df2, on="key", how="right", suffixes=["_a", "_b"])
+        return df3
+    def test_impl4(df1, df2):
+        o1 = df1.merge(df2, on="key", how="outer", suffixes=["_a", "_b"])
+        return o1
 
-    bodo_func = bodo.jit(test_impl)
     df1 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [1, 2, 3, 5]})
     df2 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [5, 6, 7, 8]})
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl1, (df1, df2), sort_output=True)
+    check_func(test_impl2, (df1, df2), sort_output=True)
+    check_func(test_impl3, (df1, df2), sort_output=True)
+    check_func(test_impl4, (df1, df2), sort_output=True)
+
 
 
 def test_merge_suffixes_parenthesis():
@@ -352,6 +364,48 @@ def test_merge_int_key(n):
         bodo_func(df1, df2).sort_values("key1").reset_index(drop=True),
         test_impl(df1, df2).sort_values("key1").reset_index(drop=True),
     )
+
+
+@pytest.mark.parametrize("n1, n2, len_siz", [(5,4,2), (10,12,3), (120, 100, 10), (40, 30, 7), (1000, 900, 10)])
+def test_merge_nullable_int_bool(n1, n2, len_siz):
+    """
+    Test merge(): test of nullable_int_bool for inner/left/right/outer and random input
+    """
+
+    def test_impl1(df1, df2):
+        df3 = df1.merge(df2, on="A", how="inner")
+        return df3
+    def test_impl2(df1, df2):
+        df3 = df1.merge(df2, on="A", how="left")
+        return df3
+    def test_impl3(df1, df2):
+        df3 = df1.merge(df2, on="A", how="right")
+        return df3
+    def test_impl4(df1, df2):
+        df3 = df1.merge(df2, on="A", how="outer")
+        return df3
+
+    def get_random_column(n,len_siz):
+        elist = []
+        for _ in range(n):
+            prob = random.randint(1,len_siz)
+            if prob==1:
+                elist.append(None)
+            else:
+                elist.append(prob)
+        return pd.array(elist, dtype='UInt16')
+    def get_random_dataframe(n,len_siz):
+        elist1 = get_random_column(n,len_siz)
+        elist2 = get_random_column(n,len_siz)
+        return pd.DataFrame({'A':elist1,'B':elist2})
+    random.seed(5)
+    df1 = get_random_dataframe(n1,len_siz)
+    df2 = get_random_dataframe(n2,len_siz)
+    check_func(test_impl1, (df1, df2), sort_output=True)
+    check_func(test_impl2, (df1, df2), sort_output=True)
+    check_func(test_impl3, (df1, df2), sort_output=True)
+    check_func(test_impl4, (df1, df2), sort_output=True)
+
 
 
 def test_merge_multi_int_key():

@@ -65,11 +65,7 @@ def overload_coerce_to_ndarray(data, error_on_nonarray=True, bool_arr_convert=No
                 vals = []
                 for d in data:
                     vals.append(
-                        bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-                            bodo.hiframes.pd_timestamp_ext.convert_timestamp_to_datetime64(
-                                d
-                            )
-                        )
+                        bodo.hiframes.pd_timestamp_ext.integer_to_dt64(d.value)
                     )
                 return np.asarray(vals)
 

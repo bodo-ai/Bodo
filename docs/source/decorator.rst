@@ -39,6 +39,7 @@ but the second call will reuse the compiled binary. The output is as follows::
     1  1
     2  2
 
+The `jit` decorators can be disabled if necessary (see :ref:`disable-jit`).
 
 `distributed` Flag
 ~~~~~~~~~~~~~~~~~~

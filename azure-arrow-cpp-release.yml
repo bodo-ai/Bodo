@@ -10,3 +10,4 @@ jobs:
   parameters:
     name: Mac
     vmImage: xcode9-macos10.13
+- template: buildscripts/azure/arrow-cpp-feedstock/.azure-pipelines/azure-pipelines-win.yml

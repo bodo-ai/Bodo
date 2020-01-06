@@ -30,7 +30,6 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import (
     pandas_timestamp_type,
     convert_datetime64_to_timestamp,
-    convert_timestamp_to_datetime64,
     integer_to_dt64,
 )
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType

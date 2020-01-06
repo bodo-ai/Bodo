@@ -224,7 +224,8 @@ Bodo automatically parallelizes I/O of different nodes in a distributed setting
 without any code changes.
 
 Bodo needs to know the types of input arrays. If the file name is a constant
-string, Bodo tries to look at the file at compile time and recognize the types.
+string or function argument, Bodo tries to look at the file at compile time
+and recognize the types.
 Otherwise, the user is responsile for providing the types similar to
 `Numba's typing syntax
 <http://numba.pydata.org/numba-doc/latest/reference/types.html>`_. For
@@ -236,12 +237,20 @@ example::
                       'four': bodo.float64[:],
                       'five': bodo.string_array_type,
                       }})
-    def example_df_schema(file_name):
+    def example_df_schema(fname1, fname2, flag):
+        if flag:
+            file_name = fname1
+        else:
+            file_name = fname2
         df = pd.read_parquet(file_name)
 
 
      @bodo.jit(locals={'X': bodo.float64[:,:], 'Y': bodo.float64[:]})
-     def example_h5(file_name):
+     def example_h5(fname1, fname2, flag):
+        if flag:
+            file_name = fname1
+        else:
+            file_name = fname2
          f = h5py.File(file_name, "r")
          X = f['points'][:]
          Y = f['responses'][:]
@@ -249,12 +258,12 @@ example::
 Print
 -----
 
-Bodo assigns `REP` to distributable arguments of ``print`` functions
-(to make sure values are identical on all processors) and prints values
-only once instead of one print per process. The intention is to avoid
-unexpected behavior, especially when running on large number of processors.
-Programmers can use `bodo.parallel_print` for printing distributed chunks of
-data or parallel prints of other values.
+Bodo avoids repeated prints of replicated data by printing
+them only once (on rank 0) instead of one print per process.
+However, chunks of distributed data are
+printed on all processes as expected.
+Programmers can use `bodo.parallel_print` for printing
+replicated data on all processes if desired.
 
 
 Parallel APIs

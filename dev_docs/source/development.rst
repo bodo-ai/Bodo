@@ -179,6 +179,21 @@ We use `clang-format` as the formatter.
 See `instructions in Pandas <https://pandas.pydata.org/pandas-docs/stable/development/contributing.html#c-cpplint>`_.
 
 
+Code Coverage
+---------------
+We use `codecov <https://codecov.io/gh/Bodo-inc/Bodo>`_ for coverage reports. 
+In `setup.cfg <https://github.com/Bodo-inc/Bodo/blob/package_config/setup.cfg>`_, there are two `coverage <https://coverage.readthedocs.io/en/coverage-5.0/>`_ configurations related sections.
+
+To have a more accurate codecov report, during development, add :code:`# pragma: no cover` to numba compiled functions and dummy functions used for typing, which includes:
+
+1. :code:`@numba.njit` functions (`example <https://github.com/Bodo-inc/Bodo/blob/8ec0446ee0972c92a878e338cff15d6011fe7605/bodo/hiframes/pd_index_ext.py#L217>`_)
+2. :code:`@numba.extending.register_jitable` functions (`example <https://github.com/Bodo-inc/Bodo/blob/8ec0446ee0972c92a878e338cff15d6011fe7605/bodo/libs/int_arr_ext.py#L147>`_)
+3. :code:`impl` (returned function) inside :code:`@overload` functions (`example <https://github.com/Bodo-inc/Bodo/blob/8ec0446ee0972c92a878e338cff15d6011fe7605/bodo/libs/array_kernels.py#L636>`_)
+4. :code:`impl` (returned function) inside :code:`@overload_method` functions (`example <https://github.com/Bodo-inc/Bodo/blob/8ec0446ee0972c92a878e338cff15d6011fe7605/bodo/libs/str_arr_ext.py#L778>`_)
+5. :code:`impl` (returned function) inside :code:`@numba.generated_jit` functions (`example <https://github.com/Bodo-inc/Bodo/blob/8ec0446ee0972c92a878e338cff15d6011fe7605/bodo/hiframes/pd_dataframe_ext.py#L395>`_)
+6. dummy functions (`example <https://github.com/Bodo-inc/Bodo/blob/8ec0446ee0972c92a878e338cff15d6011fe7605/bodo/hiframes/pd_dataframe_ext.py#L1846>`_)
+
+
 DevOps
 ----------
 
@@ -186,7 +201,11 @@ We currently have two build pipelines on `Azure DevOps <https://dev.azure.com/bo
 
 1. Bodo-inc.Bodo: This pipeline is triggered whenever a pull request whose target branch is set to :code:`master` is created and following commits. This does not test on the full test suite in order to save time. A `codecov <https://codecov.io/gh/Bodo-inc/Bodo>`_ code coverage report is generated and uploaded for testing on Linux with one processor.
 
-2. Bodo-build-binary: This pipeline is used for release and automatic nightly testing on full test suite, triggered by pushing tags. It has two stages. The first stage removes docstrings, builds the bodo binary and makes the artifact(:code:`bodo-inc.zip`) available for downloads. The second stage runs the full test suite with the binary we just built on Linux with 1, 2, and 3 processors. It is structured this way so that in case of emergency bug fix release, we can still download the binary without waiting for the tests to finish. The default TRIAL_PERIOD is 14(days) set through Azure's UI, and this enviroment variable can be changed before manually triggering the build.
+2. Bodo-build-binary: This pipeline is used for release and automatic nightly testing on full test suite, triggered by pushing tags. It has two stages. The first stage removes docstrings, builds the bodo binary and makes the artifact(:code:`bodo-inc.zip`) available for downloads. The second stage runs the full test suite with the binary we just built on Linux with 1, 2, and 3 processors. It is structured this way so that in case of emergency bug fix release, we can still download the binary without waiting for the tests to finish. 
+
+The default :code:`TRIAL_PERIOD` is 14(days) set through Azure's UI, and this enviroment variable can be changed before manually triggering the build. 
+
+:code:`MAX_CORE_COUNT` does not have a default value, it can be set through Azure's UI when manually triggering it.
 
 
 Papers

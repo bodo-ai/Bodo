@@ -1,0 +1,55 @@
+migrator_ts: 1569538102   # The timestamp of when the migration was made
+__migrator: 
+  kind: 
+    version
+  exclude:
+    - c_compiler
+    - vc
+    - cxx_compiler
+  migration_number:  # Only use this if the bot messes up, putting this in will cause a complete rerun of the migration
+    1 
+  bump_number: 0
+
+python:
+  - 2.7
+  - 3.6
+  - 3.7
+  - 3.8
+
+c_compiler:
+  # legacy compilers for things that refuse to move
+  - toolchain_c                # [(linux64 or osx) and (environ.get('CF_COMPILER_STACK') == 'comp4')]
+  # modern compilers
+  - gcc                        # [linux64]
+  - clang                      # [osx]
+  # non-standard arches get built with gcc
+  - gcc                        # [aarch64]
+  - gcc                        # [ppc64le]
+  - gcc                        # [armv7l]
+
+  - vs2008                     # [win]
+  - vs2015                     # [win]
+  - vs2015                     # [win]
+  - vs2015                     # [win]
+
+cxx_compiler:
+  # legacy compilers for things that refuse to move
+  - toolchain_cxx              # [(linux64 or osx) and (environ.get('CF_COMPILER_STACK') == 'comp4')]
+  # modern compilers
+  - gxx                        # [linux64]
+  - clangxx                    # [osx]
+
+  - gxx                        # [aarch64]
+  - gxx                        # [ppc64le]
+  - gxx                        # [armv7l]
+
+  - vs2008                     # [win]
+  - vs2015                     # [win]
+  - vs2015                     # [win]
+  - vs2015                     # [win]
+
+vc:                    # [win]
+  - 9                  # [win]
+  - 14                 # [win]
+  - 14                 # [win]
+  - 14                 # [win]

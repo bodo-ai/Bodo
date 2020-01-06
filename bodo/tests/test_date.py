@@ -15,9 +15,143 @@ from bodo.tests.utils import (
     dist_IR_contains,
     check_func,
 )
-from datetime import datetime
+import datetime
 import random
 import pytest
+
+
+# ------------------------- Testing datetime.timedelta ------------------------- #
+def test_timedelta_construct():
+    """
+    Testing construction of datetime.timedelta object in Bodo
+    """
+
+    def test_impl():
+        dt_obj = datetime.timedelta(34535, 34959834, 948583858)
+        return dt_obj
+
+    check_func(test_impl, ())
+
+
+def test_timedelta_boxing():
+    """
+    Testing boxing and unboxing of datetime.timedelta object in Bodo
+    """
+
+    def test_impl(dt_obj):
+        return dt_obj
+
+    dt_obj = datetime.timedelta(34535, 34959834, 948583858)
+    check_func(test_impl, (dt_obj,))
+
+
+def test_timedelta_getattr():
+    """
+    Testing getting attributes from datetime.timedelta object in Bodo
+    """
+
+    def test_days(dt_obj):
+        return dt_obj.days
+
+    def test_seconds(dt_obj):
+        return dt_obj.seconds
+
+    def test_microseconds(dt_obj):
+        return dt_obj.microseconds
+
+    dt_obj = datetime.timedelta(2, 55, 34)
+    check_func(test_days, (dt_obj,))
+    check_func(test_seconds, (dt_obj,))
+    check_func(test_microseconds, (dt_obj,))
+
+
+def test_timedelta_total_seconds():
+    """
+    Testing total_seconds method of datetime.timedelta object in Bodo
+    """
+
+    def test_impl(dt_obj):
+        return dt_obj.total_seconds()
+
+    dt_obj = datetime.timedelta(1, 1, 1)
+    check_func(test_impl, (dt_obj,))
+
+
+def test_timedelta_operations():
+    """
+    Testing operations of datetime.timedelta objects in Bodo
+    """
+
+    def test_add(dt_obj1, dt_obj2):
+        return dt_obj1 + dt_obj2
+
+    def test_sub(dt_obj1, dt_obj2):
+        return dt_obj1 - dt_obj2
+
+    def test_mul(dt_obj1, m):
+        return dt_obj1 * m
+
+    def test_floordiv(dt_obj1, dt_obj2):
+        return dt_obj1 // dt_obj2
+
+    def test_truediv(dt_obj1, dt_obj2):
+        return dt_obj1 / dt_obj2
+
+    def test_mod(dt_obj1, dt_obj2):
+        return dt_obj1 % dt_obj2
+
+    def test_eq(dt_obj1, dt_obj2):
+        return dt_obj1 == dt_obj2
+
+    def test_ne(dt_obj1, dt_obj2):
+        return dt_obj1 != dt_obj2
+
+    def test_le(dt_obj1, dt_obj2):
+        return dt_obj1 <= dt_obj2
+
+    def test_lt(dt_obj1, dt_obj2):
+        return dt_obj1 < dt_obj2
+
+    def test_ge(dt_obj1, dt_obj2):
+        return dt_obj1 >= dt_obj2
+
+    def test_gt(dt_obj1, dt_obj2):
+        return dt_obj1 > dt_obj2
+
+    def test_neg(dt_obj1):
+        return -dt_obj1
+
+    def test_pos(dt_obj1):
+        return +dt_obj1
+
+    def test_divmod(dt_obj1, dt_obj2):
+        return divmod(dt_obj1, dt_obj2)
+
+    def test_abs(dt_obj1):
+        return abs(dt_obj1)
+
+    dt_obj1 = datetime.timedelta(7, 7, 7)
+    dt_obj2 = datetime.timedelta(2, 2, 2)
+    check_func(test_add, (dt_obj1, dt_obj2))
+    check_func(test_sub, (dt_obj1, dt_obj2))
+    check_func(test_mul, (dt_obj1, 5))
+    check_func(test_floordiv, (dt_obj1, dt_obj2))
+    check_func(test_floordiv, (dt_obj1, 2))
+    check_func(test_truediv, (dt_obj1, dt_obj2))
+    check_func(test_truediv, (dt_obj1, 2))
+    check_func(test_mod, (dt_obj1, dt_obj2))
+    check_func(test_eq, (dt_obj1, dt_obj2))
+    check_func(test_ne, (dt_obj1, dt_obj2))
+    check_func(test_le, (dt_obj1, dt_obj2))
+    check_func(test_lt, (dt_obj1, dt_obj2))
+    check_func(test_ge, (dt_obj1, dt_obj2))
+    check_func(test_gt, (dt_obj1, dt_obj2))
+    check_func(test_neg, (dt_obj1,))
+    check_func(test_pos, (dt_obj1,))
+    check_func(test_divmod, (dt_obj1, dt_obj2))
+
+
+# ---------------------------------------------------------------------------- #
 
 
 def test_series_dt64_scalar_cmp():
@@ -38,6 +172,39 @@ def test_series_dt64_cmp():
     S2 = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
     S2.values[3] = np.datetime64("2018-05-03").astype("datetime64[ns]")
     check_func(test_impl, (S1, S2))
+
+
+def test_dt_year_before_2000():
+    """Test Series.dt.year for values less than 2000 (issue #343)
+    """
+
+    def test_impl(S):
+        return S.dt.year
+
+    S = pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=5))
+    check_func(test_impl, (S,))
+
+
+################################## Timestamp tests ###################################
+
+
+def test_timestamp_constructor_kw():
+    """Test pd.Timestamp() constructor with year/month/day passed as keyword arguments
+    """
+    def test_impl():
+        return pd.Timestamp(year=1998, month=2, day=3)
+
+    assert bodo.jit(test_impl)() == test_impl()
+
+
+def test_timestamp_constructor_pos():
+    """Test pd.Timestamp() constructor with year/month/day passed as positional
+    arguments
+    """
+    def test_impl():
+        return pd.Timestamp(1998, 2, 3)
+
+    assert bodo.jit(test_impl)() == test_impl()
 
 
 class TestDate(unittest.TestCase):
@@ -150,9 +317,10 @@ class TestDate(unittest.TestCase):
         allequal = df["std"].equals(df["bodo"])
         self.assertTrue(allequal)
 
+    @unittest.skip("pending proper datatime.datetime() support")
     def test_timestamp(self):
         def test_impl():
-            dt = datetime(2017, 4, 26)
+            dt = datetime.datetime(2017, 4, 26)
             ts = pd.Timestamp(dt)
             return (
                 ts.day
@@ -172,7 +340,7 @@ class TestDate(unittest.TestCase):
             return s.month
 
         bodo_func = bodo.jit(test_impl)
-        ts = pd.Timestamp(datetime(2017, 4, 26).isoformat())
+        ts = pd.Timestamp(datetime.datetime(2017, 4, 26).isoformat())
         month = bodo_func(ts)
         self.assertEqual(month, 4)
 
@@ -181,7 +349,7 @@ class TestDate(unittest.TestCase):
             return s.date()
 
         bodo_func = bodo.jit(test_impl)
-        ts = pd.Timestamp(datetime(2017, 4, 26).isoformat())
+        ts = pd.Timestamp(datetime.datetime(2017, 4, 26).isoformat())
         self.assertEqual(bodo_func(ts), test_impl(ts))
 
     def test_datetimeindex_str_comp(self):
@@ -234,7 +402,9 @@ class TestDate(unittest.TestCase):
         data = []
         for row in range(rows):
             data.append(
-                datetime(2017, random.randint(1, 12), random.randint(1, 28)).isoformat()
+                datetime.datetime(
+                    2017, random.randint(1, 12), random.randint(1, 28)
+                ).isoformat()
             )
         return pd.DataFrame({"str_date": data})
 

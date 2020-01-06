@@ -212,6 +212,9 @@ def is_alloc_callname(func_name, mod_name):
             func_name == "pre_alloc_list_string_array"
             and mod_name == "bodo.libs.list_str_arr_ext"
         )
+        or (func_name == "alloc_bool_array" and mod_name == "bodo.libs.bool_arr_ext")
+        or (func_name == "alloc_datetime_date_array"
+            and mod_name == "bodo.hiframes.datetime_date_ext")
     )
 
 
@@ -361,6 +364,7 @@ def is_array_typ(var_typ):
             string_array_type,
             list_string_array_type,
             bodo.hiframes.split_impl.string_array_split_view_type,
+            bodo.hiframes.datetime_date_ext.datetime_date_array_type,
         )
         or isinstance(var_typ, bodo.hiframes.pd_series_ext.SeriesType)
         or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
@@ -704,10 +708,8 @@ def overload_alloc_type(n, t):
 
         return lambda n, t: fix_cat_array_type(np.empty(n, t.dtype))
 
-    if typ.dtype == bodo.hiframes.pd_timestamp_ext.datetime_date_type:
-        return lambda n, t: bodo.hiframes.datetime_date_ext.np_arr_to_array_datetime_date(
-            np.empty(n, np.int64)
-        )
+    if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
+        return lambda n, t: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
 
     dtype = numba.numpy_support.as_dtype(typ.dtype)
 
@@ -840,28 +842,6 @@ def include_new_blocks(
             numba.inline_closurecall._add_definitions(func_ir, block)
             work_list.append((_label, block))
     return label
-
-
-def find_str_const(func_ir, var):
-    """Check if a variable can be inferred as a string constant, and return
-    the constant value, or raise GuardException otherwise.
-    """
-    require(isinstance(var, ir.Var))
-    var_def = get_definition(func_ir, var)
-    if isinstance(var_def, (ir.Const, ir.Global, ir.FreeVar)):
-        val = var_def.value
-        require(isinstance(val, str))
-        return val
-
-    # only add supported (s1+s2), TODO: extend to other expressions
-    require(
-        isinstance(var_def, ir.Expr)
-        and var_def.op == "binop"
-        and var_def.fn == operator.add
-    )
-    arg1 = find_str_const(func_ir, var_def.lhs)
-    arg2 = find_str_const(func_ir, var_def.rhs)
-    return arg1 + arg2
 
 
 def gen_getitem(out_var, in_var, ind, calltypes, nodes):

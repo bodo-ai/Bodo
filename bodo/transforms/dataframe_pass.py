@@ -56,7 +56,7 @@ from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 import bodo.hiframes.pd_rolling_ext
 from bodo.hiframes.pd_rolling_ext import RollingType
 from bodo.ir.aggregate import get_agg_func
-from bodo.utils.transform import compile_func_single_block, update_locs
+from bodo.utils.transform import compile_func_single_block, update_locs, get_str_const_value
 from bodo.libs.str_arr_ext import (
     string_array_type,
     get_utf8_size,
@@ -1081,13 +1081,12 @@ class DataFramePass(object):
     def _run_call_df_sort_values(self, assign, lhs, rhs):
         df_var, by_var, ascending_var, inplace_var, na_position_var = rhs.args
         df_typ = self.typemap[df_var.name]
-        ascending = guard(find_const, self.func_ir, ascending_var)
         inplace = guard(find_const, self.func_ir, inplace_var)
         na_position = guard(find_const, self.func_ir, na_position_var)
 
         # find key array for sort ('by' arg)
         key_names = self._get_const_or_list(by_var)
-
+        ascending_list = self._get_list_value_spec_length(ascending_var, len(key_names), err_msg="ascending should be bool or a list of bool of the number of keys")
         if not (
             key_names == ("$_bodo_index_",)
             or all(k in df_typ.columns for k in key_names)
@@ -1140,7 +1139,7 @@ class DataFramePass(object):
                 out_vars,
                 inplace,
                 lhs.loc,
-                ascending,
+                ascending_list,
                 na_position,
             )
         )
@@ -1483,7 +1482,7 @@ class DataFramePass(object):
         err_msg = (
             "df.query() expr arg should be constant string or argument to jit function"
         )
-        expr = self._get_const_value(expr_var, err_msg)
+        expr = get_str_const_value(expr_var, self.func_ir, err_msg, self.typemap)
 
         # parse expression
         parsed_expr, parsed_expr_str, used_cols = self._parse_query_expr(
@@ -1858,6 +1857,7 @@ class DataFramePass(object):
             how = "left"
             left_df, right_df = right_df, left_df
             left_on, right_on = right_on, left_on
+            suffix_x, suffix_y = suffix_y, suffix_x
 
         nodes = []
         out_data_vars = {
@@ -2411,26 +2411,6 @@ class DataFramePass(object):
 
         return df_var
 
-    def _get_const_value(self, var, err_msg):
-        """Get constant value of a variable if possible, otherwise raise error.
-        If the variable is argument to the function, force recompilation with literal
-        typing of the argument.
-        """
-        # literal type
-        typ = self.typemap[var.name]
-        if isinstance(typ, types.Literal):
-            return typ.literal_value
-
-        try:
-            return find_const(self.func_ir, var)
-        except GuardException:
-            # if variable is argument, force literal
-            var_def = guard(get_definition, self.func_ir, var)
-            if isinstance(var_def, ir.Arg):
-                raise numba.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
-
-        raise bodo.utils.typing.BodoError(err_msg)
-
     def _get_const_tup(self, tup_var):
         tup_def = guard(get_definition, self.func_ir, tup_var)
         if isinstance(tup_def, ir.Expr):
@@ -2674,6 +2654,26 @@ class DataFramePass(object):
                 if default is not None:
                     return default
                 raise ValueError(err_msg)
+        return key_colnames
+
+    def _get_list_value_spec_length(
+        self, by_arg, n_key, err_msg=None
+    ):
+        """Used to returning a list of values of length n_key.
+        If by_arg is a list of values then check that the list of length n_key.
+        If by_arg is just a single value, then return the list of length n_key of this value.
+        """
+        var_typ = self.typemap[by_arg.name]
+        if hasattr(var_typ, "consts"):
+            n_arg = len(var_typ.consts)
+            if n_key != n_arg:
+                raise ValueError(err_msg)
+            return var_typ.consts
+        # try single key column
+        by_arg_def = guard(find_const, self.func_ir, by_arg)
+        if by_arg_def is None:
+            raise ValueError(err_msg)
+        key_colnames = (by_arg_def,) * n_key
         return key_colnames
 
 
