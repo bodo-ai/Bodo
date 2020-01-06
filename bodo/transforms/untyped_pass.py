@@ -5,6 +5,7 @@ such as non-uniform dictionary input of `pd.DataFrame({})`.
 """
 import warnings
 import itertools
+import datetime
 import pandas as pd
 import numpy as np
 import math
@@ -123,7 +124,12 @@ def remove_hiframes(rhs, lives, call_list):
         ]
     ):
         return True
-    if call_list == ["alloc_datetime_date_array", "datetime_date_ext", "hiframes", bodo]:
+    if call_list == [
+        "alloc_datetime_date_array",
+        "datetime_date_ext",
+        "hiframes",
+        bodo,
+    ]:
         return True
     if len(call_list) == 4 and call_list[1:] == ["conversion", "utils", bodo]:
         # all conversion functions are side effect-free
@@ -369,6 +375,19 @@ class UntypedPass(object):
                     return nodes
                 except numba.ir_utils.GuardException:
                     pass
+
+            # replace datetime.date.today with an internal function since class methods
+            # are not supported in Numba's typing
+            if rhs.op == "getattr" and rhs.attr == "today":
+                val_def = guard(get_definition, self.func_ir, rhs.value)
+                if is_expr(val_def, "getattr") and val_def.attr == "date":
+                    mod_def = guard(get_definition, self.func_ir, val_def.value)
+                    if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
+                        return _compile_func_single_block(
+                            lambda: bodo.hiframes.datetime_date_ext.today_impl,
+                            (),
+                            assign.target,
+                        )
 
             if rhs.op == "make_function":
                 # HACK make globals availabe for typing in series.map()
@@ -781,7 +800,9 @@ class UntypedPass(object):
                 "pd.read_csv() requires explicit type "
                 "annotation using 'dtype' if filename is not constant"
             )
-            fname_const = get_str_const_value(fname, self.func_ir, msg, arg_types=self.args)
+            fname_const = get_str_const_value(
+                fname, self.func_ir, msg, arg_types=self.args
+            )
             rows_to_read = 100  # TODO: tune this
             df = pd.read_csv(
                 fname_const,
