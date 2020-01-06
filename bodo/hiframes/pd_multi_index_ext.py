@@ -12,6 +12,7 @@ from numba.extending import (
     typeof_impl,
     unbox,
     NativeValue,
+    intrinsic,
 )
 import bodo
 
@@ -164,3 +165,32 @@ def unbox_multi_index(typ, val, c):
     c.pyapi.decref(names_tup_obj)
     c.pyapi.decref(name_obj)
     return NativeValue(index_val._getvalue())
+
+
+@intrinsic
+def init_multi_index(typingctx, data, names, name=None):
+    """Create a MultiIndex with provided data, names and name values.
+    """
+    name = types.none if name is None else name
+    name = types.unliteral(name)
+
+    def codegen(context, builder, signature, args):
+        data_val, names_val, name_val = args
+        # create multi_index struct and store values
+        multi_index = cgutils.create_struct_proxy(signature.return_type)(
+            context, builder
+        )
+        multi_index.data = data_val
+        multi_index.names = names_val
+        multi_index.name = name_val
+
+        # increase refcount of stored values
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[0], data_val)
+            context.nrt.incref(builder, signature.args[1], names_val)
+            context.nrt.incref(builder, signature.args[2], name_val)
+
+        return multi_index._getvalue()
+
+    ret_typ = MultiIndexType(data.types, names.types, name)
+    return ret_typ(data, names, name), codegen
