@@ -173,6 +173,10 @@ def init_multi_index(typingctx, data, names, name=None):
     """
     name = types.none if name is None else name
     name = types.unliteral(name)
+    # recreate Tuple type to make sure UniTuple is created if types are homogeneous
+    # instead of regular Tuple
+    # happens in gatherv() implementation of MultiIndex for some reason
+    names = types.Tuple(names.types)
 
     def codegen(context, builder, signature, args):
         data_val, names_val, name_val = args

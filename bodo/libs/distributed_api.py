@@ -590,6 +590,18 @@ def gatherv(data, allgather=False):
 
         return impl_pd_index
 
+    # MultiIndex index
+    if isinstance(data, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
+        # just gather the data arrays
+        # TODO: handle `levels` and `codes` when available
+        def impl_multi_index(data, allgather=False):  # pragma: no cover
+            all_data = bodo.gatherv(data._data, allgather)
+            return bodo.hiframes.pd_multi_index_ext.init_multi_index(
+                all_data, data._names, data._name
+            )
+
+        return impl_multi_index
+
     if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
         n_cols = len(data.columns)
         data_args = ", ".join("g_data_{}".format(i) for i in range(n_cols))
@@ -720,6 +732,20 @@ def gatherv(data, allgather=False):
             return all_data
 
         return gatherv_list_str_arr_impl
+
+    # Tuple of data containers
+    if isinstance(data, types.BaseTuple):
+        func_text = "def impl_tuple(data, allgather=False):\n"
+        func_text += "  return ({}{})\n".format(
+            ", ".join(
+                "bodo.gatherv(data[{}], allgather)".format(i) for i in range(len(data))
+            ),
+            "," if len(data) > 0 else "",
+        )
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+        impl_tuple = loc_vars["impl_tuple"]
+        return impl_tuple
 
     if data is types.none:
         return lambda data: None
