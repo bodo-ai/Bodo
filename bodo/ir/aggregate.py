@@ -47,7 +47,7 @@ from bodo.utils.utils import (
 )
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.utils import _numba_to_c_type_map, unliteral_all, incref
+from bodo.utils.utils import unliteral_all, incref
 from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from bodo.utils.utils import build_set

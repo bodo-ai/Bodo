@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <iostream>
 #include <string>
+#include "../libs/_bodo_common.h"
 #include "hdf5.h"
 #include "mpi.h"
 
@@ -272,24 +273,35 @@ int h5_read_filter(hid_t dataset_id, int ndims, int64_t* starts,
     return ret;
 }
 
-// _numba_to_c_type_map = {
-//     int8:0,
-//     uint8:1,
-//     int32:2,
-//     uint32:3,
-//     int64:4,
-//     float32:5,
-//     float64:6
-//     }
-
 hid_t get_h5_typ(int typ_enum) {
     // printf("h5 type enum:%d\n", typ_enum);
-    hid_t types_list[] = {H5T_NATIVE_CHAR,  H5T_NATIVE_UCHAR, H5T_NATIVE_INT,
-                          H5T_NATIVE_UINT,  H5T_NATIVE_LLONG, H5T_NATIVE_FLOAT,
-                          H5T_NATIVE_DOUBLE};
-    return types_list[typ_enum];
+    switch (typ_enum) {
+        case Bodo_CTypes::_BOOL:
+            return H5T_NATIVE_B8;
+        case Bodo_CTypes::INT8:
+            return H5T_NATIVE_CHAR;
+        case Bodo_CTypes::UINT8:
+            return H5T_NATIVE_UCHAR;
+        case Bodo_CTypes::INT16:
+            return H5T_NATIVE_SHORT;
+        case Bodo_CTypes::UINT16:
+            return H5T_NATIVE_USHORT;
+        case Bodo_CTypes::INT32:
+            return H5T_NATIVE_INT;
+        case Bodo_CTypes::UINT32:
+            return H5T_NATIVE_UINT;
+        case Bodo_CTypes::INT64:
+            return H5T_NATIVE_LLONG;
+        case Bodo_CTypes::UINT64:
+            return H5T_NATIVE_ULLONG;
+        case Bodo_CTypes::FLOAT32:
+            return H5T_NATIVE_FLOAT;
+        case Bodo_CTypes::FLOAT64:
+            return H5T_NATIVE_DOUBLE;
+        default:
+            CHECK(false, "dtype does not have corresponding H5 type");
+    }
 }
-
 
 void h5_close_object(hid_t obj_id) {
     H5O_info_t object_info;

@@ -310,19 +310,10 @@ static void dist_waitall(int size, MPI_Request* req_arr) {
     return;
 }
 
-// _numba_to_c_type_map = {
-//     int8:0,
-//     uint8:1,
-//     int32:2,
-//     uint32:3,
-//     int64:4,
-//     float32:5,
-//     float64:6
-//     uint64: 7
-//     }
-
 static MPI_Datatype get_MPI_typ(int typ_enum) {
     switch (typ_enum) {
+        case Bodo_CTypes::_BOOL:
+            return MPI_UNSIGNED_CHAR; // MPI_C_BOOL doesn't support operations like min
         case Bodo_CTypes::INT8:
             return MPI_CHAR;
         case Bodo_CTypes::UINT8:

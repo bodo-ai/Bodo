@@ -993,7 +993,6 @@ from numba import cgutils
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 from numba.targets.arrayobj import make_array
-from bodo.utils.utils import _numba_to_c_type_map
 from bodo.libs import hdist
 
 ll.add_symbol("c_alltoallv", hdist.c_alltoallv)

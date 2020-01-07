@@ -200,16 +200,6 @@ double quantile_float(T *data, int64_t local_size, double quantile,
     return res1 + (res2 - res1) * fraction;
 }
 
-// _numba_to_c_type_map = {
-//     int8:0,
-//     uint8:1,
-//     int32:2,
-//     uint32:3,
-//     int64:4,
-//     float32:5,
-//     float64:6
-//     }
-
 template <class T>
 T get_nth_parallel(std::vector<T> &my_array, int64_t k, int myrank, int n_pes,
                    int type_enum) {

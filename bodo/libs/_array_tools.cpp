@@ -226,6 +226,9 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
     // dispatch to proper function
     // TODO: general dispatcher
     // XXX: assumes nullable array data for nulls is always consistent
+    if (array->dtype == Bodo_CTypes::_BOOL)
+        return hash_array_inner<bool>(out_hashes, (bool*)array->data1,
+                                      n_rows, seed);
     if (array->dtype == Bodo_CTypes::INT8)
         return hash_array_inner<int8_t>(out_hashes, (int8_t*)array->data1,
                                         n_rows, seed);
@@ -298,6 +301,9 @@ void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
                         const uint32_t seed) {
     // dispatch to proper function
     // TODO: general dispatcher
+    if (array->dtype == Bodo_CTypes::_BOOL)
+        return hash_array_combine_inner<bool>(
+            out_hashes, (bool*)array->data1, n_rows, seed);
     if (array->dtype == Bodo_CTypes::INT8)
         return hash_array_combine_inner<int8_t>(
             out_hashes, (int8_t*)array->data1, n_rows, seed);
@@ -410,6 +416,10 @@ void fill_send_array(array_info* send_arr, array_info* array, uint32_t* hashes,
         fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask,
                                    (uint8_t*)array->null_bitmask, hashes,
                                    send_disp_null, n_pes, n_rows);
+    if (array->dtype == Bodo_CTypes::_BOOL)
+        return fill_send_array_inner<bool>((bool*)send_arr->data1,
+                                             (bool*)array->data1, hashes,
+                                             send_disp, n_pes, n_rows);
     if (array->dtype == Bodo_CTypes::INT8)
         return fill_send_array_inner<int8_t>((int8_t*)send_arr->data1,
                                              (int8_t*)array->data1, hashes,
@@ -788,6 +798,7 @@ std::vector<char> GetVector(T const& val) {
  * @return the list of characters in output.
  */
 std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
+    if (dtype == Bodo_CTypes::_BOOL) return GetVector<bool>(false);
     if (dtype == Bodo_CTypes::INT8) return GetVector<int8_t>(-1);
     if (dtype == Bodo_CTypes::UINT8) return GetVector<uint8_t>(0);
     if (dtype == Bodo_CTypes::INT16) return GetVector<int16_t>(-1);
@@ -809,6 +820,10 @@ std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
  */
 std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
                                 char* ptrdata) {
+    if (dtype == Bodo_CTypes::_BOOL) {
+        bool* ptr = (bool*)ptrdata;
+        return std::to_string(*ptr);
+    }
     if (dtype == Bodo_CTypes::INT8) {
         int8_t* ptr = (int8_t*)ptrdata;
         return std::to_string(*ptr);
@@ -1311,6 +1326,8 @@ inline typename std::enable_if<std::is_floating_point<T>::value,int>::type Numer
  */
 int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
                       char* ptr2, bool const& na_position) {
+    if (dtype == Bodo_CTypes::_BOOL)
+        return NumericComparison_T<bool>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::INT8)
         return NumericComparison_T<int8_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT8)
@@ -2287,6 +2304,22 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
         }
     }
     switch (in_col->dtype) {
+        case Bodo_CTypes::_BOOL:
+            switch (ftype) {
+                case Bodo_FTypes::min:
+                    return apply_to_column<bool, Bodo_FTypes::min>(
+                        in_col, out_col, aux_cols, row_to_group);
+                case Bodo_FTypes::max:
+                    return apply_to_column<bool, Bodo_FTypes::max>(
+                        in_col, out_col, aux_cols, row_to_group);
+                case Bodo_FTypes::prod:
+                    return apply_to_column<bool, Bodo_FTypes::prod>(
+                        in_col, out_col, aux_cols, row_to_group);
+                default:
+                    PyErr_SetString(PyExc_RuntimeError,
+                        "unsuported aggregation for boolean type column");
+                    return;
+            }
         case Bodo_CTypes::INT8:
             switch (ftype) {
                 case Bodo_FTypes::sum:
@@ -2747,6 +2780,10 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
     switch (ftype) {
         case Bodo_FTypes::prod:
             switch (out_col->dtype) {
+                case Bodo_CTypes::_BOOL:
+                    std::fill((bool*)out_col->data1,
+                              (bool*)out_col->data1 + out_col->length, true);
+                    return;
                 case Bodo_CTypes::INT8:
                     std::fill((int8_t*)out_col->data1,
                               (int8_t*)out_col->data1 + out_col->length, 1);
@@ -2794,6 +2831,11 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
             }
         case Bodo_FTypes::min:
             switch (out_col->dtype) {
+                case Bodo_CTypes::_BOOL:
+                    std::fill((bool*)out_col->data1,
+                              (bool*)out_col->data1 + out_col->length,
+                              true);
+                    return;
                 case Bodo_CTypes::INT8:
                     std::fill((int8_t*)out_col->data1,
                               (int8_t*)out_col->data1 + out_col->length,
@@ -2855,6 +2897,11 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
             }
         case Bodo_FTypes::max:
             switch (out_col->dtype) {
+                case Bodo_CTypes::_BOOL:
+                    std::fill((bool*)out_col->data1,
+                              (bool*)out_col->data1 + out_col->length,
+                              false);
+                    return;
                 case Bodo_CTypes::INT8:
                     std::fill((int8_t*)out_col->data1,
                               (int8_t*)out_col->data1 + out_col->length,
@@ -3804,6 +3851,7 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     // init numpy
     import_array();
 
+    numpy_item_size[Bodo_CTypes::_BOOL] = sizeof(bool);
     numpy_item_size[Bodo_CTypes::INT8] = sizeof(int8_t);
     numpy_item_size[Bodo_CTypes::UINT8] = sizeof(uint8_t);
     numpy_item_size[Bodo_CTypes::INT16] = sizeof(int16_t);
@@ -3814,6 +3862,23 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     numpy_item_size[Bodo_CTypes::UINT64] = sizeof(uint64_t);
     numpy_item_size[Bodo_CTypes::FLOAT32] = sizeof(float);
     numpy_item_size[Bodo_CTypes::FLOAT64] = sizeof(double);
+
+    PyObject *np_mod = PyImport_ImportModule("numpy");
+    PyObject *dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "bool");
+    if ((size_t)PyNumber_AsSsize_t(PyObject_GetAttrString(dtype_obj, "itemsize"), NULL) != sizeof(bool)) {
+        PyErr_SetString(PyExc_RuntimeError, "bool size mistmatch between C++ and NumPy!");
+        return NULL;
+    }
+    dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "float32");
+    if ((size_t)PyNumber_AsSsize_t(PyObject_GetAttrString(dtype_obj, "itemsize"), NULL) != sizeof(float)) {
+        PyErr_SetString(PyExc_RuntimeError, "float32 size mistmatch between C++ and NumPy!");
+        return NULL;
+    }
+    dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "float64");
+    if ((size_t)PyNumber_AsSsize_t(PyObject_GetAttrString(dtype_obj, "itemsize"), NULL) != sizeof(double)) {
+        PyErr_SetString(PyExc_RuntimeError, "float64 size mistmatch between C++ and NumPy!");
+        return NULL;
+    }
 
     combine_funcs[Bodo_FTypes::sum] = Bodo_FTypes::sum;
     combine_funcs[Bodo_FTypes::count] = Bodo_FTypes::sum;

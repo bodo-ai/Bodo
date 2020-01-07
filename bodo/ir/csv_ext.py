@@ -19,7 +19,7 @@ from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.timsort import copyElement_tup, getitem_arr_tup
-from bodo.utils.utils import _numba_to_c_type_map, sanitize_varname
+from bodo.utils.utils import sanitize_varname
 from bodo import objmode
 import pandas as pd
 import numpy as np

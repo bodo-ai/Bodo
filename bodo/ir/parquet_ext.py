@@ -17,7 +17,6 @@ from bodo.transforms.distributed_analysis import Distribution
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.timsort import copyElement_tup, getitem_arr_tup
-from bodo.utils.utils import _numba_to_c_type_map
 from bodo import objmode
 import pandas as pd
 import numpy as np

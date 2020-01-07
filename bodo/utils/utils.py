@@ -39,7 +39,7 @@ from enum import Enum
 
 
 # int values for types to pass to C code
-# XXX: _bodo_common.h
+# XXX: These are defined in _bodo_common.h and must match here
 class CTypeEnum(Enum):
     Int8 = 0
     UInt8 = 1
@@ -51,6 +51,8 @@ class CTypeEnum(Enum):
     Float64 = 6
     Int16 = 8
     UInt16 = 9
+    # NOTE: 10 is used by STRING in bodo_common.h
+    Bool = 11
 
 
 _numba_to_c_type_map = {
@@ -63,10 +65,7 @@ _numba_to_c_type_map = {
     types.float32: CTypeEnum.Float32.value,
     types.float64: CTypeEnum.Float64.value,
     types.NPDatetime("ns"): CTypeEnum.UInt64.value,
-    # XXX: Numpy's bool array uses a byte for each value but regular booleans
-    # are not bytes
-    # TODO: handle boolean scalars properly
-    types.bool_: CTypeEnum.UInt8.value,
+    types.bool_: CTypeEnum.Bool.value,
     types.int16: CTypeEnum.Int16.value,
     types.uint16: CTypeEnum.UInt16.value,
 }
