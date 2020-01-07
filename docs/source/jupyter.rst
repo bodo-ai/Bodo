@@ -60,3 +60,5 @@ If you wish to run across multiple nodes, you can add the following to
 `machinefile` (or `hostfile`) is a file with the hostnames of available nodes that MPI can use.
 More information about `machinefiles` can be found
 `here <https://www.open-mpi.org/faq/?category=running#mpirun-hostfile>`_.
+
+It is important to note that other MPI implementation (such as QSUB/PBS) may use a different user interface for the allocation of computational nodes.

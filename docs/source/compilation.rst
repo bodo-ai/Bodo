@@ -83,3 +83,28 @@ For the last (:ref:`Not supported Python programs <notsupported>`) of the 4 limi
         print(f1())
     else:
         print(f2())
+
+Common compilation/runtime errors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Some parameters passed to supported APIs have to be literal constants. This requirement could be due to several reasons such as type stability and performance. For example, the following will raise a compilation error::
+
+    @bodo.jit
+    def f(df1, df2, how_mode):
+        df3 = df1.merge(df2, how=how_mode)
+        return df3
+
+On the other hand the hand the following works::
+
+    @bodo.jit
+    def f(df1, df2):
+        df3 = df1.merge(df2, how='inner')
+        return df3
+
+Zero-length dataframe arguments to Bodo functions can cause compilation errors due to potential type ambiguity. Dataframes can become empty inadvertently when multiple processes are used with variable-length data chunks across them. The solution is to specify the types in the decorator::
+
+    @bodo.jit(locals={'df':{'A': bodo.float64[:],
+                            'B': bodo.int64[:],
+                      }})
+    def f(df):
+

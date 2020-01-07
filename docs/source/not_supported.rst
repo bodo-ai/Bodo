@@ -20,7 +20,7 @@ variable ``a`` can be both a float and an array of floats::
     else:
         a = np.ones(10)
 
-The use of ``isinstance`` operator of Python often means type instabillity and
+The use of ``isinstance`` operator of Python often means type instability and
 is not supported.
 
 Similarly, function calls should also be deterministic. The below example is

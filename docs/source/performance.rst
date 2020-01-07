@@ -5,7 +5,18 @@ Performance Measurement
 
 In this section, we show some tips on how Bodo's performance can be measured.
 
-.. note::  Make sure the computation is long enough to have realistic measurement.
+------------------
+
+To obtain accurate performance measurements, it is important to keep following points in mind when trying to determine running times:
+
+    1. Every program has overhead and one may need a large data set in order to get useful measurement.
+    2. Performance can vary from one run to another. Several measurements are always needed.
+    3. It is important to have not just one test but instead a sequence of tests of increasing size in order to see how the program behaves with problems of increasing size.
+    4. Running on 1, 2 or more processors is important as more than one factor can impact.
+    5. For interesting computation, it is useful to consider simple programs. Complex program are impacted by multiple factors and their performance harder to understand.
+    6. Long computation typically give more reliable running time information.
+
+------------------
 
 Since Bodo decorated functions are `JIT-compiled <https://numba.pydata.org/numba-doc/dev/reference/jit-compilation.html>`_, the compilation time is non-negligible but it only happens once. To avoid measuring compilation time, place timers inside the functions. For example::
 

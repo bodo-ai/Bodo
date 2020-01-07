@@ -83,7 +83,7 @@ Top-level conversions:
   Output requires type annotation. `errors='coerce'` required.
 
 
-Top-level dealing with datetimelike:
+Top-level dealing with datetime like:
 
 
 * :func:`pandas.date_range`
@@ -224,7 +224,7 @@ Missing data handling:
 Reshaping, sorting:
 
 * :meth:`Series.argsort`
-* :meth:`Series.sort_values` (does not push NAs to first/last positions yet)
+* :meth:`Series.sort_values`
 * :meth:`Series.append` `ignore_index` is supported.
   setting name for output Series not supported yet)
 
@@ -344,7 +344,7 @@ Computations / Descriptive Stats:
 * :meth:`DataFrame.sum`
 * :meth:`DataFrame.std`
 * :meth:`DataFrame.var`
-* :meth:`DataFrame.nunique` (`dropna` argument not supported)
+* :meth:`DataFrame.nunique` (`dropna` argument not supported yet. The behavior is slightly different from `.nunique` implementation in pandas)
 
 
 Reindexing / Selection / Label manipulation:
@@ -378,8 +378,9 @@ Reshaping, sorting, transposing:
     For example, `@bodo.jit(pivots={'pt': ['small', 'large']})` declares
     the output pivot table `pt` will have columns called `small` and `large`.
 
-* :meth:`DataFrame.sort_values` `by` argument should be constant string or
-  constant list of strings. `ascending` argument is supported.
+* :meth:`DataFrame.sort_values` ``by`` argument should be constant string or
+  constant list of strings. ``ascending`` and ``na_position`` arguments are supported.
+* :meth:`DataFrame.drop_duplicates` is supported.
 * :meth:`DataFrame.sort_index` `ascending` argument is supported.
 
 Combining / joining / merging:
@@ -390,6 +391,8 @@ Combining / joining / merging:
 * :meth:`DataFrame.merge` only dataframes. `how`, `on`, `left_on`,
   `right_on`, `left_index`, and `right_index` are supported but
   should be constant values.
+
+
 
 Time series-related:
 
@@ -477,6 +480,7 @@ Time fields of TimedeltaIndex are supported:
 * :attr:`TimedeltaIndex.microsecond`
 * :attr:`TimedeltaIndex.nanosecond`
 
+
 PeriodIndex
 ~~~~~~~~~~~~~
 
@@ -488,6 +492,8 @@ Operations on them will be supported in upcoming releases.
 Timestamp
 ~~~~~~~~~
 
+Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Timestamp.html>`_.
+
 * :attr:`Timestamp.day`
 * :attr:`Timestamp.hour`
 * :attr:`Timestamp.microsecond`
@@ -495,11 +501,13 @@ Timestamp
 * :attr:`Timestamp.nanosecond`
 * :attr:`Timestamp.second`
 * :attr:`Timestamp.year`
-
 * :meth:`Timestamp.date`
+
 
 Window
 ~~~~~~
+
+Rolling functionality is documented in `pandas.DataFrame.rolling <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.rolling.html>`_.
 
 * :meth:`Rolling.count`
 * :meth:`Rolling.sum`
@@ -517,6 +525,7 @@ Window
 GroupBy
 ~~~~~~~
 
+The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydata.org/pandas-docs/stable/reference/groupby.html>`_.
 
 * :meth:`GroupBy.agg` `arg` should be a function, and the compiler should be
   able to simplify it to a single parallel loop and analyze it.
@@ -570,7 +579,7 @@ For example, this code reads column `A` into a nullable integer array
     )
     ...
 
-Bodo can use nullable integer arrays when reading Parquent files if
+Bodo can use nullable integer arrays when reading Parquet files if
 the `bodo.io.parquet_pio.use_nullable_int_arr` flag is set by the user.
 For example::
 

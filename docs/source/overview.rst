@@ -45,9 +45,9 @@ computation can also be parallelized.
 The speed up achieved using Bodo depends on various factors such problem size,
 parallel overheads of the operations, and hardware platform's attributes.
 For example, the program above can scale almost linearly
-(e.g. 100 speed on 100 cores)
-for large enough problem sizes, since the only communication requirement is
-parallel summation for `np.sum`.
-On the other hand, workloads with several join and groupby operations
-require significant communication of data, requiring fast cluster
+(e.g. 100 speed up on 100 cores)
+for large enough problem sizes, since the only communication overhead is
+parallel summation of the partial sums obtained by `np.sum` on each processors.
+On the other hand, some operations such as join and groupby operations
+require significantly larger communication of data, requiring fast cluster
 interconnection networks to scale to large number of cores.

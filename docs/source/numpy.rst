@@ -85,11 +85,11 @@ Here is the output of `bodo.distribution_report()`::
 The first `dot` has a 1D array with `1D_Block` distribution as first input
 (`Y`), while the second input is a 2D array with `1D_Block` distribution (`X`).
 Hence, `dot` is a sum reduction across distributed datasets and therefore,
-the output (`w`) is on the `reduce` side and is assiged `REP` distribution.
+the output (`w`) is on the `reduce` side and is assigned `REP` distribution.
 
 The second `dot` has a 2D array with `1D_Block` distribution (`X`) as first
 input, while the second input is a REP array (`w`). Hence, the computation is
-data-parallel across rows of `X`, which implies a `1D_Block` distibution for
+data-parallel across rows of `X`, which implies a `1D_Block` distribution for
 output (`z`).
 
 Variable `z` does not exist in the distribution report since

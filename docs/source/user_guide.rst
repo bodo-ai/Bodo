@@ -71,13 +71,14 @@ as a 9 by 2 array, on three processors:
     :align: center
 
 
+
 Argument and Return Variables
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Bodo assumes argument and return variables to jitted functions are
 replicated. However, the user can annotate these variables to indicate
 distributed data. In this case,
-the user is responsile for handling of the distributed data chunks outside
+the user is responsible for handling of the distributed data chunks outside
 the Bodo scope. For example, the data can come from other jitted functions::
 
     @bodo.jit(distributed={'A'})
@@ -226,7 +227,7 @@ without any code changes.
 Bodo needs to know the types of input arrays. If the file name is a constant
 string or function argument, Bodo tries to look at the file at compile time
 and recognize the types.
-Otherwise, the user is responsile for providing the types similar to
+Otherwise, the user is responsible for providing the types similar to
 `Numba's typing syntax
 <http://numba.pydata.org/numba-doc/latest/reference/types.html>`_. For
 example::
@@ -270,12 +271,16 @@ Parallel APIs
 -------------
 
 Bodo provides a limited number of parallel APIs to
-support advanced cases that may need them.
+support advanced cases that may need them (the reference communicator is `MPI_COMM_WORLD`).
 
 * :func:`bodo.get_rank` Get the rank of the process (same as `MPI_Comm_rank`).
 * :func:`bodo.get_size` Get the number of processes (same as `MPI_Comm_size`).
 * :func:`bodo.barrier` Blocks until all processes have reached this call
   (same as `MPI_Barrier`).
+* :func:`bodo.send` Blocking send of data from a process (same as `MPI_SEND`)
+* :func:`bodo.recv` Blocking recv of data from a process (same as `MPI_RECV`)
+* :func:`bodo.isend` Asynchronous send of data from a process (same as `MPI_ISEND`)
+* :func:`bodo.irecv` Asynchronous recv of data from a process (same as `MPI_IRECV`)
 * :func:`bodo.gatherv` Gathers all data chunks into process 0
   (same as `MPI_Gatherv`).
 * :func:`bodo.allgatherv` Gathers all data chunks and delivers to all processes
