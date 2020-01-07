@@ -273,6 +273,16 @@ def timedelta_mul(lhs, rhs):
 
         return impl
 
+    elif lhs == types.int64 and rhs == datetime_timedelta_type:
+
+        def impl(lhs, rhs):
+            d = lhs * rhs.days
+            s = lhs * rhs.seconds
+            us = lhs * rhs.microseconds
+            return datetime.timedelta(d, s, us)
+
+        return impl
+
 
 @overload(operator.floordiv)
 def timedelta_floordiv(lhs, rhs):
@@ -282,13 +292,15 @@ def timedelta_floordiv(lhs, rhs):
             us = _to_microseconds(lhs)
             return us // _to_microseconds(rhs)
 
+        return impl
+
     elif lhs == datetime_timedelta_type and rhs == types.int64:
 
         def impl(lhs, rhs):  # pragma: no cover
             us = _to_microseconds(lhs)
             return datetime.timedelta(0, 0, us // rhs)
 
-    return impl
+        return impl
 
 
 @overload(operator.truediv)
@@ -299,15 +311,17 @@ def timedelta_truediv(lhs, rhs):
             us = _to_microseconds(lhs)
             return us / _to_microseconds(rhs)
 
+        return impl
+
     elif lhs == datetime_timedelta_type and rhs == types.int64:
 
         def impl(lhs, rhs):  # pragma: no cover
             us = _to_microseconds(lhs)
             return datetime.timedelta(0, 0, _divide_and_round(us, rhs))
 
-    # TODO: float division: rhs=float64 type
+        # TODO: float division: rhs=float64 type
 
-    return impl
+        return impl
 
 
 @overload(operator.mod)
@@ -318,7 +332,7 @@ def timedelta_mod(lhs, rhs):
             r = _to_microseconds(lhs) % _to_microseconds(rhs)
             return datetime.timedelta(0, 0, r)
 
-    return impl
+        return impl
 
 
 @overload(operator.eq)
@@ -329,7 +343,7 @@ def timedelta_eq(lhs, rhs):
             ret = _cmp(_getstate(lhs), _getstate(rhs))
             return ret == 0
 
-    return impl
+        return impl
 
 
 @overload(operator.ne)
@@ -340,7 +354,7 @@ def timedelta_ne(lhs, rhs):
             ret = _cmp(_getstate(lhs), _getstate(rhs))
             return ret != 0
 
-    return impl
+        return impl
 
 
 @overload(operator.le)
@@ -351,7 +365,7 @@ def timedelta_le(lhs, rhs):
             ret = _cmp(_getstate(lhs), _getstate(rhs))
             return ret <= 0
 
-    return impl
+        return impl
 
 
 @overload(operator.lt)
@@ -362,7 +376,7 @@ def timedelta_lt(lhs, rhs):
             ret = _cmp(_getstate(lhs), _getstate(rhs))
             return ret < 0
 
-    return impl
+        return impl
 
 
 @overload(operator.ge)
@@ -373,7 +387,7 @@ def timedelta_ge(lhs, rhs):
             ret = _cmp(_getstate(lhs), _getstate(rhs))
             return ret >= 0
 
-    return impl
+        return impl
 
 
 @overload(operator.gt)
@@ -384,7 +398,7 @@ def timedelta_gt(lhs, rhs):
             ret = _cmp(_getstate(lhs), _getstate(rhs))
             return ret > 0
 
-    return impl
+        return impl
 
 
 @overload(operator.neg)
@@ -394,7 +408,7 @@ def timedelta_neg(lhs):
         def impl(lhs):  # pragma: no cover
             return datetime.timedelta(-lhs.days, -lhs.seconds, -lhs.microseconds)
 
-    return impl
+        return impl
 
 
 @overload(operator.pos)
@@ -404,7 +418,7 @@ def timedelta_pos(lhs):
         def impl(lhs):  # pragma: no cover
             return lhs
 
-    return impl
+        return impl
 
 
 @overload(divmod)
@@ -415,7 +429,7 @@ def timedelta_divmod(lhs, rhs):
             q, r = divmod(_to_microseconds(lhs), _to_microseconds(rhs))
             return q, datetime.timedelta(0, 0, r)
 
-    return impl
+        return impl
 
 
 @overload(abs)
@@ -428,5 +442,5 @@ def timedelta_abs(lhs):
             else:
                 return lhs
 
-    return impl
+        return impl
 

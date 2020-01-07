@@ -20,21 +20,10 @@ import random
 import pytest
 
 
-def test_datetime_date_today():
+# ------------------------- Test datetime.timedelta ------------------------- #
+def test_datetime_timedelta_construct():
     """
-    Test datetime.date.today() classmethod
-    """
-
-    def test_impl():
-        return datetime.date.today()
-
-    assert bodo.jit(test_impl)() == test_impl()
-
-
-# ------------------------- Testing datetime.timedelta ------------------------- #
-def test_timedelta_construct():
-    """
-    Testing construction of datetime.timedelta object in Bodo
+    Test construction of datetime.timedelta object in Bodo
     """
 
     def test_impl():
@@ -44,9 +33,9 @@ def test_timedelta_construct():
     check_func(test_impl, ())
 
 
-def test_timedelta_boxing():
+def test_datetime_timedelta_boxing():
     """
-    Testing boxing and unboxing of datetime.timedelta object in Bodo
+    Test boxing and unboxing of datetime.timedelta object in Bodo
     """
 
     def test_impl(dt_obj):
@@ -56,9 +45,9 @@ def test_timedelta_boxing():
     check_func(test_impl, (dt_obj,))
 
 
-def test_timedelta_getattr():
+def test_datetime_timedelta_getattr():
     """
-    Testing getting attributes from datetime.timedelta object in Bodo
+    Test getting attributes from datetime.timedelta object in Bodo
     """
 
     def test_days(dt_obj):
@@ -76,9 +65,9 @@ def test_timedelta_getattr():
     check_func(test_microseconds, (dt_obj,))
 
 
-def test_timedelta_total_seconds():
+def test_datetime_timedelta_total_seconds():
     """
-    Testing total_seconds method of datetime.timedelta object in Bodo
+    Test total_seconds method of datetime.timedelta object in Bodo
     """
 
     def test_impl(dt_obj):
@@ -88,9 +77,9 @@ def test_timedelta_total_seconds():
     check_func(test_impl, (dt_obj,))
 
 
-def test_timedelta_operations():
+def test_datetime_timedelta_operations():
     """
-    Testing operations of datetime.timedelta objects in Bodo
+    Test operations of datetime.timedelta objects in Bodo
     """
 
     def test_add(dt_obj1, dt_obj2):
@@ -99,8 +88,8 @@ def test_timedelta_operations():
     def test_sub(dt_obj1, dt_obj2):
         return dt_obj1 - dt_obj2
 
-    def test_mul(dt_obj1, m):
-        return dt_obj1 * m
+    def test_mul(dt_obj1, dt_obj2):
+        return dt_obj1 * dt_obj2
 
     def test_floordiv(dt_obj1, dt_obj2):
         return dt_obj1 // dt_obj2
@@ -146,6 +135,7 @@ def test_timedelta_operations():
     check_func(test_add, (dt_obj1, dt_obj2))
     check_func(test_sub, (dt_obj1, dt_obj2))
     check_func(test_mul, (dt_obj1, 5))
+    check_func(test_mul, (5, dt_obj1))
     check_func(test_floordiv, (dt_obj1, dt_obj2))
     check_func(test_floordiv, (dt_obj1, 2))
     check_func(test_truediv, (dt_obj1, dt_obj2))
@@ -160,6 +150,108 @@ def test_timedelta_operations():
     check_func(test_neg, (dt_obj1,))
     check_func(test_pos, (dt_obj1,))
     check_func(test_divmod, (dt_obj1, dt_obj2))
+
+
+# ------------------------- Test datetime.date ------------------------- #
+def test_datetime_date_construct():
+    """
+    Test construction of datetime.date object in Bodo
+    """
+
+    def test_impl():
+        dt_obj = datetime.date(2020, 1, 4)
+        return dt_obj
+
+    check_func(test_impl, ())
+
+
+def test_datetime_date_today():
+    """
+    Test datetime.date.today() classmethod
+    """
+
+    def test_impl():
+        return datetime.date.today()
+
+    assert bodo.jit(test_impl)() == test_impl()
+
+
+def test_datetime_date_fromordinal():
+    """
+    Test datetime.date.fromordinal() classmethod
+    """
+
+    def test_impl(n):
+        return datetime.date.fromordinal(n)
+
+    date = datetime.date(2013, 10, 5)
+    n = date.toordinal()
+    assert bodo.jit(test_impl)(n) == test_impl(n)
+
+
+def test_datetime_date_operations():
+    """
+    Test operations of datetime.date and timedelta object in Bodo
+    """
+
+    def test_add(a, b):
+        return a + b
+
+    def test_sub(a, b):
+        return a - b
+
+    date = datetime.date(2020, 1, 4)
+    date2 = datetime.date(1999, 5, 2)
+    timedelta = datetime.timedelta(1, 2, 1)
+    check_func(test_add, (date, timedelta))
+    check_func(test_add, (timedelta, date))
+    check_func(test_sub, (date, timedelta))
+    check_func(test_sub, (date, date2))
+
+
+def test_datetime_date_comparisons():
+    """
+    Test comparison operators of datetime.date object in Bodo
+    """
+
+    def test_eq(date, date2):
+        return date == date2
+
+    def test_le(date, date2):
+        return date <= date2
+
+    def test_lt(date, date2):
+        return date < date2
+
+    def test_ge(date, date2):
+        return date >= date2
+
+    def test_gt(date, date2):
+        return date > date2
+
+    date = datetime.date(2020, 1, 4)
+    date2 = datetime.date(2020, 3, 1)
+    check_func(test_eq, (date, date2))
+    check_func(test_le, (date, date2))
+    check_func(test_lt, (date, date2))
+    check_func(test_ge, (date, date2))
+    check_func(test_gt, (date, date2))
+
+
+def test_datetime_date_methods():
+    """
+    Test methods of datetime.date object in Bodo
+    """
+
+    def test_weekday(date):
+        return date.weekday()
+
+    def test_toordinal(date):
+        return date.toordinal()
+
+    date = datetime.date(2013, 10, 5)
+    check_func(test_weekday, (date,))
+    check_func(test_toordinal, (date,))
 
 
 # ---------------------------------------------------------------------------- #
