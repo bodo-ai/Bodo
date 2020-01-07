@@ -123,7 +123,7 @@ def datetime_timedelta(
 ):
     def impl_timedelta(
         days=0, seconds=0, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0
-    ):
+    ):  # pragma: no cover
         d = s = us = 0
 
         # Normalize everything to days, seconds, microseconds.
@@ -170,7 +170,7 @@ make_attribute_wrapper(DatetimeTimeDeltaType, "microseconds", "_microseconds")
 # Implement the getters
 @overload_attribute(DatetimeTimeDeltaType, "days")
 def timedelta_get_days(td):
-    def impl(td):
+    def impl(td):  # pragma: no cover
         return td._days
 
     return impl
@@ -178,7 +178,7 @@ def timedelta_get_days(td):
 
 @overload_attribute(DatetimeTimeDeltaType, "seconds")
 def timedelta_get_seconds(td):
-    def impl(td):
+    def impl(td):  # pragma: no cover
         return td._seconds
 
     return impl
@@ -186,7 +186,7 @@ def timedelta_get_seconds(td):
 
 @overload_attribute(DatetimeTimeDeltaType, "microseconds")
 def timedelta_get_microseconds(td):
-    def impl(td):
+    def impl(td):  # pragma: no cover
         return td._microseconds
 
     return impl
@@ -196,29 +196,29 @@ def timedelta_get_microseconds(td):
 def total_seconds(td):
     """Total seconds in the duration."""
 
-    def impl(td):
+    def impl(td):  # pragma: no cover
         return ((td._days * 86400 + td._seconds) * 10 ** 6 + td._microseconds) / 10 ** 6
 
     return impl
 
 
 @register_jitable
-def _to_microseconds(td):
+def _to_microseconds(td): # pragma: no cover
     return (td._days * (24 * 3600) + td._seconds) * 1000000 + td._microseconds
 
 
 @register_jitable
-def _cmp(x, y):
+def _cmp(x, y): # pragma: no cover
     return 0 if x == y else 1 if x > y else -1
 
 
 @register_jitable
-def _getstate(td):
+def _getstate(td): # pragma: no cover
     return (td._days, td._seconds, td._microseconds)
 
 
 @register_jitable
-def _divide_and_round(a, b):
+def _divide_and_round(a, b): # pragma: no cover
     """divide a by b and round result to the nearest integer
     When the ratio is exactly half-way between two integers,
     the even integer is returned.
@@ -239,7 +239,7 @@ def _divide_and_round(a, b):
 def timedelta_add(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             d = lhs.days + rhs.days
             s = lhs.seconds + rhs.seconds
             us = lhs.microseconds + rhs.microseconds
@@ -252,7 +252,7 @@ def timedelta_add(lhs, rhs):
 def timedelta_sub(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             d = lhs.days - rhs.days
             s = lhs.seconds - rhs.seconds
             us = lhs.microseconds - rhs.microseconds
@@ -265,7 +265,7 @@ def timedelta_sub(lhs, rhs):
 def timedelta_mul(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == types.int64:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             d = lhs.days * rhs
             s = lhs.seconds * rhs
             us = lhs.microseconds * rhs
@@ -278,13 +278,13 @@ def timedelta_mul(lhs, rhs):
 def timedelta_floordiv(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             us = _to_microseconds(lhs)
             return us // _to_microseconds(rhs)
 
     elif lhs == datetime_timedelta_type and rhs == types.int64:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             us = _to_microseconds(lhs)
             return datetime.timedelta(0, 0, us // rhs)
 
@@ -295,13 +295,13 @@ def timedelta_floordiv(lhs, rhs):
 def timedelta_truediv(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             us = _to_microseconds(lhs)
             return us / _to_microseconds(rhs)
 
     elif lhs == datetime_timedelta_type and rhs == types.int64:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             us = _to_microseconds(lhs)
             return datetime.timedelta(0, 0, _divide_and_round(us, rhs))
 
@@ -314,7 +314,7 @@ def timedelta_truediv(lhs, rhs):
 def timedelta_mod(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             r = _to_microseconds(lhs) % _to_microseconds(rhs)
             return datetime.timedelta(0, 0, r)
 
@@ -325,7 +325,7 @@ def timedelta_mod(lhs, rhs):
 def timedelta_eq(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             ret = _cmp(_getstate(lhs), _getstate(rhs))
             return ret == 0
 
@@ -336,7 +336,7 @@ def timedelta_eq(lhs, rhs):
 def timedelta_ne(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             ret = _cmp(_getstate(lhs), _getstate(rhs))
             return ret != 0
 
@@ -347,7 +347,7 @@ def timedelta_ne(lhs, rhs):
 def timedelta_le(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             ret = _cmp(_getstate(lhs), _getstate(rhs))
             return ret <= 0
 
@@ -358,7 +358,7 @@ def timedelta_le(lhs, rhs):
 def timedelta_lt(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             ret = _cmp(_getstate(lhs), _getstate(rhs))
             return ret < 0
 
@@ -369,7 +369,7 @@ def timedelta_lt(lhs, rhs):
 def timedelta_ge(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             ret = _cmp(_getstate(lhs), _getstate(rhs))
             return ret >= 0
 
@@ -380,7 +380,7 @@ def timedelta_ge(lhs, rhs):
 def timedelta_gt(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             ret = _cmp(_getstate(lhs), _getstate(rhs))
             return ret > 0
 
@@ -391,7 +391,7 @@ def timedelta_gt(lhs, rhs):
 def timedelta_neg(lhs):
     if lhs == datetime_timedelta_type:
 
-        def impl(lhs):
+        def impl(lhs):  # pragma: no cover
             return datetime.timedelta(-lhs.days, -lhs.seconds, -lhs.microseconds)
 
     return impl
@@ -401,7 +401,7 @@ def timedelta_neg(lhs):
 def timedelta_pos(lhs):
     if lhs == datetime_timedelta_type:
 
-        def impl(lhs):
+        def impl(lhs):  # pragma: no cover
             return lhs
 
     return impl
@@ -411,7 +411,7 @@ def timedelta_pos(lhs):
 def timedelta_divmod(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             q, r = divmod(_to_microseconds(lhs), _to_microseconds(rhs))
             return q, datetime.timedelta(0, 0, r)
 
@@ -422,7 +422,7 @@ def timedelta_divmod(lhs, rhs):
 def timedelta_abs(lhs):
     if lhs == datetime_timedelta_type:
 
-        def impl(lhs):
+        def impl(lhs):  # pragma: no cover
             if lhs.days < 0:
                 return -lhs
             else:
