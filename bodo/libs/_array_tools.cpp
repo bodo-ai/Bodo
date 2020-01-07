@@ -14,14 +14,46 @@
 #include <cstring>
 #include <iostream>
 #include <numeric>
-#include <unordered_map>
-#include <unordered_set>
 #include <string>
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_murmurhash3.cpp"
 #include "gfx/timsort.hpp"
 #include "mpi.h"
+
+#undef USE_STD
+#define USE_TSL_ROBIN
+#undef USE_TSL_SPARSE
+#undef USE_TSL_HOPSCOTCH
+
+#ifdef USE_STD
+# include <unordered_map>
+# include <unordered_set>
+# define MAP_CONTAINER std::unordered_map
+# define SET_CONTAINER std::unordered_set
+#endif
+#ifdef USE_TSL_ROBIN
+# include <include/tsl/robin_map.h>
+# include <include/tsl/robin_set.h>
+# define MAP_CONTAINER tsl::robin_map
+# define SET_CONTAINER tsl::robin_set
+#endif
+#ifdef USE_TSL_SPARSE
+# include <include/tsl/sparse_map.h>
+# include <include/tsl/sparse_set.h>
+# define MAP_CONTAINER tsl::sparse_map
+# define SET_CONTAINER tsl::sparse_set
+#endif
+#ifdef USE_TSL_HOPSCOTCH
+# include <include/tsl/hopscotch_map.h>
+# include <include/tsl/hopscotch_set.h>
+# define MAP_CONTAINER tsl::hopscotch_map
+# define SET_CONTAINER tsl::hopscotch_set
+#endif
+
+
+
+
 #define ALIGNMENT 64  // preferred alignment for AVX512
 
 array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
@@ -1434,8 +1466,8 @@ bool KeyComparisonAsPython(std::vector<array_info*> const& columns,
  * This implementation follows the Shared partition procedure.
  * The data is partitioned and shuffled with the _gen_par_shuffle.
  *
- * The first stage is the partitioning of the data by using hashes
- * and std::unordered_map array.
+ * The first stage is the partitioning of the data by using hashes array
+ * and unordered map array.
  *
  * Afterwards, secondary partitioning is done is the hashes match.
  * Then the pairs of left/right origins are created for subsequent
@@ -1550,7 +1582,7 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
               << " long_table_rows=" << long_table_rows << "\n";
 #endif
     /* This is a function for comparing the rows.
-     * This is the first lambda used as argument for the unordered_map.
+     * This is the first lambda used as argument for the unordered map container.
      *
      * rows can be in the left or the right tables.
      * If iRow < short_table_rows then it is in the first table.
@@ -1562,14 +1594,14 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
      * @param iRow is the first row index for the comparison
      * @return true/false depending on the case.
      */
-    auto hash_fct = [&](size_t const& iRow) -> size_t {
+    std::function<size_t(size_t)> hash_fct = [&](size_t iRow) -> size_t {
         if (iRow < short_table_rows)
             return short_table_hashes[iRow];
         else
             return long_table_hashes[iRow - short_table_rows];
     };
     /* This is a function for testing equality of rows.
-     * This is used as second argument for the unordered_map.
+     * This is used as second argument for the unordered map container.
      *
      * rows can be in the left or the right tables.
      * If iRow < short_table_rows then it is in the first table.
@@ -1579,7 +1611,7 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
      * @param iRowB is the second row index for the comparison
      * @return true/false depending on equality or not.
      */
-    auto equal_fct = [&](size_t const& iRowA, size_t const& iRowB) -> bool {
+    std::function<bool(size_t,size_t)> equal_fct = [&](size_t iRowA, size_t iRowB) -> bool {
         size_t jRowA, jRowB;
         size_t shift_A, shift_B;
         if (iRowA < short_table_rows) {
@@ -1602,9 +1634,7 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
     // The entList contains the hash of the short table.
     // We address the entry by the row index. We store all the rows which are
     // identical in the std::vector.
-    std::unordered_map<size_t, std::vector<size_t>, decltype(hash_fct),
-                       decltype(equal_fct)>
-        entList({}, hash_fct, equal_fct);
+    MAP_CONTAINER <size_t, std::vector<size_t>, std::function<size_t(size_t)>,std::function<bool(size_t,size_t)>> entList({}, hash_fct, equal_fct);
     // The loop over the short table.
     // entries are stored one by one and all of them are put even if identical
     // in value.
@@ -2607,7 +2637,7 @@ void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
     // in the map (but note that the group values I record in the output go from
     // 0 to num_groups - 1)
     int next_group = 1;
-    std::unordered_map<multi_col_key, int64_t, key_hash> key_to_group;
+    MAP_CONTAINER <multi_col_key, int64_t, key_hash> key_to_group;
     bool key_is_nullable = false;
     if (check_for_null_keys) {
       key_is_nullable = does_keys_have_nulls(key_cols);
@@ -2666,7 +2696,7 @@ grouping_info get_group_info_iterate(table_info* table) {
     // in the map (but note that the group values I record in the output go from
     // 0 to num_groups - 1)
     int next_group = 1;
-    std::unordered_map<multi_col_key, int64_t, key_hash> key_to_group;
+    MAP_CONTAINER <multi_col_key, int64_t, key_hash> key_to_group;
     for (int64_t i = 0; i < table->nrows(); i++) {
         if (key_is_nullable) {
             if (does_row_has_nulls(key_cols, i)) {
@@ -3260,18 +3290,18 @@ array_info* nunique_computation(array_info* arr, grouping_info const& grp_inf,
         };
         size_t siztype = numpy_item_size[arr->dtype];
         for (size_t igrp = 0; igrp < num_group; igrp++) {
-            auto hash_fct=[&](int64_t i) -> size_t {
+            std::function<size_t(int64_t)> hash_fct=[&](int64_t i) -> size_t {
               char *ptr = arr->data1 + i * siztype;
               size_t retval = 0;
               memcpy(&retval, ptr, std::min(siztype, sizeof(size_t)));
               return retval;
             };
-            auto equal_fct=[&](int64_t i1, int64_t i2) -> bool {
+            std::function<bool(int64_t,int64_t)> equal_fct=[&](int64_t i1, int64_t i2) -> bool {
               char *ptr1 = arr->data1 + i1 * siztype;
               char *ptr2 = arr->data1 + i2 * siztype;
               return memcmp(ptr1, ptr2, siztype) == 0;
             };
-            std::unordered_set<int64_t, decltype(hash_fct), decltype(equal_fct)> eset({}, hash_fct, equal_fct);
+            SET_CONTAINER <int64_t, std::function<size_t(int64_t)>, std::function<bool(int64_t,int64_t)>> eset({}, hash_fct, equal_fct);
             int64_t i = grp_inf.group_to_first_row[igrp];
             bool HasNullRow = false;
             while (true) {
@@ -3295,14 +3325,14 @@ array_info* nunique_computation(array_info* arr, grouping_info const& grp_inf,
         uint32_t seed = 0xb0d01280;
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
-            auto hash_fct=[&](int64_t i) -> size_t {
+            std::function<size_t(int64_t)> hash_fct=[&](int64_t i) -> size_t {
               char* val_chars = arr->data1 + in_offsets[i];
               int len = in_offsets[i + 1] - in_offsets[i];
               uint32_t val;
               hash_string_32(val_chars, len, seed, &val);
               return size_t(val);
             };
-            auto equal_fct=[&](int64_t i1, int64_t i2) -> bool {
+            std::function<bool(int64_t,int64_t)> equal_fct=[&](int64_t i1, int64_t i2) -> bool {
               size_t len1 = in_offsets[i1 + 1] - in_offsets[i1];
               size_t len2 = in_offsets[i2 + 1] - in_offsets[i2];
               if (len1 != len2) return false;
@@ -3310,7 +3340,7 @@ array_info* nunique_computation(array_info* arr, grouping_info const& grp_inf,
               char *ptr2 = arr->data1 + in_offsets[i2];
               return strncmp(ptr1, ptr2, len1) == 0;
             };
-            std::unordered_set<int64_t, decltype(hash_fct), decltype(equal_fct)> eset({}, hash_fct, equal_fct);
+            SET_CONTAINER <int64_t, std::function<size_t(int64_t)>, std::function<bool(int64_t,int64_t)>> eset({}, hash_fct, equal_fct);
             int64_t i = grp_inf.group_to_first_row[igrp];
             bool HasNullRow = false;
             while (true) {
@@ -3331,7 +3361,7 @@ array_info* nunique_computation(array_info* arr, grouping_info const& grp_inf,
         uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
         size_t siztype = numpy_item_size[arr->dtype];
         for (size_t igrp = 0; igrp < num_group; igrp++) {
-            auto hash_fct=[&](int64_t i) -> size_t {
+            std::function<size_t(int64_t)> hash_fct=[&](int64_t i) -> size_t {
               char *ptr = arr->data1 + i * siztype;
               size_t retval = 0;
               size_t *size_t_ptrA = &retval;
@@ -3340,12 +3370,12 @@ array_info* nunique_computation(array_info* arr, grouping_info const& grp_inf,
                 size_t_ptrB[i] = ptr[i];
               return retval;
             };
-            auto equal_fct=[&](int64_t i1, int64_t i2) -> bool {
+            std::function<bool(int64_t,int64_t)> equal_fct=[&](int64_t i1, int64_t i2) -> bool {
               char *ptr1 = arr->data1 + i1 * siztype;
               char *ptr2 = arr->data1 + i2 * siztype;
               return memcmp(ptr1, ptr2, siztype) == 0;
             };
-            std::unordered_set<int64_t, decltype(hash_fct), decltype(equal_fct)> eset({}, hash_fct, equal_fct);
+            SET_CONTAINER <int64_t, std::function<size_t(int64_t)>, std::function<bool(int64_t,int64_t)>> eset({}, hash_fct, equal_fct);
             int64_t i = grp_inf.group_to_first_row[igrp];
             bool HasNullRow = false;
             while (true) {
@@ -3695,7 +3725,7 @@ table_info* drop_duplicates_table_outplace(table_info* in_table,
      * @param iRow is the first row index for the comparison
      * @return the hash itself
      */
-    auto hash_fct = [&](size_t const& iRow) -> size_t {
+    std::function<size_t(size_t)> hash_fct = [&](size_t const& iRow) -> size_t {
         return size_t(hashes[iRow]);
     };
     /* This is a function for testing equality of rows.
@@ -3707,7 +3737,7 @@ table_info* drop_duplicates_table_outplace(table_info* in_table,
      * @param iRowB is the second row index for the comparison
      * @return true/false depending on the case.
      */
-    auto equal_fct = [&](size_t const& iRowA, size_t const& iRowB) -> bool {
+    std::function<bool(size_t,size_t)> equal_fct = [&](size_t const& iRowA, size_t const& iRowB) -> bool {
         size_t shift_A = 0, shift_B = 0;
         bool test = TestEqual(key_arrs, n_key, shift_A, iRowA, shift_B, iRowB);
         return test;
@@ -3715,8 +3745,7 @@ table_info* drop_duplicates_table_outplace(table_info* in_table,
     // The entList contains the hash of the short table.
     // We address the entry by the row index. We store all the rows which are
     // identical in the std::vector.
-    std::unordered_map<size_t, size_t, decltype(hash_fct), decltype(equal_fct)>
-        entSet({}, hash_fct, equal_fct);
+    MAP_CONTAINER <size_t, size_t, std::function<size_t(size_t)>, std::function<bool(size_t,size_t)>> entSet({}, hash_fct, equal_fct);
     // The loop over the short table.
     // entries are stored one by one and all of them are put even if identical
     // in value.

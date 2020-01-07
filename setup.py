@@ -55,6 +55,10 @@ if "BODO_XE_SUPPORT" in os.environ and os.environ["BODO_XE_SUPPORT"] != "0":
     _has_xenon = True
 
 ind = [PREFIX_DIR + "/include"]
+extra_hash_ind1 = ["bodo/libs/HashLibs/TSL/hopscotch-map"]
+extra_hash_ind2 = ["bodo/libs/HashLibs/TSL/robin-map"]
+extra_hash_ind3 = ["bodo/libs/HashLibs/TSL/sparse-map"]
+extra_hash_ind = extra_hash_ind1 + extra_hash_ind2 + extra_hash_ind3
 lid = [PREFIX_DIR + "/lib"]
 # eca = ["-std=c++11", "-fsanitize=address"]
 # ela = ["-std=c++11", "-fsanitize=address"]
@@ -194,7 +198,7 @@ ext_arr = Extension(
     extra_compile_args=eca,
     extra_link_args=ela,
     define_macros=np_compile_args["define_macros"],
-    include_dirs=np_compile_args["include_dirs"] + ind,
+    include_dirs=np_compile_args["include_dirs"] + ind + extra_hash_ind,
     library_dirs=np_compile_args["library_dirs"] + lid,
 )
 
