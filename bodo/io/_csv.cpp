@@ -53,7 +53,7 @@ class LocalFileReader : public FileReader {
         this->fstream->read(s, size);
         return this->ok();
     }
-    ~LocalFileReader() {
+    virtual ~LocalFileReader() {
         if (fstream) delete fstream;
     }
 };
@@ -480,7 +480,7 @@ extern "C" PyObject *csv_file_chunk_reader(const char *fname, bool is_parallel,
     FileReader *f_reader;
 
     // load s3_reader module if path starts with s3://
-    char *s3_prefix = "s3://";
+    const char *s3_prefix = "s3://";
     if (strncmp(s3_prefix, fname, strlen(s3_prefix)) == 0) {
         PyObject *s3_mod = PyImport_ImportModule("bodo.io.s3_reader");
         CHECK(s3_mod, "importing bodo.io.s3_reader module failed");

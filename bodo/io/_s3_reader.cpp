@@ -72,7 +72,7 @@ class S3FileReader : public FileReader {
         return (uint64_t)size;
     }
 
-    ~S3FileReader() { CHECK_ARROW(arrow::fs::FinalizeS3(), "Finalize34"); }
+    virtual ~S3FileReader() { CHECK_ARROW(arrow::fs::FinalizeS3(), "Finalize34"); }
 };
 
 extern "C" {

@@ -8,6 +8,7 @@ class FileReader {
    public:
     const char *fname;
     FileReader(const char *_fname) : fname(_fname) {}
+    virtual ~FileReader() {};
     virtual uint64_t getSize() = 0;
     virtual bool seek(int64_t pos) = 0;
     virtual bool ok() = 0;
