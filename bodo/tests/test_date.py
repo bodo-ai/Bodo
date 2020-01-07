@@ -20,6 +20,17 @@ import random
 import pytest
 
 
+def test_datetime_date_today():
+    """
+    Test datetime.date.today() classmethod
+    """
+
+    def test_impl():
+        return datetime.date.today()
+
+    assert bodo.jit(test_impl)() == test_impl()
+
+
 # ------------------------- Testing datetime.timedelta ------------------------- #
 def test_timedelta_construct():
     """
@@ -191,6 +202,7 @@ def test_dt_year_before_2000():
 def test_timestamp_constructor_kw():
     """Test pd.Timestamp() constructor with year/month/day passed as keyword arguments
     """
+
     def test_impl():
         return pd.Timestamp(year=1998, month=2, day=3)
 
@@ -201,6 +213,7 @@ def test_timestamp_constructor_pos():
     """Test pd.Timestamp() constructor with year/month/day passed as positional
     arguments
     """
+
     def test_impl():
         return pd.Timestamp(1998, 2, 3)
 

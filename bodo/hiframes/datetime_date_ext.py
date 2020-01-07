@@ -26,6 +26,7 @@ from numba.extending import (
     overload,
     intrinsic,
     overload_attribute,
+    register_jitable,
 )
 from numba import cgutils
 from numba.targets.arrayobj import (
@@ -300,7 +301,7 @@ def init_datetime_date_array(typingctx, data=None):
     assert data == types.Array(types.int64, 1, "C")
 
     def codegen(context, builder, signature, args):
-        data_val, = args
+        (data_val,) = args
         # create arr struct and store values
         dt_date_arr = cgutils.create_struct_proxy(signature.return_type)(
             context, builder
@@ -363,3 +364,17 @@ def dt_date_arr_setitem(A, ind, val):
 def overload_len_datetime_date_arr(A):
     if A == datetime_date_array_type:
         return lambda A: len(A._data)
+
+
+types.datetime_date_type = datetime_date_type
+
+
+@register_jitable
+def today_impl():
+    """Internal call to support datetime.date.today().
+    Untyped pass replaces datetime.date.today() with this call since class methods are
+    not supported in Numba's typing
+    """
+    with numba.objmode(d="datetime_date_type"):
+        d = datetime.date.today()
+    return d
