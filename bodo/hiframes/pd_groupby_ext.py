@@ -205,14 +205,8 @@ class GroupbyTyper(AbstractTemplate):
         for k in keys:
             selection.remove(k)
 
-        if isinstance(as_index, bodo.utils.utils.BooleanLiteral):
-            as_index = as_index.literal_value
-        else:
-            # XXX as_index type is just bool when value not passed. Therefore,
-            # we assume the default True value.
-            # TODO: more robust fix or just check
-            as_index = True
-
+        # safe since overload makes sure as_index is constant
+        as_index = is_overload_true(as_index)
         out_typ = DataFrameGroupByType(df, keys, tuple(selection), as_index, False)
         return signature(out_typ, *args)
 
