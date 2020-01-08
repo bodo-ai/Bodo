@@ -1116,6 +1116,10 @@ def test_groupby_multi_key_to_index():
             "C": [3, 5, 6, 5, 4, 4, 3],
         }
     )
+    # not using check_func(... sort_output=True) since it drops index, but we need to
+    # make sure proper index is being created
+    # TODO: avoid dropping index in check_func(... sort_output=True) when indexes are
+    # supported properly for various APIs
     pd.testing.assert_series_equal(
         bodo.jit(impl)(df).sort_index(), impl(df).sort_index()
     )

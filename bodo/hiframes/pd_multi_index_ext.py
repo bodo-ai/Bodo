@@ -69,8 +69,8 @@ make_attribute_wrapper(MultiIndexType, "name", "_name")
 
 @typeof_impl.register(pd.MultiIndex)
 def typeof_multi_index(val, c):
-    # using array type inferrence
-    # TODO: avoild using .values if possible, since behavior of .values may change
+    # using array type inference
+    # TODO: avoid using .values if possible, since behavior of .values may change
     array_types = tuple(numba.typeof(val.levels[i].values) for i in range(val.nlevels))
     return MultiIndexType(
         array_types, numba.typeof(tuple(val.names)), numba.typeof(val.name)
