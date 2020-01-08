@@ -346,3 +346,24 @@ def test_period_index_box(period_index):
         return A
 
     pd.testing.assert_index_equal(bodo.jit(impl)(period_index), impl(period_index))
+
+
+@pytest.mark.parametrize(
+    "m_ind",
+    [
+        pd.MultiIndex.from_arrays([[3, 4, 1, 5, -3]]),
+        pd.MultiIndex.from_arrays(
+            [
+                ["ABCD", "V", "CAD", "", "AA"],
+                [1.3, 4.1, 3.1, -1.1, -3.2],
+                pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
+            ]
+        ),
+    ],
+)
+def test_multi_index_unbox(m_ind):
+    def test_impl(m_ind):
+        return m_ind
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_index_equal(bodo_func(m_ind), test_impl(m_ind))

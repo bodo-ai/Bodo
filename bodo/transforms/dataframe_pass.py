@@ -56,7 +56,11 @@ from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 import bodo.hiframes.pd_rolling_ext
 from bodo.hiframes.pd_rolling_ext import RollingType
 from bodo.ir.aggregate import get_agg_func
-from bodo.utils.transform import compile_func_single_block, update_locs, get_str_const_value
+from bodo.utils.transform import (
+    compile_func_single_block,
+    update_locs,
+    get_str_const_value,
+)
 from bodo.libs.str_arr_ext import (
     string_array_type,
     get_utf8_size,
@@ -64,6 +68,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 
 
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
@@ -1086,7 +1091,11 @@ class DataFramePass(object):
 
         # find key array for sort ('by' arg)
         key_names = self._get_const_or_list(by_var)
-        ascending_list = self._get_list_value_spec_length(ascending_var, len(key_names), err_msg="ascending should be bool or a list of bool of the number of keys")
+        ascending_list = self._get_list_value_spec_length(
+            ascending_var,
+            len(key_names),
+            err_msg="ascending should be bool or a list of bool of the number of keys",
+        )
         if not (
             key_names == ("$_bodo_index_",)
             or all(k in df_typ.columns for k in key_names)
@@ -1841,9 +1850,15 @@ class DataFramePass(object):
         return self._replace_func(f, [arr], pre_nodes=nodes)
 
     def _run_call_join(self, assign, lhs, rhs):
-        left_df, right_df, left_on_var, right_on_var, how_var, suffix_x_var, suffix_y_var = (
-            rhs.args
-        )
+        (
+            left_df,
+            right_df,
+            left_on_var,
+            right_on_var,
+            how_var,
+            suffix_x_var,
+            suffix_y_var,
+        ) = rhs.args
 
         left_on = self._get_const_or_list(left_on_var)
         right_on = self._get_const_or_list(right_on_var)
@@ -1992,6 +2007,21 @@ class DataFramePass(object):
             index_var = ir.Var(lhs.scope, mk_unique_var("gp_index"), lhs.loc)
             self.typemap[index_var.name] = types.none
             nodes.append(ir.Assign(ir.Const(None, lhs.loc), index_var, lhs.loc))
+        elif isinstance(out_typ.index, MultiIndexType):
+            # gen MultiIndex init function
+            arg_names = ", ".join("in{}".format(i) for i in range(len(grp_typ.keys)))
+            names_tup = ", ".join("'{}'".format(k) for k in grp_typ.keys)
+            func_text = "def _multi_inde_impl({}):\n".format(arg_names)
+            func_text += "    return bodo.hiframes.pd_multi_index_ext.init_multi_index(({}), ({}))\n".format(
+                arg_names, names_tup
+            )
+            loc_vars = {}
+            exec(func_text, {}, loc_vars)
+            _multi_inde_impl = loc_vars["_multi_inde_impl"]
+            nodes += compile_func_single_block(
+                _multi_inde_impl, out_key_vars, None, self,
+            )
+            index_var = nodes[-1].target
         else:
             index_arr = out_key_vars[0]
             index_name = grp_typ.keys[0]
@@ -2656,9 +2686,7 @@ class DataFramePass(object):
                 raise ValueError(err_msg)
         return key_colnames
 
-    def _get_list_value_spec_length(
-        self, by_arg, n_key, err_msg=None
-    ):
+    def _get_list_value_spec_length(self, by_arg, n_key, err_msg=None):
         """Used to returning a list of values of length n_key.
         If by_arg is a list of values then check that the list of length n_key.
         If by_arg is just a single value, then return the list of length n_key of this value.

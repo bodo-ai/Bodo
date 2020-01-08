@@ -30,6 +30,7 @@ import bodo
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.libs.str_ext import string_type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.ir.aggregate import get_agg_func
 from bodo.utils.typing import (
     BodoError,
@@ -319,10 +320,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 out_data.append(grp.df_type.data[ind])
         else:
             if len(grp.keys) > 1:
-                # returning None index for MultiIndex, TODO: raise warning?
-                # TODO: support MultiIndex
-                pass  # raise TypeError("MultiIndex not supported yet. "
-                # "Please use 'as_index'=False in groupby to avoid it.")
+                key_col_inds = tuple(
+                    grp.df_type.columns.index(grp.keys[i]) for i in range(len(grp.keys))
+                )
+                arr_types = tuple(grp.df_type.data[ind] for ind in key_col_inds)
+                index = MultiIndexType(arr_types, (bodo.string_type,) * len(grp.keys))
             else:
                 ind = grp.df_type.columns.index(grp.keys[0])
                 index = bodo.hiframes.pd_index_ext.array_typ_to_index(
@@ -341,8 +343,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 )
                 try:
                     # input to UDFs is a Series
-                    in_series_typ = SeriesType(
-                        data.dtype, data, None, string_type)
+                    in_series_typ = SeriesType(data.dtype, data, None, string_type)
                     _, out_dtype, _ = numba.typed_passes.type_inference_stage(
                         self.context, f_ir, (in_series_typ,), None
                     )
@@ -543,9 +544,7 @@ class PivotTyper(AbstractTemplate):
         # get output data type
         data = df.data[df.columns.index(values)]
         func = get_agg_func(None, aggfunc.literal_value, None)
-        f_ir = numba.ir_utils.get_ir_of_code(
-            func.__globals__, func.__code__
-        )
+        f_ir = numba.ir_utils.get_ir_of_code(func.__globals__, func.__code__)
         in_series_typ = SeriesType(data.dtype, data, None, string_type)
         bodo.ir.aggregate.replace_closures(f_ir, func.__closure__, func.__code__)
         _, out_dtype, _ = numba.typed_passes.type_inference_stage(

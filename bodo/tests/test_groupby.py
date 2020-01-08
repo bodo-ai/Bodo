@@ -182,10 +182,7 @@ def test_agg_str_key():
         return A
 
     df = pd.DataFrame(
-    {
-        "A": ["AA", "B", "B", "B", "AA", "AA", "B"],
-        "B": [-8, 2, 3, 1, 5, 6, 7],
-    }
+        {"A": ["AA", "B", "B", "B", "AA", "AA", "B"], "B": [-8, 2, 3, 1, 5, 6, 7],}
     )
     check_func(impl, (df,), sort_output=True)
 
@@ -1101,6 +1098,31 @@ def test_groupby_multi_intlabels_sum():
         }
     )
     check_func(impl, (df,), sort_output=True)
+
+
+def test_groupby_multi_key_to_index():
+    """
+    Make sure df.groupby() with multiple keys creates a MultiIndex index in output
+    """
+
+    def impl(df):
+        A = df.groupby(["A", "C"])["B"].sum()
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [-8, 2, 3, 1, 5, 6, 7],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        }
+    )
+    # not using check_func(... sort_output=True) since it drops index, but we need to
+    # make sure proper index is being created
+    # TODO: avoid dropping index in check_func(... sort_output=True) when indexes are
+    # supported properly for various APIs
+    pd.testing.assert_series_equal(
+        bodo.jit(impl)(df).sort_index(), impl(df).sort_index()
+    )
 
 
 def test_groupby_multi_strlabels():
