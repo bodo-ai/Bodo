@@ -3866,17 +3866,17 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     PyObject *np_mod = PyImport_ImportModule("numpy");
     PyObject *dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "bool");
     if ((size_t)PyNumber_AsSsize_t(PyObject_GetAttrString(dtype_obj, "itemsize"), NULL) != sizeof(bool)) {
-        PyErr_SetString(PyExc_RuntimeError, "bool size mistmatch between C++ and NumPy!");
+        PyErr_SetString(PyExc_RuntimeError, "bool size mismatch between C++ and NumPy!");
         return NULL;
     }
     dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "float32");
     if ((size_t)PyNumber_AsSsize_t(PyObject_GetAttrString(dtype_obj, "itemsize"), NULL) != sizeof(float)) {
-        PyErr_SetString(PyExc_RuntimeError, "float32 size mistmatch between C++ and NumPy!");
+        PyErr_SetString(PyExc_RuntimeError, "float32 size mismatch between C++ and NumPy!");
         return NULL;
     }
     dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "float64");
     if ((size_t)PyNumber_AsSsize_t(PyObject_GetAttrString(dtype_obj, "itemsize"), NULL) != sizeof(double)) {
-        PyErr_SetString(PyExc_RuntimeError, "float64 size mistmatch between C++ and NumPy!");
+        PyErr_SetString(PyExc_RuntimeError, "float64 size mismatch between C++ and NumPy!");
         return NULL;
     }
 

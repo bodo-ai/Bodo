@@ -50,6 +50,7 @@ from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.utils import unliteral_all, incref
 from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
+from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.utils.utils import build_set
 from bodo.libs.str_arr_ext import (
     string_array_type,
@@ -1549,6 +1550,10 @@ def gen_top_level_agg_func(
                 int_typ_name = int_typ_name[:-7]  # remove trailing "Dtype()"
                 func_text += '    {} = pd.Series([1], dtype="{}").values\n'.format(
                     out_name, int_typ_name
+                )
+            elif isinstance(out_col_typs[i], BooleanArrayType):
+                func_text += '    {} = pd.Series([True]).values\n'.format(
+                    out_name
                 )
             else:
                 func_text += "    {} = np.empty(1, {})\n".format(
