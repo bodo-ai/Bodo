@@ -706,6 +706,57 @@ def test_df_set_index(df_value):
     check_func(impl, (df_value,))
 
 
+def test_df_reset_index1(df_value):
+    """Test DataFrame.reset_index(drop=False) on various dataframe/index combinations
+    """
+    def impl(df):
+        return df.reset_index()
+
+    check_func(impl, (df_value,))
+
+
+@pytest.mark.parametrize(
+    "test_index",
+    [
+        # named numeric index
+        pd.Int64Index([3, 1, 2, 4, 6], name="AA"),
+        pd.UInt64Index([3, 1, 2, 4, 6], name="AA"),
+        pd.Float64Index([3.1, 1.2, 2.3, 4.4, 6.6], name="AA"),
+        pd.RangeIndex(0, 5, name="AA"),  # TODO: Range(1, 6) when RangeIndex is fixed
+        # named string index
+        pd.Index(["A", "C", "D", "E", "AA"], name="ABC"),
+        # named date/time index
+        pd.date_range(start="2018-04-24", end="2018-04-27", periods=5, name="ABC"),
+        # TODO: test PeriodIndex when PeriodArray is supported
+        # pd.period_range(start='2017-01-01', end='2017-05-01', freq='M', name="ACD"),
+        pd.timedelta_range(start="1D", end="5D", name="ABC"),
+        pd.MultiIndex.from_arrays(
+            [
+                ["ABCD", "V", "CAD", "", "AA"],
+                [1.3, 4.1, 3.1, -1.1, -3.2],
+                pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
+            ]
+        ),
+        pd.MultiIndex.from_arrays(
+            [
+                ["ABCD", "V", "CAD", "", "AA"],
+                [1.3, 4.1, 3.1, -1.1, -3.2],
+                pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
+            ], names=["AA", "ABC", "ABCD"]
+        ),
+    ],
+)
+def test_df_reset_index2(test_index):
+    """Test DataFrame.reset_index(drop=False) with MultiIndex and named indexes
+    """
+    def impl(df):
+        return df.reset_index()
+
+    test_df = pd.DataFrame({"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]})
+    test_df.index = test_index
+    check_func(impl, (test_df,))
+
+
 def test_df_duplicated():
     def impl(df):
         return df.duplicated()

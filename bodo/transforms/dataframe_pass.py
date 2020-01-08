@@ -61,6 +61,7 @@ from bodo.utils.transform import (
     update_locs,
     get_str_const_value,
 )
+from bodo.utils.utils import gen_getitem
 from bodo.libs.str_arr_ext import (
     string_array_type,
     get_utf8_size,
@@ -1444,24 +1445,29 @@ class DataFramePass(object):
             return self._set_df_inplace(_dropna_imp, args, df_var, lhs.loc, nodes)
 
     def _run_call_reset_index(self, assign, lhs, rhs):
-        # TODO: reflection, drop=False semantics
+        # import pdb; pdb.set_trace()
+        # TODO: reflection
         # TODO: drop actual index, fix inplace
         df_var = rhs.args[0]
-        inplace_var = rhs.args[1]
-        inplace = guard(find_const, self.func_ir, inplace_var)
+        drop = guard(find_const, self.func_ir, rhs.args[1])
+        inplace = guard(find_const, self.func_ir, rhs.args[2])
         df_typ = self.typemap[df_var.name]
+        out_df_typ = self.typemap[lhs.name]
+        n_ind = len(out_df_typ.columns) - len(df_typ.columns)
+        assert drop or n_ind != 0  # there are index columns when not dropping index
+
 
         # impl: for each column, copy data and create a new dataframe
-        n_cols = len(df_typ.columns)
-        data_args = tuple("data{}".format(i) for i in range(n_cols))
+        n_cols = len(out_df_typ.columns)
+        data_args = ["data{}".format(i) for i in range(n_cols)]
 
-        col_args = ", ".join("'{}'".format(c) for c in df_typ.columns)
+        col_args = ", ".join("'{}'".format(c) for c in out_df_typ.columns)
         col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
             col_args, col_args
         )
         func_text = "def _reset_index_impl({}):\n".format(", ".join(data_args))
-        for d in data_args:
-            if not inplace:
+        for i, d in enumerate(data_args):
+            if not inplace and i >= n_ind:
                 func_text += "  {} = {}.copy()\n".format(d, d)
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
             ", ".join(data_args), col_var
@@ -1472,6 +1478,23 @@ class DataFramePass(object):
 
         nodes = []
         args = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
+        # add index array arguments if not dropping index
+        if not drop:
+            if isinstance(df_typ.index, MultiIndexType):
+                # MultiIndex case takes multiple arrays from MultiIndex._data
+                ind_var = self._get_dataframe_index(df_var, nodes)
+                nodes += compile_func_single_block(lambda ind: ind._data, [ind_var], None, self)
+                arr_tup = nodes[-1].target
+                arr_args = []
+                for i in range(n_ind):
+                    arr_var = ir.Var(ind_var.scope, mk_unique_var("ind_arr"), lhs.loc)
+                    self.typemap[arr_var.name] = df_typ.index.array_types[i]
+                    gen_getitem(arr_var, arr_tup, i, self.calltypes, nodes)
+                    arr_args.append(arr_var)
+                args = arr_args + args
+            else:
+                ind_var = self._gen_array_from_index(df_var, df_var, nodes)
+                args = [ind_var] + args
 
         if not inplace:
             return self._replace_func(_reset_index_impl, args, pre_nodes=nodes)
