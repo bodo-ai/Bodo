@@ -757,6 +757,26 @@ def test_df_reset_index2(test_index):
     check_func(impl, (test_df,))
 
 
+def test_df_reset_index3():
+    """Test DataFrame.reset_index(drop=False) after groupby() which is a common pattern
+    """
+    def impl1(df):
+        return df.groupby("A").sum().reset_index()
+
+    def impl2(df):
+        return df.groupby(["A", "B"]).sum().reset_index()
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [-8, 2, 3, 1, 5, 6, 7],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        }
+    )
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
+
+
 def test_df_duplicated():
     def impl(df):
         return df.duplicated()

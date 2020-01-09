@@ -324,11 +324,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     grp.df_type.columns.index(grp.keys[i]) for i in range(len(grp.keys))
                 )
                 arr_types = tuple(grp.df_type.data[ind] for ind in key_col_inds)
-                index = MultiIndexType(arr_types, (bodo.string_type,) * len(grp.keys))
+                index = MultiIndexType(arr_types, tuple(types.StringLiteral(k) for k in grp.keys))
             else:
                 ind = grp.df_type.columns.index(grp.keys[0])
                 index = bodo.hiframes.pd_index_ext.array_typ_to_index(
-                    grp.df_type.data[ind], bodo.string_type
+                    grp.df_type.data[ind], types.StringLiteral(grp.keys[0])
                 )
 
         # get output type for each selected column

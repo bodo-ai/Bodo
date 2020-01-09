@@ -189,6 +189,9 @@ def get_index_names(t, func_name, default_name):
     """
     from bodo.hiframes.pd_multi_index_ext import MultiIndexType
     err_msg = "{}: index name should be a constant string".format(func_name)
+    # TODO: remove when none index is gone
+    if t == types.none:
+        t = bodo.hiframes.pd_index_ext.RangeIndexType(types.none)
 
     # MultIndex has multiple names
     if isinstance(t, MultiIndexType):
@@ -214,6 +217,10 @@ def get_index_data_arr_types(t):
     from bodo.hiframes.pd_index_ext import (NumericIndexType, RangeIndexType,
         StringIndexType, DatetimeIndexType, TimedeltaIndexType, PeriodIndexType)
     from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+
+    # TODO: remove when none index is gone
+    if t == types.none:
+        t = RangeIndexType(types.none)
 
     if isinstance(t, MultiIndexType):
         return tuple(t.array_types)
