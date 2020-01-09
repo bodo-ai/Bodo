@@ -13,12 +13,14 @@ numba.targets.cpu.CPUTargetOptions.OPTIONS["all_returns_distributed"] = bool
 numba.targets.cpu.CPUTargetOptions.OPTIONS["distributed"] = set
 numba.targets.cpu.CPUTargetOptions.OPTIONS["distributed_varlength"] = set
 numba.targets.cpu.CPUTargetOptions.OPTIONS["threaded"] = set
+numba.targets.cpu.CPUTargetOptions.OPTIONS["pivots"] = dict
 numba.compiler.Flags.OPTIONS["all_args_distributed"] = False
 numba.compiler.Flags.OPTIONS["all_args_distributed_varlength"] = False
 numba.compiler.Flags.OPTIONS["all_returns_distributed"] = False
 numba.compiler.Flags.OPTIONS["distributed"] = set()
 numba.compiler.Flags.OPTIONS["distributed_varlength"] = set()
 numba.compiler.Flags.OPTIONS["threaded"] = set()
+numba.compiler.Flags.OPTIONS["pivots"] = dict()
 
 
 # Add Bodo's options to 'set_flags' function of numba.targets.options.TargetOptions
@@ -90,6 +92,9 @@ def set_flags(self, flags):
     if 'threaded' in kws:
         flags.set('threaded', kws.pop('threaded'))
 
+    if 'pivots' in kws:
+        flags.set('pivots', kws.pop('pivots'))
+
     if kws:
         # Unread options?
         raise NameError("Unrecognized options: %s" % kws.keys())
@@ -139,12 +144,6 @@ def jit(signature_or_function=None, **options):
 
     _locals = options.pop("locals", {})
     assert isinstance(_locals, dict)
-
-    # put pivots in locals TODO: generalize numba.jit options
-    pivots = options.pop("pivots", {})
-    assert isinstance(pivots, dict)
-    for var, vals in pivots.items():
-        _locals[var + ":pivot"] = vals
 
     h5_types = options.pop("h5_types", {})
     assert isinstance(h5_types, dict)

@@ -436,9 +436,8 @@ class UntypedPass(object):
         # pass pivot values to df.pivot_table() calls using a meta
         # variable passed as argument. The meta variable's type
         # is set to MetaType with pivot values baked in.
-        pivot_key = lhs + ":pivot"
-        if pivot_key in self.locals:
-            pivot_values = self.locals.pop(pivot_key)
+        if lhs in self.flags.pivots:
+            pivot_values = self.flags.pivots[lhs]
             # put back the definition removed earlier
             self.func_ir._definitions[lhs].append(rhs)
             pivot_call = guard(get_definition, self.func_ir, lhs)

@@ -1745,8 +1745,11 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     f_ir._definitions = build_definitions(f_ir.blocks)
 
     assert f_ir.arg_count == 1, "agg function should have one input"
+    # construct default flags similar to numba.compiler
+    flags = numba.compiler.Flags()
+    flags.set('nrt')
     untyped_pass = bodo.transforms.untyped_pass.UntypedPass(
-        f_ir, typingctx, arg_typs, {}, {}
+        f_ir, typingctx, arg_typs, {}, {}, flags
     )
     untyped_pass.run()
     f_ir._definitions = build_definitions(f_ir.blocks)
