@@ -2033,7 +2033,9 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
 
 
 def sort_values_dummy(df, by, ascending, inplace, na_position):  # pragma: no cover
-    return df.sort_values(by, ascending=ascending, inplace=inplace, na_position=na_position)
+    return df.sort_values(
+        by, ascending=ascending, inplace=inplace, na_position=na_position
+    )
 
 
 @infer_global(sort_values_dummy)
@@ -2116,7 +2118,7 @@ def set_parent_dummy(df):  # pragma: no cover
 class ParentDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        df, = args
+        (df,) = args
         ret = DataFrameType(df.data, df.index, df.columns, True)
         return signature(ret, *args)
 
@@ -2144,7 +2146,7 @@ def itertuples_dummy(df):  # pragma: no cover
 class ItertuplesDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        df, = args
+        (df,) = args
         # XXX index handling, assuming implicit index
         assert "Index" not in df.columns
         columns = ("Index",) + df.columns
@@ -2213,14 +2215,20 @@ def reset_index_overload(
 ):
     # make sure 'drop' is a constant bool
     if not is_overload_constant_bool(drop):
-        raise BodoError("reset_index(): 'drop' parameter should be a constant boolean value")
+        raise BodoError(
+            "reset_index(): 'drop' parameter should be a constant boolean value"
+        )
 
     # make sure 'inplace' is a constant bool
     if not is_overload_constant_bool(inplace):
-        raise BodoError("reset_index(): 'inplace' parameter should be a constant boolean value")
+        raise BodoError(
+            "reset_index(): 'inplace' parameter should be a constant boolean value"
+        )
 
     if is_overload_false(drop) and is_overload_true(inplace):
-        raise BodoError("reset_index(): drop=False and inplace=True parameter combination not supported yet")
+        raise BodoError(
+            "reset_index(): drop=False and inplace=True parameter combination not supported yet"
+        )
 
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: inplace of df with parent (reflection)
@@ -2257,7 +2265,9 @@ class ResetIndexDummyTyper(AbstractTemplate):
             # pandas assigns "level_0" if "index" is already used as a column name
             # https://github.com/pandas-dev/pandas/blob/08b70d837dd017d49d2c18e02369a15272b662b2/pandas/core/frame.py#L4547
             default_name = "index" if "index" not in columns else "level_0"
-            index_names = get_index_names(df.index, "DataFrame.reset_index()", default_name)
+            index_names = get_index_names(
+                df.index, "DataFrame.reset_index()", default_name
+            )
             columns = index_names + columns
             data = get_index_data_arr_types(df.index) + data
 

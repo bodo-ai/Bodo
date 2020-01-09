@@ -1456,7 +1456,6 @@ class DataFramePass(object):
         n_ind = len(out_df_typ.columns) - len(df_typ.columns)
         assert drop or n_ind != 0  # there are index columns when not dropping index
 
-
         # impl: for each column, copy data and create a new dataframe
         n_cols = len(out_df_typ.columns)
         data_args = ["data{}".format(i) for i in range(n_cols)]
@@ -1483,7 +1482,9 @@ class DataFramePass(object):
             if isinstance(df_typ.index, MultiIndexType):
                 # MultiIndex case takes multiple arrays from MultiIndex._data
                 ind_var = self._get_dataframe_index(df_var, nodes)
-                nodes += compile_func_single_block(lambda ind: ind._data, [ind_var], None, self)
+                nodes += compile_func_single_block(
+                    lambda ind: ind._data, [ind_var], None, self
+                )
                 arr_tup = nodes[-1].target
                 arr_args = []
                 for i in range(n_ind):

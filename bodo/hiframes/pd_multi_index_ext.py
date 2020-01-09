@@ -74,7 +74,9 @@ def typeof_multi_index(val, c):
     # TODO: avoid using .values if possible, since behavior of .values may change
     array_types = tuple(numba.typeof(val.levels[i].values) for i in range(val.nlevels))
     return MultiIndexType(
-        array_types, tuple(get_val_type_maybe_str_literal(v) for v in val.names), numba.typeof(val.name)
+        array_types,
+        tuple(get_val_type_maybe_str_literal(v) for v in val.names),
+        numba.typeof(val.name),
     )
 
 

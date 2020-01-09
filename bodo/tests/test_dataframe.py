@@ -709,6 +709,7 @@ def test_df_set_index(df_value):
 def test_df_reset_index1(df_value):
     """Test DataFrame.reset_index(drop=False) on various dataframe/index combinations
     """
+
     def impl(df):
         return df.reset_index()
 
@@ -742,13 +743,15 @@ def test_df_reset_index1(df_value):
                 ["ABCD", "V", "CAD", "", "AA"],
                 [1.3, 4.1, 3.1, -1.1, -3.2],
                 pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
-            ], names=["AA", "ABC", "ABCD"]
+            ],
+            names=["AA", "ABC", "ABCD"],
         ),
     ],
 )
 def test_df_reset_index2(test_index):
     """Test DataFrame.reset_index(drop=False) with MultiIndex and named indexes
     """
+
     def impl(df):
         return df.reset_index()
 
@@ -760,6 +763,7 @@ def test_df_reset_index2(test_index):
 def test_df_reset_index3():
     """Test DataFrame.reset_index(drop=False) after groupby() which is a common pattern
     """
+
     def impl1(df):
         return df.groupby("A").sum().reset_index()
 

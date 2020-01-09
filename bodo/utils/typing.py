@@ -63,8 +63,9 @@ def is_overload_constant_str_list(val):
 def is_overload_constant_int(val):
     return (
         isinstance(val, int)
-        or (isinstance(val, types.IntegerLiteral)
-            and isinstance(val.literal_value, int))
+        or (
+            isinstance(val, types.IntegerLiteral) and isinstance(val.literal_value, int)
+        )
         or ((isinstance(val, types.Omitted) and isinstance(val.value, int)))
     )
 
@@ -188,6 +189,7 @@ def get_index_names(t, func_name, default_name):
     otherwise, throw error.
     """
     from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+
     err_msg = "{}: index name should be a constant string".format(func_name)
     # TODO: remove when none index is gone
     if t == types.none:
@@ -214,8 +216,14 @@ def get_index_names(t, func_name, default_name):
 
 
 def get_index_data_arr_types(t):
-    from bodo.hiframes.pd_index_ext import (NumericIndexType, RangeIndexType,
-        StringIndexType, DatetimeIndexType, TimedeltaIndexType, PeriodIndexType)
+    from bodo.hiframes.pd_index_ext import (
+        NumericIndexType,
+        RangeIndexType,
+        StringIndexType,
+        DatetimeIndexType,
+        TimedeltaIndexType,
+        PeriodIndexType,
+    )
     from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 
     # TODO: remove when none index is gone
@@ -456,7 +464,7 @@ class ConvertTupRecType(AbstractTemplate):
 
 @lower_builtin(convert_tup_to_rec, types.Any)
 def lower_convert_impl(context, builder, sig, args):
-    val, = args
+    (val,) = args
     in_typ = sig.args[0]
     rec_typ = sig.return_type
 
@@ -497,7 +505,7 @@ class ConvertRecTupType(AbstractTemplate):
 
 @lower_builtin(convert_rec_to_tup, types.Any)
 def lower_convert_rec_tup_impl(context, builder, sig, args):
-    val, = args
+    (val,) = args
     rec_typ = sig.args[0]
     tup_typ = sig.return_type
 
