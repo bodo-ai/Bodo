@@ -1323,9 +1323,7 @@ class UntypedPass(object):
             self.metadata["distributed"] = self.flags.distributed.copy()
 
         if "distributed_varlength" not in self.metadata:
-            self.metadata["distributed_varlength"] = self.locals.pop(
-                "##distributed_varlength", set()
-            )
+            self.metadata["distributed_varlength"] = self.flags.distributed_varlength.copy()
 
         if "threaded" not in self.metadata:
             self.metadata["threaded"] = self.locals.pop("##threaded", set())
