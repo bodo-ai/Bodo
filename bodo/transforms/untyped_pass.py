@@ -1320,7 +1320,7 @@ class UntypedPass(object):
         """
         if "distributed" not in self.metadata:
             # TODO: keep updated in variable renaming?
-            self.metadata["distributed"] = self.locals.pop("##distributed", set())
+            self.metadata["distributed"] = self.flags.distributed.copy()
 
         if "distributed_varlength" not in self.metadata:
             self.metadata["distributed_varlength"] = self.locals.pop(

@@ -10,9 +10,11 @@ import bodo
 numba.targets.cpu.CPUTargetOptions.OPTIONS["all_args_distributed"] = bool
 numba.targets.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_varlength"] = bool
 numba.targets.cpu.CPUTargetOptions.OPTIONS["all_returns_distributed"] = bool
+numba.targets.cpu.CPUTargetOptions.OPTIONS["distributed"] = set
 numba.compiler.Flags.OPTIONS["all_args_distributed"] = False
 numba.compiler.Flags.OPTIONS["all_args_distributed_varlength"] = False
 numba.compiler.Flags.OPTIONS["all_returns_distributed"] = False
+numba.compiler.Flags.OPTIONS["distributed"] = set()
 
 
 # Add Bodo's options to 'set_flags' function of numba.targets.options.TargetOptions
@@ -75,6 +77,9 @@ def set_flags(self, flags):
     if kws.pop('all_returns_distributed', False):
         flags.set("all_returns_distributed")
 
+    if 'distributed' in kws:
+        flags.set('distributed', kws.pop('distributed'))
+
     if kws:
         # Unread options?
         raise NameError("Unrecognized options: %s" % kws.keys())
@@ -135,10 +140,6 @@ def jit(signature_or_function=None, **options):
     assert isinstance(h5_types, dict)
     for var, vals in h5_types.items():
         _locals[var + ":h5_types"] = vals
-
-    distributed = set(options.pop("distributed", set()))
-    assert isinstance(distributed, (set, list))
-    _locals["##distributed"] = distributed
 
     distributed_varlength = set(options.pop("distributed_varlength", set()))
     assert isinstance(distributed_varlength, (set, list))
