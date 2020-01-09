@@ -735,7 +735,16 @@ def test_max(test_df):
         A = df.groupby("A").max()
         return A
 
+    df_bool = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "C": [True, True, False, True, True, False, False, False],
+        }
+    )
+
     check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True, check_dtype=True)
     check_func(impl2, (11,))
 
 
@@ -753,7 +762,16 @@ def test_max_one_col(test_df):
         A = df.groupby("A")["B"].max()
         return A
 
+    df_bool = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "C": [True, True, False, True, True, False, False, False],
+        }
+    )
+
     check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True, check_dtype=True)
     check_func(impl2, (11,))
 
 
@@ -847,7 +865,16 @@ def test_min(test_df):
         A = df.groupby("A").min()
         return A
 
+    df_bool = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "C": [True, True, False, True, True, False, False, False],
+        }
+    )
+
     check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+    check_func(impl1, (df_bool,), sort_output=True, check_dtype=True)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
@@ -865,7 +892,16 @@ def test_min_one_col(test_df):
         A = df.groupby("A")["B"].min()
         return A
 
+    df_bool = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "C": [True, True, False, True, True, False, False, False],
+        }
+    )
+
     check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+    check_func(impl1, (df_bool,), sort_output=True, check_dtype=True)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
@@ -924,7 +960,19 @@ def test_prod(test_df):
         A = df.groupby("A").prod()
         return A
 
+    df_bool = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            # This column is disabled because pandas removes it
+            # from output. This could be a bug in pandas. TODO: enable when it
+            # is fixed
+            #"B": [True, np.nan, False, True, np.nan, False, False, True],
+            "C": [True, True, False, True, True, False, False, False],
+        }
+    )
+
     check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+    check_func(impl1, (df_bool,), sort_output=True, check_dtype=True)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
@@ -942,7 +990,16 @@ def test_prod_one_col(test_df):
         A = df.groupby("A")["B"].prod()
         return A
 
+    df_bool = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "C": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, True, False, True, True, False, False, False],
+        }
+    )
+
     check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+    check_func(impl1, (df_bool,), sort_output=True, check_dtype=True)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 

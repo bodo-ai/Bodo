@@ -25,7 +25,6 @@ from numba.typing import signature
 from numba.extending import overload
 import bodo
 import bodo.libs.timsort
-from bodo.utils.utils import _numba_to_c_type_map
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.transforms.distributed_analysis import Distribution

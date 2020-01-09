@@ -47,6 +47,7 @@ from numba.typing.templates import (
 from numba.array_analysis import ArrayAnalysis
 from llvmlite import ir as lir
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
+from bodo.hiframes.datetime_datetime_ext import DatetimeDatetimeType
 import bodo
 
 
@@ -350,6 +351,7 @@ def fromordinal_impl(n):  # pragma: no cover
     return datetime.date(y, m, d)
 
 
+@overload_method(DatetimeDatetimeType, "toordinal")
 @overload_method(DatetimeDateType, "toordinal")
 def toordinal(date):
     """Return proleptic Gregorian ordinal for the year, month and day.
@@ -363,6 +365,7 @@ def toordinal(date):
     return impl
 
 
+@overload_method(DatetimeDatetimeType, "weekday")
 @overload_method(DatetimeDateType, "weekday")
 def weekday(date):
     "Return day of the week, where Monday == 0 ... Sunday == 6."
@@ -424,6 +427,19 @@ def date_eq(lhs, rhs):
             m, m2 = lhs.month, rhs.month
             d, d2 = lhs.day, rhs.day
             return _cmp((y, m, d), (y2, m2, d2)) == 0
+
+        return impl
+
+
+@overload(operator.ne)
+def date_ne(lhs, rhs):
+    if lhs == datetime_date_type and rhs == datetime_date_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            y, y2 = lhs.year, rhs.year
+            m, m2 = lhs.month, rhs.month
+            d, d2 = lhs.day, rhs.day
+            return _cmp((y, m, d), (y2, m2, d2)) != 0
 
         return impl
 
@@ -647,4 +663,3 @@ def dt_date_arr_setitem(A, ind, val):
 def overload_len_datetime_date_arr(A):
     if A == datetime_date_array_type:
         return lambda A: len(A._data)
-

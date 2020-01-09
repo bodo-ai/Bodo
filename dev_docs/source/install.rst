@@ -173,11 +173,12 @@ Building from Source on Windows
 * Start 'Anaconda (Miniconda3) prompt'
 * Setup the Conda environment in Anaconda Prompt::
 
-    conda create -n DEV numpy scipy pandas boost-cpp cmake h5py pyarrow
+    conda create -n DEV python=3.7 numpy scipy pandas boost-cpp cmake h5py -c conda-forge
     source activate DEV
-    conda install -c defaults numba
+    conda install numba=0.46.0 -c conda-forge
     conda install vc vs2015_runtime vs2015_win-64
     conda install -c defaults -c intel impi_rt impi-devel
+    conda install -c bodo.ai -c conda-forge pyarrow=0.15.1 arrow-cpp=0.15.1=*transfer_s3*
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo

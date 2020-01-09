@@ -3,6 +3,9 @@ import pandas as pd
 import numpy as np
 import numba
 import bodo
+from bodo.utils.typing import BodoWarning
+import warnings
+from bodo.utils.utils import is_distributable_typ, is_distributable_tuple_typ
 
 
 def count_array_REPs():
@@ -90,8 +93,14 @@ def check_func(
     # sequential
     bodo_func = bodo.jit(func)
     call_args = tuple(_get_arg(a, copy_input) for a in args)
+
+    # try to catch BodoWarning if no parallelism found
+    with warnings.catch_warnings(record=True) as w:
+        warnings.filterwarnings("always", message="No parallelism found for function", category=BodoWarning)
+        bodo_out = bodo_func(*call_args)
+
     passed = _test_equal_guard(
-        bodo_func(*call_args), py_output, sort_output, check_names, check_dtype
+        bodo_out, py_output, sort_output, check_names, check_dtype
     )
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs
@@ -104,6 +113,17 @@ def check_func(
             py_output,
             (pd.Series, pd.Index, pd.DataFrame, np.ndarray, pd.arrays.IntegerArray),
         )
+
+    # skip 1D distributed and 1D distributed variable length tests
+    # if no parallelism is found
+    # and if neither inputs nor output is distributable
+    if w != None: # if no parallelism is found
+        if not is_out_distributed: # if output is not distributable
+            args_type = map(lambda a: bodo.typeof(a), args)
+            args_distributable = map(lambda t: is_distributable_typ(t) or is_distributable_tuple_typ(t), args_type)
+            if not (any(args_distributable)):
+                # if none of the inputs is distributable
+                return
 
     # 1D distributed
     bodo_func = bodo.jit(
@@ -150,7 +170,7 @@ def _get_dist_arg(a, copy=False, var_length=False):
         a = a.copy()
 
     arg_typ = bodo.typeof(a)
-    if not bodo.utils.utils.is_distributable_typ(arg_typ):
+    if not is_distributable_typ(arg_typ):
         return a
 
     start, end = get_start_end(len(a))

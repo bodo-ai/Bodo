@@ -370,22 +370,6 @@ def test_groupby_built_in_col_type():
         bodo.jit(impl)(df)
 
 
-def test_groupby_built_in_col_bool():
-    """
-    Test Groupby.max() does not accept Boolean columns
-    and max(), min(), prod(), sum() should have same behaviors
-    """
-
-    def impl(df):
-        return df.groupby(by=["A"]).max()
-
-    df = pd.DataFrame({"A": [1, 2, 2], "B": [True, False, True]})
-    with pytest.raises(
-        BodoError, match="groupby built-in functions .* does not support boolean column"
-    ):
-        bodo.jit(impl)(df)
-
-
 def test_groupby_built_in_col_str():
     """
     Test Groupby.max() does not accept string columns

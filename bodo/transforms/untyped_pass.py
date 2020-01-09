@@ -402,6 +402,32 @@ class UntypedPass(object):
                             assign.target,
                         )
 
+            # replace datetime.datedatetime.now with an internal function since class methods
+            # are not supported in Numba's typing
+            if rhs.op == "getattr" and rhs.attr == "now":
+                val_def = guard(get_definition, self.func_ir, rhs.value)
+                if is_expr(val_def, "getattr") and val_def.attr == "datetime":
+                    mod_def = guard(get_definition, self.func_ir, val_def.value)
+                    if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
+                        return _compile_func_single_block(
+                            lambda: bodo.hiframes.datetime_datetime_ext.now_impl,
+                            (),
+                            assign.target,
+                        )
+
+            # replace datetime.datedatetime.strptime with an internal function since class methods
+            # are not supported in Numba's typing
+            if rhs.op == "getattr" and rhs.attr == "strptime":
+                val_def = guard(get_definition, self.func_ir, rhs.value)
+                if is_expr(val_def, "getattr") and val_def.attr == "datetime":
+                    mod_def = guard(get_definition, self.func_ir, val_def.value)
+                    if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
+                        return _compile_func_single_block(
+                            lambda: bodo.hiframes.datetime_datetime_ext.strptime_impl,
+                            (),
+                            assign.target,
+                        )
+
             if rhs.op == "make_function":
                 # HACK make globals availabe for typing in series.map()
                 rhs.globals = self.func_ir.func_id.func.__globals__

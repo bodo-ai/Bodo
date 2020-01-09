@@ -34,10 +34,12 @@ struct Bodo_CTypes {
         INT16 = 8,
         UINT16 = 9,
         STRING = 10,
+        _BOOL = 11,
+        _numtypes
     };
 };
 
-#define BODO_NUMPY_ARRAY_NUM_DTYPES 10
+#define BODO_NUMPY_ARRAY_NUM_DTYPES Bodo_CTypes::_numtypes
 
 /**
  * @brief enum for array types supported by Bodo

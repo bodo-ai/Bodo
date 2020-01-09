@@ -283,9 +283,6 @@ def get_groupby_output_dtype(arr_type, func_name):
             )
     if isinstance(in_dtype, types.Boolean) and func_name in {
         "cumsum",
-        "max",
-        "min",
-        "prod",
         "sum",
     }:
         raise BodoError(
