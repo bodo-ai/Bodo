@@ -1355,10 +1355,7 @@ class DistributedAnalysis(object):
         self._set_REP([inst.value], array_dists)
 
     def _analyze_arg(self, lhs, rhs, array_dists):
-        if (
-            rhs.name in self.metadata["distributed"]
-            or self.flags.all_args_distributed
-        ):
+        if rhs.name in self.metadata["distributed"] or self.flags.all_args_distributed:
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD)
         elif (

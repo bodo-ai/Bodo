@@ -210,7 +210,9 @@ class UntypedPass(object):
         self.pq_handler = ParquetHandler(
             func_ir, typingctx, args, _locals, self.reverse_copies
         )
-        self.h5_handler = h5.H5_IO(self.func_ir, _locals, flags, args, self.reverse_copies)
+        self.h5_handler = h5.H5_IO(
+            self.func_ir, _locals, flags, args, self.reverse_copies
+        )
 
     def run(self):
         # XXX: the block structure shouldn't change in this pass since labels
@@ -1322,7 +1324,9 @@ class UntypedPass(object):
             self.metadata["distributed"] = self.flags.distributed.copy()
 
         if "distributed_varlength" not in self.metadata:
-            self.metadata["distributed_varlength"] = self.flags.distributed_varlength.copy()
+            self.metadata[
+                "distributed_varlength"
+            ] = self.flags.distributed_varlength.copy()
 
         if "threaded" not in self.metadata:
             self.metadata["threaded"] = self.flags.threaded.copy()

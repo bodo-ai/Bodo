@@ -173,8 +173,12 @@ class BodoUntypedPass(FunctionPass):
         # Ensure we have an IR and type information.
         assert state.func_ir
         untyped_pass = UntypedPass(
-            state.func_ir, state.typingctx, state.args, state.locals, state.metadata,
-            state.flags
+            state.func_ir,
+            state.typingctx,
+            state.args,
+            state.locals,
+            state.metadata,
+            state.flags,
         )
         untyped_pass.run()
         return True

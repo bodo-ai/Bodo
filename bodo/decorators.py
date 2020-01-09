@@ -34,71 +34,71 @@ def set_flags(self, flags):
     """
     kws = self.values.copy()
 
-    if kws.pop('nopython', False) == False:
+    if kws.pop("nopython", False) == False:
         flags.set("enable_pyobject")
 
     if kws.pop("forceobj", False):
         flags.set("force_pyobject")
 
-    if kws.pop('looplift', True):
+    if kws.pop("looplift", True):
         flags.set("enable_looplift")
 
-    if kws.pop('boundcheck', False):
+    if kws.pop("boundcheck", False):
         flags.set("boundcheck")
 
-    if kws.pop('_nrt', True):
+    if kws.pop("_nrt", True):
         flags.set("nrt")
 
-    if kws.pop('debug', numba.config.DEBUGINFO_DEFAULT):
+    if kws.pop("debug", numba.config.DEBUGINFO_DEFAULT):
         flags.set("debuginfo")
         flags.set("boundcheck")
 
-    if kws.pop('nogil', False):
+    if kws.pop("nogil", False):
         flags.set("release_gil")
 
-    if kws.pop('no_rewrites', False):
-        flags.set('no_rewrites')
+    if kws.pop("no_rewrites", False):
+        flags.set("no_rewrites")
 
-    if kws.pop('no_cpython_wrapper', False):
-        flags.set('no_cpython_wrapper')
+    if kws.pop("no_cpython_wrapper", False):
+        flags.set("no_cpython_wrapper")
 
-    if 'parallel' in kws:
-        flags.set('auto_parallel', kws.pop('parallel'))
+    if "parallel" in kws:
+        flags.set("auto_parallel", kws.pop("parallel"))
 
-    if 'fastmath' in kws:
-        flags.set('fastmath', kws.pop('fastmath'))
+    if "fastmath" in kws:
+        flags.set("fastmath", kws.pop("fastmath"))
 
-    if 'error_model' in kws:
-        flags.set('error_model', kws.pop('error_model'))
+    if "error_model" in kws:
+        flags.set("error_model", kws.pop("error_model"))
 
-    if 'inline' in kws:
-        flags.set('inline', kws.pop('inline'))
+    if "inline" in kws:
+        flags.set("inline", kws.pop("inline"))
 
     flags.set("enable_pyobject_looplift")
 
-    if kws.pop('all_args_distributed', False):
+    if kws.pop("all_args_distributed", False):
         flags.set("all_args_distributed")
 
-    if kws.pop('all_args_distributed_varlength', False):
+    if kws.pop("all_args_distributed_varlength", False):
         flags.set("all_args_distributed_varlength")
 
-    if kws.pop('all_returns_distributed', False):
+    if kws.pop("all_returns_distributed", False):
         flags.set("all_returns_distributed")
 
-    if 'distributed' in kws:
-        flags.set('distributed', kws.pop('distributed'))
+    if "distributed" in kws:
+        flags.set("distributed", kws.pop("distributed"))
 
-    if 'distributed_varlength' in kws:
-        flags.set('distributed_varlength', kws.pop('distributed_varlength'))
+    if "distributed_varlength" in kws:
+        flags.set("distributed_varlength", kws.pop("distributed_varlength"))
 
-    if 'threaded' in kws:
-        flags.set('threaded', kws.pop('threaded'))
+    if "threaded" in kws:
+        flags.set("threaded", kws.pop("threaded"))
 
-    if 'pivots' in kws:
-        flags.set('pivots', kws.pop('pivots'))
+    if "pivots" in kws:
+        flags.set("pivots", kws.pop("pivots"))
 
-    if 'h5_types' in kws:
-        flags.set('h5_types', kws.pop('h5_types'))
+    if "h5_types" in kws:
+        flags.set("h5_types", kws.pop("h5_types"))
 
     if kws:
         # Unread options?
