@@ -189,12 +189,13 @@ class UntypedPass(object):
     Transformations before typing to enable type inference.
     """
 
-    def __init__(self, func_ir, typingctx, args, _locals, metadata):
+    def __init__(self, func_ir, typingctx, args, _locals, metadata, flags):
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.args = args
         self.locals = _locals
         self.metadata = metadata
+        self.flags = flags
         ir_utils._max_label = max(func_ir.blocks.keys())
         # replace inst variables as determined previously during the pass
         # currently use to keep lhs of Arg nodes intact
@@ -1329,21 +1330,6 @@ class UntypedPass(object):
         if "threaded" not in self.metadata:
             self.metadata["threaded"] = self.locals.pop("##threaded", set())
 
-        if "all_args_distributed" not in self.metadata:
-            self.metadata["all_args_distributed"] = self.locals.pop(
-                "##all_args_distributed", False
-            )
-
-        if "all_args_distributed_varlength" not in self.metadata:
-            self.metadata["all_args_distributed_varlength"] = self.locals.pop(
-                "##all_args_distributed_varlength", False
-            )
-
-        if "all_returns_distributed" not in self.metadata:
-            self.metadata["all_returns_distributed"] = self.locals.pop(
-                "##all_returns_distributed", False
-            )
-
         # handle old input flags
         # e.g. {"A:input": "distributed"} -> "A"
         dist_inputs = {
@@ -1392,7 +1378,7 @@ class UntypedPass(object):
         # change in simplify() and replace_var_names()
         # TODO: include distributed_varlength?
         flagged_vars = self.metadata["distributed"] | self.metadata["threaded"]
-        all_returns_distributed = self.metadata["all_returns_distributed"]
+        all_returns_distributed = self.flags.all_returns_distributed
         nodes = [ret_node]
         cast = guard(get_definition, self.func_ir, ret_node.value)
         assert cast is not None, "return cast not found"

@@ -89,7 +89,7 @@ fir_text = None
 class DistributedPass(object):
     """analyze program and transfrom to distributed"""
 
-    def __init__(self, func_ir, typingctx, targetctx, typemap, calltypes, metadata):
+    def __init__(self, func_ir, typingctx, targetctx, typemap, calltypes, metadata, flags):
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.targetctx = targetctx
@@ -98,6 +98,7 @@ class DistributedPass(object):
         # Loc object of current location being translated
         self.curr_loc = self.func_ir.loc
         self.metadata = metadata
+        self.flags = flags
         self.arr_analysis = numba.array_analysis.ArrayAnalysis(
             self.typingctx, self.func_ir, self.typemap, self.calltypes
         )
@@ -115,7 +116,7 @@ class DistributedPass(object):
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
         self.arr_analysis.run(self.func_ir.blocks)
         dist_analysis_pass = DistributedAnalysis(
-            self.func_ir, self.typemap, self.calltypes, self.typingctx, self.metadata
+            self.func_ir, self.typemap, self.calltypes, self.typingctx, self.metadata, self.flags
         )
         self._dist_analysis = dist_analysis_pass.run()
         # dprint_func_ir(self.func_ir, "after analysis distributed")

@@ -189,12 +189,13 @@ class DistributedAnalysis(object):
         assert (typ, func) not in cls._extra_call
         cls._extra_call[(typ, func)] = analysis_func
 
-    def __init__(self, func_ir, typemap, calltypes, typingctx, metadata):
+    def __init__(self, func_ir, typemap, calltypes, typingctx, metadata, flags):
         self.func_ir = func_ir
         self.typemap = typemap
         self.calltypes = calltypes
         self.typingctx = typingctx
         self.metadata = metadata
+        self.flags = flags
         self.parfor_locs = {}
         self.array_locs = {}
         self.diag_info = []
@@ -1356,13 +1357,13 @@ class DistributedAnalysis(object):
     def _analyze_arg(self, lhs, rhs, array_dists):
         if (
             rhs.name in self.metadata["distributed"]
-            or self.metadata["all_args_distributed"]
+            or self.flags.all_args_distributed
         ):
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD)
         elif (
             rhs.name in self.metadata["distributed_varlength"]
-            or self.metadata["all_args_distributed_varlength"]
+            or self.flags.all_args_distributed_varlength
         ):
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)

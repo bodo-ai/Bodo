@@ -173,7 +173,8 @@ class BodoUntypedPass(FunctionPass):
         # Ensure we have an IR and type information.
         assert state.func_ir
         untyped_pass = UntypedPass(
-            state.func_ir, state.typingctx, state.args, state.locals, state.metadata
+            state.func_ir, state.typingctx, state.args, state.locals, state.metadata,
+            state.flags
         )
         untyped_pass.run()
         return True
@@ -202,6 +203,7 @@ class BodoDistributedPass(FunctionPass):
             state.type_annotation.typemap,
             state.type_annotation.calltypes,
             state.metadata,
+            state.flags,
         )
         dist_pass.run()
         return True
