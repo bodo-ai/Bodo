@@ -27,7 +27,8 @@ numba.compiler.Flags.OPTIONS["h5_types"] = dict()
 
 # Add Bodo's options to 'set_flags' function of numba.targets.options.TargetOptions
 # and replace it since it checks for allowed flags
-def set_flags(self, flags):
+# NOTE: keep this updated if Numba changes options
+def set_flags(self, flags):  # pragma: no cover
     """
     Provide default flags setting logic.
     Subclass can override.
