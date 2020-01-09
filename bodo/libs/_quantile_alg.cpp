@@ -101,6 +101,10 @@ double quantile_dispatch(void *data, int64_t local_size, double quantile,
         case Bodo_CTypes::INT8:
             return quantile_int((char *)data, local_size, at, type_enum,
                                 parallel);
+        case Bodo_CTypes::_BOOL:
+            // if we use bool type here, compiler gives a strange error in
+            // MPI_Gatherv call, possibly because the MPI type we are using
+            // for bool is MPI_UNSIGNED_CHAR (see _distributed.h)
         case Bodo_CTypes::UINT8:
             return quantile_int((unsigned char *)data, local_size, at,
                                 type_enum, parallel);
@@ -439,6 +443,10 @@ void nth_dispatch(void *res, void *data, int64_t local_size, int64_t k,
         case Bodo_CTypes::INT8:
             return get_nth((char *)res, (char *)data, local_size, k, type_enum,
                            myrank, n_pes, parallel);
+        case Bodo_CTypes::_BOOL:
+            // if we use bool type here, compiler gives a strange error in
+            // MPI_Gatherv call, possibly because the MPI type we are using
+            // for bool is MPI_UNSIGNED_CHAR (see _distributed.h)
         case Bodo_CTypes::UINT8:
             return get_nth((unsigned char *)res, (unsigned char *)data,
                            local_size, k, type_enum, myrank, n_pes, parallel);
