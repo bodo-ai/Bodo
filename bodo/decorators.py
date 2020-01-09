@@ -14,6 +14,7 @@ numba.targets.cpu.CPUTargetOptions.OPTIONS["distributed"] = set
 numba.targets.cpu.CPUTargetOptions.OPTIONS["distributed_varlength"] = set
 numba.targets.cpu.CPUTargetOptions.OPTIONS["threaded"] = set
 numba.targets.cpu.CPUTargetOptions.OPTIONS["pivots"] = dict
+numba.targets.cpu.CPUTargetOptions.OPTIONS["h5_types"] = dict
 numba.compiler.Flags.OPTIONS["all_args_distributed"] = False
 numba.compiler.Flags.OPTIONS["all_args_distributed_varlength"] = False
 numba.compiler.Flags.OPTIONS["all_returns_distributed"] = False
@@ -21,6 +22,7 @@ numba.compiler.Flags.OPTIONS["distributed"] = set()
 numba.compiler.Flags.OPTIONS["distributed_varlength"] = set()
 numba.compiler.Flags.OPTIONS["threaded"] = set()
 numba.compiler.Flags.OPTIONS["pivots"] = dict()
+numba.compiler.Flags.OPTIONS["h5_types"] = dict()
 
 
 # Add Bodo's options to 'set_flags' function of numba.targets.options.TargetOptions
@@ -95,6 +97,9 @@ def set_flags(self, flags):
     if 'pivots' in kws:
         flags.set('pivots', kws.pop('pivots'))
 
+    if 'h5_types' in kws:
+        flags.set('h5_types', kws.pop('h5_types'))
+
     if kws:
         # Unread options?
         raise NameError("Unrecognized options: %s" % kws.keys())
@@ -141,16 +146,6 @@ def jit(signature_or_function=None, **options):
     # set nopython by default
     if "nopython" not in options:
         options["nopython"] = True
-
-    _locals = options.pop("locals", {})
-    assert isinstance(_locals, dict)
-
-    h5_types = options.pop("h5_types", {})
-    assert isinstance(h5_types, dict)
-    for var, vals in h5_types.items():
-        _locals[var + ":h5_types"] = vals
-
-    options["locals"] = _locals
 
     # options['parallel'] = True
     options["parallel"] = {

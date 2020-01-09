@@ -210,7 +210,7 @@ class UntypedPass(object):
         self.pq_handler = ParquetHandler(
             func_ir, typingctx, args, _locals, self.reverse_copies
         )
-        self.h5_handler = h5.H5_IO(self.func_ir, _locals, args, self.reverse_copies)
+        self.h5_handler = h5.H5_IO(self.func_ir, _locals, flags, args, self.reverse_copies)
 
     def run(self):
         # XXX: the block structure shouldn't change in this pass since labels
