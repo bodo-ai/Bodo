@@ -1326,7 +1326,7 @@ class UntypedPass(object):
             self.metadata["distributed_varlength"] = self.flags.distributed_varlength.copy()
 
         if "threaded" not in self.metadata:
-            self.metadata["threaded"] = self.locals.pop("##threaded", set())
+            self.metadata["threaded"] = self.flags.threaded.copy()
 
         # handle old input flags
         # e.g. {"A:input": "distributed"} -> "A"

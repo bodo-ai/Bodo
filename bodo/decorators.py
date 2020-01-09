@@ -12,11 +12,13 @@ numba.targets.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_varlength"] = b
 numba.targets.cpu.CPUTargetOptions.OPTIONS["all_returns_distributed"] = bool
 numba.targets.cpu.CPUTargetOptions.OPTIONS["distributed"] = set
 numba.targets.cpu.CPUTargetOptions.OPTIONS["distributed_varlength"] = set
+numba.targets.cpu.CPUTargetOptions.OPTIONS["threaded"] = set
 numba.compiler.Flags.OPTIONS["all_args_distributed"] = False
 numba.compiler.Flags.OPTIONS["all_args_distributed_varlength"] = False
 numba.compiler.Flags.OPTIONS["all_returns_distributed"] = False
 numba.compiler.Flags.OPTIONS["distributed"] = set()
 numba.compiler.Flags.OPTIONS["distributed_varlength"] = set()
+numba.compiler.Flags.OPTIONS["threaded"] = set()
 
 
 # Add Bodo's options to 'set_flags' function of numba.targets.options.TargetOptions
@@ -85,6 +87,9 @@ def set_flags(self, flags):
     if 'distributed_varlength' in kws:
         flags.set('distributed_varlength', kws.pop('distributed_varlength'))
 
+    if 'threaded' in kws:
+        flags.set('threaded', kws.pop('threaded'))
+
     if kws:
         # Unread options?
         raise NameError("Unrecognized options: %s" % kws.keys())
@@ -145,10 +150,6 @@ def jit(signature_or_function=None, **options):
     assert isinstance(h5_types, dict)
     for var, vals in h5_types.items():
         _locals[var + ":h5_types"] = vals
-
-    threaded = set(options.pop("threaded", set()))
-    assert isinstance(threaded, (set, list))
-    _locals["##threaded"] = threaded
 
     options["locals"] = _locals
 
