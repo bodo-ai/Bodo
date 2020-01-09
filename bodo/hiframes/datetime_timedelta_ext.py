@@ -25,21 +25,7 @@ from numba import cgutils
 from numba.typing.templates import signature
 from llvmlite import ir as lir
 import bodo
-from bodo.utils.typing import (
-    BodoError,
-    is_overload_none,
-    get_const_str_list,
-    is_overload_true,
-    is_overload_false,
-    is_overload_zero,
-    is_overload_constant_bool,
-    is_overload_constant_str,
-    is_overload_constant_str_list,
-    get_overload_const_str,
-    get_overload_const_str_len,
-    is_overload_constant_int,
-    get_overload_const_int,
-)
+from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 
 # 1.Define a new Numba type class by subclassing the Type class
 #   Define a singleton Numba type instance for a non-parametric type
@@ -203,22 +189,22 @@ def total_seconds(td):
 
 
 @register_jitable
-def _to_microseconds(td): # pragma: no cover
+def _to_microseconds(td):  # pragma: no cover
     return (td._days * (24 * 3600) + td._seconds) * 1000000 + td._microseconds
 
 
 @register_jitable
-def _cmp(x, y): # pragma: no cover
+def _cmp(x, y):  # pragma: no cover
     return 0 if x == y else 1 if x > y else -1
 
 
 @register_jitable
-def _getstate(td): # pragma: no cover
+def _getstate(td):  # pragma: no cover
     return (td._days, td._seconds, td._microseconds)
 
 
 @register_jitable
-def _divide_and_round(a, b): # pragma: no cover
+def _divide_and_round(a, b):  # pragma: no cover
     """divide a by b and round result to the nearest integer
     When the ratio is exactly half-way between two integers,
     the even integer is returned.
@@ -235,6 +221,9 @@ def _divide_and_round(a, b): # pragma: no cover
     return q
 
 
+_MAXORDINAL = 3652059
+
+
 @overload(operator.add)
 def timedelta_add(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
@@ -244,6 +233,50 @@ def timedelta_add(lhs, rhs):
             s = lhs.seconds + rhs.seconds
             us = lhs.microseconds + rhs.microseconds
             return datetime.timedelta(d, s, us)
+
+        return impl
+
+    if lhs == datetime_timedelta_type and rhs == datetime_datetime_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            delta = datetime.timedelta(
+                rhs.toordinal(),
+                hours=rhs.hour,
+                minutes=rhs.minute,
+                seconds=rhs.second,
+                microseconds=rhs.microsecond,
+            )
+            delta = delta + lhs
+            hour, rem = divmod(delta.seconds, 3600)
+            minute, second = divmod(rem, 60)
+            if 0 < delta.days <= _MAXORDINAL:
+                d = bodo.hiframes.datetime_date_ext.fromordinal_impl(delta.days)
+                return datetime.datetime(
+                    d.year, d.month, d.day, hour, minute, second, delta.microseconds
+                )
+            raise OverflowError("result out of range")
+
+        return impl
+
+    if lhs == datetime_datetime_type and rhs == datetime_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            delta = datetime.timedelta(
+                lhs.toordinal(),
+                hours=lhs.hour,
+                minutes=lhs.minute,
+                seconds=lhs.second,
+                microseconds=lhs.microsecond,
+            )
+            delta = delta + rhs
+            hour, rem = divmod(delta.seconds, 3600)
+            minute, second = divmod(rem, 60)
+            if 0 < delta.days <= _MAXORDINAL:
+                d = bodo.hiframes.datetime_date_ext.fromordinal_impl(delta.days)
+                return datetime.datetime(
+                    d.year, d.month, d.day, hour, minute, second, delta.microseconds
+                )
+            raise OverflowError("result out of range")
 
         return impl
 
@@ -257,6 +290,13 @@ def timedelta_sub(lhs, rhs):
             s = lhs.seconds - rhs.seconds
             us = lhs.microseconds - rhs.microseconds
             return datetime.timedelta(d, s, us)
+
+        return impl
+
+    if lhs == datetime_datetime_type and rhs == datetime_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs + -rhs
 
         return impl
 
@@ -275,7 +315,7 @@ def timedelta_mul(lhs, rhs):
 
     elif lhs == types.int64 and rhs == datetime_timedelta_type:
 
-        def impl(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
             d = lhs * rhs.days
             s = lhs * rhs.seconds
             us = lhs * rhs.microseconds

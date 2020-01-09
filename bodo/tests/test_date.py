@@ -19,6 +19,151 @@ import datetime
 import random
 import pytest
 
+# ------------------------- Test datetime OPs ------------------------- #
+def test_datetime_operations():
+    """
+    Test operations of datetime module objects in Bodo
+    """
+
+    def test_add(a, b):
+        return a + b
+
+    def test_sub(a, b):
+        return a - b
+
+    def test_mul(a, b):
+        return a * b
+
+    def test_floordiv(a, b):
+        return a // b
+
+    def test_truediv(a, b):
+        return a / b
+
+    def test_mod(a, b):
+        return a % b
+
+    def test_neg(a):
+        return -a
+
+    def test_pos(a):
+        return +a
+
+    def test_divmod(a, b):
+        return divmod(a, b)
+
+    def test_abs(a):
+        return abs(a)
+
+    # Test timedelta
+    dt_obj1 = datetime.timedelta(7, 7, 7)
+    dt_obj2 = datetime.timedelta(2, 2, 2)
+    check_func(test_add, (dt_obj1, dt_obj2))
+    check_func(test_sub, (dt_obj1, dt_obj2))
+    check_func(test_mul, (dt_obj1, 5))
+    check_func(test_mul, (5, dt_obj1))
+    check_func(test_floordiv, (dt_obj1, dt_obj2))
+    check_func(test_floordiv, (dt_obj1, 2))
+    check_func(test_truediv, (dt_obj1, dt_obj2))
+    check_func(test_truediv, (dt_obj1, 2))
+    check_func(test_mod, (dt_obj1, dt_obj2))
+    check_func(test_neg, (dt_obj1,))
+    check_func(test_pos, (dt_obj1,))
+    check_func(test_divmod, (dt_obj1, dt_obj2))
+
+    # Test date
+    date = datetime.date(2020, 1, 4)
+    date2 = datetime.date(1999, 5, 2)
+    td = datetime.timedelta(1, 2, 1)
+    check_func(test_add, (date, td))
+    check_func(test_add, (td, date))
+    check_func(test_sub, (date, td))
+    check_func(test_sub, (date, date2))
+
+    # Test datetime
+    dt = datetime.datetime(2020, 1, 20, 10, 20, 30, 40)
+    dt2 = datetime.datetime(2019, 3, 8, 7, 12, 15, 20)
+    td = datetime.timedelta(7, 7, 7)
+    check_func(test_add, (dt, td))
+    check_func(test_add, (td, dt))
+    check_func(test_sub, (dt, td))
+    check_func(test_sub, (dt, dt2))
+
+
+def test_datetime_comparisons():
+    """
+    Test comparison operators of datetime module objects in Bodo
+    """
+
+    def test_eq(a, b):
+        return a == b
+
+    def test_ne(a, b):
+        return a != b
+
+    def test_le(a, b):
+        return a <= b
+
+    def test_lt(a, b):
+        return a < b
+
+    def test_ge(a, b):
+        return a >= b
+
+    def test_gt(a, b):
+        return a > b
+
+    # Test timedelta
+    dt_obj1 = datetime.timedelta(7, 7, 7)
+    dt_obj2 = datetime.timedelta(2, 2, 2)
+    check_func(test_eq, (dt_obj1, dt_obj2))
+    check_func(test_ne, (dt_obj1, dt_obj2))
+    check_func(test_le, (dt_obj1, dt_obj2))
+    check_func(test_lt, (dt_obj1, dt_obj2))
+    check_func(test_ge, (dt_obj1, dt_obj2))
+    check_func(test_gt, (dt_obj1, dt_obj2))
+
+    # test date
+    date = datetime.date(2020, 1, 4)
+    date2 = datetime.date(2020, 3, 1)
+    check_func(test_eq, (date, date2))
+    check_func(test_ne, (date, date2))
+    check_func(test_le, (date, date2))
+    check_func(test_lt, (date, date2))
+    check_func(test_ge, (date, date2))
+    check_func(test_gt, (date, date2))
+
+    # datetime.datetime comparisons
+    dt = datetime.datetime(2020, 1, 4, 10, 40, 55, 11)
+    dt2 = datetime.datetime(2020, 1, 4, 11, 22, 12, 33)
+    check_func(test_eq, (dt, dt2))
+    check_func(test_ne, (dt, dt2))
+    check_func(test_le, (dt, dt2))
+    check_func(test_lt, (dt, dt2))
+    check_func(test_ge, (dt, dt2))
+    check_func(test_gt, (dt, dt2))
+
+
+def test_datetime_boxing():
+    """
+    Test boxing and unboxing of datetime module object in Bodo
+    """
+
+    def test_impl(dt_obj):
+        return dt_obj
+
+    # Test timedelta
+    td = datetime.timedelta(34535, 34959834, 948583858)
+    check_func(test_impl, (td,))
+
+    # Test date
+    d = datetime.date(2020, 1, 8)
+    check_func(test_impl, (d,))
+
+    # Test datetime
+    dt = datetime.datetime(2020, 1, 4, 13, 44, 33, 22)
+    check_func(test_impl, (dt,))
+
 
 # ------------------------- Test datetime.timedelta ------------------------- #
 def test_datetime_timedelta_construct():
@@ -31,18 +176,6 @@ def test_datetime_timedelta_construct():
         return dt_obj
 
     check_func(test_impl, ())
-
-
-def test_datetime_timedelta_boxing():
-    """
-    Test boxing and unboxing of datetime.timedelta object in Bodo
-    """
-
-    def test_impl(dt_obj):
-        return dt_obj
-
-    dt_obj = datetime.timedelta(34535, 34959834, 948583858)
-    check_func(test_impl, (dt_obj,))
 
 
 def test_datetime_timedelta_getattr():
@@ -75,81 +208,6 @@ def test_datetime_timedelta_total_seconds():
 
     dt_obj = datetime.timedelta(1, 1, 1)
     check_func(test_impl, (dt_obj,))
-
-
-def test_datetime_timedelta_operations():
-    """
-    Test operations of datetime.timedelta objects in Bodo
-    """
-
-    def test_add(dt_obj1, dt_obj2):
-        return dt_obj1 + dt_obj2
-
-    def test_sub(dt_obj1, dt_obj2):
-        return dt_obj1 - dt_obj2
-
-    def test_mul(dt_obj1, dt_obj2):
-        return dt_obj1 * dt_obj2
-
-    def test_floordiv(dt_obj1, dt_obj2):
-        return dt_obj1 // dt_obj2
-
-    def test_truediv(dt_obj1, dt_obj2):
-        return dt_obj1 / dt_obj2
-
-    def test_mod(dt_obj1, dt_obj2):
-        return dt_obj1 % dt_obj2
-
-    def test_eq(dt_obj1, dt_obj2):
-        return dt_obj1 == dt_obj2
-
-    def test_ne(dt_obj1, dt_obj2):
-        return dt_obj1 != dt_obj2
-
-    def test_le(dt_obj1, dt_obj2):
-        return dt_obj1 <= dt_obj2
-
-    def test_lt(dt_obj1, dt_obj2):
-        return dt_obj1 < dt_obj2
-
-    def test_ge(dt_obj1, dt_obj2):
-        return dt_obj1 >= dt_obj2
-
-    def test_gt(dt_obj1, dt_obj2):
-        return dt_obj1 > dt_obj2
-
-    def test_neg(dt_obj1):
-        return -dt_obj1
-
-    def test_pos(dt_obj1):
-        return +dt_obj1
-
-    def test_divmod(dt_obj1, dt_obj2):
-        return divmod(dt_obj1, dt_obj2)
-
-    def test_abs(dt_obj1):
-        return abs(dt_obj1)
-
-    dt_obj1 = datetime.timedelta(7, 7, 7)
-    dt_obj2 = datetime.timedelta(2, 2, 2)
-    check_func(test_add, (dt_obj1, dt_obj2))
-    check_func(test_sub, (dt_obj1, dt_obj2))
-    check_func(test_mul, (dt_obj1, 5))
-    check_func(test_mul, (5, dt_obj1))
-    check_func(test_floordiv, (dt_obj1, dt_obj2))
-    check_func(test_floordiv, (dt_obj1, 2))
-    check_func(test_truediv, (dt_obj1, dt_obj2))
-    check_func(test_truediv, (dt_obj1, 2))
-    check_func(test_mod, (dt_obj1, dt_obj2))
-    check_func(test_eq, (dt_obj1, dt_obj2))
-    check_func(test_ne, (dt_obj1, dt_obj2))
-    check_func(test_le, (dt_obj1, dt_obj2))
-    check_func(test_lt, (dt_obj1, dt_obj2))
-    check_func(test_ge, (dt_obj1, dt_obj2))
-    check_func(test_gt, (dt_obj1, dt_obj2))
-    check_func(test_neg, (dt_obj1,))
-    check_func(test_pos, (dt_obj1,))
-    check_func(test_divmod, (dt_obj1, dt_obj2))
 
 
 # ------------------------- Test datetime.date ------------------------- #
@@ -189,55 +247,6 @@ def test_datetime_date_fromordinal():
     assert bodo.jit(test_impl)(n) == test_impl(n)
 
 
-def test_datetime_date_operations():
-    """
-    Test operations of datetime.date and timedelta object in Bodo
-    """
-
-    def test_add(a, b):
-        return a + b
-
-    def test_sub(a, b):
-        return a - b
-
-    date = datetime.date(2020, 1, 4)
-    date2 = datetime.date(1999, 5, 2)
-    timedelta = datetime.timedelta(1, 2, 1)
-    check_func(test_add, (date, timedelta))
-    check_func(test_add, (timedelta, date))
-    check_func(test_sub, (date, timedelta))
-    check_func(test_sub, (date, date2))
-
-
-def test_datetime_date_comparisons():
-    """
-    Test comparison operators of datetime.date object in Bodo
-    """
-
-    def test_eq(date, date2):
-        return date == date2
-
-    def test_le(date, date2):
-        return date <= date2
-
-    def test_lt(date, date2):
-        return date < date2
-
-    def test_ge(date, date2):
-        return date >= date2
-
-    def test_gt(date, date2):
-        return date > date2
-
-    date = datetime.date(2020, 1, 4)
-    date2 = datetime.date(2020, 3, 1)
-    check_func(test_eq, (date, date2))
-    check_func(test_le, (date, date2))
-    check_func(test_lt, (date, date2))
-    check_func(test_ge, (date, date2))
-    check_func(test_gt, (date, date2))
-
-
 def test_datetime_date_methods():
     """
     Test methods of datetime.date object in Bodo
@@ -252,6 +261,104 @@ def test_datetime_date_methods():
     date = datetime.date(2013, 10, 5)
     check_func(test_weekday, (date,))
     check_func(test_toordinal, (date,))
+
+
+# ------------------------- Test datetime.datetime ------------------------- #
+def test_datetime_datetime_construct():
+    """
+    Test construction of datetime.datetime object in Bodo
+    """
+
+    def test_impl():
+        dt_obj = datetime.datetime(2020, 1, 4, 13, 44, 33, 22)
+        return dt_obj
+
+    check_func(test_impl, ())
+
+
+def test_datetime_datetime_getattr():
+    """
+    Test getting attributes from datetime.datetime object in Bodo
+    """
+
+    def test_year(dt_obj):
+        return dt_obj.year
+
+    def test_month(dt_obj):
+        return dt_obj.month
+
+    def test_day(dt_obj):
+        return dt_obj.day
+
+    def test_hour(dt_obj):
+        return dt_obj.hour
+
+    def test_minute(dt_obj):
+        return dt_obj.minute
+
+    def test_second(dt_obj):
+        return dt_obj.second
+
+    def test_microsecond(dt_obj):
+        return dt_obj.microsecond
+
+    dt_obj = datetime.datetime(2020, 1, 4, 13, 44, 33, 22)
+    check_func(test_year, (dt_obj,))
+    check_func(test_month, (dt_obj,))
+    check_func(test_day, (dt_obj,))
+    check_func(test_hour, (dt_obj,))
+    check_func(test_minute, (dt_obj,))
+    check_func(test_second, (dt_obj,))
+    check_func(test_microsecond, (dt_obj,))
+
+
+def test_datetime_datetime_methods():
+    """
+    Test methods of datetime.date object in Bodo
+    """
+
+    def test_weekday(dt):
+        return dt.weekday()
+
+    def test_toordinal(dt):
+        return dt.toordinal()
+
+    def test_date(dt):
+        return dt.date()
+
+    dt = datetime.datetime(2020, 1, 8, 11, 1, 30, 40)
+    check_func(test_weekday, (dt,))
+    check_func(test_toordinal, (dt,))
+    check_func(test_date, (dt,))
+
+
+def test_datetime_datetime_now():
+    """
+    Test datetime.datetime classmethod 'now'
+    """
+
+    def test_now():
+        return datetime.datetime.now()
+
+    dt = datetime.datetime(2020, 1, 8, 11, 1, 30, 40)
+    # cannot test whether two results are exactly same because they are different in
+    # microseconds due to the run time.
+    b = bodo.jit(test_now)()
+    p = test_now()
+    assert (p - b) < datetime.timedelta(seconds=5)
+
+
+def test_datetime_datetime_strptime():
+    """
+    Test datetime.datetime classmethod 'strptime'
+    """
+
+    def test_strptime(datetime_str, dtformat):
+        return datetime.datetime.strptime(datetime_str, dtformat)
+
+    datetime_str = "2020-01-08"
+    dtformat = "%Y-%m-%d"
+    check_func(test_strptime, (datetime_str, dtformat))
 
 
 # ---------------------------------------------------------------------------- #
