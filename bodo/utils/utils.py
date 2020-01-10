@@ -22,6 +22,7 @@ from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.targets.imputils import lower_builtin
 from numba.extending import overload, intrinsic, lower_cast
+from numba.targets.arrayobj import populate_array, get_itemsize, make_array
 import collections
 import numpy as np
 import bodo
@@ -579,6 +580,78 @@ def empty_like_type_overload(n, arr):
         return pre_alloc_string_array(n, n * avg_chars)
 
     return empty_like_type_str_arr
+
+
+# copied from numba.targets.arrayobj (0.47), except the raising exception code is
+# changed to just a print since unboxing call convention throws an error for exceptions
+def _empty_nd_impl(context, builder, arrtype, shapes):
+    """Utility function used for allocating a new array during LLVM code
+    generation (lowering).  Given a target context, builder, array
+    type, and a tuple or list of lowered dimension sizes, returns a
+    LLVM value pointing at a Numba runtime allocated array.
+    """
+    arycls = make_array(arrtype)
+    ary = arycls(context, builder)
+
+    datatype = context.get_data_type(arrtype.dtype)
+    itemsize = context.get_constant(types.intp, get_itemsize(context, arrtype))
+
+    # compute array length
+    arrlen = context.get_constant(types.intp, 1)
+    overflow = lir.Constant(lir.IntType(1), 0)
+    for s in shapes:
+        arrlen_mult = builder.smul_with_overflow(arrlen, s)
+        arrlen = builder.extract_value(arrlen_mult, 0)
+        overflow = builder.or_(
+            overflow, builder.extract_value(arrlen_mult, 1)
+        )
+
+    if arrtype.ndim == 0:
+        strides = ()
+    elif arrtype.layout == 'C':
+        strides = [itemsize]
+        for dimension_size in reversed(shapes[1:]):
+            strides.append(builder.mul(strides[-1], dimension_size))
+        strides = tuple(reversed(strides))
+    elif arrtype.layout == 'F':
+        strides = [itemsize]
+        for dimension_size in shapes[:-1]:
+            strides.append(builder.mul(strides[-1], dimension_size))
+        strides = tuple(strides)
+    else:
+        raise NotImplementedError(
+            "Don't know how to allocate array with layout '{0}'.".format(
+                arrtype.layout))
+
+    # Check overflow, numpy also does this after checking order
+    allocsize_mult = builder.smul_with_overflow(arrlen, itemsize)
+    allocsize = builder.extract_value(allocsize_mult, 0)
+    overflow = builder.or_(overflow, builder.extract_value(allocsize_mult, 1))
+
+    with builder.if_then(overflow, likely=False):
+        cgutils.printf(builder,
+            ("array is too big; `arr.size * arr.dtype.itemsize` is larger than"
+             " the maximum possible size.")
+        )
+
+    align = context.get_preferred_array_alignment(arrtype.dtype)
+    meminfo = context.nrt.meminfo_alloc_aligned(builder, size=allocsize,
+                                                align=align)
+
+    data = context.nrt.meminfo_data(builder, meminfo)
+
+    intp_t = context.get_value_type(types.intp)
+    shape_array = cgutils.pack_array(builder, shapes, ty=intp_t)
+    strides_array = cgutils.pack_array(builder, strides, ty=intp_t)
+
+    populate_array(ary,
+                   data=builder.bitcast(data, datatype.as_pointer()),
+                   shape=shape_array,
+                   strides=strides_array,
+                   itemsize=itemsize,
+                   meminfo=meminfo)
+
+    return ary
 
 
 def alloc_arr_tup(n, arr_tup, init_vals=()):  # pragma: no cover

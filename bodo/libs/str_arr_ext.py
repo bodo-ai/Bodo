@@ -776,7 +776,7 @@ def is_str_arr_typ(typ):
 
 
 @overload_method(StringArrayType, "copy")
-def str_arr_copy_overload(str_arr):
+def str_arr_copy_overload(arr):
     def copy_impl(arr):  # pragma: no cover
         n = len(arr)
         n_chars = num_total_chars(arr)
@@ -911,7 +911,7 @@ def impl_string_array_single(context, builder, sig, args):
         return res
 
     if isinstance(args[0], types.UniTuple):
-        assert args[0].dtype == string_type
+        assert isinstance (args[0].dtype, (types.UnicodeType, types.StringLiteral))
 
     def str_arr_from_list(in_list):  # pragma: no cover
         n_strs = len(in_list)
