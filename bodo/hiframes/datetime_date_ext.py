@@ -680,3 +680,63 @@ def overload_datetime_date_arr_sub(arg1, arg2):
             return A
 
         return impl
+
+
+def create_cmp_op_overload(op):
+    """create overload function for comparison operators with datetime_date_array
+    """
+
+    def overload_date_arr_cmp(A1, A2):
+        # both datetime_date_array_type
+        if A1 == datetime_date_array_type and A2 == datetime_date_array_type:
+
+            def impl(A1, A2):
+                n = len(A1)
+                out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+                for i in numba.parfor.internal_prange(n):
+                    out_arr[i] = op(A1[i], A2[i])
+                return out_arr
+
+            return impl
+        # 1st arg is array
+        elif A1 == datetime_date_array_type:
+
+            def impl(A1, A2):
+                n = len(A1)
+                out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+                for i in numba.parfor.internal_prange(n):
+                    out_arr[i] = op(A1[i], A2)
+                return out_arr
+
+            return impl
+        # 2nd arg is array
+        elif A2 == datetime_date_array_type:
+
+            def impl(A1, A2):
+                n = len(A2)
+                out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+                for i in numba.parfor.internal_prange(n):
+                    out_arr[i] = op(A1, A2[i])
+                return out_arr
+
+            return impl
+
+    return overload_date_arr_cmp
+
+
+def _install_cmp_ops():
+    """install overloads for comparison operators with datetime_date_array
+    """
+    for op in (
+        operator.eq,
+        operator.ne,
+        operator.ge,
+        operator.gt,
+        operator.le,
+        operator.lt,
+    ):
+        overload_impl = create_cmp_op_overload(op)
+        overload(op)(overload_impl)
+
+
+_install_cmp_ops()
