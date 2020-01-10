@@ -458,13 +458,28 @@ def test_dist_list1():
     assert count_array_OneDs() > 0
 
 
-def test_dist_list_append():
-    """Test support for list.append of dist data
+def test_dist_list_append1():
+    """Test support for list.append of dist tuple
     """
 
     def impl1(df):
         v = [(1, df)]
         v.append((1, df))
+        return v
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    bodo.jit(distributed={"v", "df"})(impl1)(df)
+    assert count_array_OneDs() > 0
+
+
+def test_dist_list_append2():
+    """Test support for list.append of dist data
+    """
+
+    def impl1(df):
+        v = [df]
+        v.append(df)
         return v
 
     n = 11

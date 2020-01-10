@@ -340,7 +340,7 @@ class DistributedAnalysis(object):
         elif (
             isinstance(rhs, ir.Expr)
             and rhs.op == "build_list"
-            and is_distributable_tuple_typ(lhs_typ)
+            and (is_distributable_tuple_typ(lhs_typ) or is_distributable_typ(lhs_typ))
         ):
             # dist vars can be in lists
             # meet all distributions

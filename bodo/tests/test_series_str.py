@@ -164,6 +164,29 @@ def test_rfind():
     check_func(test_impl, (S,), check_dtype=False)
 
 
+def test_pad_fill_fast():
+    # this function increases coverage for not slow test suite
+    def test_impl1(S):
+        return S.str.center(1, "a")
+    def test_impl2(S):
+        return S.str.rjust(1, "a")
+    def test_impl3(S):
+        return S.str.ljust(1, "a")
+    def test_impl4(S):
+        return S.str.pad(1, "left", "a")
+    def test_impl5(S):
+        return S.str.zfill(1)
+
+    S = pd.Series(
+        ["AB,C", "AB", "A", "C,ABB, D", np.nan], [3, 5, 1, 0, 2], name="A"
+    )
+    check_func(test_impl1, (S,))
+    check_func(test_impl2, (S,))
+    check_func(test_impl3, (S,))
+    check_func(test_impl4, (S,))
+    check_func(test_impl5, (S,))
+
+
 @pytest.mark.slow
 def test_center():
     def test_impl(S):

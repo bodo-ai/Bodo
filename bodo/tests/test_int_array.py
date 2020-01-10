@@ -218,6 +218,24 @@ def test_shape():
     check_func(test_impl, (A,))
 
 
+def test_unary_ufunc_fast():
+    ufunc1 = list(numba.targets.ufunc_db.get_ufuncs())[1]
+    ufunc2 = list(numba.targets.ufunc_db.get_ufuncs())[13]
+
+    def test_impl1(A):
+        return ufunc1(A)
+
+    def test_impl2(A):
+        return ufunc2(A)
+
+    A = pd.arrays.IntegerArray(
+        np.array([1, 1, 1, -3, 10], np.int32),
+        np.array([False, True, True, False, False]),
+    )
+    check_func(test_impl1, (A,))
+    check_func(test_impl2, (A,))
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "ufunc", [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 1]
@@ -266,6 +284,20 @@ def test_binary_ufunc(ufunc):
     check_func(test_impl, (arr, A2))
 
 
+def test_add():
+    def test_impl(A, other):
+        return A+other
+
+    A = pd.arrays.IntegerArray(
+        np.array([1, 1, 1, -3, 10], np.int64),
+        np.array([False, True, True, False, False]),
+    )
+
+    check_func(test_impl, (A, A))
+    check_func(test_impl, (A, 2))
+    check_func(test_impl, (2, A))
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "op", numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
@@ -300,6 +332,19 @@ def test_binary_op(op):
     check_func(test_impl, (A1, A2))
     check_func(test_impl, (A1, 2))
     check_func(test_impl, (2, A2))
+
+
+def test_inplace_iadd():
+    def test_impl(A, other):
+        A+=other
+        return A
+
+    A = pd.arrays.IntegerArray(
+        np.array([1, 1, 1, -3, 10], np.int32),
+        np.array([False, True, True, False, False]),
+    )
+    check_func(test_impl, (A, A), copy_input=True)
+    check_func(test_impl, (A, 2), copy_input=True)
 
 
 @pytest.mark.slow
@@ -383,6 +428,18 @@ def test_copy(int_arr_value):
         return A.copy()
 
     check_func(test_impl, (int_arr_value,))
+
+
+def test_astype_fast():
+    def test_impl(A, dtype):
+        return A.astype(dtype)
+
+    A = pd.arrays.IntegerArray(
+            np.array([1, -3, 2, 3, 10], np.int8),
+            np.array([False, True, True, False, False]),
+        )
+    dtype = pd.Int8Dtype()
+    check_func(test_impl, (A, dtype))
 
 
 @pytest.mark.parametrize("dtype", [pd.Int8Dtype(), np.float64])

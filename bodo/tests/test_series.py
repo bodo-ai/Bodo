@@ -94,6 +94,24 @@ def test_series_constructor(data, index, name):
     )
 
 
+def test_series_constructor2():
+    def impl(d, i, n):
+        return pd.Series(d, i, name=n)
+
+    bodo_func = bodo.jit(impl)
+    data1 = pd.Series(["A", "B", "CC"], name="A")
+    pd.testing.assert_series_equal(
+        bodo_func(data1, None, None),
+        impl(data1, None, None), check_dtype=False
+    )
+
+    data2 = pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A")
+    pd.testing.assert_series_equal(
+        bodo_func(data2, None, None),
+        impl(data2, None, None), check_dtype=False
+    )
+
+
 def test_series_constructor_dtype1():
     def impl(d):
         return pd.Series(d, dtype=np.int32)
@@ -685,6 +703,14 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg):
 ############################ binary ops #############################
 
 
+def test_series_add():
+    def test_impl(s):
+        return s.add(s, None)
+
+    s = pd.Series([1, 8, 4, 10, 3], [3, 7, 9, 2, 1], dtype="Int32")
+    check_func(test_impl, (s,))
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "op",
@@ -802,6 +828,16 @@ def test_series_unary_op(op):
 
     S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
     check_func(test_impl, (S,))
+
+
+def test_series_ufunc():
+    ufunc = list(numba.targets.ufunc_db.get_ufuncs())[0]
+
+    def test_impl(S):
+        return ufunc(S)
+
+    S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
+    check_func(test_impl, (S, ))
 
 
 @pytest.mark.slow
@@ -972,12 +1008,22 @@ def test_series_combine_kws():
     check_func(test_impl, (S1, S2, fill))
 
 
+def test_series_combine_kws_int():
+    def test_impl(S1, S2, fill_val):
+        return S1.combine(other=S2, func=lambda a, b: 2 * a + b, fill_value=fill_val)
+
+    S1 = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
+    S2 = pd.Series([6.0, 21.0, 3.6, 5.0, 0.0])
+    fill = 2
+    check_func(test_impl, (S1, S2, fill))
+
+
 def test_series_combine_no_fill():
     def test_impl(S1, S2):
         return S1.combine(other=S2, func=lambda a, b: 2 * a + b)
 
-    S1 = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
-    S2 = pd.Series([6.0, 21.0, 3.6, 5.0, 0.0])
+    S1 = pd.Series([1, 2, 3, 4, 5])
+    S2 = pd.Series([6, 21, 3, 5, 0])
     check_func(test_impl, (S1, S2))
 
 

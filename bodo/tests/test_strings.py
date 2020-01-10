@@ -722,7 +722,7 @@ class TestString(unittest.TestCase):
             return str(a)
 
         bodo_func = bodo.jit(test_impl)
-        for arg in [np.int32(45), 43, np.float32(1.4), 4.5]:
+        for arg in [np.int32(45), np.uint32(45), 43, np.float32(1.4), 4.5]:
             py_res = test_impl(arg)
             h_res = bodo_func(arg)
             # XXX: use startswith since bodo output can have extra characters
