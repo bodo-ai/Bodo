@@ -49,6 +49,7 @@ from bodo.utils.utils import (
     get_getsetitem_index_var,
 )
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.utils.transform import get_stmt_defs
 from bodo.utils.typing import BodoWarning
 
@@ -425,6 +426,26 @@ class DistributedAnalysis(object):
             )
             and rhs.attr in ("_start", "_stop", "_step", "_name")
         ):
+            return
+        elif (
+            isinstance(rhs, ir.Expr)
+            and rhs.op == "getattr"
+            and isinstance(
+                self.typemap[rhs.value.name], MultiIndexType
+            )
+            and len(self.typemap[rhs.value.name].array_types) > 0
+            and rhs.attr == "_data"
+        ):
+            # output of MultiIndex._data is a tuple, with all arrays having the same
+            # distribution as input MultiIndex
+            # find min of all array distributions
+            l_dist = self._get_var_dist(lhs, array_dists)
+            m_dist = self._get_var_dist(rhs.value.name, array_dists)
+            new_dist = self._min_dist(l_dist[0], m_dist)
+            for d in l_dist:
+                new_dist = self._min_dist(new_dist, d)
+            self._set_var_dist(lhs, array_dists, new_dist)
+            self._set_var_dist(rhs.value.name, array_dists, new_dist)
             return
         elif isinstance(rhs, ir.Expr) and rhs.op == "call":
             self._analyze_call(lhs, rhs, rhs.func.name, rhs.args, array_dists)

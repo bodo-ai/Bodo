@@ -15,6 +15,7 @@ from numba.extending import (
     intrinsic,
 )
 import bodo
+from bodo.utils.typing import get_val_type_maybe_str_literal
 
 
 # NOTE: minimal MultiIndex support that just stores the index arrays without factorizing
@@ -73,7 +74,9 @@ def typeof_multi_index(val, c):
     # TODO: avoid using .values if possible, since behavior of .values may change
     array_types = tuple(numba.typeof(val.levels[i].values) for i in range(val.nlevels))
     return MultiIndexType(
-        array_types, numba.typeof(tuple(val.names)), numba.typeof(val.name)
+        array_types,
+        tuple(get_val_type_maybe_str_literal(v) for v in val.names),
+        numba.typeof(val.name),
     )
 
 
@@ -172,7 +175,6 @@ def init_multi_index(typingctx, data, names, name=None):
     """Create a MultiIndex with provided data, names and name values.
     """
     name = types.none if name is None else name
-    name = types.unliteral(name)
     # recreate Tuple type to make sure UniTuple is created if types are homogeneous
     # instead of regular Tuple
     # happens in gatherv() implementation of MultiIndex for some reason
