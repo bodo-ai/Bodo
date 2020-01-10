@@ -691,6 +691,7 @@ def create_cmp_op_overload(op):
         if A1 == datetime_date_array_type and A2 == datetime_date_array_type:
 
             def impl(A1, A2):
+                numba.parfor.init_prange()
                 n = len(A1)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfor.internal_prange(n):
@@ -702,6 +703,7 @@ def create_cmp_op_overload(op):
         elif A1 == datetime_date_array_type:
 
             def impl(A1, A2):
+                numba.parfor.init_prange()
                 n = len(A1)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfor.internal_prange(n):
@@ -713,6 +715,7 @@ def create_cmp_op_overload(op):
         elif A2 == datetime_date_array_type:
 
             def impl(A1, A2):
+                numba.parfor.init_prange()
                 n = len(A2)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfor.internal_prange(n):
