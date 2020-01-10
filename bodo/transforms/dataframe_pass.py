@@ -1445,7 +1445,6 @@ class DataFramePass(object):
             return self._set_df_inplace(_dropna_imp, args, df_var, lhs.loc, nodes)
 
     def _run_call_reset_index(self, assign, lhs, rhs):
-        # import pdb; pdb.set_trace()
         # TODO: reflection
         # TODO: drop actual index, fix inplace
         df_var = rhs.args[0]
