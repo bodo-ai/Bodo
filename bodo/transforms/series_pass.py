@@ -80,6 +80,8 @@ from bodo.hiframes.series_indexing import SeriesIatType
 from bodo.ir.aggregate import Aggregate
 from bodo.hiframes import series_kernels, split_impl
 from bodo.hiframes.series_kernels import series_replace_funcs
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.split_impl import (
     string_array_split_view_type,
     StringArraySplitViewType,
@@ -532,6 +534,11 @@ class SeriesPass(object):
                 and typ1 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
             ):
                 impl = bodo.hiframes.pd_index_ext.overload_datetime_index_sub(
+                    typ1, typ2
+                )
+                return self._replace_func(impl, [arg1, arg2])
+            if typ1 == datetime_date_array_type and typ2 == datetime_timedelta_type:
+                impl = bodo.hiframes.datetime_date_ext.overload_datetime_date_arr_sub(
                     typ1, typ2
                 )
                 return self._replace_func(impl, [arg1, arg2])

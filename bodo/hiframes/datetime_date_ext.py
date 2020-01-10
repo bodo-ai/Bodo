@@ -661,3 +661,22 @@ def dt_date_arr_setitem(A, ind, val):
 def overload_len_datetime_date_arr(A):
     if A == datetime_date_array_type:
         return lambda A: len(A._data)
+
+
+@overload(operator.sub)
+def overload_datetime_date_arr_sub(arg1, arg2):
+    from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
+
+    # datetime_date_array - timedelta
+    if arg1 == datetime_date_array_type and arg2 == datetime_timedelta_type:
+
+        def impl(arg1, arg2):  # pragma: no cover
+            in_arr = arg1
+            numba.parfor.init_prange()
+            n = len(in_arr)
+            A = alloc_datetime_date_array(n)
+            for i in numba.parfor.internal_prange(n):
+                A[i] = in_arr[i] - arg2
+            return A
+
+        return impl
