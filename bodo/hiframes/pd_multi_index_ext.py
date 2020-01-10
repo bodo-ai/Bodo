@@ -175,7 +175,6 @@ def init_multi_index(typingctx, data, names, name=None):
     """Create a MultiIndex with provided data, names and name values.
     """
     name = types.none if name is None else name
-    name = types.unliteral(name)
     # recreate Tuple type to make sure UniTuple is created if types are homogeneous
     # instead of regular Tuple
     # happens in gatherv() implementation of MultiIndex for some reason
