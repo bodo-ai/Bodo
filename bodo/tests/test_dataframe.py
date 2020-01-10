@@ -187,6 +187,23 @@ def test_unbox_df2(column_name_df_value):
     check_func(impl1, (column_name_df_value,))
 
 
+def test_unbox_df3():
+    # unbox dataframe datetime and unsigned int indices
+    def impl(df):
+        return df
+
+    df1 = pd.DataFrame(
+            {"A": [3, 5, 1, -1, 4]},
+            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+        )
+    df2 = pd.DataFrame(
+            {"A": [3, 5, 1, -1, 4]},
+            np.array([1, 8, 4, 0, 2], dtype=np.uint8),
+        )
+    check_func(impl, (df1,))
+    check_func(impl, (df2,))
+
+
 def test_box_df():
     # box dataframe contains column with name overlaps with pandas function
     def impl():
@@ -373,7 +390,14 @@ def test_df_isin(other):
     check_func(impl, (df, other))
 
 
-def test_df_abs(numeric_df_value):
+def test_df_abs1():
+    def impl(df):
+        return df.abs()
+
+    df = pd.DataFrame({"A": [1, 8, 4, 1, -2]}, range(0, 5, 1))
+    check_func(impl, (df,))
+
+def test_df_abs2(numeric_df_value):
     # not supported for dt64
     if any(d == np.dtype("datetime64[ns]") for d in numeric_df_value.dtypes):
         return
@@ -512,7 +536,16 @@ def test_df_std(numeric_df_value):
     check_func(impl, (numeric_df_value,), False)
 
 
-def test_df_median(numeric_df_value):
+def test_df_median1():
+    # remove this after NAs are properly handled
+    def impl(df):
+        return df.median()
+
+    df = pd.DataFrame({"A": [1, 8, 4, 11, -3]})
+    check_func(impl, (df,), False)
+
+
+def test_df_median2(numeric_df_value):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:
         return
@@ -583,7 +616,16 @@ def test_df_cumprod(numeric_df_value):
     check_func(impl, (numeric_df_value,))
 
 
-def test_df_cumsum(numeric_df_value):
+def test_df_cumsum1():
+    # remove this after NAs are properly handled
+    def impl(df):
+        return df.cumsum()
+
+    df = pd.DataFrame({"A": [1, 8, 4, 11, -3]})
+    check_func(impl, (df,))
+
+
+def test_df_cumsum2(numeric_df_value):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:
         return
@@ -624,6 +666,17 @@ def _is_supported_argminmax_typ(d):
         supported_typs.append(np.int64)
         supported_typs.append(np.dtype("datetime64[ns]"))
     return d in supported_typs
+
+
+def test_df_idxmax_datetime():
+    def impl(df):
+        return df.idxmax()
+
+    df = pd.DataFrame(
+            {"A": [3, 5, 1, -1, 2]},
+            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+        )
+    check_func(impl, (df,), False)
 
 
 def test_df_idxmax(numeric_df_value):
@@ -704,6 +757,81 @@ def test_df_set_index(df_value):
         return df.set_index("A")
 
     check_func(impl, (df_value,))
+
+
+def test_df_reset_index1(df_value):
+    """Test DataFrame.reset_index(drop=False) on various dataframe/index combinations
+    """
+
+    def impl(df):
+        return df.reset_index()
+
+    check_func(impl, (df_value,))
+
+
+@pytest.mark.parametrize(
+    "test_index",
+    [
+        # named numeric index
+        pd.Int64Index([3, 1, 2, 4, 6], name="AA"),
+        pd.UInt64Index([3, 1, 2, 4, 6], name="AA"),
+        pd.Float64Index([3.1, 1.2, 2.3, 4.4, 6.6], name="AA"),
+        pd.RangeIndex(0, 5, name="AA"),  # TODO: Range(1, 6) when RangeIndex is fixed
+        # named string index
+        pd.Index(["A", "C", "D", "E", "AA"], name="ABC"),
+        # named date/time index
+        pd.date_range(start="2018-04-24", end="2018-04-27", periods=5, name="ABC"),
+        # TODO: test PeriodIndex when PeriodArray is supported
+        # pd.period_range(start='2017-01-01', end='2017-05-01', freq='M', name="ACD"),
+        pd.timedelta_range(start="1D", end="5D", name="ABC"),
+        pd.MultiIndex.from_arrays(
+            [
+                ["ABCD", "V", "CAD", "", "AA"],
+                [1.3, 4.1, 3.1, -1.1, -3.2],
+                pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
+            ]
+        ),
+        pd.MultiIndex.from_arrays(
+            [
+                ["ABCD", "V", "CAD", "", "AA"],
+                [1.3, 4.1, 3.1, -1.1, -3.2],
+                pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
+            ],
+            names=["AA", "ABC", "ABCD"],
+        ),
+    ],
+)
+def test_df_reset_index2(test_index):
+    """Test DataFrame.reset_index(drop=False) with MultiIndex and named indexes
+    """
+
+    def impl(df):
+        return df.reset_index()
+
+    test_df = pd.DataFrame({"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]})
+    test_df.index = test_index
+    check_func(impl, (test_df,))
+
+
+def test_df_reset_index3():
+    """Test DataFrame.reset_index(drop=False) after groupby() which is a common pattern
+    """
+
+    def impl1(df):
+        return df.groupby("A").sum().reset_index()
+
+    def impl2(df):
+        return df.groupby(["A", "B"]).sum().reset_index()
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [-8, 2, 3, 1, 5, 6, 7],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        }
+    )
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
 
 
 def test_df_duplicated():
@@ -807,6 +935,19 @@ def test_sort_values_str():
 ##################### binary ops ###############################
 
 
+def test_dataframe_binary_add():
+
+    def test_impl(df, other):
+        return df+other
+
+    df = pd.DataFrame({"A": [4, 6, 7, 1, 3]}, index=[3, 5, 0, 7, 2])
+    # df/df
+    check_func(test_impl, (df, df))
+    # df/scalar
+    check_func(test_impl, (df, 2))
+    check_func(test_impl, (2, df))
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_binary_ops)
 def test_dataframe_binary_op(op):
@@ -824,6 +965,17 @@ def test_dataframe_binary_op(op):
     # df/scalar
     check_func(test_impl, (df, 2))
     check_func(test_impl, (2, df))
+
+
+def test_dataframe_binary_iadd():
+
+    def test_impl(df, other):
+        df+=other
+        return df
+        
+    df = pd.DataFrame({"A": [4, 6, 7, 1, 3]}, index=[3, 5, 0, 7, 2])
+    check_func(test_impl, (df, df), copy_input=True)
+    check_func(test_impl, (df, 2), copy_input=True)
 
 
 @pytest.mark.slow

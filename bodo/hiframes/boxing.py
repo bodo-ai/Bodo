@@ -72,22 +72,6 @@ def typeof_pd_series(val, c):
     )
 
 
-@typeof_impl.register(pd.Index)
-def typeof_pd_index(val, c):
-    if val.inferred_type == "string" or pd._libs.lib.infer_dtype(val, True) == "string":
-        # Index.inferred_type doesn't skip NAs so we call infer_dtype with
-        # skipna=True
-        return bodo.hiframes.pd_index_ext.StringIndexType(numba.typeof(val.name))
-
-    # XXX: assume string data type for empty Index with object dtype
-    if val.equals(pd.Index([])):
-        return bodo.hiframes.pd_index_ext.StringIndexType(numba.typeof(val.name))
-
-    # catch-all for non-supported Index types
-    # RangeIndex is directly supported (TODO: make sure this is not called)
-    raise NotImplementedError("unsupported pd.Index type")
-
-
 @unbox(DataFrameType)
 def unbox_dataframe(typ, val, c):
     """unbox dataframe to an empty DataFrame struct

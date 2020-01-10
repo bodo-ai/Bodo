@@ -92,6 +92,8 @@ def remove_hiframes(rhs, lives, call_list):
         and call_list[0] in ["convert_tup_to_rec", "convert_rec_to_tup"]
     ):
         return True
+    if call_list == call_list == ["internal_prange", "parfor", numba]:
+        return True
     if (
         len(call_list) == 4
         and call_list[1:] == ["pd_index_ext", "hiframes", bodo]
@@ -177,6 +179,8 @@ def remove_hiframes(rhs, lives, call_list):
         return True
     # TODO: handle copy properly, copy of some types can have side effects?
     if call_list == ["copy"]:
+        return True
+    if len(call_list) == 2 and call_list[0] == "copy":
         return True
     return False
 

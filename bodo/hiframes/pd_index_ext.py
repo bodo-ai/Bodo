@@ -37,7 +37,12 @@ from bodo.hiframes.pd_series_ext import is_str_series_typ, string_array_type, Se
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 import bodo.utils.conversion
 from bodo.utils.utils import BooleanLiteral
-from bodo.utils.typing import is_overload_none, is_overload_true, is_overload_false
+from bodo.utils.typing import (
+    is_overload_none,
+    is_overload_true,
+    is_overload_false,
+    get_val_type_maybe_str_literal,
+)
 from bodo.libs.int_arr_ext import IntegerArrayType
 
 
@@ -45,6 +50,22 @@ _dt_index_data_typ = types.Array(types.NPDatetime("ns"), 1, "C")
 _timedelta_index_data_typ = types.Array(types.NPTimedelta("ns"), 1, "C")
 iNaT = pd._libs.tslibs.iNaT
 NaT = types.NPDatetime("ns")("NaT")  # TODO: pd.NaT
+
+
+@typeof_impl.register(pd.Index)
+def typeof_pd_index(val, c):
+    if val.inferred_type == "string" or pd._libs.lib.infer_dtype(val, True) == "string":
+        # Index.inferred_type doesn't skip NAs so we call infer_dtype with
+        # skipna=True
+        return StringIndexType(get_val_type_maybe_str_literal(val.name))
+
+    # XXX: assume string data type for empty Index with object dtype
+    if val.equals(pd.Index([])):
+        return StringIndexType(get_val_type_maybe_str_literal(val.name))
+
+    # catch-all for non-supported Index types
+    # RangeIndex is directly supported (TODO: make sure this is not called)
+    raise NotImplementedError("unsupported pd.Index type")
 
 
 # -------------------------  DatetimeIndex -----------------------------
@@ -82,7 +103,7 @@ class DatetimeIndexType(types.IterableType):
 @typeof_impl.register(pd.DatetimeIndex)
 def typeof_datetime_index(val, c):
     # TODO: check value for freq, tz, etc. and raise error since unsupported
-    return DatetimeIndexType(numba.typeof(val.name))
+    return DatetimeIndexType(get_val_type_maybe_str_literal(val.name))
 
 
 @register_model(DatetimeIndexType)
@@ -142,7 +163,6 @@ def init_datetime_index(typingctx, data, name=None):
     """Create a DatetimeIndex with provided data and name values.
     """
     name = types.none if name is None else name
-    name = types.unliteral(name)
 
     def codegen(context, builder, signature, args):
         data_val, name_val = args
@@ -663,7 +683,8 @@ class TimedeltaIndexTypeModel(models.StructModel):
 
 @typeof_impl.register(pd.TimedeltaIndex)
 def typeof_timedelta_index(val, c):
-    return TimedeltaIndexType(numba.typeof(val.name))
+    # keep string literal value in type since reset_index() may need it
+    return TimedeltaIndexType(get_val_type_maybe_str_literal(val.name))
 
 
 @box(TimedeltaIndexType)
@@ -713,7 +734,6 @@ def init_timedelta_index(typingctx, data, name=None):
     """Create a TimedeltaIndex with provided data and name values.
     """
     name = types.none if name is None else name
-    name = types.unliteral(name)
 
     def codegen(context, builder, signature, args):
         data_val, name_val = args
@@ -873,7 +893,7 @@ class RangeIndexType(types.IterableType):
 
 @typeof_impl.register(pd.RangeIndex)
 def typeof_pd_range_index(val, c):
-    return RangeIndexType(numba.typeof(val.name))
+    return RangeIndexType(get_val_type_maybe_str_literal(val.name))
 
 
 @register_model(RangeIndexType)
@@ -917,7 +937,6 @@ def init_range_index(typingctx, start, stop, step, name=None):
     """Create RangeIndex object
     """
     name = types.none if name is None else name
-    name = types.unliteral(name)
 
     def codegen(context, builder, signature, args):
         assert len(args) == 4
@@ -1070,7 +1089,8 @@ class PeriodIndexType(types.IterableType):
 
 @typeof_impl.register(pd.PeriodIndex)
 def typeof_pd_period_index(val, c):
-    return PeriodIndexType(val.freqstr, numba.typeof(val.name))
+    # keep string literal value in type since reset_index() may need it
+    return PeriodIndexType(val.freqstr, get_val_type_maybe_str_literal(val.name))
 
 
 # even though name attribute is mutable, we don't handle it for now
@@ -1161,17 +1181,20 @@ class NumericIndexType(types.IterableType):
 
 @typeof_impl.register(pd.Int64Index)
 def typeof_pd_int64_index(val, c):
-    return NumericIndexType(types.int64, numba.typeof(val.name))
+    # keep string literal value in type since reset_index() may need it
+    return NumericIndexType(types.int64, get_val_type_maybe_str_literal(val.name))
 
 
 @typeof_impl.register(pd.UInt64Index)
 def typeof_pd_uint64_index(val, c):
-    return NumericIndexType(types.uint64, numba.typeof(val.name))
+    # keep string literal value in type since reset_index() may need it
+    return NumericIndexType(types.uint64, get_val_type_maybe_str_literal(val.name))
 
 
 @typeof_impl.register(pd.Float64Index)
 def typeof_pd_float64_index(val, c):
-    return NumericIndexType(types.float64, numba.typeof(val.name))
+    # keep string literal value in type since reset_index() may need it
+    return NumericIndexType(types.float64, get_val_type_maybe_str_literal(val.name))
 
 
 # even though name attribute is mutable, we don't handle it for now
@@ -1223,7 +1246,6 @@ def init_numeric_index(typingctx, data, name=None):
     """Create NumericIndex object
     """
     name = types.none if name is None else name
-    name = types.unliteral(name)
 
     def codegen(context, builder, signature, args):
         assert len(args) == 2
@@ -1365,7 +1387,6 @@ def init_string_index(typingctx, data, name=None):
     """Create StringIndex object
     """
     name = types.none if name is None else name
-    name = types.unliteral(name)
 
     def codegen(context, builder, signature, args):
         assert len(args) == 2

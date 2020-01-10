@@ -95,8 +95,8 @@ numba.targets.hashing._hashsecret = _build_hashsecret()
 ## use objmode for string methods for now
 
 # string methods that just return another string
-# 'lstrip', 'rstrip', 'strip' are in Numba now
-str2str_methods = ("capitalize", "casefold", "lower", "swapcase", "title", "upper")
+# 'lstrip', 'rstrip', 'strip', 'lower', 'title', and 'upper' are in Numba now
+str2str_methods = ("capitalize", "casefold", "swapcase")
 
 
 for method in str2str_methods:
@@ -115,12 +115,7 @@ for method in str2str_methods:
 # string methods that just return another boolean
 # 'isupper' is in numba
 str2bool_methods = (
-    "isalnum",
-    "isalpha",
     "isdigit",
-    "isspace",
-    "islower",
-    "istitle",
     "isnumeric",
     "isdecimal",
 )
@@ -147,16 +142,6 @@ def str_replace_overload(in_str, old, new, count=-1):
         return out
 
     return _str_replace_impl
-
-
-@overload_method(types.UnicodeType, "rfind")
-def str_rfind_overload(in_str, sub, start=0, end=None):
-    def _str_rfind_impl(in_str, sub, start=0, end=None):  # pragma: no cover
-        with numba.objmode(out="int64"):
-            out = in_str.rfind(sub, start, end)
-        return out
-
-    return _str_rfind_impl
 
 
 @intrinsic
