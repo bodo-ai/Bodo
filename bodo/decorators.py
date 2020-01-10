@@ -25,57 +25,13 @@ numba.compiler.Flags.OPTIONS["pivots"] = dict()
 numba.compiler.Flags.OPTIONS["h5_types"] = dict()
 
 
-# Add Bodo's options to 'set_flags' function of numba.targets.options.TargetOptions
-# and replace it since it checks for allowed flags
-# NOTE: keep this updated if Numba changes options
-def set_flags(self, flags):  # pragma: no cover
+def bodo_set_flags(self, flags):
+    """Add Bodo's options to 'set_flags' function of numba.targets.options.TargetOptions
+    Handles Bodo flags, then calls Numba for handling regular Numba flags
     """
-    Provide default flags setting logic.
-    Subclass can override.
-    """
-    kws = self.values.copy()
-
-    if kws.pop("nopython", False) == False:
-        flags.set("enable_pyobject")
-
-    if kws.pop("forceobj", False):
-        flags.set("force_pyobject")
-
-    if kws.pop("looplift", True):
-        flags.set("enable_looplift")
-
-    if kws.pop("boundcheck", False):
-        flags.set("boundcheck")
-
-    if kws.pop("_nrt", True):
-        flags.set("nrt")
-
-    if kws.pop("debug", numba.config.DEBUGINFO_DEFAULT):
-        flags.set("debuginfo")
-        flags.set("boundcheck")
-
-    if kws.pop("nogil", False):
-        flags.set("release_gil")
-
-    if kws.pop("no_rewrites", False):
-        flags.set("no_rewrites")
-
-    if kws.pop("no_cpython_wrapper", False):
-        flags.set("no_cpython_wrapper")
-
-    if "parallel" in kws:
-        flags.set("auto_parallel", kws.pop("parallel"))
-
-    if "fastmath" in kws:
-        flags.set("fastmath", kws.pop("fastmath"))
-
-    if "error_model" in kws:
-        flags.set("error_model", kws.pop("error_model"))
-
-    if "inline" in kws:
-        flags.set("inline", kws.pop("inline"))
-
-    flags.set("enable_pyobject_looplift")
+    # remove Bodo options from 'values', call 'numba_set_flags', restore Bodo options
+    orig_values = self.values.copy()
+    kws = self.values
 
     if kws.pop("all_args_distributed", False):
         flags.set("all_args_distributed")
@@ -101,12 +57,12 @@ def set_flags(self, flags):  # pragma: no cover
     if "h5_types" in kws:
         flags.set("h5_types", kws.pop("h5_types"))
 
-    if kws:
-        # Unread options?
-        raise NameError("Unrecognized options: %s" % kws.keys())
+    self.numba_set_flags(flags)
+    self.values = orig_values
 
 
-numba.targets.options.TargetOptions.set_flags = set_flags
+numba.targets.options.TargetOptions.numba_set_flags = numba.targets.options.TargetOptions.set_flags
+numba.targets.options.TargetOptions.set_flags = bodo_set_flags
 
 
 # adapted from parallel_diagnostics()
