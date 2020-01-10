@@ -1,5 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
+import datetime
 import numpy as np
 import numba
 import bodo
@@ -33,6 +34,7 @@ from numba.extending import (
 from numba import cgutils
 from bodo.libs.str_ext import string_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type, datetime_date_type
 from numba.targets.imputils import (
     impl_ret_new_ref,
     impl_ret_borrowed,
@@ -1673,6 +1675,8 @@ def _typeof_ndarray(val, c):
             return bodo.libs.bool_arr_ext.boolean_array
         if dtype == types.List(string_type):
             return list_string_array_type
+        if dtype == datetime_date_type:
+            return datetime_date_array_type  # TODO: test array of datetime.date
         raise ValueError("Unsupported array dtype: %s" % (val.dtype,))
     layout = numba.numpy_support.map_layout(val)
     readonly = not val.flags.writeable
@@ -1699,6 +1703,8 @@ def _infer_ndarray_obj_dtype(val):
         return types.bool_
     if isinstance(first_val, list):
         return bodo.hiframes.boxing._infer_series_list_dtype(val, "array")
+    if isinstance(first_val, datetime.date):
+        return datetime_date_type
 
 
 # TODO: support array of strings
