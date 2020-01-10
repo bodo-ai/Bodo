@@ -1453,6 +1453,8 @@ class DataFramePass(object):
         inplace = guard(find_const, self.func_ir, rhs.args[2])
         df_typ = self.typemap[df_var.name]
         out_df_typ = self.typemap[lhs.name]
+        if inplace:  # lhs is None for inplace case and output type is same as input
+            out_df_typ = df_typ
         n_ind = len(out_df_typ.columns) - len(df_typ.columns)
         assert drop or n_ind != 0  # there are index columns when not dropping index
 

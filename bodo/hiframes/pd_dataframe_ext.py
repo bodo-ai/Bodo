@@ -2277,6 +2277,8 @@ class ResetIndexDummyTyper(AbstractTemplate):
 
 @lower_builtin(reset_index_dummy, types.VarArg(types.Any))
 def lower_reset_index_dummy(context, builder, sig, args):
+    if sig.return_type is types.none:
+        return context.get_dummy_value()
     out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
     return out_obj._getvalue()
 
