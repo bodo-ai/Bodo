@@ -57,6 +57,9 @@ def is_overload_constant_str_list(val):
         isinstance(val, (bodo.utils.typing.ConstList, bodo.utils.typing.ConstUniTuple))
         and isinstance(val.consts, tuple)
         and isinstance(val.consts[0], str)
+    ) or (
+        isinstance(val, types.BaseTuple)
+        and all(isinstance(t, types.StringLiteral) for t in val.types)
     )
 
 
@@ -120,6 +123,11 @@ def get_const_str_list(val):
         return [val.literal_value]
     if hasattr(val, "consts"):
         return val.consts
+    if (
+        isinstance(val, types.BaseTuple)
+        and all(isinstance(t, types.StringLiteral) for t in val.types)
+    ):
+        return [t.literal_value for t in val.types]
 
 
 def get_overload_const_str(val):

@@ -382,6 +382,20 @@ def test_getitem_int_1D_Var(A, s):
     assert count_array_OneD_Vars() > 0
 
 
+def test_getitem_const_slice_multidim():
+    """test getitem of multi-dim distributed array with a constant slice in first
+    dimension.
+    """
+    def impl(A):
+        return A[1:3,0,1:]
+
+    bodo_func = bodo.jit(distributed={"A"})(impl)
+    n = 5
+    A = np.arange(n*n*n).reshape(n, n, n)
+    start, end = get_start_end(len(A))
+    np.testing.assert_array_equal(bodo_func(A[start:end]), impl(A))
+
+
 def test_dist_tuple1():
     def impl1(A):
         B1, B2 = A

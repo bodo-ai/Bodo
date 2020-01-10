@@ -428,7 +428,7 @@ def overload_dataframe_cov(df, min_periods=None):
     str_arr = "bodo.utils.conversion.coerce_to_array({})".format(numeric_cols)
     index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(str_arr)
 
-    header = "def impl(df, min_periods=1):\n"
+    header = "def impl(df, min_periods=None):\n"
     header += "  mat = {}\n".format(mat)
     header += "  res = bodo.libs.array_kernels.nancorr(mat, 1, {})\n".format(minpv)
     return _gen_init_df(header, numeric_cols, data_args, index)
