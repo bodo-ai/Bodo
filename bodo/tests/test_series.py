@@ -1287,6 +1287,7 @@ def test_series_tail(series_val):
     [
         (pd.Series([3, 2, np.nan, 2, 7], [3, 4, 2, 1, 0], name="A"), [2.0, 3.0]),
         (pd.Series(["aa", "b", np.nan, "ccc", "b"], [3, 4, 2, 1, 0], name="A"), ["aa", "b"]),
+        (pd.Series([4, 9, 1, 2, 4], [3, 4, 2, 1, 0], name="A"), pd.Series([3, 4, 0, 2, 5])),
     ],
 )
 def test_series_isin(S, values):
@@ -1295,6 +1296,28 @@ def test_series_isin(S, values):
         return S.isin(values)
 
     check_func(test_impl, (S, values))
+
+
+
+
+def test_series_isin_large_random():
+    def get_random_array(n, len_siz):
+        elist = []
+        for _ in range(n):
+            val = random.randint(1,len_siz)
+            elist.append(val)
+        return elist
+
+    def test_impl(S, values):
+        return S.isin(values)
+
+    random.seed(5)
+    S = pd.Series(get_random_array(1000, 100))
+    values = pd.Series(get_random_array(100,100))
+    check_func(test_impl, (S,values))
+
+
+
 
 
 @pytest.mark.slow

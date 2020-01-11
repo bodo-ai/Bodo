@@ -663,6 +663,17 @@ class DistributedAnalysis(object):
             array_dists[lhs] = new_dist
             return
 
+        if fdef == ("array_isin", "bodo.libs.array_tools"):
+            # out_arr and in_arr should have the same distribution
+            new_dist = self._meet_array_dists(
+                rhs.args[0].name, rhs.args[1].name, array_dists)
+            # values array can be distributed only if input is distributed
+            new_dist = Distribution(
+                min(new_dist.value, array_dists[rhs.args[2].name].value)
+            )
+            array_dists[rhs.args[2].name] = new_dist
+            return
+
         if fdef == ("rolling_fixed", "bodo.hiframes.rolling"):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
