@@ -6,6 +6,65 @@ import numba
 import bodo
 
 
+# Add Bodo's options to Numba's allowed options/flags
+numba.targets.cpu.CPUTargetOptions.OPTIONS["all_args_distributed"] = bool
+numba.targets.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_varlength"] = bool
+numba.targets.cpu.CPUTargetOptions.OPTIONS["all_returns_distributed"] = bool
+numba.targets.cpu.CPUTargetOptions.OPTIONS["distributed"] = set
+numba.targets.cpu.CPUTargetOptions.OPTIONS["distributed_varlength"] = set
+numba.targets.cpu.CPUTargetOptions.OPTIONS["threaded"] = set
+numba.targets.cpu.CPUTargetOptions.OPTIONS["pivots"] = dict
+numba.targets.cpu.CPUTargetOptions.OPTIONS["h5_types"] = dict
+numba.compiler.Flags.OPTIONS["all_args_distributed"] = False
+numba.compiler.Flags.OPTIONS["all_args_distributed_varlength"] = False
+numba.compiler.Flags.OPTIONS["all_returns_distributed"] = False
+numba.compiler.Flags.OPTIONS["distributed"] = set()
+numba.compiler.Flags.OPTIONS["distributed_varlength"] = set()
+numba.compiler.Flags.OPTIONS["threaded"] = set()
+numba.compiler.Flags.OPTIONS["pivots"] = dict()
+numba.compiler.Flags.OPTIONS["h5_types"] = dict()
+
+
+def bodo_set_flags(self, flags):
+    """Add Bodo's options to 'set_flags' function of numba.targets.options.TargetOptions
+    Handles Bodo flags, then calls Numba for handling regular Numba flags
+    """
+    # remove Bodo options from 'values', call 'numba_set_flags', restore Bodo options
+    orig_values = self.values.copy()
+    kws = self.values
+
+    if kws.pop("all_args_distributed", False):
+        flags.set("all_args_distributed")
+
+    if kws.pop("all_args_distributed_varlength", False):
+        flags.set("all_args_distributed_varlength")
+
+    if kws.pop("all_returns_distributed", False):
+        flags.set("all_returns_distributed")
+
+    if "distributed" in kws:
+        flags.set("distributed", kws.pop("distributed"))
+
+    if "distributed_varlength" in kws:
+        flags.set("distributed_varlength", kws.pop("distributed_varlength"))
+
+    if "threaded" in kws:
+        flags.set("threaded", kws.pop("threaded"))
+
+    if "pivots" in kws:
+        flags.set("pivots", kws.pop("pivots"))
+
+    if "h5_types" in kws:
+        flags.set("h5_types", kws.pop("h5_types"))
+
+    self.numba_set_flags(flags)
+    self.values = orig_values
+
+
+numba.targets.options.TargetOptions.numba_set_flags = numba.targets.options.TargetOptions.set_flags
+numba.targets.options.TargetOptions.set_flags = bodo_set_flags
+
+
 # adapted from parallel_diagnostics()
 def distributed_diagnostics(self, signature=None, level=1):
     """
@@ -44,48 +103,6 @@ def jit(signature_or_function=None, **options):
     # set nopython by default
     if "nopython" not in options:
         options["nopython"] = True
-
-    _locals = options.pop("locals", {})
-    assert isinstance(_locals, dict)
-
-    # put pivots in locals TODO: generalize numba.jit options
-    pivots = options.pop("pivots", {})
-    assert isinstance(pivots, dict)
-    for var, vals in pivots.items():
-        _locals[var + ":pivot"] = vals
-
-    h5_types = options.pop("h5_types", {})
-    assert isinstance(h5_types, dict)
-    for var, vals in h5_types.items():
-        _locals[var + ":h5_types"] = vals
-
-    distributed = set(options.pop("distributed", set()))
-    assert isinstance(distributed, (set, list))
-    _locals["##distributed"] = distributed
-
-    distributed_varlength = set(options.pop("distributed_varlength", set()))
-    assert isinstance(distributed_varlength, (set, list))
-    _locals["##distributed_varlength"] = distributed_varlength
-
-    all_args_distributed = options.pop("all_args_distributed", False)
-    assert isinstance(all_args_distributed, bool)
-    _locals["##all_args_distributed"] = all_args_distributed
-
-    all_args_distributed_varlength = options.pop(
-        "all_args_distributed_varlength", False
-    )
-    assert isinstance(all_args_distributed_varlength, bool)
-    _locals["##all_args_distributed_varlength"] = all_args_distributed_varlength
-
-    all_returns_distributed = options.pop("all_returns_distributed", False)
-    assert isinstance(all_returns_distributed, bool)
-    _locals["##all_returns_distributed"] = all_returns_distributed
-
-    threaded = set(options.pop("threaded", set()))
-    assert isinstance(threaded, (set, list))
-    _locals["##threaded"] = threaded
-
-    options["locals"] = _locals
 
     # options['parallel'] = True
     options["parallel"] = {

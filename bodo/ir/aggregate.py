@@ -1552,9 +1552,7 @@ def gen_top_level_agg_func(
                     out_name, int_typ_name
                 )
             elif isinstance(out_col_typs[i], BooleanArrayType):
-                func_text += '    {} = pd.Series([True]).values\n'.format(
-                    out_name
-                )
+                func_text += "    {} = pd.Series([True]).values\n".format(out_name)
             else:
                 func_text += "    {} = np.empty(1, {})\n".format(
                     out_name, _get_np_dtype(out_typs[i])
@@ -1745,8 +1743,11 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     f_ir._definitions = build_definitions(f_ir.blocks)
 
     assert f_ir.arg_count == 1, "agg function should have one input"
+    # construct default flags similar to numba.compiler
+    flags = numba.compiler.Flags()
+    flags.set("nrt")
     untyped_pass = bodo.transforms.untyped_pass.UntypedPass(
-        f_ir, typingctx, arg_typs, {}, {}
+        f_ir, typingctx, arg_typs, {}, {}, flags
     )
     untyped_pass.run()
     f_ir._definitions = build_definitions(f_ir.blocks)
