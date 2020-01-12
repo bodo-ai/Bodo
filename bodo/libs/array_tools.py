@@ -49,6 +49,7 @@ ll.add_symbol(
 ll.add_symbol("sort_values_table", array_tools_ext.sort_values_table)
 ll.add_symbol("groupby_and_aggregate", array_tools_ext.groupby_and_aggregate)
 ll.add_symbol("groupby_and_aggregate_nunique", array_tools_ext.groupby_and_aggregate_nunique)
+ll.add_symbol("array_isin", array_tools_ext.array_isin)
 
 
 class ArrayInfoType(types.Type):
@@ -628,3 +629,12 @@ def groupby_and_aggregate_nunique(typingctx, table_t, n_keys_t, is_parallel):
 
     return table_type(table_t, types.int64, types.boolean), codegen
 
+
+_array_isin = types.ExternalFunction("array_isin", types.void(
+    array_info_type, array_info_type, array_info_type, types.bool_))
+
+
+@numba.njit
+def array_isin(out_arr, in_arr, in_values, is_parallel):
+    _array_isin(array_to_info(out_arr), array_to_info(in_arr), array_to_info(in_values),
+        is_parallel)

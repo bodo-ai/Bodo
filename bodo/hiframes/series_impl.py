@@ -779,6 +779,22 @@ def overload_series_append(S, to_append, ignore_index=False, verify_integrity=Fa
 
 @overload_method(SeriesType, "isin")
 def overload_series_isin(S, values):
+    # if input is Series or array, special implementation is necessary since it may
+    # require hash-based shuffling of both inputs for parallelization
+    if bodo.utils.utils.is_array_typ(values):
+        def impl_arr(S, values):  # pragma: no cover
+            values_arr = bodo.utils.conversion.coerce_to_array(values)
+            A = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            numba.parfor.init_prange()
+            n = len(A)
+            out_arr = np.empty(n, np.bool_)
+            bodo.libs.array_tools.array_isin(out_arr, A, values_arr, False)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return impl_arr
+
     # 'values' should be a set or list, TODO: support other list-likes such as Array
     if not isinstance(values, (types.Set, types.List)):
         raise BodoError("Series.isin(): 'values' parameter should be a set or a list")

@@ -89,7 +89,9 @@ fir_text = None
 class DistributedPass(object):
     """analyze program and transfrom to distributed"""
 
-    def __init__(self, func_ir, typingctx, targetctx, typemap, calltypes, metadata):
+    def __init__(
+        self, func_ir, typingctx, targetctx, typemap, calltypes, metadata, flags
+    ):
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.targetctx = targetctx
@@ -98,6 +100,7 @@ class DistributedPass(object):
         # Loc object of current location being translated
         self.curr_loc = self.func_ir.loc
         self.metadata = metadata
+        self.flags = flags
         self.arr_analysis = numba.array_analysis.ArrayAnalysis(
             self.typingctx, self.func_ir, self.typemap, self.calltypes
         )
@@ -115,7 +118,12 @@ class DistributedPass(object):
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
         self.arr_analysis.run(self.func_ir.blocks)
         dist_analysis_pass = DistributedAnalysis(
-            self.func_ir, self.typemap, self.calltypes, self.typingctx, self.metadata
+            self.func_ir,
+            self.typemap,
+            self.calltypes,
+            self.typingctx,
+            self.metadata,
+            self.flags,
         )
         self._dist_analysis = dist_analysis_pass.run()
         # dprint_func_ir(self.func_ir, "after analysis distributed")
@@ -208,7 +216,8 @@ class DistributedPass(object):
                     out_nodes = self._gen_barrier() + [inst]
                 # avoid replicated prints, print on all PEs only when there is dist arg
                 elif isinstance(inst, ir.Print) and all(
-                        self._is_REP(v.name) for v in inst.args):
+                    self._is_REP(v.name) for v in inst.args
+                ):
                     out_nodes = self._run_print(inst)
 
                 if out_nodes is None:
@@ -596,6 +605,15 @@ class DistributedPass(object):
             self.typemap[true_var.name] = types.boolean
             rhs.args[2] = true_var
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
+
+        if fdef == ("array_isin", "bodo.libs.array_tools") and (
+            self._is_1D_arr(rhs.args[2].name) or self._is_1D_Var_arr(rhs.args[2].name)
+        ):
+            # array_isin requires shuffling data only if values array is distributed
+            f = lambda out_arr, in_arr, vals, p: bodo.libs.array_tools.array_isin(
+                out_arr, in_arr, vals, True
+            )
+            return compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ("quantile", "bodo.libs.array_kernels") and (
             self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)

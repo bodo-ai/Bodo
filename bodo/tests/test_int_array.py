@@ -218,24 +218,6 @@ def test_shape():
     check_func(test_impl, (A,))
 
 
-def test_unary_ufunc_fast():
-    ufunc1 = list(numba.targets.ufunc_db.get_ufuncs())[1]
-    ufunc2 = list(numba.targets.ufunc_db.get_ufuncs())[13]
-
-    def test_impl1(A):
-        return ufunc1(A)
-
-    def test_impl2(A):
-        return ufunc2(A)
-
-    A = pd.arrays.IntegerArray(
-        np.array([1, 1, 1, -3, 10], np.int32),
-        np.array([False, True, True, False, False]),
-    )
-    check_func(test_impl1, (A,))
-    check_func(test_impl2, (A,))
-
-
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "ufunc", [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 1]

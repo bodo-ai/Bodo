@@ -14,6 +14,8 @@ from bodo.tests.utils import (
     dist_IR_contains,
     get_start_end,
     count_array_OneD_Vars,
+    _get_dist_arg,
+    _test_equal,
 )
 
 
@@ -548,6 +550,30 @@ def test_empty_object_array_warning():
         bodo.jit(impl)(np.array([], dtype=np.object))
     with pytest.warns(BodoWarning, match="Empty object array passed to Bodo"):
         bodo.jit(impl)(pd.Series(np.array([], dtype=np.object)))
+
+
+def test_dist_flags():
+    """Make sure Bodo flags are preserved when the same Dispatcher that has distributed
+    flags is called with different data types, triggering multiple compilations.
+    See #357
+    """
+
+    def impl(A):
+        return A.sum()
+
+    n = 50
+    A = np.arange(n)
+    bodo_func = bodo.jit(all_args_distributed=True)(impl)
+    result_bodo = bodo_func(_get_dist_arg(A, False))
+    result_python = impl(A)
+    if bodo.get_rank() == 0:
+        _test_equal(result_bodo, result_python)
+
+    A = np.arange(n, dtype=np.float64)  # change dtype to trigger compilation again
+    result_bodo = bodo_func(_get_dist_arg(A, False))
+    result_python = impl(A)
+    if bodo.get_rank() == 0:
+        _test_equal(result_bodo, result_python)
 
 
 def test_dist_objmode():

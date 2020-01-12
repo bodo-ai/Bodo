@@ -193,12 +193,13 @@ class UntypedPass(object):
     Transformations before typing to enable type inference.
     """
 
-    def __init__(self, func_ir, typingctx, args, _locals, metadata):
+    def __init__(self, func_ir, typingctx, args, _locals, metadata, flags):
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.args = args
         self.locals = _locals
         self.metadata = metadata
+        self.flags = flags
         ir_utils._max_label = max(func_ir.blocks.keys())
         # replace inst variables as determined previously during the pass
         # currently use to keep lhs of Arg nodes intact
@@ -213,7 +214,9 @@ class UntypedPass(object):
         self.pq_handler = ParquetHandler(
             func_ir, typingctx, args, _locals, self.reverse_copies
         )
-        self.h5_handler = h5.H5_IO(self.func_ir, _locals, args, self.reverse_copies)
+        self.h5_handler = h5.H5_IO(
+            self.func_ir, _locals, flags, args, self.reverse_copies
+        )
 
     def run(self):
         # XXX: the block structure shouldn't change in this pass since labels
@@ -439,9 +442,8 @@ class UntypedPass(object):
         # pass pivot values to df.pivot_table() calls using a meta
         # variable passed as argument. The meta variable's type
         # is set to MetaType with pivot values baked in.
-        pivot_key = lhs + ":pivot"
-        if pivot_key in self.locals:
-            pivot_values = self.locals.pop(pivot_key)
+        if lhs in self.flags.pivots:
+            pivot_values = self.flags.pivots[lhs]
             # put back the definition removed earlier
             self.func_ir._definitions[lhs].append(rhs)
             pivot_call = guard(get_definition, self.func_ir, lhs)
@@ -1323,30 +1325,15 @@ class UntypedPass(object):
         """
         if "distributed" not in self.metadata:
             # TODO: keep updated in variable renaming?
-            self.metadata["distributed"] = self.locals.pop("##distributed", set())
+            self.metadata["distributed"] = self.flags.distributed.copy()
 
         if "distributed_varlength" not in self.metadata:
-            self.metadata["distributed_varlength"] = self.locals.pop(
-                "##distributed_varlength", set()
-            )
+            self.metadata[
+                "distributed_varlength"
+            ] = self.flags.distributed_varlength.copy()
 
         if "threaded" not in self.metadata:
-            self.metadata["threaded"] = self.locals.pop("##threaded", set())
-
-        if "all_args_distributed" not in self.metadata:
-            self.metadata["all_args_distributed"] = self.locals.pop(
-                "##all_args_distributed", False
-            )
-
-        if "all_args_distributed_varlength" not in self.metadata:
-            self.metadata["all_args_distributed_varlength"] = self.locals.pop(
-                "##all_args_distributed_varlength", False
-            )
-
-        if "all_returns_distributed" not in self.metadata:
-            self.metadata["all_returns_distributed"] = self.locals.pop(
-                "##all_returns_distributed", False
-            )
+            self.metadata["threaded"] = self.flags.threaded.copy()
 
         # handle old input flags
         # e.g. {"A:input": "distributed"} -> "A"
@@ -1396,7 +1383,7 @@ class UntypedPass(object):
         # change in simplify() and replace_var_names()
         # TODO: include distributed_varlength?
         flagged_vars = self.metadata["distributed"] | self.metadata["threaded"]
-        all_returns_distributed = self.metadata["all_returns_distributed"]
+        all_returns_distributed = self.flags.all_returns_distributed
         nodes = [ret_node]
         cast = guard(get_definition, self.func_ir, ret_node.value)
         assert cast is not None, "return cast not found"

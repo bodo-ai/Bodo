@@ -190,12 +190,13 @@ class DistributedAnalysis(object):
         assert (typ, func) not in cls._extra_call
         cls._extra_call[(typ, func)] = analysis_func
 
-    def __init__(self, func_ir, typemap, calltypes, typingctx, metadata):
+    def __init__(self, func_ir, typemap, calltypes, typingctx, metadata, flags):
         self.func_ir = func_ir
         self.typemap = typemap
         self.calltypes = calltypes
         self.typingctx = typingctx
         self.metadata = metadata
+        self.flags = flags
         self.parfor_locs = {}
         self.array_locs = {}
         self.diag_info = []
@@ -660,6 +661,17 @@ class DistributedAnalysis(object):
                 min(array_dists[lhs].value, array_dists[rhs.args[0].name].value)
             )
             array_dists[lhs] = new_dist
+            return
+
+        if fdef == ("array_isin", "bodo.libs.array_tools"):
+            # out_arr and in_arr should have the same distribution
+            new_dist = self._meet_array_dists(
+                rhs.args[0].name, rhs.args[1].name, array_dists)
+            # values array can be distributed only if input is distributed
+            new_dist = Distribution(
+                min(new_dist.value, array_dists[rhs.args[2].name].value)
+            )
+            array_dists[rhs.args[2].name] = new_dist
             return
 
         if fdef == ("rolling_fixed", "bodo.hiframes.rolling"):
@@ -1375,15 +1387,12 @@ class DistributedAnalysis(object):
         self._set_REP([inst.value], array_dists)
 
     def _analyze_arg(self, lhs, rhs, array_dists):
-        if (
-            rhs.name in self.metadata["distributed"]
-            or self.metadata["all_args_distributed"]
-        ):
+        if rhs.name in self.metadata["distributed"] or self.flags.all_args_distributed:
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD)
         elif (
             rhs.name in self.metadata["distributed_varlength"]
-            or self.metadata["all_args_distributed_varlength"]
+            or self.flags.all_args_distributed_varlength
         ):
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
