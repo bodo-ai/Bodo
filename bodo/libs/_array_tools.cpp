@@ -56,6 +56,26 @@
 
 #define ALIGNMENT 64  // preferred alignment for AVX512
 
+#define SEED_HASH_PARTITION 0xb0d01289
+
+
+void CheckEqualityArrayType(array_info* arr1, array_info* arr2)
+{
+    if (arr1->arr_type != arr2->arr_type) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "array_info passed to Cpp code have different arr_type");
+        return;
+    }
+    if (arr1->arr_type != bodo_array_type::STRING) {
+        if (arr1->dtype != arr2->dtype) {
+            PyErr_SetString(PyExc_RuntimeError,
+                            "array_info passed to Cpp code have different dtype");
+            return;
+        }
+    }
+}
+
+
 array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
                                  char* offsets, char* null_bitmap,
                                  NRT_MemInfo* meminfo) {
@@ -355,7 +375,7 @@ uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
 
 template <class T>
 void fill_send_array_inner(T* send_buff, T* data, uint32_t* hashes,
-                           std::vector<int>& send_disp, int n_pes,
+                           std::vector<int> const& send_disp, int n_pes,
                            size_t n_rows) {
     std::vector<int> tmp_offset(send_disp);
     for (size_t i = 0; i < n_rows; i++) {
@@ -366,11 +386,30 @@ void fill_send_array_inner(T* send_buff, T* data, uint32_t* hashes,
     }
 }
 
+
+template <class T>
+void fill_recv_data_inner(T* recv_buff, T* data, uint32_t* hashes,
+                           std::vector<int> const& send_disp, int n_pes,
+                           size_t n_rows) {
+    std::vector<int> tmp_offset(send_disp);
+    for (size_t i = 0; i < n_rows; i++) {
+        size_t node = (size_t)hashes[i] % (size_t)n_pes;
+        int ind = tmp_offset[node];
+        data[i] = recv_buff[ind];
+        tmp_offset[node]++;
+    }
+}
+
+
+
+
+
+
 void fill_send_array_string_inner(char* send_data_buff,
                                   uint32_t* send_length_buff, char* arr_data,
                                   uint32_t* arr_offsets, uint32_t* hashes,
-                                  std::vector<int>& send_disp,
-                                  std::vector<int>& send_disp_char, int n_pes,
+                                  std::vector<int> const& send_disp,
+                                  std::vector<int> const& send_disp_char, int n_pes,
                                   size_t n_rows) {
     std::vector<int> tmp_offset(send_disp);
     std::vector<int> tmp_offset_char(send_disp_char);
@@ -390,7 +429,7 @@ void fill_send_array_string_inner(char* send_data_buff,
 
 void fill_send_array_null_inner(uint8_t* send_null_bitmask,
                                 uint8_t* array_null_bitmask, uint32_t* hashes,
-                                std::vector<int>& send_disp_null, int n_pes,
+                                std::vector<int> const& send_disp_null, int n_pes,
                                 size_t n_rows) {
     std::vector<int> tmp_offset(n_pes, 0);
     for (size_t i = 0; i < n_rows; i++) {
@@ -406,9 +445,9 @@ void fill_send_array_null_inner(uint8_t* send_null_bitmask,
 }
 
 void fill_send_array(array_info* send_arr, array_info* array, uint32_t* hashes,
-                     std::vector<int>& send_disp,
-                     std::vector<int>& send_disp_char,
-                     std::vector<int>& send_disp_null, int n_pes) {
+                     std::vector<int> const& send_disp,
+                     std::vector<int> const& send_disp_char,
+                     std::vector<int> const& send_disp_null, int n_pes) {
     size_t n_rows = (size_t)array->length;
     // dispatch to proper function
     // TODO: general dispatcher
@@ -499,7 +538,7 @@ struct mpi_comm_info {
     std::vector<int> recv_count_null;
     std::vector<int> send_disp_null;
     std::vector<int> recv_disp_null;
-    std::vector<uint8_t> tmp_null_bytes;
+    size_t n_null_bytes;
 
     explicit mpi_comm_info(int _n_pes, std::vector<array_info*>& _arrays)
         : n_pes(_n_pes), arrays(_arrays) {
@@ -510,6 +549,7 @@ struct mpi_comm_info {
                 arr_info->arr_type == bodo_array_type::NULLABLE_INT_BOOL)
                 has_nulls = true;
         }
+        n_null_bytes=0;
         // init counts
         send_count = std::vector<int>(n_pes, 0);
         recv_count = std::vector<int>(n_pes);
@@ -537,7 +577,7 @@ struct mpi_comm_info {
         }
     }
 
-    void get_counts(uint32_t* hashes) {
+    void set_counts(uint32_t* hashes) {
         // get send count
         for (size_t i = 0; i < n_rows; i++) {
             size_t node = (size_t)hashes[i] % (size_t)n_pes;
@@ -580,9 +620,8 @@ struct mpi_comm_info {
             }
             calc_disp(send_disp_null, send_count_null);
             calc_disp(recv_disp_null, recv_count_null);
-            size_t n_null_bytes = std::accumulate(recv_count_null.begin(),
-                                                  recv_count_null.end(), 0);
-            tmp_null_bytes = std::vector<uint8_t>(n_null_bytes);
+            n_null_bytes = std::accumulate(recv_count_null.begin(),
+                                           recv_count_null.end(), 0);
         }
         return;
     }
@@ -704,42 +743,20 @@ void free_array(array_info* arr) {
     return;
 }
 
-table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
-    // error checking
-    if (in_table->ncols() <= 0 || n_keys <= 0) {
-        PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
-        return NULL;
-    }
-
-    // declare comm auxiliary data structures
-    int n_pes, rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-    mpi_comm_info comm_info(n_pes, in_table->columns);
-
-    size_t n_rows = (size_t)in_table->nrows();
-    size_t n_cols = in_table->ncols();
-    std::vector<array_info*> key_arrs = std::vector<array_info*>(
-        in_table->columns.begin(), in_table->columns.begin() + n_keys);
-
-    // get hashes
-    uint32_t seed = 0xb0d01289;
-    uint32_t* hashes = hash_keys(key_arrs, seed);
-
-    comm_info.get_counts(hashes);
-
+table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes, int n_pes, mpi_comm_info const& comm_info) {
     int total_recv = std::accumulate(comm_info.recv_count.begin(),
                                      comm_info.recv_count.end(), 0);
+    size_t n_cols = in_table->ncols();
     std::vector<int> n_char_recvs(n_cols);
     for (size_t i = 0; i < n_cols; i++)
         n_char_recvs[i] =
             std::accumulate(comm_info.recv_count_char[i].begin(),
                             comm_info.recv_count_char[i].end(), 0);
 
-    // printf("%d total count %d\n", rank, total_recv);
-
     // fill send buffer and send
     std::vector<array_info*> out_arrs;
+    size_t n_rows = (size_t)in_table->nrows();
+    std::vector<uint8_t> tmp_null_bytes(comm_info.n_null_bytes);
     for (size_t i = 0; i < n_cols; i++) {
         array_info* in_arr = in_table->columns[i];
         array_info* send_arr =
@@ -747,29 +764,51 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
                         in_arr->dtype, 2 * n_pes);
         array_info* out_arr = alloc_array(total_recv, n_char_recvs[i],
                                           in_arr->arr_type, in_arr->dtype, 0);
-
         fill_send_array(send_arr, in_arr, hashes, comm_info.send_disp,
                         comm_info.send_disp_char[i], comm_info.send_disp_null,
                         n_pes);
 
-        shuffle_array(send_arr, out_arr, comm_info.send_count,
-                      comm_info.recv_count, comm_info.send_disp,
-                      comm_info.recv_disp, comm_info.send_count_char[i],
-                      comm_info.recv_count_char[i], comm_info.send_disp_char[i],
-                      comm_info.recv_disp_char[i], comm_info.send_count_null,
-                      comm_info.recv_count_null, comm_info.send_disp_null,
-                      comm_info.recv_disp_null, comm_info.tmp_null_bytes);
+        shuffle_array(send_arr, out_arr,
+                      comm_info.send_count, comm_info.recv_count,
+                      comm_info.send_disp, comm_info.recv_disp,
+                      comm_info.send_count_char[i], comm_info.recv_count_char[i],
+                      comm_info.send_disp_char[i], comm_info.recv_disp_char[i],
+                      comm_info.send_count_null, comm_info.recv_count_null,
+                      comm_info.send_disp_null, comm_info.recv_disp_null,
+                      tmp_null_bytes);
 
         out_arrs.push_back(out_arr);
         free_array(send_arr);
         delete send_arr;
     }
 
-    // clean up
-    delete[] hashes;
-
     return new table_info(out_arrs);
 }
+
+
+table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
+    // error checking
+    if (in_table->ncols() <= 0 || n_keys <= 0) {
+        PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
+        return NULL;
+    }
+    int n_pes;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    mpi_comm_info comm_info(n_pes, in_table->columns);
+    // computing the hash data structure
+    std::vector<array_info*> key_arrs = std::vector<array_info*>(
+        in_table->columns.begin(), in_table->columns.begin() + n_keys);
+    uint32_t seed = SEED_HASH_PARTITION;
+    uint32_t* hashes = hash_keys(key_arrs, seed);
+
+    comm_info.set_counts(hashes);
+
+    table_info* table = shuffle_table_kernel(in_table, hashes, n_pes, comm_info);
+    delete [] hashes;
+    return table;
+}
+
+
 
 /** Getting the expression of a T value as a vector of characters
  *
@@ -1171,6 +1210,76 @@ array_info* RetrieveArray(
     return out_arr;
 };
 
+
+/** This code test if two keys are equal (Before that the hash should have been
+ * used) It is used that way because we assume that the left key have the same
+ * type as the right keys. The computation is for just one column and it is used
+ * keys or the right keys. Equality means that the column/rows are the same.
+ *
+ * @param arr1 the first column for the comparison
+ * @param iRow1 the row of the first key
+ * @param arr2 the second columne for the comparison
+ * @param iRow2 the row of the second key
+ * @return True if they are equal and false otherwise.
+ */
+bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2, int64_t pos2)
+{
+    if (arr1->arr_type == bodo_array_type::NUMPY) {
+        // In the case of NUMPY, we compare the values for concluding.
+        uint64_t siztype = numpy_item_size[arr1->dtype];
+        char* ptr1 = arr1->data1 + siztype * pos1;
+        char* ptr2 = arr2->data1 + siztype * pos2;
+        if (memcmp(ptr1, ptr2, siztype) != 0) return false;
+    }
+    if (arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        // NULLABLE case. We need to consider the bitmask and the values.
+        uint8_t* null_bitmask1 = (uint8_t*)arr1->null_bitmask;
+        uint8_t* null_bitmask2 = (uint8_t*)arr2->null_bitmask;
+        bool bit1 = GetBit(null_bitmask1, pos1);
+        bool bit2 = GetBit(null_bitmask2, pos2);
+        // If one bitmask is T and the other the reverse then they are
+        // clearly not equal.
+        if (bit1 != bit2) return false;
+        // If both bitmasks are false, then it does not matter what value
+        // they are storing. Comparison is the same as for NUMPY.
+        if (bit1) {
+            uint64_t siztype = numpy_item_size[arr1->dtype];
+            char* ptr1 = arr1->data1 + siztype * pos1;
+            char* ptr2 = arr2->data1 + siztype * pos2;
+            if (memcmp(ptr1, ptr2, siztype) != 0) return false;
+        }
+    }
+    if (arr1->arr_type == bodo_array_type::STRING) {
+        // For STRING case we need to deal bitmask and the values.
+        uint8_t* null_bitmask1 = (uint8_t*)arr1->null_bitmask;
+        uint8_t* null_bitmask2 = (uint8_t*)arr2->null_bitmask;
+        bool bit1 = GetBit(null_bitmask1, pos1);
+        bool bit2 = GetBit(null_bitmask2, pos2);
+        // If bitmasks are different then we conclude they are not equal.
+        if (bit1 != bit2) return false;
+        // If bitmasks are both false, then no need to compare the string
+        // values.
+        if (bit1) {
+            // Here we consider the shifts in data2 for the comparison.
+            uint32_t* data2_1 = (uint32_t*)arr1->data2;
+            uint32_t* data2_2 = (uint32_t*)arr2->data2;
+            uint32_t len1 = data2_1[pos1 + 1] - data2_1[pos1];
+            uint32_t len2 = data2_2[pos2 + 1] - data2_2[pos2];
+            // If string lengths are different then they are different.
+            if (len1 != len2) return false;
+            // Now we iterate over the characters for the comparison.
+            uint32_t pos1_prev = data2_1[pos1];
+            uint32_t pos2_prev = data2_2[pos2];
+            char* data1_1 = arr1->data1 + pos1_prev;
+            char* data1_2 = arr2->data1 + pos2_prev;
+            if (memcmp(data1_1, data1_2, len1) != 0) return false;
+        }
+    }
+    return true;
+};
+
+
+
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same
  * type as the right keys. The shift is used to precise whether we use the left
@@ -1178,9 +1287,7 @@ array_info* RetrieveArray(
  * Thus the test iterates over the columns and if one is different then result
  * is false. We consider all types of bodo_array_type
  *
- * This function is currently unused but could be used in the future.
- *
- * @param in_table the input table
+ * @param columns the vector of columns
  * @param n_key the number of keys considered for the comparison
  * @param shift_key1 the column shift for the first key
  * @param iRow1 the row of the first key
@@ -1193,74 +1300,9 @@ bool TestEqual(std::vector<array_info*> const& columns, size_t const& n_key,
                size_t const& shift_key2, size_t const& iRow2) {
     // iteration over the list of key for the comparison.
     for (size_t iKey = 0; iKey < n_key; iKey++) {
-        if (columns[shift_key1 + iKey]->arr_type == bodo_array_type::NUMPY) {
-            // In the case of NUMPY, we compare the values for concluding.
-            uint64_t siztype = numpy_item_size[columns[shift_key1 + iKey]->dtype];
-            for (uint64_t u = 0; u < siztype; u++) {
-                if (columns[shift_key1 + iKey]->data1[siztype * iRow1 + u] !=
-                    columns[shift_key2 + iKey]->data1[siztype * iRow2 + u])
-                    return false;
-            }
-        }
-        if (columns[shift_key1 + iKey]->arr_type ==
-            bodo_array_type::NULLABLE_INT_BOOL) {
-            // NULLABLE case. We need to consider the bitmask and the values.
-            uint8_t* null_bitmask1 =
-                (uint8_t*)columns[shift_key1 + iKey]->null_bitmask;
-            uint8_t* null_bitmask2 =
-                (uint8_t*)columns[shift_key2 + iKey]->null_bitmask;
-            bool bit1 = GetBit(null_bitmask1, iRow1);
-            bool bit2 = GetBit(null_bitmask2, iRow2);
-            // If one bitmask is T and the other the reverse then they are
-            // clearly not equal.
-            if (bit1 != bit2) return false;
-            // If both bitmasks are false, then it does not matter what value
-            // they are storing. Comparison is the same as for NUMPY.
-            if (bit1) {
-                uint64_t siztype =
-                    numpy_item_size[columns[shift_key1 + iKey]->dtype];
-                for (uint64_t u = 0; u < siztype; u++) {
-                    if (columns[shift_key1 + iKey]
-                            ->data1[siztype * iRow1 + u] !=
-                        columns[shift_key2 + iKey]->data1[siztype * iRow2 + u])
-                        return false;
-                }
-            }
-        }
-        if (columns[shift_key1 + iKey]->arr_type == bodo_array_type::STRING) {
-            // For STRING case we need to deal bitmask and the values.
-            uint8_t* null_bitmask1 =
-                (uint8_t*)columns[shift_key1 + iKey]->null_bitmask;
-            uint8_t* null_bitmask2 =
-                (uint8_t*)columns[shift_key2 + iKey]->null_bitmask;
-            bool bit1 = GetBit(null_bitmask1, iRow1);
-            bool bit2 = GetBit(null_bitmask2, iRow2);
-            // If bitmasks are different then we conclude they are not equal.
-            if (bit1 != bit2) return false;
-            // If bitmasks are both false, then no need to compare the string
-            // values.
-            if (bit1) {
-                // Here we consider the shifts in data2 for the comparison.
-                uint32_t* data2_1 =
-                    (uint32_t*)columns[shift_key1 + iKey]->data2;
-                uint32_t* data2_2 =
-                    (uint32_t*)columns[shift_key2 + iKey]->data2;
-                uint32_t len1 = data2_1[iRow1 + 1] - data2_1[iRow1];
-                uint32_t len2 = data2_2[iRow2 + 1] - data2_2[iRow2];
-                // If string lengths are different then they are different.
-                if (len1 != len2) return false;
-                // Now we iterate over the characters for the comparison.
-                uint32_t pos1_prev = data2_1[iRow1];
-                uint32_t pos2_prev = data2_2[iRow2];
-                char* data1_1 = (char*)columns[shift_key1 + iKey]->data1;
-                char* data1_2 = (char*)columns[shift_key2 + iKey]->data1;
-                for (uint32_t pos = 0; pos < len1; pos++) {
-                    uint32_t pos1 = pos1_prev + pos;
-                    uint32_t pos2 = pos2_prev + pos;
-                    if (data1_1[pos1] != data1_2[pos2]) return false;
-                }
-            }
-        }
+        bool test = TestEqualColumn(columns[shift_key1 + iKey], iRow1, columns[shift_key2 + iKey], iRow2);
+        if (!test)
+          return false;
     }
     // If all keys are equal then we are ok and the keys are equals.
     return true;
@@ -1527,6 +1569,8 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
     size_t n_tot_right = n_key + n_data_right;
     size_t sum_dim = 2 * n_key + n_data_left + n_data_right;
     size_t n_col = in_table->ncols();
+    for (size_t iKey=0; iKey<n_key; iKey++)
+      CheckEqualityArrayType(in_table->columns[iKey], in_table->columns[n_tot_left + iKey]);
     if (n_col != sum_dim) {
         PyErr_SetString(PyExc_RuntimeError, "incoherent dimensions");
         return NULL;
@@ -3494,7 +3538,135 @@ table_info* groupby_and_nunique(table_info* in_table, int64_t num_keys,
 
 
 
+/**
+ * Compute the boolean array on output corresponds to the "isin" function in matlab.
+ * each group, writes the result to a new output table containing one row per
+ * group.
+ *
+ * @param out_arr the boolean array on output.
+ * @param in_arr the list of values on input
+ * @param in_values the list of values that we need to check with
+ */
+void array_isin_kernel(array_info* out_arr, array_info* in_arr, array_info* in_values)
+{
+    CheckEqualityArrayType(in_arr, in_values);
+    if (out_arr->dtype != Bodo_CTypes::_BOOL) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "array out_arr should be a boolean array");
+        return;
+    }
+    uint32_t seed = 0xb0d01d80;
 
+    int64_t len_values = in_values->length;
+    uint32_t* hashes_values = new uint32_t[len_values];
+    hash_array(hashes_values, in_values, (size_t)len_values, seed);
+
+    int64_t len_in_arr = in_arr->length;
+    uint32_t* hashes_in_arr = new uint32_t[len_in_arr];
+    hash_array(hashes_in_arr, in_arr, (size_t)len_in_arr, seed);
+
+    std::function<bool(int64_t,int64_t)> equal_fct=[&](int64_t const& pos1, int64_t const& pos2) -> bool {
+      int64_t pos1_b, pos2_b;
+      array_info *arr1_b, *arr2_b;
+      if (pos1 < len_values) {
+        arr1_b = in_values;
+        pos1_b = pos1;
+      }
+      else {
+        arr1_b = in_arr;
+        pos1_b = pos1 - len_values;
+      }
+      if (pos2 < len_values) {
+        arr2_b = in_values;
+        pos2_b = pos2;
+      }
+      else {
+        arr2_b = in_arr;
+        pos2_b = pos2 - len_values;
+      }
+      return TestEqualColumn(arr1_b, pos1_b, arr2_b, pos2_b);
+    };
+    std::function<size_t(int64_t)> hash_fct=[&](int64_t const& pos) -> size_t {
+      int64_t value;
+      if (pos < len_values)
+        value = hashes_values[pos];
+      else
+        value = hashes_in_arr[pos - len_values];
+      return (size_t)value;
+    };
+    SET_CONTAINER <size_t, std::function<size_t(int64_t)>, std::function<bool(int64_t,int64_t)>> eset({}, hash_fct, equal_fct);
+    for (int64_t pos=0; pos<len_values; pos++) {
+      eset.insert(pos);
+    }
+    for (int64_t pos=0; pos<len_in_arr; pos++) {
+      bool test = eset.count(pos + len_values) == 1;
+      out_arr->at<bool>(pos) = test;
+    }
+    delete [] hashes_in_arr;
+    delete [] hashes_values;
+}
+
+
+
+
+
+
+/**
+ * Compute the boolean array on output corresponds to the "isin" function in matlab.
+ * each group, writes the result to a new output table containing one row per
+ * group.
+ *
+ * @param out_arr the boolean array on output.
+ * @param in_arr the list of values on input
+ * @param in_values the list of values that we need to check with
+ * @param is_parallel, whether the computation is parallel or not.
+ */
+void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values, bool is_parallel)
+{
+    if (!is_parallel) {
+        return array_isin_kernel(out_arr, in_arr, in_values);
+    }
+    std::vector<array_info*> vect_in_values={in_values};
+    table_info table_in_values = table_info(vect_in_values);
+    std::vector<array_info*> vect_in_arr={in_arr};
+    table_info table_in_arr = table_info(vect_in_arr);
+
+    int64_t num_keys = 1;
+    table_info* shuf_table_in_values = shuffle_table(&table_in_values, num_keys);
+    // we need the comm_info and hashes for the reverse shuffling
+    int n_pes;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    mpi_comm_info comm_info(n_pes, table_in_arr.columns);
+    uint32_t seed = SEED_HASH_PARTITION;
+    uint32_t* hashes = hash_keys(vect_in_arr, seed);
+    comm_info.set_counts(hashes);
+    table_info* shuf_table_in_arr = shuffle_table_kernel(&table_in_arr, hashes, n_pes, comm_info);
+    // Creation of the output array.
+    int64_t len = shuf_table_in_arr->columns[0]->length;
+    array_info* shuf_out_arr = alloc_array(len, -1, out_arr->arr_type, out_arr->dtype, 0);
+    // Calling isin on the shuffled info
+    array_isin_kernel(shuf_out_arr, shuf_table_in_arr->columns[0], shuf_table_in_values->columns[0]);
+
+    // Deleting the data after usage
+    delete_table_free_arrays(shuf_table_in_values);
+    delete_table_free_arrays(shuf_table_in_arr);
+    // Now the reverse shuffling operation. Since the array out_arr is not directly handled
+    // by the comm_info, we have to get out hands dirty.
+    MPI_Datatype mpi_typ = get_MPI_typ(out_arr->dtype);
+    size_t n_rows=out_arr->length;
+    std::vector<uint8_t> tmp_recv(n_rows);
+    MPI_Alltoallv(shuf_out_arr->data1,
+                  comm_info.recv_count.data(), comm_info.recv_disp.data(),
+                  mpi_typ, tmp_recv.data(),
+                  comm_info.send_count.data(), comm_info.send_disp.data(),
+                  mpi_typ, MPI_COMM_WORLD);
+    fill_recv_data_inner<uint8_t>(tmp_recv.data(), (uint8_t*)out_arr->data1, hashes,
+                                  comm_info.send_disp, n_pes,
+                                  n_rows);
+    // freeing just before returning.
+    free_array(shuf_out_arr);
+    delete [] hashes;
+}
 
 
 
@@ -3930,5 +4102,7 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                            PyLong_FromVoidPtr((void*)(&groupby_and_aggregate)));
     PyObject_SetAttrString(m, "groupby_and_aggregate_nunique",
                            PyLong_FromVoidPtr((void*)(&groupby_and_aggregate_nunique)));
+    PyObject_SetAttrString(m, "array_isin",
+                           PyLong_FromVoidPtr((void*)(&array_isin)));
     return m;
 }

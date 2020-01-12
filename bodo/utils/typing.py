@@ -66,8 +66,9 @@ def is_overload_constant_str_list(val):
 def is_overload_constant_int(val):
     return (
         isinstance(val, int)
-        or (isinstance(val, types.IntegerLiteral)
-            and isinstance(val.literal_value, int))
+        or (
+            isinstance(val, types.IntegerLiteral) and isinstance(val.literal_value, int)
+        )
         or ((isinstance(val, types.Omitted) and isinstance(val.value, int)))
     )
 
@@ -189,6 +190,82 @@ def is_list_like_index_type(t):
         or isinstance(t, (NumericIndexType, RangeIndexType))
         or isinstance(t, SeriesType)
     )
+
+
+def get_index_names(t, func_name, default_name):
+    """get name(s) of index type 't', assuming constant string literal name(s) are used.
+    otherwise, throw error.
+    """
+    from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+
+    err_msg = "{}: index name should be a constant string".format(func_name)
+    # TODO: remove when none index is gone
+    if t == types.none:
+        t = bodo.hiframes.pd_index_ext.RangeIndexType(types.none)
+
+    # MultIndex has multiple names
+    if isinstance(t, MultiIndexType):
+        names = []
+        for i, n_typ in enumerate(t.names_typ):
+            if n_typ == types.none:
+                names.append("level_{}".format(i))
+                continue
+            if not is_overload_constant_str(n_typ):
+                raise BodoError(err_msg)
+            names.append(get_overload_const_str(n_typ))
+        return tuple(names)
+
+    # other indices have a single name
+    if t.name_typ == types.none:
+        return (default_name,)
+    if not is_overload_constant_str(t.name_typ):
+        raise BodoError(err_msg)
+    return (get_overload_const_str(t.name_typ),)
+
+
+def get_index_data_arr_types(t):
+    from bodo.hiframes.pd_index_ext import (
+        NumericIndexType,
+        RangeIndexType,
+        StringIndexType,
+        DatetimeIndexType,
+        TimedeltaIndexType,
+        PeriodIndexType,
+    )
+    from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+
+    # TODO: remove when none index is gone
+    if t == types.none:
+        t = RangeIndexType(types.none)
+
+    if isinstance(t, MultiIndexType):
+        return tuple(t.array_types)
+
+    if isinstance(t, (RangeIndexType, PeriodIndexType)):
+        return (types.Array(types.int64, 1, "C"),)
+
+    if isinstance(t, NumericIndexType):
+        return (types.Array(t.dtype, 1, "C"),)
+
+    if isinstance(t, StringIndexType):
+        return (bodo.string_array_type,)
+
+    if isinstance(t, DatetimeIndexType):
+        return (bodo.hiframes.pd_index_ext._dt_index_data_typ,)
+
+    if isinstance(t, TimedeltaIndexType):
+        return (bodo.hiframes.pd_index_ext._timedelta_index_data_typ,)
+
+    raise BodoError("Invalid index type {}".format(t))
+
+
+def get_val_type_maybe_str_literal(value):
+    """Get type of value, using StringLiteral if possible
+    """
+    t = numba.typeof(value)
+    if isinstance(value, str):
+        t = types.StringLiteral(value)
+    return t
 
 
 # type used to pass metadata to type inference functions
@@ -395,7 +472,7 @@ class ConvertTupRecType(AbstractTemplate):
 
 @lower_builtin(convert_tup_to_rec, types.Any)
 def lower_convert_impl(context, builder, sig, args):
-    val, = args
+    (val,) = args
     in_typ = sig.args[0]
     rec_typ = sig.return_type
 
@@ -436,7 +513,7 @@ class ConvertRecTupType(AbstractTemplate):
 
 @lower_builtin(convert_rec_to_tup, types.Any)
 def lower_convert_rec_tup_impl(context, builder, sig, args):
-    val, = args
+    (val,) = args
     rec_typ = sig.args[0]
     tup_typ = sig.return_type
 

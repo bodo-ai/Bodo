@@ -33,6 +33,7 @@ from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.series_indexing import SeriesIlocType
+from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import (
     BodoWarning,
@@ -48,6 +49,8 @@ from bodo.utils.typing import (
     get_overload_const_str,
     get_const_str_list,
     is_overload_bool_list,
+    get_index_names,
+    get_index_data_arr_types,
 )
 
 
@@ -2040,7 +2043,9 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
 
 
 def sort_values_dummy(df, by, ascending, inplace, na_position):  # pragma: no cover
-    return df.sort_values(by, ascending=ascending, inplace=inplace, na_position=na_position)
+    return df.sort_values(
+        by, ascending=ascending, inplace=inplace, na_position=na_position
+    )
 
 
 @infer_global(sort_values_dummy)
@@ -2123,7 +2128,7 @@ def set_parent_dummy(df):  # pragma: no cover
 class ParentDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        df, = args
+        (df,) = args
         ret = DataFrameType(df.data, df.index, df.columns, True)
         return signature(ret, *args)
 
@@ -2151,7 +2156,7 @@ def itertuples_dummy(df):  # pragma: no cover
 class ItertuplesDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        df, = args
+        (df,) = args
         # XXX index handling, assuming implicit index
         assert "Index" not in df.columns
         columns = ("Index",) + df.columns
@@ -2218,13 +2223,29 @@ def lower_fillna_dummy(context, builder, sig, args):
 def reset_index_overload(
     df, level=None, drop=False, inplace=False, col_level=0, col_fill=""
 ):
+    # make sure 'drop' is a constant bool
+    if not is_overload_constant_bool(drop):
+        raise BodoError(
+            "reset_index(): 'drop' parameter should be a constant boolean value"
+        )
+
+    # make sure 'inplace' is a constant bool
+    if not is_overload_constant_bool(inplace):
+        raise BodoError(
+            "reset_index(): 'inplace' parameter should be a constant boolean value"
+        )
+
+    if is_overload_false(drop) and is_overload_true(inplace):
+        raise BodoError(
+            "reset_index(): drop=False and inplace=True parameter combination not supported yet"
+        )
 
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: inplace of df with parent (reflection)
     def _impl(
         df, level=None, drop=False, inplace=False, col_level=0, col_fill=""
     ):  # pragma: no cover
-        return bodo.hiframes.pd_dataframe_ext.reset_index_dummy(df, inplace)
+        return bodo.hiframes.pd_dataframe_ext.reset_index_dummy(df, drop, inplace)
 
     return _impl
 
@@ -2236,24 +2257,38 @@ def reset_index_dummy(df, n):  # pragma: no cover
 @infer_global(reset_index_dummy)
 class ResetIndexDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
-        df, inplace = args
-        # inplace value
-        if isinstance(inplace, bodo.utils.utils.BooleanLiteral):
-            inplace = inplace.literal_value
-        else:
-            # XXX inplace type is just bool when value not passed. Therefore,
-            # we assume the default False value.
-            # TODO: more robust fix or just check
-            inplace = False
+        df, drop, inplace = args
+        # safe to just get const values here, since error checking is done in
+        # reset_index overload
+        drop = is_overload_true(drop)
+        inplace = is_overload_true(inplace)
 
-        if not inplace:
-            out_df = DataFrameType(df.data, None, df.columns)
-            return signature(out_df, *args)
-        return signature(types.none, *args)
+        if inplace:
+            return signature(types.none, *args)
+
+        # default output index is simple integer index with no name
+        # TODO: handle MultiIndex and `level` argument case
+        index = types.none  # TODO: RangeIndexType(types.none)
+        data = df.data
+        columns = df.columns
+        if not drop:
+            # pandas assigns "level_0" if "index" is already used as a column name
+            # https://github.com/pandas-dev/pandas/blob/08b70d837dd017d49d2c18e02369a15272b662b2/pandas/core/frame.py#L4547
+            default_name = "index" if "index" not in columns else "level_0"
+            index_names = get_index_names(
+                df.index, "DataFrame.reset_index()", default_name
+            )
+            columns = index_names + columns
+            data = get_index_data_arr_types(df.index) + data
+
+        out_df = DataFrameType(data, index, columns)
+        return signature(out_df, *args)
 
 
 @lower_builtin(reset_index_dummy, types.VarArg(types.Any))
 def lower_reset_index_dummy(context, builder, sig, args):
+    if sig.return_type is types.none:
+        return context.get_dummy_value()
     out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
     return out_obj._getvalue()
 

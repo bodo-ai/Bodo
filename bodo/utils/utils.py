@@ -66,6 +66,7 @@ _numba_to_c_type_map = {
     types.float32: CTypeEnum.Float32.value,
     types.float64: CTypeEnum.Float64.value,
     types.NPDatetime("ns"): CTypeEnum.UInt64.value,
+    types.NPTimedelta("ns"): CTypeEnum.UInt64.value,
     types.bool_: CTypeEnum.Bool.value,
     types.int16: CTypeEnum.Int16.value,
     types.uint16: CTypeEnum.UInt16.value,

@@ -44,9 +44,10 @@ numba.ir_utils.remove_call_handlers.append(remove_h5)
 class H5_IO(object):
     """analyze and transform hdf5 calls"""
 
-    def __init__(self, func_ir, _locals, arg_types, reverse_copies):
+    def __init__(self, func_ir, _locals, flags, arg_types, reverse_copies):
         self.func_ir = func_ir
         self.locals = _locals
+        self.flags = flags
         self.arg_types = arg_types
         self.reverse_copies = reverse_copies
 
@@ -136,5 +137,5 @@ class H5_IO(object):
         new_name = self.reverse_copies.get(varname, None)
         typ = self.locals.pop(new_name, None)
         if typ is None and new_name is not None:
-            typ = self.locals.pop(new_name + ":h5_types", None)
+            typ = self.flags.h5_types.get(new_name, None)
         return typ
