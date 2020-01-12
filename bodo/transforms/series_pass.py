@@ -551,7 +551,7 @@ class SeriesPass(object):
             operator.gt,
             operator.le,
             operator.lt,
-        ) and (typ1 == datetime_date_array_type or typ2 == datetime_timedelta_type):
+        ) and (typ1 == datetime_date_array_type or typ2 == datetime_date_array_type):
             impl = bodo.hiframes.datetime_date_ext.create_cmp_op_overload(rhs.fn)(
                 typ1, typ2
             )
