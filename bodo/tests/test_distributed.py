@@ -539,6 +539,19 @@ def test_dist_warning3():
         bodo.jit(impl)(10)
 
 
+def test_empty_object_array_warning():
+    """Make sure BodoWarning is thrown when there is an empty object array in input
+    """
+
+    def impl(A):
+        return A
+
+    with pytest.warns(BodoWarning, match="Empty object array passed to Bodo"):
+        bodo.jit(impl)(np.array([], dtype=np.object))
+    with pytest.warns(BodoWarning, match="Empty object array passed to Bodo"):
+        bodo.jit(impl)(pd.Series(np.array([], dtype=np.object)))
+
+
 def test_dist_flags():
     """Make sure Bodo flags are preserved when the same Dispatcher that has distributed
     flags is called with different data types, triggering multiple compilations.

@@ -5,6 +5,7 @@ Boxing and unboxing support for DataFrame, Series, etc.
 import pandas as pd
 import numpy as np
 import datetime
+import warnings
 import numba
 from numba.extending import (
     typeof_impl,
@@ -41,6 +42,7 @@ from bodo.hiframes.split_impl import (
     string_array_split_view_type,
     box_str_arr_split_view,
 )
+from bodo.utils.typing import BodoWarning
 
 from bodo.libs import hstr_ext
 import llvmlite.binding as ll
@@ -139,8 +141,6 @@ def _infer_series_dtype(S):
         # XXX: assume empty series/column is string since it's the most common
         # TODO: checks for distributed case with list/datetime.date/...
         # e.g. one rank's data is empty but other ranks have other types
-        if len(S) == 0:
-            return string_type
         # XXX assuming the whole column is strings if 1st val is string
         # TODO: handle NA as 1st value
         i = 0
@@ -148,6 +148,12 @@ def _infer_series_dtype(S):
             i += 1
         if i == len(S):
             # assume all NA object column is string
+            warnings.warn(
+                BodoWarning(
+                "Empty object array passed to Bodo, which causes ambiguity in typing. "
+                "This can cause errors in parallel execution."
+                )
+            )
             return string_type
 
         first_val = S.iloc[i]
@@ -157,7 +163,7 @@ def _infer_series_dtype(S):
             return string_type
         elif isinstance(first_val, bool):
             return types.bool_  # will become BooleanArray in Series and DF
-        elif isinstance(S.values[0], datetime.date):
+        elif isinstance(S.values[i], datetime.date):
             # XXX: using .values to check date type since DatetimeIndex returns
             # Timestamp which is subtype of datetime.date
             return datetime_date_type
