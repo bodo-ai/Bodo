@@ -1,6 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
 import datetime
+import warnings
 import numpy as np
 import numba
 import bodo
@@ -35,6 +36,7 @@ from numba import cgutils
 from bodo.libs.str_ext import string_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type, datetime_date_type
+from bodo.utils.typing import BodoWarning
 from numba.targets.imputils import (
     impl_ret_new_ref,
     impl_ret_borrowed,
@@ -1694,6 +1696,12 @@ def _infer_ndarray_obj_dtype(val):
         i += 1
     if i == len(val):
         # empty or all NA object arrays are assumed to be strings
+        warnings.warn(
+            BodoWarning(
+            "Empty object array passed to Bodo, which causes ambiguity in typing. "
+            "This can cause errors in parallel execution."
+            )
+        )
         return string_type
 
     first_val = val[i]
