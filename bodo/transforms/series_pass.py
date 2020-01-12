@@ -80,6 +80,8 @@ from bodo.hiframes.series_indexing import SeriesIatType
 from bodo.ir.aggregate import Aggregate
 from bodo.hiframes import series_kernels, split_impl
 from bodo.hiframes.series_kernels import series_replace_funcs
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.split_impl import (
     string_array_split_view_type,
     StringArraySplitViewType,
@@ -535,6 +537,25 @@ class SeriesPass(object):
                     typ1, typ2
                 )
                 return self._replace_func(impl, [arg1, arg2])
+            if typ1 == datetime_date_array_type and typ2 == datetime_timedelta_type:
+                impl = bodo.hiframes.datetime_date_ext.overload_datetime_date_arr_sub(
+                    typ1, typ2
+                )
+                return self._replace_func(impl, [arg1, arg2])
+
+        # datetime_date_array operations
+        if rhs.fn in (
+            operator.eq,
+            operator.ne,
+            operator.ge,
+            operator.gt,
+            operator.le,
+            operator.lt,
+        ) and (typ1 == datetime_date_array_type or typ2 == datetime_date_array_type):
+            impl = bodo.hiframes.datetime_date_ext.create_cmp_op_overload(rhs.fn)(
+                typ1, typ2
+            )
+            return self._replace_func(impl, [arg1, arg2])
 
         # string comparison with DatetimeIndex
         if rhs.fn in (
@@ -1230,7 +1251,9 @@ class SeriesPass(object):
         if fdef == ("alloc_type", "bodo.utils.utils"):
             typ = self.typemap[rhs.args[1].name].instance_type
             if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
-                impl = lambda n, t: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
+                impl = lambda n, t: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(
+                    n
+                )
             elif isinstance(typ, IntegerArrayType):
                 impl = lambda n, t: bodo.libs.int_arr_ext.init_integer_array(
                     np.empty(n, _dtype), np.empty((n + 7) >> 3, np.uint8)
@@ -1382,9 +1405,10 @@ class SeriesPass(object):
             return self._replace_func(impl, rhs.args)
 
         # inline np.where() for 3 arg case with 1D input
-        if (fdef == ("where", "numpy")
-                or fdef == ("where_impl", "bodo.hiframes.series_impl")) and (
-                len(rhs.args) == 3 and self.typemap[rhs.args[0].name].ndim == 1):
+        if (
+            fdef == ("where", "numpy")
+            or fdef == ("where_impl", "bodo.hiframes.series_impl")
+        ) and (len(rhs.args) == 3 and self.typemap[rhs.args[0].name].ndim == 1):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
             impl = bodo.hiframes.series_impl.overload_np_where(*arg_typs, **kw_typs)

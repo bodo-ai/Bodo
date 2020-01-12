@@ -419,6 +419,24 @@ def test_timestamp_constructor_pos():
     assert bodo.jit(test_impl)() == test_impl()
 
 
+def test_datetime_date_series_timedelta_ops():
+    def test_sub(S, t):
+        return S - t
+
+    S = pd.Series(pd.date_range("2017-01-03", "2017-01-07").date)
+    t = datetime.timedelta(1, 1, 1)
+    check_func(test_sub, (S, t))
+
+
+def test_datetime_date_series_cmp():
+    def test_cmp(S, t):
+        return S >= t
+
+    S = pd.Series(pd.date_range("2017-01-03", "2017-01-07").date)
+    t = datetime.date(2017, 1, 4)
+    check_func(test_cmp, (S, t))
+
+
 class TestDate(unittest.TestCase):
     def test_datetime_index(self):
         def test_impl(df):
