@@ -49,13 +49,10 @@ requirements:
 
 
 test:
-  requires:
-    - hdf5 * mpi_mpich_*
-    - h5py
-    - scipy
-    - pytest
   imports:
     - bodo
+  source_files:
+    - examples/pi.py
 
 
 about:
