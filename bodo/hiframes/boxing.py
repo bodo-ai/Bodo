@@ -345,6 +345,8 @@ def unbox_series(typ, val, c):
     )
     # TODO: set parent pointer
     c.pyapi.decref(arr_obj)
+    c.pyapi.decref(index_obj)
+    c.pyapi.decref(name_obj)
     return NativeValue(series_val)
 
 
