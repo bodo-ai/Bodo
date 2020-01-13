@@ -1698,14 +1698,6 @@ class SeriesPass(object):
                 impl, rhs.args, pysig=numba.utils.pysignature(stub), kws=dict(rhs.kws)
             )
 
-        # functions we revert to Numpy for now, otherwise warning
-        # TODO: fix distributed cumsum/cumprod
-        # TODO: handle series-specific cases for this funcs
-        if not func_name.startswith("values."):
-            warnings.warn(
-                "unknown Series call {}, reverting to Numpy".format(func_name)
-            )
-
         return [assign]
 
     def _run_call_series_fillna(self, assign, lhs, rhs, series_var):
