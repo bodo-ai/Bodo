@@ -61,6 +61,8 @@ from bodo.libs.array_tools import (
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import StringArray, string_array_type
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.hiframes.pd_index_ext import is_pd_index_type
+from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 
 
 class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column names
@@ -295,6 +297,7 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
     data has changed, and get the array variables from init_dataframe() args if
     not changed.
     """
+    # assert is_pd_index_type(index_typ) or isinstance(index_typ, MultiIndexType)
 
     n_cols = len(data_tup_typ.types)
     # assert all(isinstance(t, types.StringLiteral) for t in col_names_typ.types)
@@ -737,6 +740,7 @@ def _get_df_args(data, index, columns, dtype, copy):
     if not is_overload_none(dtype):
         astype_str = ".astype(dtype)"
 
+    index_is_none = is_overload_none(index)
     index_arg = "bodo.utils.conversion.convert_to_index(index)"
 
     # data is sentinel tuple (converted from dictionary)
@@ -761,6 +765,7 @@ def _get_df_args(data, index, columns, dtype, copy):
                     index_arg = "bodo.hiframes.pd_series_ext.get_series_index(data[{}])".format(
                         n_cols + 1 + i
                     )
+                    index_is_none = False
                     break
     else:
         # ndarray case
@@ -785,32 +790,42 @@ def _get_df_args(data, index, columns, dtype, copy):
     else:
         col_names = columns.consts
 
-    _fill_null_arrays(data_dict, col_names, index)
+    df_len = _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg)
+    _fill_null_arrays(data_dict, col_names, df_len)
+
+    # set default RangeIndex if index argument is None and data argument isn't Series
+    if index_is_none:
+        index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(df_len)
 
     data_args = ", ".join(data_dict[c] for c in col_names)
     col_args = ", ".join("'{}'".format(c) for c in col_names)
     return col_args, data_args, index_arg
 
 
-def _fill_null_arrays(data_dict, col_names, index):
-    """Fills data_dict with Null arrays if there are columns that are not
-    available in data_dict.
+def _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg):
+    """return generated text for length of dataframe, given the input info in the
+    pd.DataFrame() call
     """
-    # no null array needed
-    if all(c in data_dict for c in col_names):
-        return
-
-    # get null array, needs index or an array available for length
     df_len = None
     for c in col_names:
         if c in data_dict:
             df_len = "len({})".format(data_dict[c])
             break
 
-    if df_len is None and not is_overload_none(index):
-        df_len = "len(index)"  # TODO: test
+    if df_len is None and not index_is_none:
+        df_len = "len({})".format(index_arg)  # TODO: test
 
     assert df_len is not None, "empty dataframe with null arrays"  # TODO
+    return df_len
+
+
+def _fill_null_arrays(data_dict, col_names, df_len):
+    """Fills data_dict with Null arrays if there are columns that are not
+    available in data_dict.
+    """
+    # no null array needed
+    if all(c in data_dict for c in col_names):
+        return
 
     # TODO: object array with NaN (use StringArray?)
     null_arr = "np.full({}, np.nan)".format(df_len)

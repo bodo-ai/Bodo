@@ -14,7 +14,6 @@ from bodo.libs.str_arr_ext import (get_str_arr_item_length, get_utf8_size,
     pre_alloc_string_array
 )
 from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.pd_index_ext import is_pd_index_type
 from bodo.hiframes.pd_categorical_ext import PDCategoricalClass
 from bodo.utils.typing import (
     is_overload_none,
