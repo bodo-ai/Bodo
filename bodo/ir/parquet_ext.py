@@ -77,11 +77,14 @@ numba.array_analysis.array_analysis_extensions[ParquetReader] = pq_array_analysi
 
 
 def pq_distributed_analysis(pq_node, array_dists):
+    # all output arrays should have the same distribution
+    out_dist = Distribution.OneD
     for v in pq_node.out_vars:
-        if v.name not in array_dists:
-            array_dists[v.name] = Distribution.OneD
+        if v.name in array_dists:
+            out_dist = Distribution(min(out_dist.value, array_dists[v.name].value))
 
-    return
+    for v in pq_node.out_vars:
+        array_dists[v.name] = out_dist
 
 
 distributed_analysis.distributed_analysis_extensions[
