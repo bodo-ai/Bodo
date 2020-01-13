@@ -13,7 +13,7 @@
     }
 
 // a global singleton instance of S3FileSystem that is
-// initialized the first time it is needed and reuse afterwards
+// initialized the first time it is needed and reused afterwards
 std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
 bool is_fs_initialized = false;
 
@@ -77,6 +77,10 @@ class S3FileReader : public FileReader {
 
 extern "C" {
 
+void s3_get_fs(std::shared_ptr<arrow::fs::S3FileSystem> *fs) {
+    *fs = get_s3_fs();
+}
+
 FileReader *init_s3_reader(const char *fname) {
     return new S3FileReader(fname);
 }
@@ -100,6 +104,8 @@ PyMODINIT_FUNC PyInit_s3_reader(void) {
                            PyLong_FromVoidPtr((void *)(&init_s3_reader)));
     PyObject_SetAttrString(m, "s3_open_file",
                            PyLong_FromVoidPtr((void *)(&s3_open_file)));
+    PyObject_SetAttrString(m, "s3_get_fs",
+                           PyLong_FromVoidPtr((void *)(&s3_get_fs)));
 
     return m;
 }

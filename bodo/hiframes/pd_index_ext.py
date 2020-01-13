@@ -1178,6 +1178,14 @@ class NumericIndexType(types.IterableType):
         # TODO: handle iterator
         return types.iterators.ArrayIterator(types.Array(self.dtype, 1, "C"))
 
+    @property
+    def pandas_type_name(self):
+        return str(self.dtype)
+
+    @property
+    def numpy_type_name(self):
+        return str(self.dtype)
+
 
 @typeof_impl.register(pd.Int64Index)
 def typeof_pd_int64_index(val, c):
@@ -1346,6 +1354,14 @@ class StringIndexType(types.IterableType):
 
     def copy(self):
         return StringIndexType(self.name_typ)
+
+    @property
+    def pandas_type_name(self):
+        return "unicode"
+
+    @property
+    def numpy_type_name(self):
+        return "object"
 
     @property
     def iterator_type(self):

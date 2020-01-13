@@ -374,7 +374,7 @@ class DistributedAnalysis(object):
             isinstance(rhs, ir.Expr)
             and rhs.op == "getattr"
             and isinstance(self.typemap[rhs.value.name], DataFrameType)
-            and rhs.attr == "to_csv"
+            and rhs.attr in {"to_csv", "to_parquet"}
         ):
             return
         # list methods
@@ -1105,8 +1105,8 @@ class DistributedAnalysis(object):
             self._analyze_call_set_REP(lhs, [arr], array_dists, "reshape")
 
     def _analyze_call_df(self, lhs, arr, func_name, args, array_dists):
-        # to_csv() can be parallelized
-        if func_name == "to_csv":
+        # to_csv() and to_parquet() can be parallelized
+        if func_name in {"to_csv", "to_parquet"}:
             return
 
         # set REP if not found

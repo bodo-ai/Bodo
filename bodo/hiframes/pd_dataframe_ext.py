@@ -4,6 +4,7 @@ Implement pd.DataFrame typing and data model handling.
 """
 import operator
 import warnings
+import json
 from collections import namedtuple
 import pandas as pd
 import numpy as np
@@ -34,7 +35,7 @@ import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.series_indexing import SeriesIlocType
 from bodo.hiframes.pd_index_ext import RangeIndexType
-from bodo.libs.str_ext import string_type
+from bodo.libs.str_ext import string_type, unicode_to_char_ptr
 from bodo.utils.typing import (
     BodoWarning,
     BodoError,
@@ -52,6 +53,14 @@ from bodo.utils.typing import (
     get_index_names,
     get_index_data_arr_types,
 )
+from bodo.utils.conversion import index_to_array
+from bodo.libs.array_tools import (
+    array_to_info,
+    arr_info_list_to_table,
+)
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.str_arr_ext import StringArray, string_array_type
+from bodo.libs.bool_arr_ext import boolean_array
 
 
 class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column names
@@ -2487,6 +2496,158 @@ def append_overload(df, other, ignore_index=False, verify_integrity=False, sort=
     raise ValueError(
         "invalid df.append() input. Only dataframe and list" " of dataframes supported"
     )
+
+
+def gen_pandas_parquet_metadata(df):
+    # returns dict with pandas dataframe metadata for parquet storage.
+    # For more information, see:
+    # https://pandas.pydata.org/pandas-docs/stable/development/developer.html#storing-pandas-dataframe-objects-in-apache-parquet-format
+
+    pandas_metadata = {}
+
+    pandas_metadata["columns"] = []
+    for col_name, col_type in zip(df.columns, df.data):
+        if isinstance(col_type, types.Array) or col_type == boolean_array:
+            pandas_type = numpy_type = col_type.dtype.name
+        elif col_type == string_array_type:
+            pandas_type = "unicode"
+            numpy_type = "object"
+        elif isinstance(col_type, IntegerArrayType):
+            dtype_name = col_type.dtype.name
+            if dtype_name.startswith("int"):
+                pandas_type = "Int" + dtype_name[3:]
+            elif dtype_name.startswith("uint"):
+                pandas_type = "UInt" + dtype_name[4:]
+            else:  # pragma: no cover
+                raise BodoError(
+                    "to_parquet(): unknown dtype in nullable Integer column {} {}".format(
+                        col_name, col_type
+                    )
+                )
+            numpy_type = col_type.dtype.name
+        else:  # pragma: no cover
+            raise BodoError(
+                "to_parquet(): unsupported column type for metadata generation : {} {}".format(
+                    col_name, col_type
+                )
+            )
+        col_metadata = {
+            "name": col_name,
+            "field_name": col_name,
+            "pandas_type": pandas_type,
+            "numpy_type": numpy_type,
+            "metadata": None,
+        }
+        pandas_metadata["columns"].append(col_metadata)
+
+    if df.index is not None and not isinstance(
+        df.index, bodo.hiframes.pd_index_ext.RangeIndexType
+    ):
+        # TODO multi-level
+        pandas_metadata["index_columns"] = ["__index_level_0__"]
+
+        # add index column metadata
+        pandas_metadata["columns"].append(
+            {
+                "name": None,
+                "field_name": "__index_level_0__",
+                "pandas_type": df.index.pandas_type_name,
+                "numpy_type": df.index.numpy_type_name,
+                "metadata": None,
+            }
+        )
+
+    pandas_metadata["pandas_version"] = pd.__version__
+
+    return pandas_metadata
+
+
+@overload_method(DataFrameType, "to_parquet")
+def to_parquet_overload(
+    df,
+    fname,
+    engine="auto",
+    compression="snappy",
+    index=None,
+    partition_cols=None,
+    # TODO handle possible **kwargs options?
+    _is_parallel=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    if not is_overload_none(partition_cols):
+        raise BodoError(
+            "to_parquet(): Bodo does not currently support partition_cols option"
+        )
+
+    if not is_overload_none(compression) and get_overload_const_str(compression) not in {'snappy', 'gzip', 'brotli'}:
+        raise BodoError(
+            "to_parquet(): Unsupported compression: " + str(get_overload_const_str(compression))
+        )
+
+    if not is_overload_none(index) and not is_overload_constant_bool(index):
+        raise BodoError(
+            "to_parquet(): index must be a constant bool or None"
+        )
+
+    from bodo.io.parquet_pio import parquet_write_table_cpp
+
+    # if index=False, we don't write index to the parquet file
+    write_index = (
+        (is_overload_none(index) or is_overload_true(index))
+        and (df.index is not None)
+        and not (
+            isinstance(df.index, bodo.hiframes.pd_index_ext.RangeIndexType)
+            and df.index.name == "RangeIndexType(none)"
+        )
+    )
+    if write_index:
+        pandas_metadata_str = json.dumps(gen_pandas_parquet_metadata(df))
+
+    # convert dataframe columns to array_info
+    data_args = ", ".join(
+        "array_to_info(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}))".format(
+            i
+        )
+        for i in range(len(df.columns))
+    )
+
+    col_names_text = ", ".join('"{}"'.format(col_name) for col_name in df.columns)
+
+    func_text = "def df_to_parquet(df, fname, engine='auto', compression='snappy', index=None, partition_cols=None, _is_parallel=False):\n"
+    # put arrays in table_info
+    func_text += "    info_list = [{}]\n".format(data_args)
+    func_text += "    table = arr_info_list_to_table(info_list)\n"
+    func_text += "    col_names = array_to_info(StringArray([{}]))\n".format(
+        col_names_text
+    )
+    if write_index:
+        func_text += "    index_col = array_to_info(index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df)))\n"
+        func_text += '    metadata = """' + pandas_metadata_str + '"""\n'
+    else:
+        func_text += "    index_col = array_to_info(np.empty(0))\n"
+        func_text += '    metadata = ""\n'
+    func_text += "    if compression is None:\n"
+    func_text += "        compression = 'none'\n"
+    func_text += "    parquet_write_table_cpp(unicode_to_char_ptr(fname), table, col_names, index_col, unicode_to_char_ptr(metadata), unicode_to_char_ptr(compression), _is_parallel)\n"
+
+    # print(func_text)
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "np": np,
+            "bodo": bodo,
+            "unicode_to_char_ptr": unicode_to_char_ptr,
+            "array_to_info": array_to_info,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "StringArray": StringArray,
+            "parquet_write_table_cpp": parquet_write_table_cpp,
+            "index_to_array": index_to_array,
+        },
+        loc_vars,
+    )
+    df_to_parquet = loc_vars["df_to_parquet"]
+    return df_to_parquet
 
 
 # TODO: other Pandas versions (0.24 defaults are different than 0.23)

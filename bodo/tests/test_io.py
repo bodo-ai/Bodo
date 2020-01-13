@@ -2,10 +2,12 @@
 import unittest
 import pytest
 import os
+import shutil
 import pandas as pd
 import numpy as np
 import h5py
 import bodo
+from bodo.utils.typing import BodoError
 from bodo.utils.testing import ensure_clean
 from bodo.tests.utils import (
     count_array_REPs,
@@ -16,8 +18,10 @@ from bodo.tests.utils import (
     get_rank,
     get_start_end,
     check_func,
+    _get_dist_arg,
+    reduce_sum,
+    _test_equal_guard,
 )
-
 
 kde_file = os.path.join("bodo", "tests", "data", "kde.parquet")
 
@@ -122,11 +126,218 @@ def test_pq_schema(datapath):
     pd.testing.assert_frame_equal(bodo_func(fname), impl(fname))
 
 
+def clean_pq_files(mode, pandas_pq_path, bodo_pq_path):
+    if bodo.get_rank() == 0:
+        try:
+            os.remove(pandas_pq_path)
+        except FileNotFoundError:
+            pass
+    if mode == "sequential":
+        # in sequential mode each process has written to a different file
+        if os.path.exists(bodo_pq_path):
+            os.remove(bodo_pq_path)
+    elif bodo.get_rank() == 0:
+        # in parallel mode, the path is a directory containing multiple
+        # parquet files (one per process)
+        shutil.rmtree(bodo_pq_path, ignore_errors=True)
+
+
+def test_write_parquet():
+    def write(df, filename):
+        df.to_parquet(filename)
+
+    def gen_dataframe(num_elements, write_index):
+        df = pd.DataFrame()
+        cur_col = 0
+        for dtype in [
+            "int8",
+            "uint8",
+            "int16",
+            "uint16",
+            "int32",
+            "uint32",
+            "int64",
+            "uint64",
+            "float32",
+            "float64",
+            "bool",
+            "String",
+            "Int8",
+            "UInt8",
+            "Int16",
+            "UInt16",
+            "Int32",
+            "UInt32",
+            "Int64",
+            "UInt64",
+        ]:
+            col_name = "col_" + str(cur_col)
+            if dtype == "String":
+                # missing values every 5 elements
+                data = [str(x) * 3 if x % 5 != 0 else None for x in range(num_elements)]
+                df[col_name] = data
+            elif dtype == "bool":
+                data = [True if x % 2 == 0 else False for x in range(num_elements)]
+                df[col_name] = np.array(data, dtype="bool")
+            elif dtype.startswith("Int") or dtype.startswith("UInt"):
+                # missing values every 5 elements
+                data = [x if x % 5 != 0 else np.nan for x in range(num_elements)]
+                df[col_name] = pd.Series(data, dtype=dtype)
+            else:
+                df[col_name] = np.arange(num_elements, dtype=dtype)
+            cur_col += 1
+        if write_index == "string":
+            # set a string index
+            max_zeros = len(str(num_elements - 1))
+            df.index = [
+                ("0" * (max_zeros - len(str(val)))) + str(val)
+                for val in range(num_elements)
+            ]
+        elif write_index == "numeric":
+            # set a numeric index (not range)
+            df.index = [v ** 2 for v in range(num_elements)]
+        return df
+
+    n_pes = bodo.get_size()
+    NUM_ELEMS = 100  # length of each column in generated dataset
+
+    # workaround for pandas/pyarrow writing nullable Int64 issue:
+    # https://issues.apache.org/jira/browse/ARROW-5379
+    import pyarrow
+    pd.arrays.IntegerArray.__arrow_array__ = lambda self, type: pyarrow.array(
+        self._data, mask=self._mask, type=type
+    )
+
+    for write_index in [None, "string", "numeric"]:
+        for mode in ["sequential", "1d-distributed", "1d-distributed-varlength"]:
+
+            df = gen_dataframe(NUM_ELEMS, write_index)
+
+            pandas_pq_filename = "test_io___pandas.pq"
+            if mode == "sequential":
+                bodo_pq_filename = str(bodo.get_rank()) + "_test_io___bodo.pq"
+            else:
+                # in parallel mode, each process writes its piece to a separate
+                # file in the same directory
+                bodo_pq_filename = "test_io___bodo_pq_write_dir"
+
+            try:
+                # write the same dataset with pandas and bodo
+                if bodo.get_rank() == 0:
+                    write(df, pandas_pq_filename)
+                if mode == "sequential":
+                    bodo_write = bodo.jit(write)
+                    bodo_write(df, bodo_pq_filename)
+                elif mode == "1d-distributed":
+                    bodo_write = bodo.jit(write, all_args_distributed=True)
+                    bodo_write(_get_dist_arg(df, False), bodo_pq_filename)
+                elif mode == "1d-distributed-varlength":
+                    bodo_write = bodo.jit(write, all_args_distributed_varlength=True)
+                    bodo_write(_get_dist_arg(df, False, True), bodo_pq_filename)
+                bodo.barrier()
+                # read both files with pandas
+                df1 = pd.read_parquet(pandas_pq_filename)
+                df2 = pd.read_parquet(bodo_pq_filename)
+                # read dataframes must be same as original except for dtypes
+                passed = _test_equal_guard(
+                    df, df1, sort_output=False, check_names=True, check_dtype=False
+                )
+                n_passed = reduce_sum(passed)
+                assert n_passed == n_pes
+                passed = _test_equal_guard(
+                    df, df2, sort_output=False, check_names=True, check_dtype=False
+                )
+                n_passed = reduce_sum(passed)
+                assert n_passed == n_pes
+                # both read dataframes should be equal in everything
+                passed = _test_equal_guard(
+                    df1, df2, sort_output=False, check_names=True, check_dtype=True
+                )
+                n_passed = reduce_sum(passed)
+                assert n_passed == n_pes
+            finally:
+                # cleanup
+                clean_pq_files(mode, pandas_pq_filename, bodo_pq_filename)
+                bodo.barrier()
+
+    def error_check1(df):
+        df.to_parquet("out.parquet", partition_cols=["col1"])
+
+    def error_check2(df):
+        df.to_parquet("out.parquet", compression="wrong")
+
+    def error_check3(df):
+        df.to_parquet("out.parquet", index=3)
+
+    df = pd.DataFrame({"A": range(5)})
+
+    with pytest.raises(
+        BodoError, match="Bodo does not currently support partition_cols option"
+    ):
+        bodo.jit(error_check1)(df)
+
+    with pytest.raises(BodoError, match="Unsupported compression"):
+        bodo.jit(error_check2)(df)
+
+    with pytest.raises(BodoError, match="index must be a constant bool or None"):
+        bodo.jit(error_check3)(df)
+
+
+def test_write_parquet_params():
+    def write1(df, filename):
+        df.to_parquet(compression="snappy", fname=filename)
+
+    def write2(df, filename):
+        df.to_parquet(fname=filename, index=None, compression="gzip")
+
+    def write3(df, filename):
+        df.to_parquet(fname=filename, index=True, compression="brotli")
+
+    def write4(df, filename):
+        df.to_parquet(fname=filename, index=False, compression=None)
+
+    S1 = ["¡Y tú quién te crees?", "🐍⚡", "大处着眼，小处着手。"] * 4
+    S2 = ["abc¡Y tú quién te crees?", "dd2🐍⚡", "22 大处着眼，小处着手。"] * 4
+    df = pd.DataFrame({"A": S1, "B": S2})
+    # set a numeric index (not range)
+    df.index = [v ** 2 for v in range(len(df))]
+
+    for mode in ["sequential", "1d-distributed"]:
+        pd_fname = "test_io___pandas.pq"
+        if mode == "sequential":
+            bodo_fname = str(bodo.get_rank()) + "_test_io___bodo.pq"
+        else:
+            # in parallel mode, each process writes its piece to a separate
+            # file in the same directory
+            bodo_fname = "test_io___bodo_pq_write_dir"
+        for func in [write1, write2, write3, write4]:
+            try:
+                if mode == "sequential":
+                    bodo_func = bodo.jit(func)
+                    data = df
+                elif mode == "1d-distributed":
+                    bodo_func = bodo.jit(func, all_args_distributed=True)
+                    data = _get_dist_arg(df, False)
+                if bodo.get_rank() == 0:
+                    func(df, pd_fname)  # write with pandas
+                bodo.barrier()
+                bodo_func(data, bodo_fname)
+                df_a = pd.read_parquet(pd_fname)
+                df_b = pd.read_parquet(bodo_fname)
+                pd.testing.assert_frame_equal(df_a, df_b)
+                bodo.barrier()
+            finally:
+                # cleanup
+                clean_pq_files(mode, pd_fname, bodo_fname)
+                bodo.barrier()
+
+
 def test_csv_bool1(datapath):
     """Test boolean data in CSV files.
     Also test extra separator at the end of the file
     which requires index_col=False.
     """
+
     def test_impl(fname):
         dtype = {"A": "int", "B": "bool", "C": "float"}
         return pd.read_csv(fname, names=dtype.keys(), dtype=dtype, index_col=False)
@@ -176,7 +387,6 @@ def test_csv_fname_comp(datapath):
     @bodo.jit
     def test_impl(data_folder):
         return load_func(data_folder)
-
 
     @bodo.jit
     def load_func(data_folder):

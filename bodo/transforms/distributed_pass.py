@@ -866,7 +866,28 @@ class DistributedPass(object):
         return out
 
     def _run_call_df(self, lhs, df, func_name, assign, args):
-        if func_name == "to_csv" and (
+        if func_name == "to_parquet" and (
+            self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
+        ):
+            rhs = assign.value
+            kws = dict(rhs.kws)
+            nodes = []
+
+            fname = self._get_arg("to_parquet", rhs.args, kws, 0, "fname")
+
+            compression_var = ir.Var(assign.target.scope, mk_unique_var("to_pq_compression"), rhs.loc)
+            nodes.append(ir.Assign(ir.Const("snappy", rhs.loc), compression_var, rhs.loc))
+            self.typemap[compression_var.name] = types.StringLiteral("snappy")
+            compression = self._get_arg("to_parquet", rhs.args, kws, 2, "compression", compression_var)
+
+            index_var = ir.Var(assign.target.scope, mk_unique_var("to_pq_index"), rhs.loc)
+            nodes.append(ir.Assign(ir.Const(None, rhs.loc), index_var, rhs.loc))
+            self.typemap[index_var.name] = types.none
+            index = self._get_arg("to_parquet", rhs.args, kws, 3, "index", index_var)
+
+            f = lambda df, fname, compression, index: df.to_parquet(fname, compression=compression, index=index, _is_parallel=True)
+            return nodes + compile_func_single_block(f, [df, fname, compression, index], assign.target, self)
+        elif func_name == "to_csv" and (
             self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
         ):
             # set index to proper range if None

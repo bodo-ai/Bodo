@@ -5,16 +5,25 @@
 #include <iostream>
 #include <string>
 #include "mpi.h"
+#include <boost/filesystem/operations.hpp>
 
 #if _MSC_VER >= 1900
 #undef timezone
 #endif
+#include "arrow/filesystem/s3fs.h"
 #include "arrow/record_batch.h"
 #include "parquet/arrow/reader.h"
 using parquet::arrow::FileReader;
 #include "_parquet_reader.h"
+#include "../libs/_bodo_common.h"
+
+#include "parquet/arrow/writer.h"
+#include <arrow/api.h>
+#include <arrow/io/api.h>
 
 typedef std::vector<std::shared_ptr<FileReader> > FileReaderVec;
+
+typedef void (*s3_get_fs_t)(std::shared_ptr<::arrow::fs::S3FileSystem>*);
 
 FileReaderVec *get_arrow_readers(char *file_name);
 void del_arrow_readers(FileReaderVec *readers);
@@ -35,6 +44,9 @@ int pq_read_string_parallel(FileReaderVec *readers, int64_t column_idx,
 
 void pack_null_bitmap(uint8_t **out_nulls, std::vector<bool> &null_vec,
                       int64_t n_all_vals);
+void pq_write(const char* filename, const table_info* table,
+              const array_info* col_names, const array_info* index,
+              const char *metadata, const char* compression, bool parallel);
 
 static PyMethodDef parquet_cpp_methods[] = {
     {"str_list_to_vec", str_list_to_vec, METH_O,  // METH_STATIC
@@ -64,6 +76,9 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
     PyObject_SetAttrString(
         m, "read_string_parallel",
         PyLong_FromVoidPtr((void *)(&pq_read_string_parallel)));
+    PyObject_SetAttrString(
+        m, "pq_write",
+        PyLong_FromVoidPtr((void *)(&pq_write)));
 
     return m;
 }
@@ -395,3 +410,314 @@ int pq_read_string_parallel(FileReaderVec *readers, int64_t column_idx,
     }
     return 0;
 }
+
+void bodo_array_to_arrow(
+    arrow::MemoryPool *pool, const array_info *array,
+    const std::string &col_name,
+    std::vector<std::shared_ptr<arrow::Field>> &schema_vector,
+    std::shared_ptr<arrow::ChunkedArray> *out) {
+
+    // allocate null bitmap
+    std::shared_ptr<arrow::ResizableBuffer> null_bitmap;
+    int64_t null_bytes = arrow::BitUtil::BytesForBits(array->length);
+    AllocateResizableBuffer(pool, null_bytes, &null_bitmap);
+    // Padding zeroed by AllocateResizableBuffer
+    memset(null_bitmap->mutable_data(), 0, static_cast<size_t>(null_bytes));
+
+    int64_t null_count_ = 0;
+    if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        // set arrow bit mask based on bodo bitmask
+        for (int64_t i = 0; i < array->length; i++) {
+            if (!GetBit((uint8_t *)array->null_bitmask, i)) {
+                null_count_++;
+                ::arrow::BitUtil::ClearBit(null_bitmap->mutable_data(), i);
+            } else {
+                ::arrow::BitUtil::SetBit(null_bitmap->mutable_data(), i);
+            }
+        }
+        if (array->dtype == Bodo_CTypes::_BOOL) {
+            // special case: nullable bool column are bit vectors in Arrow
+            schema_vector.push_back(arrow::field(col_name, arrow::boolean()));
+            int64_t nbytes = ::arrow::BitUtil::BytesForBits(array->length);
+            std::shared_ptr<::arrow::Buffer> buffer;
+            AllocateBuffer(pool, nbytes, &buffer);
+
+            int64_t i = 0;
+            uint8_t *in_data = (uint8_t *)array->data1;
+            const auto generate = [&in_data, &i]() -> bool {
+                return in_data[i++] != 0;
+            };
+            ::arrow::internal::GenerateBitsUnrolled(buffer->mutable_data(), 0,
+                                                    array->length, generate);
+
+            auto arr_data =
+                arrow::ArrayData::Make(arrow::boolean(), array->length,
+                                       {null_bitmap, buffer}, null_count_, 0);
+            *out = std::make_shared<arrow::ChunkedArray>(
+                arrow::MakeArray(arr_data));
+        }
+    }
+
+    if (array->arr_type == bodo_array_type::NUMPY ||
+        (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+         array->dtype != Bodo_CTypes::_BOOL)) {
+        int64_t num_bytes;
+        std::shared_ptr<arrow::DataType> type;
+        switch (array->dtype) {
+            case Bodo_CTypes::INT8:
+                num_bytes = sizeof(int8_t) * array->length;
+                type = arrow::int8();
+                break;
+            case Bodo_CTypes::UINT8:
+                num_bytes = sizeof(uint8_t) * array->length;
+                type = arrow::uint8();
+                break;
+            case Bodo_CTypes::INT16:
+                num_bytes = sizeof(int16_t) * array->length;
+                type = arrow::int16();
+                break;
+            case Bodo_CTypes::UINT16:
+                num_bytes = sizeof(uint16_t) * array->length;
+                type = arrow::uint16();
+                break;
+            case Bodo_CTypes::INT32:
+                num_bytes = sizeof(int32_t) * array->length;
+                type = arrow::int32();
+                break;
+            case Bodo_CTypes::UINT32:
+                num_bytes = sizeof(uint32_t) * array->length;
+                type = arrow::uint32();
+                break;
+            case Bodo_CTypes::INT64:
+                num_bytes = sizeof(int64_t) * array->length;
+                type = arrow::int64();
+                break;
+            case Bodo_CTypes::UINT64:
+                num_bytes = sizeof(uint64_t) * array->length;
+                type = arrow::uint64();
+                break;
+            case Bodo_CTypes::FLOAT32:
+                num_bytes = sizeof(float) * array->length;
+                type = arrow::float32();
+                break;
+            case Bodo_CTypes::FLOAT64:
+                num_bytes = sizeof(double) * array->length;
+                type = arrow::float64();
+                break;
+        }
+        schema_vector.push_back(arrow::field(col_name, type));
+        std::shared_ptr<arrow::Buffer> data =
+            std::make_shared<arrow::Buffer>((uint8_t *)array->data1, num_bytes);
+        auto arr_data = arrow::ArrayData::Make(
+            type, array->length, {null_bitmap, data}, null_count_, 0);
+
+        *out =
+            std::make_shared<arrow::ChunkedArray>(arrow::MakeArray(arr_data));
+    } else if (array->arr_type == bodo_array_type::STRING) {
+        schema_vector.push_back(arrow::field(col_name, arrow::utf8()));
+        // Create 16MB chunks for binary data
+        constexpr int32_t kBinaryChunksize = 1 << 24;
+        ::arrow::internal::ChunkedStringBuilder builder(kBinaryChunksize, pool);
+        char *cur_str = array->data1;
+        uint32_t *offsets = (uint32_t *)array->data2;
+        for (int64_t i = 0; i < array->length; i++) {
+            if (!GetBit((uint8_t *)array->null_bitmask, i)) {
+                builder.AppendNull();
+            } else {
+                size_t len = offsets[i + 1] - offsets[i];
+                builder.Append((uint8_t *)cur_str, len);
+                cur_str += len;
+            }
+        }
+
+        ::arrow::ArrayVector result;
+        builder.Finish(&result);
+        *out = std::make_shared<arrow::ChunkedArray>(result);
+    }
+}
+
+#define CHECK(expr, msg)                                             \
+    if (!(expr)) {                                                   \
+        std::cerr << "Error in parquet write: " << msg << std::endl; \
+        return;                                                      \
+    }
+
+#define CHECK_ARROW(expr, msg)                                                 \
+    if (!(expr.ok())) {                                                        \
+        std::cerr << "Error in arrow s3 parquet write: " << msg << " " << expr \
+                  << std::endl;                                                \
+        return;                                                                \
+    }
+
+/*
+ * Write the Bodo table (the chunk in this process) to a parquet file.
+ * @param path of output file or directory
+ * @param table to write to parquet file
+ * @param array containing the table's column names (index not included)
+ * @param array containing the table index (can be an empty array if no index)
+ * @param string containing table metadata
+ * @param true if the table is part of a distributed table (in this case, this
+ *        process writes a file named "part-000X.parquet" where X is my rank
+ *        into the directory specified by 'path_name'
+ */
+void pq_write(const char *_path_name, const table_info *table,
+              const array_info *col_names_arr, const array_info *index,
+              const char *metadata, const char *compression, bool is_parallel) {
+    int myrank, num_ranks;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+    std::string path_name;  // original path passed to this function
+    std::string dirname;  // path and directory name to store the parquet files
+                          // (only if is_parallel=true)
+    std::string fname;    // name of parquet file to write (excludes path)
+    std::shared_ptr<::arrow::io::OutputStream> out_stream;
+
+    bool is_s3 = false;
+    if (strncmp(_path_name, "s3://", 5) == 0) {
+        is_s3 = true;
+        path_name = std::string(_path_name + 5);  // remove s3://
+    } else {
+        path_name = std::string(_path_name);
+    }
+
+    // TODO add compression scheme to file name
+
+    if (is_parallel) {
+        // construct file name for this process' piece
+        std::string part_number = std::to_string(myrank);
+        std::string max_part_number = std::to_string(num_ranks - 1);
+        int n_digits = max_part_number.length() +
+                       1;  // number of digits I want the part numbers to have
+        std::string new_part_number =
+            std::string(n_digits - part_number.length(), '0') + part_number;
+        std::stringstream ss;
+        ss << "part-" << new_part_number
+           << ".parquet";  // this is the actual file name
+        fname = ss.str();
+        dirname = path_name;
+    } else {
+        // path_name is a file
+        fname = path_name;
+    }
+
+    if (is_s3) {
+        // get s3_get_fs function
+        PyObject *s3_mod = PyImport_ImportModule("bodo.io.s3_reader");
+        CHECK(s3_mod, "importing bodo.io.s3_reader module failed");
+        PyObject *func_obj = PyObject_GetAttrString(s3_mod, "s3_get_fs");
+        CHECK(func_obj, "getting s3_get_fs func_obj failed");
+        s3_get_fs_t s3_get_fs = (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
+
+        std::shared_ptr<arrow::fs::S3FileSystem> fs;
+        s3_get_fs(&fs);
+        if (is_parallel) {
+            if (myrank == 0) fs->CreateDir(dirname);
+            MPI_Barrier(MPI_COMM_WORLD);
+            arrow::Status status =
+                fs->OpenOutputStream(dirname + "/" + fname, &out_stream);
+            CHECK_ARROW(status, "S3FileSystem::OpenOutputStream");
+        } else {
+            arrow::Status status = fs->OpenOutputStream(fname, &out_stream);
+            CHECK_ARROW(status, "S3FileSystem::OpenOutputStream");
+        }
+    } else {
+        if (is_parallel) {
+            // create output directory
+            int error = 0;
+            if (boost::filesystem::exists(dirname)) {
+                if (!boost::filesystem::is_directory(dirname)) error = 1;
+            } else {
+                // for the parallel case, 'dirname' is the directory where the
+                // different parts of the distributed table are stored (each as
+                // a file)
+                boost::filesystem::create_directory(dirname);
+            }
+            MPI_Allreduce(MPI_IN_PLACE, &error, 1, MPI_INT, MPI_LOR,
+                          MPI_COMM_WORLD);
+            if (error) {
+                if (myrank == 0)
+                    std::cerr << "Bodo parquet write ERROR: a process reports "
+                                 "that path "
+                              << path_name << " exists and is not a directory"
+                              << std::endl;
+                return;
+            }
+            boost::filesystem::path out_path(dirname);
+            out_path /= fname;  // append file name to output path
+            arrow::io::FileOutputStream::Open(out_path.string(), &out_stream);
+        } else {
+            arrow::io::FileOutputStream::Open(fname, &out_stream);
+        }
+    }
+
+    // copy column names to a std::vector<string>
+    std::vector<std::string> col_names;
+    char *cur_str = col_names_arr->data1;
+    uint32_t *offsets = (uint32_t *)col_names_arr->data2;
+    for (int64_t i = 0; i < col_names_arr->length; i++) {
+        size_t len = offsets[i + 1] - offsets[i];
+        col_names.emplace_back(cur_str, len);
+        cur_str += len;
+    }
+
+    auto pool = ::arrow::default_memory_pool();
+
+    // convert Bodo table to Arrow: construct Arrow Schema and ChunkedArray
+    // columns
+    std::vector<std::shared_ptr<arrow::Field>> schema_vector;
+    std::vector<std::shared_ptr<arrow::ChunkedArray>> columns(
+        table->columns.size());
+    for (size_t i = 0; i < table->columns.size(); i++) {
+        auto col = table->columns[i];
+        bodo_array_to_arrow(pool, col, col_names[i], schema_vector,
+                            &columns[i]);
+    }
+
+    // make Arrow Schema object
+    std::shared_ptr<arrow::Schema> schema;
+    if (index->length > 0) {
+        // if there is an index, construct ChunkedArray index column and add
+        // metadata to the schema
+        std::shared_ptr<arrow::ChunkedArray> chunked_arr;
+        bodo_array_to_arrow(pool, index, "__index_level_0__", schema_vector,
+                            &chunked_arr);
+        columns.push_back(chunked_arr);
+        auto schema_metadata =
+            ::arrow::key_value_metadata({{"pandas", metadata}});
+        schema =
+            std::make_shared<arrow::Schema>(schema_vector, schema_metadata);
+    } else {
+        schema = std::make_shared<arrow::Schema>(schema_vector);
+    }
+
+    // make Arrow table from Schema and ChunkedArray columns
+    int64_t row_group_size = table->nrows();
+    std::shared_ptr<arrow::Table> arrow_table =
+        arrow::Table::Make(schema, columns, row_group_size);
+
+    // set compression option
+    ::arrow::Compression::type codec_type;
+    if (strcmp(compression, "snappy") == 0) {
+        codec_type = ::arrow::Compression::SNAPPY;
+    } else if (strcmp(compression, "brotli") == 0) {
+        codec_type = ::arrow::Compression::BROTLI;
+    } else if (strcmp(compression, "gzip") == 0) {
+        codec_type = ::arrow::Compression::GZIP;
+    } else {
+        codec_type = ::arrow::Compression::UNCOMPRESSED;
+    }
+    parquet::WriterProperties::Builder prop_builder;
+    prop_builder.compression(codec_type);
+    std::shared_ptr<parquet::WriterProperties> writer_properties =
+        prop_builder.build();
+
+    // open file and write table
+    parquet::arrow::WriteTable(
+        *arrow_table, pool, out_stream, row_group_size,
+        writer_properties,
+        // store_schema() = true is needed to write the schema metadata to file
+        ::parquet::ArrowWriterProperties::Builder().store_schema()->build());
+}
+
+#undef CHECK
+#undef CHECK_ARROW

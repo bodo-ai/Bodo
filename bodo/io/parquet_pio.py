@@ -24,6 +24,7 @@ from bodo.utils.typing import BodoError
 import bodo.ir.parquet_ext
 from bodo.transforms import distributed_pass
 from bodo.utils.transform import get_str_const_value
+from numba.extending import intrinsic
 
 
 # from parquet/types.h
@@ -474,6 +475,7 @@ if _has_pyarrow:
     ll.add_symbol("pq_get_size", parquet_cpp.get_size)
     ll.add_symbol("pq_read_string", parquet_cpp.read_string)
     ll.add_symbol("pq_read_string_parallel", parquet_cpp.read_string_parallel)
+    ll.add_symbol("pq_write", parquet_cpp.pq_write)
 
 
 @lower_builtin(get_column_size_parquet, types.Opaque("arrow_reader"), types.intp)
@@ -760,3 +762,51 @@ def pq_read_string_parallel_lower(context, builder, sig, args):
     )
     ret = string_array._getvalue()
     return impl_ret_new_ref(context, builder, typ, ret)
+
+
+############################ parquet write table #############################
+
+
+@intrinsic
+def parquet_write_table_cpp(
+    typingctx,
+    filename_t,
+    table_t,
+    col_names_t,
+    index_t,
+    metadata_t,
+    compression_t,
+    is_parallel_t,
+):
+    """
+    Call C++ parquet write function
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+            ],
+        )
+        fn_tp = builder.module.get_or_insert_function(fnty, name="pq_write")
+        builder.call(fn_tp, args)
+
+    return (
+        types.void(
+            types.voidptr,
+            table_t,
+            col_names_t,
+            index_t,
+            types.voidptr,
+            types.voidptr,
+            types.boolean,
+        ),
+        codegen,
+    )
