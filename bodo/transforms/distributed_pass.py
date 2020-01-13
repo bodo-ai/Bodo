@@ -59,6 +59,7 @@ from bodo.transforms.distributed_analysis import (
 )
 
 import bodo.utils.utils
+from bodo.utils.typing import BodoError
 from bodo.utils.transform import compile_func_single_block
 from bodo.utils.utils import (
     is_alloc_callname,
@@ -326,7 +327,7 @@ class DistributedPass(object):
             # XXX for pre_alloc_string_array(n, nc), we assume nc is local
             # value (updated only in parfor like _str_replace_regex_impl)
             size_var = rhs.args[0]
-            out, new_size_var = self._run_alloc(size_var, lhs, scope, loc)
+            out, new_size_var = self._run_alloc(size_var, scope, loc)
             # empty_inferred is tuple for some reason
             rhs.args = list(rhs.args)
             rhs.args[0] = new_size_var
@@ -337,7 +338,7 @@ class DistributedPass(object):
         if self._is_1D_Var_arr(lhs) and is_alloc_callname(func_name, func_mod):
             size_var = rhs.args[0]
             out, new_size_var = self._fix_1D_Var_alloc(
-                size_var, lhs, scope, loc, equiv_set, avail_vars
+                size_var, scope, loc, equiv_set, avail_vars
             )
             # empty_inferred is tuple for some reason
             rhs.args = list(rhs.args)
@@ -689,6 +690,31 @@ class DistributedPass(object):
                 assign.value = arg_def.args[0]
             return out
 
+        if fdef == ("init_range_index", "bodo.hiframes.pd_index_ext") and (
+            self._is_1D_arr(lhs) or self._is_1D_Var_arr(lhs)
+        ):
+            assert len(rhs.args) == 4, "invalid init_range_index() call"
+            # parallelize init_range_index() similar to allocations
+            # FIXME: assuming start == 0 and step == 1
+            # TODO: support start != 0 and step != 1 in parallel mode
+            if guard(find_const, self.func_ir, rhs.args[0]) != 0 or guard(find_const, self.func_ir, rhs.args[2]) != 1:
+                raise BodoError("creating parallel RangeIndex() with start != 0 and/or step != 1 not supported yet")
+
+            size_var = rhs.args[1]
+
+            if self._is_1D_arr(lhs):
+                out, new_size_var = self._run_alloc(size_var, scope, loc)
+            else:
+                # 1D_Var case
+                assert self._is_1D_Var_arr(lhs)
+                out, new_size_var = self._fix_1D_Var_alloc(
+                    size_var, scope, loc, equiv_set, avail_vars
+                )
+            rhs.args[1] = new_size_var
+            def impl(start, stop, step, name):
+                return bodo.hiframes.pd_index_ext.init_range_index(start, stop, step, name)
+            return out + compile_func_single_block(impl, rhs.args, assign.target, self)
+
         if fdef == ("dist_return", "bodo.libs.distributed_api"):
             # always rebalance returned distributed arrays
             # TODO: need different flag for 1D_Var return (distributed_var)?
@@ -820,7 +846,7 @@ class DistributedPass(object):
             assert len(args) == 2 and guard(find_const, self.func_ir, args[1]) == 1
             size_var = args[0]
             out, new_size_var = self._fix_1D_Var_alloc(
-                size_var, lhs, assign.target.scope, assign.loc, equiv_set, avail_vars
+                size_var, assign.target.scope, assign.loc, equiv_set, avail_vars
             )
             # empty_inferred is tuple for some reason
             assign.value.args = list(args)
@@ -1092,7 +1118,7 @@ class DistributedPass(object):
             new_shape = args
         # TODO: avoid alloc and copy if no communication necessary
         # get new local shape in reshape and set start/count vars like new allocation
-        out, new_local_shape_var = self._run_alloc(new_shape, lhs.name, scope, loc)
+        out, new_local_shape_var = self._run_alloc(new_shape, scope, loc)
         # get actual tuple for mk_alloc
         if isinstance(self.typemap[new_local_shape_var.name], types.BaseTuple):
             sh_list = guard(find_build_tuple, self.func_ir, new_local_shape_var)
@@ -1182,7 +1208,7 @@ class DistributedPass(object):
 
         return out
 
-    def _run_alloc(self, size_var, lhs, scope, loc):
+    def _run_alloc(self, size_var, scope, loc):
         """ divides array sizes and assign its sizes/starts/counts attributes
         returns generated nodes and the new size variable to enable update of
         the alloc call.
@@ -1268,7 +1294,7 @@ class DistributedPass(object):
         new_size_var = tuple_var
         return out, new_size_var
 
-    def _fix_1D_Var_alloc(self, size_var, lhs, scope, loc, equiv_set, avail_vars):
+    def _fix_1D_Var_alloc(self, size_var, scope, loc, equiv_set, avail_vars):
         """ 1D_Var allocs use global sizes of other 1D_var variables,
         so find the local size of one those variables for replacement.
         Assuming 1D_Var alloc is resulting from an operation with another
