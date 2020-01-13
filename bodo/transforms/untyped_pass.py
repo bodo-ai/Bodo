@@ -1158,9 +1158,12 @@ class UntypedPass(object):
             if (index_col is None or i != columns.index(index_col))
         )
 
-        index_arg = (
-            "None" if index_col is None else "data{}".format(columns.index(index_col))
-        )
+        if index_col is None:
+            assert n_cols > 0
+            index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, len(data0), 1, None)"
+        else:
+            index_arg = "bodo.utils.conversion.convert_to_index(data{})".format(columns.index(index_col))
+
         col_args = ", ".join(
             "'{}'".format(c) for c in columns if (index_col is None or c != index_col)
         )
@@ -1168,7 +1171,7 @@ class UntypedPass(object):
             col_args, col_args
         )
         func_text = "def _init_df({}):\n".format(args)
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), bodo.utils.conversion.convert_to_index({}), {})\n".format(
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
             data_args, index_arg, col_var
         )
         loc_vars = {}
