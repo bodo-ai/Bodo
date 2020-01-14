@@ -67,6 +67,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
     """
 
     def __init__(self, dtype, data=None, index=None, name_typ=None):
+        from bodo.hiframes.pd_index_ext import RangeIndexType
         # keeping data array in type since operators can make changes such
         # as making array unaligned etc.
         # data is underlying array type and can have different dtype
@@ -83,7 +84,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         self.dtype = dtype
         self.data = data
         name_typ = types.none if name_typ is None else name_typ
-        index = types.none if index is None else index
+        index = RangeIndexType(types.none) if index is None else index
         self.index = index  # index should be an Index type (not Array)
         self.name_typ = name_typ
         super(SeriesType, self).__init__(

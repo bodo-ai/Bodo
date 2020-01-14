@@ -2426,13 +2426,11 @@ class SeriesPass(object):
         tup_expr = ir.Expr.build_tuple(arrs, arr_tup.loc)
         nodes.append(ir.Assign(tup_expr, arr_tup, arr_tup.loc))
         # TODO: index and name
-        return self._replace_func(
-            lambda arr_list: bodo.hiframes.pd_series_ext.init_series(
-                bodo.libs.array_kernels.concat(arr_list)
-            ),
-            [arr_tup],
-            pre_nodes=nodes,
-        )
+        def impl(arr_list):
+            arr = bodo.libs.array_kernels.concat(arr_list)
+            index = bodo.hiframes.pd_index_ext.init_range_index(0, len(arr), 1, None)
+            return bodo.hiframes.pd_series_ext.init_series(arr, index)
+        return self._replace_func(impl, [arr_tup], pre_nodes=nodes)
 
     def _handle_h5_write(self, dset, index, arr):
         if index != slice(None):

@@ -76,7 +76,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
 
         self.data = data
         if index is None:
-            index = types.none
+            index = RangeIndexType(types.none)
         self.index = index
         self.columns = columns
         # keeping whether it is unboxed from Python to enable reflection of new
@@ -89,7 +89,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
     def copy(self, index=None, has_parent=None):
         # XXX is copy necessary?
         if index is None:
-            index = types.none if self.index == types.none else self.index.copy()
+            index = self.index.copy()
         data = tuple(a.copy() for a in self.data)
         if has_parent is None:
             has_parent = self.has_parent
@@ -1898,9 +1898,9 @@ class ConcatDummyTyper(AbstractTemplate):
             assert axis == 0
             assert isinstance(objs.dtype, (SeriesType, DataFrameType))
             # TODO: support Index in append/concat
-            ret_typ = objs.dtype.copy(index=types.none)
+            ret_typ = objs.dtype.copy(index=RangeIndexType(types.none))
             if isinstance(ret_typ, DataFrameType):
-                ret_typ = ret_typ.copy(has_parent=False, index=types.none)
+                ret_typ = ret_typ.copy(has_parent=False, index=RangeIndexType(types.none))
             return signature(ret_typ, *args)
 
         if not isinstance(objs, types.BaseTuple):
@@ -1923,7 +1923,7 @@ class ConcatDummyTyper(AbstractTemplate):
                     data.extend(obj.data)
                     names.extend(obj.columns)
 
-            ret_typ = DataFrameType(tuple(data), None, tuple(names))
+            ret_typ = DataFrameType(tuple(data), RangeIndexType(types.none), tuple(names))
             return signature(ret_typ, *args)
 
         assert axis == 0
@@ -1958,7 +1958,7 @@ class ConcatDummyTyper(AbstractTemplate):
                 ).return_type
                 all_data.append(concat_typ)
 
-            ret_typ = DataFrameType(tuple(all_data), None, tuple(all_colnames))
+            ret_typ = DataFrameType(tuple(all_data), RangeIndexType(types.none), tuple(all_colnames))
             return signature(ret_typ, *args)
 
         # series case
