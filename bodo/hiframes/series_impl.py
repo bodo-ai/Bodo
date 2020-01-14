@@ -1425,13 +1425,14 @@ def to_numeric_overload(A, dtype):
     def _to_numeric_impl(A, dtype):  # pragma: no cover
         # TODO: fix distributed
         arr = bodo.hiframes.pd_series_ext.get_series_data(A)
+        index = bodo.hiframes.pd_series_ext.get_series_index(A)
         numba.parfor.init_prange()
         n = len(arr)
         B = np.empty(n, out_dtype)
         for i in numba.parfor.internal_prange(n):
             bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arr, i)
 
-        return bodo.hiframes.pd_series_ext.init_series(B)
+        return bodo.hiframes.pd_series_ext.init_series(B, index)
 
     return _to_numeric_impl
 
