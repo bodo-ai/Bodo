@@ -24,7 +24,7 @@ def _column_filter_impl(B, ind):  # pragma: no cover
             A[i] = B[i]
         else:
             bodo.ir.join.setitem_arr_nan(A, i)
-    return bodo.hiframes.pd_series_ext.init_series(A)
+    return A
 
 
 def _column_count_impl(A):  # pragma: no cover

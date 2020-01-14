@@ -13,7 +13,7 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import (get_str_arr_item_length, get_utf8_size,
     pre_alloc_string_array
 )
-from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
 from bodo.hiframes.pd_categorical_ext import PDCategoricalClass
 from bodo.utils.typing import (
     is_overload_none,
@@ -1446,9 +1446,9 @@ class SeriesFilterBoolInfer(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         assert len(args) == 2
-        ret = args[0]
-        if isinstance(ret.dtype, types.Integer):
-            ret = SeriesType(types.float64)
+        ret = if_series_to_array_type(args[0])
+        if isinstance(ret, types.Array) and isinstance(ret.dtype, types.Integer):
+            ret = types.Array(types.float64, 1, "C")
         return ret(*args)
 
 
