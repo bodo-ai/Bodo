@@ -1005,14 +1005,10 @@ class DataFramePass(object):
         # TODO: handle non numpy alloc types
         # prange func to inline
         col_name_args = ", ".join(["c" + str(i) for i in range(len(used_cols))])
-        row_args = ", ".join(["c" + str(i) + "[i]" for i in range(len(used_cols))])
+        row_args = ", ".join(["bodo.utils.conversion.box_if_dt64(c{}[i])".format(i)
+            for i in range(len(used_cols))])
 
         func_text = "def f({}, df_index):\n".format(col_name_args)
-        # make series to enable getitem of dt64 to timestamp for example
-        for i in range(len(used_cols)):
-            func_text += "  c{0} = bodo.hiframes.pd_series_ext.init_series(c{0})\n".format(
-                i
-            )
 
         if self.typemap[lhs.name].data == string_array_type:
             func_text += "  numba.parfor.init_prange()\n"
