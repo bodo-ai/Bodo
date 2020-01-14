@@ -2743,7 +2743,11 @@ def _gen_init_df(columns, index=None):
     n_cols = len(columns)
     data_args = ", ".join("data{}".format(i) for i in range(n_cols))
     args = data_args
-    if index is not None:
+
+    if index is None:
+        assert n_cols > 0
+        index = "bodo.hiframes.pd_index_ext.init_range_index(0, len(data0), 1, None)"
+    else:
         args += ", " + index
 
     # using add_consts_to_type with list to avoid const tuple problems

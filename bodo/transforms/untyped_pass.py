@@ -104,6 +104,7 @@ def remove_hiframes(rhs, lives, call_list):
             "_dti_val_finalize",
             "init_datetime_index",
             "init_timedelta_index",
+            "init_range_index",
         )
     ):
         return True

@@ -1661,7 +1661,7 @@ class JoinTyper(AbstractTemplate):
         ]
 
         # TODO: unify left/right indices if necessary (e.g. RangeIndex/Int64)
-        index_typ = types.none
+        index_typ = RangeIndexType(types.none)
         left_index = "$_bodo_index_" in left_on.consts
         right_index = "$_bodo_index_" in right_on.consts
         if left_index and right_index and not is_overload_str(how, "asof"):

@@ -30,6 +30,7 @@ import bodo
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.libs.str_ext import string_type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.ir.aggregate import get_agg_func
 from bodo.utils.typing import (
@@ -553,7 +554,8 @@ class PivotTyper(AbstractTemplate):
 
         pivot_vals = _pivot_values.meta
         n_vals = len(pivot_vals)
-        out_df = DataFrameType((out_arr_typ,) * n_vals, None, tuple(pivot_vals))
+        df_index = RangeIndexType(types.none)
+        out_df = DataFrameType((out_arr_typ,) * n_vals, df_index, tuple(pivot_vals))
 
         return signature(out_df, *args)
 
@@ -581,7 +583,8 @@ class CrossTabTyper(AbstractTemplate):
 
         pivot_vals = _pivot_values.meta
         n_vals = len(pivot_vals)
-        out_df = DataFrameType((out_arr_typ,) * n_vals, None, tuple(pivot_vals))
+        df_index = RangeIndexType(types.none)
+        out_df = DataFrameType((out_arr_typ,) * n_vals, df_index, tuple(pivot_vals))
 
         return signature(out_df, *args)
 
