@@ -718,7 +718,8 @@ def overload_series_append(S, to_append, ignore_index=False, verify_integrity=Fa
                 other_arrs = bodo.hiframes.pd_series_ext.get_series_data_tup(tup_other)
                 all_arrs = bodo.utils.typing.to_const_tuple((arr,) + other_arrs)
                 out_arr = bodo.libs.array_kernels.concat(all_arrs)
-                return bodo.hiframes.pd_series_ext.init_series(out_arr)
+                index = bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr), 1, None)
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, index)
 
             return impl_multi_noindex
 
@@ -728,7 +729,8 @@ def overload_series_append(S, to_append, ignore_index=False, verify_integrity=Fa
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
             other = bodo.hiframes.pd_series_ext.get_series_data(to_append)
             out_arr = bodo.libs.array_kernels.concat((arr, other))
-            return bodo.hiframes.pd_series_ext.init_series(out_arr)
+            index = bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr), 1, None)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index)
 
         return impl_single_noindex
 
