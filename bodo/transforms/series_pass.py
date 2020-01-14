@@ -79,7 +79,6 @@ from bodo.hiframes.series_str_impl import SeriesStrMethodType
 from bodo.hiframes.series_indexing import SeriesIatType
 from bodo.ir.aggregate import Aggregate
 from bodo.hiframes import series_kernels, split_impl
-from bodo.hiframes.series_kernels import series_replace_funcs
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.split_impl import (
@@ -1707,83 +1706,6 @@ class SeriesPass(object):
             )
 
         return [assign]
-
-    def _run_call_series_fillna(self, assign, lhs, rhs, series_var):
-        dtype = self.typemap[series_var.name].dtype
-        val = rhs.args[0]
-        nodes = []
-        data = self._get_series_data(series_var, nodes)
-        index = self._get_series_index(series_var, nodes)
-        name = self._get_series_name(series_var, nodes)
-        kws = dict(rhs.kws)
-        inplace = False
-        if "inplace" in kws:
-            inplace = guard(find_const, self.func_ir, kws["inplace"])
-            if inplace == None:  # pragma: no cover
-                raise ValueError("inplace arg to fillna should be constant")
-
-        if inplace:
-            if dtype == string_type:
-                # optimization: just set null bit if fill is empty
-                if guard(find_const, self.func_ir, val) == "":
-                    return self._replace_func(
-                        lambda A: bodo.libs.str_arr_ext.set_null_bits(A),
-                        [data],
-                        pre_nodes=nodes,
-                    )
-                # Since string arrays can't be changed, we have to create a new
-                # array and assign it back to the same Series variable
-                # result back to the same variable
-                # TODO: handle string array reflection
-                fill_var = rhs.args[0]
-                assign.target = series_var  # replace output
-                return self._replace_func(
-                    series_kernels._series_fillna_str_alloc_impl,
-                    (data, fill_var, index, name),
-                    pre_nodes=nodes,
-                )
-            else:
-                return self._replace_func(
-                    series_kernels._column_fillna_impl,
-                    [data, data, val],
-                    pre_nodes=nodes,
-                )
-        else:
-            if dtype == string_type:
-                func = series_replace_funcs["fillna_str_alloc"]
-            else:
-                func = series_replace_funcs["fillna_alloc"]
-            return self._replace_func(func, [data, val, index, name], pre_nodes=nodes)
-
-    def _run_call_series_dropna(self, assign, lhs, rhs, series_var):
-        dtype = self.typemap[series_var.name].dtype
-        kws = dict(rhs.kws)
-        inplace = False
-        if "inplace" in kws:
-            inplace = guard(find_const, self.func_ir, kws["inplace"])
-            if inplace == None:  # pragma: no cover
-                raise ValueError("inplace arg to dropna should be constant")
-
-        nodes = []
-        data = self._get_series_data(series_var, nodes)
-        name = self._get_series_name(series_var, nodes)
-        if dtype == string_type:
-            func = series_replace_funcs["dropna_str_alloc"]
-        elif isinstance(dtype, types.Float):
-            func = series_replace_funcs["dropna_float"]
-        else:
-            # integer case, TODO: bool, date etc.
-            func = lambda A, name: bodo.hiframes.pd_series_ext.init_series(
-                A, None, name
-            )
-
-        if inplace:
-            # Since arrays can't resize inplace, we have to create a new
-            # array and assign it back to the same Series variable
-            # result back to the same variable
-            assign.target = series_var  # replace output
-
-        return self._replace_func(func, [data, name], pre_nodes=nodes)
 
     def _handle_series_map(self, assign, lhs, rhs, series_var, func_var):
         """translate df.A.map(lambda a:...) to prange()
