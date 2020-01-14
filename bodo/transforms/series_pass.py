@@ -2195,17 +2195,6 @@ class SeriesPass(object):
         def _is_allowed_type(t):
             return is_dt64_series_typ(t) or t in (string_type, types.NPDatetime("ns"))
 
-        # TODO: this has to be more generic to support all combinations.
-        if (
-            is_dt64_series_typ(self.typemap[arg1.name])
-            and self.typemap[arg2.name]
-            == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
-            and rhs.fn in ("-", operator.sub)
-        ):
-            return self._replace_func(
-                series_kernels._column_sub_impl_datetime_series_timestamp, [arg1, arg2]
-            )
-
         if not _is_allowed_type(
             types.unliteral(self.typemap[arg1.name])
         ) or not _is_allowed_type(types.unliteral(self.typemap[arg2.name])):

@@ -195,18 +195,6 @@ def _var_handle_nan(s, count):  # pragma: no cover
         s = s / (count - 1)
     return s
 
-# TODO: handle index and name
-def _column_sub_impl_datetime_series_timestamp(in_arr, ts):  # pragma: no cover
-    numba.parfor.init_prange()
-    n = len(in_arr)
-    S = numba.unsafe.ndarray.empty_inferred((n,))
-    tsint = ts.value
-    for i in numba.parfor.internal_prange(n):
-        S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
-            bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i]) - tsint
-        )
-    return bodo.hiframes.pd_series_ext.init_series(S)
-
 
 @numba.njit
 def lt_f(a, b):  # pragma: no cover

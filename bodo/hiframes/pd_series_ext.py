@@ -814,19 +814,6 @@ class CmpOpLTSeries(SeriesCompEqual):
     key = "<"
 
 
-# TODO: handle all timedelta args
-def type_sub(context):
-    def typer(val1, val2):
-        if is_dt64_series_typ(val1) and val2 == pandas_timestamp_type:
-            return SeriesType(types.NPTimedelta("ns"))
-
-    return typer
-
-
-type_callable("-")(type_sub)
-type_callable(operator.sub)(type_sub)
-
-
 @overload(pd.Series)
 def pd_series_overload(
     data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
