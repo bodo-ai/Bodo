@@ -1477,7 +1477,8 @@ class DataFramePass(object):
         for i, d in enumerate(data_args):
             if not inplace and i >= n_ind:
                 func_text += "  {} = {}.copy()\n".format(d, d)
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
+        func_text += "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)\n".format(data_args[0])
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), index, {})\n".format(
             ", ".join(data_args), col_var
         )
         loc_vars = {}

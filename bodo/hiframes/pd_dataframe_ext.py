@@ -2292,7 +2292,7 @@ class ResetIndexDummyTyper(AbstractTemplate):
 
         # default output index is simple integer index with no name
         # TODO: handle MultiIndex and `level` argument case
-        index = types.none  # TODO: RangeIndexType(types.none)
+        index = RangeIndexType(types.none)
         data = df.data
         columns = df.columns
         if not drop:
