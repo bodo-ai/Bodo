@@ -70,6 +70,7 @@ from bodo.libs.str_arr_ext import (
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+from bodo.utils.typing import get_index_data_arr_types
 
 
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
@@ -1303,33 +1304,36 @@ class DataFramePass(object):
         inplace = guard(find_const, self.func_ir, inplace_var)
         df_typ = self.typemap[df_var.name]
 
-        # TODO: index
         nodes = []
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
 
-        n_cols = len(df_typ.columns)
-        arg_names = ["data" + str(i) for i in range(n_cols)]
-        out_names = ["out" + str(i) for i in range(n_cols)]
+        index_arr_types = get_index_data_arr_types(df_typ.index)
+        n_ind_arrs = len(index_arr_types)
+        arr_types = df_typ.data + index_arr_types
+        arg_names = ["data" + str(i) for i in range(len(arr_types))]
+        out_names = ["out" + str(i) for i in range(len(arr_types))]
 
         str_colnames = [
-            arg_names[i] for i, t in enumerate(df_typ.data) if t == string_array_type
+            arg_names[i] for i, t in enumerate(arr_types) if t == string_array_type
         ]
         list_str_colnames = [
             arg_names[i]
-            for i, t in enumerate(df_typ.data)
+            for i, t in enumerate(arr_types)
             if t == list_string_array_type
         ]
         split_view_colnames = [
             arg_names[i]
-            for i, t in enumerate(df_typ.data)
+            for i, t in enumerate(arr_types)
             if t == string_array_split_view_type
         ]
 
+        # Pandas ignores NAs in index arrays
         isna_calls = [
-            "bodo.libs.array_kernels.isna({}, i)".format(v) for v in arg_names
+            "bodo.libs.array_kernels.isna({}, i)".format(v) for v in arg_names[:-n_ind_arrs]
         ]
 
         func_text = "def _dropna_imp({}, inplace):\n".format(", ".join(arg_names))
+        # find new length, and number of characters etc. if necessary
         func_text += "  old_len = len({})\n".format(arg_names[0])
         func_text += "  new_len = 0\n"
         for c in str_colnames:
@@ -1347,6 +1351,8 @@ class DataFramePass(object):
             func_text += "      num_lists_{0} += len(v_{0})\n".format(c)
             func_text += "      for s_{0} in v_{0}:\n".format(c)
             func_text += "        num_chars_{0} += get_utf8_size(s_{0})\n".format(c)
+        # allocate new arrays
+        func_text += "  curr_ind = 0\n"
         for v, out in zip(arg_names, out_names):
             if v in str_colnames:
                 func_text += "  {} = bodo.libs.str_arr_ext.pre_alloc_string_array(new_len, num_chars_{})\n".format(
@@ -1361,20 +1367,20 @@ class DataFramePass(object):
                 func_text += "  {} = {}\n".format(out, v)
             else:
                 func_text += "  {} = np.empty(new_len, {}.dtype)\n".format(out, v)
-        func_text += "  curr_ind = 0\n"
-        if v in list_str_colnames:
-            func_text += "  index_offsets_{} = bodo.libs.list_str_arr_ext.get_index_offset_ptr({})\n".format(
-                c, out
-            )
-            func_text += "  data_offsets_{} = bodo.libs.list_str_arr_ext.get_data_offset_ptr({})\n".format(
-                c, out
-            )
-            func_text += "  curr_s_offset_{} = 0\n".format(c)
-            func_text += "  curr_d_offset_{} = 0\n".format(c)
+            if v in list_str_colnames:
+                func_text += "  index_offsets_{} = bodo.libs.list_str_arr_ext.get_index_offset_ptr({})\n".format(
+                    c, out
+                )
+                func_text += "  data_offsets_{} = bodo.libs.list_str_arr_ext.get_data_offset_ptr({})\n".format(
+                    c, out
+                )
+                func_text += "  curr_s_offset_{} = 0\n".format(c)
+                func_text += "  curr_d_offset_{} = 0\n".format(c)
+        # fill new array
         func_text += "  for ii in numba.parfor.internal_prange(old_len):\n"
         func_text += "    if not ({}):\n".format(
             " or ".join(
-                ["bodo.libs.array_kernels.isna({}, ii)".format(v) for v in arg_names]
+                ["bodo.libs.array_kernels.isna({}, ii)".format(v) for v in arg_names[:-n_ind_arrs]]
             )
         )
         for v, out in zip(arg_names, out_names):
@@ -1426,18 +1432,20 @@ class DataFramePass(object):
         col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
             col_seq, col_seq
         )
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), None, {})\n".format(
-            ", ".join(out_names), col_var
+        # TODO: support MultiIndex
+        func_text += "  index = bodo.utils.conversion.index_from_array({})\n".format(out_names[-1])
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), index, {})\n".format(
+            ", ".join(out_names[:-n_ind_arrs]), col_var
         )
 
-        # print(func_text)
         loc_vars = {}
         exec(
             func_text, {"get_utf8_size": bodo.libs.str_arr_ext.get_utf8_size}, loc_vars
         )
         _dropna_imp = loc_vars["_dropna_imp"]
 
-        args = col_vars + [inplace_var]
+        in_index_var = self._gen_array_from_index(df_var, df_var, nodes)
+        args = col_vars + [in_index_var, inplace_var]
 
         if not inplace:
             return self._replace_func(_dropna_imp, args, pre_nodes=nodes)

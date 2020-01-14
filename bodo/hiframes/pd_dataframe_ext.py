@@ -34,7 +34,7 @@ from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.series_indexing import SeriesIlocType
-from bodo.hiframes.pd_index_ext import RangeIndexType
+from bodo.hiframes.pd_index_ext import RangeIndexType, NumericIndexType
 from bodo.libs.str_ext import string_type, unicode_to_char_ptr
 from bodo.utils.typing import (
     BodoWarning,
@@ -2349,8 +2349,10 @@ class DropnaDummyTyper(AbstractTemplate):
 
         if not inplace:
             # copy type to set has_parent False
-            # TODO: support Index
-            out_df = DataFrameType(df.data, types.none, df.columns)
+            index = df.index
+            if isinstance(index, RangeIndexType):
+                index = NumericIndexType(types.int64)
+            out_df = DataFrameType(df.data, index, df.columns)
             return signature(out_df, *args)
         return signature(types.none, *args)
 
