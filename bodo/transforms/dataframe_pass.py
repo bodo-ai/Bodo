@@ -1267,7 +1267,8 @@ class DataFramePass(object):
             ", ".join(data_args)
         )
         for d in data_args:
-            func_text += "  {} = bodo.hiframes.pd_series_ext.init_series({})\n".format(
+            func_text += "  ind_{0} = bodo.hiframes.pd_index_ext.init_range_index(0, len({0}), 1, None)\n".format(d)
+            func_text += "  {0} = bodo.hiframes.pd_series_ext.init_series({1}, ind_{1})\n".format(
                 d + "_S", d
             )
             if not inplace:
