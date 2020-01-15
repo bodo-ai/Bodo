@@ -2149,6 +2149,15 @@ class DataFramePass(object):
         pivot_values = self.typemap[_pivot_values.name].meta
         out_typ = self.typemap[lhs.name]
 
+        nodes =[]
+        if isinstance(self.typemap[index.name], SeriesType):
+            nodes += compile_func_single_block(lambda S: bodo.hiframes.pd_series_ext.get_series_data(S), (index,), None, self)
+            index = nodes[-1].target
+
+        if isinstance(self.typemap[columns.name], SeriesType):
+            nodes += compile_func_single_block(lambda S: bodo.hiframes.pd_series_ext.get_series_data(S), (columns,), None, self)
+            columns = nodes[-1].target
+
         in_vars = {}
 
         df_col_map = {
@@ -2167,7 +2176,6 @@ class DataFramePass(object):
             return count
 
         # TODO: make out_key_var an index column
-        # TODO: check Series vs. array for index/columns
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name,
             "crosstab",
@@ -2182,7 +2190,7 @@ class DataFramePass(object):
             pivot_values,
             True,
         )
-        nodes = [agg_node]
+        nodes.append(agg_node)
 
         _init_df = _gen_init_df(out_typ.columns)
 
