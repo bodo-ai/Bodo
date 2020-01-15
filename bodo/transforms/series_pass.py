@@ -184,18 +184,6 @@ class SeriesPass(object):
                     out_nodes = self._run_assign(inst)
                 elif isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
                     out_nodes = self._run_setitem(inst)
-                else:
-                    if isinstance(
-                        inst,
-                        (
-                            Aggregate,
-                            bodo.ir.sort.Sort,
-                            bodo.ir.join.Join,
-                            bodo.ir.filter.Filter,
-                            bodo.ir.csv_ext.CsvReader,
-                        ),
-                    ):
-                        out_nodes = self._handle_hiframes_nodes(inst)
 
                 if isinstance(out_nodes, list):
                     new_body.extend(out_nodes)
@@ -2592,89 +2580,12 @@ class SeriesPass(object):
         var_def = guard(get_definition, self.func_ir, var)
         return isinstance(var_def, ir.Const) and var_def.value is None
 
-    def _handle_hiframes_nodes(self, inst):
-        if isinstance(inst, Aggregate):
-            # now that type inference is done, remove type vars to
-            # enable dead code elimination
-            inst.out_typer_vars = None
-            use_vars = inst.key_arrs + list(inst.df_in_vars.values())
-            if inst.pivot_arr is not None:
-                use_vars.append(inst.pivot_arr)
-            def_vars = list(inst.df_out_vars.values())
-            if inst.out_key_vars is not None:
-                def_vars += inst.out_key_vars
-            apply_copies_func = bodo.ir.aggregate.apply_copies_aggregate
-        elif isinstance(inst, bodo.ir.sort.Sort):
-            use_vars = inst.key_arrs + list(inst.df_in_vars.values())
-            def_vars = []
-            if not inst.inplace:
-                def_vars = inst.out_key_arrs + list(inst.df_out_vars.values())
-            apply_copies_func = bodo.ir.sort.apply_copies_sort
-        elif isinstance(inst, bodo.ir.join.Join):
-            use_vars = list(inst.right_vars.values()) + list(inst.left_vars.values())
-            def_vars = list(inst.df_out_vars.values())
-            apply_copies_func = bodo.ir.join.apply_copies_join
-        elif isinstance(inst, bodo.ir.csv_ext.CsvReader):
-            use_vars = []
-            def_vars = inst.out_vars
-            apply_copies_func = bodo.ir.csv_ext.apply_copies_csv
-        else:
-            assert isinstance(inst, bodo.ir.filter.Filter)
-            use_vars = list(inst.df_in_vars.values())
-            if isinstance(self.typemap[inst.bool_arr.name], SeriesType):
-                use_vars.append(inst.bool_arr)
-            def_vars = list(inst.df_out_vars.values())
-            apply_copies_func = bodo.ir.filter.apply_copies_filter
-
-        out_nodes = self._convert_series_hiframes_nodes(
-            inst, use_vars, def_vars, apply_copies_func
-        )
-
-        return out_nodes
-
     def _update_definitions(self, node_list):
         loc = ir.Loc("", 0)
         dumm_block = ir.Block(ir.Scope(None, loc), loc)
         dumm_block.body = node_list
         build_definitions({0: dumm_block}, self.func_ir._definitions)
         return
-
-    def _convert_series_hiframes_nodes(
-        self, inst, use_vars, def_vars, apply_copies_func
-    ):
-        #
-        out_nodes = []
-        varmap = {
-            v.name: self._get_series_data(v, out_nodes)
-            for v in use_vars
-            if isinstance(self.typemap[v.name], SeriesType)
-        }
-        apply_copies_func(inst, varmap, None, None, None, None)
-        out_nodes.append(inst)
-
-        for v in def_vars:
-            self.func_ir._definitions[v.name].remove(inst)
-        varmap = {}
-        for v in def_vars:
-            if not isinstance(self.typemap[v.name], SeriesType):
-                continue
-            data_var = ir.Var(v.scope, mk_unique_var(v.name + "data"), v.loc)
-            self.typemap[data_var.name] = series_to_array_type(self.typemap[v.name])
-            f_block = compile_to_numba_ir(
-                lambda A: bodo.hiframes.pd_series_ext.init_series(A),
-                {"bodo": bodo},
-                self.typingctx,
-                (self.typemap[data_var.name],),
-                self.typemap,
-                self.calltypes,
-            ).blocks.popitem()[1]
-            replace_arg_nodes(f_block, [data_var])
-            out_nodes += f_block.body[:-2]
-            out_nodes[-1].target = v
-            varmap[v.name] = data_var
-
-        apply_copies_func(inst, varmap, None, None, None, None)
-        return out_nodes
 
     def _get_arg(self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):
         arg = None
