@@ -1228,8 +1228,9 @@ class DataFramePass(object):
 
         func_text = "def _mean_impl({}):\n".format(", ".join(data_args))
         for d in data_args:
-            func_text += "  {} = bodo.hiframes.pd_series_ext.init_series({})\n".format(
-                d + "_S", d
+            ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(d)
+            func_text += "  {} = bodo.hiframes.pd_series_ext.init_series({}, {})\n".format(
+                d + "_S", d, ind
             )
             func_text += "  {} = {}.{}()\n".format(d + "_O", d + "_S", func_name)
         func_text += "  data = np.array(({},))\n".format(
