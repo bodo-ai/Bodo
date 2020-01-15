@@ -2245,10 +2245,13 @@ class SeriesPass(object):
             arg1 = rhs.lhs
             arg2 = rhs.rhs
             is_series = False
+            index_var = None
             if is_str_series_typ(self.typemap[arg1.name]):
+                index_var = self._get_series_index(arg1, nodes)
                 arg1 = self._get_series_data(arg1, nodes)
                 is_series = True
             if is_str_series_typ(self.typemap[arg2.name]):
+                index_var = self._get_series_index(arg2, nodes)
                 arg2 = self._get_series_data(arg2, nodes)
                 is_series = True
 
@@ -2277,7 +2280,7 @@ class SeriesPass(object):
 
             op_str = _binop_to_str[rhs.fn]
 
-            func_text = "def f(A, B):\n"
+            func_text = "def f(A, B{}):\n".format(", index" if is_series else "")
             func_text += "  l = {}\n".format(len_call)
             if is_series:
                 func_text += "  S = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
@@ -2288,14 +2291,17 @@ class SeriesPass(object):
                 arg1_access, op_str, arg2_access
             )
             if is_series:
-                func_text += "  return bodo.hiframes.pd_series_ext.init_series(S)\n"
+                func_text += "  return bodo.hiframes.pd_series_ext.init_series(S, index)\n"
             else:
                 func_text += "  return S\n"
 
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             f = loc_vars["f"]
-            return self._replace_func(f, [arg1, arg2], pre_nodes=nodes)
+            args = [arg1, arg2]
+            if is_series:
+                args.append(index_var)
+            return self._replace_func(f, args, pre_nodes=nodes)
 
         return None
 
