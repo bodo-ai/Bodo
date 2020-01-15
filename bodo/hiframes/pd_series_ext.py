@@ -271,15 +271,16 @@ def construct_series(context, builder, series_type, data_val, index_val, name_va
 
 
 @intrinsic
-def init_series(typingctx, data, index=None, name=None):
+def init_series(typingctx, data, index, name=None):
     """Create a Series with provided data, index and name values.
     Used as a single constructor for Series and assigning its data, so that
     optimization passes can look for init_series() to see if underlying
     data has changed, and get the array variables from init_series() args if
     not changed.
     """
-
-    index = types.none if index is None else index
+    from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+    from bodo.hiframes.pd_index_ext import is_pd_index_type
+    assert is_pd_index_type(index) or isinstance(index, MultiIndexType)
     name = types.none if name is None else name
     name = types.unliteral(name)
 

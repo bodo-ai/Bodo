@@ -297,7 +297,7 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
     data has changed, and get the array variables from init_dataframe() args if
     not changed.
     """
-    # assert is_pd_index_type(index_typ) or isinstance(index_typ, MultiIndexType)
+    assert is_pd_index_type(index_typ) or isinstance(index_typ, MultiIndexType)
 
     n_cols = len(data_tup_typ.types)
     # assert all(isinstance(t, types.StringLiteral) for t in col_names_typ.types)
