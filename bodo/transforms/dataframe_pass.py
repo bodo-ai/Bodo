@@ -1679,9 +1679,10 @@ class DataFramePass(object):
                 self.operands,
             )
             op = "np.{}".format(self.op)
+            ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(str(self.operands[0]))
             return pd.io.formats.printing.pprint_thing(
-                "bodo.hiframes.pd_series_ext.init_series({0}({1}))".format(
-                    op, ",".join(operands)
+                "bodo.hiframes.pd_series_ext.init_series({0}({1}), {2})".format(
+                    op, ",".join(operands), ind
                 )
             )
 
