@@ -500,13 +500,14 @@ class SeriesPass(object):
             func = rhs.fn
 
             def impl(S1, S2):
+                index = bodo.hiframes.pd_series_ext.get_series_index(S1)
                 arr1 = bodo.hiframes.pd_series_ext.get_series_data(S1)
                 arr2 = bodo.hiframes.pd_series_ext.get_series_data(S2)
                 l = len(arr1)
                 S = bodo.libs.bool_arr_ext.alloc_bool_array(l)
                 for i in numba.parfor.internal_prange(l):
                     S[i] = func(arr1[i], arr2[i])
-                return bodo.hiframes.pd_series_ext.init_series(S)
+                return bodo.hiframes.pd_series_ext.init_series(S, index)
 
             return self._replace_func(impl, [arg1, arg2])
 
@@ -2194,13 +2195,15 @@ class SeriesPass(object):
         typ2 = types.unliteral(self.typemap[arg2.name])
         nodes = []
 
-        func_text = "def f(arg1, arg2):\n"
+        func_text = "def f(arg1, arg2, index):\n"
         if is_dt64_series_typ(typ1):
+            index_var = self._get_series_index(arg1, nodes)
             arg1 = self._get_series_data(arg1, nodes)
             func_text += "  dt_index, _str = arg1, arg2\n"
             comp = "dt_index[i] {} other".format(op_str)
             other_typ = typ2
         else:
+            index_var = self._get_series_index(arg2, nodes)
             arg2 = self._get_series_data(arg2, nodes)
             func_text += "  dt_index, _str = arg2, arg1\n"
             comp = "other {} dt_index[i]".format(op_str)
@@ -2215,12 +2218,12 @@ class SeriesPass(object):
         func_text += "  S = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
         func_text += "  for i in numba.parfor.internal_prange(l):\n"
         func_text += "    S[i] = {}\n".format(comp)
-        func_text += "  return bodo.hiframes.pd_series_ext.init_series(S)\n"
+        func_text += "  return bodo.hiframes.pd_series_ext.init_series(S, index)\n"
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         f = loc_vars["f"]
         # print(func_text)
-        return self._replace_func(f, [arg1, arg2], pre_nodes=nodes)
+        return self._replace_func(f, [arg1, arg2, index_var], pre_nodes=nodes)
 
     def _handle_string_array_expr(self, assign, rhs):
         # convert str_arr==str into parfor

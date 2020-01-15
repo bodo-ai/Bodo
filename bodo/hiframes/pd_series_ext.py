@@ -783,10 +783,14 @@ class SeriesCompEqual(AbstractTemplate):
         if (is_dt64_series_typ(va) and vb in (string_type, types.NPDatetime("ns"))) or (
             is_dt64_series_typ(vb) and va in (string_type, types.NPDatetime("ns"))
         ):
-            return signature(SeriesType(types.boolean, boolean_array), va, vb)
+            if is_dt64_series_typ(va):
+                index_typ = va.index
+            else:
+                index_typ = vb.index
+            return signature(SeriesType(types.boolean, boolean_array, index_typ), va, vb)
 
         if is_dt64_series_typ(va) and is_dt64_series_typ(vb):
-            return signature(SeriesType(types.boolean, boolean_array), va, vb)
+            return signature(SeriesType(types.boolean, boolean_array, va.index), va, vb)
 
 
 @infer
