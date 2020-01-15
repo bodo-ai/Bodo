@@ -346,6 +346,10 @@ def overload_series_getitem(S, idx):
         # TODO: handle idx as SeriesType on array
         raise ValueError("setting Series value using {} not supported yet".format(idx))
 
+    # convert Series index on Array getitem to array
+    elif bodo.utils.utils.is_array_typ(S) and isinstance(idx, SeriesType):
+        return lambda S, idx: S[bodo.hiframes.pd_series_ext.get_series_data(idx)]
+
 
 @overload(operator.setitem)
 def overload_series_setitem(S, idx, val):

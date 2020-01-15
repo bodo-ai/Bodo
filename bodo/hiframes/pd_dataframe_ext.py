@@ -2464,7 +2464,7 @@ def query_dummy(df, expr):  # pragma: no cover
 class QueryDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        return signature(SeriesType(types.bool_), *args)
+        return signature(SeriesType(types.bool_, index=RangeIndexType(types.none)), *args)
 
 
 @lower_builtin(query_dummy, types.VarArg(types.Any))
@@ -2486,7 +2486,7 @@ def val_notin_dummy(S, vals):  # pragma: no cover
 class ValIsinTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        return signature(SeriesType(types.bool_), *args)
+        return signature(SeriesType(types.bool_, index=args[0].index), *args)
 
 
 @lower_builtin(val_isin_dummy, types.VarArg(types.Any))

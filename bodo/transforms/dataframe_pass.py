@@ -1539,9 +1539,10 @@ class DataFramePass(object):
 
         func_text = "def _query_impl({}):\n".format(", ".join(in_args))
         # convert array to Series to support cases such as C.str.contains
-        for c, c_var in used_cols.items():
-            func_text += "  {0} = bodo.hiframes.pd_series_ext.init_series({0})\n".format(
-                c_var
+        for c_var in used_cols.values():
+            ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(c_var)
+            func_text += "  {0} = bodo.hiframes.pd_series_ext.init_series({0}, {1})\n".format(
+                c_var, ind
             )
         func_text += "  return {}".format(parsed_expr_str)
         loc_vars = {}

@@ -1338,12 +1338,13 @@ class SeriesPass(object):
 
             def impl(S, vals):  # pragma: no cover
                 arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+                index = bodo.hiframes.pd_series_ext.get_series_index(S)
                 numba.parfor.init_prange()
                 n = len(arr)
                 out = np.empty(n, np.bool_)
                 for i in numba.parfor.internal_prange(n):
                     out[i] = arr[i] in vals
-                return bodo.hiframes.pd_series_ext.init_series(out)
+                return bodo.hiframes.pd_series_ext.init_series(out, index)
 
             return self._replace_func(impl, rhs.args)
 
@@ -1351,6 +1352,7 @@ class SeriesPass(object):
 
             def impl(S, vals):  # pragma: no cover
                 arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+                index = bodo.hiframes.pd_series_ext.get_series_index(S)
                 numba.parfor.init_prange()
                 n = len(arr)
                 out = np.empty(n, np.bool_)
@@ -1360,7 +1362,7 @@ class SeriesPass(object):
                     # out[i] = not (arr[i] in vals)
                     _in = arr[i] in vals
                     out[i] = not _in
-                return bodo.hiframes.pd_series_ext.init_series(out)
+                return bodo.hiframes.pd_series_ext.init_series(out, index)
 
             return self._replace_func(impl, rhs.args)
 
