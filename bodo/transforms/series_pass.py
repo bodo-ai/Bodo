@@ -612,35 +612,7 @@ class SeriesPass(object):
             impl = overload_func(typ1, typ2)
             return self._replace_func(impl, [arg1, arg2])
 
-        # TODO: remove this code
-        nodes = []
-        # TODO: support alignment, dt, etc.
-        # S3 = S1 + S2 ->
-        # S3_data = S1_data + S2_data; S3 = init_series(S3_data)
-        if isinstance(typ1, SeriesType):
-            arg1 = self._get_series_data(arg1, nodes)
-        if isinstance(typ2, SeriesType):
-            arg2 = self._get_series_data(arg2, nodes)
-
-        rhs.lhs, rhs.rhs = arg1, arg2
-        self._convert_series_calltype(rhs)
-
-        # output stays as Array in A += B where A is Array
-        if isinstance(self.typemap[assign.target.name], types.Array):
-            assert isinstance(self.calltypes[rhs].return_type, types.Array)
-            nodes.append(assign)
-            return nodes
-
-        out_data = ir.Var(
-            arg1.scope, mk_unique_var(assign.target.name + "_data"), rhs.loc
-        )
-        self.typemap[out_data.name] = self.calltypes[rhs].return_type
-        nodes.append(ir.Assign(rhs, out_data, rhs.loc))
-        return self._replace_func(
-            lambda data: bodo.hiframes.pd_series_ext.init_series(data, None, None),
-            [out_data],
-            pre_nodes=nodes,
-        )
+        return [assign]
 
     def _run_unary(self, assign, rhs):
         arg = rhs.value
