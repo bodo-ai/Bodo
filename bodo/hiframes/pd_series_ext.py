@@ -99,7 +99,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
     def copy(self, dtype=None, index=None):
         # XXX is copy necessary?
         if index is None:
-            index = types.none if self.index == types.none else self.index.copy()
+            index = RangeIndexType(types.none) if self.index == types.none else self.index.copy()
         dtype = dtype if dtype is not None else self.dtype
         data = _get_series_array_type(dtype)
         return SeriesType(dtype, data, index, self.name_typ)

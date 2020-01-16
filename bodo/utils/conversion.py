@@ -462,7 +462,9 @@ def overload_extract_index_if_none(data, index):
     if isinstance(data, SeriesType):
         return lambda data, index: bodo.hiframes.pd_series_ext.get_series_index(data)
 
-    return lambda data, index: index
+    return lambda data, index: bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(data), 1, None
+        )
 
 
 def box_if_dt64(val):  # pragma: no cover

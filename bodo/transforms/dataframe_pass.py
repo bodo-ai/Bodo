@@ -69,6 +69,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.utils.typing import get_index_data_arr_types
 
@@ -2037,10 +2038,15 @@ class DataFramePass(object):
 
         nodes.append(agg_node)
 
-        if out_typ.index == types.none:
-            index_var = ir.Var(lhs.scope, mk_unique_var("gp_index"), lhs.loc)
-            self.typemap[index_var.name] = types.none
-            nodes.append(ir.Assign(ir.Const(None, lhs.loc), index_var, lhs.loc))
+        if isinstance(out_typ.index, RangeIndexType):
+            # as_index=False case generates trivial RangeIndex
+            nodes += compile_func_single_block(
+                lambda A: bodo.hiframes.pd_index_ext.init_range_index(0, len(A), 1, None),
+                (out_key_vars[0],),
+                None,
+                self,
+            )
+            index_var = nodes[-1].target
         elif isinstance(out_typ.index, MultiIndexType):
             # gen MultiIndex init function
             arg_names = ", ".join("in{}".format(i) for i in range(len(grp_typ.keys)))

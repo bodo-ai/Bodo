@@ -307,7 +307,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
     key = DataFrameGroupByType
 
     def _get_agg_typ(self, grp, args, func_name, code=None):
-        index = types.none
+        index = RangeIndexType(types.none)
         out_data = []
         out_columns = []
         # add key columns of not as_index
@@ -488,7 +488,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
     # TODO: cumprod etc.
     @bound_function("groupby.cumsum")
     def resolve_cumsum(self, grp, args, kws):
-        index = types.none
+        index = RangeIndexType(types.none)
         out_columns = []
         out_data = []
         for c in grp.selection:
