@@ -182,6 +182,8 @@ def remove_hiframes(rhs, lives, call_list):
         return True
     if len(call_list) == 2 and call_list[0] == "copy":
         return True
+    if call_list == ["parse_datetime_str", "pd_timestamp_ext", "hiframes", bodo]:
+        return True
     return False
 
 
