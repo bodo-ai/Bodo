@@ -947,7 +947,9 @@ class UntypedPass(object):
             if isinstance(index_col, int):
                 index_col = columns[index_col]
             index_ind = columns.index(index_col)
-            index_arg = data_args[index_ind]
+            index_arg = "bodo.utils.conversion.convert_to_index({})".format(
+                data_args[index_ind]
+            )
             columns.remove(index_col)
             data_args.remove(data_args[index_ind])
         else:
