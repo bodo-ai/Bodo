@@ -29,6 +29,9 @@ from numba.ir_utils import (
     dprint_func_ir,
     build_definitions,
     find_build_sequence,
+    remove_dead_extensions,
+    has_no_side_effect,
+    analysis,
 )
 from numba.inline_closurecall import inline_closure_call
 from numba.typing.templates import Signature, bound_function, signature
@@ -90,6 +93,7 @@ from bodo.hiframes.split_impl import (
     get_split_view_data_ptr,
 )
 from bodo.utils.transform import compile_func_single_block, update_locs
+from bodo.utils.utils import is_array_typ
 
 
 ufunc_names = set(f.__name__ for f in numba.typing.npydecl.supported_ufuncs)
@@ -151,7 +155,10 @@ _binop_to_str = {
 }
 
 
-class SeriesPass(object):
+saved_array_analysis = None
+
+
+class SeriesPass:
     """Analyze and transform hiframes calls after typing"""
 
     def __init__(self, func_ir, typingctx, typemap, calltypes):
@@ -159,6 +166,9 @@ class SeriesPass(object):
         self.typingctx = typingctx
         self.typemap = typemap
         self.calltypes = calltypes
+        self.array_analysis = numba.array_analysis.ArrayAnalysis(
+            typingctx, func_ir, typemap, calltypes
+        )
         # Loc object of current location being translated
         self.curr_loc = self.func_ir.loc
         # keep track of tuple variables change by to_const_tuple
@@ -229,13 +239,7 @@ class SeriesPass(object):
             if not replaced:
                 blocks[label].body = new_body
 
-        self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
-        while ir_utils.remove_dead(
-            self.func_ir.blocks, self.func_ir.arg_names, self.func_ir, self.typemap
-        ):
-            pass
-
-        self.func_ir._definitions = build_definitions(self.func_ir.blocks)
+        self._simplify_IR()
         dprint_func_ir(self.func_ir, "after series pass")
         return
 
@@ -2368,6 +2372,26 @@ class SeriesPass(object):
             extra_globals={"_sort_func": numba.njit(sort_func)},
         )
 
+    def _simplify_IR(self):
+        """Simplify IR after Series pass transforms. Also, saves array analysis to
+        replace dead arrays in array.shape (see test_csv_remove_col0_used_for_len
+        and bodo_remove_dead_block)
+        """
+        global saved_array_analysis
+        self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
+        self.array_analysis.run(self.func_ir.blocks)
+
+        try:
+            saved_array_analysis = self.array_analysis
+            while ir_utils.remove_dead(
+                self.func_ir.blocks, self.func_ir.arg_names, self.func_ir, self.typemap
+            ):
+                pass
+        finally:
+            saved_array_analysis = None
+
+        self.func_ir._definitions = build_definitions(self.func_ir.blocks)
+
     def _get_const_tup(self, tup_var):
         tup_def = guard(get_definition, self.func_ir, tup_var)
         if isinstance(tup_def, ir.Expr):
@@ -2625,3 +2649,96 @@ def get_stmt_writes(stmt):
 # XXX override stmt write function use in parfor fusion
 # TODO: implement support for nodes properly
 ir_utils.get_stmt_writes = get_stmt_writes
+
+
+# replaces remove_dead_block of Numba to add Bodo optimization (e.g. replace dead array
+# in array.shape)
+def bodo_remove_dead_block(block, lives, call_table, arg_aliases, alias_map,
+                                                  alias_set, func_ir, typemap):
+    """remove dead code using liveness info.
+    Mutable arguments (e.g. arrays) that are not definitely assigned are live
+    after return of function.
+    """
+    # TODO: find mutable args that are not definitely assigned instead of
+    # assuming all args are live after return
+    removed = False
+
+    # add statements in reverse order
+    new_body = [block.terminator]
+    # for each statement in reverse order, excluding terminator
+    for stmt in reversed(block.body[:-1]):
+        # aliases of lives are also live
+        alias_lives = set()
+        init_alias_lives = lives & alias_set
+        for v in init_alias_lives:
+            alias_lives |= alias_map[v]
+        lives_n_aliases = lives | alias_lives | arg_aliases
+
+        # let external calls handle stmt if type matches
+        if type(stmt) in remove_dead_extensions:
+            f = remove_dead_extensions[type(stmt)]
+            stmt = f(stmt, lives_n_aliases, arg_aliases, alias_map, func_ir,
+                     typemap)
+            if stmt is None:
+                removed = True
+                continue
+
+        # ignore assignments that their lhs is not live or lhs==rhs
+        if isinstance(stmt, ir.Assign):
+            lhs = stmt.target
+            rhs = stmt.value
+            if lhs.name not in lives and has_no_side_effect(
+                    rhs, lives_n_aliases, call_table):
+                removed = True
+                continue
+            # replace dead array in array.shape with a live alternative equivalent array
+            # this happens for CSV/Parquet read nodes where the first array is used
+            # for forming RangeIndex but some other arrays may be used in the
+            # program afterwards
+            if (saved_array_analysis and lhs.name in lives and is_expr(rhs, "getattr")
+                    and rhs.attr == "shape" and is_array_typ(typemap[rhs.value.name])
+                    and rhs.value.name not in lives):
+                # TODO: use proper block to label mapping
+                block_to_label = {v: k for k, v in func_ir.blocks.items()}
+                label = block_to_label[block]
+                eq_set = saved_array_analysis.get_equiv_set(label)
+                for v in eq_set.get_equiv_set(rhs.value):
+                    if v.endswith("#0"):
+                        v = v[:-2]
+                    if v in typemap and is_array_typ(typemap[v]) and v in lives:
+                        rhs.value = ir.Var(rhs.value.scope, v, rhs.value.loc)
+                        removed = True
+                        break
+
+            if isinstance(rhs, ir.Var) and lhs.name == rhs.name:
+                removed = True
+                continue
+            # TODO: remove other nodes like SetItem etc.
+
+        if isinstance(stmt, ir.Del):
+            if stmt.value not in lives:
+                removed = True
+                continue
+
+        if isinstance(stmt, ir.SetItem):
+            name = stmt.target.name
+            if name not in lives_n_aliases:
+                continue
+
+        if type(stmt) in analysis.ir_extension_usedefs:
+            def_func = analysis.ir_extension_usedefs[type(stmt)]
+            uses, defs = def_func(stmt)
+            lives -= defs
+            lives |= uses
+        else:
+            lives |= {v.name for v in stmt.list_vars()}
+            if isinstance(stmt, ir.Assign):
+                lives.remove(lhs.name)
+
+        new_body.append(stmt)
+    new_body.reverse()
+    block.body = new_body
+    return removed
+
+
+ir_utils.remove_dead_block = bodo_remove_dead_block

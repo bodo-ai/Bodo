@@ -6,6 +6,7 @@ import shutil
 import pandas as pd
 import numpy as np
 import h5py
+import numba
 import bodo
 from bodo.utils.typing import BodoError
 from bodo.utils.testing import ensure_clean
@@ -21,6 +22,7 @@ from bodo.tests.utils import (
     _get_dist_arg,
     reduce_sum,
     _test_equal_guard,
+    DeadcodeTestPipeline,
 )
 
 kde_file = os.path.join("bodo", "tests", "data", "kde.parquet")
@@ -124,6 +126,31 @@ def test_pq_schema(datapath):
         }
     )(impl)
     pd.testing.assert_frame_equal(bodo_func(fname), impl(fname))
+
+
+def test_csv_remove_col0_used_for_len(datapath):
+    """read_csv() handling code uses the first column for creating RangeIndex of the
+    output dataframe. In cases where the first column array is dead, it should be
+    replaced by an alternative live array. This test makes sure this replacement happens
+    properly.
+    """
+    fname = datapath("csv_data1.csv")
+
+    def impl():
+        df = pd.read_csv(fname, names=["A", "B", "C", "D"])
+        return df.C
+
+    bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline)(impl)
+    pd.testing.assert_series_equal(bodo_func(), impl())
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    read_csv_found = False
+    # find CsvReader node and make sure it has only 1 column
+    for stmt in fir.blocks[0].body:
+        if isinstance(stmt, bodo.ir.csv_ext.CsvReader):
+            read_csv_found = True
+            assert len(stmt.df_colnames) == 1
+            break
+    assert read_csv_found
 
 
 def clean_pq_files(mode, pandas_pq_path, bodo_pq_path):
