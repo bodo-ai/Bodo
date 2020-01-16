@@ -129,7 +129,7 @@ Test Suite
 ----------
 
 
-We use `pytest` for testing. The tests are designed for up to
+We use :code:`pytest` for testing. The tests are designed for up to
 3 processors. Run the test suite on different
 number of processors (should run in Bodo repo's main directory)::
 
@@ -137,10 +137,29 @@ number of processors (should run in Bodo repo's main directory)::
     mpiexec -n 2 pytest -s -v -m "not slow" -W ignore
     mpiexec -n 3 pytest -s -v -m "not slow" -W ignore
 
-The `not slow` flag skips some less necessary tests,
-which allows for faster testing.
-The nightly CI build runs the full test suite.
 
+We have two customized `pytest markers <http://doc.pytest.org/en/latest/example/markers.html>`_:
+
+1. :code:`slow` defined in `pytest.ini <https://github.com/Bodo-inc/Bodo/blob/master/pytest.ini>`_::
+    
+      pytest -s -v -m "slow" -W ignore
+      pytest -s -v -m "not slow" -W ignore
+
+   The :code:`not slow` flag skips some less necessary tests,
+   which allows for faster testing. So it is used in the PR/merge pipeline.
+
+   The nightly CI build&test pipeline runs the full test suite.
+      
+2. :code:`firsthalf` dynamically defined in `bodo/tests/conftest.py <https://github.com/Bodo-inc/Bodo/blob/master/bodo/tests/conftest.py>`_::
+
+      pytest -s -v -m "firsthalf" -W ignore
+      pytest -s -v -m "not firsthalf" -W ignore
+
+   We use this marker in the nightly CI build&test pipeline due to limited memory available on azure.
+
+Two markers can be used together::
+
+   pytest -s -v -m "not slow and firsthalf" -W ignore
 
 Debugging
 ---------

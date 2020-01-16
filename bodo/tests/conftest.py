@@ -32,3 +32,13 @@ def datapath():
         return path
 
     return deco
+
+
+def pytest_collection_modifyitems(items):
+    """
+    called after collection has been performed.
+    Mark the first half of the tests with marker "firsthalf"
+    """
+    n = len(items)
+    for item in items[0:n//2]:
+        item.add_marker(pytest.mark.firsthalf)

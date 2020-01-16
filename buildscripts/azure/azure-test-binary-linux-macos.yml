@@ -56,5 +56,6 @@ jobs:
       source activate BODOENV
       pip install pytest pytest-azurepipelines
       cd $HOME/bodo-inc
-      mpiexec -n $NP pytest --pyargs bodo -x -s -v -m "$(PYTEST_MARKER)" -W ignore
+      mpiexec -n $NP pytest --pyargs bodo -x -s -v -m "$(PYTEST_MARKER) and firsthalf" -W ignore
+      mpiexec -n $NP pytest --pyargs bodo -x -s -v -m "$(PYTEST_MARKER) and not firsthalf" -W ignore
     displayName: 'Test Bodo'
