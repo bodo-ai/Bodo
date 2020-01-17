@@ -41,7 +41,7 @@ def remove_h5(rhs, lives, call_list):
 numba.ir_utils.remove_call_handlers.append(remove_h5)
 
 
-class H5_IO(object):
+class H5_IO:
     """analyze and transform hdf5 calls"""
 
     def __init__(self, func_ir, _locals, flags, arg_types, reverse_copies):

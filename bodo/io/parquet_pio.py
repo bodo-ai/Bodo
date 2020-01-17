@@ -79,7 +79,7 @@ def remove_parquet(rhs, lives, call_list):
 numba.ir_utils.remove_call_handlers.append(remove_parquet)
 
 
-class ParquetHandler(object):
+class ParquetHandler:
     """analyze and transform parquet IO calls"""
 
     def __init__(self, func_ir, typingctx, args, _locals, _reverse_copies):

@@ -77,7 +77,7 @@ from bodo.utils.typing import get_index_data_arr_types
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
 
 
-class DataFramePass(object):
+class DataFramePass:
     """Analyze and transform dataframe calls after typing"""
 
     def __init__(self, func_ir, typingctx, typemap, calltypes):

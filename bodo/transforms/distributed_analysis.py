@@ -176,7 +176,7 @@ class DistributedDiagnostics:
         print("\n".join(newlines))
 
 
-class DistributedAnalysis(object):
+class DistributedAnalysis:
     """Analyze program for distributed transformation"""
 
     _extra_call = {}
