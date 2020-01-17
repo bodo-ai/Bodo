@@ -2382,6 +2382,10 @@ class SeriesPass:
         """
         global saved_array_analysis
         self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
+        while ir_utils.remove_dead(
+            self.func_ir.blocks, self.func_ir.arg_names, self.func_ir, self.typemap
+        ):
+            pass
         self.array_analysis.run(self.func_ir.blocks)
 
         try:
