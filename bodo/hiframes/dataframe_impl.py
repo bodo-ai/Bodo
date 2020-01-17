@@ -246,8 +246,7 @@ def overload_dataframe_head(df, n=5):
     data_args = ", ".join("df['{}'].head(n).values".format(c) for c in df.columns)
     header = "def impl(df, n=5):\n"
     index = (
-        "bodo.utils.conversion.fix_none_index("
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))[:n]"
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[:n]"
     )
     return _gen_init_df(header, df.columns, data_args, index)
 
@@ -258,8 +257,7 @@ def overload_dataframe_tail(df, n=5):
     data_args = ", ".join("df['{}'].tail(n).values".format(c) for c in df.columns)
     header = "def impl(df, n=5):\n"
     index = (
-        "bodo.utils.conversion.fix_none_index("
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))[-n:]"
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[-n:]"
     )
     return _gen_init_df(header, df.columns, data_args, index)
 
@@ -673,8 +671,7 @@ def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
     header = "def impl(df, indices, axis=0, convert=None, is_copy=True):\n"
     header += "  indices_t = bodo.utils.conversion.coerce_to_ndarray(indices)\n"
     index = (
-        "bodo.utils.conversion.fix_none_index("
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))"
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
         "[indices_t]"
     )
     return _gen_init_df(header, df.columns, data_args, index)
