@@ -797,7 +797,16 @@ class DistributedAnalysis(object):
 
         # from flat map pattern: pd.Series(list(itertools.chain(*A)))
         if fdef == ("flatten_array", "bodo.utils.conversion"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            # output of flatten_array is variable-length even if input is 1D
+            if lhs not in array_dists:
+                array_dists[lhs] = Distribution.OneD_Var
+            in_dist = array_dists[rhs.args[0].name]
+            out_dist = array_dists[lhs]
+            out_dist = Distribution(min(out_dist.value, in_dist.value))
+            array_dists[lhs] = out_dist
+            # output can cause input REP
+            if out_dist != Distribution.OneD_Var:
+                array_dists[rhs.args[0].name] = out_dist
             return
 
         if fdef == ("str_split", "bodo.libs.list_str_arr_ext"):

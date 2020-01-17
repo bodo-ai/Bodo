@@ -694,7 +694,7 @@ class DistributedPass(object):
             self._is_1D_arr(lhs) or self._is_1D_Var_arr(lhs)
         ):
             assert len(rhs.args) == 4, "invalid init_range_index() call"
-            # parallelize init_range_index() similar to allocations
+            # parallelize init_range_index() similar to parfors
             # FIXME: assuming start == 0 and step == 1
             # TODO: support start != 0 and step != 1 in parallel mode
             if guard(find_const, self.func_ir, rhs.args[0]) != 0 or guard(find_const, self.func_ir, rhs.args[2]) != 1:
@@ -703,17 +703,30 @@ class DistributedPass(object):
             size_var = rhs.args[1]
 
             if self._is_1D_arr(lhs):
-                out, new_size_var = self._run_alloc(size_var, scope, loc)
+                out = []
+                start_var = self._get_1D_start(size_var, avail_vars, out)
+                end_var = self._get_1D_end(size_var, out)
+                self._update_avail_vars(avail_vars, out)
+                rhs.args[0] = start_var
+                rhs.args[1] = end_var
+                def impl(start, stop, step, name):
+                    res = bodo.hiframes.pd_index_ext.init_range_index(start, stop, step, name)
+                    return res
+                return out + compile_func_single_block(impl, rhs.args, assign.target, self)
             else:
                 # 1D_Var case
                 assert self._is_1D_Var_arr(lhs)
-                out, new_size_var = self._fix_1D_Var_alloc(
-                    size_var, scope, loc, equiv_set, avail_vars
+                out = []
+                new_size_var = self._get_1D_Var_size(
+                    size_var, equiv_set, avail_vars, out
                 )
-            rhs.args[1] = new_size_var
-            def impl(start, stop, step, name):
-                return bodo.hiframes.pd_index_ext.init_range_index(start, stop, step, name)
-            return out + compile_func_single_block(impl, rhs.args, assign.target, self)
+                def impl(stop, name):  # pragma: no cover
+                    prefix = bodo.libs.distributed_api.dist_exscan(stop, _op)
+                    return bodo.hiframes.pd_index_ext.init_range_index(prefix, prefix + stop, 1, name)
+                return out + compile_func_single_block(
+                    impl, [new_size_var, rhs.args[3]], assign.target, self,
+                    extra_globals={"_op": np.int32(Reduce_Type.Sum.value)}
+                )
 
         if fdef == ("dist_return", "bodo.libs.distributed_api"):
             # always rebalance returned distributed arrays
