@@ -2648,7 +2648,7 @@ def to_parquet_overload(
         col_names_text
     )
     if write_index:
-        func_text += "    index_col = array_to_info(index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df)))\n"
+        func_text += "    index_col = array_to_info(index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)))\n"
         func_text += '    metadata = """' + pandas_metadata_str + '"""\n'
     else:
         func_text += "    index_col = array_to_info(np.empty(0))\n"

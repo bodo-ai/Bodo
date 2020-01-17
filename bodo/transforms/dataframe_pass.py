@@ -1182,7 +1182,7 @@ class DataFramePass:
     def _gen_array_from_index(self, df_var, arr, nodes):
         def _get_index(df, arr):  # pragma: no cover
             return bodo.utils.conversion.index_to_array(
-                bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(arr)
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
             )
 
         nodes += compile_func_single_block(_get_index, (df_var, arr), None, self)

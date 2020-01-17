@@ -748,7 +748,7 @@ def overload_dataframe_duplicated(df, subset=None, keep="first"):
         func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
             i
         )
-    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))"
+    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
     func_text += "  duplicated, index_arr = bodo.libs.array_kernels.duplicated(({},), {})\n".format(
         ", ".join("data_{}".format(i) for i in range(n_cols)), index
     )
@@ -782,7 +782,7 @@ def overload_dataframe_drop_duplicates(df, subset=None, keep="first", inplace=Fa
         func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
             i
         )
-    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))"
+    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
     func_text += "  ({0},), index_arr = bodo.libs.array_kernels.drop_duplicates(({0},), {1})\n".format(
         data_args, index
     )

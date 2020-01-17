@@ -383,35 +383,22 @@ def overload_index_from_array(data, name=None):
     raise TypeError("invalid index type {}".format(data))
 
 
-def index_to_array(data, l):  # pragma: no cover
+def index_to_array(data):  # pragma: no cover
     return data
 
 
 @overload(index_to_array)
-def overload_index_to_array(I, l=0):
+def overload_index_to_array(I):
     """
     convert Index object to data array.
     """
     from bodo.hiframes.pd_index_ext import RangeIndexType
 
-    if is_overload_none(I):
-        # return lambda I, l=0: np.arange(l)
-        # XXX use implementation of arange directly to avoid calc_nitems calls
-        # TODO: remove calc_nitems() with trivial input
-        def impl(I, l=0):  # pragma: no cover
-            numba.parfor.init_prange()
-            arr = np.empty(l, np.int64)
-            for i in numba.parfor.internal_prange(l):
-                arr[i] = i
-            return arr
-
-        return impl
-
     if isinstance(I, RangeIndexType):
-        return lambda I, l=0: np.arange(I._start, I._stop, I._step)
+        return lambda I: np.arange(I._start, I._stop, I._step)
 
     # other indices have data
-    return lambda I, l=0: bodo.hiframes.pd_index_ext.get_index_data(I)
+    return lambda I: bodo.hiframes.pd_index_ext.get_index_data(I)
 
 
 def extract_name_if_none(data, name):  # pragma: no cover
