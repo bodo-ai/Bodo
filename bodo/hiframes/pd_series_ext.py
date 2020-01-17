@@ -68,6 +68,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
 
     def __init__(self, dtype, data=None, index=None, name_typ=None):
         from bodo.hiframes.pd_index_ext import RangeIndexType
+
         # keeping data array in type since operators can make changes such
         # as making array unaligned etc.
         # data is underlying array type and can have different dtype
@@ -99,7 +100,11 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
     def copy(self, dtype=None, index=None):
         # XXX is copy necessary?
         if index is None:
-            index = RangeIndexType(types.none) if self.index == types.none else self.index.copy()
+            index = (
+                RangeIndexType(types.none)
+                if self.index == types.none
+                else self.index.copy()
+            )
         dtype = dtype if dtype is not None else self.dtype
         data = _get_series_array_type(dtype)
         return SeriesType(dtype, data, index, self.name_typ)
@@ -280,6 +285,7 @@ def init_series(typingctx, data, index, name=None):
     """
     from bodo.hiframes.pd_multi_index_ext import MultiIndexType
     from bodo.hiframes.pd_index_ext import is_pd_index_type
+
     assert is_pd_index_type(index) or isinstance(index, MultiIndexType)
     name = types.none if name is None else name
     name = types.unliteral(name)
@@ -788,7 +794,9 @@ class SeriesCompEqual(AbstractTemplate):
                 index_typ = va.index
             else:
                 index_typ = vb.index
-            return signature(SeriesType(types.boolean, boolean_array, index_typ), va, vb)
+            return signature(
+                SeriesType(types.boolean, boolean_array, index_typ), va, vb
+            )
 
         if is_dt64_series_typ(va) and is_dt64_series_typ(vb):
             return signature(SeriesType(types.boolean, boolean_array, va.index), va, vb)

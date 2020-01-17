@@ -1440,15 +1440,21 @@ def unbox_string_index(typ, val, c):
 @overload(operator.getitem)
 def overload_index_getitem(I, ind):
     # output of integer indexing is scalar value
-    if isinstance(I, (NumericIndexType, StringIndexType)) and isinstance(ind, types.Integer):
+    if isinstance(I, (NumericIndexType, StringIndexType)) and isinstance(
+        ind, types.Integer
+    ):
         return lambda I, ind: bodo.hiframes.pd_index_ext.get_index_data(I)[ind]
 
     # output of slice, bool array ... indexing is pd.Index
     if isinstance(I, NumericIndexType):
-        return lambda I, ind: bodo.hiframes.pd_index_ext.init_numeric_index(bodo.hiframes.pd_index_ext.get_index_data(I)[ind])
+        return lambda I, ind: bodo.hiframes.pd_index_ext.init_numeric_index(
+            bodo.hiframes.pd_index_ext.get_index_data(I)[ind]
+        )
 
     if isinstance(I, StringIndexType):
-        return lambda I, ind: bodo.hiframes.pd_index_ext.init_string_index(bodo.hiframes.pd_index_ext.get_index_data(I)[ind])
+        return lambda I, ind: bodo.hiframes.pd_index_ext.init_string_index(
+            bodo.hiframes.pd_index_ext.get_index_data(I)[ind]
+        )
 
 
 # similar to index_from_array()

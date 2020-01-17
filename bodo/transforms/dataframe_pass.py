@@ -1006,8 +1006,12 @@ class DataFramePass(object):
         # TODO: handle non numpy alloc types
         # prange func to inline
         col_name_args = ", ".join(["c" + str(i) for i in range(len(used_cols))])
-        row_args = ", ".join(["bodo.utils.conversion.box_if_dt64(c{}[i])".format(i)
-            for i in range(len(used_cols))])
+        row_args = ", ".join(
+            [
+                "bodo.utils.conversion.box_if_dt64(c{}[i])".format(i)
+                for i in range(len(used_cols))
+            ]
+        )
 
         func_text = "def f({}, df_index):\n".format(col_name_args)
 
@@ -1229,7 +1233,9 @@ class DataFramePass(object):
 
         func_text = "def _mean_impl({}):\n".format(", ".join(data_args))
         for d in data_args:
-            ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(d)
+            ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
+                d
+            )
             func_text += "  {} = bodo.hiframes.pd_series_ext.init_series({}, {})\n".format(
                 d + "_S", d, ind
             )
@@ -1269,7 +1275,9 @@ class DataFramePass(object):
             ", ".join(data_args)
         )
         for d in data_args:
-            func_text += "  ind_{0} = bodo.hiframes.pd_index_ext.init_range_index(0, len({0}), 1, None)\n".format(d)
+            func_text += "  ind_{0} = bodo.hiframes.pd_index_ext.init_range_index(0, len({0}), 1, None)\n".format(
+                d
+            )
             func_text += "  {0} = bodo.hiframes.pd_series_ext.init_series({1}, ind_{1})\n".format(
                 d + "_S", d
             )
@@ -1316,9 +1324,7 @@ class DataFramePass(object):
             arg_names[i] for i, t in enumerate(arr_types) if t == string_array_type
         ]
         list_str_colnames = [
-            arg_names[i]
-            for i, t in enumerate(arr_types)
-            if t == list_string_array_type
+            arg_names[i] for i, t in enumerate(arr_types) if t == list_string_array_type
         ]
         split_view_colnames = [
             arg_names[i]
@@ -1328,7 +1334,8 @@ class DataFramePass(object):
 
         # Pandas ignores NAs in index arrays
         isna_calls = [
-            "bodo.libs.array_kernels.isna({}, i)".format(v) for v in arg_names[:-n_ind_arrs]
+            "bodo.libs.array_kernels.isna({}, i)".format(v)
+            for v in arg_names[:-n_ind_arrs]
         ]
 
         func_text = "def _dropna_imp({}, inplace):\n".format(", ".join(arg_names))
@@ -1379,7 +1386,10 @@ class DataFramePass(object):
         func_text += "  for ii in numba.parfor.internal_prange(old_len):\n"
         func_text += "    if not ({}):\n".format(
             " or ".join(
-                ["bodo.libs.array_kernels.isna({}, ii)".format(v) for v in arg_names[:-n_ind_arrs]]
+                [
+                    "bodo.libs.array_kernels.isna({}, ii)".format(v)
+                    for v in arg_names[:-n_ind_arrs]
+                ]
             )
         )
         for v, out in zip(arg_names, out_names):
@@ -1432,7 +1442,9 @@ class DataFramePass(object):
             col_seq, col_seq
         )
         # TODO: support MultiIndex
-        func_text += "  index = bodo.utils.conversion.index_from_array({})\n".format(out_names[-1])
+        func_text += "  index = bodo.utils.conversion.index_from_array({})\n".format(
+            out_names[-1]
+        )
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), index, {})\n".format(
             ", ".join(out_names[:-n_ind_arrs]), col_var
         )
@@ -1476,7 +1488,9 @@ class DataFramePass(object):
         for i, d in enumerate(data_args):
             if not inplace and i >= n_ind:
                 func_text += "  {} = {}.copy()\n".format(d, d)
-        func_text += "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)\n".format(data_args[0])
+        func_text += "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)\n".format(
+            data_args[0]
+        )
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), index, {})\n".format(
             ", ".join(data_args), col_var
         )
@@ -1543,7 +1557,9 @@ class DataFramePass(object):
         func_text = "def _query_impl({}):\n".format(", ".join(in_args))
         # convert array to Series to support cases such as C.str.contains
         for c_var in used_cols.values():
-            ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(c_var)
+            ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
+                c_var
+            )
             func_text += "  {0} = bodo.hiframes.pd_series_ext.init_series({0}, {1})\n".format(
                 c_var, ind
             )
@@ -1682,7 +1698,9 @@ class DataFramePass(object):
                 self.operands,
             )
             op = "np.{}".format(self.op)
-            ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(str(self.operands[0]))
+            ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
+                str(self.operands[0])
+            )
             return pd.io.formats.printing.pprint_thing(
                 "bodo.hiframes.pd_series_ext.init_series({0}({1}), {2})".format(
                     op, ",".join(operands), ind
@@ -2041,7 +2059,9 @@ class DataFramePass(object):
         if isinstance(out_typ.index, RangeIndexType):
             # as_index=False case generates trivial RangeIndex
             nodes += compile_func_single_block(
-                lambda A: bodo.hiframes.pd_index_ext.init_range_index(0, len(A), 1, None),
+                lambda A: bodo.hiframes.pd_index_ext.init_range_index(
+                    0, len(A), 1, None
+                ),
                 (out_key_vars[0],),
                 None,
                 self,
@@ -2158,13 +2178,23 @@ class DataFramePass(object):
         pivot_values = self.typemap[_pivot_values.name].meta
         out_typ = self.typemap[lhs.name]
 
-        nodes =[]
+        nodes = []
         if isinstance(self.typemap[index.name], SeriesType):
-            nodes += compile_func_single_block(lambda S: bodo.hiframes.pd_series_ext.get_series_data(S), (index,), None, self)
+            nodes += compile_func_single_block(
+                lambda S: bodo.hiframes.pd_series_ext.get_series_data(S),
+                (index,),
+                None,
+                self,
+            )
             index = nodes[-1].target
 
         if isinstance(self.typemap[columns.name], SeriesType):
-            nodes += compile_func_single_block(lambda S: bodo.hiframes.pd_series_ext.get_series_data(S), (columns,), None, self)
+            nodes += compile_func_single_block(
+                lambda S: bodo.hiframes.pd_series_ext.get_series_data(S),
+                (columns,),
+                None,
+                self,
+            )
             columns = nodes[-1].target
 
         in_vars = {}

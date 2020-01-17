@@ -795,7 +795,9 @@ def _get_df_args(data, index, columns, dtype, copy):
 
     # set default RangeIndex if index argument is None and data argument isn't Series
     if index_is_none:
-        index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(df_len)
+        index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(
+            df_len
+        )
 
     data_args = ", ".join(data_dict[c] for c in col_names)
     col_args = ", ".join("'{}'".format(c) for c in col_names)
@@ -1514,11 +1516,11 @@ def validate_keys_dtypes(
             if lk_arr_type == rk_arr_type:
                 continue
 
-            msg = ("merge: You are trying to merge on column {lk} of {lk_dtype} and "
-                   "column {rk} of {rk_dtype}. If you wish to proceed "
-                   "you should use pd.concat").format(
-                        lk=lk, lk_dtype=lk_type, rk=rk, rk_dtype=rk_type
-            )
+            msg = (
+                "merge: You are trying to merge on column {lk} of {lk_dtype} and "
+                "column {rk} of {rk_dtype}. If you wish to proceed "
+                "you should use pd.concat"
+            ).format(lk=lk, lk_dtype=lk_type, rk=rk, rk_dtype=rk_type)
 
             # Make sure non-string columns are not merged with string columns.
             # As of Numba 0.47, string comparison with non-string works and is always
@@ -1900,7 +1902,9 @@ class ConcatDummyTyper(AbstractTemplate):
             # TODO: support Index in append/concat
             ret_typ = objs.dtype.copy(index=RangeIndexType(types.none))
             if isinstance(ret_typ, DataFrameType):
-                ret_typ = ret_typ.copy(has_parent=False, index=RangeIndexType(types.none))
+                ret_typ = ret_typ.copy(
+                    has_parent=False, index=RangeIndexType(types.none)
+                )
             return signature(ret_typ, *args)
 
         if not isinstance(objs, types.BaseTuple):
@@ -1923,7 +1927,9 @@ class ConcatDummyTyper(AbstractTemplate):
                     data.extend(obj.data)
                     names.extend(obj.columns)
 
-            ret_typ = DataFrameType(tuple(data), RangeIndexType(types.none), tuple(names))
+            ret_typ = DataFrameType(
+                tuple(data), RangeIndexType(types.none), tuple(names)
+            )
             return signature(ret_typ, *args)
 
         assert axis == 0
@@ -1958,7 +1964,9 @@ class ConcatDummyTyper(AbstractTemplate):
                 ).return_type
                 all_data.append(concat_typ)
 
-            ret_typ = DataFrameType(tuple(all_data), RangeIndexType(types.none), tuple(all_colnames))
+            ret_typ = DataFrameType(
+                tuple(all_data), RangeIndexType(types.none), tuple(all_colnames)
+            )
             return signature(ret_typ, *args)
 
         # series case
@@ -2464,7 +2472,9 @@ def query_dummy(df, expr):  # pragma: no cover
 class QueryDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        return signature(SeriesType(types.bool_, index=RangeIndexType(types.none)), *args)
+        return signature(
+            SeriesType(types.bool_, index=RangeIndexType(types.none)), *args
+        )
 
 
 @lower_builtin(query_dummy, types.VarArg(types.Any))
@@ -2595,15 +2605,16 @@ def to_parquet_overload(
             "to_parquet(): Bodo does not currently support partition_cols option"
         )
 
-    if not is_overload_none(compression) and get_overload_const_str(compression) not in {'snappy', 'gzip', 'brotli'}:
+    if not is_overload_none(compression) and get_overload_const_str(
+        compression
+    ) not in {"snappy", "gzip", "brotli"}:
         raise BodoError(
-            "to_parquet(): Unsupported compression: " + str(get_overload_const_str(compression))
+            "to_parquet(): Unsupported compression: "
+            + str(get_overload_const_str(compression))
         )
 
     if not is_overload_none(index) and not is_overload_constant_bool(index):
-        raise BodoError(
-            "to_parquet(): index must be a constant bool or None"
-        )
+        raise BodoError("to_parquet(): index must be a constant bool or None")
 
     from bodo.io.parquet_pio import parquet_write_table_cpp
 

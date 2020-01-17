@@ -955,7 +955,9 @@ class UntypedPass(object):
         else:
             # generate RangeIndex as default index
             assert len(data_args) > 0
-            index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(data_args[0])
+            index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
+                data_args[0]
+            )
 
         col_args = ", ".join("'{}'".format(c) for c in columns)
 
@@ -1163,9 +1165,13 @@ class UntypedPass(object):
 
         if index_col is None:
             assert n_cols > 0
-            index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, len(data0), 1, None)"
+            index_arg = (
+                "bodo.hiframes.pd_index_ext.init_range_index(0, len(data0), 1, None)"
+            )
         else:
-            index_arg = "bodo.utils.conversion.convert_to_index(data{})".format(columns.index(index_col))
+            index_arg = "bodo.utils.conversion.convert_to_index(data{})".format(
+                columns.index(index_col)
+            )
 
         col_args = ", ".join(
             "'{}'".format(c) for c in columns if (index_col is None or c != index_col)

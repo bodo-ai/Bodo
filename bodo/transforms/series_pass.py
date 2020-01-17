@@ -2260,7 +2260,9 @@ class SeriesPass:
                 arg1_access, op_str, arg2_access
             )
             if is_series:
-                func_text += "  return bodo.hiframes.pd_series_ext.init_series(S, index)\n"
+                func_text += (
+                    "  return bodo.hiframes.pd_series_ext.init_series(S, index)\n"
+                )
             else:
                 func_text += "  return S\n"
 
@@ -2316,6 +2318,7 @@ class SeriesPass:
             arr = bodo.libs.array_kernels.concat(arr_list)
             index = bodo.hiframes.pd_index_ext.init_range_index(0, len(arr), 1, None)
             return bodo.hiframes.pd_series_ext.init_series(arr, index)
+
         return self._replace_func(impl, [arr_tup], pre_nodes=nodes)
 
     def _handle_h5_write(self, dset, index, arr):
@@ -2653,8 +2656,9 @@ ir_utils.get_stmt_writes = get_stmt_writes
 
 # replaces remove_dead_block of Numba to add Bodo optimization (e.g. replace dead array
 # in array.shape)
-def bodo_remove_dead_block(block, lives, call_table, arg_aliases, alias_map,
-                                                  alias_set, func_ir, typemap):
+def bodo_remove_dead_block(
+    block, lives, call_table, arg_aliases, alias_map, alias_set, func_ir, typemap
+):
     """remove dead code using liveness info.
     Mutable arguments (e.g. arrays) that are not definitely assigned are live
     after return of function.
@@ -2677,8 +2681,7 @@ def bodo_remove_dead_block(block, lives, call_table, arg_aliases, alias_map,
         # let external calls handle stmt if type matches
         if type(stmt) in remove_dead_extensions:
             f = remove_dead_extensions[type(stmt)]
-            stmt = f(stmt, lives_n_aliases, arg_aliases, alias_map, func_ir,
-                     typemap)
+            stmt = f(stmt, lives_n_aliases, arg_aliases, alias_map, func_ir, typemap)
             if stmt is None:
                 removed = True
                 continue
@@ -2688,16 +2691,22 @@ def bodo_remove_dead_block(block, lives, call_table, arg_aliases, alias_map,
             lhs = stmt.target
             rhs = stmt.value
             if lhs.name not in lives and has_no_side_effect(
-                    rhs, lives_n_aliases, call_table):
+                rhs, lives_n_aliases, call_table
+            ):
                 removed = True
                 continue
             # replace dead array in array.shape with a live alternative equivalent array
             # this happens for CSV/Parquet read nodes where the first array is used
             # for forming RangeIndex but some other arrays may be used in the
             # program afterwards
-            if (saved_array_analysis and lhs.name in lives and is_expr(rhs, "getattr")
-                    and rhs.attr == "shape" and is_array_typ(typemap[rhs.value.name])
-                    and rhs.value.name not in lives):
+            if (
+                saved_array_analysis
+                and lhs.name in lives
+                and is_expr(rhs, "getattr")
+                and rhs.attr == "shape"
+                and is_array_typ(typemap[rhs.value.name])
+                and rhs.value.name not in lives
+            ):
                 # TODO: use proper block to label mapping
                 block_to_label = {v: k for k, v in func_ir.blocks.items()}
                 label = block_to_label[block]

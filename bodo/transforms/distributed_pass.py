@@ -697,8 +697,13 @@ class DistributedPass(object):
             # parallelize init_range_index() similar to parfors
             # FIXME: assuming start == 0 and step == 1
             # TODO: support start != 0 and step != 1 in parallel mode
-            if guard(find_const, self.func_ir, rhs.args[0]) != 0 or guard(find_const, self.func_ir, rhs.args[2]) != 1:
-                raise BodoError("creating parallel RangeIndex() with start != 0 and/or step != 1 not supported yet")
+            if (
+                guard(find_const, self.func_ir, rhs.args[0]) != 0
+                or guard(find_const, self.func_ir, rhs.args[2]) != 1
+            ):
+                raise BodoError(
+                    "creating parallel RangeIndex() with start != 0 and/or step != 1 not supported yet"
+                )
 
             size_var = rhs.args[1]
 
@@ -709,10 +714,16 @@ class DistributedPass(object):
                 self._update_avail_vars(avail_vars, out)
                 rhs.args[0] = start_var
                 rhs.args[1] = end_var
+
                 def impl(start, stop, step, name):
-                    res = bodo.hiframes.pd_index_ext.init_range_index(start, stop, step, name)
+                    res = bodo.hiframes.pd_index_ext.init_range_index(
+                        start, stop, step, name
+                    )
                     return res
-                return out + compile_func_single_block(impl, rhs.args, assign.target, self)
+
+                return out + compile_func_single_block(
+                    impl, rhs.args, assign.target, self
+                )
             else:
                 # 1D_Var case
                 assert self._is_1D_Var_arr(lhs)
@@ -720,12 +731,19 @@ class DistributedPass(object):
                 new_size_var = self._get_1D_Var_size(
                     size_var, equiv_set, avail_vars, out
                 )
+
                 def impl(stop, name):  # pragma: no cover
                     prefix = bodo.libs.distributed_api.dist_exscan(stop, _op)
-                    return bodo.hiframes.pd_index_ext.init_range_index(prefix, prefix + stop, 1, name)
+                    return bodo.hiframes.pd_index_ext.init_range_index(
+                        prefix, prefix + stop, 1, name
+                    )
+
                 return out + compile_func_single_block(
-                    impl, [new_size_var, rhs.args[3]], assign.target, self,
-                    extra_globals={"_op": np.int32(Reduce_Type.Sum.value)}
+                    impl,
+                    [new_size_var, rhs.args[3]],
+                    assign.target,
+                    self,
+                    extra_globals={"_op": np.int32(Reduce_Type.Sum.value)},
                 )
 
         if fdef == ("dist_return", "bodo.libs.distributed_api"):
@@ -914,18 +932,30 @@ class DistributedPass(object):
 
             fname = self._get_arg("to_parquet", rhs.args, kws, 0, "fname")
 
-            compression_var = ir.Var(assign.target.scope, mk_unique_var("to_pq_compression"), rhs.loc)
-            nodes.append(ir.Assign(ir.Const("snappy", rhs.loc), compression_var, rhs.loc))
+            compression_var = ir.Var(
+                assign.target.scope, mk_unique_var("to_pq_compression"), rhs.loc
+            )
+            nodes.append(
+                ir.Assign(ir.Const("snappy", rhs.loc), compression_var, rhs.loc)
+            )
             self.typemap[compression_var.name] = types.StringLiteral("snappy")
-            compression = self._get_arg("to_parquet", rhs.args, kws, 2, "compression", compression_var)
+            compression = self._get_arg(
+                "to_parquet", rhs.args, kws, 2, "compression", compression_var
+            )
 
-            index_var = ir.Var(assign.target.scope, mk_unique_var("to_pq_index"), rhs.loc)
+            index_var = ir.Var(
+                assign.target.scope, mk_unique_var("to_pq_index"), rhs.loc
+            )
             nodes.append(ir.Assign(ir.Const(None, rhs.loc), index_var, rhs.loc))
             self.typemap[index_var.name] = types.none
             index = self._get_arg("to_parquet", rhs.args, kws, 3, "index", index_var)
 
-            f = lambda df, fname, compression, index: df.to_parquet(fname, compression=compression, index=index, _is_parallel=True)
-            return nodes + compile_func_single_block(f, [df, fname, compression, index], assign.target, self)
+            f = lambda df, fname, compression, index: df.to_parquet(
+                fname, compression=compression, index=index, _is_parallel=True
+            )
+            return nodes + compile_func_single_block(
+                f, [df, fname, compression, index], assign.target, self
+            )
         elif func_name == "to_csv" and (
             self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
         ):
@@ -1698,7 +1728,11 @@ class DistributedPass(object):
                     other_ind = nodes[-1].target
                     return nodes + compile_func_single_block(
                         lambda arr, slice_index, start, tot_len, other_ind: bodo.libs.distributed_api.slice_getitem(
-                            operator.getitem(arr, other_ind), slice_index, start, tot_len, _is_1D
+                            operator.getitem(arr, other_ind),
+                            slice_index,
+                            start,
+                            tot_len,
+                            _is_1D,
                         ),
                         [in_arr, index_var, start_var, size_var, other_ind],
                         lhs,
@@ -1946,7 +1980,8 @@ class DistributedPass(object):
         pre = []
         out = []
         _, reductions = get_parfor_reductions(
-            self.func_ir, parfor, parfor.params, self.calltypes)
+            self.func_ir, parfor, parfor.params, self.calltypes
+        )
 
         for reduce_varname, (_init_val, reduce_nodes, _op) in reductions.items():
             reduce_op = guard(self._get_reduce_op, reduce_nodes)
