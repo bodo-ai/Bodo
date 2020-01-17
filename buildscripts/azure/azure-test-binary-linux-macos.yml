@@ -46,9 +46,9 @@ jobs:
       mkdir bodo
       mkdir bodo/tests
       if [[ "${{ parameters.name }}" == "Linux" ]]; then
-        cp -avr /home/vsts/work/1/s/bodo/tests/data bodo/tests/
+        cp -avr $(System.DefaultWorkingDirectory)/bodo/tests/data bodo/tests/
       else
-        cp -r /Users/runner/runners/2.163.1/work/1/s/bodo/tests/data bodo/tests/
+        cp -r $(System.DefaultWorkingDirectory)/bodo/tests/data bodo/tests/
       fi
     displayName: 'Copy test data'
   - script: |
