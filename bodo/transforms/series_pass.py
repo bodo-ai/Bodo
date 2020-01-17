@@ -2711,13 +2711,15 @@ def bodo_remove_dead_block(
                 block_to_label = {v: k for k, v in func_ir.blocks.items()}
                 label = block_to_label[block]
                 eq_set = saved_array_analysis.get_equiv_set(label)
-                for v in eq_set.get_equiv_set(rhs.value):
-                    if v.endswith("#0"):
-                        v = v[:-2]
-                    if v in typemap and is_array_typ(typemap[v]) and v in lives:
-                        rhs.value = ir.Var(rhs.value.scope, v, rhs.value.loc)
-                        removed = True
-                        break
+                var_eq_set = eq_set.get_equiv_set(rhs.value)
+                if var_eq_set is not None:
+                    for v in var_eq_set:
+                        if v.endswith("#0"):
+                            v = v[:-2]
+                        if v in typemap and is_array_typ(typemap[v]) and v in lives:
+                            rhs.value = ir.Var(rhs.value.scope, v, rhs.value.loc)
+                            removed = True
+                            break
 
             if isinstance(rhs, ir.Var) and lhs.name == rhs.name:
                 removed = True
