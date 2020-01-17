@@ -1984,8 +1984,16 @@ class DataFramePass(object):
         out_typ = self.typemap[lhs.name]
 
         nodes = []
+        in_cols = grp_typ.selection
+        if func_name == "agg":
+            agg_func = guard(get_definition, self.func_ir, rhs.args[0])
+            if isinstance(agg_func, ir.Expr) and agg_func.op == "build_map":
+                # multi-function const dict case:
+                # in this case, the input columns are the ones in the dict
+                in_cols = [guard(find_const, self.func_ir, v[0]) for v in agg_func.items]
+
         in_vars = {
-            c: self._get_dataframe_data(df_var, c, nodes) for c in grp_typ.selection
+            c: self._get_dataframe_data(df_var, c, nodes) for c in in_cols
         }
 
         in_key_arrs = [self._get_dataframe_data(df_var, c, nodes) for c in grp_typ.keys]

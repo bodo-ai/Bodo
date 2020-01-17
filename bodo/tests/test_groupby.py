@@ -400,17 +400,23 @@ def test_groupby_agg_const_dict():
     """
 
     def impl(df):
+        df2 = df.groupby("A")["B","C"].agg({"B": "count", "C": "sum"})
+        return df2
+
+    def impl2(df):
         df2 = df.groupby("A").agg({"B": "count", "C": "sum"})
         return df2
 
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
+            "D": ["AA", "B", "B", "B", "AA", "AA", "B"],
             "B": [-8.1, 2.1, 3.1, 1.1, 5.1, 6.1, 7.1],
             "C": [3, 5, 6, 5, 4, 4, 3],
         }
     )
     check_func(impl, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
 
 
 def test_count():
