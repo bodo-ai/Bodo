@@ -227,6 +227,24 @@ def test_agg_as_index():
         A = df.groupby("A", as_index=False)["B"].agg(lambda x: x.max() - x.min())
         return A
 
+    def impl3(df):
+        A = df.groupby("A", as_index=False)["B"].agg({"B": "sum"})
+        return A
+
+    def impl3b(df):
+        A = df.groupby(["A", "B"], as_index=False)["C"].agg({"C": "sum"})
+        return A
+
+    def impl4(df):
+        def id1(x):
+            return (x <= 2).sum()
+
+        def id2(x):
+            return (x > 2).sum()
+
+        A = df.groupby("A", as_index=False)["B"].agg((id1, id2))
+        return A
+
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
@@ -237,6 +255,17 @@ def test_agg_as_index():
 
     check_func(impl1, (df,), sort_output=True, check_dtype=False)
     check_func(impl2, (df,), sort_output=True, check_dtype=False)
+    check_func(impl3, (df,), sort_output=True, check_dtype=False)
+    check_func(impl3b, (df,), sort_output=True, check_dtype=False)
+
+    # for some reason pandas does not make index a column with impl4:
+    # https://github.com/pandas-dev/pandas/issues/25011
+    pandas_df = impl4(df)
+    pandas_df.reset_index(inplace=True)  # convert A index to column
+    pandas_df = pandas_df.sort_values(by="A").reset_index(drop=True)
+    bodo_df = bodo.jit(impl4)(df)
+    bodo_df = bodo_df.sort_values(by="A").reset_index(drop=True)
+    pd.testing.assert_frame_equal(pandas_df, bodo_df)
 
 
 def test_agg_select_col():

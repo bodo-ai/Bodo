@@ -305,16 +305,21 @@ def get_groupby_output_dtype(arr_type, func_name):
 class DataframeGroupByAttribute(AttributeTemplate):
     key = DataFrameGroupByType
 
+    def _get_keys_not_as_index(self, grp, out_columns, out_data):
+        """ Add groupby keys to output columns (to be used when
+            as_index=False) """
+        for k in grp.keys:
+            out_columns.append(k)
+            ind = grp.df_type.columns.index(k)
+            out_data.append(grp.df_type.data[ind])
+
     def _get_agg_typ(self, grp, args, func_name, code=None):
         index = types.none
         out_data = []
         out_columns = []
         # add key columns of not as_index
         if not grp.as_index:
-            for k in grp.keys:
-                out_columns.append(k)
-                ind = grp.df_type.columns.index(k)
-                out_data.append(grp.df_type.data[ind])
+            self._get_keys_not_as_index(grp, out_columns, out_data)
         else:
             if len(grp.keys) > 1:
                 key_col_inds = tuple(
@@ -375,7 +380,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     def _resolve_agg(self, grp, args, kws):
         if len(args) == 0:
-            raise BodoError("Goupby.agg()/aggregate(): Must provide 'func'")
+            raise BodoError("Groupby.agg()/aggregate(): Must provide 'func'")
 
         func = args[0]
 
@@ -388,16 +393,20 @@ class DataframeGroupByAttribute(AttributeTemplate):
             }
 
             # make sure selected columns exist in dataframe
-            out_columns = tuple(col_map.keys())
-            if any(c not in grp.selection for c in out_columns):
+            if any(c not in grp.selection for c in col_map.keys()):
                 raise BodoError(
                     "Selected column names {} not all available in dataframe column names {}".format(
-                        out_columns, grp.selection
+                        tuple(col_map.keys()), grp.selection
                     )
                 )
 
-            # get output data types
+            out_columns = []
             out_data = []
+            if not grp.as_index:
+                self._get_keys_not_as_index(grp, out_columns, out_data)
+            out_columns = tuple(out_columns + list(col_map.keys()))
+
+            # get output data types
             for k, func_name in col_map.items():
                 if func_name == "cumsum":
                     raise BodoError(
@@ -409,9 +418,16 @@ class DataframeGroupByAttribute(AttributeTemplate):
                         "unsupported aggregate function {}".format(func_name)
                     )
                 # run typer on a groupby with just column k
-                ret_grp = DataFrameGroupByType(grp.df_type, grp.keys, (k,), True, True)
+                ret_grp = DataFrameGroupByType(grp.df_type, grp.keys, (k,), grp.as_index, True)
                 out_tp = self._get_agg_typ(ret_grp, args, func_name).return_type
-                out_data.append(out_tp.data)
+                if not grp.as_index:
+                    # _get_agg_typ also returns the index (keys) as part of
+                    # out_tp, but we already added them outside of the loop
+                    # (by calling _get_keys_not_as_index), so we skip them
+                    out_data.append(out_tp.data[len(grp.keys)])
+                else:
+                    # out_tp is assumed to be a SeriesType (see _get_agg_typ)
+                    out_data.append(out_tp.data)
 
             out_res = DataFrameType(tuple(out_data), out_tp.index, out_columns)
             return signature(out_res, *args)
@@ -425,12 +441,21 @@ class DataframeGroupByAttribute(AttributeTemplate):
             assert len(func) > 0
             out_data = []
             out_columns = []
+            if not grp.as_index:
+                self._get_keys_not_as_index(grp, out_columns, out_data)
             for f in func.types:
                 code = f.literal_value.code
                 validate_udf("agg", f)
                 out_columns.append(code.co_name)
                 out_tp = self._get_agg_typ(grp, args, "agg", code).return_type
-                out_data.append(out_tp.data)
+                if not grp.as_index:
+                    # _get_agg_typ also returns the index (keys) as part of
+                    # out_tp, but we already added them outside of the loop
+                    # (by calling _get_keys_not_as_index), so we skip them
+                    out_data.append(out_tp.data[len(grp.keys)])
+                else:
+                    # out_tp is assumed to be a SeriesType (see _get_agg_typ)
+                    out_data.append(out_tp.data)
             index = out_tp.index
             out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
             return signature(out_res, *args)
