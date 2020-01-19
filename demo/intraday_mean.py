@@ -18,12 +18,10 @@ from bodo import prange
         "s_vol": bodo.float64[:],
     }
 )
-def intraday_mean_revert():
-    file_name = "stock_data_all_google.hdf5"
+def intraday_mean_revert(file_name, max_num_days):
     f = h5py.File(file_name, "r")
     sym_list = list(f.keys())
     nsyms = len(sym_list)
-    max_num_days = 4000
     all_res = np.zeros(max_num_days)
 
     t1 = time.time()
@@ -78,4 +76,5 @@ def intraday_mean_revert():
     print("execution time:", time.time() - t1)
 
 
-intraday_mean_revert()
+intraday_mean_revert("../sw/data/stock_data_all_google.hdf5", 4000)
+# intraday_mean_revert("../sw/data/stock_data_all_yahoo.hdf5", 14513)
