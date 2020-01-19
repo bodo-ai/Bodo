@@ -192,6 +192,8 @@ numba.ir_utils.remove_call_handlers.append(remove_hiframes)
 class UntypedPass:
     """
     Transformations before typing to enable type inference.
+    This pass transforms the IR to remove operations that cannot be handled in Numba's
+    type inference due to complexity such as pd.read_csv().
     """
 
     def __init__(self, func_ir, typingctx, args, _locals, metadata, flags):

@@ -93,7 +93,13 @@ saved_array_analysis = None
 
 
 class DistributedPass:
-    """analyze program and transfrom to distributed"""
+    """
+    This pass analyzes the IR to decide parallelism of arrays and parfors for
+    distributed transformation, then parallelizes the IR for distributed execution and
+    inserts MPI calls.
+    Specialized IR nodes are also transformed to regular IR here since all analysis and
+    transformations are done.
+    """
 
     def __init__(
         self, func_ir, typingctx, targetctx, typemap, calltypes, metadata, flags

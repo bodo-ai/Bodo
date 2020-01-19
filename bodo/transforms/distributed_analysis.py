@@ -177,7 +177,10 @@ class DistributedDiagnostics:
 
 
 class DistributedAnalysis:
-    """Analyze program for distributed transformation"""
+    """
+    Analyzes the program for distributed transformation and assigns distributions to
+    distributable containers (e.g. arrays) and parfors.
+    """
 
     _extra_call = {}
 

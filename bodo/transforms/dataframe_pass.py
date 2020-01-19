@@ -78,7 +78,11 @@ binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary
 
 
 class DataFramePass:
-    """Analyze and transform dataframe calls after typing"""
+    """
+    This pass converts data frame operations to Series and Array operations as much as
+    possible to provide implementation and enable optimization. Creates specialized
+    IR nodes for complex operations like Join.
+    """
 
     def __init__(self, func_ir, typingctx, typemap, calltypes):
         self.func_ir = func_ir

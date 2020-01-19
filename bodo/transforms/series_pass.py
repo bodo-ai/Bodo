@@ -153,7 +153,10 @@ _binop_to_str = {
 
 
 class SeriesPass:
-    """Analyze and transform hiframes calls after typing"""
+    """
+    This pass converts Series operations to array operations as much as possible to
+    provide implementation and enable optimization.
+    """
 
     def __init__(self, func_ir, typingctx, typemap, calltypes):
         self.func_ir = func_ir
