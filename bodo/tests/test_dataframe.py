@@ -2110,7 +2110,7 @@ class TestDataFrame(unittest.TestCase):
 
         df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [4, 5, 6, 7]})
         bodo_func = bodo.jit(test_impl)
-        out = test_impl(df).reset_index(drop=True)
+        out = test_impl(df)
         h_out = bodo_func(df)
         pd.testing.assert_frame_equal(out, h_out)
 
@@ -2120,7 +2120,7 @@ class TestDataFrame(unittest.TestCase):
 
         df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0]})
         bodo_func = bodo.jit(test_impl)
-        out = test_impl(df).reset_index(drop=True)
+        out = test_impl(df)
         h_out = bodo_func(df)
         pd.testing.assert_frame_equal(out, h_out)
 
@@ -2150,7 +2150,7 @@ class TestDataFrame(unittest.TestCase):
             }
         )
         bodo_func = bodo.jit(test_impl)
-        out = test_impl(df).reset_index(drop=True)
+        out = test_impl(df)
         h_out = bodo_func(df)
         pd.testing.assert_frame_equal(out, h_out)
 

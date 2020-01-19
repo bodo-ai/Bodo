@@ -85,12 +85,14 @@ numba.array_analysis.array_analysis_extensions[CsvReader] = csv_array_analysis
 
 
 def csv_distributed_analysis(csv_node, array_dists):
-    # TODO: all vars should have the same distribution for csv
+    # all output arrays should have the same distribution
+    out_dist = Distribution.OneD
     for v in csv_node.out_vars:
-        if v.name not in array_dists:
-            array_dists[v.name] = Distribution.OneD
+        if v.name in array_dists:
+            out_dist = Distribution(min(out_dist.value, array_dists[v.name].value))
 
-    return
+    for v in csv_node.out_vars:
+        array_dists[v.name] = out_dist
 
 
 distributed_analysis.distributed_analysis_extensions[

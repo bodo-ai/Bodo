@@ -8,8 +8,6 @@ import numpy as np
 import random
 import string
 import numba
-from numba.untyped_passes import PreserveIR
-from numba.typed_passes import NopythonRewrites
 import bodo
 from bodo.libs.str_arr_ext import StringArray
 from bodo.tests.utils import (
@@ -20,6 +18,7 @@ from bodo.tests.utils import (
     count_array_OneDs,
     dist_IR_contains,
     get_start_end,
+    DeadcodeTestPipeline,
 )
 from bodo.utils.typing import BodoError
 import pytest
@@ -43,20 +42,6 @@ def _gen_df_str(n):
     A = np.random.randint(0, 100, n)
     df = pd.DataFrame({"A": A, "B": str_vals})
     return df
-
-
-class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeleine used in test_join_deadcode_cleanup()
-    additional PreserveIR pass then bodo_pipeline
-    """
-
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(True)
-        pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIR, NopythonRewrites)
-        pipeline.finalize()
-        return [pipeline]
 
 
 # ------------------------------ merge() ------------------------------ #

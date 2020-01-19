@@ -93,10 +93,7 @@ def unbox_dataframe(typ, val, c):
         c.builder, types.UniTuple(types.int8, n_cols + 1), [zero] * (n_cols + 1)
     )
 
-    # TODO: support unboxing index
-    if typ.index == types.none:
-        index_val = c.context.get_constant(types.none, None)
-    elif isinstance(typ.index, bodo.hiframes.pd_index_ext.RangeIndexType):
+    if isinstance(typ.index, bodo.hiframes.pd_index_ext.RangeIndexType):
         # TODO: more Index classes
         ind_obj = c.pyapi.object_getattr_string(val, "index")
         index_val = c.pyapi.to_native_value(typ.index, ind_obj).value
@@ -345,6 +342,8 @@ def unbox_series(typ, val, c):
     )
     # TODO: set parent pointer
     c.pyapi.decref(arr_obj)
+    c.pyapi.decref(index_obj)
+    c.pyapi.decref(name_obj)
     return NativeValue(series_val)
 
 

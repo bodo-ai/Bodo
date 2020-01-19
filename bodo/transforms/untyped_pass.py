@@ -104,6 +104,7 @@ def remove_hiframes(rhs, lives, call_list):
             "_dti_val_finalize",
             "init_datetime_index",
             "init_timedelta_index",
+            "init_range_index",
         )
     ):
         return True
@@ -190,9 +191,11 @@ def remove_hiframes(rhs, lives, call_list):
 numba.ir_utils.remove_call_handlers.append(remove_hiframes)
 
 
-class UntypedPass(object):
+class UntypedPass:
     """
     Transformations before typing to enable type inference.
+    This pass transforms the IR to remove operations that cannot be handled in Numba's
+    type inference due to complexity such as pd.read_csv().
     """
 
     def __init__(self, func_ir, typingctx, args, _locals, metadata, flags):
@@ -941,7 +944,6 @@ class UntypedPass(object):
         n_cols = len(columns)
         args = ["data{}".format(i) for i in range(n_cols)]
         data_args = args.copy()
-        index_arg = "None"
 
         # one column is index
         if index_col != -1 and index_col != False:
@@ -949,9 +951,17 @@ class UntypedPass(object):
             if isinstance(index_col, int):
                 index_col = columns[index_col]
             index_ind = columns.index(index_col)
-            index_arg = data_args[index_ind]
+            index_arg = "bodo.utils.conversion.convert_to_index({})".format(
+                data_args[index_ind]
+            )
             columns.remove(index_col)
             data_args.remove(data_args[index_ind])
+        else:
+            # generate RangeIndex as default index
+            assert len(data_args) > 0
+            index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
+                data_args[0]
+            )
 
         col_args = ", ".join("'{}'".format(c) for c in columns)
 
@@ -1157,9 +1167,16 @@ class UntypedPass(object):
             if (index_col is None or i != columns.index(index_col))
         )
 
-        index_arg = (
-            "None" if index_col is None else "data{}".format(columns.index(index_col))
-        )
+        if index_col is None:
+            assert n_cols > 0
+            index_arg = (
+                "bodo.hiframes.pd_index_ext.init_range_index(0, len(data0), 1, None)"
+            )
+        else:
+            index_arg = "bodo.utils.conversion.convert_to_index(data{})".format(
+                columns.index(index_col)
+            )
+
         col_args = ", ".join(
             "'{}'".format(c) for c in columns if (index_col is None or c != index_col)
         )
@@ -1167,7 +1184,7 @@ class UntypedPass(object):
             col_args, col_args
         )
         func_text = "def _init_df({}):\n".format(args)
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), bodo.utils.conversion.convert_to_index({}), {})\n".format(
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
             data_args, index_arg, col_var
         )
         loc_vars = {}

@@ -67,6 +67,8 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
     """
 
     def __init__(self, dtype, data=None, index=None, name_typ=None):
+        from bodo.hiframes.pd_index_ext import RangeIndexType
+
         # keeping data array in type since operators can make changes such
         # as making array unaligned etc.
         # data is underlying array type and can have different dtype
@@ -83,7 +85,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         self.dtype = dtype
         self.data = data
         name_typ = types.none if name_typ is None else name_typ
-        index = types.none if index is None else index
+        index = RangeIndexType(types.none) if index is None else index
         self.index = index  # index should be an Index type (not Array)
         self.name_typ = name_typ
         super(SeriesType, self).__init__(
@@ -98,7 +100,11 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
     def copy(self, dtype=None, index=None):
         # XXX is copy necessary?
         if index is None:
-            index = types.none if self.index == types.none else self.index.copy()
+            index = (
+                RangeIndexType(types.none)
+                if self.index == types.none
+                else self.index.copy()
+            )
         dtype = dtype if dtype is not None else self.dtype
         data = _get_series_array_type(dtype)
         return SeriesType(dtype, data, index, self.name_typ)
@@ -270,15 +276,17 @@ def construct_series(context, builder, series_type, data_val, index_val, name_va
 
 
 @intrinsic
-def init_series(typingctx, data, index=None, name=None):
+def init_series(typingctx, data, index, name=None):
     """Create a Series with provided data, index and name values.
     Used as a single constructor for Series and assigning its data, so that
     optimization passes can look for init_series() to see if underlying
     data has changed, and get the array variables from init_series() args if
     not changed.
     """
+    from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+    from bodo.hiframes.pd_index_ext import is_pd_index_type
 
-    index = types.none if index is None else index
+    assert is_pd_index_type(index) or isinstance(index, MultiIndexType)
     name = types.none if name is None else name
     name = types.unliteral(name)
 
@@ -782,10 +790,16 @@ class SeriesCompEqual(AbstractTemplate):
         if (is_dt64_series_typ(va) and vb in (string_type, types.NPDatetime("ns"))) or (
             is_dt64_series_typ(vb) and va in (string_type, types.NPDatetime("ns"))
         ):
-            return signature(SeriesType(types.boolean, boolean_array), va, vb)
+            if is_dt64_series_typ(va):
+                index_typ = va.index
+            else:
+                index_typ = vb.index
+            return signature(
+                SeriesType(types.boolean, boolean_array, index_typ), va, vb
+            )
 
         if is_dt64_series_typ(va) and is_dt64_series_typ(vb):
-            return signature(SeriesType(types.boolean, boolean_array), va, vb)
+            return signature(SeriesType(types.boolean, boolean_array, va.index), va, vb)
 
 
 @infer
@@ -811,19 +825,6 @@ class CmpOpLESeries(SeriesCompEqual):
 @infer
 class CmpOpLTSeries(SeriesCompEqual):
     key = "<"
-
-
-# TODO: handle all timedelta args
-def type_sub(context):
-    def typer(val1, val2):
-        if is_dt64_series_typ(val1) and val2 == pandas_timestamp_type:
-            return SeriesType(types.NPTimedelta("ns"))
-
-    return typer
-
-
-type_callable("-")(type_sub)
-type_callable(operator.sub)(type_sub)
 
 
 @overload(pd.Series)

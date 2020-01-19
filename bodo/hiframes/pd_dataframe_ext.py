@@ -34,7 +34,7 @@ from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.series_indexing import SeriesIlocType
-from bodo.hiframes.pd_index_ext import RangeIndexType
+from bodo.hiframes.pd_index_ext import RangeIndexType, NumericIndexType
 from bodo.libs.str_ext import string_type, unicode_to_char_ptr
 from bodo.utils.typing import (
     BodoWarning,
@@ -61,6 +61,8 @@ from bodo.libs.array_tools import (
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import StringArray, string_array_type
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.hiframes.pd_index_ext import is_pd_index_type
+from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 
 
 class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column names
@@ -74,7 +76,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
 
         self.data = data
         if index is None:
-            index = types.none
+            index = RangeIndexType(types.none)
         self.index = index
         self.columns = columns
         # keeping whether it is unboxed from Python to enable reflection of new
@@ -87,7 +89,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
     def copy(self, index=None, has_parent=None):
         # XXX is copy necessary?
         if index is None:
-            index = types.none if self.index == types.none else self.index.copy()
+            index = self.index.copy()
         data = tuple(a.copy() for a in self.data)
         if has_parent is None:
             has_parent = self.has_parent
@@ -295,6 +297,7 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
     data has changed, and get the array variables from init_dataframe() args if
     not changed.
     """
+    assert is_pd_index_type(index_typ) or isinstance(index_typ, MultiIndexType)
 
     n_cols = len(data_tup_typ.types)
     # assert all(isinstance(t, types.StringLiteral) for t in col_names_typ.types)
@@ -737,6 +740,7 @@ def _get_df_args(data, index, columns, dtype, copy):
     if not is_overload_none(dtype):
         astype_str = ".astype(dtype)"
 
+    index_is_none = is_overload_none(index)
     index_arg = "bodo.utils.conversion.convert_to_index(index)"
 
     # data is sentinel tuple (converted from dictionary)
@@ -761,6 +765,7 @@ def _get_df_args(data, index, columns, dtype, copy):
                     index_arg = "bodo.hiframes.pd_series_ext.get_series_index(data[{}])".format(
                         n_cols + 1 + i
                     )
+                    index_is_none = False
                     break
     else:
         # ndarray case
@@ -785,32 +790,44 @@ def _get_df_args(data, index, columns, dtype, copy):
     else:
         col_names = columns.consts
 
-    _fill_null_arrays(data_dict, col_names, index)
+    df_len = _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg)
+    _fill_null_arrays(data_dict, col_names, df_len)
+
+    # set default RangeIndex if index argument is None and data argument isn't Series
+    if index_is_none:
+        index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(
+            df_len
+        )
 
     data_args = ", ".join(data_dict[c] for c in col_names)
     col_args = ", ".join("'{}'".format(c) for c in col_names)
     return col_args, data_args, index_arg
 
 
-def _fill_null_arrays(data_dict, col_names, index):
-    """Fills data_dict with Null arrays if there are columns that are not
-    available in data_dict.
+def _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg):
+    """return generated text for length of dataframe, given the input info in the
+    pd.DataFrame() call
     """
-    # no null array needed
-    if all(c in data_dict for c in col_names):
-        return
-
-    # get null array, needs index or an array available for length
     df_len = None
     for c in col_names:
         if c in data_dict:
             df_len = "len({})".format(data_dict[c])
             break
 
-    if df_len is None and not is_overload_none(index):
-        df_len = "len(index)"  # TODO: test
+    if df_len is None and not index_is_none:
+        df_len = "len({})".format(index_arg)  # TODO: test
 
     assert df_len is not None, "empty dataframe with null arrays"  # TODO
+    return df_len
+
+
+def _fill_null_arrays(data_dict, col_names, df_len):
+    """Fills data_dict with Null arrays if there are columns that are not
+    available in data_dict.
+    """
+    # no null array needed
+    if all(c in data_dict for c in col_names):
+        return
 
     # TODO: object array with NaN (use StringArray?)
     null_arr = "np.full({}, np.nan)".format(df_len)
@@ -1499,11 +1516,11 @@ def validate_keys_dtypes(
             if lk_arr_type == rk_arr_type:
                 continue
 
-            msg = ("merge: You are trying to merge on column {lk} of {lk_dtype} and "
-                   "column {rk} of {rk_dtype}. If you wish to proceed "
-                   "you should use pd.concat").format(
-                        lk=lk, lk_dtype=lk_type, rk=rk, rk_dtype=rk_type
-            )
+            msg = (
+                "merge: You are trying to merge on column {lk} of {lk_dtype} and "
+                "column {rk} of {rk_dtype}. If you wish to proceed "
+                "you should use pd.concat"
+            ).format(lk=lk, lk_dtype=lk_type, rk=rk, rk_dtype=rk_type)
 
             # Make sure non-string columns are not merged with string columns.
             # As of Numba 0.47, string comparison with non-string works and is always
@@ -1646,7 +1663,7 @@ class JoinTyper(AbstractTemplate):
         ]
 
         # TODO: unify left/right indices if necessary (e.g. RangeIndex/Int64)
-        index_typ = types.none
+        index_typ = RangeIndexType(types.none)
         left_index = "$_bodo_index_" in left_on.consts
         right_index = "$_bodo_index_" in right_on.consts
         if left_index and right_index and not is_overload_str(how, "asof"):
@@ -1883,9 +1900,11 @@ class ConcatDummyTyper(AbstractTemplate):
             assert axis == 0
             assert isinstance(objs.dtype, (SeriesType, DataFrameType))
             # TODO: support Index in append/concat
-            ret_typ = objs.dtype.copy(index=types.none)
+            ret_typ = objs.dtype.copy(index=RangeIndexType(types.none))
             if isinstance(ret_typ, DataFrameType):
-                ret_typ = ret_typ.copy(has_parent=False, index=types.none)
+                ret_typ = ret_typ.copy(
+                    has_parent=False, index=RangeIndexType(types.none)
+                )
             return signature(ret_typ, *args)
 
         if not isinstance(objs, types.BaseTuple):
@@ -1908,7 +1927,9 @@ class ConcatDummyTyper(AbstractTemplate):
                     data.extend(obj.data)
                     names.extend(obj.columns)
 
-            ret_typ = DataFrameType(tuple(data), None, tuple(names))
+            ret_typ = DataFrameType(
+                tuple(data), RangeIndexType(types.none), tuple(names)
+            )
             return signature(ret_typ, *args)
 
         assert axis == 0
@@ -1943,7 +1964,9 @@ class ConcatDummyTyper(AbstractTemplate):
                 ).return_type
                 all_data.append(concat_typ)
 
-            ret_typ = DataFrameType(tuple(all_data), None, tuple(all_colnames))
+            ret_typ = DataFrameType(
+                tuple(all_data), RangeIndexType(types.none), tuple(all_colnames)
+            )
             return signature(ret_typ, *args)
 
         # series case
@@ -2277,7 +2300,7 @@ class ResetIndexDummyTyper(AbstractTemplate):
 
         # default output index is simple integer index with no name
         # TODO: handle MultiIndex and `level` argument case
-        index = types.none  # TODO: RangeIndexType(types.none)
+        index = RangeIndexType(types.none)
         data = df.data
         columns = df.columns
         if not drop:
@@ -2334,8 +2357,10 @@ class DropnaDummyTyper(AbstractTemplate):
 
         if not inplace:
             # copy type to set has_parent False
-            # TODO: support Index
-            out_df = DataFrameType(df.data, types.none, df.columns)
+            index = df.index
+            if isinstance(index, RangeIndexType):
+                index = NumericIndexType(types.int64)
+            out_df = DataFrameType(df.data, index, df.columns)
             return signature(out_df, *args)
         return signature(types.none, *args)
 
@@ -2447,7 +2472,9 @@ def query_dummy(df, expr):  # pragma: no cover
 class QueryDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        return signature(SeriesType(types.bool_), *args)
+        return signature(
+            SeriesType(types.bool_, index=RangeIndexType(types.none)), *args
+        )
 
 
 @lower_builtin(query_dummy, types.VarArg(types.Any))
@@ -2469,7 +2496,7 @@ def val_notin_dummy(S, vals):  # pragma: no cover
 class ValIsinTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        return signature(SeriesType(types.bool_), *args)
+        return signature(SeriesType(types.bool_, index=args[0].index), *args)
 
 
 @lower_builtin(val_isin_dummy, types.VarArg(types.Any))
@@ -2578,15 +2605,16 @@ def to_parquet_overload(
             "to_parquet(): Bodo does not currently support partition_cols option"
         )
 
-    if not is_overload_none(compression) and get_overload_const_str(compression) not in {'snappy', 'gzip', 'brotli'}:
+    if not is_overload_none(compression) and get_overload_const_str(
+        compression
+    ) not in {"snappy", "gzip", "brotli"}:
         raise BodoError(
-            "to_parquet(): Unsupported compression: " + str(get_overload_const_str(compression))
+            "to_parquet(): Unsupported compression: "
+            + str(get_overload_const_str(compression))
         )
 
     if not is_overload_none(index) and not is_overload_constant_bool(index):
-        raise BodoError(
-            "to_parquet(): index must be a constant bool or None"
-        )
+        raise BodoError("to_parquet(): index must be a constant bool or None")
 
     from bodo.io.parquet_pio import parquet_write_table_cpp
 
@@ -2620,7 +2648,7 @@ def to_parquet_overload(
         col_names_text
     )
     if write_index:
-        func_text += "    index_col = array_to_info(index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df)))\n"
+        func_text += "    index_col = array_to_info(index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)))\n"
         func_text += '    metadata = """' + pandas_metadata_str + '"""\n'
     else:
         func_text += "    index_col = array_to_info(np.empty(0))\n"

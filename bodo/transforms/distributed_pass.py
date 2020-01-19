@@ -36,6 +36,9 @@ from numba.ir_utils import (
     find_const,
     is_get_setitem,
     compute_cfg_from_blocks,
+    remove_dead_extensions,
+    has_no_side_effect,
+    analysis,
 )
 from numba.typing import signature
 from numba.parfor import (
@@ -59,6 +62,7 @@ from bodo.transforms.distributed_analysis import (
 )
 
 import bodo.utils.utils
+from bodo.utils.typing import BodoError
 from bodo.utils.transform import compile_func_single_block
 from bodo.utils.utils import (
     is_alloc_callname,
@@ -75,6 +79,7 @@ from bodo.utils.utils import (
     is_expr,
     is_call_assign,
     get_getsetitem_index_var,
+    is_array_typ,
 )
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
@@ -84,10 +89,17 @@ distributed_run_extensions = {}
 # analysis data for debugging
 dist_analysis = None
 fir_text = None
+saved_array_analysis = None
 
 
-class DistributedPass(object):
-    """analyze program and transfrom to distributed"""
+class DistributedPass:
+    """
+    This pass analyzes the IR to decide parallelism of arrays and parfors for
+    distributed transformation, then parallelizes the IR for distributed execution and
+    inserts MPI calls.
+    Specialized IR nodes are also transformed to regular IR here since all analysis and
+    transformations are done.
+    """
 
     def __init__(
         self, func_ir, typingctx, targetctx, typemap, calltypes, metadata, flags
@@ -117,6 +129,20 @@ class DistributedPass(object):
         dprint_func_ir(self.func_ir, "starting distributed pass")
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
         self.arr_analysis.run(self.func_ir.blocks)
+        # saves array analysis to replace dead arrays in array.shape
+        # (see test_csv_remove_col0_used_for_len and bodo_remove_dead_block)
+        global saved_array_analysis
+        try:
+            saved_array_analysis = self.arr_analysis
+            while ir_utils.remove_dead(
+                self.func_ir.blocks, self.func_ir.arg_names, self.func_ir, self.typemap
+            ):
+                pass
+        finally:
+            saved_array_analysis = None
+        self.func_ir._definitions = build_definitions(self.func_ir.blocks)
+        self.arr_analysis.run(self.func_ir.blocks)
+
         dist_analysis_pass = DistributedAnalysis(
             self.func_ir,
             self.typemap,
@@ -326,7 +352,7 @@ class DistributedPass(object):
             # XXX for pre_alloc_string_array(n, nc), we assume nc is local
             # value (updated only in parfor like _str_replace_regex_impl)
             size_var = rhs.args[0]
-            out, new_size_var = self._run_alloc(size_var, lhs, scope, loc)
+            out, new_size_var = self._run_alloc(size_var, scope, loc)
             # empty_inferred is tuple for some reason
             rhs.args = list(rhs.args)
             rhs.args[0] = new_size_var
@@ -337,7 +363,7 @@ class DistributedPass(object):
         if self._is_1D_Var_arr(lhs) and is_alloc_callname(func_name, func_mod):
             size_var = rhs.args[0]
             out, new_size_var = self._fix_1D_Var_alloc(
-                size_var, lhs, scope, loc, equiv_set, avail_vars
+                size_var, scope, loc, equiv_set, avail_vars
             )
             # empty_inferred is tuple for some reason
             rhs.args = list(rhs.args)
@@ -689,6 +715,62 @@ class DistributedPass(object):
                 assign.value = arg_def.args[0]
             return out
 
+        if fdef == ("init_range_index", "bodo.hiframes.pd_index_ext") and (
+            self._is_1D_arr(lhs) or self._is_1D_Var_arr(lhs)
+        ):
+            assert len(rhs.args) == 4, "invalid init_range_index() call"
+            # parallelize init_range_index() similar to parfors
+            # FIXME: assuming start == 0 and step == 1
+            # TODO: support start != 0 and step != 1 in parallel mode
+            if (
+                guard(find_const, self.func_ir, rhs.args[0]) != 0
+                or guard(find_const, self.func_ir, rhs.args[2]) != 1
+            ):
+                raise BodoError(
+                    "creating parallel RangeIndex() with start != 0 and/or step != 1 not supported yet"
+                )
+
+            size_var = rhs.args[1]
+
+            if self._is_1D_arr(lhs):
+                out = []
+                start_var = self._get_1D_start(size_var, avail_vars, out)
+                end_var = self._get_1D_end(size_var, out)
+                self._update_avail_vars(avail_vars, out)
+                rhs.args[0] = start_var
+                rhs.args[1] = end_var
+
+                def impl(start, stop, step, name):
+                    res = bodo.hiframes.pd_index_ext.init_range_index(
+                        start, stop, step, name
+                    )
+                    return res
+
+                return out + compile_func_single_block(
+                    impl, rhs.args, assign.target, self
+                )
+            else:
+                # 1D_Var case
+                assert self._is_1D_Var_arr(lhs)
+                out = []
+                new_size_var = self._get_1D_Var_size(
+                    size_var, equiv_set, avail_vars, out
+                )
+
+                def impl(stop, name):  # pragma: no cover
+                    prefix = bodo.libs.distributed_api.dist_exscan(stop, _op)
+                    return bodo.hiframes.pd_index_ext.init_range_index(
+                        prefix, prefix + stop, 1, name
+                    )
+
+                return out + compile_func_single_block(
+                    impl,
+                    [new_size_var, rhs.args[3]],
+                    assign.target,
+                    self,
+                    extra_globals={"_op": np.int32(Reduce_Type.Sum.value)},
+                )
+
         if fdef == ("dist_return", "bodo.libs.distributed_api"):
             # always rebalance returned distributed arrays
             # TODO: need different flag for 1D_Var return (distributed_var)?
@@ -820,7 +902,7 @@ class DistributedPass(object):
             assert len(args) == 2 and guard(find_const, self.func_ir, args[1]) == 1
             size_var = args[0]
             out, new_size_var = self._fix_1D_Var_alloc(
-                size_var, lhs, assign.target.scope, assign.loc, equiv_set, avail_vars
+                size_var, assign.target.scope, assign.loc, equiv_set, avail_vars
             )
             # empty_inferred is tuple for some reason
             assign.value.args = list(args)
@@ -875,18 +957,30 @@ class DistributedPass(object):
 
             fname = self._get_arg("to_parquet", rhs.args, kws, 0, "fname")
 
-            compression_var = ir.Var(assign.target.scope, mk_unique_var("to_pq_compression"), rhs.loc)
-            nodes.append(ir.Assign(ir.Const("snappy", rhs.loc), compression_var, rhs.loc))
+            compression_var = ir.Var(
+                assign.target.scope, mk_unique_var("to_pq_compression"), rhs.loc
+            )
+            nodes.append(
+                ir.Assign(ir.Const("snappy", rhs.loc), compression_var, rhs.loc)
+            )
             self.typemap[compression_var.name] = types.StringLiteral("snappy")
-            compression = self._get_arg("to_parquet", rhs.args, kws, 2, "compression", compression_var)
+            compression = self._get_arg(
+                "to_parquet", rhs.args, kws, 2, "compression", compression_var
+            )
 
-            index_var = ir.Var(assign.target.scope, mk_unique_var("to_pq_index"), rhs.loc)
+            index_var = ir.Var(
+                assign.target.scope, mk_unique_var("to_pq_index"), rhs.loc
+            )
             nodes.append(ir.Assign(ir.Const(None, rhs.loc), index_var, rhs.loc))
             self.typemap[index_var.name] = types.none
             index = self._get_arg("to_parquet", rhs.args, kws, 3, "index", index_var)
 
-            f = lambda df, fname, compression, index: df.to_parquet(fname, compression=compression, index=index, _is_parallel=True)
-            return nodes + compile_func_single_block(f, [df, fname, compression, index], assign.target, self)
+            f = lambda df, fname, compression, index: df.to_parquet(
+                fname, compression=compression, index=index, _is_parallel=True
+            )
+            return nodes + compile_func_single_block(
+                f, [df, fname, compression, index], assign.target, self
+            )
         elif func_name == "to_csv" and (
             self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
         ):
@@ -1092,7 +1186,7 @@ class DistributedPass(object):
             new_shape = args
         # TODO: avoid alloc and copy if no communication necessary
         # get new local shape in reshape and set start/count vars like new allocation
-        out, new_local_shape_var = self._run_alloc(new_shape, lhs.name, scope, loc)
+        out, new_local_shape_var = self._run_alloc(new_shape, scope, loc)
         # get actual tuple for mk_alloc
         if isinstance(self.typemap[new_local_shape_var.name], types.BaseTuple):
             sh_list = guard(find_build_tuple, self.func_ir, new_local_shape_var)
@@ -1182,7 +1276,7 @@ class DistributedPass(object):
 
         return out
 
-    def _run_alloc(self, size_var, lhs, scope, loc):
+    def _run_alloc(self, size_var, scope, loc):
         """ divides array sizes and assign its sizes/starts/counts attributes
         returns generated nodes and the new size variable to enable update of
         the alloc call.
@@ -1268,7 +1362,7 @@ class DistributedPass(object):
         new_size_var = tuple_var
         return out, new_size_var
 
-    def _fix_1D_Var_alloc(self, size_var, lhs, scope, loc, equiv_set, avail_vars):
+    def _fix_1D_Var_alloc(self, size_var, scope, loc, equiv_set, avail_vars):
         """ 1D_Var allocs use global sizes of other 1D_var variables,
         so find the local size of one those variables for replacement.
         Assuming 1D_Var alloc is resulting from an operation with another
@@ -1659,7 +1753,11 @@ class DistributedPass(object):
                     other_ind = nodes[-1].target
                     return nodes + compile_func_single_block(
                         lambda arr, slice_index, start, tot_len, other_ind: bodo.libs.distributed_api.slice_getitem(
-                            operator.getitem(arr, other_ind), slice_index, start, tot_len, _is_1D
+                            operator.getitem(arr, other_ind),
+                            slice_index,
+                            start,
+                            tot_len,
+                            _is_1D,
                         ),
                         [in_arr, index_var, start_var, size_var, other_ind],
                         lhs,
@@ -1907,7 +2005,8 @@ class DistributedPass(object):
         pre = []
         out = []
         _, reductions = get_parfor_reductions(
-            self.func_ir, parfor, parfor.params, self.calltypes)
+            self.func_ir, parfor, parfor.params, self.calltypes
+        )
 
         for reduce_varname, (_init_val, reduce_nodes, _op) in reductions.items():
             reduce_op = guard(self._get_reduce_op, reduce_nodes)
@@ -2565,3 +2664,104 @@ def find_available_vars(blocks, cfg, init_avail=None):
         new_point = tuple(len(v) for v in in_avail_vars.values())
 
     return in_avail_vars
+
+
+# replaces remove_dead_block of Numba to add Bodo optimization (e.g. replace dead array
+# in array.shape)
+def bodo_remove_dead_block(
+    block, lives, call_table, arg_aliases, alias_map, alias_set, func_ir, typemap
+):
+    """remove dead code using liveness info.
+    Mutable arguments (e.g. arrays) that are not definitely assigned are live
+    after return of function.
+    """
+    # TODO: find mutable args that are not definitely assigned instead of
+    # assuming all args are live after return
+    removed = False
+
+    # add statements in reverse order
+    new_body = [block.terminator]
+    # for each statement in reverse order, excluding terminator
+    for stmt in reversed(block.body[:-1]):
+        # aliases of lives are also live
+        alias_lives = set()
+        init_alias_lives = lives & alias_set
+        for v in init_alias_lives:
+            alias_lives |= alias_map[v]
+        lives_n_aliases = lives | alias_lives | arg_aliases
+
+        # let external calls handle stmt if type matches
+        if type(stmt) in remove_dead_extensions:
+            f = remove_dead_extensions[type(stmt)]
+            stmt = f(stmt, lives_n_aliases, arg_aliases, alias_map, func_ir, typemap)
+            if stmt is None:
+                removed = True
+                continue
+
+        # ignore assignments that their lhs is not live or lhs==rhs
+        if isinstance(stmt, ir.Assign):
+            lhs = stmt.target
+            rhs = stmt.value
+            if lhs.name not in lives and has_no_side_effect(
+                rhs, lives_n_aliases, call_table
+            ):
+                removed = True
+                continue
+            # replace dead array in array.shape with a live alternative equivalent array
+            # this happens for CSV/Parquet read nodes where the first array is used
+            # for forming RangeIndex but some other arrays may be used in the
+            # program afterwards
+            if (
+                saved_array_analysis
+                and lhs.name in lives
+                and is_expr(rhs, "getattr")
+                and rhs.attr == "shape"
+                and is_array_typ(typemap[rhs.value.name])
+                and rhs.value.name not in lives
+            ):
+                # TODO: use proper block to label mapping
+                block_to_label = {v: k for k, v in func_ir.blocks.items()}
+                label = block_to_label[block]
+                eq_set = saved_array_analysis.get_equiv_set(label)
+                var_eq_set = eq_set.get_equiv_set(rhs.value)
+                if var_eq_set is not None:
+                    for v in var_eq_set:
+                        if v.endswith("#0"):
+                            v = v[:-2]
+                        if v in typemap and is_array_typ(typemap[v]) and v in lives:
+                            rhs.value = ir.Var(rhs.value.scope, v, rhs.value.loc)
+                            removed = True
+                            break
+
+            if isinstance(rhs, ir.Var) and lhs.name == rhs.name:
+                removed = True
+                continue
+            # TODO: remove other nodes like SetItem etc.
+
+        if isinstance(stmt, ir.Del):
+            if stmt.value not in lives:
+                removed = True
+                continue
+
+        if isinstance(stmt, ir.SetItem):
+            name = stmt.target.name
+            if name not in lives_n_aliases:
+                continue
+
+        if type(stmt) in analysis.ir_extension_usedefs:
+            def_func = analysis.ir_extension_usedefs[type(stmt)]
+            uses, defs = def_func(stmt)
+            lives -= defs
+            lives |= uses
+        else:
+            lives |= {v.name for v in stmt.list_vars()}
+            if isinstance(stmt, ir.Assign):
+                lives.remove(lhs.name)
+
+        new_body.append(stmt)
+    new_body.reverse()
+    block.body = new_body
+    return removed
+
+
+ir_utils.remove_dead_block = bodo_remove_dead_block

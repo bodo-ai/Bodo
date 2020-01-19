@@ -198,9 +198,7 @@ def overload_series_iloc_getitem(I, idx):
             def impl(I, idx):  # pragma: no cover
                 idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
                 arr = bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx_t]
-                index = bodo.utils.conversion.fix_none_index(
-                    bodo.hiframes.pd_series_ext.get_series_index(I._obj), len(arr)
-                )[idx_t]
+                index = bodo.hiframes.pd_series_ext.get_series_index(I._obj)[idx_t]
                 name = bodo.hiframes.pd_series_ext.get_series_name(I._obj)
                 return bodo.hiframes.pd_series_ext.init_series(arr, index, name)
 
@@ -322,9 +320,7 @@ def overload_series_getitem(S, idx):
             def impl_arr(S, idx):  # pragma: no cover
                 idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
                 arr = bodo.hiframes.pd_series_ext.get_series_data(S)[idx_t]
-                index = bodo.utils.conversion.fix_none_index(
-                    bodo.hiframes.pd_series_ext.get_series_index(S), len(arr)
-                )[idx_t]
+                index = bodo.hiframes.pd_series_ext.get_series_index(S)[idx_t]
                 name = bodo.hiframes.pd_series_ext.get_series_name(S)
                 return bodo.hiframes.pd_series_ext.init_series(arr, index, name)
 
@@ -345,6 +341,10 @@ def overload_series_getitem(S, idx):
 
         # TODO: handle idx as SeriesType on array
         raise ValueError("setting Series value using {} not supported yet".format(idx))
+
+    # convert Series index on Array getitem to array
+    elif bodo.utils.utils.is_array_typ(S) and isinstance(idx, SeriesType):
+        return lambda S, idx: S[bodo.hiframes.pd_series_ext.get_series_data(idx)]
 
 
 @overload(operator.setitem)

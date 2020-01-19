@@ -246,8 +246,7 @@ def overload_dataframe_head(df, n=5):
     data_args = ", ".join("df['{}'].head(n).values".format(c) for c in df.columns)
     header = "def impl(df, n=5):\n"
     index = (
-        "bodo.utils.conversion.fix_none_index("
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))[:n]"
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[:n]"
     )
     return _gen_init_df(header, df.columns, data_args, index)
 
@@ -258,8 +257,7 @@ def overload_dataframe_tail(df, n=5):
     data_args = ", ".join("df['{}'].tail(n).values".format(c) for c in df.columns)
     header = "def impl(df, n=5):\n"
     index = (
-        "bodo.utils.conversion.fix_none_index("
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))[-n:]"
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[-n:]"
     )
     return _gen_init_df(header, df.columns, data_args, index)
 
@@ -673,8 +671,7 @@ def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
     header = "def impl(df, indices, axis=0, convert=None, is_copy=True):\n"
     header += "  indices_t = bodo.utils.conversion.coerce_to_ndarray(indices)\n"
     index = (
-        "bodo.utils.conversion.fix_none_index("
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))"
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
         "[indices_t]"
     )
     return _gen_init_df(header, df.columns, data_args, index)
@@ -751,7 +748,7 @@ def overload_dataframe_duplicated(df, subset=None, keep="first"):
         func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
             i
         )
-    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))"
+    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
     func_text += "  duplicated, index_arr = bodo.libs.array_kernels.duplicated(({},), {})\n".format(
         ", ".join("data_{}".format(i) for i in range(n_cols)), index
     )
@@ -785,7 +782,7 @@ def overload_dataframe_drop_duplicates(df, subset=None, keep="first", inplace=Fa
         func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
             i
         )
-    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df), len(df))"
+    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
     func_text += "  ({0},), index_arr = bodo.libs.array_kernels.drop_duplicates(({0},), {1})\n".format(
         data_args, index
     )

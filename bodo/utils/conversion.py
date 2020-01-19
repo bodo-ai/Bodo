@@ -383,35 +383,22 @@ def overload_index_from_array(data, name=None):
     raise TypeError("invalid index type {}".format(data))
 
 
-def index_to_array(data, l):  # pragma: no cover
+def index_to_array(data):  # pragma: no cover
     return data
 
 
 @overload(index_to_array)
-def overload_index_to_array(I, l=0):
+def overload_index_to_array(I):
     """
     convert Index object to data array.
     """
     from bodo.hiframes.pd_index_ext import RangeIndexType
 
-    if is_overload_none(I):
-        # return lambda I, l=0: np.arange(l)
-        # XXX use implementation of arange directly to avoid calc_nitems calls
-        # TODO: remove calc_nitems() with trivial input
-        def impl(I, l=0):  # pragma: no cover
-            numba.parfor.init_prange()
-            arr = np.empty(l, np.int64)
-            for i in numba.parfor.internal_prange(l):
-                arr[i] = i
-            return arr
-
-        return impl
-
     if isinstance(I, RangeIndexType):
-        return lambda I, l=0: np.arange(I._start, I._stop, I._step)
+        return lambda I: np.arange(I._start, I._stop, I._step)
 
     # other indices have data
-    return lambda I, l=0: bodo.hiframes.pd_index_ext.get_index_data(I)
+    return lambda I: bodo.hiframes.pd_index_ext.get_index_data(I)
 
 
 def extract_name_if_none(data, name):  # pragma: no cover
@@ -462,7 +449,9 @@ def overload_extract_index_if_none(data, index):
     if isinstance(data, SeriesType):
         return lambda data, index: bodo.hiframes.pd_series_ext.get_series_index(data)
 
-    return lambda data, index: index
+    return lambda data, index: bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(data), 1, None
+        )
 
 
 def box_if_dt64(val):  # pragma: no cover
@@ -498,21 +487,6 @@ def overload_get_array_if_series_or_index(data):
     return lambda data: data
 
 
-def fix_none_index(I, n):  # pragma: no cover
-    return I
-
-
-@overload(fix_none_index)
-def overload_fix_none_index(I, n):
-    """Used for converting None index of Series to RangeIndex.
-    If I is None, RangeIndex is created. Otherwise, I is returned.
-    """
-    if is_overload_none(I):
-        return lambda I, n: pd.RangeIndex(n)
-
-    return lambda I, n: I
-
-
 def extract_index_array(A):  # pragma: no cover
     return np.arange(len(A))
 
@@ -528,8 +502,7 @@ def overload_extract_index_array(A):
 
         def impl(A):  # pragma: no cover
             index = bodo.hiframes.pd_series_ext.get_series_index(A)
-            index_t = bodo.utils.conversion.fix_none_index(index, len(A))
-            index_arr = bodo.utils.conversion.coerce_to_array(index_t)
+            index_arr = bodo.utils.conversion.coerce_to_array(index)
             return index_arr
 
         return impl

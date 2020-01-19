@@ -582,7 +582,7 @@ def gatherv(data, allgather=False):
             # be 0-length to match
             if bodo.get_rank() != 0 and not allgather:
                 n = 0
-            return bodo.hiframes.pd_index_ext.init_range_index(0, n, 1)
+            return bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, data._name)
 
         return impl_range_index
 

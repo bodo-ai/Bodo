@@ -55,7 +55,7 @@ data_ctypes_type = types.ArrayCTypes(types.Array(char_typ, 1, "C"))
 offset_ctypes_type = types.ArrayCTypes(types.Array(offset_typ, 1, "C"))
 
 
-class StringArray(object):
+class StringArray:
     def __init__(self, str_list=None):
         # dummy constructor
         if str_list is None:
