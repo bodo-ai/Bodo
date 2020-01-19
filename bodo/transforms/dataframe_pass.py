@@ -421,8 +421,16 @@ class DataFramePass:
         nodes.append(assign)
         return nodes
 
-    def _gen_df_filter(self, df_var, index_var, lhs):
+    def _gen_df_filter(self, df_var, bool_arr_var, lhs):
         nodes = []
+        if isinstance(self.typemap[bool_arr_var.name], SeriesType):
+            nodes += compile_func_single_block(
+                lambda s: bodo.hiframes.pd_series_ext.get_series_data(s),
+                (bool_arr_var,),
+                None,
+                self
+            )
+            bool_arr_var = nodes[-1].target
         df_typ = self.typemap[df_var.name]
         in_vars = {}
         out_vars = {}
@@ -446,7 +454,7 @@ class DataFramePass:
 
         nodes.append(
             bodo.ir.filter.Filter(
-                lhs.name, df_var.name, index_var, out_vars, in_vars, lhs.loc
+                lhs.name, df_var.name, bool_arr_var, out_vars, in_vars, lhs.loc
             )
         )
 

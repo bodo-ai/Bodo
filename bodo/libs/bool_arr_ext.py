@@ -25,12 +25,13 @@ from numba.extending import (
     overload_method,
     overload,
     overload_attribute,
+    lower_cast,
 )
 from numba.array_analysis import ArrayAnalysis
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.str_arr_ext import kBitmask, string_array_type
 from bodo.utils.typing import is_list_like_index_type
-
+from numba.targets.imputils import impl_ret_borrowed
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import hstr_ext
@@ -795,3 +796,11 @@ def bool_arr_ind_getitem(A, ind):
     ):
         # XXX assuming data value for NAs is False
         return lambda A, ind: A[ind._data]
+
+
+@lower_cast(types.Array(types.bool_, 1, "C"), boolean_array)
+def cast_np_bool_arr_to_bool_arr(context, builder, fromty, toty, val):
+    func = lambda A: bodo.libs.bool_arr_ext.init_bool_array(
+                         A, np.full((len(A) + 7) >> 3, 255, np.uint8))
+    res = context.compile_internal(builder, func, toty(fromty), [val])
+    return impl_ret_borrowed(context, builder, toty, res)
