@@ -428,6 +428,21 @@ def test_flatten3():
     check_func(impl, (S,))
 
 
+def test_flatten4():
+    """tests flattening array with "from_iterable"
+    """
+
+    def impl(S):
+        A = S.str.split(",")
+        res = pd.Series(itertools.chain.from_iterable(A))
+        return res
+
+    S = pd.Series(
+        ["AB,CC", "C,ABB,D", "CAD", "CA,D", "AA,,D"], [3, 1, 2, 0, 4], name="A"
+    )
+    check_func(impl, (S,))
+
+
 def test_join():
     """test the functionality of bodo's join with NaN
     """
