@@ -72,7 +72,8 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
     def __init__(self, data=None, index=None, columns=None, has_parent=False):
         # data is tuple of Array types (not Series)
         # index is Index obj (not Array type)
-        # columns is tuple of strings
+        # columns is a tuple of column names (strings, ints, or tuples in case of
+        # MultiIndex)
 
         self.data = data
         if index is None:
@@ -176,12 +177,11 @@ class DataFramePayloadModel(models.StructModel):
 @register_model(DataFrameType)
 class DataFrameModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        n_cols = len(fe_type.columns)
         payload_type = DataFramePayloadType(fe_type)
         # payload_type = types.Opaque('Opaque.DataFrame')
         # TODO: does meminfo decref content when object is deallocated?
         members = [
-            ("columns", types.UniTuple(string_type, n_cols)),
+            ("columns", numba.typeof(fe_type.columns)),
             ("meminfo", types.MemInfoPointer(payload_type)),
             # for boxed DataFrames, enables updating original DataFrame object
             ("parent", types.pyobject),
@@ -308,29 +308,26 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
         df_type = signature.return_type
         data_tup = args[0]
         index_val = args[1]
-        column_strs = [
-            numba.unicode.make_string_from_constant(context, builder, string_type, c)
-            for c in column_names
-        ]
+        columns_type = numba.typeof(column_names)
 
-        column_tup = context.make_tuple(
-            builder, types.UniTuple(string_type, n_cols), column_strs
-        )
+        # column names
+        columns_tup = context.get_constant_generic(builder, columns_type, column_names)
+
+        # unboxed flags
         zero = context.get_constant(types.int8, 0)
         unboxed_tup = context.make_tuple(
             builder, types.UniTuple(types.int8, n_cols + 1), [zero] * (n_cols + 1)
         )
 
         dataframe_val = construct_dataframe(
-            context, builder, df_type, data_tup, index_val, column_tup, unboxed_tup
+            context, builder, df_type, data_tup, index_val, columns_tup, unboxed_tup
         )
 
         # increase refcount of stored values
         if context.enable_nrt:
             context.nrt.incref(builder, data_tup_typ, data_tup)
             context.nrt.incref(builder, index_typ, index_val)
-            for var in column_strs:
-                context.nrt.incref(builder, string_type, var)
+            context.nrt.incref(builder, columns_type, columns_tup)
 
         return dataframe_val
 

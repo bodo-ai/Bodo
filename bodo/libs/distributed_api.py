@@ -610,7 +610,9 @@ def gatherv(data, allgather=False):
         n_cols = len(data.columns)
         data_args = ", ".join("g_data_{}".format(i) for i in range(n_cols))
         col_var = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
-            ", ".join("'{}'".format(c) for c in data.columns)
+            ", ".join(
+                "'{}'".format(c) if isinstance(c, str) else str(c) for c in data.columns
+            )
         )
 
         func_text = "def impl_df(data, allgather=False):\n"
@@ -738,9 +740,11 @@ def gatherv(data, allgather=False):
         return gatherv_list_str_arr_impl
 
     if data == datetime_date_array_type:
+
         def impl_datetime_date(data, allgather=False):
             arr = bodo.libs.distributed_api.gatherv(data._data, allgather)
             return init_datetime_date_array(arr)
+
         return impl_datetime_date
 
     # Tuple of data containers
