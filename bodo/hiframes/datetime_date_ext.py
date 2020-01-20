@@ -29,10 +29,7 @@ from numba.extending import (
     register_jitable,
 )
 from numba import cgutils
-from numba.targets.arrayobj import (
-    store_item,
-    basic_indexing,
-)
+from numba.targets.arrayobj import store_item, basic_indexing
 from numba.typing.templates import (
     infer_getattr,
     AttributeTemplate,

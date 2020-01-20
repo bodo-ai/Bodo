@@ -526,27 +526,27 @@ class SeriesPass:
                     typ1, typ2
                 )
                 return self._replace_func(impl, [arg1, arg2])
+
             if typ1 == datetime_date_array_type and typ2 == datetime_timedelta_type:
                 impl = bodo.hiframes.datetime_date_ext.overload_datetime_date_arr_sub(
                     typ1, typ2
                 )
                 return self._replace_func(impl, [arg1, arg2])
 
-        # datetime_date_array operations
-        if rhs.fn in (
-            operator.eq,
-            operator.ne,
-            operator.ge,
-            operator.gt,
-            operator.le,
-            operator.lt,
-        ) and (typ1 == datetime_date_array_type or typ2 == datetime_date_array_type):
-            impl = bodo.hiframes.datetime_date_ext.create_cmp_op_overload(rhs.fn)(
-                typ1, typ2
-            )
-            return self._replace_func(impl, [arg1, arg2])
+            if (
+                is_dt64_series_typ(typ1)
+                and typ2 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+            ) or (
+                is_dt64_series_typ(typ2)
+                and typ1 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+            ):
+                impl = bodo.hiframes.series_dt_impl.overload_series_dt64_sub(
+                    typ1, typ2
+                )
+                return self._replace_func(impl, [arg1, arg2])
 
-        # string comparison with DatetimeIndex
+
+        # inline overload for comparisons
         if rhs.fn in (
             operator.eq,
             operator.ne,
@@ -554,21 +554,67 @@ class SeriesPass:
             operator.gt,
             operator.le,
             operator.lt,
-        ) and (
-            (
+        ):
+            # datetime_date_array operations
+            if typ1 == datetime_date_array_type or typ2 == datetime_date_array_type:
+                impl = bodo.hiframes.datetime_date_ext.create_cmp_op_overload(rhs.fn)(
+                    typ1, typ2
+                )
+                return self._replace_func(impl, [arg1, arg2])
+
+            # series(dt64) comp ops with pandas.Timestamp type
+            if (
+                is_dt64_series_typ(typ1)
+                and typ2 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+            ) or (
+                is_dt64_series_typ(typ2)
+                and typ1 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+            ):
+                impl = bodo.hiframes.series_dt_impl.create_cmp_op_overload(rhs.fn)(
+                    typ1, typ2
+                )
+                return self._replace_func(impl, [arg1, arg2])
+
+            # series(dt64) comp ops with string type
+            if (
+                is_dt64_series_typ(typ1)
+                and (
+                    typ2 == string_type
+                    or bodo.utils.typing.is_overload_constant_str(typ2)
+                )
+            ) or (
+                is_dt64_series_typ(typ2)
+                and (
+                    typ1 == string_type
+                    or bodo.utils.typing.is_overload_constant_str(typ1)
+                )
+            ):
+                impl = bodo.hiframes.series_dt_impl.create_cmp_op_overload(rhs.fn)(
+                    typ1, typ2
+                )
+                return self._replace_func(impl, [arg1, arg2])
+
+            # series(dt64) comp ops with dt64 type
+            if (is_dt64_series_typ(typ1) and typ2 == types.NPDatetime("ns")) or (
+                is_dt64_series_typ(typ2) and typ1 == types.NPDatetime("ns")
+            ):
+                impl = bodo.hiframes.series_dt_impl.create_cmp_op_overload(rhs.fn)(
+                    typ1, typ2
+                )
+                return self._replace_func(impl, [arg1, arg2])
+
+            # string comparison with DatetimeIndex
+            if (
                 isinstance(typ1, DatetimeIndexType)
                 and types.unliteral(typ2) == string_type
-            )
-            or (
+            ) or (
                 isinstance(typ2, DatetimeIndexType)
                 and types.unliteral(typ1) == string_type
-            )
-        ):
-            impl = bodo.hiframes.pd_index_ext.overload_binop_dti_str(rhs.fn)(typ1, typ2)
-            return self._replace_func(impl, [arg1, arg2])
-
-        if self._is_dt_index_binop(rhs):
-            return self._handle_dt_index_binop(assign, rhs)
+            ):
+                impl = bodo.hiframes.pd_index_ext.overload_binop_dti_str(rhs.fn)(
+                    typ1, typ2
+                )
+                return self._replace_func(impl, [arg1, arg2])
 
         if rhs.fn in numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys() and any(
             isinstance(t, IntegerArrayType) for t in (typ1, typ2)
@@ -2145,53 +2191,7 @@ class SeriesPass:
 
         return False
 
-    def _handle_dt_index_binop(self, assign, rhs):
-        arg1, arg2 = rhs.lhs, rhs.rhs
-
-        def _is_allowed_type(t):
-            return is_dt64_series_typ(t) or t in (string_type, types.NPDatetime("ns"))
-
-        if not _is_allowed_type(
-            types.unliteral(self.typemap[arg1.name])
-        ) or not _is_allowed_type(types.unliteral(self.typemap[arg2.name])):
-            raise ValueError("Series(dt64) operation not supported")
-
-        # string comparison with Series(dt64)
-        op_str = _binop_to_str[rhs.fn]
-        typ1 = types.unliteral(self.typemap[arg1.name])
-        typ2 = types.unliteral(self.typemap[arg2.name])
-        nodes = []
-
-        func_text = "def f(arg1, arg2, index):\n"
-        if is_dt64_series_typ(typ1):
-            index_var = self._get_series_index(arg1, nodes)
-            arg1 = self._get_series_data(arg1, nodes)
-            func_text += "  dt_index, _str = arg1, arg2\n"
-            comp = "dt_index[i] {} other".format(op_str)
-            other_typ = typ2
-        else:
-            index_var = self._get_series_index(arg2, nodes)
-            arg2 = self._get_series_data(arg2, nodes)
-            func_text += "  dt_index, _str = arg2, arg1\n"
-            comp = "other {} dt_index[i]".format(op_str)
-            other_typ = typ1
-        func_text += "  l = len(dt_index)\n"
-        if other_typ == string_type:
-            func_text += (
-                "  other = bodo.hiframes.pd_timestamp_ext.parse_datetime_str(_str)\n"
-            )
-        else:
-            func_text += "  other = _str\n"
-        func_text += "  S = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
-        func_text += "  for i in numba.parfor.internal_prange(l):\n"
-        func_text += "    S[i] = {}\n".format(comp)
-        func_text += "  return bodo.hiframes.pd_series_ext.init_series(S, index)\n"
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        f = loc_vars["f"]
-        # print(func_text)
-        return self._replace_func(f, [arg1, arg2, index_var], pre_nodes=nodes)
-
+      
     def _handle_string_array_expr(self, assign, rhs):
         # convert str_arr==str into parfor
         if (

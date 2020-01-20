@@ -89,6 +89,11 @@ def test_datetime_operations():
     check_func(test_sub, (dt, td))
     check_func(test_sub, (dt, dt2))
 
+    # Test series(dt64)
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
+    timestamp = pd.to_datetime("2018-04-24")
+    check_func(test_sub, (S, timestamp))
+
 
 def test_datetime_comparisons():
     """
@@ -370,8 +375,12 @@ def test_series_dt64_scalar_cmp():
     def test_impl(S):
         return S >= t
 
+    def test_impl2(S):
+        return t >= S
+
     S = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
     check_func(test_impl, (S,))
+    check_func(test_impl2, (S,))
 
 
 def test_series_dt64_cmp():
@@ -393,6 +402,41 @@ def test_dt_year_before_2000():
 
     S = pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=5))
     check_func(test_impl, (S,))
+
+
+def test_series_dt64_comparison():
+    """Test Series.dt comparison with pandas.timestamp scalar
+    """
+
+    def test_impl(S, t):
+        return S == t
+
+    def test_impl2(S):
+        return S == "2018-04-24"
+
+    def test_impl3(S):
+        return "2018-04-24" == S
+
+    def test_impl4(S, t):
+        return S[S == t]
+
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
+    timestamp = pd.to_datetime("2018-04-24")
+    t_string = "2018-04-24"
+
+    # compare series(dt64) with a timestamp and a string
+    check_func(test_impl, (S, timestamp))
+    check_func(test_impl, (S, t_string))
+    check_func(test_impl, (timestamp, S))
+    check_func(test_impl, (t_string, S))
+
+    # compare series(dt64) with a string constant
+    check_func(test_impl2, (S,))
+    check_func(test_impl3, (S,))
+
+    # test filter
+    check_func(test_impl4, (S, timestamp))
+    check_func(test_impl4, (S, t_string))
 
 
 ################################## Timestamp tests ###################################

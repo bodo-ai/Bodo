@@ -52,6 +52,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.utils.transform import get_stmt_defs
 from bodo.utils.typing import BodoWarning
+from bodo.libs.bool_arr_ext import boolean_array
 
 
 class Distribution(Enum):
@@ -434,9 +435,7 @@ class DistributedAnalysis:
         elif (
             isinstance(rhs, ir.Expr)
             and rhs.op == "getattr"
-            and isinstance(
-                self.typemap[rhs.value.name], MultiIndexType
-            )
+            and isinstance(self.typemap[rhs.value.name], MultiIndexType)
             and len(self.typemap[rhs.value.name].array_types) > 0
             and rhs.attr == "_data"
         ):
@@ -669,7 +668,8 @@ class DistributedAnalysis:
         if fdef == ("array_isin", "bodo.libs.array_tools"):
             # out_arr and in_arr should have the same distribution
             new_dist = self._meet_array_dists(
-                rhs.args[0].name, rhs.args[1].name, array_dists)
+                rhs.args[0].name, rhs.args[1].name, array_dists
+            )
             # values array can be distributed only if input is distributed
             new_dist = Distribution(
                 min(new_dist.value, array_dists[rhs.args[2].name].value)
@@ -1330,7 +1330,11 @@ class DistributedAnalysis:
         index_typ = self.typemap[index_var.name]
 
         # array selection with boolean index
-        if is_np_array_typ(index_typ) and index_typ.dtype == types.boolean:
+        if (
+            is_np_array_typ(index_typ)
+            and index_typ.dtype == types.boolean
+            or index_typ == boolean_array
+        ):
             # input array and bool index have the same distribution
             new_dist = self._meet_array_dists(
                 index_var.name, rhs.value.name, array_dists
