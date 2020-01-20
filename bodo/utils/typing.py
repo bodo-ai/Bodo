@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import numba
 from numba import types, cgutils
-from numba.extending import register_model, models, overload
+from numba.extending import register_model, models, overload, register_jitable
 from numba.typing.templates import infer_global, AbstractTemplate, CallableTemplate
 from numba.typing import signature
 from numba.targets.imputils import lower_builtin, impl_ret_borrowed, impl_ret_new_ref
@@ -436,6 +436,15 @@ class ConstUniTupleModel(models.UniTupleModel):
 @overload(itertools.chain)
 def chain_overload():
     return lambda: [0]
+
+
+@register_jitable
+def from_iterable_impl(A):  # pragma: no cover
+    """Internal call to support itertools.chain.from_iterable().
+    Untyped pass replaces itertools.chain.from_iterable() with this call since class
+    methods are not supported in Numba's typing
+    """
+    return bodo.utils.conversion.flatten_array(bodo.utils.conversion.coerce_to_array(A))
 
 
 # taken from numba/typing/listdecl.py

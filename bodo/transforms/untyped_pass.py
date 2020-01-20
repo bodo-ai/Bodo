@@ -178,6 +178,8 @@ def remove_hiframes(rhs, lives, call_list):
         return True
     if call_list == ["chain", itertools]:
         return True
+    if call_list == ["from_iterable_impl", "typing", "utils", bodo]:
+        return True
     # TODO: handle copy properly, copy of some types can have side effects?
     if call_list == ["copy"]:
         return True
@@ -436,6 +438,19 @@ class UntypedPass:
                     if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
                         return _compile_func_single_block(
                             lambda: bodo.hiframes.datetime_datetime_ext.strptime_impl,
+                            (),
+                            assign.target,
+                        )
+
+            # replace itertools.chain.from_iterable with an internal function since
+            #  class methods are not supported in Numba's typing
+            if rhs.op == "getattr" and rhs.attr == "from_iterable":
+                val_def = guard(get_definition, self.func_ir, rhs.value)
+                if is_expr(val_def, "getattr") and val_def.attr == "chain":
+                    mod_def = guard(get_definition, self.func_ir, val_def.value)
+                    if isinstance(mod_def, ir.Global) and mod_def.value == itertools:
+                        return _compile_func_single_block(
+                            lambda: bodo.utils.typing.from_iterable_impl,
                             (),
                             assign.target,
                         )
@@ -1084,30 +1099,35 @@ class UntypedPass:
             and guard(find_callname, self.func_ir, data_def) == ("list", "builtins")
             and len(data_def.args) == 1
         ):
-            arg_def = guard(get_definition, self.func_ir, data_def.args[0])
-            if is_call(arg_def) and guard(find_callname, self.func_ir, arg_def) == (
-                "chain",
-                "itertools",
-            ):
-                in_data = arg_def.vararg
-                arg_def.vararg = None  # avoid typing error
-                new_arr = ir.Var(in_data.scope, mk_unique_var("flat_arr"), in_data.loc)
-                nodes = _compile_func_single_block(
-                    lambda A: bodo.utils.conversion.flatten_array(
-                        bodo.utils.conversion.coerce_to_array(A)
-                    ),
-                    (in_data,),
-                    new_arr,
-                )
-                # put the new array back to pd.Series call
-                if len(rhs.args) > 0:
-                    rhs.args[0] = new_arr
-                else:  # kw case
-                    # TODO: test
-                    kws["data"] = new_arr
-                    rhs.kws = tuple(kws.items())
-                nodes.append(assign)
-                return nodes
+            data_def = guard(get_definition, self.func_ir, data_def.args[0])
+
+        fdef = guard(find_callname, self.func_ir, data_def)
+        if is_call(data_def) and fdef in (
+            ("chain", "itertools",),
+            ("from_iterable_impl", "bodo.utils.typing"),
+        ):
+            if fdef == ("chain", "itertools",):
+                in_data = data_def.vararg
+                data_def.vararg = None  # avoid typing error
+            else:
+                in_data = data_def.args[0]
+            new_arr = ir.Var(in_data.scope, mk_unique_var("flat_arr"), in_data.loc)
+            nodes = _compile_func_single_block(
+                lambda A: bodo.utils.conversion.flatten_array(
+                    bodo.utils.conversion.coerce_to_array(A)
+                ),
+                (in_data,),
+                new_arr,
+            )
+            # put the new array back to pd.Series call
+            if len(rhs.args) > 0:
+                rhs.args[0] = new_arr
+            else:  # kw case
+                # TODO: test
+                kws["data"] = new_arr
+                rhs.kws = tuple(kws.items())
+            nodes.append(assign)
+            return nodes
 
         # pd.Series() is handled in typed pass now
         return [assign]
