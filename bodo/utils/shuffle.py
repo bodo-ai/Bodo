@@ -189,16 +189,17 @@ def update_shuffle_meta_overload(
                 i
             )
 
-        # XXX: handling null bits is only supported for data arrays now
-        if i >= n_keys and is_null_masked_type(typ):
+        if is_null_masked_type(typ):
             func_text += "  if is_contig:\n"
             func_text += "    out_bitmap = pre_shuffle_meta.send_arr_nulls_tup[{}].ctypes\n".format(
                 i
             )
-            # func_text += "    bit_val = get_bit_bitmap(get_null_bitmap_ptr(data[{}]), ind)\n".format(i - n_keys)
-            func_text += "    bit_val = get_mask_bit(data[{}], ind)\n".format(
-                i - n_keys
-            )
+            if i < n_keys:
+                func_text += "    bit_val = get_mask_bit(key_arrs[{}], ind)\n".format(i)
+            else:
+                func_text += "    bit_val = get_mask_bit(data[{}], ind)\n".format(
+                    i - n_keys
+                )
             func_text += "    set_bit_to(out_bitmap, padded_bits + ind, bit_val)\n"
 
     # print(func_text)
@@ -465,8 +466,7 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
                 i
             )
 
-        # XXX: handling null bits is only supported for data arrays now
-        if i >= n_keys and is_null_masked_type(typ):
+        if is_null_masked_type(typ):
             func_text += "  null_bitmap_ptr_{} = get_arr_null_ptr(meta.out_arr_tup[{}])\n".format(
                 i, i
             )

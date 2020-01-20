@@ -183,6 +183,31 @@ def test_sort_values_strings_variable_length(n, len_str):
     )
 
 
+
+def test_sort_values_string_list():
+    """Test the list of string. Missing values in a string array"""
+    def test_impl1(df1):
+        df2 = df1.sort_values(by='A', kind="mergesort", na_position='last', axis=0)
+        return df2
+
+    def get_random_string_dataframe(n, len_str):
+        random.seed(5)
+        str_vals = []
+        for _ in range(n):
+            val1 = random.randint(1,len_str)
+            if val1==1:
+                val=np.nan
+            else:
+                val = "".join(random.choices(string.ascii_uppercase, k=val1))
+            str_vals.append(val)
+        df = pd.DataFrame({"A": str_vals})
+        return df
+
+    df1 = get_random_string_dataframe(100,10)
+    check_func(test_impl1, (df1,), sort_output=False)
+
+
+
 @pytest.mark.parametrize("n, len_str", [(100, 30), (1000, 10), (10, 30), (100, 30)])
 def test_sort_values_strings(n, len_str):
     """
