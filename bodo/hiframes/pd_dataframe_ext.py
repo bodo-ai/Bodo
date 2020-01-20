@@ -849,6 +849,28 @@ def df_len_overload(df):
 def df_getitem_overload(df, ind):
     if isinstance(df, DataFrameType) and is_overload_constant_str(ind):
         ind_str = get_overload_const_str(ind)
+        # df with multi-level column names returns a lower level dataframe
+        if isinstance(df.columns[0], tuple):
+            new_names = []
+            new_data = []
+            for i, v in enumerate(df.columns):
+                if v[0] != ind_str:
+                    continue
+                # output names are str in 2 level case, not tuple
+                # TODO: test more than 2 levels
+                new_names.append(v[1] if len(v) == 2 else v[1:])
+                new_data.append(
+                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(
+                        i
+                    )
+                )
+            func_text = "def impl(df, ind):\n"
+            index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
+            return bodo.hiframes.dataframe_impl._gen_init_df(
+                func_text, new_names, ", ".join(new_data), index
+            )
+
+        # regular single level case
         if ind_str not in df.columns:
             raise BodoError(
                 "dataframe {} does not include column {}".format(df, ind_str)

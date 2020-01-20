@@ -219,6 +219,20 @@ def test_unbox_df_multi():
     check_func(impl, (df,))
 
 
+def test_df_multi_get_level():
+    """
+    getitem with string to get a level of dataframe with MultiIndex columns structure
+    """
+    def impl1(df):
+        return df["B"]
+
+    df = pd.DataFrame(
+        data=np.arange(36).reshape(6, 6),
+        columns=pd.MultiIndex.from_product((["A", "B"], ["CC", "DD", "EE"])),
+    )
+    check_func(impl1, (df,))
+
+
 def test_box_df():
     # box dataframe contains column with name overlaps with pandas function
     def impl():
