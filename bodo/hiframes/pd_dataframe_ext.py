@@ -845,12 +845,19 @@ def df_len_overload(df):
     return lambda df: len(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 0))
 
 
-@overload(operator.getitem)  # TODO: avoid lowering?
+@overload(operator.getitem)
 def df_getitem_overload(df, ind):
-    if isinstance(df, DataFrameType) and isinstance(ind, types.StringLiteral):
-        index = df.columns.index(ind.literal_value)
+    if isinstance(df, DataFrameType) and is_overload_constant_str(ind):
+        ind_str = get_overload_const_str(ind)
+        if ind_str not in df.columns:
+            raise BodoError(
+                "dataframe {} does not include column {}".format(df, ind_str)
+            )
+        col_no = df.columns.index(ind_str)
         return lambda df, ind: bodo.hiframes.pd_series_ext.init_series(
-            get_dataframe_data(df, index), _get_dataframe_index(df), df._columns[index]
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_no),
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df),
+            ind_str,
         )
 
 
