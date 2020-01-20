@@ -226,11 +226,15 @@ def test_df_multi_get_level():
     def impl1(df):
         return df["B"]
 
+    def impl2(df):
+        return df.A
+
     df = pd.DataFrame(
         data=np.arange(36).reshape(6, 6),
         columns=pd.MultiIndex.from_product((["A", "B"], ["CC", "DD", "EE"])),
     )
     check_func(impl1, (df,))
+    check_func(impl2, (df,))
 
 
 def test_box_df():

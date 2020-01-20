@@ -250,10 +250,24 @@ class DataFrameAttribute(AttributeTemplate):
         return signature(SeriesType(f_return_type, index=df.index), *args)
 
     def generic_resolve(self, df, attr):
+        # column selection
         if attr in df.columns:
             ind = df.columns.index(attr)
             arr_typ = df.data[ind]
             return SeriesType(arr_typ.dtype, arr_typ, df.index, string_type)
+
+        # level selection in multi-level df
+        if isinstance(df.columns[0], tuple):
+            new_names = []
+            new_data = []
+            for i, v in enumerate(df.columns):
+                if v[0] != attr:
+                    continue
+                # output names are str in 2 level case, not tuple
+                # TODO: test more than 2 levels
+                new_names.append(v[1] if len(v) == 2 else v[1:])
+                new_data.append(df.data[i])
+            return DataFrameType(tuple(new_data), df.index, tuple(new_names))
 
 
 def construct_dataframe(

@@ -514,6 +514,28 @@ class DataFramePass:
                 pre_nodes=nodes,
             )
 
+        # level selection in multi-level df
+        if (
+            isinstance(rhs_type, DataFrameType)
+            and isinstance(rhs_type.columns[0], tuple)
+            and any(v[0] == rhs.attr for v in rhs_type.columns)
+        ):
+            nodes = []
+            index = self._get_dataframe_index(rhs.value, nodes)
+            new_names = []
+            new_data = []
+            for i, v in enumerate(rhs_type.columns):
+                if v[0] != rhs.attr:
+                    continue
+                # output names are str in 2 level case, not tuple
+                # TODO: test more than 2 levels
+                new_names.append(v[1] if len(v) == 2 else v[1:])
+                new_data.append(self._get_dataframe_data(rhs.value, v, nodes))
+            _init_df = _gen_init_df(new_names, "index")
+            return nodes + compile_func_single_block(
+                _init_df, new_data + [index], assign.target, self
+            )
+
         # df.shape
         if isinstance(rhs_type, DataFrameType) and rhs.attr == "shape":
             n_cols = len(rhs_type.columns)
