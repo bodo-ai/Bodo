@@ -13,6 +13,7 @@ from numba import (
     threading_layer,
     jitclass,
     objmode,
+    typed,
 )
 from numba.types import *
 
