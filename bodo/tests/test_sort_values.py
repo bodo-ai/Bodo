@@ -406,6 +406,27 @@ def test_sort_values_numpy_nan():
 
 
 
+def test_sort_with_nan_entries():
+    """Test of the dataframe with nan entries"""
+    def impl1(df):
+        return df.sort_values(by="A", kind="mergesort")
+
+    df1 = pd.DataFrame({"A": ["AA", np.nan, "", "D", "GG"]})
+    df2 = pd.DataFrame({"A": [1, 8, 4, np.nan, 3]})
+    df3 = pd.DataFrame({"A": [True, False, False, np.nan, True]})
+    df4 = pd.DataFrame({"A": pd.array([1,2,None,3], dtype='UInt16')})
+    df5 = pd.DataFrame({"A": pd.Series([1, 8, 4, np.nan, 3], dtype="Int32")})
+    df6 = pd.DataFrame({"A": pd.Series([True, False, False, np.nan, True])})
+    df7 = pd.DataFrame({"A": pd.Series(["AA", np.nan, "", "D", "GG"])})
+    check_func(impl1, (df1,), sort_output=False)
+    check_func(impl1, (df2,), sort_output=False)
+    check_func(impl1, (df3,), sort_output=False)
+    check_func(impl1, (df4,), sort_output=False)
+    check_func(impl1, (df5,), sort_output=False)
+    check_func(impl1, (df6,), sort_output=False)
+    check_func(impl1, (df7,), sort_output=False)
+
+
 
 
 def test_sort_values_two_columns():
