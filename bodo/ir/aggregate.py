@@ -465,22 +465,16 @@ def aggregate_array_analysis(aggregate_node, equiv_set, typemap, array_analysis)
     ), "empty aggregate in array analysis"
 
     # arrays of input df have same size in first dimension as key array
-    # string array doesn't have shape in array analysis
     all_shapes = []
     for key_arr in aggregate_node.key_arrs:
-        key_typ = typemap[key_arr.name]
-        if key_typ != string_array_type:
-            col_shape = equiv_set.get_shape(key_arr)
-            all_shapes.append(col_shape[0])
+        col_shape = equiv_set.get_shape(key_arr)
+        all_shapes.append(col_shape[0])
 
     if aggregate_node.pivot_arr is not None:
-        pivot_typ = typemap[aggregate_node.pivot_arr.name]
-        if pivot_typ != string_array_type:
-            col_shape = equiv_set.get_shape(aggregate_node.pivot_arr)
-            all_shapes.append(col_shape[0])
+        col_shape = equiv_set.get_shape(aggregate_node.pivot_arr)
+        all_shapes.append(col_shape[0])
 
     for col_var in aggregate_node.df_in_vars.values():
-        typ = typemap[col_var.name]
         col_shape = equiv_set.get_shape(col_var)
         all_shapes.append(col_shape[0])
 
