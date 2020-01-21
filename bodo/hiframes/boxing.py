@@ -248,12 +248,19 @@ def box_dataframe(typ, val, c):
                 # need to get underlying array since Series has index but
                 # df_obj doesn't have index yet, leading to index mismatches
                 arr_obj_orig = pyapi.object_getattr_string(ser_obj, "values")
-                # make contiguous by calling np.ascontiguousarray()
-                np_mod_name = c.context.insert_const_string(c.builder.module, "numpy")
-                np_class_obj = c.pyapi.import_module_noblock(np_mod_name)
-                arr_obj = c.pyapi.call_method(np_class_obj, "ascontiguousarray", (arr_obj_orig,))
-                c.pyapi.decref(arr_obj_orig)
-                c.pyapi.decref(np_class_obj)
+                if isinstance(arr_typ, types.Array):
+                    # make contiguous by calling np.ascontiguousarray()
+                    np_mod_name = c.context.insert_const_string(
+                        c.builder.module, "numpy"
+                    )
+                    np_class_obj = c.pyapi.import_module_noblock(np_mod_name)
+                    arr_obj = c.pyapi.call_method(
+                        np_class_obj, "ascontiguousarray", (arr_obj_orig,)
+                    )
+                    c.pyapi.decref(arr_obj_orig)
+                    c.pyapi.decref(np_class_obj)
+                else:
+                    arr_obj = arr_obj_orig
                 pyapi.decref(ser_obj)
                 pyapi.object_setitem(df_obj, c_ind_obj, arr_obj)
 
@@ -313,14 +320,19 @@ def unbox_dataframe_column(typingctx, df, i=None):
         series_obj = c.pyapi.object_getitem(dataframe.parent, col_name_obj)
         arr_obj_orig = c.pyapi.object_getattr_string(series_obj, "values")
 
-        # call np.ascontiguousarray() on array since it may not be contiguous
-        # the typing infrastructure assumes C-contiguous arrays
-        # see test_df_multi_get_level() for an example of non-contiguous input
-        np_mod_name = c.context.insert_const_string(c.builder.module, "numpy")
-        np_class_obj = c.pyapi.import_module_noblock(np_mod_name)
-        arr_obj = c.pyapi.call_method(np_class_obj, "ascontiguousarray", (arr_obj_orig,))
-        c.pyapi.decref(arr_obj_orig)
-        c.pyapi.decref(np_class_obj)
+        if isinstance(data_typ, types.Array):
+            # call np.ascontiguousarray() on array since it may not be contiguous
+            # the typing infrastructure assumes C-contiguous arrays
+            # see test_df_multi_get_level() for an example of non-contiguous input
+            np_mod_name = c.context.insert_const_string(c.builder.module, "numpy")
+            np_class_obj = c.pyapi.import_module_noblock(np_mod_name)
+            arr_obj = c.pyapi.call_method(
+                np_class_obj, "ascontiguousarray", (arr_obj_orig,)
+            )
+            c.pyapi.decref(arr_obj_orig)
+            c.pyapi.decref(np_class_obj)
+        else:
+            arr_obj = arr_obj_orig
 
         # TODO: support column of tuples?
         native_val = _unbox_series_data(data_typ.dtype, data_typ, arr_obj, c)
@@ -354,12 +366,17 @@ def unbox_dataframe_column(typingctx, df, i=None):
 def unbox_series(typ, val, c):
     arr_obj_orig = c.pyapi.object_getattr_string(val, "values")
 
-    # make contiguous by calling np.ascontiguousarray()
-    np_mod_name = c.context.insert_const_string(c.builder.module, "numpy")
-    np_class_obj = c.pyapi.import_module_noblock(np_mod_name)
-    arr_obj = c.pyapi.call_method(np_class_obj, "ascontiguousarray", (arr_obj_orig,))
-    c.pyapi.decref(arr_obj_orig)
-    c.pyapi.decref(np_class_obj)
+    if isinstance(typ.data, types.Array):
+        # make contiguous by calling np.ascontiguousarray()
+        np_mod_name = c.context.insert_const_string(c.builder.module, "numpy")
+        np_class_obj = c.pyapi.import_module_noblock(np_mod_name)
+        arr_obj = c.pyapi.call_method(
+            np_class_obj, "ascontiguousarray", (arr_obj_orig,)
+        )
+        c.pyapi.decref(arr_obj_orig)
+        c.pyapi.decref(np_class_obj)
+    else:
+        arr_obj = arr_obj_orig
 
     data_val = _unbox_series_data(typ.dtype, typ.data, arr_obj, c).value
 
