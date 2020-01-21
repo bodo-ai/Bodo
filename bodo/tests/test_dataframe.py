@@ -229,12 +229,16 @@ def test_df_multi_get_level():
     def impl2(df):
         return df.A
 
+    def impl3(df):
+        return df.A.CC
+
     df = pd.DataFrame(
         data=np.arange(36).reshape(6, 6),
         columns=pd.MultiIndex.from_product((["A", "B"], ["CC", "DD", "EE"])),
     )
     check_func(impl1, (df,))
     check_func(impl2, (df,))
+    check_func(impl3, (df,))
 
 
 def test_box_df():
