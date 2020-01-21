@@ -373,7 +373,7 @@ class UntypedPass:
                         items = itertools.chain(*rhs.items)
                     else:
                         items = rhs.items
-                    vals = tuple(find_const(self.func_ir, v) for v in items)
+                    vals = tuple(self._get_const_nested(v) for v in items)
                     # a = ['A', 'B'] ->
                     # tmp = ['A', 'B']
                     # a = add_consts_to_type(tmp, 'A', 'B')
@@ -1571,6 +1571,24 @@ class UntypedPass:
 
         return nodes
 
+    def _get_const_nested(self, v):
+        """get constant value for v, even if v is a constant list or set.
+        Does not capture GuardException.
+        """
+        v_def = get_definition(self.func_ir, v)
+        if is_call(v_def) and find_callname(self.func_ir, v_def) == (
+            "add_consts_to_type",
+            "bodo.utils.typing",
+        ):
+            v_def = get_definition(self.func_ir, v_def.args[0])
+        if isinstance(v_def, ir.Expr) and v_def.op in (
+            "build_list",
+            "build_set",
+            "build_tuple",
+        ):
+            return tuple(self._get_const_nested(a) for a in v_def.items)
+        return find_const(self.func_ir, v)
+
     def _update_definitions(self, node_list):
         loc = ir.Loc("", 0)
         dumm_block = ir.Block(ir.Scope(None, loc), loc)
@@ -1599,3 +1617,21 @@ def _compile_func_single_block(func, args, ret_var, extra_globals=None):
 
     nodes[-1].target = ret_var
     return nodes
+
+
+# replace Numba's dictionary item checking to allow constant list/dict
+numba_sentry_forbidden_types = numba.types.containers._sentry_forbidden_types
+
+
+def bodo_sentry_forbidden_types(key, value):
+    from bodo.utils.typing import ConstDictType, ConstList
+
+    if isinstance(key, (ConstDictType, ConstList)) or isinstance(
+        value, (ConstDictType, ConstList)
+    ):
+        return
+
+    numba_sentry_forbidden_types(key, value)
+
+
+numba.types.containers._sentry_forbidden_types = bodo_sentry_forbidden_types
