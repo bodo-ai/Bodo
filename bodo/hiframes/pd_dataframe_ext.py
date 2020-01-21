@@ -735,7 +735,6 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     )
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
-    # print(func_text)
     _init_df = loc_vars["_init_df"]
     return _init_df
 

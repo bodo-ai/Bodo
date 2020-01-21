@@ -730,6 +730,13 @@ class UntypedPass:
         index_arg = self._get_arg("pd.DataFrame", rhs.args, kws, 1, "index", "")
 
         arg_def = guard(get_definition, self.func_ir, data_arg)
+        # handle converted constant dictionaries
+        if is_call(arg_def) and (
+            guard(find_callname, self.func_ir, arg_def)
+            == ("add_consts_to_type", "bodo.utils.typing")
+        ):
+            arg_def = guard(get_definition, self.func_ir, arg_def.args[0])
+
         if isinstance(arg_def, ir.Expr) and arg_def.op == "build_map":
             # check column names to be string
             col_names = tuple(
