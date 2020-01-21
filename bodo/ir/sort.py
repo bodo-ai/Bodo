@@ -114,7 +114,6 @@ def sort_array_analysis(sort_node, equiv_set, typemap, array_analysis):
     all_shapes = []
     in_arrs = sort_node.key_arrs + list(sort_node.df_in_vars.values())
     for col_var in in_arrs:
-        typ = typemap[col_var.name]
         col_shape = equiv_set.get_shape(col_var)
         if col_shape is not None:
             all_shapes.append(col_shape[0])
@@ -122,19 +121,27 @@ def sort_array_analysis(sort_node, equiv_set, typemap, array_analysis):
     if len(all_shapes) > 1:
         equiv_set.insert_equiv(*all_shapes)
 
-    # arrays of output have the same shape (not necessarily the same as input
-    # arrays in the parallel case, TODO: fix)
-    out_arrs = sort_node.out_key_arrs + list(sort_node.df_out_vars.values())
-    for col_var in out_arrs:
+    # create correlations for output arrays
+    # arrays of output df have same size in first dimension
+    # gen size variables for output columns
+    post = []
+    all_shapes = []
+    out_vars = sort_node.out_key_arrs + list(sort_node.df_out_vars.values())
+
+    for col_var in out_vars:
         typ = typemap[col_var.name]
-        col_shape = equiv_set.get_shape(col_var)
-        if col_shape is not None:
-            all_shapes.append(col_shape[0])
+        (shape, c_post) = array_analysis._gen_shape_call(
+            equiv_set, col_var, typ.ndim, None
+        )
+        equiv_set.insert_equiv(col_var, shape)
+        post.extend(c_post)
+        all_shapes.append(shape[0])
+        equiv_set.define(col_var, {})
 
     if len(all_shapes) > 1:
         equiv_set.insert_equiv(*all_shapes)
 
-    return [], []
+    return [], post
 
 
 numba.array_analysis.array_analysis_extensions[Sort] = sort_array_analysis
