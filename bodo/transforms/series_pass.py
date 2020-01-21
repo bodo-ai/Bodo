@@ -91,6 +91,7 @@ from bodo.hiframes.split_impl import (
 )
 from bodo.utils.transform import compile_func_single_block, update_locs
 from bodo.utils.utils import is_array_typ
+from bodo.utils.typing import BodoError
 
 
 ufunc_names = set(f.__name__ for f in numba.typing.npydecl.supported_ufuncs)
@@ -540,11 +541,8 @@ class SeriesPass:
                 is_dt64_series_typ(typ2)
                 and typ1 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
             ):
-                impl = bodo.hiframes.series_dt_impl.overload_series_dt64_sub(
-                    typ1, typ2
-                )
+                impl = bodo.hiframes.series_dt_impl.overload_series_dt64_sub(typ1, typ2)
                 return self._replace_func(impl, [arg1, arg2])
-
 
         # inline overload for comparisons
         if rhs.fn in (
@@ -1642,11 +1640,18 @@ class SeriesPass:
 
         if func_name in ("map", "apply"):
             kws = dict(rhs.kws)
+            extra_args = []
             if func_name == "apply":
                 func_var = self._get_arg("apply", rhs.args, kws, 0, "func")
+                extra_args = self._get_arg("apply", rhs.args, kws, 2, "args", [])
+                if extra_args:
+                    extra_args = guard(find_build_sequence, self.func_ir, extra_args)
+                    extra_args = [] if extra_args is None else extra_args[0]
             else:
                 func_var = self._get_arg("map", rhs.args, kws, 0, "arg")
-            return self._handle_series_map(assign, lhs, rhs, series_var, func_var)
+            return self._handle_series_map(
+                assign, lhs, rhs, series_var, func_var, extra_args
+            )
 
         if func_name == "value_counts":
             nodes = []
@@ -1709,14 +1714,14 @@ class SeriesPass:
 
         return [assign]
 
-    def _handle_series_map(self, assign, lhs, rhs, series_var, func_var):
+    def _handle_series_map(self, assign, lhs, rhs, series_var, func_var, extra_args):
         """translate df.A.map(lambda a:...) to prange()
         """
         func = guard(get_definition, self.func_ir, func_var)
         if func is None or not (
             isinstance(func, ir.Expr) and func.op == "make_function"
         ):
-            raise ValueError("lambda for map not found")
+            raise BodoError("lambda for map not found")
 
         dtype = self.typemap[series_var.name].dtype
         nodes = []
@@ -1724,11 +1729,14 @@ class SeriesPass:
         index = self._get_series_index(series_var, nodes)
         name = self._get_series_name(series_var, nodes)
         out_typ = self.typemap[lhs.name].dtype
+        extra_arg_names = (", " if extra_args else "") + ", ".join(
+            "e{}".format(i) for i in range(len(extra_args))
+        )
 
         # TODO: handle all array types like list(str)
         if out_typ == string_type:
             # prange func to inline
-            func_text = "def f(A, index, name):\n"
+            func_text = "def f(A, index, name{}):\n".format(extra_arg_names)
             func_text += "  numba.parfor.init_prange()\n"
             func_text += "  n = len(A)\n"
             func_text += "  n_chars = 0\n"
@@ -1739,7 +1747,9 @@ class SeriesPass:
                 func_text += "    t = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
             else:
                 func_text += "    t = A[i]\n"
-            func_text += "    n_chars += get_utf8_size(map_func(t))\n"
+            func_text += "    n_chars += get_utf8_size(map_func(t{}))\n".format(
+                extra_arg_names
+            )
             func_text += "  S = pre_alloc_string_array(n, n_chars)\n"
             func_text += "  for i in numba.parfor.internal_prange(n):\n"
             if dtype == types.NPDatetime("ns"):
@@ -1748,14 +1758,13 @@ class SeriesPass:
                 func_text += "    t = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
             else:
                 func_text += "    t = A[i]\n"
-            func_text += "    v = map_func(t)\n"
+            func_text += "    v = map_func(t{})\n".format(extra_arg_names)
             func_text += "    S[i] = v\n"
-            # func_text += "    print(S[i])\n"
             func_text += (
                 "  return bodo.hiframes.pd_series_ext.init_series(S, index, name)\n"
             )
         else:
-            func_text = "def f(A, index, name):\n"
+            func_text = "def f(A, index, name{}):\n".format(extra_arg_names)
             func_text += "  numba.parfor.init_prange()\n"
             func_text += "  n = len(A)\n"
             func_text += "  S = np.empty(n, out_dtype)\n"
@@ -1766,12 +1775,11 @@ class SeriesPass:
                 func_text += "    t = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
             else:
                 func_text += "    t = A[i]\n"
-            func_text += "    v = map_func(t)\n"
+            func_text += "    v = map_func(t{})\n".format(extra_arg_names)
             if isinstance(out_typ, types.BaseTuple):
                 func_text += "    S[i] = bodo.utils.typing.convert_tup_to_rec(v)\n"
             else:
                 func_text += "    S[i] = v\n"
-            # func_text += "    print(S[i])\n"
             func_text += (
                 "  return bodo.hiframes.pd_series_ext.init_series(S, index, name)\n"
             )
@@ -1818,11 +1826,8 @@ class SeriesPass:
         # remove sentinel global to avoid type inference issues
         ir_utils.remove_dead(f_ir.blocks, f_ir.arg_names, f_ir)
         f_ir._definitions = build_definitions(f_ir.blocks)
-        arg_typs = (
-            self.typemap[data.name],
-            self.typemap[index.name],
-            self.typemap[name.name],
-        )
+        args = [data, index, name] + extra_args
+        arg_typs = tuple(self.typemap[v.name] for v in args)
         f_typemap, _f_ret_t, f_calltypes = numba.typed_passes.type_inference_stage(
             self.typingctx, f_ir, arg_typs, self.typemap[lhs.name]
         )
@@ -1832,7 +1837,7 @@ class SeriesPass:
             f_typemap.pop(a)
         self.typemap.update(f_typemap)
         self.calltypes.update(f_calltypes)
-        replace_arg_nodes(f_ir.blocks[topo_order[0]], [data, index, name])
+        replace_arg_nodes(f_ir.blocks[topo_order[0]], args)
         f_ir.blocks[topo_order[0]].body = nodes + f_ir.blocks[topo_order[0]].body
         return f_ir.blocks
 
@@ -2191,7 +2196,6 @@ class SeriesPass:
 
         return False
 
-      
     def _handle_string_array_expr(self, assign, rhs):
         # convert str_arr==str into parfor
         if (

@@ -548,7 +548,7 @@ class SeriesAttribute(AttributeTemplate):
         pysig = numba.utils.pysignature(rolling_stub)
         return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
 
-    def _resolve_map_func(self, ary, func, pysig):
+    def _resolve_map_func(self, ary, func, pysig, f_args=None):
 
         dtype = ary.dtype
         # getitem returns Timestamp for dt_index and series(dt64)
@@ -562,12 +562,20 @@ class SeriesAttribute(AttributeTemplate):
             _globals = func.literal_value.globals
 
         f_ir = numba.ir_utils.get_ir_of_code(_globals, code)
+        in_types = (dtype,)
+        if f_args is not None:
+            in_types += tuple(f_args.types)
         _, f_return_type, _ = numba.typed_passes.type_inference_stage(
-            self.context, f_ir, (dtype,), None
+            self.context, f_ir, in_types, None
         )
 
+        data_arr = _get_series_array_type(f_return_type)
+        # Series.map codegen returns np bool array instead of boolean_array currently
+        # TODO: return nullable boolean_array
+        if f_return_type == types.bool_:
+            data_arr = types.Array(types.bool_, 1, "C")
         return signature(
-            SeriesType(f_return_type, index=ary.index, name_typ=ary.name_typ), (func,)
+            SeriesType(f_return_type, data_arr, ary.index, ary.name_typ), (func,)
         ).replace(pysig=pysig)
 
     @bound_function("series.map")
@@ -585,13 +593,14 @@ class SeriesAttribute(AttributeTemplate):
     def resolve_apply(self, ary, args, kws):
         kwargs = dict(kws)
         func = args[0] if len(args) > 0 else kwargs["func"]
+        f_args = args[2] if len(args) > 2 else kwargs.pop("args", None)
 
         def apply_stub(func, convert_dtype=True, args=()):  # pragma: no cover
             pass
 
         pysig = numba.utils.pysignature(apply_stub)
         # TODO: handle apply differences: extra args, np ufuncs etc.
-        return self._resolve_map_func(ary, func, pysig)
+        return self._resolve_map_func(ary, func, pysig, f_args)
 
     def _resolve_combine_func(self, ary, args, kws):
         # handle kwargs

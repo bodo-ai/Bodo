@@ -101,14 +101,12 @@ def test_series_constructor2():
     bodo_func = bodo.jit(impl)
     data1 = pd.Series(["A", "B", "CC"], name="A")
     pd.testing.assert_series_equal(
-        bodo_func(data1, None, None),
-        impl(data1, None, None), check_dtype=False
+        bodo_func(data1, None, None), impl(data1, None, None), check_dtype=False
     )
 
     data2 = pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A")
     pd.testing.assert_series_equal(
-        bodo_func(data2, None, None),
-        impl(data2, None, None), check_dtype=False
+        bodo_func(data2, None, None), impl(data2, None, None), check_dtype=False
     )
 
 
@@ -837,7 +835,7 @@ def test_series_ufunc():
         return ufunc(S)
 
     S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
-    check_func(test_impl, (S, ))
+    check_func(test_impl, (S,))
 
 
 @pytest.mark.slow
@@ -1047,6 +1045,15 @@ def test_series_apply_kw():
 
     S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
     check_func(test_impl, (S,))
+
+
+def test_series_apply_extra_arg():
+    def test_impl(S, D):
+        return S.apply(lambda a, d: a not in d, args=(D,))
+
+    d = ("A", "B")
+    S = pd.Series(["A", "C", "FF", "AA", "CC", "B", "DD", "ABC", "A"])
+    check_func(test_impl, (S, d))
 
 
 @pytest.mark.parametrize(
@@ -1286,25 +1293,28 @@ def test_series_tail(series_val):
     "S,values",
     [
         (pd.Series([3, 2, np.nan, 2, 7], [3, 4, 2, 1, 0], name="A"), [2.0, 3.0]),
-        (pd.Series(["aa", "b", np.nan, "ccc", "b"], [3, 4, 2, 1, 0], name="A"), ["aa", "b"]),
-        (pd.Series([4, 9, 1, 2, 4], [3, 4, 2, 1, 0], name="A"), pd.Series([3, 4, 0, 2, 5])),
+        (
+            pd.Series(["aa", "b", np.nan, "ccc", "b"], [3, 4, 2, 1, 0], name="A"),
+            ["aa", "b"],
+        ),
+        (
+            pd.Series([4, 9, 1, 2, 4], [3, 4, 2, 1, 0], name="A"),
+            pd.Series([3, 4, 0, 2, 5]),
+        ),
     ],
 )
 def test_series_isin(S, values):
-
     def test_impl(S, values):
         return S.isin(values)
 
     check_func(test_impl, (S, values))
 
 
-
-
 def test_series_isin_large_random():
     def get_random_array(n, len_siz):
         elist = []
         for _ in range(n):
-            val = random.randint(1,len_siz)
+            val = random.randint(1, len_siz)
             elist.append(val)
         return elist
 
@@ -1313,11 +1323,8 @@ def test_series_isin_large_random():
 
     random.seed(5)
     S = pd.Series(get_random_array(1000, 100))
-    values = pd.Series(get_random_array(100,100))
-    check_func(test_impl, (S,values))
-
-
-
+    values = pd.Series(get_random_array(100, 100))
+    check_func(test_impl, (S, values))
 
 
 @pytest.mark.slow
@@ -1587,14 +1594,15 @@ def test_series_value_counts():
 def test_series_np_where_str():
     """Tests np.where() called on Series with string input (#223).
     """
-    def test_impl1(S):
-        return np.where(S=='aa', S, "d")
-    def test_impl2(S, a):
-        return np.where(S=='aa', a, S)
 
-    S = pd.Series(['aa', 'b', 'aa', 'cc', np.nan, 'aa', 'DD'],
-        [5, 1, 2, 0, 3, 4, 9],
-        name="AA"
+    def test_impl1(S):
+        return np.where(S == "aa", S, "d")
+
+    def test_impl2(S, a):
+        return np.where(S == "aa", a, S)
+
+    S = pd.Series(
+        ["aa", "b", "aa", "cc", np.nan, "aa", "DD"], [5, 1, 2, 0, 3, 4, 9], name="AA"
     )
     check_func(test_impl1, (S,))
     check_func(test_impl2, (S, "ddd"))
@@ -1603,14 +1611,15 @@ def test_series_np_where_str():
 def test_series_np_where_num():
     """Tests np.where() called on Series with numeric input.
     """
-    def test_impl1(S):
-        return np.where((S==2.0), S, 11.0)
-    def test_impl2(S, a):
-        return np.where((S==2.0).values, a, S.values)
 
-    S = pd.Series([4.0, 2.0, 1.1, 9.1, 2.0, np.nan, 2.5],
-        [5, 1, 2, 0, 3, 4, 9],
-        name="AA"
+    def test_impl1(S):
+        return np.where((S == 2.0), S, 11.0)
+
+    def test_impl2(S, a):
+        return np.where((S == 2.0).values, a, S.values)
+
+    S = pd.Series(
+        [4.0, 2.0, 1.1, 9.1, 2.0, np.nan, 2.5], [5, 1, 2, 0, 3, 4, 9], name="AA"
     )
     check_func(test_impl1, (S,))
     check_func(test_impl2, (S, 12))
