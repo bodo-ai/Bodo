@@ -71,7 +71,7 @@ from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-from bodo.utils.typing import get_index_data_arr_types
+from bodo.utils.typing import get_index_data_arr_types, is_overload_constant_str
 
 
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
@@ -281,31 +281,15 @@ class DataFramePass:
         nodes = []
         index_var = get_getsetitem_index_var(rhs, self.typemap, nodes)
         index_typ = self.typemap[index_var.name]
+        target = rhs.value
+        target_typ = self.typemap[target.name]
 
         # A = df['column']
-        if self._is_df_var(rhs.value) and isinstance(index_typ, types.StringLiteral):
-            df_var = rhs.value
-            df_typ = self.typemap[df_var.name]
-            index = index_typ.literal_value
-            if index not in df_typ.columns:
-                raise ValueError(
-                    "dataframe {} does not include column {}".format(df_var.name, index)
-                )
-
-            arr = self._get_dataframe_data(df_var, index, nodes)
-            df_index = self._get_dataframe_index(df_var, nodes)
-            name_str = index
-            name_var = ir.Var(lhs.scope, mk_unique_var("S_name"), lhs.loc)
-            self.typemap[name_var.name] = types.StringLiteral(name_str)
-            nodes.append(ir.Assign(ir.Const(name_str, lhs.loc), name_var, lhs.loc))
-            return nodes + compile_func_single_block(
-                lambda A, df_index, name: bodo.hiframes.pd_series_ext.init_series(
-                    A, df_index, name
-                ),
-                (arr, df_index, name_var),
-                lhs,
-                self,
+        if self._is_df_var(target) and is_overload_constant_str(index_typ):
+            impl = bodo.hiframes.pd_dataframe_ext.df_getitem_overload(
+                target_typ, index_typ
             )
+            return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
 
         # A = df[['C1', 'C2']]
         if rhs.op == "static_getitem" and self._is_df_var(rhs.value):
@@ -528,6 +512,28 @@ class DataFramePass:
                 ),
                 [arr, index, name],
                 pre_nodes=nodes,
+            )
+
+        # level selection in multi-level df
+        if (
+            isinstance(rhs_type, DataFrameType)
+            and isinstance(rhs_type.columns[0], tuple)
+            and any(v[0] == rhs.attr for v in rhs_type.columns)
+        ):
+            nodes = []
+            index = self._get_dataframe_index(rhs.value, nodes)
+            new_names = []
+            new_data = []
+            for i, v in enumerate(rhs_type.columns):
+                if v[0] != rhs.attr:
+                    continue
+                # output names are str in 2 level case, not tuple
+                # TODO: test more than 2 levels
+                new_names.append(v[1] if len(v) == 2 else v[1:])
+                new_data.append(self._get_dataframe_data(rhs.value, v, nodes))
+            _init_df = _gen_init_df(new_names, "index")
+            return nodes + compile_func_single_block(
+                _init_df, new_data + [index], assign.target, self
             )
 
         # df.shape

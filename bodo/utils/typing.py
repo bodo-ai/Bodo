@@ -123,9 +123,8 @@ def get_const_str_list(val):
         return [val.literal_value]
     if hasattr(val, "consts"):
         return val.consts
-    if (
-        isinstance(val, types.BaseTuple)
-        and all(isinstance(t, types.StringLiteral) for t in val.types)
+    if isinstance(val, types.BaseTuple) and all(
+        isinstance(t, types.StringLiteral) for t in val.types
     ):
         return [t.literal_value for t in val.types]
 
@@ -348,6 +347,22 @@ class ConstListModel(models.ListModel):
         super(ConstListModel, self).__init__(dmm, l_type)
 
 
+def is_literal_type(t):
+    return isinstance(t, (types.Literal, types.Omitted)) or (
+        isinstance(t, types.Tuple) and all(is_literal_type(v) for v in t.types)
+    )
+
+
+def get_literal_value(t):
+    assert is_literal_type(t)
+    if isinstance(t, types.Literal):
+        return t.literal_value
+    if isinstance(t, types.Omitted):
+        return t.value
+    if isinstance(t, types.Tuple):
+        return tuple(get_literal_value(v) for v in t.types)
+
+
 # add constant metadata to list or tuple type, see untyped_pass.py
 def add_consts_to_type(a, *args):
     return a
@@ -359,8 +374,8 @@ class AddConstsTyper(AbstractTemplate):
         assert not kws
         ret_typ = args[0]
         # TODO: FloatLiteral e.g. test_fillna
-        if all(isinstance(v, types.Literal) for v in args[1:]):
-            consts = tuple(v.literal_value for v in args[1:])
+        if all(is_literal_type(v) for v in args[1:]):
+            consts = tuple(get_literal_value(v) for v in args[1:])
             if isinstance(ret_typ, types.DictType):
                 ret_typ = ConstDictType(ret_typ.key_type, ret_typ.value_type, consts)
             elif isinstance(ret_typ, types.UniTuple):

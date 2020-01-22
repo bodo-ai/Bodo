@@ -193,15 +193,52 @@ def test_unbox_df3():
         return df
 
     df1 = pd.DataFrame(
-            {"A": [3, 5, 1, -1, 4]},
-            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
-        )
+        {"A": [3, 5, 1, -1, 4]},
+        pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+    )
     df2 = pd.DataFrame(
-            {"A": [3, 5, 1, -1, 4]},
-            np.array([1, 8, 4, 0, 2], dtype=np.uint8),
-        )
+        {"A": [3, 5, 1, -1, 4]}, np.array([1, 8, 4, 0, 2], dtype=np.uint8),
+    )
     check_func(impl, (df1,))
     check_func(impl, (df2,))
+
+
+def test_unbox_df_multi():
+    """
+    box/unbox dataframe with MultiIndex columns structure (sometimes created in groupby,
+    ...)
+    """
+    # TODO: add a MultiIndex dataframe to all tests
+    def impl(df):
+        return df
+
+    df = pd.DataFrame(
+        data=np.arange(36).reshape(6, 6),
+        columns=pd.MultiIndex.from_product((["A", "B"], ["CC", "DD", "EE"])),
+    )
+    check_func(impl, (df,))
+
+
+def test_df_multi_get_level():
+    """
+    getitem with string to get a level of dataframe with MultiIndex columns structure
+    """
+    def impl1(df):
+        return df["B"]
+
+    def impl2(df):
+        return df.A
+
+    def impl3(df):
+        return df.A.CC
+
+    df = pd.DataFrame(
+        data=np.arange(36).reshape(6, 6),
+        columns=pd.MultiIndex.from_product((["A", "B"], ["CC", "DD", "EE"])),
+    )
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+    check_func(impl3, (df,))
 
 
 def test_box_df():
@@ -396,6 +433,7 @@ def test_df_abs1():
 
     df = pd.DataFrame({"A": [1, 8, 4, 1, -2]}, range(0, 5, 1))
     check_func(impl, (df,))
+
 
 def test_df_abs2(numeric_df_value):
     # not supported for dt64
@@ -673,9 +711,9 @@ def test_df_idxmax_datetime():
         return df.idxmax()
 
     df = pd.DataFrame(
-            {"A": [3, 5, 1, -1, 2]},
-            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
-        )
+        {"A": [3, 5, 1, -1, 2]},
+        pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+    )
     check_func(impl, (df,), False)
 
 
@@ -936,9 +974,8 @@ def test_sort_values_str():
 
 
 def test_dataframe_binary_add():
-
     def test_impl(df, other):
-        return df+other
+        return df + other
 
     df = pd.DataFrame({"A": [4, 6, 7, 1, 3]}, index=[3, 5, 0, 7, 2])
     # df/df
@@ -968,11 +1005,10 @@ def test_dataframe_binary_op(op):
 
 
 def test_dataframe_binary_iadd():
-
     def test_impl(df, other):
-        df+=other
+        df += other
         return df
-        
+
     df = pd.DataFrame({"A": [4, 6, 7, 1, 3]}, index=[3, 5, 0, 7, 2])
     check_func(test_impl, (df, df), copy_input=True)
     check_func(test_impl, (df, 2), copy_input=True)

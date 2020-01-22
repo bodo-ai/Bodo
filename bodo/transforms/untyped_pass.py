@@ -43,6 +43,7 @@ import bodo.io
 from bodo.io import h5, parquet_pio
 from bodo.io.parquet_pio import ParquetHandler
 from bodo.utils.utils import inline_new_blocks, ReplaceFunc, is_call, is_assign, is_expr
+from bodo.utils.transform import get_const_nested
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -373,7 +374,7 @@ class UntypedPass:
                         items = itertools.chain(*rhs.items)
                     else:
                         items = rhs.items
-                    vals = tuple(find_const(self.func_ir, v) for v in items)
+                    vals = tuple(get_const_nested(self.func_ir, v) for v in items)
                     # a = ['A', 'B'] ->
                     # tmp = ['A', 'B']
                     # a = add_consts_to_type(tmp, 'A', 'B')
@@ -730,6 +731,13 @@ class UntypedPass:
         index_arg = self._get_arg("pd.DataFrame", rhs.args, kws, 1, "index", "")
 
         arg_def = guard(get_definition, self.func_ir, data_arg)
+        # handle converted constant dictionaries
+        if is_call(arg_def) and (
+            guard(find_callname, self.func_ir, arg_def)
+            == ("add_consts_to_type", "bodo.utils.typing")
+        ):
+            arg_def = guard(get_definition, self.func_ir, arg_def.args[0])
+
         if isinstance(arg_def, ir.Expr) and arg_def.op == "build_map":
             # check column names to be string
             col_names = tuple(
@@ -1599,3 +1607,21 @@ def _compile_func_single_block(func, args, ret_var, extra_globals=None):
 
     nodes[-1].target = ret_var
     return nodes
+
+
+# replace Numba's dictionary item checking to allow constant list/dict
+numba_sentry_forbidden_types = numba.types.containers._sentry_forbidden_types
+
+
+def bodo_sentry_forbidden_types(key, value):
+    from bodo.utils.typing import ConstDictType, ConstList
+
+    if isinstance(key, (ConstDictType, ConstList)) or isinstance(
+        value, (ConstDictType, ConstList)
+    ):
+        return
+
+    numba_sentry_forbidden_types(key, value)
+
+
+numba.types.containers._sentry_forbidden_types = bodo_sentry_forbidden_types

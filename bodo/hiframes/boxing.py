@@ -34,8 +34,7 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import typeof_pd_int_dtype
 from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
-    box_categorical_array,
-    unbox_categorical_array,
+    CategoricalArray,
 )
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.hiframes.split_impl import (
@@ -56,8 +55,8 @@ ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
 
 @typeof_impl.register(pd.DataFrame)
 def typeof_pd_dataframe(val, c):
-    col_names = tuple(val.columns.tolist())
-    # TODO: support other types like string and timestamp
+    # convert "columns" from Index/MultiIndex to a tuple
+    col_names = tuple(val.columns.to_list())
     col_types = get_hiframes_dtypes(val)
     index_typ = numba.typeof(val.index)
 
@@ -80,44 +79,42 @@ def unbox_dataframe(typ, val, c):
     columns will be extracted later if necessary.
     """
     n_cols = len(typ.columns)
-    column_strs = [
-        numba.unicode.make_string_from_constant(c.context, c.builder, string_type, a)
-        for a in typ.columns
-    ]
 
-    column_tup = c.context.make_tuple(
-        c.builder, types.UniTuple(string_type, n_cols), column_strs
+    # unbox "columns" as a tuple instead of Index (for simplicity of codegen in
+    # bodo-generated dataframes)
+    columns_obj = c.pyapi.object_getattr_string(val, "columns")
+    columns_list_obj = c.pyapi.call_method(columns_obj, "to_list", ())
+    tuple_class_obj = c.pyapi.unserialize(c.pyapi.serialize_object(tuple))
+    columns_tup_obj = c.pyapi.call_function_objargs(
+        tuple_class_obj, (columns_list_obj,)
     )
+    columns_tup = c.pyapi.to_native_value(
+        numba.typeof(typ.columns), columns_tup_obj
+    ).value
+    c.pyapi.decref(columns_obj)
+    c.pyapi.decref(columns_list_obj)
+    c.pyapi.decref(tuple_class_obj)
+    c.pyapi.decref(columns_tup_obj)
+
+    # set all columns as not unboxed
     zero = c.context.get_constant(types.int8, 0)
     unboxed_tup = c.context.make_tuple(
         c.builder, types.UniTuple(types.int8, n_cols + 1), [zero] * (n_cols + 1)
     )
 
-    if isinstance(typ.index, bodo.hiframes.pd_index_ext.RangeIndexType):
-        # TODO: more Index classes
-        ind_obj = c.pyapi.object_getattr_string(val, "index")
-        index_val = c.pyapi.to_native_value(typ.index, ind_obj).value
-        c.pyapi.decref(ind_obj)
-    else:
-        # treating numerical index like Numpy arrays for now
-        # TODO: proper index types
-        ind_obj = c.pyapi.object_getattr_string(val, "index")
-        index_val = c.pyapi.to_native_value(typ.index, ind_obj).value
-        c.pyapi.decref(ind_obj)
+    # unbox index
+    ind_obj = c.pyapi.object_getattr_string(val, "index")
+    index_val = c.pyapi.to_native_value(typ.index, ind_obj).value
+    c.pyapi.decref(ind_obj)
 
+    # set data arrays as null due to lazy unboxing
     # TODO: does this work for array types?
     data_nulls = [c.context.get_constant_null(t) for t in typ.data]
     data_tup = c.context.make_tuple(c.builder, types.Tuple(typ.data), data_nulls)
 
     dataframe_val = construct_dataframe(
-        c.context, c.builder, typ, data_tup, index_val, column_tup, unboxed_tup, val
+        c.context, c.builder, typ, data_tup, index_val, columns_tup, unboxed_tup, val
     )
-
-    # increase refcount of stored values
-    if c.context.enable_nrt:
-        # TODO: other objects?
-        for var in column_strs:
-            c.context.nrt.incref(c.builder, string_type, var)
 
     return NativeValue(dataframe_val)
 
@@ -147,8 +144,8 @@ def _infer_series_dtype(S):
             # assume all NA object column is string
             warnings.warn(
                 BodoWarning(
-                "Empty object array passed to Bodo, which causes ambiguity in typing. "
-                "This can cause errors in parallel execution."
+                    "Empty object array passed to Bodo, which causes ambiguity in typing. "
+                    "This can cause errors in parallel execution."
                 )
             )
             return string_type
@@ -211,11 +208,10 @@ def box_dataframe(typ, val, c):
     """
     context = c.context
     builder = c.builder
+    pyapi = c.pyapi
 
     n_cols = len(typ.columns)
-    col_names = typ.columns
     arr_typs = typ.data
-    dtypes = [a.dtype for a in arr_typs]  # TODO: check Categorical
 
     dataframe_payload = bodo.hiframes.pd_dataframe_ext.get_dataframe_payload(
         c.context, c.builder, typ, val
@@ -226,18 +222,18 @@ def box_dataframe(typ, val, c):
     # df unboxed from Python
     has_parent = cgutils.is_not_null(builder, dataframe.parent)
 
-    pyapi = c.pyapi
-    # gil_state = pyapi.gil_ensure()  # acquire GIL
-
     mod_name = context.insert_const_string(c.builder.module, "pandas")
     class_obj = pyapi.import_module_noblock(mod_name)
     df_obj = pyapi.call_method(class_obj, "DataFrame", ())
+    columns_obj = pyapi.from_native_value(
+        numba.typeof(typ.columns), dataframe.columns, c.env_manager
+    )
 
-    for i, cname, arr, arr_typ in zip(range(n_cols), col_names, col_arrs, arr_typs):
-        # df['cname'] = boxed_arr
+    for i, arr, arr_typ in zip(range(n_cols), col_arrs, arr_typs):
+        # df[i] = boxed_arr
         # TODO: datetime.date, DatetimeIndex?
-        name_str = context.insert_const_string(c.builder.module, cname)
-        cname_obj = pyapi.string_from_string(name_str)
+        c_ind_obj = pyapi.long_from_longlong(context.get_constant(types.int64, i))
+        cname_obj = pyapi.tuple_getitem(columns_obj, i)
         # if column not unboxed, just used the boxed version from parent
         unboxed_val = builder.extract_value(dataframe_payload.unboxed, i)
         not_unboxed = builder.icmp(
@@ -250,9 +246,24 @@ def box_dataframe(typ, val, c):
                 ser_obj = pyapi.object_getitem(dataframe.parent, cname_obj)
                 # need to get underlying array since Series has index but
                 # df_obj doesn't have index yet, leading to index mismatches
-                arr_obj = pyapi.object_getattr_string(ser_obj, "values")
+                arr_obj_orig = pyapi.object_getattr_string(ser_obj, "values")
+                if isinstance(arr_typ, types.Array) and not isinstance(
+                    arr_typ, CategoricalArray
+                ):
+                    # make contiguous by calling np.ascontiguousarray()
+                    np_mod_name = c.context.insert_const_string(
+                        c.builder.module, "numpy"
+                    )
+                    np_class_obj = c.pyapi.import_module_noblock(np_mod_name)
+                    arr_obj = c.pyapi.call_method(
+                        np_class_obj, "ascontiguousarray", (arr_obj_orig,)
+                    )
+                    c.pyapi.decref(arr_obj_orig)
+                    c.pyapi.decref(np_class_obj)
+                else:
+                    arr_obj = arr_obj_orig
                 pyapi.decref(ser_obj)
-                pyapi.object_setitem(df_obj, cname_obj, arr_obj)
+                pyapi.object_setitem(df_obj, c_ind_obj, arr_obj)
 
             with orelse:
                 # NOTE: adding extra incref() since boxing could be called twice on
@@ -261,19 +272,23 @@ def box_dataframe(typ, val, c):
                 # TODO: Find the right solution to refcounting in @box functions
                 context.nrt.incref(builder, arr_typ, arr)
                 arr_obj = pyapi.from_native_value(arr_typ, arr, c.env_manager)
-                pyapi.object_setitem(df_obj, cname_obj, arr_obj)
+                pyapi.object_setitem(df_obj, c_ind_obj, arr_obj)
 
         # pyapi.decref(arr_obj)
-        pyapi.decref(cname_obj)
+        # pyapi.decref(cname_obj)
+        pyapi.decref(c_ind_obj)
 
-    # set df.index if necessary
-    if typ.index != types.none:
-        # NOTE: see comment on incref above
-        context.nrt.incref(builder, typ.index, dataframe_payload.index)
-        arr_obj = c.pyapi.from_native_value(
-            typ.index, dataframe_payload.index, c.env_manager
-        )
-        pyapi.object_setattr_string(df_obj, "index", arr_obj)
+    # set df.columns
+    pyapi.object_setattr_string(df_obj, "columns", columns_obj)
+    pyapi.decref(columns_obj)
+
+    # set df.index
+    # NOTE: see comment on incref above
+    context.nrt.incref(builder, typ.index, dataframe_payload.index)
+    arr_obj = c.pyapi.from_native_value(
+        typ.index, dataframe_payload.index, c.env_manager
+    )
+    pyapi.object_setattr_string(df_obj, "index", arr_obj)
 
     pyapi.decref(class_obj)
     return df_obj
@@ -284,26 +299,50 @@ def unbox_dataframe_column(typingctx, df, i=None):
     def codegen(context, builder, sig, args):
         pyapi = context.get_python_api(builder)
         c = numba.pythonapi._UnboxContext(context, builder, pyapi)
+        gil_state = pyapi.gil_ensure()  # acquire GIL
 
         df_typ = sig.args[0]
         col_ind = sig.args[1].literal_value
         data_typ = df_typ.data[col_ind]
-        col_name = df_typ.columns[col_ind]
-        col_name_str = context.insert_const_string(c.builder.module, col_name)
-        col_name_obj = pyapi.string_from_string(col_name_str)
+        columns_typ = numba.typeof(df_typ.columns)
         # TODO: refcounts?
 
         dataframe = cgutils.create_struct_proxy(sig.args[0])(
             context, builder, value=args[0]
         )
+        columns_obj = pyapi.from_native_value(
+            columns_typ, dataframe.columns, context.get_env_manager(builder)
+        )
+        # XXX: this incref seems necessary, which is probably due to Numba's limitations
+        # in boxing of tuples
+        # TODO: fix boxing refcount
+        context.nrt.incref(builder, columns_typ, dataframe.columns)
+        col_name_obj = pyapi.tuple_getitem(columns_obj, col_ind)
         series_obj = c.pyapi.object_getitem(dataframe.parent, col_name_obj)
-        arr_obj = c.pyapi.object_getattr_string(series_obj, "values")
+        arr_obj_orig = c.pyapi.object_getattr_string(series_obj, "values")
+
+        if isinstance(data_typ, types.Array) and not isinstance(
+            data_typ, CategoricalArray
+        ):
+            # call np.ascontiguousarray() on array since it may not be contiguous
+            # the typing infrastructure assumes C-contiguous arrays
+            # see test_df_multi_get_level() for an example of non-contiguous input
+            np_mod_name = c.context.insert_const_string(c.builder.module, "numpy")
+            np_class_obj = c.pyapi.import_module_noblock(np_mod_name)
+            arr_obj = c.pyapi.call_method(
+                np_class_obj, "ascontiguousarray", (arr_obj_orig,)
+            )
+            c.pyapi.decref(arr_obj_orig)
+            c.pyapi.decref(np_class_obj)
+        else:
+            arr_obj = arr_obj_orig
 
         # TODO: support column of tuples?
         native_val = _unbox_series_data(data_typ.dtype, data_typ, arr_obj, c)
 
         c.pyapi.decref(series_obj)
         c.pyapi.decref(arr_obj)
+        pyapi.gil_release(gil_state)  # release GIL
 
         # assign array and set unboxed flag
         dataframe_payload = bodo.hiframes.pd_dataframe_ext.get_dataframe_payload(
@@ -328,7 +367,20 @@ def unbox_dataframe_column(typingctx, df, i=None):
 
 @unbox(SeriesType)
 def unbox_series(typ, val, c):
-    arr_obj = c.pyapi.object_getattr_string(val, "values")
+    arr_obj_orig = c.pyapi.object_getattr_string(val, "values")
+
+    if isinstance(typ.data, types.Array) and not isinstance(typ.data, CategoricalArray):
+        # make contiguous by calling np.ascontiguousarray()
+        np_mod_name = c.context.insert_const_string(c.builder.module, "numpy")
+        np_class_obj = c.pyapi.import_module_noblock(np_mod_name)
+        arr_obj = c.pyapi.call_method(
+            np_class_obj, "ascontiguousarray", (arr_obj_orig,)
+        )
+        c.pyapi.decref(arr_obj_orig)
+        c.pyapi.decref(np_class_obj)
+    else:
+        arr_obj = arr_obj_orig
+
     data_val = _unbox_series_data(typ.dtype, typ.data, arr_obj, c).value
 
     index_obj = c.pyapi.object_getattr_string(val, "index")

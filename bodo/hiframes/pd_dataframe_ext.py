@@ -72,7 +72,8 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
     def __init__(self, data=None, index=None, columns=None, has_parent=False):
         # data is tuple of Array types (not Series)
         # index is Index obj (not Array type)
-        # columns is tuple of strings
+        # columns is a tuple of column names (strings, ints, or tuples in case of
+        # MultiIndex)
 
         self.data = data
         if index is None:
@@ -176,12 +177,11 @@ class DataFramePayloadModel(models.StructModel):
 @register_model(DataFrameType)
 class DataFrameModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        n_cols = len(fe_type.columns)
         payload_type = DataFramePayloadType(fe_type)
         # payload_type = types.Opaque('Opaque.DataFrame')
         # TODO: does meminfo decref content when object is deallocated?
         members = [
-            ("columns", types.UniTuple(string_type, n_cols)),
+            ("columns", numba.typeof(fe_type.columns)),
             ("meminfo", types.MemInfoPointer(payload_type)),
             # for boxed DataFrames, enables updating original DataFrame object
             ("parent", types.pyobject),
@@ -250,10 +250,24 @@ class DataFrameAttribute(AttributeTemplate):
         return signature(SeriesType(f_return_type, index=df.index), *args)
 
     def generic_resolve(self, df, attr):
+        # column selection
         if attr in df.columns:
             ind = df.columns.index(attr)
             arr_typ = df.data[ind]
             return SeriesType(arr_typ.dtype, arr_typ, df.index, string_type)
+
+        # level selection in multi-level df
+        if isinstance(df.columns[0], tuple):
+            new_names = []
+            new_data = []
+            for i, v in enumerate(df.columns):
+                if v[0] != attr:
+                    continue
+                # output names are str in 2 level case, not tuple
+                # TODO: test more than 2 levels
+                new_names.append(v[1] if len(v) == 2 else v[1:])
+                new_data.append(df.data[i])
+            return DataFrameType(tuple(new_data), df.index, tuple(new_names))
 
 
 def construct_dataframe(
@@ -308,29 +322,26 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
         df_type = signature.return_type
         data_tup = args[0]
         index_val = args[1]
-        column_strs = [
-            numba.unicode.make_string_from_constant(context, builder, string_type, c)
-            for c in column_names
-        ]
+        columns_type = numba.typeof(column_names)
 
-        column_tup = context.make_tuple(
-            builder, types.UniTuple(string_type, n_cols), column_strs
-        )
+        # column names
+        columns_tup = context.get_constant_generic(builder, columns_type, column_names)
+
+        # unboxed flags
         zero = context.get_constant(types.int8, 0)
         unboxed_tup = context.make_tuple(
             builder, types.UniTuple(types.int8, n_cols + 1), [zero] * (n_cols + 1)
         )
 
         dataframe_val = construct_dataframe(
-            context, builder, df_type, data_tup, index_val, column_tup, unboxed_tup
+            context, builder, df_type, data_tup, index_val, columns_tup, unboxed_tup
         )
 
         # increase refcount of stored values
         if context.enable_nrt:
             context.nrt.incref(builder, data_tup_typ, data_tup)
             context.nrt.incref(builder, index_typ, index_val)
-            for var in column_strs:
-                context.nrt.incref(builder, string_type, var)
+            context.nrt.incref(builder, columns_type, columns_tup)
 
         return dataframe_val
 
@@ -724,7 +735,6 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     )
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
-    # print(func_text)
     _init_df = loc_vars["_init_df"]
     return _init_df
 
@@ -848,12 +858,41 @@ def df_len_overload(df):
     return lambda df: len(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 0))
 
 
-@overload(operator.getitem)  # TODO: avoid lowering?
+@overload(operator.getitem)
 def df_getitem_overload(df, ind):
-    if isinstance(df, DataFrameType) and isinstance(ind, types.StringLiteral):
-        index = df.columns.index(ind.literal_value)
+    if isinstance(df, DataFrameType) and is_overload_constant_str(ind):
+        ind_str = get_overload_const_str(ind)
+        # df with multi-level column names returns a lower level dataframe
+        if isinstance(df.columns[0], tuple):
+            new_names = []
+            new_data = []
+            for i, v in enumerate(df.columns):
+                if v[0] != ind_str:
+                    continue
+                # output names are str in 2 level case, not tuple
+                # TODO: test more than 2 levels
+                new_names.append(v[1] if len(v) == 2 else v[1:])
+                new_data.append(
+                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(
+                        i
+                    )
+                )
+            func_text = "def impl(df, ind):\n"
+            index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
+            return bodo.hiframes.dataframe_impl._gen_init_df(
+                func_text, new_names, ", ".join(new_data), index
+            )
+
+        # regular single level case
+        if ind_str not in df.columns:
+            raise BodoError(
+                "dataframe {} does not include column {}".format(df, ind_str)
+            )
+        col_no = df.columns.index(ind_str)
         return lambda df, ind: bodo.hiframes.pd_series_ext.init_series(
-            get_dataframe_data(df, index), _get_dataframe_index(df), df._columns[index]
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_no),
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df),
+            ind_str,
         )
 
 
