@@ -607,9 +607,18 @@ def test_series_getitem_array_bool(series_val):
     def test_impl(S):
         return S[[True, True, False, True, False]]
 
+    def test_impl2(S, cond):
+        # using .values to test boolean_array
+        return S[cond.values]
+
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
         bodo_func(series_val), test_impl(series_val), check_dtype=False
+    )
+    cond = pd.Series([True, True, False, True, False])
+    bodo_func = bodo.jit(test_impl2)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val, cond), test_impl2(series_val, cond), check_dtype=False
     )
 
 

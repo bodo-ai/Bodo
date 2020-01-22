@@ -2557,13 +2557,6 @@ class SeriesPass:
             self.calltypes[call] = new_sig
         return
 
-    def is_bool_arr(self, varname):
-        typ = self.typemap[varname]
-        return (
-            isinstance(if_series_to_array_type(typ), types.Array)
-            and typ.dtype == types.bool_
-        )
-
     def _is_const_none(self, var):
         var_def = guard(get_definition, self.func_ir, var)
         return isinstance(var_def, ir.Const) and var_def.value is None

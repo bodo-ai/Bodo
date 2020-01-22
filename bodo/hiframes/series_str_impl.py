@@ -34,7 +34,6 @@ from bodo.hiframes.pd_timestamp_ext import (
 )
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
 from bodo.utils.typing import (
-    is_list_like_index_type,
     is_overload_false,
     is_overload_true,
 )
