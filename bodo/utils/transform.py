@@ -151,5 +151,5 @@ def get_const_nested(func_ir, v):
         "build_set",
         "build_tuple",
     ):
-        return tuple(get_const_nested(a) for a in v_def.items)
+        return tuple(get_const_nested(func_ir, a) for a in v_def.items)
     return find_const(func_ir, v)
