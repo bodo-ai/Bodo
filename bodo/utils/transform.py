@@ -16,11 +16,13 @@ from numba.ir_utils import (
     GuardException,
     get_definition,
     require,
+    find_callname,
 )
 import bodo
 from bodo.utils.utils import is_assign, is_expr
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import BodoError
+from bodo.utils.utils import is_call
 
 
 def compile_func_single_block(func, args, ret_var, typing_info, extra_globals=None):
@@ -132,3 +134,22 @@ def find_str_const(func_ir, var, arg_types=None, typemap=None):
     arg1 = find_str_const(func_ir, var_def.lhs, arg_types, typemap)
     arg2 = find_str_const(func_ir, var_def.rhs, arg_types, typemap)
     return arg1 + arg2
+
+
+def get_const_nested(func_ir, v):
+    """get constant value for v, even if v is a constant list or set.
+    Does not capture GuardException.
+    """
+    v_def = get_definition(func_ir, v)
+    if is_call(v_def) and find_callname(func_ir, v_def) == (
+        "add_consts_to_type",
+        "bodo.utils.typing",
+    ):
+        v_def = get_definition(func_ir, v_def.args[0])
+    if isinstance(v_def, ir.Expr) and v_def.op in (
+        "build_list",
+        "build_set",
+        "build_tuple",
+    ):
+        return tuple(get_const_nested(a) for a in v_def.items)
+    return find_const(func_ir, v)

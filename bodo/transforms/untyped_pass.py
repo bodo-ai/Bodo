@@ -43,6 +43,7 @@ import bodo.io
 from bodo.io import h5, parquet_pio
 from bodo.io.parquet_pio import ParquetHandler
 from bodo.utils.utils import inline_new_blocks, ReplaceFunc, is_call, is_assign, is_expr
+from bodo.utils.transform import get_const_nested
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -373,7 +374,7 @@ class UntypedPass:
                         items = itertools.chain(*rhs.items)
                     else:
                         items = rhs.items
-                    vals = tuple(self._get_const_nested(v) for v in items)
+                    vals = tuple(get_const_nested(self.func_ir, v) for v in items)
                     # a = ['A', 'B'] ->
                     # tmp = ['A', 'B']
                     # a = add_consts_to_type(tmp, 'A', 'B')
@@ -1577,24 +1578,6 @@ class UntypedPass:
             nodes[-1].target = df_var
 
         return nodes
-
-    def _get_const_nested(self, v):
-        """get constant value for v, even if v is a constant list or set.
-        Does not capture GuardException.
-        """
-        v_def = get_definition(self.func_ir, v)
-        if is_call(v_def) and find_callname(self.func_ir, v_def) == (
-            "add_consts_to_type",
-            "bodo.utils.typing",
-        ):
-            v_def = get_definition(self.func_ir, v_def.args[0])
-        if isinstance(v_def, ir.Expr) and v_def.op in (
-            "build_list",
-            "build_set",
-            "build_tuple",
-        ):
-            return tuple(self._get_const_nested(a) for a in v_def.items)
-        return find_const(self.func_ir, v)
 
     def _update_definitions(self, node_list):
         loc = ir.Loc("", 0)
