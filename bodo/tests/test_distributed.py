@@ -16,6 +16,7 @@ from bodo.tests.utils import (
     count_array_OneD_Vars,
     _get_dist_arg,
     _test_equal,
+    check_func,
 )
 
 
@@ -606,3 +607,15 @@ def test_diagnostics_not_compiled_error():
 
     with pytest.raises(BodoError, match="Distributed diagnostics not available for"):
         bodo.jit(test_impl).distributed_diagnostics()
+
+
+def test_sort_output_1D_Var_size():
+    """Test using size variable of an output 1D_Var array of a Sort node
+    """
+    # RangeIndex of output Series needs size of Sort output array
+    def impl(S):
+        res = pd.Series(S.sort_values().values)
+        return res
+
+    S = pd.Series([3, 4, 1, 2, 5])
+    check_func(impl, (S,))

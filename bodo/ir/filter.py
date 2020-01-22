@@ -9,6 +9,7 @@ from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.utils import debug_prints
 from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.split_impl import string_array_split_view_type
 
 
@@ -44,7 +45,9 @@ def filter_array_analysis(filter_node, equiv_set, typemap, array_analysis):
     all_shapes = []
     index_typ = typemap[filter_node.bool_arr.name]
     # add shape for bool array indices
-    if isinstance(index_typ, types.Array) and index_typ.dtype == types.bool_:
+    if (
+        isinstance(index_typ, types.Array) and index_typ.dtype == types.bool_
+    ) or index_typ == boolean_array:
         col_shape = equiv_set.get_shape(filter_node.bool_arr)
         all_shapes.append(col_shape[0])
     for col_var in filter_node.df_in_vars.values():
