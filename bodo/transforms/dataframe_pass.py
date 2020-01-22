@@ -428,7 +428,7 @@ class DataFramePass:
                 lambda s: bodo.hiframes.pd_series_ext.get_series_data(s),
                 (bool_arr_var,),
                 None,
-                self
+                self,
             )
             bool_arr_var = nodes[-1].target
         df_typ = self.typemap[df_var.name]
@@ -2030,11 +2030,11 @@ class DataFramePass:
             if isinstance(agg_func, ir.Expr) and agg_func.op == "build_map":
                 # multi-function const dict case:
                 # in this case, the input columns are the ones in the dict
-                in_cols = [guard(find_const, self.func_ir, v[0]) for v in agg_func.items]
+                in_cols = [
+                    guard(find_const, self.func_ir, v[0]) for v in agg_func.items
+                ]
 
-        in_vars = {
-            c: self._get_dataframe_data(df_var, c, nodes) for c in in_cols
-        }
+        in_vars = {c: self._get_dataframe_data(df_var, c, nodes) for c in in_cols}
 
         in_key_arrs = [self._get_dataframe_data(df_var, c, nodes) for c in grp_typ.keys]
 
@@ -2061,7 +2061,6 @@ class DataFramePass:
             df_col_map[c] = var
 
         agg_func = get_agg_func(self.func_ir, func_name, rhs)
-
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name,
             df_var.name,

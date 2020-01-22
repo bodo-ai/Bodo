@@ -400,3 +400,66 @@ def test_groupby_cumsum_col_type():
         BodoError, match="only supports columns of types integer and float"
     ):
         bodo.jit(impl)(df)
+
+
+def test_groupby_median_type_check():
+    """
+    Test Groupby.median() testing the input type argument
+    """
+
+    def impl1(df):
+        return df.groupby("A")["B"].median()
+
+    def impl2(df):
+        return df.groupby("A")["B"].median()
+
+    df1 = pd.DataFrame({"A": [1, 1, 1, 1], "B": ["a", "b", "c", "d"]})
+    df2 = pd.DataFrame({"A": [1, 1, 1, 1], "B": [True, False, True, False]})
+    with pytest.raises(
+        BodoError, match="For median, only column of integer or float type are allowed"
+    ):
+        bodo.jit(impl1)(df1)
+    with pytest.raises(
+        BodoError, match="For median, only column of integer or float type are allowed"
+    ):
+        bodo.jit(impl2)(df2)
+
+
+def test_groupby_median_argument_check():
+    """
+    Test Groupby.median() testing for skipna argument
+    """
+
+    def impl1(df):
+        return df.groupby("A")["B"].median(skipna=0)
+
+    def impl2(df):
+        return df.groupby("A")["B"].median(wrongarg=True)
+
+    df = pd.DataFrame({"A": [1, 1, 1, 1], "B": [1, 2, 3, 4]})
+    with pytest.raises(
+        BodoError, match="argument of skipna to median should be a boolean"
+    ):
+        bodo.jit(impl1)(df)
+    with pytest.raises(BodoError, match="argument to median can only be skipna"):
+        bodo.jit(impl2)(df)
+
+
+def test_groupby_nunique_argument_check():
+    """
+    Test Groupby.nunique() testing for dropna argument
+    """
+
+    def impl1(df):
+        return df.groupby("A")["B"].nunique(dropna=0)
+
+    def impl2(df):
+        return df.groupby("A")["B"].nunique(wrongarg=True)
+
+    df = pd.DataFrame({"A": [1, 1, 1, 1], "B": [1, 2, 3, 4]})
+    with pytest.raises(
+        BodoError, match="argument of dropna to nunique should be a boolean"
+    ):
+        bodo.jit(impl1)(df)
+    with pytest.raises(BodoError, match="argument to nunique can only be dropna"):
+        bodo.jit(impl2)(df)

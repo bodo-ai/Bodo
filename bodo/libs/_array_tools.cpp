@@ -14,6 +14,7 @@
 #include <cstring>
 #include <iostream>
 #include <numeric>
+#include <algorithm>
 #include <string>
 #include "_bodo_common.h"
 #include "_distributed.h"
@@ -817,13 +818,54 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
  * @return the vector of characters on output
  */
 template <typename T>
-std::vector<char> GetVector(T const& val) {
+std::vector<char> GetCharVector(T const& val) {
     const T* valptr = &val;
     const char* charptr = (char*)valptr;
     std::vector<char> V(sizeof(T));
     for (size_t u = 0; u < sizeof(T); u++) V[u] = charptr[u];
     return V;
 }
+
+
+
+
+/** Getting the expression of a string of characters as a T value
+ *
+ * The template paramter is T.
+ * @param dtype the bodo data type.
+ * @param ptr the value of the pointer passed in argument
+ * @return the value as a T value.
+ */
+template<typename T>
+T GetTentry(char* ptr)
+{
+  T* ptr_T = (T*)ptr;
+  return *ptr_T;
+}
+
+/** Getting the expression of a string of characters as a double value
+ *
+ * @param dtype the bodo data type.
+ * @param ptr the value of the pointer passed in argument
+ * @return the value as a double.
+ */
+double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr)
+{
+    if (dtype == Bodo_CTypes::INT8) return GetTentry<int8_t>(ptr);
+    if (dtype == Bodo_CTypes::UINT8) return GetTentry<uint8_t>(ptr);
+    if (dtype == Bodo_CTypes::INT16) return GetTentry<int16_t>(ptr);
+    if (dtype == Bodo_CTypes::UINT16) return GetTentry<uint16_t>(ptr);
+    if (dtype == Bodo_CTypes::INT32) return GetTentry<int32_t>(ptr);
+    if (dtype == Bodo_CTypes::UINT32) return GetTentry<uint32_t>(ptr);
+    if (dtype == Bodo_CTypes::INT64) return GetTentry<int64_t>(ptr);
+    if (dtype == Bodo_CTypes::UINT64) return GetTentry<uint64_t>(ptr);
+    if (dtype == Bodo_CTypes::FLOAT32) return GetTentry<float>(ptr);
+    if (dtype == Bodo_CTypes::FLOAT64) return GetTentry<double>(ptr);
+    return 0;
+}
+
+
+
 
 /* The NaN entry used in the case a normal value is not available.
  *
@@ -837,17 +879,17 @@ std::vector<char> GetVector(T const& val) {
  * @return the list of characters in output.
  */
 std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
-    if (dtype == Bodo_CTypes::_BOOL) return GetVector<bool>(false);
-    if (dtype == Bodo_CTypes::INT8) return GetVector<int8_t>(-1);
-    if (dtype == Bodo_CTypes::UINT8) return GetVector<uint8_t>(0);
-    if (dtype == Bodo_CTypes::INT16) return GetVector<int16_t>(-1);
-    if (dtype == Bodo_CTypes::UINT16) return GetVector<uint16_t>(0);
-    if (dtype == Bodo_CTypes::INT32) return GetVector<int32_t>(-1);
-    if (dtype == Bodo_CTypes::UINT32) return GetVector<uint32_t>(0);
-    if (dtype == Bodo_CTypes::INT64) return GetVector<int64_t>(-1);
-    if (dtype == Bodo_CTypes::UINT64) return GetVector<uint64_t>(0);
-    if (dtype == Bodo_CTypes::FLOAT32) return GetVector<float>(std::nanf("1"));
-    if (dtype == Bodo_CTypes::FLOAT64) return GetVector<double>(std::nan("1"));
+    if (dtype == Bodo_CTypes::_BOOL) return GetCharVector<bool>(false);
+    if (dtype == Bodo_CTypes::INT8) return GetCharVector<int8_t>(-1);
+    if (dtype == Bodo_CTypes::UINT8) return GetCharVector<uint8_t>(0);
+    if (dtype == Bodo_CTypes::INT16) return GetCharVector<int16_t>(-1);
+    if (dtype == Bodo_CTypes::UINT16) return GetCharVector<uint16_t>(0);
+    if (dtype == Bodo_CTypes::INT32) return GetCharVector<int32_t>(-1);
+    if (dtype == Bodo_CTypes::UINT32) return GetCharVector<uint32_t>(0);
+    if (dtype == Bodo_CTypes::INT64) return GetCharVector<int64_t>(-1);
+    if (dtype == Bodo_CTypes::UINT64) return GetCharVector<uint64_t>(0);
+    if (dtype == Bodo_CTypes::FLOAT32) return GetCharVector<float>(std::nanf("1"));
+    if (dtype == Bodo_CTypes::FLOAT64) return GetCharVector<double>(std::nan("1"));
     return {};
 }
 
@@ -1364,7 +1406,7 @@ inline typename std::enable_if<std::is_floating_point<T>::value,int>::type Numer
  * @param ptr1: char* pointer to the first value
  * @param ptr2: char* pointer to the second value
  * @param na_position: true for NaN being last, false for NaN being first
- * @return 1 if *ptr1 < *ptr2
+ * @return 1 if *ptr1 < *ptr2, 0 if equal and -1 if >
  */
 int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
                       char* ptr2, bool const& na_position) {
@@ -1834,6 +1876,7 @@ struct Bodo_FTypes {
         sum,
         count,
         nunique,
+        median,
         mean,
         min,
         max,
@@ -3348,6 +3391,88 @@ table_info* groupby_combine(table_info& in_table, int64_t num_keys,
 
 
 /**
+ * The median_computation function. It uses the symbolic information to compute
+ * the median results.
+ *
+ * @param The column on which we do the computation
+ * @param The array containing information on how the rows are organized
+ * @param skipna: Whether to skip NaN values or not.
+ */
+array_info* median_computation(array_info* arr,
+                               grouping_info const& grp_inf, bool const& skipna) {
+    size_t num_group = grp_inf.group_to_first_row.size();
+    std::function<bool(size_t)> isnan_entry;
+    size_t siztype = numpy_item_size[arr->dtype];
+    if (arr->arr_type == bodo_array_type::STRING) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "There is no median for the string case");
+    }
+    if (arr->arr_type == bodo_array_type::NUMPY) {
+        isnan_entry=[=](size_t pos) -> bool {
+          if (arr->dtype == Bodo_CTypes::FLOAT32) {
+            return isnan(arr->at<float>(pos));
+          }
+          if (arr->dtype == Bodo_CTypes::FLOAT64) {
+            return isnan(arr->at<double>(pos));
+          }
+          return false;
+        };
+    }
+    if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+        isnan_entry = [=](size_t pos) -> bool {
+          return !GetBit(null_bitmask,pos);
+        };
+    }
+    array_info* out_arr = alloc_array(num_group, 1, bodo_array_type::NUMPY,
+                                      Bodo_CTypes::FLOAT64, 0);
+    for (size_t igrp=0; igrp<num_group; igrp++) {
+        int64_t i = grp_inf.group_to_first_row[igrp];
+        std::vector<double> ListValue;
+        bool HasNaN = false;
+        while (true) {
+          if (!isnan_entry(i)) {
+            char* ptr = arr->data1 + i * siztype;
+            double eVal = GetDoubleEntry(arr->dtype, ptr);
+            ListValue.push_back(eVal);
+          }
+          else {
+            if (!skipna) {
+              HasNaN = true;
+              break;
+            }
+          }
+          i = grp_inf.next_row_in_group[i];
+          if (i == -1) break;
+        }
+        auto GetKthValue=[&](size_t const& pos) -> double {
+          std::nth_element(ListValue.begin(), ListValue.begin() + pos, ListValue.end());
+          return ListValue[pos];
+        };
+        double valReturn;
+        if (HasNaN) {
+          valReturn = std::nan("1");
+        }
+        else {
+          size_t len = ListValue.size();
+          int res = len % 2;
+          if (res == 0) {
+            size_t kMid1 = len / 2;
+            size_t kMid2 = kMid1 - 1;
+            valReturn = (GetKthValue(kMid1) + GetKthValue(kMid2)) / 2;
+          }
+          else {
+            size_t kMid = len / 2;
+            valReturn = GetKthValue(kMid);
+          }
+        }
+        out_arr->at<double>(igrp) = valReturn;
+    }
+    return out_arr;
+}
+
+
+/**
  * The nunique_computation function. It uses the symbolic information to compute
  * the nunique results.
  *
@@ -3492,19 +3617,21 @@ array_info* nunique_computation(array_info* arr, grouping_info const& grp_inf,
 
 
 /**
- * Groups the rows in a table based on key, applies the nunique operation to the rows in
- * each group, writes the result to a new output table containing one row per
- * group.
+ * Groups the rows in a table based on key, applies the nunique or median operation
+ * to the rows in each group, writes the result to a new output table containing
+ * one row per group.
  *
- * @param input table
- * @param number of key columns in the table
- * @param number of data columns
- * @param whether to drop NaN values or not from the computation
+ * @param   in_table: input table
+ * @param   num_keys: number of key columns in the table
+ * @param      ftype: the type of operation (nunique or median)
+ * @param skipdropna: whether to drop NaN values or not from the computation
+ *                    correspond to dropna for nunique and skipna for median.
+ * @return the returning table.
  */
-table_info* groupby_and_nunique(table_info* in_table, int64_t num_keys,
-                                int64_t num_data_cols, bool const& dropna) {
-#undef DEBUG_NUNIQUE
-#ifdef DEBUG_NUNIQUE
+table_info* groupby_and_sets(table_info* in_table, int64_t num_keys,
+                             int32_t ftype, bool const& skipdropna) {
+#undef DEBUG_SETS
+#ifdef DEBUG_SETS
     std::cout << "IN_TABLE:\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     DEBUG_PrintRefct(std::cout, in_table->columns);
@@ -3525,10 +3652,14 @@ table_info* groupby_and_nunique(table_info* in_table, int64_t num_keys,
             RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
     }
     for (int64_t i_col = num_keys; i_col < ncols; i_col++) {
+      if (ftype == Bodo_FTypes::nunique)
         out_arrs.push_back(
-            nunique_computation(in_table->columns[i_col], grp_inf, dropna));
+            nunique_computation(in_table->columns[i_col], grp_inf, skipdropna));
+      if (ftype == Bodo_FTypes::median)
+        out_arrs.push_back(
+            median_computation(in_table->columns[i_col], grp_inf, skipdropna));
     }
-#ifdef DEBUG_NUNIQUE
+#ifdef DEBUG_SETS
     std::cout << "OUT_TABLE:\n";
     DEBUG_PrintSetOfColumn(std::cout, out_arrs);
     DEBUG_PrintRefct(std::cout, out_arrs);
@@ -3671,6 +3802,10 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values, 
 
 
 
+
+
+
+
 /**
  * Applies an evaluation function to each row in input table, writing the
  * final result to output data columns. Removes redvar columns when done.
@@ -3732,20 +3867,30 @@ void groupby_eval(table_info& in_table, int64_t num_keys, int64_t n_data_cols,
 std::vector<Bodo_FTypes::FTypeEnum> combine_funcs(Bodo_FTypes::num_funcs);
 
 
-table_info* groupby_and_aggregate_nunique(table_info* in_table, int64_t num_keys,
-                                          bool is_parallel) {
+
+/**
+ * Groups the rows in a table based on key, applies the nunique or median operation
+ * to the rows in each group, writes the result to a new output table containing
+ * one row per group. It is adequate for parallel computations.
+ *
+ * @param    in_table: input table
+ * @param    num_keys: number of key columns in the table
+ * @param       ftype: the type of operation (nunique or median)
+ * @param  skipdropna: whether to drop NaN values or not from the computation
+ *                     correspond to dropna for nunique and skipna for median.
+ * @param is_parallel: whether to do computation in parallel by applying shuffling.
+ * @return the returning table.
+ */
+table_info* groupby_and_aggregate_sets(table_info* in_table, int64_t num_keys,
+                                       int32_t ftype, bool skipdropna, bool is_parallel) {
     // perform initial local aggregation
-    int64_t num_data_cols = in_table->ncols() - num_keys;
     table_info* work_table;
     if (is_parallel) {
       work_table = shuffle_table(in_table, num_keys);
     } else {
       work_table = in_table;
     }
-    bool dropna=true;
-    // TODO: implement correct use of dropna in the computation.
-    // See https://github.com/Bodo-inc/Bodo/issues/270
-    table_info* out_table = groupby_and_nunique(work_table, num_keys, num_data_cols, dropna);
+    table_info* out_table = groupby_and_sets(work_table, num_keys, ftype, skipdropna);
     if (is_parallel) delete_table_free_arrays(work_table);
     return out_table;
 }
@@ -4100,8 +4245,8 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
         PyLong_FromVoidPtr((void*)(&drop_duplicates_table_outplace)));
     PyObject_SetAttrString(m, "groupby_and_aggregate",
                            PyLong_FromVoidPtr((void*)(&groupby_and_aggregate)));
-    PyObject_SetAttrString(m, "groupby_and_aggregate_nunique",
-                           PyLong_FromVoidPtr((void*)(&groupby_and_aggregate_nunique)));
+    PyObject_SetAttrString(m, "groupby_and_aggregate_sets",
+                           PyLong_FromVoidPtr((void*)(&groupby_and_aggregate_sets)));
     PyObject_SetAttrString(m, "array_isin",
                            PyLong_FromVoidPtr((void*)(&array_isin)));
     return m;

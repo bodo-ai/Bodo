@@ -8,6 +8,7 @@ import copy
 import numpy as np
 import pandas as pd
 import numba
+from bodo.utils.typing import BodoError
 from numba import typeinfer, ir, ir_utils, config, types, compiler
 from numba.ir_utils import (
     visit_vars_inner,
@@ -78,7 +79,7 @@ from bodo.libs.array_tools import (
     array_to_info,
     arr_info_list_to_table,
     groupby_and_aggregate,
-    groupby_and_aggregate_nunique,
+    groupby_and_aggregate_sets,
     info_from_table,
     info_to_array,
     delete_table,
@@ -97,6 +98,7 @@ supported_agg_funcs = [
     "sum",
     "count",
     "nunique",
+    "median",
     "mean",
     "min",
     "max",
@@ -128,6 +130,28 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None):
     if func_name in supported_agg_funcs[:-2]:
         func = getattr(series_impl, "overload_series_" + func_name)(series_type)
         func.ftype = supported_agg_funcs.index(func_name)
+        skipdropna = True
+        if isinstance(rhs, ir.Expr):
+            for erec in rhs.kws:
+                if func_name == "median":
+                    if erec[0] == "skipna":
+                        skipdropna = guard(find_const, func_ir, erec[1])
+                        if not isinstance(skipdropna, bool):
+                            raise BodoError(
+                                "argument of skipna to median should be a boolean"
+                            )
+                    else:
+                        raise BodoError("argument to median can only be skipna")
+                if func_name == "nunique":
+                    if erec[0] == "dropna":
+                        skipdropna = guard(find_const, func_ir, erec[1])
+                        if not isinstance(skipdropna, bool):
+                            raise BodoError(
+                                "argument of dropna to nunique should be a boolean"
+                            )
+                    else:
+                        raise BodoError("argument to nunique can only be dropna")
+        func.skipdropna = skipdropna
         return func
 
     assert func_name in ["agg", "aggregate"]
@@ -725,7 +749,7 @@ def agg_distributed_run(
                 "array_to_info": array_to_info,
                 "arr_info_list_to_table": arr_info_list_to_table,
                 "groupby_and_aggregate": groupby_and_aggregate,
-                "groupby_and_aggregate_nunique": groupby_and_aggregate_nunique,
+                "groupby_and_aggregate_sets": groupby_and_aggregate_sets,
                 "info_from_table": info_from_table,
                 "info_to_array": info_to_array,
                 "delete_table": delete_table,
@@ -1638,9 +1662,12 @@ def gen_top_level_agg_func(
                 )
             )
         else:
-            if agg_func.ftype == supported_agg_funcs.index("nunique"):
-                func_text += "    out_table = groupby_and_aggregate_nunique(table, {}, {})\n".format(
-                    n_keys, parallel
+            if agg_func.ftype in {
+                supported_agg_funcs.index("nunique"),
+                supported_agg_funcs.index("median"),
+            }:
+                func_text += "    out_table = groupby_and_aggregate_sets(table, {}, {}, {}, {})\n".format(
+                    n_keys, agg_func.ftype, agg_func.skipdropna, parallel
                 )
             else:
                 # non-agg operations don't use dummy output table, so just
@@ -1674,8 +1701,6 @@ def gen_top_level_agg_func(
         func_text += "    return ({},)\n".format(
             ", ".join(out_names + tuple(key_names))
         )
-
-    # print(func_text)
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)

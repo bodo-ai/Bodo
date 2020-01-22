@@ -263,6 +263,12 @@ def get_groupby_output_dtype(arr_type, func_name):
     """
     in_dtype = arr_type.dtype
     if (
+        func_name == "median"
+        and not isinstance(in_dtype, types.Float)
+        and not isinstance(in_dtype, types.Integer)
+    ):
+        raise BodoError("For median, only column of integer or float type are allowed")
+    if (
         not isinstance(in_dtype, types.Integer)
         and not isinstance(in_dtype, types.Float)
         and not isinstance(in_dtype, types.Boolean)
@@ -290,11 +296,11 @@ def get_groupby_output_dtype(arr_type, func_name):
             "groupby built-in functions {}"
             " does not support boolean column".format(func_name)
         )
-    if func_name == "count":
+    if func_name in "count":
         return types.int64
     elif func_name == "nunique":
         return types.int64
-    elif func_name in {"mean", "var", "std"}:
+    elif func_name in {"median", "mean", "var", "std"}:
         return types.float64
     else:
         if isinstance(arr_type, IntegerArrayType):
@@ -419,7 +425,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
                         "unsupported aggregate function {}".format(func_name)
                     )
                 # run typer on a groupby with just column k
-                ret_grp = DataFrameGroupByType(grp.df_type, grp.keys, (k,), grp.as_index, True)
+                ret_grp = DataFrameGroupByType(
+                    grp.df_type, grp.keys, (k,), grp.as_index, True
+                )
                 out_tp = self._get_agg_typ(ret_grp, args, func_name).return_type
                 if not grp.as_index:
                     # _get_agg_typ also returns the index (keys) as part of
@@ -483,8 +491,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.nunique")
     def resolve_nunique(self, grp, args, kws):
-        func = get_agg_func(None, "nunique", None)
-        return self._get_agg_typ(grp, args, "nunique", func.__code__)
+        return self._get_agg_typ(grp, args, "nunique")
+
+    @bound_function("groupby.median")
+    def resolve_median(self, grp, args, kws):
+        return self._get_agg_typ(grp, args, "median")
 
     @bound_function("groupby.mean")
     def resolve_mean(self, grp, args, kws):

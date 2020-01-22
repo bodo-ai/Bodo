@@ -48,7 +48,7 @@ ll.add_symbol(
 )
 ll.add_symbol("sort_values_table", array_tools_ext.sort_values_table)
 ll.add_symbol("groupby_and_aggregate", array_tools_ext.groupby_and_aggregate)
-ll.add_symbol("groupby_and_aggregate_nunique", array_tools_ext.groupby_and_aggregate_nunique)
+ll.add_symbol("groupby_and_aggregate_sets", array_tools_ext.groupby_and_aggregate_sets)
 ll.add_symbol("array_isin", array_tools_ext.array_isin)
 
 
@@ -613,21 +613,22 @@ def groupby_and_aggregate(
 
 
 @intrinsic
-def groupby_and_aggregate_nunique(typingctx, table_t, n_keys_t, is_parallel):
+def groupby_and_aggregate_sets(typingctx, table_t, n_keys_t, ftype_t, skipdropna_t, is_parallel):
     """
-    Interface to groupby_and_aggregate_nunique function in C++ library for groupby
+    Interface to groupby_and_aggregate_sets function in C++ library for groupby
     offloading.
     """
     assert table_t == table_type
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(), lir.IntType(64), lir.IntType(1)]
+            lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(),
+                                          lir.IntType(64), lir.IntType(32), lir.IntType(1), lir.IntType(1)]
         )
-        fn_tp = builder.module.get_or_insert_function(fnty, name="groupby_and_aggregate_nunique")
+        fn_tp = builder.module.get_or_insert_function(fnty, name="groupby_and_aggregate_sets")
         return builder.call(fn_tp, args)
 
-    return table_type(table_t, types.int64, types.boolean), codegen
+    return table_type(table_t, types.int64, types.int32, types.boolean, types.boolean), codegen
 
 
 _array_isin = types.ExternalFunction("array_isin", types.void(

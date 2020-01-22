@@ -1,5 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import unittest
+import random
 import pandas as pd
 import numpy as np
 import numba
@@ -400,7 +401,7 @@ def test_groupby_agg_const_dict():
     """
 
     def impl(df):
-        df2 = df.groupby("A")["B","C"].agg({"B": "count", "C": "sum"})
+        df2 = df.groupby("A")["B", "C"].agg({"B": "count", "C": "sum"})
         return df2
 
     def impl2(df):
@@ -510,7 +511,109 @@ def test_count_select_col():
     check_func(impl2, (11,), sort_output=True)
 
 
-def test_nunique_select_col():
+@pytest.mark.parametrize(
+    "df_med",
+    [
+        pd.DataFrame({"A": [1, 1, 1, 1], "B": [1, 2, 3, 4]}),
+        pd.DataFrame({"A": [1, 2, 2, 1, 1], "B": [1, 5, 4, 4, 3]}),
+        pd.DataFrame({"A": [1, 1, 1, 1, 1], "B": [1, 2, 3, 4, np.nan]}),
+    ],
+)
+def test_median_simple(df_med):
+    """
+    Test Groupby.median() with a single entry.
+    """
+
+    def impl1(df):
+        A = df.groupby("A")["B"].median()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A")["B"].median(skipna=True)
+        return A
+
+    def impl3(df):
+        A = df.groupby("A")["B"].median(skipna=False)
+        return A
+
+    check_func(impl1, (df_med,), sort_output=True)
+    check_func(impl2, (df_med,), sort_output=True)
+    check_func(impl3, (df_med,), sort_output=True)
+
+
+def test_median_large_random_numpy():
+    """
+    Test Groupby.median() with a large random numpy vector
+    """
+
+    def get_random_array(n, sizlen):
+        elist = []
+        for i in range(n):
+            eval = random.randint(1, sizlen)
+            if eval == 1:
+                eval = None
+            elist.append(eval)
+        return np.array(elist, dtype=np.float64)
+
+    def impl1(df):
+        A = df.groupby("A")["B"].median()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A")["B"].median(skipna=True)
+        return A
+
+    def impl3(df):
+        A = df.groupby("A")["B"].median(skipna=False)
+        return A
+
+    random.seed(5)
+    nb = 100
+    df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)})
+    check_func(impl1, (df1,), sort_output=True)
+    check_func(impl2, (df1,), sort_output=True)
+    check_func(impl3, (df1,), sort_output=True)
+
+
+def test_median_nullable_int_bool():
+    """
+    Test Groupby.median() with a large random sets of nullable_int_bool
+    """
+
+    def impl1(df):
+        df2 = df.groupby("A")["B"].median()
+        return df2
+
+    def impl2(df):
+        df2 = df.groupby("A")["B"].median(skipna=True)
+        return df2
+
+    def impl3(df):
+        df2 = df.groupby("A")["B"].median(skipna=False)
+        return df2
+
+    nullarr = pd.Series([1, 2, 3, 4, None, 1, 2], dtype="UInt16")
+    df1 = pd.DataFrame({"A": [1, 1, 1, 1, 1, 2, 2], "B": nullarr})
+    check_func(impl1, (df1,), sort_output=True)
+    check_func(impl2, (df1,), sort_output=True)
+    check_func(impl3, (df1,), sort_output=True)
+
+
+@pytest.mark.parametrize(
+    "df_uniq",
+    [
+        pd.DataFrame(
+            {"A": [2, 1, 1, 1, 2, 2, 1], "B": [-8, np.nan, 3, 1, np.nan, 6, 7]}
+        ),
+        pd.DataFrame(
+            {
+                "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
+                "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+            }
+        ),
+    ],
+)
+def test_nunique_select_col(df_uniq):
     """
     Test Groupby.nunique() with explicitly selected one column. Boolean are broken in pandas so the
     test is removed.
@@ -521,40 +624,17 @@ def test_nunique_select_col():
         A = df.groupby("A")["B"].nunique()
         return A
 
-    def impl2(n):
-        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
-        A = df.groupby("A")["B"].nunique()
+    def impl2(df):
+        A = df.groupby("A")["B"].nunique(dropna=True)
         return A
 
-    df_int = pd.DataFrame(
-        {
-            "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [-8, np.nan, 3, 1, np.nan, 6, 7],
-            "C": [1.1, 2.4, 3.1, -1.9, 2.3, 3.0, -2.4],
-        }
-    )
-    df_str = pd.DataFrame(
-        {
-            "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
-            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
-            "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
-        }
-    )
-    df_bool = pd.DataFrame(
-        {
-            "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [True, np.nan, False, True, np.nan, False, False],
-            "C": [True, True, False, True, True, False, False],
-        }
-    )
-    df_dt = pd.DataFrame(
-        {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
-    )
-    check_func(impl1, (df_int,), sort_output=True)
-    check_func(impl1, (df_str,), sort_output=True)
-    #    check_func(impl1, (df_bool,), sort_output=True)
-    check_func(impl1, (df_dt,), sort_output=True)
-    check_func(impl2, (11,), sort_output=True)
+    def impl3(df):
+        A = df.groupby("A")["B"].nunique(dropna=False)
+        return A
+
+    check_func(impl1, (df_uniq,), sort_output=True)
+    check_func(impl2, (df_uniq,), sort_output=True)
+    check_func(impl3, (df_uniq,), sort_output=True)
 
 
 def test_nunique_select_col_missing_keys():
@@ -1001,7 +1081,7 @@ def test_prod(test_df):
             # This column is disabled because pandas removes it
             # from output. This could be a bug in pandas. TODO: enable when it
             # is fixed
-            #"B": [True, np.nan, False, True, np.nan, False, False, True],
+            # "B": [True, np.nan, False, True, np.nan, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
