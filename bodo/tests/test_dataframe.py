@@ -1153,15 +1153,21 @@ def test_df_filter():
         df2 = df[cond]
         return df2
 
+    def test_impl2(df, cond):
+        # using .values to test nullable boolean array
+        df2 = df[cond.values]
+        return df2
+
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [-8, 2, 3, 1, 5, 6, 7],
-            "C": [2, 3, -1, 1, 2, 3, -1],
+            "B": ["A", "B", np.nan, "ACDE", "C", np.nan, "AA"],
+            "C": [2, 3, -1, 1, np.nan, 3.1, -1],
         }
     )
     cond = df.A > 1
     check_func(test_impl, (df, cond))
+    check_func(test_impl2, (df, cond))
 
 
 def test_create_series_input1():

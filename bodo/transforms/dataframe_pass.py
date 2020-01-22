@@ -69,6 +69,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.utils.typing import get_index_data_arr_types, is_overload_constant_str
@@ -2715,7 +2716,10 @@ class DataFramePass:
 
     def is_bool_arr(self, varname):
         typ = self.typemap[varname]
-        return isinstance(typ, (SeriesType, types.Array)) and typ.dtype == types.bool_
+        return (
+            isinstance(typ, (SeriesType, types.Array, BooleanArrayType))
+            and typ.dtype == types.bool_
+        )
 
     def is_int_list_or_arr(self, varname):
         typ = self.typemap[varname]
