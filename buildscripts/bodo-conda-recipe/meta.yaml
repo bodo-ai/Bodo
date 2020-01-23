@@ -19,7 +19,7 @@ requirements:
   host:
     - python 3.7
     - setuptools
-    - numba 0.47.*
+    - numba 0.48.*
     - numpy
     - pandas >=0.25
     - pyarrow
@@ -41,7 +41,7 @@ requirements:
     - pyarrow
     - arrow-cpp 0.15.1 transfer_s3_*
     - boost-cpp
-    - numba 0.47.*
+    - numba 0.48.*
     - mpich # [not win]
     - impi_rt # [win]
     - vs2015_runtime # [win]
