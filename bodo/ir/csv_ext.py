@@ -129,7 +129,9 @@ def visit_vars_csv(csv_node, callback, cbdata):
 ir_utils.visit_vars_extensions[CsvReader] = visit_vars_csv
 
 
-def remove_dead_csv(csv_node, lives, arg_aliases, alias_map, func_ir, typemap):
+def remove_dead_csv(
+    csv_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
+):
     # TODO
     new_df_colnames = []
     new_out_vars = []

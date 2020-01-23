@@ -366,7 +366,7 @@ numba.analysis.ir_extension_usedefs[Aggregate] = aggregate_usedefs
 
 
 def remove_dead_aggregate(
-    aggregate_node, lives, arg_aliases, alias_map, func_ir, typemap
+    aggregate_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
 ):
 
     dead_cols = []

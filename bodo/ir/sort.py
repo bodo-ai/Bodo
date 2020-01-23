@@ -246,7 +246,9 @@ def visit_vars_sort(sort_node, callback, cbdata):
 ir_utils.visit_vars_extensions[Sort] = visit_vars_sort
 
 
-def remove_dead_sort(sort_node, lives, arg_aliases, alias_map, func_ir, typemap):
+def remove_dead_sort(
+    sort_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
+):
 
     # TODO: arg aliases for inplace case?
     dead_cols = []
@@ -368,7 +370,10 @@ def sort_distributed_run(
     func_text = "def f({}, {}):\n".format(key_name_args_join, col_name_args_join)
     if bodo.use_cpp_sort:
         func_text += local_sort_cpp(
-            key_name_args, col_name_args, sort_node.ascending_list, sort_node.na_position_b
+            key_name_args,
+            col_name_args,
+            sort_node.ascending_list,
+            sort_node.na_position_b,
         )
     else:
         func_text += "  key_arrs = ({},)\n".format(key_name_args_join)
@@ -477,7 +482,9 @@ def sort_distributed_run(
         func_text += "  out_key, out_data = parallel_sort(key_arrs, data, {}, {})\n".format(
             sort_node.ascending_list[0], sort_node.na_position_b
         )
-        func_text += "  bodo.ir.sort.local_sort(out_key, out_data, {})\n".format(sort_node.ascending_list[0])
+        func_text += "  bodo.ir.sort.local_sort(out_key, out_data, {})\n".format(
+            sort_node.ascending_list[0]
+        )
         func_text += "  return out_key, out_data\n"
 
     loc_vars = {}

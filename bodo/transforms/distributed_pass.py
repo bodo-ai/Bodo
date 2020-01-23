@@ -2693,7 +2693,9 @@ def bodo_remove_dead_block(
         # let external calls handle stmt if type matches
         if type(stmt) in remove_dead_extensions:
             f = remove_dead_extensions[type(stmt)]
-            stmt = f(stmt, lives_n_aliases, arg_aliases, alias_map, func_ir, typemap)
+            stmt = f(
+                stmt, lives, lives_n_aliases, arg_aliases, alias_map, func_ir, typemap
+            )
             if stmt is None:
                 removed = True
                 continue
