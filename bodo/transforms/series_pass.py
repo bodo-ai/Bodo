@@ -1113,6 +1113,7 @@ class SeriesPass:
             out_df = {"inds": out_index}
             in_keys = [data]
             out_keys = [out_data]
+            na_position = "last"
 
             # Sort node
             nodes.append(
@@ -1126,6 +1127,7 @@ class SeriesPass:
                     inplace,
                     lhs.loc,
                     ascending,
+                    na_position,
                 )
             )
 

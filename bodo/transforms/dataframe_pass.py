@@ -12,6 +12,7 @@ import warnings
 
 import numba
 from numba import ir, ir_utils, types
+from bodo.utils.typing import is_overload_none
 from numba.ir_utils import (
     replace_arg_nodes,
     compile_to_numba_ir,
@@ -1112,37 +1113,45 @@ class DataFramePass:
 
         # find key array for sort ('by' arg)
         key_names = self._get_const_or_list(by_var)
+        set_possible_keys = set(df_typ.columns)
+        index_is_key=False
+        index_name="unset"
+        if not is_overload_none(df_typ.index.name_typ):
+            index_name = df_typ.index.name_typ.literal_value
+            set_possible_keys.add(index_name)
+            if index_name in key_names:
+                index_is_key=True
+        if "$_bodo_index_" in key_names:
+            index_is_key=True
+            index_name="$_bodo_index_"
+            set_possible_keys.add(index_name)
         ascending_list = self._get_list_value_spec_length(
             ascending_var,
             len(key_names),
             err_msg="ascending should be bool or a list of bool of the number of keys",
         )
-        if not (
-            key_names == ("$_bodo_index_",)
-            or all(k in df_typ.columns for k in key_names)
-        ):
+        if not all(k in set_possible_keys for k in key_names):
             raise ValueError("invalid sort keys {}".format(key_names))
 
         nodes = []
         in_vars = {
             c: self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns
         }
-
-        # input index
-        in_df_index = self._get_dataframe_index(df_var, nodes)
-        in_df_index_name = self._get_index_name(in_df_index, nodes)
         arr = list(in_vars.values())[0]
         in_index_var = self._gen_array_from_index(df_var, arr, nodes)
         in_vars["$_bodo_index_"] = in_index_var
 
         # remove key from dfs (only data is kept)
-        in_key_arrs = [in_vars.pop(c) for c in key_names]
-
-        out_key_vars = in_key_arrs.copy()
-        out_vars = in_vars.copy()
-        out_index_var = in_index_var
-        if not inplace:
-            out_key_vars = []
+        def get_value(c):
+            if c == index_name:
+                return in_index_var
+            return in_vars.pop(c)
+        in_key_arrs = [get_value(c) for c in key_names]
+        if inplace:
+            out_key_vars = in_key_arrs.copy()
+            out_vars = in_vars.copy()
+            out_index_var = in_index_var
+        else:
             out_vars = {}
             for k in df_typ.columns:
                 out_var = ir.Var(lhs.scope, mk_unique_var(k), lhs.loc)
@@ -1152,12 +1161,14 @@ class DataFramePass:
             # index var
             out_index_var = ir.Var(lhs.scope, mk_unique_var("_index_"), lhs.loc)
             self.typemap[out_index_var.name] = self.typemap[in_index_var.name]
-            if key_names == ("$_bodo_index_",):
-                out_key_vars.append(out_index_var)
-            else:
-                for k in key_names:
-                    out_key_vars.append(out_vars.pop(k))
+            out_key_vars = []
+            if not index_is_key:
                 out_vars["$_bodo_index_"] = out_index_var
+            for k in key_names:
+                if index_is_key and k==index_name:
+                    out_key_vars.append(out_index_var)
+                else:
+                    out_key_vars.append(out_vars.pop(k))
 
         nodes.append(
             bodo.ir.sort.Sort(
@@ -1174,7 +1185,9 @@ class DataFramePass:
             )
         )
 
-        # output index
+        # output from input index
+        in_df_index = self._get_dataframe_index(df_var, nodes)
+        in_df_index_name = self._get_index_name(in_df_index, nodes)
         out_index = self._gen_index_from_array(out_index_var, in_df_index_name, nodes)
 
         _init_df = _gen_init_df(df_typ.columns, "index")

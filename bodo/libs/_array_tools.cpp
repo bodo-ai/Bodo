@@ -4001,7 +4001,9 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     size_t n_key = size_t(n_key_t);
 #undef DEBUG_SORT
 #ifdef DEBUG_SORT
-    std::cout << "ascending=" << ascending << " na_position=" << na_position << "\n";
+    std::cout << "n_key_t=" << n_key_t << " na_position=" << na_position << "\n";
+    for (int64_t iKey=0; iKey<n_key_t; iKey++)
+      std::cerr << "iKey=" << iKey << "/" << n_key_t << "  vect_ascending=" << vect_ascending[iKey] << "\n";
     std::cout << "INPUT:\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     DEBUG_PrintRefct(std::cout, in_table->columns);
