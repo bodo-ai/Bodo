@@ -859,7 +859,7 @@ def test_max(test_df):
     )
 
     check_func(impl1, (test_df,), sort_output=True)
-    check_func(impl1, (df_bool,), sort_output=True, check_dtype=True)
+    check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl2, (11,))
 
 
@@ -886,7 +886,7 @@ def test_max_one_col(test_df):
     )
 
     check_func(impl1, (test_df,), sort_output=True)
-    check_func(impl1, (df_bool,), sort_output=True, check_dtype=True)
+    check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl2, (11,))
 
 
@@ -988,9 +988,9 @@ def test_min(test_df):
         }
     )
 
-    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
-    check_func(impl1, (df_bool,), sort_output=True, check_dtype=True)
-    check_func(impl2, (11,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_min_one_col(test_df):
@@ -1015,9 +1015,9 @@ def test_min_one_col(test_df):
         }
     )
 
-    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
-    check_func(impl1, (df_bool,), sort_output=True, check_dtype=True)
-    check_func(impl2, (11,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_groupby_as_index_min():
@@ -1036,8 +1036,8 @@ def test_groupby_as_index_min():
         df2 = df.groupby("A", as_index=False)["B"].min()
         return df2
 
-    check_func(impl1, (11,), sort_output=True, check_dtype=False)
-    check_func(impl2, (11,), sort_output=True, check_dtype=False)
+    check_func(impl1, (11,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_min_datetime():
@@ -1086,9 +1086,9 @@ def test_prod(test_df):
         }
     )
 
-    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
-    check_func(impl1, (df_bool,), sort_output=True, check_dtype=True)
-    check_func(impl2, (11,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_prod_one_col(test_df):
@@ -1113,9 +1113,9 @@ def test_prod_one_col(test_df):
         }
     )
 
-    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
-    check_func(impl1, (df_bool,), sort_output=True, check_dtype=True)
-    check_func(impl2, (11,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_groupby_as_index_prod():
@@ -1134,8 +1134,8 @@ def test_groupby_as_index_prod():
         df2 = df.groupby("A", as_index=False)["B"].prod()
         return df2
 
-    check_func(impl1, (11,), sort_output=True, check_dtype=False)
-    check_func(impl2, (11,), sort_output=True, check_dtype=False)
+    check_func(impl1, (11,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_std(test_df_int_no_null):
@@ -1210,8 +1210,8 @@ def test_sum(test_df):
         A = df.groupby("A").sum()
         return A
 
-    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
-    check_func(impl2, (11,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_sum_one_col(test_df):
@@ -1228,8 +1228,8 @@ def test_sum_one_col(test_df):
         A = df.groupby("A")["B"].sum()
         return A
 
-    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
-    check_func(impl2, (11,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_groupby_as_index_sum():
@@ -1248,8 +1248,8 @@ def test_groupby_as_index_sum():
         df2 = df.groupby("A", as_index=False)["B"].sum()
         return df2
 
-    check_func(impl1, (11,), sort_output=True, check_dtype=False)
-    check_func(impl2, (11,), sort_output=True, check_dtype=False)
+    check_func(impl1, (11,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_groupby_multi_intlabels_sum():
