@@ -2149,6 +2149,10 @@ class DistributedPass:
         # XXX we return parfors start assuming parfor and parallel accessed
         # array are equivalent in size and have equivalent distribution
         # TODO: is this always the case?
+        if isinstance(self.typemap[index_var.name], types.BaseTuple):
+            index_list = guard(find_build_tuple, self.func_ir, index_var)
+            assert index_list is not None
+            index_var = index_list[0]
         if index_var.name in self._1D_parfor_starts:
             return self._1D_parfor_starts[index_var.name], []
 
