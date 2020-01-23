@@ -747,18 +747,6 @@ def test_df_take(df_value):
     )
 
 
-def test_df_sort_values(df_value):
-    # skip NAs
-    # TODO: handle NA order
-    if df_value.isna().sum().sum():
-        return
-
-    def impl(df):
-        return df.sort_values(by="A")
-
-    check_func(impl, (df_value,))
-
-
 def test_df_sort_index(df_value):
     # skip NAs
     # TODO: handle NA order
@@ -939,35 +927,6 @@ def test_df_drop_duplicates(test_df):
         return df.drop_duplicates()
 
     check_func(impl, (test_df,), sort_output=True)
-
-
-def _gen_df_str(n):
-    str_vals = []
-    for _ in range(n):
-        # store NA with 30% chance
-        if random.random() < 0.3:
-            str_vals.append(np.nan)
-            continue
-
-        k = random.randint(1, 10)
-        val = "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
-        str_vals.append(val)
-
-    A = np.random.randint(0, 1000, n)
-    df = pd.DataFrame({"A": A, "B": str_vals}).drop_duplicates("A")
-    return df
-
-
-def test_sort_values_str():
-    def test_impl(df):
-        return df.sort_values(by="A")
-
-    # seeds should be the same on different processors for consistent input
-    random.seed(2)
-    np.random.seed(3)
-    n = 17  # 1211
-    df = _gen_df_str(n)
-    check_func(test_impl, (df,))
 
 
 ##################### binary ops ###############################
@@ -1824,124 +1783,6 @@ class TestDataFrame(unittest.TestCase):
         # XXX: test actual output
         # self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
-
-    def test_sort_values(self):
-        def test_impl(df):
-            df.sort_values("A", inplace=True)
-            return df.B.values
-
-        n = 1211
-        np.random.seed(2)
-        df = pd.DataFrame(
-            {"A": np.random.ranf(n), "B": np.arange(n), "C": np.random.ranf(n)}
-        )
-        bodo_func = bodo.jit(test_impl)
-        np.testing.assert_almost_equal(bodo_func(df.copy()), test_impl(df))
-
-    def test_sort_values_copy(self):
-        def test_impl(df):
-            df2 = df.sort_values("A")
-            return df2.B.values
-
-        n = 1211
-        np.random.seed(2)
-        df = pd.DataFrame(
-            {"A": np.random.ranf(n), "B": np.arange(n), "C": np.random.ranf(n)}
-        )
-        bodo_func = bodo.jit(test_impl)
-        np.testing.assert_almost_equal(bodo_func(df.copy()), test_impl(df))
-
-    def test_sort_values_single_col(self):
-        def test_impl(df):
-            df.sort_values("A", inplace=True)
-            return df.A.values
-
-        n = 1211
-        np.random.seed(2)
-        df = pd.DataFrame({"A": np.random.ranf(n)})
-        bodo_func = bodo.jit(test_impl)
-        np.testing.assert_almost_equal(bodo_func(df.copy()), test_impl(df))
-
-    def test_sort_values_single_col_str(self):
-        def test_impl(df):
-            df.sort_values("A", inplace=True)
-            return df.A.values
-
-        n = 1211
-        random.seed(2)
-        str_vals = []
-
-        for _ in range(n):
-            k = random.randint(1, 30)
-            val = "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
-            str_vals.append(val)
-        df = pd.DataFrame({"A": str_vals})
-        bodo_func = bodo.jit(test_impl)
-        self.assertTrue((bodo_func(df.copy()) == test_impl(df)).all())
-
-    def test_sort_values_str(self):
-        def test_impl(df):
-            df.sort_values("A", inplace=True)
-            return df.B.values
-
-        n = 1211
-        random.seed(2)
-        str_vals = []
-        str_vals2 = []
-
-        for _ in range(n):
-            k = random.randint(1, 30)
-            val = "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
-            str_vals.append(val)
-            val = "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
-            str_vals2.append(val)
-
-        df = pd.DataFrame({"A": str_vals, "B": str_vals2})
-        # use mergesort for stability, in str generation equal keys are more probable
-        sorted_df = df.sort_values("A", inplace=False, kind="mergesort")
-        bodo_func = bodo.jit(test_impl)
-        self.assertTrue((bodo_func(df) == sorted_df.B.values).all())
-
-    def test_sort_parallel_single_col(self):
-        # TODO: better parallel sort test
-        fname = os.path.join("bodo", "tests", "data", "kde.parquet")
-
-        def test_impl():
-            df = pd.read_parquet(fname)
-            df.sort_values("points", inplace=True)
-            res = df.points.values
-            return res
-
-        bodo_func = bodo.jit(locals={"res:return": "distributed"})(test_impl)
-
-        save_min_samples = bodo.ir.sort.MIN_SAMPLES
-        try:
-            bodo.ir.sort.MIN_SAMPLES = 10
-            res = bodo_func()
-            self.assertTrue((np.diff(res) >= 0).all())
-        finally:
-            bodo.ir.sort.MIN_SAMPLES = save_min_samples  # restore global val
-
-    def test_sort_parallel(self):
-        # TODO: better parallel sort test
-        fname = os.path.join("bodo", "tests", "data", "kde.parquet")
-
-        def test_impl():
-            df = pd.read_parquet(fname)
-            df["A"] = df.points.astype(np.float64)
-            df.sort_values("points", inplace=True)
-            res = df.A.values
-            return res
-
-        bodo_func = bodo.jit(locals={"res:return": "distributed"})(test_impl)
-
-        save_min_samples = bodo.ir.sort.MIN_SAMPLES
-        try:
-            bodo.ir.sort.MIN_SAMPLES = 10
-            res = bodo_func()
-            self.assertTrue((np.diff(res) >= 0).all())
-        finally:
-            bodo.ir.sort.MIN_SAMPLES = save_min_samples  # restore global val
 
     def test_itertuples(self):
         def test_impl(df):
