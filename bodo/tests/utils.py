@@ -102,8 +102,8 @@ def check_func(
     if is_out_distributed is None:
         # assume all distributable output is distributed if not specified
         is_out_distributed = is_distributable_typ(
-            bodo.typeof(py_output)
-        ) or is_distributable_tuple_typ(bodo.typeof(py_output))
+            _typeof(py_output)
+        ) or is_distributable_tuple_typ(_typeof(py_output))
 
     # skip 1D distributed and 1D distributed variable length tests
     # if no parallelism is found
@@ -112,8 +112,7 @@ def check_func(
         w is not None  # if no parallelism is found
         and not is_out_distributed  # if output is not distributable
         and not any(
-            is_distributable_typ(bodo.typeof(a))
-            or is_distributable_tuple_typ(bodo.typeof(a))
+            is_distributable_typ(_typeof(a)) or is_distributable_tuple_typ(_typeof(a))
             for a in args
         )  # if none of the inputs is distributable
     ):
@@ -327,6 +326,21 @@ def _test_equal(
         pd.util.testing.assert_extension_array_equal(bodo_out, py_out)
     else:
         assert bodo_out == py_out
+
+
+def _typeof(val):
+    # Pandas returns an object array for .values or to_numpy() call on Series of
+    # nullable int, which can't be handled in typeof. Bodo returns a nullable int array
+    # see test_series_to_numpy[numeric_series_val3] and
+    # test_series_get_values[series_val4]
+    if (
+        isinstance(val, np.ndarray)
+        and val.dtype == np.dtype("O")
+        and all(np.isnan(a) or isinstance(a, int) for a in val)
+    ):
+        return bodo.libs.int_arr_ext.IntegerArrayType(bodo.int64)
+
+    return bodo.typeof(val)
 
 
 def is_bool_object_series(S):
