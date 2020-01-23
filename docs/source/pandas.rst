@@ -233,6 +233,18 @@ Time series-related:
 * :meth:`Series.shift` (supports numeric types and
   only the `periods` argument supported)
 
+Datetime properties:
+
+* :meth:`Series.dt.date`
+* :meth:`Series.dt.year`
+* :meth:`Series.dt.month`
+* :meth:`Series.dt.day`
+* :meth:`Series.dt.hour`
+* :meth:`Series.dt.minute`
+* :meth:`Series.dt.second`
+* :meth:`Series.dt.microsecond`
+* :meth:`Series.dt.nanosecond`
+
 String handling:
 
 * :meth:`Series.str.capitalize`
@@ -240,6 +252,7 @@ String handling:
 * :meth:`Series.str.contains` regex argument supported.
 * :meth:`Series.str.count`
 * :meth:`Series.str.endswith`
+* :meth:`Series.str.extract`
 * :meth:`Series.str.find`
 * :meth:`Series.str.get`
 * :meth:`Series.str.join`

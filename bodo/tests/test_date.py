@@ -18,6 +18,7 @@ from bodo.tests.utils import (
 import datetime
 import random
 import pytest
+from bodo.utils.typing import BodoError
 
 # ------------------------- Test datetime OPs ------------------------- #
 def test_datetime_operations():
@@ -366,10 +367,54 @@ def test_datetime_datetime_strptime():
     check_func(test_strptime, (datetime_str, dtformat))
 
 
-# ---------------------------------------------------------------------------- #
+# -------------------------  Test series.dt  -------------------------- #
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            pd.Series(pd.date_range(start="2019-01-24", end="2019-01-29", periods=5)),
+            marks=pytest.mark.slow,
+        ),
+        # Test Series.dt.year for values less than 2000 (issue #343)
+        pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=5)),
+        pd.Series(pd.date_range(start='5/20/2015', periods=5, freq='10N')),
+        pytest.param(
+            pd.Series(pd.date_range(start='1/1/2000', periods=5, freq='4Y')),
+            marks=pytest.mark.slow,
+        ),
+    ]
+)
+def series_value(request):
+    return request.param
+
+
+@pytest.mark.parametrize("date_fields", bodo.hiframes.pd_timestamp_ext.date_fields)
+def test_dt_extract(series_value, date_fields):
+    """Test Series.dt extraction
+    """
+    func_text = "def impl(S, date_fields):\n"
+    func_text += "  return S.dt.{}\n".format(date_fields)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars["impl"]
+
+    check_func(impl, (series_value, date_fields, ))
+
+
+def test_dt_extract_date(series_value):
+    """Test Series.dt.date extraction
+    """
+    def impl(S):
+        return S.dt.date
+
+    check_func(impl, (series_value, ))
 
 
 def test_series_dt64_scalar_cmp():
+    """Test Series.dt comparison with scalar
+    """
+
     t = np.datetime64("2018-04-27").astype("datetime64[ns]")
 
     def test_impl(S):
@@ -384,27 +429,25 @@ def test_series_dt64_scalar_cmp():
 
 
 def test_series_dt64_cmp():
-    def test_impl(S1, S2):
+    """Test Series.dt comparison with Series.dt
+    """
+
+    def test_impl1(S1, S2):
+        return S1 == S2
+
+    def test_impl2(S1, S2):
         return S1 >= S2
 
     S1 = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
     S2 = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
+    check_func(test_impl1, (S1, S2))
+    check_func(test_impl2, (S1, S2))
+
     S2.values[3] = np.datetime64("2018-05-03").astype("datetime64[ns]")
-    check_func(test_impl, (S1, S2))
+    check_func(test_impl2, (S1, S2))
 
 
-def test_dt_year_before_2000():
-    """Test Series.dt.year for values less than 2000 (issue #343)
-    """
-
-    def test_impl(S):
-        return S.dt.year
-
-    S = pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=5))
-    check_func(test_impl, (S,))
-
-
-def test_series_dt64_comparison():
+def test_series_dt64_timestamp_cmp():
     """Test Series.dt comparison with pandas.timestamp scalar
     """
 
@@ -437,6 +480,28 @@ def test_series_dt64_comparison():
     # test filter
     check_func(test_impl4, (S, timestamp))
     check_func(test_impl4, (S, t_string))
+
+
+# -------------------------  series.dt errorchecking  -------------------------- #
+
+
+def test_series_dt_type():
+    """
+    Test dt is called on series of type dt64
+
+    """
+
+    def impl(S):
+        return S.dt.year
+
+    S = pd.Series([" bbCD ", "ABC", " mCDm ", np.nan, "abcffcc", "", "A"])
+
+    with pytest.raises(
+        BodoError,
+        match="Can only use .dt accessor with datetimelike values.",
+    ):
+        bodo.jit(impl)(S)
+
 
 
 ################################## Timestamp tests ###################################
@@ -650,26 +715,6 @@ class TestDate(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         df = self._gen_str_date_df()
         np.testing.assert_array_equal(bodo_func(df), test_impl(df))
-
-    def test_datetime_series_dt_date(self):
-        def test_impl(A):
-            return A.dt.date
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        A = pd.DatetimeIndex(df["str_date"]).to_series()
-        # TODO: fix index and name
-        pd.testing.assert_series_equal(bodo_func(A), test_impl(A))
-
-    def test_datetime_series_dt_year(self):
-        def test_impl(A):
-            return A.dt.year
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        A = pd.DatetimeIndex(df["str_date"]).to_series()
-        # TODO: fix index and name
-        pd.testing.assert_series_equal(bodo_func(A), test_impl(A))
 
     def _gen_str_date_df(self):
         rows = 10
