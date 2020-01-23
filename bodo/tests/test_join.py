@@ -71,6 +71,7 @@ def test_merge_key_change():
     )
 
 
+@pytest.mark.slow
 def test_merge_suffixes_bracket():
     """
     Test merge(): test the suffixes functionality for inner/left/right/outer with bracket
@@ -351,7 +352,12 @@ def test_merge_int_key(n):
     )
 
 
-@pytest.mark.parametrize("n1, n2, len_siz", [(5,4,2), (10,12,3), (120, 100, 10), (40, 30, 7), (1000, 900, 10)])
+@pytest.mark.parametrize("n1, n2, len_siz", 
+    [pytest.param(5, 4, 2, marks=pytest.mark.slow), 
+    pytest.param(10, 12, 3, marks=pytest.mark.slow), 
+    (120, 100, 10), 
+    pytest.param(40, 30, 7, marks=pytest.mark.slow), 
+    pytest.param(1000, 900, 10, marks=pytest.mark.slow)])
 def test_merge_nullable_int_bool(n1, n2, len_siz):
     """
     Test merge(): test of nullable_int_bool for inner/left/right/outer and random input
@@ -786,6 +792,7 @@ def test_merge_all_nan_cols():
     pd.testing.assert_frame_equal(bodo_func(df1, df2), impl(df1, df2))
 
 
+@pytest.mark.slow
 def test_merge_match_key_types():
     """
     test merge(): where key types mismatch but values can be equal

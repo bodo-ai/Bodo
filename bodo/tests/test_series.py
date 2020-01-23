@@ -1395,6 +1395,17 @@ def test_series_take(series_val):
     # TODO: dist support for selection with index list
 
 
+def test_series_argsort_fast():
+    def test_impl(A):
+        return A.argsort()
+
+    S = pd.Series([3, 5, 6, 1, 9])
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+    # TODO: support distributed argsort()
+    # check_func(test_impl, (series_val,))
+
+@pytest.mark.slow
 def test_series_argsort(series_val):
     def test_impl(A):
         return A.argsort()

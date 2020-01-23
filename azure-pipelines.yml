@@ -15,6 +15,7 @@ jobs:
     matrix:
       py37_np1:
         CONDA_ENV: 'bodo'
+        PYTEST_MARKER: not slow
         NP: 1
            
 - template: buildscripts/azure/azure-linux-macos.yml
@@ -22,9 +23,19 @@ jobs:
     name: macOS
     vmImage: xcode9-macos10.13
     matrix:
-      py37_np1:
+      py37_np1_firsthalf:
         CONDA_ENV: 'bodo'
+        PYTEST_MARKER: not slow and firsthalf
         NP: 1
-      py37_np2:
+      py37_np1_secondhalf:
         CONDA_ENV: 'bodo'
+        PYTEST_MARKER: not slow and not firsthalf
+        NP: 1
+      py37_np2_firsthalf:
+        CONDA_ENV: 'bodo'
+        PYTEST_MARKER: not slow and firsthalf
+        NP: 2
+      py37_np2_secondhalf:
+        CONDA_ENV: 'bodo'
+        PYTEST_MARKER: not slow and not firsthalf
         NP: 2
