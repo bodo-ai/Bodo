@@ -336,7 +336,9 @@ def _typeof(val):
     if (
         isinstance(val, np.ndarray)
         and val.dtype == np.dtype("O")
-        and all(np.isnan(a) or isinstance(a, int) for a in val)
+        and all(
+            (isinstance(a, np.float) and np.isnan(a)) or isinstance(a, int) for a in val
+        )
     ):
         return bodo.libs.int_arr_ext.IntegerArrayType(bodo.int64)
 
