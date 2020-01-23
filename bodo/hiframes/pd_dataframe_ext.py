@@ -60,7 +60,7 @@ from bodo.libs.array_tools import (
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import StringArray, string_array_type
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
 from bodo.hiframes.pd_index_ext import is_pd_index_type
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 
@@ -905,7 +905,7 @@ class GetItemDataFrame(AbstractTemplate):
         # df1 = df[df.A > .5]
         if (
             isinstance(df, DataFrameType)
-            and isinstance(idx, (SeriesType, types.Array))
+            and isinstance(idx, (SeriesType, types.Array, BooleanArrayType))
             and idx.dtype == types.bool_
         ):
             index = df.index
@@ -1078,9 +1078,9 @@ class GetItemDataFrameLoc(AbstractTemplate):
         # TODO: handle proper labeled indexes
         if isinstance(df, DataFrameLocType):
             # df1 = df.loc[df.A > .5], df1 = df.loc[np.array([1,2,3])]
-            if isinstance(idx, (SeriesType, types.Array, types.List)) and (
-                idx.dtype == types.bool_ or isinstance(idx.dtype, types.Integer)
-            ):
+            if isinstance(
+                idx, (SeriesType, types.Array, types.List, BooleanArrayType)
+            ) and (idx.dtype == types.bool_ or isinstance(idx.dtype, types.Integer)):
                 return signature(df.df_type, *args)
             # df.loc[1:n]
             if isinstance(idx, types.SliceType):
@@ -1107,9 +1107,9 @@ class GetItemDataFrameILoc(AbstractTemplate):
         df, idx = args
         if isinstance(df, DataFrameILocType):
             # df1 = df.iloc[df.A > .5], df1 = df.iloc[np.array([1,2,3])]
-            if isinstance(idx, (SeriesType, types.Array, types.List)) and (
-                idx.dtype == types.bool_ or isinstance(idx.dtype, types.Integer)
-            ):
+            if isinstance(
+                idx, (SeriesType, types.Array, types.List, BooleanArrayType)
+            ) and (idx.dtype == types.bool_ or isinstance(idx.dtype, types.Integer)):
                 return signature(df.df_type, *args)
             # df.iloc[1:n]
             if isinstance(idx, types.SliceType):
