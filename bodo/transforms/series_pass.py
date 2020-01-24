@@ -62,6 +62,7 @@ from bodo.hiframes.pd_series_ext import (
     is_str_series_typ,
     series_to_array_type,
     is_dt64_series_typ,
+    is_timedelta64_series_typ,
     is_bool_series_typ,
     if_series_to_array_type,
     is_series_type,
@@ -81,6 +82,7 @@ from bodo.ir.aggregate import Aggregate
 from bodo.hiframes import series_kernels, split_impl
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
+from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.hiframes.split_impl import (
     string_array_split_view_type,
     StringArraySplitViewType,
@@ -516,6 +518,7 @@ class SeriesPass:
         # inline overloaded
         # TODO: use overload inlining when available
         if rhs.fn == operator.sub:
+
             if (
                 isinstance(typ1, DatetimeIndexType)
                 and typ2 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
@@ -534,14 +537,62 @@ class SeriesPass:
                 )
                 return self._replace_func(impl, [arg1, arg2])
 
+            # series(dt64) - (timestamp/datetime.timedelta/datetime.datetime/series(timedelta64))
+            # or (timestamp or datetime.datetime) - series(dt64)
             if (
                 is_dt64_series_typ(typ1)
-                and typ2 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+                and (
+                    typ2 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+                    or typ2 == datetime_timedelta_type
+                    or typ2 == datetime_datetime_type
+                    or is_timedelta64_series_typ(typ2)
+                )
             ) or (
                 is_dt64_series_typ(typ2)
-                and typ1 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+                and (
+                    typ1 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+                    or typ1 == datetime_datetime_type
+                )
             ):
-                impl = bodo.hiframes.series_dt_impl.overload_series_dt64_sub(typ1, typ2)
+                impl = bodo.hiframes.series_dt_impl.create_bin_op_overload(rhs.fn)(
+                    typ1, typ2
+                )
+                return self._replace_func(impl, [arg1, arg2])
+
+            # series(timedelta64) - datetime.timedelta
+            # or datetime.timedelta - series(timedelta64)
+            if (
+                is_timedelta64_series_typ(typ1) and typ2 == datetime_timedelta_type
+            ) or (is_timedelta64_series_typ(typ2) and typ1 == datetime_timedelta_type):
+                impl = bodo.hiframes.series_dt_impl.create_bin_op_overload(rhs.fn)(
+                    typ1, typ2
+                )
+                return self._replace_func(impl, [arg1, arg2])
+
+        if rhs.fn == operator.add:
+            # series(dt64) + (datetime.timedelta/series(timedelta64))
+            # or (datetime.timedelta/series(timedelta64)) + series(dt64)
+            if (
+                is_dt64_series_typ(typ1)
+                and (typ2 == datetime_timedelta_type or is_timedelta64_series_typ(typ2))
+            ) or (
+                is_dt64_series_typ(typ2)
+                and (typ1 == datetime_timedelta_type or is_timedelta64_series_typ(typ1))
+            ):
+
+                impl = bodo.hiframes.series_dt_impl.create_bin_op_overload(rhs.fn)(
+                    typ1, typ2
+                )
+                return self._replace_func(impl, [arg1, arg2])
+
+            # series(timedelta64) + datetime.timedelta
+            # or datetime.timedelta + series(timedelta64)
+            if (
+                is_timedelta64_series_typ(typ1) and typ2 == datetime_timedelta_type
+            ) or (is_timedelta64_series_typ(typ2) and typ1 == datetime_timedelta_type):
+                impl = bodo.hiframes.series_dt_impl.create_bin_op_overload(rhs.fn)(
+                    typ1, typ2
+                )
                 return self._replace_func(impl, [arg1, arg2])
 
         # inline overload for comparisons

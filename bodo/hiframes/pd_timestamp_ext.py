@@ -630,6 +630,26 @@ def parse_datetime_str(val):  # pragma: no cover
     return integer_to_dt64(res)
 
 
+@numba.njit
+def datetime_timedelta_to_timedelta64(val):  # pragma: no cover
+    """convert datetime.timedelta to np.timedelta64
+    """
+    with numba.objmode(res='NPTimedelta("ns")'):
+        res = pd.to_timedelta(val)
+        res = res.to_timedelta64()
+    return res
+
+
+@numba.njit
+def datetime_datetime_to_dt64(val):  # pragma: no cover
+    """convert datetime.datetime to np.datetime64
+    """
+    with numba.objmode(res='NPDatetime("ns")'):
+        res = np.datetime64(val).astype("datetime64[ns]")
+
+    return res
+
+
 # -- builtin operators for dt64 ----------------------------------------------
 # TODO: move to Numba
 

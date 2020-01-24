@@ -93,7 +93,31 @@ def test_datetime_operations():
     # Test series(dt64)
     S = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
     timestamp = pd.to_datetime("2018-04-24")
+    dt_dt = datetime.datetime(2001, 1, 1)
+    dt_td = datetime.timedelta(1, 1, 1)
     check_func(test_sub, (S, timestamp))
+    check_func(test_sub, (S, dt_dt))
+    check_func(test_sub, (S, dt_td))
+    check_func(test_sub, (timestamp, S))
+    check_func(test_sub, (dt_dt, S))
+    check_func(test_add, (S, dt_td))
+    check_func(test_add, (dt_td, S))
+
+    # Test series(timedelta64)
+    tdS = pd.Series(
+        (
+            datetime.timedelta(6, 6, 6),
+            datetime.timedelta(5, 5, 5),
+            datetime.timedelta(4, 4, 4),
+            datetime.timedelta(3, 3, 3),
+            datetime.timedelta(2, 2, 2),
+        )
+    )
+    check_func(test_sub, (tdS, dt_td))
+    check_func(test_sub, (dt_td, tdS))
+    check_func(test_sub, (S, tdS))
+    check_func(test_add, (S, tdS))
+    check_func(test_add, (tdS, S))
 
 
 def test_datetime_comparisons():
@@ -148,6 +172,17 @@ def test_datetime_comparisons():
     check_func(test_lt, (dt, dt2))
     check_func(test_ge, (dt, dt2))
     check_func(test_gt, (dt, dt2))
+
+    # test series(dt64) scalar cmp
+    t = np.datetime64("2018-04-27").astype("datetime64[ns]")
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
+    check_func(test_ge, (S, t))
+    check_func(test_ge, (t, S))
+
+    # test series(dt64) cmp
+    S1 = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
+    S2 = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
+    check_func(test_ge, (S1, S2))
 
 
 def test_datetime_boxing():
@@ -409,42 +444,6 @@ def test_dt_extract_date(series_value):
         return S.dt.date
 
     check_func(impl, (series_value, ))
-
-
-def test_series_dt64_scalar_cmp():
-    """Test Series.dt comparison with scalar
-    """
-
-    t = np.datetime64("2018-04-27").astype("datetime64[ns]")
-
-    def test_impl(S):
-        return S >= t
-
-    def test_impl2(S):
-        return t >= S
-
-    S = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
-    check_func(test_impl, (S,))
-    check_func(test_impl2, (S,))
-
-
-def test_series_dt64_cmp():
-    """Test Series.dt comparison with Series.dt
-    """
-
-    def test_impl1(S1, S2):
-        return S1 == S2
-
-    def test_impl2(S1, S2):
-        return S1 >= S2
-
-    S1 = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
-    S2 = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
-    check_func(test_impl1, (S1, S2))
-    check_func(test_impl2, (S1, S2))
-
-    S2.values[3] = np.datetime64("2018-05-03").astype("datetime64[ns]")
-    check_func(test_impl2, (S1, S2))
 
 
 def test_series_dt64_timestamp_cmp():
