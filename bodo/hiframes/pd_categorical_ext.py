@@ -1,11 +1,14 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
+import numpy as np
+import pandas as pd
 import numba
 from numba.extending import (
     box,
     unbox,
     typeof_impl,
     register_model,
+    make_attribute_wrapper,
     models,
     NativeValue,
     lower_builtin,
@@ -13,15 +16,12 @@ from numba.extending import (
     overload,
     type_callable,
     overload_method,
+    overload_attribute,
     intrinsic,
 )
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba import types, typing, cgutils
-from numba.targets.boxing import box_array, unbox_array
-
-import numpy as np
-import pandas as pd
 
 
 class PDCategoricalDtype(types.Opaque):
@@ -52,32 +52,40 @@ class CategoricalDtypeModel(models.IntegerModel):
 
 
 # Array of categorical data (similar to Pandas Categorical array)
-# same as Array but knows how to box etc.
-# TODO: defer to Array for all operations
-class CategoricalArray(types.Array):
+class CategoricalArray(types.ArrayCompatible):
     def __init__(self, dtype):
         self.dtype = dtype
         super(CategoricalArray, self).__init__(
-            dtype, 1, "C", name="CategoricalArray({})".format(dtype)
+            name="CategoricalArray({})".format(dtype)
         )
+
+    @property
+    def as_array(self):
+        return types.Array(types.undefined, 1, "C")
 
 
 @register_model(CategoricalArray)
-class CategoricalArrayModel(models.ArrayModel):
+class CategoricalArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         int_dtype = get_categories_int_type(fe_type.dtype)
-        data_array = types.Array(int_dtype, 1, "C")
-        super(CategoricalArrayModel, self).__init__(dmm, data_array)
+        members = [("codes", types.Array(int_dtype, 1, "C"))]
+        super(CategoricalArrayModel, self).__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(CategoricalArray, "codes", "_codes")
 
 
 @unbox(CategoricalArray)
 def unbox_categorical_array(typ, val, c):
     arr_obj = c.pyapi.object_getattr_string(val, "codes")
-    # c.pyapi.print_object(arr_obj)
     dtype = get_categories_int_type(typ.dtype)
-    native_val = unbox_array(types.Array(dtype, 1, "C"), arr_obj, c)
+    codes = c.pyapi.to_native_value(types.Array(dtype, 1, "C"), arr_obj).value
     c.pyapi.decref(arr_obj)
-    return native_val
+
+    # create CategoricalArray
+    cat_arr_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    cat_arr_val.codes = codes
+    return NativeValue(cat_arr_val._getvalue())
 
 
 def get_categories_int_type(cat_dtype):
@@ -117,7 +125,10 @@ def box_categorical_array(typ, val, c):
     # c.pyapi.decref(types_obj)
 
     int_dtype = get_categories_int_type(dtype)
-    arr = box_array(types.Array(int_dtype, 1, "C"), val, c)
+    codes = cgutils.create_struct_proxy(typ)(c.context, c.builder, val).codes
+    arr = c.pyapi.from_native_value(
+        types.Array(int_dtype, 1, "C"), codes, c.env_manager
+    )
 
     pdcat_cls_obj = c.pyapi.object_getattr_string(pd_class_obj, "Categorical")
     cat_arr = c.pyapi.call_method(pdcat_cls_obj, "from_codes", (arr, list_obj))
@@ -131,7 +142,7 @@ def box_categorical_array(typ, val, c):
     return cat_arr
 
 
-# TODO: handle all ops, redo CategoricalArray without Array subtyping
+# TODO: handle all ops
 @overload(operator.eq)
 def overload_cat_arr_eq_str(A, other):
     if isinstance(A, CategoricalArray) and isinstance(other, types.StringLiteral):
@@ -208,3 +219,19 @@ def set_cat_dtype(typingctx, arr, cat_arr=None):
         return impl_ret_borrowed(context, builder, sig.return_type, args[0])
 
     return cat_arr(arr, cat_arr), codegen
+
+
+@overload(len)
+def overload_cat_arr_len(A):
+    if isinstance(A, CategoricalArray):
+        return lambda A: len(A._codes)
+
+
+@overload_attribute(CategoricalArray, "shape")
+def overload_cat_arr_shape(A):
+    return lambda A: (len(A._codes),)
+
+
+@overload_attribute(CategoricalArray, "ndim")
+def overload_cat_arr_ndim(A):
+    return lambda A: 1

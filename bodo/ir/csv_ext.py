@@ -394,7 +394,6 @@ def _gen_csv_reader_py(
         # func_text += "    print({})\n".format(s_cname)
     func_text += "  return ({},)\n".format(", ".join(sc for sc in sanitized_cnames))
 
-    # print(func_text)
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
     # {'objmode': objmode, 'csv_file_chunk_reader': csv_file_chunk_reader,
     # 'pd': pd, 'np': np}
