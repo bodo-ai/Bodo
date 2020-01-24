@@ -31,24 +31,12 @@ class PDCategoricalDtype(types.Opaque):
         super(PDCategoricalDtype, self).__init__(name=name)
 
 
-class PDCategoricalClass(types.Opaque):
-    # class for categorical dtype objects passed as types to astype() etc.
-    def __init__(self, _categories):
-        self.categories = _categories
-        name = "PDCategoricalClass({})".format(self.categories)
-        super(PDCategoricalClass, self).__init__(name=name)
-
-
 @typeof_impl.register(pd.CategoricalDtype)
-def _typeof_pd_cat_class(val, c):
-    return PDCategoricalClass(val.categories.to_list())
+def _typeof_pd_cat_dtype(val, c):
+    return PDCategoricalDtype(val.categories.to_list())
 
 
-@register_model(PDCategoricalDtype)
-class CategoricalDtypeModel(models.IntegerModel):
-    def __init__(self, dmm, fe_type):
-        int_dtype = get_categories_int_type(fe_type)
-        super(CategoricalDtypeModel, self).__init__(dmm, int_dtype)
+register_model(PDCategoricalDtype)(models.OpaqueModel)
 
 
 # Array of categorical data (similar to Pandas Categorical array)
@@ -178,6 +166,29 @@ def cat_overload_dummy(val_list):
 
 
 @intrinsic
+def init_categorical_array(typingctx, codes, cat_dtype=None):
+    """Create a CategoricalArray with codes array (integers) and categories dtype
+    """
+    assert isinstance(codes, types.Array) and isinstance(codes.dtype, types.Integer)
+
+    def codegen(context, builder, signature, args):
+        data_val = args[0]
+        # create cat_arr struct and store values
+        cat_arr = cgutils.create_struct_proxy(signature.return_type)(context, builder)
+        cat_arr.codes = data_val
+
+        # increase refcount of stored array
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[0], data_val)
+
+        return cat_arr._getvalue()
+
+    ret_typ = CategoricalArray(cat_dtype)
+    sig = ret_typ(codes, cat_dtype)
+    return sig, codegen
+
+
+@intrinsic
 def fix_cat_array_type(typingctx, arr=None):
     # fix array type from Array(CatDtype) to CategoricalArray(CatDtype)
     # no-op for other arrays
@@ -235,3 +246,21 @@ def overload_cat_arr_shape(A):
 @overload_attribute(CategoricalArray, "ndim")
 def overload_cat_arr_ndim(A):
     return lambda A: 1
+
+
+@intrinsic
+def init_cat_dtype(typingctx, cat_dtype=None):
+    """Create a dummy value for CategoricalDtype
+    """
+
+    def codegen(context, builder, signature, args):
+        return context.get_dummy_value()
+
+    sig = cat_dtype.instance_type(cat_dtype)
+    return sig, codegen
+
+
+@overload_attribute(CategoricalArray, "dtype")
+def overload_cat_arr_dtype(A):
+    dtype = A.dtype
+    return lambda A: init_cat_dtype(dtype)

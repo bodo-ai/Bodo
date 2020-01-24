@@ -21,7 +21,6 @@ from bodo import objmode
 import pandas as pd
 import numpy as np
 
-from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 
 
 class ParquetReader(ir.Stmt):
