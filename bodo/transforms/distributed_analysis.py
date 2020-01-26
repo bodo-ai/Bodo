@@ -50,6 +50,7 @@ from bodo.utils.utils import (
 )
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.utils.transform import get_stmt_defs
 from bodo.utils.typing import BodoWarning
 from bodo.libs.bool_arr_ext import boolean_array
@@ -435,6 +436,10 @@ class DistributedAnalysis:
             self._set_var_dist(lhs, array_dists, new_dist)
             self._set_var_dist(rhs.value.name, array_dists, new_dist)
             return
+        elif isinstance(rhs_typ, CategoricalArray) and rhs.attr == "_codes":
+            # categorical array and its underlying codes array have same distributions
+            arr = rhs.value.name
+            self._meet_array_dists(lhs, arr, array_dists)
 
     def _analyze_parfor(self, parfor, array_dists, parfor_dists):
         if parfor.id not in parfor_dists:
