@@ -292,7 +292,7 @@ class DistributedAnalysis:
         lhs_typ = self.typemap[lhs]
 
         # treat return casts like assignments
-        if isinstance(rhs, ir.Expr) and rhs.op == "cast":
+        if is_expr(rhs, "cast"):
             rhs = rhs.value
 
         if isinstance(rhs, ir.Var) and (
@@ -300,11 +300,7 @@ class DistributedAnalysis:
         ):
             self._meet_array_dists(lhs, rhs.name, array_dists)
             return
-        elif (
-            is_array_typ(lhs_typ)
-            and isinstance(rhs, ir.Expr)
-            and rhs.op == "inplace_binop"
-        ):
+        elif is_array_typ(lhs_typ) and is_expr(rhs, "inplace_binop"):
             # distributions of all 3 variables should meet (lhs, arg1, arg2)
             # XXX: arg1 or arg2 (but not both) can be non-array like scalar
             arg1 = rhs.lhs.name
@@ -323,11 +319,7 @@ class DistributedAnalysis:
         elif isinstance(rhs, ir.Expr) and rhs.op in ("getitem", "static_getitem"):
             self._analyze_getitem(inst, lhs, rhs, array_dists)
             return
-        elif (
-            isinstance(rhs, ir.Expr)
-            and rhs.op == "build_tuple"
-            and is_distributable_tuple_typ(lhs_typ)
-        ):
+        elif is_expr(rhs, "build_tuple") and is_distributable_tuple_typ(lhs_typ):
             # parallel arrays can be packed and unpacked from tuples
             # e.g. boolean array index in test_getitem_multidim
             l_dist = self._get_var_dist(lhs, array_dists)
@@ -343,10 +335,8 @@ class DistributedAnalysis:
 
             array_dists[lhs] = new_dist
             return
-        elif (
-            isinstance(rhs, ir.Expr)
-            and rhs.op == "build_list"
-            and (is_distributable_tuple_typ(lhs_typ) or is_distributable_typ(lhs_typ))
+        elif is_expr(rhs, "build_list") and (
+            is_distributable_tuple_typ(lhs_typ) or is_distributable_typ(lhs_typ)
         ):
             # dist vars can be in lists
             # meet all distributions
@@ -356,87 +346,82 @@ class DistributedAnalysis:
             for v in rhs.items:
                 self._meet_array_dists(lhs, v.name, array_dists)
             return
-        elif (
-            isinstance(rhs, ir.Expr)
-            and rhs.op == "exhaust_iter"
-            and is_distributable_tuple_typ(lhs_typ)
-        ):
+        elif is_expr(rhs, "exhaust_iter") and is_distributable_tuple_typ(lhs_typ):
             self._meet_array_dists(lhs, rhs.value.name, array_dists)
-        elif (
-            isinstance(rhs, ir.Expr)
-            and rhs.op == "getattr"
-            and rhs.attr == "T"
-            and is_array_typ(lhs_typ)
-        ):
+        elif is_expr(rhs, "getattr"):
+            self._analyze_getattr(lhs, rhs, array_dists)
+        elif is_expr(rhs, "call"):
+            self._analyze_call(lhs, rhs, rhs.func.name, rhs.args, array_dists)
+        # handle for A in arr_container: ...
+        # A = pair_first(iternext(getiter(arr_container)))
+        # TODO: support getitem of container
+        elif is_expr(rhs, "pair_first") and is_distributable_typ(lhs_typ):
+            arr_container = guard(_get_pair_first_container, self.func_ir, rhs)
+            if arr_container is not None:
+                self._meet_array_dists(lhs, arr_container.name, array_dists)
+                return
+        elif isinstance(rhs, ir.Expr) and rhs.op in ("getiter", "iternext"):
+            # analyze array container access in pair_first
+            return
+        elif isinstance(rhs, ir.Arg):
+            self._analyze_arg(lhs, rhs, array_dists)
+            return
+        else:
+            self._set_REP(inst.list_vars(), array_dists)
+
+    def _analyze_getattr(self, lhs, rhs, array_dists):
+        lhs_typ = self.typemap[lhs]
+        rhs_typ = self.typemap[rhs.value.name]
+        if rhs.attr == "T" and is_array_typ(lhs_typ):
             # array and its transpose have same distributions
             arr = rhs.value.name
             self._meet_array_dists(lhs, arr, array_dists)
             # keep lhs in table for dot() handling
             self._T_arrs.add(lhs)
             return
-        elif (
-            isinstance(rhs, ir.Expr)
-            and rhs.op == "getattr"
-            and isinstance(self.typemap[rhs.value.name], DataFrameType)
-            and rhs.attr in {"to_csv", "to_parquet"}
+        elif isinstance(rhs_typ, DataFrameType) and rhs.attr in (
+            "to_csv",
+            "to_parquet",
         ):
             return
         # list methods
-        elif (
-            isinstance(rhs, ir.Expr)
-            and rhs.op == "getattr"
-            and isinstance(self.typemap[rhs.value.name], types.List)
-            and rhs.attr
-            in (
-                "append",
-                "clear",
-                "copy",
-                "count",
-                "extend",
-                "index",
-                "insert",
-                "pop",
-                "remove",
-                "reverse",
-                "sort",
-            )
+        elif isinstance(rhs_typ, types.List) and rhs.attr in (
+            "append",
+            "clear",
+            "copy",
+            "count",
+            "extend",
+            "index",
+            "insert",
+            "pop",
+            "remove",
+            "reverse",
+            "sort",
         ):
             return
-        elif (
-            isinstance(rhs, ir.Expr)
-            and rhs.op == "getattr"
-            and rhs.attr
-            in [
-                "shape",
-                "ndim",
-                "size",
-                "strides",
-                "dtype",
-                "itemsize",
-                "astype",
-                "reshape",
-                "ctypes",
-                "transpose",
-                "tofile",
-                "copy",
-                "view",
-            ]
-        ):
+        elif rhs.attr in [
+            "shape",
+            "ndim",
+            "size",
+            "strides",
+            "dtype",
+            "itemsize",
+            "astype",
+            "reshape",
+            "ctypes",
+            "transpose",
+            "tofile",
+            "copy",
+            "view",
+        ]:
             pass  # X.shape doesn't affect X distribution
-        elif (
-            isinstance(rhs, ir.Expr)
-            and rhs.op == "getattr"
-            and isinstance(
-                self.typemap[rhs.value.name], bodo.hiframes.pd_index_ext.RangeIndexType
-            )
-            and rhs.attr in ("_start", "_stop", "_step", "_name")
-        ):
+        elif isinstance(
+            rhs_typ, bodo.hiframes.pd_index_ext.RangeIndexType
+        ) and rhs.attr in ("_start", "_stop", "_step", "_name"):
             return
         elif (
-            isinstance(rhs, ir.Expr)
-            and rhs.op == "getattr"
-            and isinstance(self.typemap[rhs.value.name], MultiIndexType)
-            and len(self.typemap[rhs.value.name].array_types) > 0
+            isinstance(rhs_typ, MultiIndexType)
+            and len(rhs_typ.array_types) > 0
             and rhs.attr == "_data"
         ):
             # output of MultiIndex._data is a tuple, with all arrays having the same
@@ -450,29 +435,6 @@ class DistributedAnalysis:
             self._set_var_dist(lhs, array_dists, new_dist)
             self._set_var_dist(rhs.value.name, array_dists, new_dist)
             return
-        elif isinstance(rhs, ir.Expr) and rhs.op == "call":
-            self._analyze_call(lhs, rhs, rhs.func.name, rhs.args, array_dists)
-        # handle for A in arr_container: ...
-        # A = pair_first(iternext(getiter(arr_container)))
-        # TODO: support getitem of container
-        elif (
-            isinstance(rhs, ir.Expr)
-            and rhs.op == "pair_first"
-            and is_distributable_typ(lhs_typ)
-        ):
-            arr_container = guard(_get_pair_first_container, self.func_ir, rhs)
-            if arr_container is not None:
-                self._meet_array_dists(lhs, arr_container.name, array_dists)
-                return
-        elif isinstance(rhs, ir.Expr) and rhs.op in ("getiter", "iternext"):
-            # analyze array container access in pair_first
-            return
-        elif isinstance(rhs, ir.Arg):
-            self._analyze_arg(lhs, rhs, array_dists)
-            return
-        else:
-            self._set_REP(inst.list_vars(), array_dists)
-        return
 
     def _analyze_parfor(self, parfor, array_dists, parfor_dists):
         if parfor.id not in parfor_dists:
