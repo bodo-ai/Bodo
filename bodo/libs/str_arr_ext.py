@@ -1452,8 +1452,11 @@ def decode_utf8(typingctx, ptr_t, len_t=None):
         pyapi = context.get_python_api(builder)
         unicode_obj = pyapi.string_from_string_and_size(ptr, length)
         str_val = pyapi.to_native_value(string_type, unicode_obj).value
+        str_struct = cgutils.create_struct_proxy(string_type)(context, builder, str_val)
+        # clear hash field due to Python-based shuffle hashing (#442)
+        str_struct.hash = str_struct.hash.type(-1)
         pyapi.decref(unicode_obj)
-        return str_val
+        return str_struct._getvalue()
 
     return string_type(types.voidptr, types.intp), codegen
 
