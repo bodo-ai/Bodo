@@ -427,7 +427,7 @@ def test_csv_fname_comp(datapath):
 
 def test_write_csv_parallel_unicode():
     def test_impl(df, fname):
-        df.to_csv(fname, index=False)
+        df.to_csv(fname)
 
     bodo_func = bodo.jit(all_args_distributed=True)(test_impl)
     S1 = ["¡Y tú quién te crees?", "🐍⚡", "大处着眼，小处着手。"] * 2
@@ -1179,7 +1179,7 @@ class TestIO(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         n = 111
-        df = pd.DataFrame({"A": np.arange(n)})
+        df = pd.DataFrame({"A": np.arange(n)}, index=np.arange(n) * 2)
         hp_fname = "test_write_csv1_bodo.csv"
         pd_fname = "test_write_csv1_pd.csv"
         with ensure_clean(pd_fname), ensure_clean(hp_fname):
