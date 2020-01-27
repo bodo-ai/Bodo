@@ -24,6 +24,7 @@ from numba.typing.templates import infer_global, AbstractTemplate
 from numba import types, typing, cgutils
 
 
+# type for pd.CategoricalDtype objects in Pandas
 class PDCategoricalDtype(types.Opaque):
     def __init__(self, _categories):
         self.categories = _categories
