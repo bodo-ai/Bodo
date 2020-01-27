@@ -37,7 +37,6 @@ from bodo.utils.utils import (
     is_alloc_callname,
     is_whole_slice,
     is_array_typ,
-    is_array_container_typ,
     is_np_array_typ,
     find_build_tuple,
     debug_prints,
@@ -1504,7 +1503,7 @@ class DistributedAnalysis:
 
     def _get_dist(self, typ, dist):
         if is_distributable_tuple_typ(typ):
-            if isinstance(typ, (types.List, types.Set)):
+            if isinstance(typ, types.List):
                 typ = typ.dtype
             return [
                 self._get_dist(t, dist)

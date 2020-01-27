@@ -377,17 +377,13 @@ def is_np_array_typ(var_typ):
     return isinstance(var_typ, types.Array)
 
 
-def is_array_container_typ(var_typ):
-    return isinstance(var_typ, (types.List, types.Set)) and is_array_typ(var_typ.dtype)
-
-
 # TODO: fix tuple, dataframe distribution
 def is_distributable_typ(var_typ):
     return (
         is_array_typ(var_typ)
         or isinstance(var_typ, bodo.hiframes.pd_dataframe_ext.DataFrameType)
         or (
-            isinstance(var_typ, (types.List, types.Set))
+            isinstance(var_typ, types.List)
             and is_distributable_typ(var_typ.dtype)
         )
     )
@@ -401,7 +397,7 @@ def is_distributable_tuple_typ(var_typ):
             for t in var_typ.types
         )
     ) or (
-        isinstance(var_typ, (types.List, types.Set))
+        isinstance(var_typ, types.List)
         and is_distributable_tuple_typ(var_typ.dtype)
     )
 
