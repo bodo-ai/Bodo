@@ -1133,6 +1133,12 @@ class DistributedAnalysis:
 
         if func_name == "dist_return":
             arr_name = args[0].name
+            arr_typ = self.typemap[arr_name]
+            assert is_distributable_typ(arr_typ) or is_distributable_tuple_typ(
+                arr_typ
+            ), "Variable {} is not distributable since it is of type {}".format(
+                arr_name, arr_typ
+            )
             assert arr_name in array_dists, "array distribution not found"
             if is_REP(array_dists[arr_name]):
                 raise ValueError(
