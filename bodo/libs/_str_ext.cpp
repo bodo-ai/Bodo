@@ -208,8 +208,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&array_getptr1)));
     PyObject_SetAttrString(m, "array_setitem",
                            PyLong_FromVoidPtr((void*)(&array_setitem)));
-    PyObject_SetAttrString(m, "decode_utf8",
-                           PyLong_FromVoidPtr((void*)(&decode_utf8)));
     PyObject_SetAttrString(m, "get_utf8_size",
                            PyLong_FromVoidPtr((void*)(&get_utf8_size)));
     PyObject_SetAttrString(m, "mask_arr_to_bitmap",

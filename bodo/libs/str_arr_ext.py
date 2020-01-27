@@ -831,7 +831,6 @@ ll.add_symbol("str_arr_to_int64", hstr_ext.str_arr_to_int64)
 ll.add_symbol("str_arr_to_float64", hstr_ext.str_arr_to_float64)
 ll.add_symbol("dtor_string_array", hstr_ext.dtor_string_array)
 ll.add_symbol("c_glob", hstr_ext.c_glob)
-ll.add_symbol("decode_utf8", hstr_ext.decode_utf8)
 ll.add_symbol("get_utf8_size", hstr_ext.get_utf8_size)
 ll.add_symbol("print_str_arr", hstr_ext.print_str_arr)
 
@@ -1450,36 +1449,11 @@ def decode_utf8(typingctx, ptr_t, len_t=None):
     def codegen(context, builder, sig, args):
         ptr, length = args
 
-        # create str and call decode with internal pointers
-        uni_str = cgutils.create_struct_proxy(string_type)(context, builder)
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(32).as_pointer(),
-                lir.IntType(32).as_pointer(),
-                lir.IntType(64).as_pointer(),
-                uni_str.meminfo.type.as_pointer(),
-            ],
-        )
-        fn_decode = builder.module.get_or_insert_function(fnty, name="decode_utf8")
-        builder.call(
-            fn_decode,
-            [
-                ptr,
-                length,
-                uni_str._get_ptr_by_name("kind"),
-                uni_str._get_ptr_by_name("is_ascii"),
-                uni_str._get_ptr_by_name("length"),
-                uni_str._get_ptr_by_name("meminfo"),
-            ],
-        )
-        uni_str.hash = context.get_constant(_Py_hash_t, -1)
-        uni_str.data = context.nrt.meminfo_data(builder, uni_str.meminfo)
-        # Set parent to NULL
-        uni_str.parent = cgutils.get_null_value(uni_str.parent.type)
-        return uni_str._getvalue()
+        pyapi = context.get_python_api(builder)
+        unicode_obj = pyapi.string_from_string_and_size(ptr, length)
+        str_val = pyapi.to_native_value(string_type, unicode_obj).value
+        pyapi.decref(unicode_obj)
+        return str_val
 
     return string_type(types.voidptr, types.intp), codegen
 

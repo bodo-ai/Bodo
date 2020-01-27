@@ -43,7 +43,6 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import (
     string_array_type,
     pre_alloc_string_array,
-    get_utf8_size,
 )
 
 

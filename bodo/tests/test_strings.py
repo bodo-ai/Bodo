@@ -849,6 +849,17 @@ class TestString(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(), test_impl())
 
+    def test_unicode_decode_2byte_kind(self):
+        """Test decoding element from string array in UTF8 to 2-byte kind Unicode
+        """
+        def test_impl(A):
+            return bodo.libs.str_arr_ext.get_utf8_size(A[0])
+
+        # a string array with a 2-byte kind Unicode
+        A = np.array(["Õ"], dtype=np.object)
+        # length of element after encoding back to UTF8 should be 2
+        assert bodo.jit(test_impl)(A) == 2
+
     @unittest.skip("TODO: explore np array of strings")
     def test_box_np_arr_string(self):
         def test_impl(A):
