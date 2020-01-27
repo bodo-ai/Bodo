@@ -385,6 +385,10 @@ def is_distributable_typ(var_typ):
         or (
             isinstance(var_typ, types.List)
             and is_distributable_typ(var_typ.dtype)
+        ) or (
+        isinstance(var_typ, types.DictType)
+        # only dictionary values can be distributed since keys should be hashable
+        and is_distributable_typ(var_typ.value_type)
         )
     )
 
@@ -399,6 +403,9 @@ def is_distributable_tuple_typ(var_typ):
     ) or (
         isinstance(var_typ, types.List)
         and is_distributable_tuple_typ(var_typ.dtype)
+    ) or (
+        isinstance(var_typ, types.DictType)
+        and is_distributable_tuple_typ(var_typ.value_type)
     )
 
 

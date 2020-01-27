@@ -356,6 +356,18 @@ class DistributedAnalysis:
                 self._meet_array_dists(lhs, v.name, array_dists)
             return
         elif (
+            is_expr(rhs, "build_map")
+            and (is_distributable_tuple_typ(lhs_typ) or is_distributable_typ(lhs_typ))
+        ):
+            # dist vars can be in dictionary as values
+            # meet all distributions
+            for _, v in rhs.items:
+                self._meet_array_dists(lhs, v.name, array_dists)
+            # second round to propagate info fully
+            for _, v in rhs.items:
+                self._meet_array_dists(lhs, v.name, array_dists)
+            return
+        elif (
             isinstance(rhs, ir.Expr)
             and rhs.op == "exhaust_iter"
             and is_distributable_tuple_typ(lhs_typ)

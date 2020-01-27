@@ -491,6 +491,20 @@ def test_dist_list_append2():
     assert count_array_OneDs() > 0
 
 
+def test_dist_dict1():
+    """Test support for build_map of dist data
+    """
+
+    def impl1(df):
+        v = {1: df}
+        return v
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    bodo.jit(distributed={"v", "df"})(impl1)(df)
+    assert count_array_OneDs() > 0
+
+
 def test_dist_warning1():
     """Make sure BodoWarning is thrown when there is no parallelism discovered due
     to unsupported function
