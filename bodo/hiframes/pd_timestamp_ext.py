@@ -650,6 +650,29 @@ def datetime_datetime_to_dt64(val):  # pragma: no cover
     return res
 
 
+types.pandas_timestamp_type = pandas_timestamp_type
+
+
+@overload(pd.to_datetime)
+def overload_to_datetime(arg):
+    """implementation for pd.to_datetime
+    """
+
+    if arg == bodo.string_type or bodo.utils.typing.is_overload_constant_str(
+        arg
+    ):
+
+        def pd_to_datetime_impl(arg):  # pragma: no cover
+            with numba.objmode(t="pandas_timestamp_type"):
+                t = pd.to_datetime(arg)
+            return t
+
+        return pd_to_datetime_impl
+
+    # TODO: input Type of a dataframe or series
+    # TODO: input type of an array
+
+
 # -- builtin operators for dt64 ----------------------------------------------
 # TODO: move to Numba
 
