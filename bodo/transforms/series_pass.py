@@ -6,6 +6,7 @@ to provide implementation and enable optimization.
 import operator
 from collections import defaultdict, namedtuple
 import re
+import types as pytypes
 import numpy as np
 import pandas as pd
 import warnings
@@ -1766,8 +1767,9 @@ class SeriesPass:
         """translate df.A.map(lambda a:...) to prange()
         """
         func = guard(get_definition, self.func_ir, func_var)
+        func = func.value if isinstance(func, ir.Global) else func
         if func is None or not (
-            isinstance(func, ir.Expr) and func.op == "make_function"
+            is_expr(func, "make_function") or isinstance(func, pytypes.FunctionType)
         ):
             raise BodoError("lambda for map not found")
 

@@ -3,6 +3,7 @@
 Helper functions to enable typing.
 """
 import itertools
+import types as pytypes
 import numpy as np
 import pandas as pd
 import numba
@@ -13,6 +14,7 @@ from numba.extending import (
     overload,
     register_jitable,
     lower_cast,
+    typeof_impl,
 )
 from numba.typing.templates import infer_global, AbstractTemplate, CallableTemplate
 from numba.typing import signature
@@ -297,6 +299,23 @@ def literal_bool_cast(context, builder, fromty, toty, val):
         builder, fromty.literal_type, fromty.literal_value
     )
     return context.cast(builder, lit, fromty.literal_type, toty)
+
+
+# literal type for functions (to handle function arguments to map/apply methods)
+# TODO: update when Numba's #4967 is merged
+# similar to MakeFunctionLiteral
+class FunctionLiteral(types.Literal, types.Opaque):
+    """Literal type for function objects (i.e. pytypes.FunctionType)
+    """
+    pass
+
+
+@typeof_impl.register(pytypes.FunctionType)
+def typeof_function(val, c):
+    """Assign literal type to constant functions that are not overloaded in numba.
+    """
+    if not numba.targets.registry.cpu_target.typing_context._get_global_type(val):
+        return FunctionLiteral(val)
 
 
 # type used to pass metadata to type inference functions

@@ -153,3 +153,28 @@ def get_const_nested(func_ir, v):
     ):
         return tuple(get_const_nested(func_ir, a) for a in v_def.items)
     return find_const(func_ir, v)
+
+
+def get_const_func_output_type(func, arg_types, typing_context):
+    """Get output type of constant function 'func' when compiled with 'arg_types' as
+    argument types.
+    'func' can be a MakeFunctionLiteral (inline lambda) or FunctionLiteral (function)
+    """
+
+    if isinstance(func, types.MakeFunctionLiteral):
+        code = func.literal_value.code
+        _globals = {"np": np, "pd": pd, "numba": numba, "bodo": bodo}
+        # XXX hack in untyped_pass to make globals available
+        if hasattr(func.literal_value, "globals"):
+            # TODO: use code.co_names to find globals actually used?
+            _globals = func.literal_value.globals
+
+        f_ir = numba.ir_utils.get_ir_of_code(_globals, code)
+    else:
+        assert isinstance(func, bodo.utils.typing.FunctionLiteral)
+        f_ir = numba.compiler.run_frontend(func.literal_value, inline_closures=True)
+
+    _, f_return_type, _ = numba.typed_passes.type_inference_stage(
+        typing_context, f_ir, arg_types, None
+    )
+    return f_return_type
