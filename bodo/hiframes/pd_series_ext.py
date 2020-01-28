@@ -191,10 +191,6 @@ def _get_series_array_type(dtype):
     return types.Array(dtype, 1, "C")
 
 
-def is_bool_series_typ(t):
-    return isinstance(t, SeriesType) and t.dtype == types.bool_
-
-
 def is_str_series_typ(t):
     return isinstance(t, SeriesType) and t.dtype == string_type
 
@@ -552,7 +548,7 @@ class SeriesAttribute(AttributeTemplate):
             dtype = pandas_timestamp_type
         code = func.literal_value.code
         _globals = {"np": np, "pd": pd}
-        # XXX hack in series_pass to make globals available
+        # XXX hack in untyped_pass to make globals available
         if hasattr(func.literal_value, "globals"):
             # TODO: use code.co_names to find globals actually used?
             _globals = func.literal_value.globals

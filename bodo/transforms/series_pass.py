@@ -63,7 +63,6 @@ from bodo.hiframes.pd_series_ext import (
     series_to_array_type,
     is_dt64_series_typ,
     is_timedelta64_series_typ,
-    is_bool_series_typ,
     if_series_to_array_type,
     is_series_type,
     SeriesRollingType,
