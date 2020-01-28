@@ -491,6 +491,21 @@ def test_dist_list_append2():
     assert count_array_OneDs() > 0
 
 
+def test_dist_list_getitem1():
+    """Test support for getitem of distributed list
+    """
+
+    def impl1(v):
+        df = v[1]
+        return df
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    v = [df, df]
+    bodo.jit(distributed={"v", "df"})(impl1)(v)
+    assert count_array_OneDs() > 0
+
+
 def test_dist_dict1():
     """Test support for build_map of dist data
     """

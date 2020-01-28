@@ -1320,7 +1320,7 @@ class DistributedAnalysis:
             return
 
         # getitem on dictionary of distributed values
-        if isinstance(in_typ, types.DictType) and (
+        if isinstance(in_typ, (types.List, types.DictType)) and (
             is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(lhs_typ)
         ):
             # output and dictionary have the same distribution
