@@ -16,7 +16,6 @@ from bodo.libs.str_arr_ext import (
     pre_alloc_string_array,
 )
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
-from bodo.hiframes.pd_categorical_ext import PDCategoricalClass
 from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,

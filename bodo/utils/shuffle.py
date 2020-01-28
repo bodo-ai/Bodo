@@ -407,7 +407,6 @@ def finalize_shuffle_meta_overload(
             "get_data_ptr": get_data_ptr,
             "ShuffleMeta": ShuffleMeta,
             "get_ctypes_ptr": get_ctypes_ptr,
-            "fix_cat_array_type": bodo.hiframes.pd_categorical_ext.fix_cat_array_type,
             "calc_disp_nulls": calc_disp_nulls,
         },
         loc_vars,

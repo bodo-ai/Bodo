@@ -1012,9 +1012,7 @@ def ensure_capacity(arr, new_size):  # pragma: no cover
     curr_len = len(arr)
     if curr_len < new_size:
         new_len = 2 * curr_len
-        new_arr = bodo.hiframes.pd_categorical_ext.fix_cat_array_type(
-            bodo.utils.utils.alloc_type(new_len, arr)
-        )
+        new_arr = bodo.utils.utils.alloc_type(new_len, arr)
         new_arr[:curr_len] = arr
     return new_arr
 
@@ -1143,7 +1141,7 @@ def copy_elem_buff_tup_overload(data, ind, val):
 
 
 def trim_arr(arr, size):  # pragma: no cover
-    return bodo.hiframes.pd_categorical_ext.fix_cat_array_type(arr[:size])
+    return arr[:size]
 
 
 @overload(trim_arr)
@@ -1608,8 +1606,7 @@ def setitem_arr_nan_overload(arr, ind, int_nan_const=0):
     if isinstance(arr, CategoricalArray):
 
         def setitem_arr_nan_cat(arr, ind, int_nan_const=0):  # pragma: no cover
-            int_arr = bodo.hiframes.pd_categorical_ext.cat_array_to_int(arr)
-            int_arr[ind] = -1
+            arr._codes[ind] = -1
 
         return setitem_arr_nan_cat
 

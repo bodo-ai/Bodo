@@ -24,6 +24,7 @@ import bodo
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.utils import _numba_to_c_type_map
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.hiframes.pd_categorical_ext import CategoricalArray, get_categories_int_type
 from bodo.libs.bool_arr_ext import boolean_array
 
 from bodo.libs import array_tools_ext
@@ -71,9 +72,10 @@ register_model(TableType)(models.OpaqueModel)
 
 
 @intrinsic
-def array_to_info(typingctx, arr_type):
+def array_to_info(typingctx, arr_type_t):
     def codegen(context, builder, sig, args):
         in_arr, = args
+        arr_type = arr_type_t
         # arr_info struct keeps a reference
         if context.enable_nrt:
             context.nrt.incref(builder, arr_type, in_arr)
@@ -107,15 +109,20 @@ def array_to_info(typingctx, arr_type):
                 ],
             )
 
+        # get codes array from CategoricalArray to be handled similar to other Numpy
+        # arrays.
+        # TODO: create CategoricalArray on C++ side to handle NAs (-1) properly
+        if isinstance(arr_type, CategoricalArray):
+            in_arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr).codes
+            int_dtype = get_categories_int_type(arr_type.dtype)
+            arr_type = types.Array(int_dtype, 1, "C")
+
         # Numpy
         if isinstance(arr_type, types.Array):
             arr = context.make_array(arr_type)(context, builder, in_arr)
             assert arr_type.ndim == 1, "only 1D array shuffle supported"
             length = builder.extract_value(arr.shape, 0)
             dtype = arr_type.dtype
-            # handle Categorical type
-            if isinstance(dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
-                dtype = bodo.hiframes.pd_categorical_ext.get_categories_int_type(dtype)
             typ_enum = _numba_to_c_type_map[dtype]
             typ_arg = cgutils.alloca_once_value(
                 builder, lir.Constant(lir.IntType(32), typ_enum)
@@ -186,7 +193,55 @@ def array_to_info(typingctx, arr_type):
                 ],
             )
 
-    return array_info_type(arr_type), codegen
+    return array_info_type(arr_type_t), codegen
+
+
+def _lower_info_to_array_numpy(arr_type, context, builder, in_info):
+    assert arr_type.ndim == 1, "only 1D array supported"
+    arr = context.make_array(arr_type)(context, builder)
+
+    length_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+    data_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+    meminfo_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [
+            lir.IntType(8).as_pointer(),  # info
+            lir.IntType(64).as_pointer(),  # num_items
+            lir.IntType(8).as_pointer().as_pointer(),  # data
+            lir.IntType(8).as_pointer().as_pointer(),
+        ],
+    )  # meminfo
+    fn_tp = builder.module.get_or_insert_function(
+        fnty, name="info_to_numpy_array"
+    )
+    builder.call(fn_tp, [in_info, length_ptr, data_ptr, meminfo_ptr])
+
+    intp_t = context.get_value_type(types.intp)
+    shape_array = cgutils.pack_array(
+        builder, [builder.load(length_ptr)], ty=intp_t
+    )
+    itemsize = context.get_constant(
+        types.intp,
+        context.get_abi_sizeof(context.get_data_type(arr_type.dtype)),
+    )
+    strides_array = cgutils.pack_array(builder, [itemsize], ty=intp_t)
+
+    data = builder.bitcast(
+        builder.load(data_ptr),
+        context.get_data_type(arr_type.dtype).as_pointer(),
+    )
+
+    numba.targets.arrayobj.populate_array(
+        arr,
+        data=data,
+        shape=shape_array,
+        strides=strides_array,
+        itemsize=itemsize,
+        meminfo=builder.load(meminfo_ptr),
+    )
+    return arr._getvalue()
 
 
 @intrinsic
@@ -229,53 +284,16 @@ def info_to_array(typingctx, info_type, arr_type):
             )
             return string_array._getvalue()
 
+        if isinstance(arr_type, CategoricalArray):
+            out_arr = cgutils.create_struct_proxy(arr_type)(context, builder)
+            int_dtype = get_categories_int_type(arr_type.dtype)
+            int_arr_type = types.Array(int_dtype, 1, "C")
+            out_arr.codes = _lower_info_to_array_numpy(int_arr_type, context, builder, in_info)
+            return out_arr._getvalue()
+
         # Numpy
         if isinstance(arr_type, types.Array):
-            assert arr_type.ndim == 1, "only 1D array supported"
-            arr = context.make_array(arr_type)(context, builder)
-
-            length_ptr = cgutils.alloca_once(builder, lir.IntType(64))
-            data_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
-            meminfo_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
-
-            fnty = lir.FunctionType(
-                lir.VoidType(),
-                [
-                    lir.IntType(8).as_pointer(),  # info
-                    lir.IntType(64).as_pointer(),  # num_items
-                    lir.IntType(8).as_pointer().as_pointer(),  # data
-                    lir.IntType(8).as_pointer().as_pointer(),
-                ],
-            )  # meminfo
-            fn_tp = builder.module.get_or_insert_function(
-                fnty, name="info_to_numpy_array"
-            )
-            builder.call(fn_tp, [in_info, length_ptr, data_ptr, meminfo_ptr])
-
-            intp_t = context.get_value_type(types.intp)
-            shape_array = cgutils.pack_array(
-                builder, [builder.load(length_ptr)], ty=intp_t
-            )
-            itemsize = context.get_constant(
-                types.intp,
-                context.get_abi_sizeof(context.get_data_type(arr_type.dtype)),
-            )
-            strides_array = cgutils.pack_array(builder, [itemsize], ty=intp_t)
-
-            data = builder.bitcast(
-                builder.load(data_ptr),
-                context.get_data_type(arr_type.dtype).as_pointer(),
-            )
-
-            numba.targets.arrayobj.populate_array(
-                arr,
-                data=data,
-                shape=shape_array,
-                strides=strides_array,
-                itemsize=itemsize,
-                meminfo=builder.load(meminfo_ptr),
-            )
-            return arr._getvalue()
+            return _lower_info_to_array_numpy(arr_type, context, builder, in_info)
 
         # nullable integer/bool array
         if isinstance(arr_type, IntegerArrayType) or arr_type == boolean_array:

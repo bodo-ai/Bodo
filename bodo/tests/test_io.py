@@ -717,6 +717,18 @@ def test_csv_header_none(datapath):
     pd.testing.assert_frame_equal(b_df, p_df)
 
 
+def test_csv_cat1(datapath):
+    fname = datapath("csv_data_cat1.csv")
+
+    def test_impl():
+        ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
+        dtypes = {"C1": np.int, "C2": ct_dtype, "C3": str}
+        df = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
+        return df
+
+    check_func(test_impl, ())
+
+
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
         fname = "lr_w.hdf5"
@@ -1131,18 +1143,6 @@ class TestIO(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
-
-    def test_csv_cat1(self):
-        fname = os.path.join("bodo", "tests", "data", "csv_data_cat1.csv")
-
-        def test_impl():
-            ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
-            dtypes = {"C1": np.int, "C2": ct_dtype, "C3": str}
-            df = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
-            return df.C2
-
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(), test_impl(), check_names=False)
 
     def test_csv_cat2(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_cat1.csv")
