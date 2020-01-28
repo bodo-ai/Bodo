@@ -93,7 +93,7 @@ from bodo.hiframes.split_impl import (
 )
 from bodo.utils.transform import compile_func_single_block, update_locs
 from bodo.utils.utils import is_array_typ
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import get_overload_const_func, BodoError
 
 
 ufunc_names = set(f.__name__ for f in numba.typing.npydecl.supported_ufuncs)
@@ -1766,12 +1766,8 @@ class SeriesPass:
     def _handle_series_map(self, assign, lhs, rhs, series_var, func_var, extra_args):
         """translate df.A.map(lambda a:...) to prange()
         """
-        func = guard(get_definition, self.func_ir, func_var)
-        func = func.value if isinstance(func, ir.Global) else func
-        if func is None or not (
-            is_expr(func, "make_function") or isinstance(func, pytypes.FunctionType)
-        ):
-            raise BodoError("lambda for map not found")
+        # get the function object (ir.Expr.make_function or actual python function)
+        func = get_overload_const_func(self.typemap[func_var.name])
 
         dtype = self.typemap[series_var.name].dtype
         nodes = []

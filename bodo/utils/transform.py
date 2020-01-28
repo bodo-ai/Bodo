@@ -170,9 +170,12 @@ def get_const_func_output_type(func, arg_types, typing_context):
             _globals = func.literal_value.globals
 
         f_ir = numba.ir_utils.get_ir_of_code(_globals, code)
-    else:
-        assert isinstance(func, bodo.utils.typing.FunctionLiteral)
+    elif isinstance(func, bodo.utils.typing.FunctionLiteral):
         f_ir = numba.compiler.run_frontend(func.literal_value, inline_closures=True)
+    else:
+        assert isinstance(func, types.Dispatcher)
+        py_func = func.dispatcher.py_func
+        f_ir = numba.compiler.run_frontend(py_func, inline_closures=True)
 
     _, f_return_type, _ = numba.typed_passes.type_inference_stage(
         typing_context, f_ir, arg_types, None

@@ -15,6 +15,8 @@ from numba.extending import (
     register_jitable,
     lower_cast,
     typeof_impl,
+    unbox,
+    NativeValue,
 )
 from numba.typing.templates import infer_global, AbstractTemplate, CallableTemplate
 from numba.typing import signature
@@ -163,6 +165,16 @@ def get_overload_const_int(val):
         assert isinstance(val.literal_value, int)
         return val.literal_value
     raise ValueError("{} not constant integer".format(val))
+
+
+def get_overload_const_func(val):
+    """get constant function object or ir.Expr.make_function from function type
+    """
+    if isinstance(val, (types.MakeFunctionLiteral, bodo.utils.typing.FunctionLiteral)):
+        return val.literal_value
+    if isinstance(val, types.Dispatcher):
+        return val.dispatcher.py_func
+    raise BodoError("'{}' not a constant function type".format(val))
 
 
 # TODO: move to Numba
@@ -316,6 +328,15 @@ def typeof_function(val, c):
     """
     if not numba.targets.registry.cpu_target.typing_context._get_global_type(val):
         return FunctionLiteral(val)
+
+
+register_model(FunctionLiteral)(models.OpaqueModel)
+
+
+# dummy unbox to avoid errors when function is passed as argument
+@unbox(FunctionLiteral)
+def unbox_func_literal(typ, obj, c):
+    return NativeValue(obj)
 
 
 # type used to pass metadata to type inference functions
