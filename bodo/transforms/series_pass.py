@@ -880,10 +880,6 @@ class SeriesPass:
                 impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
             )
 
-        if fdef == ("cat_array_to_int", "bodo.hiframes.pd_categorical_ext"):
-            assign.value = rhs.args[0]
-            return [assign]
-
         # replace _get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
         # TODO: min

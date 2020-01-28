@@ -55,10 +55,6 @@ from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 from bodo.hiframes.rolling import supported_rolling_funcs
 import datetime
-from bodo.hiframes.split_impl import (
-    string_array_split_view_type,
-    GetItemStringArraySplitView,
-)
 from bodo.utils.typing import is_overload_none, is_overload_true, is_overload_false
 
 

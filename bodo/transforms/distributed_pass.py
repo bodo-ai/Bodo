@@ -984,15 +984,11 @@ class DistributedPass:
         elif func_name == "to_csv" and (
             self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
         ):
-            # set index to proper range if None
             # avoid header for non-zero ranks
             # write to string then parallel file write
             # df.to_csv(fname) ->
-            # l = len(df)
-            # index_start = dist_exscan(l)
-            # df2 = df(index=range(index_start, index_start+l))
             # header = header and is_root  # only first line has header
-            # str_out = df2.to_csv(None, header=header)
+            # str_out = df.to_csv(None, header=header)
             # bodo.io.np_io._file_write_parallel(fname, str_out)
 
             df_typ = self.typemap[df.name]
@@ -1001,24 +997,13 @@ class DistributedPass:
             # convert StringLiteral to Unicode to make ._data available
             self.typemap.pop(fname.name)
             self.typemap[fname.name] = string_type
+            nodes = []
 
-            # update df index and get to_csv from new df
-            nodes = self._fix_parallel_df_index(df)
-            new_df = nodes[-1].target
-            new_df_typ = self.typemap[new_df.name]
-            new_to_csv = ir.Expr.getattr(new_df, "to_csv", new_df.loc)
-            new_func = ir.Var(new_df.scope, mk_unique_var("func"), new_df.loc)
-            self.typemap[new_func.name] = self.typingctx.resolve_getattr(
-                new_df_typ, "to_csv"
-            )
-            nodes.append(ir.Assign(new_to_csv, new_func, new_df.loc))
-            rhs.func = new_func
-
-            # # header = header and is_root
+            # header = header and is_root
             kws = dict(rhs.kws)
             true_var = ir.Var(assign.target.scope, mk_unique_var("true"), rhs.loc)
             self.typemap[true_var.name] = types.bool_
-            nodes.append(ir.Assign(ir.Const(True, new_df.loc), true_var, new_df.loc))
+            nodes.append(ir.Assign(ir.Const(True, df.loc), true_var, df.loc))
             header_var = self._get_arg("to_csv", rhs.args, kws, 5, "header", true_var)
             nodes += self._gen_is_root_and_cond(header_var)
             header_var = nodes[-1].target
@@ -1036,7 +1021,7 @@ class DistributedPass:
             # self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
             #      self.typingctx, arg_typs, {})
             self.calltypes[rhs] = numba.typing.Signature(
-                string_type, arg_typs, new_df_typ, call_type.pysig
+                string_type, arg_typs, df_typ, call_type.pysig
             )
 
             # None as 1st arg
@@ -1096,26 +1081,6 @@ class DistributedPass:
             self.calltypes,
         ).blocks.popitem()[1]
         replace_arg_nodes(f_block, [cond_var])
-        nodes = f_block.body[:-2]
-        return nodes
-
-    def _fix_parallel_df_index(self, df):
-        def f(df):  # pragma: no cover
-            l = len(df)
-            start = bodo.libs.distributed_api.dist_exscan(l, _op)
-            ind = np.arange(start, start + l)
-            df2 = bodo.hiframes.pd_dataframe_ext.set_df_index(df, ind)
-            return df2
-
-        f_block = compile_to_numba_ir(
-            f,
-            {"bodo": bodo, "np": np, "_op": np.int32(Reduce_Type.Sum.value)},
-            self.typingctx,
-            (self.typemap[df.name],),
-            self.typemap,
-            self.calltypes,
-        ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [df])
         nodes = f_block.body[:-2]
         return nodes
 

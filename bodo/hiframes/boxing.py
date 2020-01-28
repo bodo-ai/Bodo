@@ -34,7 +34,6 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import typeof_pd_int_dtype
 from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
-    CategoricalArray,
 )
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.hiframes.split_impl import (
@@ -172,7 +171,7 @@ def _infer_series_dtype(S):
     if isinstance(S.dtype, pd.core.arrays.integer._IntegerDtype):
         return typeof_pd_int_dtype(S.dtype, None)
     elif isinstance(S.dtype, pd.CategoricalDtype):
-        return PDCategoricalDtype(S.dtype.categories)
+        return PDCategoricalDtype(S.dtype.categories.to_list())
 
     # regular numpy types
     try:
@@ -247,9 +246,7 @@ def box_dataframe(typ, val, c):
                 # need to get underlying array since Series has index but
                 # df_obj doesn't have index yet, leading to index mismatches
                 arr_obj_orig = pyapi.object_getattr_string(ser_obj, "values")
-                if isinstance(arr_typ, types.Array) and not isinstance(
-                    arr_typ, CategoricalArray
-                ):
+                if isinstance(arr_typ, types.Array):
                     # make contiguous by calling np.ascontiguousarray()
                     np_mod_name = c.context.insert_const_string(
                         c.builder.module, "numpy"
@@ -321,9 +318,7 @@ def unbox_dataframe_column(typingctx, df, i=None):
         series_obj = c.pyapi.object_getitem(dataframe.parent, col_name_obj)
         arr_obj_orig = c.pyapi.object_getattr_string(series_obj, "values")
 
-        if isinstance(data_typ, types.Array) and not isinstance(
-            data_typ, CategoricalArray
-        ):
+        if isinstance(data_typ, types.Array):
             # call np.ascontiguousarray() on array since it may not be contiguous
             # the typing infrastructure assumes C-contiguous arrays
             # see test_df_multi_get_level() for an example of non-contiguous input
@@ -369,7 +364,7 @@ def unbox_dataframe_column(typingctx, df, i=None):
 def unbox_series(typ, val, c):
     arr_obj_orig = c.pyapi.object_getattr_string(val, "values")
 
-    if isinstance(typ.data, types.Array) and not isinstance(typ.data, CategoricalArray):
+    if isinstance(typ.data, types.Array):
         # make contiguous by calling np.ascontiguousarray()
         np_mod_name = c.context.insert_const_string(c.builder.module, "numpy")
         np_class_obj = c.pyapi.import_module_noblock(np_mod_name)
