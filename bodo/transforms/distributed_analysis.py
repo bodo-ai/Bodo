@@ -355,9 +355,8 @@ class DistributedAnalysis:
             for v in rhs.items:
                 self._meet_array_dists(lhs, v.name, array_dists)
             return
-        elif (
-            is_expr(rhs, "build_map")
-            and (is_distributable_tuple_typ(lhs_typ) or is_distributable_typ(lhs_typ))
+        elif is_expr(rhs, "build_map") and (
+            is_distributable_tuple_typ(lhs_typ) or is_distributable_typ(lhs_typ)
         ):
             # dist vars can be in dictionary as values
             # meet all distributions
@@ -1297,6 +1296,7 @@ class DistributedAnalysis:
         # get index_var without changing IR since we are in analysis
         index_var = get_getsetitem_index_var(rhs, self.typemap, [])
         index_typ = self.typemap[index_var.name]
+        lhs_typ = self.typemap[lhs]
 
         # selecting a value from a distributable tuple does not make it REP
         # nested tuples are also possible
@@ -1306,9 +1306,7 @@ class DistributedAnalysis:
             and isinstance(index_typ, types.IntegerLiteral)
         ):
             # meet distributions if returned value is distributable
-            if is_distributable_typ(self.typemap[lhs]) or is_distributable_tuple_typ(
-                self.typemap[lhs]
-            ):
+            if is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(lhs_typ):
                 # meet distributions
                 ind_val = index_typ.literal_value
                 tup = rhs.value.name
@@ -1319,6 +1317,14 @@ class DistributedAnalysis:
                 new_dist = self._min_dist(array_dists[tup][ind_val], array_dists[lhs])
                 array_dists[tup][ind_val] = new_dist
                 array_dists[lhs] = new_dist
+            return
+
+        # getitem on dictionary of distributed values
+        if isinstance(in_typ, types.DictType) and (
+            is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(lhs_typ)
+        ):
+            # output and dictionary have the same distribution
+            self._meet_array_dists(lhs, rhs.value.name, array_dists)
             return
 
         # indexing into arrays from this point only, check for array type

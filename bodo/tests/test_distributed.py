@@ -505,6 +505,23 @@ def test_dist_dict1():
     assert count_array_OneDs() > 0
 
 
+def test_dist_dict_getitem1():
+    """Test support for getitem of dist dictionary
+    """
+
+    def impl1(v):
+        df = v[1]
+        return df
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    v = bodo.typed.Dict.empty(bodo.int64, bodo.typeof(df))
+    v[0] = df
+    v[1] = df
+    bodo.jit(distributed={"v", "df"})(impl1)(v)
+    assert count_array_OneDs() > 0
+
+
 def test_dist_warning1():
     """Make sure BodoWarning is thrown when there is no parallelism discovered due
     to unsupported function
