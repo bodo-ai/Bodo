@@ -1319,7 +1319,7 @@ class DistributedAnalysis:
                 array_dists[lhs] = new_dist
             return
 
-        # getitem on dictionary of distributed values
+        # getitem on list/dictionary of distributed values
         if isinstance(in_typ, (types.List, types.DictType)) and (
             is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(lhs_typ)
         ):
@@ -1403,9 +1403,19 @@ class DistributedAnalysis:
 
     def _analyze_setitem(self, inst, array_dists):
         index_var = inst.index_var if is_static_getsetitem(inst) else inst.index
+        target_typ = self.typemap[inst.target.name]
+        value_typ = self.typemap[inst.value.name]
 
         if index_var is None:
             self._set_REP(inst.list_vars(), array_dists)
+            return
+
+        # setitem on list/dictionary of distributed values
+        if isinstance(target_typ, (types.List, types.DictType)) and (
+            is_distributable_typ(value_typ) or is_distributable_tuple_typ(value_typ)
+        ):
+            # output and dictionary have the same distribution
+            self._meet_array_dists(inst.target.name, inst.value.name, array_dists)
             return
 
         if (inst.target.name, index_var.name) in self._parallel_accesses:
