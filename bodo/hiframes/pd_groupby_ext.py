@@ -206,7 +206,7 @@ class GroupbyTyper(AbstractTemplate):
         for k in keys:
             selection.remove(k)
 
-        if isinstance(as_index, bodo.utils.utils.BooleanLiteral):
+        if isinstance(as_index, bodo.utils.typing.BooleanLiteral):
             as_index = as_index.literal_value
         else:
             # XXX as_index type is just bool when value not passed. Therefore,

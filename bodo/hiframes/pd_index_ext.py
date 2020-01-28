@@ -36,7 +36,6 @@ import bodo.hiframes
 from bodo.hiframes.pd_series_ext import is_str_series_typ, string_array_type, SeriesType
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 import bodo.utils.conversion
-from bodo.utils.utils import BooleanLiteral
 from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,

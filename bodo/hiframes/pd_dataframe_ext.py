@@ -579,7 +579,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
     """Set df column and reflect to parent Python object
     return a new df.
     """
-    assert isinstance(inplace, bodo.utils.utils.BooleanLiteral)
+    assert isinstance(inplace, bodo.utils.typing.BooleanLiteral)
     is_inplace = inplace.literal_value
     col_name = cname.literal_value
     n_cols = len(df.columns)
@@ -714,7 +714,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
 @overload(pd.DataFrame)
 def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=False):
     # TODO: support other input combinations
-    if not isinstance(copy, (bool, bodo.utils.utils.BooleanLiteral, types.Omitted)):
+    if not isinstance(copy, (bool, bodo.utils.typing.BooleanLiteral, types.Omitted)):
         raise ValueError("pd.DataFrame(): copy argument should be constant")
 
     # get value of copy
@@ -2128,7 +2128,7 @@ class SortDummyTyper(AbstractTemplate):
         df, by, ascending, inplace, na_position = args
 
         # inplace value
-        if isinstance(inplace, bodo.utils.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
@@ -2271,7 +2271,7 @@ class FillnaDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         df, value, inplace = args
         # inplace value
-        if isinstance(inplace, bodo.utils.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
@@ -2388,7 +2388,7 @@ class DropnaDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         df, inplace = args
         # inplace value
-        if isinstance(inplace, bodo.utils.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
@@ -2482,7 +2482,7 @@ class DropDummyTyper(AbstractTemplate):
         new_data = tuple(df.data[df.columns.index(c)] for c in new_cols)
 
         # inplace value
-        if isinstance(inplace, bodo.utils.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
