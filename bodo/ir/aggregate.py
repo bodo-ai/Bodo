@@ -41,6 +41,7 @@ from bodo.utils.utils import (
     is_call_assign,
     is_var_assign,
     is_assign,
+    is_expr,
     debug_prints,
     alloc_arr_tup,
     empty_like_type,
@@ -165,7 +166,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     # multi-function tuple case
     if isinstance(agg_func_def, ir.Expr) and agg_func_def.op == "build_tuple":
         return [
-            _get_const_agg_func(func_ir, v, typemap) for v in agg_func_def.items
+            _get_const_agg_func(typemap[v.name]) for v in agg_func_def.items
         ]
 
     # multi-function const dict case
@@ -176,21 +177,22 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         # return AggFuncStruct(func, ftype)
         return [get_agg_func(func_ir, f, rhs, series_type, typemap) for f in func]
 
-    func = _get_const_agg_func(func_ir, rhs.args[0], typemap)
+    # typemap should be available for UDF case
+    assert typemap is not None, "typemap is required for agg UDF handling"
+    func = _get_const_agg_func(typemap[rhs.args[0].name])
     func.ftype = supported_agg_funcs.index("agg")
     return func
 
 
-def _get_const_agg_func(func_ir, v, typemap):
-    if typemap:
-        agg_func = get_overload_const_func(typemap[v.name])
-    else:
-        agg_func = guard(get_definition, func_ir, v)
+def _get_const_agg_func(func_typ):
+    """get UDF function from its type. Wraps closures in functions.
+    """
+    agg_func = get_overload_const_func(func_typ)
 
     # convert agg_func to a function if it is a make_function object
     # TODO: more robust handling, maybe reuse Numba's inliner code if possible
-    if isinstance(agg_func, ir.Expr) and agg_func.op == "make_function":
-        def agg_func_wrapper(A):
+    if is_expr(agg_func, "make_function"):
+        def agg_func_wrapper(A):  # pragma: no cover
             return A
 
         agg_func_wrapper.__code__ = agg_func.code
