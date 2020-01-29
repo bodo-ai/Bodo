@@ -53,6 +53,7 @@ from bodo.utils.typing import (
     get_index_names,
     get_index_data_arr_types,
 )
+from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
 from bodo.libs.array_tools import (
     array_to_info,
@@ -213,9 +214,6 @@ class DataFrameAttribute(AttributeTemplate):
     def resolve_apply(self, df, args, kws):
         kws = dict(kws)
         func = args[0] if len(args) > 0 else kws.get("func", None)
-        # check lambda
-        if not isinstance(func, types.MakeFunctionLiteral):
-            raise ValueError("df.apply(): lambda not found")
 
         # check axis
         axis = args[1] if len(args) > 1 else kws.get("axis", None)
@@ -241,11 +239,7 @@ class DataFrameAttribute(AttributeTemplate):
             dtypes.append(el_typ)
 
         row_typ = types.NamedTuple(dtypes, Row)
-        code = func.literal_value.code
-        f_ir = numba.ir_utils.get_ir_of_code({"np": np}, code)
-        _, f_return_type, _ = numba.typed_passes.type_inference_stage(
-            self.context, f_ir, (row_typ,), None
-        )
+        f_return_type = get_const_func_output_type(func, (row_typ,), self.context)
 
         return signature(SeriesType(f_return_type, index=df.index), *args)
 

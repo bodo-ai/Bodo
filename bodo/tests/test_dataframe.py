@@ -1160,6 +1160,21 @@ def test_df_apply_str():
     check_func(test_impl, (df,))
 
 
+def g(r):
+    return 2 * r.A
+
+
+def test_df_apply_func_case1():
+    """make sure a global function can be used in df.apply
+    """
+    def test_impl(df):
+        return df.apply(g, axis=1)
+
+    n = 121
+    df = pd.DataFrame({"A": np.arange(n)})
+    check_func(test_impl, (df,))
+
+
 def test_df_drop_inplace_branch():
     def test_impl(cond):
         if cond:
