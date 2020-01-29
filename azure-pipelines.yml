@@ -21,7 +21,7 @@ jobs:
 - template: buildscripts/azure/azure-linux-macos.yml
   parameters:
     name: macOS
-    vmImage: xcode9-macos10.13
+    vmImage: macOS-latest
     matrix:
       py37_np1_firsthalf:
         CONDA_ENV: 'bodo'

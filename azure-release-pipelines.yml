@@ -16,7 +16,7 @@ stages:
   jobs:
   - job: find_suffix
     pool:
-      vmImage: xcode9-macos10.13
+      vmImage: macOS-latest
     steps:
     - script: |
         if [[ ! -z "${TRIAL_PERIOD}" ]]; then
