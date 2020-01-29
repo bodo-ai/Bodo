@@ -35,7 +35,7 @@ else
 fi
 
 $CONDA_INSTALL -c bodo.ai -c conda-forge pyarrow=0.15.1 arrow-cpp=0.15.1=*transfer_s3*
-$CONDA_INSTALL numba=0.48.* -c numba/label/dev
+$CONDA_INSTALL numba=0.48.* -c conda-forge
 $CONDA_INSTALL -c conda-forge hdf5=*=*mpich*
 
 if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi
