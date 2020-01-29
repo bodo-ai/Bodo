@@ -2050,7 +2050,7 @@ class DataFramePass:
 
         nodes = []
         in_cols = grp_typ.selection
-        if func_name == "agg":
+        if func_name in ("agg", "aggregate"):
             agg_func = guard(get_definition, self.func_ir, rhs.args[0])
             if isinstance(agg_func, ir.Expr) and agg_func.op == "build_map":
                 # multi-function const dict case:
@@ -2085,7 +2085,7 @@ class DataFramePass:
             )
             df_col_map[c] = var
 
-        agg_func = get_agg_func(self.func_ir, func_name, rhs)
+        agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name,
             df_var.name,
