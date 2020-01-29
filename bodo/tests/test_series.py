@@ -1122,26 +1122,31 @@ def test_series_map_func_cases1():
     def test_impl1(S):
         return S.map(g1)
 
-    # const jit function defined as global
-    def test_impl2(S):
-        return S.map(g2)
-
     f = lambda a: 2 * a + 1
 
     # const function defined as freevar
-    def test_impl3(S):
+    def test_impl2(S):
         return S.map(f)
 
     # const function or jit function passed as argument
-    def test_impl4(S, h):
+    def test_impl3(S, h):
         return S.map(h)
 
     S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
     check_func(test_impl1, (S,))
     check_func(test_impl2, (S,))
-    check_func(test_impl3, (S,))
-    check_func(test_impl4, (S, g1))
-    check_func(test_impl4, (S, g2))
+    check_func(test_impl3, (S, g1))
+    check_func(test_impl3, (S, g2))
+
+
+def test_series_map_global_jit():
+    """Test UDF defined as a global jit function
+    """
+    def test_impl(S):
+        return S.map(g2)
+
+    S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
+    check_func(test_impl, (S,))
 
 
 def test_series_map_tup1():
