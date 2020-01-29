@@ -610,11 +610,9 @@ class SeriesAttribute(AttributeTemplate):
         dtype2 = other.dtype
         if dtype2 == types.NPDatetime("ns"):
             dtype2 = pandas_timestamp_type
-        code = func.literal_value.code
-        f_ir = numba.ir_utils.get_ir_of_code({"np": np, "pd": pd}, code)
-        _, f_return_type, _ = numba.typed_passes.type_inference_stage(
-            self.context, f_ir, (dtype1, dtype2), None
-        )
+
+        f_return_type = get_const_func_output_type(func, (dtype1, dtype2), self.context)
+
 
         # TODO: output name is always None in Pandas?
         sig = signature(

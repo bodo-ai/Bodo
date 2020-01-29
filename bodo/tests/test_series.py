@@ -1005,6 +1005,7 @@ def test_series_combine(S1, S2, fill, raises):
         pd.testing.assert_series_equal(bodo_func(S1, S2, fill), test_impl(S1, S2, fill))
 
 
+@pytest.mark.slow
 def test_series_combine_kws():
     def test_impl(S1, S2, fill_val):
         return S1.combine(other=S2, func=lambda a, b: 2 * a + b, fill_value=fill_val)
@@ -1034,6 +1035,21 @@ def test_series_combine_no_fill():
     check_func(test_impl, (S1, S2))
 
 
+def g(a, b):
+    return 2 * a + b
+
+
+@pytest.mark.slow
+def test_series_combine_global_func():
+    def test_impl(S1, S2):
+        return S1.combine(other=S2, func=g)
+
+    S1 = pd.Series([1, 2, 3, 4, 5])
+    S2 = pd.Series([6, 21, 3, 5, 0])
+    check_func(test_impl, (S1, S2))
+
+
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "S",
     [
@@ -1056,6 +1072,7 @@ def test_series_apply_kw():
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_series_apply_extra_arg():
     def test_impl(S, D):
         return S.apply(lambda a, d: a not in d, args=(D,))
@@ -1096,6 +1113,7 @@ def g2(a):
     return 2 * a + 3
 
 
+@pytest.mark.slow
 def test_series_map_func_cases1():
     """test map() called with a function defined as global/freevar outside or passed as
     argument.

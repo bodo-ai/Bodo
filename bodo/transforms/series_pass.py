@@ -1999,11 +1999,7 @@ class SeriesPass:
         func_var = self._get_arg("combine", rhs.args, kws, 1, "func")
         fill_var = self._get_arg("combine", rhs.args, kws, 2, "fill_value", default="")
 
-        func = guard(get_definition, self.func_ir, func_var)
-        if func is None or not (
-            isinstance(func, ir.Expr) and func.op == "make_function"
-        ):
-            raise ValueError("lambda for combine not found")
+        func = get_overload_const_func(self.typemap[func_var.name])
 
         nodes = []
         data = self._get_series_data(series_var, nodes)
