@@ -207,7 +207,7 @@ def is_alloc_callname(func_name, mod_name):
             func_name == "pre_alloc_string_array"
             and mod_name == "bodo.libs.str_arr_ext"
         )
-        or (func_name == "alloc_str_list" and mod_name == "bodo.libs.str_ext")
+        or (func_name == "alloc_random_access_string_array" and mod_name == "bodo.libs.str_ext")
         or (
             func_name == "pre_alloc_list_string_array"
             and mod_name == "bodo.libs.list_str_arr_ext"
@@ -371,6 +371,7 @@ def is_array_typ(var_typ):
         or isinstance(var_typ, IntegerArrayType)
         or var_typ == boolean_array
         or isinstance(var_typ, bodo.hiframes.pd_categorical_ext.CategoricalArray)
+        or var_typ == bodo.libs.str_ext.random_access_string_array
     )
 
 

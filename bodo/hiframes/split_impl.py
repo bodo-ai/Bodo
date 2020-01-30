@@ -435,7 +435,7 @@ def str_arr_split_view_getitem_overload(A, ind):
             end_index = getitem_c_arr(A._index_offsets, ind + 1)
             n = end_index - start_index - 1
 
-            str_list = bodo.libs.str_ext.alloc_str_list(n)
+            str_list = bodo.libs.str_ext.alloc_random_access_string_array(n)
             for i in range(n):
                 data_start = getitem_c_arr(A._data_offsets, start_index + i)
                 data_start += 1

@@ -18,6 +18,8 @@ from numba.extending import (
     type_callable,
     overload_method,
     intrinsic,
+    make_attribute_wrapper,
+    overload_attribute,
 )
 from numba.targets.imputils import lower_constant, impl_ret_new_ref, impl_ret_untracked
 from numba import types, typing
@@ -32,6 +34,7 @@ from numba.typing.templates import (
     infer_global,
 )
 from numba import cgutils
+from numba.array_analysis import ArrayAnalysis
 import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
 import llvmlite.binding as ll
@@ -425,18 +428,102 @@ def std_str_to_unicode(typingctx, unicode_t=None):
     return string_type(std_str_type), codegen
 
 
+# string array type that is optimized for random access read/write
+class RandomAccessStringArrayType(types.ArrayCompatible):
+    def __init__(self):
+        super(RandomAccessStringArrayType, self).__init__(
+            name="RandomAccessStringArrayType()"
+        )
+
+    @property
+    def as_array(self):
+        return types.Array(types.undefined, 1, "C")
+
+    @property
+    def dtype(self):
+        return string_type
+
+
+random_access_string_array = RandomAccessStringArrayType()
+
+
+# store data as a list of strings
+@register_model(RandomAccessStringArrayType)
+class RandomAccessStringArrayModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [
+            ("data", types.List(string_type)),
+        ]
+        models.StructModel.__init__(self, dmm, fe_type, members)
+
+
+make_attribute_wrapper(RandomAccessStringArrayType, "data", "_data")
+
+
 @intrinsic
-def alloc_str_list(typingctx, n_t=None):
+def alloc_random_access_string_array(typingctx, n_t=None):
     def codegen(context, builder, sig, args):
-        nitems = args[0]
+        (nitems,) = args
+
+        # alloc a list
         list_type = types.List(string_type)
         l = numba.targets.listobj.ListInstance.allocate(
             context, builder, list_type, nitems
         )
         l.size = nitems
-        return impl_ret_new_ref(context, builder, list_type, l.value)
 
-    return types.List(string_type)(types.intp), codegen
+        str_arr = cgutils.create_struct_proxy(sig.return_type)(context, builder)
+        str_arr.data = l.value
+
+        return str_arr._getvalue()
+
+    return random_access_string_array(types.intp), codegen
+
+
+@overload(operator.getitem)
+def random_access_str_arr_getitem(A, ind):
+    if A != random_access_string_array:
+        return
+
+    if isinstance(ind, types.Integer):
+        return lambda A, ind: A._data[ind]
+
+
+@overload(operator.setitem)
+def random_access_str_arr_setitem(A, idx, val):
+    if A != random_access_string_array:
+        return
+
+    if isinstance(idx, types.Integer):
+        assert val == string_type
+
+        def impl_scalar(A, idx, val):  # pragma: no cover
+            A._data[idx] = val
+
+        return impl_scalar
+
+
+@overload(len)
+def overload_str_arr_len(A):
+    if A == random_access_string_array:
+        return lambda A: len(A._data)
+
+
+@overload_attribute(RandomAccessStringArrayType, "shape")
+def overload_str_arr_shape(A):
+    return lambda A: (len(A._data),)
+
+
+def alloc_random_access_str_arr_equiv(self, scope, equiv_set, args, kws):
+    """Array analysis function for alloc_random_access_string_array()
+    """
+    assert len(args) == 1 and not kws
+    return args[0], []
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_str_ext_alloc_random_access_string_array = (
+    alloc_random_access_str_arr_equiv
+)
 
 
 @lower_builtin(str, types.Any)
