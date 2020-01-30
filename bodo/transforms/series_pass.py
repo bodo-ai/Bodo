@@ -6,6 +6,7 @@ to provide implementation and enable optimization.
 import operator
 from collections import defaultdict, namedtuple
 import re
+import types as pytypes
 import numpy as np
 import pandas as pd
 import warnings
@@ -63,7 +64,6 @@ from bodo.hiframes.pd_series_ext import (
     series_to_array_type,
     is_dt64_series_typ,
     is_timedelta64_series_typ,
-    is_bool_series_typ,
     if_series_to_array_type,
     is_series_type,
     SeriesRollingType,
@@ -93,7 +93,7 @@ from bodo.hiframes.split_impl import (
 )
 from bodo.utils.transform import compile_func_single_block, update_locs
 from bodo.utils.utils import is_array_typ
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import get_overload_const_func, BodoError
 
 
 ufunc_names = set(f.__name__ for f in numba.typing.npydecl.supported_ufuncs)
@@ -1766,11 +1766,8 @@ class SeriesPass:
     def _handle_series_map(self, assign, lhs, rhs, series_var, func_var, extra_args):
         """translate df.A.map(lambda a:...) to prange()
         """
-        func = guard(get_definition, self.func_ir, func_var)
-        if func is None or not (
-            isinstance(func, ir.Expr) and func.op == "make_function"
-        ):
-            raise BodoError("lambda for map not found")
+        # get the function object (ir.Expr.make_function or actual python function)
+        func = get_overload_const_func(self.typemap[func_var.name])
 
         dtype = self.typemap[series_var.name].dtype
         nodes = []
@@ -2002,11 +1999,7 @@ class SeriesPass:
         func_var = self._get_arg("combine", rhs.args, kws, 1, "func")
         fill_var = self._get_arg("combine", rhs.args, kws, 2, "fill_value", default="")
 
-        func = guard(get_definition, self.func_ir, func_var)
-        if func is None or not (
-            isinstance(func, ir.Expr) and func.op == "make_function"
-        ):
-            raise ValueError("lambda for combine not found")
+        func = get_overload_const_func(self.typemap[func_var.name])
 
         nodes = []
         data = self._get_series_data(series_var, nodes)

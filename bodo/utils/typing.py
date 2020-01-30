@@ -3,11 +3,21 @@
 Helper functions to enable typing.
 """
 import itertools
+import types as pytypes
 import numpy as np
 import pandas as pd
 import numba
 from numba import types, cgutils
-from numba.extending import register_model, models, overload, register_jitable
+from numba.extending import (
+    register_model,
+    models,
+    overload,
+    register_jitable,
+    lower_cast,
+    typeof_impl,
+    unbox,
+    NativeValue,
+)
 from numba.typing.templates import infer_global, AbstractTemplate, CallableTemplate
 from numba.typing import signature
 from numba.targets.imputils import lower_builtin, impl_ret_borrowed, impl_ret_new_ref
@@ -35,7 +45,7 @@ def is_overload_none(val):
 def is_overload_constant_bool(val):
     return (
         isinstance(val, bool)
-        or isinstance(val, bodo.utils.utils.BooleanLiteral)
+        or isinstance(val, bodo.utils.typing.BooleanLiteral)
         or ((isinstance(val, types.Omitted) and isinstance(val.value, bool)))
     )
 
@@ -80,7 +90,7 @@ def is_overload_bool_list(val):
 def is_overload_true(val):
     return (
         val == True
-        or val == bodo.utils.utils.BooleanLiteral(True)
+        or val == bodo.utils.typing.BooleanLiteral(True)
         or getattr(val, "value", False) is True
     )
 
@@ -88,7 +98,7 @@ def is_overload_true(val):
 def is_overload_false(val):
     return (
         val == False
-        or val == bodo.utils.utils.BooleanLiteral(False)
+        or val == bodo.utils.typing.BooleanLiteral(False)
         or getattr(val, "value", True) is False
     )
 
@@ -155,6 +165,16 @@ def get_overload_const_int(val):
         assert isinstance(val.literal_value, int)
         return val.literal_value
     raise ValueError("{} not constant integer".format(val))
+
+
+def get_overload_const_func(val):
+    """get constant function object or ir.Expr.make_function from function type
+    """
+    if isinstance(val, (types.MakeFunctionLiteral, bodo.utils.typing.FunctionLiteral)):
+        return val.literal_value
+    if isinstance(val, types.Dispatcher):
+        return val.dispatcher.py_func
+    raise BodoError("'{}' not a constant function type".format(val))
 
 
 # TODO: move to Numba
@@ -269,6 +289,54 @@ def get_val_type_maybe_str_literal(value):
     if isinstance(value, str):
         t = types.StringLiteral(value)
     return t
+
+
+# TODO: move to Numba
+class BooleanLiteral(types.Literal, types.Boolean):
+    def can_convert_to(self, typingctx, other):
+        # similar to IntegerLiteral
+        conv = typingctx.can_convert(self.literal_type, other)
+        if conv is not None:
+            return max(conv, types.Conversion.promote)
+
+
+types.Literal.ctor_map[bool] = BooleanLiteral
+
+register_model(BooleanLiteral)(models.BooleanModel)
+
+
+@lower_cast(BooleanLiteral, types.Boolean)
+def literal_bool_cast(context, builder, fromty, toty, val):
+    lit = context.get_constant_generic(
+        builder, fromty.literal_type, fromty.literal_value
+    )
+    return context.cast(builder, lit, fromty.literal_type, toty)
+
+
+# literal type for functions (to handle function arguments to map/apply methods)
+# TODO: update when Numba's #4967 is merged
+# similar to MakeFunctionLiteral
+class FunctionLiteral(types.Literal, types.Opaque):
+    """Literal type for function objects (i.e. pytypes.FunctionType)
+    """
+    pass
+
+
+@typeof_impl.register(pytypes.FunctionType)
+def typeof_function(val, c):
+    """Assign literal type to constant functions that are not overloaded in numba.
+    """
+    if not numba.targets.registry.cpu_target.typing_context._get_global_type(val):
+        return FunctionLiteral(val)
+
+
+register_model(FunctionLiteral)(models.OpaqueModel)
+
+
+# dummy unbox to avoid errors when function is passed as argument
+@unbox(FunctionLiteral)
+def unbox_func_literal(typ, obj, c):
+    return NativeValue(obj)
 
 
 # type used to pass metadata to type inference functions

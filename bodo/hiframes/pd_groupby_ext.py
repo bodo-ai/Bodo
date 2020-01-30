@@ -44,7 +44,9 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_overload_constant_str_list,
     ConstDictType,
+    get_overload_const_func,
 )
+from bodo.utils.transform import get_const_func_output_type
 
 
 class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
@@ -180,7 +182,14 @@ def validate_groupby_spec(
 
 
 def validate_udf(func_name, func):
-    if not isinstance(func, types.functions.MakeFunctionLiteral):
+    if not isinstance(
+        func,
+        (
+            types.functions.MakeFunctionLiteral,
+            bodo.utils.typing.FunctionLiteral,
+            types.Dispatcher,
+        ),
+    ):
         raise BodoError(
             "Groupby.{}: 'func' must be user defined function".format(func_name)
         )
@@ -206,7 +215,7 @@ class GroupbyTyper(AbstractTemplate):
         for k in keys:
             selection.remove(k)
 
-        if isinstance(as_index, bodo.utils.utils.BooleanLiteral):
+        if isinstance(as_index, bodo.utils.typing.BooleanLiteral):
             as_index = as_index.literal_value
         else:
             # XXX as_index type is just bool when value not passed. Therefore,
@@ -320,7 +329,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
             ind = grp.df_type.columns.index(k)
             out_data.append(grp.df_type.data[ind])
 
-    def _get_agg_typ(self, grp, args, func_name, code=None):
+    def _get_agg_typ(self, grp, args, func_name, func=None):
         index = RangeIndexType(types.none)
         out_data = []
         out_columns = []
@@ -349,24 +358,17 @@ class DataframeGroupByAttribute(AttributeTemplate):
             data = grp.df_type.data[ind]
 
             if func_name == "agg":
-                f_ir = numba.ir_utils.get_ir_of_code(
-                    {"np": np, "numba": numba, "bodo": bodo}, code
-                )
                 try:
                     # input to UDFs is a Series
                     in_series_typ = SeriesType(data.dtype, data, None, string_type)
-                    _, out_dtype, _ = numba.typed_passes.type_inference_stage(
-                        self.context, f_ir, (in_series_typ,), None
+                    out_dtype = get_const_func_output_type(
+                        func, (in_series_typ,), self.context
                     )
                 except:
                     raise BodoError(
                         "Groupy.agg()/Groupy.aggregate(): column {col} of type {type} "
-                        "is unsupported/not a valid input type for user defined function "
-                        "at {file}:{line}".format(
-                            col=c,
-                            type=data.dtype,
-                            file=f_ir.func_id.filename,
-                            line=f_ir.func_id.firstlineno,
+                        "is unsupported/not a valid input type for user defined function".format(
+                            col=c, type=data.dtype,
                         )
                     )
             else:
@@ -453,10 +455,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
             if not grp.as_index:
                 self._get_keys_not_as_index(grp, out_columns, out_data)
             for f in func.types:
-                code = f.literal_value.code
                 validate_udf("agg", f)
+                f_val = get_overload_const_func(f)
+                code = f_val.code if hasattr(f_val, "code") else func.__code__
                 out_columns.append(code.co_name)
-                out_tp = self._get_agg_typ(grp, args, "agg", code).return_type
+                out_tp = self._get_agg_typ(grp, args, "agg", f).return_type
                 if not grp.as_index:
                     # _get_agg_typ also returns the index (keys) as part of
                     # out_tp, but we already added them outside of the loop
@@ -470,8 +473,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
             return signature(out_res, *args)
 
         validate_udf("agg", func)
-        code = func.literal_value.code
-        return self._get_agg_typ(grp, args, "agg", code)
+        return self._get_agg_typ(grp, args, "agg", func)
 
     @bound_function("groupby.agg")
     def resolve_agg(self, grp, args, kws):

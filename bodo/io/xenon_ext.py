@@ -8,7 +8,6 @@ from numba.ir_utils import (
     get_name_var_table,
     replace_var_names,
     add_offset_to_labels,
-    get_ir_of_code,
     compile_to_numba_ir,
     replace_arg_nodes,
     find_callname,

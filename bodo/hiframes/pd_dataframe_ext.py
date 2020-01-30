@@ -53,6 +53,7 @@ from bodo.utils.typing import (
     get_index_names,
     get_index_data_arr_types,
 )
+from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
 from bodo.libs.array_tools import (
     array_to_info,
@@ -213,9 +214,6 @@ class DataFrameAttribute(AttributeTemplate):
     def resolve_apply(self, df, args, kws):
         kws = dict(kws)
         func = args[0] if len(args) > 0 else kws.get("func", None)
-        # check lambda
-        if not isinstance(func, types.MakeFunctionLiteral):
-            raise ValueError("df.apply(): lambda not found")
 
         # check axis
         axis = args[1] if len(args) > 1 else kws.get("axis", None)
@@ -241,11 +239,7 @@ class DataFrameAttribute(AttributeTemplate):
             dtypes.append(el_typ)
 
         row_typ = types.NamedTuple(dtypes, Row)
-        code = func.literal_value.code
-        f_ir = numba.ir_utils.get_ir_of_code({"np": np}, code)
-        _, f_return_type, _ = numba.typed_passes.type_inference_stage(
-            self.context, f_ir, (row_typ,), None
-        )
+        f_return_type = get_const_func_output_type(func, (row_typ,), self.context)
 
         return signature(SeriesType(f_return_type, index=df.index), *args)
 
@@ -579,7 +573,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
     """Set df column and reflect to parent Python object
     return a new df.
     """
-    assert isinstance(inplace, bodo.utils.utils.BooleanLiteral)
+    assert isinstance(inplace, bodo.utils.typing.BooleanLiteral)
     is_inplace = inplace.literal_value
     col_name = cname.literal_value
     n_cols = len(df.columns)
@@ -714,7 +708,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
 @overload(pd.DataFrame)
 def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=False):
     # TODO: support other input combinations
-    if not isinstance(copy, (bool, bodo.utils.utils.BooleanLiteral, types.Omitted)):
+    if not isinstance(copy, (bool, bodo.utils.typing.BooleanLiteral, types.Omitted)):
         raise ValueError("pd.DataFrame(): copy argument should be constant")
 
     # get value of copy
@@ -2128,7 +2122,7 @@ class SortDummyTyper(AbstractTemplate):
         df, by, ascending, inplace, na_position = args
 
         # inplace value
-        if isinstance(inplace, bodo.utils.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
@@ -2271,7 +2265,7 @@ class FillnaDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         df, value, inplace = args
         # inplace value
-        if isinstance(inplace, bodo.utils.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
@@ -2388,7 +2382,7 @@ class DropnaDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         df, inplace = args
         # inplace value
-        if isinstance(inplace, bodo.utils.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
@@ -2482,7 +2476,7 @@ class DropDummyTyper(AbstractTemplate):
         new_data = tuple(df.data[df.columns.index(c)] for c in new_cols)
 
         # inplace value
-        if isinstance(inplace, bodo.utils.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
