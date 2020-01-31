@@ -339,6 +339,13 @@ def unbox_func_literal(typ, obj, c):
     return NativeValue(obj)
 
 
+
+# groupby.agg() can take a constant dictionary with a UDF in values. Typer of Numba's
+# typed.Dict trys to get the type of the UDF value, which is not possible. This hack
+# makes a dummy type available to Numba so that type inference works.
+types.MakeFunctionLiteral._literal_type_cache = types.MakeFunctionLiteral(lambda: 0)
+
+
 # type used to pass metadata to type inference functions
 # see untyped_pass.py and df.pivot_table()
 class MetaType(types.Type):
