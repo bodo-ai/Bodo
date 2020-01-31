@@ -636,9 +636,23 @@ class UntypedPass:
             return var
 
     def _gen_add_consts_to_type(self, vals, var, ret_var):
-        vals_expr = ", ".join(
-            "'{}'".format(c) if isinstance(c, str) else "{}".format(c) for c in vals
-        )
+        """generate add_consts_to_type() call that makes constant values of dict/list
+        available during typing
+        """
+        # convert constants to string representation
+        const_funcs = {}
+        val_reps = []
+        for c in vals:
+            v_rep = "{}".format(c)
+            if isinstance(c, str):
+                v_rep = "'{}'".format(c)
+            # store a name for make_function exprs to replace later
+            elif is_expr(c, "make_function"):
+                v_rep = "func{}".format(ir_utils.next_label())
+                const_funcs[v_rep] = c
+            val_reps.append(v_rep)
+
+        vals_expr = ", ".join(val_reps)
         func_text = "def _build_f(a):\n"
         func_text += "  return bodo.utils.typing.add_consts_to_type(a, {})\n".format(
             vals_expr
@@ -647,6 +661,10 @@ class UntypedPass:
         exec(func_text, {"bodo": bodo}, loc_vars)
         _build_f = loc_vars["_build_f"]
         nodes = _compile_func_single_block(_build_f, (var,), ret_var)
+        # replace make_function exprs with actual node
+        for stmt in nodes:
+            if is_assign(stmt) and isinstance(stmt.value, ir.Global) and stmt.value.name in const_funcs:
+                stmt.value = const_funcs[stmt.value.name]
         return nodes
 
     def _handle_np_where(self, assign, lhs, rhs):

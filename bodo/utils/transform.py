@@ -152,6 +152,9 @@ def get_const_nested(func_ir, v):
         "build_tuple",
     ):
         return tuple(get_const_nested(func_ir, a) for a in v_def.items)
+    # treat make_function exprs as constant
+    if is_expr(v_def, "make_function"):
+        return v_def
     return find_const(func_ir, v)
 
 
