@@ -24,7 +24,8 @@ done
 echo ------------------TPCH-H Benchmark Done------------------ >> $filename
 echo >> $filename
 
+echo ------------------Running Custom Queries Benchmark------------------ >> $filename
 echo ------------------Running Q-GroupBy, Num Proc: $cores------------------ >> $filename
 mpiexec -n $cores python main.py -f q_groupby --folder=/tmp/data1 -p=bodo -l=0 >> $filename
-echo ------------------Q-GroupBy Done------------------ >> $filename
+echo ------------------Custom Queries Benchmark Done------------------ >> $filename
 echo >> $filename
