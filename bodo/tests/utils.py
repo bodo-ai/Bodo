@@ -129,6 +129,7 @@ def check_func(
         check_dtype,
         n_pes,
     )
+
     check_func_1D_var(
         func,
         args,

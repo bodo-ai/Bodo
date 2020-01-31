@@ -17,7 +17,7 @@ such as Numba on Ubuntu Linux::
     source activate DEV
     # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64 -c conda-forge
-    conda install numba=0.46.0 -c conda-forge
+    conda install numba=0.47.0 -c conda-forge
     conda install -c bodo.ai -c conda-forge hdf5=*=*mpich*
     conda install -c bodo.ai -c conda-forge pyarrow=0.15.1 arrow-cpp=0.15.1=*transfer_s3*
     git clone https://github.com/Bodo-inc/Bodo.git
