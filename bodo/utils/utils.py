@@ -737,6 +737,35 @@ def overload_full_type(n, val, t):
     return lambda n, val, t: np.full(n, val, dtype)
 
 
+# replacing _analyze_broadcast in array analysis to fix a bug. It's assuming that
+# get_shape throws GuardException which is wrong.
+# Numba 0.48 exposed this error with test_linear_regression since array analysis is
+# more restrictive and assumes more variables as redefined
+def _analyze_broadcast(self, scope, equiv_set, loc, args):
+    """Infer shape equivalence of arguments based on Numpy broadcast rules
+    and return shape of output
+    https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html
+    """
+    arrs = list(filter(lambda a: self._isarray(a.name), args))
+    require(len(arrs) > 0)
+    names = [x.name for x in arrs]
+    dims = [self.typemap[x.name].ndim for x in arrs]
+    max_dim = max(dims)
+    require(max_dim > 0)
+    # Numba code replaced:
+    # try:
+    #     shapes = [equiv_set.get_shape(x) for x in arrs]
+    # except GuardException:
+    #     return arrs[0], self._call_assert_equiv(scope, loc, equiv_set, arrs)
+    shapes = [equiv_set.get_shape(x) for x in arrs]
+    if any(a is None for a in shapes):
+        return arrs[0], self._call_assert_equiv(scope, loc, equiv_set, arrs)
+    return self._broadcast_assert_shapes(scope, equiv_set, loc, shapes, names)
+
+
+numba.array_analysis.ArrayAnalysis._analyze_broadcast = _analyze_broadcast
+
+
 @intrinsic
 def get_ctypes_ptr(typingctx, ctypes_typ=None):
     assert isinstance(ctypes_typ, types.ArrayCTypes)

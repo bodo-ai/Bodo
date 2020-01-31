@@ -373,7 +373,7 @@ numba.analysis.ir_extension_usedefs[Aggregate] = aggregate_usedefs
 
 
 def remove_dead_aggregate(
-    aggregate_node, lives, arg_aliases, alias_map, func_ir, typemap
+    aggregate_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
 ):
 
     dead_cols = []
@@ -529,7 +529,7 @@ def aggregate_array_analysis(aggregate_node, equiv_set, typemap, array_analysis)
         equiv_set.insert_equiv(col_var, shape)
         post.extend(c_post)
         all_shapes.append(shape[0])
-        equiv_set.define(col_var, {})
+        equiv_set.define(col_var, set())
 
     if len(all_shapes) > 1:
         equiv_set.insert_equiv(*all_shapes)

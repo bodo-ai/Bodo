@@ -70,7 +70,7 @@ def filter_array_analysis(filter_node, equiv_set, typemap, array_analysis):
         equiv_set.insert_equiv(col_var, shape)
         post.extend(c_post)
         all_shapes.append(shape[0])
-        equiv_set.define(col_var, {})
+        equiv_set.define(col_var, set())
 
     if len(all_shapes) > 1:
         equiv_set.insert_equiv(*all_shapes)
@@ -201,7 +201,9 @@ def visit_vars_filter(filter_node, callback, cbdata):
 ir_utils.visit_vars_extensions[Filter] = visit_vars_filter
 
 
-def remove_dead_filter(filter_node, lives, arg_aliases, alias_map, func_ir, typemap):
+def remove_dead_filter(
+    filter_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
+):
     dead_cols = []
 
     for col_name, col_var in filter_node.df_out_vars.items():
