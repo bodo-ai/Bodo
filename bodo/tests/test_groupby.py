@@ -760,13 +760,76 @@ def test_as_index_count():
     check_func(impl2, (df,), sort_output=True)
 
 
+def test_cumsum_large_random_numpy():
+    def get_random_array(n, sizlen):
+        elist = []
+        for i in range(n):
+            eval = random.randint(1, sizlen)
+            if eval == 1:
+                eval = None
+            elist.append(eval)
+        return np.array(elist, dtype=np.float64)
+
+    def impl1(df):
+        A = df.groupby("A")["B"].cumsum()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A")["B"].cumsum(skipna=True)
+        return A
+
+    def impl3(df):
+        A = df.groupby("A")["B"].cumsum(skipna=False)
+        return A
+
+    random.seed(5)
+    nb = 100
+    df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)})
+    check_func(impl1, (df1,), sort_output=True)
+    check_func(impl2, (df1,), sort_output=True)
+    check_func(impl3, (df1,), sort_output=True)
+
+
+
+
+
+
+def test_groupby_cumsum_simple():
+    """
+    Test Groupby.cumsum(): a simple case
+    """
+
+    def impl(df):
+        df2 = df.groupby("A")["B"].cumsum()
+        return df2
+
+    df1 = pd.DataFrame({"A": [1, 1, 1, 1, 1], "B": [1, 2, 3, 4, 5]})
+    check_func(impl, (df1,), sort_output=True)
+
+
+def test_groupby_cumprod_simple():
+    """
+    Test Groupby.cumprod(): a simple case
+    """
+
+    def impl(df):
+        df2 = df.groupby("A")["B"].cumprod()
+        return df2
+
+    df1 = pd.DataFrame({"A": [1, 1, 1, 1, 1], "B": [1, 2, 3, 4, 5]})
+    check_func(impl, (df1,), sort_output=True)
+
 def test_groupby_cumsum():
     """
     Test Groupby.cumsum()
     """
 
-    def impl(df):
-        df2 = df.groupby("A").cumsum()
+    def impl1(df):
+        df2 = df.groupby("A").cumsum(skipna=False)
+        return df2
+
+    def impl2(df):
+        df2 = df.groupby("A").cumsum(skipna=True)
         return df2
 
     df1 = pd.DataFrame(
@@ -790,9 +853,12 @@ def test_groupby_cumsum():
             "C": [-8.1, 2.3, 5.3, 1.1, 0.5, 4.6, 1.7, 4.3, -8.1, 5.3],
         }
     )
-    check_func(impl, (df1,), sort_output=True)
-    check_func(impl, (df2,), sort_output=True)
-    check_func(impl, (df3,), sort_output=True)
+    check_func(impl1, (df1,), sort_output=True)
+    check_func(impl1, (df2,), sort_output=True)
+    check_func(impl1, (df3,), sort_output=True)
+    check_func(impl2, (df1,), sort_output=True)
+    check_func(impl2, (df2,), sort_output=True)
+    check_func(impl2, (df3,), sort_output=True)
 
 
 def test_groupby_multi_intlabels_cumsum_int():
@@ -812,7 +878,7 @@ def test_groupby_multi_intlabels_cumsum_int():
             "C": [3, np.nan, 6, 5, 4, 4, 3],
         }
     )
-    check_func(impl, (df,))
+    check_func(impl, (df,), sort_output=True)
 
 
 def test_groupby_multi_labels_cumsum_multi_cols():
@@ -833,7 +899,7 @@ def test_groupby_multi_labels_cumsum_multi_cols():
             "D": [3.1, 1.1, 6.0, np.nan, 4.0, np.nan, 3],
         }
     )
-    check_func(impl, (df,))
+    check_func(impl, (df,), sort_output=True)
 
 
 def test_groupby_as_index_cumsum():
@@ -860,8 +926,8 @@ def test_groupby_as_index_cumsum():
             "D": [3.1, 1.1, 6.0, np.nan, 4.0, np.nan, 3],
         }
     )
-    check_func(impl1, (df,))
-    check_func(impl2, (df,))
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
 
 
 def test_cumsum_all_nulls_col():
@@ -883,7 +949,7 @@ def test_cumsum_all_nulls_col():
             "D": [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
         }
     )
-    check_func(impl, (df,))
+    check_func(impl, (df,), sort_output=True)
 
 
 def test_max(test_df):

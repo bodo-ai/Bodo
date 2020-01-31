@@ -1877,6 +1877,8 @@ struct Bodo_FTypes {
         count,
         nunique,
         median,
+        cumsum,
+        cumprod,
         mean,
         min,
         max,
@@ -2787,6 +2789,7 @@ struct grouping_info {
     std::vector<int64_t> row_to_group;
     std::vector<int64_t> group_to_first_row;
     std::vector<int64_t> next_row_in_group;
+    std::vector<int64_t> list_missing;
 };
 
 /**
@@ -2794,16 +2797,17 @@ struct grouping_info {
  * mapping for every row based on its key.
  * For every row in the table, this only does *one* lookup in the hash map.
  *
- * @param the table
- * @param[out] vector that maps row number in the table to a group number
- * @param[out] vector that maps group number to the first row in the table
+ * @param           table: the table
+ * @param conider_missing: whether to return the list of missing rows or not
+ * @return vector that maps group number to the first row in the table
  *                that belongs to that group
  */
-grouping_info get_group_info_iterate(table_info* table) {
-    std::vector<int64_t> row_to_group;
+grouping_info get_group_info_iterate(table_info* table, bool consider_missing) {
+    std::vector<int64_t> row_to_group(table->nrows());
     std::vector<int64_t> group_to_first_row;
     std::vector<int64_t> next_row_in_group(table->nrows(), -1);
     std::vector<int64_t> active_group_repr;
+    std::vector<int64_t> list_missing;
 
     std::vector<array_info*> key_cols = std::vector<array_info*>(
         table->columns.begin(), table->columns.begin() + table->num_keys);
@@ -2811,7 +2815,6 @@ grouping_info get_group_info_iterate(table_info* table) {
     uint32_t* hashes = hash_keys(key_cols, seed);
 
     bool key_is_nullable = does_keys_have_nulls(key_cols);
-    row_to_group.reserve(table->nrows());
     // start at 1 because I'm going to use 0 to mean nothing was inserted yet
     // in the map (but note that the group values I record in the output go from
     // 0 to num_groups - 1)
@@ -2820,7 +2823,9 @@ grouping_info get_group_info_iterate(table_info* table) {
     for (int64_t i = 0; i < table->nrows(); i++) {
         if (key_is_nullable) {
             if (does_row_has_nulls(key_cols, i)) {
-                row_to_group.push_back(-1);
+                row_to_group[i] = -1;
+                if (consider_missing)
+                  list_missing.push_back(i);
                 continue;
             }
         }
@@ -2837,10 +2842,10 @@ grouping_info get_group_info_iterate(table_info* table) {
             next_row_in_group[prev_elt] = i;
             active_group_repr[group - 1] = i;
         }
-        row_to_group.push_back(group - 1);
+        row_to_group[i] = group - 1;
     }
     delete[] hashes;
-    return {std::move(row_to_group), std::move(group_to_first_row), std::move(next_row_in_group)};
+    return {std::move(row_to_group), std::move(group_to_first_row), std::move(next_row_in_group), std::move(list_missing)};
 }
 
 /**
@@ -3390,6 +3395,142 @@ table_info* groupby_combine(table_info& in_table, int64_t num_keys,
 
 
 
+
+/**
+ * The isnan operation done for all types.
+ *
+ * @param eVal: the T value
+ * @return true if for integer and true/false for floating point
+ */
+template <typename T>
+inline typename std::enable_if<!std::is_floating_point<T>::value,bool>::type isnan_T(char* ptr) {
+  return false;
+}
+template <typename T>
+inline typename std::enable_if<std::is_floating_point<T>::value,bool>::type isnan_T(char* ptr) {
+  T* ptr_d = (T*)ptr;
+  return isnan(*ptr_d);
+}
+
+
+
+/**
+ * The cumsum_cumprod_computation function. It uses the symbolic information
+ * to compute the cumsum/cumprod.
+ *
+ * @param The column on which we do the computation
+ * @param The array containing information on how the rows are organized
+ * @param skipna: Whether to skip NaN values or not.
+ * @return the returning array.
+ */
+template<typename T>
+array_info* cumsum_cumprod_computation_T(array_info* arr, grouping_info const& grp_inf,
+                                         int32_t const& ftype, bool const& skipna) {
+    size_t num_group = grp_inf.group_to_first_row.size();
+    if (arr->arr_type == bodo_array_type::STRING) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "There is no median for the string case");
+        return nullptr;
+    }
+    int64_t len = arr->length;
+    array_info* out_arr = alloc_array(len, 1, arr->arr_type,
+                                      arr->dtype, 0);
+    size_t siztype = numpy_item_size[arr->dtype];
+    auto cum_computation=[&](std::function<std::pair<bool,T>(int64_t)> const& get_entry, std::function<void(int64_t, std::pair<bool,T> const&)> const& set_entry) -> void {
+        for (size_t igrp=0; igrp<num_group; igrp++) {
+            int64_t i = grp_inf.group_to_first_row[igrp];
+            T initVal = 0;
+            if (ftype == Bodo_FTypes::cumprod)
+                initVal = 1;
+            std::pair<bool,T> ePair{false, initVal};
+            while (true) {
+                std::pair<bool,T> fPair = get_entry(i);
+                if (fPair.first) { // the value is a NaN.
+                    if (skipna) {
+                        set_entry(i, fPair);
+                    }
+                    else {
+                        ePair = fPair;
+                        set_entry(i, ePair);
+                    }
+                }
+                else { // The value is a normal one.
+                    if (ftype == Bodo_FTypes::cumsum)
+                        ePair.second += fPair.second;
+                    else
+                        ePair.second *= fPair.second;
+                    set_entry(i, ePair);
+                }
+                i = grp_inf.next_row_in_group[i];
+                if (i == -1) break;
+            }
+        }
+        T eVal_nan = GetTentry<T>(RetrieveNaNentry(arr->dtype).data());
+        std::pair<bool,T> pairNaN{true,eVal_nan};
+        for (auto & idx_miss : grp_inf.list_missing)
+            set_entry(idx_miss, pairNaN);
+    };
+
+    if (arr->arr_type == bodo_array_type::NUMPY) {
+        cum_computation([=](int64_t pos) -> std::pair<bool,T> {
+            char* ptr = arr->data1 + pos * siztype;
+            bool isna = isnan_T<T>(ptr);
+            T eVal = GetTentry<T>(ptr);
+            return {isna, eVal};
+          },
+          [=](int64_t pos, std::pair<bool,T> const& ePair) -> void {
+            out_arr->at<T>(pos) = ePair.second;
+          });
+    }
+    if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        uint8_t* null_bitmask_i = (uint8_t*)arr->null_bitmask;
+        uint8_t* null_bitmask_o = (uint8_t*)out_arr->null_bitmask;
+        cum_computation([=](int64_t pos) -> std::pair<bool,T> {
+            char* ptr = arr->data1 + pos * siztype;
+            return {!GetBit(null_bitmask_i,pos), GetTentry<T>(ptr)};
+          },
+          [=](int64_t pos, std::pair<bool,T> const& ePair) -> void {
+            SetBitTo(null_bitmask_o, pos, ePair.first);
+            out_arr->at<T>(pos) = ePair.second;
+          });
+    }
+    return out_arr;
+}
+
+
+
+
+
+
+array_info* cumsum_cumprod_computation(array_info* arr, grouping_info const& grp_inf,
+                                       int32_t const& ftype, bool const& skipna) {
+    if (arr->dtype == Bodo_CTypes::INT8)
+        return cumsum_cumprod_computation_T<int8_t>(arr, grp_inf, ftype, skipna);
+    if (arr->dtype == Bodo_CTypes::UINT8)
+        return cumsum_cumprod_computation_T<uint8_t>(arr, grp_inf, ftype, skipna);
+
+    if (arr->dtype == Bodo_CTypes::INT16)
+        return cumsum_cumprod_computation_T<int16_t>(arr, grp_inf, ftype, skipna);
+    if (arr->dtype == Bodo_CTypes::UINT16)
+        return cumsum_cumprod_computation_T<uint16_t>(arr, grp_inf, ftype, skipna);
+
+    if (arr->dtype == Bodo_CTypes::INT32)
+        return cumsum_cumprod_computation_T<int32_t>(arr, grp_inf, ftype, skipna);
+    if (arr->dtype == Bodo_CTypes::UINT32)
+        return cumsum_cumprod_computation_T<uint32_t>(arr, grp_inf, ftype, skipna);
+
+    if (arr->dtype == Bodo_CTypes::INT64)
+        return cumsum_cumprod_computation_T<int64_t>(arr, grp_inf, ftype, skipna);
+    if (arr->dtype == Bodo_CTypes::UINT64)
+        return cumsum_cumprod_computation_T<uint64_t>(arr, grp_inf, ftype, skipna);
+
+    if (arr->dtype == Bodo_CTypes::FLOAT32)
+        return cumsum_cumprod_computation_T<float>(arr, grp_inf, ftype, skipna);
+    if (arr->dtype == Bodo_CTypes::FLOAT64)
+        return cumsum_cumprod_computation_T<double>(arr, grp_inf, ftype, skipna);
+}
+
+
 /**
  * The median_computation function. It uses the symbolic information to compute
  * the median results.
@@ -3406,67 +3547,70 @@ array_info* median_computation(array_info* arr,
     if (arr->arr_type == bodo_array_type::STRING) {
         PyErr_SetString(PyExc_RuntimeError,
                         "There is no median for the string case");
-    }
-    if (arr->arr_type == bodo_array_type::NUMPY) {
-        isnan_entry=[=](size_t pos) -> bool {
-          if (arr->dtype == Bodo_CTypes::FLOAT32) {
-            return isnan(arr->at<float>(pos));
-          }
-          if (arr->dtype == Bodo_CTypes::FLOAT64) {
-            return isnan(arr->at<double>(pos));
-          }
-          return false;
-        };
-    }
-    if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
-        isnan_entry = [=](size_t pos) -> bool {
-          return !GetBit(null_bitmask,pos);
-        };
+        return nullptr;
     }
     array_info* out_arr = alloc_array(num_group, 1, bodo_array_type::NUMPY,
                                       Bodo_CTypes::FLOAT64, 0);
-    for (size_t igrp=0; igrp<num_group; igrp++) {
-        int64_t i = grp_inf.group_to_first_row[igrp];
-        std::vector<double> ListValue;
-        bool HasNaN = false;
-        while (true) {
-          if (!isnan_entry(i)) {
-            char* ptr = arr->data1 + i * siztype;
-            double eVal = GetDoubleEntry(arr->dtype, ptr);
-            ListValue.push_back(eVal);
-          }
-          else {
-            if (!skipna) {
-              HasNaN = true;
-              break;
+    auto median_operation=[&](std::function<bool(size_t)> const& isnan_entry) -> void {
+        for (size_t igrp=0; igrp<num_group; igrp++) {
+            int64_t i = grp_inf.group_to_first_row[igrp];
+            std::vector<double> ListValue;
+            bool HasNaN = false;
+            while (true) {
+                if (!isnan_entry(i)) {
+                    char* ptr = arr->data1 + i * siztype;
+                    double eVal = GetDoubleEntry(arr->dtype, ptr);
+                    ListValue.push_back(eVal);
+                }
+                else {
+                    if (!skipna) {
+                        HasNaN = true;
+                        break;
+                    }
+                }
+                i = grp_inf.next_row_in_group[i];
+                if (i == -1) break;
             }
-          }
-          i = grp_inf.next_row_in_group[i];
-          if (i == -1) break;
+            auto GetKthValue=[&](size_t const& pos) -> double {
+                std::nth_element(ListValue.begin(), ListValue.begin() + pos, ListValue.end());
+                return ListValue[pos];
+            };
+            double valReturn;
+            if (HasNaN) {
+                valReturn = std::nan("1");
+            }
+            else {
+                size_t len = ListValue.size();
+                int res = len % 2;
+                if (res == 0) {
+                    size_t kMid1 = len / 2;
+                    size_t kMid2 = kMid1 - 1;
+                    valReturn = (GetKthValue(kMid1) + GetKthValue(kMid2)) / 2;
+                }
+                else {
+                    size_t kMid = len / 2;
+                    valReturn = GetKthValue(kMid);
+                }
+            }
+            out_arr->at<double>(igrp) = valReturn;
         }
-        auto GetKthValue=[&](size_t const& pos) -> double {
-          std::nth_element(ListValue.begin(), ListValue.begin() + pos, ListValue.end());
-          return ListValue[pos];
-        };
-        double valReturn;
-        if (HasNaN) {
-          valReturn = std::nan("1");
-        }
-        else {
-          size_t len = ListValue.size();
-          int res = len % 2;
-          if (res == 0) {
-            size_t kMid1 = len / 2;
-            size_t kMid2 = kMid1 - 1;
-            valReturn = (GetKthValue(kMid1) + GetKthValue(kMid2)) / 2;
-          }
-          else {
-            size_t kMid = len / 2;
-            valReturn = GetKthValue(kMid);
-          }
-        }
-        out_arr->at<double>(igrp) = valReturn;
+    };
+    if (arr->arr_type == bodo_array_type::NUMPY) {
+        median_operation([=](size_t pos) -> bool {
+            if (arr->dtype == Bodo_CTypes::FLOAT32) {
+                return isnan(arr->at<float>(pos));
+            }
+            if (arr->dtype == Bodo_CTypes::FLOAT64) {
+                return isnan(arr->at<double>(pos));
+            }
+            return false;
+        });
+    }
+    if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+        median_operation([=](size_t pos) -> bool {
+            return !GetBit(null_bitmask,pos);
+        });
     }
     return out_arr;
 }
@@ -3494,28 +3638,28 @@ array_info* nunique_computation(array_info* arr, grouping_info const& grp_inf,
          * @param the type of the data in input
          */
         auto isnan_entry=[&](char* ptr) -> bool {
-          if (arr->dtype == Bodo_CTypes::FLOAT32) {
-            float* ptr_f = (float*)ptr;
-            return isnan(*ptr_f);
-          }
-          if (arr->dtype == Bodo_CTypes::FLOAT64) {
-            double* ptr_d = (double*)ptr;
-            return isnan(*ptr_d);
-          }
-          return false;
+            if (arr->dtype == Bodo_CTypes::FLOAT32) {
+                float* ptr_f = (float*)ptr;
+                return isnan(*ptr_f);
+            }
+            if (arr->dtype == Bodo_CTypes::FLOAT64) {
+                double* ptr_d = (double*)ptr;
+                return isnan(*ptr_d);
+            }
+            return false;
         };
         size_t siztype = numpy_item_size[arr->dtype];
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             std::function<size_t(int64_t)> hash_fct=[&](int64_t i) -> size_t {
-              char *ptr = arr->data1 + i * siztype;
-              size_t retval = 0;
-              memcpy(&retval, ptr, std::min(siztype, sizeof(size_t)));
-              return retval;
+                char *ptr = arr->data1 + i * siztype;
+                size_t retval = 0;
+                memcpy(&retval, ptr, std::min(siztype, sizeof(size_t)));
+                return retval;
             };
             std::function<bool(int64_t,int64_t)> equal_fct=[&](int64_t i1, int64_t i2) -> bool {
-              char *ptr1 = arr->data1 + i1 * siztype;
-              char *ptr2 = arr->data1 + i2 * siztype;
-              return memcmp(ptr1, ptr2, siztype) == 0;
+                char *ptr1 = arr->data1 + i1 * siztype;
+                char *ptr2 = arr->data1 + i2 * siztype;
+                return memcmp(ptr1, ptr2, siztype) == 0;
             };
             SET_CONTAINER <int64_t, std::function<size_t(int64_t)>, std::function<bool(int64_t,int64_t)>> eset({}, hash_fct, equal_fct);
             int64_t i = grp_inf.group_to_first_row[igrp];
@@ -3542,19 +3686,19 @@ array_info* nunique_computation(array_info* arr, grouping_info const& grp_inf,
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             std::function<size_t(int64_t)> hash_fct=[&](int64_t i) -> size_t {
-              char* val_chars = arr->data1 + in_offsets[i];
-              int len = in_offsets[i + 1] - in_offsets[i];
-              uint32_t val;
-              hash_string_32(val_chars, len, seed, &val);
-              return size_t(val);
+                char* val_chars = arr->data1 + in_offsets[i];
+                int len = in_offsets[i + 1] - in_offsets[i];
+                uint32_t val;
+                hash_string_32(val_chars, len, seed, &val);
+                return size_t(val);
             };
             std::function<bool(int64_t,int64_t)> equal_fct=[&](int64_t i1, int64_t i2) -> bool {
-              size_t len1 = in_offsets[i1 + 1] - in_offsets[i1];
-              size_t len2 = in_offsets[i2 + 1] - in_offsets[i2];
-              if (len1 != len2) return false;
-              char *ptr1 = arr->data1 + in_offsets[i1];
-              char *ptr2 = arr->data1 + in_offsets[i2];
-              return strncmp(ptr1, ptr2, len1) == 0;
+                size_t len1 = in_offsets[i1 + 1] - in_offsets[i1];
+                size_t len2 = in_offsets[i2 + 1] - in_offsets[i2];
+                if (len1 != len2) return false;
+                char *ptr1 = arr->data1 + in_offsets[i1];
+                char *ptr2 = arr->data1 + in_offsets[i2];
+                return strncmp(ptr1, ptr2, len1) == 0;
             };
             SET_CONTAINER <int64_t, std::function<size_t(int64_t)>, std::function<bool(int64_t,int64_t)>> eset({}, hash_fct, equal_fct);
             int64_t i = grp_inf.group_to_first_row[igrp];
@@ -3578,18 +3722,18 @@ array_info* nunique_computation(array_info* arr, grouping_info const& grp_inf,
         size_t siztype = numpy_item_size[arr->dtype];
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             std::function<size_t(int64_t)> hash_fct=[&](int64_t i) -> size_t {
-              char *ptr = arr->data1 + i * siztype;
-              size_t retval = 0;
-              size_t *size_t_ptrA = &retval;
-              char* size_t_ptrB = (char*)size_t_ptrA;
-              for (size_t i=0; i<std::min(siztype, sizeof(size_t)); i++)
-                size_t_ptrB[i] = ptr[i];
-              return retval;
+                char *ptr = arr->data1 + i * siztype;
+                size_t retval = 0;
+                size_t *size_t_ptrA = &retval;
+                char* size_t_ptrB = (char*)size_t_ptrA;
+                for (size_t i=0; i<std::min(siztype, sizeof(size_t)); i++)
+                    size_t_ptrB[i] = ptr[i];
+                return retval;
             };
             std::function<bool(int64_t,int64_t)> equal_fct=[&](int64_t i1, int64_t i2) -> bool {
-              char *ptr1 = arr->data1 + i1 * siztype;
-              char *ptr2 = arr->data1 + i2 * siztype;
-              return memcmp(ptr1, ptr2, siztype) == 0;
+                char *ptr1 = arr->data1 + i1 * siztype;
+                char *ptr2 = arr->data1 + i2 * siztype;
+                return memcmp(ptr1, ptr2, siztype) == 0;
             };
             SET_CONTAINER <int64_t, std::function<size_t(int64_t)>, std::function<bool(int64_t,int64_t)>> eset({}, hash_fct, equal_fct);
             int64_t i = grp_inf.group_to_first_row[igrp];
@@ -3638,18 +3782,18 @@ table_info* groupby_and_sets(table_info* in_table, int64_t num_keys,
 #endif
     const int64_t ncols = in_table->ncols();
     in_table->num_keys = num_keys;
-    grouping_info grp_inf = get_group_info_iterate(in_table);
-    size_t num_groups = grp_inf.group_to_first_row.size();
-    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(
-        num_groups);
-    for (size_t igrp = 0; igrp < num_groups; igrp++) {
-        ListPairWrite[igrp] = {grp_inf.group_to_first_row[igrp], -1};
-    }
-
+    bool consider_missing=false;
+    if (ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod)
+      consider_missing=true;
+    grouping_info grp_inf = get_group_info_iterate(in_table, consider_missing);
     std::vector<array_info*> out_arrs;
-    for (int64_t i_col = 0; i_col < num_keys; i_col++) {
-        out_arrs.push_back(
-            RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
+    if (ftype == Bodo_FTypes::nunique || ftype == Bodo_FTypes::median) {
+        size_t num_groups = grp_inf.group_to_first_row.size();
+        std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(num_groups);
+        for (size_t igrp = 0; igrp < num_groups; igrp++)
+            ListPairWrite[igrp] = {grp_inf.group_to_first_row[igrp], -1};
+        for (int64_t i_col = 0; i_col < num_keys; i_col++)
+            out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
     }
     for (int64_t i_col = num_keys; i_col < ncols; i_col++) {
       if (ftype == Bodo_FTypes::nunique)
@@ -3658,6 +3802,9 @@ table_info* groupby_and_sets(table_info* in_table, int64_t num_keys,
       if (ftype == Bodo_FTypes::median)
         out_arrs.push_back(
             median_computation(in_table->columns[i_col], grp_inf, skipdropna));
+      if (ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod)
+        out_arrs.push_back(
+            cumsum_cumprod_computation(in_table->columns[i_col], grp_inf, ftype, skipdropna));
     }
 #ifdef DEBUG_SETS
     std::cout << "OUT_TABLE:\n";

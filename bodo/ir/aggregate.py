@@ -100,6 +100,8 @@ supported_agg_funcs = [
     "count",
     "nunique",
     "median",
+    "cumsum",
+    "cumprod",
     "mean",
     "min",
     "max",
@@ -117,9 +119,6 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     if series_type is None:
         series_type = SeriesType(types.float64)
 
-    # TODO: cumprod etc.
-    if func_name == "cumsum":
-        return func_name
     if func_name == "var":
         func = _column_var_impl_linear
         func.ftype = supported_agg_funcs.index(func_name)
@@ -134,15 +133,13 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         skipdropna = True
         if isinstance(rhs, ir.Expr):
             for erec in rhs.kws:
-                if func_name == "median":
+                if func_name in {"median", "cumsum", "cumprod"}:
                     if erec[0] == "skipna":
                         skipdropna = guard(find_const, func_ir, erec[1])
                         if not isinstance(skipdropna, bool):
-                            raise BodoError(
-                                "argument of skipna to median should be a boolean"
-                            )
+                            raise BodoError("For {} argument of skipna should be a boolean".format(func_name))
                     else:
-                        raise BodoError("argument to median can only be skipna")
+                        raise BodoError("argument to {} can only be skipna".format(func_name))
                 if func_name == "nunique":
                     if erec[0] == "dropna":
                         skipdropna = guard(find_const, func_ir, erec[1])
@@ -1599,6 +1596,7 @@ def gen_top_level_agg_func(
             ftype = agg_func.ftype
             n_funcs = 1
 
+        return_keys = True
         if agg_func_struct is not None:
             red_var_typs = agg_func_struct.var_typs
 
@@ -1663,10 +1661,13 @@ def gen_top_level_agg_func(
                 )
             )
         else:
-            if agg_func.ftype in {
-                supported_agg_funcs.index("nunique"),
-                supported_agg_funcs.index("median"),
-            }:
+            idx1 = supported_agg_funcs.index("nunique")
+            idx2 = supported_agg_funcs.index("median")
+            idx3 = supported_agg_funcs.index("cumsum")
+            idx4 = supported_agg_funcs.index("cumprod")
+            if agg_func.ftype in {idx3, idx4}:
+                return_keys = False
+            if agg_func.ftype in {idx1, idx2, idx3, idx4}:
                 func_text += "    out_table = groupby_and_aggregate_sets(table, {}, {}, {}, {})\n".format(
                     n_keys, agg_func.ftype, agg_func.skipdropna, parallel
                 )
@@ -1683,25 +1684,30 @@ def gen_top_level_agg_func(
                 )
 
         # extract arrays from output table
+
+        key_names = ["key_" + name for name in key_names]
+        idx = 0
+        if return_keys:
+            for i, key_name in enumerate(key_names):
+                func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+                    key_name, idx, key_name
+                )
+                idx += 1
         for i in range(len(out_names)):
             out_name = out_names[i]
             func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                out_name, i + n_keys, out_name + "_dummy"
+                out_name, idx, out_name + "_dummy"
             )
-
-        key_names = ["key_" + name for name in key_names]
-        for i, key_name in enumerate(key_names):
-            func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                key_name, i, key_name
-            )
+            idx += 1
 
         # clean up
         func_text += "    delete_table(table)\n"
         func_text += "    delete_table(out_table)\n"
 
-        func_text += "    return ({},)\n".format(
-            ", ".join(out_names + tuple(key_names))
-        )
+        ret_names = out_names
+        if return_keys:
+            ret_names += tuple(key_names)
+        func_text += "    return ({},)\n".format(", ".join(ret_names))
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)

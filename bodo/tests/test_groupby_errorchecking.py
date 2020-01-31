@@ -438,10 +438,54 @@ def test_groupby_median_argument_check():
 
     df = pd.DataFrame({"A": [1, 1, 1, 1], "B": [1, 2, 3, 4]})
     with pytest.raises(
-        BodoError, match="argument of skipna to median should be a boolean"
+        BodoError, match="For median argument of skipna should be a boolean"
     ):
         bodo.jit(impl1)(df)
     with pytest.raises(BodoError, match="argument to median can only be skipna"):
+        bodo.jit(impl2)(df)
+
+
+def test_groupby_cumsum_argument_check():
+    """
+    Test Groupby.cumsum() testing for skipna argument
+    """
+
+    def impl1(df):
+        return df.groupby("A")["B"].cumsum(skipna=0)
+
+    def impl2(df):
+        return df.groupby("A")["B"].cumsum(wrongarg=True)
+
+    df = pd.DataFrame({"A":[1,1,1,1], "B":[1,2,3,4]})
+    with pytest.raises(
+        BodoError, match="For cumsum argument of skipna should be a boolean"
+    ):
+        bodo.jit(impl1)(df)
+    with pytest.raises(
+        BodoError, match="argument to cumsum can only be skipna"
+    ):
+        bodo.jit(impl2)(df)
+
+
+def test_groupby_cumprod_argument_check():
+    """
+    Test Groupby.cumprod() testing for skipna argument
+    """
+
+    def impl1(df):
+        return df.groupby("A")["B"].cumprod(skipna=0)
+
+    def impl2(df):
+        return df.groupby("A")["B"].cumprod(wrongarg=True)
+
+    df = pd.DataFrame({"A":[1,1,1,1], "B":[1,2,3,4]})
+    with pytest.raises(
+        BodoError, match="For cumprod argument of skipna should be a boolean"
+    ):
+        bodo.jit(impl1)(df)
+    with pytest.raises(
+        BodoError, match="argument to cumprod can only be skipna"
+    ):
         bodo.jit(impl2)(df)
 
 

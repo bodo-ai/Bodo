@@ -305,9 +305,7 @@ def get_groupby_output_dtype(arr_type, func_name):
             "groupby built-in functions {}"
             " does not support boolean column".format(func_name)
         )
-    if func_name in "count":
-        return types.int64
-    elif func_name == "nunique":
+    if func_name in {"count", "nunique"}:
         return types.int64
     elif func_name in {"median", "mean", "var", "std"}:
         return types.float64
@@ -523,9 +521,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
     def resolve_std(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "std")
 
-    # TODO: cumprod etc.
-    @bound_function("groupby.cumsum")
-    def resolve_cumsum(self, grp, args, kws):
+    def resolve_cumulative(self, grp, args, kws, msg):
         index = RangeIndexType(types.none)
         out_columns = []
         out_data = []
@@ -536,9 +532,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
             if not isinstance(data.dtype, types.Integer) and not isinstance(
                 data.dtype, types.Float
             ):
-                raise BodoError(
-                    "Groupby.cumsum() only supports columns of types integer and float"
-                )
+                raise BodoError(msg)
             out_data.append(data)
         out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
         # XXX output becomes series if single output and explicitly selected
@@ -550,6 +544,17 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 name_typ=bodo.string_type,
             )
         return signature(out_res, *args)
+
+    @bound_function("groupby.cumsum")
+    def resolve_cumsum(self, grp, args, kws):
+        msg = "Groupby.cumsum() only supports columns of types integer and float"
+        return self.resolve_cumulative(grp, args, kws, msg)
+
+
+    @bound_function("groupby.cumprod")
+    def resolve_cumprod(self, grp, args, kws):
+        msg = "Groupby.cumprod() only supports columns of types integer and float"
+        return self.resolve_cumulative(grp, args, kws, msg)
 
 
 # a dummy pivot_table function that will be replace in dataframe_pass
