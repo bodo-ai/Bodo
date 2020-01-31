@@ -306,7 +306,9 @@ def overload_pat_findall(p, string, pos=0, endpos=9223372036854775807):
     # number of groups here
     if p.pat_const:
         n_groups = re.compile(p.pat_const).groups
-        typ = types.List(types.Tuple([string_type] * n_groups))
+        typ = types.List(string_type)
+        if n_groups > 1:
+            typ = types.List(types.Tuple([string_type] * n_groups))
         # HACK add type string to numba.types for objmode
         typ_name = "list_tup_str_{}".format(numba.ir_utils.next_label())
         setattr(types, typ_name, typ)

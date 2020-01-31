@@ -269,6 +269,16 @@ def test_pat_findall():
     py_out = test_impl3(in_str)
     assert py_out == bodo_out
 
+    def test_impl4(in_str):
+        pat = re.compile(r"(\w+).*")
+        return pat.findall(in_str)
+
+    in_str = "ww 132"
+    py_out = test_impl4(in_str)
+    bodo_out = bodo.jit(test_impl4)(in_str)
+    py_out = test_impl4(in_str)
+    assert py_out == bodo_out
+
 
 def test_re_sub():
     """make sure re.sub returns proper output (a string)
