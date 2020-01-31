@@ -299,7 +299,7 @@ def test_agg_select_col_fast():
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
     )
 
-    check_func(impl_str, (df_str,), sort_output=True, check_dtype=False)
+    check_func(impl_str, (df_str,), sort_output=True)
 
 
 @pytest.mark.slow
@@ -447,6 +447,27 @@ def test_groupby_agg_const_dict():
     )
     check_func(impl, (df,), sort_output=True)
     check_func(impl2, (df,), sort_output=True)
+
+
+def g(x):
+    return (x == "a").sum()
+
+
+@pytest.mark.slow
+def test_agg_global_func():
+    """
+    Test Groupby.agg() with a global function as UDF
+    """
+
+    def impl_str(df):
+        A = df.groupby("A")["B"].agg(g)
+        return A
+
+    df_str = pd.DataFrame(
+        {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
+    )
+
+    check_func(impl_str, (df_str,), sort_output=True)
 
 
 def test_count():

@@ -64,7 +64,7 @@ def pq_array_analysis(pq_node, equiv_set, typemap, array_analysis):
         equiv_set.insert_equiv(col_var, shape)
         post.extend(c_post)
         all_shapes.append(shape[0])
-        equiv_set.define(col_var, {})
+        equiv_set.define(col_var, set())
 
     if len(all_shapes) > 1:
         equiv_set.insert_equiv(*all_shapes)
@@ -120,7 +120,9 @@ def visit_vars_pq(pq_node, callback, cbdata):
 ir_utils.visit_vars_extensions[ParquetReader] = visit_vars_pq
 
 
-def remove_dead_pq(pq_node, lives, arg_aliases, alias_map, func_ir, typemap):
+def remove_dead_pq(
+    pq_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
+):
     # TODO
     new_col_names = []
     new_out_vars = []

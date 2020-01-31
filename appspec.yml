@@ -1,0 +1,26 @@
+version: 0.0
+os: linux
+files:
+  - source: /
+    destination: /home/ubuntu/
+hooks:
+  BeforeInstall:
+    - location: aws_scripts/cleanup.sh
+      timeout: 60
+      runas: root
+  ValidateService:
+    - location: aws_scripts/unzip_bodo.sh
+      timeout: 60
+      runas: root
+    - location: aws_scripts/install_bodo.sh
+      timeout: 300
+      runas: root
+    - location: aws_scripts/run_benchmarks.sh
+      timeout: 300
+      runas: root
+    - location: aws_scripts/run_tpch.sh
+      timeout: 600
+      runas: root
+    - location: aws_scripts/git_push.sh
+      timeout: 60
+      runas: root

@@ -21,7 +21,7 @@ from numba.parfor import wrap_parfor_blocks, unwrap_parfor_blocks
 from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.targets.imputils import lower_builtin
-from numba.extending import overload, intrinsic, lower_cast
+from numba.extending import overload, intrinsic
 from numba.targets.arrayobj import populate_array, get_itemsize, make_array
 import collections
 import numpy as np
@@ -99,28 +99,6 @@ np_alloc_callnames = ("empty", "zeros", "ones", "full")
 
 def unliteral_all(args):
     return tuple(types.unliteral(a) for a in args)
-
-
-# TODO: move to Numba
-class BooleanLiteral(types.Literal, types.Boolean):
-    def can_convert_to(self, typingctx, other):
-        # similar to IntegerLiteral
-        conv = typingctx.can_convert(self.literal_type, other)
-        if conv is not None:
-            return max(conv, types.Conversion.promote)
-
-
-types.Literal.ctor_map[bool] = BooleanLiteral
-
-numba.datamodel.register_default(BooleanLiteral)(numba.extending.models.BooleanModel)
-
-
-@lower_cast(BooleanLiteral, types.Boolean)
-def literal_bool_cast(context, builder, fromty, toty, val):
-    lit = context.get_constant_generic(
-        builder, fromty.literal_type, fromty.literal_value
-    )
-    return context.cast(builder, lit, fromty.literal_type, toty)
 
 
 def get_constant(func_ir, var, default=NOT_CONSTANT):
@@ -761,6 +739,35 @@ def overload_full_type(n, val, t):
         )
 
     return lambda n, val, t: np.full(n, val, dtype)
+
+
+# replacing _analyze_broadcast in array analysis to fix a bug. It's assuming that
+# get_shape throws GuardException which is wrong.
+# Numba 0.48 exposed this error with test_linear_regression since array analysis is
+# more restrictive and assumes more variables as redefined
+def _analyze_broadcast(self, scope, equiv_set, loc, args):
+    """Infer shape equivalence of arguments based on Numpy broadcast rules
+    and return shape of output
+    https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html
+    """
+    arrs = list(filter(lambda a: self._isarray(a.name), args))
+    require(len(arrs) > 0)
+    names = [x.name for x in arrs]
+    dims = [self.typemap[x.name].ndim for x in arrs]
+    max_dim = max(dims)
+    require(max_dim > 0)
+    # Numba code replaced:
+    # try:
+    #     shapes = [equiv_set.get_shape(x) for x in arrs]
+    # except GuardException:
+    #     return arrs[0], self._call_assert_equiv(scope, loc, equiv_set, arrs)
+    shapes = [equiv_set.get_shape(x) for x in arrs]
+    if any(a is None for a in shapes):
+        return arrs[0], self._call_assert_equiv(scope, loc, equiv_set, arrs)
+    return self._broadcast_assert_shapes(scope, equiv_set, loc, shapes, names)
+
+
+numba.array_analysis.ArrayAnalysis._analyze_broadcast = _analyze_broadcast
 
 
 @intrinsic

@@ -172,7 +172,7 @@ def join_array_analysis(join_node, equiv_set, typemap, array_analysis):
         equiv_set.insert_equiv(col_var, shape)
         post.extend(c_post)
         all_shapes.append(shape[0])
-        equiv_set.define(col_var, {})
+        equiv_set.define(col_var, set())
 
     if len(all_shapes) > 1:
         equiv_set.insert_equiv(*all_shapes)
@@ -285,7 +285,9 @@ def visit_vars_join(join_node, callback, cbdata):
 ir_utils.visit_vars_extensions[Join] = visit_vars_join
 
 
-def remove_dead_join(join_node, lives, arg_aliases, alias_map, func_ir, typemap):
+def remove_dead_join(
+    join_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
+):
     # if an output column is dead, the related input column is not needed
     # anymore in the join
     dead_cols = []
@@ -1359,9 +1361,7 @@ def _gen_pd_join(
     return jit_func
 
 
-def pd_join(
-    t1_keys, t2_keys, data_left, data_right, how, same_keys
-):
+def pd_join(t1_keys, t2_keys, data_left, data_right, how, same_keys):
     # construct dataframes and call join
     lk_prefix = "lk"
     rk_prefix = "rk"

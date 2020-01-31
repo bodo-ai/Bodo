@@ -41,6 +41,7 @@ from bodo.utils.utils import (
     is_call_assign,
     is_var_assign,
     is_assign,
+    is_expr,
     debug_prints,
     alloc_arr_tup,
     empty_like_type,
@@ -74,7 +75,7 @@ from bodo.utils.shuffle import (
     _get_keys_tup,
     _get_data_tup,
 )
-from bodo.utils.typing import is_overload_true
+from bodo.utils.typing import is_overload_true, get_overload_const_func
 from bodo.libs.array_tools import (
     array_to_info,
     arr_info_list_to_table,
@@ -110,7 +111,7 @@ supported_agg_funcs = [
 ]
 
 
-def get_agg_func(func_ir, func_name, rhs, series_type=None):
+def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     # FIXME: using float64 type as default to be compatible with old code
     # TODO: make groupby functions typed properly everywhere
     if series_type is None:
@@ -160,38 +161,44 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None):
     if len(rhs.args) != 1:
         raise ValueError("agg expects 1 argument")
 
-    agg_func = guard(get_definition, func_ir, rhs.args[0])
+    agg_func_def = guard(get_definition, func_ir, rhs.args[0])
 
     # multi-function tuple case
-    if isinstance(agg_func, ir.Expr) and agg_func.op == "build_tuple":
+    if isinstance(agg_func_def, ir.Expr) and agg_func_def.op == "build_tuple":
         return [
-            _get_agg_code(guard(get_definition, func_ir, v)) for v in agg_func.items
+            _get_const_agg_func(typemap[v.name]) for v in agg_func_def.items
         ]
 
     # multi-function const dict case
-    if isinstance(agg_func, ir.Expr) and agg_func.op == "build_map":
-        func = [guard(find_const, func_ir, v[1]) for v in agg_func.items]
+    if isinstance(agg_func_def, ir.Expr) and agg_func_def.op == "build_map":
+        func = [guard(find_const, func_ir, v[1]) for v in agg_func_def.items]
         # TODO: support multi-function in C++ backend
         # ftype = [supported_agg_funcs.index(f) for f in func]
         # return AggFuncStruct(func, ftype)
-        return [get_agg_func(func_ir, f, rhs, series_type) for f in func]
+        return [get_agg_func(func_ir, f, rhs, series_type, typemap) for f in func]
 
-    func = _get_agg_code(agg_func)
+    # typemap should be available for UDF case
+    assert typemap is not None, "typemap is required for agg UDF handling"
+    func = _get_const_agg_func(typemap[rhs.args[0].name])
     func.ftype = supported_agg_funcs.index("agg")
     return func
 
 
-def _get_agg_code(agg_func):
-    if agg_func is None or not (
-        isinstance(agg_func, ir.Expr) and agg_func.op == "make_function"
-    ):
-        raise ValueError("lambda for map not found")
+def _get_const_agg_func(func_typ):
+    """get UDF function from its type. Wraps closures in functions.
+    """
+    agg_func = get_overload_const_func(func_typ)
 
-    def agg_func_wrapper(A):
-        return A
+    # convert agg_func to a function if it is a make_function object
+    # TODO: more robust handling, maybe reuse Numba's inliner code if possible
+    if is_expr(agg_func, "make_function"):
+        def agg_func_wrapper(A):  # pragma: no cover
+            return A
 
-    agg_func_wrapper.__code__ = agg_func.code
-    agg_func = agg_func_wrapper
+        agg_func_wrapper.__code__ = agg_func.code
+        agg_func = agg_func_wrapper
+        return agg_func
+
     return agg_func
 
 
@@ -366,7 +373,7 @@ numba.analysis.ir_extension_usedefs[Aggregate] = aggregate_usedefs
 
 
 def remove_dead_aggregate(
-    aggregate_node, lives, arg_aliases, alias_map, func_ir, typemap
+    aggregate_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
 ):
 
     dead_cols = []
@@ -522,7 +529,7 @@ def aggregate_array_analysis(aggregate_node, equiv_set, typemap, array_analysis)
         equiv_set.insert_equiv(col_var, shape)
         post.extend(c_post)
         all_shapes.append(shape[0])
-        equiv_set.define(col_var, {})
+        equiv_set.define(col_var, set())
 
     if len(all_shapes) > 1:
         equiv_set.insert_equiv(*all_shapes)

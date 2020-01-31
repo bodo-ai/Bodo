@@ -4,7 +4,7 @@ trigger:
 pr: none
 
 schedules:
-- cron: "0 0 * * *"
+- cron: "0 5 * * *"
   displayName: 'Daily midnight build'
   branches:
     include:
@@ -16,7 +16,7 @@ stages:
   jobs:
   - job: find_suffix
     pool:
-      vmImage: xcode9-macos10.13
+      vmImage: macOS-latest
     steps:
     - script: |
         if [[ ! -z "${TRIAL_PERIOD}" ]]; then

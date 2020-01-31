@@ -95,58 +95,6 @@ def _build_hashsecret():
 numba.targets.hashing._hashsecret = _build_hashsecret()
 
 
-## use objmode for string methods for now
-
-# string methods that just return another string
-# 'lstrip', 'rstrip', 'strip', 'lower', 'title', and 'upper' are in Numba now
-str2str_methods = ("capitalize", "casefold", "swapcase")
-
-
-for method in str2str_methods:
-    func_text = "def str_overload(in_str):\n"
-    func_text += "  def _str_impl(in_str):\n"
-    func_text += "    with numba.objmode(out='unicode_type'):\n"
-    func_text += "      out = in_str.{}()\n".format(method)
-    func_text += "    return out\n"
-    func_text += "  return _str_impl\n"
-    loc_vars = {}
-    exec(func_text, {"numba": numba}, loc_vars)
-    str_overload = loc_vars["str_overload"]
-    overload_method(types.UnicodeType, method)(str_overload)
-
-
-# string methods that just return another boolean
-# 'isupper' is in numba
-str2bool_methods = (
-    "isdigit",
-    "isnumeric",
-    "isdecimal",
-)
-
-
-for method in str2bool_methods:
-    func_text = "def str_overload(in_str):\n"
-    func_text += "  def _str_impl(in_str):\n"
-    func_text += "    with numba.objmode(out='boolean'):\n"
-    func_text += "      out = in_str.{}()\n".format(method)
-    func_text += "    return out\n"
-    func_text += "  return _str_impl\n"
-    loc_vars = {}
-    exec(func_text, {"numba": numba}, loc_vars)
-    str_overload = loc_vars["str_overload"]
-    overload_method(types.UnicodeType, method)(str_overload)
-
-
-@overload_method(types.UnicodeType, "replace")
-def str_replace_overload(in_str, old, new, count=-1):
-    def _str_replace_impl(in_str, old, new, count=-1):  # pragma: no cover
-        with numba.objmode(out="unicode_type"):
-            out = in_str.replace(old, new, count)
-        return out
-
-    return _str_replace_impl
-
-
 @intrinsic
 def string_to_char_ptr(typingctx, str_tp=None):
     assert str_tp == string_type or isinstance(str_tp, types.StringLiteral)
