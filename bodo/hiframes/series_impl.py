@@ -16,7 +16,6 @@ from bodo.libs.str_arr_ext import (
     pre_alloc_string_array,
 )
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
-from bodo.hiframes.pd_categorical_ext import PDCategoricalClass
 from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
@@ -27,6 +26,7 @@ from bodo.utils.typing import (
     is_overload_constant_str,
 )
 from numba.typing.templates import infer_global, AbstractTemplate
+from bodo.libs.bool_arr_ext import BooleanArrayType
 
 
 @overload_attribute(SeriesType, "index")
@@ -1459,7 +1459,10 @@ def where_impl(c, x, y):
 
 @overload(where_impl)
 def overload_where_unsupported(condition, x, y):
-    if not isinstance(condition, (SeriesType, types.Array)) or condition.ndim != 1:
+    if (
+        not isinstance(condition, (SeriesType, types.Array, BooleanArrayType))
+        or condition.ndim != 1
+    ):
         return lambda condition, x, y: np.where(condition, x, y)
 
 
@@ -1469,7 +1472,10 @@ def overload_np_where(condition, x, y):
     """implement parallelizable np.where() for Series and 1D arrays
     """
     # this overload only supports 1D arrays
-    if not isinstance(condition, (SeriesType, types.Array)) or condition.ndim != 1:
+    if (
+        not isinstance(condition, (SeriesType, types.Array, BooleanArrayType))
+        or condition.ndim != 1
+    ):
         return
 
     assert condition.dtype == types.bool_

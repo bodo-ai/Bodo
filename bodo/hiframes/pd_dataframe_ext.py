@@ -53,6 +53,7 @@ from bodo.utils.typing import (
     get_index_names,
     get_index_data_arr_types,
 )
+from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
 from bodo.libs.array_tools import (
     array_to_info,
@@ -60,7 +61,7 @@ from bodo.libs.array_tools import (
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import StringArray, string_array_type
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
 from bodo.hiframes.pd_index_ext import is_pd_index_type
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 
@@ -213,9 +214,6 @@ class DataFrameAttribute(AttributeTemplate):
     def resolve_apply(self, df, args, kws):
         kws = dict(kws)
         func = args[0] if len(args) > 0 else kws.get("func", None)
-        # check lambda
-        if not isinstance(func, types.MakeFunctionLiteral):
-            raise ValueError("df.apply(): lambda not found")
 
         # check axis
         axis = args[1] if len(args) > 1 else kws.get("axis", None)
@@ -241,11 +239,7 @@ class DataFrameAttribute(AttributeTemplate):
             dtypes.append(el_typ)
 
         row_typ = types.NamedTuple(dtypes, Row)
-        code = func.literal_value.code
-        f_ir = numba.ir_utils.get_ir_of_code({"np": np}, code)
-        _, f_return_type, _ = numba.typed_passes.type_inference_stage(
-            self.context, f_ir, (row_typ,), None
-        )
+        f_return_type = get_const_func_output_type(func, (row_typ,), self.context)
 
         return signature(SeriesType(f_return_type, index=df.index), *args)
 
@@ -579,7 +573,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
     """Set df column and reflect to parent Python object
     return a new df.
     """
-    assert isinstance(inplace, bodo.utils.utils.BooleanLiteral)
+    assert isinstance(inplace, bodo.utils.typing.BooleanLiteral)
     is_inplace = inplace.literal_value
     col_name = cname.literal_value
     n_cols = len(df.columns)
@@ -714,7 +708,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
 @overload(pd.DataFrame)
 def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=False):
     # TODO: support other input combinations
-    if not isinstance(copy, (bool, bodo.utils.utils.BooleanLiteral, types.Omitted)):
+    if not isinstance(copy, (bool, bodo.utils.typing.BooleanLiteral, types.Omitted)):
         raise ValueError("pd.DataFrame(): copy argument should be constant")
 
     # get value of copy
@@ -905,7 +899,7 @@ class GetItemDataFrame(AbstractTemplate):
         # df1 = df[df.A > .5]
         if (
             isinstance(df, DataFrameType)
-            and isinstance(idx, (SeriesType, types.Array))
+            and isinstance(idx, (SeriesType, types.Array, BooleanArrayType))
             and idx.dtype == types.bool_
         ):
             index = df.index
@@ -1078,9 +1072,9 @@ class GetItemDataFrameLoc(AbstractTemplate):
         # TODO: handle proper labeled indexes
         if isinstance(df, DataFrameLocType):
             # df1 = df.loc[df.A > .5], df1 = df.loc[np.array([1,2,3])]
-            if isinstance(idx, (SeriesType, types.Array, types.List)) and (
-                idx.dtype == types.bool_ or isinstance(idx.dtype, types.Integer)
-            ):
+            if isinstance(
+                idx, (SeriesType, types.Array, types.List, BooleanArrayType)
+            ) and (idx.dtype == types.bool_ or isinstance(idx.dtype, types.Integer)):
                 return signature(df.df_type, *args)
             # df.loc[1:n]
             if isinstance(idx, types.SliceType):
@@ -1107,9 +1101,9 @@ class GetItemDataFrameILoc(AbstractTemplate):
         df, idx = args
         if isinstance(df, DataFrameILocType):
             # df1 = df.iloc[df.A > .5], df1 = df.iloc[np.array([1,2,3])]
-            if isinstance(idx, (SeriesType, types.Array, types.List)) and (
-                idx.dtype == types.bool_ or isinstance(idx.dtype, types.Integer)
-            ):
+            if isinstance(
+                idx, (SeriesType, types.Array, types.List, BooleanArrayType)
+            ) and (idx.dtype == types.bool_ or isinstance(idx.dtype, types.Integer)):
                 return signature(df.df_type, *args)
             # df.iloc[1:n]
             if isinstance(idx, types.SliceType):
@@ -2128,7 +2122,7 @@ class SortDummyTyper(AbstractTemplate):
         df, by, ascending, inplace, na_position = args
 
         # inplace value
-        if isinstance(inplace, bodo.utils.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
@@ -2271,7 +2265,7 @@ class FillnaDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         df, value, inplace = args
         # inplace value
-        if isinstance(inplace, bodo.utils.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
@@ -2388,7 +2382,7 @@ class DropnaDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         df, inplace = args
         # inplace value
-        if isinstance(inplace, bodo.utils.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,
@@ -2482,7 +2476,7 @@ class DropDummyTyper(AbstractTemplate):
         new_data = tuple(df.data[df.columns.index(c)] for c in new_cols)
 
         # inplace value
-        if isinstance(inplace, bodo.utils.utils.BooleanLiteral):
+        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
             inplace = inplace.literal_value
         else:
             # XXX inplace type is just bool when value not passed. Therefore,

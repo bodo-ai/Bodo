@@ -34,6 +34,7 @@ from bodo.hiframes.pd_timestamp_ext import (
 )
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
 from bodo.utils.typing import (
+    BodoError,
     is_list_like_index_type,
     is_overload_false,
     is_overload_true,
@@ -42,7 +43,6 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import (
     string_array_type,
     pre_alloc_string_array,
-    get_utf8_size,
 )
 
 
@@ -89,6 +89,8 @@ def init_series_dt_properties(typingctx, obj=None):
 
 @overload_attribute(SeriesType, "dt")
 def overload_series_dt(s):
+    if not bodo.hiframes.pd_series_ext.is_dt64_series_typ(s):
+        raise BodoError("Can only use .dt accessor with datetimelike values.")
     return lambda s: bodo.hiframes.series_dt_impl.init_series_dt_properties(s)
 
 
@@ -156,30 +158,274 @@ def series_dt_date_overload(S_dt):
     return impl
 
 
-@overload(operator.sub)
-def overload_series_dt64_sub(A1, A2):
+def create_bin_op_overload(op):
+    """create overload function for binary operators 
+    with series(dt64)/series(timedelta) type
+    """
 
-    # A1 is series(dt64) and A2 is timestamp
-    if (
-        bodo.hiframes.pd_series_ext.is_dt64_series_typ(A1)
-        and A2 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
-    ):
+    def overload_series_dt_binop(A1, A2):
 
-        def impl(A1, A2):  # pragma: no cover
-            numba.parfor.init_prange()
-            arr = bodo.hiframes.pd_series_ext.get_series_data(A1)
-            index = bodo.hiframes.pd_series_ext.get_series_index(A1)
-            name = bodo.hiframes.pd_series_ext.get_series_name(A1)
-            n = len(arr)
-            S = numba.unsafe.ndarray.empty_inferred((n,))
-            tsint = A2.value
-            for i in numba.parfor.internal_prange(n):
-                S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
-                    bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i]) - tsint
+        # A1 is series(dt64) and A2 is series(timedelta64)
+        if bodo.hiframes.pd_series_ext.is_dt64_series_typ(
+            A1
+        ) and bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(A2):
+
+            def impl(A1, A2):  # pragma: no cover
+                numba.parfor.init_prange()
+                arr = bodo.hiframes.pd_series_ext.get_series_data(A1)
+                index = bodo.hiframes.pd_series_ext.get_series_index(A1)
+                name = bodo.hiframes.pd_series_ext.get_series_name(A1)
+                arr2 = bodo.hiframes.pd_series_ext.get_series_data(A2)
+                n = len(arr)
+                S = numba.unsafe.ndarray.empty_inferred((n,))
+
+                for i in numba.parfor.internal_prange(n):
+                    int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
+                    td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
+                        arr2[i]
+                    )
+                    int_td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(
+                        td64
+                    )
+                    S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
+                        op(int_dt64, int_td64)
+                    )
+                return bodo.hiframes.pd_series_ext.init_series(S, index, name)
+
+            return impl
+
+        # A1 is series(timedelta64) and A2 is series(dt64)
+        if bodo.hiframes.pd_series_ext.is_dt64_series_typ(
+            A2
+        ) and bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(A1):
+
+            def impl(A1, A2):  # pragma: no cover
+                numba.parfor.init_prange()
+                arr = bodo.hiframes.pd_series_ext.get_series_data(A2)
+                index = bodo.hiframes.pd_series_ext.get_series_index(A2)
+                name = bodo.hiframes.pd_series_ext.get_series_name(A2)
+                arr2 = bodo.hiframes.pd_series_ext.get_series_data(A1)
+                n = len(arr)
+                S = numba.unsafe.ndarray.empty_inferred((n,))
+
+                for i in numba.parfor.internal_prange(n):
+                    int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
+                    td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
+                        arr2[i]
+                    )
+                    int_td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(
+                        td64
+                    )
+                    S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
+                        op(int_dt64, int_td64)
+                    )
+                return bodo.hiframes.pd_series_ext.init_series(S, index, name)
+
+            return impl
+
+        # A1 is series(dt64) and A2 is timestamp
+        if (
+            bodo.hiframes.pd_series_ext.is_dt64_series_typ(A1)
+            and A2 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+        ):
+
+            def impl(A1, A2):  # pragma: no cover
+                numba.parfor.init_prange()
+                arr = bodo.hiframes.pd_series_ext.get_series_data(A1)
+                index = bodo.hiframes.pd_series_ext.get_series_index(A1)
+                name = bodo.hiframes.pd_series_ext.get_series_name(A1)
+                n = len(arr)
+                S = numba.unsafe.ndarray.empty_inferred((n,))
+                tsint = A2.value
+                for i in numba.parfor.internal_prange(n):
+                    int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
+                    S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                        op(int_dt64, tsint)
+                    )
+                return bodo.hiframes.pd_series_ext.init_series(S, index, name)
+
+            return impl
+
+        # A1 is timestamp and A2 is series(dt64)
+        if (
+            bodo.hiframes.pd_series_ext.is_dt64_series_typ(A2)
+            and A1 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+        ):
+
+            def impl(A1, A2):  # pragma: no cover
+                numba.parfor.init_prange()
+                arr = bodo.hiframes.pd_series_ext.get_series_data(A2)
+                index = bodo.hiframes.pd_series_ext.get_series_index(A2)
+                name = bodo.hiframes.pd_series_ext.get_series_name(A2)
+                n = len(arr)
+                S = numba.unsafe.ndarray.empty_inferred((n,))
+                tsint = A1.value
+                for i in numba.parfor.internal_prange(n):
+                    int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
+                    S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                        op(tsint, int_dt64)
+                    )
+                return bodo.hiframes.pd_series_ext.init_series(S, index, name)
+
+            return impl
+
+        # A1 is series(dt64) and A2 is datetime.timedelta
+        if (
+            bodo.hiframes.pd_series_ext.is_dt64_series_typ(A1)
+            and A2 == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
+        ):
+
+            def impl(A1, A2):  # pragma: no cover
+                numba.parfor.init_prange()
+                arr = bodo.hiframes.pd_series_ext.get_series_data(A1)
+                index = bodo.hiframes.pd_series_ext.get_series_index(A1)
+                name = bodo.hiframes.pd_series_ext.get_series_name(A1)
+                n = len(arr)
+                S = numba.unsafe.ndarray.empty_inferred((n,))
+                td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
+                    A2
                 )
-            return bodo.hiframes.pd_series_ext.init_series(S, index, name)
+                int_td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(td64)
+                for i in numba.parfor.internal_prange(n):
+                    int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
+                    S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
+                        op(int_dt64, int_td64)
+                    )
+                return bodo.hiframes.pd_series_ext.init_series(S, index, name)
 
-        return impl
+            return impl
+
+        # A1 is datetime.timedelta and A2 is series(dt64)
+        if (
+            bodo.hiframes.pd_series_ext.is_dt64_series_typ(A2)
+            and A1 == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
+        ):
+
+            def impl(A1, A2):  # pragma: no cover
+                numba.parfor.init_prange()
+                arr = bodo.hiframes.pd_series_ext.get_series_data(A2)
+                index = bodo.hiframes.pd_series_ext.get_series_index(A2)
+                name = bodo.hiframes.pd_series_ext.get_series_name(A2)
+                n = len(arr)
+                S = numba.unsafe.ndarray.empty_inferred((n,))
+                td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
+                    A1
+                )
+                int_td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(td64)
+                for i in numba.parfor.internal_prange(n):
+                    int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
+                    S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
+                        op(int_dt64, int_td64)
+                    )
+                return bodo.hiframes.pd_series_ext.init_series(S, index, name)
+
+            return impl
+
+        # A1 is series(dt64) and A2 is datetime.datetime
+        if (
+            bodo.hiframes.pd_series_ext.is_dt64_series_typ(A1)
+            and A2 == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type
+        ):
+
+            def impl(A1, A2):  # pragma: no cover
+                numba.parfor.init_prange()
+                arr = bodo.hiframes.pd_series_ext.get_series_data(A1)
+                index = bodo.hiframes.pd_series_ext.get_series_index(A1)
+                name = bodo.hiframes.pd_series_ext.get_series_name(A1)
+                n = len(arr)
+                S = numba.unsafe.ndarray.empty_inferred((n,))
+                dt64 = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(A2)
+                int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dt64)
+                for i in numba.parfor.internal_prange(n):
+                    int_dt64_2 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
+                    S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                        op(int_dt64_2, int_dt64)
+                    )
+                return bodo.hiframes.pd_series_ext.init_series(S, index, name)
+
+            return impl
+
+        # A1 is datetime.datetime and A2 is series(dt64)
+        if (
+            bodo.hiframes.pd_series_ext.is_dt64_series_typ(A2)
+            and A1 == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type
+        ):
+
+            def impl(A1, A2):  # pragma: no cover
+                numba.parfor.init_prange()
+                arr = bodo.hiframes.pd_series_ext.get_series_data(A2)
+                index = bodo.hiframes.pd_series_ext.get_series_index(A2)
+                name = bodo.hiframes.pd_series_ext.get_series_name(A2)
+                n = len(arr)
+                S = numba.unsafe.ndarray.empty_inferred((n,))
+                dt64 = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(A1)
+                int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dt64)
+                for i in numba.parfor.internal_prange(n):
+                    int_dt64_2 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
+                    S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                        op(int_dt64, int_dt64_2)
+                    )
+                return bodo.hiframes.pd_series_ext.init_series(S, index, name)
+
+            return impl
+
+        # A1 is series(timedelta64) and A2 is datetime.timedelta
+        if (
+            bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(A1)
+            and A2 == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
+        ):
+
+            def impl(A1, A2):  # pragma: no cover
+                numba.parfor.init_prange()
+                arr = bodo.hiframes.pd_series_ext.get_series_data(A1)
+                index = bodo.hiframes.pd_series_ext.get_series_index(A1)
+                name = bodo.hiframes.pd_series_ext.get_series_name(A1)
+                n = len(arr)
+                S = numba.unsafe.ndarray.empty_inferred((n,))
+                td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
+                    A2
+                )
+                int_td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(td64)
+                for i in numba.parfor.internal_prange(n):
+                    int_td64_2 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(
+                        arr[i]
+                    )
+                    S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                        op(int_td64_2, int_td64)
+                    )
+                return bodo.hiframes.pd_series_ext.init_series(S, index, name)
+
+            return impl
+
+        # A1 is datetime.timedelta and A2 is series(timedelta64)
+        if (
+            bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(A2)
+            and A1 == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
+        ):
+
+            def impl(A1, A2):  # pragma: no cover
+                numba.parfor.init_prange()
+                arr = bodo.hiframes.pd_series_ext.get_series_data(A2)
+                index = bodo.hiframes.pd_series_ext.get_series_index(A2)
+                name = bodo.hiframes.pd_series_ext.get_series_name(A2)
+                n = len(arr)
+                S = numba.unsafe.ndarray.empty_inferred((n,))
+                td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
+                    A1
+                )
+                int_td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(td64)
+                for i in numba.parfor.internal_prange(n):
+                    int_td64_2 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(
+                        arr[i]
+                    )
+                    S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                        op(int_td64, int_td64_2)
+                    )
+                return bodo.hiframes.pd_series_ext.init_series(S, index, name)
+
+            return impl
+
+    return overload_series_dt_binop
 
 
 def create_cmp_op_overload(op):
@@ -330,3 +576,14 @@ def _install_cmp_ops():
 
 
 _install_cmp_ops()
+
+
+def _install_bin_ops():
+    """install overloads for operators with series(dt64) type
+    """
+    for op in (operator.add, operator.sub):
+        overload_impl = create_bin_op_overload(op)
+        overload(op)(overload_impl)
+
+
+_install_bin_ops()

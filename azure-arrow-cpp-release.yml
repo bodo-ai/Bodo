@@ -9,5 +9,5 @@ jobs:
 - template: buildscripts/azure/azure-arrow-cpp-build-mac-linux.yml
   parameters:
     name: Mac
-    vmImage: xcode9-macos10.13
+    vmImage: macOS-latest
 - template: buildscripts/azure/arrow-cpp-feedstock/.azure-pipelines/azure-pipelines-win.yml

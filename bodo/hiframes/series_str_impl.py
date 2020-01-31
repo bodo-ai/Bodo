@@ -33,11 +33,7 @@ from bodo.hiframes.pd_timestamp_ext import (
     integer_to_dt64,
 )
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
-from bodo.utils.typing import (
-    is_list_like_index_type,
-    is_overload_false,
-    is_overload_true,
-)
+from bodo.utils.typing import is_overload_false, is_overload_true
 from bodo.libs.str_ext import string_type, str_findall_count
 from bodo.libs.str_arr_ext import (
     string_array_type,

@@ -36,7 +36,7 @@ requirements:
     - boost-cpp
     - futures  # [py==27]
     - glog
-    - pandas
+    - pandas 0.25.3
     # empty parquet-cpp metapackage, force old versions to be uninstalled
     - parquet-cpp 1.5.1.*
     - python

@@ -85,20 +85,76 @@ def check_func(
     copy_input=False,
     check_dtype=True,
 ):
-    """test bodo compilation of function 'func' on arguments using REP and 1D
+    """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
     """
     n_pes = bodo.get_size()
 
     call_args = tuple(_get_arg(a, copy_input) for a in args)
     py_output = func(*call_args)
+    w = None
+
     # sequential
+    w = check_func_seq(
+        func, args, py_output, copy_input, sort_output, check_names, check_dtype, n_pes
+    )
+
+    if is_out_distributed is None:
+        # assume all distributable output is distributed if not specified
+        is_out_distributed = is_distributable_typ(
+            _typeof(py_output)
+        ) or is_distributable_tuple_typ(_typeof(py_output))
+
+    # skip 1D distributed and 1D distributed variable length tests
+    # if no parallelism is found
+    # and if neither inputs nor outputs are distributable
+    if (
+        w is not None  # if no parallelism is found
+        and not is_out_distributed  # if output is not distributable
+        and not any(
+            is_distributable_typ(_typeof(a)) or is_distributable_tuple_typ(_typeof(a))
+            for a in args
+        )  # if none of the inputs is distributable
+    ):
+        return  # no need for distributed checks
+
+    check_func_1D(
+        func,
+        args,
+        py_output,
+        is_out_distributed,
+        copy_input,
+        sort_output,
+        check_names,
+        check_dtype,
+        n_pes,
+    )
+    check_func_1D_var(
+        func,
+        args,
+        py_output,
+        is_out_distributed,
+        copy_input,
+        sort_output,
+        check_names,
+        check_dtype,
+        n_pes,
+    )
+
+
+def check_func_seq(
+    func, args, py_output, copy_input, sort_output, check_names, check_dtype, n_pes
+):
+    """check function output against Python without manually setting inputs/outputs
+    distributions (keep the function sequential)
+    """
     bodo_func = bodo.jit(func)
     call_args = tuple(_get_arg(a, copy_input) for a in args)
-
     # try to catch BodoWarning if no parallelism found
     with warnings.catch_warnings(record=True) as w:
-        warnings.filterwarnings("always", message="No parallelism found for function", category=BodoWarning)
+        warnings.filterwarnings(
+            "always", message="No parallelism found for function", category=BodoWarning
+        )
         bodo_out = bodo_func(*call_args)
 
     passed = _test_equal_guard(
@@ -108,25 +164,23 @@ def check_func(
     # can lead to inconsistency across pes and hangs
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes
+    return w
 
-    if is_out_distributed is None:
-        # assume all distributable output is distributed if not specified
-        is_out_distributed = isinstance(
-            py_output,
-            (pd.Series, pd.Index, pd.DataFrame, np.ndarray, pd.arrays.IntegerArray),
-        )
 
-    # skip 1D distributed and 1D distributed variable length tests
-    # if no parallelism is found
-    # and if neither inputs nor output is distributable
-    if w != None: # if no parallelism is found
-        if not is_out_distributed: # if output is not distributable
-            args_type = map(lambda a: bodo.typeof(a), args)
-            args_distributable = map(lambda t: is_distributable_typ(t) or is_distributable_tuple_typ(t), args_type)
-            if not (any(args_distributable)):
-                # if none of the inputs is distributable
-                return
-
+def check_func_1D(
+    func,
+    args,
+    py_output,
+    is_out_distributed,
+    copy_input,
+    sort_output,
+    check_names,
+    check_dtype,
+    n_pes,
+):
+    """Check function output against Python while setting the inputs/outputs as
+    1D distributed
+    """
     # 1D distributed
     bodo_func = bodo.jit(
         all_args_distributed=True, all_returns_distributed=is_out_distributed
@@ -144,7 +198,21 @@ def check_func(
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes
 
-    # 1D distributed variable length
+
+def check_func_1D_var(
+    func,
+    args,
+    py_output,
+    is_out_distributed,
+    copy_input,
+    sort_output,
+    check_names,
+    check_dtype,
+    n_pes,
+):
+    """Check function output against Python while setting the inputs/outputs as
+    1D distributed variable length
+    """
     bodo_func = bodo.jit(
         all_args_distributed_varlength=True, all_returns_distributed=is_out_distributed
     )(func)
@@ -258,6 +326,23 @@ def _test_equal(
         pd.util.testing.assert_extension_array_equal(bodo_out, py_out)
     else:
         assert bodo_out == py_out
+
+
+def _typeof(val):
+    # Pandas returns an object array for .values or to_numpy() call on Series of
+    # nullable int, which can't be handled in typeof. Bodo returns a nullable int array
+    # see test_series_to_numpy[numeric_series_val3] and
+    # test_series_get_values[series_val4]
+    if (
+        isinstance(val, np.ndarray)
+        and val.dtype == np.dtype("O")
+        and all(
+            (isinstance(a, np.float) and np.isnan(a)) or isinstance(a, int) for a in val
+        )
+    ):
+        return bodo.libs.int_arr_ext.IntegerArrayType(bodo.int64)
+
+    return bodo.typeof(val)
 
 
 def is_bool_object_series(S):

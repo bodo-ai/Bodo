@@ -70,9 +70,14 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-from bodo.utils.typing import get_index_data_arr_types, is_overload_constant_str
+from bodo.utils.typing import (
+    get_index_data_arr_types,
+    is_overload_constant_str,
+    get_overload_const_func,
+)
 
 
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
@@ -982,7 +987,7 @@ class DataFramePass:
         # get apply function
         kws = dict(rhs.kws)
         func_var = self._get_arg("apply", rhs.args, kws, 0, "func")
-        func = guard(get_definition, self.func_ir, func_var)
+        func = get_overload_const_func(self.typemap[func_var.name])
         # TODO: get globals directly from passed lambda if possible?
         _globals = self.func_ir.func_id.func.__globals__
         lambda_ir = compile_to_numba_ir(func, _globals)
@@ -1114,16 +1119,16 @@ class DataFramePass:
         # find key array for sort ('by' arg)
         key_names = self._get_const_or_list(by_var)
         set_possible_keys = set(df_typ.columns)
-        index_is_key=False
-        index_name="unset"
+        index_is_key = False
+        index_name = "unset"
         if not is_overload_none(df_typ.index.name_typ):
             index_name = df_typ.index.name_typ.literal_value
             set_possible_keys.add(index_name)
             if index_name in key_names:
-                index_is_key=True
+                index_is_key = True
         if "$_bodo_index_" in key_names:
-            index_is_key=True
-            index_name="$_bodo_index_"
+            index_is_key = True
+            index_name = "$_bodo_index_"
             set_possible_keys.add(index_name)
         ascending_list = self._get_list_value_spec_length(
             ascending_var,
@@ -1146,6 +1151,7 @@ class DataFramePass:
             if c == index_name:
                 return in_index_var
             return in_vars.pop(c)
+
         in_key_arrs = [get_value(c) for c in key_names]
         if inplace:
             out_key_vars = in_key_arrs.copy()
@@ -1165,7 +1171,7 @@ class DataFramePass:
             if not index_is_key:
                 out_vars["$_bodo_index_"] = out_index_var
             for k in key_names:
-                if index_is_key and k==index_name:
+                if index_is_key and k == index_name:
                     out_key_vars.append(out_index_var)
                 else:
                     out_key_vars.append(out_vars.pop(k))
@@ -2044,7 +2050,7 @@ class DataFramePass:
 
         nodes = []
         in_cols = grp_typ.selection
-        if func_name == "agg":
+        if func_name in ("agg", "aggregate"):
             agg_func = guard(get_definition, self.func_ir, rhs.args[0])
             if isinstance(agg_func, ir.Expr) and agg_func.op == "build_map":
                 # multi-function const dict case:
@@ -2079,7 +2085,7 @@ class DataFramePass:
             )
             df_col_map[c] = var
 
-        agg_func = get_agg_func(self.func_ir, func_name, rhs)
+        agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name,
             df_var.name,
@@ -2728,7 +2734,10 @@ class DataFramePass:
 
     def is_bool_arr(self, varname):
         typ = self.typemap[varname]
-        return isinstance(typ, (SeriesType, types.Array)) and typ.dtype == types.bool_
+        return (
+            isinstance(typ, (SeriesType, types.Array, BooleanArrayType))
+            and typ.dtype == types.bool_
+        )
 
     def is_int_list_or_arr(self, varname):
         typ = self.typemap[varname]

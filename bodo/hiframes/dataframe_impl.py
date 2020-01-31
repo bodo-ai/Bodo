@@ -1133,7 +1133,7 @@ def sort_values_inplace_overload(
         inplace=False,
         kind="quicksort",
         na_position="last",
-    ):
+    ):  # pragma: no cover
 
         new_df = bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
             df, by, ascending, inplace, na_position

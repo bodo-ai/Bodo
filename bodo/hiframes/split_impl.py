@@ -425,24 +425,6 @@ def overload_split_view_arr_shape(A):
     return lambda A: (np.int64(A._num_items),)
 
 
-# @infer_global(operator.getitem)
-class GetItemStringArraySplitView(AbstractTemplate):
-    key = operator.getitem
-
-    def generic(self, args, kws):
-        assert not kws
-        [ary, idx] = args
-        if ary == string_array_split_view_type:
-            if isinstance(idx, types.SliceType):
-                return signature(string_array_split_view_type, *args)
-            elif isinstance(idx, types.Integer):
-                return signature(types.List(string_type), *args)
-            elif idx == types.Array(types.bool_, 1, "C"):
-                return signature(string_array_split_view_type, *args)
-            elif idx == types.Array(types.intp, 1, "C"):
-                return signature(string_array_split_view_type, *args)
-
-
 @overload(operator.getitem)
 def str_arr_split_view_getitem_overload(A, ind):
     if A == string_array_split_view_type and isinstance(ind, types.Integer):
@@ -462,10 +444,8 @@ def str_arr_split_view_getitem_overload(A, ind):
                     data_start = 0
                 data_end = getitem_c_arr(A._data_offsets, start_index + i + 1)
                 length = data_end - data_start
-                # TODO: unicode
-                _str = numba.unicode._empty_string(kind, length)
                 ptr = get_array_ctypes_ptr(A._data, data_start)
-                _memcpy(_str._data, ptr, length, 1)
+                _str = bodo.libs.str_arr_ext.decode_utf8(ptr, length)
                 str_list[i] = _str
 
             return str_list

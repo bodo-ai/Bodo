@@ -6,7 +6,7 @@ from bodo.utils.typing import BodoError
 import pytest
 
 
-# ------------------------------ merge() ------------------------------ #
+# ------------------------------ merge_asof() ------------------------------ #
 
 
 df1 = pd.DataFrame({"A": [1, 2, 3], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})

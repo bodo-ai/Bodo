@@ -21,7 +21,7 @@ from numba.parfor import wrap_parfor_blocks, unwrap_parfor_blocks
 from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.targets.imputils import lower_builtin
-from numba.extending import overload, intrinsic, lower_cast
+from numba.extending import overload, intrinsic
 from numba.targets.arrayobj import populate_array, get_itemsize, make_array
 import collections
 import numpy as np
@@ -99,28 +99,6 @@ np_alloc_callnames = ("empty", "zeros", "ones", "full")
 
 def unliteral_all(args):
     return tuple(types.unliteral(a) for a in args)
-
-
-# TODO: move to Numba
-class BooleanLiteral(types.Literal, types.Boolean):
-    def can_convert_to(self, typingctx, other):
-        # similar to IntegerLiteral
-        conv = typingctx.can_convert(self.literal_type, other)
-        if conv is not None:
-            return max(conv, types.Conversion.promote)
-
-
-types.Literal.ctor_map[bool] = BooleanLiteral
-
-numba.datamodel.register_default(BooleanLiteral)(numba.extending.models.BooleanModel)
-
-
-@lower_cast(BooleanLiteral, types.Boolean)
-def literal_bool_cast(context, builder, fromty, toty, val):
-    lit = context.get_constant_generic(
-        builder, fromty.literal_type, fromty.literal_value
-    )
-    return context.cast(builder, lit, fromty.literal_type, toty)
 
 
 def get_constant(func_ir, var, default=NOT_CONSTANT):
@@ -370,6 +348,7 @@ def is_array_typ(var_typ):
         or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
         or isinstance(var_typ, IntegerArrayType)
         or var_typ == boolean_array
+        or isinstance(var_typ, bodo.hiframes.pd_categorical_ext.CategoricalArray)
     )
 
 
@@ -534,9 +513,9 @@ def empty_like_type(n, arr):  # pragma: no cover
 def empty_like_type_overload(n, arr):
     # categorical
     if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArray):
-        from bodo.hiframes.pd_categorical_ext import fix_cat_array_type
+        from bodo.hiframes.pd_categorical_ext import init_categorical_array
 
-        return lambda n, arr: fix_cat_array_type(np.empty(n, arr.dtype))
+        return lambda n, arr: init_categorical_array(np.empty(n, arr._codes.dtype), arr.dtype)
 
     if isinstance(arr, types.Array):
         return lambda n, arr: np.empty(n, arr.dtype)
@@ -704,9 +683,9 @@ def overload_alloc_type(n, t):
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
 
     if isinstance(typ, bodo.hiframes.pd_categorical_ext.CategoricalArray):
-        from bodo.hiframes.pd_categorical_ext import fix_cat_array_type
+        from bodo.hiframes.pd_categorical_ext import init_categorical_array
 
-        return lambda n, t: fix_cat_array_type(np.empty(n, t.dtype))
+        return lambda n, t: init_categorical_array(np.empty(n, t._codes.dtype), t.dtype)
 
     if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
         return lambda n, t: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
@@ -728,9 +707,6 @@ def overload_alloc_type(n, t):
             # XXX using full since nulls are not supported in shuffle keys
             np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8),
         )
-
-    # TODO: categorical needs fixing?
-    # fix_cat_array_type(np.empty(n_out, arr.dtype))
 
     return lambda n, t: np.empty(n, dtype)
 
@@ -757,9 +733,6 @@ def overload_full_type(n, val, t):
             np.full(n, val, np.bool_),
             np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8),
         )
-
-    # TODO: categorical needs fixing?
-    # fix_cat_array_type(np.full(n_send, val, arr.dtype))
 
     return lambda n, val, t: np.full(n, val, dtype)
 

@@ -55,11 +55,8 @@ from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 from bodo.hiframes.rolling import supported_rolling_funcs
 import datetime
-from bodo.hiframes.split_impl import (
-    string_array_split_view_type,
-    GetItemStringArraySplitView,
-)
 from bodo.utils.typing import is_overload_none, is_overload_true, is_overload_false
+from bodo.utils.transform import get_const_func_output_type
 
 
 class SeriesType(types.IterableType, types.ArrayCompatible):
@@ -193,10 +190,6 @@ def _get_series_array_type(dtype):
     # TODO: other types?
     # regular numpy array
     return types.Array(dtype, 1, "C")
-
-
-def is_bool_series_typ(t):
-    return isinstance(t, SeriesType) and t.dtype == types.bool_
 
 
 def is_str_series_typ(t):
@@ -554,20 +547,11 @@ class SeriesAttribute(AttributeTemplate):
         # getitem returns Timestamp for dt_index and series(dt64)
         if dtype == types.NPDatetime("ns"):
             dtype = pandas_timestamp_type
-        code = func.literal_value.code
-        _globals = {"np": np, "pd": pd}
-        # XXX hack in series_pass to make globals available
-        if hasattr(func.literal_value, "globals"):
-            # TODO: use code.co_names to find globals actually used?
-            _globals = func.literal_value.globals
 
-        f_ir = numba.ir_utils.get_ir_of_code(_globals, code)
         in_types = (dtype,)
         if f_args is not None:
             in_types += tuple(f_args.types)
-        _, f_return_type, _ = numba.typed_passes.type_inference_stage(
-            self.context, f_ir, in_types, None
-        )
+        f_return_type = get_const_func_output_type(func, in_types, self.context)
 
         data_arr = _get_series_array_type(f_return_type)
         # Series.map codegen returns np bool array instead of boolean_array currently
@@ -626,11 +610,9 @@ class SeriesAttribute(AttributeTemplate):
         dtype2 = other.dtype
         if dtype2 == types.NPDatetime("ns"):
             dtype2 = pandas_timestamp_type
-        code = func.literal_value.code
-        f_ir = numba.ir_utils.get_ir_of_code({"np": np, "pd": pd}, code)
-        _, f_return_type, _ = numba.typed_passes.type_inference_stage(
-            self.context, f_ir, (dtype1, dtype2), None
-        )
+
+        f_return_type = get_const_func_output_type(func, (dtype1, dtype2), self.context)
+
 
         # TODO: output name is always None in Pandas?
         sig = signature(

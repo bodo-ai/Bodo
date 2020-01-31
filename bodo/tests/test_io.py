@@ -427,7 +427,7 @@ def test_csv_fname_comp(datapath):
 
 def test_write_csv_parallel_unicode():
     def test_impl(df, fname):
-        df.to_csv(fname, index=False)
+        df.to_csv(fname)
 
     bodo_func = bodo.jit(all_args_distributed=True)(test_impl)
     S1 = ["¡Y tú quién te crees?", "🐍⚡", "大处着眼，小处着手。"] * 2
@@ -715,6 +715,18 @@ def test_csv_header_none(datapath):
     # convert column names from integer to string since Bodo only supports string names
     p_df.columns = [str(c) for c in p_df.columns]
     pd.testing.assert_frame_equal(b_df, p_df)
+
+
+def test_csv_cat1(datapath):
+    fname = datapath("csv_data_cat1.csv")
+
+    def test_impl():
+        ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
+        dtypes = {"C1": np.int, "C2": ct_dtype, "C3": str}
+        df = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
+        return df
+
+    check_func(test_impl, ())
 
 
 class TestIO(unittest.TestCase):
@@ -1132,18 +1144,6 @@ class TestIO(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
-    def test_csv_cat1(self):
-        fname = os.path.join("bodo", "tests", "data", "csv_data_cat1.csv")
-
-        def test_impl():
-            ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
-            dtypes = {"C1": np.int, "C2": ct_dtype, "C3": str}
-            df = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
-            return df.C2
-
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(), test_impl(), check_names=False)
-
     def test_csv_cat2(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_cat1.csv")
 
@@ -1179,7 +1179,7 @@ class TestIO(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         n = 111
-        df = pd.DataFrame({"A": np.arange(n)})
+        df = pd.DataFrame({"A": np.arange(n)}, index=np.arange(n) * 2)
         hp_fname = "test_write_csv1_bodo.csv"
         pd_fname = "test_write_csv1_pd.csv"
         with ensure_clean(pd_fname), ensure_clean(hp_fname):

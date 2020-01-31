@@ -382,9 +382,9 @@ def gatherv(data, allgather=False):
     if isinstance(data, CategoricalArray):
 
         def impl_cat(data, allgather=False):  # pragma: no cover
-            int_arr = bodo.hiframes.pd_categorical_ext.cat_array_to_int(data)
-            return bodo.hiframes.pd_categorical_ext.set_cat_dtype(
-                bodo.gatherv(int_arr, allgather), data
+            codes = bodo.gatherv(data._codes, allgather)
+            return bodo.hiframes.pd_categorical_ext.init_categorical_array(
+                codes, data.dtype
             )
 
         return impl_cat

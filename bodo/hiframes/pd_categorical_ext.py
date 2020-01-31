@@ -1,11 +1,14 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
+import numpy as np
+import pandas as pd
 import numba
 from numba.extending import (
     box,
     unbox,
     typeof_impl,
     register_model,
+    make_attribute_wrapper,
     models,
     NativeValue,
     lower_builtin,
@@ -13,17 +16,15 @@ from numba.extending import (
     overload,
     type_callable,
     overload_method,
+    overload_attribute,
     intrinsic,
 )
 from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba import types, typing, cgutils
-from numba.targets.boxing import box_array, unbox_array
-
-import numpy as np
-import pandas as pd
 
 
+# type for pd.CategoricalDtype objects in Pandas
 class PDCategoricalDtype(types.Opaque):
     def __init__(self, _categories):
         self.categories = _categories
@@ -31,53 +32,49 @@ class PDCategoricalDtype(types.Opaque):
         super(PDCategoricalDtype, self).__init__(name=name)
 
 
-class PDCategoricalClass(types.Opaque):
-    # class for categorical dtype objects passed as types to astype() etc.
-    def __init__(self, _categories):
-        self.categories = _categories
-        name = "PDCategoricalClass({})".format(self.categories)
-        super(PDCategoricalClass, self).__init__(name=name)
-
-
 @typeof_impl.register(pd.CategoricalDtype)
-def _typeof_pd_cat_class(val, c):
-    return PDCategoricalClass(val.categories.to_list())
+def _typeof_pd_cat_dtype(val, c):
+    return PDCategoricalDtype(val.categories.to_list())
 
 
-@register_model(PDCategoricalDtype)
-class CategoricalDtypeModel(models.IntegerModel):
-    def __init__(self, dmm, fe_type):
-        int_dtype = get_categories_int_type(fe_type)
-        super(CategoricalDtypeModel, self).__init__(dmm, int_dtype)
+register_model(PDCategoricalDtype)(models.OpaqueModel)
 
 
 # Array of categorical data (similar to Pandas Categorical array)
-# same as Array but knows how to box etc.
-# TODO: defer to Array for all operations
-class CategoricalArray(types.Array):
+class CategoricalArray(types.ArrayCompatible):
     def __init__(self, dtype):
         self.dtype = dtype
         super(CategoricalArray, self).__init__(
-            dtype, 1, "C", name="CategoricalArray({})".format(dtype)
+            name="CategoricalArray({})".format(dtype)
         )
+
+    @property
+    def as_array(self):
+        return types.Array(types.undefined, 1, "C")
 
 
 @register_model(CategoricalArray)
-class CategoricalArrayModel(models.ArrayModel):
+class CategoricalArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         int_dtype = get_categories_int_type(fe_type.dtype)
-        data_array = types.Array(int_dtype, 1, "C")
-        super(CategoricalArrayModel, self).__init__(dmm, data_array)
+        members = [("codes", types.Array(int_dtype, 1, "C"))]
+        super(CategoricalArrayModel, self).__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(CategoricalArray, "codes", "_codes")
 
 
 @unbox(CategoricalArray)
 def unbox_categorical_array(typ, val, c):
     arr_obj = c.pyapi.object_getattr_string(val, "codes")
-    # c.pyapi.print_object(arr_obj)
     dtype = get_categories_int_type(typ.dtype)
-    native_val = unbox_array(types.Array(dtype, 1, "C"), arr_obj, c)
+    codes = c.pyapi.to_native_value(types.Array(dtype, 1, "C"), arr_obj).value
     c.pyapi.decref(arr_obj)
-    return native_val
+
+    # create CategoricalArray
+    cat_arr_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    cat_arr_val.codes = codes
+    return NativeValue(cat_arr_val._getvalue())
 
 
 def get_categories_int_type(cat_dtype):
@@ -117,7 +114,10 @@ def box_categorical_array(typ, val, c):
     # c.pyapi.decref(types_obj)
 
     int_dtype = get_categories_int_type(dtype)
-    arr = box_array(types.Array(int_dtype, 1, "C"), val, c)
+    codes = cgutils.create_struct_proxy(typ)(c.context, c.builder, val).codes
+    arr = c.pyapi.from_native_value(
+        types.Array(int_dtype, 1, "C"), codes, c.env_manager
+    )
 
     pdcat_cls_obj = c.pyapi.object_getattr_string(pd_class_obj, "Categorical")
     cat_arr = c.pyapi.call_method(pdcat_cls_obj, "from_codes", (arr, list_obj))
@@ -131,14 +131,14 @@ def box_categorical_array(typ, val, c):
     return cat_arr
 
 
-# TODO: handle all ops, redo CategoricalArray without Array subtyping
+# TODO: handle all ops
 @overload(operator.eq)
 def overload_cat_arr_eq_str(A, other):
     if isinstance(A, CategoricalArray) and isinstance(other, types.StringLiteral):
         other_idx = list(A.dtype.categories).index(other.literal_value)
 
         def impl(A, other):  # pragma: no cover
-            out_arr = cat_array_to_int(A) == other_idx
+            out_arr = A._codes == other_idx
             return out_arr
 
         return impl
@@ -167,44 +167,62 @@ def cat_overload_dummy(val_list):
 
 
 @intrinsic
-def fix_cat_array_type(typingctx, arr=None):
-    # fix array type from Array(CatDtype) to CategoricalArray(CatDtype)
-    # no-op for other arrays
-    fixed_arr = arr
-    if isinstance(arr.dtype, PDCategoricalDtype):
-        fixed_arr = CategoricalArray(arr.dtype)
+def init_categorical_array(typingctx, codes, cat_dtype=None):
+    """Create a CategoricalArray with codes array (integers) and categories dtype
+    """
+    assert isinstance(codes, types.Array) and isinstance(codes.dtype, types.Integer)
 
-    def codegen(context, builder, sig, args):
-        return impl_ret_borrowed(context, builder, sig.return_type, args[0])
+    def codegen(context, builder, signature, args):
+        data_val = args[0]
+        # create cat_arr struct and store values
+        cat_arr = cgutils.create_struct_proxy(signature.return_type)(context, builder)
+        cat_arr.codes = data_val
 
-    return fixed_arr(arr), codegen
+        # increase refcount of stored array
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[0], data_val)
 
+        return cat_arr._getvalue()
 
-@intrinsic
-def cat_array_to_int(typingctx, arr=None):
-    # TODO: fix aliasing
-    # get the underlying integer array for a CategoricalArray
-    out_arr = arr
-    if isinstance(arr.dtype, PDCategoricalDtype):
-        int_dtype = get_categories_int_type(arr.dtype)
-        out_arr = types.Array(int_dtype, 1, "C")
-
-    def codegen(context, builder, sig, args):
-        return impl_ret_borrowed(context, builder, sig.return_type, args[0])
-
-    return out_arr(arr), codegen
+    ret_typ = CategoricalArray(cat_dtype)
+    sig = ret_typ(codes, cat_dtype)
+    return sig, codegen
 
 
 @overload_method(CategoricalArray, "copy")
 def cat_arr_copy_overload(arr):
-    return lambda arr: set_cat_dtype(cat_array_to_int(arr).copy(), arr)
+    return lambda arr: init_categorical_array(arr._codes.copy(), arr.dtype)
+
+
+@overload(len)
+def overload_cat_arr_len(A):
+    if isinstance(A, CategoricalArray):
+        return lambda A: len(A._codes)
+
+
+@overload_attribute(CategoricalArray, "shape")
+def overload_cat_arr_shape(A):
+    return lambda A: (len(A._codes),)
+
+
+@overload_attribute(CategoricalArray, "ndim")
+def overload_cat_arr_ndim(A):
+    return lambda A: 1
 
 
 @intrinsic
-def set_cat_dtype(typingctx, arr, cat_arr=None):
-    # set dtype of integer array to categorical from categorical array
+def init_cat_dtype(typingctx, cat_dtype=None):
+    """Create a dummy value for CategoricalDtype
+    """
 
-    def codegen(context, builder, sig, args):
-        return impl_ret_borrowed(context, builder, sig.return_type, args[0])
+    def codegen(context, builder, signature, args):
+        return context.get_dummy_value()
 
-    return cat_arr(arr, cat_arr), codegen
+    sig = cat_dtype.instance_type(cat_dtype)
+    return sig, codegen
+
+
+@overload_attribute(CategoricalArray, "dtype")
+def overload_cat_arr_dtype(A):
+    dtype = A.dtype
+    return lambda A: init_cat_dtype(dtype)
