@@ -346,6 +346,7 @@ def is_array_typ(var_typ):
         )
         or isinstance(var_typ, bodo.hiframes.pd_series_ext.SeriesType)
         or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
+        or isinstance(var_typ, bodo.hiframes.pd_multi_index_ext.MultiIndexType)
         or isinstance(var_typ, IntegerArrayType)
         or var_typ == boolean_array
         or isinstance(var_typ, bodo.hiframes.pd_categorical_ext.CategoricalArray)
