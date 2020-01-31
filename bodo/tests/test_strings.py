@@ -247,6 +247,28 @@ def test_pat_findall():
     bodo_out = bodo.jit(test_impl)(pat, in_str)
     assert py_out == bodo_out
 
+    # FIXME: checking for ValueError causes a segfault sometimes
+    # # an error should be raised with multiple groups if pattern is not constant
+    # def test_impl2(pat, in_str):
+    #     return pat.findall(in_str)
+
+    # pat = re.compile(r"(\w+).*(\d+)")
+    # in_str = "ww 132"
+    # with pytest.raises(
+    #     ValueError, match="pattern string should be constant"
+    # ):
+    #     bodo_out = bodo.jit(test_impl2)(pat, in_str)
+
+    def test_impl3(in_str):
+        pat = re.compile(r"(\w+).*(\d+)")
+        return pat.findall(in_str)
+
+    in_str = "ww 132"
+    py_out = test_impl3(in_str)
+    bodo_out = bodo.jit(test_impl3)(in_str)
+    py_out = test_impl3(in_str)
+    assert py_out == bodo_out
+
 
 def test_re_sub():
     """make sure re.sub returns proper output (a string)
