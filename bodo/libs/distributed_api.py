@@ -1287,6 +1287,20 @@ def rebalance_array_parallel(in_arr, count):  # pragma: no cover
     return out_arr
 
 
+# dummy function to set a distributed array without changing the index in distributed
+# pass
+@numba.njit
+def set_arr_local(arr, ind, val):
+    arr[ind] = val
+
+
+# dummy function to specify local allocation size, to enable bypassing distributed
+# transformations
+@numba.njit
+def local_alloc_size(n, in_arr):
+    return n
+
+
 @overload(rebalance_array)
 def dist_return_overload(A):
     return dist_return
