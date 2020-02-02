@@ -886,7 +886,7 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
             "Series.str.extract(): 'expand' argument should be a constant bool"
         )
 
-    columns = _get_column_names_from_regex(pat, flags, "extract")
+    columns, regex = _get_column_names_from_regex(pat, flags, "extract")
     n_cols = len(columns)
 
     # generate one loop for finding character count and another for computation
@@ -971,7 +971,7 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
 @overload_method(SeriesStrMethodType, "extractall")
 def overload_str_method_extractall(S_str, pat, flags=0, expand=True):
 
-    columns = _get_column_names_from_regex(pat, flags, "extractall")
+    columns, _ = _get_column_names_from_regex(pat, flags, "extractall")
     n_cols = len(columns)
     is_index_string = isinstance(S_str.stype.index, StringIndexType)
 
@@ -1089,7 +1089,7 @@ def _get_column_names_from_regex(pat, flags, func_name):
         )
     names = dict(zip(regex.groupindex.values(), regex.groupindex.keys()))
     columns = [names.get(1 + i, i) for i in range(regex.groups)]
-    return columns
+    return columns, regex
 
 
 def create_str2str_methods_overload(func_name):
