@@ -289,7 +289,7 @@ def overload_str_method_get(S_str, i):
         numba.parfor.init_prange()
         n = len(arr)
         n_total_chars = 0
-        str_list = bodo.libs.str_ext.alloc_str_list(n)
+        str_list = bodo.libs.str_ext.alloc_random_access_string_array(n)
         na_map = np.empty(n, np.bool_)
         for k in numba.parfor.internal_prange(n):
             if bodo.libs.array_kernels.isna(arr, k):
@@ -384,7 +384,7 @@ def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, rege
             e = re.compile(pat, flags)
             l = len(arr)
             n_total_chars = 0
-            str_list = bodo.libs.str_ext.alloc_str_list(l)
+            str_list = bodo.libs.str_ext.alloc_random_access_string_array(l)
             for i in numba.parfor.internal_prange(l):
                 if bodo.libs.array_kernels.isna(arr, i):
                     continue
@@ -417,7 +417,7 @@ def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, rege
         numba.parfor.init_prange()
         l = len(arr)
         n_total_chars = 0
-        str_list = bodo.libs.str_ext.alloc_str_list(l)
+        str_list = bodo.libs.str_ext.alloc_random_access_string_array(l)
         for i in numba.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(arr, i):
                 continue

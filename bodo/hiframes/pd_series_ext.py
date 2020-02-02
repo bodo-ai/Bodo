@@ -477,13 +477,6 @@ def if_series_to_array_type(typ):
     if isinstance(typ, SeriesType):
         return series_to_array_type(typ)
 
-    if isinstance(typ, types.BaseTuple):
-        return types.Tuple([if_series_to_array_type(t) for t in typ.types])
-    if isinstance(typ, types.List) and isinstance(typ.dtype, SeriesType):
-        return types.List(if_series_to_array_type(typ.dtype))
-    if isinstance(typ, types.Set):
-        return types.Set(if_series_to_array_type(typ.dtype))
-    # TODO: other types that can have Series inside?
     return typ
 
 

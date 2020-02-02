@@ -491,6 +491,82 @@ def test_dist_list_append2():
     assert count_array_OneDs() > 0
 
 
+def test_dist_list_getitem1():
+    """Test support for getitem of distributed list
+    """
+
+    def impl1(v):
+        df = v[1]
+        return df
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    v = [df, df]
+    bodo.jit(distributed={"v", "df"})(impl1)(v)
+    assert count_array_OneDs() > 0
+
+
+def test_dist_list_setitem1():
+    """Test support for setitem of distributed list
+    """
+
+    def impl1(v, df):
+        v[1] = df
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    v = [df, df]
+    bodo.jit(distributed={"v", "df"})(impl1)(v, df)
+    assert count_array_OneDs() >= 2
+
+
+def test_dist_dict1():
+    """Test support for build_map of dist data
+    """
+
+    def impl1(df):
+        v = {1: df}
+        return v
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    bodo.jit(distributed={"v", "df"})(impl1)(df)
+    assert count_array_OneDs() > 0
+
+
+def test_dist_dict_getitem1():
+    """Test support for getitem of dist dictionary
+    """
+
+    def impl1(v):
+        df = v[1]
+        return df
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    v = bodo.typed.Dict.empty(bodo.int64, bodo.typeof(df))
+    v[0] = df
+    v[1] = df
+    bodo.jit(distributed={"v", "df"})(impl1)(v)
+    assert count_array_OneDs() > 0
+
+
+def test_dist_dict_setitem1():
+    """Test support for setitem of dist dictionary
+    """
+
+    def impl1(v, df):
+        v[1] = df
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    v = bodo.typed.Dict.empty(bodo.int64, bodo.typeof(df))
+    v[0] = df
+    v[1] = df
+    bodo.jit(distributed={"v", "df"})(impl1)(v, df)
+    assert count_array_OneDs() >= 2
+
+
 def test_dist_warning1():
     """Make sure BodoWarning is thrown when there is no parallelism discovered due
     to unsupported function

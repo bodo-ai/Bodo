@@ -1559,6 +1559,11 @@ class DistributedPass:
         out = [full_node]
         index_var = self._fix_index_var(index_var)
         full_index_var = index_var
+        in_typ = self.typemap[arr.name]
+
+        # no need for transformation for getitem/setitem of distributed List/Dict
+        if isinstance(in_typ, (types.List, types.DictType)):
+            return out
 
         # adjust parallel access indices (in parfors)
         # 1D_Var arrays need adjustment if 1D_Var parfor has start adjusted

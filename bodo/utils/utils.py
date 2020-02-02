@@ -185,7 +185,7 @@ def is_alloc_callname(func_name, mod_name):
             func_name == "pre_alloc_string_array"
             and mod_name == "bodo.libs.str_arr_ext"
         )
-        or (func_name == "alloc_str_list" and mod_name == "bodo.libs.str_ext")
+        or (func_name == "alloc_random_access_string_array" and mod_name == "bodo.libs.str_ext")
         or (
             func_name == "pre_alloc_list_string_array"
             and mod_name == "bodo.libs.list_str_arr_ext"
@@ -349,15 +349,12 @@ def is_array_typ(var_typ):
         or isinstance(var_typ, IntegerArrayType)
         or var_typ == boolean_array
         or isinstance(var_typ, bodo.hiframes.pd_categorical_ext.CategoricalArray)
+        or var_typ == bodo.libs.str_ext.random_access_string_array
     )
 
 
 def is_np_array_typ(var_typ):
     return isinstance(var_typ, types.Array)
-
-
-def is_array_container_typ(var_typ):
-    return isinstance(var_typ, (types.List, types.Set)) and is_array_typ(var_typ.dtype)
 
 
 # TODO: fix tuple, dataframe distribution
@@ -366,8 +363,12 @@ def is_distributable_typ(var_typ):
         is_array_typ(var_typ)
         or isinstance(var_typ, bodo.hiframes.pd_dataframe_ext.DataFrameType)
         or (
-            isinstance(var_typ, (types.List, types.Set))
+            isinstance(var_typ, types.List)
             and is_distributable_typ(var_typ.dtype)
+        ) or (
+        isinstance(var_typ, types.DictType)
+        # only dictionary values can be distributed since keys should be hashable
+        and is_distributable_typ(var_typ.value_type)
         )
     )
 
@@ -380,8 +381,11 @@ def is_distributable_tuple_typ(var_typ):
             for t in var_typ.types
         )
     ) or (
-        isinstance(var_typ, (types.List, types.Set))
+        isinstance(var_typ, types.List)
         and is_distributable_tuple_typ(var_typ.dtype)
+    ) or (
+        isinstance(var_typ, types.DictType)
+        and is_distributable_tuple_typ(var_typ.value_type)
     )
 
 

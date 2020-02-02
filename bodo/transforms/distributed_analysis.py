@@ -37,7 +37,6 @@ from bodo.utils.utils import (
     is_alloc_callname,
     is_whole_slice,
     is_array_typ,
-    is_array_container_typ,
     is_np_array_typ,
     find_build_tuple,
     debug_prints,
@@ -345,6 +344,17 @@ class DistributedAnalysis:
                 self._meet_array_dists(lhs, v.name, array_dists)
             # second round to propagate info fully
             for v in rhs.items:
+                self._meet_array_dists(lhs, v.name, array_dists)
+            return
+        elif is_expr(rhs, "build_map") and (
+            is_distributable_tuple_typ(lhs_typ) or is_distributable_typ(lhs_typ)
+        ):
+            # dist vars can be in dictionary as values
+            # meet all distributions
+            for _, v in rhs.items:
+                self._meet_array_dists(lhs, v.name, array_dists)
+            # second round to propagate info fully
+            for _, v in rhs.items:
                 self._meet_array_dists(lhs, v.name, array_dists)
             return
         elif is_expr(rhs, "exhaust_iter") and is_distributable_tuple_typ(lhs_typ):
@@ -1101,6 +1111,12 @@ class DistributedAnalysis:
 
         if func_name == "dist_return":
             arr_name = args[0].name
+            arr_typ = self.typemap[arr_name]
+            assert is_distributable_typ(arr_typ) or is_distributable_tuple_typ(
+                arr_typ
+            ), "Variable {} is not distributable since it is of type {}".format(
+                arr_name, arr_typ
+            )
             assert arr_name in array_dists, "array distribution not found"
             if is_REP(array_dists[arr_name]):
                 raise ValueError(
@@ -1247,6 +1263,7 @@ class DistributedAnalysis:
         # get index_var without changing IR since we are in analysis
         index_var = get_getsetitem_index_var(rhs, self.typemap, [])
         index_typ = self.typemap[index_var.name]
+        lhs_typ = self.typemap[lhs]
 
         # selecting a value from a distributable tuple does not make it REP
         # nested tuples are also possible
@@ -1256,9 +1273,7 @@ class DistributedAnalysis:
             and isinstance(index_typ, types.IntegerLiteral)
         ):
             # meet distributions if returned value is distributable
-            if is_distributable_typ(self.typemap[lhs]) or is_distributable_tuple_typ(
-                self.typemap[lhs]
-            ):
+            if is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(lhs_typ):
                 # meet distributions
                 ind_val = index_typ.literal_value
                 tup = rhs.value.name
@@ -1269,6 +1284,14 @@ class DistributedAnalysis:
                 new_dist = self._min_dist(array_dists[tup][ind_val], array_dists[lhs])
                 array_dists[tup][ind_val] = new_dist
                 array_dists[lhs] = new_dist
+            return
+
+        # getitem on list/dictionary of distributed values
+        if isinstance(in_typ, (types.List, types.DictType)) and (
+            is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(lhs_typ)
+        ):
+            # output and dictionary have the same distribution
+            self._meet_array_dists(lhs, rhs.value.name, array_dists)
             return
 
         # indexing into arrays from this point only, check for array type
@@ -1347,9 +1370,19 @@ class DistributedAnalysis:
 
     def _analyze_setitem(self, inst, array_dists):
         index_var = inst.index_var if is_static_getsetitem(inst) else inst.index
+        target_typ = self.typemap[inst.target.name]
+        value_typ = self.typemap[inst.value.name]
 
         if index_var is None:
             self._set_REP(inst.list_vars(), array_dists)
+            return
+
+        # setitem on list/dictionary of distributed values
+        if isinstance(target_typ, (types.List, types.DictType)) and (
+            is_distributable_typ(value_typ) or is_distributable_tuple_typ(value_typ)
+        ):
+            # output and dictionary have the same distribution
+            self._meet_array_dists(inst.target.name, inst.value.name, array_dists)
             return
 
         if (inst.target.name, index_var.name) in self._parallel_accesses:
@@ -1471,7 +1504,7 @@ class DistributedAnalysis:
 
     def _get_dist(self, typ, dist):
         if is_distributable_tuple_typ(typ):
-            if isinstance(typ, (types.List, types.Set)):
+            if isinstance(typ, types.List):
                 typ = typ.dtype
             return [
                 self._get_dist(t, dist)
