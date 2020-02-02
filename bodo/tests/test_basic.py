@@ -32,6 +32,22 @@ def _copy_py_state(r, ptr):
     return ints, index
 
 
+@unittest.skip("enable after the hash computation has been moved to C++")
+def test_membership():
+    d = numba.typed.Dict.empty(
+        key_type=numba.types.unicode_type,
+        value_type=numba.types.int64,
+    )
+    d["A"] = 0
+    d["B"] = 0
+    def g(d):
+        test = "A" in d
+        return test
+    bodo_g = bodo.jit(g)
+    is_in = g(d)
+    assert(is_in)
+
+
 class BaseTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

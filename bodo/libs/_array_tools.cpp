@@ -811,6 +811,42 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
 
 
 
+/** Getting the computing node on which a row belongs to
+ *
+ * The template paramter is T.
+ * @param in_table: the input table
+ * @param n_keys  : the number of keys to be used for the hash
+ * @param n_pes   : the number of processor considered
+ * @return the table containing a single column with the nodes
+ */
+table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys, int64_t n_pes)
+{
+#undef DEBUG_COMP_HASH
+    int64_t n_rows = in_table->nrows();
+    std::vector<array_info*> key_arrs = std::vector<array_info*>(
+        in_table->columns.begin(), in_table->columns.begin() + n_keys);
+    uint32_t seed = SEED_HASH_PARTITION;
+    uint32_t* hashes = hash_keys(key_arrs, seed);
+    //
+    std::vector<array_info*> out_arrs;
+    array_info* out_arr = alloc_array(n_rows, -1, bodo_array_type::NUMPY,
+                                      Bodo_CTypes::INT32, 0);
+#ifdef DEBUG_COMP_HASH
+    std::cout << "COMPUTE_HASH\n";
+#endif
+    for (int64_t i_row=0; i_row<n_rows; i_row++) {
+      int32_t node_id = hashes[i_row] % n_pes;
+      out_arr->at<int32_t>(i_row) = node_id;
+#ifdef DEBUG_COMP_HASH
+      std::cout << "i_row=" << i_row << " node_id=" << node_id << "\n";
+#endif
+    }
+    out_arrs.push_back(out_arr);
+    return new table_info(out_arrs);
+}
+
+
+
 /** Getting the expression of a T value as a vector of characters
  *
  * The template paramter is T.
@@ -4398,5 +4434,7 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
                            PyLong_FromVoidPtr((void*)(&groupby_and_aggregate_sets)));
     PyObject_SetAttrString(m, "array_isin",
                            PyLong_FromVoidPtr((void*)(&array_isin)));
+    PyObject_SetAttrString(m, "compute_node_partition_by_hash",
+                           PyLong_FromVoidPtr((void*)(&compute_node_partition_by_hash)));
     return m;
 }

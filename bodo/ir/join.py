@@ -60,6 +60,7 @@ from bodo.libs.array_tools import (
     array_to_info,
     arr_info_list_to_table,
     shuffle_table,
+    compute_node_partition_by_hash,
     hash_join_table,
     info_from_table,
     info_to_array,
@@ -476,33 +477,23 @@ def join_distributed_run(
             func_text += "    t2_keys, data_right = parallel_asof_comm(t1_keys, t2_keys, data_right)\n"
     else:
         if left_parallel:
-            if bodo.use_legacy_shuffle:
-                func_text += (
-                    "    t1_keys, data_left = parallel_shuffle(t1_keys, data_left)\n"
-                )
-            else:
-                func_text += _gen_par_shuffle(
-                    left_key_names,
-                    left_other_names,
-                    "t1_keys",
-                    "data_left",
-                    left_key_types,
-                    right_key_types,
-                )
+            func_text += _gen_par_shuffle(
+                left_key_names,
+                left_other_names,
+                "t1_keys",
+                "data_left",
+                left_key_types,
+                right_key_types,
+            )
         if right_parallel:
-            if bodo.use_legacy_shuffle:
-                func_text += (
-                    "    t2_keys, data_right = parallel_shuffle(t2_keys, data_right)\n"
-                )
-            else:
-                func_text += _gen_par_shuffle(
-                    right_key_names,
-                    right_other_names,
-                    "t2_keys",
-                    "data_right",
-                    right_key_types,
-                    left_key_types,
-                )
+            func_text += _gen_par_shuffle(
+                right_key_names,
+                right_other_names,
+                "t2_keys",
+                "data_right",
+                right_key_types,
+                left_key_types,
+            )
         # func_text += "    print(t2_key, data_right)\n"
 
     if method == "sort" and join_node.how != "asof":
@@ -632,7 +623,6 @@ def join_distributed_run(
         "pd_join_func": pd_join_func,
         "to_string_list": to_string_list,
         "cp_str_list_to_array": cp_str_list_to_array,
-        "parallel_shuffle": parallel_shuffle,
         "parallel_asof_comm": parallel_asof_comm,
         "array_to_info": array_to_info,
         "arr_info_list_to_table": arr_info_list_to_table,
@@ -829,10 +819,18 @@ def parallel_join_impl(key_arrs, data):  # pragma: no cover
     n = len(key_arrs[0])
     node_ids = np.empty(n, np.int32)
 
+    input_table = arr_info_list_to_table([array_to_info(key_arrs[0])])
+    n_key = 1
+    out_table = compute_node_partition_by_hash(input_table, n_key, n_pes)
+    data_dummy = np.empty(1, np.int32)
+    out_arr = info_to_array(info_from_table(out_table, 0), data_dummy)
+    delete_table(out_table)
+    delete_table(input_table)
+
     # calc send/recv counts
     for i in range(n):
         val = getitem_arr_tup_single(key_arrs, i)
-        node_id = hash(val) % n_pes
+        node_id = out_arr[i]
         node_ids[i] = node_id
         update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs, data, False)
 
@@ -1298,13 +1296,6 @@ def local_hash_join(
     left_keys, right_keys, data_left, data_right, is_left=False, is_right=False
 ):
     return local_hash_join_impl
-
-
-@generated_jit(nopython=True, cache=True)
-def _hash_if_tup(val):
-    if val == types.Tuple((types.intp,)):
-        return lambda val: val[0]
-    return lambda val: hash(val)
 
 
 @generated_jit(nopython=True, cache=True)

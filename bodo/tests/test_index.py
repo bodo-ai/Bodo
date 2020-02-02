@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import bodo
 import pytest
+import numba
 
 
 def test_range_index_constructor():

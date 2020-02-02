@@ -51,6 +51,7 @@ ll.add_symbol("sort_values_table", array_tools_ext.sort_values_table)
 ll.add_symbol("groupby_and_aggregate", array_tools_ext.groupby_and_aggregate)
 ll.add_symbol("groupby_and_aggregate_sets", array_tools_ext.groupby_and_aggregate_sets)
 ll.add_symbol("array_isin", array_tools_ext.array_isin)
+ll.add_symbol("compute_node_partition_by_hash", array_tools_ext.compute_node_partition_by_hash)
 
 
 class ArrayInfoType(types.Type):
@@ -534,6 +535,24 @@ def hash_join_table(
         ),
         codegen,
     )
+
+
+@intrinsic
+def compute_node_partition_by_hash(typingctx, table_t, n_keys_t, n_pes_t):
+    """
+    """
+    assert table_t == table_type
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
+                                [lir.IntType(8).as_pointer(),
+                                 lir.IntType(64),
+                                 lir.IntType(64)])
+        fn_tp = builder.module.get_or_insert_function(fnty, name="compute_node_partition_by_hash")
+        return builder.call(fn_tp, args)
+
+    return table_type(table_t, types.int64, types.int64), codegen
+
 
 
 @intrinsic

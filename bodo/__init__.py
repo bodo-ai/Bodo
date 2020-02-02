@@ -45,7 +45,6 @@ import bodo.config
 import bodo.libs.timsort
 
 use_pandas_join = False
-use_legacy_shuffle = False
 use_cpp_hash_join = True
 use_cpp_drop_duplicates = True
 use_cpp_sort = True

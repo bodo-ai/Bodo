@@ -81,6 +81,7 @@ from bodo.libs.array_tools import (
     arr_info_list_to_table,
     groupby_and_aggregate,
     groupby_and_aggregate_sets,
+    compute_node_partition_by_hash,
     info_from_table,
     info_to_array,
     delete_table,
@@ -705,7 +706,13 @@ def agg_distributed_run(
             agg_node.df_out_vars.keys(),
             parallel,
         )
-        glbs.update({"group_cumsum": group_cumsum})
+        glbs.update({"group_cumsum": group_cumsum,
+                     "array_to_info": array_to_info,
+                     "compute_node_partition_by_hash": compute_node_partition_by_hash,
+                     "info_to_array": info_to_array,
+                     "info_from_table": info_from_table,
+                     "delete_table": delete_table,
+                     "arr_info_list_to_table": arr_info_list_to_table})
     else:
         offload = agg_node.pivot_arr is None
         agg_func_struct = None
@@ -748,6 +755,7 @@ def agg_distributed_run(
                 "arr_info_list_to_table": arr_info_list_to_table,
                 "groupby_and_aggregate": groupby_and_aggregate,
                 "groupby_and_aggregate_sets": groupby_and_aggregate_sets,
+                "compute_node_partition_by_hash": compute_node_partition_by_hash,
                 "info_from_table": info_from_table,
                 "info_to_array": info_to_array,
                 "delete_table": delete_table,
@@ -804,7 +812,7 @@ distributed_pass.distributed_run_extensions[Aggregate] = agg_distributed_run
 
 @numba.njit(no_cpython_wrapper=True, cache=True)
 def par_agg_get_shuffle_meta(
-    key_arrs, data_redvar_dummy, init_vals
+    key_arrs, node_arr, data_redvar_dummy, init_vals
 ):  # pragma: no cover
     # alloc shuffle meta
     n_pes = bodo.libs.distributed_api.get_size()
@@ -820,7 +828,7 @@ def par_agg_get_shuffle_meta(
         if val not in key_set:
             # key_set.add(val)
             key_set[val] = 0
-            node_id = hash(val) % n_pes
+            node_id = node_arr[i]
             node_ids[i] = node_id
             # data isn't computed here yet so pass empty tuple
             update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs, (), False)
@@ -834,6 +842,7 @@ def par_agg_get_shuffle_meta(
 @numba.njit(no_cpython_wrapper=True)
 def parallel_agg(
     key_arrs,
+    node_arr,
     data_redvar_dummy,
     out_dummy_tup,
     data_in,
@@ -846,7 +855,7 @@ def parallel_agg(
 ):  # pragma: no cover
 
     shuffle_meta, node_ids = par_agg_get_shuffle_meta(
-        key_arrs, data_redvar_dummy, init_vals
+        key_arrs, node_arr, data_redvar_dummy, init_vals
     )
 
     agg_parallel_local_iter(
@@ -1539,8 +1548,15 @@ def gen_top_level_agg_func(
         out_tup = ", ".join(out_names + out_keys if return_key else out_names)
 
         if parallel:
+            func_text += "    i_arr_tab = arr_info_list_to_table([{}])\n".format(",".join("array_to_info(key_{})".format(sanitize_varname(c)) for c in key_names))
+            func_text += "    n_pes = bodo.libs.distributed_api.get_size()\n"
+            func_text += "    o_arr_tab = compute_node_partition_by_hash(i_arr_tab, {}, n_pes)\n".format(len(key_names))
+            func_text += "    data_dummy = np.empty(1, np.int32)\n"
+            func_text += "    node_arr = info_to_array(info_from_table(o_arr_tab, 0), data_dummy)\n"
+            func_text += "    delete_table(o_arr_tab)\n"
+            func_text += "    delete_table(i_arr_tab)\n"
             func_text += (
-                "    ({},) = parallel_agg(({},), data_redvar_dummy, "
+                "    ({},) = parallel_agg(({},), node_arr, data_redvar_dummy, "
                 "out_dummy_tup, data_in, init_vals, __update_redvars, "
                 "__combine_redvars, __eval_res, {}, pivot_arr)\n"
             ).format(out_tup, key_args, return_key_p)
@@ -1742,7 +1758,14 @@ def gen_top_level_transform_func(key_names, in_col_names, out_col_names, paralle
     # cumsum ignores the index and returns a Series with values in the same
     # order as original column. Therefore, we need to shuffle the data back.
     if parallel:
-        func_text += "    key_in, data_in, orig_indices, shuffle_meta = bodo.utils.shuffle.shuffle_with_index(key_in, data_in)\n".format()
+        func_text += "    i_arr_tab = arr_info_list_to_table([{}])\n".format(",".join("array_to_info({})".format(c) for c in key_names))
+        func_text += "    n_pes = bodo.libs.distributed_api.get_size()\n"
+        func_text += "    o_arr_tab = compute_node_partition_by_hash(i_arr_tab, {}, n_pes)\n".format(len(key_names))
+        func_text += "    data_dummy = np.empty(1, np.int32)\n"
+        func_text += "    node_arr = info_to_array(info_from_table(o_arr_tab, 0), data_dummy)\n"
+        func_text += "    delete_table(o_arr_tab)\n"
+        func_text += "    delete_table(i_arr_tab)\n"
+        func_text += "    key_in, data_in, orig_indices, shuffle_meta = bodo.utils.shuffle.shuffle_with_index(key_in, node_arr, data_in)\n".format()
 
     func_text += "    ({},) = group_cumsum(key_in, data_in)\n".format(out_tup)
 

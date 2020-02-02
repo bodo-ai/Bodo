@@ -32,7 +32,13 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
-
+from bodo.libs.array_tools import (
+    arr_info_list_to_table,
+    array_to_info,
+    info_to_array,
+    info_from_table,
+    delete_table,
+)
 
 ########## metadata required for shuffle
 # send_counts -> pre, single
@@ -509,7 +515,7 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
     return a2a_impl
 
 
-def shuffle_with_index_impl(key_arrs, data):  # pragma: no cover
+def shuffle_with_index_impl(key_arrs, node_arr, data):  # pragma: no cover
     # alloc shuffle meta
     n_pes = bodo.libs.distributed_api.get_size()
     pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, False)
@@ -520,7 +526,7 @@ def shuffle_with_index_impl(key_arrs, data):  # pragma: no cover
     # calc send/recv counts
     for i in range(n):
         val = getitem_arr_tup_single(key_arrs, i)
-        node_id = hash(val) % n_pes
+        node_id = node_arr[i]
         node_ids[i] = node_id
         update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs, data, False)
 
@@ -543,7 +549,7 @@ def shuffle_with_index_impl(key_arrs, data):  # pragma: no cover
 
 
 @generated_jit(nopython=True, cache=True)
-def shuffle_with_index(key_arrs, data):
+def shuffle_with_index(key_arrs, node_arr, data):
     """shuffle the data but preserve index of data elements to reverse later
     """
     return shuffle_with_index_impl
