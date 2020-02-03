@@ -43,6 +43,14 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs() {
     return s3_fs;
 }
 
+static int finalize_s3(){ 
+    if(is_fs_initialized){
+        CHECK_ARROW(arrow::fs::FinalizeS3(), "Finalize34"); 
+        is_fs_initialized = false;
+    }
+    return 0;
+}
+
 // read S3 files using Arrow 0.15
 class S3FileReader : public FileReader {
    public:
@@ -71,8 +79,6 @@ class S3FileReader : public FileReader {
         CHECK_ARROW(status, "S3 file GetSize()");
         return (uint64_t)size;
     }
-
-    virtual ~S3FileReader() { CHECK_ARROW(arrow::fs::FinalizeS3(), "Finalize34"); }
 };
 
 extern "C" {
@@ -106,6 +112,8 @@ PyMODINIT_FUNC PyInit_s3_reader(void) {
                            PyLong_FromVoidPtr((void *)(&s3_open_file)));
     PyObject_SetAttrString(m, "s3_get_fs",
                            PyLong_FromVoidPtr((void *)(&s3_get_fs)));
+    PyObject_SetAttrString(m, "finalize_s3",
+                           PyLong_FromVoidPtr((void *)(&finalize_s3)));
 
     return m;
 }

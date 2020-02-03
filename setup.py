@@ -154,7 +154,9 @@ if "MAX_CORE_COUNT" in os.environ and os.environ["MAX_CORE_COUNT"] != "":
 ext_hdist = Extension(
     name="bodo.libs.hdist",
     sources=["bodo/libs/_distributed.cpp"],
-    depends=["bodo/libs/_bodo_common.h", "bodo/libs/_distributed.h"],
+    depends=[
+        "bodo/libs/_bodo_common.h", 
+        "bodo/libs/_distributed.h",],
     libraries=MPI_LIBS,
     define_macros=dist_macros,
     extra_compile_args=eca,
