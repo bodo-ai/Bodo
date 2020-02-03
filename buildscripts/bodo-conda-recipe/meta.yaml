@@ -21,7 +21,7 @@ requirements:
     - setuptools
     - numba 0.48.*
     - numpy
-    - pandas 0.25.3
+    - pandas 1.0.0
     - pyarrow
     - arrow-cpp 0.15.1 transfer_s3_*
     - boost-cpp
@@ -37,7 +37,7 @@ requirements:
   run:
     - python 3.7
     - {{ pin_compatible('numpy') }}
-    - pandas 0.25.3
+    - pandas 1.0.0
     - pyarrow
     - arrow-cpp 0.15.1 transfer_s3_*
     - boost-cpp

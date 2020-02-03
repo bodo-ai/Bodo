@@ -19,7 +19,7 @@ ENV LDSHARED "gcc-4.9 -shared"
 
 RUN conda create -y -n Bodo
 RUN source activate Bodo && \
-    conda install -y numpy scipy pandas=0.25.3 mpich2 llvmlite &&\
+    conda install -y numpy scipy pandas=1.0.0 mpich2 llvmlite &&\
     git clone https://github.com/IntelLabs/numba.git && \
     cd numba && git checkout hpat_req && python setup.py install && cd .. &&\
     git clone https://github.com/IntelLabs/bodo.git && \
