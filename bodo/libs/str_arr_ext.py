@@ -57,35 +57,17 @@ offset_ctypes_type = types.ArrayCTypes(types.Array(offset_typ, 1, "C"))
 
 
 class StringArray:
-    def __init__(self, str_list=None):
-        # dummy constructor
-        if str_list is None:
-            str_list = []
-        self.num_strings = len(str_list)
-        self.offsets = str_list
-        self.data = str_list
-
-    ndim = 1
-
-    def __repr__(self):
-        return "StringArray({})".format(self.data)
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, key):
-        if isinstance(key, int):
-            return self.data[key]
-        return StringArray(self.data[key])
+    pass
 
 
+# type for pd.arrays.StringArray and ndarray with string object values
 class StringArrayType(types.IterableType, types.ArrayCompatible):
     def __init__(self):
         super(StringArrayType, self).__init__(name="StringArrayType()")
 
     @property
     def as_array(self):
-        return types.Array(string_type, 1, "C")
+        return types.Array(types.undefined, 1, "C")
 
     @property
     def dtype(self):
@@ -102,7 +84,7 @@ class StringArrayType(types.IterableType, types.ArrayCompatible):
 string_array_type = StringArrayType()
 
 
-@typeof_impl.register(StringArray)
+@typeof_impl.register(pd.arrays.StringArray)
 def typeof_string_array(val, c):
     return string_array_type
 
@@ -859,7 +841,7 @@ ll.add_symbol("getitem_string_array", hstr_ext.getitem_string_array)
 ll.add_symbol("getitem_string_array_std", hstr_ext.getitem_string_array_std)
 ll.add_symbol("is_na", hstr_ext.is_na)
 ll.add_symbol("string_array_from_sequence", hstr_ext.string_array_from_sequence)
-ll.add_symbol("np_array_from_string_array", hstr_ext.np_array_from_string_array)
+ll.add_symbol("pd_array_from_string_array", hstr_ext.pd_array_from_string_array)
 ll.add_symbol("print_int", hstr_ext.print_int)
 ll.add_symbol("convert_len_arr_to_offset", hstr_ext.convert_len_arr_to_offset)
 ll.add_symbol("set_string_array_range", hstr_ext.set_string_array_range)
@@ -1214,7 +1196,7 @@ def box_str_arr(typ, val, c):
         ],
     )
     fn_get = c.builder.module.get_or_insert_function(
-        fnty, name="np_array_from_string_array"
+        fnty, name="pd_array_from_string_array"
     )
     arr = c.builder.call(
         fn_get,

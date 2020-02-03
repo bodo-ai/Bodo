@@ -41,7 +41,6 @@ from numba.targets.imputils import (
 from bodo.libs.str_arr_ext import (
     string_array_type,
     get_data_ptr,
-    is_str_arr_typ,
     pre_alloc_string_array,
     _memcpy,
 )

@@ -54,7 +54,7 @@ void list_string_array_from_sequence(PyObject* obj, int64_t* num_items,
                                      char** buffer, uint32_t** data_offset,
                                      uint32_t** index_offset,
                                      uint8_t** null_bitmap);
-void* np_array_from_string_array(int64_t no_strings,
+void* pd_array_from_string_array(int64_t no_strings,
                                  const uint32_t* offset_table,
                                  const char* buffer,
                                  const uint8_t* null_bitmap);
@@ -152,8 +152,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
         m, "list_string_array_from_sequence",
         PyLong_FromVoidPtr((void*)(&list_string_array_from_sequence)));
     PyObject_SetAttrString(
-        m, "np_array_from_string_array",
-        PyLong_FromVoidPtr((void*)(&np_array_from_string_array)));
+        m, "pd_array_from_string_array",
+        PyLong_FromVoidPtr((void*)(&pd_array_from_string_array)));
     PyObject_SetAttrString(
         m, "np_array_from_list_string_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_list_string_array)));
@@ -536,6 +536,12 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
         obj = PyObject_GetAttrString(obj, "values");
     }
 
+    // get pd.isna object to call in the loop to check for NAs
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* isna_call_obj = PyObject_GetAttrString(pd_mod, "isna");
+    CHECK(isna_call_obj, "getting pd.isna failed");
+
     offsets = new uint32_t[n + 1];
     std::vector<const char*> tmp_store(n);
     size_t len = 0;
@@ -543,9 +549,9 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
         offsets[i] = len;
         PyObject* s = PySequence_GetItem(obj, i);
         CHECK(s, "getting element failed");
-        // Pandas stores NA as either None or nan
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s)))) {
+        // Pandas stores NA as either None, nan, or pd.NA
+        PyObject* isna_obj = PyObject_CallFunctionObjArgs(isna_call_obj, s, NULL);
+        if (PyObject_IsTrue(isna_obj)) {
             // leave null bit as 0
             tmp_store[i] = "";
         } else {
@@ -560,6 +566,7 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
             len += size;
         }
         Py_DECREF(s);
+        Py_DECREF(isna_obj);
     }
     offsets[n] = len;
 
@@ -567,6 +574,9 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
     for (Py_ssize_t i = 0; i < n; ++i) {
         memcpy(outbuf + offsets[i], tmp_store[i], offsets[i + 1] - offsets[i]);
     }
+
+    Py_DECREF(isna_call_obj);
+    Py_DECREF(pd_mod);
 
     PyGILState_Release(gilstate);
 
@@ -578,12 +588,12 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
 #undef CHECK
 }
 
-/// @brief  From a StringArray create a numpy array of string objects
-/// @return numpy array of str objects
+/// @brief  Create Pandas StringArray from Bodo's packed StringArray
+/// @return Pandas StringArray of str objects
 /// @param[in] no_strings number of strings found in buffer
 /// @param[in] offset_table offsets for strings in buffer
 /// @param[in] buffer with concatenated strings (from StringArray)
-void* np_array_from_string_array(int64_t no_strings,
+void* pd_array_from_string_array(int64_t no_strings,
                                  const uint32_t* offset_table,
                                  const char* buffer,
                                  const uint8_t* null_bitmap) {
@@ -599,10 +609,11 @@ void* np_array_from_string_array(int64_t no_strings,
     PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
     CHECK(ret, "allocating numpy array failed");
     int err;
-    PyObject* np_mod = PyImport_ImportModule("numpy");
-    CHECK(np_mod, "importing numpy module failed");
-    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
-    CHECK(nan_obj, "getting np.nan failed");
+
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* na_obj = PyObject_GetAttrString(pd_mod, "NA");
+    CHECK(na_obj, "getting pd.NA failed");
 
     for (int64_t i = 0; i < no_strings; ++i) {
         PyObject* s = PyUnicode_FromStringAndSize(
@@ -613,15 +624,17 @@ void* np_array_from_string_array(int64_t no_strings,
         if (!is_na(null_bitmap, i))
             err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, s);
         else
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
+            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, na_obj);
         CHECK(err == 0, "setting item in numpy array failed");
         Py_DECREF(s);
     }
 
-    Py_DECREF(np_mod);
-    Py_DECREF(nan_obj);
+    PyObject* str_arr_obj = PyObject_CallMethod(pd_mod, "array", "Osl", ret, "string", 0);
+
+    Py_DECREF(pd_mod);
+    Py_DECREF(na_obj);
     PyGILState_Release(gilstate);
-    return ret;
+    return str_arr_obj;
 #undef CHECK
 }
 
