@@ -847,7 +847,7 @@ class TestString(unittest.TestCase):
             return pd.Series(["¡Y tú quién te crees?", "🐍⚡", "大处着眼，小处着手。"])
 
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(), test_impl())
+        pd.testing.assert_series_equal(bodo_func(), test_impl(), check_dtype=False)
 
     def test_unicode_decode_2byte_kind(self):
         """Test decoding element from string array in UTF8 to 2-byte kind Unicode

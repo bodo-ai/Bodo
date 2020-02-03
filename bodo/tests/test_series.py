@@ -1885,7 +1885,7 @@ class TestSeries(unittest.TestCase):
 
         S = pd.Series(["aa", "bb", "cc"])
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(bodo_func(S), test_impl(S), check_dtype=False)
 
     def test_series_astype_str1(self):
         def test_impl(A):
@@ -1902,7 +1902,7 @@ class TestSeries(unittest.TestCase):
 
         S = pd.Series(["aa", "bb", "cc"])
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(bodo_func(S), test_impl(S), check_dtype=False)
 
     def test_np_call_on_series1(self):
         def test_impl(A):
@@ -2199,7 +2199,7 @@ class TestSeries(unittest.TestCase):
             return A
 
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(), test_impl())
+        pd.testing.assert_series_equal(bodo_func(), test_impl(), check_dtype=False)
 
     def test_series_list_str_unbox1(self):
         def test_impl(A):
@@ -2273,7 +2273,7 @@ class TestSeries(unittest.TestCase):
         df = pd.DataFrame({"A": ["aa", "b", None, "ccc"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(
-            bodo_func(df.A), test_impl(df.A), check_names=False
+            bodo_func(df.A), test_impl(df.A), check_names=False, check_dtype=False
         )
 
     def test_series_fillna_str_inplace1(self):
@@ -2284,7 +2284,7 @@ class TestSeries(unittest.TestCase):
         S1 = pd.Series(["aa", "b", None, "ccc"])
         S2 = S1.copy()
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(S1), test_impl(S2))
+        pd.testing.assert_series_equal(bodo_func(S1), test_impl(S2), check_dtype=False)
         # TODO: handle string array reflection
         # bodo_func(S1)
         # test_impl(S2)
@@ -2298,7 +2298,7 @@ class TestSeries(unittest.TestCase):
         S1 = pd.Series(["aa", "b", None, "ccc"])
         S2 = S1.copy()
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(S1), test_impl(S2))
+        pd.testing.assert_series_equal(bodo_func(S1), test_impl(S2), check_dtype=False)
 
     def test_series_dropna_float1(self):
         def test_impl(A):
@@ -2498,7 +2498,9 @@ class TestSeries(unittest.TestCase):
         S2 = pd.Series(["1", "12", "", np.nan, "A"])
         # TODO: handle index in concat
         pd.testing.assert_series_equal(
-            bodo_func(S1, S2), test_impl(S1, S2).reset_index(drop=True)
+            bodo_func(S1, S2),
+            test_impl(S1, S2).reset_index(drop=True),
+            check_dtype=False
         )
 
     def test_series_cov1(self):
