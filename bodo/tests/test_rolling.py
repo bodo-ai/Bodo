@@ -284,7 +284,7 @@ class TestRolling(unittest.TestCase):
             wins = ("1s", "2s", "3s", "4s")
         # all functions except apply
         for w in wins:
-            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').apply(lambda a: a.sum())\n".format(
+            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').apply(lambda a: a.sum(), raw=True)\n".format(
                 w
             )
             loc_vars = {}
