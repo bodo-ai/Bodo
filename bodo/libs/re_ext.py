@@ -19,6 +19,8 @@ from numba.extending import (
     lower_builtin,
 )
 from bodo.libs.str_ext import string_type
+from bodo.utils.typing import is_overload_constant_str, get_overload_const_str
+from numba.targets.imputils import impl_ret_borrowed
 from llvmlite import ir as lir
 
 
@@ -30,8 +32,11 @@ Match = type(re.match(_dummy_pat, _dummy_pat))
 
 
 class RePatternType(types.Opaque):
-    def __init__(self):
-        super(RePatternType, self).__init__(name="RePatternType")
+    def __init__(self, pat_const=None):
+        # keep pattern string if it is a constant value
+        # useful for findall() to handle multi-group case
+        self.pat_const = pat_const
+        super(RePatternType, self).__init__(name="RePatternType({})".format(pat_const))
 
 
 re_pattern_type = RePatternType()
@@ -170,6 +175,7 @@ def overload_re_split(pattern, string, maxsplit=0, flags=0):
 @overload(re.findall)
 def overload_re_findall(pattern, string, flags=0):
     def _re_findall_impl(pattern, string, flags=0):  # pragma: no cover
+        # TODO: check for multiple group case which can fail
         with numba.objmode(m="list_str_type"):
             m = re.findall(pattern, string, flags)
         return m
@@ -217,8 +223,29 @@ def overload_re_purge():
     return _re_purge_impl
 
 
+@intrinsic
+def init_const_pattern(typingctx, pat, pat_const=None):
+    """dummy intrinsic to add constant pattern string to Pattern data type
+    """
+    pat_const_str = get_overload_const_str(pat_const)
+    def codegen(context, builder, sig, args):
+        return impl_ret_borrowed(context, builder, sig.return_type, args[0])
+
+    return RePatternType(pat_const_str)(pat, pat_const), codegen
+
+
+
 @overload(re.compile)
 def re_compile_overload(pattern, flags=0):
+    # if pattern string is constant, add it to data type to enable findall()
+    if is_overload_constant_str(pattern):
+        pat_const = get_overload_const_str(pattern)
+        def _re_compile_const_impl(pattern, flags=0):  # pragma: no cover
+            with numba.objmode(pat="re_pattern_type"):
+                pat = re.compile(pattern, flags)
+            return init_const_pattern(pat, pat_const)
+        return _re_compile_const_impl
+
     def _re_compile_impl(pattern, flags=0):  # pragma: no cover
         with numba.objmode(pat="re_pattern_type"):
             pat = re.compile(pattern, flags)
@@ -275,11 +302,38 @@ def overload_pat_split(pattern, string, maxsplit=0):
 
 @overload_method(RePatternType, "findall")
 def overload_pat_findall(p, string, pos=0, endpos=9223372036854775807):
+    # if pattern string is constant, we can handle multi-group case since we know the
+    # number of groups here
+    if p.pat_const:
+        n_groups = re.compile(p.pat_const).groups
+        typ = types.List(string_type)
+        if n_groups > 1:
+            typ = types.List(types.Tuple([string_type] * n_groups))
+        # HACK add type string to numba.types for objmode
+        typ_name = "list_tup_str_{}".format(numba.ir_utils.next_label())
+        setattr(types, typ_name, typ)
+        func_text = """
+def _pat_findall_const_impl(
+    p, string, pos=0, endpos=9223372036854775807
+):  # pragma: no cover
+    with numba.objmode(m="{}"):
+        m = p.findall(string, pos, endpos)
+    return m
+""".format(typ_name)
+        loc_vars = {}
+        exec(func_text, {"numba": numba}, loc_vars)
+        impl = loc_vars["_pat_findall_const_impl"]
+        return impl
+
     def _pat_findall_impl(
         p, string, pos=0, endpos=9223372036854775807
     ):  # pragma: no cover
         with numba.objmode(m="list_str_type"):
             m = p.findall(string, pos, endpos)
+        if p.groups > 1:
+            raise ValueError(
+                "pattern string should be constant for 'findall' with multiple groups"
+            )
         return m
 
     return _pat_findall_impl

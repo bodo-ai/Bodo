@@ -245,9 +245,7 @@ def overload_dataframe_head(df, n=5):
     # call head() on column Series
     data_args = ", ".join("df['{}'].head(n).values".format(c) for c in df.columns)
     header = "def impl(df, n=5):\n"
-    index = (
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[:n]"
-    )
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[:n]"
     return _gen_init_df(header, df.columns, data_args, index)
 
 
@@ -256,9 +254,7 @@ def overload_dataframe_tail(df, n=5):
     # call tail() on column Series
     data_args = ", ".join("df['{}'].tail(n).values".format(c) for c in df.columns)
     header = "def impl(df, n=5):\n"
-    index = (
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[-n:]"
-    )
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[-n:]"
     return _gen_init_df(header, df.columns, data_args, index)
 
 
@@ -670,10 +666,7 @@ def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
     )
     header = "def impl(df, indices, axis=0, convert=None, is_copy=True):\n"
     header += "  indices_t = bodo.utils.conversion.coerce_to_ndarray(indices)\n"
-    index = (
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
-        "[indices_t]"
-    )
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)" "[indices_t]"
     return _gen_init_df(header, df.columns, data_args, index)
 
 
@@ -799,7 +792,9 @@ def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
 
     # using add_consts_to_type with list to avoid const tuple problems
     # TODO: fix type inference for const str
-    col_seq = ", ".join("'{}'".format(c) for c in columns)
+    col_seq = ", ".join(
+        "'{}'".format(c) if isinstance(c, str) else "{}".format(c) for c in columns
+    )
     col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_seq, col_seq)
 
     func_text = "{}  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
@@ -1240,8 +1235,8 @@ def getiter_itertuples(context, builder, sig, args):
 @iternext_impl(RefType.UNTRACKED)
 def iternext_itertuples(context, builder, sig, args, result):
     # TODO: refcount issues?
-    iterty, = sig.args
-    it, = args
+    (iterty,) = sig.args
+    (it,) = args
 
     # TODO: support string arrays
     iterobj = context.make_helper(builder, iterty, value=it)

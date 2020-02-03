@@ -32,7 +32,7 @@ from bodo.hiframes.pd_timestamp_ext import (
     convert_datetime64_to_timestamp,
     integer_to_dt64,
 )
-from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
+from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType, StringIndexType
 from bodo.utils.typing import is_overload_false, is_overload_true
 from bodo.libs.str_ext import string_type, str_findall_count
 from bodo.libs.str_arr_ext import (
@@ -86,7 +86,7 @@ make_attribute_wrapper(SeriesStrMethodType, "obj", "_obj")
 @intrinsic
 def init_series_str_method(typingctx, obj=None):
     def codegen(context, builder, signature, args):
-        obj_val, = args
+        (obj_val,) = args
         str_method_type = signature.return_type
 
         str_method_val = cgutils.create_struct_proxy(str_method_type)(context, builder)
@@ -880,36 +880,13 @@ def overload_str_method_getitem(S_str, ind):
 
 @overload_method(SeriesStrMethodType, "extract")
 def overload_str_method_extract(S_str, pat, flags=0, expand=True):
-    # error checking
-    # regex arguments have to be constant for "extract", since evaluation of regex in
-    # compilation time is required for determining output type.
-    if not is_overload_constant_str(pat):
-        raise BodoError(
-            "Series.str.extract(): 'pat' argument should be a constant string"
-        )
-
-    if not is_overload_constant_int(flags):
-        raise BodoError(
-            "Series.str.extract(): 'flags' argument should be a constant int"
-        )
 
     if not is_overload_constant_bool(expand):
         raise BodoError(
             "Series.str.extract(): 'expand' argument should be a constant bool"
         )
 
-    # get column names similar to pd.core.strings._str_extract_frame()
-    pat = get_overload_const_str(pat)
-    flags = get_overload_const_int(flags)
-    regex = re.compile(pat, flags=flags)
-    if regex.groups == 0:
-        raise BodoError(
-            "Series.str.extract(): pattern {} contains no capture groups".format(pat)
-        )
-    names = dict(zip(regex.groupindex.values(), regex.groupindex.keys()))
-    # using str(i) since Bodo only supports string column names
-    # TODO: use integer when supported
-    columns = [names.get(1 + i, str(i)) for i in range(regex.groups)]
+    columns, regex = _get_column_names_from_regex(pat, flags, "extract")
     n_cols = len(columns)
 
     # generate one loop for finding character count and another for computation
@@ -989,6 +966,130 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
         extra_globals={"get_utf8_size": get_utf8_size, "re": re},
     )
     return impl
+
+
+@overload_method(SeriesStrMethodType, "extractall")
+def overload_str_method_extractall(S_str, pat, flags=0, expand=True):
+
+    columns, _ = _get_column_names_from_regex(pat, flags, "extractall")
+    n_cols = len(columns)
+    is_index_string = isinstance(S_str.stype.index, StringIndexType)
+
+    # generate one loop for finding character count and another for computation
+    # TODO: avoid multiple loops if possible, or even avoid inlined loops if needed
+    func_text = "def impl(S_str, pat, flags=0, expand=True):\n"
+    func_text += "  regex = re.compile(pat, flags=flags)\n"
+    func_text += "  S = S_str._obj\n"
+    func_text += "  str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+    func_text += "  index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+    func_text += "  name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+    # TODO: support MultiIndex in input Series
+    func_text += "  index_arr = bodo.utils.conversion.index_to_array(index)\n"
+    func_text += "  index_name = bodo.hiframes.pd_index_ext.get_index_name(index)\n"
+    # TODO: string index char count
+    func_text += "  numba.parfor.init_prange()\n"
+    func_text += "  n = len(str_arr)\n"
+    # using a list wrapper for integer to avoid reduction machinery (we need local size)
+    func_text += "  out_n_l = [0]\n"
+    for i in range(n_cols):
+        func_text += "  num_chars_{} = 0\n".format(i)
+    if is_index_string:
+        func_text += "  index_num_chars = 0\n"
+    func_text += "  for i in numba.parfor.internal_prange(n):\n"
+    if is_index_string:
+        func_text += "      index_num_chars += get_utf8_size(index_arr[i])\n"
+    func_text += "      if bodo.libs.array_kernels.isna(str_arr, i):\n"
+    func_text += "          continue\n"  # extractall just skips NAs
+    func_text += "      m = regex.findall(str_arr[i])\n"
+    func_text += "      out_n_l[0] += len(m)\n"
+    for i in range(n_cols):
+        func_text += "      l_{} = 0\n".format(i)
+    func_text += "      for s in m:\n"
+    for i in range(n_cols):
+        func_text += "        l_{} += get_utf8_size(s{})\n".format(
+            i, "[{}]".format(i) if n_cols > 1 else ""
+        )
+    for i in range(n_cols):
+        func_text += "      num_chars_{0} += l_{0}\n".format(i)
+    # using a sentinel function to specify that the arrays are local and no need for
+    # distributed transformation
+    func_text += (
+        "  out_n = bodo.libs.distributed_api.local_alloc_size(out_n_l[0], str_arr)\n"
+    )
+    for i in range(n_cols):
+        func_text += "  out_arr_{0} = bodo.libs.str_arr_ext.pre_alloc_string_array(out_n, num_chars_{0})\n".format(
+            i
+        )
+    if is_index_string:
+        func_text += "  out_ind_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(out_n, index_num_chars)\n"
+    else:
+        func_text += "  out_ind_arr = np.empty(out_n, index_arr.dtype)\n"
+    func_text += "  out_match_arr = np.empty(out_n, np.int64)\n"
+    func_text += "  out_ind = 0\n"
+    func_text += "  for j in numba.parfor.internal_prange(n):\n"
+    func_text += "      if bodo.libs.array_kernels.isna(str_arr, j):\n"
+    func_text += "          continue\n"  # extractall just skips NAs
+    func_text += "      m = regex.findall(str_arr[j])\n"
+    func_text += "      for k, s in enumerate(m):\n"
+    for i in range(n_cols):
+        # using set_arr_local() to avoid distributed transformation of setitem
+        func_text += "        bodo.libs.distributed_api.set_arr_local(out_arr_{}, out_ind, s{})\n".format(
+            i, "[{}]".format(i) if n_cols > 1 else ""
+        )
+    func_text += "        bodo.libs.distributed_api.set_arr_local(out_ind_arr, out_ind, index_arr[j])\n"
+    func_text += (
+        "        bodo.libs.distributed_api.set_arr_local(out_match_arr, out_ind, k)\n"
+    )
+    func_text += "        out_ind += 1\n"
+    func_text += "  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(\n"
+    func_text += "    (out_ind_arr, out_match_arr), (index_name, 'match'))\n"
+
+    # TODO: support dead code elimination with local distribution sentinels
+    data_args = ", ".join("out_arr_{}".format(i) for i in range(n_cols))
+    impl = bodo.hiframes.dataframe_impl._gen_init_df(
+        func_text,
+        columns,
+        data_args,
+        "out_index",
+        extra_globals={"get_utf8_size": get_utf8_size, "re": re},
+    )
+    return impl
+
+
+def _get_column_names_from_regex(pat, flags, func_name):
+    """get output dataframe's column names from constant regular expression in
+    extract/extractall calls
+    """
+    # error checking
+    # regex arguments have to be constant for "extract", since evaluation of regex in
+    # compilation time is required for determining output type.
+    if not is_overload_constant_str(pat):
+        raise BodoError(
+            "Series.str.{}(): 'pat' argument should be a constant string".format(
+                func_name
+            )
+        )
+
+    if not is_overload_constant_int(flags):
+        raise BodoError(
+            "Series.str.{}(): 'flags' argument should be a constant int".format(
+                func_name
+            )
+        )
+
+    # get column names similar to pd.core.strings._str_extract_frame()
+    pat = get_overload_const_str(pat)
+    flags = get_overload_const_int(flags)
+    regex = re.compile(pat, flags=flags)
+    if regex.groups == 0:
+        raise BodoError(
+            "Series.str.{}(): pattern {} contains no capture groups".format(
+                func_name, pat
+            )
+        )
+    names = dict(zip(regex.groupindex.values(), regex.groupindex.keys()))
+    columns = [names.get(1 + i, i) for i in range(regex.groups)]
+    return columns, regex
 
 
 def create_str2str_methods_overload(func_name):

@@ -252,7 +252,8 @@ String handling:
 * :meth:`Series.str.contains` regex argument supported.
 * :meth:`Series.str.count`
 * :meth:`Series.str.endswith`
-* :meth:`Series.str.extract`
+* :meth:`Series.str.extract` (input pattern should be a constant string)
+* :meth:`Series.str.extractall` (input pattern should be a constant string)
 * :meth:`Series.str.find`
 * :meth:`Series.str.get`
 * :meth:`Series.str.join`

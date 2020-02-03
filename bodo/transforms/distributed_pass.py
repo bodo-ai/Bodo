@@ -362,6 +362,12 @@ class DistributedPass:
         # fix 1D_Var allocs in case global len of another 1DVar is used
         if self._is_1D_Var_arr(lhs) and is_alloc_callname(func_name, func_mod):
             size_var = rhs.args[0]
+            size_def = guard(get_definition, self.func_ir, size_var)
+            # local 1D_Var arrays don't need transformation
+            if is_expr(size_def, "call") and guard(
+                find_callname, self.func_ir, size_def, self.typemap
+            ) == ("local_alloc_size", "bodo.libs.distributed_api"):
+                return out
             out, new_size_var = self._fix_1D_Var_alloc(
                 size_var, scope, loc, equiv_set, avail_vars
             )

@@ -312,6 +312,31 @@ def test_extract_noexpand(test_unicode):
     check_func(test_impl2, (test_unicode,))
 
 
+def test_extractall():
+    """Test Series.str.extractall() with various input cases
+    """
+    # ascii input with non-string index, single named group
+    def test_impl1(S):
+        return S.str.extractall(r"(?P<BBB>[abd]+)\d+")
+
+    S = pd.Series(
+        ["a1b1", "b1", np.nan, "a2", "c2", "ddd", "dd4d1", "d22c2"],
+        [4, 3, 5, 1, 0, 2, 6, 11],
+        name="AA",
+    )
+    check_func(test_impl1, (S,))
+
+    # unicode input with string index, multiple unnamed group
+    def test_impl2(S):
+        return S.str.extractall(r"([чен]+)\d+([ст]+)\d+")
+
+    S2 = pd.Series(
+        ["чьь1т33", "ьнн2с222", "странаст2", np.nan, "ьнне33ст3"],
+        ["е3", "не3", "н2с2", "AA", "C"],
+    )
+    check_func(test_impl2, (S2,))
+
+
 def test_count_noflag(test_unicode):
     def test_impl(S):
         return S.str.count("A")

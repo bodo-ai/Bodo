@@ -551,6 +551,20 @@ class DistributedAnalysis:
         if is_alloc_callname(func_name, func_mod):
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
+            size_def = guard(get_definition, self.func_ir, rhs.args[0])
+            # local 1D_var if local_alloc_size() is used
+            if is_expr(size_def, "call") and guard(
+                find_callname, self.func_ir, size_def, self.typemap
+            ) == ("local_alloc_size", "bodo.libs.distributed_api"):
+                in_arr_name = size_def.args[1].name
+                # output array is 1D_Var if input array is distributed
+                out_dist = Distribution(
+                    min(Distribution.OneD_Var.value, array_dists[in_arr_name].value)
+                )
+                array_dists[lhs] = out_dist
+                # input can become REP
+                if out_dist != Distribution.OneD_Var:
+                    array_dists[in_arr_name] = out_dist
             return
 
         # numpy direct functions
@@ -811,16 +825,22 @@ class DistributedAnalysis:
             return
 
         if fdef == ("init_multi_index", "bodo.hiframes.pd_multi_index_ext"):
+            # input arrays and output index have the same distribution
+            tup_list = guard(find_build_tuple, self.func_ir, rhs.args[0])
+            assert tup_list is not None
+            for v in tup_list:
+                self._meet_array_dists(lhs, v.name, array_dists)
+            for v in tup_list:
+                self._meet_array_dists(lhs, v.name, array_dists)
             return
 
         if fdef == ("init_series", "bodo.hiframes.pd_series_ext"):
             # lhs, in_arr, and index should have the same distribution
             new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            if len(rhs.args) > 1 and self.typemap[rhs.args[1].name] != types.none:
-                new_dist = self._meet_array_dists(
-                    lhs, rhs.args[1].name, array_dists, new_dist
-                )
-                array_dists[rhs.args[0].name] = new_dist
+            new_dist = self._meet_array_dists(
+                lhs, rhs.args[1].name, array_dists, new_dist
+            )
+            array_dists[rhs.args[0].name] = new_dist
             return
 
         if fdef == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
@@ -1107,6 +1127,12 @@ class DistributedAnalysis:
         """
 
         if func_name == "parallel_print":
+            return
+
+        if func_name == "set_arr_local":
+            return
+
+        if func_name == "local_alloc_size":
             return
 
         if func_name == "dist_return":
