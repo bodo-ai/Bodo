@@ -10,11 +10,7 @@ from numba import types
 from numba.typing.templates import (
     infer_global,
     AbstractTemplate,
-    infer,
     signature,
-    AttributeTemplate,
-    infer_getattr,
-    bound_function,
 )
 import numba.typing.typeof
 from numba.extending import (
@@ -27,7 +23,6 @@ from numba.extending import (
     lower_builtin,
     box,
     unbox,
-    lower_getattr,
     intrinsic,
     overload_method,
     overload,

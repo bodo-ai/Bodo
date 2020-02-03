@@ -83,10 +83,12 @@ def check_func(
     sort_output=False,
     check_names=True,
     copy_input=False,
-    check_dtype=True,
+    check_dtype=False,
 ):
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
+    check_dtype is False by default since we return typed extension arrays like
+    StringArray for all APIs but Pandas doesn't return them by default in all APIs yet.
     """
     n_pes = bodo.get_size()
 
