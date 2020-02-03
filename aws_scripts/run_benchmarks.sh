@@ -5,6 +5,7 @@ today=$(TZ=":US/Eastern" date +%Y_%m_%d)
 filename="/home/ubuntu/benchmark_logs/2020/benchmark_log.$today.txt"
 
 cd /home/ubuntu/
+git clone git@github.com:Bodo-inc/benchmarks.git
 eval "$(conda shell.bash hook)"
 conda activate Bodo
 cd benchmarks
@@ -13,6 +14,7 @@ echo ------------------Spec------------------ > $filename
 echo "EC2 Instance Type: m5.8xlarge" >> $filename
 echo "# of Physical Cores: 16" >> $filename
 echo "# of vCPUs: 32" >> $filename
+echo "Bodo Version: " $(python -c "import bodo ; print(bodo.__version__)") >> $filename
 echo >> $filename
 
 

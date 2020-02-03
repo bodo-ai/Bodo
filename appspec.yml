@@ -8,13 +8,14 @@ hooks:
     - location: aws_scripts/cleanup.sh
       timeout: 60
       runas: root
-  ValidateService:
+  AfterInstall:
     - location: aws_scripts/unzip_bodo.sh
       timeout: 60
       runas: root
     - location: aws_scripts/install_bodo.sh
       timeout: 300
       runas: root
+  ValidateService:
     - location: aws_scripts/run_benchmarks.sh
       timeout: 300
       runas: root

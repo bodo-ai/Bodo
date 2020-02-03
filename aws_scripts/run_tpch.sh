@@ -8,6 +8,7 @@ eval "$(conda shell.bash hook)"
 conda activate Bodo
 
 cd /home/ubuntu/
+git clone git@github.com:Bodo-inc/tpch.git
 cd tpch
 rm -rf tpch-dbgen
 rm -rf /tmp/data1

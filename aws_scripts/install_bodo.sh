@@ -8,7 +8,6 @@ pwd
 echo $PATH
 export PATH=/root/miniconda3/bin:$PATH
 echo $PATH
-# conda env remove --name Bodo
 conda create -n Bodo python=3.7
 cd /home/ubuntu
 eval "$(conda shell.bash hook)"
