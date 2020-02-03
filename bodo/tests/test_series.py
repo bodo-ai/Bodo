@@ -9,7 +9,6 @@ import string
 import numba
 import numba.targets.ufunc_db
 import bodo
-from bodo.libs.str_arr_ext import StringArray
 from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,

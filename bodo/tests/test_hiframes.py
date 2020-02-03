@@ -9,7 +9,7 @@ import string
 import numba
 import bodo
 from bodo import hiframes
-from bodo.libs.str_arr_ext import StringArray
+from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
@@ -327,7 +327,7 @@ class TestHiFrames(unittest.TestCase):
 
     def test_str_contains_regex(self):
         def test_impl():
-            A = StringArray(["ABC", "BB", "ADEF"])
+            A = str_arr_from_sequence(["ABC", "BB", "ADEF"])
             df = pd.DataFrame({"A": A})
             B = df.A.str.contains("AB*", regex=True)
             return B.sum()
@@ -337,7 +337,7 @@ class TestHiFrames(unittest.TestCase):
 
     def test_str_contains_noregex(self):
         def test_impl():
-            A = StringArray(["ABC", "BB", "ADEF"])
+            A = str_arr_from_sequence(["ABC", "BB", "ADEF"])
             df = pd.DataFrame({"A": A})
             B = df.A.str.contains("BB", regex=False)
             return B.sum()

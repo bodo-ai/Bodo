@@ -1280,7 +1280,7 @@ class DataFramePass:
         func_text += "  data = np.array(({},))\n".format(
             ", ".join(d + "_O" for d in data_args)
         )
-        func_text += "  index = bodo.libs.str_arr_ext.StringArray(({},))\n".format(
+        func_text += "  index = bodo.libs.str_arr_ext.str_arr_from_sequence(({},))\n".format(
             ", ".join("'{}'".format(c) for c in df_typ.columns)
         )
         func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, index)\n"

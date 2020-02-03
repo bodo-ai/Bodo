@@ -134,7 +134,7 @@ def overload_coerce_to_array(data, error_on_nonarray=True, bool_arr_convert=None
 
     # string list
     if isinstance(data, types.List) and data.dtype == bodo.string_type:
-        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.libs.str_arr_ext.StringArray(
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.libs.str_arr_ext.str_arr_from_sequence(
             data
         )
 
@@ -143,7 +143,7 @@ def overload_coerce_to_array(data, error_on_nonarray=True, bool_arr_convert=None
             data.dtype, (types.UnicodeType, types.StringLiteral)))
             or (isinstance(data, types.BaseTuple)
                 and all(isinstance(t, types.StringLiteral) for t in data.types))):
-        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.libs.str_arr_ext.StringArray(
+        return lambda data, error_on_nonarray=True, bool_arr_convert=None: bodo.libs.str_arr_ext.str_arr_from_sequence(
             list(data)
         )
 
