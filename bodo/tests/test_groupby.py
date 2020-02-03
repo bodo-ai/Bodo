@@ -377,9 +377,6 @@ def test_aggregate_as_index():
         A = df.groupby("A", as_index=False).aggregate(lambda x: x.max() - x.min())
         return A
 
-    def impl2(df):
-        A = df.groupby("A", as_index=False)["C"].aggregate(lambda x: x.max() - x.min())
-        return A
 
     df = pd.DataFrame(
         {
@@ -390,7 +387,6 @@ def test_aggregate_as_index():
     )
 
     check_func(impl1, (df,), sort_output=True, check_dtype=False)
-    check_func(impl2, (df,), sort_output=True, check_dtype=False)
 
 
 def test_aggregate_select_col():
