@@ -47,7 +47,6 @@ ll.add_symbol("hash_join_table", array_tools_ext.hash_join_table)
 ll.add_symbol("drop_duplicates_table", array_tools_ext.drop_duplicates_table)
 ll.add_symbol("sort_values_table", array_tools_ext.sort_values_table)
 ll.add_symbol("groupby_and_aggregate", array_tools_ext.groupby_and_aggregate)
-ll.add_symbol("groupby_and_aggregate_sets", array_tools_ext.groupby_and_aggregate_sets)
 ll.add_symbol("array_isin", array_tools_ext.array_isin)
 ll.add_symbol("compute_node_partition_by_hash", array_tools_ext.compute_node_partition_by_hash)
 
@@ -596,20 +595,22 @@ def groupby_and_aggregate(
     typingctx,
     table_t,
     n_keys_t,
-    ftype,
-    num_funcs,
+    ftypes,
+    func_offsets,
+    udf_n_redvars,
     is_parallel,
+    skipdropna_t,
     update_cb,
     combine_cb,
     eval_cb,
-    out_table_dummy_t,
+    udf_table_dummy_t,
 ):
     """
     Interface to groupby_and_aggregate function in C++ library for groupby
     offloading.
     """
     assert table_t == table_type
-    assert out_table_dummy_t == table_type
+    assert udf_table_dummy_t == table_type
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
@@ -617,8 +618,10 @@ def groupby_and_aggregate(
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
-                lir.IntType(32),
-                lir.IntType(32),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
@@ -635,8 +638,10 @@ def groupby_and_aggregate(
         table_type(
             table_t,
             types.int64,
-            types.int32,
-            types.int32,
+            types.intp,
+            types.intp,
+            types.intp,
+            types.boolean,
             types.boolean,
             types.voidptr,
             types.voidptr,
@@ -645,25 +650,6 @@ def groupby_and_aggregate(
         ),
         codegen,
     )
-
-
-@intrinsic
-def groupby_and_aggregate_sets(typingctx, table_t, n_keys_t, ftype_t, skipdropna_t, is_parallel):
-    """
-    Interface to groupby_and_aggregate_sets function in C++ library for groupby
-    offloading.
-    """
-    assert table_t == table_type
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(),
-                                          lir.IntType(64), lir.IntType(32), lir.IntType(1), lir.IntType(1)]
-        )
-        fn_tp = builder.module.get_or_insert_function(fnty, name="groupby_and_aggregate_sets")
-        return builder.call(fn_tp, args)
-
-    return table_type(table_t, types.int64, types.int32, types.boolean, types.boolean), codegen
 
 
 _array_isin = types.ExternalFunction("array_isin", types.void(

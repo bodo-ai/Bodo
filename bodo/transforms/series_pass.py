@@ -1715,8 +1715,7 @@ class SeriesPass:
             agg_func = bodo.hiframes.series_impl.overload_series_count(
                 self.typemap[series_var.name]
             )
-            agg_func.ftype = bodo.ir.aggregate.supported_agg_funcs.index("count")
-            agg_func.builtin = True
+            agg_func.ftype = "count"
             agg_node = bodo.ir.aggregate.Aggregate(
                 lhs.name,
                 "series",

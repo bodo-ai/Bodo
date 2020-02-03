@@ -99,6 +99,7 @@ struct table_info {
     // (which is only needed when key equality is checked but not for hashing)
     // TODO consider passing 'num_keys' to the constructor
     int64_t num_keys;
+    table_info() {}
     explicit table_info(std::vector<array_info*> &_columns)
         : columns(_columns) {}
 

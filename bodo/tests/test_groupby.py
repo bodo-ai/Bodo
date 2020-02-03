@@ -238,6 +238,7 @@ def test_agg_as_index_fast():
 
     check_func(impl1, (df,), sort_output=True, check_dtype=False)
 
+
 @pytest.mark.slow
 def test_agg_as_index():
     """
@@ -347,8 +348,27 @@ def test_agg_multi_udf():
 
         return df.groupby("A")["B"].agg((id1, id2))
 
+    def impl2(df):
+        def id1(x):
+            return (x <= 2).sum()
+
+        def id2(x):
+            return (x > 2).sum()
+
+        return df.groupby("A")["B"].agg(("var", id1, id2, "sum"))
+
+    def impl3(df):
+        return df.groupby("A")["B"].agg((lambda x: x.max() - x.min(), lambda x: x.max() + x.min()))
+
+    def impl4(df):
+        return df.groupby("A")["B"].agg(("cumprod", "cumsum"))
+
     df = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [1, 2, 3, 4, 5, 6, 7]})
     check_func(impl, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
+    # check_dtype=False since Bodo returns float for Series.min/max. TODO: fix min/max
+    check_func(impl3, (df,), sort_output=True, check_dtype=False)
+    check_func(impl4, (df,), sort_output=True)
 
 
 def test_aggregate():
@@ -437,16 +457,64 @@ def test_groupby_agg_const_dict():
         df2 = df.groupby("A").agg({"B": "count", "C": "sum"})
         return df2
 
+    def impl3(df):
+        df2 = df.groupby("A").agg({"B" : "median"})
+        return df2
+
+    def impl4(df):
+        df2 = df.groupby("A").agg({"D": "nunique", "B": "median", "C": "var"})
+        return df2
+
+    def impl5(df):
+        df2 = df.groupby("A").agg({"B" : ["median", "nunique"]})
+        return df2
+
+    def impl6(df):
+        df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": ["std", "sum"]})
+        return df2
+
+    def impl7(df):
+        df2 = df.groupby("A").agg({"B": ["count", "median", "prod"], "C": ["nunique", "sum"]})
+        return df2
+
+    def impl8(df):
+        def id1(x):
+            return (x >= 2).sum()
+
+        df2 = df.groupby("D").agg({"B": "var", "A": id1, "C": "sum"})
+        return df2
+
+    def impl9(df):
+        df2 = df.groupby("D").agg({"B": lambda x: x.max() - x.min(), "A": "sum"})
+        return df2
+
+    def impl10(df):
+        df2 = df.groupby("A").agg({"D": lambda x: (x == "BB").sum(), "B": lambda x: x.max() - x.min(), "C": "sum"})
+        return df2
+
+    def impl11(df):
+        df2 = df.groupby("A").agg({"B": "cumsum", "C": "cumprod"})
+        return df2
+
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
-            "D": ["AA", "B", "B", "B", "AA", "AA", "B"],
+            "D": ["AA", "B", "BB", "B", "AA", "AA", "B"],
             "B": [-8.1, 2.1, 3.1, 1.1, 5.1, 6.1, 7.1],
             "C": [3, 5, 6, 5, 4, 4, 3],
         }
     )
     check_func(impl, (df,), sort_output=True)
     check_func(impl2, (df,), sort_output=True)
+    check_func(impl3, (df,), sort_output=True)
+    check_func(impl4, (df,), sort_output=True)
+    check_func(impl5, (df,), sort_output=True)
+    check_func(impl6, (df,), sort_output=True)
+    check_func(impl7, (df,), sort_output=True)
+    check_func(impl8, (df,), sort_output=True)
+    check_func(impl9, (df,), sort_output=True)
+    check_func(impl10, (df,), sort_output=True)
+    check_func(impl11, (df,), sort_output=True)
 
 
 def g(x):

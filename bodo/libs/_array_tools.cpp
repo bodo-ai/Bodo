@@ -1921,11 +1921,10 @@ struct Bodo_FTypes {
         prod,
         var,
         std,
-        agg,
+        udf,
         num_funcs,  // num_funcs is used to know how many functions up to this
                     // point
         mean_eval,
-        var_combine,
         var_eval,
         std_eval
     };
@@ -1933,50 +1932,49 @@ struct Bodo_FTypes {
 
 /**
  * Function pointer for groupby update and combine operations that are
- * executed in JIT-compiled code (also see agginfo_t).
+ * executed in JIT-compiled code (also see udfinfo_t).
  *
  * @param input table
  * @param output table
  * @param row to group mapping (tells to which group -row in output table-
           the row i of input table goes to)
  */
-typedef void (*agg_table_op_fn)(table_info* in_table, table_info* out_table,
+typedef void (*udf_table_op_fn)(table_info* in_table, table_info* out_table,
                                 int64_t* row_to_group);
 /**
  * Function pointer for groupby eval operation that is executed in JIT-compiled
- * code (also see agginfo_t).
+ * code (also see udfinfo_t).
  *
  * @param table containing the output columns and reduction variables columns
  */
-typedef void (*agg_eval_fn)(table_info*);
+typedef void (*udf_eval_fn)(table_info*);
 
 /*
- * This struct stores info that is currently used for groupby.agg() where
- * code such as user-defined functions is JIT-compiled and used for
- * aggregation. Such JIT-compiled code will be invoked by the C++ library
- * via function pointers.
+ * This struct stores info that is used when groupby.agg() has JIT-compiled
+ * user-defined functions. Such JIT-compiled code will be invoked by the C++
+ * library via function pointers.
  */
-struct agginfo_t {
+struct udfinfo_t {
     /*
      * This empty table is used to tell the C++ library the types to use
-     * to allocate the output table (also has the type for redvar columns)
+     * to allocate the columns (output and redvar) for udfs
      */
-    table_info* out_table_dummy;
+    table_info* udf_table_dummy;
     /*
      * Function pointer to "update" code which performs the initial
      * local groupby and aggregation.
      */
-    agg_table_op_fn update;
+    udf_table_op_fn update;
     /*
      * Function pointer to "combine" code which combines the results
      * after shuffle.
      */
-    agg_table_op_fn combine;
+    udf_table_op_fn combine;
     /*
      * Function pointer to "eval" code which performs post-processing and
      * sets the final output value for each group.
      */
-    agg_eval_fn eval;
+    udf_eval_fn eval;
 };
 
 /**
@@ -2249,7 +2247,10 @@ void var_combine(array_info* count_col_in, array_info* mean_col_in,
  * @param m2: sum of squares of differences from the current mean
  */
 static void var_eval(double& result, uint64_t& count, double& m2) {
-    result = m2 / (count - 1);
+    if (count == 0)
+        result = std::numeric_limits<double>::quiet_NaN();
+    else
+        result = m2 / (count - 1);
 }
 
 /**
@@ -2263,7 +2264,10 @@ static void var_eval(double& result, uint64_t& count, double& m2) {
  * @param m2: sum of squares of differences from the current mean
  */
 static void std_eval(double& result, uint64_t& count, double& m2) {
-    result = sqrt(m2 / (count - 1));
+    if (count == 0)
+        result = std::numeric_limits<double>::quiet_NaN();
+    else
+        result = sqrt(m2 / (count - 1));
 }
 
 
@@ -3097,74 +3101,6 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
 }
 
 /**
- * Create temporary columns needed by mean, var, std and agg (to store
- * reduction variables).
- *
- * @param[in,out] table output columns. The created columns are added to this
- * vector
- * @param number of keys in table
- * @param number of columns in table before adding auxiliar columns
- * @param number of groups, which equals the number of rows that we need to
- * create
- * @param function identifier
- * @param[in,out] stores the created auxiliary columns
- * @param info structure for agg operation
- */
-void create_auxiliary_cols(std::vector<array_info*>& out_cols, int64_t num_keys,
-                           int64_t ncols, int64_t num_groups, int ftype,
-                           std::vector<std::vector<array_info*>>& aux_cols,
-                           const agginfo_t& agginfo) {
-    switch (ftype) {
-        case Bodo_FTypes::mean:
-            for (int64_t i = num_keys; i < ncols; i++) {
-                array_info* aux_col =
-                    alloc_array(num_groups, 1, bodo_array_type::NUMPY,
-                                Bodo_CTypes::UINT64, 0);
-                out_cols.emplace_back(aux_col);
-                aux_cols.emplace_back();
-                aux_cols.back().emplace_back(aux_col);
-                // auxiliary column for mean will record the count
-                aggfunc_output_initialize(aux_col, Bodo_FTypes::count);
-            }
-            return;
-        case Bodo_FTypes::var:
-        case Bodo_FTypes::std:
-            for (int64_t i = num_keys; i < ncols; i++) {
-                array_info* count_col =
-                    alloc_array(num_groups, 1, bodo_array_type::NUMPY,
-                                Bodo_CTypes::UINT64, 0);
-                array_info* mean_col =
-                    alloc_array(num_groups, 1, bodo_array_type::NUMPY,
-                                Bodo_CTypes::FLOAT64, 0);
-                array_info* m2_col =
-                    alloc_array(num_groups, 1, bodo_array_type::NUMPY,
-                                Bodo_CTypes::FLOAT64, 0);
-                out_cols.emplace_back(count_col);
-                out_cols.emplace_back(mean_col);
-                out_cols.emplace_back(m2_col);
-                aux_cols.emplace_back();
-                aux_cols.back().emplace_back(count_col);
-                aux_cols.back().emplace_back(mean_col);
-                aux_cols.back().emplace_back(m2_col);
-                // auxiliary column for mean will record the count
-                aggfunc_output_initialize(count_col, Bodo_FTypes::count);
-                aggfunc_output_initialize(mean_col, Bodo_FTypes::count);
-                aggfunc_output_initialize(m2_col, Bodo_FTypes::count);
-            }
-            return;
-        case Bodo_FTypes::agg:
-            for (int64_t i=ncols; i < agginfo.out_table_dummy->ncols(); i++) {
-                bodo_array_type::arr_type_enum arr_type = agginfo.out_table_dummy->columns[i]->arr_type;
-                Bodo_CTypes::CTypeEnum dtype = agginfo.out_table_dummy->columns[i]->dtype;
-                out_cols.emplace_back(alloc_array(num_groups, 1, arr_type, dtype, 0));
-            }
-            return;
-        default:
-            return;
-    }
-}
-
-/**
  * Returns the array type and dtype required for output columns based on the
  * aggregation function and input dtype.
  *
@@ -3186,6 +3122,7 @@ void get_groupby_output_dtype(int ftype,
             array_type = bodo_array_type::NUMPY;
             dtype = Bodo_CTypes::INT64;
             return;
+        case Bodo_FTypes::median:
         case Bodo_FTypes::mean:
         case Bodo_FTypes::var:
         case Bodo_FTypes::std:
@@ -3197,238 +3134,696 @@ void get_groupby_output_dtype(int ftype,
     }
 }
 
+std::vector<Bodo_FTypes::FTypeEnum> combine_funcs(Bodo_FTypes::num_funcs);
 
 
+/*
+ An instance of GroupbyPipeline class manages a groupby operation. In a
+ groupby operation, an arbitrary number of functions can be applied to each
+ input column. The functions can vary between input columns. Each combination
+ of (input column, function) is an operation that produces a column in the
+ output table. The computation of each (input column, function) pair is
+ encapsulated in what is called a "column set" (for lack of a better name).
+ There are different column sets for different types of operations (e.g. var,
+ mean, median, udfs, basic operations...). Each column set creates,
+ initializes, operates on and manages the arrays needed to perform its
+ computation. Different column set types may require different number of
+ columns and dtypes. The main control flow of groupby is in
+ GroupbyPipeline::run(). It invokes update, shuffle, combine and eval steps
+ (as needed), and these steps iterate through the column sets and invoke
+ their operations.
+*/
 
-
-
-
-
-
-
-
-/**
- * Allocate output tables (intermediary or final) for groupby.
- *
- * @param input table
- * @param number of keys in input table
- * @param total number of output columns to allocate
- * @param number of groups (number of rows in output table)
- * @param groupby aggregation function type
- * @param info structure for agg operation
- * @param vector that maps group number to the first row in input table
- *        that belongs to that group
- * @return the newly allocated output table and columns
+/*
+ * This is the base column set class which is used by most operations (like
+ * sum, prod, count, etc.). Several subclasses also rely on some of the methods
+ * of this base class.
  */
-table_info* groupby_alloc_table(const table_info& in_table, int64_t n_keys,
-                                int64_t n_out_cols,
-                                int64_t num_groups, int ftype,
-                                const agginfo_t& agginfo,
-                                const std::vector<int64_t>& group_to_first_row) {
-    std::vector<array_info*> out_cols(n_out_cols);
-    for (int64_t i = 0; i < n_out_cols; i++) {
-        if (ftype == Bodo_FTypes::agg && i >= n_keys) {
-            // for output data columns in 'agg' case, we need to get the type
-            // from the dummy table that was passed to C++ library
-            bodo_array_type::arr_type_enum arr_type = agginfo.out_table_dummy->columns[i]->arr_type;
-            Bodo_CTypes::CTypeEnum dtype = agginfo.out_table_dummy->columns[i]->dtype;
-            out_cols[i] = alloc_array(num_groups, 1, arr_type, dtype, 0);
-        } else {
-            const array_info* in_arr = in_table[i];
-            bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
-            Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
+class BasicColSet {
+public:
+
+    /**
+     * Construct column set corresponding to function of type ftype applied to
+     * the input column in_col
+     * @param input column of groupby associated with this column set
+     * @param ftype associated with this column set
+     * @param tells the column set whether GroupbyPipeline is going to perform
+     *        a combine operation or not. If false, this means that either
+     *        shuffling is not necessary or that it will be done at the
+     *        beginning of the pipeline.
+     */
+    BasicColSet(array_info *in_col, int ftype, bool combine_step) :
+        in_col(in_col), ftype(ftype), combine_step(combine_step) {}
+    virtual ~BasicColSet() {}
+
+    /**
+     * Allocate my columns for update step.
+     * @param number of groups found in the input table
+     * @param[in,out] vector of columns of update table. This method adds
+     *                columns to this vector.
+     */
+    virtual void alloc_update_columns(size_t num_groups, std::vector<array_info*> &out_cols) {
+        bodo_array_type::arr_type_enum arr_type = in_col->arr_type;
+        Bodo_CTypes::CTypeEnum dtype = in_col->dtype;
+        // calling this modifies arr_type and dtype
+        get_groupby_output_dtype(ftype, arr_type, dtype, false);
+        out_cols.push_back(alloc_array(num_groups, 1, arr_type, dtype, 0));
+        update_cols.push_back(out_cols.back());
+    }
+
+    /**
+     * Perform update step for this column set. This will fill my columns with
+     * the result of the aggregation operation corresponding to this column set
+     * @param grouping info calculated by GroupbyPipeline
+     */
+    virtual void update(const grouping_info &grp_info) {
+        std::vector<array_info*> aux_cols;
+        aggfunc_output_initialize(update_cols[0], ftype);
+        do_apply_to_column(in_col, update_cols[0],
+                           aux_cols, grp_info.row_to_group, ftype);
+    }
+
+    /**
+     * When GroupbyPipeline shuffles the table after update, the column set
+     * needs to be updated with the columns from the new shuffled table. This
+     * method is called by GroupbyPipeline with an iterator pointing to my
+     * first column. The column set will update its columns and return an
+     * iterator pointing to the next set of columns.
+     * @param iterator pointing to the first column in this column set
+     */
+    virtual std::vector<array_info*>::iterator update_after_shuffle(
+      std::vector<array_info*>::iterator &it) {
+        update_cols.assign(it, it + update_cols.size());
+        return it + update_cols.size();
+    }
+
+    /**
+     * Allocate my columns for combine step.
+     * @param number of groups found in the input table (which is the update table)
+     * @param[in,out] vector of columns of combine table. This method adds
+     *                columns to this vector.
+     */
+    virtual void alloc_combine_columns(size_t num_groups, std::vector<array_info*> &out_cols) {
+        Bodo_FTypes::FTypeEnum combine_ftype = combine_funcs[ftype];
+        for (auto col : update_cols) {
+            bodo_array_type::arr_type_enum arr_type = col->arr_type;
+            Bodo_CTypes::CTypeEnum dtype = col->dtype;
             // calling this modifies arr_type and dtype
-            get_groupby_output_dtype(ftype, arr_type, dtype, i < n_keys);
-            if (arr_type == bodo_array_type::STRING) {
-                // this is a special case: key columns containing strings.
-                // in this case, output col will have num_groups rows
-                // containing the string for each group
-                assert(i < n_keys);  // assert that this is a key column
-                int64_t n_chars = 0;   // total number of chars of all keys for this
-                                       // column
-                uint32_t* in_offsets = (uint32_t*)in_arr->data2;
+            get_groupby_output_dtype(combine_ftype, arr_type, dtype, false);
+            out_cols.push_back(alloc_array(num_groups, 1, arr_type, dtype, 0));
+            combine_cols.push_back(out_cols.back());
+        }
+    }
+
+    /**
+     * Perform combine step for this column set. This will fill my columns with
+     * the result of the aggregation operation corresponding to this column set
+     * @param grouping info calculated by GroupbyPipeline
+     */
+    virtual void combine(const grouping_info &grp_info) {
+        Bodo_FTypes::FTypeEnum combine_ftype = combine_funcs[ftype];
+        std::vector<array_info*> aux_cols(combine_cols.begin() + 1, combine_cols.end());
+        for (auto col : combine_cols)
+            aggfunc_output_initialize(col, combine_ftype);
+        do_apply_to_column(update_cols[0], combine_cols[0],
+                           aux_cols, grp_info.row_to_group, combine_ftype);
+    }
+
+    /**
+     * Perform eval step for this column set. This will fill the output column
+     * with the final result of the aggregation operation corresponding to this
+     * column set
+     * @param grouping info calculated by GroupbyPipeline
+     */
+    virtual void eval(const grouping_info &grp_info) {}
+
+    /**
+     * Obtain the final output column resulting from the groupby operation on
+     * this column set. This will free all other intermediate or auxiliary
+     * columns (if any) used by the column set (like reduction variables).
+     */
+    virtual array_info* getOutputColumn() {
+        std::vector<array_info*> *mycols;
+        if (combine_step)
+            mycols = &combine_cols;
+        else
+            mycols = &update_cols;
+        array_info* out_col = mycols->at(0);
+        for (auto it = mycols->begin() + 1; it != mycols->end(); it++) {
+            array_info *a = *it;
+            free_array(a);
+            delete a;
+        }
+        return out_col;
+    }
+
+protected:
+    friend class GroupbyPipeline;
+    array_info *in_col; // the input column (from groupby input table) to which this column set corresponds to
+    int ftype;
+    bool combine_step; // GroupbyPipeline is going to perform a combine operation or not
+    std::vector<array_info*> update_cols; // columns for update step
+    std::vector<array_info*> combine_cols; // columns for combine step
+};
+
+class MeanColSet : public BasicColSet {
+public:
+
+    MeanColSet(array_info *in_col, bool combine_step) :
+        BasicColSet(in_col, Bodo_FTypes::mean, combine_step) {}
+    virtual ~MeanColSet() {}
+
+    virtual void alloc_update_columns(size_t num_groups, std::vector<array_info*> &out_cols) {
+        array_info* c1 = alloc_array(num_groups, 1, bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64, 0); // for sum and result
+        array_info* c2 = alloc_array(num_groups, 1, bodo_array_type::NUMPY, Bodo_CTypes::UINT64, 0); // for counts
+        out_cols.push_back(c1);
+        out_cols.push_back(c2);
+        update_cols.push_back(c1);
+        update_cols.push_back(c2);
+    }
+
+    virtual void update(const grouping_info &grp_info) {
+        std::vector<array_info*> aux_cols = {update_cols[1]};
+        aggfunc_output_initialize(update_cols[0], ftype);
+        aggfunc_output_initialize(update_cols[1], ftype);
+        do_apply_to_column(in_col, update_cols[0],
+                           aux_cols, grp_info.row_to_group, ftype);
+    }
+
+    virtual void combine(const grouping_info &grp_info) {
+        std::vector<array_info*> aux_cols;
+        aggfunc_output_initialize(combine_cols[0], Bodo_FTypes::sum);
+        aggfunc_output_initialize(combine_cols[1], Bodo_FTypes::sum);
+        do_apply_to_column(update_cols[0], combine_cols[0],
+                           aux_cols, grp_info.row_to_group, Bodo_FTypes::sum);
+        do_apply_to_column(update_cols[1], combine_cols[1],
+                           aux_cols, grp_info.row_to_group, Bodo_FTypes::sum);
+    }
+
+    virtual void eval(const grouping_info &grp_info) {
+        std::vector<array_info*> aux_cols;
+        if (combine_step)
+            do_apply_to_column(combine_cols[1], combine_cols[0], aux_cols,
+                               grp_info.row_to_group, Bodo_FTypes::mean_eval);
+        else
+            do_apply_to_column(update_cols[1], update_cols[0], aux_cols,
+                               grp_info.row_to_group, Bodo_FTypes::mean_eval);
+    }
+};
+
+class VarStdColSet : public BasicColSet {
+public:
+
+    VarStdColSet(array_info *in_col, int ftype, bool combine_step) : BasicColSet(in_col, ftype, combine_step) {}
+    virtual ~VarStdColSet() {}
+
+    virtual void alloc_update_columns(size_t num_groups, std::vector<array_info*> &out_cols) {
+        if (!combine_step) {
+            // need to create output column now
+            array_info* col = alloc_array(num_groups, 1, bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64, 0); // for result
+            out_cols.push_back(col);
+            update_cols.push_back(col);
+        }
+        array_info* count_col = alloc_array(num_groups, 1,
+                                            bodo_array_type::NUMPY,
+                                            Bodo_CTypes::UINT64, 0);
+        array_info* mean_col = alloc_array(num_groups, 1,
+                                           bodo_array_type::NUMPY,
+                                           Bodo_CTypes::FLOAT64, 0);
+        array_info* m2_col = alloc_array(num_groups, 1,
+                                         bodo_array_type::NUMPY,
+                                         Bodo_CTypes::FLOAT64, 0);
+        aggfunc_output_initialize(count_col, Bodo_FTypes::count); // zero initialize
+        aggfunc_output_initialize(mean_col, Bodo_FTypes::count); // zero initialize
+        aggfunc_output_initialize(m2_col, Bodo_FTypes::count); // zero initialize
+        out_cols.push_back(count_col);
+        out_cols.push_back(mean_col);
+        out_cols.push_back(m2_col);
+        update_cols.push_back(count_col);
+        update_cols.push_back(mean_col);
+        update_cols.push_back(m2_col);
+    }
+
+    virtual void update(const grouping_info &grp_info) {
+        if (!combine_step) {
+            std::vector<array_info*> aux_cols = {update_cols[1],
+                                                 update_cols[2],
+                                                 update_cols[3]};
+            do_apply_to_column(in_col, update_cols[1],
+                               aux_cols, grp_info.row_to_group, ftype);
+        } else {
+            std::vector<array_info*> aux_cols = {update_cols[0],
+                                                 update_cols[1],
+                                                 update_cols[2]};
+            do_apply_to_column(in_col, update_cols[0],
+                               aux_cols, grp_info.row_to_group, ftype);
+        }
+    }
+
+    virtual void alloc_combine_columns(size_t num_groups, std::vector<array_info*> &out_cols) {
+        array_info* col = alloc_array(num_groups, 1, bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64, 0); // for result
+        out_cols.push_back(col);
+        combine_cols.push_back(col);
+        BasicColSet::alloc_combine_columns(num_groups, out_cols);
+    }
+
+    virtual void combine(const grouping_info &grp_info) {
+        array_info* count_col_in = update_cols[0];
+        array_info* mean_col_in = update_cols[1];
+        array_info* m2_col_in = update_cols[2];
+        array_info* count_col_out = combine_cols[1];
+        array_info* mean_col_out = combine_cols[2];
+        array_info* m2_col_out = combine_cols[3];
+        aggfunc_output_initialize(count_col_out, Bodo_FTypes::count);
+        aggfunc_output_initialize(mean_col_out, Bodo_FTypes::count);
+        aggfunc_output_initialize(m2_col_out, Bodo_FTypes::count);
+        var_combine(count_col_in, mean_col_in, m2_col_in, count_col_out,
+                    mean_col_out, m2_col_out, grp_info.row_to_group);
+    }
+
+    virtual void eval(const grouping_info &grp_info) {
+        std::vector<array_info*> *mycols;
+        if (combine_step)
+            mycols = &combine_cols;
+        else
+            mycols = &update_cols;
+
+        std::vector<array_info*> aux_cols = {mycols->at(1),
+                                             mycols->at(2),
+                                             mycols->at(3)};
+        if (ftype == Bodo_FTypes::var)
+            do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols,
+                               grp_info.row_to_group, Bodo_FTypes::var_eval);
+        else
+            do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols,
+                               grp_info.row_to_group, Bodo_FTypes::std_eval);
+    }
+};
+
+class UdfColSet : public BasicColSet {
+public:
+
+    UdfColSet(array_info *in_col, bool combine_step, table_info *udf_table, int udf_table_idx,
+              int n_redvars) :
+                  BasicColSet(in_col, Bodo_FTypes::udf, combine_step),
+                  udf_table(udf_table),
+                  udf_table_idx(udf_table_idx),
+                  n_redvars(n_redvars) {}
+    virtual ~UdfColSet() {}
+
+    virtual void alloc_update_columns(size_t num_groups, std::vector<array_info*> &out_cols) {
+        int offset = 0;
+        if (combine_step) offset = 1;
+        // for update table we only need redvars (skip first column which is
+        // output column)
+        for (int i=udf_table_idx + offset; i < udf_table_idx + 1 + n_redvars; i++) {
+            // we get the type from the udf dummy table that was passed to C++ library
+            bodo_array_type::arr_type_enum arr_type = udf_table->columns[i]->arr_type;
+            Bodo_CTypes::CTypeEnum dtype = udf_table->columns[i]->dtype;
+            out_cols.push_back(alloc_array(num_groups, 1, arr_type, dtype, 0));
+            if (!combine_step) update_cols.push_back(out_cols.back());
+        }
+    }
+
+    virtual void update(const grouping_info &grp_info) {
+        // do nothing because this is done in JIT-compiled code (invoked from
+        // GroupbyPipeline once for all udf columns sets)
+    }
+
+    virtual std::vector<array_info*>::iterator update_after_shuffle(
+      std::vector<array_info*>::iterator &it) {
+        // UdfColSet doesn't keep the update cols, return the updated iterator
+        return it + n_redvars;
+    }
+
+    virtual void alloc_combine_columns(size_t num_groups, std::vector<array_info*> &out_cols) {
+        for (int i=udf_table_idx; i < udf_table_idx + 1 + n_redvars; i++) {
+            // we get the type from the udf dummy table that was passed to C++ library
+            bodo_array_type::arr_type_enum arr_type = udf_table->columns[i]->arr_type;
+            Bodo_CTypes::CTypeEnum dtype = udf_table->columns[i]->dtype;
+            out_cols.push_back(alloc_array(num_groups, 1, arr_type, dtype, 0));
+            combine_cols.push_back(out_cols.back());
+        }
+    }
+
+    virtual void combine(const grouping_info &grp_info) {
+        // do nothing because this is done in JIT-compiled code (invoked from
+        // GroupbyPipeline once for all udf columns sets)
+    }
+
+    virtual void eval(const grouping_info &grp_info) {
+        // do nothing because this is done in JIT-compiled code (invoked from
+        // GroupbyPipeline once for all udf columns sets)
+    }
+
+private:
+    table_info *udf_table; // the table containing type info for UDF columns
+    int udf_table_idx; // index to my information in the udf table
+    int n_redvars; // number of redvar columns this UDF uses
+};
+
+// TODO moving GroupbyPipeline and related code to bottom of file will avoid
+// need for this forward declaration
+void median_computation(array_info* arr, array_info* out_arr,
+                               grouping_info const& grp_inf, bool const& skipna);
+
+class MedianColSet : public BasicColSet {
+public:
+
+    MedianColSet(array_info *in_col, bool _skipna) :
+        BasicColSet(in_col, Bodo_FTypes::median, false), skipna(_skipna) {}
+    virtual ~MedianColSet() {}
+
+    virtual void update(const grouping_info &grp_info) {
+        median_computation(in_col, update_cols[0], grp_info, skipna);
+    }
+
+private:
+    bool skipna;
+};
+
+// TODO moving GroupbyPipeline and related code to bottom of file will avoid
+// need for this forward declaration
+void nunique_computation(array_info* arr, array_info* out_arr, grouping_info const& grp_inf,
+                                bool const& dropna);
+
+class NUniqueColSet : public BasicColSet {
+public:
+
+    NUniqueColSet(array_info *in_col, bool _dropna) :
+        BasicColSet(in_col, Bodo_FTypes::nunique, false), dropna(_dropna) {}
+    virtual ~NUniqueColSet() {}
+
+    virtual void update(const grouping_info &grp_info) {
+        nunique_computation(in_col, update_cols[0], grp_info, dropna);
+    }
+
+private:
+    bool dropna;
+};
+
+// TODO moving GroupbyPipeline and related code to bottom of file will avoid
+// need for this forward declaration
+void cumsum_cumprod_computation(array_info* arr, array_info* out_arr, grouping_info const& grp_inf,
+                                       int32_t const& ftype, bool const& skipna);
+
+class CumOpColSet : public BasicColSet {
+public:
+
+    CumOpColSet(array_info *in_col, int ftype, bool _skipna) :
+        BasicColSet(in_col, ftype, false), skipna(_skipna) {}
+    virtual ~CumOpColSet() {}
+
+    virtual void alloc_update_columns(size_t num_groups, std::vector<array_info*> &out_cols) {
+        // NOTE: output size of cum ops is the same as input size
+        //       (NOT the number of groups)
+        out_cols.push_back(alloc_array(in_col->length, 1, in_col->arr_type,
+                                       in_col->dtype, 0));
+        update_cols.push_back(out_cols.back());
+    }
+
+    virtual void update(const grouping_info &grp_info) {
+        cumsum_cumprod_computation(in_col, update_cols[0], grp_info, ftype, skipna);
+    }
+
+private:
+    bool skipna;
+};
+
+class GroupbyPipeline {
+
+public:
+
+    GroupbyPipeline(table_info* _in_table, int64_t _num_keys, bool _is_parallel,
+                    int *ftypes, int *func_offsets, int *_udf_nredvars,
+                    table_info* _udf_table,
+                    udf_table_op_fn update_cb,
+                    udf_table_op_fn combine_cb,
+                    udf_eval_fn eval_cb, bool skipna) :
+                    in_table(_in_table), num_keys(_num_keys), is_parallel(_is_parallel),
+                    udf_table(_udf_table), udf_n_redvars(_udf_nredvars) {
+
+        udf_info = {udf_table, update_cb, combine_cb, eval_cb};
+
+        // NOTE cumulative operations (cumsum, cumprod, etc.) cannot be mixed
+        // with non cumulative ops. This is checked at compile time in
+        // aggregate.py
+
+        for (int i=0; i < func_offsets[in_table->ncols() - num_keys]; i++) {
+            int ftype = ftypes[i];
+            if (ftype == Bodo_FTypes::nunique || ftype == Bodo_FTypes::median ||
+                ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod) {
+                // these operations first require shuffling the data to
+                // gather all rows with the same key in the same process
+                if (is_parallel)
+                    shuffle_before_update = true;
+                // these operations require extended group info
+                req_extended_group_info = true;
+                if (ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod)
+                    cumulative_op = true;
+                break;
+            }
+        }
+        if (shuffle_before_update)
+            in_table = shuffle_table(in_table, num_keys);
+        // a combine operation is only necessary when data is distributed and
+        // a shuffle has not been done at the start of the groupby pipeline
+        do_combine = is_parallel && !shuffle_before_update;
+
+        // construct the column sets, one for each (input_column, func) pair
+        // ftypes is an array of function types received from generated code,
+        // and has one ftype for each (input_column, func) pair
+        int k=0;
+        for (int64_t i=num_keys; i < in_table->ncols(); i++, k++) {
+            array_info* col = in_table->columns[i];
+            int start = func_offsets[k];
+            int end = func_offsets[k + 1];
+            for (int j=start; j != end; j++) {
+                col_sets.push_back(makeColSet(col, ftypes[j], do_combine, skipna));
+            }
+        }
+    }
+
+    ~GroupbyPipeline() {
+        for (auto col_set : col_sets)
+            delete col_set;
+    }
+
+    /**
+     * This is the main control flow of the Groupby pipeline.
+     */
+    table_info* run() {
+        update();
+        if (shuffle_before_update)
+            // in_table was created in C++ during shuffling and not needed anymore
+            delete_table_free_arrays(in_table);
+        if (is_parallel && !shuffle_before_update) {
+            shuffle();
+            combine();
+        }
+        eval();
+        return getOutputTable();
+    }
+
+private:
+
+    /**
+     * Construct and return a column set based on the ftype.
+     * @param groupby input column associated with this column set.
+     * @param ftype function type associated with this column set.
+     * @param do_combine whether GroupbyPipeline will perform combine operation
+     *        or not.
+     * @param skipna option used for nunique, cumsum, cumprod
+     */
+    BasicColSet* makeColSet(array_info *in_col, int ftype, bool do_combine,
+                            bool skipna) {
+        BasicColSet* col_set;
+        switch (ftype) {
+            case Bodo_FTypes::udf:
+                col_set = new UdfColSet(in_col, do_combine, udf_table, udf_table_idx, udf_n_redvars[n_udf]);
+                udf_table_idx += (1 + udf_n_redvars[n_udf]);
+                n_udf++;
+                return col_set;
+            case Bodo_FTypes::median:
+                 return new MedianColSet(in_col, skipna);
+            case Bodo_FTypes::nunique:
+                 return new NUniqueColSet(in_col, skipna);
+            case Bodo_FTypes::cumsum:
+            case Bodo_FTypes::cumprod:
+                 return new CumOpColSet(in_col, ftype, skipna);
+            case Bodo_FTypes::mean:
+                 return new MeanColSet(in_col, do_combine);
+            case Bodo_FTypes::var:
+            case Bodo_FTypes::std:
+                return new VarStdColSet(in_col, ftype, do_combine);
+            default:
+                return new BasicColSet(in_col, ftype, do_combine);
+        }
+    }
+
+    /**
+     * The update step groups rows in the input table based on keys, and
+     * aggregates them based on the function to be applied to the columns.
+     * More specifically, it will invoke the update method of each column set.
+     */
+    void update() {
+        in_table->num_keys = num_keys;
+        if (req_extended_group_info) {
+            bool consider_missing = cumulative_op;
+            grp_info = get_group_info_iterate(in_table, consider_missing);
+        } else
+            get_group_info(*in_table, grp_info.row_to_group, grp_info.group_to_first_row, true);
+        num_groups = grp_info.group_to_first_row.size();
+
+        update_table = cur_table = new table_info();
+        if (cumulative_op)
+            num_keys = 0; // there are no key columns in output of cumsum, etc.
+        else
+            alloc_init_keys(in_table, update_table);
+
+        for (auto col_set : col_sets) {
+            col_set->alloc_update_columns(num_groups, update_table->columns);
+            col_set->update(grp_info);
+        }
+        if (n_udf > 0)
+            udf_info.update(in_table, update_table, grp_info.row_to_group.data());
+    }
+
+    /**
+     * Shuffles the update table and updates the column sets with the newly
+     * shuffled table.
+     */
+    void shuffle() {
+        table_info* shuf_table = shuffle_table(update_table, num_keys);
+        delete_table_free_arrays(update_table);
+        update_table = cur_table = shuf_table;
+
+        // update column sets with columns from shuffled table
+        auto it = update_table->columns.begin() + num_keys;
+        for (auto col_set : col_sets)
+            it = col_set->update_after_shuffle(it);
+    }
+
+    /**
+     * The combine step is performed after update and shuffle. It groups rows
+     * in shuffled table based on keys, and aggregates them based on the
+     * function to be applied to the columns. More specifically, it will invoke
+     * the combine method of each column set.
+     */
+    void combine() {
+        grp_info.row_to_group.clear();
+        grp_info.group_to_first_row.clear();
+        update_table->num_keys = num_keys;
+        get_group_info(*update_table, grp_info.row_to_group, grp_info.group_to_first_row, false);
+        num_groups = grp_info.group_to_first_row.size();
+
+        combine_table = cur_table = new table_info();
+        alloc_init_keys(update_table, combine_table);
+        for (auto col_set : col_sets) {
+            col_set->alloc_combine_columns(num_groups, combine_table->columns);
+            col_set->combine(grp_info);
+        }
+        if (n_udf > 0)
+            udf_info.combine(update_table, combine_table, grp_info.row_to_group.data());
+        delete_table_free_arrays(update_table);
+    }
+
+    /**
+     * The eval step generates the final result (output column) for each column
+     * set. It call the eval method of each column set.
+     */
+    void eval() {
+        for (auto col_set : col_sets)
+            col_set->eval(grp_info);
+        if (n_udf > 0)
+            udf_info.eval(cur_table);
+    }
+
+    /**
+     * Returns the final output table which is the result of the groupby.
+     */
+    table_info *getOutputTable() {
+        table_info *out_table = new table_info();
+        out_table->columns.assign(cur_table->columns.begin(),
+                                  cur_table->columns.begin() + num_keys);
+        for (BasicColSet* col_set : col_sets)
+            out_table->columns.push_back(col_set->getOutputColumn());
+        delete cur_table;
+        return out_table;
+    }
+
+    /**
+     * Allocate and fill key columns, based on grouping info. It uses the
+     * values of key columns from from_table to populate out_table.
+     */
+    void alloc_init_keys(table_info* from_table, table_info *out_table) {
+        for (int64_t i = 0; i < num_keys; i++) {
+            const array_info* key_col = (*from_table)[i];
+            array_info* new_key_col;
+            if (key_col->arr_type == bodo_array_type::STRING) {
+                // new key col will have num_groups rows containing the
+                // string for each group
+                int64_t n_chars = 0;   // total number of chars of all keys for
+                                       // this column
+                uint32_t* in_offsets = (uint32_t*)key_col->data2;
                 for (int64_t j = 0; j < num_groups; j++) {
-                    int64_t row = group_to_first_row[j];
+                    int64_t row = grp_info.group_to_first_row[j];
                     n_chars += in_offsets[row + 1] - in_offsets[row];
                 }
-                out_cols[i] = alloc_array(num_groups, n_chars, arr_type, dtype, 0);
+                new_key_col = alloc_array(num_groups, n_chars, key_col->arr_type, key_col->dtype, 0);
+
+                uint8_t* in_null_bitmask = (uint8_t*)key_col->null_bitmask;
+                uint8_t* out_null_bitmask = (uint8_t*)new_key_col->null_bitmask;
+                uint32_t* out_offsets = (uint32_t*)new_key_col->data2;
+                uint32_t pos = 0;
+                for (int64_t j = 0; j < num_groups; j++) {
+                    size_t in_row = grp_info.group_to_first_row[j];
+                    uint32_t start_offset = in_offsets[in_row];
+                    uint32_t str_len = in_offsets[in_row + 1] - start_offset;
+                    out_offsets[j] = pos;
+                    memcpy(&new_key_col->data1[pos], &key_col->data1[start_offset],
+                           str_len);
+                    pos += str_len;
+                    SetBitTo(out_null_bitmask, j, GetBit(in_null_bitmask, in_row));
+                }
+                out_offsets[num_groups] = pos;
             } else {
-                out_cols[i] = alloc_array(num_groups, 1, arr_type, dtype, 0);
+                new_key_col = alloc_array(num_groups, 1, key_col->arr_type, key_col->dtype, 0);
+                int64_t dtype_size = numpy_item_size[key_col->dtype];
+                for (int64_t j = 0; j < num_groups; j++)
+                    memcpy(new_key_col->data1 + j * dtype_size,
+                           key_col->data1 + grp_info.group_to_first_row[j] * dtype_size,
+                           dtype_size);
             }
+            out_table->columns.push_back(new_key_col);
         }
     }
 
-    return new table_info(out_cols);
-}
+private:
+    table_info *in_table; // input table of groupby
+    int64_t num_keys;
+    bool is_parallel;
+    std::vector<BasicColSet*> col_sets;
+    table_info *udf_table;
+    int *udf_n_redvars;
+    int n_udf = 0;
+    int udf_table_idx = 0;
+    // shuffling before update requires more communication and is needed
+    // when one of the groupby functions is median/nunique/cumsum/cumprod
+    bool shuffle_before_update = false;
+    bool cumulative_op = false;
+    bool req_extended_group_info = false;
+    bool do_combine;
 
-/**
- * Initialize key columns in groupby output tables (intermediary or final
- * tables).
- *
- * @param input table
- * @param[in,out] output table
- * @param number of keys in tables
- * @param number of groups
- * @param vector that maps group number to the first row in input table
- *        that belongs to that group
- */
-void groupby_init_keys(const table_info& in_table, table_info& out_table,
-                       int64_t n_keys, int64_t num_groups,
-                       const std::vector<int64_t>& group_to_first_row) {
-    for (int64_t j = 0; j < n_keys; j++) {
-        const array_info* in_col = in_table[j];
-        array_info* out_col = out_table[j];
-        if (in_col->arr_type == bodo_array_type::NUMPY ||
-            in_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-            int64_t dtype_size = numpy_item_size[out_col->dtype];
-            for (int64_t i = 0; i < num_groups; i++)
-                memcpy(out_col->data1 + i * dtype_size,
-                       in_col->data1 + group_to_first_row[i] * dtype_size,
-                       dtype_size);
-        } else if (in_col->arr_type == bodo_array_type::STRING) {
-            uint8_t* in_null_bitmask = (uint8_t*)in_col->null_bitmask;
-            uint32_t* in_offsets = (uint32_t*)in_col->data2;
-            uint8_t* out_null_bitmask = (uint8_t*)out_col->null_bitmask;
-            uint32_t* out_offsets = (uint32_t*)out_col->data2;
-            uint32_t pos = 0;
-            for (int64_t i = 0; i < num_groups; i++) {
-                size_t in_row = group_to_first_row[i];
-                uint32_t start_offset = in_offsets[in_row];
-                uint32_t str_len = in_offsets[in_row + 1] - start_offset;
-                out_offsets[i] = pos;
-                memcpy(&out_col->data1[pos], &in_col->data1[start_offset],
-                       str_len);
-                pos += str_len;
-                SetBitTo(out_null_bitmask, i, GetBit(in_null_bitmask, in_row));
-            }
-            out_offsets[num_groups] = pos;
-        }
-    }
-}
+    udfinfo_t udf_info;
 
-/**
- * Groups the rows in a table based on key, applies a function to the rows in
- * each group, writes the result to a new output table containing one row per
- * group.
- *
- * @param input table (contains keys and input data columns)
- * @param number of key columns in the table
- * @param number of data columns
- * @param function to apply
- * @param number of functions to apply per data column (used in agg)
- * @param info structure for agg operation
- * @return output table which contains key columns, output data columns, and
- * optionally redvar columns (depends on function to apply). Note that
- * currently, which columns are populated and how depends on the function
- */
-table_info* groupby_update(table_info& in_table, int64_t num_keys,
-                           int64_t num_data_cols,
-                           int ftype,
-                           int32_t num_funcs,
-                           const agginfo_t& agginfo) {
+    table_info* update_table = nullptr;
+    table_info* combine_table = nullptr;
+    table_info* cur_table = nullptr;
 
-    int64_t n_out_cols = num_keys + num_data_cols * num_funcs;
-    std::vector<int64_t> inrows_to_group;
-    std::vector<int64_t> group_to_first_row;
-    in_table.num_keys = num_keys;
-    get_group_info(in_table, inrows_to_group, group_to_first_row, true);
-    int64_t num_groups = group_to_first_row.size();
-
-    // create output table with *uninitialized* columns
-    // output table has one row per group
-    table_info* out_table = groupby_alloc_table(in_table, num_keys, n_out_cols,
-                                                num_groups, ftype, agginfo,
-                                                group_to_first_row);
-
-    // some aggregation functions like 'mean' need auxiliary columns to store
-    // reduction variables such as the count of valid elements
-    std::vector<std::vector<array_info*>> aux_cols;
-    create_auxiliary_cols(out_table->columns, num_keys, n_out_cols, num_groups,
-                          ftype, aux_cols, agginfo);
-
-    // set key values in output table
-    groupby_init_keys(in_table, *out_table, num_keys, num_groups,
-                      group_to_first_row);
-
-    if (ftype == Bodo_FTypes::agg) { // user defined function
-        agginfo.update(&in_table, out_table, inrows_to_group.data());
-    } else {
-        for (int64_t j = num_keys; j < n_out_cols; j++) {
-            aggfunc_output_initialize((*out_table)[j], ftype);
-            do_apply_to_column(in_table[j], (*out_table)[j],
-                               aux_cols[j - num_keys], inrows_to_group, ftype);
-        }
-    }
-
-    return out_table;
-}
-
-/**
- * Combine operation. After shuffle, groups the rows in a table based on key,
- * applies a combine function to the rows in each group, writes the result to a
- * new output table containing one row per group.
- *
- * @param input table after shuffle (contains keys, output data columns and
- * optionally redvar data columns resulting from 'update' operation)
- * @param number of key columns in the table
- * @param number of data columns
- * @param function to apply
- * @param info structure for agg operation
- * @return output table which contains key columns, output data columns, and
- * optionally redvar columns (if they were added in 'update'). Note that
- * currently, which columns are populated and how depends on the function
- */
-table_info* groupby_combine(table_info& in_table, int64_t num_keys,
-                            int64_t num_data_cols, int ftype,
-                            const agginfo_t& agginfo) {
-
-    int64_t n_out_cols = in_table.ncols();
-    std::vector<int64_t> inrows_to_group;
-    std::vector<int64_t> group_to_first_row;
-    in_table.num_keys = num_keys;
-    get_group_info(in_table, inrows_to_group, group_to_first_row, false);
-    int64_t num_groups = group_to_first_row.size();
-
-    // create output table with *uninitialized* columns
-    // output table has one row per group
-    table_info* out_table = groupby_alloc_table(in_table, num_keys, n_out_cols,
-                                                num_groups, ftype, agginfo,
-                                                group_to_first_row);
-    std::vector<std::vector<array_info*>> aux_cols;
-
-    // set key values in output table
-    groupby_init_keys(in_table, *out_table, num_keys, num_groups,
-                      group_to_first_row);
-
-    if (ftype == Bodo_FTypes::agg) { // user defined function
-        agginfo.combine(&in_table, out_table, inrows_to_group.data());
-    } else if (ftype != Bodo_FTypes::var_combine) {
-        for (int64_t j = num_keys; j < n_out_cols; j++) {
-            aggfunc_output_initialize((*out_table)[j], ftype);
-            do_apply_to_column(in_table[j], (*out_table)[j],
-                               aux_cols[j - num_keys], inrows_to_group, ftype);
-        }
-    } else {
-        for (int64_t i = 0; i < num_data_cols; i++) {
-            // get count, mean, m2 cols for this data col
-            int idx = num_keys + num_data_cols + i * 3;
-            array_info* count_col_in = in_table[idx];
-            array_info* mean_col_in = in_table[idx + 1];
-            array_info* m2_col_in = in_table[idx + 2];
-            array_info* count_col_out = (*out_table)[idx];
-            array_info* mean_col_out = (*out_table)[idx + 1];
-            array_info* m2_col_out = (*out_table)[idx + 2];
-            aggfunc_output_initialize(count_col_out, Bodo_FTypes::count);
-            aggfunc_output_initialize(mean_col_out, Bodo_FTypes::count);
-            aggfunc_output_initialize(m2_col_out, Bodo_FTypes::count);
-            var_combine(count_col_in, mean_col_in, m2_col_in, count_col_out,
-                        mean_col_out, m2_col_out, inrows_to_group);
-        }
-    }
-    return out_table;
-}
-
-
+    grouping_info grp_info;
+    size_t num_groups;
+};
 
 
 
@@ -3460,17 +3855,14 @@ inline typename std::enable_if<std::is_floating_point<T>::value,bool>::type isna
  * @return the returning array.
  */
 template<typename T>
-array_info* cumsum_cumprod_computation_T(array_info* arr, grouping_info const& grp_inf,
+void cumsum_cumprod_computation_T(array_info* arr, array_info* out_arr, grouping_info const& grp_inf,
                                          int32_t const& ftype, bool const& skipna) {
     size_t num_group = grp_inf.group_to_first_row.size();
     if (arr->arr_type == bodo_array_type::STRING) {
         PyErr_SetString(PyExc_RuntimeError,
                         "There is no median for the string case");
-        return nullptr;
+        return;
     }
-    int64_t len = arr->length;
-    array_info* out_arr = alloc_array(len, 1, arr->arr_type,
-                                      arr->dtype, 0);
     size_t siztype = numpy_item_size[arr->dtype];
     auto cum_computation=[&](std::function<std::pair<bool,T>(int64_t)> const& get_entry, std::function<void(int64_t, std::pair<bool,T> const&)> const& set_entry) -> void {
         for (size_t igrp=0; igrp<num_group; igrp++) {
@@ -3530,7 +3922,6 @@ array_info* cumsum_cumprod_computation_T(array_info* arr, grouping_info const& g
             out_arr->at<T>(pos) = ePair.second;
           });
     }
-    return out_arr;
 }
 
 
@@ -3538,32 +3929,32 @@ array_info* cumsum_cumprod_computation_T(array_info* arr, grouping_info const& g
 
 
 
-array_info* cumsum_cumprod_computation(array_info* arr, grouping_info const& grp_inf,
+void cumsum_cumprod_computation(array_info* arr, array_info* out_arr, grouping_info const& grp_inf,
                                        int32_t const& ftype, bool const& skipna) {
     if (arr->dtype == Bodo_CTypes::INT8)
-        return cumsum_cumprod_computation_T<int8_t>(arr, grp_inf, ftype, skipna);
+        return cumsum_cumprod_computation_T<int8_t>(arr, out_arr, grp_inf, ftype, skipna);
     if (arr->dtype == Bodo_CTypes::UINT8)
-        return cumsum_cumprod_computation_T<uint8_t>(arr, grp_inf, ftype, skipna);
+        return cumsum_cumprod_computation_T<uint8_t>(arr, out_arr, grp_inf, ftype, skipna);
 
     if (arr->dtype == Bodo_CTypes::INT16)
-        return cumsum_cumprod_computation_T<int16_t>(arr, grp_inf, ftype, skipna);
+        return cumsum_cumprod_computation_T<int16_t>(arr, out_arr, grp_inf, ftype, skipna);
     if (arr->dtype == Bodo_CTypes::UINT16)
-        return cumsum_cumprod_computation_T<uint16_t>(arr, grp_inf, ftype, skipna);
+        return cumsum_cumprod_computation_T<uint16_t>(arr, out_arr, grp_inf, ftype, skipna);
 
     if (arr->dtype == Bodo_CTypes::INT32)
-        return cumsum_cumprod_computation_T<int32_t>(arr, grp_inf, ftype, skipna);
+        return cumsum_cumprod_computation_T<int32_t>(arr, out_arr, grp_inf, ftype, skipna);
     if (arr->dtype == Bodo_CTypes::UINT32)
-        return cumsum_cumprod_computation_T<uint32_t>(arr, grp_inf, ftype, skipna);
+        return cumsum_cumprod_computation_T<uint32_t>(arr, out_arr, grp_inf, ftype, skipna);
 
     if (arr->dtype == Bodo_CTypes::INT64)
-        return cumsum_cumprod_computation_T<int64_t>(arr, grp_inf, ftype, skipna);
+        return cumsum_cumprod_computation_T<int64_t>(arr, out_arr, grp_inf, ftype, skipna);
     if (arr->dtype == Bodo_CTypes::UINT64)
-        return cumsum_cumprod_computation_T<uint64_t>(arr, grp_inf, ftype, skipna);
+        return cumsum_cumprod_computation_T<uint64_t>(arr, out_arr, grp_inf, ftype, skipna);
 
     if (arr->dtype == Bodo_CTypes::FLOAT32)
-        return cumsum_cumprod_computation_T<float>(arr, grp_inf, ftype, skipna);
+        return cumsum_cumprod_computation_T<float>(arr, out_arr, grp_inf, ftype, skipna);
     if (arr->dtype == Bodo_CTypes::FLOAT64)
-        return cumsum_cumprod_computation_T<double>(arr, grp_inf, ftype, skipna);
+        return cumsum_cumprod_computation_T<double>(arr, out_arr, grp_inf, ftype, skipna);
 }
 
 
@@ -3575,7 +3966,7 @@ array_info* cumsum_cumprod_computation(array_info* arr, grouping_info const& grp
  * @param The array containing information on how the rows are organized
  * @param skipna: Whether to skip NaN values or not.
  */
-array_info* median_computation(array_info* arr,
+void median_computation(array_info* arr, array_info* out_arr,
                                grouping_info const& grp_inf, bool const& skipna) {
     size_t num_group = grp_inf.group_to_first_row.size();
     std::function<bool(size_t)> isnan_entry;
@@ -3583,10 +3974,8 @@ array_info* median_computation(array_info* arr,
     if (arr->arr_type == bodo_array_type::STRING) {
         PyErr_SetString(PyExc_RuntimeError,
                         "There is no median for the string case");
-        return nullptr;
+        return;
     }
-    array_info* out_arr = alloc_array(num_group, 1, bodo_array_type::NUMPY,
-                                      Bodo_CTypes::FLOAT64, 0);
     auto median_operation=[&](std::function<bool(size_t)> const& isnan_entry) -> void {
         for (size_t igrp=0; igrp<num_group; igrp++) {
             int64_t i = grp_inf.group_to_first_row[igrp];
@@ -3648,7 +4037,6 @@ array_info* median_computation(array_info* arr,
             return !GetBit(null_bitmask,pos);
         });
     }
-    return out_arr;
 }
 
 
@@ -3661,11 +4049,9 @@ array_info* median_computation(array_info* arr,
  * @param The boolean dropna indicating whether we drop or not the NaN values from the
  *   nunique computation.
  */
-array_info* nunique_computation(array_info* arr, grouping_info const& grp_inf,
+void nunique_computation(array_info* arr, array_info* out_arr, grouping_info const& grp_inf,
                                 bool const& dropna) {
     size_t num_group = grp_inf.group_to_first_row.size();
-    array_info* out_arr = alloc_array(num_group, 1, bodo_array_type::NUMPY,
-                                      Bodo_CTypes::INT64, 0);
     if (arr->arr_type == bodo_array_type::NUMPY) {
         /**
          * Check if a pointer points to a NaN or not
@@ -3788,69 +4174,7 @@ array_info* nunique_computation(array_info* arr, grouping_info const& grp_inf,
             out_arr->at<int64_t>(igrp) = size;
         }
     }
-    return out_arr;
 }
-
-
-
-
-
-
-/**
- * Groups the rows in a table based on key, applies the nunique or median operation
- * to the rows in each group, writes the result to a new output table containing
- * one row per group.
- *
- * @param   in_table: input table
- * @param   num_keys: number of key columns in the table
- * @param      ftype: the type of operation (nunique or median)
- * @param skipdropna: whether to drop NaN values or not from the computation
- *                    correspond to dropna for nunique and skipna for median.
- * @return the returning table.
- */
-table_info* groupby_and_sets(table_info* in_table, int64_t num_keys,
-                             int32_t ftype, bool const& skipdropna) {
-#undef DEBUG_SETS
-#ifdef DEBUG_SETS
-    std::cout << "IN_TABLE:\n";
-    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-    DEBUG_PrintRefct(std::cout, in_table->columns);
-#endif
-    const int64_t ncols = in_table->ncols();
-    in_table->num_keys = num_keys;
-    bool consider_missing=false;
-    if (ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod)
-      consider_missing=true;
-    grouping_info grp_inf = get_group_info_iterate(in_table, consider_missing);
-    std::vector<array_info*> out_arrs;
-    if (ftype == Bodo_FTypes::nunique || ftype == Bodo_FTypes::median) {
-        size_t num_groups = grp_inf.group_to_first_row.size();
-        std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(num_groups);
-        for (size_t igrp = 0; igrp < num_groups; igrp++)
-            ListPairWrite[igrp] = {grp_inf.group_to_first_row[igrp], -1};
-        for (int64_t i_col = 0; i_col < num_keys; i_col++)
-            out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
-    }
-    for (int64_t i_col = num_keys; i_col < ncols; i_col++) {
-      if (ftype == Bodo_FTypes::nunique)
-        out_arrs.emplace_back(
-            nunique_computation(in_table->columns[i_col], grp_inf, skipdropna));
-      if (ftype == Bodo_FTypes::median)
-        out_arrs.emplace_back(
-            median_computation(in_table->columns[i_col], grp_inf, skipdropna));
-      if (ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod)
-        out_arrs.push_back(
-            cumsum_cumprod_computation(in_table->columns[i_col], grp_inf, ftype, skipdropna));
-    }
-#ifdef DEBUG_SETS
-    std::cout << "OUT_TABLE:\n";
-    DEBUG_PrintSetOfColumn(std::cout, out_arrs);
-    DEBUG_PrintRefct(std::cout, out_arrs);
-#endif
-    return new table_info(out_arrs);
-}
-
-
 
 /**
  * Compute the boolean array on output corresponds to the "isin" function in matlab.
@@ -3982,112 +4306,16 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values, 
     delete [] hashes;
 }
 
-
-
-
-
-
-
-
-/**
- * Applies an evaluation function to each row in input table, writing the
- * final result to output data columns. Removes redvar columns when done.
- *
- * @param input table (contains keys, output data columns and optionally
- *        redvar columns if added during 'update')
- * @param number of key columns in the table
- * @param number of data columns
- * @param function to apply (see Bodo_FTypes::FTypeEnum)
- * @param number of functions to apply per data column (used in agg)
- * @param info structure for agg operation
- */
-void groupby_eval(table_info& in_table, int64_t num_keys, int64_t n_data_cols,
-                  int32_t ftype, int64_t num_funcs, const agginfo_t& agginfo) {
-    std::vector<array_info*> aux_cols;
-    std::vector<int64_t> row_to_group;
-    bool remove_aux_cols = false;
-    switch (ftype) {
-        case Bodo_FTypes::mean:
-            for (int64_t i = num_keys; i < num_keys + n_data_cols; i++) {
-                do_apply_to_column(in_table[i + n_data_cols], in_table[i],
-                                   aux_cols, row_to_group,
-                                   Bodo_FTypes::mean_eval);
-            }
-            remove_aux_cols = true;
-            break;
-        case Bodo_FTypes::std:
-        case Bodo_FTypes::var:
-            for (int64_t j = num_keys, z = 0; j < num_keys + n_data_cols;
-                 j++, z++) {
-                int64_t idx = num_keys + n_data_cols + z * 3;
-                aux_cols.emplace_back(in_table[idx]);
-                aux_cols.emplace_back(in_table[idx + 1]);
-                aux_cols.emplace_back(in_table[idx + 2]);
-                if (ftype == Bodo_FTypes::var)
-                    do_apply_to_column(in_table[0], in_table[j], aux_cols,
-                                       row_to_group, Bodo_FTypes::var_eval);
-                else
-                    do_apply_to_column(in_table[0], in_table[j], aux_cols,
-                                       row_to_group, Bodo_FTypes::std_eval);
-                aux_cols.clear();
-            }
-            remove_aux_cols = true;
-            break;
-        case Bodo_FTypes::agg:
-            agginfo.eval(&in_table);
-            remove_aux_cols = true;
-            break;
-        default:
-            return;
-    }
-    if (remove_aux_cols) {
-        for (int64_t i = num_keys + n_data_cols*num_funcs; i < in_table.ncols(); i++)
-            free_array(in_table[i]);
-        in_table.columns.resize(num_keys + n_data_cols*num_funcs);
-    }
-}
-
-std::vector<Bodo_FTypes::FTypeEnum> combine_funcs(Bodo_FTypes::num_funcs);
-
-
-
-/**
- * Groups the rows in a table based on key, applies the nunique or median operation
- * to the rows in each group, writes the result to a new output table containing
- * one row per group. It is adequate for parallel computations.
- *
- * @param    in_table: input table
- * @param    num_keys: number of key columns in the table
- * @param       ftype: the type of operation (nunique or median)
- * @param  skipdropna: whether to drop NaN values or not from the computation
- *                     correspond to dropna for nunique and skipna for median.
- * @param is_parallel: whether to do computation in parallel by applying shuffling.
- * @return the returning table.
- */
-table_info* groupby_and_aggregate_sets(table_info* in_table, int64_t num_keys,
-                                       int32_t ftype, bool skipdropna, bool is_parallel) {
-    // perform initial local aggregation
-    table_info* work_table;
-    if (is_parallel) {
-      work_table = shuffle_table(in_table, num_keys);
-    } else {
-      work_table = in_table;
-    }
-    table_info* out_table = groupby_and_sets(work_table, num_keys, ftype, skipdropna);
-    if (is_parallel) delete_table_free_arrays(work_table);
-    return out_table;
-}
-
-
 /**
  * This operation groups rows in a distributed table based on keys, and applies
- * a function(s) to a set of columns in each group (producing one row per
- * group). For each input column for which a function is applied, there will be
- * an output column with the result. The algorithm works as follows:
+ * a function(s) to a set of columns in each group, producing one output column
+ * for each (input column, function) pair. The general algorithm works as
+ * follows:
  * a) Group and Update: Each process does the following with its local table:
  *   - Determine to which group each row in the input table belongs to by using
  *     a hash table on the key columns (obtaining a row to group mapping).
- *   - Allocate output table (one row per group)
+ *   - Allocate output table (one row per group -most of the time- or one row
+ *     per input row for cumulative operations)
  *   - Initialize output columns (depends on aggregation function)
  *   - Update: apply function to input columns, write result to output (either
  *     directly to output data column or to temporary reduction variable
@@ -4104,64 +4332,39 @@ table_info* groupby_and_aggregate_sets(table_info* in_table, int64_t num_keys,
  *    output data columns. This step is only needed for certain functions
  *    like mean, var, std and agg. Redvar columns are deleted afterwards.
  *
- * IMPORTANT: Currently there are cases where multiple functions are applied
- * to each column, but those functions run in numba-generated code (even if
- * they are built-in functions like sum). This C++ code needs to know how many
- * functions there are (passed via 'num_funcs'). But the number of
- * functions could vary between columns. Currently this only supports the same
- * number of functions per column.
- *
- * TODOs:
- * - offload multi-function case with built-ins to C++
- *   (https://github.com/Bodo-inc/Bodo/issues/277)
- * - support variable number of functions per column
- *
  * @param input table
  * @param number of key columns in the table
- * @param function to apply (see Bodo_FTypes::FTypeEnum)
- * @param Number of functions to apply per input data column (currently only
- *        used with ftype=agg)
- * @param true if needs to run in parallel (do a parallel shuffle)
+ * @param functions to apply (see Bodo_FTypes::FTypeEnum)
+ * @param the functions to apply to input col i are in ftypes, in range
+ *        func_offsets[i] to func_offsets[i+1]
+ * @param udf_nredvars[i] is the number of redvar columns needed by udf i
+ * @param true if needs to run in parallel (distributed data on multiple
+ *        processes)
+ * @param skipdropna: whether to drop NaN values or not from the computation
+ *                    (dropna for nunique and skipna for median/cumsum/cumprod)
  * @param external 'update' function (a function pointer).
- *        If ftype=agg, the update step happens in external JIT-compiled code,
- *        which must initialize output and/or redvar columns and apply the
- *        update function.
+ *        For ftype=udf, the update step happens in external JIT-compiled code,
+ *        which must initialize redvar columns and apply the update function.
  * @param external 'combine' function (a function pointer).
- *        If ftype=agg, external code does the combine step (apply combine
+ *        For ftype=udf, external code does the combine step (apply combine
  *        function to current table)
  * @param external 'eval' function (a function pointer).
- *        If ftype=agg, external code does the eval step.
- * @param dummy table containing type info for output table (for ftype=agg)
+ *        For ftype=udf, external code does the eval step.
+ * @param dummy table containing type info for output and redvars columns for
+ *        udfs
  */
 table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
-                                  int32_t ftype, int32_t num_funcs, bool is_parallel,
+                                  int *ftypes, int *func_offsets, int *udf_nredvars,
+                                  bool is_parallel, bool skipdropna,
                                   void* update_cb, void* combine_cb, void* eval_cb,
-                                  table_info* out_table_dummy) {
+                                  table_info* udf_dummy_table) {
 
-    agginfo_t agginfo = {out_table_dummy, (agg_table_op_fn)update_cb,
-                         (agg_table_op_fn)combine_cb, (agg_eval_fn)eval_cb};
-
-    // perform initial local aggregation
-    int64_t num_data_cols = in_table->ncols() - num_keys;
-    table_info* aggr_local =
-        groupby_update(*in_table, num_keys, num_data_cols, ftype, num_funcs, agginfo);
-
-    // shuffle step
-    table_info* shuf_table = aggr_local;
-    if (is_parallel) {
-        shuf_table = shuffle_table(aggr_local, num_keys);
-        delete_table_free_arrays(aggr_local);
-    }
-
-    // combine step
-    table_info* out_table = groupby_combine(
-        *shuf_table, num_keys, num_data_cols, combine_funcs[ftype], agginfo);
-    delete_table_free_arrays(shuf_table);
-
-    // eval step
-    groupby_eval(*out_table, num_keys, num_data_cols, ftype, num_funcs, agginfo);
-
-    return out_table;
+    GroupbyPipeline groupby(in_table, num_keys, is_parallel, ftypes, func_offsets,
+                            udf_nredvars,
+                            udf_dummy_table, (udf_table_op_fn)update_cb,
+                            (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb,
+                            skipdropna);
+    return groupby.run();
 }
 
 /**
@@ -4472,6 +4675,8 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
         return NULL;
     }
 
+    // this mapping is used by BasicColSet operations to know what combine
+    // function to use for a given aggregation function
     combine_funcs[Bodo_FTypes::sum] = Bodo_FTypes::sum;
     combine_funcs[Bodo_FTypes::count] = Bodo_FTypes::sum;
     combine_funcs[Bodo_FTypes::mean] =
@@ -4479,9 +4684,6 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     combine_funcs[Bodo_FTypes::min] = Bodo_FTypes::min;
     combine_funcs[Bodo_FTypes::max] = Bodo_FTypes::max;
     combine_funcs[Bodo_FTypes::prod] = Bodo_FTypes::prod;
-    combine_funcs[Bodo_FTypes::var] = Bodo_FTypes::var_combine;
-    combine_funcs[Bodo_FTypes::std] = Bodo_FTypes::var_combine;
-    combine_funcs[Bodo_FTypes::agg] = Bodo_FTypes::agg;
 
     // DEC_MOD_METHOD(string_array_to_info);
     PyObject_SetAttrString(m, "string_array_to_info",
@@ -4520,8 +4722,6 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
         PyLong_FromVoidPtr((void*)(&drop_duplicates_table)));
     PyObject_SetAttrString(m, "groupby_and_aggregate",
                            PyLong_FromVoidPtr((void*)(&groupby_and_aggregate)));
-    PyObject_SetAttrString(m, "groupby_and_aggregate_sets",
-                           PyLong_FromVoidPtr((void*)(&groupby_and_aggregate_sets)));
     PyObject_SetAttrString(m, "array_isin",
                            PyLong_FromVoidPtr((void*)(&array_isin)));
     PyObject_SetAttrString(m, "compute_node_partition_by_hash",

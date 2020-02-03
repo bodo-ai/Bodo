@@ -2129,7 +2129,11 @@ class DataFramePass:
             grp_typ.selection if isinstance(out_typ, SeriesType) else out_typ.columns
         )
         for c in out_colnames:
-            var = ir.Var(lhs.scope, mk_unique_var(c), lhs.loc)
+            # output column name can be a string or tuple of strings. the
+            # latter case occurs when doing this:
+            # df.groupby(...).agg({"A": [f1, f2]})
+            # In this case, output names have 2 levels: (A, f1) and (A, f2)
+            var = ir.Var(lhs.scope, mk_unique_var(str(c)), lhs.loc)
             self.typemap[var.name] = (
                 out_typ.data
                 if isinstance(out_typ, SeriesType)
@@ -2895,8 +2899,12 @@ def _gen_init_df(columns, index=None):
 
     # using add_consts_to_type with list to avoid const tuple problems
     # TODO: fix type inference for const str
-    col_seq = ", ".join("'{}'".format(c) for c in columns)
-    col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_seq, col_seq)
+    # a column name can be a string or tuple of strings (multi-level)
+    col_var = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
+        ", ".join(
+            "'{}'".format(c) if isinstance(c, str) else str(c) for c in columns
+        )
+    )
     func_text = "def _init_df({}):\n".format(args)
     func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
         data_args, index, col_var

@@ -45,8 +45,10 @@ from bodo.utils.typing import (
     is_overload_constant_str_list,
     ConstDictType,
     get_overload_const_func,
+    get_overload_const_str,
 )
 from bodo.utils.transform import get_const_func_output_type
+from bodo.utils.utils import is_expr
 
 
 class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
@@ -385,15 +387,67 @@ class DataframeGroupByAttribute(AttributeTemplate):
             out_res = SeriesType(dtype, index=index, name_typ=bodo.string_type)
         return signature(out_res, *args)
 
+    def _get_agg_funcname_and_outtyp(self, grp, args, col, f_val):
+        """ Get function name and output type for a function used in
+            groupby.agg(), given by f_val (can be a string constant or
+            user-defined function) applied to column col """
+        is_udf = True  # is user-defined function
+        if isinstance(f_val, str):
+            is_udf = False
+            f_name = f_val
+        elif is_overload_constant_str(f_val):
+            is_udf = False
+            f_name = get_overload_const_str(f_val)
+        if not is_udf:
+            if f_name not in bodo.ir.aggregate.supported_agg_funcs[:-1]:
+                raise BodoError(
+                    "unsupported aggregate function {}".format(f_name)
+                )
+            # run typer on a groupby with just column col
+            ret_grp = DataFrameGroupByType(
+                grp.df_type, grp.keys, (col,), grp.as_index, True
+            )
+            out_tp = self._get_agg_typ(ret_grp, args, f_name).return_type
+        else:
+            # assume udf
+            if is_expr(f_val, "make_function"):
+                f = types.functions.MakeFunctionLiteral(f_val)
+            else:
+                assert isinstance(f_val, types.MakeFunctionLiteral)
+                f = f_val
+            validate_udf("agg", f)
+            func = get_overload_const_func(f)
+            code = func.code if hasattr(func, "code") else func.__code__
+            f_name = code.co_name
+            # run typer on a groupby with just column col
+            ret_grp = DataFrameGroupByType(
+                grp.df_type, grp.keys, (col,), grp.as_index, True
+            )
+            out_tp = self._get_agg_typ(ret_grp, args, "agg", f).return_type
+        return f_name, out_tp
+
     def _resolve_agg(self, grp, args, kws):
         if len(args) == 0:
             raise BodoError("Groupby.agg()/aggregate(): Must provide 'func'")
 
         func = args[0]
+        has_cumulative_ops = False
+
+        def _append_out_type(grp, out_data, out_tp):
+            if grp.as_index is False:
+                # _get_agg_typ also returns the index (keys) as part of
+                # out_tp, but we already added them at the beginning
+                # (by calling _get_keys_not_as_index), so we skip them
+                out_data.append(out_tp.data[len(grp.keys)])
+            else:
+                # out_tp is assumed to be a SeriesType (see _get_agg_typ)
+                out_data.append(out_tp.data)
 
         # multi-function constant dictionary case
         if isinstance(func, ConstDictType):
-            # get mapping of column names to functions (string -> string)
+            # get mapping of column names to functions:
+            # string -> string or tuple of strings (tuple when multiple
+            # functions are applied to a column)
             col_map = {
                 func.consts[2 * i]: func.consts[2 * i + 1]
                 for i in range(len(func.consts) // 2)
@@ -407,38 +461,35 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     )
                 )
 
+            # get output names and output types
             out_columns = []
             out_data = []
             if not grp.as_index:
                 self._get_keys_not_as_index(grp, out_columns, out_data)
-            out_columns = tuple(out_columns + list(col_map.keys()))
-
-            # get output data types
-            for k, func_name in col_map.items():
-                if func_name == "cumsum":
-                    raise BodoError(
-                        "only groupby aggregation supported in dictionary-based"
-                        "groupby, not transform like cumsum"
-                    )
-                if func_name not in bodo.ir.aggregate.supported_agg_funcs[:-2]:
-                    raise BodoError(
-                        "unsupported aggregate function {}".format(func_name)
-                    )
-                # run typer on a groupby with just column k
-                ret_grp = DataFrameGroupByType(
-                    grp.df_type, grp.keys, (k,), grp.as_index, True
-                )
-                out_tp = self._get_agg_typ(ret_grp, args, func_name).return_type
-                if not grp.as_index:
-                    # _get_agg_typ also returns the index (keys) as part of
-                    # out_tp, but we already added them outside of the loop
-                    # (by calling _get_keys_not_as_index), so we skip them
-                    out_data.append(out_tp.data[len(grp.keys)])
+            for col_name, f_val in col_map.items():
+                if isinstance(f_val, (tuple, list)):
+                    # TODO tuple containing function objects (not just strings)
+                    for f in f_val:
+                        f_name, out_tp = self._get_agg_funcname_and_outtyp(grp, args, col_name, f)
+                        has_cumulative_ops = f_name in {"cumsum", "cumprod"}
+                        # TODO f_name == "<lambda>"
+                        # output column name is 2-level (col_name, func_name)
+                        # This happens, for example, with
+                        # df.groupby(...).agg({"A": [f1, f2]})
+                        out_columns.append((col_name, f_name))
+                        _append_out_type(grp, out_data, out_tp)
                 else:
-                    # out_tp is assumed to be a SeriesType (see _get_agg_typ)
-                    out_data.append(out_tp.data)
+                    f_name, out_tp = self._get_agg_funcname_and_outtyp(grp, args, col_name, f_val)
+                    has_cumulative_ops = f_name in {"cumsum", "cumprod"}
+                    out_columns.append(col_name)
+                    _append_out_type(grp, out_data, out_tp)
 
-            out_res = DataFrameType(tuple(out_data), out_tp.index, out_columns)
+            if has_cumulative_ops:
+                # result of groupby.cumsum, etc. doesn't have a group index
+                index = RangeIndexType(types.none)
+            else:
+                index = out_tp.index
+            out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
             return signature(out_res, *args)
 
         # multi-function tuple case
@@ -450,23 +501,24 @@ class DataframeGroupByAttribute(AttributeTemplate):
             assert len(func) > 0
             out_data = []
             out_columns = []
+            lambda_count = 0
             if not grp.as_index:
                 self._get_keys_not_as_index(grp, out_columns, out_data)
-            for f in func.types:
-                validate_udf("agg", f)
-                f_val = get_overload_const_func(f)
-                code = f_val.code if hasattr(f_val, "code") else func.__code__
-                out_columns.append(code.co_name)
-                out_tp = self._get_agg_typ(grp, args, "agg", f).return_type
-                if not grp.as_index:
-                    # _get_agg_typ also returns the index (keys) as part of
-                    # out_tp, but we already added them outside of the loop
-                    # (by calling _get_keys_not_as_index), so we skip them
-                    out_data.append(out_tp.data[len(grp.keys)])
-                else:
-                    # out_tp is assumed to be a SeriesType (see _get_agg_typ)
-                    out_data.append(out_tp.data)
-            index = out_tp.index
+            for f_val in func.types:
+                f_name, out_tp = self._get_agg_funcname_and_outtyp(grp, args, grp.selection[0], f_val)
+                has_cumulative_ops = f_name in {"cumsum", "cumprod"}
+                # if tuple has lambdas they will be named <lambda_0>,
+                # <lambda_1>, ... in output
+                if f_name == "<lambda>":
+                    f_name = "<lambda_" + str(lambda_count) + ">"
+                    lambda_count += 1
+                out_columns.append(f_name)
+                _append_out_type(grp, out_data, out_tp)
+            if has_cumulative_ops:
+                # result of groupby.cumsum, etc. doesn't have a group index
+                index = RangeIndexType(types.none)
+            else:
+                index = out_tp.index
             out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
             return signature(out_res, *args)
 
