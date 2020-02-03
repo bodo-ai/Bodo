@@ -12,7 +12,8 @@ from bodo.tests.utils import check_func
     params=[
         # unicode
         pytest.param(
-            pd.array([
+            pd.array(
+                [
                     "¿abc¡Y tú, quién te crees?",
                     "ÕÕÕú¡úú,úũ¿ééé",
                     "россия очень, холодная страна",
@@ -22,7 +23,8 @@ from bodo.tests.utils import check_func
                     "Español es agra,dable escuchar",
                     "한국,가,고싶다ㅠ",
                     "🢇🄐,🏈𠆶💑😅",
-                ],),
+                ],
+            ),
             marks=pytest.mark.slow,
         ),
         # ASCII array
@@ -92,4 +94,18 @@ def test_getitem_slice(str_arr_value):
     # TODO: parallel test
     pd.util.testing.assert_extension_array_equal(
         bodo_func(str_arr_value, ind), test_impl(str_arr_value, ind)
+    )
+
+
+def test_setitem_int():
+    def test_impl(A, idx, val):
+        A[idx] = val
+        return A
+
+    A = pd.array(["AB", "", "한국", pd.NA, "abcd"])
+    idx = 2
+    val = "국한"  # same size as element 2 but different value
+    bodo_func = bodo.jit(test_impl)
+    pd.util.testing.assert_extension_array_equal(
+        bodo_func(A.copy(), idx, val), test_impl(A.copy(), idx, val)
     )

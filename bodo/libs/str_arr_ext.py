@@ -39,7 +39,10 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type, datetime_date_type
 from bodo.utils.typing import (
-    BodoWarning, is_list_like_index_type, is_overload_true, is_overload_none
+    BodoWarning,
+    is_list_like_index_type,
+    is_overload_true,
+    is_overload_none,
 )
 from numba.targets.imputils import (
     impl_ret_new_ref,
@@ -739,19 +742,6 @@ def str_list_to_array_overload(str_list):
     return lambda str_list: str_list
 
 
-@infer_global(operator.setitem)
-class SetItemStringArray(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        ary, idx, val = args
-        if (
-            ary == string_array_type
-            and isinstance(idx, types.Integer)
-            and val == string_type
-        ):
-            return signature(types.none, *args)
-
-
 def is_str_arr_typ(typ):
     from bodo.hiframes.pd_series_ext import is_str_series_typ
 
@@ -820,7 +810,16 @@ convert_len_arr_to_offset = types.ExternalFunction(
 
 setitem_string_array = types.ExternalFunction(
     "setitem_string_array",
-    types.void(types.voidptr, types.voidptr, types.intp, string_type, types.intp),
+    types.void(
+        types.CPointer(offset_typ),
+        types.CPointer(char_typ),
+        types.uint64,
+        types.voidptr,
+        types.intp,
+        types.int32,
+        types.int32,
+        types.intp,
+    ),
 )
 _get_utf8_size = types.ExternalFunction(
     "get_utf8_size", types.intp(types.voidptr, types.intp, types.int32)
@@ -1169,44 +1168,6 @@ def set_null_bits(typingctx, str_arr_typ=None):
     return types.none(string_array_type), codegen
 
 
-# XXX: setitem works only if value is same size as the previous value
-@lower_builtin(operator.setitem, StringArrayType, types.Integer, string_type)
-def setitem_str_arr(context, builder, sig, args):
-    arr, ind, val = args
-    uni_str = cgutils.create_struct_proxy(string_type)(context, builder, value=val)
-    string_array = context.make_helper(builder, string_array_type, arr)
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(32).as_pointer(),
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-            lir.IntType(32),
-            lir.IntType(32),
-            lir.IntType(64),
-        ],
-    )
-    fn_setitem = builder.module.get_or_insert_function(
-        fnty, name="setitem_string_array"
-    )
-    builder.call(
-        fn_setitem,
-        [
-            string_array.offsets,
-            string_array.data,
-            string_array.num_total_chars,
-            uni_str.data,
-            uni_str.length,
-            uni_str.kind,
-            uni_str.is_ascii,
-            ind,
-        ],
-    )
-    return context.get_dummy_value()
-
-
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_utf8_size(s):
     if isinstance(s, types.StringLiteral):
@@ -1390,7 +1351,42 @@ def str_arr_getitem_int(A, ind):
                     if str_arr_is_na(A, slice_idx.start + i * slice_idx.step):
                         str_arr_set_na(new_arr, i)
                 return new_arr
+
         return str_arr_slice_impl
+
+
+dummy_use = numba.njit(lambda a: None)
+
+
+@overload(operator.setitem)
+def str_arr_setitem(A, idx, val):
+    if A != string_array_type:
+        return
+
+    # scalar case
+    if isinstance(idx, types.Integer):
+        assert val == string_type
+
+        # XXX: setitem works only if value is same size as the previous value
+        def impl_scalar(A, idx, val):  # pragma: no cover
+            setitem_string_array(
+                A._offsets,
+                A._data,
+                A._num_total_chars,
+                val._data,
+                val._length,
+                val._kind,
+                val._is_ascii,
+                idx,
+            )
+            # dummy use function to avoid decref of A
+            # TODO: refcounting support for _offsets, ... to avoid this workaround
+            dummy_use(A)
+            dummy_use(val)
+
+        return impl_scalar
+
+    # TODO: other setitem cases
 
 
 @intrinsic
@@ -1488,8 +1484,8 @@ def _infer_ndarray_obj_dtype(val):
         # empty or all NA object arrays are assumed to be strings
         warnings.warn(
             BodoWarning(
-            "Empty object array passed to Bodo, which causes ambiguity in typing. "
-            "This can cause errors in parallel execution."
+                "Empty object array passed to Bodo, which causes ambiguity in typing. "
+                "This can cause errors in parallel execution."
             )
         )
         return string_type
