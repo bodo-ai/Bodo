@@ -40,14 +40,7 @@ from numba.targets.imputils import impl_ret_borrowed
 import bodo
 from bodo.libs.str_ext import string_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
-from bodo.libs.str_arr_ext import (
-    string_array_type,
-    offset_typ,
-    char_typ,
-    str_arr_payload_type,
-    StringArrayType,
-    GetItemStringArray,
-)
+from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type

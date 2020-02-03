@@ -59,3 +59,37 @@ def test_string_dtype():
         return pd.StringDtype()
 
     check_func(impl2, ())
+
+
+def test_getitem_int(str_arr_value):
+    def test_impl(A, i):
+        return A[i]
+
+    bodo_func = bodo.jit(test_impl)
+    i = 1
+    assert bodo_func(str_arr_value, i) == test_impl(str_arr_value, i)
+
+
+def test_getitem_bool(str_arr_value):
+    def test_impl(A, ind):
+        return A[ind]
+
+    bodo_func = bodo.jit(test_impl)
+    np.random.seed(0)
+    ind = np.random.ranf(len(str_arr_value)) < 0.2
+    # TODO: parallel test
+    pd.util.testing.assert_extension_array_equal(
+        bodo_func(str_arr_value, ind), test_impl(str_arr_value, ind)
+    )
+
+
+def test_getitem_slice(str_arr_value):
+    def test_impl(A, ind):
+        return A[ind]
+
+    bodo_func = bodo.jit(test_impl)
+    ind = slice(1, 4)
+    # TODO: parallel test
+    pd.util.testing.assert_extension_array_equal(
+        bodo_func(str_arr_value, ind), test_impl(str_arr_value, ind)
+    )
