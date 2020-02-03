@@ -238,7 +238,9 @@ def test_get():
         name="A",
     )
     # check_func(test_impl, (S,))
-    pd.testing.assert_series_equal(bodo.jit(test_impl)(S), test_impl(S))
+    pd.testing.assert_series_equal(
+        bodo.jit(test_impl)(S), test_impl(S), check_dtype=False
+    )
 
 
 def test_replace_regex(test_unicode):

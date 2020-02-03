@@ -2238,13 +2238,10 @@ class TestSeries(unittest.TestCase):
                     "three": [True, False, True],
                 }
             )
-            return df.one.values, df.two.values, df.three.values
+            return df
 
         bodo_func = bodo.jit(test_impl)
-        one, two, three = bodo_func()
-        self.assertTrue(isinstance(one, np.ndarray))
-        self.assertTrue(isinstance(two, np.ndarray))
-        self.assertTrue(isinstance(three, np.ndarray))
+        pd.testing.assert_frame_equal(test_impl(), bodo_func(), check_dtype=False)
 
     @unittest.skip("needs empty_like typing fix in npydecl.py")
     def test_series_empty_like(self):
