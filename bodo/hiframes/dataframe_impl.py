@@ -710,14 +710,17 @@ def overload_dataframe_set_index(
 @overload_method(DataFrameType, "query")
 def overload_dataframe_query(df, expr, inplace=False):
     """Support query only for the case where expr is a constant string and expr output
-    is a 1D boolean array. Refering to named index by name is not supported.
+    is a 1D boolean array. 
+    Refering to named index by name is not supported.
+    Series.dt.* is not supported. issue #451
     """
     # check unsupported "inplace"
     if not is_overload_false(inplace):
-        raise BodoError("query() inplace argument not supported yet")
+        raise BodoError("query(): inplace argument not supported yet")
 
+    # check expr is of type string
     if not isinstance(expr, (types.StringLiteral, types.UnicodeType)):
-        raise BodoError("query() expr argument should be a string")
+        raise BodoError("query(): expr argument should be a string")
 
     # TODO: support df.loc for normal case and getitem for multi-dim case similar to
     # Pandas

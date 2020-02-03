@@ -9,6 +9,35 @@ import pytest
 from bodo.tests.utils import check_func
 
 
+@pytest.mark.parametrize(
+    "test_df",
+    [
+        # all string
+        pd.DataFrame({"A": ["A", "B", "A", "B", "C"], "B": ["F", "E", "F", "S", "C"]}),
+        # mix string and numbers and index
+        pd.DataFrame(
+            {"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]},
+            index=[3, 1, 2, 4, 6],
+        ),
+        # string index
+        pd.DataFrame(
+            {"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]},
+            index=["A", "C", "D", "E", "AA"],
+        ),
+        # all numbers
+        pd.DataFrame(
+            {"A": [1, 3, 1, 2, 3], "B": [1.2, 3.1, 1.2, 2.5, 3.3]},
+            index=[3, 1, 2, 4, 6],
+        ),
+    ],
+)
+def test_df_drop_duplicates(test_df):
+    def impl(df):
+        return df.drop_duplicates()
+
+    check_func(impl, (test_df,), sort_output=True)
+
+
 def test_drop_duplicates_1col():
     """
     Test drop_duplicates(): with just one column

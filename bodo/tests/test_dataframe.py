@@ -872,63 +872,6 @@ def test_df_duplicated():
     check_func(impl, (df,), sort_output=True)
 
 
-@pytest.mark.parametrize(
-    "expr",
-    [
-        "`B B` > @a + 1 & 5 > index > 1",
-        "(A == @a) | (C == 'AA')",
-        "C in ['AA', 'C']",
-        "C not in ['AA', 'C']",
-        "C.str.contains('C')",
-        "abs(A) > @a",
-        "A in [1, 4]",
-        "A not in [1, 4]",
-    ],
-)
-def test_df_query(expr):
-    def impl(df, expr, a):
-        return df.query(expr)
-
-    df = pd.DataFrame(
-        {
-            "A": [1, 8, 4, 11, -3],
-            "B B": [1.1, np.nan, 4.2, 3.1, -1.3],
-            "C": ["AA", "BBB", "C", "AA", "C"],
-        },
-        index=[3, 1, 2, 4, 5],
-    )
-    check_func(impl, (df, expr, 1))
-
-
-@pytest.mark.parametrize(
-    "test_df",
-    [
-        # all string
-        pd.DataFrame({"A": ["A", "B", "A", "B", "C"], "B": ["F", "E", "F", "S", "C"]}),
-        # mix string and numbers and index
-        pd.DataFrame(
-            {"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]},
-            index=[3, 1, 2, 4, 6],
-        ),
-        # string index
-        pd.DataFrame(
-            {"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]},
-            index=["A", "C", "D", "E", "AA"],
-        ),
-        # all numbers
-        pd.DataFrame(
-            {"A": [1, 3, 1, 2, 3], "B": [1.2, 3.1, 1.2, 2.5, 3.3]},
-            index=[3, 1, 2, 4, 6],
-        ),
-    ],
-)
-def test_df_drop_duplicates(test_df):
-    def impl(df):
-        return df.drop_duplicates()
-
-    check_func(impl, (test_df,), sort_output=True)
-
-
 ##################### binary ops ###############################
 
 

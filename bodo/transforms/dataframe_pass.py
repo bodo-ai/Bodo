@@ -74,11 +74,13 @@ from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.utils.typing import (
-    get_index_data_arr_types,
-    is_overload_constant_str,
+    get_index_data_arr_types, 
+    is_overload_none, 
+    is_overload_constant_str, 
     get_overload_const_func,
+    get_overload_const_str, 
+    BodoError
 )
-
 
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
 
@@ -1577,10 +1579,22 @@ class DataFramePass:
         )
         expr = get_str_const_value(expr_var, self.func_ir, err_msg, self.typemap)
 
+        # check expr is a non-empty string
+        if len(expr)==0:
+            raise BodoError("query(): expr argument cannot be an empty string")
+
+        # check expr is not multiline expression
+        if len([e.strip() for e in expr.splitlines() if e.strip() != ""])>1:
+            raise BodoError("query(): multiline expressions not supported yet")
+        
         # parse expression
         parsed_expr, parsed_expr_str, used_cols = self._parse_query_expr(
             expr, df_typ.columns
         )
+
+        # check no columns nor index in selcted in expr
+        if len(used_cols) == 0 and "index" not in expr:
+            raise BodoError("query(): no column/index is selected in expr")
 
         # local variables
         sentinel = pd.core.computation.ops._LOCAL_TAG
@@ -1590,7 +1604,6 @@ class DataFramePass:
             if isinstance(c, str) and c.startswith(sentinel)
         }
         in_args = list(used_cols.values()) + ["index"] + list(loc_ref_vars.keys())
-
         func_text = "def _query_impl({}):\n".format(", ".join(in_args))
         # convert array to Series to support cases such as C.str.contains
         for c_var in used_cols.values():
@@ -1617,7 +1630,16 @@ class DataFramePass:
         args.append(self._gen_array_from_index(df_var, arr, nodes))
         # local referenced variables
         args += [ir.Var(lhs.scope, v, lhs.loc) for v in loc_ref_vars.values()]
-        return nodes + compile_func_single_block(_query_impl, args, lhs, self)
+
+        nodes += compile_func_single_block(_query_impl, args, lhs, self)
+        
+        # check whether the output of generated function is a boolean array
+        if(type(self.typemap[nodes[-1].value.name]) != bodo.hiframes.pd_series_ext.SeriesType
+           or self.typemap[nodes[-1].value.name].dtype != types.bool_):
+            raise BodoError('query(): expr does not evaluate to a 1D boolean array.'
+                ' Only 1D boolean array is supported right now.')
+
+        return nodes
 
     def _parse_query_expr(self, expr, columns):
         """Parses query expression using Pandas parser but avoids issues such as
@@ -1649,6 +1671,7 @@ class DataFramePass:
             eval_in_python=("in", "not in"),
             maybe_eval_in_python=("==", "!=", "<", ">", "<=", ">="),
         ):
+            # currently, & and | are not supported in expr
             res = op(lhs, rhs)
             return res
 
@@ -1688,19 +1711,23 @@ class DataFramePass:
             attr = node.attr
             value = node.value
             sentinel = pd.core.computation.ops._LOCAL_TAG
-            value_str = str(self.visit(value))
+
+            if attr == "str":
+                # check the case where df.column.str where column is not in df
+                try:
+                    value_str = str(self.visit(value))
+                except pd.core.computation.ops.UndefinedVariableError as e:
+                    col_name = e.args[0].split("'")[1]
+                    raise BodoError("df.query(): column {} is not found in dataframe columns {}"
+                        .format(col_name, columns))
+            else:
+                value_str = str(self.visit(value))
             name = value_str + "." + attr
             if name.startswith(sentinel):
                 name = name[len(sentinel) :]
 
             # make local variable in case of C.str
             if attr == "str":
-                if value_str not in cleaned_columns:
-                    raise bodo.utils.typing.BodoError(
-                        "column {} not found in dataframe columns {}".format(
-                            value_str, columns
-                        )
-                    )
                 orig_col_name = columns[cleaned_columns.index(value_str)]
                 used_cols[orig_col_name] = value_str
                 self.env.scope[name] = 0
@@ -1776,7 +1803,6 @@ class DataFramePass:
         saved__str__ = pd.core.computation.ops.Term.__str__
         saved_math__str__ = pd.core.computation.ops.MathCall.__str__
         saved_op__str__ = pd.core.computation.ops.Op.__str__
-
         try:
             pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (
                 _rewrite_membership_op
@@ -1790,6 +1816,33 @@ class DataFramePass:
             pd.core.computation.ops.Op.__str__ = op__str__
             parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
             parsed_expr_str = str(parsed_expr)
+        except pd.core.computation.ops.UndefinedVariableError as e:
+            # catch undefined variable error
+            index_name = self.typemap['arg.df'].index.name_typ
+            if (not is_overload_none(index_name) and 
+                get_overload_const_str(index_name) == e.args[0].split("'")[1]):
+                # currently do not support named index appears in expr
+                raise BodoError(
+                    "df.query(): Refering to named"
+                    " index ('{}') by name is not supported".format(get_overload_const_str(index_name)))
+            else:
+                # throw other errors
+                # this includes: columns does not exist in dataframe, 
+                #                undefined local variable using @
+                raise BodoError("df.query(): undefined variable, {}".format(e))
+        except AttributeError as e:
+            if e.args[0] == "'NewFuncNode' object has no attribute 'is_scalar'":
+                # AttributeError with this error message is thrown 
+                # when expr has unsupported expressions
+                if ".dt." in expr:
+                    # currently do not support series.dt in expr
+                    raise BodoError("df.query(): Series.dt is not supported in expression")
+                else:
+                    raise BodoError("df.query(): unsupported expression: {}, ".format(expr))
+            else:
+                # still throwing attribute error
+                # because during testing, no other kinds of AttributeError were found
+                raise AttributeError(e)
         finally:
             pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (
                 saved_rewrite_membership_op
