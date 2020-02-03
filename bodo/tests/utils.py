@@ -314,8 +314,8 @@ def _test_equal(
         )
     elif isinstance(py_out, np.ndarray):
         if sort_output:
-            py_out.sort()
-            bodo_out.sort()
+            py_out = np.sort(py_out)
+            bodo_out = np.sort(bodo_out)
         # use tester of Pandas for array of objects since Numpy doesn't handle np.nan
         # properly
         if py_out.dtype == np.dtype("O") and bodo_out.dtype == np.dtype("O"):
