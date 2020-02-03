@@ -36,6 +36,9 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs() {
             std::cerr << "Warning: AWS_DEFAULT_REGION environment variable not "
                          "found. Region defaults to 'us-east-1' currently."
                       << std::endl;
+        char *custom_endpoint = std::getenv("AWS_S3_ENDPOINT");
+        if (custom_endpoint)
+            options.endpoint_override = std::string(custom_endpoint);
         status = arrow::fs::S3FileSystem::Make(options, &s3_fs);
         CHECK_ARROW(status, "S3FileSystem::Make");
         is_fs_initialized = true;
