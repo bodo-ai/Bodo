@@ -413,13 +413,6 @@ def test_series_to_list(series_val):
     assert bodo_func(series_val) == test_impl(series_val)
 
 
-def test_series_get_values(series_val):
-    def test_impl(S):
-        return S.get_values()
-
-    check_func(test_impl, (series_val,))
-
-
 def test_series_to_numpy(numeric_series_val):
     def test_impl(S):
         return S.to_numpy()

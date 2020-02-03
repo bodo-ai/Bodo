@@ -134,7 +134,6 @@ Conversion:
   can be a Numpy numeric dtype or ``str``)
 * :meth:`Series.copy` (including ``deep`` argument)
 * :meth:`Series.to_list`
-* :meth:`Series.get_values`
 * :meth:`Series.to_numpy`
 
 
@@ -301,7 +300,6 @@ Attributes and underlying data:
 * :attr:`DataFrame.index` (can access but not set new index yet)
 * :attr:`DataFrame.columns`  (can access but not set new columns yet)
 * :attr:`DataFrame.values` (only for numeric dataframes)
-* :meth:`DataFrame.get_values` (only for numeric dataframes)
 * :meth:`DataFrame.to_numpy` (only for numeric dataframes)
 * :attr:`DataFrame.ndim`
 * :attr:`DataFrame.size`

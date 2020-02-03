@@ -1621,7 +1621,6 @@ class SeriesPass:
             "abs",
             "count",
             "unique",
-            "get_values",
             "to_numpy",
             "min",
             "max",
