@@ -351,7 +351,7 @@ class TestHiFrames(unittest.TestCase):
 
         df = pd.DataFrame({"A": ["ABCC", "CABBD", np.nan, "CCD"]})
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
+        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
     def test_str_replace_noregex(self):
         def test_impl(df):
@@ -359,7 +359,7 @@ class TestHiFrames(unittest.TestCase):
 
         df = pd.DataFrame({"A": ["ABCC", "CABBD", np.nan, "AA"]})
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
+        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
     def test_str_replace_regex_parallel(self):
         def test_impl(df):
@@ -371,7 +371,7 @@ class TestHiFrames(unittest.TestCase):
         # TODO: support Index
         df = pd.DataFrame({"A": A}).iloc[start:end].reset_index(drop=True)
         bodo_func = bodo.jit(distributed={"df", "B"})(test_impl)
-        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
+        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
@@ -450,7 +450,7 @@ class TestHiFrames(unittest.TestCase):
 
         df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D"]})
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
+        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
     def test_str_get_parallel(self):
         def test_impl(df):
@@ -463,7 +463,7 @@ class TestHiFrames(unittest.TestCase):
         A = ["AB,CC", "C,ABB,D", "CAD,F", "CA,D", "AA,,D"]
         df = pd.DataFrame({"A": A[start:end]})
         bodo_func = bodo.jit(distributed={"df", "B"})(test_impl)
-        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
+        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
@@ -552,7 +552,9 @@ class TestHiFrames(unittest.TestCase):
     def test_rolling3(self):
         def test_impl(n):
             df = pd.DataFrame({"A": np.ones(n), "B": np.random.ranf(n)})
-            Ac = df.A.rolling(3, center=True).apply(lambda a: a[0] + 2 * a[1] + a[2])
+            Ac = df.A.rolling(3, center=True).apply(
+                lambda a: a[0] + 2 * a[1] + a[2], raw=True
+            )
             return Ac.sum()
 
         bodo_func = bodo.jit(test_impl)
