@@ -109,3 +109,17 @@ def test_setitem_int():
     pd.util.testing.assert_extension_array_equal(
         bodo_func(A.copy(), idx, val), test_impl(A.copy(), idx, val)
     )
+
+
+def test_dtype():
+    def test_impl(A):
+        return A.dtype
+
+    check_func(test_impl, (pd.array(["AA", "B"]),))
+
+
+def test_ndim():
+    def test_impl(A):
+        return A.ndim
+
+    check_func(test_impl, (pd.array(["AA", "B"]),))

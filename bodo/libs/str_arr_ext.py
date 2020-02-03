@@ -1389,6 +1389,16 @@ def str_arr_setitem(A, idx, val):
     # TODO: other setitem cases
 
 
+@overload_attribute(StringArrayType, "dtype")
+def overload_str_arr_dtype(A):
+    return lambda A: pd.StringDtype()
+
+
+@overload_attribute(StringArrayType, "ndim")
+def overload_str_arr_ndim(A):
+    return lambda A: 1
+
+
 @intrinsic
 def decode_utf8(typingctx, ptr_t, len_t=None):
     def codegen(context, builder, sig, args):
