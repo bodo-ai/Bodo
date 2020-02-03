@@ -1655,10 +1655,11 @@ def test_series_np_where_str():
     """
 
     def test_impl1(S):
-        return np.where(S == "aa", S, "d")
+        # wrapping array in Series to enable output comparison for NA
+        return pd.Series(np.where(S == "aa", S, "d"))
 
     def test_impl2(S, a):
-        return np.where(S == "aa", a, S)
+        return pd.Series(np.where(S == "aa", a, S))
 
     S = pd.Series(
         ["aa", "b", "aa", "cc", np.nan, "aa", "DD"], [5, 1, 2, 0, 3, 4, 9], name="AA"
