@@ -3,6 +3,7 @@ import operator
 import datetime
 import warnings
 import numpy as np
+import pandas as pd
 import numba
 import bodo
 from numba import types
@@ -157,6 +158,41 @@ make_attribute_wrapper(StringArrayType, "num_total_chars", "_num_total_chars")
 make_attribute_wrapper(StringArrayType, "null_bitmap", "_null_bitmap")
 make_attribute_wrapper(StringArrayType, "offsets", "_offsets")
 make_attribute_wrapper(StringArrayType, "data", "_data")
+
+
+# dtype object for pd.StringDtype()
+class StringDtype(types.Number):
+    """
+    Type class associated with pandas String dtype pd.StringDtype()
+    """
+
+    def __init__(self):
+        super(StringDtype, self).__init__("StringDtype")
+
+
+string_dtype = StringDtype()
+
+
+register_model(StringDtype)(models.OpaqueModel)
+
+
+@box(StringDtype)
+def box_string_dtype(typ, val, c):
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    res = c.pyapi.call_method(pd_class_obj, "StringDtype", ())
+    c.pyapi.decref(pd_class_obj)
+    return res
+
+
+@unbox(StringDtype)
+def unbox_string_dtype(typ, val, c):
+    return NativeValue(c.context.get_dummy_value())
+
+
+typeof_impl.register(pd.StringDtype)(lambda a, b: string_dtype)
+type_callable(pd.StringDtype)(lambda c: lambda: string_dtype)
+lower_builtin(pd.StringDtype)(lambda c, b, s, a: c.get_dummy_value())
 
 
 def create_binary_op_overload(op):
