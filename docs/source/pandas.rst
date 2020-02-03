@@ -123,7 +123,6 @@ Attributes:
 * :attr:`Series.empty`
 * :attr:`Series.dtypes`
 * :attr:`Series.name`
-* :meth:`Series.put` (only numeric data types)
 
 
 Methods:

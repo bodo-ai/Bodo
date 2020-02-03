@@ -287,21 +287,6 @@ def test_series_name(series_val):
     check_func(test_impl, (series_val,))
 
 
-def test_series_put(series_val):
-    # IntegerArray doesn't have put
-    if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
-        return
-
-    def test_impl(S):
-        S.put(0, S.values[1])
-        return S
-
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val.copy()), test_impl(series_val.copy()), check_dtype=False
-    )
-
-
 def test_series_astype_numeric(numeric_series_val):
     # datetime can't be converted to float
     if numeric_series_val.dtype == np.dtype("datetime64[ns]"):

@@ -1632,7 +1632,6 @@ class SeriesPass:
             "cov",
             "nunique",
             "describe",
-            "put",
             "isna",
             "isnull",
             "isin",
