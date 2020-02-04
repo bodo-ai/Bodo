@@ -254,24 +254,62 @@ def unbox_bool_array(typ, obj, c):
 
 @box(BooleanArrayType)
 def box_bool_arr(typ, val, c):
-    """Box bool array into Numpy object array with NAs converted to np.nan.
-    Always use object array to avoid inconsistency across processors.
-    e.g. bodo/tests/test_series.py::test_series_values[series_val3] on 2 pes
+    """Box bool array into pd.arrays.BooleanArray object. Null bitmap is converted to
+    mask array.
     """
+    # TODO: refactor with integer array
     bool_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-    bool_arr_obj = c.pyapi.from_native_value(
+    data = c.pyapi.from_native_value(
         types.Array(typ.dtype, 1, "C"), bool_arr.data, c.env_manager
     )
     bitmap_arr_data = c.context.make_array(types.Array(types.uint8, 1, "C"))(
         c.context, c.builder, bool_arr.null_bitmap
     ).data
 
-    fnty = lir.FunctionType(
-        lir.IntType(8).as_pointer(),
-        [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer()],
+    # allocate mask array
+    n_obj = c.pyapi.call_method(data, "__len__", ())
+    n = c.pyapi.long_as_longlong(n_obj)
+    mod_name = c.context.insert_const_string(c.builder.module, "numpy")
+    np_class_obj = c.pyapi.import_module_noblock(mod_name)
+    bool_dtype = c.pyapi.object_getattr_string(np_class_obj, "bool_")
+    mask_arr = c.pyapi.call_method(np_class_obj, "empty", (n_obj, bool_dtype))
+    mask_arr_ctypes = c.pyapi.object_getattr_string(mask_arr, "ctypes")
+    mask_arr_data = c.pyapi.object_getattr_string(mask_arr_ctypes, "data")
+    mask_arr_ptr = c.builder.inttoptr(
+        c.pyapi.long_as_longlong(mask_arr_data), lir.IntType(8).as_pointer()
     )
-    fn = c.builder.module.get_or_insert_function(fnty, name="set_nulls_bool_array")
-    res = c.builder.call(fn, [bool_arr_obj, bitmap_arr_data])
+
+    # fill mask array
+    with cgutils.for_range(c.builder, n) as loop:
+        # (bits[i >> 3] >> (i & 0x07)) & 1
+        i = loop.index
+        byte_ind = c.builder.lshr(i, lir.Constant(lir.IntType(64), 3))
+        byte = c.builder.load(cgutils.gep(c.builder, bitmap_arr_data, byte_ind))
+        mask = c.builder.trunc(
+            c.builder.and_(i, lir.Constant(lir.IntType(64), 7)), lir.IntType(8)
+        )
+        val = c.builder.and_(
+            c.builder.lshr(byte, mask), lir.Constant(lir.IntType(8), 1)
+        )
+        # flip value since bitmap uses opposite convention
+        val = c.builder.xor(val, lir.Constant(lir.IntType(8), 1))
+        ptr = cgutils.gep(c.builder, mask_arr_ptr, i)
+        c.builder.store(val, ptr)
+
+    # create BooleanArray
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    arr_mod_obj = c.pyapi.object_getattr_string(pd_class_obj, "arrays")
+    res = c.pyapi.call_method(arr_mod_obj, "BooleanArray", (data, mask_arr))
+
+    # clean up references (TODO: check for potential refcount issues)
+    c.pyapi.decref(pd_class_obj)
+    c.pyapi.decref(n_obj)
+    c.pyapi.decref(np_class_obj)
+    c.pyapi.decref(bool_dtype)
+    c.pyapi.decref(mask_arr_ctypes)
+    c.pyapi.decref(mask_arr_data)
+    c.pyapi.decref(arr_mod_obj)
     return res
 
 
