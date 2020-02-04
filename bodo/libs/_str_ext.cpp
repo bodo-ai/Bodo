@@ -100,6 +100,7 @@ void mask_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* mask_arr, int64_t n);
 PyArrayObject* set_nulls_bool_array(PyArrayObject* bool_arr,
                                     uint8_t* bitmap_arr);
 int is_bool_array(PyArrayObject* arr);
+int is_pd_boolean_array(PyObject* arr);
 void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
                           int64_t n);
 void print_str_arr(uint64_t n, uint64_t n_chars, uint32_t* offsets,
@@ -216,6 +217,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&set_nulls_bool_array)));
     PyObject_SetAttrString(m, "is_bool_array",
                            PyLong_FromVoidPtr((void*)(&is_bool_array)));
+    PyObject_SetAttrString(m, "is_pd_boolean_array",
+                        PyLong_FromVoidPtr((void*)(&is_pd_boolean_array)));
     PyObject_SetAttrString(m, "unbox_bool_array_obj",
                            PyLong_FromVoidPtr((void*)(&unbox_bool_array_obj)));
     return m;
@@ -934,6 +937,35 @@ int is_bool_array(PyArrayObject* arr) {
 #undef CHECK
 }
 
+
+int is_pd_boolean_array(PyObject* arr) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return false;                  \
+    }
+
+    // pd.arrays.BooleanArray
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* pd_arrays_obj = PyObject_GetAttrString(pd_mod, "arrays");
+    CHECK(pd_arrays_obj, "getting pd.arrays failed");
+    PyObject* pd_arrays_bool_arr_obj = PyObject_GetAttrString(pd_arrays_obj, "BooleanArray");
+    CHECK(pd_arrays_obj, "getting pd.arrays.BooleanArray failed");
+
+    // isinstance(arr, BooleanArray)
+    int ret = PyObject_IsInstance(arr, pd_arrays_bool_arr_obj);
+    CHECK(ret >= 0, "isinstance fails");
+
+    Py_DECREF(pd_mod);
+    Py_DECREF(pd_arrays_obj);
+    Py_DECREF(pd_arrays_bool_arr_obj);
+    return ret;
+
+#undef CHECK
+}
+
+
 void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
                           int64_t n) {
 #define CHECK(expr, msg)               \
@@ -943,7 +975,12 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
         return;                        \
     }
     auto gilstate = PyGILState_Ensure();
-    //
+
+    // get pd.isna object to call in the loop to check for NAs
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* isna_call_obj = PyObject_GetAttrString(pd_mod, "isna");
+    CHECK(isna_call_obj, "getting pd.isna failed");
 
     for (uint64_t i = 0; i < uint64_t(n); ++i) {
         auto p = PyArray_GETPTR1((PyArrayObject*)arr, i);
@@ -951,8 +988,8 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
         PyObject* s = PyArray_GETITEM(arr, (const char*)p);
         CHECK(s, "getting element failed");
         // Pandas stores NA as either None or nan
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s)))) {
+        PyObject* isna_obj = PyObject_CallFunctionObjArgs(isna_call_obj, s, NULL);
+        if (PyObject_IsTrue(isna_obj)) {
             // null bit
             ClearBit(bitmap, i);
             data[i] = 0;
@@ -963,8 +1000,11 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
             data[i] = (uint8_t)is_true;
         }
         Py_DECREF(s);
+        Py_DECREF(isna_obj);
     }
 
+    Py_DECREF(pd_mod);
+    Py_DECREF(isna_call_obj);
 #undef CHECK
 }
 

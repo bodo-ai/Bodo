@@ -9,6 +9,26 @@ import bodo
 from bodo.tests.utils import check_func
 
 
+@pytest.fixture(
+    params=[pd.array([True, False, True, pd.NA, False]),]
+)
+def bool_arr_value(request):
+    return request.param
+
+
+def test_unbox(bool_arr_value):
+    # just unbox
+    def impl(arr_arg):
+        return True
+
+    check_func(impl, (bool_arr_value,))
+
+    # unbox and box
+    def impl2(arr_arg):
+        return arr_arg
+
+    check_func(impl2, (bool_arr_value,))
+
 
 def test_boolean_dtype():
     # unbox and box
