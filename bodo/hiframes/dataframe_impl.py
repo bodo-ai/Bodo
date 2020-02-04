@@ -43,7 +43,6 @@ import llvmlite.llvmpy.core as lc
 from bodo.libs.array_tools import (
     array_to_info,
     arr_info_list_to_table,
-    drop_duplicates_table_outplace,
     info_from_table,
     info_to_array,
     delete_table,

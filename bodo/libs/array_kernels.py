@@ -47,7 +47,7 @@ from bodo.libs.array_tools import (
     array_to_info,
     arr_info_list_to_table,
     shuffle_table,
-    drop_duplicates_table_outplace,
+    drop_duplicates_table,
     info_from_table,
     info_to_array,
     delete_table,
@@ -476,70 +476,26 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     count = len(data)
 
     func_text = "def impl(data, ind_arr, parallel=False):\n"
-    func_text += "  if parallel:\n"
-    key_names = tuple(["data[" + str(i) + "]" for i in range(len(data))])
-    func_text += bodo.ir.join._gen_par_shuffle(
-        key_names, ("ind_arr",), "data", "data_ind", data.types, data.types
+    func_text += "  info_list_total = [{}, array_to_info(ind_arr)]\n".format(
+        ", ".join("array_to_info(data[{}])".format(x) for x in range(count))
     )
-    func_text += "    (ind_arr,) = data_ind\n"
-    if not bodo.use_cpp_drop_duplicates:
-        func_text += "  n = len(data[0])\n"
-        for i in range(count):
-            if data.types[i] == string_array_type:
-                func_text += "  out_arr_{0} = pre_alloc_string_array(n, data[{0}]._num_total_chars)\n".format(
-                    i
-                )
-            else:
-                func_text += "  out_arr_{0} = bodo.utils.utils.alloc_type(n, data[{0}])\n".format(
-                    i
-                )
-        if ind_arr == string_array_type:
-            func_text += "  out_arr_index = pre_alloc_string_array(n, ind_arr._num_total_chars)\n"
-        else:
-            func_text += "  out_arr_index = bodo.utils.utils.alloc_type(n, ind_arr)\n"
-        # func_text += "  uniqs = set()\n"
-        func_text += "  uniqs = dict()\n"
-        func_text += "  w_ind = 0\n"
-        func_text += "  for i in range(n):\n"
-        func_text += "    val = getitem_arr_tup_single(data, i)\n"
-        func_text += "    if val in uniqs:\n"
-        func_text += "      continue\n"
-        # func_text += "    uniqs.add(val)\n"
-        func_text += "    uniqs[val] = 0\n"
-        for i in range(count):
-            func_text += "    out_arr_{0}[w_ind] = data[{0}][i]\n".format(i)
-        func_text += "    out_arr_index[w_ind] = ind_arr[i]\n"
-        func_text += "    w_ind += 1\n"
-        for i in range(count):
-            func_text += "  out_arr_{0} = trim_arr(out_arr_{0}, w_ind)\n".format(i)
-        func_text += "  out_arr_index = trim_arr(out_arr_index, w_ind)\n"
-        func_text += "  return ({},), out_arr_index\n".format(
-            ", ".join("out_arr_{}".format(i) for i in range(count))
+    func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
+    # We keep the first entry in the drop_duplicates
+    func_text += "  keep_i = 0\n"
+    func_text += "  out_table = drop_duplicates_table(table_total, parallel, {}, keep_i)\n".format(count)
+    for i_col in range(count):
+        func_text += "  out_arr_{} = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(
+            i_col, i_col, i_col
         )
-    else:
-        func_text += "  info_list_total = [{}, array_to_info(ind_arr)]\n".format(
-            ", ".join("array_to_info(data[{}])".format(x) for x in range(count))
-        )
-        func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
-        # All are keys except the last one which is for index
-        func_text += "  subset_vect = np.array([1] * {} + [0])\n".format(count)
-        # We keep the first entry in the drop_duplicates
-        func_text += "  keep_i = 0\n"
-        func_text += "  out_table = drop_duplicates_table_outplace(table_total, subset_vect.ctypes, keep_i)\n"
-        for i_col in range(count):
-            func_text += "  out_arr_{} = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(
-                i_col, i_col, i_col
-            )
-        func_text += "  out_arr_index = info_to_array(info_from_table(out_table, {}), ind_arr)\n".format(
-            count
-        )
-        func_text += "  delete_table(out_table)\n"
-        func_text += "  delete_table(table_total)\n"
-        func_text += "  return ({},), out_arr_index\n".format(
-            ", ".join("out_arr_{}".format(i) for i in range(count))
-        )
-
-    #    print("array_kernels : func_text=", func_text)
+    func_text += "  out_arr_index = info_to_array(info_from_table(out_table, {}), ind_arr)\n".format(
+        count
+    )
+    func_text += "  delete_table(out_table)\n"
+    func_text += "  delete_table(table_total)\n"
+    func_text += "  return ({},), out_arr_index\n".format(
+        ", ".join("out_arr_{}".format(i) for i in range(count))
+    )
+#    print("array_kernels : func_text=", func_text)
     loc_vars = {}
     exec(
         func_text,
@@ -551,7 +507,7 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
             "get_str_arr_item_length": get_str_arr_item_length,
             "trim_arr": bodo.ir.join.trim_arr,
             "array_to_info": array_to_info,
-            "drop_duplicates_table_outplace": drop_duplicates_table_outplace,
+            "drop_duplicates_table": drop_duplicates_table,
             "arr_info_list_to_table": arr_info_list_to_table,
             "shuffle_table": shuffle_table,
             "info_from_table": info_from_table,
@@ -671,35 +627,13 @@ def unique_overload(A):
 @overload(unique_parallel)
 def unique_overload_parallel(A):
     def unique_par(A):  # pragma: no cover
-        uniq_A = bodo.utils.utils.unique(A)
-        key_arrs = (uniq_A,)
-        n = len(uniq_A)
-        node_ids = np.empty(n, np.int32)
-
-        n_pes = bodo.libs.distributed_api.get_size()
-        pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, (), n_pes, False)
-
-        # calc send/recv counts
-        for i in range(n):
-            val = uniq_A[i]
-            node_id = hash(val) % n_pes
-            node_ids[i] = node_id
-            update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs, (), False)
-
-        shuffle_meta = finalize_shuffle_meta(
-            key_arrs, (), pre_shuffle_meta, n_pes, False
-        )
-
-        # write send buffers
-        for i in range(n):
-            node_id = node_ids[i]
-            write_send_buff(shuffle_meta, node_id, i, key_arrs, ())
-            # update last since it is reused in data
-            shuffle_meta.tmp_offset[node_id] += 1
-
-        # shuffle
-        (out_arr,) = alltoallv_tup(key_arrs, shuffle_meta, ())
-
+        input_table = arr_info_list_to_table([array_to_info(A)])
+        n_key = 1
+        keep_i = 0
+        out_table = drop_duplicates_table(input_table, True, n_key, keep_i)
+        out_arr = info_to_array(info_from_table(out_table, 0), A)
+        delete_table(input_table)
+        delete_table(out_table)
         return bodo.utils.utils.unique(out_arr)
 
     return unique_par

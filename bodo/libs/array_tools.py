@@ -44,9 +44,7 @@ ll.add_symbol("info_from_table", array_tools_ext.info_from_table)
 ll.add_symbol("delete_table", array_tools_ext.delete_table)
 ll.add_symbol("shuffle_table", array_tools_ext.shuffle_table)
 ll.add_symbol("hash_join_table", array_tools_ext.hash_join_table)
-ll.add_symbol(
-    "drop_duplicates_table_outplace", array_tools_ext.drop_duplicates_table_outplace
-)
+ll.add_symbol("drop_duplicates_table", array_tools_ext.drop_duplicates_table)
 ll.add_symbol("sort_values_table", array_tools_ext.sort_values_table)
 ll.add_symbol("groupby_and_aggregate", array_tools_ext.groupby_and_aggregate)
 ll.add_symbol("groupby_and_aggregate_sets", array_tools_ext.groupby_and_aggregate_sets)
@@ -574,7 +572,7 @@ def sort_values_table(typingctx, table_t, n_keys_t, vect_ascending_t, na_positio
 
 
 @intrinsic
-def drop_duplicates_table_outplace(typingctx, table_t, subset_vect_t, keep_t):
+def drop_duplicates_table(typingctx, table_t, parallel_t, nkey_t, keep_t):
     """
     Interface to dropping duplicate entry in tables
     """
@@ -583,14 +581,14 @@ def drop_duplicates_table_outplace(typingctx, table_t, subset_vect_t, keep_t):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer(), lir.IntType(64)],
+            [lir.IntType(8).as_pointer(), lir.IntType(1), lir.IntType(64), lir.IntType(64)],
         )
         fn_tp = builder.module.get_or_insert_function(
-            fnty, name="drop_duplicates_table_outplace"
+            fnty, name="drop_duplicates_table"
         )
         return builder.call(fn_tp, args)
 
-    return table_type(table_t, types.voidptr, types.int64), codegen
+    return table_type(table_t, types.boolean, types.int64, types.int64), codegen
 
 
 @intrinsic

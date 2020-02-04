@@ -559,15 +559,15 @@ struct mpi_comm_info {
         // init counts for string arrays
         for (array_info* arr_info : arrays) {
             if (arr_info->arr_type == bodo_array_type::STRING) {
-                send_count_char.push_back(std::vector<int>(n_pes, 0));
-                recv_count_char.push_back(std::vector<int>(n_pes));
-                send_disp_char.push_back(std::vector<int>(n_pes));
-                recv_disp_char.push_back(std::vector<int>(n_pes));
+                send_count_char.emplace_back(std::vector<int>(n_pes, 0));
+                recv_count_char.emplace_back(std::vector<int>(n_pes));
+                send_disp_char.emplace_back(std::vector<int>(n_pes));
+                recv_disp_char.emplace_back(std::vector<int>(n_pes));
             } else {
-                send_count_char.push_back(std::vector<int>());
-                recv_count_char.push_back(std::vector<int>());
-                send_disp_char.push_back(std::vector<int>());
-                recv_disp_char.push_back(std::vector<int>());
+                send_count_char.emplace_back(std::vector<int>());
+                recv_count_char.emplace_back(std::vector<int>());
+                send_disp_char.emplace_back(std::vector<int>());
+                recv_disp_char.emplace_back(std::vector<int>());
             }
         }
         if (has_nulls) {
@@ -1072,8 +1072,8 @@ void DEBUG_PrintSetOfColumn(std::ostream& os,
     for (int iCol = 0; iCol < nCol; iCol++) {
         std::vector<std::string> LStr = DEBUG_PrintColumn(ListArr[iCol]);
         for (int iRow = ListLen[iCol]; iRow < nRowMax; iRow++)
-            LStr.push_back("");
-        ListListStr.push_back(LStr);
+            LStr.emplace_back("");
+        ListListStr.emplace_back(LStr);
     }
     std::vector<std::string> ListStrOut(nRowMax);
     for (int iRow = 0; iRow < nRowMax; iRow++) {
@@ -1782,7 +1782,7 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
         std::cout << "i_short=" << i_short << "\n";
 #endif
         std::vector<size_t>& group = entList[i_short];
-        group.push_back(i_short);
+        group.emplace_back(i_short);
     }
     size_t nEnt = entList.size();
 #ifdef DEBUG_JOIN
@@ -1847,18 +1847,18 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
     for (size_t i = 0; i < n_tot_left; i++) {
         if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
             if (ChoiceOpt == 0) {
-                out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i,
+                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, i,
                                                  n_tot_left + i, 2));
             } else {
-                out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
+                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite,
                                                  n_tot_left + i, i, 2));
             }
         } else {
             if (ChoiceOpt == 0) {
-                out_arrs.push_back(
+                out_arrs.emplace_back(
                     RetrieveArray(in_table, ListPairWrite, i, -1, 0));
             } else {
-                out_arrs.push_back(
+                out_arrs.emplace_back(
                     RetrieveArray(in_table, ListPairWrite, -1, i, 1));
             }
         }
@@ -1867,18 +1867,18 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
     for (size_t i = 0; i < n_tot_right; i++) {
         if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
             if (ChoiceOpt == 0) {
-                out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i,
+                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, i,
                                                  n_tot_left + i, 2));
             } else {
-                out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
+                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite,
                                                  n_tot_left + i, i, 2));
             }
         } else {
             if (ChoiceOpt == 0) {
-                out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, -1,
+                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, -1,
                                                  n_tot_left + i, 1));
             } else {
-                out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
+                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite,
                                                  n_tot_left + i, -1, 0));
             }
         }
@@ -2803,7 +2803,7 @@ void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
     for (int64_t i = 0; i < table.nrows(); i++) {
         if (key_is_nullable) {
             if (does_row_has_nulls(key_cols, i)) {
-                row_to_group.push_back(-1);
+                row_to_group.emplace_back(-1);
                 continue;
             }
         }
@@ -2813,9 +2813,9 @@ void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
         if (group == 0) {
             group = next_group++;  // this updates the value in the map without
                                    // another lookup
-            group_to_first_row.push_back(i);
+            group_to_first_row.emplace_back(i);
         }
-        row_to_group.push_back(group - 1);
+        row_to_group.emplace_back(group - 1);
     }
     delete[] hashes;
 }
@@ -2871,8 +2871,8 @@ grouping_info get_group_info_iterate(table_info* table, bool consider_missing) {
         if (group == 0) {
             group = next_group++;  // this updates the value in the map without
                                    // another lookup
-            group_to_first_row.push_back(i);
-            active_group_repr.push_back(i);
+            group_to_first_row.emplace_back(i);
+            active_group_repr.emplace_back(i);
         } else {
             int64_t prev_elt = active_group_repr[group - 1];
             next_row_in_group[prev_elt] = i;
@@ -3120,9 +3120,9 @@ void create_auxiliary_cols(std::vector<array_info*>& out_cols, int64_t num_keys,
                 array_info* aux_col =
                     alloc_array(num_groups, 1, bodo_array_type::NUMPY,
                                 Bodo_CTypes::UINT64, 0);
-                out_cols.push_back(aux_col);
+                out_cols.emplace_back(aux_col);
                 aux_cols.emplace_back();
-                aux_cols.back().push_back(aux_col);
+                aux_cols.back().emplace_back(aux_col);
                 // auxiliary column for mean will record the count
                 aggfunc_output_initialize(aux_col, Bodo_FTypes::count);
             }
@@ -3139,13 +3139,13 @@ void create_auxiliary_cols(std::vector<array_info*>& out_cols, int64_t num_keys,
                 array_info* m2_col =
                     alloc_array(num_groups, 1, bodo_array_type::NUMPY,
                                 Bodo_CTypes::FLOAT64, 0);
-                out_cols.push_back(count_col);
-                out_cols.push_back(mean_col);
-                out_cols.push_back(m2_col);
+                out_cols.emplace_back(count_col);
+                out_cols.emplace_back(mean_col);
+                out_cols.emplace_back(m2_col);
                 aux_cols.emplace_back();
-                aux_cols.back().push_back(count_col);
-                aux_cols.back().push_back(mean_col);
-                aux_cols.back().push_back(m2_col);
+                aux_cols.back().emplace_back(count_col);
+                aux_cols.back().emplace_back(mean_col);
+                aux_cols.back().emplace_back(m2_col);
                 // auxiliary column for mean will record the count
                 aggfunc_output_initialize(count_col, Bodo_FTypes::count);
                 aggfunc_output_initialize(mean_col, Bodo_FTypes::count);
@@ -3156,7 +3156,7 @@ void create_auxiliary_cols(std::vector<array_info*>& out_cols, int64_t num_keys,
             for (int64_t i=ncols; i < agginfo.out_table_dummy->ncols(); i++) {
                 bodo_array_type::arr_type_enum arr_type = agginfo.out_table_dummy->columns[i]->arr_type;
                 Bodo_CTypes::CTypeEnum dtype = agginfo.out_table_dummy->columns[i]->dtype;
-                out_cols.push_back(alloc_array(num_groups, 1, arr_type, dtype, 0));
+                out_cols.emplace_back(alloc_array(num_groups, 1, arr_type, dtype, 0));
             }
             return;
         default:
@@ -3596,7 +3596,7 @@ array_info* median_computation(array_info* arr,
                 if (!isnan_entry(i)) {
                     char* ptr = arr->data1 + i * siztype;
                     double eVal = GetDoubleEntry(arr->dtype, ptr);
-                    ListValue.push_back(eVal);
+                    ListValue.emplace_back(eVal);
                 }
                 else {
                     if (!skipna) {
@@ -3829,14 +3829,14 @@ table_info* groupby_and_sets(table_info* in_table, int64_t num_keys,
         for (size_t igrp = 0; igrp < num_groups; igrp++)
             ListPairWrite[igrp] = {grp_inf.group_to_first_row[igrp], -1};
         for (int64_t i_col = 0; i_col < num_keys; i_col++)
-            out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
+            out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
     }
     for (int64_t i_col = num_keys; i_col < ncols; i_col++) {
       if (ftype == Bodo_FTypes::nunique)
-        out_arrs.push_back(
+        out_arrs.emplace_back(
             nunique_computation(in_table->columns[i_col], grp_inf, skipdropna));
       if (ftype == Bodo_FTypes::median)
-        out_arrs.push_back(
+        out_arrs.emplace_back(
             median_computation(in_table->columns[i_col], grp_inf, skipdropna));
       if (ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod)
         out_arrs.push_back(
@@ -4020,9 +4020,9 @@ void groupby_eval(table_info& in_table, int64_t num_keys, int64_t n_data_cols,
             for (int64_t j = num_keys, z = 0; j < num_keys + n_data_cols;
                  j++, z++) {
                 int64_t idx = num_keys + n_data_cols + z * 3;
-                aux_cols.push_back(in_table[idx]);
-                aux_cols.push_back(in_table[idx + 1]);
-                aux_cols.push_back(in_table[idx + 2]);
+                aux_cols.emplace_back(in_table[idx]);
+                aux_cols.emplace_back(in_table[idx + 1]);
+                aux_cols.emplace_back(in_table[idx + 2]);
                 if (ftype == Bodo_FTypes::var)
                     do_apply_to_column(in_table[0], in_table[j], aux_cols,
                                        row_to_group, Bodo_FTypes::var_eval);
@@ -4210,7 +4210,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     std::vector<array_info*> out_arrs;
     // Inserting the left data
     for (size_t i_col = 0; i_col < n_cols; i_col++)
-        out_arrs.push_back(
+        out_arrs.emplace_back(
             RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
         //
 #ifdef DEBUG_SORT
@@ -4225,14 +4225,16 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 
 
 
-/** This function is the kernel function for the dropping of duplicated rows.
- * This C++ code should provide following functionality of pandas
- * drop_duplicates:
- * ---possibility of selecting columns for the identification
- * ---possibility of keeping first, last or removing all entries with duplicate
- * inplace operation for keeping the data in the same place is another problem.
+/** This function is the inner function for the dropping of duplicated rows.
+ * This C++ code is used for the drop_duplicates.
+ * Two support cases:
+ * ---The local computation where we store two values (first and last) in order
+ *    to deal with all eventualities
+ * ---The final case where depending on the case we store the first, last or
+ *    none if more than 2 are considered.
  *
  * As for the join, this relies on using hash keys for the partitionning.
+ * The computation is done locally.
  *
  * External function used are "RetrieveArray" and "TestEqual"
  *
@@ -4242,22 +4244,24 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
  *        keep = 0 corresponds to the case of keep="first" keep first entry
  *        keep = 1 corresponds to the case of keep="last" keep last entry
  *        keep = 2 corresponds to the case of keep=False : remove all duplicates
- * @param in_place: True for returning the entry to the same place and False for
- * the opposite case.
+ * @param step: integer specifying the work done
+ *              2 corresponds to the first step of the operation where we collate the rows
+ *                on the computational node
+ *              1 corresponds to the second step of the operation after the rows have been
+ *                merged on the computation
  * @return the vector of pointers to be used.
  */
-table_info* drop_duplicates_table_outplace(table_info* in_table,
-                                           int64_t* subset_vect, int64_t keep) {
+table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
+                                        int64_t keep, int step) {
 #undef DEBUG_DD
     size_t n_col = in_table->ncols();
     size_t n_rows = (size_t)in_table->nrows();
-    std::vector<array_info*> key_arrs;
-    for (size_t iCol = 0; iCol < n_col; iCol++)
-        if (subset_vect[iCol] == 1) key_arrs.push_back(in_table->columns[iCol]);
-    size_t n_key = key_arrs.size();
+    std::vector<array_info*> key_arrs(num_keys);
+    for (size_t iKey = 0; iKey < size_t(num_keys); iKey++)
+        key_arrs[iKey] = in_table->columns[iKey];
 #ifdef DEBUG_DD
     std::cout << "INPUT:\n";
-    std::cout << "n_col=" << n_col << " n_rows=" << n_rows << " n_key=" << n_key
+    std::cout << "n_col=" << n_col << " n_rows=" << n_rows << " num_keys=" << num_keys
               << "\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     DEBUG_PrintRefct(std::cout, in_table->columns);
@@ -4288,40 +4292,72 @@ table_info* drop_duplicates_table_outplace(table_info* in_table,
      */
     std::function<bool(size_t,size_t)> equal_fct = [&](size_t const& iRowA, size_t const& iRowB) -> bool {
         size_t shift_A = 0, shift_B = 0;
-        bool test = TestEqual(key_arrs, n_key, shift_A, iRowA, shift_B, iRowB);
+        bool test = TestEqual(key_arrs, num_keys, shift_A, iRowA, shift_B, iRowB);
         return test;
     };
-    // The entList contains the hash of the short table.
-    // We address the entry by the row index. We store all the rows which are
-    // identical in the std::vector.
+    // The entSet contains the hash of the table.
+    // We address the entry by the row index.
     MAP_CONTAINER <size_t, size_t, std::function<size_t(size_t)>, std::function<bool(size_t,size_t)>> entSet({}, hash_fct, equal_fct);
     // The loop over the short table.
     // entries are stored one by one and all of them are put even if identical
     // in value.
-    std::vector<int64_t> ListRow;
-    uint64_t next_ent = 0;
-    for (size_t i_row = 0; i_row < n_rows; i_row++) {
-        size_t& group = entSet[i_row];
-        if (group == 0) {
-            next_ent++;
-            group = next_ent;
-            ListRow.push_back(i_row);
-        } else {
-            size_t pos = group - 1;
-            if (keep == 0) {  // keep first entry. So do nothing here
-            }
-            if (keep == 1) {  // keep last entry. So update the list
-                ListRow[pos] = i_row;
-            }
-            if (keep == 2) {  // Case of False. So put it to -1.
-                ListRow[pos] = -1;
+    //
+    // In the first case we keep only one entry.
+    auto RetrievePair1=[&]() -> std::vector<std::pair<std::ptrdiff_t,std::ptrdiff_t>> {
+        std::vector<int64_t> ListRow;
+        uint64_t next_ent = 0;
+        for (size_t i_row = 0; i_row < n_rows; i_row++) {
+            size_t& group = entSet[i_row];
+            if (group == 0) {
+                next_ent++;
+                group = next_ent;
+                ListRow.emplace_back(i_row);
+            } else {
+                size_t pos = group - 1;
+                if (keep == 0) {  // keep first entry. So do nothing here
+                }
+                if (keep == 1) {  // keep last entry. So update the list
+                    ListRow[pos] = i_row;
+                }
+                if (keep == 2) {  // Case of False. So put it to -1.
+                    ListRow[pos] = -1;
+                }
             }
         }
-    }
+        std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
+        for (auto& eRow : ListRow) {
+          if (eRow != -1) ListPairWrite.push_back({eRow, -1});
+        }
+        return std::move(ListPairWrite);
+    };
+    // In this case we store the pairs of values, the first and the last.
+    // This allows to reach conclusions in all possible cases.
+    auto RetrievePair2=[&]() -> std::vector<std::pair<std::ptrdiff_t,std::ptrdiff_t>> {
+        std::vector<std::pair<int64_t,int64_t>> ListRowPair;
+        size_t next_ent = 0;
+        for (size_t i_row = 0; i_row < n_rows; i_row++) {
+            size_t& group = entSet[i_row];
+            if (group == 0) {
+                next_ent++;
+                group = next_ent;
+                ListRowPair.push_back({i_row,-1});
+            } else {
+                size_t pos = group - 1;
+                ListRowPair[pos].second = i_row;
+            }
+        }
+        std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
+        for (auto& eRowPair : ListRowPair) {
+          if (eRowPair.first  != -1) ListPairWrite.push_back({eRowPair.first,  -1});
+          if (eRowPair.second != -1) ListPairWrite.push_back({eRowPair.second, -1});
+        }
+        return std::move(ListPairWrite);
+    };
     std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
-    for (auto& eRow : ListRow) {
-        if (eRow != -1) ListPairWrite.push_back({eRow, -1});
-    }
+    if (step == 1 || keep == 0 || keep == 1)
+      ListPairWrite = RetrievePair1();
+    else
+      ListPairWrite = RetrievePair2();
 #ifdef DEBUG_DD
     std::cout << "|ListPairWrite|=" << ListPairWrite.size() << "\n";
 #endif
@@ -4329,7 +4365,7 @@ table_info* drop_duplicates_table_outplace(table_info* in_table,
     std::vector<array_info*> out_arrs;
     // Inserting the left data
     for (size_t i_col = 0; i_col < n_col; i_col++)
-        out_arrs.push_back(
+        out_arrs.emplace_back(
             RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
     //
     delete[] hashes;
@@ -4340,6 +4376,60 @@ table_info* drop_duplicates_table_outplace(table_info* in_table,
 #endif
     return new table_info(out_arrs);
 }
+
+
+/** This function is the function for the dropping of duplicated rows.
+ * This C++ code should provide following functionality of pandas
+ * drop_duplicates:
+ * ---possibility of selecting columns for the identification
+ * ---possibility of keeping first, last or removing all entries with duplicate
+ * inplace operation for keeping the data in the same place is another problem.
+ *
+ * @param in_table : the input table
+ * @param is_parallel: the boolean specifying if the computation is parallel or not.
+ * @param num_keys: the number of keys used for the computation
+ * @param keep: integer specifying the expected behavior.
+ *        keep = 0 corresponds to the case of keep="first" keep first entry
+ *        keep = 1 corresponds to the case of keep="last" keep last entry
+ *        keep = 2 corresponds to the case of keep=False : remove all duplicates
+ * @return the vector of pointers to be used.
+ */
+table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
+                                  int64_t num_keys, int64_t keep) {
+#ifdef DEBUG_DD
+  std::cout << "is_parallel=" << is_parallel << "\n";
+#endif
+  // serial case
+  if (!is_parallel) {
+    return drop_duplicates_table_inner(in_table, num_keys, keep, 1);
+  }
+  // parallel case
+  // pre reduction of duplicates
+#ifdef DEBUG_DD
+  std::cout << "Before the drop duplicates on the local nodes\n";
+#endif
+  table_info* red_table = drop_duplicates_table_inner(in_table, num_keys, keep, 2);
+  // shuffling of values
+#ifdef DEBUG_DD
+  std::cout << "Before the shuffling\n";
+#endif
+  table_info* shuf_table = shuffle_table(red_table, num_keys);
+  delete_table_free_arrays(red_table);
+  // reduction after shuffling
+#ifdef DEBUG_DD
+  std::cout << "Before the second shuffling\n";
+#endif
+  table_info* ret_table = drop_duplicates_table_inner(shuf_table, num_keys, keep, 1);
+  delete_table_free_arrays(shuf_table);
+#ifdef DEBUG_DD
+  std::cout << "Final returning table\n";
+  DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
+  DEBUG_PrintRefct(std::cout, ret_table->columns);
+#endif
+  // returning table
+  return ret_table;
+}
+
 
 
 PyMODINIT_FUNC PyInit_array_tools_ext(void) {
@@ -4426,8 +4516,8 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     PyObject_SetAttrString(m, "sort_values_table",
                            PyLong_FromVoidPtr((void*)(&sort_values_table)));
     PyObject_SetAttrString(
-        m, "drop_duplicates_table_outplace",
-        PyLong_FromVoidPtr((void*)(&drop_duplicates_table_outplace)));
+        m, "drop_duplicates_table",
+        PyLong_FromVoidPtr((void*)(&drop_duplicates_table)));
     PyObject_SetAttrString(m, "groupby_and_aggregate",
                            PyLong_FromVoidPtr((void*)(&groupby_and_aggregate)));
     PyObject_SetAttrString(m, "groupby_and_aggregate_sets",
