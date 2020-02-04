@@ -248,7 +248,7 @@ def test_box_df():
         return df
 
     bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(bodo_func(), impl())
+    pd.testing.assert_frame_equal(bodo_func(), impl(), check_dtype=False)
 
 
 def test_df_index(df_value):
@@ -1426,7 +1426,7 @@ class TestDataFrame(unittest.TestCase):
             return df
 
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        pd.testing.assert_frame_equal(bodo_func(), test_impl(), check_dtype=False)
 
     def test_box3(self):
         def test_impl(df):
@@ -1435,7 +1435,7 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         df = pd.DataFrame({"A": ["aa", "bb", "dd", "cc"]}, [3, 1, 2, -1])
-        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
+        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
     def test_box_dist_return(self):
         def test_impl(n):
@@ -1966,7 +1966,7 @@ class TestDataFrame(unittest.TestCase):
 
         df = pd.DataFrame({"A": ["aa", "b", None, "ccc"]})
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
+        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
     def test_df_fillna_inplace1(self):
         def test_impl(A):
@@ -2043,7 +2043,7 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         out = test_impl(df)
         h_out = bodo_func(df)
-        pd.testing.assert_frame_equal(out, h_out)
+        pd.testing.assert_frame_equal(out, h_out, check_dtype=False)
 
     def test_df_drop1(self):
         def test_impl(df):
