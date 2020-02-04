@@ -36,7 +36,6 @@ from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import hstr_ext
 
-ll.add_symbol("set_nulls_bool_array", hstr_ext.set_nulls_bool_array)
 ll.add_symbol("is_bool_array", hstr_ext.is_bool_array)
 ll.add_symbol("is_pd_boolean_array", hstr_ext.is_pd_boolean_array)
 ll.add_symbol("unbox_bool_array_obj", hstr_ext.unbox_bool_array_obj)
