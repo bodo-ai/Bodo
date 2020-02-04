@@ -84,6 +84,41 @@ make_attribute_wrapper(BooleanArrayType, "data", "_data")
 make_attribute_wrapper(BooleanArrayType, "null_bitmap", "_null_bitmap")
 
 
+# dtype object for pd.BooleanDtype()
+class BooleanDtype(types.Number):
+    """
+    Type class associated with pandas Boolean dtype pd.BooleanDtype()
+    """
+
+    def __init__(self):
+        super(BooleanDtype, self).__init__("BooleanDtype")
+
+
+boolean_dtype = BooleanDtype()
+
+
+register_model(BooleanDtype)(models.OpaqueModel)
+
+
+@box(BooleanDtype)
+def box_boolean_dtype(typ, val, c):
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    res = c.pyapi.call_method(pd_class_obj, "BooleanDtype", ())
+    c.pyapi.decref(pd_class_obj)
+    return res
+
+
+@unbox(BooleanDtype)
+def unbox_boolean_dtype(typ, val, c):
+    return NativeValue(c.context.get_dummy_value())
+
+
+typeof_impl.register(pd.BooleanDtype)(lambda a, b: boolean_dtype)
+type_callable(pd.BooleanDtype)(lambda c: lambda: boolean_dtype)
+lower_builtin(pd.BooleanDtype)(lambda c, b, s, a: c.get_dummy_value())
+
+
 @numba.njit
 def gen_full_bitmap(n):  # pragma: no cover
     n_bytes = (n + 7) >> 3

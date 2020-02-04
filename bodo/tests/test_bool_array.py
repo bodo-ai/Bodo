@@ -9,6 +9,21 @@ import bodo
 from bodo.tests.utils import check_func
 
 
+
+def test_boolean_dtype():
+    # unbox and box
+    def impl(d):
+        return d
+
+    check_func(impl, (pd.BooleanDtype(),))
+
+    # constructor
+    def impl2():
+        return pd.BooleanDtype()
+
+    check_func(impl2, ())
+
+
 def test_unary_ufunc():
     ufunc = np.invert
 
