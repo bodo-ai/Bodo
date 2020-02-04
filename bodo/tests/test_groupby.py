@@ -1565,9 +1565,17 @@ def test_pivot():
         pt = df.pivot_table(index="A", columns="C", values="D", aggfunc="sum")
         return (pt.small.values, pt.large.values)
 
+    def test_impl2(df):
+        pt = df.pivot_table(index="A", columns="C", values="D")
+        return (pt.small.values, pt.large.values)
+
     bodo_func = bodo.jit(pivots={"pt": ["small", "large"]})(test_impl)
     assert set(bodo_func(_pivot_df1)[0]) == set(test_impl(_pivot_df1)[0])
     assert set(bodo_func(_pivot_df1)[1]) == set(test_impl(_pivot_df1)[1])
+
+    bodo_func = bodo.jit(pivots={"pt": ["small", "large"]})(test_impl2)
+    assert set(bodo_func(_pivot_df1)[0]) == set(test_impl2(_pivot_df1)[0])
+    assert set(bodo_func(_pivot_df1)[1]) == set(test_impl2(_pivot_df1)[1])
 
 
 def test_pivot_parallel(datapath):

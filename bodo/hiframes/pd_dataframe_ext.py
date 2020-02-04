@@ -1838,6 +1838,26 @@ def pivot_table_overload(
     margins_name="All",
     _pivot_values=None,
 ):
+    if aggfunc=="mean":
+        def _impl(
+            df,
+            values=None,
+            index=None,
+            columns=None,
+            aggfunc="mean",
+            fill_value=None,
+            margins=False,
+            dropna=True,
+            margins_name="All",
+            _pivot_values=None,
+        ):  # pragma: no cover
+
+            return bodo.hiframes.pd_groupby_ext.pivot_table_dummy(
+                df, values, index, columns, "mean", _pivot_values
+            )
+
+        return _impl
+
     def _impl(
         df,
         values=None,
