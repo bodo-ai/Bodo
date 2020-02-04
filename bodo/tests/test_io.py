@@ -58,7 +58,7 @@ def test_pq_index(datapath):
     # passing function name as value to test value-based dispatch
     fname = datapath("index_test1.pq")
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_frame_equal(bodo_func(fname), test_impl(fname))
+    pd.testing.assert_frame_equal(bodo_func(fname), test_impl(fname), check_dtype=False)
 
     # string index
     fname = datapath("index_test2.pq")
@@ -67,7 +67,7 @@ def test_pq_index(datapath):
         return pd.read_parquet(fname)
 
     bodo_func = bodo.jit(test_impl2)
-    pd.testing.assert_frame_equal(bodo_func(), test_impl2())
+    pd.testing.assert_frame_equal(bodo_func(), test_impl2(), check_dtype=False)
 
 
 def test_pq_nullable_int_single(datapath):
@@ -125,7 +125,7 @@ def test_pq_schema(datapath):
             }
         }
     )(impl)
-    pd.testing.assert_frame_equal(bodo_func(fname), impl(fname))
+    pd.testing.assert_frame_equal(bodo_func(fname), impl(fname), check_dtype=False)
 
 
 def test_csv_remove_col0_used_for_len(datapath):
@@ -981,7 +981,7 @@ class TestIO(unittest.TestCase):
             return df
 
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        pd.testing.assert_frame_equal(bodo_func(), test_impl(), check_dtype=False)
 
     def test_csv_skip1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data1.csv")
@@ -1055,7 +1055,7 @@ class TestIO(unittest.TestCase):
             )
 
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        pd.testing.assert_frame_equal(bodo_func(), test_impl(), check_dtype=False)
 
     def test_csv_index_name1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_date1.csv")
@@ -1071,7 +1071,7 @@ class TestIO(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         pd_expected = test_impl()
         pd_expected.index.name = None  # TODO: handle index name
-        pd.testing.assert_frame_equal(bodo_func(), pd_expected)
+        pd.testing.assert_frame_equal(bodo_func(), pd_expected, check_dtype=False)
 
     def test_csv_index_ind1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_date1.csv")
@@ -1087,7 +1087,7 @@ class TestIO(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         pd_expected = test_impl()
         pd_expected.index.name = None  # TODO: handle index name
-        pd.testing.assert_frame_equal(bodo_func(), pd_expected)
+        pd.testing.assert_frame_equal(bodo_func(), pd_expected, check_dtype=False)
 
     def test_csv_parallel1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data1.csv")
@@ -1157,7 +1157,7 @@ class TestIO(unittest.TestCase):
             return df
 
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        pd.testing.assert_frame_equal(bodo_func(), test_impl(), check_dtype=False)
 
     def test_csv_single_dtype1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_dtype1.csv")

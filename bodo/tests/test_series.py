@@ -1894,7 +1894,7 @@ class TestSeries(unittest.TestCase):
         n = 11
         S = pd.Series(np.arange(n))
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(bodo_func(S), test_impl(S), check_dtype=False)
 
     def test_series_astype_str2(self):
         def test_impl(A):
