@@ -134,7 +134,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         skipdropna = True
         if isinstance(rhs, ir.Expr):
             for erec in rhs.kws:
-                if func_name in {"median", "cumsum", "cumprod"}:
+                if func_name in {"cumsum", "cumprod"}:
                     if erec[0] == "skipna":
                         skipdropna = guard(find_const, func_ir, erec[1])
                         if not isinstance(skipdropna, bool):

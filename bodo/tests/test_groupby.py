@@ -574,17 +574,7 @@ def test_median_simple(df_med):
         A = df.groupby("A")["B"].median()
         return A
 
-    def impl2(df):
-        A = df.groupby("A")["B"].median(skipna=True)
-        return A
-
-    def impl3(df):
-        A = df.groupby("A")["B"].median(skipna=False)
-        return A
-
     check_func(impl1, (df_med,), sort_output=True)
-    check_func(impl2, (df_med,), sort_output=True)
-    check_func(impl3, (df_med,), sort_output=True)
 
 
 def test_median_large_random_numpy():
@@ -605,20 +595,10 @@ def test_median_large_random_numpy():
         A = df.groupby("A")["B"].median()
         return A
 
-    def impl2(df):
-        A = df.groupby("A")["B"].median(skipna=True)
-        return A
-
-    def impl3(df):
-        A = df.groupby("A")["B"].median(skipna=False)
-        return A
-
     random.seed(5)
     nb = 100
     df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)})
     check_func(impl1, (df1,), sort_output=True)
-    check_func(impl2, (df1,), sort_output=True)
-    check_func(impl3, (df1,), sort_output=True)
 
 
 def test_median_nullable_int_bool():
@@ -630,19 +610,9 @@ def test_median_nullable_int_bool():
         df2 = df.groupby("A")["B"].median()
         return df2
 
-    def impl2(df):
-        df2 = df.groupby("A")["B"].median(skipna=True)
-        return df2
-
-    def impl3(df):
-        df2 = df.groupby("A")["B"].median(skipna=False)
-        return df2
-
     nullarr = pd.Series([1, 2, 3, 4, None, 1, 2], dtype="UInt16")
     df1 = pd.DataFrame({"A": [1, 1, 1, 1, 1, 2, 2], "B": nullarr})
     check_func(impl1, (df1,), sort_output=True)
-    check_func(impl2, (df1,), sort_output=True)
-    check_func(impl3, (df1,), sort_output=True)
 
 
 @pytest.mark.parametrize(
