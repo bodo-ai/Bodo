@@ -318,8 +318,13 @@ def _test_equal(
             bodo_out = np.sort(bodo_out)
         # use tester of Pandas for array of objects since Numpy doesn't handle np.nan
         # properly
-        if py_out.dtype == np.dtype("O") and bodo_out.dtype == np.dtype("O"):
-            pd.testing.assert_series_equal(pd.Series(py_out), pd.Series(bodo_out))
+        if py_out.dtype == np.dtype("O") and (
+            bodo_out.dtype == np.dtype("O")
+            or isinstance(bodo_out.dtype, pd.BooleanDtype)
+        ):
+            pd.testing.assert_series_equal(
+                pd.Series(py_out), pd.Series(bodo_out), check_dtype=False
+            )
         else:
             np.testing.assert_array_equal(bodo_out, py_out)
     elif isinstance(py_out, pd.arrays.IntegerArray):
