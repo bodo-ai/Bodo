@@ -367,9 +367,15 @@ def get_parquet_dataset(file_name):
             import s3fs
         except:
             raise BodoError("Reading from s3 requires s3fs currently.")
-        fs = s3fs.S3FileSystem()
+        import os
+        if "AWS_S3_ENDPOINT" in os.environ:
+            custom_endpoint = os.environ["AWS_S3_ENDPOINT"]
+            fs = s3fs.S3FileSystem(client_kwargs={'endpoint_url': custom_endpoint})
+        else:
+            fs = s3fs.S3FileSystem()
 
     return pq.ParquetDataset(file_name, filesystem=fs)
+
 
 
 def parquet_file_schema(file_name):
