@@ -282,14 +282,9 @@ def _test_equal(
                 bodo_out.sort_values(inplace=True)
             py_out.reset_index(inplace=True, drop=True)
             bodo_out.reset_index(inplace=True, drop=True)
-        # fix dtype for bool Series with no NA
-        if is_bool_object_series(py_out) and not py_out.hasnans:
-            py_out = py_out.astype("bool")
-        if is_bool_object_series(bodo_out) and not py_out.hasnans:
-            bodo_out = bodo_out.astype("bool")
         # we return typed extension arrays like StringArray for all APIs but Pandas
         # doesn't return them by default in all APIs yet.
-        if py_out.dtype == np.object:
+        if py_out.dtype in (np.object, np.bool_):
             check_dtype = False
         pd.testing.assert_series_equal(
             bodo_out, py_out, check_names=check_names, check_dtype=check_dtype
@@ -305,15 +300,12 @@ def _test_equal(
             py_out.reset_index(inplace=True, drop=True)
             bodo_out.sort_values(bodo_out.columns.to_list(), inplace=True)
             bodo_out.reset_index(inplace=True, drop=True)
-        # fix object dtype for all bool output
-        for c in py_out.columns:
-            if is_bool_object_series(py_out[c]) and not py_out[c].hasnans:
-                py_out[c] = py_out[c].astype("bool")
-            if is_bool_object_series(bodo_out[c]) and not bodo_out[c].hasnans:
-                bodo_out[c] = bodo_out[c].astype("bool")
         # we return typed extension arrays like StringArray for all APIs but Pandas
         # doesn't return them by default in all APIs yet.
-        if np.object in py_out.dtypes.values:
+        if (
+            np.object in py_out.dtypes.values.tolist()
+            or np.bool_ in py_out.dtypes.values.tolist()
+        ):
             check_dtype = False
         pd.testing.assert_frame_equal(
             bodo_out, py_out, check_names=check_names, check_dtype=check_dtype
