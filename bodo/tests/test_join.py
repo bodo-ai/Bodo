@@ -9,7 +9,6 @@ import random
 import string
 import numba
 import bodo
-from bodo.libs.str_arr_ext import StringArray
 from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
@@ -522,8 +521,7 @@ def test_merge_out_str_na():
     df1 = pd.DataFrame({"key1": ["foo", "bar", "baz"]})
     df2 = pd.DataFrame({"key2": ["baz", "bar", "baz"], "B": ["b", "zzz", "ss"]})
 
-    bodo_func = bodo.jit(test_impl)
-    assert set(bodo_func(df1, df2)) == set(test_impl(df1, df2))
+    check_func(test_impl, (df1, df2))
 
 
 def test_merge_datetime():
@@ -773,6 +771,7 @@ def test_merge_non_unique_index(df1, df2):
     pd.testing.assert_frame_equal(
         bodo_func(df1, df2).sort_values("A_x").reset_index(drop=True),
         impl(df1, df2).sort_values("A_x").reset_index(drop=True),
+        check_dtype=False,
     )
 
 
@@ -860,6 +859,7 @@ def test_merge_cat_multi_cols():
     pd.testing.assert_frame_equal(
         bodo_func(df1, df2).sort_values("C1").reset_index(drop=True),
         test_impl(df1, df2).sort_values("C1").reset_index(drop=True),
+        check_dtype=False,
     )
 
 
@@ -882,6 +882,7 @@ def test_merge_cat1_inner():
     pd.testing.assert_frame_equal(
         bodo_func().sort_values("C1").reset_index(drop=True),
         test_impl().sort_values("C1").reset_index(drop=True),
+        check_dtype=False,
     )
 
 
@@ -928,6 +929,7 @@ def test_merge_cat1_right_2cols2():
     pd.testing.assert_frame_equal(
         bodo_func().sort_values("C1").reset_index(drop=True),
         test_impl().sort_values("C1").reset_index(drop=True),
+        check_dtype=False,
     )
 
 
@@ -950,6 +952,7 @@ def test_merge_cat1_right():
     pd.testing.assert_frame_equal(
         bodo_func().sort_values("C1").reset_index(drop=True),
         test_impl().sort_values("C1").reset_index(drop=True),
+        check_dtype=False,
     )
 
 

@@ -9,7 +9,6 @@ import string
 import numba
 import numba.targets.ufunc_db
 import bodo
-from bodo.libs.str_arr_ext import StringArray
 from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
@@ -288,21 +287,6 @@ def test_series_name(series_val):
     check_func(test_impl, (series_val,))
 
 
-def test_series_put(series_val):
-    # IntegerArray doesn't have put
-    if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
-        return
-
-    def test_impl(S):
-        S.put(0, S.values[1])
-        return S
-
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val.copy()), test_impl(series_val.copy()), check_dtype=False
-    )
-
-
 def test_series_astype_numeric(numeric_series_val):
     # datetime can't be converted to float
     if numeric_series_val.dtype == np.dtype("datetime64[ns]"):
@@ -412,13 +396,6 @@ def test_series_to_list(series_val):
 
     bodo_func = bodo.jit(test_impl)
     assert bodo_func(series_val) == test_impl(series_val)
-
-
-def test_series_get_values(series_val):
-    def test_impl(S):
-        return S.get_values()
-
-    check_func(test_impl, (series_val,))
 
 
 def test_series_to_numpy(numeric_series_val):
@@ -1678,10 +1655,11 @@ def test_series_np_where_str():
     """
 
     def test_impl1(S):
-        return np.where(S == "aa", S, "d")
+        # wrapping array in Series to enable output comparison for NA
+        return pd.Series(np.where(S == "aa", S, "d"))
 
     def test_impl2(S, a):
-        return np.where(S == "aa", a, S)
+        return pd.Series(np.where(S == "aa", a, S))
 
     S = pd.Series(
         ["aa", "b", "aa", "cc", np.nan, "aa", "DD"], [5, 1, 2, 0, 3, 4, 9], name="AA"
@@ -1907,7 +1885,7 @@ class TestSeries(unittest.TestCase):
 
         S = pd.Series(["aa", "bb", "cc"])
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(bodo_func(S), test_impl(S), check_dtype=False)
 
     def test_series_astype_str1(self):
         def test_impl(A):
@@ -1916,7 +1894,7 @@ class TestSeries(unittest.TestCase):
         n = 11
         S = pd.Series(np.arange(n))
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(bodo_func(S), test_impl(S), check_dtype=False)
 
     def test_series_astype_str2(self):
         def test_impl(A):
@@ -1924,7 +1902,7 @@ class TestSeries(unittest.TestCase):
 
         S = pd.Series(["aa", "bb", "cc"])
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(bodo_func(S), test_impl(S), check_dtype=False)
 
     def test_np_call_on_series1(self):
         def test_impl(A):
@@ -2221,7 +2199,7 @@ class TestSeries(unittest.TestCase):
             return A
 
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(), test_impl())
+        pd.testing.assert_series_equal(bodo_func(), test_impl(), check_dtype=False)
 
     def test_series_list_str_unbox1(self):
         def test_impl(A):
@@ -2260,13 +2238,10 @@ class TestSeries(unittest.TestCase):
                     "three": [True, False, True],
                 }
             )
-            return df.one.values, df.two.values, df.three.values
+            return df
 
         bodo_func = bodo.jit(test_impl)
-        one, two, three = bodo_func()
-        self.assertTrue(isinstance(one, np.ndarray))
-        self.assertTrue(isinstance(two, np.ndarray))
-        self.assertTrue(isinstance(three, np.ndarray))
+        pd.testing.assert_frame_equal(test_impl(), bodo_func(), check_dtype=False)
 
     @unittest.skip("needs empty_like typing fix in npydecl.py")
     def test_series_empty_like(self):
@@ -2295,7 +2270,7 @@ class TestSeries(unittest.TestCase):
         df = pd.DataFrame({"A": ["aa", "b", None, "ccc"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(
-            bodo_func(df.A), test_impl(df.A), check_names=False
+            bodo_func(df.A), test_impl(df.A), check_names=False, check_dtype=False
         )
 
     def test_series_fillna_str_inplace1(self):
@@ -2306,7 +2281,7 @@ class TestSeries(unittest.TestCase):
         S1 = pd.Series(["aa", "b", None, "ccc"])
         S2 = S1.copy()
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(S1), test_impl(S2))
+        pd.testing.assert_series_equal(bodo_func(S1), test_impl(S2), check_dtype=False)
         # TODO: handle string array reflection
         # bodo_func(S1)
         # test_impl(S2)
@@ -2320,7 +2295,7 @@ class TestSeries(unittest.TestCase):
         S1 = pd.Series(["aa", "b", None, "ccc"])
         S2 = S1.copy()
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(S1), test_impl(S2))
+        pd.testing.assert_series_equal(bodo_func(S1), test_impl(S2), check_dtype=False)
 
     def test_series_dropna_float1(self):
         def test_impl(A):
@@ -2520,7 +2495,9 @@ class TestSeries(unittest.TestCase):
         S2 = pd.Series(["1", "12", "", np.nan, "A"])
         # TODO: handle index in concat
         pd.testing.assert_series_equal(
-            bodo_func(S1, S2), test_impl(S1, S2).reset_index(drop=True)
+            bodo_func(S1, S2),
+            test_impl(S1, S2).reset_index(drop=True),
+            check_dtype=False
         )
 
     def test_series_cov1(self):

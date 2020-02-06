@@ -60,7 +60,7 @@ from bodo.libs.array_tools import (
     arr_info_list_to_table,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.str_arr_ext import StringArray, string_array_type
+from bodo.libs.str_arr_ext import string_array_type, str_arr_from_sequence
 from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
 from bodo.hiframes.pd_index_ext import is_pd_index_type
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
@@ -2699,7 +2699,7 @@ def to_parquet_overload(
     # put arrays in table_info
     func_text += "    info_list = [{}]\n".format(data_args)
     func_text += "    table = arr_info_list_to_table(info_list)\n"
-    func_text += "    col_names = array_to_info(StringArray([{}]))\n".format(
+    func_text += "    col_names = array_to_info(str_arr_from_sequence([{}]))\n".format(
         col_names_text
     )
     if write_index:
@@ -2723,7 +2723,7 @@ def to_parquet_overload(
             "unicode_to_char_ptr": unicode_to_char_ptr,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
-            "StringArray": StringArray,
+            "str_arr_from_sequence": str_arr_from_sequence,
             "parquet_write_table_cpp": parquet_write_table_cpp,
             "index_to_array": index_to_array,
         },

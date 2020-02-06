@@ -377,9 +377,6 @@ def test_aggregate_as_index():
         A = df.groupby("A", as_index=False).aggregate(lambda x: x.max() - x.min())
         return A
 
-    def impl2(df):
-        A = df.groupby("A", as_index=False)["C"].aggregate(lambda x: x.max() - x.min())
-        return A
 
     df = pd.DataFrame(
         {
@@ -390,7 +387,6 @@ def test_aggregate_as_index():
     )
 
     check_func(impl1, (df,), sort_output=True, check_dtype=False)
-    check_func(impl2, (df,), sort_output=True, check_dtype=False)
 
 
 def test_aggregate_select_col():
@@ -578,17 +574,7 @@ def test_median_simple(df_med):
         A = df.groupby("A")["B"].median()
         return A
 
-    def impl2(df):
-        A = df.groupby("A")["B"].median(skipna=True)
-        return A
-
-    def impl3(df):
-        A = df.groupby("A")["B"].median(skipna=False)
-        return A
-
     check_func(impl1, (df_med,), sort_output=True)
-    check_func(impl2, (df_med,), sort_output=True)
-    check_func(impl3, (df_med,), sort_output=True)
 
 
 def test_median_large_random_numpy():
@@ -609,20 +595,10 @@ def test_median_large_random_numpy():
         A = df.groupby("A")["B"].median()
         return A
 
-    def impl2(df):
-        A = df.groupby("A")["B"].median(skipna=True)
-        return A
-
-    def impl3(df):
-        A = df.groupby("A")["B"].median(skipna=False)
-        return A
-
     random.seed(5)
     nb = 100
     df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)})
     check_func(impl1, (df1,), sort_output=True)
-    check_func(impl2, (df1,), sort_output=True)
-    check_func(impl3, (df1,), sort_output=True)
 
 
 def test_median_nullable_int_bool():
@@ -634,19 +610,9 @@ def test_median_nullable_int_bool():
         df2 = df.groupby("A")["B"].median()
         return df2
 
-    def impl2(df):
-        df2 = df.groupby("A")["B"].median(skipna=True)
-        return df2
-
-    def impl3(df):
-        df2 = df.groupby("A")["B"].median(skipna=False)
-        return df2
-
     nullarr = pd.Series([1, 2, 3, 4, None, 1, 2], dtype="UInt16")
     df1 = pd.DataFrame({"A": [1, 1, 1, 1, 1, 2, 2], "B": nullarr})
     check_func(impl1, (df1,), sort_output=True)
-    check_func(impl2, (df1,), sort_output=True)
-    check_func(impl3, (df1,), sort_output=True)
 
 
 @pytest.mark.parametrize(
@@ -1001,7 +967,11 @@ def test_max_one_col(test_df):
         }
     )
 
-    check_func(impl1, (test_df,), sort_output=True)
+    # seems like Pandas 1.0 has a regression and returns float64 for Int64 in this case
+    check_dtype = True
+    if pd.Int64Dtype() in test_df.dtypes.to_list():
+        check_dtype = False
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl2, (11,))
 
@@ -1131,7 +1101,11 @@ def test_min_one_col(test_df):
         }
     )
 
-    check_func(impl1, (test_df,), sort_output=True)
+    # seems like Pandas 1.0 has a regression and returns float64 for Int64 in this case
+    check_dtype = True
+    if pd.Int64Dtype() in test_df.dtypes.to_list():
+        check_dtype = False
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
@@ -1229,7 +1203,11 @@ def test_prod_one_col(test_df):
         }
     )
 
-    check_func(impl1, (test_df,), sort_output=True)
+    # seems like Pandas 1.0 has a regression and returns float64 for Int64 in this case
+    check_dtype = True
+    if pd.Int64Dtype() in test_df.dtypes.to_list():
+        check_dtype = False
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 

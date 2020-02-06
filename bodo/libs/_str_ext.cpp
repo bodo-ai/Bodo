@@ -54,7 +54,7 @@ void list_string_array_from_sequence(PyObject* obj, int64_t* num_items,
                                      char** buffer, uint32_t** data_offset,
                                      uint32_t** index_offset,
                                      uint8_t** null_bitmap);
-void* np_array_from_string_array(int64_t no_strings,
+void* pd_array_from_string_array(int64_t no_strings,
                                  const uint32_t* offset_table,
                                  const char* buffer,
                                  const uint8_t* null_bitmap);
@@ -97,9 +97,8 @@ npy_intp array_size(PyArrayObject* arr);
 void* array_getptr1(PyArrayObject* arr, npy_intp ind);
 void array_setitem(PyArrayObject* arr, char* p, PyObject* s);
 void mask_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* mask_arr, int64_t n);
-PyArrayObject* set_nulls_bool_array(PyArrayObject* bool_arr,
-                                    uint8_t* bitmap_arr);
 int is_bool_array(PyArrayObject* arr);
+int is_pd_boolean_array(PyObject* arr);
 void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
                           int64_t n);
 void print_str_arr(uint64_t n, uint64_t n_chars, uint32_t* offsets,
@@ -152,8 +151,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
         m, "list_string_array_from_sequence",
         PyLong_FromVoidPtr((void*)(&list_string_array_from_sequence)));
     PyObject_SetAttrString(
-        m, "np_array_from_string_array",
-        PyLong_FromVoidPtr((void*)(&np_array_from_string_array)));
+        m, "pd_array_from_string_array",
+        PyLong_FromVoidPtr((void*)(&pd_array_from_string_array)));
     PyObject_SetAttrString(
         m, "np_array_from_list_string_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_list_string_array)));
@@ -212,10 +211,10 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&get_utf8_size)));
     PyObject_SetAttrString(m, "mask_arr_to_bitmap",
                            PyLong_FromVoidPtr((void*)(&mask_arr_to_bitmap)));
-    PyObject_SetAttrString(m, "set_nulls_bool_array",
-                           PyLong_FromVoidPtr((void*)(&set_nulls_bool_array)));
     PyObject_SetAttrString(m, "is_bool_array",
                            PyLong_FromVoidPtr((void*)(&is_bool_array)));
+    PyObject_SetAttrString(m, "is_pd_boolean_array",
+                        PyLong_FromVoidPtr((void*)(&is_pd_boolean_array)));
     PyObject_SetAttrString(m, "unbox_bool_array_obj",
                            PyLong_FromVoidPtr((void*)(&unbox_bool_array_obj)));
     return m;
@@ -536,6 +535,12 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
         obj = PyObject_GetAttrString(obj, "values");
     }
 
+    // get pd.isna object to call in the loop to check for NAs
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* isna_call_obj = PyObject_GetAttrString(pd_mod, "isna");
+    CHECK(isna_call_obj, "getting pd.isna failed");
+
     offsets = new uint32_t[n + 1];
     std::vector<const char*> tmp_store(n);
     size_t len = 0;
@@ -543,9 +548,9 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
         offsets[i] = len;
         PyObject* s = PySequence_GetItem(obj, i);
         CHECK(s, "getting element failed");
-        // Pandas stores NA as either None or nan
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s)))) {
+        // Pandas stores NA as either None, nan, or pd.NA
+        PyObject* isna_obj = PyObject_CallFunctionObjArgs(isna_call_obj, s, NULL);
+        if (PyObject_IsTrue(isna_obj)) {
             // leave null bit as 0
             tmp_store[i] = "";
         } else {
@@ -560,6 +565,7 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
             len += size;
         }
         Py_DECREF(s);
+        Py_DECREF(isna_obj);
     }
     offsets[n] = len;
 
@@ -567,6 +573,9 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
     for (Py_ssize_t i = 0; i < n; ++i) {
         memcpy(outbuf + offsets[i], tmp_store[i], offsets[i + 1] - offsets[i]);
     }
+
+    Py_DECREF(isna_call_obj);
+    Py_DECREF(pd_mod);
 
     PyGILState_Release(gilstate);
 
@@ -578,12 +587,12 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
 #undef CHECK
 }
 
-/// @brief  From a StringArray create a numpy array of string objects
-/// @return numpy array of str objects
+/// @brief  Create Pandas StringArray from Bodo's packed StringArray
+/// @return Pandas StringArray of str objects
 /// @param[in] no_strings number of strings found in buffer
 /// @param[in] offset_table offsets for strings in buffer
 /// @param[in] buffer with concatenated strings (from StringArray)
-void* np_array_from_string_array(int64_t no_strings,
+void* pd_array_from_string_array(int64_t no_strings,
                                  const uint32_t* offset_table,
                                  const char* buffer,
                                  const uint8_t* null_bitmap) {
@@ -599,10 +608,11 @@ void* np_array_from_string_array(int64_t no_strings,
     PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
     CHECK(ret, "allocating numpy array failed");
     int err;
-    PyObject* np_mod = PyImport_ImportModule("numpy");
-    CHECK(np_mod, "importing numpy module failed");
-    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
-    CHECK(nan_obj, "getting np.nan failed");
+
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* na_obj = PyObject_GetAttrString(pd_mod, "NA");
+    CHECK(na_obj, "getting pd.NA failed");
 
     for (int64_t i = 0; i < no_strings; ++i) {
         PyObject* s = PyUnicode_FromStringAndSize(
@@ -613,15 +623,18 @@ void* np_array_from_string_array(int64_t no_strings,
         if (!is_na(null_bitmap, i))
             err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, s);
         else
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
+            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, na_obj);
         CHECK(err == 0, "setting item in numpy array failed");
         Py_DECREF(s);
     }
 
-    Py_DECREF(np_mod);
-    Py_DECREF(nan_obj);
+    PyObject* str_arr_obj = PyObject_CallMethod(pd_mod, "array", "Osl", ret, "string", 0);
+
+    Py_DECREF(pd_mod);
+    Py_DECREF(na_obj);
+    Py_DECREF(ret);
     PyGILState_Release(gilstate);
-    return ret;
+    return str_arr_obj;
 #undef CHECK
 }
 
@@ -862,44 +875,6 @@ void mask_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* mask_arr, int64_t n) {
             kBitmask[i % 8];
 }
 
-PyArrayObject* set_nulls_bool_array(PyArrayObject* bool_arr,
-                                    uint8_t* bitmap_arr) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return NULL;                   \
-    }
-    auto gilstate = PyGILState_Ensure();
-    // Always use object array to avoid inconsistency across processors.
-    // e.g. bodo/tests/test_series.py::test_series_values[series_val3] on 2 pes
-
-    int64_t n = PyArray_SIZE(bool_arr);
-    CHECK(n >= 0, "invalid array size");
-
-    PyObject* np_mod = PyImport_ImportModule("numpy");
-    CHECK(np_mod, "importing numpy module failed");
-    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
-    CHECK(nan_obj, "getting np.nan failed");
-
-    PyArrayObject* new_arr = (PyArrayObject*)PyObject_CallMethod(
-        (PyObject*)bool_arr, "astype", "s", "O");
-    for (int i = 0; i < n; i++)
-        if (!GetBit(bitmap_arr, i)) {
-            auto p = PyArray_GETPTR1((PyArrayObject*)new_arr, i);
-            CHECK(p, "getting offset in numpy array failed");
-            int err =
-                PyArray_SETITEM((PyArrayObject*)new_arr, (char*)p, nan_obj);
-            CHECK(err == 0, "setting item in numpy array failed");
-        }
-
-    Py_DECREF(bool_arr);
-    Py_DECREF(np_mod);
-    Py_DECREF(nan_obj);
-    PyGILState_Release(gilstate);
-    return new_arr;
-#undef CHECK
-}
 
 int is_bool_array(PyArrayObject* arr) {
 #define CHECK(expr, msg)               \
@@ -916,10 +891,41 @@ int is_bool_array(PyArrayObject* arr) {
 
     // returning int instead of bool to avoid potential bool call convention
     // issues
-    return dtype->kind == 'b';
+    int res = dtype->kind == 'b';
+    Py_DECREF(dtype);
+    return res;
 
 #undef CHECK
 }
+
+
+int is_pd_boolean_array(PyObject* arr) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return false;                  \
+    }
+
+    // pd.arrays.BooleanArray
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* pd_arrays_obj = PyObject_GetAttrString(pd_mod, "arrays");
+    CHECK(pd_arrays_obj, "getting pd.arrays failed");
+    PyObject* pd_arrays_bool_arr_obj = PyObject_GetAttrString(pd_arrays_obj, "BooleanArray");
+    CHECK(pd_arrays_obj, "getting pd.arrays.BooleanArray failed");
+
+    // isinstance(arr, BooleanArray)
+    int ret = PyObject_IsInstance(arr, pd_arrays_bool_arr_obj);
+    CHECK(ret >= 0, "isinstance fails");
+
+    Py_DECREF(pd_mod);
+    Py_DECREF(pd_arrays_obj);
+    Py_DECREF(pd_arrays_bool_arr_obj);
+    return ret;
+
+#undef CHECK
+}
+
 
 void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
                           int64_t n) {
@@ -930,7 +936,12 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
         return;                        \
     }
     auto gilstate = PyGILState_Ensure();
-    //
+
+    // get pd.isna object to call in the loop to check for NAs
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* isna_call_obj = PyObject_GetAttrString(pd_mod, "isna");
+    CHECK(isna_call_obj, "getting pd.isna failed");
 
     for (uint64_t i = 0; i < uint64_t(n); ++i) {
         auto p = PyArray_GETPTR1((PyArrayObject*)arr, i);
@@ -938,8 +949,8 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
         PyObject* s = PyArray_GETITEM(arr, (const char*)p);
         CHECK(s, "getting element failed");
         // Pandas stores NA as either None or nan
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s)))) {
+        PyObject* isna_obj = PyObject_CallFunctionObjArgs(isna_call_obj, s, NULL);
+        if (PyObject_IsTrue(isna_obj)) {
             // null bit
             ClearBit(bitmap, i);
             data[i] = 0;
@@ -950,8 +961,11 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
             data[i] = (uint8_t)is_true;
         }
         Py_DECREF(s);
+        Py_DECREF(isna_obj);
     }
 
+    Py_DECREF(pd_mod);
+    Py_DECREF(isna_call_obj);
 #undef CHECK
 }
 

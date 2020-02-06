@@ -94,15 +94,6 @@ def overload_series_name(s):
     return lambda s: bodo.hiframes.pd_series_ext.get_series_name(s)
 
 
-@overload_method(SeriesType, "put")
-def overload_series_put(S, indices, values):
-    # TODO: non-numeric types like strings
-    def impl(S, indices, values):  # pragma: no cover
-        bodo.hiframes.pd_series_ext.get_series_data(S)[indices] = values
-
-    return impl
-
-
 @overload(len)
 def overload_series_len(S):
     if isinstance(S, SeriesType):
@@ -154,14 +145,6 @@ def overload_series_to_list(S):
             # using iat directly on S to box Timestamp/... properly
             l.append(S.iat[i])
         return l
-
-    return impl
-
-
-@overload_method(SeriesType, "get_values")
-def overload_series_get_values(S):
-    def impl(S):  # pragma: no cover
-        return S.values
 
     return impl
 

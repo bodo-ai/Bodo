@@ -13,7 +13,7 @@ such as Numba on Ubuntu Linux::
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
-    conda create -n DEV python=3.7 numpy scipy pandas=0.25.3 boost-cpp cmake h5py mpich mpi -c conda-forge
+    conda create -n DEV python=3.7 numpy scipy pandas=1.0.0 boost-cpp cmake h5py mpich mpi -c conda-forge
     source activate DEV
     # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64 -c conda-forge
@@ -173,7 +173,7 @@ Building from Source on Windows
 * Start 'Anaconda (Miniconda3) prompt'
 * Setup the Conda environment in Anaconda Prompt::
 
-    conda create -n DEV python=3.7 numpy scipy pandas=0.25.3 boost-cpp cmake h5py -c conda-forge
+    conda create -n DEV python=3.7 numpy scipy pandas=1.0.0 boost-cpp cmake h5py -c conda-forge
     source activate DEV
     conda install numba=0.46.0 -c conda-forge
     conda install vc vs2015_runtime vs2015_win-64

@@ -17,7 +17,6 @@ import bodo
 from bodo.libs.str_arr_ext import (
     string_array_type,
     num_total_chars,
-    StringArray,
     pre_alloc_string_array,
     get_offset_ptr,
     get_null_bitmap_ptr,
@@ -445,7 +444,7 @@ def gatherv(data, allgather=False):
             n_total_char = recv_counts_char.sum()
 
             # displacements
-            all_data = StringArray()  # dummy arrays on non-root PEs
+            all_data = pre_alloc_string_array(0, 0)  # dummy arrays on non-root PEs
             displs = np.empty(1, np.int32)
             displs_char = np.empty(1, np.int32)
             recv_counts_nulls = np.empty(1, np.int32)

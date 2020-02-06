@@ -3,17 +3,14 @@ import operator
 import datetime
 import warnings
 import numpy as np
+import pandas as pd
 import numba
 import bodo
 from numba import types
 from numba.typing.templates import (
     infer_global,
     AbstractTemplate,
-    infer,
     signature,
-    AttributeTemplate,
-    infer_getattr,
-    bound_function,
 )
 import numba.typing.typeof
 from numba.extending import (
@@ -26,17 +23,22 @@ from numba.extending import (
     lower_builtin,
     box,
     unbox,
-    lower_getattr,
     intrinsic,
     overload_method,
     overload,
     overload_attribute,
+    register_jitable,
 )
 from numba import cgutils
 from bodo.libs.str_ext import string_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type, datetime_date_type
-from bodo.utils.typing import BodoWarning
+from bodo.utils.typing import (
+    BodoWarning,
+    is_list_like_index_type,
+    is_overload_true,
+    is_overload_none,
+)
 from numba.targets.imputils import (
     impl_ret_new_ref,
     impl_ret_borrowed,
@@ -46,7 +48,7 @@ from numba.targets.imputils import (
 from numba.targets.hashing import _Py_hash_t
 import llvmlite.llvmpy.core as lc
 from glob import glob
-from bodo.utils.typing import is_overload_true, is_overload_none
+
 
 char_typ = types.uint8
 offset_typ = types.uint32
@@ -55,36 +57,14 @@ data_ctypes_type = types.ArrayCTypes(types.Array(char_typ, 1, "C"))
 offset_ctypes_type = types.ArrayCTypes(types.Array(offset_typ, 1, "C"))
 
 
-class StringArray:
-    def __init__(self, str_list=None):
-        # dummy constructor
-        if str_list is None:
-            str_list = []
-        self.num_strings = len(str_list)
-        self.offsets = str_list
-        self.data = str_list
-
-    ndim = 1
-
-    def __repr__(self):
-        return "StringArray({})".format(self.data)
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, key):
-        if isinstance(key, int):
-            return self.data[key]
-        return StringArray(self.data[key])
-
-
+# type for pd.arrays.StringArray and ndarray with string object values
 class StringArrayType(types.IterableType, types.ArrayCompatible):
     def __init__(self):
         super(StringArrayType, self).__init__(name="StringArrayType()")
 
     @property
     def as_array(self):
-        return types.Array(string_type, 1, "C")
+        return types.Array(types.undefined, 1, "C")
 
     @property
     def dtype(self):
@@ -101,17 +81,9 @@ class StringArrayType(types.IterableType, types.ArrayCompatible):
 string_array_type = StringArrayType()
 
 
-@typeof_impl.register(StringArray)
+@typeof_impl.register(pd.arrays.StringArray)
 def typeof_string_array(val, c):
     return string_array_type
-
-
-@type_callable(StringArray)
-def type_string_array_call2(context):
-    def typer(string_list=None):
-        return string_array_type
-
-    return typer
 
 
 class StringArrayPayloadType(types.Type):
@@ -157,6 +129,41 @@ make_attribute_wrapper(StringArrayType, "num_total_chars", "_num_total_chars")
 make_attribute_wrapper(StringArrayType, "null_bitmap", "_null_bitmap")
 make_attribute_wrapper(StringArrayType, "offsets", "_offsets")
 make_attribute_wrapper(StringArrayType, "data", "_data")
+
+
+# dtype object for pd.StringDtype()
+class StringDtype(types.Number):
+    """
+    Type class associated with pandas String dtype pd.StringDtype()
+    """
+
+    def __init__(self):
+        super(StringDtype, self).__init__("StringDtype")
+
+
+string_dtype = StringDtype()
+
+
+register_model(StringDtype)(models.OpaqueModel)
+
+
+@box(StringDtype)
+def box_string_dtype(typ, val, c):
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    res = c.pyapi.call_method(pd_class_obj, "StringDtype", ())
+    c.pyapi.decref(pd_class_obj)
+    return res
+
+
+@unbox(StringDtype)
+def unbox_string_dtype(typ, val, c):
+    return NativeValue(c.context.get_dummy_value())
+
+
+typeof_impl.register(pd.StringDtype)(lambda a, b: string_dtype)
+type_callable(pd.StringDtype)(lambda c: lambda: string_dtype)
+lower_builtin(pd.StringDtype)(lambda c, b, s, a: c.get_dummy_value())
 
 
 def create_binary_op_overload(op):
@@ -240,18 +247,6 @@ def _install_binary_ops():
 
 
 _install_binary_ops()
-
-
-# TODO: fix overload for things like 'getitem'
-# @overload(operator.getitem)
-# def str_arr_getitem_bool_overload(str_arr_tp, bool_arr_tp):
-#     if str_arr_tp == string_array_type and bool_arr_tp == types.Array(types.bool_, 1, 'C'):
-#         def str_arr_bool_impl(str_arr, bool_arr):
-#             n = len(str_arr)
-#             if n!=len(bool_arr):
-#                 raise IndexError("boolean index did not match indexed array along dimension 0")
-#             return str_arr
-#         return str_arr_bool_impl
 
 
 class StringArrayIterator(types.SimpleIteratorType):
@@ -742,37 +737,6 @@ def str_list_to_array_overload(str_list):
     return lambda str_list: str_list
 
 
-@infer_global(operator.getitem)
-class GetItemStringArray(AbstractTemplate):
-    key = operator.getitem
-
-    def generic(self, args, kws):
-        assert not kws
-        [ary, idx] = args
-        if isinstance(ary, StringArrayType):
-            if isinstance(idx, types.SliceType):
-                return signature(string_array_type, *args)
-            # elif isinstance(idx, types.Integer):
-            #     return signature(string_type, *args)
-            elif idx == types.Array(types.bool_, 1, "C"):
-                return signature(string_array_type, *args)
-            elif idx == types.Array(types.intp, 1, "C"):
-                return signature(string_array_type, *args)
-
-
-@infer_global(operator.setitem)
-class SetItemStringArray(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        ary, idx, val = args
-        if (
-            ary == string_array_type
-            and isinstance(idx, types.Integer)
-            and val == string_type
-        ):
-            return signature(types.none, *args)
-
-
 def is_str_arr_typ(typ):
     from bodo.hiframes.pd_series_ext import is_str_series_typ
 
@@ -823,7 +787,7 @@ ll.add_symbol("getitem_string_array", hstr_ext.getitem_string_array)
 ll.add_symbol("getitem_string_array_std", hstr_ext.getitem_string_array_std)
 ll.add_symbol("is_na", hstr_ext.is_na)
 ll.add_symbol("string_array_from_sequence", hstr_ext.string_array_from_sequence)
-ll.add_symbol("np_array_from_string_array", hstr_ext.np_array_from_string_array)
+ll.add_symbol("pd_array_from_string_array", hstr_ext.pd_array_from_string_array)
 ll.add_symbol("print_int", hstr_ext.print_int)
 ll.add_symbol("convert_len_arr_to_offset", hstr_ext.convert_len_arr_to_offset)
 ll.add_symbol("set_string_array_range", hstr_ext.set_string_array_range)
@@ -841,7 +805,16 @@ convert_len_arr_to_offset = types.ExternalFunction(
 
 setitem_string_array = types.ExternalFunction(
     "setitem_string_array",
-    types.void(types.voidptr, types.voidptr, types.intp, string_type, types.intp),
+    types.void(
+        types.CPointer(offset_typ),
+        types.CPointer(char_typ),
+        types.uint64,
+        types.voidptr,
+        types.intp,
+        types.int32,
+        types.int32,
+        types.intp,
+    ),
 )
 _get_utf8_size = types.ExternalFunction(
     "get_utf8_size", types.intp(types.voidptr, types.intp, types.int32)
@@ -879,137 +852,19 @@ def construct_string_array(context, builder):
     return meminfo, meminfo_data_ptr
 
 
-# TODO: overload of constructor doesn't work
-# @overload(StringArray)
-# def string_array_const(in_list=None):
-#     if in_list is None:
-#         return lambda: pre_alloc_string_array(0, 0)
+@register_jitable
+def str_arr_from_sequence(in_seq):  # pragma: no cover
+    n_strs = len(in_seq)
+    total_chars = 0
+    # get total number of chars
+    for s in in_seq:
+        total_chars += get_utf8_size(s)
 
-#     def str_arr_from_list(in_list):
-#         n_strs = len(in_list)
-#         total_chars = 0
-#         # TODO: use vector to avoid two passes?
-#         # get total number of chars
-#         for s in in_list:
-#             total_chars += len(s)
+    A = pre_alloc_string_array(n_strs, total_chars)
+    for i in range(n_strs):
+        A[i] = in_seq[i]
 
-#         A = pre_alloc_string_array(n_strs, total_chars)
-#         for i in range(n_strs):
-#             A[i] = in_list[i]
-
-#         return A
-
-#     return str_arr_from_list
-
-
-# used in pd.DataFrame() and pd.Series() to convert list of strings
-@lower_builtin(StringArray)
-@lower_builtin(StringArray, types.List)
-@lower_builtin(StringArray, types.UniTuple)
-def impl_string_array_single(context, builder, sig, args):
-    if not sig.args:  # return empty string array if no args
-        res = context.compile_internal(
-            builder, lambda: pre_alloc_string_array(0, 0), sig, args
-        )
-        return res
-
-    if isinstance(args[0], types.UniTuple):
-        assert isinstance (args[0].dtype, (types.UnicodeType, types.StringLiteral))
-
-    def str_arr_from_list(in_list):  # pragma: no cover
-        n_strs = len(in_list)
-        total_chars = 0
-        # TODO: use vector to avoid two passes?
-        # get total number of chars
-        for s in in_list:
-            total_chars += get_utf8_size(s)
-
-        A = pre_alloc_string_array(n_strs, total_chars)
-        for i in range(n_strs):
-            A[i] = in_list[i]
-
-        return A
-
-    res = context.compile_internal(builder, str_arr_from_list, sig, args)
-    return res
-
-
-# @lower_builtin(StringArray)
-# @lower_builtin(StringArray, types.List)
-# def impl_string_array_single(context, builder, sig, args):
-#     typ = sig.return_type
-#     zero = context.get_constant(types.intp, 0)
-#     meminfo, meminfo_data_ptr = construct_string_array(context, builder)
-
-#     str_arr_payload = cgutils.create_struct_proxy(str_arr_payload_type)(context, builder)
-#     if not sig.args:  # return empty string array if no args
-#         # XXX alloc empty arrays for dtor to safely delete?
-#         builder.store(str_arr_payload._getvalue(), meminfo_data_ptr)
-#         string_array = context.make_helper(builder, typ)
-#         string_array.meminfo = meminfo
-#         string_array.num_items = zero
-#         string_array.num_total_chars = zero
-#         ret = string_array._getvalue()
-#         #context.nrt.decref(builder, ty, ret)
-
-#         return impl_ret_new_ref(context, builder, typ, ret)
-
-#     string_list = ListInstance(context, builder, sig.args[0], args[0])
-
-#     # get total size of string buffer
-#     fnty = lir.FunctionType(lir.IntType(64),
-#                             [lir.IntType(8).as_pointer()])
-#     fn_len = builder.module.get_or_insert_function(fnty, name="get_str_len")
-#     total_size = cgutils.alloca_once_value(builder, zero)
-
-#     # loop through all strings and get length
-#     with cgutils.for_range(builder, string_list.size) as loop:
-#         str_value = string_list.getitem(loop.index)
-#         str_len = builder.call(fn_len, [str_value])
-#         builder.store(builder.add(builder.load(total_size), str_len), total_size)
-
-#     # allocate string array
-#     fnty = lir.FunctionType(lir.VoidType(),
-#                             [lir.IntType(32).as_pointer().as_pointer(),
-#                              lir.IntType(8).as_pointer().as_pointer(),
-#                              lir.IntType(8).as_pointer().as_pointer(),
-#                              lir.IntType(64),
-#                              lir.IntType(64)])
-#     fn_alloc = builder.module.get_or_insert_function(fnty,
-#                                                      name="allocate_string_array")
-#     builder.call(fn_alloc, [str_arr_payload._get_ptr_by_name('offsets'),
-#                             str_arr_payload._get_ptr_by_name('data'),
-#                             str_arr_payload._get_ptr_by_name('null_bitmap'),
-#                             string_list.size, builder.load(total_size)])
-
-#     # set string array values
-#     fnty = lir.FunctionType(lir.VoidType(),
-#                             [lir.IntType(32).as_pointer(),
-#                              lir.IntType(8).as_pointer(),
-#                              lir.IntType(8).as_pointer(),
-#                              lir.IntType(64)])
-#     fn_setitem = builder.module.get_or_insert_function(fnty,
-#                                                        name="setitem_string_array")
-
-#     with cgutils.for_range(builder, string_list.size) as loop:
-#         str_value = string_list.getitem(loop.index)
-#         builder.call(fn_setitem, [str_arr_payload.offsets, str_arr_payload.data,
-#                                   str_value, loop.index])
-
-#     builder.store(str_arr_payload._getvalue(), meminfo_data_ptr)
-
-#     string_array = context.make_helper(builder, typ)
-#     string_array.num_items = string_list.size
-#     string_array.num_total_chars = builder.load(total_size)
-#     #cgutils.printf(builder, "str %d %d\n", string_array.num_items, string_array.num_total_chars)
-#     string_array.offsets = str_arr_payload.offsets
-#     string_array.data = str_arr_payload.data
-#     string_array.null_bitmap = str_arr_payload.null_bitmap
-#     string_array.meminfo = meminfo
-#     ret = string_array._getvalue()
-#     #context.nrt.decref(builder, ty, ret)
-
-#     return impl_ret_new_ref(context, builder, typ, ret)
+    return A
 
 
 @intrinsic
@@ -1178,7 +1033,7 @@ def box_str_arr(typ, val, c):
         ],
     )
     fn_get = c.builder.module.get_or_insert_function(
-        fnty, name="np_array_from_string_array"
+        fnty, name="pd_array_from_string_array"
     )
     arr = c.builder.call(
         fn_get,
@@ -1308,44 +1163,6 @@ def set_null_bits(typingctx, str_arr_typ=None):
     return types.none(string_array_type), codegen
 
 
-# XXX: setitem works only if value is same size as the previous value
-@lower_builtin(operator.setitem, StringArrayType, types.Integer, string_type)
-def setitem_str_arr(context, builder, sig, args):
-    arr, ind, val = args
-    uni_str = cgutils.create_struct_proxy(string_type)(context, builder, value=val)
-    string_array = context.make_helper(builder, string_array_type, arr)
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(32).as_pointer(),
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-            lir.IntType(32),
-            lir.IntType(32),
-            lir.IntType(64),
-        ],
-    )
-    fn_setitem = builder.module.get_or_insert_function(
-        fnty, name="setitem_string_array"
-    )
-    builder.call(
-        fn_setitem,
-        [
-            string_array.offsets,
-            string_array.data,
-            string_array.num_total_chars,
-            uni_str.data,
-            uni_str.length,
-            uni_str.kind,
-            uni_str.is_ascii,
-            ind,
-        ],
-    )
-    return context.get_dummy_value()
-
-
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_utf8_size(s):
     if isinstance(s, types.StringLiteral):
@@ -1428,12 +1245,15 @@ def print_str_arr(arr):  # pragma: no cover
 
 
 @overload(operator.getitem)
-def str_arr_getitem_int(A, i):
-    if A == string_array_type and isinstance(i, types.Integer):
+def str_arr_getitem_int(A, ind):
+    if A != string_array_type:
+        return
+
+    if isinstance(ind, types.Integer):
         # kind = numba.unicode.PY_UNICODE_1BYTE_KIND
-        def str_arr_getitem_impl(A, i):  # pragma: no cover
-            start_offset = getitem_str_offset(A, i)
-            end_offset = getitem_str_offset(A, i + 1)
+        def str_arr_getitem_impl(A, ind):  # pragma: no cover
+            start_offset = getitem_str_offset(A, ind)
+            end_offset = getitem_str_offset(A, ind + 1)
             length = end_offset - start_offset
             ptr = get_data_ptr_ind(A, start_offset)
             ret = decode_utf8(ptr, length)
@@ -1442,6 +1262,136 @@ def str_arr_getitem_int(A, i):
             return ret
 
         return str_arr_getitem_impl
+
+    # bool arr indexing
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+
+        def bool_impl(A, ind):  # pragma: no cover
+            n = len(A)
+            n_strs = 0
+            n_chars = 0
+            for i in range(n):
+                if ind[i]:
+                    n_strs += 1
+                    n_chars += get_str_arr_item_length(A, i)
+            out_arr = pre_alloc_string_array(n_strs, n_chars)
+            str_ind = 0
+            for i in range(n):
+                if ind[i]:
+                    _str = A[i]
+                    out_arr[str_ind] = _str
+                    # set NA
+                    if str_arr_is_na(A, i):
+                        str_arr_set_na(out_arr, str_ind)
+                    str_ind += 1
+            return out_arr
+
+        return bool_impl
+
+    # int arr indexing
+    if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
+
+        def str_arr_arr_impl(A, ind):  # pragma: no cover
+            n = len(ind)
+            # get lengths
+            n_strs = 0
+            n_chars = 0
+            for i in range(n):
+                n_strs += 1
+                n_chars += get_str_arr_item_length(A, ind[i])
+
+            out_arr = pre_alloc_string_array(n_strs, n_chars)
+            str_ind = 0
+            for i in range(n):
+                _str = A[ind[i]]
+                out_arr[str_ind] = _str
+                # set NA
+                if str_arr_is_na(A, ind[i]):
+                    str_arr_set_na(out_arr, str_ind)
+                str_ind += 1
+            return out_arr
+
+        return str_arr_arr_impl
+
+    # slice case
+    if isinstance(ind, types.SliceType):
+
+        def str_arr_slice_impl(A, ind):  # pragma: no cover
+            n = len(A)
+            slice_idx = numba.unicode._normalize_slice(ind, n)
+            span = numba.unicode._slice_span(slice_idx)
+
+            if slice_idx.step == 1:
+                start_offset = getitem_str_offset(A, slice_idx.start)
+                end_offset = getitem_str_offset(A, slice_idx.stop)
+                n_chars = end_offset - start_offset
+                new_arr = pre_alloc_string_array(span, np.int64(n_chars))
+                # TODO: more efficient copy
+                for i in range(span):
+                    new_arr[i] = A[slice_idx.start + i]
+                    # set NA
+                    if str_arr_is_na(A, slice_idx.start + i):
+                        str_arr_set_na(new_arr, i)
+                return new_arr
+            else:  # TODO: test
+                # get number of chars
+                n_chars = 0
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    n_chars += get_str_arr_item_length(A, i)
+                new_arr = pre_alloc_string_array(span, np.int64(n_chars))
+                # TODO: more efficient copy
+                for i in range(span):
+                    new_arr[i] = A[slice_idx.start + i * slice_idx.step]
+                    # set NA
+                    if str_arr_is_na(A, slice_idx.start + i * slice_idx.step):
+                        str_arr_set_na(new_arr, i)
+                return new_arr
+
+        return str_arr_slice_impl
+
+
+dummy_use = numba.njit(lambda a: None)
+
+
+@overload(operator.setitem)
+def str_arr_setitem(A, idx, val):
+    if A != string_array_type:
+        return
+
+    # scalar case
+    if isinstance(idx, types.Integer):
+        assert val == string_type
+
+        # XXX: setitem works only if value is same size as the previous value
+        def impl_scalar(A, idx, val):  # pragma: no cover
+            setitem_string_array(
+                A._offsets,
+                A._data,
+                A._num_total_chars,
+                val._data,
+                val._length,
+                val._kind,
+                val._is_ascii,
+                idx,
+            )
+            # dummy use function to avoid decref of A
+            # TODO: refcounting support for _offsets, ... to avoid this workaround
+            dummy_use(A)
+            dummy_use(val)
+
+        return impl_scalar
+
+    # TODO: other setitem cases
+
+
+@overload_attribute(StringArrayType, "dtype")
+def overload_str_arr_dtype(A):
+    return lambda A: pd.StringDtype()
+
+
+@overload_attribute(StringArrayType, "ndim")
+def overload_str_arr_ndim(A):
+    return lambda A: 1
 
 
 @intrinsic
@@ -1459,142 +1409,6 @@ def decode_utf8(typingctx, ptr_t, len_t=None):
         return str_struct._getvalue()
 
     return string_type(types.voidptr, types.intp), codegen
-
-
-# @lower_builtin(operator.getitem, StringArrayType, types.Integer)
-# @lower_builtin(operator.getitem, StringArrayType, types.IntegerLiteral)
-# def lower_string_arr_getitem(context, builder, sig, args):
-#     # TODO: support multibyte unicode
-#     # TODO: support Null
-#     kind = numba.unicode.PY_UNICODE_1BYTE_KIND
-#     def str_arr_getitem_impl(A, i):
-#         start_offset = getitem_str_offset(A, i)
-#         end_offset = getitem_str_offset(A, i + 1)
-#         length = end_offset - start_offset
-#         ret = numba.unicode._empty_string(kind, length)
-#         ptr = get_data_ptr_ind(A, start_offset)
-#         _memcpy(ret._data, ptr, length, 1)
-#         return ret
-
-#     res = context.compile_internal(builder, str_arr_getitem_impl, sig, args)
-#     return res
-
-# typ = sig.args[0]
-# ind = args[1]
-
-# string_array = context.make_helper(builder, typ, args[0])
-
-# # check for NA
-# # i/8, XXX: lshr since always positive
-# #byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
-# #bit_ind = builder.srem
-
-# # cgutils.printf(builder, "calling bitmap\n")
-# # with cgutils.if_unlikely(builder, lower_is_na(context, builder, string_array.null_bitmap, ind)):
-# #     cgutils.printf(builder, "is_na %d \n", ind)
-# # cgutils.printf(builder, "calling bitmap done\n")
-
-# fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
-#                         [lir.IntType(32).as_pointer(),
-#                          lir.IntType(8).as_pointer(),
-#                          lir.IntType(64)])
-# fn_getitem = builder.module.get_or_insert_function(fnty,
-#                                                    name="getitem_string_array_std")
-# return builder.call(fn_getitem, [string_array.offsets,
-#                                  string_array.data, args[1]])
-
-
-@lower_builtin(operator.getitem, StringArrayType, types.Array(types.bool_, 1, "C"))
-def lower_string_arr_getitem_bool(context, builder, sig, args):
-    def str_arr_bool_impl(str_arr, bool_arr):  # pragma: no cover
-        n = len(str_arr)
-        if n != len(bool_arr):
-            raise IndexError(
-                "boolean index did not match indexed array along dimension 0"
-            )
-        n_strs = 0
-        n_chars = 0
-        for i in range(n):
-            if bool_arr[i]:
-                n_strs += 1
-                n_chars += get_str_arr_item_length(str_arr, i)
-        out_arr = pre_alloc_string_array(n_strs, n_chars)
-        str_ind = 0
-        for i in range(n):
-            if bool_arr[i]:
-                _str = str_arr[i]
-                out_arr[str_ind] = _str
-                # set NA
-                if str_arr_is_na(str_arr, i):
-                    str_arr_set_na(out_arr, str_ind)
-                str_ind += 1
-        return out_arr
-
-    res = context.compile_internal(builder, str_arr_bool_impl, sig, args)
-    return res
-
-
-@lower_builtin(operator.getitem, StringArrayType, types.Array(types.intp, 1, "C"))
-def lower_string_arr_getitem_arr(context, builder, sig, args):
-    def str_arr_arr_impl(str_arr, ind_arr):  # pragma: no cover
-        n = len(ind_arr)
-        # get lengths
-        n_strs = 0
-        n_chars = 0
-        for i in range(n):
-            n_strs += 1
-            n_chars += get_str_arr_item_length(str_arr, ind_arr[i])
-
-        out_arr = pre_alloc_string_array(n_strs, n_chars)
-        str_ind = 0
-        for i in range(n):
-            _str = str_arr[ind_arr[i]]
-            out_arr[str_ind] = _str
-            # set NA
-            if str_arr_is_na(str_arr, ind_arr[i]):
-                str_arr_set_na(out_arr, str_ind)
-            str_ind += 1
-        return out_arr
-
-    res = context.compile_internal(builder, str_arr_arr_impl, sig, args)
-    return res
-
-
-@lower_builtin(operator.getitem, StringArrayType, types.SliceType)
-def lower_string_arr_getitem_slice(context, builder, sig, args):
-    def str_arr_slice_impl(str_arr, idx):  # pragma: no cover
-        n = len(str_arr)
-        slice_idx = numba.unicode._normalize_slice(idx, n)
-        span = numba.unicode._slice_span(slice_idx)
-
-        if slice_idx.step == 1:
-            start_offset = getitem_str_offset(str_arr, slice_idx.start)
-            end_offset = getitem_str_offset(str_arr, slice_idx.stop)
-            n_chars = end_offset - start_offset
-            new_arr = pre_alloc_string_array(span, np.int64(n_chars))
-            # TODO: more efficient copy
-            for i in range(span):
-                new_arr[i] = str_arr[slice_idx.start + i]
-                # set NA
-                if str_arr_is_na(str_arr, slice_idx.start + i):
-                    str_arr_set_na(new_arr, i)
-            return new_arr
-        else:  # TODO: test
-            # get number of chars
-            n_chars = 0
-            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                n_chars += get_str_arr_item_length(str_arr, i)
-            new_arr = pre_alloc_string_array(span, np.int64(n_chars))
-            # TODO: more efficient copy
-            for i in range(span):
-                new_arr[i] = str_arr[slice_idx.start + i * slice_idx.step]
-                # set NA
-                if str_arr_is_na(str_arr, slice_idx.start + i * slice_idx.step):
-                    str_arr_set_na(new_arr, i)
-            return new_arr
-
-    res = context.compile_internal(builder, str_arr_slice_impl, sig, args)
-    return res
 
 
 @numba.njit(no_cpython_wrapper=True)
@@ -1675,8 +1489,8 @@ def _infer_ndarray_obj_dtype(val):
         # empty or all NA object arrays are assumed to be strings
         warnings.warn(
             BodoWarning(
-            "Empty object array passed to Bodo, which causes ambiguity in typing. "
-            "This can cause errors in parallel execution."
+                "Empty object array passed to Bodo, which causes ambiguity in typing. "
+                "This can cause errors in parallel execution."
             )
         )
         return string_type

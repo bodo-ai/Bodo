@@ -172,6 +172,10 @@ def _infer_series_dtype(S):
         return typeof_pd_int_dtype(S.dtype, None)
     elif isinstance(S.dtype, pd.CategoricalDtype):
         return PDCategoricalDtype(S.dtype.categories.to_list())
+    elif isinstance(S.dtype, pd.StringDtype):
+        return string_type
+    elif isinstance(S.dtype, pd.BooleanDtype):
+        return types.bool_
 
     # regular numpy types
     try:

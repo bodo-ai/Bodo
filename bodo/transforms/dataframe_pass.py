@@ -774,7 +774,6 @@ class DataFramePass:
 
     def _run_call_dataframe(self, assign, lhs, rhs, df_var, func_name):
         if func_name in (
-            "get_values",
             "to_numpy",
             "astype",
             "copy",
@@ -1282,7 +1281,7 @@ class DataFramePass:
         func_text += "  data = np.array(({},))\n".format(
             ", ".join(d + "_O" for d in data_args)
         )
-        func_text += "  index = bodo.libs.str_arr_ext.StringArray(({},))\n".format(
+        func_text += "  index = bodo.libs.str_arr_ext.str_arr_from_sequence(({},))\n".format(
             ", ".join("'{}'".format(c) for c in df_typ.columns)
         )
         func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, index)\n"
@@ -1645,7 +1644,7 @@ class DataFramePass:
         """Parses query expression using Pandas parser but avoids issues such as
         early evaluation of string expressions by Pandas.
         """
-        clean_name = pd.core.computation.common._remove_spaces_column_name
+        clean_name = pd.core.computation.parsing.clean_column_name
         cleaned_columns = [clean_name(c) for c in columns]
         resolver = {c: 0 for c in cleaned_columns}
         resolver["index"] = 0
@@ -1654,7 +1653,7 @@ class DataFramePass:
         # enable parsing
         glbs = self.func_ir.func_id.func.__globals__
         lcls = {a: 0 for a in self.func_ir.func_id.code.co_varnames}
-        env = pd.core.computation.scope._ensure_scope(2, glbs, lcls, (resolver,))
+        env = pd.core.computation.scope.ensure_scope(2, glbs, lcls, (resolver,))
 
         # avoid rewrite of operations in Pandas such as early evaluation of string exprs
         def _rewrite_membership_op(self, node, left, right):

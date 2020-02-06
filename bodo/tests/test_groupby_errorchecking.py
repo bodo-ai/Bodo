@@ -425,26 +425,6 @@ def test_groupby_median_type_check():
         bodo.jit(impl2)(df2)
 
 
-def test_groupby_median_argument_check():
-    """
-    Test Groupby.median() testing for skipna argument
-    """
-
-    def impl1(df):
-        return df.groupby("A")["B"].median(skipna=0)
-
-    def impl2(df):
-        return df.groupby("A")["B"].median(wrongarg=True)
-
-    df = pd.DataFrame({"A": [1, 1, 1, 1], "B": [1, 2, 3, 4]})
-    with pytest.raises(
-        BodoError, match="For median argument of skipna should be a boolean"
-    ):
-        bodo.jit(impl1)(df)
-    with pytest.raises(BodoError, match="argument to median can only be skipna"):
-        bodo.jit(impl2)(df)
-
-
 def test_groupby_cumsum_argument_check():
     """
     Test Groupby.cumsum() testing for skipna argument

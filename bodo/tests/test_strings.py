@@ -11,7 +11,7 @@ import pandas as pd
 import glob
 import gc
 import re
-from bodo.libs.str_arr_ext import StringArray
+from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.libs.str_ext import unicode_to_std_str, std_str_to_unicode, str_findall_count
 from bodo.tests.utils import check_func
 import pytest
@@ -58,8 +58,8 @@ def test_string_array_getitem_na(ind):
     bodo_func = bodo.jit(impl)
     S = pd.Series(["A", np.nan, "CC", "DD", np.nan, "ABC"])
     # ind = slice(0, 3)
-    pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind))
-    pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind))
+    pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind), check_dtype=False)
+    pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind), check_dtype=False)
 
 
 ##########################  Test re support  ##########################
@@ -775,21 +775,21 @@ class TestString(unittest.TestCase):
     def test_string_array_constructor(self):
         # create StringArray and return as list of strings
         def test_impl():
-            return StringArray(["ABC", "BB", "CDEF"])
+            return str_arr_from_sequence(["ABC", "BB", "CDEF"])
 
         bodo_func = bodo.jit(test_impl)
         self.assertTrue(np.array_equal(bodo_func(), ["ABC", "BB", "CDEF"]))
 
     def test_string_array_shape(self):
         def test_impl():
-            return StringArray(["ABC", "BB", "CDEF"]).shape
+            return str_arr_from_sequence(["ABC", "BB", "CDEF"]).shape
 
         bodo_func = bodo.jit(test_impl)
         self.assertEqual(bodo_func(), (3,))
 
     def test_string_array_comp(self):
         def test_impl():
-            A = StringArray(["ABC", "BB", "CDEF"])
+            A = str_arr_from_sequence(["ABC", "BB", "CDEF"])
             B = A == "ABC"
             return B.sum()
 
@@ -812,7 +812,7 @@ class TestString(unittest.TestCase):
 
     def test_string_array_bool_getitem(self):
         def test_impl():
-            A = StringArray(["ABC", "BB", "CDEF"])
+            A = str_arr_from_sequence(["ABC", "BB", "CDEF"])
             B = A == "ABC"
             C = A[B]
             return len(C) == 1 and C[0] == "ABC"
@@ -879,7 +879,7 @@ class TestString(unittest.TestCase):
             return pd.Series(["¡Y tú quién te crees?", "🐍⚡", "大处着眼，小处着手。"])
 
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(), test_impl())
+        pd.testing.assert_series_equal(bodo_func(), test_impl(), check_dtype=False)
 
     def test_unicode_decode_2byte_kind(self):
         """Test decoding element from string array in UTF8 to 2-byte kind Unicode

@@ -404,7 +404,7 @@ def test_sort_values_strings(n, len_str):
     bodo_func = bodo.jit(test_impl)
     df1 = get_random_strings_array(n, len_str)
     pd.testing.assert_frame_equal(
-        bodo_func(df1), test_impl(df1),
+        bodo_func(df1), test_impl(df1), check_dtype=False
     )
 
 

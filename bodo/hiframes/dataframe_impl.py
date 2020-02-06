@@ -91,14 +91,6 @@ def overload_dataframe_values(df):
     return f
 
 
-@overload_method(DataFrameType, "get_values")
-def overload_dataframe_get_values(df):
-    def impl(df):  # pragma: no cover
-        return df.values
-
-    return impl
-
-
 @overload_method(DataFrameType, "to_numpy")
 def overload_dataframe_to_numpy(df, dtype=None, copy=False):
     # The copy argument can be ignored here since we always copy the data
