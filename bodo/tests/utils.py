@@ -83,12 +83,10 @@ def check_func(
     sort_output=False,
     check_names=True,
     copy_input=False,
-    check_dtype=False,
+    check_dtype=True,
 ):
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
-    check_dtype is False by default since we return typed extension arrays like
-    StringArray for all APIs but Pandas doesn't return them by default in all APIs yet.
     """
     n_pes = bodo.get_size()
 
@@ -289,6 +287,10 @@ def _test_equal(
             py_out = py_out.astype("bool")
         if is_bool_object_series(bodo_out) and not py_out.hasnans:
             bodo_out = bodo_out.astype("bool")
+        # we return typed extension arrays like StringArray for all APIs but Pandas
+        # doesn't return them by default in all APIs yet.
+        if py_out.dtype == np.object:
+            check_dtype = False
         pd.testing.assert_series_equal(
             bodo_out, py_out, check_names=check_names, check_dtype=check_dtype
         )
@@ -309,6 +311,10 @@ def _test_equal(
                 py_out[c] = py_out[c].astype("bool")
             if is_bool_object_series(bodo_out[c]) and not bodo_out[c].hasnans:
                 bodo_out[c] = bodo_out[c].astype("bool")
+        # we return typed extension arrays like StringArray for all APIs but Pandas
+        # doesn't return them by default in all APIs yet.
+        if np.object in py_out.dtypes.values:
+            check_dtype = False
         pd.testing.assert_frame_equal(
             bodo_out, py_out, check_names=check_names, check_dtype=check_dtype
         )
