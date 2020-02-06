@@ -632,6 +632,7 @@ void* pd_array_from_string_array(int64_t no_strings,
 
     Py_DECREF(pd_mod);
     Py_DECREF(na_obj);
+    Py_DECREF(ret);
     PyGILState_Release(gilstate);
     return str_arr_obj;
 #undef CHECK
@@ -890,7 +891,9 @@ int is_bool_array(PyArrayObject* arr) {
 
     // returning int instead of bool to avoid potential bool call convention
     // issues
-    return dtype->kind == 'b';
+    int res = dtype->kind == 'b';
+    Py_DECREF(dtype);
+    return res;
 
 #undef CHECK
 }
