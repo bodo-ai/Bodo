@@ -55,46 +55,6 @@ ll.add_symbol("unicode_to_utf8", hstr_ext.unicode_to_utf8)
 string_type = types.unicode_type
 
 
-# XXX setting hash secret for hash(unicode_type) to be consistent across
-# processes. Other wise, shuffle operators like unique_str_parallel will fail.
-# TODO: use a seperate implementation?
-# TODO: make sure hash(str) is not already instantiated in overloads
-# def _rm_hash_str_overload():
-#     try:
-#         fn = numba.targets.registry.cpu_target.typing_context.resolve_value_type(hash)
-#         sig = signature(types.int64, types.unicode_type)
-#         key = fn.get_impl_key(sig)
-#         numba.targets.registry.cpu_target.target_context._defns[key]._cache.pop(sig.args)
-#     except:
-#         pass
-
-# _rm_hash_str_overload()
-
-# HACK: copied from Numba and modified, TODO: use a better solution
-import numba.targets.hashing
-
-_hashsecret_entry = namedtuple("_hashsecret_entry", ["symbol", "value"])
-
-
-def _build_hashsecret():
-    info = {}
-
-    def inject(name, val):
-        symbol_name = "_numba_hashsecret2_{}".format(name)
-        val = ctypes.c_uint64(val)
-        addr = ctypes.addressof(val)
-        ll.add_symbol(symbol_name, addr)
-        info[name] = _hashsecret_entry(symbol=symbol_name, value=val)
-
-    inject("djbx33a_suffix", 11094168454019993442)
-    inject("siphash_k0", 14115454492144758974)
-    inject("siphash_k1", 1895071979704503752)
-    return info
-
-
-numba.targets.hashing._hashsecret = _build_hashsecret()
-
-
 @intrinsic
 def string_to_char_ptr(typingctx, str_tp=None):
     assert str_tp == string_type or isinstance(str_tp, types.StringLiteral)
