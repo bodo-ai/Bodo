@@ -26,7 +26,8 @@ from bodo.utils.typing import (
     is_overload_constant_str,
 )
 from numba.typing.templates import infer_global, AbstractTemplate
-from bodo.libs.bool_arr_ext import BooleanArrayType
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.libs.int_arr_ext import IntegerArrayType
 
 
 @overload_attribute(SeriesType, "index")
@@ -1101,6 +1102,11 @@ def create_explicit_binary_op_overload(op):
         if isinstance(other, types.Number):
             args = (S.data, other)
             ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
+            # Pandas 1.0 returns nullable bool array for nullable int array
+            if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
+                types.bool_, 1, "C"
+            ):
+                ret_dtype = boolean_array
 
             def impl_scalar(
                 S, other, level=None, fill_value=None, axis=0
@@ -1128,6 +1134,11 @@ def create_explicit_binary_op_overload(op):
 
         args = (S.data, types.Array(other.dtype, 1, "C"))
         ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
+        # Pandas 1.0 returns nullable bool array for nullable int array
+        if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
+            types.bool_, 1, "C"
+        ):
+            ret_dtype = boolean_array
 
         def impl(S, other, level=None, fill_value=None, axis=0):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
