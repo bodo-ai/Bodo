@@ -1521,9 +1521,7 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, out_data_typs):
     if n_red_vars:  # if there is a parfor
         func_text += "    for i in range(len(recv_redvar_arr_0)):\n"
         func_text += "        w_ind = row_to_group[i]\n"
-        func_text += (
-            "        __combine_redvars(redvars, recv_redvars, w_ind, i, pivot_arr=None)\n"
-        )
+        func_text += "        __combine_redvars(redvars, recv_redvars, w_ind, i, pivot_arr=None)\n"
 
     # print(func_text)
 
@@ -1983,6 +1981,19 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     closure = func.closure if hasattr(func, "closure") else func.__closure__
     f_ir = get_ir_of_code(func.__globals__, code)
     replace_closures(f_ir, closure, code)
+
+    # replace len(arr) calls (i.e. size of group) with a sentinel function that will be
+    # replaced with a simple loop in series pass
+    for block in f_ir.blocks.values():
+        for stmt in block.body:
+            if (
+                is_call_assign(stmt)
+                and find_callname(f_ir, stmt.value) == ("len", "builtins")
+                and stmt.value.args[0].name == f_ir.arg_names[0]
+            ):
+                len_global = get_definition(f_ir, stmt.value.func)
+                len_global.name = "dummy_agg_count"
+                len_global.value = dummy_agg_count
 
     # rename all variables to avoid conflict (init and eval nodes)
     var_table = get_name_var_table(f_ir.blocks)
@@ -3250,3 +3261,10 @@ def setitem_arr_tup_na_match_overload(arr_tup1, arr_tup2, ind):
     exec(func_text, {"bodo": bodo, "setitem_arr_nan": setitem_arr_nan}, loc_vars)
     impl = loc_vars["f"]
     return impl
+
+
+# sentinel function for the use of len (length of group) in agg UDFs, which will be
+# replaced with a dummy loop in series pass
+@numba.extending.register_jitable
+def dummy_agg_count(A):
+    return len(A)

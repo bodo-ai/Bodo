@@ -1472,6 +1472,17 @@ class SeriesPass:
                 impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
+        # dummy count loop to support len of group in agg UDFs
+        if fdef == ("dummy_agg_count", "bodo.ir.aggregate"):
+            def impl_agg_c(A):
+                c = 0
+                for _ in numba.parfor.internal_prange(len(A)):
+                    c += 1
+                return c
+            return self._replace_func(
+                impl_agg_c, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+            )
+
         # convert Series to Array for unhandled calls
         # TODO check all the functions that get here and handle if necessary
         # e.g. np.sum, prod, min, max, argmin, argmax, mean, var, and std
