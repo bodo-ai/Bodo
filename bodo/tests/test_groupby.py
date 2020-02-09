@@ -334,6 +334,18 @@ def test_agg_select_col():
     check_func(test_impl, (11,), sort_output=True, check_dtype=False)
 
 
+def test_agg_no_parfor():
+    """
+    Test Groupby.agg(): simple UDF with no parfor
+    """
+
+    def impl(df):
+        A = df.groupby("A").agg(lambda x: 1)
+        return A
+
+    check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
+
+
 def test_agg_multi_udf():
     """
     Test Groupby.agg() multiple user defined functions
