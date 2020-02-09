@@ -32,9 +32,7 @@ from bodo.hiframes.pd_dataframe_ext import (
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import typeof_pd_int_dtype
-from bodo.hiframes.pd_categorical_ext import (
-    PDCategoricalDtype,
-)
+from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.hiframes.split_impl import (
     string_array_split_view_type,
@@ -213,60 +211,41 @@ def box_dataframe(typ, val, c):
     builder = c.builder
     pyapi = c.pyapi
 
-    n_cols = len(typ.columns)
-    arr_typs = typ.data
-
     dataframe_payload = bodo.hiframes.pd_dataframe_ext.get_dataframe_payload(
         c.context, c.builder, typ, val
     )
     dataframe = cgutils.create_struct_proxy(typ)(context, builder, value=val)
 
-    col_arrs = [builder.extract_value(dataframe_payload.data, i) for i in range(n_cols)]
+    # see boxing of reflected list in Numba:
+    # https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L561
+    obj = dataframe.parent
+    res = cgutils.alloca_once_value(c.builder, obj)
     # df unboxed from Python
-    has_parent = cgutils.is_not_null(builder, dataframe.parent)
+    has_parent = cgutils.is_not_null(builder, obj)
 
-    mod_name = context.insert_const_string(c.builder.module, "pandas")
-    class_obj = pyapi.import_module_noblock(mod_name)
-    df_obj = pyapi.call_method(class_obj, "DataFrame", ())
-    columns_obj = pyapi.from_native_value(
-        numba.typeof(typ.columns), dataframe.columns, c.env_manager
-    )
+    with c.builder.if_else(has_parent) as (use_parent, otherwise):
+        with use_parent:
+            pyapi.incref(obj)
+        with otherwise:
+            # df_obj = pd.DataFrame()
+            mod_name = context.insert_const_string(c.builder.module, "pandas")
+            class_obj = pyapi.import_module_noblock(mod_name)
+            df_obj = pyapi.call_method(class_obj, "DataFrame", ())
+            pyapi.decref(class_obj)
 
-    for i, arr, arr_typ in zip(range(n_cols), col_arrs, arr_typs):
-        # df[i] = boxed_arr
-        # TODO: datetime.date, DatetimeIndex?
-        c_ind_obj = pyapi.long_from_longlong(context.get_constant(types.int64, i))
-        cname_obj = pyapi.tuple_getitem(columns_obj, i)
-        # if column not unboxed, just used the boxed version from parent
-        unboxed_val = builder.extract_value(dataframe_payload.unboxed, i)
-        not_unboxed = builder.icmp(
-            lc.ICMP_EQ, unboxed_val, context.get_constant(types.int8, 0)
-        )
-        use_parent = builder.and_(has_parent, not_unboxed)
+            # get data arrays and box them
+            n_cols = len(typ.columns)
+            col_arrs = [
+                builder.extract_value(dataframe_payload.data, i) for i in range(n_cols)
+            ]
+            arr_typs = typ.data
+            for i, arr, arr_typ in zip(range(n_cols), col_arrs, arr_typs):
+                # df[i] = boxed_arr
+                # TODO: datetime.date, DatetimeIndex?
+                c_ind_obj = pyapi.long_from_longlong(
+                    context.get_constant(types.int64, i)
+                )
 
-        with builder.if_else(use_parent) as (then, orelse):
-            with then:
-                ser_obj = pyapi.object_getitem(dataframe.parent, cname_obj)
-                # need to get underlying array since Series has index but
-                # df_obj doesn't have index yet, leading to index mismatches
-                arr_obj_orig = pyapi.object_getattr_string(ser_obj, "values")
-                if isinstance(arr_typ, types.Array):
-                    # make contiguous by calling np.ascontiguousarray()
-                    np_mod_name = c.context.insert_const_string(
-                        c.builder.module, "numpy"
-                    )
-                    np_class_obj = c.pyapi.import_module_noblock(np_mod_name)
-                    arr_obj = c.pyapi.call_method(
-                        np_class_obj, "ascontiguousarray", (arr_obj_orig,)
-                    )
-                    c.pyapi.decref(arr_obj_orig)
-                    c.pyapi.decref(np_class_obj)
-                else:
-                    arr_obj = arr_obj_orig
-                pyapi.decref(ser_obj)
-                pyapi.object_setitem(df_obj, c_ind_obj, arr_obj)
-
-            with orelse:
                 # NOTE: adding extra incref() since boxing could be called twice on
                 # a dataframe and not having incref can cause crashes.
                 # see test_csv_double_box.
@@ -274,25 +253,30 @@ def box_dataframe(typ, val, c):
                 context.nrt.incref(builder, arr_typ, arr)
                 arr_obj = pyapi.from_native_value(arr_typ, arr, c.env_manager)
                 pyapi.object_setitem(df_obj, c_ind_obj, arr_obj)
+                pyapi.decref(arr_obj)
+                pyapi.decref(c_ind_obj)
 
-        # pyapi.decref(arr_obj)
-        # pyapi.decref(cname_obj)
-        pyapi.decref(c_ind_obj)
+            # set df.columns
+            columns = dataframe.columns
+            columns_typ = numba.typeof(typ.columns)
+            context.nrt.incref(builder, columns_typ, columns)
+            columns_obj = pyapi.from_native_value(columns_typ, columns, c.env_manager)
+            pyapi.object_setattr_string(df_obj, "columns", columns_obj)
+            pyapi.decref(columns_obj)
 
-    # set df.columns
-    pyapi.object_setattr_string(df_obj, "columns", columns_obj)
-    pyapi.decref(columns_obj)
+            # set df.index
+            context.nrt.incref(builder, typ.index, dataframe_payload.index)
+            arr_obj = c.pyapi.from_native_value(
+                typ.index, dataframe_payload.index, c.env_manager
+            )
+            pyapi.object_setattr_string(df_obj, "index", arr_obj)
+            pyapi.decref(arr_obj)
+            builder.store(df_obj, res)
 
-    # set df.index
-    # NOTE: see comment on incref above
-    context.nrt.incref(builder, typ.index, dataframe_payload.index)
-    arr_obj = c.pyapi.from_native_value(
-        typ.index, dataframe_payload.index, c.env_manager
-    )
-    pyapi.object_setattr_string(df_obj, "index", arr_obj)
-
-    pyapi.decref(class_obj)
-    return df_obj
+    # decref() should be called on native value
+    # see https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L389
+    c.context.nrt.decref(c.builder, typ, val)
+    return c.builder.load(res)
 
 
 @intrinsic
