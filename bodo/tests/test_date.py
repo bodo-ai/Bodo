@@ -487,13 +487,26 @@ def test_series_dt64_timestamp_cmp():
     check_func(test_impl4, (S, t_string))
 
 
+def test_series_dt_getitem():
+    """ Test getitem of series(dt64)
+    """
+
+    def test_impl(S):
+        return S[0]
+
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
+    check_func(test_impl, (S,))
+    # TODO: test datetime.date array when #522 is closed
+    # S = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).date)
+    # check_func(test_impl, (S,))
+
+
 # -------------------------  series.dt errorchecking  -------------------------- #
 
 
 def test_series_dt_type():
     """
     Test dt is called on series of type dt64
-
     """
 
     def impl(S):
@@ -507,28 +520,33 @@ def test_series_dt_type():
         bodo.jit(impl)(S)
 
 
-################################## Timestamp tests ###################################
+# -----------------------------  Timestamp Test  ------------------------------ #
 
 
-def test_timestamp_constructor_kw():
-    """Test pd.Timestamp() constructor with year/month/day passed as keyword arguments
+def test_timestamp_constructors():
+    """ Test pd.Timestamp's different types of constructors
     """
 
-    def test_impl():
+    def test_constructor_kw():
+        # Test constructor with year/month/day passed as keyword arguments
         return pd.Timestamp(year=1998, month=2, day=3)
 
-    assert bodo.jit(test_impl)() == test_impl()
-
-
-def test_timestamp_constructor_pos():
-    """Test pd.Timestamp() constructor with year/month/day passed as positional
-    arguments
-    """
-
-    def test_impl():
+    def test_constructor_pos():
+        # Test constructor with year/month/day passed as positional arguments
         return pd.Timestamp(1998, 2, 3)
 
-    assert bodo.jit(test_impl)() == test_impl()
+    def test_constructor_input(dt):
+        ts = pd.Timestamp(dt)
+        return ts
+
+    check_func(test_constructor_kw, ())
+    check_func(test_constructor_pos, ())
+
+    dt_d = datetime.date(2020, 2, 6)
+    dt_dt = datetime.datetime(2017, 4, 26, 4, 55, 23, 32)
+
+    check_func(test_constructor_input, (dt_d,))
+    check_func(test_constructor_input, (dt_dt,))
 
 
 def test_pd_to_datetime():
@@ -545,192 +563,139 @@ def test_pd_to_datetime():
     check_func(test_scalar, ())
     check_func(test_input, (date_str,))
 
-    #TODO: Support following inputs
+    # TODO: Support following inputs
     # df = pd.DataFrame({'year': [2015, 2016], 'month': [2, 3], 'day': [4, 5]})
     # date_str_arr = np.array(['1991-1-1', '1992-1-1', '1993-1-1'])
     # date_str_arr = ['1991-1-1', '1992-1-1', '1993-1-1']
 
-class TestDate(unittest.TestCase):
-    def test_datetime_index(self):
-        def test_impl(df):
-            return pd.DatetimeIndex(df["str_date"]).values
 
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        np.testing.assert_array_equal(bodo_func(df), test_impl(df))
+def test_extract():
+    """ Test extracting an attribute of timestamp
+    """
 
-    def test_datetime_index_kw(self):
-        def test_impl(df):
-            return pd.DatetimeIndex(data=df["str_date"]).values
+    def test_impl(s):
+        return s.month
 
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        np.testing.assert_array_equal(bodo_func(df), test_impl(df))
+    ts = pd.Timestamp(datetime.datetime(2017, 4, 26).isoformat())
+    check_func(test_impl, (ts,))
 
-    def test_datetime_arg(self):
-        def test_impl(A):
-            return A
 
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        A = pd.DatetimeIndex(df["str_date"]).to_series()
-        np.testing.assert_array_equal(bodo_func(A), test_impl(A))
+def test_timestamp_date():
+    """ Test timestamp's date() method
+    """
 
-    def test_datetime_getitem(self):
-        def test_impl(A):
-            return A[0]
+    def test_impl(s):
+        return s.date()
 
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        A = pd.DatetimeIndex(df["str_date"]).to_series()
-        self.assertEqual(bodo_func(A), test_impl(A))
+    ts = pd.Timestamp(datetime.datetime(2017, 4, 26).isoformat())
+    check_func(test_impl, (ts,))
 
-    def test_ts_map(self):
-        def test_impl(A):
-            return A.map(lambda x: x.hour)
 
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        A = pd.DatetimeIndex(df["str_date"]).to_series()
-        np.testing.assert_array_equal(bodo_func(A), test_impl(A))
+# ------------------------- DatetimeIndex Testing  -------------------------- #
 
-    @unittest.skip("pending proper datatime.date() support")
-    def test_ts_map_date(self):
-        def test_impl(A):
-            return A.map(lambda x: x.date())[0]
 
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        A = pd.DatetimeIndex(df["str_date"]).to_series()
-        np.testing.assert_array_equal(bodo_func(A), test_impl(A))
-
-    def test_ts_map_date2(self):
-        def test_impl(df):
-            return df.apply(lambda row: row.dt_ind.date(), axis=1)[0]
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        df["dt_ind"] = pd.DatetimeIndex(df["str_date"])
-        np.testing.assert_array_equal(bodo_func(df), test_impl(df))
-
-    @unittest.skip("pending proper datatime.date() support")
-    def test_ts_map_date_set(self):
-        def test_impl(df):
-            df["hpat_date"] = df.dt_ind.map(lambda x: x.date())
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        df["dt_ind"] = pd.DatetimeIndex(df["str_date"])
-        bodo_func(df)
-        df["pd_date"] = df.dt_ind.map(lambda x: x.date())
-        np.testing.assert_array_equal(df["hpat_date"], df["pd_date"])
-
-    def test_date_series_unbox(self):
-        def test_impl(A):
-            return A[0]
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        A = pd.DatetimeIndex(df["str_date"]).to_series().map(lambda x: x.date())
-        self.assertEqual(bodo_func(A), test_impl(A))
-
-    def test_date_series_unbox2(self):
-        def test_impl(A):
-            return A[0]
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        # TODO: index of date values
-        A = (
-            pd.DatetimeIndex(df["str_date"])
-            .map(lambda x: x.date())
-            .to_series()
-            .reset_index(drop=True)
+def _gen_str_date_df():
+    rows = 10
+    data = []
+    for row in range(rows):
+        data.append(
+            datetime.datetime(
+                2017, random.randint(1, 12), random.randint(1, 28)
+            ).isoformat()
         )
-        self.assertEqual(bodo_func(A), test_impl(A))
-
-    def test_datetime_index_set(self):
-        def test_impl(df):
-            df["bodo"] = pd.DatetimeIndex(df["str_date"]).values
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        bodo_func(df)
-        df["std"] = pd.DatetimeIndex(df["str_date"])
-        allequal = df["std"].equals(df["bodo"])
-        self.assertTrue(allequal)
-
-    @unittest.skip("pending proper datatime.datetime() support")
-    def test_timestamp(self):
-        def test_impl():
-            dt = datetime.datetime(2017, 4, 26)
-            ts = pd.Timestamp(dt)
-            return (
-                ts.day
-                + ts.hour
-                + ts.microsecond
-                + ts.month
-                + ts.nanosecond
-                + ts.second
-                + ts.year
-            )
-
-        bodo_func = bodo.jit(test_impl)
-        self.assertEqual(bodo_func(), test_impl())
-
-    def test_extract(self):
-        def test_impl(s):
-            return s.month
-
-        bodo_func = bodo.jit(test_impl)
-        ts = pd.Timestamp(datetime.datetime(2017, 4, 26).isoformat())
-        month = bodo_func(ts)
-        self.assertEqual(month, 4)
-
-    def test_timestamp_date(self):
-        def test_impl(s):
-            return s.date()
-
-        bodo_func = bodo.jit(test_impl)
-        ts = pd.Timestamp(datetime.datetime(2017, 4, 26).isoformat())
-        self.assertEqual(bodo_func(ts), test_impl(ts))
-
-    def test_datetimeindex_str_comp(self):
-        def test_impl(df):
-            return (df.A >= "2011-10-23").values
-
-        df = pd.DataFrame({"A": pd.DatetimeIndex(["2015-01-03", "2010-10-11"])})
-        bodo_func = bodo.jit(test_impl)
-        np.testing.assert_array_equal(bodo_func(df), test_impl(df))
-
-    def test_datetimeindex_str_comp2(self):
-        def test_impl(df):
-            return ("2011-10-23" <= df.A).values
-
-        df = pd.DataFrame({"A": pd.DatetimeIndex(["2015-01-03", "2010-10-11"])})
-        bodo_func = bodo.jit(test_impl)
-        np.testing.assert_array_equal(bodo_func(df), test_impl(df))
-
-    def test_datetime_index_df(self):
-        def test_impl(df):
-            df = pd.DataFrame({"A": pd.DatetimeIndex(df["str_date"])})
-            return df.A
-
-        bodo_func = bodo.jit(test_impl)
-        df = self._gen_str_date_df()
-        np.testing.assert_array_equal(bodo_func(df), test_impl(df))
-
-    def _gen_str_date_df(self):
-        rows = 10
-        data = []
-        for row in range(rows):
-            data.append(
-                datetime.datetime(
-                    2017, random.randint(1, 12), random.randint(1, 28)
-                ).isoformat()
-            )
-        return pd.DataFrame({"str_date": data})
+    return pd.DataFrame({"str_date": data})
 
 
-if __name__ == "__main__":
-    unittest.main()
+dt_df = _gen_str_date_df()
+dt_ser = pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=10))
+
+
+def test_datetime_index_ctor():
+    """ Test pd.DatetimeIndex constructors
+    """
+
+    def test_impl_pos(S):
+        return pd.DatetimeIndex(S)
+
+    def test_impl_kw(S):
+        return pd.DatetimeIndex(data=S)
+
+    check_func(test_impl_pos, (dt_ser,))
+    check_func(test_impl_kw, (dt_ser,))
+
+
+def test_ts_map():
+    def test_impl(A):
+        return A.map(lambda x: x.hour)
+
+    check_func(test_impl, (dt_ser,))
+
+
+@pytest.mark.skip(reason="pending proper datetime.date() support")
+def test_ts_map_date():
+    def test_impl(A):
+        return A.map(lambda x: x.date())[0]
+
+    bodo_func = bodo.jit(test_impl)
+    # TODO: Test after issue #530 is closed
+    assert bodo_func(dt_ser) == test_impl(dt_ser)
+
+
+def test_ts_map_date2():
+    def test_impl(df):
+        return df.apply(lambda row: row.dt_ind.date(), axis=1)[0]
+
+    bodo_func = bodo.jit(test_impl)
+    dt_df["dt_ind"] = pd.DatetimeIndex(dt_df["str_date"])
+    np.testing.assert_array_equal(bodo_func(dt_df), test_impl(dt_df))
+    # TODO: Use check_func when #522 is closed
+    # check_func(test_impl, (dt_df,))
+
+
+@pytest.mark.skip(reason="pending proper datetime.date() support")
+def test_ts_map_date_set():
+    def test_impl(df):
+        df["hpat_date"] = df.dt_ind.map(lambda x: x.date())
+        return
+
+    bodo_func = bodo.jit(test_impl)
+    dt_df["dt_ind"] = pd.DatetimeIndex(dt_df["str_date"])
+    bodo_func(dt_df)
+    dt_df["pd_date"] = dt_df.dt_ind.map(lambda x: x.date())
+    # TODO: Test after issue #530 is closed
+    np.testing.assert_array_equal(dt_df["hpat_date"], dt_df["pd_date"])
+
+
+def test_datetime_index_set():
+    def test_impl(df):
+        df["bodo"] = pd.DatetimeIndex(df["str_date"]).values
+        return
+
+    bodo_func = bodo.jit(test_impl)
+    bodo_func(dt_df)
+    dt_df["std"] = pd.DatetimeIndex(dt_df["str_date"])
+    allequal = dt_df["std"].equals(dt_df["bodo"])
+    assert allequal == True
+
+
+def test_datetimeindex_str_comp():
+    def test_impl(df):
+        return (df.A >= "2011-10-23").values
+
+    def test_impl2(df):
+        return ("2011-10-23" <= df.A).values
+
+    df = pd.DataFrame({"A": pd.DatetimeIndex(["2015-01-03", "2010-10-11"])})
+    check_func(test_impl, (df,))
+    check_func(test_impl2, (df,))
+
+
+def test_datetimeindex_df():
+    def test_impl(df):
+        df = pd.DataFrame({"A": pd.DatetimeIndex(df["str_date"])})
+        return df.A
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_array_equal(bodo_func(dt_df), test_impl(dt_df))
+    # TODO: Use check_func when #522 is closed
+    # check_func(test_impl, (dt_df,))

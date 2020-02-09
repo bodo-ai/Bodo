@@ -298,7 +298,6 @@ def overload_pd_timestamp(
     nanosecond=None,
     tzinfo=None,
 ):
-
     # The code for creating Timestamp from year/month/... is complex in Pandas but it
     # eventually just sets year/month/... values, and calculates dt64 "value" attribute
     # Timestamp.__new__()
@@ -429,6 +428,102 @@ def overload_pd_timestamp(
             lambda ts_input=_no_input, freq=None, tz=None, unit=None, year=None, month=None, day=None, hour=None, minute=None, second=None, microsecond=None, nanosecond=None, tzinfo=None: ts_input
         )
 
+    if ts_input == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type:
+
+        def impl_datetime(
+            ts_input=_no_input,
+            freq=None,
+            tz=None,
+            unit=None,
+            year=None,
+            month=None,
+            day=None,
+            hour=None,
+            minute=None,
+            second=None,
+            microsecond=None,
+            nanosecond=None,
+            tzinfo=None,
+        ):  # pragma: no cover
+
+            year = ts_input.year
+            month = ts_input.month
+            day = ts_input.day
+            hour = ts_input.hour
+            minute = ts_input.minute
+            second = ts_input.second
+            microsecond = ts_input.microsecond
+
+            value = npy_datetimestruct_to_datetime(
+                year,
+                month,
+                day,
+                zero_if_none(hour),
+                zero_if_none(minute),
+                zero_if_none(second),
+                zero_if_none(microsecond),
+            )
+            value += zero_if_none(nanosecond)
+            return init_timestamp(
+                year,
+                month,
+                day,
+                zero_if_none(hour),
+                zero_if_none(minute),
+                zero_if_none(second),
+                zero_if_none(microsecond),
+                zero_if_none(nanosecond),
+                value,
+            )
+
+        return impl_datetime
+
+
+    if ts_input == bodo.hiframes.datetime_date_ext.datetime_date_type:
+    
+        def impl_date(
+            ts_input=_no_input,
+            freq=None,
+            tz=None,
+            unit=None,
+            year=None,
+            month=None,
+            day=None,
+            hour=None,
+            minute=None,
+            second=None,
+            microsecond=None,
+            nanosecond=None,
+            tzinfo=None,
+        ):  # pragma: no cover
+        
+            year = ts_input.year
+            month = ts_input.month
+            day = ts_input.day
+
+            value = npy_datetimestruct_to_datetime(
+                year,
+                month,
+                day,
+                zero_if_none(hour),
+                zero_if_none(minute),
+                zero_if_none(second),
+                zero_if_none(microsecond),
+            )
+            value += zero_if_none(nanosecond)
+            return init_timestamp(
+                year,
+                month,
+                day,
+                zero_if_none(hour),
+                zero_if_none(minute),
+                zero_if_none(second),
+                zero_if_none(microsecond),
+                zero_if_none(nanosecond),
+                value,
+            )
+
+        return impl_date
 
 @overload_method(PandasTimestampType, "date")
 def overload_pd_timestamp_date(ptt):
@@ -658,9 +753,7 @@ def overload_to_datetime(arg):
     """implementation for pd.to_datetime
     """
 
-    if arg == bodo.string_type or bodo.utils.typing.is_overload_constant_str(
-        arg
-    ):
+    if arg == bodo.string_type or bodo.utils.typing.is_overload_constant_str(arg):
 
         def pd_to_datetime_impl(arg):  # pragma: no cover
             with numba.objmode(t="pandas_timestamp_type"):

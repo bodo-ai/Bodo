@@ -1871,6 +1871,7 @@ class SeriesPass:
         f_ir._definitions = build_definitions(f_ir.blocks)
         args = [data, index, name] + extra_args
         arg_typs = tuple(self.typemap[v.name] for v in args)
+
         f_typemap, _f_ret_t, f_calltypes = numba.typed_passes.type_inference_stage(
             self.typingctx, f_ir, arg_typs, self.typemap[lhs.name]
         )
