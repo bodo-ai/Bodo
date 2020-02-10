@@ -1474,7 +1474,7 @@ class SeriesPass:
 
         # dummy count loop to support len of group in agg UDFs
         if fdef == ("dummy_agg_count", "bodo.ir.aggregate"):
-            def impl_agg_c(A):
+            def impl_agg_c(A):  # pragma: no cover
                 c = 0
                 for _ in numba.parfor.internal_prange(len(A)):
                     c += 1

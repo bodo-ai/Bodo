@@ -3266,5 +3266,5 @@ def setitem_arr_tup_na_match_overload(arr_tup1, arr_tup2, ind):
 # sentinel function for the use of len (length of group) in agg UDFs, which will be
 # replaced with a dummy loop in series pass
 @numba.extending.register_jitable
-def dummy_agg_count(A):
+def dummy_agg_count(A):  # pragma: no cover
     return len(A)
