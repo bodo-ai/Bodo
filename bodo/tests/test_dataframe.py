@@ -203,6 +203,20 @@ def test_unbox_df3():
     check_func(impl, (df2,))
 
 
+def test_unbox_df_leak_test(memory_leak_check):
+    """
+    A simple test to check for memory leaks in unbox/box sequence of a dataframe.
+    TODO: the other unbox/box tests should check for memory leaks when all the leaks
+    are fixed (this test should eventually be removed).
+    """
+    def impl(df):
+        return df
+
+    bodo_func = bodo.jit(impl)
+    df1 = pd.DataFrame({"a": [0.0, 1.0]})
+    bodo_func(df1)
+
+
 def test_unbox_df_multi():
     """
     box/unbox dataframe with MultiIndex columns structure (sometimes created in groupby,
