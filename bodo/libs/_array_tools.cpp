@@ -2077,6 +2077,11 @@ struct aggfunc<
     static void apply(T& v1, T& v2) { v1 *= v2; }
 };
 
+template<>
+struct aggfunc<bool, Bodo_FTypes::prod> {
+    static void apply(bool& v1, bool& v2) { v1 = v1 && v2; }
+};
+
 template <typename T>
 struct aggfunc<
     T, Bodo_FTypes::prod,
@@ -2957,6 +2962,7 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                               (double*)out_col->data1 + out_col->length, 1);
                     return;
                 case Bodo_CTypes::STRING:
+                default:
                     PyErr_SetString(PyExc_RuntimeError,
                                     "unsupported/not implemented");
                     return;
@@ -3023,6 +3029,7 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                               std::numeric_limits<double>::quiet_NaN());
                     return;
                 case Bodo_CTypes::STRING:
+                default:
                     PyErr_SetString(PyExc_RuntimeError,
                                     "unsupported/not implemented");
                     return;
@@ -3089,6 +3096,7 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                               std::numeric_limits<double>::quiet_NaN());
                     return;
                 case Bodo_CTypes::STRING:
+                default:
                     PyErr_SetString(PyExc_RuntimeError,
                                     "unsupported/not implemented");
                     return;
@@ -3766,7 +3774,7 @@ private:
                 int64_t n_chars = 0;   // total number of chars of all keys for
                                        // this column
                 uint32_t* in_offsets = (uint32_t*)key_col->data2;
-                for (int64_t j = 0; j < num_groups; j++) {
+                for (size_t j = 0; j < num_groups; j++) {
                     int64_t row = grp_info.group_to_first_row[j];
                     n_chars += in_offsets[row + 1] - in_offsets[row];
                 }
@@ -3776,7 +3784,7 @@ private:
                 uint8_t* out_null_bitmask = (uint8_t*)new_key_col->null_bitmask;
                 uint32_t* out_offsets = (uint32_t*)new_key_col->data2;
                 uint32_t pos = 0;
-                for (int64_t j = 0; j < num_groups; j++) {
+                for (size_t j = 0; j < num_groups; j++) {
                     size_t in_row = grp_info.group_to_first_row[j];
                     uint32_t start_offset = in_offsets[in_row];
                     uint32_t str_len = in_offsets[in_row + 1] - start_offset;
@@ -3790,7 +3798,7 @@ private:
             } else {
                 new_key_col = alloc_array(num_groups, 1, key_col->arr_type, key_col->dtype, 0);
                 int64_t dtype_size = numpy_item_size[key_col->dtype];
-                for (int64_t j = 0; j < num_groups; j++)
+                for (size_t j = 0; j < num_groups; j++)
                     memcpy(new_key_col->data1 + j * dtype_size,
                            key_col->data1 + grp_info.group_to_first_row[j] * dtype_size,
                            dtype_size);
