@@ -6,10 +6,10 @@
 #include "arrow/filesystem/s3fs.h"
 #include "arrow/io/interfaces.h"
 
-#define CHECK_ARROW(expr, msg)                                            \
-    if (!(expr.ok())) {                                                   \
-        std::cerr << "Error in arrow s3 csv_read: " << msg << " " << expr \
-                  << std::endl;                                           \
+#define CHECK_ARROW(expr, msg)                                   \
+    if (!(expr.ok())) {                                          \
+        std::cerr << "Error in arrow s3: " << msg << " " << expr \
+                  << std::endl;                                  \
     }
 
 // a global singleton instance of S3FileSystem that is
@@ -72,6 +72,9 @@ class S3FileReader : public FileReader {
     }
     bool ok() { return status.ok(); }
     bool read(char *s, int64_t size) {
+        if(size == 0){ // hack for minio, read_csv size 0
+            return 1;
+        }
         int64_t bytes_read;
         status = s3_file->Read(size, &bytes_read, s);
         return status.ok() && (bytes_read == size);

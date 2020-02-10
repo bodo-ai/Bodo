@@ -52,6 +52,15 @@ jobs:
       fi
     displayName: 'Copy test data'
   - script: |
+      buildscripts/setup_minio.sh
+    displayName: 'Setup minio'
+  - script: |
+      export PATH=$HOME/miniconda3/bin:$PATH
+      source activate $CONDA_ENV
+      conda install -y -c conda-forge botocore s3fs
+      conda install -y -c conda-forge boto3
+    displayName: 'Setup s3_tesing'
+  - script: |
       export PATH=$HOME/miniconda3/bin:${PATH}
       source activate BODOENV
       pip install pytest pytest-azurepipelines

@@ -17,9 +17,12 @@ such as Numba on Ubuntu Linux::
     source activate DEV
     # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64 -c conda-forge
-    conda install numba=0.47.0 -c conda-forge
+    conda install numba=0.48.0 -c conda-forge
     conda install -c bodo.ai -c conda-forge hdf5=*=*mpich*
     conda install -c bodo.ai -c conda-forge pyarrow=0.15.1 arrow-cpp=0.15.1=*transfer_s3*
+    # The following 2 commands are required for s3 related development and tests
+    # conda install -c conda-forge botocore s3fs
+    # conda install -c conda-forge boto3
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo
@@ -38,10 +41,19 @@ Running unit tests::
     conda install pytest
     pytest -x -s -v -m "not slow" -W ignore
 
+To run s3 related unit tests, in addition::
+    
+    export AWS_ACCESS_KEY_ID=bodotest1
+    export AWS_SECRET_ACCESS_KEY=bodosecret1
+
+The two environment variables will be read in `conftest.py <https://github.com/Bodo-inc/Bodo/blob/master/bodo/tests/conftest.py>`_
+and set for `minio <https://min.io/?gclid=Cj0KCQiAsvTxBRDkARIsAH4W_j9rNeSft9zVArxg1Zo4RAfXS31dC9Aq-amIigRAT_yAPQbKdU0RvD4aAv0UEALw_wcB>`_.
+
 In case of issues, reinstalling in a new conda environment is recommended.
 
 
 Other useful packages for development::
+
     conda install pytest sphinx pylint jupyter
     .. conda install daal4py -c defaults -c intel
 

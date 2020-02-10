@@ -138,7 +138,7 @@ number of processors (should run in Bodo repo's main directory)::
     mpiexec -n 3 pytest -s -v -m "not slow" -W ignore
 
 
-We have two customized `pytest markers <http://doc.pytest.org/en/latest/example/markers.html>`_:
+We have three customized `pytest markers <http://doc.pytest.org/en/latest/example/markers.html>`_:
 
 1. :code:`slow` defined in `pytest.ini <https://github.com/Bodo-inc/Bodo/blob/master/pytest.ini>`_::
     
@@ -157,9 +157,18 @@ We have two customized `pytest markers <http://doc.pytest.org/en/latest/example/
 
    We use this marker in the nightly CI build&test pipeline due to limited memory available on azure.
 
-Two markers can be used together::
+3. :code:`s3` defined in `pytest.ini <https://github.com/Bodo-inc/Bodo/blob/master/pytest.ini>`_::
 
+      pytest -s -v -m "s3" -W ignore
+
+   This marker marks the tests that test for s3 file system. These tests will be skipped, if `boto3
+   <https://boto3.amazonaws.com/v1/documentation/api/latest/index.html>`_ or `botocore
+   <https://botocore.amazonaws.com/v1/documentation/api/latest/index.html>`_ is not installed.
+
+More than one markers can be used together::
+    
    pytest -s -v -m "not slow and firsthalf" -W ignore
+    
 
 Debugging
 ---------

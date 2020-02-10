@@ -20,7 +20,7 @@ from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
 from bodo.utils.utils import unliteral_all, sanitize_varname
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, BodoWarning
 import bodo.ir.parquet_ext
 from bodo.transforms import distributed_pass
 from bodo.utils.transform import get_str_const_value
@@ -361,6 +361,7 @@ def get_parquet_dataset(file_name):
     """create ParquetDataset instance from Parquet file name
     """
     import pyarrow.parquet as pq
+
     fs = None
     if file_name.startswith("s3://"):
         try:
@@ -368,14 +369,32 @@ def get_parquet_dataset(file_name):
         except:
             raise BodoError("Reading from s3 requires s3fs currently.")
         import os
-        if "AWS_S3_ENDPOINT" in os.environ:
-            custom_endpoint = os.environ["AWS_S3_ENDPOINT"]
-            fs = s3fs.S3FileSystem(client_kwargs={'endpoint_url': custom_endpoint})
-        else:
-            fs = s3fs.S3FileSystem()
+
+        custom_endpoint = os.environ.get("AWS_S3_ENDPOINT", None)
+        aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", None)
+        aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", None)
+
+        # always use s3fs.S3FileSystem.clear_instance_cache()
+        # before initializing S3FileSystem due to inconsistent file system
+        # between to_parquet to read_parquet
+        if custom_endpoint is not None and (
+            aws_access_key_id is None or aws_secret_access_key is None
+        ):
+            warnings.warn(
+                BodoWarning(
+                    "Reading from s3 with custom_endpoint, "
+                    "but environment variables AWS_ACCESS_KEY_ID or "
+                    "AWS_SECRET_ACCESS_KEY is not set."
+                )
+            )
+        s3fs.S3FileSystem.clear_instance_cache()
+        fs = s3fs.S3FileSystem(
+            key=aws_access_key_id,
+            secret=aws_secret_access_key,
+            client_kwargs={"endpoint_url": custom_endpoint},
+        )
 
     return pq.ParquetDataset(file_name, filesystem=fs)
-
 
 
 def parquet_file_schema(file_name):

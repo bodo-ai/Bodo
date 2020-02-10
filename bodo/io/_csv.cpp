@@ -190,7 +190,7 @@ static PyObject *stream_reader_read(stream_reader *self, PyObject *args) {
     bool ok = self->ifs->read(self->buf.data(), size);
     self->chunk_pos += size;
     if (!ok) {
-        std::cerr << "Failed reading " << size << " bytes";
+        std::cerr << "Failed reading " << size << " bytes" << std::endl;
         return NULL;
     }
 

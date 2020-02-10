@@ -186,22 +186,99 @@ supported.
 File I/O
 --------
 
-Currently, Bodo supports I/O for `Parquet <http://parquet.apache.org/>`_,
-CSV, Numpy binaries and `HDF5 <http://www.h5py.org/>`_ formats.
+Bodo automatically parallelizes I/O of different nodes in a distributed setting
+without any code changes.
 
-For Parquet and CSV, the syntax is the same as Pandas::
+Supported formats
+~~~~~~~~~~~~~~~~~
+
+Currently, Bodo supports I/O for `Parquet <http://parquet.apache.org/>`_,
+CSV, `HDF5 <http://www.h5py.org/>`_ and Numpy binaries formats.
+
+.. _parquet-section:
+
+Parquet
+^^^^^^^
+
+For Parquet, the syntax is the same as ``Pandas``:
+``pd.read_parquet(path)``, where path can be a parquet file or a directory with multiple parquet files 
+(all are part of the same dataframe)::
 
     @bodo.jit
     def example_pq():
         df = pd.read_parquet('example.pq')
 
+``to_parquet(name)`` with distributed data writes to a 'folder' called ``name``.
+Each process writes one file into the folder, but if the data is not distributed,
+``to_parquet(name)`` writes to a file called ``name``:: 
 
-Reading CSV and Parquet files from Amazon S3 is also supported.
-The file path should start with `s3://`, and the `s3fs` package should
-be available.
-Currently, specifying the region using the `AWS_DEFAULT_REGION` environment
-variable is required.
+    df = pd.DataFrame({'A': np.arange(n)})
 
+    @bodo.jit
+    def example1_pq(df):
+        df.to_parquet('example1.pq')
+
+    @bodo.jit(distributed={'df'})
+    def example2_pq(df):
+        df.to_parquet('example2.pq')
+
+    if bodo.get_rank() == 0:
+        example1_pq(df)
+    example2_pq(df)
+
+Run the code above with 4 processors::
+
+    $ mpiexec -n 4 python ../example_pq.py
+
+``example1_pq(df)`` writes 1 single file, and ``example2_pq(df)`` writes a folder containing 4 parquet files::
+
+    .
+    ├── example1.pq
+    ├── example2.pq
+    │   ├── part-00.parquet
+    │   ├── part-01.parquet
+    │   ├── part-02.parquet
+    │   └── part-03.parquet
+
+.. _csv-section:
+
+CSV
+^^^
+For csv, the syntax is the also same as Pandas::
+
+    @bodo.jit
+    def example_csv():
+        df = pd.read_csv('example.csv')
+
+``to_csv()`` always writes to a single file, regardless of the number
+of processes and whether the data is distributed::
+
+    df = pd.DataFrame({'A': np.arange(n)})
+
+    @bodo.jit
+    def example1_csv(df):
+        df.to_csv('example1.csv')
+
+    @bodo.jit(distributed={'df'})
+    def example2_csv(df):
+        df.to_csv('example2.csv')
+
+    if bodo.get_rank() == 0:
+        example1_csv(df)
+    example2_csv(df)
+
+Run the code above with 4 processors::
+
+    $ mpiexec -n 4 python ../example_csv.py
+
+each ``example1_csv(df)`` and ``example2_csv(df)`` writes to a single file::
+
+    .
+    ├── example1.csv
+    ├── example2.csv
+
+HDF5
+^^^^
 
 For HDF5, the syntax is the same as the `h5py <http://www.h5py.org/>`_ package.
 For example::
@@ -212,7 +289,10 @@ For example::
         X = f['points'][:]
         Y = f['responses'][:]
 
-Numpy's `fromfile` and `tofile` are supported as below::
+Numpy binaries
+^^^^^^^^^^^^^^
+
+Numpy's ``fromfile`` and ``tofile`` are supported as below::
 
     @bodo.jit
     def example_np_io():
@@ -220,9 +300,8 @@ Numpy's `fromfile` and `tofile` are supported as below::
         ...
         A.tofile("newfile.dat")
 
-
-Bodo automatically parallelizes I/O of different nodes in a distributed setting
-without any code changes.
+Input array types
+~~~~~~~~~~~~~~~~~
 
 Bodo needs to know the types of input arrays. If the file name is a constant
 string or function argument, Bodo tries to look at the file at compile time
@@ -255,6 +334,22 @@ example::
          f = h5py.File(file_name, "r")
          X = f['points'][:]
          Y = f['responses'][:]
+
+Amazon S3
+~~~~~~~~~
+
+Reading :ref:`csv <csv-section>` and :ref:`Parquet <parquet-section>` files from Amazon S3 is also supported. 
+The ``s3fs`` package must be available, and the file path should start with :code:`s3://`::
+
+    @bodo.jit
+    def example_s3_csv():
+        df = pd.read_csv('s3://bucket-name/file_name.csv')
+
+These environment variables are used for File I/O with S3 credentials:
+  - ``AWS_ACCESS_KEY_ID``
+  - ``AWS_SECRET_ACCESS_KEY``
+  - ``AWS_DEFAULT_REGION``: default as ``us-east-1``
+  - ``AWS_S3_ENDPOINT``: specify custom host name, default as AWS endpoint(``s3.amazonaws.com``)
 
 Print
 -----

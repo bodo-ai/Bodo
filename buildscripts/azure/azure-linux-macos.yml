@@ -25,6 +25,17 @@ jobs:
     displayName: 'Setup Miniconda'
 
   - script: |
+      buildscripts/setup_minio.sh
+    displayName: 'Setup minio'
+
+  - script: |
+      export PATH=$HOME/miniconda3/bin:$PATH
+      source activate $CONDA_ENV
+      conda install -y -c conda-forge botocore s3fs
+      conda install -y -c conda-forge boto3
+    displayName: 'Setup s3_tesing'
+
+  - script: |
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
       HDF5_DIR=$CONDA_PREFIX python setup.py develop
@@ -57,7 +68,7 @@ jobs:
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
       if [[ "$NP" -eq 1 ]] && [[ "${{ parameters.name }}" == "Linux" ]]; then
-        codecov -t $(CODECOV_TOKEN)
+        codecov -t $(CODECOV_TOKEN) || (sleep 5 && codecov -t $(CODECOV_TOKEN)) || (sleep 5 && codecov -t $(CODECOV_TOKEN)) || (sleep 5 && codecov -t $(CODECOV_TOKEN)) || (sleep 5 && codecov -t $(CODECOV_TOKEN))
       fi
     displayName: 'codecov report upload'
     

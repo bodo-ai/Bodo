@@ -84,6 +84,7 @@ def check_func(
     check_names=True,
     copy_input=False,
     check_dtype=True,
+    py_output=None,
 ):
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
@@ -91,8 +92,12 @@ def check_func(
     n_pes = bodo.get_size()
 
     call_args = tuple(_get_arg(a, copy_input) for a in args)
-    py_output = func(*call_args)
     w = None
+
+    # gives the option of passing desired output to check_func
+    # in situations where pandas is buggy/lacks support
+    if py_output is None:
+        py_output = func(*call_args)
 
     # sequential
     w = check_func_seq(
