@@ -22,7 +22,7 @@ source deactivate
 
 conda remove --all -q -y -n $CONDA_ENV
 
-conda create -n $CONDA_ENV -q -y -c conda-forge python=3.7 numpy scipy pandas=1.0.0 boost-cpp cmake h5py mpich mpi
+conda create -n $CONDA_ENV -q -y -c conda-forge python=3.7 numpy scipy boost-cpp cmake h5py mpich mpi
 source activate $CONDA_ENV
 
 # install compilers
@@ -35,6 +35,7 @@ else
 fi
 
 $CONDA_INSTALL -c bodo.ai -c conda-forge pyarrow=0.15.1 arrow-cpp=0.15.1=*transfer_s3*
+$CONDA_INSTALL pandas>=1.0.0 -c conda-forge
 $CONDA_INSTALL numba=0.48.* -c conda-forge
 $CONDA_INSTALL -c conda-forge hdf5=*=*mpich*
 
