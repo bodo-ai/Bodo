@@ -368,8 +368,8 @@ def get_parquet_dataset(file_name):
             import s3fs
         except:
             raise BodoError("Reading from s3 requires s3fs currently.")
-        import os
 
+        import os
         custom_endpoint = os.environ.get("AWS_S3_ENDPOINT", None)
         aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", None)
         aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", None)
@@ -394,8 +394,32 @@ def get_parquet_dataset(file_name):
             client_kwargs={"endpoint_url": custom_endpoint},
         )
 
-    return pq.ParquetDataset(file_name, filesystem=fs)
+        file_names = None
+        try:
+            # check if file_name is a directory, and if there is a zero-size object
+            # with the name of the directory. If there is, we have to omit it
+            # because pq.ParquetDataset will throw Invalid Parquet file size is 0
+            # bytes
+            path_info = fs.info(file_name)
+            if path_info["Size"] == 0 and path_info["type"] == "directory":  # pragma: no cover
+                # excluded from coverage because haven't found a reliable way
+                # to create 0 size object that is a directory. For example:
+                # fs.mkdir(path)  sometimes doesn't do anything at all
+                path = file_name  # this is "s3://bucket/path-to-dir"
+                files = fs.ls(path)
+                if (
+                    files
+                    and (files[0] == path[5:] or files[0] == path[5:] + "/")
+                    and fs.info("s3://" + files[0])["Size"] == 0
+                ):
+                    # get actual names of objects inside the dir
+                    file_names = ["s3://" + fname for fname in files[1:]]
+        except:  # pragma: no cover
+            pass
+        if file_names is not None:  # pragma: no cover
+            return pq.ParquetDataset(file_names, filesystem=fs)
 
+    return pq.ParquetDataset(file_name, filesystem=fs)
 
 def parquet_file_schema(file_name):
 

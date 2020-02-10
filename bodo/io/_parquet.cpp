@@ -611,8 +611,6 @@ void pq_write(const char *_path_name, const table_info *table,
         std::shared_ptr<arrow::fs::S3FileSystem> fs;
         s3_get_fs(&fs);
         if (is_parallel) {
-            if (myrank == 0) fs->CreateDir(dirname);
-            MPI_Barrier(MPI_COMM_WORLD);
             arrow::Status status =
                 fs->OpenOutputStream(dirname + "/" + fname, &out_stream);
             CHECK_ARROW(status, "S3FileSystem::OpenOutputStream");
