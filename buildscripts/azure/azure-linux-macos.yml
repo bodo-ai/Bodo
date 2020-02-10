@@ -68,7 +68,7 @@ jobs:
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
       if [[ "$NP" -eq 1 ]] && [[ "${{ parameters.name }}" == "Linux" ]]; then
-        codecov -t $(CODECOV_TOKEN) || (sleep 5 && codecov -t $(CODECOV_TOKEN)) || (sleep 5 && codecov -t $(CODECOV_TOKEN)) || (sleep 5 && codecov -t $(CODECOV_TOKEN)) || (sleep 5 && codecov -t $(CODECOV_TOKEN))
+        codecov --required -t $(CODECOV_TOKEN) || (sleep 5 && codecov --required -t $(CODECOV_TOKEN)) || (sleep 5 && codecov --required -t $(CODECOV_TOKEN)) || (sleep 5 && codecov --required -t $(CODECOV_TOKEN)) || (sleep 5 && codecov --required -t $(CODECOV_TOKEN))
       fi
     displayName: 'codecov report upload'
     
