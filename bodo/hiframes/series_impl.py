@@ -32,12 +32,6 @@ from bodo.libs.int_arr_ext import IntegerArrayType
 
 @overload_attribute(SeriesType, "index")
 def overload_series_index(s):
-    # None should be range type
-    if s.index == types.none:
-        return lambda s: bodo.hiframes.pd_index_ext.init_range_index(
-            0, len(bodo.hiframes.pd_series_ext.get_series_data(s)), 1, None
-        )
-
     return lambda s: bodo.hiframes.pd_series_ext.get_series_index(s)
 
 

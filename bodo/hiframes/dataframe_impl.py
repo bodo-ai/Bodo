@@ -52,12 +52,6 @@ from bodo.hiframes.pd_dataframe_ext import validate_sort_values_spec
 
 @overload_attribute(DataFrameType, "index")
 def overload_dataframe_index(df):
-    # None index means full RangeIndex
-    if df.index == types.none:
-        return lambda df: bodo.hiframes.pd_index_ext.init_range_index(
-            0, len(df), 1, None
-        )
-
     return lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
 
 

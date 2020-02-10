@@ -757,6 +757,19 @@ def test_series_explicit_binary_op_nan(fill):
     check_func(test_impl, (L1, L2, fill))
 
 
+def test_series_explicit_binary_op_nullable_int_bool():
+    """Make comparison operation on nullable int array returns a BooleanArray
+    (Pandas 1.0)
+    """
+    def test_impl(S, other):
+        return S.lt(other)
+
+    S1 = pd.Series([1, 8, 4, 10, 3], [3, 7, 9, 2, 1], dtype="Int32")
+    S2 = pd.Series([1, -1, 3, 11, 7], [3, 7, 9, 2, 1], dtype="Int32")
+    check_func(test_impl, (S1, S2))
+    check_func(test_impl, (S1, 5))
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_binary_ops)
 def test_series_binary_op(op):
