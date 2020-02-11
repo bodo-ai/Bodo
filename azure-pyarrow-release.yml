@@ -1,0 +1,13 @@
+trigger: none
+pr: none
+
+jobs:
+# - template: buildscripts/azure/azure-arrow-cpp-build-mac-linux.yml
+#   parameters:
+#     name: Linux
+#     vmImage: ubuntu-latest
+- template: buildscripts/azure/azure-pyarrow-build-mac-linux.yml
+  parameters:
+    name: Mac
+    vmImage: macOS-latest
+# - template: buildscripts/azure/arrow-cpp-feedstock/.azure-pipelines/azure-pipelines-win.yml
