@@ -19,7 +19,7 @@ such as Numba on Ubuntu Linux::
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64 -c conda-forge
     conda install numba=0.48.0 -c conda-forge
     conda install -c bodo.ai -c conda-forge hdf5=*=*mpich*
-    conda install -c bodo.ai -c conda-forge pyarrow=0.15.1 arrow-cpp=0.15.1=*transfer_s3*
+    conda install -c conda-forge pyarrow=0.16.0
     # The following 2 commands are required for s3 related development and tests
     # conda install -c conda-forge botocore s3fs
     # conda install -c conda-forge boto3
@@ -190,7 +190,7 @@ Building from Source on Windows
     conda install numba=0.46.0 -c conda-forge
     conda install vc vs2015_runtime vs2015_win-64
     conda install -c defaults -c intel impi_rt impi-devel
-    conda install -c bodo.ai -c conda-forge pyarrow=0.15.1 arrow-cpp=0.15.1=*transfer_s3*
+    conda install -c conda-forge pyarrow=0.16.0
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo

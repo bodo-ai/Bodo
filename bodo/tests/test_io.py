@@ -194,7 +194,8 @@ def test_write_parquet():
             "Int16",
             "UInt16",
             "Int32",
-            "UInt32",
+            # "UInt32",
+            # pandas read_parquet has incorrect output with pyarrow 0.16.0 for UInt32
             "Int64",
             "UInt64",
         ]:

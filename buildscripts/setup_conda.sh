@@ -34,7 +34,7 @@ else
     echo "Error in compiler install"
 fi
 
-$CONDA_INSTALL -c bodo.ai -c conda-forge pyarrow=0.15.1 arrow-cpp=0.15.1=*transfer_s3*
+$CONDA_INSTALL -c conda-forge pyarrow=0.16.0
 $CONDA_INSTALL pandas>=1.0.0 -c conda-forge
 $CONDA_INSTALL numba=0.48.* -c conda-forge
 $CONDA_INSTALL -c conda-forge hdf5=*=*mpich*

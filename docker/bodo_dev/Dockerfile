@@ -19,7 +19,7 @@ ENV PATH /root/miniconda3/bin/:${PATH}
 RUN conda create -n BODODEV numpy scipy pandas>=1.0.0 boost-cpp cmake h5py mpich mpi gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
 RUN conda install -n BODODEV python=3.7 numba=0.48.0 -c conda-forge
 RUN conda install -n BODODEV hdf5=*=*mpich* -c conda-forge
-RUN conda install -n BODODEV python=3.7 pyarrow arrow-cpp=*=*transfer_s3* -c bodo.ai -c conda-forge
+RUN conda install -n BODODEV python=3.7 pyarrow=0.16.0 -c conda-forge
 RUN conda install -n BODODEV pytest
 #
 # Creation of the initial .bashrc to be right up

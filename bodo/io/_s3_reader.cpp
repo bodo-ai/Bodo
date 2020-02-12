@@ -5,12 +5,18 @@
 #include "_bodo_csv_file_reader.h"
 #include "arrow/filesystem/s3fs.h"
 #include "arrow/io/interfaces.h"
+#include "arrow/status.h"
+#include "arrow/result.h"
 
 #define CHECK_ARROW(expr, msg)                                   \
     if (!(expr.ok())) {                                          \
         std::cerr << "Error in arrow s3: " << msg << " " << expr \
                   << std::endl;                                  \
     }
+
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK_ARROW(res.status(), msg)            \
+    lhs = std::move(res).ValueOrDie();        \
 
 // a global singleton instance of S3FileSystem that is
 // initialized the first time it is needed and reused afterwards
@@ -39,8 +45,10 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs() {
         char *custom_endpoint = std::getenv("AWS_S3_ENDPOINT");
         if (custom_endpoint)
             options.endpoint_override = std::string(custom_endpoint);
-        status = arrow::fs::S3FileSystem::Make(options, &s3_fs);
-        CHECK_ARROW(status, "S3FileSystem::Make");
+
+        arrow::Result<std::shared_ptr<arrow::fs::S3FileSystem>> result;
+        result = arrow::fs::S3FileSystem::Make(options);
+        CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::Make", s3_fs)
         is_fs_initialized = true;
     }
     return s3_fs;
@@ -60,11 +68,12 @@ class S3FileReader : public FileReader {
     std::shared_ptr<arrow::io::RandomAccessFile> s3_file;
     std::shared_ptr<arrow::fs::S3FileSystem> fs;
     arrow::Status status;
+    arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> result;
     S3FileReader(const char *_fname) : FileReader(_fname) {
         fs = get_s3_fs();
         // open file
-        status = fs->OpenInputFile(std::string(_fname), &s3_file);
-        CHECK_ARROW(status, "S3FileSystem::OpenInputFile");
+        result = fs->OpenInputFile(std::string(_fname));
+        CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::OpenInputFile", s3_file)
     }
     bool seek(int64_t pos) {
         status = s3_file->Seek(pos);
@@ -100,8 +109,9 @@ FileReader *init_s3_reader(const char *fname) {
 void s3_open_file(const char *fname,
                   std::shared_ptr<::arrow::io::RandomAccessFile> *file) {
     std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs();
-    arrow::Status status = fs->OpenInputFile(std::string(fname), file);
-    CHECK_ARROW(status, "fs->OpenInputFile");
+    arrow::Result<std::shared_ptr<::arrow::io::RandomAccessFile>> result;
+    result = fs->OpenInputFile(std::string(fname));
+    CHECK_ARROW_AND_ASSIGN(result, "fs->OpenInputFile", *file)
 }
 
 PyMODINIT_FUNC PyInit_s3_reader(void) {

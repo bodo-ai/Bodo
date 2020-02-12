@@ -13,6 +13,7 @@
 #include "arrow/io/hdfs.h"
 #include "arrow/table.h"
 #include "arrow/type.h"
+#include "arrow/array.h"
 #include "parquet/api/reader.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/arrow/schema.h"

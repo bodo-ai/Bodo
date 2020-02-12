@@ -549,6 +549,10 @@ void bodo_array_to_arrow(
         return;                                                                \
     }
 
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK_ARROW(res.status(), msg)            \
+    lhs = std::move(res).ValueOrDie();        \
+
 /*
  * Write the Bodo table (the chunk in this process) to a parquet file.
  * @param path of output file or directory
@@ -611,12 +615,13 @@ void pq_write(const char *_path_name, const table_info *table,
         std::shared_ptr<arrow::fs::S3FileSystem> fs;
         s3_get_fs(&fs);
         if (is_parallel) {
-            arrow::Status status =
-                fs->OpenOutputStream(dirname + "/" + fname, &out_stream);
-            CHECK_ARROW(status, "S3FileSystem::OpenOutputStream");
+            arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+                fs->OpenOutputStream(dirname + "/" + fname);
+            CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::OpenOutputStream", out_stream)
         } else {
-            arrow::Status status = fs->OpenOutputStream(fname, &out_stream);
-            CHECK_ARROW(status, "S3FileSystem::OpenOutputStream");
+            arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result = 
+                fs->OpenOutputStream(fname);
+            CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::OpenOutputStream", out_stream)
         }
     } else {
         if (is_parallel) {
