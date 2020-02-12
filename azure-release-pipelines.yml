@@ -39,10 +39,10 @@ stages:
     parameters:
       name: Mac
       vmImage: xcode9-macos10.13
-#   - template: buildscripts/azure/azure-build-binary-windows.yml
-#     parameters:
-#       name: Windows
-#       vmImage: vs2017-win2016
+  - template: buildscripts/azure/azure-build-binary-windows.yml
+    parameters:
+      name: Windows
+      vmImage: vs2017-win2016
 
 - stage: Test_Bodo_Binary
   displayName: Test Bodo Binary
