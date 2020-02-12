@@ -1,7 +1,7 @@
 # A initial version
 # TODO: hava Python compiled from source to work with conda
 FROM buildpack-deps:stretch
-ARG PYTHON_VERSION=3.7.2
+ARG PYTHON_VERSION=3.8.0
 
 ENV PYTHONMALLOC malloc
 ENV MKL_DISABLE_FAST_MM 1
@@ -37,10 +37,10 @@ ENV PATH /root/miniconda3/bin/:${PATH}
 # Creation of the BODODEV environment
 #
 RUN conda create -n BODODEV numpy scipy pandas>=1.0.0 boost-cpp cmake h5py mpich mpi gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
-RUN conda install -n BODODEV python=3.7 hdf5=*=*mpich* -c conda-forge
-RUN conda install -n BODODEV python=3.7 pyarrow=0.16.0 -c conda-forge
-RUN conda install -n BODODEV python=3.7 numba=0.48.0 -c conda-forge
-RUN conda install -v BODODEV python=3.7 nomkl numpy -c conda-forge
+RUN conda install -n BODODEV python hdf5=*=*mpich* -c conda-forge
+RUN conda install -n BODODEV python pyarrow=0.16.0 -c conda-forge
+RUN conda install -n BODODEV python numba=0.48.0 -c conda-forge
+RUN conda install -v BODODEV python nomkl numpy -c conda-forge
 #
 # Creation of the .bashrc file
 #

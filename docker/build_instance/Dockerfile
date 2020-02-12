@@ -11,7 +11,7 @@ RUN ./miniconda.sh -b
 ENV PATH="/root/miniconda3/bin/:${PATH}"
 RUN echo "export PATH=/root/miniconda3/bin/:${PATH}" >> /root/.bashrc
 RUN conda install -y conda-build anaconda-client conda-verify
-#RUN conda create -y -n BUILD python=3.6
+#RUN conda create -y -n BUILD python
 
 
 #RUN echo "source activate BUILD" >> /root/.bashrc

@@ -26,7 +26,7 @@ jobs:
     displayName: 'Extract Bodo' 
   - task: UsePythonVersion@0
     inputs:
-      versionSpec: '3.7'
+      versionSpec: '3.8'
     displayName: 'Use Python $(python.version)'
   - script: |
       if [[ "${{ parameters.name }}" == "Linux" ]]; then
