@@ -400,9 +400,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
             f_name = get_overload_const_str(f_val)
         if not is_udf:
             if f_name not in bodo.ir.aggregate.supported_agg_funcs[:-1]:
-                raise BodoError(
-                    "unsupported aggregate function {}".format(f_name)
-                )
+                raise BodoError("unsupported aggregate function {}".format(f_name))
             # run typer on a groupby with just column col
             ret_grp = DataFrameGroupByType(
                 grp.df_type, grp.keys, (col,), grp.as_index, True
@@ -470,7 +468,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 if isinstance(f_val, (tuple, list)):
                     # TODO tuple containing function objects (not just strings)
                     for f in f_val:
-                        f_name, out_tp = self._get_agg_funcname_and_outtyp(grp, args, col_name, f)
+                        f_name, out_tp = self._get_agg_funcname_and_outtyp(
+                            grp, args, col_name, f
+                        )
                         has_cumulative_ops = f_name in {"cumsum", "cumprod"}
                         # TODO f_name == "<lambda>"
                         # output column name is 2-level (col_name, func_name)
@@ -479,7 +479,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
                         out_columns.append((col_name, f_name))
                         _append_out_type(grp, out_data, out_tp)
                 else:
-                    f_name, out_tp = self._get_agg_funcname_and_outtyp(grp, args, col_name, f_val)
+                    f_name, out_tp = self._get_agg_funcname_and_outtyp(
+                        grp, args, col_name, f_val
+                    )
                     has_cumulative_ops = f_name in {"cumsum", "cumprod"}
                     out_columns.append(col_name)
                     _append_out_type(grp, out_data, out_tp)
@@ -505,7 +507,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
             if not grp.as_index:
                 self._get_keys_not_as_index(grp, out_columns, out_data)
             for f_val in func.types:
-                f_name, out_tp = self._get_agg_funcname_and_outtyp(grp, args, grp.selection[0], f_val)
+                f_name, out_tp = self._get_agg_funcname_and_outtyp(
+                    grp, args, grp.selection[0], f_val
+                )
                 has_cumulative_ops = f_name in {"cumsum", "cumprod"}
                 # if tuple has lambdas they will be named <lambda_0>,
                 # <lambda_1>, ... in output
@@ -602,11 +606,21 @@ class DataframeGroupByAttribute(AttributeTemplate):
         msg = "Groupby.cumsum() only supports columns of types integer and float"
         return self.resolve_cumulative(grp, args, kws, msg)
 
-
     @bound_function("groupby.cumprod")
     def resolve_cumprod(self, grp, args, kws):
         msg = "Groupby.cumprod() only supports columns of types integer and float"
         return self.resolve_cumulative(grp, args, kws, msg)
+
+    def generic_resolve(self, grpby, attr):
+        if attr not in grpby.df_type.columns:
+            raise BodoError(
+                "groupby: invalid attribute {} (column not found in dataframe or unsupported function)".format(
+                    attr
+                )
+            )
+        return DataFrameGroupByType(
+            grpby.df_type, grpby.keys, (attr,), grpby.as_index, True
+        )
 
 
 # a dummy pivot_table function that will be replace in dataframe_pass

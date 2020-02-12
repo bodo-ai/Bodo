@@ -1398,6 +1398,25 @@ def test_sum_one_col(test_df):
     check_func(impl2, (11,), sort_output=True)
 
 
+def test_select_col_attr():
+    """
+    Test Groupby with column selected using getattr instead of getitem
+    """
+
+    def impl(df):
+        A = df.groupby("A").B.sum()
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [-8, 2, 3, 1, 5, 6, 7],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        }
+    )
+    check_func(impl, (df,), sort_output=True)
+
+
 def test_groupby_as_index_sum():
     """
     Test sum on groupby() as_index=False

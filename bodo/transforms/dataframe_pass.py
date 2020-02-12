@@ -2603,6 +2603,7 @@ class DataFramePass:
         if isinstance(select_def, ir.Expr) and select_def.op in (
             "getitem",
             "static_getitem",
+            "getattr",
         ):
             obj_var = select_def.value
 
