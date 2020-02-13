@@ -123,3 +123,10 @@ def test_ndim():
         return A.ndim
 
     check_func(test_impl, (pd.array(["AA", "B"]),))
+
+
+def test_astype_str():
+    def test_impl(A):
+        return A.astype(str)
+
+    check_func(test_impl, (pd.array(["AA", "B"]),))

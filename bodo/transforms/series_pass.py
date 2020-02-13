@@ -1187,6 +1187,20 @@ class SeriesPass:
             impl = bodo.hiframes.series_impl.to_numeric_overload(*arg_typs)
             return self._replace_func(impl, rhs.args)
 
+        if (
+            isinstance(func_mod, ir.Var)
+            and self.typemap[func_mod.name] == string_array_type
+            and func_name == "astype"
+        ):
+            rhs.args.insert(0, func_mod)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+
+            impl = bodo.libs.str_arr_ext.overload_str_arr_astype(*arg_typs, **kw_typs)
+            return self._replace_func(
+                impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
+            )
+
         if fdef == ("series_filter_bool", "bodo.hiframes.series_impl"):
             nodes = []
             in_arr = rhs.args[0]

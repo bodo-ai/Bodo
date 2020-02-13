@@ -38,6 +38,8 @@ from bodo.utils.typing import (
     is_list_like_index_type,
     is_overload_true,
     is_overload_none,
+    parse_dtype,
+    BodoError,
 )
 from numba.targets.imputils import (
     impl_ret_new_ref,
@@ -1392,6 +1394,50 @@ def overload_str_arr_dtype(A):
 @overload_attribute(StringArrayType, "ndim")
 def overload_str_arr_ndim(A):
     return lambda A: 1
+
+
+@overload_method(StringArrayType, "astype")
+def overload_str_arr_astype(A, dtype, copy=True):
+
+    # same dtype case
+    if isinstance(dtype, types.Function) and dtype.key[0] == str:
+        # no need to copy since our StringArray is immutable
+        return lambda A, dtype, copy=True: A
+
+    # numpy dtypes
+    nb_dtype = parse_dtype(dtype)
+
+    # TODO: support other dtypes if any
+    # TODO: error checking
+    if not isinstance(nb_dtype, (types.Float, types.Integer)):  # pragma: no cover
+        raise BodoError("invalid dtype in StringArray.astype()")
+
+    # NA positions are assigned np.nan for float output
+    if isinstance(nb_dtype, types.Float):
+        # TODO: raise error if conversion not possible
+        def impl_float(A, dtype, copy=True):  # pragma: no cover
+            n = len(A)
+            B = np.empty(n, nb_dtype)
+            for i in numba.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(A, i):
+                    B[i] = np.nan
+                else:
+                    B[i] = float(A[i])
+            return B
+
+        return impl_float
+
+    else:
+        # int dtype doesn't support NAs
+        # TODO: raise some form of error for NAs
+        def impl_int(A, dtype, copy=True):  # pragma: no cover
+            n = len(A)
+            B = np.empty(n, nb_dtype)
+            for i in numba.parfor.internal_prange(n):
+                B[i] = int(A[i])
+            return B
+
+        return impl_int
 
 
 @intrinsic
