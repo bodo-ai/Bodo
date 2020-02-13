@@ -730,6 +730,22 @@ def test_csv_cat1(datapath):
     check_func(test_impl, ())
 
 
+def test_csv_date_col_name(datapath):
+    """Test the use of column names in "parse_dates" of read_csv
+    """
+    fname = datapath("csv_data_date1.csv")
+
+    def test_impl():
+        return pd.read_csv(
+            fname,
+            names=["A", "B", "C", "D"],
+            dtype={"A": np.int, "B": np.float, "C": str, "D": np.int},
+            parse_dates=["C"],
+        )
+
+    check_func(test_impl, ())
+
+
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
         fname = "lr_w.hdf5"
