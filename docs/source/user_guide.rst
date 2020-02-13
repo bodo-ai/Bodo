@@ -351,6 +351,14 @@ These environment variables are used for File I/O with S3 credentials:
   - ``AWS_DEFAULT_REGION``: default as ``us-east-1``
   - ``AWS_S3_ENDPOINT``: specify custom host name, default as AWS endpoint(``s3.amazonaws.com``)
 
+
+Hadoop Distributed File System (HDFS)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Reading Parquet files from Hadoop Distributed File System (HDFS)
+is supported. The file path should start with `hdfs://`.
+
+
 Print
 -----
 
