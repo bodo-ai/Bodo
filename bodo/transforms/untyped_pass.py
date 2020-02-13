@@ -1326,6 +1326,7 @@ class UntypedPass:
     ):
         """get constant value or list of constant values from variable "var"
         """
+        # TODO: test error cases and remove "pragma no cover" annotations
         typ = str if typ is None else typ
         var_def = guard(find_build_sequence, self.func_ir, var)
 
@@ -1368,7 +1369,7 @@ class UntypedPass:
                     )
                     keys_getattr.attr = "copy"
 
-        if var_def is None:
+        if var_def is None:  # pragma: no cover
             # try single key column
             var_def = guard(find_const, self.func_ir, var)
             if var_def is None:
@@ -1376,7 +1377,7 @@ class UntypedPass:
                     return default
                 raise BodoError(err_msg)
             key_colnames = [var_def]
-        else:
+        else:  # pragma: no cover
             if list_only and var_def[1] != "build_list":
                 if default is not None:
                     return default
