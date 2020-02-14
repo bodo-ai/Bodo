@@ -57,6 +57,7 @@ from bodo.ir import csv_ext
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 import bodo.hiframes.pd_dataframe_ext
 from bodo.utils.transform import update_locs, get_str_const_value
+from bodo.utils.typing import BodoError
 
 
 # dummy sentinel singleton to designate constant value not found for variable
@@ -868,7 +869,7 @@ class UntypedPass:
                 "read_csv() arguments {} not supported yet".format(unsupported_args)
             )
 
-        col_names = self._get_str_or_list(names_var, default=0)
+        col_names = self._get_const_val_or_list(names_var, default=0)
 
         # infer the column names: if no names
         # are passed the behavior is identical to ``header=0`` and column
@@ -882,7 +883,7 @@ class UntypedPass:
         usecols = None
         if usecols_var != "":
             err_msg = "pd.read_csv() usecols should be constant list of ints"
-            usecols = self._get_str_or_list(usecols_var, err_msg=err_msg, typ=int)
+            usecols = self._get_const_val_or_list(usecols_var, err_msg=err_msg, typ=int)
 
         # if inference is required
         if dtype_var is "" or col_names == 0:
@@ -959,8 +960,8 @@ class UntypedPass:
         date_cols = []
         if "parse_dates" in kws:
             err_msg = "pd.read_csv() parse_dates should be constant list"
-            date_cols = self._get_str_or_list(
-                kws["parse_dates"], err_msg=err_msg, typ=int
+            date_cols = self._get_const_val_or_list(
+                kws["parse_dates"], err_msg=err_msg, typ=[int, str]
             )
 
         columns, data_arrs, out_types = self._get_csv_col_info(
@@ -1035,7 +1036,7 @@ class UntypedPass:
         for i, (col_name, typ) in enumerate(dtype_map.items()):
             columns.append(col_name)
             # get array dtype
-            if i in date_cols:
+            if i in date_cols or col_name in date_cols:
                 typ = types.Array(types.NPDatetime("ns"), 1, "C")
             out_types.append(typ)
             # output array variable
@@ -1095,7 +1096,7 @@ class UntypedPass:
                 "CategoricalDtype", dtype_def.args, dict(dtype_def.kws), 0, "categories"
             )
             err_msg = "categories should be constant list"
-            cats = self._get_str_or_list(cats_var, list_only=True, err_msg=err_msg)
+            cats = self._get_const_val_or_list(cats_var, list_only=True, err_msg=err_msg)
             typ = PDCategoricalDtype(cats)
             return CategoricalArray(typ)
 
@@ -1252,7 +1253,7 @@ class UntypedPass:
         if columns == -1:
             columns = None
         elif columns is not None:
-            columns = self._get_str_or_list(columns)
+            columns = self._get_const_val_or_list(columns)
 
         return self._gen_parquet_read(fname, lhs, columns)
 
@@ -1320,27 +1321,30 @@ class UntypedPass:
             raise ValueError(err_msg)
         return arg
 
-    def _get_str_or_list(
-        self, by_arg, list_only=False, default=None, err_msg=None, typ=None
+    def _get_const_val_or_list(
+        self, var, list_only=False, default=None, err_msg=None, typ=None
     ):
+        """get constant value or list of constant values from variable "var"
+        """
+        # TODO: test error cases and remove "pragma no cover" annotations
         typ = str if typ is None else typ
-        by_arg_def = guard(find_build_sequence, self.func_ir, by_arg)
+        var_def = guard(find_build_sequence, self.func_ir, var)
 
-        if by_arg_def is None:
+        if var_def is None:
             # try add_consts_to_type
-            by_arg_call = guard(get_definition, self.func_ir, by_arg)
-            if guard(find_callname, self.func_ir, by_arg_call) == (
+            var_call = guard(get_definition, self.func_ir, var)
+            if guard(find_callname, self.func_ir, var_call) == (
                 "add_consts_to_type",
                 "bodo.utils.typing",
             ):
-                by_arg_def = guard(
-                    find_build_sequence, self.func_ir, by_arg_call.args[0]
+                var_def = guard(
+                    find_build_sequence, self.func_ir, var_call.args[0]
                 )
 
-        if by_arg_def is None:
+        if var_def is None:
             # try dict.keys()
-            by_arg_call = guard(get_definition, self.func_ir, by_arg)
-            call_name = guard(find_callname, self.func_ir, by_arg_call)
+            var_call = guard(get_definition, self.func_ir, var)
+            call_name = guard(find_callname, self.func_ir, var_call)
             if (
                 call_name is not None
                 and len(call_name) == 2
@@ -1356,33 +1360,33 @@ class UntypedPass:
                     var_def = guard(get_definition, self.func_ir, var_def.args[0])
 
                 if isinstance(var_def, ir.Expr) and var_def.op == "build_map":
-                    by_arg_def = [v[0] for v in var_def.items], "build_map"
+                    var_def = [v[0] for v in var_def.items], "build_map"
                     # HACK replace dict.keys getattr to avoid typing errors
-                    keys_getattr = guard(get_definition, self.func_ir, by_arg_call.func)
+                    keys_getattr = guard(get_definition, self.func_ir, var_call.func)
                     assert (
                         isinstance(keys_getattr, ir.Expr)
                         and keys_getattr.attr == "keys"
                     )
                     keys_getattr.attr = "copy"
 
-        if by_arg_def is None:
+        if var_def is None:  # pragma: no cover
             # try single key column
-            by_arg_def = guard(find_const, self.func_ir, by_arg)
-            if by_arg_def is None:
+            var_def = guard(find_const, self.func_ir, var)
+            if var_def is None:
                 if default is not None:
                     return default
-                raise ValueError(err_msg)
-            key_colnames = [by_arg_def]
-        else:
-            if list_only and by_arg_def[1] != "build_list":
+                raise BodoError(err_msg)
+            key_colnames = [var_def]
+        else:  # pragma: no cover
+            if list_only and var_def[1] != "build_list":
                 if default is not None:
                     return default
-                raise ValueError(err_msg)
-            key_colnames = [guard(find_const, self.func_ir, v) for v in by_arg_def[0]]
-            if any(not isinstance(v, typ) for v in key_colnames):
+                raise BodoError(err_msg)
+            key_colnames = [guard(find_const, self.func_ir, v) for v in var_def[0]]
+            if any(not _check_type(v, typ) for v in key_colnames):
                 if default is not None:
                     return default
-                raise ValueError(err_msg)
+                raise BodoError(err_msg)
         return key_colnames
 
     def _handle_metadata(self):
@@ -1625,6 +1629,14 @@ def _compile_func_single_block(func, args, ret_var, extra_globals=None):
 
     nodes[-1].target = ret_var
     return nodes
+
+
+def _check_type(val, typ):
+    """check whether "val" is of type "typ", or any type in "typ" if "typ" is a list
+    """
+    if isinstance(typ, list):
+        return any(isinstance(val, t) for t in typ)
+    return isinstance(val, typ)
 
 
 # replace Numba's dictionary item checking to allow constant list/dict
