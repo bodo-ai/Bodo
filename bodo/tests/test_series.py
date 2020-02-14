@@ -1749,6 +1749,23 @@ def test_create_series_index4():
     pd.testing.assert_series_equal(bodo_func("A"), test_impl("A"))
 
 
+def test_series_astype_num_constructors():
+    """
+    test Series.astype() with number constructor functions "float" and "int"
+    """
+    def impl1(A):
+        return A.astype(float)
+
+    S = pd.Series(["3.2", "1", np.nan])
+    check_func(impl1, (S,))
+
+    def impl2(A):
+        return A.astype(int)
+
+    S = pd.Series(["3", "1", "-4"])
+    check_func(impl2, (S,))
+
+
 class TestSeries(unittest.TestCase):
     def test_create1(self):
         def test_impl():

@@ -173,6 +173,14 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
             return lambda data, new_dtype, copy=None: data.copy()
         return lambda data, new_dtype, copy=None: data
 
+    # handle constructor functions, e.g. Series.astype(float)
+    if isinstance(new_dtype, types.Function):
+        # TODO: other constructor functions?
+        if new_dtype.key[0] == float:
+            new_dtype = types.StringLiteral("float")
+        elif new_dtype.key[0] == int:
+            new_dtype = types.StringLiteral("int")
+
     nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
 
     # nullable int array case
