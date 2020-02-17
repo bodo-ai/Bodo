@@ -334,6 +334,35 @@ def test_agg_select_col():
     check_func(test_impl, (11,), sort_output=True, check_dtype=False)
 
 
+def test_agg_no_parfor():
+    """
+    Test Groupby.agg(): simple UDF with no parfor
+    """
+
+    def impl1(df):
+        A = df.groupby("A").agg(lambda x: 1)
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").agg(lambda x: len(x))
+        return A
+
+    check_func(impl1, (udf_in_df,), sort_output=True, check_dtype=False)
+    check_func(impl2, (udf_in_df,), sort_output=True, check_dtype=False)
+
+
+def test_agg_len_mix():
+    """
+    Test Groupby.agg(): use of len() in a UDF mixed with another parfor
+    """
+
+    def impl(df):
+        A = df.groupby("A").agg(lambda x: x.sum()/len(x))
+        return A
+
+    check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
+
+
 def test_agg_multi_udf():
     """
     Test Groupby.agg() multiple user defined functions

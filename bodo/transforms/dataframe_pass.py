@@ -2308,11 +2308,7 @@ class DataFramePass:
         pivot_arr = columns
 
         def _agg_len_impl(in_arr):  # pragma: no cover
-            numba.parfor.init_prange()
-            count = 0
-            for i in numba.parfor.internal_prange(len(in_arr)):
-                count += 1
-            return count
+            return len(in_arr)
 
         # TODO: make out_key_var an index column
         agg_node = bodo.ir.aggregate.Aggregate(

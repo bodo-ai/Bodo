@@ -1518,11 +1518,10 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, out_data_typs):
     )
 
     func_text += "\n"
-    func_text += "    for i in range(len(recv_redvar_arr_0)):\n"
-    func_text += "        w_ind = row_to_group[i]\n"
-    func_text += (
-        "        __combine_redvars(redvars, recv_redvars, w_ind, i, pivot_arr=None)\n"
-    )
+    if n_red_vars:  # if there is a parfor
+        func_text += "    for i in range(len(recv_redvar_arr_0)):\n"
+        func_text += "        w_ind = row_to_group[i]\n"
+        func_text += "        __combine_redvars(redvars, recv_redvars, w_ind, i, pivot_arr=None)\n"
 
     # print(func_text)
 
@@ -1983,6 +1982,19 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     f_ir = get_ir_of_code(func.__globals__, code)
     replace_closures(f_ir, closure, code)
 
+    # replace len(arr) calls (i.e. size of group) with a sentinel function that will be
+    # replaced with a simple loop in series pass
+    for block in f_ir.blocks.values():
+        for stmt in block.body:
+            if (
+                is_call_assign(stmt)
+                and find_callname(f_ir, stmt.value) == ("len", "builtins")
+                and stmt.value.args[0].name == f_ir.arg_names[0]
+            ):
+                len_global = get_definition(f_ir, stmt.value.func)
+                len_global.name = "dummy_agg_count"
+                len_global.value = dummy_agg_count
+
     # rename all variables to avoid conflict (init and eval nodes)
     var_table = get_name_var_table(f_ir.blocks)
     new_var_dict = {}
@@ -2136,10 +2148,14 @@ def get_udf_func_struct(
                 # a single function is applied to this input column
                 typ_and_func.append((in_typ, f_val))
 
+    udf_found = False
+
     for in_col_typ, func in typ_and_func:
         if pivot_values is None and not is_crosstab and func.ftype != "udf":
             # don't generate code for non-udf functions
             continue
+
+        udf_found = True
         in_series_typ = SeriesType(in_col_typ.dtype, in_col_typ, None, string_type)
         f_ir, pm = compile_to_optimized_ir(func, (in_series_typ,), typingctx)
 
@@ -2159,16 +2175,25 @@ def get_udf_func_struct(
                 assert parfor_ind == -1, "only one parfor for aggregation function"
                 parfor_ind = i
 
-        parfor = block_body[parfor_ind]
-        remove_dels(parfor.loop_body)
-        remove_dels({0: parfor.init_block})
+        # some UDFs could have no parfors (e.g. lambda x: 1)
+        parfor = None
+        if parfor_ind != -1:
+            parfor = block_body[parfor_ind]
+            remove_dels(parfor.loop_body)
+            remove_dels({0: parfor.init_block})
 
-        init_nodes = block_body[:parfor_ind] + parfor.init_block.body
+        init_nodes = []
+        if parfor:
+            init_nodes = block_body[:parfor_ind] + parfor.init_block.body
+
         eval_nodes = block_body[parfor_ind + 1 :]
 
-        redvars, var_to_redvar = get_parfor_reductions(
-            parfor, parfor.params, pm.calltypes
-        )
+        redvars = []
+        var_to_redvar = {}
+        if parfor:
+            redvars, var_to_redvar = get_parfor_reductions(
+                parfor, parfor.params, pm.calltypes
+            )
 
         func.ncols_pre_shuffle = len(redvars)
         func.ncols_post_shuffle = len(redvars) + 1  # one for output after eval
@@ -2224,7 +2249,7 @@ def get_udf_func_struct(
         curr_offset += len(redvars)
         redvar_offsets.append(curr_offset)
 
-    if len(all_reduce_vars) == 0 and not is_crosstab and pivot_values is None:
+    if not udf_found:
         # no user-defined functions found for groupby.agg()
         return None
 
@@ -2279,6 +2304,9 @@ def _mv_read_only_init_vars(init_nodes, parfor, eval_nodes):
     """move stmts that are only used in the parfor body to the beginning of
     parfor body. For example, in test_agg_seq_str, B='aa' should be moved.
     """
+    if not parfor:
+        return init_nodes
+
     # get parfor body usedefs
     use_defs = compute_use_defs(parfor.loop_body)
     parfor_uses = set()
@@ -2426,9 +2454,10 @@ def gen_all_update_func(
                     for i in range(redvar_offsets[j], redvar_offsets[j + 1])
                 ]
             )
-            func_text += "  {} = update_vars_{}({},  data_in[{}][i])\n".format(
-                redvar_access, j, redvar_access, 0 if in_num_cols == 1 else j
-            )
+            if redvar_access:  # if there is a parfor
+                func_text += "  {} = update_vars_{}({},  data_in[{}][i])\n".format(
+                    redvar_access, j, redvar_access, 0 if in_num_cols == 1 else j
+                )
     func_text += "  return\n"
     # print(func_text)
 
@@ -2509,9 +2538,10 @@ def gen_all_combine_func(
                     for i in range(redvar_offsets[j], redvar_offsets[j + 1])
                 ]
             )
-            func_text += "  {} = combine_vars_{}({}, {})\n".format(
-                redvar_access, j, redvar_access, recv_access
-            )
+            if recv_access:  # if there is a parfor
+                func_text += "  {} = combine_vars_{}({}, {})\n".format(
+                    redvar_access, j, redvar_access, recv_access
+                )
     func_text += "  return\n"
     # print(func_text)
     glbs = {}
@@ -2599,7 +2629,7 @@ def gen_eval_func(f_ir, eval_nodes, reduce_vars, var_types, pm, typingctx, targe
     # eval func takes reduce vars and produces final result
     num_red_vars = len(var_types)
     in_names = ["in{}".format(i) for i in range(num_red_vars)]
-    return_typ = pm.typemap[eval_nodes[-1].value.name]
+    return_typ = types.unliteral(pm.typemap[eval_nodes[-1].value.name])
 
     # TODO: non-numeric return
     zero = return_typ(0)
@@ -2643,6 +2673,9 @@ def gen_eval_func(f_ir, eval_nodes, reduce_vars, var_types, pm, typingctx, targe
 def gen_combine_func(
     f_ir, parfor, redvars, var_to_redvar, var_types, arr_var, pm, typingctx, targetctx
 ):
+    if not parfor:
+        return numba.njit(lambda: ())
+
     num_red_vars = len(redvars)
     redvar_in_names = ["v{}".format(i) for i in range(num_red_vars)]
     in_names = ["in{}".format(i) for i in range(num_red_vars)]
@@ -2765,6 +2798,9 @@ def gen_update_func(
     typingctx,
     targetctx,
 ):
+    if not parfor:
+        return numba.njit(lambda A: ())
+
     num_red_vars = len(redvars)
     var_types = [pm.typemap[v] for v in redvars]
 
@@ -3225,3 +3261,10 @@ def setitem_arr_tup_na_match_overload(arr_tup1, arr_tup2, ind):
     exec(func_text, {"bodo": bodo, "setitem_arr_nan": setitem_arr_nan}, loc_vars)
     impl = loc_vars["f"]
     return impl
+
+
+# sentinel function for the use of len (length of group) in agg UDFs, which will be
+# replaced with a dummy loop in series pass
+@numba.extending.register_jitable
+def dummy_agg_count(A):  # pragma: no cover
+    return len(A)
