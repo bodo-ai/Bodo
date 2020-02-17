@@ -10,12 +10,14 @@ Welcome to Bodo Development's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   source/build_bodo
    source/development
-   source/install
    source/numba
-   source/debug
+   source/documentation
+   source/docker_dev
    source/conda_build
    source/testing_poc_SQL
+   source/resources
 
 
 Indices and tables

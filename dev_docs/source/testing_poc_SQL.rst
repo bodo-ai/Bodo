@@ -1,7 +1,10 @@
 .. _pocsql:
 
+Customer Code Rewrite 
+-----------------------
+
 Run SQL code
-------------
+~~~~~~~~~~~~~
 
 We use OmniSci to run SQL code on docker.
 Follow the preparation and activatetion steps in this 
@@ -36,7 +39,7 @@ After you are done with the container, stop and remove the container::
   docker rm your_container_ID
 
 Test Python code correctness
-----------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Compare python output and SQL output with :code:`pd.testing.assert_frame_equal()`
 
@@ -50,7 +53,7 @@ Compare python output and SQL output with :code:`pd.testing.assert_frame_equal()
 Test intermediate tables since some columns of tables are never used.
 
 Example with `claims_poc <https://github.com/Bodo-inc/claims_poc>`_
--------------------------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If you try to run this example on docker, there is a sample of data  inside claims_poc repo, so you could just mount :code:`claims_poc` directory when starting the docker. And in the edited SQL code(:code:`tests/omnisci/get_csv.sql`), you need to change the file paths to proper ones. 
 

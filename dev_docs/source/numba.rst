@@ -1,6 +1,6 @@
 .. _numba:
 
-Numba Development
+Numba 
 -----------------
 
 Bodo sits on top of Numba and is heavily tied to many of its features.
@@ -40,9 +40,9 @@ develop Numba extensions is necessary.
 
 
 Numba IR
---------
+~~~~~~~~~~
 
-Numba IR classes are defined `here <https://github.com/numba/numba/blob/master/numba/ir.py>`_.
+Numba IR classes are defined `here <https://github.com/numba/numba/blob/master/numba/core/ir.py>`_.
 Below is a brief summary.
 
 
@@ -105,18 +105,12 @@ ir.Expr: an expression
     `build_map`: create dictionary from values, e.g. {a1: b1, a2: b2}
         items: list/tuple of variable 2-tuples, e.g. [(a1, b1), (a2, b2)]
     `pair_first`: get first value of a pair (used in loop gen)
-
     `pair_second`: get second value of a pair (used in loop gen)
-
     `getiter`: get iterator for object
-
     `iternext`: get next value of iterator
-
     `exhaust_iter`: exhaust values of iterator (can treat it as simple assignment here)
         value: variable of value to exhaust
-
     `cast`: prepare value for return (no-op mostly)
-
     `make_function`: make a function object, used for inline lambdas
 
 
