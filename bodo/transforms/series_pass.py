@@ -1626,6 +1626,8 @@ class SeriesPass:
     def _run_call_series(self, assign, lhs, rhs, series_var, func_name):
         if func_name in (
             "sum",
+            "all",
+            "any",
             "prod",
             "mean",
             "var",

@@ -761,6 +761,7 @@ def test_series_explicit_binary_op_nullable_int_bool():
     """Make comparison operation on nullable int array returns a BooleanArray
     (Pandas 1.0)
     """
+
     def test_impl(S, other):
         return S.lt(other)
 
@@ -1132,6 +1133,7 @@ def test_series_map_func_cases1():
 def test_series_map_global_jit():
     """Test UDF defined as a global jit function
     """
+
     def test_impl(S):
         return S.map(g2)
 
@@ -1457,6 +1459,7 @@ def test_series_argsort_fast():
     # TODO: support distributed argsort()
     # check_func(test_impl, (series_val,))
 
+
 @pytest.mark.slow
 def test_series_argsort(series_val):
     def test_impl(A):
@@ -1661,6 +1664,88 @@ def test_series_value_counts():
 
     S = pd.Series(["AA", "BB", "C", "AA", "C", "AA"])
     check_func(test_impl, (S,))
+
+
+def test_series_sum():
+    def impl(S):
+        A = S.sum()
+        return A
+
+    S = pd.Series(np.arange(20))
+    check_func(impl, (S,))
+
+
+def test_series_prod():
+    def impl(S):
+        A = S.prod()
+        return A
+
+    S = pd.Series(1 + np.arange(20))
+    check_func(impl, (S,))
+
+
+def test_singlevar_series_all():
+    def impl(S):
+        A = S.all()
+        return A
+
+    S = pd.Series([False] + [True] * 10)
+    check_func(impl, (S,))
+
+
+def test_singleval_series_any():
+    def impl(S):
+        A = S.any()
+        return A
+
+    S = pd.Series([True] + [False] * 10)
+    check_func(impl, (S,))
+
+
+def test_random_series_all():
+    def impl(S):
+        A = S.all()
+        return A
+
+    def random_series(n):
+        random.seed(5)
+        eList = []
+        for i in range(n):
+            val = random.randint(0,2)
+            if val==0:
+                val_B = True
+            if val==1:
+                val_B = False
+            if val==2:
+                val_B = np.nan
+            eList.append(val_B)
+        return pd.Series(eList)
+
+    S = random_series(10)
+    check_func(impl, (S,))
+
+
+def test_random_series_any():
+    def impl(S):
+        A = S.any()
+        return A
+
+    def random_series(n):
+        random.seed(5)
+        eList = []
+        for i in range(n):
+            val = random.randint(0,2)
+            if val==0:
+                val_B = True
+            if val==1:
+                val_B = False
+            if val==2:
+                val_B = np.nan
+            eList.append(val_B)
+        return pd.Series(eList)
+
+    S = random_series(10)
+    check_func(impl, (S,))
 
 
 def test_series_np_where_str():
@@ -2527,7 +2612,7 @@ class TestSeries(unittest.TestCase):
         pd.testing.assert_series_equal(
             bodo_func(S1, S2),
             test_impl(S1, S2).reset_index(drop=True),
-            check_dtype=False
+            check_dtype=False,
         )
 
     def test_series_cov1(self):

@@ -192,7 +192,6 @@ def overload_series_sum(S):
         for i in numba.parfor.internal_prange(len(A)):
             if not bodo.libs.array_kernels.isna(A, i):
                 s += A[i]
-
         return s
 
     return impl
@@ -210,6 +209,38 @@ def overload_series_prod(S):
             if not bodo.libs.array_kernels.isna(A, i):
                 s *= A[i]
         return s
+
+    return impl
+
+
+@overload_method(SeriesType, "any")
+def overload_series_any(S):
+    def impl(S):  # pragma: no cover
+        A = bodo.hiframes.pd_series_ext.get_series_data(S)
+        numba.parfor.init_prange()
+        count = 0
+        for i in numba.parfor.internal_prange(len(A)):
+            val = 0
+            if not bodo.libs.array_kernels.isna(A, i):
+                val = int(A[i])
+            count += val
+        return count != 0
+
+    return impl
+
+
+@overload_method(SeriesType, "all")
+def overload_series_all(S):
+    def impl(S):  # pragma: no cover
+        A = bodo.hiframes.pd_series_ext.get_series_data(S)
+        numba.parfor.init_prange()
+        count = 0
+        for i in numba.parfor.internal_prange(len(A)):
+            val = 0
+            if not bodo.libs.array_kernels.isna(A, i):
+                val = int(not A[i])
+            count += val
+        return count == 0
 
     return impl
 
@@ -1526,7 +1557,6 @@ def overload_np_where(condition, x, y):
             "      if bodo.libs.array_kernels.isna(y, j): setitem_arr_nan(out_arr, j)\n"
         )
     func_text += "  return out_arr\n"
-    # print(func_text)
     loc_vars = {}
     exec(
         func_text,
