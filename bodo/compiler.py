@@ -12,31 +12,15 @@ from bodo.transforms.untyped_pass import UntypedPass
 from bodo.transforms.series_pass import SeriesPass
 from bodo.transforms.dataframe_pass import DataFramePass
 import numba
-import numba.compiler
+from numba.compiler import DefaultPassBuilder
 from numba.compiler_machinery import FunctionPass, register_pass, PassManager
-from numba.untyped_passes import (
-    ExtractByteCode,
-    TranslateByteCode,
-    FixupArgs,
-    IRProcessing,
-    DeadBranchPrune,
-    RewriteSemanticConstants,
-    InlineClosureLikes,
-    GenericRewrites,
-    WithLifting,
-    InlineInlinables,
-)
+from numba.untyped_passes import WithLifting
 
 from numba.typed_passes import (
     NopythonTypeInference,
-    AnnotateTypes,
-    NopythonRewrites,
     PreParforPass,
     ParforPass,
     DumpParforDiagnostics,
-    IRLegalization,
-    NoPythonBackend,
-    InlineOverloads,
 )
 
 from numba import ir_utils, ir, postproc
@@ -76,67 +60,50 @@ class BodoCompiler(numba.compiler.CompilerBase):
         return self._create_bodo_pipeline(True)
 
     def _create_bodo_pipeline(self, distributed):
-        pm = PassManager("bodo")
+        name = "bodo" if distributed else "bodo_seq"
+        pm = DefaultPassBuilder.define_nopython_pipeline(self.state, name)
 
-        if self.state.func_ir is None:
-            pm.add_pass(TranslateByteCode, "analyzing bytecode")
-            pm.add_pass(FixupArgs, "fix up args")
-        pm.add_pass(IRProcessing, "processing IR")
-
-        pm.add_pass(WithLifting, "Handle with contexts")
-
-        # pre typing
-        if not self.state.flags.no_rewrites:
-            pm.add_pass(GenericRewrites, "nopython rewrites")
-            pm.add_pass(RewriteSemanticConstants, "rewrite semantic constants")
-            pm.add_pass(DeadBranchPrune, "dead branch pruning")
-        pm.add_pass(InlineClosureLikes, "inline calls to locally defined closures")
-
-        # inline functions that have been determined as inlinable and rerun
-        # branch pruning this needs to be run after closures are inlined as
-        # the IR repr of a closure masks call sites if an inlinable is called
-        # inside a closure
-        pm.add_pass(InlineInlinables, "inline inlinable functions")
-        if not self.state.flags.no_rewrites:
-            pm.add_pass(DeadBranchPrune, "dead branch pruning")
-
-        pm.add_pass(InlinePass, "inline funcs")
-        pm.add_pass(BodoUntypedPass, "untyped pass")
-
-        # typing
-        pm.add_pass(NopythonTypeInference, "nopython frontend")
-        pm.add_pass(AnnotateTypes, "annotate types")
-
-        # optimisation
-        pm.add_pass(InlineOverloads, "inline overloaded functions")
+        # inline other jit functions right after IR is available
+        # NOTE: calling after WithLifting since With blocks should be handled before
+        # simplify_CFG() is called (block number is used in EnterWith nodes)
+        pm.add_pass_after(InlinePass, WithLifting)
+        # run untyped pass right before type inference
+        add_pass_before(pm, BodoUntypedPass, NopythonTypeInference)
 
         # Series pass should be before pre_parfor since
         # S.call to np.call transformation is invalid for
         # Series (e.g. S.var is not the same as np.var(S))
-        pm.add_pass(BodoDataFramePass, "typed dataframe pass")
-        pm.add_pass(BodoSeriesPass, "typed series pass")
-
-        if self.state.flags.auto_parallel.enabled:
-            pm.add_pass(PreParforPass, "Preprocessing for parfors")
-        if not self.state.flags.no_rewrites:
-            pm.add_pass(NopythonRewrites, "nopython rewrites")
-        if self.state.flags.auto_parallel.enabled:
-            pm.add_pass(ParforPass, "convert to parfors")
+        add_pass_before(pm, BodoDataFramePass, PreParforPass)
+        pm.add_pass_after(BodoSeriesPass, BodoDataFramePass)
 
         if distributed:
-            pm.add_pass(BodoDistributedPass, "convert to distributed")
+            pm.add_pass_after(BodoDistributedPass, ParforPass)
         else:
-            pm.add_pass(LowerParforSeq, "lower parfor sequentially")
+            pm.add_pass_after(LowerParforSeq, ParforPass)
 
-        # legalise
-        pm.add_pass(IRLegalization, "ensure IR is legal prior to lowering")
-
-        # lower
-        pm.add_pass(NoPythonBackend, "nopython mode backend")
-        pm.add_pass(DumpParforDiagnostics, "dump parfor diagnostics")
-        pm.add_pass(BodoDumpDiagnosticsPass, "dump distributed diagnostics")
+        pm.add_pass_after(BodoDumpDiagnosticsPass, DumpParforDiagnostics)
         pm.finalize()
         return [pm]
+
+
+# TODO: remove this helper function when available in Numba
+def add_pass_before(pm, pass_cls, location):
+    """
+    Add a pass `pass_cls` to the PassManager's compilation pipeline right before
+    the pass `location`.
+    """
+    # same as add_pass_after, except first argument to "insert"
+    assert pm.passes
+    pm._validate_pass(pass_cls)
+    pm._validate_pass(location)
+    for idx, (x, _) in enumerate(pm.passes):
+        if x == location:
+            break
+    else:  # pragma: no cover
+        raise ValueError("Could not find pass %s" % location)
+    pm.passes.insert(idx, (pass_cls, str(pass_cls)))
+    # if a pass has been added, it's not finalized
+    pm._finalized = False
 
 
 # TODO: use Numba's new inline feature
