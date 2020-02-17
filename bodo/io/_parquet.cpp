@@ -504,6 +504,10 @@ void bodo_array_to_arrow(
                 num_bytes = sizeof(double) * array->length;
                 type = arrow::float64();
                 break;
+            default:
+                std::cerr << "Fatal error: invalid dtype found in conversion"
+                             " of numeric Bodo array to Arrow" << std::endl;
+                exit(1);
         }
         schema_vector.push_back(arrow::field(col_name, type));
         std::shared_ptr<arrow::Buffer> data =
