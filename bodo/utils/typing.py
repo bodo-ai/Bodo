@@ -319,6 +319,7 @@ def literal_bool_cast(context, builder, fromty, toty, val):
 class FunctionLiteral(types.Literal, types.Opaque):
     """Literal type for function objects (i.e. pytypes.FunctionType)
     """
+
     pass
 
 
@@ -337,7 +338,6 @@ register_model(FunctionLiteral)(models.OpaqueModel)
 @unbox(FunctionLiteral)
 def unbox_func_literal(typ, obj, c):
     return NativeValue(obj)
-
 
 
 # groupby.agg() can take a constant dictionary with a UDF in values. Typer of Numba's
@@ -427,8 +427,10 @@ class ConstListModel(models.ListModel):
 
 
 def is_literal_type(t):
-    return isinstance(t, (types.Literal, types.Omitted)) or (
-        isinstance(t, types.Tuple) and all(is_literal_type(v) for v in t.types)
+    return (
+        isinstance(t, (types.Literal, types.Omitted))
+        or isinstance(t, types.Dispatcher)
+        or (isinstance(t, types.Tuple) and all(is_literal_type(v) for v in t.types))
     )
 
 
@@ -440,6 +442,8 @@ def get_literal_value(t):
         return t.value
     if isinstance(t, types.Tuple):
         return tuple(get_literal_value(v) for v in t.types)
+    if isinstance(t, types.Dispatcher):
+        return t
 
 
 # add constant metadata to list or tuple type, see untyped_pass.py

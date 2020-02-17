@@ -140,7 +140,7 @@ def test_csv_remove_col0_used_for_len(datapath):
         df = pd.read_csv(fname, names=["A", "B", "C", "D"])
         return df.C
 
-    bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline)(impl)
+    bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(impl)
     pd.testing.assert_series_equal(bodo_func(), impl())
     fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     read_csv_found = False
@@ -232,6 +232,7 @@ def test_write_parquet():
     # workaround for pandas/pyarrow writing nullable Int64 issue:
     # https://issues.apache.org/jira/browse/ARROW-5379
     import pyarrow
+
     pd.arrays.IntegerArray.__arrow_array__ = lambda self, type: pyarrow.array(
         self._data, mask=self._mask, type=type
     )

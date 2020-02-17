@@ -2186,6 +2186,10 @@ class SeriesPass:
         )
 
     def _handle_rolling_apply_func(self, func_node, dtype, out_dtype):
+        if isinstance(func_node, ir.Global) and isinstance(
+            func_node.value, numba.targets.registry.CPUDispatcher
+        ):
+            return func_node.value
         if func_node is None:
             raise ValueError("cannot find kernel function for rolling.apply() call")
         # TODO: more error checking on the kernel to make sure it doesn't

@@ -411,7 +411,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
             if is_expr(f_val, "make_function"):
                 f = types.functions.MakeFunctionLiteral(f_val)
             else:
-                assert isinstance(f_val, types.MakeFunctionLiteral)
+                assert isinstance(f_val, (types.MakeFunctionLiteral, types.Dispatcher))
                 f = f_val
             validate_udf("agg", f)
             func = get_overload_const_func(f)
