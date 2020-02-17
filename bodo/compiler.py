@@ -291,7 +291,7 @@ def inline_calls(func_ir, _locals):
                         func_def.value, CPUDispatcher
                     ):
                         py_func = func_def.value.py_func
-                        inline_out = inline_closure_call(
+                        _, var_dict = inline_closure_call(
                             func_ir,
                             py_func.__globals__,
                             block,
@@ -300,17 +300,14 @@ def inline_calls(func_ir, _locals):
                             work_list=work_list,
                         )
 
-                        # TODO remove if when inline_closure_call() output fix
-                        # is merged in Numba
-                        if isinstance(inline_out, tuple):
-                            var_dict = inline_out[1]
-                            # TODO: update '##distributed' and '##threaded'
-                            # in _locals
-                            _locals.update(
-                                (var_dict[k].name, v)
-                                for k, v in func_def.value.locals.items()
-                                if k in var_dict
-                            )
+                        _locals.update(
+                            (var_dict[k].name, v)
+                            for k, v in func_def.value.locals.items()
+                            if k in var_dict
+                        )
+                        # TODO: support options like "distributed" if applied to the
+                        # inlined function
+
                         # for block in new_blocks:
                         #     work_list.append(block)
                         # current block is modified, skip the rest
