@@ -101,7 +101,7 @@ implicitly align values based on their
 associated index values yet.
 
 
-* :func:`pandas.Series`
+* :class:`pandas.Series`
 
   * Arguments ``data``, ``index``, and ``name`` are supported.
     ``data`` is required and can be a list, array, Series or Index.
@@ -111,29 +111,29 @@ associated index values yet.
 
 Attributes:
 
-* :attr:`Series.index`
-* :attr:`Series.values`
-* :attr:`Series.dtype` (object data types such as dtype of
+* :attr:`pandas.Series.index`
+* :meth:`pandas.Series.values`
+* :meth:`pandas.Series.dtype` (object data types such as dtype of
   string series not supported yet)
-* :attr:`Series.shape`
-* :attr:`Series.ndim`
-* :attr:`Series.size`
-* :attr:`Series.T`
-* :attr:`Series.hasnans`
-* :attr:`Series.empty`
-* :attr:`Series.dtypes`
-* :attr:`Series.name`
+* :meth:`pandas.Series.shape`
+* :meth:`pandas.Series.ndim`
+* :meth:`pandas.Series.size`
+* :meth:`pandas.Series.T`
+* :meth:`pandas.Series.hasnans`
+* :meth:`pandas.Series.empty`
+* :meth:`pandas.Series.dtypes`
+* :meth:`pandas.Series.name`
 
 
 Methods:
 
 Conversion:
 
-* :meth:`Series.astype` (only ``dtype`` argument,
+* :meth:`pandas.Series.astype` (only ``dtype`` argument,
   can be a Numpy numeric dtype or ``str``)
-* :meth:`Series.copy` (including ``deep`` argument)
-* :meth:`Series.to_list`
-* :meth:`Series.to_numpy`
+* :meth:`pandas.Series.copy` (including ``deep`` argument)
+* :meth:`pandas.Series.to_list`
+* :meth:`pandas.Series.to_numpy`
 
 
 Indexing, iteration:
@@ -142,34 +142,34 @@ Location based indexing using `[]`, `iat`, and `iloc` is supported.
 Changing values of existing string Series using these operators
 is not supported yet.
 
-* :attr:`Series.iat`
-* :attr:`Series.iloc`
+* :meth:`pandas.Series.iat`
+* :meth:`pandas.Series.iloc`
 
 
 Binary operator functions:
 
 The `fill_value` optional argument for binary functions below is supported.
 
-* :meth:`Series.add`
-* :meth:`Series.sub`
-* :meth:`Series.mul`
-* :meth:`Series.div`
-* :meth:`Series.truediv`
-* :meth:`Series.floordiv`
-* :meth:`Series.mod`
-* :meth:`Series.pow`
-* :meth:`Series.combine`
-* :meth:`Series.lt`
-* :meth:`Series.gt`
-* :meth:`Series.le`
-* :meth:`Series.ge`
-* :meth:`Series.ne`
+* :meth:`pandas.Series.add`
+* :meth:`pandas.Series.sub`
+* :meth:`pandas.Series.mul`
+* :meth:`pandas.Series.div`
+* :meth:`pandas.Series.truediv`
+* :meth:`pandas.Series.floordiv`
+* :meth:`pandas.Series.mod`
+* :meth:`pandas.Series.pow`
+* :meth:`pandas.Series.combine`
+* :meth:`pandas.Series.lt`
+* :meth:`pandas.Series.gt`
+* :meth:`pandas.Series.le`
+* :meth:`pandas.Series.ge`
+* :meth:`pandas.Series.ne`
 
 Function application, GroupBy & Window:
 
-* :meth:`Series.apply` (only the `func` argument)
-* :meth:`Series.map` (only the `arg` argument, which should be a function)
-* :meth:`Series.rolling` (`window` and `center` arguments supported)
+* :meth:`pandas.Series.apply` (only the `func` argument)
+* :meth:`pandas.Series.map` (only the `arg` argument, which should be a function)
+* :meth:`pandas.Series.rolling` (`window` and `center` arguments supported)
 
 
 Computations / Descriptive Stats:
@@ -177,110 +177,110 @@ Computations / Descriptive Stats:
 Statistical functions below are supported without optional arguments
 unless support is explicitly mentioned.
 
-* :meth:`Series.abs`
-* :meth:`Series.corr`
-* :meth:`Series.count`
-* :meth:`Series.cov`
-* :meth:`Series.cumsum`
-* :meth:`Series.cumprod`
-* :meth:`Series.describe` currently returns a string instead of Series object.
-* :meth:`Series.max`
-* :meth:`Series.mean`
-* :meth:`Series.median`
-* :meth:`Series.min`
-* :meth:`Series.nlargest` (non-numerics not supported yet)
-* :meth:`Series.nsmallest` (non-numerics not supported yet)
-* :meth:`Series.pct_change`(supports numeric types and
+* :meth:`pandas.Series.abs`
+* :meth:`pandas.Series.corr`
+* :meth:`pandas.Series.count`
+* :meth:`pandas.Series.cov`
+* :meth:`pandas.Series.cumsum`
+* :meth:`pandas.Series.cumprod`
+* :meth:`pandas.Series.describe` currently returns a string instead of Series object.
+* :meth:`pandas.Series.max`
+* :meth:`pandas.Series.mean`
+* :meth:`pandas.Series.median`
+* :meth:`pandas.Series.min`
+* :meth:`pandas.Series.nlargest` (non-numerics not supported yet)
+* :meth:`pandas.Series.nsmallest` (non-numerics not supported yet)
+* :meth:`pandas.Series.pct_change`(supports numeric types and
   only the `periods` argument supported)
-* :meth:`Series.prod`
-* :meth:`Series.quantile`
-* :meth:`Series.std`
-* :meth:`Series.sum`
-* :meth:`Series.var`
-* :meth:`Series.unique`
-* :meth:`Series.nunique`
-* :meth:`Series.value_counts`
+* :meth:`pandas.Series.prod`
+* :meth:`pandas.Series.quantile`
+* :meth:`pandas.Series.std`
+* :meth:`pandas.Series.sum`
+* :meth:`pandas.Series.var`
+* :meth:`pandas.Series.unique`
+* :meth:`pandas.Series.nunique`
+* :meth:`pandas.Series.value_counts`
 
 
 Reindexing / Selection / Label manipulation:
 
 
-* :meth:`Series.head` (`n` argument is supported)
-* :meth:`Series.idxmax`
-* :meth:`Series.idxmin`
-* :meth:`Series.rename` (only set a new name using a string value)
-* :meth:`Series.tail` (`n` argument is supported)
-* :meth:`Series.take`
+* :meth:`pandas.Series.head` (`n` argument is supported)
+* :meth:`pandas.Series.idxmax`
+* :meth:`pandas.Series.idxmin`
+* :meth:`pandas.Series.rename` (only set a new name using a string value)
+* :meth:`pandas.Series.tail` (`n` argument is supported)
+* :meth:`pandas.Series.take`
 
 Missing data handling:
 
-* :meth:`Series.isna`
-* :meth:`Series.notna`
-* :meth:`Series.dropna`
-* :meth:`Series.fillna`
+* :meth:`pandas.Series.isna`
+* :meth:`pandas.Series.notna`
+* :meth:`pandas.Series.dropna`
+* :meth:`pandas.Series.fillna`
 
 Reshaping, sorting:
 
-* :meth:`Series.argsort`
-* :meth:`Series.sort_values`
-* :meth:`Series.append` `ignore_index` is supported.
+* :meth:`pandas.Series.argsort`
+* :meth:`pandas.Series.sort_values`
+* :meth:`pandas.Series.append` `ignore_index` is supported.
   setting name for output Series not supported yet)
 
 Time series-related:
 
-* :meth:`Series.shift` (supports numeric types and
+* :meth:`pandas.Series.shift` (supports numeric types and
   only the `periods` argument supported)
 
 Datetime properties:
 
-* :meth:`Series.dt.date`
-* :meth:`Series.dt.year`
-* :meth:`Series.dt.month`
-* :meth:`Series.dt.day`
-* :meth:`Series.dt.hour`
-* :meth:`Series.dt.minute`
-* :meth:`Series.dt.second`
-* :meth:`Series.dt.microsecond`
-* :meth:`Series.dt.nanosecond`
+* :attr:`pandas.Series.dt.date`
+* :attr:`pandas.Series.dt.year`
+* :attr:`pandas.Series.dt.month`
+* :attr:`pandas.Series.dt.day`
+* :attr:`pandas.Series.dt.hour`
+* :attr:`pandas.Series.dt.minute`
+* :attr:`pandas.Series.dt.second`
+* :attr:`pandas.Series.dt.microsecond`
+* :attr:`pandas.Series.dt.nanosecond`
 
 String handling:
 
-* :meth:`Series.str.capitalize`
-* :meth:`Series.str.center`
-* :meth:`Series.str.contains` regex argument supported.
-* :meth:`Series.str.count`
-* :meth:`Series.str.endswith`
-* :meth:`Series.str.extract` (input pattern should be a constant string)
-* :meth:`Series.str.extractall` (input pattern should be a constant string)
-* :meth:`Series.str.find`
-* :meth:`Series.str.get`
-* :meth:`Series.str.join`
-* :meth:`Series.str.len`
-* :meth:`Series.str.ljust`
-* :meth:`Series.str.lower`
-* :meth:`Series.str.lstrip`
-* :meth:`Series.str.pad`
-* :meth:`Series.str.replace` regex argument supported.
-* :meth:`Series.str.rfind`
-* :meth:`Series.str.rjust`
-* :meth:`Series.str.rstrip`
-* :meth:`Series.str.slice`
-* :meth:`Series.str.split`
-* :meth:`Series.str.startswith`
-* :meth:`Series.str.strip`
-* :meth:`Series.str.swapcase`
-* :meth:`Series.str.title`
-* :meth:`Series.str.upper`
-* :meth:`Series.str.zfill`
-* :meth:`Series.str.isalnum`
-* :meth:`Series.str.isalpha`
-* :meth:`Series.str.isdigit`
-* :meth:`Series.str.isspace`
-* :meth:`Series.str.islower`
-* :meth:`Series.str.isupper`
-* :meth:`Series.str.istitle`
-* :meth:`Series.str.isnumeric`
-* :meth:`Series.str.isdecimal`
+* :meth:`pandas.Series.str.capitalize`
+* :meth:`pandas.Series.str.center`
+* :meth:`pandas.Series.str.contains` regex argument supported.
+* :meth:`pandas.Series.str.count`
+* :meth:`pandas.Series.str.endswith`
+* :meth:`pandas.Series.str.extract` (input pattern should be a constant string)
+* :meth:`pandas.Series.str.extractall` (input pattern should be a constant string)
+* :meth:`pandas.Series.str.find`
+* :meth:`pandas.Series.str.get`
+* :meth:`pandas.Series.str.join`
+* :meth:`pandas.Series.str.len`
+* :meth:`pandas.Series.str.ljust`
+* :meth:`pandas.Series.str.lower`
+* :meth:`pandas.Series.str.lstrip`
+* :meth:`pandas.Series.str.pad`
+* :meth:`pandas.Series.str.replace` regex argument supported.
+* :meth:`pandas.Series.str.rfind`
+* :meth:`pandas.Series.str.rjust`
+* :meth:`pandas.Series.str.rstrip`
+* :meth:`pandas.Series.str.slice`
+* :meth:`pandas.Series.str.split`
+* :meth:`pandas.Series.str.startswith`
+* :meth:`pandas.Series.str.strip`
+* :meth:`pandas.Series.str.swapcase`
+* :meth:`pandas.Series.str.title`
+* :meth:`pandas.Series.str.upper`
+* :meth:`pandas.Series.str.zfill`
+* :meth:`pandas.Series.str.isalnum`
+* :meth:`pandas.Series.str.isalpha`
+* :meth:`pandas.Series.str.isdigit`
+* :meth:`pandas.Series.str.isspace`
+* :meth:`pandas.Series.str.islower`
+* :meth:`pandas.Series.str.isupper`
+* :meth:`pandas.Series.str.istitle`
+* :meth:`pandas.Series.str.isnumeric`
+* :meth:`pandas.Series.str.isdecimal`
 
 
 DataFrame
@@ -289,7 +289,7 @@ DataFrame
 Bodo provides extensive DataFrame support documented below.
 
 
-* :func:`pandas.DataFrame`
+* :class:`pandas.DataFrame`
 
   ``data`` argument can be a constant dictionary or 2d Numpy array.
   Other arguments are also supported.
@@ -297,91 +297,91 @@ Bodo provides extensive DataFrame support documented below.
 Attributes and underlying data:
 
 
-* :attr:`DataFrame.index` (can access but not set new index yet)
-* :attr:`DataFrame.columns`  (can access but not set new columns yet)
-* :attr:`DataFrame.values` (only for numeric dataframes)
-* :meth:`DataFrame.to_numpy` (only for numeric dataframes)
-* :attr:`DataFrame.ndim`
-* :attr:`DataFrame.size`
-* :attr:`DataFrame.shape`
-* :attr:`DataFrame.empty`
+* :attr:`pandas.DataFrame.index` (can access but not set new index yet)
+* :attr:`pandas.DataFrame.columns`  (can access but not set new columns yet)
+* :attr:`pandas.DataFrame.values` (only for numeric dataframes)
+* :meth:`pandas.DataFrame.to_numpy` (only for numeric dataframes)
+* :attr:`pandas.DataFrame.ndim`
+* :attr:`pandas.DataFrame.size`
+* :attr:`pandas.DataFrame.shape`
+* :attr:`pandas.DataFrame.empty`
 
 Conversion:
 
-* :meth:`DataFrame.astype` (only accepts a single data type
+* :meth:`pandas.DataFrame.astype` (only accepts a single data type
   of Numpy dtypes or `str`)
-* :meth:`DataFrame.copy` (including `deep` flag)
-* :meth:`DataFrame.isna`
-* :meth:`DataFrame.notna`
+* :meth:`pandas.DataFrame.copy` (including `deep` flag)
+* :meth:`pandas.DataFrame.isna`
+* :meth:`pandas.DataFrame.notna`
 
 
 Indexing, iteration:
 
-* :meth:`DataFrame.head` (including `n` argument)
-* :attr:`DataFrame.iat`
-* :attr:`DataFrame.iloc`
-* :meth:`DataFrame.tail` (including `n` argument)
-* :meth:`DataFrame.isin` (`values` can be a dataframe with matching index
+* :meth:`pandas.DataFrame.head` (including `n` argument)
+* :meth:`pandas.DataFrame.iat`
+* :meth:`pandas.DataFrame.iloc`
+* :meth:`pandas.DataFrame.tail` (including `n` argument)
+* :meth:`pandas.DataFrame.isin` (`values` can be a dataframe with matching index
   or a list or a set)
-* :meth:`DataFrame.query` (`expr` can be a constant string or an argument
+* :meth:`pandas.DataFrame.query` (`expr` can be a constant string or an argument
   to the jit function)
 
 Function application, GroupBy & Window:
 
-* :meth:`DataFrame.apply`
-* :meth:`DataFrame.groupby` `by` should be a constant column label
+* :meth:`pandas.DataFrame.apply`
+* :meth:`pandas.DataFrame.groupby` `by` should be a constant column label
   or column labels.
   `sort=False` is set by default. `as_index` argument is supported but
   `MultiIndex` is not supported yet (will just drop output `MultiIndex`).
-* :meth:`DataFrame.rolling` `window` argument should be integer or a time
+* :meth:`pandas.DataFrame.rolling` `window` argument should be integer or a time
   offset as a constant string. `center` and `on` arguments are also supported.
 
 Computations / Descriptive Stats:
 
-* :meth:`DataFrame.abs`
-* :meth:`DataFrame.corr` (`min_periods` argument supported)
-* :meth:`DataFrame.count`
-* :meth:`DataFrame.cov` (`min_periods` argument supported)
-* :meth:`DataFrame.cumprod`
-* :meth:`DataFrame.cumsum`
-* :meth:`DataFrame.describe`
-* :meth:`DataFrame.max`
-* :meth:`DataFrame.mean`
-* :meth:`DataFrame.median`
-* :meth:`DataFrame.min`
-* :meth:`DataFrame.pct_change`
-* :meth:`DataFrame.prod`
-* :meth:`DataFrame.quantile`
-* :meth:`DataFrame.sum`
-* :meth:`DataFrame.std`
-* :meth:`DataFrame.var`
-* :meth:`DataFrame.nunique` (`dropna` argument not supported yet. The behavior is slightly different from `.nunique` implementation in pandas)
+* :meth:`pandas.DataFrame.abs`
+* :meth:`pandas.DataFrame.corr` (`min_periods` argument supported)
+* :meth:`pandas.DataFrame.count`
+* :meth:`pandas.DataFrame.cov` (`min_periods` argument supported)
+* :meth:`pandas.DataFrame.cumprod`
+* :meth:`pandas.DataFrame.cumsum`
+* :meth:`pandas.DataFrame.describe`
+* :meth:`pandas.DataFrame.max`
+* :meth:`pandas.DataFrame.mean`
+* :meth:`pandas.DataFrame.median`
+* :meth:`pandas.DataFrame.min`
+* :meth:`pandas.DataFrame.pct_change`
+* :meth:`pandas.DataFrame.prod`
+* :meth:`pandas.DataFrame.quantile`
+* :meth:`pandas.DataFrame.sum`
+* :meth:`pandas.DataFrame.std`
+* :meth:`pandas.DataFrame.var`
+* :meth:`pandas.DataFrame.nunique` (`dropna` argument not supported yet. The behavior is slightly different from `.nunique` implementation in pandas)
 
 
 Reindexing / Selection / Label manipulation:
 
-* :meth:`DataFrame.drop` (only dropping columns supported,
+* :meth:`pandas.DataFrame.drop` (only dropping columns supported,
   either using `columns` argument or setting `axis=1`)
-* :meth:`DataFrame.drop_duplicates`
-* :meth:`DataFrame.duplicated`
-* :meth:`DataFrame.head` (including `n` argument)
-* :meth:`DataFrame.idxmax`
-* :meth:`DataFrame.idxmin`
-* :meth:`DataFrame.rename` (only `columns` argument with a constant dictionary)
-* :meth:`DataFrame.reset_index` (only `drop=True` supported)
-* :meth:`DataFrame.set_index` `keys` can only be a column label
+* :meth:`pandas.DataFrame.drop_duplicates`
+* :meth:`pandas.DataFrame.duplicated`
+* :meth:`pandas.DataFrame.head` (including `n` argument)
+* :meth:`pandas.DataFrame.idxmax`
+* :meth:`pandas.DataFrame.idxmin`
+* :meth:`pandas.DataFrame.rename` (only `columns` argument with a constant dictionary)
+* :meth:`pandas.DataFrame.reset_index` (only `drop=True` supported)
+* :meth:`pandas.DataFrame.set_index` `keys` can only be a column label
   (a constant string).
-* :meth:`DataFrame.tail` (including `n` argument)
-* :meth:`DataFrame.take`
+* :meth:`pandas.DataFrame.tail` (including `n` argument)
+* :meth:`pandas.DataFrame.take`
 
 Missing data handling:
 
-* :meth:`DataFrame.dropna`
-* :meth:`DataFrame.fillna`
+* :meth:`pandas.DataFrame.dropna`
+* :meth:`pandas.DataFrame.fillna`
 
 Reshaping, sorting, transposing:
 
-* :meth:`DataFrame.pivot_table`
+* :meth:`pandas.DataFrame.pivot_table`
 
   * Arguments ``values``, ``index``, ``columns`` and ``aggfunc`` are
     supported.
@@ -389,17 +389,17 @@ Reshaping, sorting, transposing:
     For example, `@bodo.jit(pivots={'pt': ['small', 'large']})` declares
     the output pivot table `pt` will have columns called `small` and `large`.
 
-* :meth:`DataFrame.sort_values` ``by`` argument should be constant string or
+* :meth:`pandas.DataFrame.sort_values` ``by`` argument should be constant string or
   constant list of strings. ``ascending`` and ``na_position`` arguments are supported.
-* :meth:`DataFrame.drop_duplicates` is supported.
-* :meth:`DataFrame.sort_index` `ascending` argument is supported.
+* :meth:`pandas.DataFrame.drop_duplicates` is supported.
+* :meth:`pandas.DataFrame.sort_index` `ascending` argument is supported.
 
 Combining / joining / merging:
 
-* :meth:`DataFrame.append` appending a dataframe or list of dataframes
+* :meth:`pandas.DataFrame.append` appending a dataframe or list of dataframes
   supported. `ignore_index=True` is necessary and set by default.
-* :meth:`DataFrame.join` only dataframes.
-* :meth:`DataFrame.merge` only dataframes. `how`, `on`, `left_on`,
+* :meth:`pandas.DataFrame.join` only dataframes.
+* :meth:`pandas.DataFrame.merge` only dataframes. `how`, `on`, `left_on`,
   `right_on`, `left_index`, and `right_index` are supported but
   should be constant values.
 
@@ -407,7 +407,7 @@ Combining / joining / merging:
 
 Time series-related:
 
-* :meth:`DataFrame.shift` (supports numeric types and
+* :meth:`pandas.DataFrame.shift` (supports numeric types and
   only the `periods` argument supported)
 
 
@@ -419,13 +419,13 @@ Numeric index objects ``RangeIndex``, ``Int64Index``, ``UInt64Index`` and
 Constructing them in Bodo functions, passing them to Bodo functions (unboxing),
 and returning them from Bodo functions (boxing) are also supported.
 
-* :func:`pandas.RangeIndex`
+* :class:`pandas.RangeIndex`
 
   * ``start``, ``stop`` and ``step`` arguments are supported.
 
-* :func:`pandas.Int64Index`
-* :func:`pandas.UInt64Index`
-* :func:`pandas.Float64Index`
+* :class:`pandas.Int64Index`
+* :class:`pandas.UInt64Index`
+* :class:`pandas.Float64Index`
 
   * ``data``, ``copy`` and ``name`` arguments are supported.
     ``data`` can be a list or array.
@@ -437,32 +437,32 @@ DatetimeIndex
 ``DatetimeIndex`` objects are supported. They can be constructed,
 boxed/unboxed, and set as index to dataframes and series.
 
-* :func:`pandas.DatetimeIndex`
+* :class:`pandas.DatetimeIndex`
 
   * Only ``data`` argument is supported, and can be array-like
     of ``datetime64['ns']``, ``int64`` or strings.
 
 Date fields of DatetimeIndex are supported:
 
-* :attr:`DatetimeIndex.year`
-* :attr:`DatetimeIndex.month`
-* :attr:`DatetimeIndex.day`
-* :attr:`DatetimeIndex.hour`
-* :attr:`DatetimeIndex.minute`
-* :attr:`DatetimeIndex.second`
-* :attr:`DatetimeIndex.microsecond`
-* :attr:`DatetimeIndex.nanosecond`
-* :attr:`DatetimeIndex.date`
+* :meth:`pandas.DatetimeIndex.year`
+* :meth:`pandas.DatetimeIndex.month`
+* :meth:`pandas.DatetimeIndex.day`
+* :meth:`pandas.DatetimeIndex.hour`
+* :meth:`pandas.DatetimeIndex.minute`
+* :meth:`pandas.DatetimeIndex.second`
+* :meth:`pandas.DatetimeIndex.microsecond`
+* :meth:`pandas.DatetimeIndex.nanosecond`
+* :meth:`pandas.DatetimeIndex.date`
 
 The min/max methods are supported without optional arguments
 (``NaT`` output for empty or all ``NaT`` input not supported yet):
 
-* :meth:`DatetimeIndex.min`
-* :meth:`DatetimeIndex.max`
+* :meth:`pandas.DatetimeIndex.min`
+* :meth:`pandas.DatetimeIndex.max`
 
 Returning underlying data array:
 
-* :attr:`DatetimeIndex.values`
+* :attr:`pandas.DatetimeIndex.values`
 
 
 Subtraction of ``Timestamp`` from ``DatetimeIndex`` and vice versa
@@ -479,17 +479,17 @@ TimedeltaIndex
 ``TimedeltaIndex`` objects are supported. They can be constructed,
 boxed/unboxed, and set as index to dataframes and series.
 
-* :func:`pandas.TimedeltaIndex`
+* :class:`pandas.TimedeltaIndex`
 
   * Only ``data`` argument is supported, and can be array-like
     of ``timedelta64['ns']`` or ``int64``.
 
 Time fields of TimedeltaIndex are supported:
 
-* :attr:`TimedeltaIndex.days`
-* :attr:`TimedeltaIndex.second`
-* :attr:`TimedeltaIndex.microsecond`
-* :attr:`TimedeltaIndex.nanosecond`
+* :meth:`pandas.TimedeltaIndex.days`
+* :meth:`pandas.TimedeltaIndex.seconds`
+* :meth:`pandas.TimedeltaIndex.microseconds`
+* :meth:`pandas.TimedeltaIndex.nanoseconds`
 
 
 PeriodIndex
@@ -505,14 +505,14 @@ Timestamp
 
 Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Timestamp.html>`_.
 
-* :attr:`Timestamp.day`
-* :attr:`Timestamp.hour`
-* :attr:`Timestamp.microsecond`
-* :attr:`Timestamp.month`
-* :attr:`Timestamp.nanosecond`
-* :attr:`Timestamp.second`
-* :attr:`Timestamp.year`
-* :meth:`Timestamp.date`
+* :attr:`pandas.Timestamp.day`
+* :attr:`pandas.Timestamp.hour`
+* :attr:`pandas.Timestamp.microsecond`
+* :attr:`pandas.Timestamp.month`
+* :attr:`pandas.Timestamp.nanosecond`
+* :attr:`pandas.Timestamp.second`
+* :attr:`pandas.Timestamp.year`
+* :meth:`pandas.Timestamp.date`
 
 
 Window
@@ -520,17 +520,17 @@ Window
 
 Rolling functionality is documented in `pandas.DataFrame.rolling <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.rolling.html>`_.
 
-* :meth:`Rolling.count`
-* :meth:`Rolling.sum`
-* :meth:`Rolling.mean`
-* :meth:`Rolling.median`
-* :meth:`Rolling.var`
-* :meth:`Rolling.std`
-* :meth:`Rolling.min`
-* :meth:`Rolling.max`
-* :meth:`Rolling.corr`
-* :meth:`Rolling.cov`
-* :meth:`Rolling.apply`
+* :meth:`pandas.core.window.rolling.Rolling.count`
+* :meth:`pandas.core.window.rolling.Rolling.sum`
+* :meth:`pandas.core.window.rolling.Rolling.mean`
+* :meth:`pandas.core.window.rolling.Rolling.median`
+* :meth:`pandas.core.window.rolling.Rolling.var`
+* :meth:`pandas.core.window.rolling.Rolling.std`
+* :meth:`pandas.core.window.rolling.Rolling.min`
+* :meth:`pandas.core.window.rolling.Rolling.max`
+* :meth:`pandas.core.window.rolling.Rolling.corr`
+* :meth:`pandas.core.window.rolling.Rolling.cov`
+* :meth:`pandas.core.window.rolling.Rolling.apply`
 
 
 GroupBy
@@ -538,7 +538,7 @@ GroupBy
 
 The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydata.org/pandas-docs/stable/reference/groupby.html>`_.
 
-* :meth:`GroupBy.agg` `arg` should be a function, and the compiler should be
+* :meth:`pandas.core.groupby.GroupBy.agg` `arg` should be a function, and the compiler should be
   able to simplify it to a single parallel loop and analyze it.
   For example, arithmetic expressions on input Series are supported.
   A list of functions is also supported if one output column is selected
@@ -551,16 +551,16 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
         def g2(x): return (x>2).sum()
         return df.groupby('A')['B'].agg((g1, g2))
 
-* :meth:`GroupBy.aggregate` same as `agg`.
-* :meth:`GroupBy.count`
-* :meth:`GroupBy.cumsum`
-* :meth:`GroupBy.max`
-* :meth:`GroupBy.mean`
-* :meth:`GroupBy.min`
-* :meth:`GroupBy.prod`
-* :meth:`GroupBy.std`
-* :meth:`GroupBy.sum`
-* :meth:`GroupBy.var`
+* :meth:`pandas.core.groupby.GroupBy.aggregate` same as `agg`
+* :meth:`pandas.core.groupby.GroupBy.count`
+* :meth:`pandas.core.groupby.GroupBy.cumsum`
+* :meth:`pandas.core.groupby.GroupBy.max`
+* :meth:`pandas.core.groupby.GroupBy.mean`
+* :meth:`pandas.core.groupby.GroupBy.min`
+* :meth:`pandas.core.groupby.GroupBy.prod`
+* :meth:`pandas.core.groupby.GroupBy.std`
+* :meth:`pandas.core.groupby.GroupBy.sum`
+* :meth:`pandas.core.groupby.GroupBy.var`
 
 
 Integer NA issue in Pandas

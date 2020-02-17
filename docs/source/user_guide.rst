@@ -7,8 +7,8 @@ Bodo supports a subset of Python that is commonly used for
 data analytics and machine learning. This section describes this subset
 and explains how parallelization is performed.
 The supported data structures for parallel/distributed datasets
-are `Numpy <http://www.numpy.org/>`_ arrays, and
-`Pandas <http://pandas.pydata.org/>`_ Dataframe, Series and Index objects.
+are `Numpy <https://numpy.org/>`_ arrays, and
+`Pandas <https://pandas.pydata.org/>`_ Dataframe, Series and Index objects.
 
 
 Automatic Parallelization

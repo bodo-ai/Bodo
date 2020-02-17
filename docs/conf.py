@@ -184,4 +184,5 @@ intersphinx_mapping = {
     "numpy": ("http://docs.scipy.org/doc/numpy", None),
     "llvmlite": ("http://llvmlite.pydata.org/en/latest/", None),
     "numba": ("http://numba.pydata.org/numba-doc/latest/", None),
+    "pandas": ("https://pandas.pydata.org/pandas-docs/stable/", None)
 }
