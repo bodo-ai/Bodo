@@ -38,8 +38,8 @@ There are 4 main limitations:
 
     1. Not supported Pandas API (:ref:`Supported Pandas Operations <pandas>`)
     2. Not supported NumPy API (:ref:`Supported NumPy Operations <numpy>`)
-    3. Not supported datatypes, such as :code:`List` containing heterogeneous values(e.g. :code:`l = [1, "a", 0.1]`), and :code:`Dictionary` containing heterogeneous values (e.g. :code:`thisdict = {"A": 1, "B": "a", "C": 0.1}`)
-    4. :ref:`Not supported Python programs <notsupported>`
+    3. :ref:`Not supported datatypes <heterogeneousdtype>`
+    4. Not supported Python programs due to :ref:`type instability <typestability>`
 
 Troubleshooting Compilation Error
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -53,7 +53,7 @@ For the first three of the limitations (not :ref:`Supported Pandas Operations <p
         (1) Pass data in and out like we discussed in `Compilation Tips`_ earlier
         (2) Use Bodo object mode, explained in *Object mode* of `Bodo tutorial`_
 
-For the last (:ref:`Not supported Python programs <notsupported>`) of the 4 limitations we discussed in the previous section, `Why Compilation error`_ , refactor your code to make it type stable::
+For the last (:ref:`Not supported Python programs <typestability>`) of the 4 limitations we discussed in the previous section, `Why Compilation error`_ , refactor your code to make it type stable::
     
     import bodo
 
