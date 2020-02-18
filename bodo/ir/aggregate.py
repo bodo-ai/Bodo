@@ -196,7 +196,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         funcs = []
         for v in agg_func_def.items:
             func_name = guard(find_const, func_ir, v)
-            if func_name is not None:
+            if isinstance(func_name, str):
                 funcs.append(
                     get_agg_func(func_ir, func_name, rhs, series_type, typemap)
                 )
@@ -221,7 +221,9 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                     [get_agg_func(func_ir, f, rhs, series_type, typemap) for f in f_val]
                 )
             else:
-                assert is_expr(f_val, "make_function")
+                assert is_expr(f_val, "make_function") or isinstance(
+                    f_val, numba.targets.registry.CPUDispatcher
+                )
                 assert typemap is not None, "typemap is required for agg UDF handling"
                 func = _get_const_agg_func(typemap[v[1].name])
                 func.ftype = "udf"

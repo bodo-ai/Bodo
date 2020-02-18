@@ -648,7 +648,9 @@ class UntypedPass:
             if isinstance(c, str):
                 v_rep = "'{}'".format(c)
             # store a name for make_function exprs to replace later
-            elif is_expr(c, "make_function"):
+            elif is_expr(c, "make_function") or isinstance(
+                c, numba.targets.registry.CPUDispatcher
+            ):
                 v_rep = "func{}".format(ir_utils.next_label())
                 const_funcs[v_rep] = c
             val_reps.append(v_rep)
@@ -664,8 +666,17 @@ class UntypedPass:
         nodes = _compile_func_single_block(_build_f, (var,), ret_var)
         # replace make_function exprs with actual node
         for stmt in nodes:
-            if is_assign(stmt) and isinstance(stmt.value, ir.Global) and stmt.value.name in const_funcs:
-                stmt.value = const_funcs[stmt.value.name]
+            if (
+                is_assign(stmt)
+                and isinstance(stmt.value, ir.Global)
+                and stmt.value.name in const_funcs
+            ):
+                v = const_funcs[stmt.value.name]
+                if is_expr(v, "make_function"):
+                    stmt.value = const_funcs[stmt.value.name]
+                # CPUDispatcher case
+                else:
+                    stmt.value.value = const_funcs[stmt.value.name]
         return nodes
 
     def _handle_np_where(self, assign, lhs, rhs):
@@ -1096,7 +1107,9 @@ class UntypedPass:
                 "CategoricalDtype", dtype_def.args, dict(dtype_def.kws), 0, "categories"
             )
             err_msg = "categories should be constant list"
-            cats = self._get_const_val_or_list(cats_var, list_only=True, err_msg=err_msg)
+            cats = self._get_const_val_or_list(
+                cats_var, list_only=True, err_msg=err_msg
+            )
             typ = PDCategoricalDtype(cats)
             return CategoricalArray(typ)
 
@@ -1337,9 +1350,7 @@ class UntypedPass:
                 "add_consts_to_type",
                 "bodo.utils.typing",
             ):
-                var_def = guard(
-                    find_build_sequence, self.func_ir, var_call.args[0]
-                )
+                var_def = guard(find_build_sequence, self.func_ir, var_call.args[0])
 
         if var_def is None:
             # try dict.keys()

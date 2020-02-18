@@ -209,6 +209,7 @@ def test_unbox_df_leak_test(memory_leak_check):
     TODO: the other unbox/box tests should check for memory leaks when all the leaks
     are fixed (this test should eventually be removed).
     """
+
     def impl(df):
         return df
 
@@ -237,6 +238,7 @@ def test_df_multi_get_level():
     """
     getitem with string to get a level of dataframe with MultiIndex columns structure
     """
+
     def impl1(df):
         return df["B"]
 
@@ -1117,6 +1119,7 @@ def g(r):
 def test_df_apply_func_case1():
     """make sure a global function can be used in df.apply
     """
+
     def test_impl(df):
         return df.apply(g, axis=1)
 
@@ -1185,7 +1188,7 @@ def test_init_dataframe_array_analysis():
         df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
         return df
 
-    test_func = numba.njit(pipeline_class=AnalysisTestPipeline)(impl)
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
     test_func(10)
     array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
         "preserved_array_analysis"
@@ -1203,7 +1206,7 @@ def test_get_dataframe_data_array_analysis():
         B = df.A.values
         return B
 
-    test_func = numba.njit(pipeline_class=AnalysisTestPipeline)(impl)
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
     test_func(pd.DataFrame({"A": np.ones(10), "B": np.arange(10)}))
     array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
         "preserved_array_analysis"

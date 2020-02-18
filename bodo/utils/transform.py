@@ -153,7 +153,7 @@ def get_const_nested(func_ir, v):
     ):
         return tuple(get_const_nested(func_ir, a) for a in v_def.items)
     # treat make_function exprs as constant
-    if is_expr(v_def, "make_function"):
+    if is_expr(v_def, "make_function"):  # pragma: no cover
         return v_def
     return find_const(func_ir, v)
 
@@ -164,7 +164,9 @@ def get_const_func_output_type(func, arg_types, typing_context):
     'func' can be a MakeFunctionLiteral (inline lambda) or FunctionLiteral (function)
     """
 
-    if isinstance(func, types.MakeFunctionLiteral):
+    # MakeFunctionLiteral is not possible currently due to Numba's
+    # MakeFunctionToJitFunction pass but may be possible later
+    if isinstance(func, types.MakeFunctionLiteral):  # pragma: no cover
         code = func.literal_value.code
         _globals = {"np": np, "pd": pd, "numba": numba, "bodo": bodo}
         # XXX hack in untyped_pass to make globals available

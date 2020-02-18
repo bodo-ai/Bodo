@@ -79,12 +79,15 @@ def test_merge_suffixes_bracket():
     def test_impl1(df1, df2):
         o1 = df1.merge(df2, on="key", how="inner", suffixes=["_a", "_b"])
         return o1
+
     def test_impl2(df1, df2):
         df3 = df1.merge(df2, on="key", how="left", suffixes=["_a", "_b"])
         return df3
+
     def test_impl3(df1, df2):
         df3 = df1.merge(df2, on="key", how="right", suffixes=["_a", "_b"])
         return df3
+
     def test_impl4(df1, df2):
         o1 = df1.merge(df2, on="key", how="outer", suffixes=["_a", "_b"])
         return o1
@@ -95,7 +98,6 @@ def test_merge_suffixes_bracket():
     check_func(test_impl2, (df1, df2), sort_output=True)
     check_func(test_impl3, (df1, df2), sort_output=True)
     check_func(test_impl4, (df1, df2), sort_output=True)
-
 
 
 def test_merge_suffixes_parenthesis():
@@ -351,12 +353,16 @@ def test_merge_int_key(n):
     )
 
 
-@pytest.mark.parametrize("n1, n2, len_siz", 
-    [pytest.param(5, 4, 2, marks=pytest.mark.slow), 
-    pytest.param(10, 12, 3, marks=pytest.mark.slow), 
-    (120, 100, 10), 
-    pytest.param(40, 30, 7, marks=pytest.mark.slow), 
-    pytest.param(1000, 900, 10, marks=pytest.mark.slow)])
+@pytest.mark.parametrize(
+    "n1, n2, len_siz",
+    [
+        pytest.param(5, 4, 2, marks=pytest.mark.slow),
+        pytest.param(10, 12, 3, marks=pytest.mark.slow),
+        (120, 100, 10),
+        pytest.param(40, 30, 7, marks=pytest.mark.slow),
+        pytest.param(1000, 900, 10, marks=pytest.mark.slow),
+    ],
+)
 def test_merge_nullable_int_bool(n1, n2, len_siz):
     """
     Test merge(): test of nullable_int_bool for inner/left/right/outer and random input
@@ -365,37 +371,41 @@ def test_merge_nullable_int_bool(n1, n2, len_siz):
     def test_impl1(df1, df2):
         df3 = df1.merge(df2, on="A", how="inner")
         return df3
+
     def test_impl2(df1, df2):
         df3 = df1.merge(df2, on="A", how="left")
         return df3
+
     def test_impl3(df1, df2):
         df3 = df1.merge(df2, on="A", how="right")
         return df3
+
     def test_impl4(df1, df2):
         df3 = df1.merge(df2, on="A", how="outer")
         return df3
 
-    def get_random_column(n,len_siz):
+    def get_random_column(n, len_siz):
         elist = []
         for _ in range(n):
-            prob = random.randint(1,len_siz)
-            if prob==1:
+            prob = random.randint(1, len_siz)
+            if prob == 1:
                 elist.append(None)
             else:
                 elist.append(prob)
-        return pd.array(elist, dtype='UInt16')
-    def get_random_dataframe(n,len_siz):
-        elist1 = get_random_column(n,len_siz)
-        elist2 = get_random_column(n,len_siz)
-        return pd.DataFrame({'A':elist1,'B':elist2})
+        return pd.array(elist, dtype="UInt16")
+
+    def get_random_dataframe(n, len_siz):
+        elist1 = get_random_column(n, len_siz)
+        elist2 = get_random_column(n, len_siz)
+        return pd.DataFrame({"A": elist1, "B": elist2})
+
     random.seed(5)
-    df1 = get_random_dataframe(n1,len_siz)
-    df2 = get_random_dataframe(n2,len_siz)
+    df1 = get_random_dataframe(n1, len_siz)
+    df2 = get_random_dataframe(n2, len_siz)
     check_func(test_impl1, (df1, df2), sort_output=True)
     check_func(test_impl2, (df1, df2), sort_output=True)
     check_func(test_impl3, (df1, df2), sort_output=True)
     check_func(test_impl4, (df1, df2), sort_output=True)
-
 
 
 def test_merge_multi_int_key():
@@ -1042,8 +1052,8 @@ def test_join_deadcode_cleanup():
     df1 = pd.DataFrame({"A": [1, 2, 3], "B": ["a", "b", "c"]})
     df2 = pd.DataFrame({"A": [1, 2, 3], "C": [4, 5, 6]})
 
-    j_func = numba.njit(pipeline_class=DeadcodeTestPipeline)(test_impl)
-    j_func_with_join = numba.njit(pipeline_class=DeadcodeTestPipeline)(
+    j_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(test_impl)
+    j_func_with_join = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(
         test_impl_with_join
     )
     j_func(df1, df2)  # calling the function to get function IR
