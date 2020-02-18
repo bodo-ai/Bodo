@@ -1635,6 +1635,25 @@ def test_groupby_as_index_var():
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
+def test_const_list_inference():
+    """
+    Test passing non-const list that can be inferred as constant to groupby()
+    """
+
+    def impl1(df):
+        return df.groupby(['A'] + ['B']).sum()
+
+    df = pd.DataFrame(
+        {"A": [2, 1, 1, 1, 2, 2, 1],
+        "B": ["a", "b", "c", "c", "b", "c", "a"],
+        "C": [1, 3, 1, 2, -4, 0, 5]
+        }
+    )
+
+    check_func(impl1, (df,), sort_output=True)
+
+
+
 # ------------------------------ pivot, crosstab ------------------------------ #
 
 

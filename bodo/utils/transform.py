@@ -17,6 +17,7 @@ from numba.ir_utils import (
     get_definition,
     require,
     find_callname,
+    build_definitions,
 )
 import bodo
 from bodo.utils.utils import is_assign, is_expr
@@ -186,3 +187,11 @@ def get_const_func_output_type(func, arg_types, typing_context):
         typing_context, f_ir, arg_types, None
     )
     return f_return_type
+
+
+def update_node_list_definitions(node_list, func_ir):
+    loc = ir.Loc("", 0)
+    dumm_block = ir.Block(ir.Scope(None, loc), loc)
+    dumm_block.body = node_list
+    build_definitions({0: dumm_block}, func_ir._definitions)
+    return

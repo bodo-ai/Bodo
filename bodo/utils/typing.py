@@ -29,6 +29,12 @@ class BodoError(BaseException):
     pass
 
 
+class BodoNotConstError(Exception):
+    """Indicates that a constant value is expected but non-constant is provided.
+    """
+    pass
+
+
 class BodoWarning(Warning):
     """
     Warning class for Bodo-related potential issues such as prevention of
@@ -408,11 +414,14 @@ class ConstList(types.List):
         return ConstList(dtype, self.consts)
 
     def unify(self, typingctx, other):
-        if isinstance(other, ConstList) and self.consts == other.consts:
+        if isinstance(other, types.List):
             dtype = typingctx.unify_pairs(self.dtype, other.dtype)
             reflected = self.reflected or other.reflected
             if dtype is not None:
-                return ConstList(dtype, reflected)
+                if isinstance(other, ConstList) and self.consts == other.consts:
+                    return ConstList(dtype, reflected)
+                else:
+                    return types.List(dtype, reflected)
 
     @property
     def key(self):

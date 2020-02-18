@@ -56,7 +56,7 @@ from bodo.ir import csv_ext
 
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 import bodo.hiframes.pd_dataframe_ext
-from bodo.utils.transform import update_locs, get_str_const_value
+from bodo.utils.transform import update_locs, get_str_const_value, update_node_list_definitions
 from bodo.utils.typing import BodoError
 
 
@@ -267,7 +267,7 @@ class UntypedPass:
                 assert isinstance(out_nodes, list)
                 # TODO: fix scope/loc
                 new_body.extend(out_nodes)
-                self._update_definitions(out_nodes)
+                update_node_list_definitions(out_nodes, self.func_ir)
                 for inst in out_nodes:
                     if is_assign(inst):
                         self.rhs_labels[inst.value] = label
@@ -1611,13 +1611,6 @@ class UntypedPass:
             nodes[-1].target = df_var
 
         return nodes
-
-    def _update_definitions(self, node_list):
-        loc = ir.Loc("", 0)
-        dumm_block = ir.Block(ir.Scope(None, loc), loc)
-        dumm_block.body = node_list
-        build_definitions({0: dumm_block}, self.func_ir._definitions)
-        return
 
 
 def _compile_func_single_block(func, args, ret_var, extra_globals=None):

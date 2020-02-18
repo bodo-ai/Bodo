@@ -11,6 +11,7 @@ import bodo.transforms.series_pass
 from bodo.transforms.untyped_pass import UntypedPass
 from bodo.transforms.series_pass import SeriesPass
 from bodo.transforms.dataframe_pass import DataFramePass
+from bodo.transforms.typing_pass import BodoTypeInference
 import numba
 from numba.compiler import DefaultPassBuilder
 from numba.compiler_machinery import FunctionPass, register_pass, PassManager
@@ -69,6 +70,7 @@ class BodoCompiler(numba.compiler.CompilerBase):
         pm.add_pass_after(InlinePass, WithLifting)
         # run untyped pass right before type inference
         add_pass_before(pm, BodoUntypedPass, NopythonTypeInference)
+        replace_pass(pm, BodoTypeInference, NopythonTypeInference)
 
         # Series pass should be before pre_parfor since
         # S.call to np.call transformation is invalid for
@@ -102,6 +104,24 @@ def add_pass_before(pm, pass_cls, location):
     else:  # pragma: no cover
         raise ValueError("Could not find pass %s" % location)
     pm.passes.insert(idx, (pass_cls, str(pass_cls)))
+    # if a pass has been added, it's not finalized
+    pm._finalized = False
+
+
+def replace_pass(pm, pass_cls, location):
+    """
+    Replace pass `location` in PassManager's compilation pipeline with the pass
+    `pass_cls`.
+    """
+    assert pm.passes
+    pm._validate_pass(pass_cls)
+    pm._validate_pass(location)
+    for idx, (x, _) in enumerate(pm.passes):
+        if x == location:
+            break
+    else:  # pragma: no cover
+        raise ValueError("Could not find pass %s" % location)
+    pm.passes[idx] = (pass_cls, str(pass_cls))
     # if a pass has been added, it's not finalized
     pm._finalized = False
 
