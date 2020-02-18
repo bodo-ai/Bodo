@@ -190,8 +190,10 @@ def overload_series_sum(S):
         numba.parfor.init_prange()
         s = zero
         for i in numba.parfor.internal_prange(len(A)):
+            val = 0
             if not bodo.libs.array_kernels.isna(A, i):
-                s += A[i]
+                val = A[i]
+            s += val
         return s
 
     return impl
@@ -206,8 +208,10 @@ def overload_series_prod(S):
         numba.parfor.init_prange()
         s = init
         for i in numba.parfor.internal_prange(len(A)):
+            val = init
             if not bodo.libs.array_kernels.isna(A, i):
-                s *= A[i]
+                val = A[i]
+            s *= val
         return s
 
     return impl
@@ -255,19 +259,23 @@ def overload_series_mean(S):
         sum_dtype = types.float32
         count_dtype = types.float32
 
-    sum_init = sum_dtype(0)
-    count_init = count_dtype(0)
+    val_0 = sum_dtype(0)
+    count_0 = count_dtype(0)
     count_1 = count_dtype(1)
 
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         numba.parfor.init_prange()
-        count = count_init
-        s = sum_init
+        s = val_0
+        count = count_0
         for i in numba.parfor.internal_prange(len(A)):
+            val = val_0
+            count_val = count_0
             if not bodo.libs.array_kernels.isna(A, i):
-                s += A[i]
-                count += count_1
+                val = A[i]
+                count_val = count_1
+            s += val
+            count += count_val
 
         res = bodo.hiframes.series_kernels._mean_handle_nan(s, count)
         return res
@@ -284,9 +292,13 @@ def overload_series_var(S):
         s = 0
         count = 0
         for i in numba.parfor.internal_prange(len(A)):
+            val = 0
+            count_val = 0
             if not bodo.libs.array_kernels.isna(A, i):
-                s += (A[i] - m) ** 2
-                count += 1
+                val = (A[i] - m) ** 2
+                count_val = 1
+            s += val
+            count += count_val
 
         res = bodo.hiframes.series_kernels._var_handle_nan(s, count)
         return res
@@ -360,8 +372,10 @@ def overload_series_count(S):
         numba.parfor.init_prange()
         count = 0
         for i in numba.parfor.internal_prange(len(A)):
+            count_val = 0
             if not bodo.libs.array_kernels.isna(A, i):
-                count += 1
+                count_val = 1
+            count += count_val
 
         res = count
         return res
@@ -426,10 +440,13 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
             s = numba.targets.builtins.get_type_max_value(np.int64)
             count = 0
             for i in numba.parfor.internal_prange(len(in_arr)):
+                val = s
+                count_val = 0
                 if not bodo.libs.array_kernels.isna(in_arr, i):
                     val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
-                    s = min(s, val)
-                    count += 1
+                    count_val = 1
+                s = min(s, val)
+                count += count_val
             return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
 
         return impl_dt64
@@ -439,13 +456,16 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
     ):  # pragma: no cover
         in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         numba.parfor.init_prange()
-        count = 0
         s = bodo.hiframes.series_kernels._get_type_max_value(in_arr.dtype)
+        count = 0
         for i in numba.parfor.internal_prange(len(in_arr)):
-            val = in_arr[i]
+            val = s
+            count_val = 0
             if not bodo.libs.array_kernels.isna(in_arr, i):
-                s = min(s, val)
-                count += 1
+                val = in_arr[i]
+                count_val = 1
+            s = min(s, val)
+            count += count_val
         res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
         return res
 
@@ -467,10 +487,13 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
             s = numba.targets.builtins.get_type_min_value(np.int64)
             count = 0
             for i in numba.parfor.internal_prange(len(in_arr)):
+                val = s
+                count_val = 0
                 if not bodo.libs.array_kernels.isna(in_arr, i):
                     val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
-                    s = max(s, val)
-                    count += 1
+                    count_val = 1
+                s = max(s, val)
+                count += count_val
             return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
 
         return impl_dt64
@@ -480,13 +503,16 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
     ):  # pragma: no cover
         in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         numba.parfor.init_prange()
-        count = 0
         s = bodo.hiframes.series_kernels._get_type_min_value(in_arr.dtype)
+        count = 0
         for i in numba.parfor.internal_prange(len(in_arr)):
-            val = in_arr[i]
+            val = s
+            count_val = 0
             if not bodo.libs.array_kernels.isna(in_arr, i):
-                s = max(s, val)
-                count += 1
+                val = in_arr[i]
+                count_val = 1
+            s = max(s, val)
+            count += count_val
         res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
         return res
 
@@ -631,11 +657,11 @@ def overload_series_astype(S, dtype, copy=True, errors="raise"):
                 num_chars += l
             A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
             for j in numba.parfor.internal_prange(n):
-                if bodo.libs.array_kernels.isna(arr, j):
-                    A[j] = "nan"
-                else:
+                val = "nan"
+                if not bodo.libs.array_kernels.isna(arr, j):
                     s = arr[j]
-                    A[j] = str(s)
+                    val = str(s)
+                A[j] = val
 
             return bodo.hiframes.pd_series_ext.init_series(A, index, name)
 
