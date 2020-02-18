@@ -74,12 +74,12 @@ from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.utils.typing import (
-    get_index_data_arr_types, 
-    is_overload_none, 
-    is_overload_constant_str, 
+    get_index_data_arr_types,
+    is_overload_none,
+    is_overload_constant_str,
     get_overload_const_func,
-    get_overload_const_str, 
-    BodoError
+    get_overload_const_str,
+    BodoError,
 )
 
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
@@ -436,9 +436,7 @@ class DataFramePass:
         # add index array to filter node
         in_df_index = self._get_dataframe_index(df_var, nodes)
         in_df_index_name = self._get_index_name(in_df_index, nodes)
-        in_index_arr = self._gen_array_from_index(
-            df_var, list(in_vars.values())[0], nodes
-        )
+        in_index_arr = self._gen_array_from_index(df_var, nodes)
         out_index_arr = ir.Var(lhs.scope, mk_unique_var("index"), lhs.loc)
         self.typemap[out_index_arr.name] = self.typemap[in_index_arr.name]
         in_vars["$_bodo_index_"] = in_index_arr
@@ -1143,8 +1141,7 @@ class DataFramePass:
         in_vars = {
             c: self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns
         }
-        arr = list(in_vars.values())[0]
-        in_index_var = self._gen_array_from_index(df_var, arr, nodes)
+        in_index_var = self._gen_array_from_index(df_var, nodes)
         in_vars["$_bodo_index_"] = in_index_var
 
         # remove key from dfs (only data is kept)
@@ -1217,13 +1214,13 @@ class DataFramePass:
             # TODO: fix index for inplace case
             return self._set_df_inplace(_init_df, out_arrs, df_var, lhs.loc, nodes)
 
-    def _gen_array_from_index(self, df_var, arr, nodes):
-        def _get_index(df, arr):  # pragma: no cover
+    def _gen_array_from_index(self, df_var, nodes):
+        def _get_index(df):  # pragma: no cover
             return bodo.utils.conversion.index_to_array(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
             )
 
-        nodes += compile_func_single_block(_get_index, (df_var, arr), None, self)
+        nodes += compile_func_single_block(_get_index, (df_var,), None, self)
         return nodes[-1].target
 
     def _gen_index_from_array(self, arr_var, name_var, nodes):
@@ -1493,7 +1490,7 @@ class DataFramePass:
         )
         _dropna_imp = loc_vars["_dropna_imp"]
 
-        in_index_var = self._gen_array_from_index(df_var, df_var, nodes)
+        in_index_var = self._gen_array_from_index(df_var, nodes)
         args = col_vars + [in_index_var, inplace_var]
 
         if not inplace:
@@ -1555,7 +1552,7 @@ class DataFramePass:
                     arr_args.append(arr_var)
                 args = arr_args + args
             else:
-                ind_var = self._gen_array_from_index(df_var, df_var, nodes)
+                ind_var = self._gen_array_from_index(df_var, nodes)
                 args = [ind_var] + args
 
         if not inplace:
@@ -1579,13 +1576,13 @@ class DataFramePass:
         expr = get_str_const_value(expr_var, self.func_ir, err_msg, self.typemap)
 
         # check expr is a non-empty string
-        if len(expr)==0:
+        if len(expr) == 0:
             raise BodoError("query(): expr argument cannot be an empty string")
 
         # check expr is not multiline expression
-        if len([e.strip() for e in expr.splitlines() if e.strip() != ""])>1:
+        if len([e.strip() for e in expr.splitlines() if e.strip() != ""]) > 1:
             raise BodoError("query(): multiline expressions not supported yet")
-        
+
         # parse expression
         parsed_expr, parsed_expr_str, used_cols = self._parse_query_expr(
             expr, df_typ.columns
@@ -1620,23 +1617,22 @@ class DataFramePass:
         # data frame column inputs
         nodes = []
         args = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols.keys()]
-        # index
-        arr = (
-            args[0]
-            if len(args) > 0
-            else self._get_dataframe_data(df_var, df_typ.columns[0], nodes)
-        )
-        args.append(self._gen_array_from_index(df_var, arr, nodes))
+        args.append(self._gen_array_from_index(df_var, nodes))
         # local referenced variables
         args += [ir.Var(lhs.scope, v, lhs.loc) for v in loc_ref_vars.values()]
 
         nodes += compile_func_single_block(_query_impl, args, lhs, self)
-        
+
         # check whether the output of generated function is a boolean array
-        if(type(self.typemap[nodes[-1].value.name]) != bodo.hiframes.pd_series_ext.SeriesType
-           or self.typemap[nodes[-1].value.name].dtype != types.bool_):
-            raise BodoError('query(): expr does not evaluate to a 1D boolean array.'
-                ' Only 1D boolean array is supported right now.')
+        if (
+            type(self.typemap[nodes[-1].value.name])
+            != bodo.hiframes.pd_series_ext.SeriesType
+            or self.typemap[nodes[-1].value.name].dtype != types.bool_
+        ):
+            raise BodoError(
+                "query(): expr does not evaluate to a 1D boolean array."
+                " Only 1D boolean array is supported right now."
+            )
 
         return nodes
 
@@ -1717,8 +1713,11 @@ class DataFramePass:
                     value_str = str(self.visit(value))
                 except pd.core.computation.ops.UndefinedVariableError as e:
                     col_name = e.args[0].split("'")[1]
-                    raise BodoError("df.query(): column {} is not found in dataframe columns {}"
-                        .format(col_name, columns))
+                    raise BodoError(
+                        "df.query(): column {} is not found in dataframe columns {}".format(
+                            col_name, columns
+                        )
+                    )
             else:
                 value_str = str(self.visit(value))
             name = value_str + "." + attr
@@ -1817,27 +1816,36 @@ class DataFramePass:
             parsed_expr_str = str(parsed_expr)
         except pd.core.computation.ops.UndefinedVariableError as e:
             # catch undefined variable error
-            index_name = self.typemap['arg.df'].index.name_typ
-            if (not is_overload_none(index_name) and 
-                get_overload_const_str(index_name) == e.args[0].split("'")[1]):
+            index_name = self.typemap["arg.df"].index.name_typ
+            if (
+                not is_overload_none(index_name)
+                and get_overload_const_str(index_name) == e.args[0].split("'")[1]
+            ):
                 # currently do not support named index appears in expr
                 raise BodoError(
                     "df.query(): Refering to named"
-                    " index ('{}') by name is not supported".format(get_overload_const_str(index_name)))
+                    " index ('{}') by name is not supported".format(
+                        get_overload_const_str(index_name)
+                    )
+                )
             else:
                 # throw other errors
-                # this includes: columns does not exist in dataframe, 
+                # this includes: columns does not exist in dataframe,
                 #                undefined local variable using @
                 raise BodoError("df.query(): undefined variable, {}".format(e))
         except AttributeError as e:
             if e.args[0] == "'NewFuncNode' object has no attribute 'is_scalar'":
-                # AttributeError with this error message is thrown 
+                # AttributeError with this error message is thrown
                 # when expr has unsupported expressions
                 if ".dt." in expr:
                     # currently do not support series.dt in expr
-                    raise BodoError("df.query(): Series.dt is not supported in expression")
+                    raise BodoError(
+                        "df.query(): Series.dt is not supported in expression"
+                    )
                 else:
-                    raise BodoError("df.query(): unsupported expression: {}, ".format(expr))
+                    raise BodoError(
+                        "df.query(): unsupported expression: {}, ".format(expr)
+                    )
             else:
                 # still throwing attribute error
                 # because during testing, no other kinds of AttributeError were found
@@ -2039,16 +2047,12 @@ class DataFramePass:
         if "$_bodo_index_" in right_on:
             in_df_index = self._get_dataframe_index(right_df, nodes)
             in_df_index_name = self._get_index_name(in_df_index, nodes)
-            in_index_var = self._gen_array_from_index(
-                right_df, list(right_arrs.values())[0], nodes
-            )
+            in_index_var = self._gen_array_from_index(right_df, nodes)
             right_arrs["$_bodo_index_"] = in_index_var
         if "$_bodo_index_" in left_on:
             in_df_index = self._get_dataframe_index(left_df, nodes)
             in_df_index_name = self._get_index_name(in_df_index, nodes)
-            in_index_var = self._gen_array_from_index(
-                left_df, list(left_arrs.values())[0], nodes
-            )
+            in_index_var = self._gen_array_from_index(left_df, nodes)
             left_arrs["$_bodo_index_"] = in_index_var
 
         if in_index_var is not None:
@@ -2376,9 +2380,7 @@ class DataFramePass:
         out_index_var = self._get_dataframe_index(df_var, nodes)
         on_index_arr = on_arr
         if isinstance(window_const, str) and on_arr is None:
-            on_index_arr = self._gen_array_from_index(
-                df_var, list(in_vars.values())[0], nodes
-            )
+            on_index_arr = self._gen_array_from_index(df_var, nodes)
 
         df_col_map = {}
         for c in rolling_typ.selection:
@@ -2898,9 +2900,7 @@ def _gen_init_df(columns, index=None):
     # TODO: fix type inference for const str
     # a column name can be a string or tuple of strings (multi-level)
     col_var = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
-        ", ".join(
-            "'{}'".format(c) if isinstance(c, str) else str(c) for c in columns
-        )
+        ", ".join("'{}'".format(c) if isinstance(c, str) else str(c) for c in columns)
     )
     func_text = "def _init_df({}):\n".format(args)
     func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
