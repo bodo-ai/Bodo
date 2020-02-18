@@ -16,22 +16,32 @@ class BodoTypeInference(PartialTypeInference):
     def run_pass(self, state):
         while True:
             super(BodoTypeInference, self).run_pass(state)
-            fix_pass = FixConstsPass(
+            # done if all types are available
+            if types.unknown not in state.typemap.values():
+                break
+            infer_consts_pass = InferConstsPass(
                 state.func_ir, state.typingctx, state.typemap, state.calltypes,
             )
-            fix_pass.run()
+            changed = infer_consts_pass.run()
+            # can't be typed if IR not changed
+            if not changed:
+                break
+
+        # run regular type inference again with _raise_errors = True to set function
+        # return type and raise errors if any
+        # TODO: avoid this extra pass when possible in Numba
+        try:
             self._raise_errors = True
             NopythonTypeInference.run_pass(self, state)
+        finally:
             self._raise_errors = False
-            break
         return True
 
 
-class FixConstsPass:
+class InferConstsPass:
     """
-    Transformations before typing to enable type inference.
-    This pass transforms the IR to remove operations that cannot be handled in Numba's
-    type inference due to complexity such as pd.read_csv().
+    Infer possible constant values (e.g. lists) using partial typing info and transform
+    them to constants so that functions like groupby() can be typed properly.
     """
 
     def __init__(self, func_ir, typingctx, typemap, calltypes):
@@ -41,6 +51,7 @@ class FixConstsPass:
         self.calltypes = calltypes
         # Loc object of current location being translated
         self.curr_loc = self.func_ir.loc
+        self.changed = False
 
     def run(self):
         blocks = self.func_ir.blocks
@@ -51,6 +62,7 @@ class FixConstsPass:
             new_body = []
             for inst in block.body:
                 out_nodes = [inst]
+                self.curr_loc = inst.loc
 
                 if isinstance(inst, ir.Assign):
                     self.func_ir._definitions[inst.target.name].remove(inst.value)
@@ -61,7 +73,7 @@ class FixConstsPass:
 
             blocks[label].body = new_body
 
-        return
+        return self.changed
 
     def _run_assign(self, assign):
         rhs = assign.value
@@ -80,7 +92,6 @@ class FixConstsPass:
             tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
             nodes = [tmp_assign]
             nodes += gen_add_consts_to_type(vals, tmp_target, assign.target, self)
-            self.typemap.pop(assign.target.name)
-            # self.typemap[assign.target.name] = self.typemap[nodes[-1].value.name]
+            self.changed = True
             return nodes
         return [assign]
