@@ -2185,11 +2185,13 @@ class SeriesPass:
             f, args, pre_nodes=nodes, extra_globals={"_func": func_global}
         )
 
-    def _handle_rolling_apply_func(self, func_node, dtype, out_dtype):
+    def _handle_rolling_apply_func(self, func_node, dtype, out_dtype):  # pragma: no cover
         if isinstance(func_node, ir.Global) and isinstance(
             func_node.value, numba.targets.registry.CPUDispatcher
         ):
             return func_node.value
+        # other UDF cases are not currently possible currently due to Numba's
+        # MakeFunctionToJitFunction pass but may be possible later
         if func_node is None:
             raise ValueError("cannot find kernel function for rolling.apply() call")
         # TODO: more error checking on the kernel to make sure it doesn't
