@@ -35,7 +35,7 @@ from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.ir.aggregate import get_agg_func
 from bodo.utils.typing import (
     BodoError,
-    BodoNotConstError,
+    raise_const_error,
     is_overload_none,
     get_const_str_list,
     is_overload_true,
@@ -142,7 +142,7 @@ def validate_groupby_spec(
 
     # make sure by is a const str list
     if not is_overload_constant_str(by) and not is_overload_constant_str_list(by):
-        raise BodoNotConstError(
+        raise_const_error(
             "groupby(): 'by' parameter only supports a constant column label or column labels."
         )
 

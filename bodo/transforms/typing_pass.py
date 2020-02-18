@@ -4,9 +4,14 @@ from numba.typed_passes import NopythonTypeInference, PartialTypeInference
 from numba.ir_utils import find_topo_order, build_definitions, mk_unique_var
 import bodo
 from bodo.libs.str_ext import string_type
-from bodo.utils.typing import BodoNotConstError, ConstList
+from bodo.utils.typing import ConstList
 from bodo.utils.utils import is_call_assign, is_assign, is_expr
 from bodo.utils.transform import gen_add_consts_to_type, update_node_list_definitions
+
+
+# global flag indicating that we are in partial type inference, so that error checking
+# code can raise regular Exceptions that can potentially be handled here
+in_partial_typing = False
 
 
 @register_pass(mutates_CFG=True, analysis_only=False)
@@ -14,8 +19,14 @@ class BodoTypeInference(PartialTypeInference):
     _name = "bodo_type_inference"
 
     def run_pass(self, state):
+        global in_partial_typing
         while True:
-            super(BodoTypeInference, self).run_pass(state)
+            try:
+                in_partial_typing = True
+                super(BodoTypeInference, self).run_pass(state)
+            finally:
+                in_partial_typing = False
+
             # done if all types are available
             if types.unknown not in state.typemap.values():
                 break

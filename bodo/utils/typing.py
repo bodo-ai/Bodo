@@ -31,8 +31,21 @@ class BodoError(BaseException):
 
 class BodoNotConstError(Exception):
     """Indicates that a constant value is expected but non-constant is provided.
+    Only used in partial typing pass to enable IR transformation. Inherits from regular
+    Exception class for this purpose.
     """
     pass
+
+
+def raise_const_error(msg):
+    """raises an error indicating that a constant value is expected with the given
+    message 'msg'.
+    Raises BodoNotConstError during partial type inference, and BodoError otherwise.
+    """
+    if bodo.transforms.typing_pass.in_partial_typing:
+        raise BodoNotConstError(msg)
+    else:
+        raise BodoError(msg)
 
 
 class BodoWarning(Warning):
