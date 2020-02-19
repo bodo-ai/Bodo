@@ -21,7 +21,11 @@ from bodo.libs.str_arr_ext import (
     construct_string_array,
     string_array_type,
 )
-from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.libs.list_str_arr_ext import (
+    list_string_array_type,
+    ListStringArrayPayloadType,
+    construct_list_string_array,
+)
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
 from bodo.utils.utils import unliteral_all, sanitize_varname
@@ -62,6 +66,14 @@ def read_parquet_str_parallel():  # pragma: no cover
     return 0
 
 
+def read_parquet_list_str():  # pragma: no cover
+    return 0
+
+
+def read_parquet_list_str_parallel():  # pragma: no cover
+    return 0
+
+
 def read_parquet_parallel():  # pragma: no cover
     return 0
 
@@ -77,6 +89,8 @@ def remove_parquet(rhs, lives, call_list):
     if call_list == [get_column_size_parquet]:
         return True
     if call_list == [read_parquet_str]:
+        return True
+    if call_list == [read_parquet_list_str]:
         return True
     return False
 
@@ -230,6 +244,8 @@ def _gen_pq_reader_py(
         "read_parquet_parallel": read_parquet_parallel,
         "read_parquet_str": read_parquet_str,
         "read_parquet_str_parallel": read_parquet_str_parallel,
+        "read_parquet_list_str": read_parquet_list_str,
+        "read_parquet_list_str_parallel": read_parquet_list_str_parallel,
         "get_start_count": bodo.libs.distributed_api.get_start_count,
         "unicode_to_char_ptr": unicode_to_char_ptr,
         "NS_DTYPE": np.dtype("M8[ns]"),
@@ -268,6 +284,16 @@ def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
         else:
             # pass size for easier allocation and distributed analysis
             func_text += "  {} = read_parquet_str(arrow_readers, {}, {}_size)\n".format(
+                cname, c_ind, cname
+            )
+    elif c_type == list_string_array_type:
+        if is_parallel:
+            func_text += "  {0} = read_parquet_list_str_parallel(arrow_readers, {1}, {0}_start, {0}_count)\n".format(
+                cname, c_ind
+            )
+        else:
+            # pass size for easier allocation and distributed analysis
+            func_text += "  {} = read_parquet_list_str(arrow_readers, {}, {}_size)\n".format(
                 cname, c_ind, cname
             )
     else:
@@ -516,6 +542,22 @@ class ReadParquetStrParallelInfer(AbstractTemplate):
         return signature(string_array_type, *unliteral_all(args))
 
 
+@infer_global(read_parquet_list_str)
+class ReadParquetListStrInfer(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 3
+        return signature(list_string_array_type, *unliteral_all(args))
+
+
+@infer_global(read_parquet_list_str_parallel)
+class ReadParquetListStrParallelInfer(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 4
+        return signature(list_string_array_type, *unliteral_all(args))
+
+
 @infer_global(read_parquet_parallel)
 class ReadParallelParquetInfer(AbstractTemplate):
     def generic(self, args, kws):
@@ -542,6 +584,8 @@ if _has_pyarrow:
     ll.add_symbol("pq_get_size", parquet_cpp.get_size)
     ll.add_symbol("pq_read_string", parquet_cpp.read_string)
     ll.add_symbol("pq_read_string_parallel", parquet_cpp.read_string_parallel)
+    ll.add_symbol("pq_read_list_string", parquet_cpp.read_list_string)
+    ll.add_symbol("pq_read_list_string_parallel", parquet_cpp.read_list_string_parallel)
     ll.add_symbol("pq_write", parquet_cpp.pq_write)
 
 
@@ -828,6 +872,141 @@ def pq_read_string_parallel_lower(context, builder, sig, args):
         lir.IntType(64),
     )
     ret = string_array._getvalue()
+    return impl_ret_new_ref(context, builder, typ, ret)
+
+
+############################## read list of strings ###############################
+
+
+@lower_builtin(
+    read_parquet_list_str, types.Opaque("arrow_reader"), types.intp, types.intp
+)
+def pq_read_list_string_lower(context, builder, sig, args):
+
+    # construct array and payload
+    typ = sig.return_type
+    dtype = ListStringArrayPayloadType()
+    meminfo, meminfo_data_ptr = construct_list_string_array(context, builder)
+    list_str_array = context.make_helper(builder, typ)
+
+    list_str_arr_payload = cgutils.create_struct_proxy(dtype)(context, builder)
+    list_str_array.num_items = args[2]  # set size
+
+    # read payload data
+    fnty = lir.FunctionType(
+        lir.IntType(32),
+        [
+            lir.IntType(8).as_pointer(),
+            lir.IntType(64),
+            lir.IntType(32).as_pointer().as_pointer(),
+            lir.IntType(32).as_pointer().as_pointer(),
+            lir.IntType(8).as_pointer().as_pointer(),
+            lir.IntType(8).as_pointer().as_pointer(),
+        ],
+    )
+
+    fn = builder.module.get_or_insert_function(fnty, name="pq_read_list_string")
+    _res = builder.call(
+        fn,
+        [
+            args[0],
+            args[1],
+            list_str_arr_payload._get_ptr_by_name("data_offsets"),
+            list_str_arr_payload._get_ptr_by_name("index_offsets"),
+            list_str_arr_payload._get_ptr_by_name("data"),
+            list_str_arr_payload._get_ptr_by_name("null_bitmap"),
+        ],
+    )
+
+    # set array values
+    builder.store(list_str_arr_payload._getvalue(), meminfo_data_ptr)
+    list_str_array.meminfo = meminfo
+    list_str_array.data_offsets = list_str_arr_payload.data_offsets
+    list_str_array.index_offsets = list_str_arr_payload.index_offsets
+    list_str_array.data = list_str_arr_payload.data
+    list_str_array.null_bitmap = list_str_arr_payload.null_bitmap
+    list_str_array.num_total_strings = builder.zext(
+        builder.load(
+            builder.gep(list_str_array.index_offsets, [list_str_array.num_items])
+        ),
+        lir.IntType(64),
+    )
+    list_str_array.num_total_chars = builder.zext(
+        builder.load(
+            builder.gep(list_str_array.data_offsets, [list_str_array.num_total_strings])
+        ),
+        lir.IntType(64),
+    )
+    ret = list_str_array._getvalue()
+    return impl_ret_new_ref(context, builder, typ, ret)
+
+
+@lower_builtin(
+    read_parquet_list_str_parallel,
+    types.Opaque("arrow_reader"),
+    types.intp,
+    types.intp,
+    types.intp,
+)
+def pq_read_list_string_parallel_lower(context, builder, sig, args):
+    typ = sig.return_type
+    dtype = ListStringArrayPayloadType()
+    meminfo, meminfo_data_ptr = construct_list_string_array(context, builder)
+    list_str_arr_payload = cgutils.create_struct_proxy(dtype)(context, builder)
+    list_str_array = context.make_helper(builder, typ)
+    list_str_array.num_items = args[3]
+
+    fnty = lir.FunctionType(
+        lir.IntType(32),
+        [
+            lir.IntType(8).as_pointer(),
+            lir.IntType(64),
+            lir.IntType(32).as_pointer().as_pointer(),
+            lir.IntType(32).as_pointer().as_pointer(),
+            lir.IntType(8).as_pointer().as_pointer(),
+            lir.IntType(8).as_pointer().as_pointer(),
+            lir.IntType(64),
+            lir.IntType(64),
+        ],
+    )
+
+    fn = builder.module.get_or_insert_function(
+        fnty, name="pq_read_list_string_parallel"
+    )
+    _res = builder.call(
+        fn,
+        [
+            args[0],
+            args[1],
+            list_str_arr_payload._get_ptr_by_name("data_offsets"),
+            list_str_arr_payload._get_ptr_by_name("index_offsets"),
+            list_str_arr_payload._get_ptr_by_name("data"),
+            list_str_arr_payload._get_ptr_by_name("null_bitmap"),
+            args[2],
+            args[3],
+        ],
+    )
+
+    # set array values
+    builder.store(list_str_arr_payload._getvalue(), meminfo_data_ptr)
+    list_str_array.meminfo = meminfo
+    list_str_array.data_offsets = list_str_arr_payload.data_offsets
+    list_str_array.index_offsets = list_str_arr_payload.index_offsets
+    list_str_array.data = list_str_arr_payload.data
+    list_str_array.null_bitmap = list_str_arr_payload.null_bitmap
+    list_str_array.num_total_strings = builder.zext(
+        builder.load(
+            builder.gep(list_str_array.index_offsets, [list_str_array.num_items])
+        ),
+        lir.IntType(64),
+    )
+    list_str_array.num_total_chars = builder.zext(
+        builder.load(
+            builder.gep(list_str_array.data_offsets, [list_str_array.num_total_strings])
+        ),
+        lir.IntType(64),
+    )
+    ret = list_str_array._getvalue()
     return impl_ret_new_ref(context, builder, typ, ret)
 
 

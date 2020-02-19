@@ -76,6 +76,11 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
     PyObject_SetAttrString(
         m, "read_string_parallel",
         PyLong_FromVoidPtr((void *)(&pq_read_string_parallel)));
+    PyObject_SetAttrString(m, "read_list_string",
+                           PyLong_FromVoidPtr((void *)(&pq_read_list_string)));
+    PyObject_SetAttrString(
+        m, "read_list_string_parallel",
+        PyLong_FromVoidPtr((void *)(&pq_read_list_string_parallel)));
     PyObject_SetAttrString(
         m, "pq_write",
         PyLong_FromVoidPtr((void *)(&pq_write)));
