@@ -1,4 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+import warnings
 import numba
 from numba import ir, config, ir_utils, types
 from numba.ir_utils import (
@@ -15,8 +16,12 @@ from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 import numpy as np
 import bodo
 from bodo.libs.str_ext import string_type, unicode_to_char_ptr
-from bodo.libs.str_arr_ext import StringArrayPayloadType, construct_string_array
-from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.str_arr_ext import (
+    StringArrayPayloadType,
+    construct_string_array,
+    string_array_type,
+)
+from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
 from bodo.utils.utils import unliteral_all, sanitize_varname
@@ -309,6 +314,13 @@ def get_element_type(dtype):
 def _get_numba_typ_from_pa_typ(pa_typ, is_index):
     import pyarrow as pa
 
+    # TODO: comparing list(string) type using pa_typ.type == pa.list_(pa.string())
+    # doesn't seem to work properly. The string representation is also inconsistent:
+    # "ListType(list<element: string>)", or "ListType(list<item: string>)"
+    # likely an Arrow/Parquet bug
+    if isinstance(pa_typ.type, pa.ListType) and pa_typ.type.value_type == pa.string():
+        return list_string_array_type
+
     _typ_map = {
         # boolean
         pa.bool_(): types.bool_,
@@ -337,7 +349,7 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index):
         pa.timestamp("s"): types.NPDatetime("ns"),
     }
     if pa_typ.type not in _typ_map:
-        raise ValueError("Arrow data type {} not supported yet".format(pa_typ))
+        raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
     dtype = _typ_map[pa_typ.type]
 
     arr_typ = string_array_type if dtype == string_type else types.Array(dtype, 1, "C")
@@ -370,6 +382,7 @@ def get_parquet_dataset(file_name):
             raise BodoError("Reading from s3 requires s3fs currently.")
 
         import os
+
         custom_endpoint = os.environ.get("AWS_S3_ENDPOINT", None)
         aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", None)
         aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", None)
@@ -401,7 +414,9 @@ def get_parquet_dataset(file_name):
             # because pq.ParquetDataset will throw Invalid Parquet file size is 0
             # bytes
             path_info = fs.info(file_name)
-            if path_info["Size"] == 0 and path_info["type"] == "directory":  # pragma: no cover
+            if (
+                path_info["Size"] == 0 and path_info["type"] == "directory"
+            ):  # pragma: no cover
                 # excluded from coverage because haven't found a reliable way
                 # to create 0 size object that is a directory. For example:
                 # fs.mkdir(path)  sometimes doesn't do anything at all
@@ -421,14 +436,17 @@ def get_parquet_dataset(file_name):
 
     return pq.ParquetDataset(file_name, filesystem=fs)
 
+
 def parquet_file_schema(file_name):
 
     col_names = []
     col_types = []
 
     pq_dataset = get_parquet_dataset(file_name)
-    col_names = pq_dataset.schema.names
     pa_schema = pq_dataset.schema.to_arrow_schema()
+    # NOTE: use arrow schema instead of the dataset schema to avoid issues with names of
+    # list types columns (arrow 0.16.0)
+    col_names = pa_schema.names
     index_col = None
 
     # find pandas index column if any
@@ -441,7 +459,7 @@ def parquet_file_schema(file_name):
         pandas_metadata = json.loads(pa_schema.metadata[key].decode("utf8"))
         n_indices = len(pandas_metadata["index_columns"])
         if n_indices > 1:
-            raise ValueError("read_parquet: MultiIndex not supported yet")
+            raise BodoError("read_parquet: MultiIndex not supported yet")
         index_col = pandas_metadata["index_columns"][0] if n_indices else None
         # arrow >=0.13 stores RangeIndex as just a dictionary here and it's
         # not a column name anymore
