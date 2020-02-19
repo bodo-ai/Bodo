@@ -34,6 +34,7 @@ class BodoNotConstError(Exception):
     Only used in partial typing pass to enable IR transformation. Inherits from regular
     Exception class for this purpose.
     """
+
     pass
 
 
@@ -432,7 +433,7 @@ class ConstList(types.List):
             reflected = self.reflected or other.reflected
             if dtype is not None:
                 if isinstance(other, ConstList) and self.consts == other.consts:
-                    return ConstList(dtype, reflected)
+                    return ConstList(dtype, self.consts)
                 else:
                     return types.List(dtype, reflected)
 
@@ -486,6 +487,8 @@ class AddConstsTyper(AbstractTemplate):
             elif isinstance(ret_typ, types.UniTuple):
                 assert ret_typ.count == len(consts)
                 ret_typ = ConstUniTuple(ret_typ.dtype, ret_typ.count, consts)
+            elif isinstance(ret_typ, types.Set):
+                ret_typ = ConstSet(ret_typ.dtype, consts)
             else:
                 ret_typ = ConstList(ret_typ.dtype, consts)
         return signature(ret_typ, *args)
@@ -516,6 +519,47 @@ class ConstDictModel(numba.dictobject.DictModel):
     def __init__(self, dmm, fe_type):
         l_type = types.DictType(fe_type.key_type, fe_type.value_type)
         super(ConstDictModel, self).__init__(dmm, l_type)
+
+
+class ConstSet(types.Set):
+    """
+    Type class for homogeneous sets with constant values.
+    """
+
+    mutable = True
+
+    def __init__(self, dtype, consts=None):
+        self.dtype = dtype
+        self.reflected = False
+        self.consts = consts
+        name = "set(%s)[%s]" % (self.dtype, consts)
+        super(types.Set, self).__init__(name=name)
+
+    @property
+    def key(self):
+        return self.dtype, self.reflected, self.consts
+
+    def copy(self, dtype=None, reflected=None):
+        if dtype is None:
+            dtype = self.dtype
+        return ConstSet(dtype, self.consts)
+
+    def unify(self, typingctx, other):
+        if isinstance(other, types.Set):
+            dtype = typingctx.unify_pairs(self.dtype, other.dtype)
+            reflected = self.reflected or other.reflected
+            if dtype is not None:
+                if isinstance(other, ConstSet) and self.consts == other.consts:
+                    return ConstSet(dtype, self.consts)
+                else:
+                    return types.Set(dtype, reflected)
+
+
+@register_model(ConstSet)
+class ConstSetModel(models.SetModel):
+    def __init__(self, dmm, fe_type):
+        l_type = types.Set(fe_type.dtype)
+        super(ConstSetModel, self).__init__(dmm, l_type)
 
 
 # Type used to add constant values to constant uniform tuples to enable typing of calls
@@ -662,3 +706,37 @@ def lower_convert_rec_tup_impl(context, builder, sig, args):
 
     res = context.compile_internal(builder, _rec_to_tup, tup_typ(rec_typ), [val])
     return impl_ret_borrowed(context, builder, sig.return_type, res)
+
+
+# replacing 'set' constructor typing of Numba to support string type
+# TODO: declare string_type (unicode_type) hashable in Numba and remove this code
+@infer_global(set)
+class SetBuiltin(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        if args:
+            # set(iterable)
+            (iterable,) = args
+            if isinstance(iterable, types.IterableType):
+                dtype = iterable.iterator_type.yield_type
+                if isinstance(dtype, types.Hashable) or dtype == bodo.string_type:
+                    return signature(types.Set(dtype), iterable)
+        else:
+            # set()
+            return signature(types.Set(types.undefined))
+
+
+# replacing types.Set.__init__ to support string dtype
+def Set__init__(self, dtype, reflected=False):
+    assert (
+        isinstance(dtype, (types.Hashable, types.Undefined))
+        or dtype == bodo.string_type
+    )
+    self.dtype = dtype
+    self.reflected = reflected
+    cls_name = "reflected set" if reflected else "set"
+    name = "%s(%s)" % (cls_name, self.dtype)
+    super(types.Set, self).__init__(name=name)
+
+
+types.Set.__init__ = Set__init__
