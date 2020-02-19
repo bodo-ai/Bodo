@@ -181,6 +181,8 @@ def overload_series_sum(S):
     # like records/tuples
     if isinstance(S.dtype, types.Integer):
         retty = types.intp
+    elif isinstance(S.dtype, types.Boolean):
+        retty = np.int64
     else:
         retty = S.dtype
     zero = retty(0)
@@ -190,7 +192,7 @@ def overload_series_sum(S):
         numba.parfor.init_prange()
         s = zero
         for i in numba.parfor.internal_prange(len(A)):
-            val = 0
+            val = zero
             if not bodo.libs.array_kernels.isna(A, i):
                 val = A[i]
             s += val
