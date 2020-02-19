@@ -56,6 +56,7 @@ from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.utils.utils import build_set
 from bodo.libs.str_arr_ext import (
     string_array_type,
+    StringArrayType,
     pre_alloc_string_array,
     get_offset_ptr,
     get_data_ptr,
@@ -746,6 +747,7 @@ def agg_distributed_run(
     # get column types
     in_col_typs = tuple(typemap[v.name] for v in in_col_vars)
     out_col_typs = tuple(typemap[v.name] for v in out_col_vars)
+
     pivot_typ = (
         types.none if agg_node.pivot_arr is None else typemap[agg_node.pivot_arr.name]
     )
@@ -1747,6 +1749,8 @@ def gen_top_level_agg_func(
                 )
             elif isinstance(out_col_typs[i], BooleanArrayType):
                 func_text += "    {} = pd.Series([True]).values\n".format(out_name)
+            elif isinstance(out_col_typs[i], StringArrayType):
+                func_text += "    {} = pre_alloc_string_array(1,1)\n".format(out_name)
             else:
                 func_text += "    {} = np.empty(1, {})\n".format(
                     out_name, _get_np_dtype(out_typs[i])

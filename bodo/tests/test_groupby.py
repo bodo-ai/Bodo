@@ -1,6 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import unittest
 import random
+import string
 import pandas as pd
 import numpy as np
 import numba
@@ -177,6 +178,46 @@ def test_agg():
     check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
 
 
+def test_sum_string():
+    def impl(df):
+        A = df.groupby("A").sum()
+        return A
+
+    df1 = pd.DataFrame({"A": [1, 1, 1, 2], "B": ["a", "b", "c", "d"]})
+    check_func(impl, (df1,), sort_output=True)
+
+
+def test_random_string_sum_min_max():
+    def impl1(df):
+        A = df.groupby("A").sum()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").min()
+        return A
+
+    def impl3(df):
+        A = df.groupby("A").max()
+        return A
+
+    def random_dataframe(n):
+        random.seed(5)
+        eList_A = []
+        eList_B = []
+        for i in range(n):
+            len_str = random.randint(1, 10)
+            val_A = random.randint(1, 10)
+            val_B = "".join(random.choices(string.ascii_uppercase, k=len_str))
+            eList_A.append(val_A)
+            eList_B.append(val_B)
+        return pd.DataFrame({"A": eList_A, "B": eList_B})
+
+    df1 = random_dataframe(100)
+    check_func(impl1, (df1,), sort_output=True)
+    check_func(impl2, (df1,), sort_output=True)
+    check_func(impl3, (df1,), sort_output=True)
+
+
 def test_agg_str_key():
     """
     Test Groupby.agg() with string keys
@@ -277,7 +318,7 @@ def test_agg_as_index():
     )
 
     # disabled because this doesn't work in pandas 1.0 (looks like a bug)
-    #check_func(impl2, (df,), sort_output=True, check_dtype=False)
+    # check_func(impl2, (df,), sort_output=True, check_dtype=False)
     check_func(impl3, (df,), sort_output=True)
     check_func(impl3b, (df,), sort_output=True)
 
@@ -387,7 +428,9 @@ def test_agg_multi_udf():
         return df.groupby("A")["B"].agg(("var", id1, id2, "sum"))
 
     def impl3(df):
-        return df.groupby("A")["B"].agg((lambda x: x.max() - x.min(), lambda x: x.max() + x.min()))
+        return df.groupby("A")["B"].agg(
+            (lambda x: x.max() - x.min(), lambda x: x.max() + x.min())
+        )
 
     def impl4(df):
         return df.groupby("A")["B"].agg(("cumprod", "cumsum"))
@@ -429,7 +472,6 @@ def test_aggregate_as_index():
     def impl1(df):
         A = df.groupby("A", as_index=False).aggregate(lambda x: x.max() - x.min())
         return A
-
 
     df = pd.DataFrame(
         {
@@ -487,7 +529,7 @@ def test_groupby_agg_const_dict():
         return df2
 
     def impl3(df):
-        df2 = df.groupby("A").agg({"B" : "median"})
+        df2 = df.groupby("A").agg({"B": "median"})
         return df2
 
     def impl4(df):
@@ -495,7 +537,7 @@ def test_groupby_agg_const_dict():
         return df2
 
     def impl5(df):
-        df2 = df.groupby("A").agg({"B" : ["median", "nunique"]})
+        df2 = df.groupby("A").agg({"B": ["median", "nunique"]})
         return df2
 
     def impl6(df):
@@ -503,7 +545,9 @@ def test_groupby_agg_const_dict():
         return df2
 
     def impl7(df):
-        df2 = df.groupby("A").agg({"B": ["count", "median", "prod"], "C": ["nunique", "sum"]})
+        df2 = df.groupby("A").agg(
+            {"B": ["count", "median", "prod"], "C": ["nunique", "sum"]}
+        )
         return df2
 
     def impl8(df):
@@ -518,7 +562,13 @@ def test_groupby_agg_const_dict():
         return df2
 
     def impl10(df):
-        df2 = df.groupby("A").agg({"D": lambda x: (x == "BB").sum(), "B": lambda x: x.max() - x.min(), "C": "sum"})
+        df2 = df.groupby("A").agg(
+            {
+                "D": lambda x: (x == "BB").sum(),
+                "B": lambda x: x.max() - x.min(),
+                "C": "sum",
+            }
+        )
         return df2
 
     def impl11(df):
@@ -857,10 +907,6 @@ def test_cumsum_large_random_numpy():
     check_func(impl3, (df1,), sort_output=True)
 
 
-
-
-
-
 def test_groupby_cumsum_simple():
     """
     Test Groupby.cumsum(): a simple case
@@ -885,6 +931,7 @@ def test_groupby_cumprod_simple():
 
     df1 = pd.DataFrame({"A": [1, 1, 1, 1, 1], "B": [1, 2, 3, 4, 5]})
     check_func(impl, (df1,), sort_output=True)
+
 
 def test_groupby_cumsum():
     """

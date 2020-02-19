@@ -2091,6 +2091,44 @@ struct aggfunc<
     }
 };
 
+
+template <int ftype, typename Enable = void>
+struct aggstring {
+    /**
+     * Apply the function.
+     * @param[in,out] first input value, and holds the result
+     * @param[in] second input value.
+     */
+    static void apply(std::string& v1, std::string& v2) {}
+};
+
+
+
+template<>
+struct aggstring<Bodo_FTypes::sum> {
+    static void apply(std::string& v1, std::string& v2) {
+        v1 += v2;
+    }
+};
+
+template<>
+struct aggstring<Bodo_FTypes::min> {
+    static void apply(std::string& v1, std::string& v2) {
+        v1 = std::min(v1, v2);
+    }
+};
+
+template<>
+struct aggstring<Bodo_FTypes::max> {
+    static void apply(std::string& v1, std::string& v2) {
+        v1 = std::max(v1, v2);
+    }
+};
+
+
+
+
+
 template <typename T, typename Enable = void>
 struct count_agg {
     /**
@@ -2278,7 +2316,28 @@ static void std_eval(double& result, uint64_t& count, double& m2) {
 
 
 
+/** Data structure used for the computation of groups.
 
+    @data row_to_group       : This takes the index and returns the group
+    @data group_to_first_row : This takes the group index and return the first row index.
+    @data next_row_in_group  : for a row in the list returns the next row in the list if existent.
+                               if non-existent value is -1.
+    @data list_missing       : list of rows which are missing and NaNs.
+
+    This is only one data structure but it has two use cases.
+    -- get_group_info computes only the entries row_to_group and group_to_first_row.
+       This is the data structure used for groupby operations such as sum, mean, etc. for which
+       the full group structure does not need to be known.
+    -- get_group_info_iterate computes all the entries. This is needed for some operations such
+       as nunique, median, cumsum, cumprod.
+       The entry list_missing is computed only for cumsum and cumprod and computed only if needed.
+ */
+struct grouping_info {
+    std::vector<int64_t> row_to_group;
+    std::vector<int64_t> group_to_first_row;
+    std::vector<int64_t> next_row_in_group;
+    std::vector<int64_t> list_missing;
+};
 
 
 
@@ -2297,17 +2356,17 @@ static void std_eval(double& result, uint64_t& count, double& m2) {
 template <typename T, int ftype>
 void apply_to_column(array_info* in_col, array_info* out_col,
                      std::vector<array_info*>& aux_cols,
-                     const std::vector<int64_t>& row_to_group) {
+                     const grouping_info &grp_info) {
     switch (in_col->arr_type) {
         case bodo_array_type::NUMPY:
             if (ftype == Bodo_FTypes::mean) {
                 array_info* count_col = aux_cols[0];
                 for (int64_t i = 0; i < in_col->length; i++)
-                    if (row_to_group[i] != -1)
+                    if (grp_info.row_to_group[i] != -1)
                         mean_agg<T>::apply(
-                            out_col->at<double>(row_to_group[i]),
+                            out_col->at<double>(grp_info.row_to_group[i]),
                             in_col->at<T>(i),
-                            count_col->at<uint64_t>(row_to_group[i]));
+                            count_col->at<uint64_t>(grp_info.row_to_group[i]));
             } else if (ftype == Bodo_FTypes::mean_eval) {
                 for (int64_t i = 0; i < in_col->length; i++)
                     mean_eval(out_col->at<double>(i), in_col->at<uint64_t>(i));
@@ -2316,12 +2375,12 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                 array_info* mean_col = aux_cols[1];
                 array_info* m2_col = aux_cols[2];
                 for (int64_t i = 0; i < in_col->length; i++)
-                    if (row_to_group[i] != -1)
+                    if (grp_info.row_to_group[i] != -1)
                         var_agg<T>::apply(
                             in_col->at<T>(i),
-                            count_col->at<uint64_t>(row_to_group[i]),
-                            mean_col->at<double>(row_to_group[i]),
-                            m2_col->at<double>(row_to_group[i]));
+                            count_col->at<uint64_t>(grp_info.row_to_group[i]),
+                            mean_col->at<double>(grp_info.row_to_group[i]),
+                            m2_col->at<double>(grp_info.row_to_group[i]));
             } else if (ftype == Bodo_FTypes::var_eval) {
                 array_info* count_col = aux_cols[0];
                 array_info* m2_col = aux_cols[2];
@@ -2336,63 +2395,121 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                              m2_col->at<double>(i));
             } else if (ftype == Bodo_FTypes::count) {
                 for (int64_t i = 0; i < in_col->length; i++)
-                    if (row_to_group[i] != -1)
+                    if (grp_info.row_to_group[i] != -1)
                         count_agg<T>::apply(
-                            out_col->at<int64_t>(row_to_group[i]),
+                            out_col->at<int64_t>(grp_info.row_to_group[i]),
                             in_col->at<T>(i));
             } else {
                 for (int64_t i = 0; i < in_col->length; i++)
-                    if (row_to_group[i] != -1)
+                    if (grp_info.row_to_group[i] != -1)
                         aggfunc<T, ftype>::apply(
-                            out_col->at<T>(row_to_group[i]), in_col->at<T>(i));
+                            out_col->at<T>(grp_info.row_to_group[i]), in_col->at<T>(i));
             }
             return;
         // for strings, we are only supporting count for now, and count function
         // works for strings because the input value doesn't matter
         case bodo_array_type::STRING:
-            assert(ftype == Bodo_FTypes::count);
+            switch (ftype) {
+                case Bodo_FTypes::count:
+                    for (int64_t i = 0; i < in_col->length; i++) {
+                        if ((grp_info.row_to_group[i] != -1) &&
+                            GetBit((uint8_t*)in_col->null_bitmask, i))
+                            count_agg<T>::apply(
+                                out_col->at<int64_t>(grp_info.row_to_group[i]),
+                                in_col->at<T>(i));
+                    }
+                    return;
+                default:
+                    size_t num_groups = grp_info.group_to_first_row.size();
+                    std::vector<std::string> ListString(num_groups);
+                    char* data = in_col->data1;
+                    uint32_t* offsets = (uint32_t*)in_col->data2;
+                    uint8_t* null_bitmask_i = (uint8_t*)in_col->null_bitmask;
+                    uint8_t* null_bitmask_o = (uint8_t*)out_col->null_bitmask;
+                    // Computing the strings used in output.
+                    for (int64_t i = 0; i < in_col->length; i++) {
+                        if ((grp_info.row_to_group[i] != -1) && GetBit(null_bitmask_i, i)) {
+                            uint32_t start_offset = offsets[i];
+                            uint32_t end_offset = offsets[i+1];
+                            uint32_t len = end_offset - start_offset;
+                            int64_t i_grp = grp_info.row_to_group[i];
+                            std::string val(&data[start_offset], len);
+                            if (GetBit(null_bitmask_o, i_grp)) {
+                                aggstring<ftype>::apply(ListString[i_grp], val);
+                            } else {
+                                ListString[i_grp] = val;
+                                SetBitTo(null_bitmask_o, i_grp, true);
+                            }
+                        }
+                    }
+                    // Determining the number of characters in output.
+                    size_t nb_char = 0;
+                    for (int64_t i_grp = 0; i_grp < int64_t(num_groups); i_grp++) {
+                        if (GetBit(null_bitmask_o, i_grp))
+                            nb_char += ListString[i_grp].size();
+                    }
+                    // Doing the additional needed allocations
+                    delete [] out_col->data1;
+                    out_col->data1 = new char[nb_char];
+                    out_col->n_sub_elems = nb_char;
+                    // Writing the strings in output
+                    char* data_o = out_col->data1;
+                    uint32_t* offsets_o = (uint32_t*)out_col->data2;
+                    uint32_t pos = 0;
+                    for (int64_t i_grp = 0; i_grp < int64_t(num_groups); i_grp++) {
+                        offsets_o[i_grp] = pos;
+                        if (GetBit(null_bitmask_o, i_grp)) {
+                            int len = ListString[i_grp].size();
+                            memcpy(data_o, ListString[i_grp].data(), len);
+                            data_o += len;
+                            pos += len;
+                        }
+                    }
+                    offsets_o[num_groups] = pos;
+                    return;
+            }
         case bodo_array_type::NULLABLE_INT_BOOL:
             switch (ftype) {
                 case Bodo_FTypes::count:
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if ((row_to_group[i] != -1) &&
+                        if ((grp_info.row_to_group[i] != -1) &&
                             GetBit((uint8_t*)in_col->null_bitmask, i))
                             count_agg<T>::apply(
-                                out_col->at<int64_t>(row_to_group[i]),
+                                out_col->at<int64_t>(grp_info.row_to_group[i]),
                                 in_col->at<T>(i));
                     }
                     return;
                 case Bodo_FTypes::mean:
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if ((row_to_group[i] != -1) &&
+                        if ((grp_info.row_to_group[i] != -1) &&
                             GetBit((uint8_t*)in_col->null_bitmask, i)) {
                             mean_agg<T>::apply(
-                                out_col->at<double>(row_to_group[i]),
+                                out_col->at<double>(grp_info.row_to_group[i]),
                                 in_col->at<T>(i),
-                                aux_cols[0]->at<uint64_t>(row_to_group[i]));
+                                aux_cols[0]->at<uint64_t>(grp_info.row_to_group[i]));
                         }
                     }
                     return;
                 case Bodo_FTypes::var:
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if ((row_to_group[i] != -1) &&
+                        if ((grp_info.row_to_group[i] != -1) &&
                             GetBit((uint8_t*)in_col->null_bitmask, i))
                             var_agg<T>::apply(
                                 in_col->at<T>(i),
-                                aux_cols[0]->at<uint64_t>(row_to_group[i]),
-                                aux_cols[1]->at<double>(row_to_group[i]),
-                                aux_cols[2]->at<double>(row_to_group[i]));
+                                aux_cols[0]->at<uint64_t>(grp_info.row_to_group[i]),
+                                aux_cols[1]->at<double>(grp_info.row_to_group[i]),
+                                aux_cols[2]->at<double>(grp_info.row_to_group[i]));
                     }
                     return;
                 default:
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if ((row_to_group[i] != -1) &&
+                        if ((grp_info.row_to_group[i] != -1) &&
                             GetBit((uint8_t*)in_col->null_bitmask, i)) {
                             aggfunc<T, ftype>::apply(
-                                out_col->at<T>(row_to_group[i]),
+                                out_col->at<T>(grp_info.row_to_group[i]),
                                 in_col->at<T>(i));
                             SetBitTo((uint8_t*)out_col->null_bitmask,
-                                     row_to_group[i], true);
+                                     grp_info.row_to_group[i], true);
                         }
                     }
                     return;
@@ -2420,35 +2537,50 @@ void apply_to_column(array_info* in_col, array_info* out_col,
  */
 void do_apply_to_column(array_info* in_col, array_info* out_col,
                         std::vector<array_info*>& aux_cols,
-                        const std::vector<int64_t>& row_to_group, int ftype) {
+                        const grouping_info &grp_info, int ftype) {
+    if (in_col->arr_type == bodo_array_type::STRING) {
+        switch (ftype) {
+            // NOTE: The int template argument is not used in this call to apply_to_column
+            case Bodo_FTypes::sum:
+                return apply_to_column<int, Bodo_FTypes::sum>(
+                    in_col, out_col, aux_cols, grp_info);
+            case Bodo_FTypes::min:
+                return apply_to_column<int, Bodo_FTypes::min>(
+                    in_col, out_col, aux_cols, grp_info);
+            case Bodo_FTypes::max:
+                return apply_to_column<int, Bodo_FTypes::max>(
+                    in_col, out_col, aux_cols, grp_info);
+        }
+    }
     if (ftype == Bodo_FTypes::count) {
         switch (in_col->dtype) {
             case Bodo_CTypes::FLOAT32:
                 // data will only be used to check for nans
                 return apply_to_column<float, Bodo_FTypes::count>(
-                    in_col, out_col, aux_cols, row_to_group);
+                    in_col, out_col, aux_cols, grp_info);
             case Bodo_CTypes::FLOAT64:
                 // data will only be used to check for nans
                 return apply_to_column<double, Bodo_FTypes::count>(
-                    in_col, out_col, aux_cols, row_to_group);
+                    in_col, out_col, aux_cols, grp_info);
             default:
                 // data will be ignored in this case, so type doesn't matter
                 return apply_to_column<int8_t, Bodo_FTypes::count>(
-                    in_col, out_col, aux_cols, row_to_group);
+                    in_col, out_col, aux_cols, grp_info);
         }
     }
+    
     switch (in_col->dtype) {
         case Bodo_CTypes::_BOOL:
             switch (ftype) {
                 case Bodo_FTypes::min:
                     return apply_to_column<bool, Bodo_FTypes::min>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
                     return apply_to_column<bool, Bodo_FTypes::max>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<bool, Bodo_FTypes::prod>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 default:
                     PyErr_SetString(PyExc_RuntimeError,
                         "unsuported aggregation for boolean type column");
@@ -2458,239 +2590,239 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
             switch (ftype) {
                 case Bodo_FTypes::sum:
                     return apply_to_column<int8_t, Bodo_FTypes::sum>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
                     return apply_to_column<int8_t, Bodo_FTypes::min>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
                     return apply_to_column<int8_t, Bodo_FTypes::max>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<int8_t, Bodo_FTypes::prod>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<int8_t, Bodo_FTypes::mean>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<int8_t, Bodo_FTypes::var>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT8:
             switch (ftype) {
                 case Bodo_FTypes::sum:
                     return apply_to_column<uint8_t, Bodo_FTypes::sum>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
                     return apply_to_column<uint8_t, Bodo_FTypes::min>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
                     return apply_to_column<uint8_t, Bodo_FTypes::max>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<uint8_t, Bodo_FTypes::prod>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<uint8_t, Bodo_FTypes::mean>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<uint8_t, Bodo_FTypes::var>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::INT16:
             switch (ftype) {
                 case Bodo_FTypes::sum:
                     return apply_to_column<int16_t, Bodo_FTypes::sum>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
                     return apply_to_column<int16_t, Bodo_FTypes::min>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
                     return apply_to_column<int16_t, Bodo_FTypes::max>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<int16_t, Bodo_FTypes::prod>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<int16_t, Bodo_FTypes::mean>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<int16_t, Bodo_FTypes::var>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT16:
             switch (ftype) {
                 case Bodo_FTypes::sum:
                     return apply_to_column<uint16_t, Bodo_FTypes::sum>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
                     return apply_to_column<uint16_t, Bodo_FTypes::min>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
                     return apply_to_column<uint16_t, Bodo_FTypes::max>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<uint16_t, Bodo_FTypes::prod>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<uint16_t, Bodo_FTypes::mean>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<uint16_t, Bodo_FTypes::var>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::INT32:
             switch (ftype) {
                 case Bodo_FTypes::sum:
                     return apply_to_column<int32_t, Bodo_FTypes::sum>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
                     return apply_to_column<int32_t, Bodo_FTypes::min>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
                     return apply_to_column<int32_t, Bodo_FTypes::max>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<int32_t, Bodo_FTypes::prod>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<int32_t, Bodo_FTypes::mean>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<int32_t, Bodo_FTypes::var>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT32:
             switch (ftype) {
                 case Bodo_FTypes::sum:
                     return apply_to_column<uint32_t, Bodo_FTypes::sum>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
                     return apply_to_column<uint32_t, Bodo_FTypes::min>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
                     return apply_to_column<uint32_t, Bodo_FTypes::max>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<uint32_t, Bodo_FTypes::prod>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<uint32_t, Bodo_FTypes::mean>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<uint32_t, Bodo_FTypes::var>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::INT64:
             switch (ftype) {
                 case Bodo_FTypes::sum:
                     return apply_to_column<int64_t, Bodo_FTypes::sum>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
                     return apply_to_column<int64_t, Bodo_FTypes::min>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
                     return apply_to_column<int64_t, Bodo_FTypes::max>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<int64_t, Bodo_FTypes::prod>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<int64_t, Bodo_FTypes::mean>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<int64_t, Bodo_FTypes::var>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT64:
             switch (ftype) {
                 case Bodo_FTypes::sum:
                     return apply_to_column<uint64_t, Bodo_FTypes::sum>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
                     return apply_to_column<uint64_t, Bodo_FTypes::min>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
                     return apply_to_column<uint64_t, Bodo_FTypes::max>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<uint64_t, Bodo_FTypes::prod>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<uint64_t, Bodo_FTypes::mean>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<uint64_t, Bodo_FTypes::var>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::FLOAT32:
             switch (ftype) {
                 case Bodo_FTypes::sum:
                     return apply_to_column<float, Bodo_FTypes::sum>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
                     return apply_to_column<float, Bodo_FTypes::min>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
                     return apply_to_column<float, Bodo_FTypes::max>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<float, Bodo_FTypes::prod>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<float, Bodo_FTypes::mean>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean_eval:
                     return apply_to_column<float, Bodo_FTypes::mean_eval>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<float, Bodo_FTypes::var>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var_eval:
                     return apply_to_column<float, Bodo_FTypes::var_eval>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::std_eval:
                     return apply_to_column<float, Bodo_FTypes::std_eval>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::FLOAT64:
             switch (ftype) {
                 case Bodo_FTypes::sum:
                     return apply_to_column<double, Bodo_FTypes::sum>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
                     return apply_to_column<double, Bodo_FTypes::min>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
                     return apply_to_column<double, Bodo_FTypes::max>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<double, Bodo_FTypes::prod>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<double, Bodo_FTypes::mean>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean_eval:
                     return apply_to_column<double, Bodo_FTypes::mean_eval>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<double, Bodo_FTypes::var>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var_eval:
                     return apply_to_column<double, Bodo_FTypes::var_eval>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::std_eval:
                     return apply_to_column<double, Bodo_FTypes::std_eval>(
-                        in_col, out_col, aux_cols, row_to_group);
+                        in_col, out_col, aux_cols, grp_info);
             }
         default:
             fprintf(stderr, "do_apply_to_column: invalid array dtype\n");
@@ -2829,21 +2961,13 @@ void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
     delete[] hashes;
 }
 
-
-struct grouping_info {
-    std::vector<int64_t> row_to_group;
-    std::vector<int64_t> group_to_first_row;
-    std::vector<int64_t> next_row_in_group;
-    std::vector<int64_t> list_missing;
-};
-
 /**
  * Given a table with n key columns, this function calculates the row to group
  * mapping for every row based on its key.
  * For every row in the table, this only does *one* lookup in the hash map.
  *
- * @param           table: the table
- * @param conider_missing: whether to return the list of missing rows or not
+ * @param            table: the table
+ * @param consider_missing: whether to return the list of missing rows or not
  * @return vector that maps group number to the first row in the table
  *                that belongs to that group
  */
@@ -2913,6 +3037,9 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
         else
             // for other functions (count, sum, etc.) output will never be null
             InitializeBitMask((uint8_t*)out_col->null_bitmask, out_col->length, true);
+    }
+    if (out_col->arr_type == bodo_array_type::STRING) {
+        InitializeBitMask((uint8_t*)out_col->null_bitmask, out_col->length, false);
     }
     switch (ftype) {
         case Bodo_FTypes::prod:
@@ -3029,6 +3156,8 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                               std::numeric_limits<double>::quiet_NaN());
                     return;
                 case Bodo_CTypes::STRING:
+                    // Nothing to initilize with in the case of strings.
+                    return;
                 default:
                     PyErr_SetString(PyExc_RuntimeError,
                                     "unsupported/not implemented");
@@ -3096,6 +3225,8 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                               std::numeric_limits<double>::quiet_NaN());
                     return;
                 case Bodo_CTypes::STRING:
+                    // nothing to initialize in the case of strings
+                    return;
                 default:
                     PyErr_SetString(PyExc_RuntimeError,
                                     "unsupported/not implemented");
@@ -3208,7 +3339,7 @@ public:
         std::vector<array_info*> aux_cols;
         aggfunc_output_initialize(update_cols[0], ftype);
         do_apply_to_column(in_col, update_cols[0],
-                           aux_cols, grp_info.row_to_group, ftype);
+                           aux_cols, grp_info, ftype);
     }
 
     /**
@@ -3254,7 +3385,7 @@ public:
         for (auto col : combine_cols)
             aggfunc_output_initialize(col, combine_ftype);
         do_apply_to_column(update_cols[0], combine_cols[0],
-                           aux_cols, grp_info.row_to_group, combine_ftype);
+                           aux_cols, grp_info, combine_ftype);
     }
 
     /**
@@ -3315,7 +3446,7 @@ public:
         aggfunc_output_initialize(update_cols[0], ftype);
         aggfunc_output_initialize(update_cols[1], ftype);
         do_apply_to_column(in_col, update_cols[0],
-                           aux_cols, grp_info.row_to_group, ftype);
+                           aux_cols, grp_info, ftype);
     }
 
     virtual void combine(const grouping_info &grp_info) {
@@ -3323,19 +3454,19 @@ public:
         aggfunc_output_initialize(combine_cols[0], Bodo_FTypes::sum);
         aggfunc_output_initialize(combine_cols[1], Bodo_FTypes::sum);
         do_apply_to_column(update_cols[0], combine_cols[0],
-                           aux_cols, grp_info.row_to_group, Bodo_FTypes::sum);
+                           aux_cols, grp_info, Bodo_FTypes::sum);
         do_apply_to_column(update_cols[1], combine_cols[1],
-                           aux_cols, grp_info.row_to_group, Bodo_FTypes::sum);
+                           aux_cols, grp_info, Bodo_FTypes::sum);
     }
 
     virtual void eval(const grouping_info &grp_info) {
         std::vector<array_info*> aux_cols;
         if (combine_step)
             do_apply_to_column(combine_cols[1], combine_cols[0], aux_cols,
-                               grp_info.row_to_group, Bodo_FTypes::mean_eval);
+                               grp_info, Bodo_FTypes::mean_eval);
         else
             do_apply_to_column(update_cols[1], update_cols[0], aux_cols,
-                               grp_info.row_to_group, Bodo_FTypes::mean_eval);
+                               grp_info, Bodo_FTypes::mean_eval);
     }
 };
 
@@ -3378,13 +3509,13 @@ public:
                                                  update_cols[2],
                                                  update_cols[3]};
             do_apply_to_column(in_col, update_cols[1],
-                               aux_cols, grp_info.row_to_group, ftype);
+                               aux_cols, grp_info, ftype);
         } else {
             std::vector<array_info*> aux_cols = {update_cols[0],
                                                  update_cols[1],
                                                  update_cols[2]};
             do_apply_to_column(in_col, update_cols[0],
-                               aux_cols, grp_info.row_to_group, ftype);
+                               aux_cols, grp_info, ftype);
         }
     }
 
@@ -3421,10 +3552,10 @@ public:
                                              mycols->at(3)};
         if (ftype == Bodo_FTypes::var)
             do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols,
-                               grp_info.row_to_group, Bodo_FTypes::var_eval);
+                               grp_info, Bodo_FTypes::var_eval);
         else
             do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols,
-                               grp_info.row_to_group, Bodo_FTypes::std_eval);
+                               grp_info, Bodo_FTypes::std_eval);
     }
 };
 
@@ -4372,6 +4503,7 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                             udf_dummy_table, (udf_table_op_fn)update_cb,
                             (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb,
                             skipdropna);
+
     return groupby.run();
 }
 

@@ -284,21 +284,20 @@ def get_groupby_output_dtype(arr_type, func_name):
         and not isinstance(in_dtype, types.Float)
         and not isinstance(in_dtype, types.Boolean)
     ):
-        if func_name not in {"count", "nunique", "min"}:
-            raise BodoError(
-                "column type of {} is not supported in groupby built-in functions".format(
-                    in_dtype
+        if in_dtype == types.unicode_type:
+            if func_name not in {"count", "nunique", "min", "max", "sum"}:
+                raise BodoError(
+                    "column type of strings is not supported in groupby built-in function {}".format(
+                        func_name
+                    )
                 )
-            )
-        if (
-            func_name != "count"
-            and func_name != "nunique"
-            and in_dtype == types.unicode_type
-        ):
-            raise BodoError(
-                "groupby built-in functions {}"
-                " does not support string column".format(func_name)
-            )
+        else:
+            if func_name not in {"count", "nunique", "min"}:
+                raise BodoError(
+                    "column type of {} is not supported in groupby built-in function {}".format(
+                        in_dtype, func_name
+                    )
+                )
     if isinstance(in_dtype, types.Boolean) and func_name in {
         "cumsum",
         "sum",
