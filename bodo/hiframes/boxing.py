@@ -148,7 +148,9 @@ def _infer_series_dtype(S):
             return string_type
 
         first_val = S.iloc[i]
-        if isinstance(first_val, list):
+        # NOTE: pandas may create array(array(str)) instead of array(list(str))
+        # see test_io.py::test_pq_list_str
+        if isinstance(first_val, (list, np.ndarray)):
             return _infer_series_list_dtype(S.values, S.name)
         elif isinstance(first_val, str):
             return string_type
@@ -189,10 +191,11 @@ def _infer_series_list_dtype(A, name):
         first_val = A[i]
         if isinstance(first_val, float) and np.isnan(first_val) or first_val is None:
             continue
-        if not isinstance(first_val, list):
+        if not isinstance(first_val, (list, np.ndarray)):
             raise ValueError("data type for column {} not supported".format(name))
         if len(first_val) > 0:
             # TODO: support more types
+            # TODO: can nulls be inside the list?
             if isinstance(first_val[0], str):
                 return types.List(string_type)
             else:
