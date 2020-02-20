@@ -587,9 +587,9 @@ std::pair<int64_t,int64_t> pq_read_list_string_single_file(std::shared_ptr<FileR
                            index_offsets_buff + parent_offsets_size / sizeof(uint32_t));
         // we are reading a dataset split into multiple parquet files. some files
         // might not have any strings at all (because all strings are empty or
-        // there are nan lists). In that case, we don't want to append nulls to
-        // the data buffer
-        if (data_size > 0 && data_buff[0] != 0)
+        // there are nan lists). In that case, we don't want to insert nulls at
+        // the middle of the data buffer
+        if ((offsets_size / sizeof(uint32_t) > 0) && (offsets_buff[offsets_size / sizeof(uint32_t) - 1] > 0))
             data_vec->insert(data_vec->end(), data_buff, data_buff + data_size);
         append_bits_to_vec(null_vec, null_buff, parent_null_size, 0, num_values);
     }
