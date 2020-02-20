@@ -41,6 +41,12 @@ int pq_read_string(FileReaderVec *readers, int64_t column_idx,
 int pq_read_string_parallel(FileReaderVec *readers, int64_t column_idx,
                             uint32_t **out_offsets, uint8_t **out_data,
                             uint8_t **out_nulls, int64_t start, int64_t count);
+int pq_read_list_string(FileReaderVec *readers, int64_t column_idx,
+                        uint32_t **out_offsets, uint32_t **index_offsets, uint8_t **out_data,
+                        uint8_t **out_nulls);
+int pq_read_list_string_parallel(FileReaderVec *readers, int64_t column_idx,
+                                 uint32_t **out_offsets, uint32_t **index_offsets, uint8_t **out_data,
+                                 uint8_t **out_nulls, int64_t start, int64_t count);
 
 void pack_null_bitmap(uint8_t **out_nulls, std::vector<bool> &null_vec,
                       int64_t n_all_vals);
@@ -412,6 +418,149 @@ int pq_read_string_parallel(FileReaderVec *readers, int64_t column_idx,
         return pq_read_string_parallel_single_file(readers->at(0), column_idx,
                                                    out_offsets, out_data,
                                                    out_nulls, start, count);
+    }
+    return 0;
+}
+
+int pq_read_list_string(FileReaderVec *readers, int64_t column_idx,
+                   uint32_t **out_offsets, uint32_t **index_offsets, uint8_t **out_data,
+                   uint8_t **out_nulls) {
+    if (readers->size() == 0) {
+        printf("empty parquet dataset\n");
+        return 0;
+    }
+
+    if (readers->size() > 1) {
+        std::vector<uint32_t> offset_vec;
+        std::vector<uint32_t> index_offset_vec;
+        std::vector<uint8_t> data_vec;
+        std::vector<bool> null_vec;
+        int32_t last_index_offset = 0;
+        int32_t last_str_offset = 0;
+        int64_t n_all_vals = 0;
+        for (size_t i = 0; i < readers->size(); i++) {
+            std::pair<int64_t, int64_t> n_vals = pq_read_list_string_single_file(
+                readers->at(i), column_idx, NULL, NULL, NULL, NULL,
+                &offset_vec, &index_offset_vec, &data_vec, &null_vec);
+            int64_t n_lists = n_vals.first;
+            int64_t n_strings = n_vals.second;
+            if (n_lists == -1) continue;
+
+            size_t size = offset_vec.size();
+            for (int64_t i = 1; i <= n_strings + 1; i++)
+                offset_vec[size - i] += last_str_offset;
+            last_str_offset = offset_vec.back();
+            offset_vec.pop_back();
+
+            size = index_offset_vec.size();
+            for (int64_t i = 1; i <= n_lists + 1; i++)
+                index_offset_vec[size - i] += last_index_offset;
+            last_index_offset = index_offset_vec[size - 1];
+            index_offset_vec.pop_back();
+
+            n_all_vals += n_lists;
+        }
+        offset_vec.push_back(last_str_offset);
+        index_offset_vec.push_back(last_index_offset);
+
+        *out_offsets = new uint32_t[offset_vec.size()];
+        *index_offsets = new uint32_t[index_offset_vec.size()];
+        *out_data = new uint8_t[data_vec.size()];
+
+        memcpy(*out_offsets, offset_vec.data(),
+               offset_vec.size() * sizeof(uint32_t));
+        memcpy(*index_offsets, index_offset_vec.data(),
+               index_offset_vec.size() * sizeof(uint32_t));
+        memcpy(*out_data, data_vec.data(), data_vec.size());
+        pack_null_bitmap(out_nulls, null_vec, n_all_vals);
+
+        return n_all_vals;
+    } else {
+        std::pair<int64_t, int64_t> n_vals = pq_read_list_string_single_file(readers->at(0), column_idx,
+                                               out_offsets, index_offsets,
+                                               out_data, out_nulls);
+        return n_vals.first;
+    }
+}
+
+int pq_read_list_string_parallel(FileReaderVec *readers, int64_t column_idx,
+                                 uint32_t **out_offsets, uint32_t **index_offsets, uint8_t **out_data,
+                                 uint8_t **out_nulls, int64_t start, int64_t count) {
+    if (readers->size() == 0) {
+        printf("empty parquet dataset\n");
+        return 0;
+    }
+
+    if (readers->size() > 1) {
+        // skip whole files if no need to read any rows
+        int file_ind = 0;
+        int64_t file_size = pq_get_size_single_file(readers->at(0), column_idx);
+        while (start >= file_size) {
+            start -= file_size;
+            file_ind++;
+            file_size =
+                pq_get_size_single_file(readers->at(file_ind), column_idx);
+        }
+
+        int64_t n_all_vals = 0;
+        std::vector<uint32_t> index_offset_vec;
+        std::vector<uint32_t> offset_vec;
+        std::vector<uint8_t> data_vec;
+        std::vector<bool> null_vec;
+
+        // read data
+        int64_t last_str_offset = 0;
+        int64_t last_index_offset = 0;
+        int64_t read_rows = 0;
+        while (read_rows < count) {
+            int64_t rows_to_read =
+                std::min(count - read_rows, file_size - start);
+            if (rows_to_read > 0) {
+                int64_t n_strings = pq_read_list_string_parallel_single_file(
+                    readers->at(file_ind), column_idx, NULL, NULL, NULL, NULL, start,
+                    rows_to_read, &offset_vec, &index_offset_vec, &data_vec, &null_vec);
+
+                int size = offset_vec.size();
+                for (int64_t i = 1; i <= n_strings + 1; i++)
+                    offset_vec[size - i] += last_str_offset;
+                last_str_offset = offset_vec.back();
+                offset_vec.pop_back();
+
+                size = index_offset_vec.size();
+                for (int64_t i = 1; i <= rows_to_read + 1; i++)
+                    index_offset_vec[size - i] += last_index_offset;
+                last_index_offset = index_offset_vec[size - 1];
+                index_offset_vec.pop_back();
+
+                n_all_vals += rows_to_read;
+            }
+
+            read_rows += rows_to_read;
+            start = 0;  // start becomes 0 after reading non-empty first chunk
+            file_ind++;
+            if (read_rows < count)
+                file_size =
+                    pq_get_size_single_file(readers->at(file_ind), column_idx);
+        }
+        offset_vec.push_back(last_str_offset);
+        index_offset_vec.push_back(last_index_offset);
+
+        *out_offsets = new uint32_t[offset_vec.size()];
+        *index_offsets = new uint32_t[index_offset_vec.size()];
+        *out_data = new uint8_t[data_vec.size()];
+
+        memcpy(*out_offsets, offset_vec.data(),
+               offset_vec.size() * sizeof(uint32_t));
+        memcpy(*index_offsets, index_offset_vec.data(),
+               index_offset_vec.size() * sizeof(uint32_t));
+        memcpy(*out_data, data_vec.data(), data_vec.size());
+        pack_null_bitmap(out_nulls, null_vec, n_all_vals);
+        return n_all_vals;
+    } else {
+        pq_read_list_string_parallel_single_file(readers->at(0), column_idx,
+                                                        out_offsets, index_offsets,
+                                                        out_data,
+                                                        out_nulls, start, count);
     }
     return 0;
 }

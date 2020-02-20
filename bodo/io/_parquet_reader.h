@@ -37,6 +37,25 @@ int pq_read_string_parallel_single_file(
     std::vector<uint32_t> *offset_vec = NULL,
     std::vector<uint8_t> *data_vec = NULL, std::vector<bool> *null_vec = NULL);
 
+std::pair<int64_t,int64_t> pq_read_list_string_single_file(std::shared_ptr<FileReader>,
+                                   int64_t column_idx, uint32_t **out_offsets,
+                                   uint32_t **index_offsets,
+                                   uint8_t **out_data, uint8_t **out_nulls,
+                                   std::vector<uint32_t> *offset_vec = NULL,
+                                   std::vector<uint32_t> *index_offset_vec = NULL,
+                                   std::vector<uint8_t> *data_vec = NULL,
+                                   std::vector<bool> *null_vec = NULL);
+
+int64_t pq_read_list_string_parallel_single_file(std::shared_ptr<FileReader>,
+                                   int64_t column_idx, uint32_t **out_offsets,
+                                   uint32_t **index_offsets,
+                                   uint8_t **out_data, uint8_t **out_nulls,
+                                   int64_t start, int64_t count,
+                                   std::vector<uint32_t> *offset_vec = NULL,
+                                   std::vector<uint32_t> *index_offset_vec = NULL,
+                                   std::vector<uint8_t> *data_vec = NULL,
+                                   std::vector<bool> *null_vec = NULL);
+
 }  // extern "C"
 
 #endif  // _PARQUET_READER_H_INCLUDED
