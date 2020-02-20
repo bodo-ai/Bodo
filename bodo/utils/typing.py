@@ -545,7 +545,8 @@ class ConstSet(types.Set):
             dtype = self.dtype
         return ConstSet(dtype, self.consts)
 
-    def unify(self, typingctx, other):
+    def unify(self, typingctx, other):  # pragma: no cover
+        # TODO: test coverage
         if isinstance(other, types.Set):
             dtype = typingctx.unify_pairs(self.dtype, other.dtype)
             reflected = self.reflected or other.reflected
@@ -558,7 +559,8 @@ class ConstSet(types.Set):
 
 @register_model(ConstSet)
 class ConstSetModel(models.SetModel):
-    def __init__(self, dmm, fe_type):
+    def __init__(self, dmm, fe_type):  # pragma: no cover
+        # TODO: test coverage
         l_type = types.Set(fe_type.dtype)
         super(ConstSetModel, self).__init__(dmm, l_type)
 

@@ -127,7 +127,8 @@ class InferConstsPass:
         # e.g. s.add()
         if is_expr(rhs, "getattr") and isinstance(
             self.typemap[rhs.value.name], ConstSet
-        ):
+        ):  # pragma: no cover
+            # TODO: test coverage
             val_typ = self.typemap[rhs.value.name]
             self.typemap.pop(rhs.value.name)
             self.typemap[rhs.value.name] = types.Set(val_typ.dtype)
@@ -136,7 +137,8 @@ class InferConstsPass:
 
     def _run_call(self, assign, rhs):
         fdef = guard(find_callname, self.func_ir, rhs, self.typemap)
-        if fdef is None:
+        if fdef is None:  # pragma: no cover
+            # TODO: test coverage
             return [assign]
 
         # set() with constant list arg
@@ -184,12 +186,12 @@ class InferConstsPass:
             and assign.target.name not in self.tmp_vars
         ):
             vals = set(arg1_typ.consts) - set(arg2_typ.consts)
-            print(vals)
             return self._gen_consts_call(assign.target, vals, False)
 
         # replace ConstSet with Set if there a set op we don't support here
         # e.g. s1 | s2
-        if isinstance(arg1_typ, ConstSet):
+        if isinstance(arg1_typ, ConstSet):  # pragma: no cover
+            # TODO: test coverage
             arg_def = guard(get_definition, self.func_ir, rhs.lhs)
             assert is_call(arg_def) and guard(find_callname, self.func_ir, arg_def) == (
                 "add_consts_to_type",
@@ -199,7 +201,8 @@ class InferConstsPass:
             self.typemap.pop(assign.target.name)
             self.typemap[assign.target.name] = types.Set(target_typ.dtype)
 
-        if isinstance(arg2_typ, ConstSet):
+        if isinstance(arg2_typ, ConstSet):  # pragma: no cover
+            # TODO: test coverage
             arg_def = guard(get_definition, self.func_ir, rhs.rhs)
             assert is_call(arg_def) and guard(find_callname, self.func_ir, arg_def) == (
                 "add_consts_to_type",
