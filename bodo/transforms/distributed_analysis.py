@@ -940,18 +940,6 @@ class DistributedAnalysis:
         if fdef == ("file_read", "bodo.io.np_io"):
             return
 
-        if bodo.config._has_pyarrow and fdef == ("read_parquet", "bodo.io.parquet_pio"):
-            return
-
-        if bodo.config._has_pyarrow and fdef == (
-            "read_parquet_str",
-            "bodo.io.parquet_pio",
-        ):
-            # string read creates array in output
-            if lhs not in array_dists:
-                array_dists[lhs] = Distribution.OneD
-            return
-
         # TODO: fix "numba.extending" in function def
         if bodo.config._has_xenon and fdef == ("read_xenon_col", "numba.extending"):
             array_dists[args[4].name] = Distribution.REP

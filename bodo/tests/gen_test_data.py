@@ -201,3 +201,24 @@ df2 = pd.DataFrame(
 )
 df1.to_parquet("asof1.pq")
 df2.to_parquet("asof2.pq")
+
+
+# data for list(str) array read from Parquet
+df = pd.DataFrame(
+    {
+        "A": [
+            None,
+            ["холодн", "¿abc¡Y "],
+            ["¡úú,úũ¿ééé"],
+            [],
+            None,
+            ["ABC", "C", "", "A"],
+            ["늘 저녁", ",고싶다ㅠ"],
+            [""],
+        ]
+        * 3
+    }
+)
+df.to_parquet("list_str_arr.pq")
+sdf = spark.createDataFrame(df)
+sdf.write.parquet("list_str_parts.pq", "overwrite")

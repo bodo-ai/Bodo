@@ -128,6 +128,14 @@ def test_pq_schema(datapath):
     pd.testing.assert_frame_equal(bodo_func(fname), impl(fname), check_dtype=False)
 
 
+def test_pq_list_str(datapath):
+    def test_impl(fname):
+        return pd.read_parquet(fname)
+
+    check_func(test_impl, (datapath("list_str_arr.pq"),))
+    check_func(test_impl, (datapath("list_str_parts.pq"),))
+
+
 def test_csv_remove_col0_used_for_len(datapath):
     """read_csv() handling code uses the first column for creating RangeIndex of the
     output dataframe. In cases where the first column array is dead, it should be
