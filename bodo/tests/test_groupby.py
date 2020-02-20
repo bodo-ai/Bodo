@@ -277,7 +277,7 @@ def test_agg_as_index():
     )
 
     # disabled because this doesn't work in pandas 1.0 (looks like a bug)
-    #check_func(impl2, (df,), sort_output=True, check_dtype=False)
+    # check_func(impl2, (df,), sort_output=True, check_dtype=False)
     check_func(impl3, (df,), sort_output=True)
     check_func(impl3b, (df,), sort_output=True)
 
@@ -357,7 +357,7 @@ def test_agg_len_mix():
     """
 
     def impl(df):
-        A = df.groupby("A").agg(lambda x: x.sum()/len(x))
+        A = df.groupby("A").agg(lambda x: x.sum() / len(x))
         return A
 
     check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
@@ -387,7 +387,9 @@ def test_agg_multi_udf():
         return df.groupby("A")["B"].agg(("var", id1, id2, "sum"))
 
     def impl3(df):
-        return df.groupby("A")["B"].agg((lambda x: x.max() - x.min(), lambda x: x.max() + x.min()))
+        return df.groupby("A")["B"].agg(
+            (lambda x: x.max() - x.min(), lambda x: x.max() + x.min())
+        )
 
     def impl4(df):
         return df.groupby("A")["B"].agg(("cumprod", "cumsum"))
@@ -429,7 +431,6 @@ def test_aggregate_as_index():
     def impl1(df):
         A = df.groupby("A", as_index=False).aggregate(lambda x: x.max() - x.min())
         return A
-
 
     df = pd.DataFrame(
         {
@@ -487,7 +488,7 @@ def test_groupby_agg_const_dict():
         return df2
 
     def impl3(df):
-        df2 = df.groupby("A").agg({"B" : "median"})
+        df2 = df.groupby("A").agg({"B": "median"})
         return df2
 
     def impl4(df):
@@ -495,7 +496,7 @@ def test_groupby_agg_const_dict():
         return df2
 
     def impl5(df):
-        df2 = df.groupby("A").agg({"B" : ["median", "nunique"]})
+        df2 = df.groupby("A").agg({"B": ["median", "nunique"]})
         return df2
 
     def impl6(df):
@@ -503,7 +504,9 @@ def test_groupby_agg_const_dict():
         return df2
 
     def impl7(df):
-        df2 = df.groupby("A").agg({"B": ["count", "median", "prod"], "C": ["nunique", "sum"]})
+        df2 = df.groupby("A").agg(
+            {"B": ["count", "median", "prod"], "C": ["nunique", "sum"]}
+        )
         return df2
 
     def impl8(df):
@@ -518,7 +521,13 @@ def test_groupby_agg_const_dict():
         return df2
 
     def impl10(df):
-        df2 = df.groupby("A").agg({"D": lambda x: (x == "BB").sum(), "B": lambda x: x.max() - x.min(), "C": "sum"})
+        df2 = df.groupby("A").agg(
+            {
+                "D": lambda x: (x == "BB").sum(),
+                "B": lambda x: x.max() - x.min(),
+                "C": "sum",
+            }
+        )
         return df2
 
     def impl11(df):
@@ -857,10 +866,6 @@ def test_cumsum_large_random_numpy():
     check_func(impl3, (df1,), sort_output=True)
 
 
-
-
-
-
 def test_groupby_cumsum_simple():
     """
     Test Groupby.cumsum(): a simple case
@@ -885,6 +890,7 @@ def test_groupby_cumprod_simple():
 
     df1 = pd.DataFrame({"A": [1, 1, 1, 1, 1], "B": [1, 2, 3, 4, 5]})
     check_func(impl, (df1,), sort_output=True)
+
 
 def test_groupby_cumsum():
     """
@@ -1641,17 +1647,21 @@ def test_const_list_inference():
     """
 
     def impl1(df):
-        return df.groupby(['A'] + ['B']).sum()
+        return df.groupby(["A"] + ["B"]).sum()
+
+    def impl2(df):
+        return df.groupby(list(set(df.columns) - set(["C"]))).sum()
 
     df = pd.DataFrame(
-        {"A": [2, 1, 1, 1, 2, 2, 1],
-        "B": ["a", "b", "c", "c", "b", "c", "a"],
-        "C": [1, 3, 1, 2, -4, 0, 5]
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": ["a", "b", "c", "c", "b", "c", "a"],
+            "C": [1, 3, 1, 2, -4, 0, 5],
         }
     )
 
     check_func(impl1, (df,), sort_output=True)
-
+    check_func(impl2, (df,), sort_output=True)
 
 
 # ------------------------------ pivot, crosstab ------------------------------ #

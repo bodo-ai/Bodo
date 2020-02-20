@@ -2,6 +2,7 @@
 """
 Helper functions to enable typing.
 """
+import operator
 import itertools
 import types as pytypes
 import numpy as np
@@ -740,3 +741,10 @@ def Set__init__(self, dtype, reflected=False):
 
 
 types.Set.__init__ = Set__init__
+
+
+# XXX: adding lowerer for eq of strings due to limitation of Set
+@lower_builtin(operator.eq, types.UnicodeType, types.UnicodeType)
+def eq_str(context, builder, sig, args):
+    func = numba.unicode.unicode_eq(*sig.args)
+    return context.compile_internal(builder, func, sig, args)
