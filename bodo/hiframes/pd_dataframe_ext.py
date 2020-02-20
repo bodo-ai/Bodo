@@ -52,6 +52,7 @@ from bodo.utils.typing import (
     is_overload_bool_list,
     get_index_names,
     get_index_data_arr_types,
+    raise_const_error,
 )
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
@@ -1301,21 +1302,21 @@ def common_validate_merge_merge_asof_spec(
         and (not is_overload_constant_str_list(on))
         and (not is_overload_constant_str(on))
     ):
-        raise BodoError(name_func + "(): on must be of type str or str list")
+        raise_const_error(name_func + "(): 'on' must be of type str or str list")
     # make sure left_on is of type str or strlist
     if (
         (not is_overload_none(left_on))
         and (not is_overload_constant_str_list(left_on))
         and (not is_overload_constant_str(left_on))
     ):
-        raise BodoError(name_func + "(): left_on must be of type str or str list")
+        raise_const_error(name_func + "(): left_on must be of type str or str list")
     # make sure right_on is of type str or strlist
     if (
         (not is_overload_none(right_on))
         and (not is_overload_constant_str_list(right_on))
         and (not is_overload_constant_str(right_on))
     ):
-        raise BodoError(name_func + "(): right_on must be of type str or str list")
+        raise_const_error(name_func + "(): right_on must be of type str or str list")
     # make sure leftindex is of type bool
     if not is_overload_constant_bool(left_index):
         raise BodoError(
@@ -1333,7 +1334,7 @@ def common_validate_merge_merge_asof_spec(
     if (not isinstance(suffixes, tuple)) and (
         not is_overload_constant_str_list(suffixes)
     ):
-        raise BodoError(
+        raise_const_error(
             name_func + "(): suffixes parameters should be ['_left', '_right']"
         )
     if isinstance(suffixes, tuple):
@@ -1635,7 +1636,7 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
         and (not is_overload_constant_str_list(on))
         and (not is_overload_constant_str(on))
     ):
-        raise BodoError("join(): on must be of type str or str list")
+        raise_const_error("join(): 'on' must be of type str or str list")
     # make sure 'on' has length 1 since we don't support Multiindex
     if not is_overload_none(on) and len(get_const_str_list(on)) != 1:
         raise BodoError("join(): len(on) must equals to 1 when specified.")
@@ -2073,7 +2074,7 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
     # whether 'by' is supplied is checked by numba
     # make sure 'by' is a const str or str list
     if not is_overload_constant_str(by) and not is_overload_constant_str_list(by):
-        raise BodoError(
+        raise_const_error(
             "sort_values(): 'by' parameter only supports "
             "a constant column label or column labels. by={}".format(by)
         )
