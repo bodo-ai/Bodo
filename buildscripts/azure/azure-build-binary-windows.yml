@@ -36,6 +36,20 @@ jobs:
 
   - bash: |
       conda create -y -n bodo_build conda-build anaconda-client conda-verify
+    displayName: 'Create Conda Env'
+
+  - bash: |
+      source activate bodo_build
+      if [[ $OBFUSCATE == 1 ]]; then
+        conda install -y astor
+        cd obfuscation
+        ./do_obfuscation.py
+      else
+        echo "Skipping Obfuscation"
+      fi
+    displayName: 'Obfuscation'
+
+  - bash: |
       source activate bodo_build
       cd buildscripts/bodo-conda-recipe/
       export TRIAL_PERIOD=$(TRIAL_PERIOD)
