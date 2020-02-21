@@ -1,0 +1,7 @@
+.. _prev_doc_link:
+
+Previous Release Documentation
+================================
+`Latest <../_static/redirect/latest.html>`_  
+
+`Bodo 2020.01 Release <../_static/redirect/2020_01.html>`_

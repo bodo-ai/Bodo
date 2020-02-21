@@ -8,7 +8,7 @@ Bodo documentation
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Version 2020.02
    :numbered:
 
    source/overview
@@ -23,4 +23,6 @@ Bodo documentation
    source/compilation
    source/aws
    source/jupyter
+   source/releases
    source/eula
+   source/prev_doc_link

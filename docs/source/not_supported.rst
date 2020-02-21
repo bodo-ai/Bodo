@@ -40,7 +40,7 @@ One can usually avoid these cases in numerical code without significant effort.
 .. _heterogeneousdtype:
 
 Heterogeneous types inside a data structure
-------------------------------------------
+---------------------------------------------
 
 - :code:`List` containing values of heterogeneous type
 	- :code:`myList = [1, "a", 0.1]`
