@@ -1488,11 +1488,13 @@ class SeriesPass:
 
         # dummy count loop to support len of group in agg UDFs
         if fdef == ("dummy_agg_count", "bodo.ir.aggregate"):
+
             def impl_agg_c(A):  # pragma: no cover
                 c = 0
                 for _ in numba.parfor.internal_prange(len(A)):
                     c += 1
                 return c
+
             return self._replace_func(
                 impl_agg_c, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
@@ -1635,49 +1637,7 @@ class SeriesPass:
         return self._replace_func(impl, args)
 
     def _run_call_series(self, assign, lhs, rhs, series_var, func_name):
-        if func_name in (
-            "sum",
-            "all",
-            "any",
-            "prod",
-            "mean",
-            "var",
-            "std",
-            "cumsum",
-            "cumprod",
-            "abs",
-            "count",
-            "unique",
-            "to_numpy",
-            "min",
-            "max",
-            "median",
-            "idxmin",
-            "idxmax",
-            "rename",
-            "corr",
-            "cov",
-            "nunique",
-            "describe",
-            "isna",
-            "isnull",
-            "isin",
-            "quantile",
-            "fillna",
-            "dropna",
-            "shift",
-            "pct_change",
-            "nlargest",
-            "notna",
-            "nsmallest",
-            "head",
-            "tail",
-            "argsort",
-            "sort_values",
-            "take",
-            "append",
-            "copy",
-        ):
+        if func_name in ("sum", "count", "isna", "isnull", "fillna", "sort_values"):
             if func_name == "isnull":
                 func_name = "isna"
             rhs.args.insert(0, series_var)
@@ -2196,7 +2156,9 @@ class SeriesPass:
             f, args, pre_nodes=nodes, extra_globals={"_func": func_global}
         )
 
-    def _handle_rolling_apply_func(self, func_node, dtype, out_dtype):  # pragma: no cover
+    def _handle_rolling_apply_func(
+        self, func_node, dtype, out_dtype
+    ):  # pragma: no cover
         if isinstance(func_node, ir.Global) and isinstance(
             func_node.value, numba.targets.registry.CPUDispatcher
         ):

@@ -2036,11 +2036,18 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
             "typemap",
             "return_type",
             "calltypes",
+            "type_annotation",
         ],
     )
+    TypeAnnotation = namedtuple("TypeAnnotation", ["typemap", "calltypes"])
+    ta = TypeAnnotation(typemap, calltypes)
     pm = DummyPipeline(
-        typingctx, targetctx, None, f_ir, typemap, return_type, calltypes
+        typingctx, targetctx, None, f_ir, typemap, return_type, calltypes, ta
     )
+    # run overload inliner to inline Series implementations such as Series.max()
+    inline_overload_pass = numba.typed_passes.InlineOverloads()
+    inline_overload_pass.run_pass(pm)
+
     series_pass = bodo.transforms.series_pass.SeriesPass(
         f_ir, typingctx, typemap, calltypes
     )

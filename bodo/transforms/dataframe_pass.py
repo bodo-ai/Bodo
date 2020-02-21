@@ -771,49 +771,9 @@ class DataFramePass:
         return [assign]
 
     def _run_call_dataframe(self, assign, lhs, rhs, df_var, func_name):
-        if func_name in (
-            "to_numpy",
-            "astype",
-            "copy",
-            "isna",
-            "isnull",
-            "notna",
-            "head",
-            "tail",
-            "isin",
-            "abs",
-            "corr",
-            "cov",
-            "count",
-            "prod",
-            "sum",
-            "max",
-            "min",
-            "mean",
-            "var",
-            "std",
-            "median",
-            "pct_change",
-            "describe",
-            "product",
-            "quantile",
-            "cumprod",
-            "cumsum",
-            "nunique",
-            "idxmax",
-            "idxmin",
-            "take",
-            "shift",
-            "set_index",
-            "duplicated",
-            "drop_duplicates",
-            "rename",
-            "query",
-        ):
+        if func_name in ("isna", "isnull", "count", "sum", "query"):
             if func_name == "isnull":
                 func_name = "isna"
-            if func_name == "product":
-                func_name = "prod"
             rhs.args.insert(0, df_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
@@ -2183,7 +2143,7 @@ class DataFramePass:
             exec(func_text, {}, loc_vars)
             _multi_inde_impl = loc_vars["_multi_inde_impl"]
             nodes += compile_func_single_block(
-                _multi_inde_impl, out_key_vars, None, self,
+                _multi_inde_impl, out_key_vars, None, self
             )
             index_var = nodes[-1].target
         else:

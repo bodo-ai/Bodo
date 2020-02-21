@@ -95,7 +95,7 @@ def overload_series_len(S):
         return lambda S: len(bodo.hiframes.pd_series_ext.get_series_data(S))
 
 
-@overload_method(SeriesType, "copy")
+@overload_method(SeriesType, "copy", inline="always")
 def overload_series_copy(S, deep=True):
     # TODO: test all Series data types
     # XXX specialized kinds until branch pruning is tested and working well
@@ -144,7 +144,7 @@ def overload_series_to_list(S):
     return impl
 
 
-@overload_method(SeriesType, "to_numpy")
+@overload_method(SeriesType, "to_numpy", inline="always")
 def overload_series_to_numpy(S, dtype=None, copy=False):
     if not is_overload_none(dtype) or not is_overload_false(copy):
         raise BodoError("'dtype' and 'copy' arguments of to_numpy() not supported yet")
@@ -201,7 +201,7 @@ def overload_series_sum(S):
     return impl
 
 
-@overload_method(SeriesType, "prod")
+@overload_method(SeriesType, "prod", inline="always")
 def overload_series_prod(S):
     init = S.dtype(1)
 
@@ -219,7 +219,7 @@ def overload_series_prod(S):
     return impl
 
 
-@overload_method(SeriesType, "any")
+@overload_method(SeriesType, "any", inline="always")
 def overload_series_any(S):
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -235,7 +235,7 @@ def overload_series_any(S):
     return impl
 
 
-@overload_method(SeriesType, "all")
+@overload_method(SeriesType, "all", inline="always")
 def overload_series_all(S):
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -251,7 +251,7 @@ def overload_series_all(S):
     return impl
 
 
-@overload_method(SeriesType, "mean")
+@overload_method(SeriesType, "mean", inline="always")
 def overload_series_mean(S):
     # see core/nanops.py/nanmean() for output types
     # TODO: more accurate port of dtypes from pandas
@@ -285,7 +285,7 @@ def overload_series_mean(S):
     return impl
 
 
-@overload_method(SeriesType, "var")
+@overload_method(SeriesType, "var", inline="always")
 def overload_series_var(S):
     def impl(S):  # pragma: no cover
         m = S.mean()
@@ -308,7 +308,7 @@ def overload_series_var(S):
     return impl
 
 
-@overload_method(SeriesType, "std")
+@overload_method(SeriesType, "std", inline="always")
 def overload_series_std(S):
     def impl(S):  # pragma: no cover
         return S.var() ** 0.5
@@ -316,7 +316,7 @@ def overload_series_std(S):
     return impl
 
 
-@overload_method(SeriesType, "cumsum")
+@overload_method(SeriesType, "cumsum", inline="always")
 def overload_series_cumsum(S):
     # TODO: support skipna
     def impl(S):  # pragma: no cover
@@ -328,7 +328,7 @@ def overload_series_cumsum(S):
     return impl
 
 
-@overload_method(SeriesType, "cumprod")
+@overload_method(SeriesType, "cumprod", inline="always")
 def overload_series_cumprod(S):
     # TODO: support skipna
     def impl(S):  # pragma: no cover
@@ -340,7 +340,7 @@ def overload_series_cumprod(S):
     return impl
 
 
-@overload_method(SeriesType, "rename")
+@overload_method(SeriesType, "rename", inline="always")
 def overload_series_rename(S, index=None):
     if not (index == bodo.string_type or isinstance(index, types.StringLiteral)):
         raise ValueError("Series.rename() 'index' can only be a string")
@@ -354,7 +354,7 @@ def overload_series_rename(S, index=None):
     return impl
 
 
-@overload_method(SeriesType, "abs")
+@overload_method(SeriesType, "abs", inline="always")
 def overload_series_abs(S):
     # TODO: timedelta
     def impl(S):  # pragma: no cover
@@ -385,7 +385,7 @@ def overload_series_count(S):
     return impl
 
 
-@overload_method(SeriesType, "corr")
+@overload_method(SeriesType, "corr", inline="always")
 def overload_series_corr(S, other, method="pearson", min_periods=None):
     if not is_overload_none(min_periods):
         raise ValueError("Series.corr(): 'min_periods' is not supported yet")
@@ -409,7 +409,7 @@ def overload_series_corr(S, other, method="pearson", min_periods=None):
     return impl
 
 
-@overload_method(SeriesType, "cov")
+@overload_method(SeriesType, "cov", inline="always")
 def overload_series_cov(S, other, min_periods=None):
     if not is_overload_none(min_periods):
         raise ValueError("Series.cov(): 'min_periods' is not supported yet")
@@ -426,7 +426,7 @@ def overload_series_cov(S, other, min_periods=None):
     return impl
 
 
-@overload_method(SeriesType, "min")
+@overload_method(SeriesType, "min", inline="always")
 def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None):
     if not (is_overload_none(axis) or is_overload_zero(axis)):
         raise ValueError("Series.min(): axis argument not supported")
@@ -474,7 +474,7 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
     return impl
 
 
-@overload_method(SeriesType, "max")
+@overload_method(SeriesType, "max", inline="always")
 def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None):
     if not (is_overload_none(axis) or is_overload_zero(axis)):
         raise ValueError("Series.min(): axis argument not supported")
@@ -521,7 +521,7 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
     return impl
 
 
-@overload_method(SeriesType, "idxmin")
+@overload_method(SeriesType, "idxmin", inline="always")
 def overload_series_idxmin(S, axis=0, skipna=True):
     if not is_overload_zero(axis):
         raise ValueError("Series.idxmin(): axis argument not supported")
@@ -541,7 +541,7 @@ def overload_series_idxmin(S, axis=0, skipna=True):
         return impl
 
 
-@overload_method(SeriesType, "idxmax")
+@overload_method(SeriesType, "idxmax", inline="always")
 def overload_series_idxmax(S, axis=0, skipna=True):
     if not is_overload_zero(axis):
         raise ValueError("Series.idxmax(): axis argument not supported")
@@ -561,7 +561,7 @@ def overload_series_idxmax(S, axis=0, skipna=True):
         return impl
 
 
-@overload_method(SeriesType, "median")
+@overload_method(SeriesType, "median", inline="always")
 def overload_series_median(S, axis=None, skipna=None, level=None, numeric_only=None):
     if not (is_overload_none(axis) or is_overload_zero(axis)):
         raise ValueError("Series.median(): axis argument not supported")
@@ -572,7 +572,7 @@ def overload_series_median(S, axis=None, skipna=None, level=None, numeric_only=N
     )
 
 
-@overload_method(SeriesType, "head")
+@overload_method(SeriesType, "head", inline="always")
 def overload_series_head(S, n=5):
     def impl(S, n=5):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -583,7 +583,7 @@ def overload_series_head(S, n=5):
     return impl
 
 
-@overload_method(SeriesType, "tail")
+@overload_method(SeriesType, "tail", inline="always")
 def overload_series_tail(S, n=5):
     def impl(S, n=5):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -594,7 +594,7 @@ def overload_series_tail(S, n=5):
     return impl
 
 
-@overload_method(SeriesType, "nlargest")
+@overload_method(SeriesType, "nlargest", inline="always")
 def overload_series_nlargest(S, n=5, keep="first"):
     # TODO: cache implementation
     # TODO: strings, categoricals
@@ -613,7 +613,7 @@ def overload_series_nlargest(S, n=5, keep="first"):
     return impl
 
 
-@overload_method(SeriesType, "nsmallest")
+@overload_method(SeriesType, "nsmallest", inline="always")
 def overload_series_nsmallest(S, n=5, keep="first"):
     # TODO: cache implementation
     def impl(S, n=5, keep="first"):  # pragma: no cover
@@ -630,7 +630,7 @@ def overload_series_nsmallest(S, n=5, keep="first"):
     return impl
 
 
-@overload_method(SeriesType, "notna")
+@overload_method(SeriesType, "notna", inline="always")
 def overload_series_notna(S):
     # TODO: make sure this is fused and optimized properly
     return lambda S: S.isna() == False
@@ -680,7 +680,7 @@ def overload_series_astype(S, dtype, copy=True, errors="raise"):
     return impl
 
 
-@overload_method(SeriesType, "take")
+@overload_method(SeriesType, "take", inline="always")
 def overload_series_take(S, indices, axis=0, convert=None, is_copy=True):
     # TODO: categorical, etc.
     def impl(S, indices, axis=0, convert=None, is_copy=True):  # pragma: no cover
@@ -695,7 +695,7 @@ def overload_series_take(S, indices, axis=0, convert=None, is_copy=True):
     return impl
 
 
-@overload_method(SeriesType, "argsort")
+@overload_method(SeriesType, "argsort", inline="always")
 def overload_series_argsort(S, axis=0, kind="quicksort", order=None):
     # TODO: categorical, etc.
     # TODO: optimize the if path of known to be no NaNs (e.g. after fillna)
@@ -735,7 +735,7 @@ def overload_series_sort_values(
     return impl
 
 
-@overload_method(SeriesType, "append")
+@overload_method(SeriesType, "append", inline="always")
 def overload_series_append(S, to_append, ignore_index=False, verify_integrity=False):
 
     if is_overload_true(ignore_index):
@@ -815,7 +815,7 @@ def overload_series_append(S, to_append, ignore_index=False, verify_integrity=Fa
     return impl_single
 
 
-@overload_method(SeriesType, "isin")
+@overload_method(SeriesType, "isin", inline="always")
 def overload_series_isin(S, values):
     # if input is Series or array, special implementation is necessary since it may
     # require hash-based shuffling of both inputs for parallelization
@@ -854,7 +854,7 @@ def overload_series_isin(S, values):
     return impl
 
 
-@overload_method(SeriesType, "quantile")
+@overload_method(SeriesType, "quantile", inline="always")
 def overload_series_quantile(S, q=0.5, interpolation="linear"):
     # TODO: datetime support
     def impl(S, q=0.5, interpolation="linear"):  # pragma: no cover
@@ -864,7 +864,7 @@ def overload_series_quantile(S, q=0.5, interpolation="linear"):
     return impl
 
 
-@overload_method(SeriesType, "nunique")
+@overload_method(SeriesType, "nunique", inline="always")
 def overload_series_nunique(S, dropna=True):
     # TODO: refactor, support NA, dt64
     def impl(S, dropna=True):  # pragma: no cover
@@ -874,7 +874,7 @@ def overload_series_nunique(S, dropna=True):
     return impl
 
 
-@overload_method(SeriesType, "unique")
+@overload_method(SeriesType, "unique", inline="always")
 def overload_series_unique(S):
     # TODO: refactor, support dt64
     def impl(S):  # pragma: no cover
@@ -884,7 +884,7 @@ def overload_series_unique(S):
     return impl
 
 
-@overload_method(SeriesType, "describe")
+@overload_method(SeriesType, "describe", inline="always")
 def overload_series_describe(S, percentiles=None, include=None, exclude=None):
     # TODO: support categorical, dt64, ...
     def impl(S, percentiles=None, include=None, exclude=None):  # pragma: no cover
@@ -1038,7 +1038,7 @@ def overload_series_fillna(
             return fillna_impl
 
 
-@overload_method(SeriesType, "dropna")
+@overload_method(SeriesType, "dropna", inline="always")
 def overload_series_dropna(S, axis=0, inplace=False):
     # TODO: fix inplace index output
     if is_overload_true(inplace):
@@ -1105,7 +1105,7 @@ def overload_series_dropna(S, axis=0, inplace=False):
             return dropna_impl
 
 
-@overload_method(SeriesType, "shift")
+@overload_method(SeriesType, "shift", inline="always")
 def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
     # TODO: handle dt64, strings
     def impl(S, periods=1, freq=None, axis=0, fill_value=None):  # pragma: no cover
@@ -1118,7 +1118,7 @@ def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
     return impl
 
 
-@overload_method(SeriesType, "pct_change")
+@overload_method(SeriesType, "pct_change", inline="always")
 def overload_series_pct_change(S, periods=1, fill_method="pad", limit=None, freq=None):
     # TODO: handle dt64, strings
     def impl(
