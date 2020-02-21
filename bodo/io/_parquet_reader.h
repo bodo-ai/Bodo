@@ -5,8 +5,6 @@
 #include "parquet/arrow/reader.h"
 using parquet::arrow::FileReader;
 
-extern "C" {
-
 // parquet type sizes (NOT arrow), parquet/types.h
 // boolean, int32, int64, int96, float, double, byte
 // XXX assuming int96 is always converted to int64 since it's timestamp
@@ -55,7 +53,5 @@ int64_t pq_read_list_string_parallel_single_file(std::shared_ptr<FileReader>,
                                    std::vector<uint32_t> *index_offset_vec = NULL,
                                    std::vector<uint8_t> *data_vec = NULL,
                                    std::vector<bool> *null_vec = NULL);
-
-}  // extern "C"
 
 #endif  // _PARQUET_READER_H_INCLUDED
