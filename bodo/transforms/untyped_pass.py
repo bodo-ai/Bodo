@@ -173,6 +173,8 @@ def remove_hiframes(rhs, lives, call_list):
         return True
     if call_list == ["add_consts_to_type", "typing", "utils", bodo]:
         return True
+    if call_list == ["str_arr_from_sequence", "str_arr_ext", "libs", bodo]:
+        return True
     if call_list == [list]:
         return True
     if call_list == ["groupby"]:
@@ -194,6 +196,8 @@ def remove_hiframes(rhs, lives, call_list):
     if len(call_list) == 2 and call_list[0] == "copy":
         return True
     if call_list == ["parse_datetime_str", "pd_timestamp_ext", "hiframes", bodo]:
+        return True
+    if call_list == [set]:
         return True
     return False
 
