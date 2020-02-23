@@ -5,10 +5,12 @@
 #include "parquet/arrow/reader.h"
 using parquet::arrow::FileReader;
 
+
+// TODO: remove this structure and use our own types
 // parquet type sizes (NOT arrow), parquet/types.h
-// boolean, int32, int64, int96, float, double, byte
+// boolean, int32, int64, int96, float, double, byte, int128
 // XXX assuming int96 is always converted to int64 since it's timestamp
-static int pq_type_sizes[] = {1, 4, 8, 8, 4, 8, 1};
+static int pq_type_sizes[] = {1, 4, 8, 8, 4, 8, 1, 16};
 
 void pq_init_reader(const char *file_name,
                     std::shared_ptr<FileReader> *a_reader);

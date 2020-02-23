@@ -244,6 +244,10 @@ pq_libs += ["arrow", "parquet"]
 ext_parquet = Extension(
     name="bodo.io.parquet_cpp",
     sources=["bodo/io/_parquet.cpp", "bodo/io/_parquet_reader.cpp"],
+    depends=[
+        "bodo/libs/_bodo_common.h",
+        "bodo/io/_parquet_reader.h"
+    ],
     libraries=pq_libs,
     include_dirs=["."] + ind,
     define_macros=[],

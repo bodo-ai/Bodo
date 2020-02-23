@@ -27,6 +27,7 @@ from bodo.libs.list_str_arr_ext import (
     construct_list_string_array,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.decimal_arr_ext import DecimalArrayType, decimal_type
 from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
 from bodo.utils.utils import unliteral_all, sanitize_varname
 from bodo.utils.typing import BodoError, BodoWarning
@@ -36,6 +37,7 @@ from bodo.utils.transform import get_str_const_value
 from numba.extending import intrinsic
 
 
+# TODO: remove this and use our own C types
 # from parquet/types.h
 # boolean, int32, int64, int96, float, double, byte
 # XXX arrow converts int96 timestamp to int64
@@ -48,6 +50,7 @@ _type_to_pq_dtype_number = {
     "np.float64": 5,
     "NS_DTYPE": 3,
     "np.int8": 6,
+    "int128": 7,
 }
 
 
@@ -320,6 +323,10 @@ def _gen_alloc(c_type, cname, alloc_size, el_type):
         return "  {0} = bodo.libs.bool_arr_ext.init_bool_array(np.empty({1}, {2}), np.empty(({1} + 7) >> 3, np.uint8))\n".format(
             cname, alloc_size, el_type
         )
+    if isinstance(c_type, DecimalArrayType):
+        return "  {0} = bodo.libs.decimal_arr_ext.alloc_decimal_array({1}, {2}, {3})\n".format(
+            cname, alloc_size, c_type.precision, c_type.scale
+        )
     return "  {} = np.empty({}, dtype={})\n".format(cname, alloc_size, el_type)
 
 
@@ -329,6 +336,10 @@ def get_element_type(dtype):
     if dtype == types.NPDatetime("ns"):
         # NS_DTYPE has to be defined in function globals
         return "NS_DTYPE"
+
+    # TODO: refactor _type_to_pq_dtype_number and remove this
+    if dtype == decimal_type:
+        return "int128"
 
     out = repr(dtype)
     if out == "bool":  # fix bool string
@@ -346,6 +357,10 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index):
     # likely an Arrow/Parquet bug
     if isinstance(pa_typ.type, pa.ListType) and pa_typ.type.value_type == pa.string():
         return list_string_array_type
+
+    # Decimal128Array type
+    if isinstance(pa_typ.type, pa.Decimal128Type):
+        return DecimalArrayType(pa_typ.type.precision, pa_typ.type.scale)
 
     _typ_map = {
         # boolean
@@ -685,6 +700,13 @@ def pq_read_parallel_lower(context, builder, sig, args):
     BooleanArrayType,
     types.int32,
 )
+@lower_builtin(
+    read_parquet,
+    types.Opaque("arrow_reader"),
+    types.intp,
+    DecimalArrayType,
+    types.int32,
+)
 def pq_read_int_arr_lower(context, builder, sig, args):
     fnty = lir.FunctionType(
         lir.IntType(64),
@@ -698,7 +720,10 @@ def pq_read_int_arr_lower(context, builder, sig, args):
     )
     int_arr_typ = sig.args[2]
     int_arr = cgutils.create_struct_proxy(int_arr_typ)(context, builder, args[2])
-    data_typ = types.Array(int_arr_typ.dtype, 1, "C")
+    dtype = int_arr_typ.dtype
+    if isinstance(int_arr_typ, DecimalArrayType):
+        dtype = bodo.libs.decimal_arr_ext.int128_type
+    data_typ = types.Array(dtype, 1, "C")
     data_array = make_array(data_typ)(context, builder, int_arr.data)
     null_arr_typ = types.Array(types.uint8, 1, "C")
     bitmap = make_array(null_arr_typ)(context, builder, int_arr.null_bitmap)
@@ -734,6 +759,15 @@ def pq_read_int_arr_lower(context, builder, sig, args):
     types.intp,
     types.intp,
 )
+@lower_builtin(
+    read_parquet_parallel,
+    types.Opaque("arrow_reader"),
+    types.intp,
+    DecimalArrayType,
+    types.int32,
+    types.intp,
+    types.intp,
+)
 def pq_read_parallel_int_arr_lower(context, builder, sig, args):
     fnty = lir.FunctionType(
         lir.IntType(32),
@@ -749,7 +783,10 @@ def pq_read_parallel_int_arr_lower(context, builder, sig, args):
     )
     int_arr_typ = sig.args[2]
     int_arr = cgutils.create_struct_proxy(int_arr_typ)(context, builder, args[2])
-    data_typ = types.Array(int_arr_typ.dtype, 1, "C")
+    dtype = int_arr_typ.dtype
+    if isinstance(int_arr_typ, DecimalArrayType):
+        dtype = bodo.libs.decimal_arr_ext.int128_type
+    data_typ = types.Array(dtype, 1, "C")
     data_array = make_array(data_typ)(context, builder, int_arr.data)
     null_arr_typ = types.Array(types.uint8, 1, "C")
     bitmap = make_array(null_arr_typ)(context, builder, int_arr.null_bitmap)
