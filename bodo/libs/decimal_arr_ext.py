@@ -30,6 +30,7 @@ from numba.extending import (
     overload,
     overload_attribute,
 )
+from numba.array_analysis import ArrayAnalysis
 from bodo.utils.typing import (
     get_overload_const_int,
     is_overload_constant_int,
@@ -56,6 +57,10 @@ class DecimalArrayType(types.ArrayCompatible):
 
     def copy(self):
         return DecimalArrayType(self.precision, self.scale)
+
+    @property
+    def dtype(self):
+        return decimal_type
 
 
 # store data and nulls as regular numpy arrays without payload machineray
@@ -87,9 +92,11 @@ def init_decimal_array(typingctx, data, null_bitmap, precision_tp, scale_tp=None
     assert is_overload_constant_int(scale_tp)
 
     def codegen(context, builder, signature, args):
-        data_val, bitmap_val = args
+        data_val, bitmap_val, _, _ = args
         # create decimal_arr struct and store values
-        decimal_arr = cgutils.create_struct_proxy(signature.return_type)(context, builder)
+        decimal_arr = cgutils.create_struct_proxy(signature.return_type)(
+            context, builder
+        )
         decimal_arr.data = data_val
         decimal_arr.null_bitmap = bitmap_val
 
@@ -113,6 +120,20 @@ def alloc_decimal_array(n, precision, scale):
     data_arr = np.empty(n, dtype=int128_type)
     nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
     return init_decimal_array(data_arr, nulls, precision, scale)
+
+
+def alloc_decimal_array_equiv(self, scope, equiv_set, args, kws):
+    """Array analysis function for alloc_decimal_array() passed to Numba's array
+    analysis extension. Assigns output array's size as equivalent to the input size
+    variable.
+    """
+    assert len(args) == 1 and not kws
+    return args[0], []
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_decimal_arr_ext_alloc_decimal_array = (
+    alloc_decimal_array_equiv
+)
 
 
 @overload(len)

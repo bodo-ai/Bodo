@@ -193,6 +193,7 @@ def is_alloc_callname(func_name, mod_name):
         or (func_name == "alloc_bool_array" and mod_name == "bodo.libs.bool_arr_ext")
         or (func_name == "alloc_datetime_date_array"
             and mod_name == "bodo.hiframes.datetime_date_ext")
+        or (func_name == "alloc_decimal_array" and mod_name == "bodo.libs.decimal_arr_ext")
     )
 
 
@@ -348,6 +349,7 @@ def is_array_typ(var_typ):
         or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
         or isinstance(var_typ, bodo.hiframes.pd_multi_index_ext.MultiIndexType)
         or isinstance(var_typ, IntegerArrayType)
+        or isinstance(var_typ, bodo.libs.decimal_arr_ext.DecimalArrayType)
         or var_typ == boolean_array
         or isinstance(var_typ, bodo.hiframes.pd_categorical_ext.CategoricalArray)
         or var_typ == bodo.libs.str_ext.random_access_string_array

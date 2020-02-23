@@ -43,6 +43,7 @@ from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.decimal_arr_ext import decimal_type, DecimalArrayType
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
@@ -179,6 +180,10 @@ def _get_series_array_type(dtype):
 
     if dtype == datetime_date_type:
         return bodo.hiframes.datetime_date_ext.datetime_date_array_type
+
+    if dtype == decimal_type:
+        # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
+        return DecimalArrayType(38, 18)
 
     # TODO: other types?
     # regular numpy array

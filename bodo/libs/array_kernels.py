@@ -25,6 +25,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.utils.shuffle import getitem_arr_tup_single
 from bodo.utils.utils import build_set
 from bodo.ir.sort import (
@@ -84,7 +85,7 @@ def isna_overload(arr, i):
         return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
 
     # masked Integer array, boolean array
-    if isinstance(arr, IntegerArrayType) or arr == boolean_array:
+    if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr == boolean_array:
         return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
             arr._null_bitmap, i
         )

@@ -1,5 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
+import decimal
 import datetime
 import warnings
 import numpy as np
@@ -32,6 +33,7 @@ from numba.extending import (
 from numba import cgutils
 from bodo.libs.str_ext import string_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.libs.decimal_arr_ext import decimal_type, DecimalArrayType
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type, datetime_date_type
 from bodo.utils.typing import (
     BodoWarning,
@@ -1516,6 +1518,9 @@ def _typeof_ndarray(val, c):
             return list_string_array_type
         if dtype == datetime_date_type:
             return datetime_date_array_type  # TODO: test array of datetime.date
+        if dtype == decimal_type:
+            # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
+            return DecimalArrayType(38, 18)
         raise ValueError("Unsupported array dtype: %s" % (val.dtype,))
     layout = numba.numpy_support.map_layout(val)
     readonly = not val.flags.writeable
@@ -1550,6 +1555,8 @@ def _infer_ndarray_obj_dtype(val):
         return bodo.hiframes.boxing._infer_series_list_dtype(val, "array")
     if isinstance(first_val, datetime.date):
         return datetime_date_type
+    if isinstance(first_val, decimal.Decimal):
+        return decimal_type
 
 
 # TODO: support array of strings
