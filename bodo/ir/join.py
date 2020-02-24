@@ -84,6 +84,7 @@ class Join(ir.Stmt):
         suffix_x,
         suffix_y,
         loc,
+        is_join,
     ):
         self.df_out = df_out
         self.left_df = left_df
@@ -97,7 +98,7 @@ class Join(ir.Stmt):
         self.suffix_x = suffix_x
         self.suffix_y = suffix_y
         self.loc = loc
-
+        self.is_join = is_join
         # keep the origin of output columns to enable proper dead code elimination
         # columns with common name that are not common keys will get a suffix
         comm_keys = set(left_keys) & set(right_keys)
@@ -392,7 +393,6 @@ def join_distributed_run(
     join_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass
 ):
     left_parallel, right_parallel = _get_table_parallel_flags(join_node, array_dists)
-
     method = "hash"
     pd_join_func = None
     if bodo.use_pandas_join:
@@ -410,6 +410,26 @@ def join_distributed_run(
     left_key_vars = tuple(join_node.left_vars[c] for c in join_node.left_keys)
     right_key_vars = tuple(join_node.right_vars[c] for c in join_node.right_keys)
 
+    left_index = "$_bodo_index_" in join_node.left_keys
+    right_index = "$_bodo_index_" in join_node.right_keys
+    optional_col_var = ()
+    optional_key_tuple = ()
+    optional_column = False
+    if left_index and not right_index and not join_node.is_join:
+        optional_key = join_node.right_keys[0]
+        optional_key_tuple = (optional_key,)
+        optional_col_var = (join_node.right_vars[optional_key],)
+        optional_column = True
+
+    if right_index and not left_index and not join_node.is_join:
+        optional_key = join_node.left_keys[0]
+        optional_key_tuple = (optional_key,)
+        optional_col_var = (join_node.left_vars[optional_key],)
+        optional_column = True
+
+    out_optional_key_vars = tuple(
+        join_node.df_out_vars[cname] for cname in optional_key_tuple
+    )
     left_other_col_vars = tuple(
         v
         for (n, v) in sorted(join_node.left_vars.items())
@@ -422,19 +442,26 @@ def join_distributed_run(
     )
     # get column types
     arg_vars = (
-        left_key_vars + right_key_vars + left_other_col_vars + right_other_col_vars
+        optional_col_var
+        + left_key_vars
+        + right_key_vars
+        + left_other_col_vars
+        + right_other_col_vars
     )
     arg_typs = tuple(typemap[v.name] for v in arg_vars)
     scope = arg_vars[0].scope
 
     # arg names of non-key columns
+    optional_names = tuple("opti_c" + str(i) for i in range(len(optional_col_var)))
+
     left_other_names = tuple("t1_c" + str(i) for i in range(len(left_other_col_vars)))
     right_other_names = tuple("t2_c" + str(i) for i in range(len(right_other_col_vars)))
 
     left_key_names = tuple("t1_key" + str(i) for i in range(n_keys))
     right_key_names = tuple("t2_key" + str(i) for i in range(n_keys))
 
-    func_text = "def f({}, {},{}{}{}):\n".format(
+    func_text = "def f({}{}, {},{}{}{}):\n".format(
+        ("{},".format(optional_names[0]) if len(optional_names) == 1 else ""),
         ",".join(left_key_names),
         ",".join(right_key_names),
         ",".join(left_other_names),
@@ -510,8 +537,6 @@ def join_distributed_run(
 
         return join_node.df_out_vars[cname]
 
-    # align output variables for local merge
-    # add keys first (TODO: remove dead keys)
     out_l_key_vars = tuple(_get_out_col_var(c, True) for c in join_node.left_keys)
     out_r_key_vars = tuple(_get_out_col_var(c, False) for c in join_node.right_keys)
     # create dummy variable if right key is not actually returned
@@ -523,7 +548,7 @@ def join_distributed_run(
         for v, w in zip(out_r_key_vars, out_l_key_vars):
             typemap[v.name] = typemap[w.name]
 
-    merge_out = out_l_key_vars + out_r_key_vars
+    merge_out = out_optional_key_vars + out_l_key_vars + out_r_key_vars
     merge_out += tuple(
         _get_out_col_var(n, True)
         for (n, v) in sorted(join_node.left_vars.items())
@@ -567,26 +592,19 @@ def join_distributed_run(
         assert method == "hash"
         is_left = join_node.how in ("left", "outer")
         is_right = join_node.how == "outer"
-        if bodo.use_cpp_hash_join:
-            func_text += _gen_local_hash_join(
-                left_key_names,
-                right_key_names,
-                left_key_types,
-                right_key_types,
-                left_other_names,
-                right_other_names,
-                vect_same_key,
-                is_left,
-                is_right,
-            )
-        else:
-            func_text += (
-                "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
-                " = bodo.ir.join.local_hash_join(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
-                    is_left, is_right
-                )
-            )
-    if not bodo.use_cpp_hash_join or join_node.how == "asof" or method != "hash":
+        func_text += _gen_local_hash_join(
+            optional_column,
+            left_key_names,
+            right_key_names,
+            left_key_types,
+            right_key_types,
+            left_other_names,
+            right_other_names,
+            vect_same_key,
+            is_left,
+            is_right,
+        )
+    if join_node.how == "asof" or method != "hash":
         for i in range(len(left_other_names)):
             func_text += "    left_{} = out_data_left[{}]\n".format(i, i)
         for i in range(len(right_other_names)):
@@ -600,19 +618,22 @@ def join_distributed_run(
                 i, i, _gen_reverse_type_match(right_key_types[i], left_key_types[i])
             )
 
+    idx = 0
+    if optional_column:
+        func_text += "    {} = opti_0\n".format(out_names[idx])
+        idx += 1
     for i in range(n_keys):
-        func_text += "    {} = t1_keys_{}\n".format(out_names[i], i)
+        func_text += "    {} = t1_keys_{}\n".format(out_names[idx], i)
+        idx += 1
     for i in range(n_keys):
-        func_text += "    {} = t2_keys_{}\n".format(out_names[n_keys + i], i)
-
+        func_text += "    {} = t2_keys_{}\n".format(out_names[idx], i)
+        idx += 1
     for i in range(len(left_other_names)):
-        func_text += "    {} = left_{}\n".format(out_names[i + 2 * n_keys], i)
-
+        func_text += "    {} = left_{}\n".format(out_names[idx], i)
+        idx += 1
     for i in range(len(right_other_names)):
-        func_text += "    {} = right_{}\n".format(
-            out_names[i + 2 * n_keys + len(left_other_names)], i
-        )
-
+        func_text += "    {} = right_{}\n".format(out_names[idx], i)
+        idx += 1
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     join_impl = loc_vars["f"]
@@ -706,6 +727,7 @@ def _get_table_parallel_flags(join_node, array_dists):
 
 
 def _gen_local_hash_join(
+    optional_column,
     left_key_names,
     right_key_names,
     left_key_types,
@@ -734,11 +756,21 @@ def _gen_local_hash_join(
     func_text += "    vect_same_key = np.array([{}])\n".format(
         ",".join("1" if x else "0" for x in vect_same_key)
     )
-    func_text += "    out_table = hash_join_table(table_total, {}, {}, {}, vect_same_key.ctypes, {}, {})\n".format(
-        n_keys, len(left_other_names), len(right_other_names), is_left, is_right
+    func_text += "    out_table = hash_join_table(table_total, {}, {}, {}, vect_same_key.ctypes, {}, {}, {})\n".format(
+        n_keys,
+        len(left_other_names),
+        len(right_other_names),
+        is_left,
+        is_right,
+        optional_column,
     )
     func_text += "    delete_table(table_total)\n"
     idx = 0
+    if optional_column:
+        func_text += "    opti_0 = info_to_array(info_from_table(out_table, {}), opti_c0)\n".format(
+            idx
+        )
+        idx += 1
     for i, t in enumerate(left_key_names):
         func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), t1_keys[{}]){}\n".format(
             i, idx, i, _gen_reverse_type_match(left_key_types[i], right_key_types[i])
@@ -759,6 +791,7 @@ def _gen_local_hash_join(
             i, idx, t
         )
         idx += 1
+
     func_text += "    delete_table(out_table)\n"
     return func_text
 
@@ -1205,97 +1238,6 @@ def setnan_elem_buff_tup_overload(data, ind):
     exec(func_text, {"setnan_elem_buff": setnan_elem_buff}, loc_vars)
     cp_impl = loc_vars["f"]
     return cp_impl
-
-
-# @numba.njit
-def local_hash_join_impl(
-    left_keys, right_keys, data_left, data_right, is_left=False, is_right=False
-):  # pragma: no cover
-    l_len = len(left_keys[0])
-    r_len = len(right_keys[0])
-    # TODO: approximate output size properly
-    curr_size = 101 + min(l_len, r_len) // 2
-    if is_left:
-        curr_size = int(1.1 * l_len)
-    if is_right:
-        curr_size = int(1.1 * r_len)
-    if is_left and is_right:
-        curr_size = int(1.1 * (l_len + r_len))
-
-    out_left_key = alloc_arr_tup(curr_size, left_keys)
-    out_data_left = alloc_arr_tup(curr_size, data_left)
-    out_data_right = alloc_arr_tup(curr_size, data_right)
-    # keep track of matched keys in case of right join
-    if is_right:
-        r_matched = np.full(r_len, False, np.bool_)
-
-    out_ind = 0
-    m = bodo.libs.dict_ext.multimap_int64_init()
-    for i in range(r_len):
-        # store hash if keys are tuple or non-int
-        k = _hash_if_tup(getitem_arr_tup(right_keys, i))
-        bodo.libs.dict_ext.multimap_int64_insert(m, k, i)
-
-    r = bodo.libs.dict_ext.multimap_int64_equal_range_alloc()
-    for i in range(l_len):
-        l_key = getitem_arr_tup(left_keys, i)
-        l_data_val = getitem_arr_tup(data_left, i)
-        l_data_nan_bits = get_nan_bits_tup(data_left, i)
-        k = _hash_if_tup(l_key)
-        bodo.libs.dict_ext.multimap_int64_equal_range_inplace(m, k, r)
-        num_matched = 0
-        for j in r:
-            # if hash for stored, check left key against the actual right key
-            r_ind = _check_ind_if_hashed(right_keys, j, l_key)
-            if r_ind == -1:
-                continue
-            if is_right:
-                r_matched[r_ind] = True
-            out_left_key = copy_elem_buff_tup(out_left_key, out_ind, l_key)
-            r_data_val = getitem_arr_tup(data_right, r_ind)
-            r_data_nan_bits = get_nan_bits_tup(data_right, r_ind)
-            out_data_right = copy_elem_buff_tup(out_data_right, out_ind, r_data_val)
-            set_nan_bits_tup(out_data_right, out_ind, r_data_nan_bits)
-            out_data_left = copy_elem_buff_tup(out_data_left, out_ind, l_data_val)
-            set_nan_bits_tup(out_data_left, out_ind, l_data_nan_bits)
-            out_ind += 1
-            num_matched += 1
-        if is_left and num_matched == 0:
-            out_left_key = copy_elem_buff_tup(out_left_key, out_ind, l_key)
-            out_data_left = copy_elem_buff_tup(out_data_left, out_ind, l_data_val)
-            set_nan_bits_tup(out_data_left, out_ind, l_data_nan_bits)
-            out_data_right = setnan_elem_buff_tup(out_data_right, out_ind)
-            out_ind += 1
-
-    bodo.libs.dict_ext.multimap_int64_equal_range_dealloc(r)
-
-    # produce NA rows for unmatched right keys
-    if is_right:
-        for i in range(r_len):
-            if not r_matched[i]:
-                r_key = getitem_arr_tup(right_keys, i)
-                r_data_val = getitem_arr_tup(data_right, i)
-                r_data_nan_bits = get_nan_bits_tup(data_right, i)
-                out_left_key = copy_elem_buff_tup(out_left_key, out_ind, r_key)
-                out_data_right = copy_elem_buff_tup(out_data_right, out_ind, r_data_val)
-                set_nan_bits_tup(out_data_right, out_ind, r_data_nan_bits)
-                out_data_left = setnan_elem_buff_tup(out_data_left, out_ind)
-                out_ind += 1
-
-    out_left_key = trim_arr_tup(out_left_key, out_ind)
-
-    out_right_key = copy_arr_tup(out_left_key)
-    out_data_left = trim_arr_tup(out_data_left, out_ind)
-    out_data_right = trim_arr_tup(out_data_right, out_ind)
-
-    return out_left_key, out_right_key, out_data_left, out_data_right
-
-
-@generated_jit(nopython=True, cache=True, no_cpython_wrapper=True)
-def local_hash_join(
-    left_keys, right_keys, data_left, data_right, is_left=False, is_right=False
-):
-    return local_hash_join_impl
 
 
 @generated_jit(nopython=True, cache=True)

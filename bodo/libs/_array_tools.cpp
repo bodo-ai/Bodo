@@ -1629,12 +1629,14 @@ bool KeyComparisonAsPython(std::vector<array_info*> const& columns,
  * @param n_data_right_t : the number of columns of data on the right
  * @param is_left : whether we do merging on the left
  * @param is_right : whether we do merging on the right.
+ * @param optional_col : When doing a merge on column and index, the key
+ *    is put also in output, so we need one additional column in that case.
  * @return the returned table used in the code.
  */
 table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
                             int64_t n_data_left_t, int64_t n_data_right_t,
                             int64_t* vect_same_key, bool is_left,
-                            bool is_right) {
+                            bool is_right, bool optional_col) {
 #undef DEBUG_JOIN
 #ifdef DEBUG_JOIN
     std::cout << "IN_TABLE:\n";
@@ -1660,7 +1662,16 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
         int64_t val = vect_same_key[iKey];
         std::cout << "iKey=" << iKey << " vect_same_key[iKey]=" << val << "\n";
     }
+    std::cout << "n_key_t=" << n_key_t << "\n";
+    std::cout << "n_data_left_t=" << n_data_left_t << " n_data_right_t=" << n_data_right_t << "\n";
+    std::cout << "is_left=" << is_left << " is_right=" << is_right << "\n";
+    std::cout << "optional_col=" << optional_col << "\n";
 #endif
+    // in the case of merging on index and one column, it can only be one column
+    if (n_key_t > 1 && optional_col) {
+        PyErr_SetString(PyExc_RuntimeError, "if optional_col=true then we must have n_key_t=1");
+        return NULL;
+    }
     // This is a hack because we may access vect_same_key_b above n_key
     // even if that is irrelevant to the computation.
     //
@@ -1844,6 +1855,17 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
                   << ListPairWrite[iPair].second << "\n";
 #endif
     std::vector<array_info*> out_arrs;
+    // Inserting the optional column in the case of merging on column and index.
+    if (optional_col) {
+        size_t i = 0;
+        if (ChoiceOpt == 0) {
+            out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i,
+                                             n_tot_left + i, 2));
+        } else {
+            out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
+                                             n_tot_left + i, i, 2));
+        }
+    }
     // Inserting the left data
     for (size_t i = 0; i < n_tot_left; i++) {
         if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
@@ -4445,6 +4467,7 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values, 
     free_array(shuf_out_arr);
     delete [] hashes;
 }
+
 
 /**
  * This operation groups rows in a distributed table based on keys, and applies

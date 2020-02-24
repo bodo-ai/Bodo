@@ -277,54 +277,28 @@ def test_merge_rightindex_only():
         bodo.jit(impl)(df1, df2)
 
 
-# tests right_index=True and len(left_on)!=1
-def test_merge_rightindex_lefton():
+def test_rightindex_lefton_len():
     def impl(df1, df2):
-        return df1.merge(df2, right_index=True, left_on=["A"])
+        return df1.merge(df2, right_index=True, left_on=["A", "C"])
 
     with pytest.raises(
         BodoError,
-        match="right_index = True and specifying left_on is not suppported yet",
+        match="len\(left_on\) must equal the number "
+        'of levels in the index of "right", which is 1',
     ):
         bodo.jit(impl)(df1, df2)
 
 
-# tests left_index=True and len(right_on)!=1
-def test_merge_leftindex_righton():
+def test_leftindex_righton_len():
     def impl(df1, df2):
-        return df1.merge(df2, left_index=True, right_on=["A"])
+        return df1.merge(df2, left_index=True, right_on=["A", "C"])
 
     with pytest.raises(
         BodoError,
-        match="left_index = True and specifying right_on is not suppported yet",
+        match="len\(right_on\) must equal the number "
+        'of levels in the index of "left", which is 1',
     ):
         bodo.jit(impl)(df1, df2)
-
-
-# # tests right_index=True and len(left_on)!=1, not supported right now
-# def test_rightindex_lefton_len():
-#     def impl(df1, df2):
-#         return df1.merge(df2, right_index=True, left_on=["A", "C"])
-
-#     with pytest.raises(
-#         BodoError,
-#         match="len\(left_on\) must equal the number "
-#         'of levels in the index of "right", which is 1',
-#     ):
-#         bodo.jit(impl)(df1, df2)
-
-
-# # tests left_index=True and len(right_on)!=1, not supported right now
-# def test_leftindex_righton_len():
-#     def impl(df1, df2):
-#         return df1.merge(df2, left_index=True, right_on=["A", "C"])
-
-#     with pytest.raises(
-#         BodoError,
-#         match="len\(right_on\) must equal the number "
-#         'of levels in the index of "left", which is 1',
-#     ):
-#         bodo.jit(impl)(df1, df2)
 
 
 # tests sort is of type bool

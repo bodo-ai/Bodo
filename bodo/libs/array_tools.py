@@ -48,7 +48,9 @@ ll.add_symbol("drop_duplicates_table", array_tools_ext.drop_duplicates_table)
 ll.add_symbol("sort_values_table", array_tools_ext.sort_values_table)
 ll.add_symbol("groupby_and_aggregate", array_tools_ext.groupby_and_aggregate)
 ll.add_symbol("array_isin", array_tools_ext.array_isin)
-ll.add_symbol("compute_node_partition_by_hash", array_tools_ext.compute_node_partition_by_hash)
+ll.add_symbol(
+    "compute_node_partition_by_hash", array_tools_ext.compute_node_partition_by_hash
+)
 
 
 class ArrayInfoType(types.Type):
@@ -72,7 +74,7 @@ register_model(TableType)(models.OpaqueModel)
 @intrinsic
 def array_to_info(typingctx, arr_type_t):
     def codegen(context, builder, sig, args):
-        in_arr, = args
+        (in_arr,) = args
         arr_type = arr_type_t
         # arr_info struct keeps a reference
         if context.enable_nrt:
@@ -111,7 +113,9 @@ def array_to_info(typingctx, arr_type_t):
         # arrays.
         # TODO: create CategoricalArray on C++ side to handle NAs (-1) properly
         if isinstance(arr_type, CategoricalArray):
-            in_arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr).codes
+            in_arr = cgutils.create_struct_proxy(arr_type)(
+                context, builder, in_arr
+            ).codes
             int_dtype = get_categories_int_type(arr_type.dtype)
             arr_type = types.Array(int_dtype, 1, "C")
 
@@ -211,24 +215,18 @@ def _lower_info_to_array_numpy(arr_type, context, builder, in_info):
             lir.IntType(8).as_pointer().as_pointer(),
         ],
     )  # meminfo
-    fn_tp = builder.module.get_or_insert_function(
-        fnty, name="info_to_numpy_array"
-    )
+    fn_tp = builder.module.get_or_insert_function(fnty, name="info_to_numpy_array")
     builder.call(fn_tp, [in_info, length_ptr, data_ptr, meminfo_ptr])
 
     intp_t = context.get_value_type(types.intp)
-    shape_array = cgutils.pack_array(
-        builder, [builder.load(length_ptr)], ty=intp_t
-    )
+    shape_array = cgutils.pack_array(builder, [builder.load(length_ptr)], ty=intp_t)
     itemsize = context.get_constant(
-        types.intp,
-        context.get_abi_sizeof(context.get_data_type(arr_type.dtype)),
+        types.intp, context.get_abi_sizeof(context.get_data_type(arr_type.dtype)),
     )
     strides_array = cgutils.pack_array(builder, [itemsize], ty=intp_t)
 
     data = builder.bitcast(
-        builder.load(data_ptr),
-        context.get_data_type(arr_type.dtype).as_pointer(),
+        builder.load(data_ptr), context.get_data_type(arr_type.dtype).as_pointer(),
     )
 
     numba.targets.arrayobj.populate_array(
@@ -286,7 +284,9 @@ def info_to_array(typingctx, info_type, arr_type):
             out_arr = cgutils.create_struct_proxy(arr_type)(context, builder)
             int_dtype = get_categories_int_type(arr_type.dtype)
             int_arr_type = types.Array(int_dtype, 1, "C")
-            out_arr.codes = _lower_info_to_array_numpy(int_arr_type, context, builder, in_info)
+            out_arr.codes = _lower_info_to_array_numpy(
+                int_arr_type, context, builder, in_info
+            )
             return out_arr._getvalue()
 
         # Numpy
@@ -427,7 +427,7 @@ def arr_info_list_to_table(typingctx, list_arr_info_typ):
     assert list_arr_info_typ == types.List(array_info_type)
 
     def codegen(context, builder, sig, args):
-        info_list, = args
+        (info_list,) = args
         inst = numba.targets.listobj.ListInstance(
             context, builder, sig.args[0], info_list
         )
@@ -499,8 +499,10 @@ def hash_join_table(
     same_vect_t,
     is_left_t,
     is_right_t,
+    optional_col_t,
 ):
     """
+    Interface to the hash join of two tables.
     """
     assert table_t == table_type
 
@@ -513,6 +515,7 @@ def hash_join_table(
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(1),
             ],
@@ -529,6 +532,7 @@ def hash_join_table(
             types.voidptr,
             types.boolean,
             types.boolean,
+            types.boolean,
         ),
         codegen,
     )
@@ -537,33 +541,40 @@ def hash_join_table(
 @intrinsic
 def compute_node_partition_by_hash(typingctx, table_t, n_keys_t, n_pes_t):
     """
+    Interface to the computation of the hash node partition from C++
     """
     assert table_t == table_type
 
     def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
-                                [lir.IntType(8).as_pointer(),
-                                 lir.IntType(64),
-                                 lir.IntType(64)])
-        fn_tp = builder.module.get_or_insert_function(fnty, name="compute_node_partition_by_hash")
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [lir.IntType(8).as_pointer(), lir.IntType(64), lir.IntType(64)],
+        )
+        fn_tp = builder.module.get_or_insert_function(
+            fnty, name="compute_node_partition_by_hash"
+        )
         return builder.call(fn_tp, args)
 
     return table_type(table_t, types.int64, types.int64), codegen
 
 
-
 @intrinsic
 def sort_values_table(typingctx, table_t, n_keys_t, vect_ascending_t, na_position_b_t):
     """
+    Interface to the sorting of tables.
     """
     assert table_t == table_type
 
     def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(lir.IntType(8).as_pointer(),
-                                [lir.IntType(8).as_pointer(),
-                                 lir.IntType(64),
-                                 lir.IntType(8).as_pointer(),
-                                 lir.IntType(1)])
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+            ],
+        )
         fn_tp = builder.module.get_or_insert_function(fnty, name="sort_values_table")
         return builder.call(fn_tp, args)
 
@@ -580,7 +591,12 @@ def drop_duplicates_table(typingctx, table_t, parallel_t, nkey_t, keep_t):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer(), lir.IntType(1), lir.IntType(64), lir.IntType(64)],
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(64),
+                lir.IntType(64),
+            ],
         )
         fn_tp = builder.module.get_or_insert_function(
             fnty, name="drop_duplicates_table"
@@ -652,11 +668,17 @@ def groupby_and_aggregate(
     )
 
 
-_array_isin = types.ExternalFunction("array_isin", types.void(
-    array_info_type, array_info_type, array_info_type, types.bool_))
+_array_isin = types.ExternalFunction(
+    "array_isin",
+    types.void(array_info_type, array_info_type, array_info_type, types.bool_),
+)
 
 
 @numba.njit
 def array_isin(out_arr, in_arr, in_values, is_parallel):
-    _array_isin(array_to_info(out_arr), array_to_info(in_arr), array_to_info(in_values),
-        is_parallel)
+    _array_isin(
+        array_to_info(out_arr),
+        array_to_info(in_arr),
+        array_to_info(in_values),
+        is_parallel,
+    )

@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 import numba
 from numba import types, cgutils
+from bodo.hiframes.pd_index_ext import StringIndexType
 from numba.extending import (
     models,
     register_model,
@@ -1246,13 +1247,12 @@ def merge_overload(
     func_text += (
         "    suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):\n"
     )
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, '{}', '{}', '{}')\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, '{}', '{}', '{}', False)\n".format(
         left_keys, right_keys, how, suffix_x, suffix_y
     )
 
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
-    # print(func_text)
     _impl = loc_vars["_impl"]
     return _impl
 
@@ -1478,7 +1478,7 @@ def validate_merge_asof_spec(
             )
 
 
-def validate_keys_length(
+def validate_merge_asof_keys_length(
     left_on, right_on, left_index, right_index, left_keys, right_keys
 ):
     # make sure right_keys and left_keys have the same size
@@ -1489,22 +1489,31 @@ def validate_keys_length(
         raise BodoError(
             "merge(): right_index = True and specifying left_on is not suppported yet."
         )
-        # error checking after specifying left_on and right_index = True is supported
-        # if len(left_keys) != 1:
-        #     raise BodoError(
-        #         "merge(): len(left_on) must equal the number "
-        #         'of levels in the index of "right", which is 1'
-        #     )
     if not is_overload_none(right_on) and is_overload_true(left_index):
         raise BodoError(
             "merge(): left_index = True and specifying right_on is not suppported yet."
         )
-        # error checking after specifying right_on and left_index = True is supported
-        # if len(right_keys) != 1:
-        #     raise BodoError(
-        #         "merge(): len(right_on) must equal the number "
-        #         'of levels in the index of "left", which is 1'
-        #     )
+
+
+def validate_keys_length(
+    left_on, right_on, left_index, right_index, left_keys, right_keys
+):
+    # make sure right_keys and left_keys have the same size
+    if (not is_overload_true(left_index)) and (not is_overload_true(right_index)):
+        if len(right_keys) != len(left_keys):
+            raise BodoError("merge(): len(right_on) must equal len(left_on)")
+    if is_overload_true(right_index):
+        if len(left_keys) != 1:
+            raise BodoError(
+                "merge(): len(left_on) must equal the number "
+                'of levels in the index of "right", which is 1'
+            )
+    if is_overload_true(left_index):
+        if len(right_keys) != 1:
+            raise BodoError(
+                "merge(): len(right_on) must equal the number "
+                'of levels in the index of "left", which is 1'
+            )
 
 
 def validate_keys_dtypes(
@@ -1517,15 +1526,25 @@ def validate_keys_dtypes(
     if is_overload_true(left_index) or is_overload_true(right_index):
         # cases where index is used in merging
         if is_overload_true(left_index) and is_overload_true(right_index):
-            lk_type = left.index.dtype
-            rk_type = right.index.dtype
+            lk_type = left.index
+            is_l_str = isinstance(lk_type, StringIndexType)
+            rk_type = right.index
+            is_r_str = isinstance(rk_type, StringIndexType)
         elif is_overload_true(left_index):
-            lk_type = left.index.dtype
-            rk_type = right.data[right.columns.index(right_keys[0])].dtype
+            lk_type = left.index
+            is_l_str = isinstance(lk_type, StringIndexType)
+            rk_type = right.data[right.columns.index(right_keys[0])]
+            is_r_str = rk_type.dtype == string_type
         elif is_overload_true(right_index):
-            lk_type = left.data[left.columns.index(left_keys[0])].dtype
-            rk_type = right.index.dtype
+            lk_type = left.data[left.columns.index(left_keys[0])]
+            is_l_str = lk_type.dtype == string_type
+            rk_type = right.index
+            is_r_str = isinstance(rk_type, StringIndexType)
 
+        if is_l_str and is_r_str:
+            return
+        lk_type = lk_type.dtype
+        rk_type = rk_type.dtype
         try:
             ret_dtype = typing_context.resolve_function_type(
                 operator.eq, (lk_type, rk_type), {}
@@ -1602,7 +1621,7 @@ def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, other, on=None, how='left',\n"
     func_text += "    lsuffix='', rsuffix='', sort=False):\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}', '{}', '{}')\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}', '{}', '{}', True)\n".format(
         left_keys, right_keys, how, lsuffix, rsuffix
     )
 
@@ -1656,7 +1675,7 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
 
 # a dummy join function that will be replace in dataframe_pass
 def join_dummy(
-    left_df, right_df, left_on, right_on, how, suffix_x, suffix_y
+    left_df, right_df, left_on, right_on, how, suffix_x, suffix_y, is_join
 ):  # pragma: no cover
     return left_df
 
@@ -1668,24 +1687,42 @@ class JoinTyper(AbstractTemplate):
         from bodo.utils.typing import is_overload_str
 
         assert not kws
-        left_df, right_df, left_on, right_on, how, suffix_x, suffix_y = args
+        left_df, right_df, left_on, right_on, how, suffix_x, suffix_y, is_join = args
 
         # columns with common name that are not common keys will get a suffix
         comm_keys = set(left_on.consts) & set(right_on.consts)
         comm_data = set(left_df.columns) & set(right_df.columns)
         add_suffix = comm_data - comm_keys
 
-        columns = [
+        left_index = "$_bodo_index_" in left_on.consts
+        right_index = "$_bodo_index_" in right_on.consts
+
+        columns = []
+        data = []
+        # In the case of merging on one index and a column we have to add another
+        # column to the output. And that requires additional work.
+        if left_index and not right_index and not is_join.literal_value:
+            c_col = right_on.consts[0]
+            columns += [c_col]
+            data += [right_df.data[right_df.columns.index(c_col)]]
+        if right_index and not left_index and not is_join.literal_value:
+            c_col = left_on.consts[0]
+            columns += [c_col]
+            data += [left_df.data[left_df.columns.index(c_col)]]
+
+        # The left side
+        columns += [
             (c + suffix_x.literal_value if c in add_suffix else c)
             for c in left_df.columns
         ]
+        data += list(left_df.data)
+        # The right side
         # common keys are added only once so avoid adding them
         columns += [
             (c + suffix_y.literal_value if c in add_suffix else c)
             for c in right_df.columns
             if c not in comm_keys
         ]
-        data = list(left_df.data)
         data += [
             right_df.data[right_df.columns.index(c)]
             for c in right_df.columns
@@ -1694,16 +1731,18 @@ class JoinTyper(AbstractTemplate):
 
         # TODO: unify left/right indices if necessary (e.g. RangeIndex/Int64)
         index_typ = RangeIndexType(types.none)
-        left_index = "$_bodo_index_" in left_on.consts
-        right_index = "$_bodo_index_" in right_on.consts
         if left_index and right_index and not is_overload_str(how, "asof"):
             index_typ = left_df.index
             if isinstance(index_typ, bodo.hiframes.pd_index_ext.RangeIndexType):
                 index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
-        elif right_index and is_overload_str(how, "left"):
+        elif left_index and not right_index:
             index_typ = left_df.index
-        elif left_index and is_overload_str(how, "right"):
+            if isinstance(index_typ, bodo.hiframes.pd_index_ext.RangeIndexType):
+                index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
+        elif right_index and not left_index:
             index_typ = right_df.index
+            if isinstance(index_typ, bodo.hiframes.pd_index_ext.RangeIndexType):
+                index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
 
         out_df = DataFrameType(tuple(data), index_typ, tuple(columns))
         return signature(out_df, *args)
@@ -1784,7 +1823,7 @@ def merge_asof_overload(
             right_keys = get_const_str_list(right_on)
             validate_keys(right_keys, right.columns)
 
-    validate_keys_length(
+    validate_merge_asof_keys_length(
         left_on, right_on, left_index, right_index, left_keys, right_keys
     )
     validate_keys_dtypes(
@@ -1811,13 +1850,12 @@ def merge_asof_overload(
     func_text += "    allow_exact_matches=True, direction='backward'):\n"
     func_text += "  suffix_x = suffixes[0]\n"
     func_text += "  suffix_y = suffixes[1]\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, 'asof', '{}', '{}')\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, 'asof', '{}', '{}', False)\n".format(
         left_keys, right_keys, suffix_x, suffix_y
     )
 
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
-    # print(func_text)
     _impl = loc_vars["_impl"]
     return _impl
 
@@ -2709,8 +2747,6 @@ def to_parquet_overload(
     func_text += "    if compression is None:\n"
     func_text += "        compression = 'none'\n"
     func_text += "    parquet_write_table_cpp(unicode_to_char_ptr(fname), table, col_names, index_col, unicode_to_char_ptr(metadata), unicode_to_char_ptr(compression), _is_parallel)\n"
-
-    # print(func_text)
 
     loc_vars = {}
     exec(

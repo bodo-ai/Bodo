@@ -1968,6 +1968,7 @@ class DataFramePass:
             how_var,
             suffix_x_var,
             suffix_y_var,
+            is_join_var,
         ) = rhs.args
 
         left_on = self._get_const_or_list(left_on_var)
@@ -1975,8 +1976,8 @@ class DataFramePass:
         how = guard(find_const, self.func_ir, how_var)
         suffix_x = guard(find_const, self.func_ir, suffix_x_var)
         suffix_y = guard(find_const, self.func_ir, suffix_y_var)
+        is_join = guard(find_const, self.func_ir, is_join_var)
         out_typ = self.typemap[lhs.name]
-
         # convert right join to left join
         if how == "right":
             how = "left"
@@ -2004,12 +2005,14 @@ class DataFramePass:
         in_index_var = None
         out_index_var = None
         in_df_index_name = None
-        if "$_bodo_index_" in right_on:
+        right_index = "$_bodo_index_" in right_on
+        left_index = "$_bodo_index_" in left_on
+        if right_index:
             in_df_index = self._get_dataframe_index(right_df, nodes)
             in_df_index_name = self._get_index_name(in_df_index, nodes)
             in_index_var = self._gen_array_from_index(right_df, nodes)
             right_arrs["$_bodo_index_"] = in_index_var
-        if "$_bodo_index_" in left_on:
+        if left_index:
             in_df_index = self._get_dataframe_index(left_df, nodes)
             in_df_index_name = self._get_index_name(in_df_index, nodes)
             in_index_var = self._gen_array_from_index(left_df, nodes)
@@ -2034,6 +2037,7 @@ class DataFramePass:
                 suffix_x,
                 suffix_y,
                 lhs.loc,
+                is_join,
             )
         )
 
@@ -2043,16 +2047,8 @@ class DataFramePass:
                 out_index_var, in_df_index_name, nodes
             )
             out_arrs = [v for c, v in out_data_vars.items() if c != "$_bodo_index_"]
-            if (
-                "$_bodo_index_" in right_on
-                and "$_bodo_index_" not in left_on
-                and how == "left"
-            ):
-                out_arrs.append(self._get_dataframe_index(left_df, nodes))
-            else:
-                out_arrs.append(out_index)
+            out_arrs.append(out_index)
             _init_df = _gen_init_df(out_typ.columns, "index")
-
         else:
             _init_df = _gen_init_df(out_typ.columns)
 
