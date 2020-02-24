@@ -5,9 +5,12 @@
 #include <numpy/arrayobject.h>
 #include <iostream>
 #include "_bodo_common.h"
+#include "arrow/util/bit_util.h"
 #include "arrow/util/decimal.h"
 
 #define BYTES_PER_DECIMAL 16
+// using scale 18 when converting from Python Decimal objects (same as Spark)
+#define PY_DECIMAL_SCALE 18
 
 extern "C" {
 
@@ -85,6 +88,83 @@ void* box_decimal_array(int64_t n, const uint8_t* data,
 
     PyGILState_Release(gilstate);
     return ret;
+#undef CHECK
+}
+
+/**
+ * @brief unbox ndarray of Decimal objects into native DecimalArray
+ *
+ * @param obj ndarray object of Decimal objects
+ * @param n number of values
+ * @param data pointer to 128-bit data buffer
+ * @param null_bitmap pointer to null_bitmap buffer
+ */
+void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
+                         uint8_t* null_bitmap) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return;                        \
+    }
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK(res.status().ok(), msg)             \
+    lhs = std::move(res).ValueOrDie();
+
+    auto gilstate = PyGILState_Ensure();
+
+    CHECK(PySequence_Check(obj), "expecting a PySequence");
+    CHECK(n >= 0 && data && null_bitmap, "output arguments must not be NULL");
+
+    // get pd.isna object to call in the loop to check for NAs
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* isna_call_obj = PyObject_GetAttrString(pd_mod, "isna");
+    CHECK(isna_call_obj, "getting pd.isna failed");
+
+    arrow::Status status;
+
+    for (int64_t i = 0; i < n; ++i) {
+        PyObject* s = PySequence_GetItem(obj, i);
+        CHECK(s, "getting element failed");
+        // Pandas stores NA as either None, nan, or pd.NA
+        PyObject* isna_obj =
+            PyObject_CallFunctionObjArgs(isna_call_obj, s, NULL);
+        if (PyObject_IsTrue(isna_obj)) {
+            // null bit
+            ::arrow::BitUtil::ClearBit(null_bitmap, i);
+            memset(data + i * BYTES_PER_DECIMAL, 0, BYTES_PER_DECIMAL);
+        } else {
+            // set not null
+            ::arrow::BitUtil::SetBit(null_bitmap, i);
+            // construct Decimal128 from str(decimal)
+            PyObject* s_str_obj = PyObject_Str(s);
+            CHECK(s_str_obj, "str(decimal) failed");
+            arrow::Decimal128 d128, d128_18;
+            int32_t precision;
+            int32_t scale;
+            status = arrow::Decimal128::FromString(
+                (const char*)PyUnicode_DATA(s_str_obj), &d128, &precision,
+                &scale);
+            CHECK(status.ok(), "decimal rescale faild");
+            // rescale decimal to 18 (default scale converting from Python)
+            CHECK_ARROW_AND_ASSIGN(d128.Rescale(scale, PY_DECIMAL_SCALE),
+                                   "decimal rescale error", d128_18);
+            // write to data array
+            uint8_t* data_ptr = (data + i * BYTES_PER_DECIMAL);
+            d128_18.ToBytes(data_ptr);
+            Py_DECREF(s_str_obj);
+        }
+        Py_DECREF(s);
+        Py_DECREF(isna_obj);
+    }
+
+    Py_DECREF(isna_call_obj);
+    Py_DECREF(pd_mod);
+
+    PyGILState_Release(gilstate);
+
+    return;
 #undef CHECK
 }
 

@@ -38,6 +38,11 @@ class BodoWarning(Warning):
     pass
 
 
+int128_type = types.Integer("int128", 128)
+# TODO: implement proper decimal.Decimal support
+decimal_type = types.Opaque("decimal")
+
+
 def is_overload_none(val):
     return val is None or val == types.none or getattr(val, "value", False) is None
 

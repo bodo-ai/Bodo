@@ -41,12 +41,9 @@ ll.add_symbol("box_decimal_array", decimal_ext.box_decimal_array)
 from bodo.utils.typing import (
     get_overload_const_int,
     is_overload_constant_int,
+    int128_type,
+    decimal_type,
 )
-
-
-int128_type = types.Integer("int128", 128)
-# TODO: implement proper decimal.Decimal support
-decimal_type = types.Opaque("decimal")
 
 
 class DecimalArrayType(types.ArrayCompatible):
@@ -174,6 +171,48 @@ def box_decimal_arr(typ, val, c):
     obj_arr = c.builder.call(fn_get, [n, data_arr.data, bitmap_arr_data, scale,],)
 
     return obj_arr
+
+
+@unbox(DecimalArrayType)
+def unbox_decimal_arr(typ, val, c):
+    """
+    Unbox a numpy array with Decimal objects into native DecimalArray
+    """
+    decimal_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+
+    # allocate data and null_bitmap arrays
+    n = c.pyapi.long_as_longlong(c.pyapi.call_method(val, "__len__", ()))
+    n_bytes = c.builder.udiv(
+        c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
+        lir.Constant(lir.IntType(64), 8),
+    )
+    data_arr_struct = bodo.utils.utils._empty_nd_impl(
+        c.context, c.builder, types.Array(int128_type, 1, "C"), [n]
+    )
+    bitmap_arr_struct = bodo.utils.utils._empty_nd_impl(
+        c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bytes]
+    )
+
+    # function signature of unbox_decimal_array
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [
+            lir.IntType(8).as_pointer(),
+            lir.IntType(64),
+            lir.IntType(128).as_pointer(),
+            lir.IntType(8).as_pointer(),
+        ],
+    )
+    fn = c.builder.module.get_or_insert_function(fnty, name="unbox_decimal_array")
+    c.builder.call(
+        fn, [val, n, data_arr_struct.data, bitmap_arr_struct.data,],
+    )
+
+    decimal_arr.null_bitmap = bitmap_arr_struct._getvalue()
+    decimal_arr.data = data_arr_struct._getvalue()
+
+    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
+    return NativeValue(decimal_arr._getvalue(), is_error=is_error)
 
 
 @overload(len)
