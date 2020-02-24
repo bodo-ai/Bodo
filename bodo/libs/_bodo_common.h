@@ -35,6 +35,7 @@ struct Bodo_CTypes {
         UINT16 = 9,
         STRING = 10,
         _BOOL = 11,
+        DECIMAL = 12,
         _numtypes
     };
 };

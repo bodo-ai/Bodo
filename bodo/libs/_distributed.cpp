@@ -40,6 +40,13 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     }
 #endif
 
+    // initialize decimal_mpi_type
+    // TODO: free when program exits
+    if (decimal_mpi_type == MPI_DATATYPE_NULL) {
+        MPI_Type_contiguous(2, MPI_LONG_LONG_INT, &decimal_mpi_type);
+        MPI_Type_commit(&decimal_mpi_type);
+    }
+
     PyObject_SetAttrString(m, "dist_get_rank",
                            PyLong_FromVoidPtr((void *)(&dist_get_rank)));
     PyObject_SetAttrString(m, "dist_get_size",

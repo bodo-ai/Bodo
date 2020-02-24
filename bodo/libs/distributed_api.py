@@ -28,6 +28,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.list_str_arr_ext import (
     list_string_array_type,
     pre_alloc_list_string_array,
@@ -501,7 +502,7 @@ def gatherv(data, allgather=False):
 
         return gatherv_str_arr_impl
 
-    if isinstance(data, IntegerArrayType) or data == boolean_array:
+    if isinstance(data, (IntegerArrayType, DecimalArrayType)) or data == boolean_array:
         typ_val = _numba_to_c_type_map[data.dtype]
         char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
 
@@ -800,7 +801,7 @@ def bcast_overload(data):
 
         return bcast_impl
 
-    if isinstance(data, IntegerArrayType) or data == boolean_array:
+    if isinstance(data, (IntegerArrayType, DecimalArrayType)) or data == boolean_array:
 
         def bcast_impl_int_arr(data):  # pragma: no cover
             bcast(data._data)
@@ -1088,7 +1089,10 @@ def alltoallv(
     typ_enum_o = get_type_enum(out_data)
     assert typ_enum == typ_enum_o
 
-    if isinstance(send_data, IntegerArrayType) or send_data == boolean_array:
+    if (
+        isinstance(send_data, (IntegerArrayType, DecimalArrayType))
+        or send_data == boolean_array
+    ):
         return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: c_alltoallv(
             send_data._data.ctypes,
             out_data._data.ctypes,
@@ -1479,8 +1483,10 @@ def dist_permutation_array_index(
 ll.add_symbol("finalize", hdist.finalize)
 finalize = types.ExternalFunction("finalize", types.int32())
 from bodo.io import s3_reader
+
 ll.add_symbol("finalize_s3", s3_reader.finalize_s3)
 finalize_s3 = types.ExternalFunction("finalize_s3", types.int32())
+
 
 @numba.njit
 def call_finalize():  # pragma: no cover

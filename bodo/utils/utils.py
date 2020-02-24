@@ -54,6 +54,7 @@ class CTypeEnum(Enum):
     UInt16 = 9
     # NOTE: 10 is used by STRING in bodo_common.h
     Bool = 11
+    Decimal = 12
 
 
 _numba_to_c_type_map = {
@@ -70,6 +71,7 @@ _numba_to_c_type_map = {
     types.bool_: CTypeEnum.Bool.value,
     types.int16: CTypeEnum.Int16.value,
     types.uint16: CTypeEnum.UInt16.value,
+    bodo.utils.typing.decimal_type: CTypeEnum.Decimal.value,
 }
 
 
@@ -555,6 +557,17 @@ def empty_like_type_overload(n, arr):
             )
 
         return empty_like_type_bool_arr
+
+    if isinstance(arr, bodo.libs.decimal_arr_ext.DecimalArrayType):
+        precision = arr.precision
+        scale = arr.scale
+        def empty_like_type_decimal_arr(n, arr):
+
+            return bodo.libs.decimal_arr_ext.alloc_decimal_array(
+                n, precision, scale
+            )
+
+        return empty_like_type_decimal_arr
 
     # string array buffer for join
     assert arr == string_array_type
