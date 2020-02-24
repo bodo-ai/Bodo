@@ -37,13 +37,106 @@ import llvmlite.binding as ll
 from bodo.libs import decimal_ext
 
 ll.add_symbol("box_decimal_array", decimal_ext.box_decimal_array)
+ll.add_symbol("unbox_decimal_array", decimal_ext.unbox_decimal_array)
+ll.add_symbol("decimal_to_str", decimal_ext.decimal_to_str)
 
 from bodo.utils.typing import (
     get_overload_const_int,
     is_overload_constant_int,
-    int128_type,
-    decimal_type,
+    parse_dtype,
 )
+
+
+int128_type = types.Integer("int128", 128)
+# TODO: implement proper decimal.Decimal support
+
+
+class Decimal128Type(types.Type):
+    """data type for Decimal128 values similar to Arrow's Decimal128
+    """
+    def __init__(self, precision, scale):
+        assert isinstance(precision, int)
+        assert isinstance(scale, int)
+        super(Decimal128Type, self).__init__(name="Decimal128Type({}, {})".format(precision, scale))
+        self.precision = precision
+        self.scale = scale
+        self.bitwidth = 128  # needed for using IntegerModel
+
+
+register_model(Decimal128Type)(models.IntegerModel)
+
+
+@intrinsic
+def int128_to_decimal(typingctx, val, precision_tp, scale_tp=None):
+    """cast int128 to decimal128
+    """
+    assert val == int128_type
+    assert is_overload_constant_int(precision_tp)
+    assert is_overload_constant_int(scale_tp)
+
+    def codegen(context, builder, signature, args):
+        return args[0]
+
+    precision = get_overload_const_int(precision_tp)
+    scale = get_overload_const_int(scale_tp)
+    return Decimal128Type(precision, scale)(int128_type, precision_tp, scale_tp), codegen
+
+
+@intrinsic
+def decimal_to_str(typingctx, val_t=None):
+    """convert decimal128 to string
+    """
+    assert isinstance(val_t, Decimal128Type)
+
+    def codegen(context, builder, signature, args):
+        (val,) = args
+        scale = context.get_constant(types.int32, val_t.scale)
+
+        uni_str = cgutils.create_struct_proxy(types.unicode_type)(context, builder)
+
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(128),
+                lir.IntType(8).as_pointer().as_pointer(),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(32),
+            ],
+        )
+        fn = builder.module.get_or_insert_function(fnty, name="decimal_to_str")
+        builder.call(
+            fn,
+            [
+                val,
+                uni_str._get_ptr_by_name("meminfo"),
+                uni_str._get_ptr_by_name("length"),
+                scale,
+            ],
+        )
+
+        # output is always ASCII
+        uni_str.kind = context.get_constant(
+            types.int32, numba.unicode.PY_UNICODE_1BYTE_KIND
+        )
+        uni_str.is_ascii = context.get_constant(types.int32, 1)
+        # set hash value -1 to indicate "need to compute hash"
+        uni_str.hash = context.get_constant(numba.unicode._Py_hash_t, -1)
+        uni_str.data = context.nrt.meminfo_data(builder, uni_str.meminfo)
+        # Set parent to NULL
+        uni_str.parent = cgutils.get_null_value(uni_str.parent.type)
+        return uni_str._getvalue()
+
+    return bodo.string_type(val_t), codegen
+
+
+@overload(str)
+def overload_str_decimal(val):
+    if isinstance(val, Decimal128Type):
+
+        def impl(val):  # pragma: no cover
+            return decimal_to_str(val)
+
+        return impl
 
 
 class DecimalArrayType(types.ArrayCompatible):
@@ -64,7 +157,7 @@ class DecimalArrayType(types.ArrayCompatible):
 
     @property
     def dtype(self):
-        return decimal_type
+        return Decimal128Type(self.precision, self.scale)
 
 
 # store data and nulls as regular numpy arrays without payload machineray
@@ -229,3 +322,15 @@ def overload_decimal_arr_shape(A):
 @overload_attribute(DecimalArrayType, "ndim")
 def overload_decimal_arr_ndim(A):
     return lambda A: 1
+
+
+@overload(operator.getitem)
+def decimal_arr_getitem(A, ind):
+    if not isinstance(A, DecimalArrayType):
+        return
+
+    if isinstance(ind, types.Integer):
+        precision = A.precision
+        scale = A.scale
+        # XXX: cannot handle NA for scalar getitem since not type stable
+        return lambda A, ind: int128_to_decimal(A._data[ind], precision, scale)

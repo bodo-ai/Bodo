@@ -33,7 +33,7 @@ from bodo.hiframes.pd_dataframe_ext import (
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import typeof_pd_int_dtype
-from bodo.libs.decimal_arr_ext import decimal_type
+from bodo.libs.decimal_arr_ext import Decimal128Type
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.hiframes.split_impl import (
@@ -163,7 +163,8 @@ def _infer_series_dtype(S):
             # Timestamp which is subtype of datetime.date
             return datetime_date_type
         if isinstance(first_val, decimal.Decimal):
-            return decimal_type
+            # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
+            return Decimal128Type(38, 18)
         else:
             raise ValueError(
                 "object dtype infer: data type for column {} not supported".format(

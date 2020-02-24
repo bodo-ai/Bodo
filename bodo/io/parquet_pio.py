@@ -27,7 +27,7 @@ from bodo.libs.list_str_arr_ext import (
     construct_list_string_array,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.decimal_arr_ext import DecimalArrayType, decimal_type
+from bodo.libs.decimal_arr_ext import DecimalArrayType, Decimal128Type
 from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
 from bodo.utils.utils import unliteral_all, sanitize_varname
 from bodo.utils.typing import BodoError, BodoWarning
@@ -338,7 +338,7 @@ def get_element_type(dtype):
         return "NS_DTYPE"
 
     # TODO: refactor _type_to_pq_dtype_number and remove this
-    if dtype == decimal_type:
+    if isinstance(dtype, Decimal128Type):
         return "int128"
 
     out = repr(dtype)

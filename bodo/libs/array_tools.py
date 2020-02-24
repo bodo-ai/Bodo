@@ -22,7 +22,7 @@ from numba.extending import (
 )
 import bodo
 from bodo.libs.str_arr_ext import string_array_type
-from bodo.utils.utils import _numba_to_c_type_map
+from bodo.utils.utils import numba_to_c_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArray, get_categories_int_type
@@ -126,7 +126,7 @@ def array_to_info(typingctx, arr_type_t):
             assert arr_type.ndim == 1, "only 1D array shuffle supported"
             length = builder.extract_value(arr.shape, 0)
             dtype = arr_type.dtype
-            typ_enum = _numba_to_c_type_map[dtype]
+            typ_enum = numba_to_c_type(dtype)
             typ_arg = cgutils.alloca_once_value(
                 builder, lir.Constant(lir.IntType(32), typ_enum)
             )
@@ -171,7 +171,7 @@ def array_to_info(typingctx, arr_type_t):
                 context, builder, arr.null_bitmap
             )
 
-            typ_enum = _numba_to_c_type_map[dtype]
+            typ_enum = numba_to_c_type(dtype)
             typ_arg = cgutils.alloca_once_value(
                 builder, lir.Constant(lir.IntType(32), typ_enum)
             )
@@ -407,7 +407,7 @@ def info_to_array(typingctx, info_type, arr_type):
 def test_alloc_np(typingctx, len_typ, arr_type):
     def codegen(context, builder, sig, args):
         length, _ = args
-        typ_enum = _numba_to_c_type_map[arr_type.dtype]
+        typ_enum = numba_to_c_type(arr_type.dtype)
         typ_arg = cgutils.alloca_once_value(
             builder, lir.Constant(lir.IntType(32), typ_enum)
         )

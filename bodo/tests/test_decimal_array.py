@@ -81,6 +81,27 @@ def test_ndim(decimal_arr_value):
     check_func(test_impl, (decimal_arr_value,))
 
 
+def test_series_astype_str(decimal_arr_value):
+    """test decimal conversion to string.
+    Using a checksum for checking output since Bodo's output can have extra 0 digits
+    """
+
+    def test_impl(A):
+        S2 = A.astype(str).values
+        s = 0.0
+        for i in bodo.prange(len(S2)):
+            val = 0
+            if not (
+                bodo.libs.array_kernels.isna(S2, i) or S2[i] == "None" or S2[i] == "nan"
+            ):
+                val = float(S2[i])
+            s += val
+        return s
+
+    S = pd.Series(decimal_arr_value)
+    check_func(test_impl, (S,))
+
+
 def test_join(decimal_arr_value):
     """test joining dataframes with decimal data columns
     TODO: add decimal array to regular df tests and remove this

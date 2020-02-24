@@ -71,7 +71,6 @@ _numba_to_c_type_map = {
     types.bool_: CTypeEnum.Bool.value,
     types.int16: CTypeEnum.Int16.value,
     types.uint16: CTypeEnum.UInt16.value,
-    bodo.utils.typing.decimal_type: CTypeEnum.Decimal.value,
 }
 
 
@@ -113,6 +112,14 @@ def get_constant(func_ir, var, default=NOT_CONSTANT):
     if isinstance(def_node, ir.Var):
         return get_constant(func_ir, def_node, default)
     return default
+
+
+
+def numba_to_c_type(t):
+    if isinstance(t, bodo.libs.decimal_arr_ext.Decimal128Type):
+        return CTypeEnum.Decimal.value
+
+    return _numba_to_c_type_map[t]
 
 
 def inline_new_blocks(func_ir, block, i, callee_blocks, work_list=None):

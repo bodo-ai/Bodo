@@ -15,6 +15,17 @@ extern "C" {
 
 void* box_decimal_array(int64_t n, const uint8_t* data,
                         const uint8_t* null_bitmap, int scale);
+void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
+                         uint8_t* null_bitmap);
+
+#pragma pack(1)
+struct decimal_value {
+    int64_t low;
+    int64_t high;
+};
+
+void decimal_to_str(decimal_value val, NRT_MemInfo **meminfo_ptr, int64_t *len_ptr, int scale);
+
 
 PyMODINIT_FUNC PyInit_decimal_ext(void) {
     PyObject* m;
@@ -29,6 +40,10 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
 
     PyObject_SetAttrString(m, "box_decimal_array",
                            PyLong_FromVoidPtr((void*)(&box_decimal_array)));
+    PyObject_SetAttrString(m, "unbox_decimal_array",
+                           PyLong_FromVoidPtr((void*)(&unbox_decimal_array)));
+    PyObject_SetAttrString(m, "decimal_to_str",
+                           PyLong_FromVoidPtr((void*)(&decimal_to_str)));
     return m;
 }
 
@@ -166,5 +181,27 @@ void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
     return;
 #undef CHECK
 }
+
+
+/**
+ * @brief convert decimal128 value to string and create a memptr pointer with the data
+ * 
+ * @param val decimal128 input value
+ * @param meminfo_ptr output memptr pointer to set
+ * @param len_ptr output length to set
+ * @param scale scale parameter of decimal128
+ */
+void decimal_to_str(decimal_value val, NRT_MemInfo **meminfo_ptr, int64_t *len_ptr, int scale)
+{
+    arrow::Decimal128 arrow_decimal(val.high, val.low);
+    std::string str = arrow_decimal.ToString(scale);
+    int64_t l = (int64_t)str.length();
+    NRT_MemInfo *meminfo = NRT_MemInfo_alloc_safe(l+1);
+    memcpy(meminfo->data, str.c_str(), l);
+    ((char*)meminfo->data)[l] = 0;
+    *len_ptr = l;
+    *meminfo_ptr = meminfo;
+}
+
 
 }  // extern "C"

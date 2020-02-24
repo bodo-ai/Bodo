@@ -17,7 +17,7 @@ from numba.targets.arrayobj import make_array
 from numba.numpy_support import as_dtype
 
 import bodo
-from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
+from bodo.utils.utils import numba_to_c_type, unliteral_all
 from bodo.libs.str_arr_ext import (
     string_array_type,
     pre_alloc_string_array,
@@ -176,7 +176,7 @@ class QuantileType(AbstractTemplate):
 def lower_dist_quantile_seq(context, builder, sig, args):
 
     # store an int to specify data type
-    typ_enum = _numba_to_c_type_map[sig.args[0].dtype]
+    typ_enum = numba_to_c_type(sig.args[0].dtype)
     typ_arg = cgutils.alloca_once_value(
         builder, lir.Constant(lir.IntType(32), typ_enum)
     )
@@ -217,7 +217,7 @@ def lower_dist_quantile_seq(context, builder, sig, args):
 def lower_dist_quantile_parallel(context, builder, sig, args):
 
     # store an int to specify data type
-    typ_enum = _numba_to_c_type_map[sig.args[0].dtype]
+    typ_enum = numba_to_c_type(sig.args[0].dtype)
     typ_arg = cgutils.alloca_once_value(
         builder, lir.Constant(lir.IntType(32), typ_enum)
     )
