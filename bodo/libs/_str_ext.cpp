@@ -88,7 +88,6 @@ void* str_from_int32(int in);
 void* str_from_int64(int64_t in);
 void* str_from_float32(float in);
 void* str_from_float64(double in);
-bool is_na(const uint8_t* bull_bitmap, int64_t ind);
 void del_str(std::string* in_str);
 int64_t hash_str(std::string* in_str);
 void c_glob(uint32_t** offsets, char** data, uint8_t** null_bitmap,
@@ -465,10 +464,6 @@ void* str_from_float64(double in) {
     return new std::string(std::to_string(in));
 }
 
-bool is_na(const uint8_t* null_bitmap, int64_t i) {
-    // printf("%d\n", *null_bitmap);
-    return (null_bitmap[i / 8] & kBitmask[i % 8]) == 0;
-}
 
 /// @brief create a concatenated string and offset table from a pandas series of
 /// strings

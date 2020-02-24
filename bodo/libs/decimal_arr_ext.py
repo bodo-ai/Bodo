@@ -31,6 +31,13 @@ from numba.extending import (
     overload_attribute,
 )
 from numba.array_analysis import ArrayAnalysis
+
+from llvmlite import ir as lir
+import llvmlite.binding as ll
+from bodo.libs import decimal_ext
+
+ll.add_symbol("box_decimal_array", decimal_ext.box_decimal_array)
+
 from bodo.utils.typing import (
     get_overload_const_int,
     is_overload_constant_int,
@@ -134,6 +141,39 @@ def alloc_decimal_array_equiv(self, scope, equiv_set, args, kws):
 ArrayAnalysis._analyze_op_call_bodo_libs_decimal_arr_ext_alloc_decimal_array = (
     alloc_decimal_array_equiv
 )
+
+
+@box(DecimalArrayType)
+def box_decimal_arr(typ, val, c):
+    """
+    Box decimal array into ndarray with decimal.Decimal values.
+    Represents null as None to match Pandas.
+    """
+    in_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+
+    data_arr = c.context.make_array(types.Array(int128_type, 1, "C"))(
+        c.context, c.builder, in_arr.data
+    )
+    bitmap_arr_data = c.context.make_array(types.Array(types.uint8, 1, "C"))(
+        c.context, c.builder, in_arr.null_bitmap
+    ).data
+
+    n = c.builder.extract_value(data_arr.shape, 0)
+    scale = c.context.get_constant(types.int32, typ.scale)
+
+    fnty = lir.FunctionType(
+        c.pyapi.pyobj,
+        [
+            lir.IntType(64),
+            lir.IntType(128).as_pointer(),
+            lir.IntType(8).as_pointer(),
+            lir.IntType(32),
+        ],
+    )
+    fn_get = c.builder.module.get_or_insert_function(fnty, name="box_decimal_array")
+    obj_arr = c.builder.call(fn_get, [n, data_arr.data, bitmap_arr_data, scale,],)
+
+    return obj_arr
 
 
 @overload(len)

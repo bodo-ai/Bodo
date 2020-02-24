@@ -187,6 +187,21 @@ ext_str = Extension(
     library_dirs=np_compile_args["library_dirs"] + lid,
 )
 
+
+# TODO: make Arrow optional in decimal extension similar to parquet extension?
+ext_decimal = Extension(
+    name="bodo.libs.decimal_ext",
+    sources=["bodo/libs/_decimal_ext.cpp"],
+    depends=["bodo/libs/_bodo_common.h"],
+    libraries=np_compile_args["libraries"] + ["arrow"],
+    define_macros=np_compile_args["define_macros"],
+    extra_compile_args=eca,
+    extra_link_args=ela,
+    include_dirs=np_compile_args["include_dirs"] + ind,
+    library_dirs=np_compile_args["library_dirs"] + lid,
+)
+
+
 ext_arr = Extension(
     name="bodo.libs.array_tools_ext",
     sources=["bodo/libs/_array_tools.cpp"],
@@ -272,6 +287,7 @@ _ext_mods = [
     ext_hdist,
     ext_dict,
     ext_str,
+    ext_decimal,
     ext_quantile,
     ext_dt,
     ext_io,
