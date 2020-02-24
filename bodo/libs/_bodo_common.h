@@ -41,6 +41,8 @@ struct Bodo_CTypes {
 };
 
 #define BODO_NUMPY_ARRAY_NUM_DTYPES Bodo_CTypes::_numtypes
+#define BYTES_PER_DECIMAL 16
+
 
 /**
  * @brief enum for array types supported by Bodo

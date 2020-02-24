@@ -79,3 +79,17 @@ def test_ndim(decimal_arr_value):
         return A.ndim
 
     check_func(test_impl, (decimal_arr_value,))
+
+
+def test_join(decimal_arr_value):
+    """test joining dataframes with decimal data columns
+    TODO: add decimal array to regular df tests and remove this
+    """
+
+    def test_impl(df1, df2):
+        return df1.merge(df2, on="A")
+
+    n = len(decimal_arr_value)
+    df1 = pd.DataFrame({"A": np.arange(n), "B": decimal_arr_value})
+    df2 = pd.DataFrame({"A": np.arange(n) + 3, "C": decimal_arr_value})
+    check_func(test_impl, (df1, df2))

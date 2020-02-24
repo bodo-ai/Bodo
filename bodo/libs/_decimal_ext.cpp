@@ -8,7 +8,6 @@
 #include "arrow/util/bit_util.h"
 #include "arrow/util/decimal.h"
 
-#define BYTES_PER_DECIMAL 16
 // using scale 18 when converting from Python Decimal objects (same as Spark)
 #define PY_DECIMAL_SCALE 18
 

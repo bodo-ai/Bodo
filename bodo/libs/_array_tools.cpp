@@ -388,6 +388,20 @@ void fill_send_array_inner(T* send_buff, T* data, uint32_t* hashes,
 }
 
 
+void fill_send_array_inner_decimal(uint8_t* send_buff, uint8_t* data, uint32_t* hashes,
+                           std::vector<int> const& send_disp, int n_pes,
+                           size_t n_rows) {
+    std::vector<int> tmp_offset(send_disp);
+    for (size_t i = 0; i < n_rows; i++) {
+        size_t node = (size_t)hashes[i] % (size_t)n_pes;
+        int ind = tmp_offset[node];
+        // send_buff[ind] = data[i];
+        memcpy(send_buff + ind * BYTES_PER_DECIMAL, data + i * BYTES_PER_DECIMAL, BYTES_PER_DECIMAL);
+        tmp_offset[node]++;
+    }
+}
+
+
 template <class T>
 void fill_recv_data_inner(T* recv_buff, T* data, uint32_t* hashes,
                            std::vector<int> const& send_disp, int n_pes,
@@ -499,6 +513,10 @@ void fill_send_array(array_info* send_arr, array_info* array, uint32_t* hashes,
     if (array->dtype == Bodo_CTypes::FLOAT64)
         return fill_send_array_inner<double>((double*)send_arr->data1,
                                              (double*)array->data1, hashes,
+                                             send_disp, n_pes, n_rows);
+    if (array->dtype == Bodo_CTypes::DECIMAL)
+        return fill_send_array_inner_decimal((uint8_t*)send_arr->data1,
+                                             (uint8_t*)array->data1, hashes,
                                              send_disp, n_pes, n_rows);
     if (array->arr_type == bodo_array_type::STRING)
         fill_send_array_string_inner(
@@ -4797,6 +4815,14 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     numpy_item_size[Bodo_CTypes::UINT64] = sizeof(uint64_t);
     numpy_item_size[Bodo_CTypes::FLOAT32] = sizeof(float);
     numpy_item_size[Bodo_CTypes::FLOAT64] = sizeof(double);
+    numpy_item_size[Bodo_CTypes::DECIMAL] = BYTES_PER_DECIMAL;
+
+    // initialize decimal_mpi_type
+    // TODO: free when program exits
+    if (decimal_mpi_type == MPI_DATATYPE_NULL) {
+        MPI_Type_contiguous(2, MPI_LONG_LONG_INT, &decimal_mpi_type);
+        MPI_Type_commit(&decimal_mpi_type);
+    }
 
     PyObject *np_mod = PyImport_ImportModule("numpy");
     PyObject *dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "bool");
