@@ -1,6 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_distributed.h"
 #include <ctime>
+#include "_common_defs.h"
 
 PyMODINIT_FUNC PyInit_hdist(void) {
     PyObject *m;
@@ -18,7 +19,7 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     std::time_t start_time = TRIAL_START;
     double time_diff = std::difftime(curr_time, start_time) / (60 * 60 * 24);
     if (time_diff > TRIAL_PERIOD) {
-        PyErr_SetString(PyExc_RuntimeError, "Bodo trial period has expired!");
+        Bodo_PyErr_SetString(PyExc_RuntimeError, "Bodo trial period has expired!");
         return NULL;
     }
 #endif
@@ -35,7 +36,7 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     // printf("max core count %d\n", MAX_CORE_COUNT);
     // printf("number of processors %d\n", num_pes);
     if (num_pes>MAX_CORE_COUNT) {
-        PyErr_SetString(PyExc_RuntimeError, "Exceeded the max core count!");
+        Bodo_PyErr_SetString(PyExc_RuntimeError, "Exceeded the max core count!");
           return NULL;
     }
 #endif

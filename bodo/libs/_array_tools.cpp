@@ -16,6 +16,7 @@
 #include <numeric>
 #include <algorithm>
 #include <string>
+#include "_common_defs.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_murmurhash3.cpp"
@@ -63,13 +64,13 @@
 void CheckEqualityArrayType(array_info* arr1, array_info* arr2)
 {
     if (arr1->arr_type != arr2->arr_type) {
-        PyErr_SetString(PyExc_RuntimeError,
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
                         "array_info passed to Cpp code have different arr_type");
         return;
     }
     if (arr1->arr_type != bodo_array_type::STRING) {
         if (arr1->dtype != arr2->dtype) {
-            PyErr_SetString(PyExc_RuntimeError,
+            Bodo_PyErr_SetString(PyExc_RuntimeError,
                             "array_info passed to Cpp code have different dtype");
             return;
         }
@@ -107,7 +108,7 @@ void info_to_string_array(array_info* info, uint64_t* n_items,
                           uint64_t* n_chars, char** data, char** offsets,
                           char** null_bitmap, NRT_MemInfo** meminfo) {
     if (info->arr_type != bodo_array_type::STRING) {
-        PyErr_SetString(PyExc_RuntimeError,
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
                         "info_to_string_array requires string input");
         return;
     }
@@ -123,7 +124,7 @@ void info_to_string_array(array_info* info, uint64_t* n_items,
 void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
                          NRT_MemInfo** meminfo) {
     if (info->arr_type != bodo_array_type::NUMPY) {
-        PyErr_SetString(PyExc_RuntimeError,
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
                         "info_to_numpy_array requires numpy input");
         return;
     }
@@ -138,7 +139,7 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
                             NRT_MemInfo** meminfo,
                             NRT_MemInfo** meminfo_bitmask) {
     if (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
-        PyErr_SetString(PyExc_RuntimeError,
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
                         "info_to_nullable_array requires nullable input");
         return;
     }
@@ -283,7 +284,7 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
     if (array->arr_type == bodo_array_type::STRING)
         return hash_array_string(out_hashes, (char*)array->data1,
                                  (uint32_t*)array->data2, n_rows, seed);
-    PyErr_SetString(PyExc_RuntimeError, "Invalid data type for hash");
+    Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid data type for hash");
 }
 
 template <class T>
@@ -358,7 +359,7 @@ void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
     if (array->arr_type == bodo_array_type::STRING)
         return hash_array_combine_string(out_hashes, (char*)array->data1,
                                          (uint32_t*)array->data2, n_rows, seed);
-    PyErr_SetString(PyExc_RuntimeError, "Invalid data type for hash combine");
+    Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid data type for hash combine");
 }
 
 uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
@@ -509,7 +510,7 @@ void fill_send_array(array_info* send_arr, array_info* array, uint32_t* hashes,
                                (uint8_t*)array->null_bitmask, hashes,
                                send_disp_null, n_pes, n_rows);
     return;
-    PyErr_SetString(PyExc_RuntimeError, "Invalid data type for send fill");
+    Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid data type for send fill");
 }
 
 void calc_disp(std::vector<int>& disps, std::vector<int>& counts) {
@@ -790,7 +791,7 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes, int n_p
 table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
     // error checking
     if (in_table->ncols() <= 0 || n_keys <= 0) {
-        PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
+        Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
         return NULL;
     }
     int n_pes;
@@ -1468,7 +1469,7 @@ int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
         return NumericComparison_T<float>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::FLOAT64)
         return NumericComparison_T<double>(ptr1, ptr2, na_position);
-    PyErr_SetString(PyExc_RuntimeError,
+    Bodo_PyErr_SetString(PyExc_RuntimeError,
                     "Invalid dtype put on input to NumericComparison");
     return 0;
 }
@@ -1650,7 +1651,7 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
     for (size_t iKey=0; iKey<n_key; iKey++)
       CheckEqualityArrayType(in_table->columns[iKey], in_table->columns[n_tot_left + iKey]);
     if (n_col != sum_dim) {
-        PyErr_SetString(PyExc_RuntimeError, "incoherent dimensions");
+        Bodo_PyErr_SetString(PyExc_RuntimeError, "incoherent dimensions");
         return NULL;
     }
 #ifdef DEBUG_JOIN
@@ -2515,7 +2516,7 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     return;
             }
         default:
-            PyErr_SetString(PyExc_RuntimeError,
+            Bodo_PyErr_SetString(PyExc_RuntimeError,
                             "apply_to_column: incorrect array type");
             return;
     }
@@ -2582,7 +2583,7 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<bool, Bodo_FTypes::prod>(
                         in_col, out_col, aux_cols, grp_info);
                 default:
-                    PyErr_SetString(PyExc_RuntimeError,
+                    Bodo_PyErr_SetString(PyExc_RuntimeError,
                         "unsuported aggregation for boolean type column");
                     return;
             }
@@ -3090,7 +3091,7 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                     return;
                 case Bodo_CTypes::STRING:
                 default:
-                    PyErr_SetString(PyExc_RuntimeError,
+                    Bodo_PyErr_SetString(PyExc_RuntimeError,
                                     "unsupported/not implemented");
                     return;
             }
@@ -3159,7 +3160,7 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                     // Nothing to initilize with in the case of strings.
                     return;
                 default:
-                    PyErr_SetString(PyExc_RuntimeError,
+                    Bodo_PyErr_SetString(PyExc_RuntimeError,
                                     "unsupported/not implemented");
                     return;
             }
@@ -3228,7 +3229,7 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                     // nothing to initialize in the case of strings
                     return;
                 default:
-                    PyErr_SetString(PyExc_RuntimeError,
+                    Bodo_PyErr_SetString(PyExc_RuntimeError,
                                     "unsupported/not implemented");
                     return;
             }
@@ -3998,7 +3999,7 @@ void cumsum_cumprod_computation_T(array_info* arr, array_info* out_arr, grouping
                                          int32_t const& ftype, bool const& skipna) {
     size_t num_group = grp_inf.group_to_first_row.size();
     if (arr->arr_type == bodo_array_type::STRING) {
-        PyErr_SetString(PyExc_RuntimeError,
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
                         "There is no median for the string case");
         return;
     }
@@ -4111,7 +4112,7 @@ void median_computation(array_info* arr, array_info* out_arr,
     std::function<bool(size_t)> isnan_entry;
     size_t siztype = numpy_item_size[arr->dtype];
     if (arr->arr_type == bodo_array_type::STRING) {
-        PyErr_SetString(PyExc_RuntimeError,
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
                         "There is no median for the string case");
         return;
     }
@@ -4328,7 +4329,7 @@ void array_isin_kernel(array_info* out_arr, array_info* in_arr, array_info* in_v
 {
     CheckEqualityArrayType(in_arr, in_values);
     if (out_arr->dtype != Bodo_CTypes::_BOOL) {
-        PyErr_SetString(PyExc_RuntimeError,
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
                         "array out_arr should be a boolean array");
         return;
     }
@@ -4801,17 +4802,17 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     PyObject *np_mod = PyImport_ImportModule("numpy");
     PyObject *dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "bool");
     if ((size_t)PyNumber_AsSsize_t(PyObject_GetAttrString(dtype_obj, "itemsize"), NULL) != sizeof(bool)) {
-        PyErr_SetString(PyExc_RuntimeError, "bool size mismatch between C++ and NumPy!");
+        Bodo_PyErr_SetString(PyExc_RuntimeError, "bool size mismatch between C++ and NumPy!");
         return NULL;
     }
     dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "float32");
     if ((size_t)PyNumber_AsSsize_t(PyObject_GetAttrString(dtype_obj, "itemsize"), NULL) != sizeof(float)) {
-        PyErr_SetString(PyExc_RuntimeError, "float32 size mismatch between C++ and NumPy!");
+        Bodo_PyErr_SetString(PyExc_RuntimeError, "float32 size mismatch between C++ and NumPy!");
         return NULL;
     }
     dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "float64");
     if ((size_t)PyNumber_AsSsize_t(PyObject_GetAttrString(dtype_obj, "itemsize"), NULL) != sizeof(double)) {
-        PyErr_SetString(PyExc_RuntimeError, "float64 size mismatch between C++ and NumPy!");
+        Bodo_PyErr_SetString(PyExc_RuntimeError, "float64 size mismatch between C++ and NumPy!");
         return NULL;
     }
 
