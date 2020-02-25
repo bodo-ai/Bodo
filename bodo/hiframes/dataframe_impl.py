@@ -50,12 +50,12 @@ from bodo.libs.array_tools import (
 from bodo.hiframes.pd_dataframe_ext import validate_sort_values_spec
 
 
-@overload_attribute(DataFrameType, "index")
+@overload_attribute(DataFrameType, "index", inline="always")
 def overload_dataframe_index(df):
     return lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
 
 
-@overload_attribute(DataFrameType, "columns")
+@overload_attribute(DataFrameType, "columns", inline="always")
 def overload_dataframe_columns(df):
     str_arr = "bodo.utils.conversion.coerce_to_array({})".format(df.columns)
     func_text = "def impl(df):\n"
@@ -100,7 +100,7 @@ def overload_dataframe_to_numpy(df, dtype=None, copy=False):
     return impl
 
 
-@overload_attribute(DataFrameType, "ndim")
+@overload_attribute(DataFrameType, "ndim", inline="always")
 def overload_dataframe_ndim(df):
     return lambda df: 2
 
@@ -208,8 +208,8 @@ def overload_dataframe_rename(
     return _gen_init_df(header, new_cols, ", ".join(data_outs))
 
 
-@overload_method(DataFrameType, "isna")
-@overload_method(DataFrameType, "isnull")
+@overload_method(DataFrameType, "isna", inline="always")
+@overload_method(DataFrameType, "isnull", inline="always")
 def overload_dataframe_isna(df):
     # call isna() on column Series
     data_args = ", ".join("df['{}'].isna().values".format(c) for c in df.columns)
@@ -460,7 +460,7 @@ def overload_dataframe_prod(
     return _gen_reduce_impl(df, "prod")
 
 
-@overload_method(DataFrameType, "sum")
+@overload_method(DataFrameType, "sum", inline="always")
 def overload_dataframe_sum(
     df, axis=None, skipna=None, level=None, numeric_only=None, min_count=0
 ):
@@ -954,8 +954,8 @@ _install_unary_ops()
 ########### top level functions ###############
 
 
-@overload(pd.isna)
-@overload(pd.isnull)
+@overload(pd.isna, inline="always")
+@overload(pd.isnull, inline="always")
 def overload_isna(obj):
     # DataFrame, Series, Index
     if isinstance(

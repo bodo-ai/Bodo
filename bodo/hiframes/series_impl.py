@@ -30,7 +30,7 @@ from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
 
 
-@overload_attribute(SeriesType, "index")
+@overload_attribute(SeriesType, "index", inline="always")
 def overload_series_index(s):
     return lambda s: bodo.hiframes.pd_series_ext.get_series_index(s)
 
@@ -40,7 +40,7 @@ def overload_series_values(s):
     return lambda s: bodo.hiframes.pd_series_ext.get_series_data(s)
 
 
-@overload_attribute(SeriesType, "dtype")
+@overload_attribute(SeriesType, "dtype", inline="always")
 def overload_series_dtype(s):
     # TODO: check other dtypes like tuple, etc.
     if s.dtype == bodo.string_type:
@@ -54,7 +54,7 @@ def overload_series_shape(s):
     return lambda s: (len(bodo.hiframes.pd_series_ext.get_series_data(s)),)
 
 
-@overload_attribute(SeriesType, "ndim")
+@overload_attribute(SeriesType, "ndim", inline="always")
 def overload_series_ndim(s):
     return lambda s: 1
 
@@ -64,12 +64,12 @@ def overload_series_size(s):
     return lambda s: len(bodo.hiframes.pd_series_ext.get_series_data(s))
 
 
-@overload_attribute(SeriesType, "T")
+@overload_attribute(SeriesType, "T", inline="always")
 def overload_series_T(s):
     return lambda s: s
 
 
-@overload_attribute(SeriesType, "hasnans")
+@overload_attribute(SeriesType, "hasnans", inline="always")
 def overload_series_hasnans(s):
     return lambda s: s.isna().sum() != 0
 
@@ -79,12 +79,12 @@ def overload_series_empty(s):
     return lambda s: len(bodo.hiframes.pd_series_ext.get_series_data(s)) == 0
 
 
-@overload_attribute(SeriesType, "dtypes")
+@overload_attribute(SeriesType, "dtypes", inline="always")
 def overload_series_dtypes(s):
     return lambda s: s.dtype
 
 
-@overload_attribute(SeriesType, "name")
+@overload_attribute(SeriesType, "name", inline="always")
 def overload_series_name(s):
     return lambda s: bodo.hiframes.pd_series_ext.get_series_name(s)
 
@@ -155,8 +155,8 @@ def overload_series_to_numpy(S, dtype=None, copy=False):
     return impl
 
 
-@overload_method(SeriesType, "isna")
-@overload_method(SeriesType, "isnull")
+@overload_method(SeriesType, "isna", inline="always")
+@overload_method(SeriesType, "isnull", inline="always")
 def overload_series_isna(S):
     # TODO: series that have different underlying data type than dtype
     # like records/tuples
@@ -175,7 +175,7 @@ def overload_series_isna(S):
     return impl
 
 
-@overload_method(SeriesType, "sum")
+@overload_method(SeriesType, "sum", inline="always")
 def overload_series_sum(S):
     # TODO: series that have different underlying data type than dtype
     # like records/tuples

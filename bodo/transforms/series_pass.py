@@ -420,36 +420,16 @@ class SeriesPass:
 
         # replace attribute access with overload
         if isinstance(rhs_type, SeriesType) and rhs.attr in (
-            "index",
             "values",
             "shape",
-            "dtype",
-            "ndim",
             "size",
-            "T",
-            "hasnans",
             "empty",
-            "dtypes",
-            "name",
         ):
             #
             overload_name = "overload_series_" + rhs.attr
             overload_func = getattr(bodo.hiframes.series_impl, overload_name)
             impl = overload_func(rhs_type)
             return self._replace_func(impl, [rhs.value])
-
-        if isinstance(rhs_type, SeriesType) and rhs.attr == "values":
-            # simply return the column
-            nodes = []
-            var = self._get_series_data(rhs.value, nodes)
-            assign.value = var
-            nodes.append(assign)
-            return nodes
-
-        if isinstance(rhs_type, SeriesType) and rhs.attr == "shape":
-            nodes = []
-            data = self._get_series_data(rhs.value, nodes)
-            return self._replace_func(lambda A: (len(A),), [data], pre_nodes=nodes)
 
         if isinstance(rhs_type, DatetimeIndexType) and rhs.attr == "values":
             # simply return the data array
@@ -473,23 +453,6 @@ class SeriesPass:
             if rhs.attr in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
                 impl = bodo.hiframes.pd_index_ext.gen_tdi_field_impl(rhs.attr)
                 return self._replace_func(impl, [rhs.value])
-
-        if isinstance(rhs_type, SeriesType) and rhs.attr in ("size", "shape"):
-            # simply return the column
-            nodes = []
-            var = self._get_series_data(rhs.value, nodes)
-            rhs.value = var
-            nodes.append(assign)
-            return nodes
-
-        # TODO: test ndim and T
-        if isinstance(rhs_type, SeriesType) and rhs.attr == "ndim":
-            rhs.value = ir.Const(1, rhs.loc)
-            return [assign]
-
-        if isinstance(rhs_type, SeriesType) and rhs.attr == "T":
-            rhs = rhs.value
-            return [assign]
 
         if isinstance(rhs_type, SeriesIlocType) and rhs.attr == "_obj":
             assign.value  = guard(get_definition, self.func_ir, rhs.value).value
@@ -1647,9 +1610,7 @@ class SeriesPass:
         return self._replace_func(impl, args)
 
     def _run_call_series(self, assign, lhs, rhs, series_var, func_name):
-        if func_name in ("sum", "count", "isna", "isnull", "fillna", "sort_values"):
-            if func_name == "isnull":
-                func_name = "isna"
+        if func_name in ("count", "fillna", "sort_values"):
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
