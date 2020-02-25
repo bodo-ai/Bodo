@@ -38,6 +38,10 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     // init numpy
     import_array();
 
+    // decimal_value should be exactly 128 bits to match Python
+    if (sizeof(decimal_value) != 16)
+        std::cerr << "invalid decimal struct size" << std::endl;
+
     PyObject_SetAttrString(m, "box_decimal_array",
                            PyLong_FromVoidPtr((void*)(&box_decimal_array)));
     PyObject_SetAttrString(m, "unbox_decimal_array",

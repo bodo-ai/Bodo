@@ -275,7 +275,7 @@ def unbox_decimal_arr(typ, val, c):
 
     # allocate data and null_bitmap arrays
     n = c.pyapi.long_as_longlong(c.pyapi.call_method(val, "__len__", ()))
-    n_bytes = c.builder.udiv(
+    n_bitmask_bytes = c.builder.udiv(
         c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
         lir.Constant(lir.IntType(64), 8),
     )
@@ -283,7 +283,7 @@ def unbox_decimal_arr(typ, val, c):
         c.context, c.builder, types.Array(int128_type, 1, "C"), [n]
     )
     bitmap_arr_struct = bodo.utils.utils._empty_nd_impl(
-        c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bytes]
+        c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bitmask_bytes]
     )
 
     # function signature of unbox_decimal_array

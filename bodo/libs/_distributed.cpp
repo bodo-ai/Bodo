@@ -47,6 +47,12 @@ PyMODINIT_FUNC PyInit_hdist(void) {
         MPI_Type_commit(&decimal_mpi_type);
     }
 
+    int decimal_bytes;
+    MPI_Type_size(decimal_mpi_type, &decimal_bytes);
+    // decimal_value should be exactly 128 bits to match Python
+    if (decimal_bytes != 16)
+        std::cerr << "invalid decimal mpi type size" << std::endl;
+
     PyObject_SetAttrString(m, "dist_get_rank",
                            PyLong_FromVoidPtr((void *)(&dist_get_rank)));
     PyObject_SetAttrString(m, "dist_get_size",
