@@ -113,4 +113,4 @@ def test_join(decimal_arr_value):
     n = len(decimal_arr_value)
     df1 = pd.DataFrame({"A": np.arange(n), "B": decimal_arr_value})
     df2 = pd.DataFrame({"A": np.arange(n) + 3, "C": decimal_arr_value})
-    check_func(test_impl, (df1, df2))
+    check_func(test_impl, (df1, df2), sort_output=True)
