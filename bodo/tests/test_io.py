@@ -136,6 +136,25 @@ def test_pq_list_str(datapath):
     check_func(test_impl, (datapath("list_str_parts.pq"),))
 
 
+def test_pq_unsupported_types(datapath):
+    """test unsupported data types in unselected columns
+    """
+    def test_impl(fname):
+        return pd.read_parquet(fname, columns=["B"])
+
+    check_func(test_impl, (datapath("nested_struct_example.pq"),))
+
+
+def test_pq_invalid_column_selection(datapath):
+    """test error raise when selected column is not in file schema
+    """
+    def test_impl(fname):
+        return pd.read_parquet(fname, columns=["C"])
+
+    with pytest.raises(BodoError, match="C not in Parquet file schema"):
+        bodo.jit(test_impl)(datapath("nested_struct_example.pq"))
+
+
 def test_pq_decimal(datapath):
     def test_impl(fname):
         return pd.read_parquet(fname)

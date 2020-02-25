@@ -143,18 +143,20 @@ class ParquetHandler:
             file_name_str = get_str_const_value(
                 file_name, self.func_ir, msg, arg_types=self.args
             )
-            col_names, col_types, index_col = parquet_file_schema(file_name_str)
+            col_names, col_types, index_col, col_indices = parquet_file_schema(
+                file_name_str, columns
+            )
         else:
             col_names = list(table_types.keys())
             col_types = [t for t in table_types.values()]
             index_col = "index" if "index" in col_names else None
-
-        col_indices = list(range(len(col_names)))
-        if columns is not None:
-            col_indices = [col_names.index(c) for c in columns]
-            col_types = [col_types[i] for i in col_indices]
-            col_names = columns
-            index_col = index_col if index_col in col_names else None
+            col_indices = list(range(len(col_names)))
+            # TODO: allow specifying types of only selected columns
+            if columns is not None:
+                col_indices = [col_names.index(c) for c in columns]
+                col_types = [col_types[i] for i in col_indices]
+                col_names = columns
+                index_col = index_col if index_col in col_names else None
 
         # HACK convert types using decorator for int columns with NaN
         for i, c in enumerate(col_names):
@@ -478,7 +480,7 @@ def get_parquet_dataset(file_name):
     return pq.ParquetDataset(file_name, filesystem=fs)
 
 
-def parquet_file_schema(file_name):
+def parquet_file_schema(file_name, selected_columns):
 
     col_names = []
     col_types = []
@@ -488,11 +490,11 @@ def parquet_file_schema(file_name):
     # NOTE: use arrow schema instead of the dataset schema to avoid issues with names of
     # list types columns (arrow 0.16.0)
     col_names = pa_schema.names
-    index_col = None
 
     # find pandas index column if any
     # TODO: other pandas metadata like dtypes needed?
     # https://pandas.pydata.org/pandas-docs/stable/development/developer.html
+    index_col = None
     key = b"pandas"
     if pa_schema.metadata is not None and key in pa_schema.metadata:
         import json
@@ -507,12 +509,25 @@ def parquet_file_schema(file_name):
         # TODO: support RangeIndex in parquet properly
         index_col = index_col if isinstance(index_col, str) else None
 
+    # handle column selection if available
+    col_indices = list(range(len(col_names)))
+    if selected_columns is not None:
+        # make sure selected columns are in the schema
+        for c in selected_columns:
+            if c not in col_names:
+                raise BodoError(
+                    "Selected column {} not in Parquet file schema".format(c)
+                )
+        col_indices = [col_names.index(c) for c in selected_columns]
+        col_names = selected_columns
+        index_col = index_col if index_col in col_names else None
+
     col_types = [
         _get_numba_typ_from_pa_typ(pa_schema.field(c), c == index_col)
         for c in col_names
     ]
     # TODO: close file?
-    return col_names, col_types, index_col
+    return col_names, col_types, index_col, col_indices
 
 
 _get_arrow_readers = types.ExternalFunction(
