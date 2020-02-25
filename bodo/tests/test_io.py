@@ -136,6 +136,13 @@ def test_pq_list_str(datapath):
     check_func(test_impl, (datapath("list_str_parts.pq"),))
 
 
+def test_pq_decimal(datapath):
+    def test_impl(fname):
+        return pd.read_parquet(fname)
+
+    check_func(test_impl, (datapath("decimal1.pq"),))
+
+
 def test_csv_remove_col0_used_for_len(datapath):
     """read_csv() handling code uses the first column for creating RangeIndex of the
     output dataframe. In cases where the first column array is dead, it should be

@@ -852,6 +852,8 @@ bool arrowPqTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
         return true;
     if (arrow_type->id() == Type::DOUBLE && pq_type == ::parquet::Type::DOUBLE)
         return true;
+    if (arrow_type->id() == Type::DECIMAL)
+        return true;
     // XXX byte array is not always string?
     if (arrow_type->id() == Type::STRING &&
         pq_type == ::parquet::Type::BYTE_ARRAY)

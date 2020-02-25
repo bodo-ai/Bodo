@@ -12,7 +12,7 @@ from numba import types, generated_jit
 from numba.extending import overload
 
 import bodo
-from bodo.utils.utils import get_ctypes_ptr, _numba_to_c_type_map, alloc_arr_tup
+from bodo.utils.utils import get_ctypes_ptr, numba_to_c_type, alloc_arr_tup
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.libs.timsort import getitem_arr_tup
 from bodo.libs.str_ext import string_type
@@ -492,8 +492,8 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
     )
     # print(func_text)
 
-    int32_typ_enum = np.int32(_numba_to_c_type_map[types.int32])
-    char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
+    int32_typ_enum = np.int32(numba_to_c_type(types.int32))
+    char_typ_enum = np.int32(numba_to_c_type(types.uint8))
     loc_vars = {}
     exec(
         func_text,

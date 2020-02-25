@@ -22,8 +22,9 @@ from numba.extending import (
 )
 import bodo
 from bodo.libs.str_arr_ext import string_array_type
-from bodo.utils.utils import _numba_to_c_type_map
+from bodo.utils.utils import numba_to_c_type
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArray, get_categories_int_type
 from bodo.libs.bool_arr_ext import boolean_array
 
@@ -125,7 +126,7 @@ def array_to_info(typingctx, arr_type_t):
             assert arr_type.ndim == 1, "only 1D array shuffle supported"
             length = builder.extract_value(arr.shape, 0)
             dtype = arr_type.dtype
-            typ_enum = _numba_to_c_type_map[dtype]
+            typ_enum = numba_to_c_type(dtype)
             typ_arg = cgutils.alloca_once_value(
                 builder, lir.Constant(lir.IntType(32), typ_enum)
             )
@@ -153,10 +154,16 @@ def array_to_info(typingctx, arr_type_t):
             )
 
         # nullable integer/bool array
-        if isinstance(arr_type, IntegerArrayType) or arr_type == boolean_array:
+        if (
+            isinstance(arr_type, (IntegerArrayType, DecimalArrayType))
+            or arr_type == boolean_array
+        ):
             arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
             dtype = arr_type.dtype
-            data_arr = context.make_array(types.Array(dtype, 1, "C"))(
+            np_dtype = dtype
+            if isinstance(arr_type, DecimalArrayType):
+                np_dtype = int128_type
+            data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
                 context, builder, arr.data
             )
             length = builder.extract_value(data_arr.shape, 0)
@@ -164,7 +171,7 @@ def array_to_info(typingctx, arr_type_t):
                 context, builder, arr.null_bitmap
             )
 
-            typ_enum = _numba_to_c_type_map[dtype]
+            typ_enum = numba_to_c_type(dtype)
             typ_arg = cgutils.alloca_once_value(
                 builder, lir.Constant(lir.IntType(32), typ_enum)
             )
@@ -294,9 +301,15 @@ def info_to_array(typingctx, info_type, arr_type):
             return _lower_info_to_array_numpy(arr_type, context, builder, in_info)
 
         # nullable integer/bool array
-        if isinstance(arr_type, IntegerArrayType) or arr_type == boolean_array:
+        if (
+            isinstance(arr_type, (IntegerArrayType, DecimalArrayType))
+            or arr_type == boolean_array
+        ):
             arr = cgutils.create_struct_proxy(arr_type)(context, builder)
-            data_arr_type = types.Array(arr_type.dtype, 1, "C")
+            np_dtype = arr_type.dtype
+            if isinstance(arr_type, DecimalArrayType):
+                np_dtype = int128_type
+            data_arr_type = types.Array(np_dtype, 1, "C")
             data_arr = context.make_array(data_arr_type)(context, builder)
             nulls_arr_type = types.Array(types.uint8, 1, "C")
             nulls_arr = context.make_array(nulls_arr_type)(context, builder)
@@ -345,14 +358,12 @@ def info_to_array(typingctx, info_type, arr_type):
                 builder, [builder.load(length_ptr)], ty=intp_t
             )
             itemsize = context.get_constant(
-                types.intp,
-                context.get_abi_sizeof(context.get_data_type(arr_type.dtype)),
+                types.intp, context.get_abi_sizeof(context.get_data_type(np_dtype)),
             )
             strides_array = cgutils.pack_array(builder, [itemsize], ty=intp_t)
 
             data = builder.bitcast(
-                builder.load(data_ptr),
-                context.get_data_type(arr_type.dtype).as_pointer(),
+                builder.load(data_ptr), context.get_data_type(np_dtype).as_pointer(),
             )
 
             numba.targets.arrayobj.populate_array(
@@ -396,7 +407,7 @@ def info_to_array(typingctx, info_type, arr_type):
 def test_alloc_np(typingctx, len_typ, arr_type):
     def codegen(context, builder, sig, args):
         length, _ = args
-        typ_enum = _numba_to_c_type_map[arr_type.dtype]
+        typ_enum = numba_to_c_type(arr_type.dtype)
         typ_arg = cgutils.alloca_once_value(
             builder, lir.Constant(lir.IntType(32), typ_enum)
         )

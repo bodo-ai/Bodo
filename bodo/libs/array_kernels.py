@@ -17,7 +17,7 @@ from numba.targets.arrayobj import make_array
 from numba.numpy_support import as_dtype
 
 import bodo
-from bodo.utils.utils import _numba_to_c_type_map, unliteral_all
+from bodo.utils.utils import numba_to_c_type, unliteral_all
 from bodo.libs.str_arr_ext import (
     string_array_type,
     pre_alloc_string_array,
@@ -25,6 +25,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.utils.shuffle import getitem_arr_tup_single
 from bodo.utils.utils import build_set
 from bodo.ir.sort import (
@@ -84,7 +85,7 @@ def isna_overload(arr, i):
         return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
 
     # masked Integer array, boolean array
-    if isinstance(arr, IntegerArrayType) or arr == boolean_array:
+    if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr == boolean_array:
         return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
             arr._null_bitmap, i
         )
@@ -175,7 +176,7 @@ class QuantileType(AbstractTemplate):
 def lower_dist_quantile_seq(context, builder, sig, args):
 
     # store an int to specify data type
-    typ_enum = _numba_to_c_type_map[sig.args[0].dtype]
+    typ_enum = numba_to_c_type(sig.args[0].dtype)
     typ_arg = cgutils.alloca_once_value(
         builder, lir.Constant(lir.IntType(32), typ_enum)
     )
@@ -216,7 +217,7 @@ def lower_dist_quantile_seq(context, builder, sig, args):
 def lower_dist_quantile_parallel(context, builder, sig, args):
 
     # store an int to specify data type
-    typ_enum = _numba_to_c_type_map[sig.args[0].dtype]
+    typ_enum = numba_to_c_type(sig.args[0].dtype)
     typ_arg = cgutils.alloca_once_value(
         builder, lir.Constant(lir.IntType(32), typ_enum)
     )

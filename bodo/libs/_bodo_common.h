@@ -35,11 +35,14 @@ struct Bodo_CTypes {
         UINT16 = 9,
         STRING = 10,
         _BOOL = 11,
+        DECIMAL = 12,
         _numtypes
     };
 };
 
 #define BODO_NUMPY_ARRAY_NUM_DTYPES Bodo_CTypes::_numtypes
+#define BYTES_PER_DECIMAL 16
+
 
 /**
  * @brief enum for array types supported by Bodo
@@ -225,6 +228,11 @@ static inline void InitializeBitMask(uint8_t* bits, size_t length, bool val) {
         memset(bits, 0, n_bytes);
     else
         memset(bits, 0xff, n_bytes);
+}
+
+
+bool is_na(const uint8_t* null_bitmap, int64_t i) {
+    return (null_bitmap[i / 8] & kBitmask[i % 8]) == 0;
 }
 
 }

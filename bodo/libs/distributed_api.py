@@ -28,6 +28,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.list_str_arr_ext import (
     list_string_array_type,
     pre_alloc_list_string_array,
@@ -40,7 +41,7 @@ from bodo.hiframes.datetime_date_ext import (
 from bodo.utils.utils import (
     debug_prints,
     empty_like_type,
-    _numba_to_c_type_map,
+    numba_to_c_type,
     unliteral_all,
 )
 from numba.typing.builtins import IndexValueType
@@ -136,7 +137,7 @@ def get_type_enum(arr):
     if isinstance(dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
         dtype = bodo.hiframes.pd_categorical_ext.get_categories_int_type(dtype)
 
-    typ_val = _numba_to_c_type_map[dtype]
+    typ_val = numba_to_c_type(dtype)
     return lambda arr: np.int32(typ_val)
 
 
@@ -190,7 +191,7 @@ def isend(arr, size, pe, tag, cond=True):
         return impl
 
     # voidptr input, pointer to bytes
-    typ_enum = _numba_to_c_type_map[types.uint8]
+    typ_enum = numba_to_c_type(types.uint8)
 
     def impl_voidptr(arr, size, pe, tag, cond=True):  # pragma: no cover
         return _isend(arr, size, typ_enum, pe, tag, cond)
@@ -228,7 +229,7 @@ def alltoall(send_arr, recv_arr, count):  # pragma: no cover
 @numba.generated_jit(nopython=True)
 def gather_scalar(data, allgather=False):
     data = types.unliteral(data)
-    typ_val = _numba_to_c_type_map[data]
+    typ_val = numba_to_c_type(data)
     dtype = data
 
     def gather_scalar_impl(data, allgather=False):  # pragma: no cover
@@ -295,7 +296,7 @@ _dist_arr_reduce = types.ExternalFunction(
 @numba.generated_jit(nopython=True)
 def dist_reduce(value, reduce_op):
     if isinstance(value, types.Array):
-        typ_enum = np.int32(_numba_to_c_type_map[value.dtype])
+        typ_enum = np.int32(numba_to_c_type(value.dtype))
 
         def impl_arr(value, reduce_op):  # pragma: no cover
             A = np.ascontiguousarray(value)
@@ -319,7 +320,7 @@ def dist_reduce(value, reduce_op):
                 "argmin/argmax not supported for type {}".format(target_typ)
             )
 
-    typ_enum = np.int32(_numba_to_c_type_map[target_typ])
+    typ_enum = np.int32(numba_to_c_type(target_typ))
 
     def impl(value, reduce_op):  # pragma: no cover
         in_ptr = value_to_ptr(value)
@@ -338,7 +339,7 @@ _dist_exscan = types.ExternalFunction(
 @numba.generated_jit(nopython=True)
 def dist_exscan(value, reduce_op):
     target_typ = types.unliteral(value)
-    typ_enum = np.int32(_numba_to_c_type_map[target_typ])
+    typ_enum = np.int32(numba_to_c_type(target_typ))
     zero = target_typ(0)
 
     def impl(value, reduce_op):  # pragma: no cover
@@ -389,7 +390,7 @@ def gatherv(data, allgather=False):
         return impl_cat
 
     if isinstance(data, types.Array):
-        typ_val = _numba_to_c_type_map[data.dtype]
+        typ_val = numba_to_c_type(data.dtype)
 
         def gatherv_impl(data, allgather=False):  # pragma: no cover
             data = np.ascontiguousarray(data)
@@ -419,8 +420,8 @@ def gatherv(data, allgather=False):
         return gatherv_impl
 
     if data == string_array_type:
-        int32_typ_enum = np.int32(_numba_to_c_type_map[types.int32])
-        char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
+        int32_typ_enum = np.int32(numba_to_c_type(types.int32))
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def gatherv_str_arr_impl(data, allgather=False):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
@@ -501,9 +502,9 @@ def gatherv(data, allgather=False):
 
         return gatherv_str_arr_impl
 
-    if isinstance(data, IntegerArrayType) or data == boolean_array:
-        typ_val = _numba_to_c_type_map[data.dtype]
-        char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
+    if isinstance(data, (IntegerArrayType, DecimalArrayType)) or data == boolean_array:
+        typ_val = numba_to_c_type(data.dtype)
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def gatherv_impl_int_arr(data, allgather=False):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
@@ -633,8 +634,8 @@ def gatherv(data, allgather=False):
         return impl_df
 
     if data == list_string_array_type:
-        int32_typ_enum = np.int32(_numba_to_c_type_map[types.int32])
-        char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
+        int32_typ_enum = np.int32(numba_to_c_type(types.int32))
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def gatherv_list_str_arr_impl(data, allgather=False):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
@@ -800,7 +801,7 @@ def bcast_overload(data):
 
         return bcast_impl
 
-    if isinstance(data, IntegerArrayType) or data == boolean_array:
+    if isinstance(data, (IntegerArrayType, DecimalArrayType)) or data == boolean_array:
 
         def bcast_impl_int_arr(data):  # pragma: no cover
             bcast(data._data)
@@ -810,8 +811,8 @@ def bcast_overload(data):
         return bcast_impl_int_arr
 
     if data == string_array_type:
-        int32_typ_enum = np.int32(_numba_to_c_type_map[types.int32])
-        char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
+        int32_typ_enum = np.int32(numba_to_c_type(types.int32))
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def bcast_str_impl(data):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
@@ -861,7 +862,7 @@ def bcast_scalar_overload(val):
         "ns"
     )
     # TODO: other types like boolean
-    typ_val = _numba_to_c_type_map[val]
+    typ_val = numba_to_c_type(val)
     # TODO: fix np.full and refactor
     func_text = (
         "def bcast_scalar_impl(val):\n"
@@ -990,7 +991,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
     if arr == string_array_type:
         # TODO: other kinds, unicode
         kind = numba.unicode.PY_UNICODE_1BYTE_KIND
-        char_typ_enum = np.int32(_numba_to_c_type_map[types.uint8])
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def str_getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
             if ind >= total_len:
@@ -1088,7 +1089,10 @@ def alltoallv(
     typ_enum_o = get_type_enum(out_data)
     assert typ_enum == typ_enum_o
 
-    if isinstance(send_data, IntegerArrayType) or send_data == boolean_array:
+    if (
+        isinstance(send_data, (IntegerArrayType, DecimalArrayType))
+        or send_data == boolean_array
+    ):
         return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: c_alltoallv(
             send_data._data.ctypes,
             out_data._data.ctypes,
@@ -1479,8 +1483,10 @@ def dist_permutation_array_index(
 ll.add_symbol("finalize", hdist.finalize)
 finalize = types.ExternalFunction("finalize", types.int32())
 from bodo.io import s3_reader
+
 ll.add_symbol("finalize_s3", s3_reader.finalize_s3)
 finalize_s3 = types.ExternalFunction("finalize_s3", types.int32())
+
 
 @numba.njit
 def call_finalize():  # pragma: no cover

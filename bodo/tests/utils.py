@@ -335,6 +335,9 @@ def _test_equal(
             py_out = py_out[py_out.argsort()]
             bodo_out = bodo_out[bodo_out.argsort()]
         pd.util.testing.assert_extension_array_equal(bodo_out, py_out)
+    elif isinstance(py_out, float):
+        # avoid equality check since paralellism can affect floating point operations
+        np.testing.assert_allclose(py_out, bodo_out, 1e-4)
     else:
         assert bodo_out == py_out
 
