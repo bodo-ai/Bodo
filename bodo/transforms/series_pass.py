@@ -77,7 +77,7 @@ import bodo.hiframes.series_str_impl  # side effect: install Series overloads
 import bodo.hiframes.series_dt_impl  # side effect: install Series overloads
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
-from bodo.hiframes.series_indexing import SeriesIatType
+from bodo.hiframes.series_indexing import SeriesIatType, SeriesIlocType
 from bodo.ir.aggregate import Aggregate
 from bodo.hiframes import series_kernels, split_impl
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
@@ -302,6 +302,12 @@ class SeriesPass:
             )
             return self._replace_func(impl, (target, idx), pre_nodes=nodes)
 
+        if isinstance(target_typ, SeriesIlocType):
+            impl = bodo.hiframes.series_indexing.overload_series_iloc_getitem(
+                self.typemap[target.name], self.typemap[idx.name]
+            )
+            return self._replace_func(impl, (target, idx), pre_nodes=nodes)
+
         # inline index getitem, TODO: test
         if bodo.hiframes.pd_index_ext.is_pd_index_type(target_typ):
             typ1, typ2 = self.typemap[target.name], self.typemap[idx.name]
@@ -483,6 +489,10 @@ class SeriesPass:
 
         if isinstance(rhs_type, SeriesType) and rhs.attr == "T":
             rhs = rhs.value
+            return [assign]
+
+        if isinstance(rhs_type, SeriesIlocType) and rhs.attr == "_obj":
+            assign.value  = guard(get_definition, self.func_ir, rhs.value).value
             return [assign]
 
         return [assign]

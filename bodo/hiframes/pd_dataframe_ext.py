@@ -1091,6 +1091,7 @@ class GetItemDataFrameLoc(AbstractTemplate):
                 return signature(ret_typ, *args)
 
 
+# TODO: use overload
 @infer_global(operator.getitem)
 class GetItemDataFrameILoc(AbstractTemplate):
     key = operator.getitem
@@ -1110,12 +1111,26 @@ class GetItemDataFrameILoc(AbstractTemplate):
             if (
                 isinstance(idx, types.BaseTuple)
                 and len(idx) == 2
+                and isinstance(idx.types[0], types.SliceType)
                 and isinstance(idx.types[1], types.IntegerLiteral)
             ):
                 col_no = idx.types[1].literal_value
                 data_typ = df.df_type.data[col_no]
                 # TODO: index
-                ret_typ = SeriesType(data_typ.dtype, data_typ, None, bodo.string_type)
+                index = RangeIndexType(types.none)
+                ret_typ = SeriesType(data_typ.dtype, data_typ, index, bodo.string_type)
+                return signature(ret_typ, *args)
+            # df.iloc[1,0]
+            if (
+                isinstance(idx, types.BaseTuple)
+                and len(idx) == 2
+                and isinstance(idx.types[0], types.Integer)
+                and isinstance(idx.types[1], types.IntegerLiteral)
+            ):
+                col_no = idx.types[1].literal_value
+                data_typ = df.df_type.data[col_no]
+                # TODO: proper Series getitem
+                ret_typ = data_typ.dtype
                 return signature(ret_typ, *args)
 
 
