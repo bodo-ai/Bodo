@@ -489,10 +489,7 @@ class DataFramePass:
 
         # replace attribute access with overload
         if isinstance(rhs_type, DataFrameType) and rhs.attr in (
-            "index",
-            "columns",
             "values",
-            "ndim",
             "size",
             "shape",
             "empty",
@@ -541,11 +538,6 @@ class DataFramePass:
             return nodes + compile_func_single_block(
                 _init_df, new_data + [index], assign.target, self
             )
-
-        # df.shape
-        if isinstance(rhs_type, DataFrameType) and rhs.attr == "shape":
-            n_cols = len(rhs_type.columns)
-            return self._replace_func(lambda df: (len(df), n_cols), [rhs.value])
 
         return [assign]
 
@@ -684,20 +676,6 @@ class DataFramePass:
                 assign, assign.target, rhs, func_mod, func_name
             )
 
-        if func_mod == "pandas" and func_name in ("isna", "isnull", "notna", "notnull"):
-            if func_name == "isnull":
-                func_name = "isna"
-            if func_name == "notnull":
-                func_name = "notna"
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = getattr(bodo.hiframes.dataframe_impl, "overload_" + func_name)(
-                *arg_typs, **kw_typs
-            )
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
-
         if fdef == ("pivot_table_dummy", "bodo.hiframes.pd_groupby_ext"):
             return self._run_call_pivot_table(assign, lhs, rhs)
 
@@ -771,9 +749,7 @@ class DataFramePass:
         return [assign]
 
     def _run_call_dataframe(self, assign, lhs, rhs, df_var, func_name):
-        if func_name in ("isna", "isnull", "count", "sum", "query"):
-            if func_name == "isnull":
-                func_name = "isna"
+        if func_name in ("count", "query"):
             rhs.args.insert(0, df_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
