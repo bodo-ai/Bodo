@@ -228,11 +228,11 @@ def init_const_pattern(typingctx, pat, pat_const=None):
     """dummy intrinsic to add constant pattern string to Pattern data type
     """
     pat_const_str = get_overload_const_str(pat_const)
+
     def codegen(context, builder, sig, args):
         return impl_ret_borrowed(context, builder, sig.return_type, args[0])
 
     return RePatternType(pat_const_str)(pat, pat_const), codegen
-
 
 
 @overload(re.compile)
@@ -240,10 +240,12 @@ def re_compile_overload(pattern, flags=0):
     # if pattern string is constant, add it to data type to enable findall()
     if is_overload_constant_str(pattern):
         pat_const = get_overload_const_str(pattern)
+
         def _re_compile_const_impl(pattern, flags=0):  # pragma: no cover
             with numba.objmode(pat="re_pattern_type"):
                 pat = re.compile(pattern, flags)
             return init_const_pattern(pat, pat_const)
+
         return _re_compile_const_impl
 
     def _re_compile_impl(pattern, flags=0):  # pragma: no cover
@@ -319,7 +321,9 @@ def _pat_findall_const_impl(
     with numba.objmode(m="{}"):
         m = p.findall(string, pos, endpos)
     return m
-""".format(typ_name)
+""".format(
+            typ_name
+        )
         loc_vars = {}
         exec(func_text, {"numba": numba}, loc_vars)
         impl = loc_vars["_pat_findall_const_impl"]
@@ -432,7 +436,8 @@ def overload_match_group(m, *args):
     # instead of the argument types, Numba passes a tuple with a StarArgTuple type at
     # some point during lowering
     if len(args) == 1 and isinstance(
-            args[0], (types.StarArgTuple, types.StarArgUniTuple)):
+        args[0], (types.StarArgTuple, types.StarArgUniTuple)
+    ):
         args = args[0].types
 
     # no argument case returns a string

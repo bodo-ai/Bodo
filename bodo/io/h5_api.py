@@ -27,7 +27,7 @@ from bodo.libs.str_ext import (
     std_str_to_unicode,
 )
 import bodo
-from bodo.utils.utils import unliteral_all, _numba_to_c_type_map
+from bodo.utils.utils import unliteral_all, numba_to_c_type
 from bodo.utils.typing import parse_dtype, is_overload_none
 import bodo.io
 
@@ -214,7 +214,7 @@ def overload_h5_file_create_dataset(obj_id, name, shape=None, dtype=None, data=N
     assert is_overload_none(data)  # TODO: support passing data directly
     # TODO: support non-constant dtype string value
     nb_dtype = parse_dtype(dtype)
-    typ_enum = np.int32(_numba_to_c_type_map[nb_dtype])
+    typ_enum = np.int32(numba_to_c_type(nb_dtype))
     ndim = np.int32(len(shape))
 
     def impl(obj_id, name, shape=None, dtype=None, data=None):  # pragma: no cover

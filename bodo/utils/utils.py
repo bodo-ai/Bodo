@@ -54,6 +54,7 @@ class CTypeEnum(Enum):
     UInt16 = 9
     # NOTE: 10 is used by STRING in bodo_common.h
     Bool = 11
+    Decimal = 12
 
 
 _numba_to_c_type_map = {
@@ -111,6 +112,14 @@ def get_constant(func_ir, var, default=NOT_CONSTANT):
     if isinstance(def_node, ir.Var):
         return get_constant(func_ir, def_node, default)
     return default
+
+
+
+def numba_to_c_type(t):
+    if isinstance(t, bodo.libs.decimal_arr_ext.Decimal128Type):
+        return CTypeEnum.Decimal.value
+
+    return _numba_to_c_type_map[t]
 
 
 def inline_new_blocks(func_ir, block, i, callee_blocks, work_list=None):
@@ -193,6 +202,7 @@ def is_alloc_callname(func_name, mod_name):
         or (func_name == "alloc_bool_array" and mod_name == "bodo.libs.bool_arr_ext")
         or (func_name == "alloc_datetime_date_array"
             and mod_name == "bodo.hiframes.datetime_date_ext")
+        or (func_name == "alloc_decimal_array" and mod_name == "bodo.libs.decimal_arr_ext")
     )
 
 
@@ -348,6 +358,7 @@ def is_array_typ(var_typ):
         or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
         or isinstance(var_typ, bodo.hiframes.pd_multi_index_ext.MultiIndexType)
         or isinstance(var_typ, IntegerArrayType)
+        or isinstance(var_typ, bodo.libs.decimal_arr_ext.DecimalArrayType)
         or var_typ == boolean_array
         or isinstance(var_typ, bodo.hiframes.pd_categorical_ext.CategoricalArray)
         or var_typ == bodo.libs.str_ext.random_access_string_array
@@ -553,6 +564,17 @@ def empty_like_type_overload(n, arr):
             )
 
         return empty_like_type_bool_arr
+
+    if isinstance(arr, bodo.libs.decimal_arr_ext.DecimalArrayType):
+        precision = arr.precision
+        scale = arr.scale
+        def empty_like_type_decimal_arr(n, arr):
+
+            return bodo.libs.decimal_arr_ext.alloc_decimal_array(
+                n, precision, scale
+            )
+
+        return empty_like_type_decimal_arr
 
     # string array buffer for join
     assert arr == string_array_type

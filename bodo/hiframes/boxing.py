@@ -2,6 +2,7 @@
 """
 Boxing and unboxing support for DataFrame, Series, etc.
 """
+import decimal
 import pandas as pd
 import numpy as np
 import datetime
@@ -32,6 +33,7 @@ from bodo.hiframes.pd_dataframe_ext import (
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import typeof_pd_int_dtype
+from bodo.libs.decimal_arr_ext import Decimal128Type
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.hiframes.split_impl import (
@@ -148,7 +150,9 @@ def _infer_series_dtype(S):
             return string_type
 
         first_val = S.iloc[i]
-        if isinstance(first_val, list):
+        # NOTE: pandas may create array(array(str)) instead of array(list(str))
+        # see test_io.py::test_pq_list_str
+        if isinstance(first_val, (list, np.ndarray)):
             return _infer_series_list_dtype(S.values, S.name)
         elif isinstance(first_val, str):
             return string_type
@@ -158,6 +162,9 @@ def _infer_series_dtype(S):
             # XXX: using .values to check date type since DatetimeIndex returns
             # Timestamp which is subtype of datetime.date
             return datetime_date_type
+        if isinstance(first_val, decimal.Decimal):
+            # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
+            return Decimal128Type(38, 18)
         else:
             raise ValueError(
                 "object dtype infer: data type for column {} not supported".format(
@@ -189,10 +196,11 @@ def _infer_series_list_dtype(A, name):
         first_val = A[i]
         if isinstance(first_val, float) and np.isnan(first_val) or first_val is None:
             continue
-        if not isinstance(first_val, list):
+        if not isinstance(first_val, (list, np.ndarray)):
             raise ValueError("data type for column {} not supported".format(name))
         if len(first_val) > 0:
             # TODO: support more types
+            # TODO: can nulls be inside the list?
             if isinstance(first_val[0], str):
                 return types.List(string_type)
             else:

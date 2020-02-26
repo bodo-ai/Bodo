@@ -74,12 +74,12 @@ from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.utils.typing import (
-    get_index_data_arr_types, 
-    is_overload_none, 
-    is_overload_constant_str, 
+    get_index_data_arr_types,
+    is_overload_none,
+    is_overload_constant_str,
     get_overload_const_func,
-    get_overload_const_str, 
-    BodoError
+    get_overload_const_str,
+    BodoError,
 )
 
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
@@ -333,12 +333,12 @@ class DataFramePass:
             return self._gen_df_filter(df_var, index_var, lhs)
 
         # df.iloc[1:n,0], df.loc[1:n,'A']
+        # df.iloc[3, 0]
         if (
             (self._is_df_loc_var(rhs.value) or self._is_df_iloc_var(rhs.value))
             and isinstance(index_typ, types.BaseTuple)
             and len(index_typ) == 2
         ):
-            #
             df_var = guard(get_definition, self.func_ir, rhs.value).value
             df_typ = self.typemap[df_var.name]
             ind_def = guard(get_definition, self.func_ir, index_var)
@@ -356,25 +356,20 @@ class DataFramePass:
             else:  # df.loc
                 col_name = guard(find_const, self.func_ir, ind_def.items[1])
 
-            col_filter_var = ind_def.items[0]
+            ind_var = ind_def.items[0]
             name_var = ir.Var(lhs.scope, mk_unique_var("df_col_name"), lhs.loc)
             self.typemap[name_var.name] = types.StringLiteral(col_name)
             nodes.append(ir.Assign(ir.Const(col_name, lhs.loc), name_var, lhs.loc))
             in_arr = self._get_dataframe_data(df_var, col_name, nodes)
             df_index_var = self._get_dataframe_index(df_var, nodes)
 
-            if guard(is_whole_slice, self.typemap, self.func_ir, col_filter_var):
-                func = lambda A, ind, df_index, name: bodo.hiframes.pd_series_ext.init_series(
-                    A, df_index, name
-                )
-            else:
-                # TODO: test this case
-                func = lambda A, ind, df_index, name: bodo.hiframes.pd_series_ext.init_series(
-                    A[ind], None, name
-                )
+            # use iloc of Series
+            func = lambda A, ind, df_index, name: bodo.hiframes.pd_series_ext.init_series(
+                A, df_index, name
+            ).iloc[ind]
 
             return self._replace_func(
-                func, [in_arr, col_filter_var, df_index_var, name_var], pre_nodes=nodes
+                func, [in_arr, ind_var, df_index_var, name_var], pre_nodes=nodes
             )
 
         if self._is_df_iat_var(rhs.value):
@@ -436,9 +431,7 @@ class DataFramePass:
         # add index array to filter node
         in_df_index = self._get_dataframe_index(df_var, nodes)
         in_df_index_name = self._get_index_name(in_df_index, nodes)
-        in_index_arr = self._gen_array_from_index(
-            df_var, list(in_vars.values())[0], nodes
-        )
+        in_index_arr = self._gen_array_from_index(df_var, nodes)
         out_index_arr = ir.Var(lhs.scope, mk_unique_var("index"), lhs.loc)
         self.typemap[out_index_arr.name] = self.typemap[in_index_arr.name]
         in_vars["$_bodo_index_"] = in_index_arr
@@ -491,10 +484,7 @@ class DataFramePass:
 
         # replace attribute access with overload
         if isinstance(rhs_type, DataFrameType) and rhs.attr in (
-            "index",
-            "columns",
             "values",
-            "ndim",
             "size",
             "shape",
             "empty",
@@ -543,11 +533,6 @@ class DataFramePass:
             return nodes + compile_func_single_block(
                 _init_df, new_data + [index], assign.target, self
             )
-
-        # df.shape
-        if isinstance(rhs_type, DataFrameType) and rhs.attr == "shape":
-            n_cols = len(rhs_type.columns)
-            return self._replace_func(lambda df: (len(df), n_cols), [rhs.value])
 
         return [assign]
 
@@ -686,20 +671,6 @@ class DataFramePass:
                 assign, assign.target, rhs, func_mod, func_name
             )
 
-        if func_mod == "pandas" and func_name in ("isna", "isnull", "notna", "notnull"):
-            if func_name == "isnull":
-                func_name = "isna"
-            if func_name == "notnull":
-                func_name = "notna"
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = getattr(bodo.hiframes.dataframe_impl, "overload_" + func_name)(
-                *arg_typs, **kw_typs
-            )
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
-
         if fdef == ("pivot_table_dummy", "bodo.hiframes.pd_groupby_ext"):
             return self._run_call_pivot_table(assign, lhs, rhs)
 
@@ -773,49 +744,7 @@ class DataFramePass:
         return [assign]
 
     def _run_call_dataframe(self, assign, lhs, rhs, df_var, func_name):
-        if func_name in (
-            "to_numpy",
-            "astype",
-            "copy",
-            "isna",
-            "isnull",
-            "notna",
-            "head",
-            "tail",
-            "isin",
-            "abs",
-            "corr",
-            "cov",
-            "count",
-            "prod",
-            "sum",
-            "max",
-            "min",
-            "mean",
-            "var",
-            "std",
-            "median",
-            "pct_change",
-            "describe",
-            "product",
-            "quantile",
-            "cumprod",
-            "cumsum",
-            "nunique",
-            "idxmax",
-            "idxmin",
-            "take",
-            "shift",
-            "set_index",
-            "duplicated",
-            "drop_duplicates",
-            "rename",
-            "query",
-        ):
-            if func_name == "isnull":
-                func_name = "isna"
-            if func_name == "product":
-                func_name = "prod"
+        if func_name in ("count", "query"):
             rhs.args.insert(0, df_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
@@ -1143,8 +1072,7 @@ class DataFramePass:
         in_vars = {
             c: self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns
         }
-        arr = list(in_vars.values())[0]
-        in_index_var = self._gen_array_from_index(df_var, arr, nodes)
+        in_index_var = self._gen_array_from_index(df_var, nodes)
         in_vars["$_bodo_index_"] = in_index_var
 
         # remove key from dfs (only data is kept)
@@ -1217,13 +1145,13 @@ class DataFramePass:
             # TODO: fix index for inplace case
             return self._set_df_inplace(_init_df, out_arrs, df_var, lhs.loc, nodes)
 
-    def _gen_array_from_index(self, df_var, arr, nodes):
-        def _get_index(df, arr):  # pragma: no cover
+    def _gen_array_from_index(self, df_var, nodes):
+        def _get_index(df):  # pragma: no cover
             return bodo.utils.conversion.index_to_array(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
             )
 
-        nodes += compile_func_single_block(_get_index, (df_var, arr), None, self)
+        nodes += compile_func_single_block(_get_index, (df_var,), None, self)
         return nodes[-1].target
 
     def _gen_index_from_array(self, arr_var, name_var, nodes):
@@ -1493,7 +1421,7 @@ class DataFramePass:
         )
         _dropna_imp = loc_vars["_dropna_imp"]
 
-        in_index_var = self._gen_array_from_index(df_var, df_var, nodes)
+        in_index_var = self._gen_array_from_index(df_var, nodes)
         args = col_vars + [in_index_var, inplace_var]
 
         if not inplace:
@@ -1555,7 +1483,7 @@ class DataFramePass:
                     arr_args.append(arr_var)
                 args = arr_args + args
             else:
-                ind_var = self._gen_array_from_index(df_var, df_var, nodes)
+                ind_var = self._gen_array_from_index(df_var, nodes)
                 args = [ind_var] + args
 
         if not inplace:
@@ -1579,13 +1507,13 @@ class DataFramePass:
         expr = get_str_const_value(expr_var, self.func_ir, err_msg, self.typemap)
 
         # check expr is a non-empty string
-        if len(expr)==0:
+        if len(expr) == 0:
             raise BodoError("query(): expr argument cannot be an empty string")
 
         # check expr is not multiline expression
-        if len([e.strip() for e in expr.splitlines() if e.strip() != ""])>1:
+        if len([e.strip() for e in expr.splitlines() if e.strip() != ""]) > 1:
             raise BodoError("query(): multiline expressions not supported yet")
-        
+
         # parse expression
         parsed_expr, parsed_expr_str, used_cols = self._parse_query_expr(
             expr, df_typ.columns
@@ -1620,23 +1548,22 @@ class DataFramePass:
         # data frame column inputs
         nodes = []
         args = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols.keys()]
-        # index
-        arr = (
-            args[0]
-            if len(args) > 0
-            else self._get_dataframe_data(df_var, df_typ.columns[0], nodes)
-        )
-        args.append(self._gen_array_from_index(df_var, arr, nodes))
+        args.append(self._gen_array_from_index(df_var, nodes))
         # local referenced variables
         args += [ir.Var(lhs.scope, v, lhs.loc) for v in loc_ref_vars.values()]
 
         nodes += compile_func_single_block(_query_impl, args, lhs, self)
-        
+
         # check whether the output of generated function is a boolean array
-        if(type(self.typemap[nodes[-1].value.name]) != bodo.hiframes.pd_series_ext.SeriesType
-           or self.typemap[nodes[-1].value.name].dtype != types.bool_):
-            raise BodoError('query(): expr does not evaluate to a 1D boolean array.'
-                ' Only 1D boolean array is supported right now.')
+        if (
+            type(self.typemap[nodes[-1].value.name])
+            != bodo.hiframes.pd_series_ext.SeriesType
+            or self.typemap[nodes[-1].value.name].dtype != types.bool_
+        ):
+            raise BodoError(
+                "query(): expr does not evaluate to a 1D boolean array."
+                " Only 1D boolean array is supported right now."
+            )
 
         return nodes
 
@@ -1717,8 +1644,11 @@ class DataFramePass:
                     value_str = str(self.visit(value))
                 except pd.core.computation.ops.UndefinedVariableError as e:
                     col_name = e.args[0].split("'")[1]
-                    raise BodoError("df.query(): column {} is not found in dataframe columns {}"
-                        .format(col_name, columns))
+                    raise BodoError(
+                        "df.query(): column {} is not found in dataframe columns {}".format(
+                            col_name, columns
+                        )
+                    )
             else:
                 value_str = str(self.visit(value))
             name = value_str + "." + attr
@@ -1817,27 +1747,36 @@ class DataFramePass:
             parsed_expr_str = str(parsed_expr)
         except pd.core.computation.ops.UndefinedVariableError as e:
             # catch undefined variable error
-            index_name = self.typemap['arg.df'].index.name_typ
-            if (not is_overload_none(index_name) and 
-                get_overload_const_str(index_name) == e.args[0].split("'")[1]):
+            index_name = self.typemap["arg.df"].index.name_typ
+            if (
+                not is_overload_none(index_name)
+                and get_overload_const_str(index_name) == e.args[0].split("'")[1]
+            ):
                 # currently do not support named index appears in expr
                 raise BodoError(
                     "df.query(): Refering to named"
-                    " index ('{}') by name is not supported".format(get_overload_const_str(index_name)))
+                    " index ('{}') by name is not supported".format(
+                        get_overload_const_str(index_name)
+                    )
+                )
             else:
                 # throw other errors
-                # this includes: columns does not exist in dataframe, 
+                # this includes: columns does not exist in dataframe,
                 #                undefined local variable using @
                 raise BodoError("df.query(): undefined variable, {}".format(e))
         except AttributeError as e:
             if e.args[0] == "'NewFuncNode' object has no attribute 'is_scalar'":
-                # AttributeError with this error message is thrown 
+                # AttributeError with this error message is thrown
                 # when expr has unsupported expressions
                 if ".dt." in expr:
                     # currently do not support series.dt in expr
-                    raise BodoError("df.query(): Series.dt is not supported in expression")
+                    raise BodoError(
+                        "df.query(): Series.dt is not supported in expression"
+                    )
                 else:
-                    raise BodoError("df.query(): unsupported expression: {}, ".format(expr))
+                    raise BodoError(
+                        "df.query(): unsupported expression: {}, ".format(expr)
+                    )
             else:
                 # still throwing attribute error
                 # because during testing, no other kinds of AttributeError were found
@@ -2000,6 +1939,7 @@ class DataFramePass:
             how_var,
             suffix_x_var,
             suffix_y_var,
+            is_join_var,
         ) = rhs.args
 
         left_on = self._get_const_or_list(left_on_var)
@@ -2007,8 +1947,8 @@ class DataFramePass:
         how = guard(find_const, self.func_ir, how_var)
         suffix_x = guard(find_const, self.func_ir, suffix_x_var)
         suffix_y = guard(find_const, self.func_ir, suffix_y_var)
+        is_join = guard(find_const, self.func_ir, is_join_var)
         out_typ = self.typemap[lhs.name]
-
         # convert right join to left join
         if how == "right":
             how = "left"
@@ -2036,19 +1976,17 @@ class DataFramePass:
         in_index_var = None
         out_index_var = None
         in_df_index_name = None
-        if "$_bodo_index_" in right_on:
+        right_index = "$_bodo_index_" in right_on
+        left_index = "$_bodo_index_" in left_on
+        if right_index:
             in_df_index = self._get_dataframe_index(right_df, nodes)
             in_df_index_name = self._get_index_name(in_df_index, nodes)
-            in_index_var = self._gen_array_from_index(
-                right_df, list(right_arrs.values())[0], nodes
-            )
+            in_index_var = self._gen_array_from_index(right_df, nodes)
             right_arrs["$_bodo_index_"] = in_index_var
-        if "$_bodo_index_" in left_on:
+        if left_index:
             in_df_index = self._get_dataframe_index(left_df, nodes)
             in_df_index_name = self._get_index_name(in_df_index, nodes)
-            in_index_var = self._gen_array_from_index(
-                left_df, list(left_arrs.values())[0], nodes
-            )
+            in_index_var = self._gen_array_from_index(left_df, nodes)
             left_arrs["$_bodo_index_"] = in_index_var
 
         if in_index_var is not None:
@@ -2070,6 +2008,7 @@ class DataFramePass:
                 suffix_x,
                 suffix_y,
                 lhs.loc,
+                is_join,
             )
         )
 
@@ -2079,16 +2018,8 @@ class DataFramePass:
                 out_index_var, in_df_index_name, nodes
             )
             out_arrs = [v for c, v in out_data_vars.items() if c != "$_bodo_index_"]
-            if (
-                "$_bodo_index_" in right_on
-                and "$_bodo_index_" not in left_on
-                and how == "left"
-            ):
-                out_arrs.append(self._get_dataframe_index(left_df, nodes))
-            else:
-                out_arrs.append(out_index)
+            out_arrs.append(out_index)
             _init_df = _gen_init_df(out_typ.columns, "index")
-
         else:
             _init_df = _gen_init_df(out_typ.columns)
 
@@ -2179,7 +2110,7 @@ class DataFramePass:
             exec(func_text, {}, loc_vars)
             _multi_inde_impl = loc_vars["_multi_inde_impl"]
             nodes += compile_func_single_block(
-                _multi_inde_impl, out_key_vars, None, self,
+                _multi_inde_impl, out_key_vars, None, self
             )
             index_var = nodes[-1].target
         else:
@@ -2376,9 +2307,7 @@ class DataFramePass:
         out_index_var = self._get_dataframe_index(df_var, nodes)
         on_index_arr = on_arr
         if isinstance(window_const, str) and on_arr is None:
-            on_index_arr = self._gen_array_from_index(
-                df_var, list(in_vars.values())[0], nodes
-            )
+            on_index_arr = self._gen_array_from_index(df_var, nodes)
 
         df_col_map = {}
         for c in rolling_typ.selection:
@@ -2898,9 +2827,7 @@ def _gen_init_df(columns, index=None):
     # TODO: fix type inference for const str
     # a column name can be a string or tuple of strings (multi-level)
     col_var = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
-        ", ".join(
-            "'{}'".format(c) if isinstance(c, str) else str(c) for c in columns
-        )
+        ", ".join("'{}'".format(c) if isinstance(c, str) else str(c) for c in columns)
     )
     func_text = "def _init_df({}):\n".format(args)
     func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(

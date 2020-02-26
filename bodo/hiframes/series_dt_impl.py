@@ -40,10 +40,7 @@ from bodo.utils.typing import (
     is_overload_true,
 )
 from bodo.libs.str_ext import string_type
-from bodo.libs.str_arr_ext import (
-    string_array_type,
-    pre_alloc_string_array,
-)
+from bodo.libs.str_arr_ext import string_array_type, pre_alloc_string_array
 
 
 class SeriesDatetimePropertiesType(types.Type):

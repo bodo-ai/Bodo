@@ -77,7 +77,7 @@ import bodo.hiframes.series_str_impl  # side effect: install Series overloads
 import bodo.hiframes.series_dt_impl  # side effect: install Series overloads
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
-from bodo.hiframes.series_indexing import SeriesIatType
+from bodo.hiframes.series_indexing import SeriesIatType, SeriesIlocType
 from bodo.ir.aggregate import Aggregate
 from bodo.hiframes import series_kernels, split_impl
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
@@ -302,6 +302,12 @@ class SeriesPass:
             )
             return self._replace_func(impl, (target, idx), pre_nodes=nodes)
 
+        if isinstance(target_typ, SeriesIlocType):
+            impl = bodo.hiframes.series_indexing.overload_series_iloc_getitem(
+                self.typemap[target.name], self.typemap[idx.name]
+            )
+            return self._replace_func(impl, (target, idx), pre_nodes=nodes)
+
         # inline index getitem, TODO: test
         if bodo.hiframes.pd_index_ext.is_pd_index_type(target_typ):
             typ1, typ2 = self.typemap[target.name], self.typemap[idx.name]
@@ -414,36 +420,16 @@ class SeriesPass:
 
         # replace attribute access with overload
         if isinstance(rhs_type, SeriesType) and rhs.attr in (
-            "index",
             "values",
             "shape",
-            "dtype",
-            "ndim",
             "size",
-            "T",
-            "hasnans",
             "empty",
-            "dtypes",
-            "name",
         ):
             #
             overload_name = "overload_series_" + rhs.attr
             overload_func = getattr(bodo.hiframes.series_impl, overload_name)
             impl = overload_func(rhs_type)
             return self._replace_func(impl, [rhs.value])
-
-        if isinstance(rhs_type, SeriesType) and rhs.attr == "values":
-            # simply return the column
-            nodes = []
-            var = self._get_series_data(rhs.value, nodes)
-            assign.value = var
-            nodes.append(assign)
-            return nodes
-
-        if isinstance(rhs_type, SeriesType) and rhs.attr == "shape":
-            nodes = []
-            data = self._get_series_data(rhs.value, nodes)
-            return self._replace_func(lambda A: (len(A),), [data], pre_nodes=nodes)
 
         if isinstance(rhs_type, DatetimeIndexType) and rhs.attr == "values":
             # simply return the data array
@@ -468,21 +454,8 @@ class SeriesPass:
                 impl = bodo.hiframes.pd_index_ext.gen_tdi_field_impl(rhs.attr)
                 return self._replace_func(impl, [rhs.value])
 
-        if isinstance(rhs_type, SeriesType) and rhs.attr in ("size", "shape"):
-            # simply return the column
-            nodes = []
-            var = self._get_series_data(rhs.value, nodes)
-            rhs.value = var
-            nodes.append(assign)
-            return nodes
-
-        # TODO: test ndim and T
-        if isinstance(rhs_type, SeriesType) and rhs.attr == "ndim":
-            rhs.value = ir.Const(1, rhs.loc)
-            return [assign]
-
-        if isinstance(rhs_type, SeriesType) and rhs.attr == "T":
-            rhs = rhs.value
+        if isinstance(rhs_type, SeriesIlocType) and rhs.attr == "_obj":
+            assign.value  = guard(get_definition, self.func_ir, rhs.value).value
             return [assign]
 
         return [assign]
@@ -864,22 +837,24 @@ class SeriesPass:
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
 
-            if func_name in bodo.hiframes.pd_series_ext.str2str_methods:
-                impl = bodo.hiframes.series_str_impl.create_str2str_methods_overload(
-                    func_name
-                )(self.typemap[func_mod.name])
-            elif func_name in bodo.hiframes.pd_series_ext.str2bool_methods:
-                impl = bodo.hiframes.series_str_impl.create_str2bool_methods_overload(
-                    func_name
-                )(self.typemap[func_mod.name])
-            else:
+            inline_str_op = (
+                "contains",
+                "pad",
+                "slice",
+                "get",
+            )
+            if func_name in inline_str_op:
                 impl = getattr(
                     bodo.hiframes.series_str_impl, "overload_str_method_" + func_name
                 )(*arg_typs, **kw_typs)
-            return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
-            )
-
+                return self._replace_func(
+                    impl,
+                    rhs.args,
+                    pysig=numba.utils.pysignature(impl),
+                    kws=dict(rhs.kws),
+                )
+            else:
+                return [assign]
         # replace _get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
         # TODO: min
@@ -1488,11 +1463,13 @@ class SeriesPass:
 
         # dummy count loop to support len of group in agg UDFs
         if fdef == ("dummy_agg_count", "bodo.ir.aggregate"):
+
             def impl_agg_c(A):  # pragma: no cover
                 c = 0
                 for _ in numba.parfor.internal_prange(len(A)):
                     c += 1
                 return c
+
             return self._replace_func(
                 impl_agg_c, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
@@ -1635,51 +1612,7 @@ class SeriesPass:
         return self._replace_func(impl, args)
 
     def _run_call_series(self, assign, lhs, rhs, series_var, func_name):
-        if func_name in (
-            "sum",
-            "all",
-            "any",
-            "prod",
-            "mean",
-            "var",
-            "std",
-            "cumsum",
-            "cumprod",
-            "abs",
-            "count",
-            "unique",
-            "to_numpy",
-            "min",
-            "max",
-            "median",
-            "idxmin",
-            "idxmax",
-            "rename",
-            "corr",
-            "cov",
-            "nunique",
-            "describe",
-            "isna",
-            "isnull",
-            "isin",
-            "quantile",
-            "fillna",
-            "dropna",
-            "shift",
-            "pct_change",
-            "nlargest",
-            "notna",
-            "nsmallest",
-            "head",
-            "tail",
-            "argsort",
-            "sort_values",
-            "take",
-            "append",
-            "copy",
-        ):
-            if func_name == "isnull":
-                func_name = "isna"
+        if func_name in ("count", "fillna", "sort_values"):
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
@@ -2196,7 +2129,9 @@ class SeriesPass:
             f, args, pre_nodes=nodes, extra_globals={"_func": func_global}
         )
 
-    def _handle_rolling_apply_func(self, func_node, dtype, out_dtype):  # pragma: no cover
+    def _handle_rolling_apply_func(
+        self, func_node, dtype, out_dtype
+    ):  # pragma: no cover
         if isinstance(func_node, ir.Global) and isinstance(
             func_node.value, numba.targets.registry.CPUDispatcher
         ):

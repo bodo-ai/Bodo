@@ -133,7 +133,9 @@ def not_supported_arg_check(func_name, arg_name, arg, defval):
     when not supported argument is provided by users
     """
     if arg_name == "na":
-        if not isinstance(arg, float) or not np.isnan(arg):
+        if not isinstance(arg, types.Omitted) and (
+            not isinstance(arg, float) or not np.isnan(arg)
+        ):
             raise BodoError(
                 "Series.str.{}(): parameter '{}' is not supported, default: np.nan".format(
                     func_name, arg_name
@@ -175,7 +177,7 @@ def overload_series_str(s):
     return lambda s: bodo.hiframes.series_str_impl.init_series_str_method(s)
 
 
-@overload_method(SeriesStrMethodType, "len")
+@overload_method(SeriesStrMethodType, "len", inline="always")
 def overload_str_method_len(S_str):
     def impl(S_str):  # pragma: no cover
         S = S_str._obj
@@ -203,7 +205,7 @@ def overload_str_method_len(S_str):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "split")
+@overload_method(SeriesStrMethodType, "split", inline="always")
 def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
     # TODO: support or just check n and expand arguments
     if not is_overload_none(pat):
@@ -319,7 +321,7 @@ def overload_str_method_get(S_str, i):
     return _str_get_impl
 
 
-@overload_method(SeriesStrMethodType, "join")
+@overload_method(SeriesStrMethodType, "join", inline="always")
 def overload_str_method_join(S_str, sep):
     arr_typ = S_str.stype.data
     if (
@@ -362,7 +364,7 @@ def overload_str_method_join(S_str, sep):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "replace")
+@overload_method(SeriesStrMethodType, "replace", inline="always")
 def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, regex=True):
     not_supported_arg_check("replace", "n", n, -1)
     not_supported_arg_check("replace", "case", case, None)
@@ -501,7 +503,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
     return _str_contains_noregex_impl
 
 
-@overload_method(SeriesStrMethodType, "count")
+@overload_method(SeriesStrMethodType, "count", inline="always")
 def overload_str_method_count(S_str, pat, flags=0):
     # python str.count() and pandas str.count() are different
     str_arg_check("count", "pat", pat)
@@ -531,7 +533,7 @@ def overload_str_method_count(S_str, pat, flags=0):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "find")
+@overload_method(SeriesStrMethodType, "find", inline="always")
 def overload_str_method_find(S_str, sub):
     # not supporting start,end as arguments
     str_arg_check("find", "sub", sub)
@@ -559,7 +561,7 @@ def overload_str_method_find(S_str, sub):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "rfind")
+@overload_method(SeriesStrMethodType, "rfind", inline="always")
 def overload_str_method_rfind(S_str, sub, start=0, end=None):
     str_arg_check("rfind", "sub", sub)
     if start != 0:
@@ -590,7 +592,7 @@ def overload_str_method_rfind(S_str, sub, start=0, end=None):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "center")
+@overload_method(SeriesStrMethodType, "center", inline="always")
 def overload_str_method_center(S_str, width, fillchar=" "):
     common_validate_padding("center", width, fillchar)
 
@@ -622,7 +624,7 @@ def overload_str_method_center(S_str, width, fillchar=" "):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "ljust")
+@overload_method(SeriesStrMethodType, "ljust", inline="always")
 def overload_str_method_ljust(S_str, width, fillchar=" "):
     common_validate_padding("ljust", width, fillchar)
 
@@ -654,7 +656,7 @@ def overload_str_method_ljust(S_str, width, fillchar=" "):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "rjust")
+@overload_method(SeriesStrMethodType, "rjust", inline="always")
 def overload_str_method_rjust(S_str, width, fillchar=" "):
     common_validate_padding("rjust", width, fillchar)
 
@@ -741,7 +743,7 @@ def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "zfill")
+@overload_method(SeriesStrMethodType, "zfill", inline="always")
 def overload_str_method_zfill(S_str, width):
     int_arg_check("zfill", "width", width)
 
@@ -806,9 +808,8 @@ def overload_str_method_slice(S_str, start=None, stop=None, step=None):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "startswith")
+@overload_method(SeriesStrMethodType, "startswith", inline="always")
 def overload_str_method_startswith(S_str, pat, na=np.nan):
-
     not_supported_arg_check("startswith", "na", na, np.nan)
     str_arg_check("startswith", "pat", pat)
 
@@ -835,7 +836,7 @@ def overload_str_method_startswith(S_str, pat, na=np.nan):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "endswith")
+@overload_method(SeriesStrMethodType, "endswith", inline="always")
 def overload_str_method_endswith(S_str, pat, na=np.nan):
     not_supported_arg_check("endswith", "na", na, np.nan)
     str_arg_check("endswith", "pat", pat)
@@ -878,7 +879,7 @@ def overload_str_method_getitem(S_str, ind):
         return lambda S_str, ind: S_str.get(ind)
 
 
-@overload_method(SeriesStrMethodType, "extract")
+@overload_method(SeriesStrMethodType, "extract", inline="always")
 def overload_str_method_extract(S_str, pat, flags=0, expand=True):
 
     if not is_overload_constant_bool(expand):
@@ -968,7 +969,7 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "extractall")
+@overload_method(SeriesStrMethodType, "extractall", inline="always")
 def overload_str_method_extractall(S_str, pat, flags=0, expand=True):
 
     columns, _ = _get_column_names_from_regex(pat, flags, "extractall")
@@ -1187,14 +1188,14 @@ def _install_str2str_methods():
     # install methods that just transform the string into another string
     for op in bodo.hiframes.pd_series_ext.str2str_methods:
         overload_impl = create_str2str_methods_overload(op)
-        overload_method(SeriesStrMethodType, op)(overload_impl)
+        overload_method(SeriesStrMethodType, op, inline="always")(overload_impl)
 
 
 def _install_str2bool_methods():
     # install methods that just transform the string into another boolean
     for op in bodo.hiframes.pd_series_ext.str2bool_methods:
         overload_impl = create_str2bool_methods_overload(op)
-        overload_method(SeriesStrMethodType, op)(overload_impl)
+        overload_method(SeriesStrMethodType, op, inline="always")(overload_impl)
 
 
 _install_str2str_methods()

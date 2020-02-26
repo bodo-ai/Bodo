@@ -5,12 +5,12 @@
 #include "parquet/arrow/reader.h"
 using parquet::arrow::FileReader;
 
-extern "C" {
 
+// TODO: remove this structure and use our own types
 // parquet type sizes (NOT arrow), parquet/types.h
-// boolean, int32, int64, int96, float, double, byte
+// boolean, int32, int64, int96, float, double, byte, int128
 // XXX assuming int96 is always converted to int64 since it's timestamp
-static int pq_type_sizes[] = {1, 4, 8, 8, 4, 8, 1};
+static int pq_type_sizes[] = {1, 4, 8, 8, 4, 8, 1, 16};
 
 void pq_init_reader(const char *file_name,
                     std::shared_ptr<FileReader> *a_reader);
@@ -37,6 +37,23 @@ int pq_read_string_parallel_single_file(
     std::vector<uint32_t> *offset_vec = NULL,
     std::vector<uint8_t> *data_vec = NULL, std::vector<bool> *null_vec = NULL);
 
-}  // extern "C"
+std::pair<int64_t,int64_t> pq_read_list_string_single_file(std::shared_ptr<FileReader>,
+                                   int64_t column_idx, uint32_t **out_offsets,
+                                   uint32_t **index_offsets,
+                                   uint8_t **out_data, uint8_t **out_nulls,
+                                   std::vector<uint32_t> *offset_vec = NULL,
+                                   std::vector<uint32_t> *index_offset_vec = NULL,
+                                   std::vector<uint8_t> *data_vec = NULL,
+                                   std::vector<bool> *null_vec = NULL);
+
+int64_t pq_read_list_string_parallel_single_file(std::shared_ptr<FileReader>,
+                                   int64_t column_idx, uint32_t **out_offsets,
+                                   uint32_t **index_offsets,
+                                   uint8_t **out_data, uint8_t **out_nulls,
+                                   int64_t start, int64_t count,
+                                   std::vector<uint32_t> *offset_vec = NULL,
+                                   std::vector<uint32_t> *index_offset_vec = NULL,
+                                   std::vector<uint8_t> *data_vec = NULL,
+                                   std::vector<bool> *null_vec = NULL);
 
 #endif  // _PARQUET_READER_H_INCLUDED

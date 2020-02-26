@@ -1,0 +1,9 @@
+This is a set of scripts for obfuscating the source code.
+
+* obfuscate.py : This is the script that does the obfuscation for one or more file.
+
+* do_obfuscation.py : This script invokes obfuscate.py to obfuscate hiframes/*.py ir/*.py transforms/*.py
+  directories
+
+There is much possible improvements to be made to the code. For example doing coherent obfuscation
+across many files at once.

@@ -1,6 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import unittest
 import random
+import string
 import pandas as pd
 import numpy as np
 import numba
@@ -139,6 +140,34 @@ def test_nullable_int():
     check_func(impl_select_colH, (df,), sort_output=True, check_dtype=False)
 
 
+
+
+
+@pytest.mark.parametrize(
+    "df_null",
+    [
+        pd.DataFrame({"A": [2, 1, 1, 1], "B": pd.Series(np.full(4, np.nan), dtype="Int64")}),
+        pd.DataFrame({"A": [1, 1, 1, 1], "B": pd.Series([1,2,3,4], dtype='Int64')}),
+    ],
+)
+def test_return_type_nullable_cumsum_cumprod(df_null):
+    """
+    Test Groupby when one row is a nullable-int-bool.
+    A current problem is that cumsum/cumprod with pandas return an array of float for Int64
+    in input. That is why we put check_dtype=False here.
+    """
+    def impl1(df):
+        df2 = df.groupby("A")["B"].agg(("cumsum", "cumprod"))
+        return df2
+
+    def impl2(df):
+        df2 = df.groupby("A")["B"].cumsum()
+        return df2
+
+    check_func(impl1, (df_null,), sort_output=True, check_dtype=False)
+    check_func(impl2, (df_null,), sort_output=True, check_dtype=False)
+
+
 def test_all_null_keys():
     """
     Test Groupby when all rows have null keys (returns empty dataframe)
@@ -175,6 +204,46 @@ def test_agg():
 
     # check_dtype=False since Bodo returns float for Series.min/max. TODO: fix min/max
     check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
+
+
+def test_sum_string():
+    def impl(df):
+        A = df.groupby("A").sum()
+        return A
+
+    df1 = pd.DataFrame({"A": [1, 1, 1, 2], "B": ["a", "b", "c", "d"]})
+    check_func(impl, (df1,), sort_output=True)
+
+
+def test_random_string_sum_min_max():
+    def impl1(df):
+        A = df.groupby("A").sum()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").min()
+        return A
+
+    def impl3(df):
+        A = df.groupby("A").max()
+        return A
+
+    def random_dataframe(n):
+        random.seed(5)
+        eList_A = []
+        eList_B = []
+        for i in range(n):
+            len_str = random.randint(1, 10)
+            val_A = random.randint(1, 10)
+            val_B = "".join(random.choices(string.ascii_uppercase, k=len_str))
+            eList_A.append(val_A)
+            eList_B.append(val_B)
+        return pd.DataFrame({"A": eList_A, "B": eList_B})
+
+    df1 = random_dataframe(100)
+    check_func(impl1, (df1,), sort_output=True)
+    check_func(impl2, (df1,), sort_output=True)
+    check_func(impl3, (df1,), sort_output=True)
 
 
 def test_agg_str_key():

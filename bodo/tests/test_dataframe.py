@@ -1215,6 +1215,29 @@ def test_get_dataframe_data_array_analysis():
     assert eq_set._get_ind("df#0") == eq_set._get_ind("B#0")
 
 
+def test_iloc_slice_col_ind():
+    """test df.iloc[slice, col_ind]
+    """
+    def test_impl(df):
+        return df.iloc[:, 1].values
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
+    check_func(test_impl, (df,))
+
+
+def test_iloc_int_col_ind():
+    """test df.iloc[int, col_ind]
+    """
+    def test_impl(df):
+        return df.iloc[3, 1]
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
+    check_func(test_impl, (df,))
+
+
+
 ############################# old tests ###############################
 
 
@@ -1513,15 +1536,6 @@ class TestDataFrame(unittest.TestCase):
         n = 11
         df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
         np.testing.assert_array_equal(bodo_func(df, n), test_impl(df, n))
-
-    def test_iloc3(self):
-        def test_impl(df):
-            return df.iloc[:, 1].values
-
-        bodo_func = bodo.jit(test_impl)
-        n = 11
-        df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
-        np.testing.assert_array_equal(bodo_func(df), test_impl(df))
 
     @unittest.skip("TODO: support A[[1,2,3]] in Numba")
     def test_iloc4(self):

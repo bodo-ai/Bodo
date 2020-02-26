@@ -80,6 +80,23 @@ def test_groupby_axis_default():
         bodo.jit(impl2)(df)
 
 
+
+def test_groupby_sum_date():
+    """dates are currently not supported"""
+    def impl(df):
+        return df.groupby("A").sum()
+
+    df1 = pd.DataFrame({"A": [2, 1, 1], "B": pd.date_range("2019-1-3", "2019-1-5")})
+    with pytest.raises(
+        BodoError, match="is not supported in groupby built-in function"
+    ):
+        bodo.jit(impl)(df1)
+
+
+
+
+
+
 def test_groupby_supply_level():
     """
     Test groupby(): 'level' cannot be supplied
@@ -378,24 +395,22 @@ def test_groupby_built_in_col_type():
     df = pd.DataFrame({"A": [1, 2, 2], "B": ["aba", "aba", "aba"]})
     with pytest.raises(
         BodoError,
-        match="column type of .* is not supported in groupby built-in functions",
+        match="column type of strings is not supported in groupby built-in function prod",
     ):
         bodo.jit(impl)(df)
 
 
-def test_groupby_built_in_col_str():
+def test_groupby_cumsum_in_col_str():
     """
-    Test Groupby.max() does not accept string columns
-    count() is supported
+    Test Groupby.cumsum() does not accept string columns
     """
 
     def impl(df):
-        return df.groupby(by=["A"]).max()
+        return df.groupby(by=["A"]).cumsum()
 
     df = pd.DataFrame({"A": [1, 2, 2], "B": ["aa", "bb", "cc"]})
     with pytest.raises(
-        BodoError,
-        match="column type of .* is not supported in groupby built-in functions",
+        BodoError, match="only supports columns of types integer and float",
     ):
         bodo.jit(impl)(df)
 
@@ -420,10 +435,7 @@ def test_groupby_median_type_check():
     Test Groupby.median() testing the input type argument
     """
 
-    def impl1(df):
-        return df.groupby("A")["B"].median()
-
-    def impl2(df):
+    def impl(df):
         return df.groupby("A")["B"].median()
 
     df1 = pd.DataFrame({"A": [1, 1, 1, 1], "B": ["a", "b", "c", "d"]})
@@ -431,11 +443,11 @@ def test_groupby_median_type_check():
     with pytest.raises(
         BodoError, match="For median, only column of integer or float type are allowed"
     ):
-        bodo.jit(impl1)(df1)
+        bodo.jit(impl)(df1)
     with pytest.raises(
         BodoError, match="For median, only column of integer or float type are allowed"
     ):
-        bodo.jit(impl2)(df2)
+        bodo.jit(impl)(df2)
 
 
 def test_groupby_cumsum_argument_check():
@@ -449,14 +461,12 @@ def test_groupby_cumsum_argument_check():
     def impl2(df):
         return df.groupby("A")["B"].cumsum(wrongarg=True)
 
-    df = pd.DataFrame({"A":[1,1,1,1], "B":[1,2,3,4]})
+    df = pd.DataFrame({"A": [1, 1, 1, 1], "B": [1, 2, 3, 4]})
     with pytest.raises(
         BodoError, match="For cumsum argument of skipna should be a boolean"
     ):
         bodo.jit(impl1)(df)
-    with pytest.raises(
-        BodoError, match="argument to cumsum can only be skipna"
-    ):
+    with pytest.raises(BodoError, match="argument to cumsum can only be skipna"):
         bodo.jit(impl2)(df)
 
 
@@ -471,14 +481,12 @@ def test_groupby_cumprod_argument_check():
     def impl2(df):
         return df.groupby("A")["B"].cumprod(wrongarg=True)
 
-    df = pd.DataFrame({"A":[1,1,1,1], "B":[1,2,3,4]})
+    df = pd.DataFrame({"A": [1, 1, 1, 1], "B": [1, 2, 3, 4]})
     with pytest.raises(
         BodoError, match="For cumprod argument of skipna should be a boolean"
     ):
         bodo.jit(impl1)(df)
-    with pytest.raises(
-        BodoError, match="argument to cumprod can only be skipna"
-    ):
+    with pytest.raises(BodoError, match="argument to cumprod can only be skipna"):
         bodo.jit(impl2)(df)
 
 

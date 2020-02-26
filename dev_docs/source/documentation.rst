@@ -6,20 +6,19 @@ User&Dev Documentation
 Building Documentation
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-The `user documentation <https://docs.bodo.ai>`_ is under the `docs` directory of the repository and uses
+The `user (or dev) documentation <https://docs.bodo.ai>`_ is under the `docs (or dev_docs)` directory of the repository and uses
 the reStructuredText format.
 It is built with `Sphinx <http://www.sphinx-doc.org>`_ and the alabaster theme::
 
     conda install sphinx
     conda install alabaster
 
-After updating documentation,
-run :code:`make html` in the `docs` folder to build.
-Open `index.html` to view the documentation.
-To update the documentation, use the :code:`gh-pages.py`
+After updating documentation, run :code:`make html` in the `docs` folder to build.  
+Open `index.html` to view the documentation.  
+For the user documentation only, to update, use the :code:`gh-pages.py`
 script under :code:`docs`::
 
-    python gh-pages.py [bodo version(ex:2020.02.0)]
+    python gh-pages.py [bodo version(ex:2020.02.0)]  
 
 Default tag `dev` will be used if no tag is provided. 
 Then verify the repository under the :code:`gh-pages` directory and

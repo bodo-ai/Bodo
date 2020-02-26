@@ -516,6 +516,246 @@ int pq_read_string_parallel_single_file(
     return 0;
 }
 
+std::pair<int64_t,int64_t> pq_read_list_string_single_file(std::shared_ptr<FileReader> arrow_reader,
+                                   int64_t column_idx, uint32_t** out_offsets,
+                                   uint32_t** index_offsets,
+                                   uint8_t** out_data, uint8_t** out_nulls,
+                                   std::vector<uint32_t>* offset_vec,
+                                   std::vector<uint32_t>* index_offset_vec,
+                                   std::vector<uint8_t>* data_vec,
+                                   std::vector<bool>* null_vec) {
+    std::shared_ptr<::arrow::ChunkedArray> chunked_arr;
+    arrow_reader->ReadColumn(column_idx, &chunked_arr);
+    if (chunked_arr == NULL) return {-1, -1};
+    auto arr = chunked_arr->chunk(0);
+    int64_t num_values = arr->length();
+    std::shared_ptr<arrow::DataType> arrow_type =
+        get_arrow_type(arrow_reader, column_idx);
+    if (arrow_type->id() != Type::LIST)
+        std::cerr << "Invalid Parquet list data type" << '\n';
+
+    std::vector<std::shared_ptr<arrow::ArrayData>> &child_data = arr->data()->child_data;
+    if (child_data.size() != 1) {
+        std::cerr << "arrow list array of strings must contain a child array" << std::endl;
+        return {-1, -1};
+    }
+
+    auto parent_buffers = arr->data()->buffers;
+    if (parent_buffers.size() != 2) {
+        std::cerr << "invalid parquet list string number of parent array buffers " << parent_buffers.size()
+                  << std::endl;
+        return {-1, -1};
+    }
+    int64_t parent_null_size = parent_buffers[0]->size();
+    int64_t parent_offsets_size = parent_buffers[1]->size();
+
+    auto child_buffers = child_data[0]->buffers;
+    if (child_buffers.size() != 3) {
+        std::cerr << "invalid parquet string number of array buffers " << child_buffers.size()
+                  << std::endl;
+        return {-1, -1};
+    }
+    int64_t num_strings = child_data[0]->length;
+    int64_t offsets_size = child_buffers[1]->size();
+    int64_t data_size = child_buffers[2]->size();
+    const uint32_t* index_offsets_buff = (const uint32_t*)parent_buffers[1]->data();
+    const uint32_t* offsets_buff = (const uint32_t*)child_buffers[1]->data();
+    const uint8_t* data_buff = child_buffers[2]->data();
+    const uint8_t* null_buff = arr->null_bitmap_data();
+
+    if (offset_vec == NULL) {
+        if (data_vec != NULL)
+            std::cerr << "parquet read string input error" << '\n';
+
+        *out_offsets = new uint32_t[offsets_size / sizeof(uint32_t)];
+        *index_offsets = new uint32_t[parent_offsets_size / sizeof(uint32_t)];
+        *out_data = new uint8_t[data_size];
+
+        if (null_buff != nullptr && parent_null_size > 0) {
+            *out_nulls = new uint8_t[parent_null_size];
+            memcpy(*out_nulls, null_buff, parent_null_size);
+        } else
+            *out_nulls = nullptr;
+
+        memcpy(*out_offsets, offsets_buff, offsets_size);
+        memcpy(*index_offsets, index_offsets_buff, parent_offsets_size);
+        memcpy(*out_data, data_buff, data_size);
+    } else {
+        offset_vec->insert(offset_vec->end(), offsets_buff,
+                           offsets_buff + offsets_size / sizeof(uint32_t));
+        index_offset_vec->insert(index_offset_vec->end(), index_offsets_buff,
+                           index_offsets_buff + parent_offsets_size / sizeof(uint32_t));
+        // we are reading a dataset split into multiple parquet files. some
+        // files might not have any string data at all (because all strings are
+        // empty or there are nan lists). In that case, we don't want to insert
+        // nulls in the middle of the data buffer
+        if ((offsets_size / sizeof(uint32_t) > 0) && (offsets_buff[offsets_size / sizeof(uint32_t) - 1] > 0))
+            data_vec->insert(data_vec->end(), data_buff, data_buff + data_size);
+        append_bits_to_vec(null_vec, null_buff, parent_null_size, 0, num_values);
+    }
+
+    return {num_values, num_strings};
+}
+
+int64_t pq_read_list_string_parallel_single_file(std::shared_ptr<FileReader> arrow_reader,
+                                   int64_t column_idx, uint32_t** out_offsets,
+                                   uint32_t** out_index_offsets,
+                                   uint8_t** out_data, uint8_t** out_nulls,
+                                   int64_t start, int64_t count,
+                                   std::vector<uint32_t>* offset_vec,
+                                   std::vector<uint32_t>* index_offset_vec,
+                                   std::vector<uint8_t>* data_vec,
+                                   std::vector<bool>* null_vec) {
+    if (count == 0) {
+        if (offset_vec == NULL) {
+            *out_offsets = NULL;
+            *out_index_offsets = NULL;
+            *out_data = NULL;
+        }
+        return 0;
+    }
+
+    std::shared_ptr<arrow::DataType> arrow_type =
+        get_arrow_type(arrow_reader, column_idx);
+    if (arrow_type->id() != Type::LIST)
+        std::cerr << "Invalid Parquet string data type" << '\n';
+    // TODO check that list of string
+
+    bool output_vectors = true;
+    if (offset_vec == NULL) {
+        output_vectors = false;
+        *out_index_offsets = new uint32_t[count + 1];
+        // don't know how many strings there are
+        offset_vec = new std::vector<uint32_t>();
+        data_vec = new std::vector<uint8_t>();
+        null_vec = new std::vector<bool>();
+    }
+
+    int64_t n_row_groups =
+        arrow_reader->parquet_reader()->metadata()->num_row_groups();
+    std::vector<int> column_indices;
+    column_indices.push_back(column_idx);
+
+    int row_group_index = 0;
+    int64_t skipped_rows = 0;
+    int64_t read_rows = 0;
+
+    auto rg_metadata =
+        arrow_reader->parquet_reader()->metadata()->RowGroup(row_group_index);
+    int64_t nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
+
+    // skip whole row groups if no need to read any rows
+    while (start - skipped_rows >= nrows_in_group) {
+        skipped_rows += nrows_in_group;
+        row_group_index++;
+        auto rg_metadata = arrow_reader->parquet_reader()->metadata()->RowGroup(
+            row_group_index);
+        nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
+    }
+
+    uint32_t curr_offset = 0;
+    uint32_t curr_index_offset = 0;
+    int64_t num_strings = 0;
+
+    /* ------- read offsets and data ------ */
+    while (read_rows < count) {
+        /* -------- read row group ---------- */
+        std::shared_ptr<::arrow::Table> table;
+        arrow_reader->ReadRowGroup(row_group_index, column_indices, &table);
+        std::shared_ptr<::arrow::ChunkedArray> chunked_arr = table->column(0);
+        if (chunked_arr->num_chunks() != 1) {
+            std::cerr << "invalid parquet number of array chunks" << std::endl;
+        }
+        std::shared_ptr<::arrow::Array> arr = chunked_arr->chunk(0);
+        auto parent_buffers = arr->data()->buffers;
+        if (parent_buffers.size() != 2) {
+            std::cerr << "invalid parquet list string number of parent array buffers " << parent_buffers.size()
+                      << std::endl;
+        }
+
+        std::vector<std::shared_ptr<arrow::ArrayData>> &child_data = arr->data()->child_data;
+        if (child_data.size() != 1) {
+            std::cerr << "arrow list array of strings must contain a child array" << std::endl;
+        }
+
+        auto child_buffers = child_data[0]->buffers;
+        if (child_buffers.size() != 3) {
+            std::cerr << "invalid parquet string number of array buffers " << child_buffers.size()
+                      << std::endl;
+        }
+        int64_t parent_null_size = parent_buffers[0]->size();
+        const uint32_t* parent_offsets_buf = (const uint32_t*)parent_buffers[1]->data();
+        const uint32_t* offsets_buff = (const uint32_t*)child_buffers[1]->data();
+        const uint8_t* data_buff = child_buffers[2]->data();
+        const uint8_t* null_buff = arr->null_bitmap_data();
+
+        /* ----------- read row group ------- */
+
+        int64_t rows_to_skip = start - skipped_rows;
+        int64_t rows_to_read =
+            std::min(count - read_rows, nrows_in_group - rows_to_skip);
+
+        int data_size = 0;
+        for (int64_t i = 0; i < rows_to_read; i++) {
+            uint32_t str_offset_start = parent_offsets_buf[rows_to_skip + i];
+            uint32_t str_offset_end = parent_offsets_buf[rows_to_skip + i + 1];
+            data_size += offsets_buff[str_offset_end] -
+                                offsets_buff[str_offset_start];
+            for (int64_t j = str_offset_start; j < str_offset_end; j++) {
+                offset_vec->push_back(curr_offset);
+                uint32_t str_size = offsets_buff[j+1] - offsets_buff[j];
+                curr_offset += str_size;
+                num_strings++;
+            }
+            if (!output_vectors) {
+                (*out_index_offsets)[read_rows + i] = curr_index_offset;
+            } else {
+                index_offset_vec->push_back(curr_index_offset);
+            }
+            curr_index_offset += str_offset_end - str_offset_start;
+        }
+
+        uint32_t data_start = offsets_buff[parent_offsets_buf[rows_to_skip]];
+        data_vec->insert(data_vec->end(),
+                         data_buff + data_start,
+                         data_buff + data_start + data_size);
+        append_bits_to_vec(null_vec, null_buff, parent_null_size, rows_to_skip,
+                           rows_to_read);
+
+        skipped_rows += rows_to_skip;
+        read_rows += rows_to_read;
+
+        row_group_index++;
+        if (row_group_index < n_row_groups) {
+            auto rg_metadata =
+                arrow_reader->parquet_reader()->metadata()->RowGroup(
+                    row_group_index);
+            nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
+        } else
+            break;
+    }
+    if (read_rows != count) std::cerr << "parquet read incomplete" << '\n';
+
+    if (!output_vectors) {
+        offset_vec->push_back(curr_offset);
+        *out_offsets = new uint32_t[offset_vec->size()];
+        memcpy(*out_offsets, offset_vec->data(), offset_vec->size() * sizeof(uint32_t));
+
+        (*out_index_offsets)[count] = curr_index_offset;
+        *out_data = new uint8_t[curr_offset];
+        memcpy(*out_data, data_vec->data(), curr_offset);
+        pack_null_bitmap(out_nulls, *null_vec, count);
+        delete offset_vec;
+        delete data_vec;
+        delete null_vec;
+    } else {
+        offset_vec->push_back(curr_offset);
+        index_offset_vec->push_back(curr_index_offset);
+    }
+
+    return num_strings;
+}
+
 void pq_init_reader(const char* file_name,
                     std::shared_ptr<FileReader>* a_reader) {
     std::string f_name(file_name);
@@ -611,6 +851,8 @@ bool arrowPqTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
     if (arrow_type->id() == Type::FLOAT && pq_type == ::parquet::Type::FLOAT)
         return true;
     if (arrow_type->id() == Type::DOUBLE && pq_type == ::parquet::Type::DOUBLE)
+        return true;
+    if (arrow_type->id() == Type::DECIMAL)
         return true;
     // XXX byte array is not always string?
     if (arrow_type->id() == Type::STRING &&

@@ -30,6 +30,13 @@ struct HPAT_ReduceOps {
     };
 };
 
+
+// data type for Decimal128 values (2 64-bit ints)
+// initialized in dist/array tools C extensions
+// NOTE: needs to be initialized in all C extensions that use it
+MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
+
+
 static int dist_get_rank() __UNUSED__;
 static int dist_get_size() __UNUSED__;
 static int64_t dist_get_start(int64_t total, int num_pes,
@@ -335,6 +342,8 @@ static MPI_Datatype get_MPI_typ(int typ_enum) {
             return MPI_SHORT;
         case Bodo_CTypes::UINT16:
             return MPI_UNSIGNED_SHORT;
+        case Bodo_CTypes::DECIMAL:
+            return decimal_mpi_type;
         default:
             std::cerr << "Invalid MPI_Type " << typ_enum << "\n";
     }

@@ -1,0 +1,62 @@
+.. _Feb_2020:
+
+Bodo 2020.02 Release (Date: 02/14/2020)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+New Features and Improvements
+------------------------------------------
+- Bodo now utilizes the following packages:
+    - pandas >= 1.0.0
+    - numba 0.48.0
+    - Apache Arrow 0.16.0
+
+- Custom S3 endpoint is supported as well as S3-like object storage systems such as MinIO
+
+- Reading and writing of parquet files with S3 is more robust
+- Parquet read now supports reading columns where elements are list of strings
+- pandas.read_csv() now also accepts a list of column names for the parse_date parameter
+- pandas groupby.agg() supports list of functions for a column::
+
+    df = pd.DataFrame(
+        {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
+    )
+    gb = df.groupby("B").agg({"A": ["sum", "mean"]})
+
+- pandas groupby.agg() now supports a tuple of built-in functions::
+    
+    gb = df.groupby("B")["A"].agg(("sum", "median"))
+
+- User-defined functions can now be used with groupby.agg() and constant dict::
+    
+    gb = df.groupby("B").agg({"A": my_function})
+
+- The compilation time and run time have been improved for pandas groupby with `median`, `cumsum`, and `cumprod`.
+- pandas groupby now supports `cumsum`, `max`, `min`, `prod`, `sum` functions for string columns. 
+- pandas groupby.agg() now supports mixing median and nunique with other functions, 
+  and use of multiple "cumulative" operations in the same groupby (example: cumsum, cumprod, etc).
+- Selecting groupby columns using attribute is now possible::
+
+    df = pd.DataFrame(
+        {"A": [2, 1, 1, 1, 2, 2, 1], "B": [3, 5, 6, 5, 4, 4, 3]}
+    )
+    df.groupby('A').B.sum()
+
+- pandas `Series.str.extractall`, `Series.all()` and `Series.any()` are supported
+- Support for returning MultiIndex in groupby operations
+- Various forms of UDFs in df.apply and Series.map are supported
+- Comparison of datetime fields with datetime constants is now possible
+- Converting `date` and `datetime` of Python `datetime` module to pandas Timestamp is now supported
+- Conversion to float using float class as dtype for pandas Series.astype() is now supported::
+
+    S = pd.Series(['1', '2', '3'])
+    S.astype(float)
+
+
+
+
+Bug Fix
+--------------
+- Fixed a memory leak issue when returning a dataframe from a Bodo function
+- pandas DataFrame.sort_values() now returns correct output for input cases that contain NA
+- Groupby.agg: explicit column selection when using constant dictionary is no longer required
+- Fixed an issue that Bodo always dropped the index in reset_index()
