@@ -4098,7 +4098,7 @@ void cumsum_cumprod_computation_T(array_info* arr, array_info* out_arr, grouping
             return {!GetBit(null_bitmask_i,pos), GetTentry<T>(ptr)};
           },
           [=](int64_t pos, std::pair<bool,T> const& ePair) -> void {
-            SetBitTo(null_bitmask_o, pos, ePair.first);
+            SetBitTo(null_bitmask_o, pos, !ePair.first);
             out_arr->at<T>(pos) = ePair.second;
           });
     }

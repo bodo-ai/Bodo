@@ -140,6 +140,34 @@ def test_nullable_int():
     check_func(impl_select_colH, (df,), sort_output=True, check_dtype=False)
 
 
+
+
+
+@pytest.mark.parametrize(
+    "df_null",
+    [
+        pd.DataFrame({"A": [2, 1, 1, 1], "B": pd.Series(np.full(4, np.nan), dtype="Int64")}),
+        pd.DataFrame({"A": [1, 1, 1, 1], "B": pd.Series([1,2,3,4], dtype='Int64')}),
+    ],
+)
+def test_return_type_nullable_cumsum_cumprod(df_null):
+    """
+    Test Groupby when one row is a nullable-int-bool.
+    A current problem is that cumsum/cumprod with pandas return an array of float for Int64
+    in input. That is why we put check_dtype=False here.
+    """
+    def impl1(df):
+        df2 = df.groupby("A")["B"].agg(("cumsum", "cumprod"))
+        return df2
+
+    def impl2(df):
+        df2 = df.groupby("A")["B"].cumsum()
+        return df2
+
+    check_func(impl1, (df_null,), sort_output=True, check_dtype=False)
+    check_func(impl2, (df_null,), sort_output=True, check_dtype=False)
+
+
 def test_all_null_keys():
     """
     Test Groupby when all rows have null keys (returns empty dataframe)
