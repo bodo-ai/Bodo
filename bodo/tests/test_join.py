@@ -109,7 +109,6 @@ def test_merge_suffixes_parenthesis():
         o1 = df1.merge(df2, on="key", how="inner", suffixes=("_a", "_b"))
         return o1
 
-    bodo_func = bodo.jit(test_impl)
     df1 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [1, 2, 3, 5]})
     df2 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [5, 6, 7, 8]})
     check_func(test_impl, (df1, df2), sort_output=True)
@@ -124,7 +123,6 @@ def test_merge_empty_suffix_underscore():
         o1 = df1.merge(df2, on="key", how="inner", suffixes=["", "_"])
         return o1
 
-    bodo_func = bodo.jit(test_impl)
     df1 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [1, 2, 3, 5]})
     df2 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [5, 6, 7, 8]})
     check_func(test_impl, (df1, df2), sort_output=True)
@@ -422,6 +420,11 @@ def test_merge_multi_int_key():
         df3 = df1.merge(df2, on=("A", "B"))
         return df3
 
+    # test constant list inference for join keys
+    def test_impl3(df1, df2):
+        df3 = df1.merge(df2, on=list(set(df1.columns) - set(["C"])))
+        return df3
+
     df1 = pd.DataFrame(
         {"A": [3, 1, 1, 3, 4], "B": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}
     )
@@ -437,6 +440,10 @@ def test_merge_multi_int_key():
     pd.testing.assert_frame_equal(
         bodo.jit(test_impl2)(df1, df2).sort_values("A").reset_index(drop=True),
         test_impl2(df1, df2).sort_values("A").reset_index(drop=True),
+    )
+    pd.testing.assert_frame_equal(
+        bodo.jit(test_impl3)(df1, df2).sort_values("A").reset_index(drop=True),
+        test_impl3(df1, df2).sort_values("A").reset_index(drop=True),
     )
 
 
