@@ -14,11 +14,7 @@ import bodo
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import ConstList, ConstSet
 from bodo.utils.utils import is_call, is_assign, is_expr
-from bodo.utils.transform import (
-    gen_add_consts_to_type,
-    update_node_list_definitions,
-    compile_func_single_block,
-)
+from bodo.utils.transform import update_node_list_definitions, compile_func_single_block
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
 
@@ -70,11 +66,6 @@ class InferConstsPass:
     them to constants so that functions like groupby() can be typed properly.
     """
 
-    # keeps the set of temporary variables generated in this pass to know when a
-    # constant transformation is already done for an operation.
-    # TODO: use proper way to know if lhs is going into add_const_to_type or not
-    tmp_vars = set()
-
     def __init__(self, func_ir, typingctx, typemap, calltypes):
         self.func_ir = func_ir
         self.typingctx = typingctx
@@ -120,7 +111,6 @@ class InferConstsPass:
             is_expr(rhs, "getattr")
             and isinstance(self.typemap[rhs.value.name], DataFrameType)
             and rhs.attr == "columns"
-            and assign.target.name not in self.tmp_vars
         ):
             vals = self.typemap[rhs.value.name].columns
             return self._gen_const_string_index(assign.target, rhs, vals)
@@ -148,7 +138,6 @@ class InferConstsPass:
             fdef == ("set", "builtins")
             and len(rhs.args) == 1
             and self._get_const_seq(rhs.args[0]) is not None
-            and assign.target.name not in self.tmp_vars
         ):
             vals = self._get_const_seq(rhs.args[0])
             return self._gen_consts_call(assign.target, vals, False)
@@ -158,7 +147,6 @@ class InferConstsPass:
             fdef == ("list", "builtins")
             and len(rhs.args) == 1
             and self._get_const_seq(rhs.args[0]) is not None
-            and assign.target.name not in self.tmp_vars
         ):
             vals = self._get_const_seq(rhs.args[0])
             return self._gen_consts_call(assign.target, vals)
@@ -175,7 +163,6 @@ class InferConstsPass:
             isinstance(arg1_typ, ConstList)
             and isinstance(arg2_typ, ConstList)
             and rhs.fn == operator.add
-            and assign.target.name not in self.tmp_vars
         ):
             vals = arg1_typ.consts + arg2_typ.consts
             return self._gen_consts_call(assign.target, vals)
@@ -185,7 +172,6 @@ class InferConstsPass:
             isinstance(arg1_typ, ConstSet)
             and isinstance(arg2_typ, ConstSet)
             and rhs.fn == operator.sub
-            and assign.target.name not in self.tmp_vars
         ):
             vals = set(arg1_typ.consts) - set(arg2_typ.consts)
             return self._gen_consts_call(assign.target, vals, False)
