@@ -433,6 +433,8 @@ class ConstList(types.List):
             dtype = typingctx.unify_pairs(self.dtype, other.dtype)
             reflected = self.reflected or other.reflected
             if dtype is not None:
+                # output type is ConstList if both unifying types are ConstList and
+                # have the same constant values
                 if isinstance(other, ConstList) and self.consts == other.consts:
                     return ConstList(dtype, self.consts)
                 else:

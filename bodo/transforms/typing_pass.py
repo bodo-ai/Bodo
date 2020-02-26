@@ -35,6 +35,7 @@ class BodoTypeInference(PartialTypeInference):
         global in_partial_typing
         while True:
             try:
+                # set global partial typing flag, see comment above
                 in_partial_typing = True
                 super(BodoTypeInference, self).run_pass(state)
             finally:
@@ -49,6 +50,7 @@ class BodoTypeInference(PartialTypeInference):
             changed = infer_consts_pass.run()
             # can't be typed if IR not changed
             if not changed:
+                # error will be raised below if there are still unknown types
                 break
 
         # run regular type inference again with _raise_errors = True to set function
