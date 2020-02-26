@@ -110,6 +110,8 @@ def test_join(decimal_arr_value):
     def test_impl(df1, df2):
         return df1.merge(df2, on="A")
 
+    # double the size of the input array to avoid issues on 3 processes
+    decimal_arr_value = np.concatenate((decimal_arr_value, decimal_arr_value))
     n = len(decimal_arr_value)
     df1 = pd.DataFrame({"A": np.arange(n), "B": decimal_arr_value})
     df2 = pd.DataFrame({"A": np.arange(n) + 3, "C": decimal_arr_value})
