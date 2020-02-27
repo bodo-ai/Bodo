@@ -60,7 +60,7 @@ class RollingType(types.Type):
 register_model(RollingType)(models.OpaqueModel)
 
 
-@overload_method(DataFrameType, "rolling")
+@overload_method(DataFrameType, "rolling", inline="always")
 def df_rolling_overload(
     df,
     window,

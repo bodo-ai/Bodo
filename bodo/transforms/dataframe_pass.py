@@ -609,39 +609,11 @@ class DataFramePass:
         #         assign.target,
         #         rhs.loc)]
 
-        if fdef == ("DataFrame", "pandas"):
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.pd_dataframe_overload(
-                *arg_typs, **kw_typs
-            )
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
-
         if fdef == ("len", "builtins") and self._is_df_var(rhs.args[0]):
             return self._run_call_len(lhs, rhs.args[0])
 
         if fdef == ("set_df_col", "bodo.hiframes.dataframe_impl"):
             return self._run_call_set_df_column(assign, lhs, rhs)
-
-        if fdef == ("merge", "pandas"):
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.merge_overload(*arg_typs, **kw_typs)
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
-
-        if fdef == ("merge_asof", "pandas"):
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.merge_asof_overload(
-                *arg_typs, **kw_typs
-            )
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
 
         if fdef == ("join_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_join(assign, lhs, rhs)
@@ -674,26 +646,8 @@ class DataFramePass:
         if fdef == ("pivot_table_dummy", "bodo.hiframes.pd_groupby_ext"):
             return self._run_call_pivot_table(assign, lhs, rhs)
 
-        if fdef == ("crosstab", "pandas"):
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.crosstab_overload(
-                *arg_typs, **kw_typs
-            )
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
-
         if fdef == ("crosstab_dummy", "bodo.hiframes.pd_groupby_ext"):
             return self._run_call_crosstab(assign, lhs, rhs)
-
-        if fdef == ("concat", "pandas"):
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.concat_overload(*arg_typs, **kw_typs)
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
 
         if fdef == ("concat_dummy", "bodo.hiframes.pd_dataframe_ext") and isinstance(
             self.typemap[lhs.name], DataFrameType
@@ -718,26 +672,6 @@ class DataFramePass:
         if fdef == ("query_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_query(assign, lhs, rhs)
 
-        if fdef == ("drop_inplace", "bodo.hiframes.dataframe_impl"):
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.dataframe_impl.drop_inplace_overload(
-                *arg_typs, **kw_typs
-            )
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
-
-        if fdef == ("sort_values_inplace", "bodo.hiframes.dataframe_impl"):
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.dataframe_impl.sort_values_inplace_overload(
-                *arg_typs, **kw_typs
-            )
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
-
         if fdef == ("drop_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_drop(assign, lhs, rhs)
 
@@ -756,27 +690,6 @@ class DataFramePass:
                 impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
             )
 
-        if func_name == "merge":
-            rhs.args.insert(0, df_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.merge_overload(*arg_typs, **kw_typs)
-            return self._replace_func(
-                impl,
-                rhs.args,
-                pysig=numba.utils.pysignature(pd.merge),
-                kws=dict(rhs.kws),
-            )
-
-        if func_name == "join":
-            rhs.args.insert(0, df_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.join_overload(*arg_typs, **kw_typs)
-            return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
-            )
-
         if func_name == "pivot_table":
             rhs.args.insert(0, df_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
@@ -790,125 +703,9 @@ class DataFramePass:
             return self._replace_func(
                 impl, rhs.args, pysig=numba.utils.pysignature(stub), kws=dict(rhs.kws)
             )
-
-        if func_name == "rolling":
-            rhs.args.insert(0, df_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_rolling_ext.df_rolling_overload(
-                *arg_typs, **kw_typs
-            )
-            stub = (
-                lambda df, window, min_periods=None, center=False, win_type=None, on=None, axis=0, closed=None: None
-            )
-            return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(stub), kws=dict(rhs.kws)
-            )
-
         # df.apply(lambda a:..., axis=1)
         if func_name == "apply":
             return self._run_call_dataframe_apply(assign, lhs, rhs, df_var)
-
-        # df.sort_values()
-        if func_name == "sort_values":
-            rhs.args.insert(0, df_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.sort_values_overload(
-                *arg_typs, **kw_typs
-            )
-            stub = (
-                lambda df, by, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last": None
-            )
-            return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(stub), kws=dict(rhs.kws)
-            )
-
-        # df.sort_index()
-        if func_name == "sort_index":
-            rhs.args.insert(0, df_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.sort_index_overload(
-                *arg_typs, **kw_typs
-            )
-            return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
-            )
-
-        if func_name == "itertuples":
-            rhs.args.insert(0, df_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.itertuples_overload(
-                *arg_typs, **kw_typs
-            )
-            stub = lambda df, index=True, name="Pandas": None
-            return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(stub), kws=dict(rhs.kws)
-            )
-
-        if func_name == "fillna":
-            rhs.args.insert(0, df_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.fillna_overload(*arg_typs, **kw_typs)
-            stub = (
-                lambda df, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None: None
-            )
-            return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(stub), kws=dict(rhs.kws)
-            )
-
-        if func_name == "dropna":
-            rhs.args.insert(0, df_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.dropna_overload(*arg_typs, **kw_typs)
-            stub = (
-                lambda df, axis=0, how="any", thresh=None, subset=None, inplace=False: None
-            )
-            return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(stub), kws=dict(rhs.kws)
-            )
-
-        if func_name == "reset_index":
-            rhs.args.insert(0, df_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.reset_index_overload(
-                *arg_typs, **kw_typs
-            )
-            stub = (
-                lambda df, level=None, drop=False, inplace=False, col_level=0, col_fill="": None
-            )
-            return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(stub), kws=dict(rhs.kws)
-            )
-
-        if func_name == "drop":
-            rhs.args.insert(0, df_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.drop_overload(*arg_typs, **kw_typs)
-            stub = (
-                lambda df, labels=None, axis=0, index=None, columns=None, level=None, inplace=False, errors="raise": None
-            )
-            return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(stub), kws=dict(rhs.kws)
-            )
-
-        if func_name == "append":
-            rhs.args.insert(0, df_var)
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.append_overload(*arg_typs, **kw_typs)
-            stub = (
-                lambda df, other, ignore_index=False, verify_integrity=False, sort=None: None
-            )
-            return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(stub), kws=dict(rhs.kws)
-            )
 
         return [assign]
 

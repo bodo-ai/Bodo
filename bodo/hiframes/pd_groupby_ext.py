@@ -298,10 +298,7 @@ def get_groupby_output_dtype(arr_type, func_name):
                         in_dtype, func_name
                     )
                 )
-    if isinstance(in_dtype, types.Boolean) and func_name in {
-        "cumsum",
-        "sum",
-    }:
+    if isinstance(in_dtype, types.Boolean) and func_name in {"cumsum", "sum"}:
         raise BodoError(
             "groupby built-in functions {}"
             " does not support boolean column".format(func_name)
@@ -367,7 +364,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     raise BodoError(
                         "Groupy.agg()/Groupy.aggregate(): column {col} of type {type} "
                         "is unsupported/not a valid input type for user defined function".format(
-                            col=c, type=data.dtype,
+                            col=c, type=data.dtype
                         )
                     )
             else:
@@ -637,9 +634,9 @@ class PivotTyper(AbstractTemplate):
         df, values, index, columns, aggfunc, _pivot_values = args
 
         if not (
-            isinstance(values, types.StringLiteral)
-            and isinstance(index, types.StringLiteral)
-            and isinstance(columns, types.StringLiteral)
+            is_overload_constant_str(values)
+            and is_overload_constant_str(index)
+            and is_overload_constant_str(columns)
         ):
             raise BodoError(
                 "pivot_table() only support string constants for "

@@ -1058,7 +1058,7 @@ def drop_inplace(df):  # pragma: no cover
     return df, res
 
 
-@overload(drop_inplace)
+@overload(drop_inplace, inline="always")
 def drop_inplace_overload(
     df,
     labels=None,
@@ -1097,7 +1097,7 @@ def sort_values_inplace(df):  # pragma: no cover
     return df, res
 
 
-@overload(sort_values_inplace)
+@overload(sort_values_inplace, inline="always")
 def sort_values_inplace_overload(
     df, by, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last"
 ):

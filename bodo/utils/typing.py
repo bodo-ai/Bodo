@@ -73,6 +73,12 @@ def is_overload_constant_str_list(val):
     )
 
 
+def is_overload_constant_tuple(val):
+    return isinstance(val, tuple) or (
+        isinstance(val, types.Omitted) and isinstance(val.value, tuple)
+    )
+
+
 def is_overload_constant_int(val):
     return (
         isinstance(val, int)
@@ -113,6 +119,15 @@ def is_overload_str(val, const):
         or val == types.StringLiteral(const)
         or getattr(val, "value", -1) == const
     )
+
+
+def get_overload_const_tuple(val):
+    if isinstance(val, tuple):
+        return val
+    # 'ommited' case
+    if getattr(val, "value", None) is not None:
+        assert isinstance(val.value, tuple)
+        return val.value
 
 
 def get_overload_const_str_len(val):
