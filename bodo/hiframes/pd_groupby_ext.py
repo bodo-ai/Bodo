@@ -487,7 +487,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
             if has_cumulative_ops:
                 # result of groupby.cumsum, etc. doesn't have a group index
-                index = RangeIndexType(types.none)
+                # So instead we set from the input index
+                index = grp.df_type.index
             else:
                 index = out_tp.index
             out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
@@ -519,7 +520,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 _append_out_type(grp, out_data, out_tp)
             if has_cumulative_ops:
                 # result of groupby.cumsum, etc. doesn't have a group index
-                index = RangeIndexType(types.none)
+                index = grp.df_type.index
             else:
                 index = out_tp.index
             out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
@@ -577,7 +578,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
         return self._get_agg_typ(grp, args, "std")
 
     def resolve_cumulative(self, grp, args, kws, msg):
-        index = RangeIndexType(types.none)
+        index = grp.df_type.index
         out_columns = []
         out_data = []
         for c in grp.selection:

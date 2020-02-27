@@ -2030,7 +2030,6 @@ class DataFramePass:
         df_var = self._get_df_obj_select(grp_var, "groupby")
         df_type = self.typemap[df_var.name]
         out_typ = self.typemap[lhs.name]
-
         nodes = []
         in_cols = grp_typ.selection
         if func_name in ("agg", "aggregate"):
@@ -2041,13 +2040,28 @@ class DataFramePass:
                 in_cols = [
                     guard(find_const, self.func_ir, v[0]) for v in agg_func.items
                 ]
+        agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
+        same_index = False
+        return_key = True
+        # allfuncs is the set of all functions used
+        allfuncs = bodo.ir.aggregate.gen_allfuncs(agg_func, len(in_cols))
+        # return_key is True if we return the keys from the table. In case
+        # of aggregate on cumsum or other cumulative function, there is no such need.
+        # same_index is True if we return the index from the table (which is the case for
+        # cumulative operations not using RangeIndex
+        for func in allfuncs:
+            if func.ftype in bodo.ir.aggregate.list_cumulative:
+                same_index = True
+                return_key = False
+        if same_index and isinstance(grp_typ.df_type.index, RangeIndexType):
+            same_index = False
 
-        in_vars = {c: self._get_dataframe_data(df_var, c, nodes) for c in in_cols}
+        df_in_vars = {c: self._get_dataframe_data(df_var, c, nodes) for c in in_cols}
 
         in_key_arrs = [self._get_dataframe_data(df_var, c, nodes) for c in grp_typ.keys]
 
         out_key_vars = None
-        if grp_typ.as_index is False or out_typ.index != types.none:
+        if return_key and (grp_typ.as_index is False or out_typ.index != types.none):
             out_key_vars = []
             for k in grp_typ.keys:
                 out_key_var = ir.Var(lhs.scope, mk_unique_var(k), lhs.loc)
@@ -2055,7 +2069,16 @@ class DataFramePass:
                 self.typemap[out_key_var.name] = df_type.data[ind]
                 out_key_vars.append(out_key_var)
 
-        df_col_map = {}
+        if same_index:
+            in_index_var = self._gen_array_from_index(df_var, nodes)
+            df_in_vars["$_bodo_index_"] = in_index_var
+            out_index_var = ir.Var(lhs.scope, mk_unique_var("out_index"), lhs.loc)
+            self.typemap[out_index_var.name] = self.typemap[in_index_var.name]
+            if out_key_vars == None:
+                out_key_vars = []
+            out_key_vars.append(out_index_var)
+
+        df_out_vars = {}
         out_colnames = (
             grp_typ.selection if isinstance(out_typ, SeriesType) else out_typ.columns
         )
@@ -2070,30 +2093,40 @@ class DataFramePass:
                 if isinstance(out_typ, SeriesType)
                 else out_typ.data[out_typ.columns.index(c)]
             )
-            df_col_map[c] = var
+            df_out_vars[c] = var
 
-        agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
+        if len(out_colnames) != len(df_out_vars):
+            raise BodoError("aggregate with duplication in output is not allowed")
+
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name,
             df_var.name,
             grp_typ.keys,
             out_key_vars,
-            df_col_map,
-            in_vars,
+            df_out_vars,
+            df_in_vars,
             in_key_arrs,
             agg_func,
+            same_index,
+            return_key,
             lhs.loc,
         )
 
         nodes.append(agg_node)
 
-        if isinstance(out_typ.index, RangeIndexType):
+        if same_index:
+            in_df_index = self._get_dataframe_index(df_var, nodes)
+            in_df_index_name = self._get_index_name(in_df_index, nodes)
+            index_var = self._gen_index_from_array(
+                out_index_var, in_df_index_name, nodes
+            )
+        elif isinstance(out_typ.index, RangeIndexType):
             # as_index=False case generates trivial RangeIndex
             nodes += compile_func_single_block(
                 lambda A: bodo.hiframes.pd_index_ext.init_range_index(
                     0, len(A), 1, None
                 ),
-                (out_key_vars[0],),
+                (list(df_out_vars.values())[0],),
                 None,
                 self,
             )
@@ -2132,13 +2165,13 @@ class DataFramePass:
                 and grp_typ.explicit_select
                 and grp_typ.as_index
             )
-            name_str = list(df_col_map.keys())[0]
+            name_str = list(df_out_vars.keys())[0]
             name_var = ir.Var(lhs.scope, mk_unique_var("S_name"), lhs.loc)
             self.typemap[name_var.name] = types.StringLiteral(name_str)
             nodes.append(ir.Assign(ir.Const(name_str, lhs.loc), name_var, lhs.loc))
             return self._replace_func(
                 lambda A, I, name: bodo.hiframes.pd_series_ext.init_series(A, I, name),
-                list(df_col_map.values()) + [index_var, name_var],
+                list(df_out_vars.values()) + [index_var, name_var],
                 pre_nodes=nodes,
             )
 
@@ -2152,7 +2185,7 @@ class DataFramePass:
                 ind = grp_typ.keys.index(c)
                 out_vars.append(out_key_vars[ind])
             else:
-                out_vars.append(df_col_map[c])
+                out_vars.append(df_out_vars[c])
 
         out_vars.append(index_var)
         return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
@@ -2180,6 +2213,8 @@ class DataFramePass:
         index_arr = self._get_dataframe_data(df_var, index, nodes)
         agg_func = get_agg_func(self.func_ir, func_name, rhs)
 
+        same_index = False
+        return_key = True
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name,
             df_var.name,
@@ -2189,6 +2224,8 @@ class DataFramePass:
             in_vars,
             [index_arr],
             agg_func,
+            same_index,
+            return_key,
             lhs.loc,
             pivot_arr,
             pivot_values,
@@ -2242,6 +2279,8 @@ class DataFramePass:
             return len(in_arr)
 
         # TODO: make out_key_var an index column
+        same_index = False
+        return_key = True
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name,
             "crosstab",
@@ -2251,6 +2290,8 @@ class DataFramePass:
             in_vars,
             [index],
             _agg_len_impl,
+            same_index,
+            return_key,
             lhs.loc,
             pivot_arr,
             pivot_values,
