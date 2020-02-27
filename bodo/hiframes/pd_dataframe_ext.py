@@ -60,6 +60,7 @@ from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
 from bodo.libs.array_tools import array_to_info, arr_info_list_to_table
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.str_arr_ext import string_array_type, str_arr_from_sequence
 from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
 from bodo.hiframes.pd_index_ext import is_pd_index_type
@@ -2651,6 +2652,8 @@ def gen_pandas_parquet_metadata(df):
         elif col_type == string_array_type:
             pandas_type = "unicode"
             numpy_type = "object"
+        elif isinstance(col_type, DecimalArrayType):
+            pandas_type = numpy_type = "object"
         elif isinstance(col_type, IntegerArrayType):
             dtype_name = col_type.dtype.name
             if dtype_name.startswith("int"):

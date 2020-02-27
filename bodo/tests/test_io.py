@@ -24,6 +24,8 @@ from bodo.tests.utils import (
     _test_equal_guard,
     DeadcodeTestPipeline,
 )
+from decimal import Decimal
+
 
 kde_file = os.path.join("bodo", "tests", "data", "kde.parquet")
 
@@ -232,6 +234,7 @@ def test_write_parquet():
             # pandas read_parquet has incorrect output with pyarrow 0.16.0 for UInt32
             "Int64",
             "UInt64",
+            "Decimal",
         ]:
             col_name = "col_" + str(cur_col)
             if dtype == "String":
@@ -245,6 +248,22 @@ def test_write_parquet():
                 # missing values every 5 elements
                 data = [x if x % 5 != 0 else np.nan for x in range(num_elements)]
                 df[col_name] = pd.Series(data, dtype=dtype)
+            elif dtype == "Decimal":
+                assert num_elements % 8 == 0
+                data = np.array(
+                     [
+                         Decimal("1.6"),
+                         None,
+                         Decimal("-0.222"),
+                         Decimal("1111.316"),
+                         Decimal("1234.00046"),
+                         Decimal("5.1"),
+                         Decimal("-11131.0056"),
+                         Decimal("0.0"),
+                     ]
+                     * (num_elements // 8)
+                     )
+                df[col_name] = pd.Series(data, dtype=object)
             else:
                 df[col_name] = np.arange(num_elements, dtype=dtype)
             cur_col += 1
@@ -261,7 +280,7 @@ def test_write_parquet():
         return df
 
     n_pes = bodo.get_size()
-    NUM_ELEMS = 100  # length of each column in generated dataset
+    NUM_ELEMS = 80  # length of each column in generated dataset
 
     # workaround for pandas/pyarrow writing nullable Int64 issue:
     # https://issues.apache.org/jira/browse/ARROW-5379
@@ -344,6 +363,27 @@ def test_write_parquet():
 
     with pytest.raises(BodoError, match="index must be a constant bool or None"):
         bodo.jit(error_check3)(df)
+
+
+def test_write_parquet_decimal(datapath):
+    """ Here we check that we can write the data read from decimal1.pq directory
+        (has columns that use a precision and scale different from our default).
+        See test_write_parquet above for main parquet write decimal test """
+    def write(read_path, write_filename):
+        df = pd.read_parquet(read_path)
+        df.to_parquet(write_filename)
+
+    write_filename = "test__write_decimal1.pq"
+    try:
+        bodo.jit(write)(datapath("decimal1.pq"), write_filename)
+        bodo.barrier()
+        if bodo.get_rank() == 0:
+            df1 = pd.read_parquet(datapath("decimal1.pq"))
+            df2 = pd.read_parquet(write_filename)
+            pd.testing.assert_frame_equal(df1, df2)
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree(write_filename)
 
 
 def test_write_parquet_params():

@@ -658,6 +658,10 @@ void bodo_array_to_arrow(
                 num_bytes = sizeof(double) * array->length;
                 type = arrow::float64();
                 break;
+            case Bodo_CTypes::DECIMAL:
+                num_bytes = BYTES_PER_DECIMAL * array->length;
+                arrow::Decimal128Type::Make(array->precision, array->scale, &type);
+                break;
             default:
                 std::cerr << "Fatal error: invalid dtype found in conversion"
                              " of numeric Bodo array to Arrow" << std::endl;
@@ -700,11 +704,11 @@ void bodo_array_to_arrow(
         return;                                                      \
     }
 
-#define CHECK_ARROW(expr, msg)                                                 \
-    if (!(expr.ok())) {                                                        \
-        std::cerr << "Error in arrow s3 parquet write: " << msg << " " << expr \
-                  << std::endl;                                                \
-        return;                                                                \
+#define CHECK_ARROW(expr, msg)                                              \
+    if (!(expr.ok())) {                                                     \
+        std::cerr << "Error in arrow parquet write: " << msg << " " << expr \
+                  << std::endl;                                             \
+        return;                                                             \
     }
 
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
@@ -805,9 +809,12 @@ void pq_write(const char *_path_name, const table_info *table,
             }
             boost::filesystem::path out_path(dirname);
             out_path /= fname;  // append file name to output path
-            arrow::io::FileOutputStream::Open(out_path.string(), &out_stream);
+            CHECK_ARROW(arrow::io::FileOutputStream::Open(out_path.string(),
+                                                          &out_stream),
+                        "error opening file for parquet output");
         } else {
-            arrow::io::FileOutputStream::Open(fname, &out_stream);
+            CHECK_ARROW(arrow::io::FileOutputStream::Open(fname, &out_stream),
+                        "error opening file for parquet output");
         }
     }
 

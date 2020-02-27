@@ -75,12 +75,15 @@ struct array_info {
     char* null_bitmask;  // for nullable arrays like strings
     NRT_MemInfo* meminfo;
     NRT_MemInfo* meminfo_bitmask;
+    int32_t precision;  // for array of decimals
+    int32_t scale;  // for array of decimals
     // TODO: shape/stride for multi-dim arrays
     explicit array_info(bodo_array_type::arr_type_enum _arr_type,
                         Bodo_CTypes::CTypeEnum _dtype, int64_t _length,
                         int64_t _n_sub_elems, char* _data1, char* _data2,
                         char* _data3, char* _null_bitmask,
-                        NRT_MemInfo* _meminfo, NRT_MemInfo* _meminfo_bitmask)
+                        NRT_MemInfo* _meminfo, NRT_MemInfo* _meminfo_bitmask,
+                        int32_t _precision = 0, int32_t _scale = 0)
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
@@ -90,7 +93,9 @@ struct array_info {
           data3(_data3),
           null_bitmask(_null_bitmask),
           meminfo(_meminfo),
-          meminfo_bitmask(_meminfo_bitmask) {}
+          meminfo_bitmask(_meminfo_bitmask),
+          precision(_precision),
+          scale(_scale) {}
 
     template<typename T>
     T& at(size_t idx) { return ((T*)data1)[idx]; }

@@ -35,6 +35,7 @@ import llvmlite.binding as ll
 ll.add_symbol("string_array_to_info", array_tools_ext.string_array_to_info)
 ll.add_symbol("numpy_array_to_info", array_tools_ext.numpy_array_to_info)
 ll.add_symbol("nullable_array_to_info", array_tools_ext.nullable_array_to_info)
+ll.add_symbol("decimal_array_to_info", array_tools_ext.decimal_array_to_info)
 ll.add_symbol("info_to_string_array", array_tools_ext.info_to_string_array)
 ll.add_symbol("info_to_numpy_array", array_tools_ext.info_to_numpy_array)
 ll.add_symbol("info_to_nullable_array", array_tools_ext.info_to_nullable_array)
@@ -176,31 +177,62 @@ def array_to_info(typingctx, arr_type_t):
                 builder, lir.Constant(lir.IntType(32), typ_enum)
             )
 
-            fnty = lir.FunctionType(
-                lir.IntType(8).as_pointer(),
-                [
-                    lir.IntType(64),
+            if isinstance(arr_type, DecimalArrayType):
+                fnty = lir.FunctionType(
                     lir.IntType(8).as_pointer(),
-                    lir.IntType(32),
+                    [
+                        lir.IntType(64),
+                        lir.IntType(8).as_pointer(),
+                        lir.IntType(32),
+                        lir.IntType(8).as_pointer(),
+                        lir.IntType(8).as_pointer(),
+                        lir.IntType(8).as_pointer(),
+                        lir.IntType(32),
+                        lir.IntType(32),
+                    ],
+                )
+                fn_tp = builder.module.get_or_insert_function(
+                    fnty, name="decimal_array_to_info"
+                )
+                return builder.call(
+                    fn_tp,
+                    [
+                        length,
+                        builder.bitcast(data_arr.data, lir.IntType(8).as_pointer()),
+                        builder.load(typ_arg),
+                        builder.bitcast(bitmap_arr.data, lir.IntType(8).as_pointer()),
+                        data_arr.meminfo,
+                        bitmap_arr.meminfo,
+                        context.get_constant(types.int32, arr_type.precision),
+                        context.get_constant(types.int32, arr_type.scale),
+                    ],
+                )
+            else:
+                fnty = lir.FunctionType(
                     lir.IntType(8).as_pointer(),
-                    lir.IntType(8).as_pointer(),
-                    lir.IntType(8).as_pointer(),
-                ],
-            )
-            fn_tp = builder.module.get_or_insert_function(
-                fnty, name="nullable_array_to_info"
-            )
-            return builder.call(
-                fn_tp,
-                [
-                    length,
-                    builder.bitcast(data_arr.data, lir.IntType(8).as_pointer()),
-                    builder.load(typ_arg),
-                    builder.bitcast(bitmap_arr.data, lir.IntType(8).as_pointer()),
-                    data_arr.meminfo,
-                    bitmap_arr.meminfo,
-                ],
-            )
+                    [
+                        lir.IntType(64),
+                        lir.IntType(8).as_pointer(),
+                        lir.IntType(32),
+                        lir.IntType(8).as_pointer(),
+                        lir.IntType(8).as_pointer(),
+                        lir.IntType(8).as_pointer(),
+                    ],
+                )
+                fn_tp = builder.module.get_or_insert_function(
+                    fnty, name="nullable_array_to_info"
+                )
+                return builder.call(
+                    fn_tp,
+                    [
+                        length,
+                        builder.bitcast(data_arr.data, lir.IntType(8).as_pointer()),
+                        builder.load(typ_arg),
+                        builder.bitcast(bitmap_arr.data, lir.IntType(8).as_pointer()),
+                        data_arr.meminfo,
+                        bitmap_arr.meminfo,
+                    ],
+                )
 
     return array_info_type(arr_type_t), codegen
 

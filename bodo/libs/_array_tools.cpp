@@ -104,6 +104,17 @@ array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
                           NULL, NULL, null_bitmap, meminfo, meminfo_bitmask);
 }
 
+array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
+                                  char* null_bitmap, NRT_MemInfo* meminfo,
+                                  NRT_MemInfo* meminfo_bitmask,
+                                  int32_t precision, int32_t scale) {
+    // TODO: better memory management of struct, meminfo refcount?
+    return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, data,
+                          NULL, NULL, null_bitmap, meminfo, meminfo_bitmask,
+                          precision, scale);
+}
+
 void info_to_string_array(array_info* info, uint64_t* n_items,
                           uint64_t* n_chars, char** data, char** offsets,
                           char** null_bitmap, NRT_MemInfo** meminfo) {
@@ -4922,6 +4933,9 @@ PyMODINIT_FUNC PyInit_array_tools_ext(void) {
     PyObject_SetAttrString(
         m, "nullable_array_to_info",
         PyLong_FromVoidPtr((void*)(&nullable_array_to_info)));
+    PyObject_SetAttrString(
+        m, "decimal_array_to_info",
+        PyLong_FromVoidPtr((void*)(&decimal_array_to_info)));
     PyObject_SetAttrString(m, "info_to_string_array",
                            PyLong_FromVoidPtr((void*)(&info_to_string_array)));
     PyObject_SetAttrString(m, "info_to_numpy_array",
