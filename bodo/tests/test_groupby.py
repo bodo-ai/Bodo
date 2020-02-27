@@ -287,6 +287,85 @@ def test_agg_bool_expr():
     check_func(impl, (df,), sort_output=True)
 
 
+@pytest.mark.parametrize(
+    "df_index",
+    [
+        pd.DataFrame({"A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],"B": [1, 2, 3, 2, 1, 1, 1],"C": [3, 5, 6, 5, 4, 4, 3]}, index=[-1, 2, -3, 0, 4, 5, 2]),
+        pd.DataFrame({"A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],"B": [1, 2, 3, 2, 1, 1, 1],"C": [3, 5, 6, 5, 4, 4, 3]}, index=["a", "b", "c", "d", "e", "f", "g"]),
+        pd.DataFrame({"A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],"B": [1, 2, 3, 2, 1, 1, 1],"C": [3, 5, 6, 5, 4, 4, 3]}),
+    ],
+)
+def test_cumsum_index_preservation(df_index):
+    def test_impl_basic(df1):
+        df2 = df1.groupby("B").cumsum()
+        return df2
+
+    def test_impl_both(df1):
+        df2 = df1.groupby("B")["C"].agg(("cumprod", "cumsum"))
+        return df2
+
+    def test_impl_all(df1):
+        df2 = df1.groupby("B").agg({"A": ["cumprod", "cumsum"], "C": ["cumprod", "cumsum"]})
+        return df2
+
+    check_func(test_impl_basic, (df_index,), sort_output=True, check_dtype=False)
+    check_func(test_impl_both, (df_index,), sort_output=True, check_dtype=False)
+    check_func(test_impl_all, (df_index,), sort_output=True, check_dtype=False)
+
+
+def test_cumsum_random_index():
+    def test_impl(df1):
+        df2 = df1.groupby("B").cumsum()
+        return df2
+
+    def get_random_dataframe_A(n):
+        random.seed(5)
+        eListA=[]
+        eListB=[]
+        for i in range(n):
+            eValA = random.randint(1,10)
+            eValB = random.randint(1,10)
+            eListA.append(eValA)
+            eListB.append(eValB)
+        return pd.DataFrame({"A":eListA, "B":eListB})
+
+    def get_random_dataframe_B(n):
+        random.seed(5)
+        eListA=[]
+        eListB=[]
+        eListC=[]
+        for i in range(n):
+            eValA = random.randint(1,10)
+            eValB = random.randint(1,10)
+            eValC = random.randint(1,10) + 20
+            eListA.append(eValA)
+            eListB.append(eValB)
+            eListC.append(eValC)
+        return pd.DataFrame({"A":eListA, "B":eListB}, index=eListC)
+
+    def get_random_dataframe_C(n):
+        random.seed(5)
+        eListA=[]
+        eListB=[]
+        eListC=[]
+        for i in range(n):
+            eValA = random.randint(1,10)
+            eValB = random.randint(1,10)
+            eValC = chr(random.randint(ord("a"), ord("z")))
+            eListA.append(eValA)
+            eListB.append(eValB)
+            eListC.append(eValC)
+        return pd.DataFrame({"A":eListA, "B":eListB}, index=eListC)
+
+    df1 = get_random_dataframe_A(100)
+    df2 = get_random_dataframe_B(100)
+    df3 = get_random_dataframe_C(100)
+
+    check_func(test_impl, (df1,), sort_output=True, check_dtype=False)
+    check_func(test_impl, (df2,), sort_output=True, check_dtype=False)
+    check_func(test_impl, (df3,), sort_output=True, check_dtype=False)
+
+
 def test_agg_as_index_fast():
     """
     Test Groupby.agg() on groupby() as_index=False

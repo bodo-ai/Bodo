@@ -470,6 +470,21 @@ def test_groupby_cumsum_argument_check():
         bodo.jit(impl2)(df)
 
 
+def test_groupby_cumsum_argument_duplication_check():
+    """
+    Test Groupby.cumsum() testing for skipna argument
+    """
+
+    def impl(df):
+        return df.groupby("A")["B"].agg(("cumsum", "cumsum"))
+
+    df = pd.DataFrame({"A": [1, 1, 1, 1], "B": [1, 2, 3, 4]})
+    with pytest.raises(
+        BodoError, match="aggregate with duplication in output is not allowed"
+    ):
+        bodo.jit(impl)(df)
+
+
 def test_groupby_cumprod_argument_check():
     """
     Test Groupby.cumprod() testing for skipna argument

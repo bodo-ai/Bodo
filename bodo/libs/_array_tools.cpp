@@ -3280,6 +3280,31 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
     }
 }
 
+
+array_info* copy_array(array_info* earr) {
+    int64_t extra_null_bytes = 0;
+    array_info* farr = alloc_array(earr->length, earr->n_sub_elems,
+                                   earr->arr_type, earr->dtype,
+                                   extra_null_bytes);
+    if (earr->arr_type == bodo_array_type::NUMPY) {
+        uint64_t siztype = numpy_item_size[earr->dtype];
+        memcpy(farr->data1, earr->data1, siztype*earr->length);
+    }
+    if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        uint64_t siztype = numpy_item_size[earr->dtype];
+        memcpy(farr->data1, earr->data1, siztype*earr->length);
+        int64_t n_bytes = ((earr->length + 7) >> 3);
+        memcpy(farr->null_bitmask, earr->null_bitmask, n_bytes);
+    }
+    if (earr->arr_type == bodo_array_type::STRING) {
+        memcpy(farr->data1, earr->data1, earr->n_sub_elems);
+        memcpy(farr->data2, earr->data2, sizeof(uint32_t)*(earr->length + 1));
+        int64_t n_bytes = ((earr->length + 7) >> 3);
+        memcpy(farr->null_bitmask, earr->null_bitmask, n_bytes);
+    }
+    return farr;
+}
+
 /**
  * Returns the array type and dtype required for output columns based on the
  * aggregation function and input dtype.
@@ -3739,17 +3764,21 @@ public:
                     table_info* _udf_table,
                     udf_table_op_fn update_cb,
                     udf_table_op_fn combine_cb,
-                    udf_eval_fn eval_cb, bool skipna) :
+                    udf_eval_fn eval_cb, bool skipna, bool _return_key, bool _return_index) :
                     in_table(_in_table), num_keys(_num_keys), is_parallel(_is_parallel),
+                    return_key(_return_key), return_index(_return_index),
                     udf_table(_udf_table), udf_n_redvars(_udf_nredvars) {
 
         udf_info = {udf_table, update_cb, combine_cb, eval_cb};
+        // if true, the last column is the index on input and output.
+        // this is relevant only to cumulative operation like cumsum.
+        int return_index_i = return_index;
 
         // NOTE cumulative operations (cumsum, cumprod, etc.) cannot be mixed
         // with non cumulative ops. This is checked at compile time in
         // aggregate.py
 
-        for (int i=0; i < func_offsets[in_table->ncols() - num_keys]; i++) {
+        for (int i=0; i < func_offsets[in_table->ncols() - num_keys - return_index_i]; i++) {
             int ftype = ftypes[i];
             if (ftype == Bodo_FTypes::nunique || ftype == Bodo_FTypes::median ||
                 ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod) {
@@ -3774,7 +3803,7 @@ public:
         // ftypes is an array of function types received from generated code,
         // and has one ftype for each (input_column, func) pair
         int k=0;
-        for (int64_t i=num_keys; i < in_table->ncols(); i++, k++) {
+        for (int64_t i=num_keys; i < in_table->ncols() - return_index_i; i++, k++) {
             array_info* col = in_table->columns[i];
             int start = func_offsets[k];
             int end = func_offsets[k + 1];
@@ -3865,6 +3894,8 @@ private:
             col_set->alloc_update_columns(num_groups, update_table->columns);
             col_set->update(grp_info);
         }
+        if (return_index)
+            update_table->columns.push_back(copy_array(in_table->columns.back()));
         if (n_udf > 0)
             udf_info.update(in_table, update_table, grp_info.row_to_group.data());
     }
@@ -3924,10 +3955,13 @@ private:
      */
     table_info *getOutputTable() {
         table_info *out_table = new table_info();
-        out_table->columns.assign(cur_table->columns.begin(),
-                                  cur_table->columns.begin() + num_keys);
+        if (return_key)
+            out_table->columns.assign(cur_table->columns.begin(),
+                                      cur_table->columns.begin() + num_keys);
         for (BasicColSet* col_set : col_sets)
             out_table->columns.push_back(col_set->getOutputColumn());
+        if (return_index)
+            out_table->columns.push_back(cur_table->columns.back());
         delete cur_table;
         return out_table;
     }
@@ -3983,6 +4017,8 @@ private:
     table_info *in_table; // input table of groupby
     int64_t num_keys;
     bool is_parallel;
+    bool return_key;
+    bool return_index;
     std::vector<BasicColSet*> col_sets;
     table_info *udf_table;
     int *udf_n_redvars;
@@ -4523,6 +4559,8 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values, 
  *        processes)
  * @param skipdropna: whether to drop NaN values or not from the computation
  *                    (dropna for nunique and skipna for median/cumsum/cumprod)
+ * @param return_key: whether to return the keys or not.
+ * @param return_index: whether to return the index or not.
  * @param external 'update' function (a function pointer).
  *        For ftype=udf, the update step happens in external JIT-compiled code,
  *        which must initialize redvar columns and apply the update function.
@@ -4537,6 +4575,7 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values, 
 table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                                   int *ftypes, int *func_offsets, int *udf_nredvars,
                                   bool is_parallel, bool skipdropna,
+                                  bool return_key, bool return_index,
                                   void* update_cb, void* combine_cb, void* eval_cb,
                                   table_info* udf_dummy_table) {
 
@@ -4544,7 +4583,7 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                             udf_nredvars,
                             udf_dummy_table, (udf_table_op_fn)update_cb,
                             (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb,
-                            skipdropna);
+                            skipdropna, return_key, return_index);
 
     return groupby.run();
 }

@@ -299,10 +299,7 @@ def get_groupby_output_dtype(arr_type, func_name):
                         in_dtype, func_name
                     )
                 )
-    if isinstance(in_dtype, types.Boolean) and func_name in {
-        "cumsum",
-        "sum",
-    }:
+    if isinstance(in_dtype, types.Boolean) and func_name in {"cumsum", "sum"}:
         raise BodoError(
             "groupby built-in functions {}"
             " does not support boolean column".format(func_name)
@@ -368,7 +365,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     raise BodoError(
                         "Groupy.agg()/Groupy.aggregate(): column {col} of type {type} "
                         "is unsupported/not a valid input type for user defined function".format(
-                            col=c, type=data.dtype,
+                            col=c, type=data.dtype
                         )
                     )
             else:
@@ -488,7 +485,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
             if has_cumulative_ops:
                 # result of groupby.cumsum, etc. doesn't have a group index
-                index = RangeIndexType(types.none)
+                # So instead we set from the input index
+                index = grp.df_type.index
             else:
                 index = out_tp.index
             out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
@@ -520,7 +518,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 _append_out_type(grp, out_data, out_tp)
             if has_cumulative_ops:
                 # result of groupby.cumsum, etc. doesn't have a group index
-                index = RangeIndexType(types.none)
+                index = grp.df_type.index
             else:
                 index = out_tp.index
             out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
@@ -578,7 +576,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
         return self._get_agg_typ(grp, args, "std")
 
     def resolve_cumulative(self, grp, args, kws, msg):
-        index = RangeIndexType(types.none)
+        index = grp.df_type.index
         out_columns = []
         out_data = []
         for c in grp.selection:
@@ -637,9 +635,9 @@ class PivotTyper(AbstractTemplate):
         df, values, index, columns, aggfunc, _pivot_values = args
 
         if not (
-            isinstance(values, types.StringLiteral)
-            and isinstance(index, types.StringLiteral)
-            and isinstance(columns, types.StringLiteral)
+            is_overload_constant_str(values)
+            and is_overload_constant_str(index)
+            and is_overload_constant_str(columns)
         ):
             raise BodoError(
                 "pivot_table() only support string constants for "

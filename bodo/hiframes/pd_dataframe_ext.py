@@ -54,6 +54,8 @@ from bodo.utils.typing import (
     get_index_names,
     get_index_data_arr_types,
     raise_const_error,
+    is_overload_constant_tuple,
+    get_overload_const_tuple,
 )
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
@@ -701,10 +703,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
     return sig, codegen
 
 
-# TODO: fix default/kws arg handling in inline_closurecall
-# e.g. bodo/tests/test_dataframe.py::TestDataFrame::test_create_dtype1
-# @overload(pd.DataFrame, inline='always')
-@overload(pd.DataFrame)
+@overload(pd.DataFrame, inline="always")
 def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=False):
     # TODO: support other input combinations
     if not isinstance(copy, (bool, bodo.utils.typing.BooleanLiteral, types.Omitted)):
@@ -1170,8 +1169,8 @@ def validate_unicity_output_column_names(
         insertOutColumn(eVar)
 
 
-@overload_method(DataFrameType, "merge")
-@overload(pd.merge)
+@overload_method(DataFrameType, "merge", inline="always")
+@overload(pd.merge, inline="always")
 def merge_overload(
     left,
     right,
@@ -1240,10 +1239,11 @@ def merge_overload(
     )
 
     # The suffixes
-    if isinstance(suffixes, tuple):
-        suffixes_val = suffixes
+    if is_overload_constant_tuple(suffixes):
+        suffixes_val = get_overload_const_tuple(suffixes)
     if is_overload_constant_str_list(suffixes):
         suffixes_val = list(get_const_str_list(suffixes))
+
     suffix_x = suffixes_val[0]
     suffix_y = suffixes_val[1]
     validate_unicity_output_column_names(
@@ -1343,16 +1343,18 @@ def common_validate_merge_merge_asof_spec(
         )
     # make sure suffixes is not passed in
     # make sure on is of type str or strlist
-    if (not isinstance(suffixes, tuple)) and (
+    if (not is_overload_constant_tuple(suffixes)) and (
         not is_overload_constant_str_list(suffixes)
     ):
         raise_const_error(
             name_func + "(): suffixes parameters should be ['_left', '_right']"
         )
-    if isinstance(suffixes, tuple):
-        suffixes_val = suffixes
+
+    if is_overload_constant_tuple(suffixes):
+        suffixes_val = get_overload_const_tuple(suffixes)
     if is_overload_constant_str_list(suffixes):
         suffixes_val = list(get_const_str_list(suffixes))
+
     if len(suffixes_val) != 2:
         raise BodoError(name_func + "(): The number of suffixes should be exactly 2")
 
@@ -1614,7 +1616,7 @@ def validate_keys(keys, columns):
         )
 
 
-@overload_method(DataFrameType, "join")
+@overload_method(DataFrameType, "join", inline="always")
 def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort=False):
     validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort)
 
@@ -1772,7 +1774,7 @@ def lower_join_dummy(context, builder, sig, args):
     return dataframe._getvalue()
 
 
-@overload(pd.merge_asof)
+@overload(pd.merge_asof, inline="always")
 def merge_asof_overload(
     left,
     right,
@@ -1789,6 +1791,7 @@ def merge_asof_overload(
     allow_exact_matches=True,
     direction="backward",
 ):
+
     validate_merge_asof_spec(
         left,
         right,
@@ -1856,6 +1859,9 @@ def merge_asof_overload(
         suffixes_val = suffixes
     if is_overload_constant_str_list(suffixes):
         suffixes_val = list(get_const_str_list(suffixes))
+    if isinstance(suffixes, types.Omitted):
+        suffixes_val = suffixes.value
+
     suffix_x = suffixes_val[0]
     suffix_y = suffixes_val[1]
 
@@ -1930,7 +1936,7 @@ def pivot_table_overload(
     return _impl
 
 
-@overload(pd.crosstab)
+@overload(pd.crosstab, inline="always")
 def crosstab_overload(
     index,
     columns,
@@ -1966,7 +1972,7 @@ def crosstab_overload(
     return _impl
 
 
-@overload(pd.concat)
+@overload(pd.concat, inline="always")
 def concat_overload(
     objs,
     axis=0,
@@ -2094,7 +2100,7 @@ def lower_concat_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, "sort_values")
+@overload_method(DataFrameType, "sort_values", inline="always")
 def sort_values_overload(
     df, by, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last"
 ):
@@ -2226,7 +2232,7 @@ def lower_sort_values_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, "sort_index")
+@overload_method(DataFrameType, "sort_index", inline="always")
 def sort_index_overload(
     df,
     axis=0,
@@ -2279,7 +2285,7 @@ def lower_set_parent_dummy(context, builder, sig, args):
 
 # TODO: jitoptions for overload_method and infer_global
 # (no_cpython_wrapper to avoid error for iterator object)
-@overload_method(DataFrameType, "itertuples")
+@overload_method(DataFrameType, "itertuples", inline="always")
 def itertuples_overload(df, index=True, name="Pandas"):
     def _impl(df, index=True, name="Pandas"):  # pragma: no cover
         return bodo.hiframes.pd_dataframe_ext.itertuples_dummy(df)
@@ -2312,7 +2318,7 @@ def lower_itertuples_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, "fillna")
+@overload_method(DataFrameType, "fillna", inline="always")
 def fillna_overload(
     df, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None
 ):
@@ -2358,7 +2364,7 @@ def lower_fillna_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, "reset_index")
+@overload_method(DataFrameType, "reset_index", inline="always")
 def reset_index_overload(
     df, level=None, drop=False, inplace=False, col_level=0, col_fill=""
 ):
@@ -2432,7 +2438,7 @@ def lower_reset_index_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, "dropna")
+@overload_method(DataFrameType, "dropna", inline="always")
 def dropna_overload(df, axis=0, how="any", thresh=None, subset=None, inplace=False):
 
     # TODO: avoid dummy and generate func here when inlining is possible
@@ -2478,7 +2484,7 @@ def lower_dropna_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, "drop")
+@overload_method(DataFrameType, "drop", inline="always")
 def drop_overload(
     df,
     labels=None,
@@ -2613,7 +2619,7 @@ def lower_val_isin_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, "append")
+@overload_method(DataFrameType, "append", inline="always")
 def append_overload(df, other, ignore_index=False, verify_integrity=False, sort=None):
     if isinstance(other, DataFrameType):
         return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(

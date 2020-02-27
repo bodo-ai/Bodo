@@ -113,6 +113,8 @@ supported_agg_funcs = [
     "udf",
 ]
 
+list_cumulative = {"cumsum", "cumprod"}
+
 
 def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     """ Returns specification of functions used by a groupby operation. It will
@@ -159,7 +161,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         skipdropna = True
         if isinstance(rhs, ir.Expr):
             for erec in rhs.kws:
-                if func_name in {"cumsum", "cumprod"}:
+                if func_name in list_cumulative:
                     if erec[0] == "skipna":
                         skipdropna = guard(find_const, func_ir, erec[1])
                         if not isinstance(skipdropna, bool):
@@ -357,6 +359,8 @@ class Aggregate(ir.Stmt):
         df_in_vars,
         key_arrs,
         agg_func,
+        same_index,
+        return_key,
         loc,
         pivot_arr=None,
         pivot_values=None,
@@ -375,7 +379,8 @@ class Aggregate(ir.Stmt):
         self.key_arrs = key_arrs
 
         self.agg_func = agg_func
-
+        self.same_index = same_index
+        self.return_key = return_key
         self.loc = loc
         # pivot_table handling
         self.pivot_arr = pivot_arr
@@ -753,80 +758,61 @@ def agg_distributed_run(
     )
     arg_typs = tuple(key_typs + in_col_typs + (pivot_typ,))
 
-    kind = "transform" if agg_node.agg_func == "cumsum" else "aggregate"
-
-    return_key = agg_node.out_key_vars is not None
+    return_key = agg_node.return_key
 
     glbs = {"bodo": bodo, "np": np, "dt64_dtype": np.dtype("datetime64[ns]")}
 
-    if kind == "transform":
-        top_level_func = gen_top_level_transform_func(
-            agg_node.key_names,
-            agg_node.df_in_vars.keys(),
-            agg_node.df_out_vars.keys(),
-            parallel,
-        )
-        glbs.update(
-            {
-                "group_cumsum": group_cumsum,
-                "array_to_info": array_to_info,
-                "compute_node_partition_by_hash": compute_node_partition_by_hash,
-                "info_to_array": info_to_array,
-                "info_from_table": info_from_table,
-                "delete_table": delete_table,
-                "arr_info_list_to_table": arr_info_list_to_table,
-            }
-        )
-    else:
-        offload = agg_node.pivot_arr is None
-        udf_func_struct = get_udf_func_struct(
-            agg_node.agg_func,
-            in_col_typs,
-            out_col_typs,
-            typingctx,
-            targetctx,
-            pivot_typ,
-            agg_node.pivot_values,
-            agg_node.is_crosstab,
-        )
+    offload = agg_node.pivot_arr is None
+    udf_func_struct = get_udf_func_struct(
+        agg_node.agg_func,
+        agg_node.same_index,
+        in_col_typs,
+        out_col_typs,
+        typingctx,
+        targetctx,
+        pivot_typ,
+        agg_node.pivot_values,
+        agg_node.is_crosstab,
+    )
 
-        top_level_func = gen_top_level_agg_func(
-            agg_node.key_names,
-            key_typs,
-            return_key,
-            in_col_typs,
-            out_col_typs,
-            agg_node.df_in_vars.keys(),
-            agg_node.df_out_vars.keys(),
-            agg_node.agg_func,
-            parallel,
-            offload,
-            udf_func_struct,
-        )
+    top_level_func = gen_top_level_agg_func(
+        agg_node.key_names,
+        key_typs,
+        return_key,
+        in_col_typs,
+        out_col_typs,
+        agg_node.df_in_vars.keys(),
+        agg_node.df_out_vars.keys(),
+        agg_node.agg_func,
+        agg_node.same_index,
+        parallel,
+        offload,
+        udf_func_struct,
+    )
+    glbs.update(
+        {
+            "pd": pd,
+            "pre_alloc_string_array": pre_alloc_string_array,
+            "agg_seq_iter": agg_seq_iter,
+            "parallel_agg": parallel_agg,
+            "array_to_info": array_to_info,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "groupby_and_aggregate": groupby_and_aggregate,
+            "compute_node_partition_by_hash": compute_node_partition_by_hash,
+            "info_from_table": info_from_table,
+            "info_to_array": info_to_array,
+            "delete_table": delete_table,
+        }
+    )
+    if udf_func_struct is not None:
         glbs.update(
             {
-                "pd": pd,
-                "pre_alloc_string_array": pre_alloc_string_array,
-                "agg_seq_iter": agg_seq_iter,
-                "parallel_agg": parallel_agg,
-                "array_to_info": array_to_info,
-                "arr_info_list_to_table": arr_info_list_to_table,
-                "groupby_and_aggregate": groupby_and_aggregate,
-                "compute_node_partition_by_hash": compute_node_partition_by_hash,
-                "info_from_table": info_from_table,
-                "info_to_array": info_to_array,
-                "delete_table": delete_table,
+                "__update_redvars": udf_func_struct.update_all_func,
+                "__init_func": udf_func_struct.init_func,
+                "__combine_redvars": udf_func_struct.combine_all_func,
+                "__eval_res": udf_func_struct.eval_all_func,
             }
         )
-        if udf_func_struct is not None:
-            glbs.update(
-                {
-                    "__update_redvars": udf_func_struct.update_all_func,
-                    "__init_func": udf_func_struct.init_func,
-                    "__combine_redvars": udf_func_struct.combine_all_func,
-                    "__eval_res": udf_func_struct.eval_all_func,
-                }
-            )
 
     f_block = compile_to_numba_ir(
         top_level_func, glbs, typingctx, arg_typs, typemap, calltypes
@@ -854,7 +840,7 @@ def agg_distributed_run(
     nodes += f_block.body[:-3]
 
     out_vars = list(agg_node.df_out_vars.values())
-    if return_key:
+    if agg_node.out_key_vars is not None:
         out_vars += agg_node.out_key_vars
 
     for i, var in enumerate(out_vars):
@@ -926,7 +912,6 @@ def parallel_agg(
     )
 
     recvs = alltoallv_tup(key_arrs + data_redvar_dummy, shuffle_meta, key_arrs)
-    # print(data_shuffle_meta[0].out_arr)
     key_arrs = _get_keys_tup(recvs, key_arrs)
     reduce_recvs = _get_data_tup(recvs, key_arrs)
     out_arrs = agg_parallel_combine_iter(
@@ -1077,8 +1062,6 @@ def get_shuffle_data_send_buffs_overload(meta, key_arrs, data):
         "," if count == 1 else "",
     )  # single value needs comma to become tuple
 
-    # print(func_text)
-
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     send_buff_impl = loc_vars["send_buff_impl"]
@@ -1124,7 +1107,6 @@ def _set_out_keys_overload(out_arrs, w_ind, key_arrs, i, k):
                 key_start + i, i
             )
 
-        # print(func_text)
         loc_vars = {}
         exec(func_text, {"setitem_array_with_str": setitem_array_with_str}, loc_vars)
         set_keys_impl = loc_vars["set_keys_impl"]
@@ -1245,7 +1227,6 @@ def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set, return_key):
         )
 
         loc_vars = {}
-        # print(func_text)
         exec(
             func_text,
             {
@@ -1434,8 +1415,6 @@ def gen_update_cb(
         "            __update_redvars(redvars, data_in, w_ind, i, pivot_arr=None)\n"
     )
 
-    # print(func_text)
-
     loc_vars = {}
     exec(
         func_text,
@@ -1527,8 +1506,6 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, out_data_typs):
         func_text += "        w_ind = row_to_group[i]\n"
         func_text += "        __combine_redvars(redvars, recv_redvars, w_ind, i, pivot_arr=None)\n"
 
-    # print(func_text)
-
     loc_vars = {}
     exec(
         func_text,
@@ -1615,8 +1592,6 @@ def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_):
     func_text += "    for i in range(len(data_out_0)):\n"
     func_text += "        __eval_res(redvars, data_out, i)\n"
 
-    # print(func_text)
-
     loc_vars = {}
     exec(
         func_text,
@@ -1632,6 +1607,20 @@ def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_):
     return loc_vars["eval"]
 
 
+def gen_allfuncs(agg_func, nb_col):
+    if not isinstance(agg_func, list):
+        agg_func_work = [agg_func] * nb_col
+    else:
+        agg_func_work = agg_func
+    allfuncs = []
+    for f_val in agg_func_work:
+        if isinstance(f_val, list):
+            allfuncs += f_val
+        else:
+            allfuncs += [f_val]
+    return allfuncs
+
+
 def gen_top_level_agg_func(
     key_names,
     key_types,
@@ -1641,12 +1630,17 @@ def gen_top_level_agg_func(
     in_col_names,
     out_col_names,
     agg_func,
+    same_index,
     parallel,
     offload,
     udf_func_struct,
 ):
     """create the top level aggregation function by generating text
     """
+    # If we output the index then we need to remove it from the list of variables.
+    if same_index:
+        in_col_typs = in_col_typs[0:-1]
+        in_col_names = list(in_col_names)[0:-1]
     out_typs = [t.dtype for t in out_col_typs]
 
     # arg names
@@ -1729,12 +1723,16 @@ def gen_top_level_agg_func(
     else:
         all_arrs = tuple("key_{}".format(c) for c in key_names) + in_names
         n_keys = len(key_names)
-
-        func_text = "def agg_top({}{}, pivot_arr):\n".format(key_args, in_args)
+        # If we put the index as argument, then it is the last argument of the
+        # function.
+        func_text = "def agg_top({}{}{}, pivot_arr):\n".format(
+            key_args, in_args, ", index_arg" if same_index else ""
+        )
 
         # convert arrays to table
-        func_text += "    info_list = [{}]\n".format(
-            ", ".join("array_to_info({})".format(a) for a in all_arrs)
+        func_text += "    info_list = [{}{}]\n".format(
+            ", ".join("array_to_info({})".format(a) for a in all_arrs),
+            ", array_to_info(index_arg)" if same_index else "",
         )
         func_text += "    table = arr_info_list_to_table(info_list)\n"
 
@@ -1785,7 +1783,7 @@ def gen_top_level_agg_func(
                     # these operations require shuffle at the beginning, so a
                     # local aggregation followed by combine is not necessary
                     do_combine = False
-                if func.ftype in {"cumsum", "cumprod"}:
+                if func.ftype in list_cumulative:
                     num_cum_funcs += 1
                 if hasattr(func, "skipdropna"):
                     skipdropna = func.skipdropna
@@ -1800,9 +1798,6 @@ def gen_top_level_agg_func(
                 allfuncs
             ), "Cannot mix cumulative operations with other aggregation functions"
             do_combine = False  # same as median and nunique
-        return_keys = (
-            num_cum_funcs == 0
-        )  # don't return keys if there are cumulative operations
 
         if udf_func_struct is not None:
             # there are user-defined functions
@@ -1882,12 +1877,15 @@ def gen_top_level_agg_func(
         else:
             func_text += "    udf_ncols = np.array([0], np.int32)\n"  # dummy
         # call C++ groupby
+        # We pass the logical arguments to the function (skipdropna, return_key, same_index, ...)
         func_text += (
             "    out_table = groupby_and_aggregate(table, {},"
-            " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, {}, udf_table_dummy)\n".format(
+            " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, {}, {}, {}, udf_table_dummy)\n".format(
                 n_keys,
                 parallel,
                 skipdropna,
+                return_key,
+                same_index,
                 cpp_cb_update_addr,
                 cpp_cb_combine_addr,
                 cpp_cb_eval_addr,
@@ -1896,7 +1894,7 @@ def gen_top_level_agg_func(
 
         key_names = ["key_" + name for name in key_names]
         idx = 0
-        if return_keys:
+        if return_key:
             for i, key_name in enumerate(key_names):
                 func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
                     key_name, idx, key_name
@@ -1908,15 +1906,22 @@ def gen_top_level_agg_func(
                 out_name, idx, out_name + "_dummy"
             )
             idx += 1
-
+        # The index as last argument in output as well.
+        if same_index:
+            func_text += "    out_index_arg = info_to_array(info_from_table(out_table, {}), index_arg)\n".format(
+                idx
+            )
+            idx += 1
         # clean up
         func_text += "    delete_table(table)\n"
         func_text += "    delete_table(out_table)\n"
 
         ret_names = out_names
-        if return_keys:
+        if return_key:
             ret_names += tuple(key_names)
-        func_text += "    return ({},)\n".format(", ".join(ret_names))
+        func_text += "    return ({},{})\n".format(
+            ", ".join(ret_names), " out_index_arg," if same_index else ""
+        )
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -2120,6 +2125,7 @@ def replace_closures(f_ir, closure, code):
 
 def get_udf_func_struct(
     agg_func,
+    same_index,
     in_col_types,
     out_col_typs,
     typingctx,
@@ -2143,6 +2149,10 @@ def get_udf_func_struct(
     # offsets of reduce vars
     curr_offset = 0
     redvar_offsets = [0]
+    # If same_index is selected the index is put as last argument.
+    # So, it needs to be removed from the list of input columns
+    if same_index:
+        in_col_types = in_col_types[0:-1]
 
     if is_crosstab and len(in_col_types) == 0:
         # use dummy int input type for crosstab since doesn't have input
@@ -2472,7 +2482,6 @@ def gen_all_update_func(
                     redvar_access, j, redvar_access, 0 if in_num_cols == 1 else j
                 )
     func_text += "  return\n"
-    # print(func_text)
 
     glbs = {}
     for i, f in enumerate(update_funcs):
@@ -2556,7 +2565,6 @@ def gen_all_combine_func(
                     redvar_access, j, redvar_access, recv_access
                 )
     func_text += "  return\n"
-    # print(func_text)
     glbs = {}
     for i, f in enumerate(combine_funcs):
         glbs["combine_vars_{}".format(i)] = f
@@ -2627,7 +2635,6 @@ def gen_all_eval_func(
                 j, j, redvar_access
             )
     func_text += "  return\n"
-    # print(func_text)
     glbs = {}
     for i, f in enumerate(eval_funcs):
         glbs["eval_vars_{}".format(i)] = f
@@ -2648,7 +2655,6 @@ def gen_eval_func(f_ir, eval_nodes, reduce_vars, var_types, pm, typingctx, targe
     zero = return_typ(0)
     func_text = "def agg_eval({}):\n return _zero\n".format(", ".join(in_names))
 
-    # print(func_text)
     loc_vars = {}
     exec(func_text, {"_zero": zero}, loc_vars)
     agg_eval = loc_vars["agg_eval"]
@@ -2748,7 +2754,6 @@ def gen_combine_func(
     func_text += "    return {}".format(
         ", ".join(["v{}".format(i) for i in range(num_red_vars)])
     )
-    # print(func_text)
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     agg_combine = loc_vars["agg_combine"]
@@ -3090,7 +3095,6 @@ def num_total_chars_set_overload(s):
         ", ".join("n_{}".format(i) for i in range(count))
     )
 
-    # print(func_text)
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "get_utf8_size": get_utf8_size}, loc_vars)
     impl = loc_vars["f"]
