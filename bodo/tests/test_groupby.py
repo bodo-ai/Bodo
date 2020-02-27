@@ -1798,7 +1798,7 @@ def test_const_list_inference():
         return df.groupby(["A"] + ["B"]).sum()
 
     def impl2(df):
-        return df.groupby(list(set(df.columns) - set(["C"]))).sum()
+        return df.groupby(list(set(df.columns) - set(["A", "C"]))).sum()
 
     df = pd.DataFrame(
         {

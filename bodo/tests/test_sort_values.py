@@ -573,7 +573,9 @@ def test_sort_values_list_inference():
     Test constant list inference in sort_values()
     """
     def impl(df):
-        return df.sort_values(by=list(set(df.columns) - set(["C"])), kind="mergesort")
+        return df.sort_values(
+            by=list(set(df.columns) - set(["B", "C"])), kind="mergesort"
+        )
 
     df = pd.DataFrame(
     {
