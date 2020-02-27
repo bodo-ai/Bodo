@@ -568,6 +568,25 @@ def test_sort_with_nan_entries():
     check_func(impl1, (df5,), sort_output=False)
 
 
+def test_sort_values_list_inference():
+    """
+    Test constant list inference in sort_values()
+    """
+    def impl(df):
+        return df.sort_values(
+            by=list(set(df.columns) - set(["B", "C"])), kind="mergesort"
+        )
+
+    df = pd.DataFrame(
+    {
+        "A": [1, 3, 2, 0, -1, 4],
+        "B": [1.2, 3.4, 0.1, 2.2, 3.1, -1.2],
+        "C": np.arange(6),
+    }
+    )
+    check_func(impl, (df,))
+
+
 # ------------------------------ error checking ------------------------------ #
 
 

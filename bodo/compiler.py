@@ -11,6 +11,7 @@ import bodo.transforms.series_pass
 from bodo.transforms.untyped_pass import UntypedPass
 from bodo.transforms.series_pass import SeriesPass
 from bodo.transforms.dataframe_pass import DataFramePass
+from bodo.transforms.typing_pass import BodoTypeInference
 import numba
 from numba.compiler import DefaultPassBuilder
 from numba.compiler_machinery import FunctionPass, register_pass, PassManager
@@ -53,7 +54,10 @@ warnings.simplefilter("ignore", category=NumbaPerformanceWarning)
 
 
 class BodoCompiler(numba.compiler.CompilerBase):
-    """Bodo compiler pipeline
+    """Bodo compiler pipeline which adds the following passes to Numba's pipeline:
+    InlinePass, BodoUntypedPass, BodoTypeInference, BodoDataFramePass, BodoSeriesPass,
+    LowerParforSeq, BodoDumpDiagnosticsPass.
+    See class docstrings for more info.
     """
 
     def define_pipelines(self):
@@ -69,6 +73,9 @@ class BodoCompiler(numba.compiler.CompilerBase):
         pm.add_pass_after(InlinePass, WithLifting)
         # run untyped pass right before type inference
         add_pass_before(pm, BodoUntypedPass, NopythonTypeInference)
+        # replace Numba's type inference pass with Bodo's version, which incorporates
+        # constant inference using partial type inference
+        replace_pass(pm, BodoTypeInference, NopythonTypeInference)
 
         # Series pass should be before pre_parfor since
         # S.call to np.call transformation is invalid for
@@ -106,9 +113,29 @@ def add_pass_before(pm, pass_cls, location):
     pm._finalized = False
 
 
+def replace_pass(pm, pass_cls, location):
+    """
+    Replace pass `location` in PassManager's compilation pipeline with the pass
+    `pass_cls`.
+    """
+    assert pm.passes
+    pm._validate_pass(pass_cls)
+    pm._validate_pass(location)
+    for idx, (x, _) in enumerate(pm.passes):
+        if x == location:
+            break
+    else:  # pragma: no cover
+        raise ValueError("Could not find pass %s" % location)
+    pm.passes[idx] = (pass_cls, str(pass_cls))
+    # if a pass has been added, it's not finalized
+    pm._finalized = False
+
+
 # TODO: use Numba's new inline feature
 @register_pass(mutates_CFG=True, analysis_only=False)
 class InlinePass(FunctionPass):
+    """inline other jit functions, mainly to enable automatic parallelism
+    """
 
     _name = "inline_pass"
 
@@ -127,6 +154,11 @@ class InlinePass(FunctionPass):
 
 @register_pass(mutates_CFG=True, analysis_only=False)
 class BodoUntypedPass(FunctionPass):
+    """
+    Transformations before typing to enable type inference.
+    This pass transforms the IR to remove operations that cannot be handled in Numba's
+    type inference due to complexity such as pd.read_csv().
+    """
 
     _name = "bodo_untyped_pass"
 
@@ -153,6 +185,13 @@ class BodoUntypedPass(FunctionPass):
 
 @register_pass(mutates_CFG=True, analysis_only=False)
 class BodoDistributedPass(FunctionPass):
+    """
+    This pass analyzes the IR to decide parallelism of arrays and parfors for
+    distributed transformation, then parallelizes the IR for distributed execution and
+    inserts MPI calls.
+    Specialized IR nodes are also transformed to regular IR here since all analysis and
+    transformations are done.
+    """
 
     _name = "bodo_distributed_pass"
 
@@ -182,6 +221,10 @@ class BodoDistributedPass(FunctionPass):
 
 @register_pass(mutates_CFG=True, analysis_only=False)
 class BodoSeriesPass(FunctionPass):
+    """
+    This pass converts Series operations to array operations as much as possible to
+    provide implementation and enable optimization.
+    """
 
     _name = "bodo_series_pass"
 
@@ -206,6 +249,11 @@ class BodoSeriesPass(FunctionPass):
 
 @register_pass(mutates_CFG=True, analysis_only=False)
 class BodoDataFramePass(FunctionPass):
+    """
+    This pass converts data frame operations to Series and Array operations as much as
+    possible to provide implementation and enable optimization. Creates specialized
+    IR nodes for complex operations like Join.
+    """
 
     _name = "bodo_dataframe_pass"
 
@@ -230,6 +278,8 @@ class BodoDataFramePass(FunctionPass):
 
 @register_pass(mutates_CFG=False, analysis_only=True)
 class BodoDumpDiagnosticsPass(FunctionPass):
+    """Print Bodo's distributed diagnostics info if needed
+    """
 
     _name = "bodo_dump_diagnostics_pass"
 
@@ -263,6 +313,8 @@ class BodoCompilerSeq(BodoCompiler):
 
 @register_pass(mutates_CFG=False, analysis_only=True)
 class LowerParforSeq(FunctionPass):
+    """Lower parfors to regular loops to avoid threading of Numba
+    """
 
     _name = "bodo_lower_parfor_seq_pass"
 

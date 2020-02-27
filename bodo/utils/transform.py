@@ -17,6 +17,7 @@ from numba.ir_utils import (
     get_definition,
     require,
     find_callname,
+    build_definitions,
 )
 import bodo
 from bodo.utils.utils import is_assign, is_expr
@@ -25,7 +26,9 @@ from bodo.utils.typing import BodoError
 from bodo.utils.utils import is_call
 
 
-def compile_func_single_block(func, args, ret_var, typing_info, extra_globals=None):
+def compile_func_single_block(
+    func, args, ret_var, typing_info=None, extra_globals=None
+):
     """compiles functions that are just a single basic block.
     Does not handle defaults, freevars etc.
     typing_info is a structure that has typingctx, typemap, calltypes
@@ -35,14 +38,21 @@ def compile_func_single_block(func, args, ret_var, typing_info, extra_globals=No
     glbls = {"numba": numba, "np": np, "bodo": bodo, "pd": pd, "math": math}
     if extra_globals is not None:
         glbls.update(extra_globals)
-    f_ir = compile_to_numba_ir(
-        func,
-        glbls,
-        typing_info.typingctx,
-        tuple(typing_info.typemap[arg.name] for arg in args),
-        typing_info.typemap,
-        typing_info.calltypes,
-    )
+    loc = ir.Loc("", 0)
+    if ret_var:
+        loc = ret_var.loc
+    if typing_info:
+        loc = typing_info.curr_loc
+        f_ir = compile_to_numba_ir(
+            func,
+            glbls,
+            typing_info.typingctx,
+            tuple(typing_info.typemap[arg.name] for arg in args),
+            typing_info.typemap,
+            typing_info.calltypes,
+        )
+    else:
+        f_ir = compile_to_numba_ir(func, glbls)
     assert (
         len(f_ir.blocks) == 1
     ), "only single block functions supported in compile_func_single_block()"
@@ -51,15 +61,15 @@ def compile_func_single_block(func, args, ret_var, typing_info, extra_globals=No
     nodes = f_block.body[:-2]
 
     # update Loc objects, avoid changing input arg vars
-    update_locs(nodes[len(args) :], typing_info.curr_loc)
+    update_locs(nodes[len(args) :], loc)
     for stmt in nodes[: len(args)]:
-        stmt.target.loc = typing_info.curr_loc
+        stmt.target.loc = loc
 
     if ret_var is not None:
         cast_assign = f_block.body[-2]
         assert is_assign(cast_assign) and is_expr(cast_assign.value, "cast")
         func_ret = cast_assign.value.value
-        nodes.append(ir.Assign(func_ret, ret_var, typing_info.curr_loc))
+        nodes.append(ir.Assign(func_ret, ret_var, loc))
 
     return nodes
 
@@ -186,3 +196,55 @@ def get_const_func_output_type(func, arg_types, typing_context):
         typing_context, f_ir, arg_types, None
     )
     return f_return_type
+
+
+def update_node_list_definitions(node_list, func_ir):
+    loc = ir.Loc("", 0)
+    dumm_block = ir.Block(ir.Scope(None, loc), loc)
+    dumm_block.body = node_list
+    build_definitions({0: dumm_block}, func_ir._definitions)
+    return
+
+
+def gen_add_consts_to_type(vals, var, ret_var, typing_info=None):
+    """generate add_consts_to_type() call that makes constant values of dict/list
+    available during typing
+    """
+    # convert constants to string representation
+    const_funcs = {}
+    val_reps = []
+    for c in vals:
+        v_rep = "{}".format(c)
+        if isinstance(c, str):
+            v_rep = "'{}'".format(c)
+        # store a name for make_function exprs to replace later
+        elif is_expr(c, "make_function") or isinstance(
+            c, numba.targets.registry.CPUDispatcher
+        ):
+            v_rep = "func{}".format(ir_utils.next_label())
+            const_funcs[v_rep] = c
+        val_reps.append(v_rep)
+
+    vals_expr = ", ".join(val_reps)
+    func_text = "def _build_f(a):\n"
+    func_text += "  return bodo.utils.typing.add_consts_to_type(a, {})\n".format(
+        vals_expr
+    )
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    _build_f = loc_vars["_build_f"]
+    nodes = compile_func_single_block(_build_f, (var,), ret_var, typing_info)
+    # replace make_function exprs with actual node
+    for stmt in nodes:
+        if (
+            is_assign(stmt)
+            and isinstance(stmt.value, ir.Global)
+            and stmt.value.name in const_funcs
+        ):
+            v = const_funcs[stmt.value.name]
+            if is_expr(v, "make_function"):
+                stmt.value = const_funcs[stmt.value.name]
+            # CPUDispatcher case
+            else:
+                stmt.value.value = const_funcs[stmt.value.name]
+    return nodes

@@ -505,7 +505,7 @@ def test_agg_len_mix():
     """
 
     def impl(df):
-        A = df.groupby("A").agg(lambda x: x.sum()/len(x))
+        A = df.groupby("A").agg(lambda x: x.sum() / len(x))
         return A
 
     check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
@@ -1787,6 +1787,29 @@ def test_groupby_as_index_var():
 
     check_func(impl1, (11,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
+
+
+def test_const_list_inference():
+    """
+    Test passing non-const list that can be inferred as constant to groupby()
+    """
+
+    def impl1(df):
+        return df.groupby(["A"] + ["B"]).sum()
+
+    def impl2(df):
+        return df.groupby(list(set(df.columns) - set(["A", "C"]))).sum()
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": ["a", "b", "c", "c", "b", "c", "a"],
+            "C": [1, 3, 1, 2, -4, 0, 5],
+        }
+    )
+
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
 
 
 # ------------------------------ pivot, crosstab ------------------------------ #

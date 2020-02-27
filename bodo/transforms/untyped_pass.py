@@ -56,7 +56,13 @@ from bodo.ir import csv_ext
 
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 import bodo.hiframes.pd_dataframe_ext
-from bodo.utils.transform import update_locs, get_str_const_value
+from bodo.utils.transform import (
+    update_locs,
+    get_str_const_value,
+    update_node_list_definitions,
+    gen_add_consts_to_type,
+    compile_func_single_block,
+)
 from bodo.utils.typing import BodoError
 
 
@@ -167,6 +173,8 @@ def remove_hiframes(rhs, lives, call_list):
         return True
     if call_list == ["add_consts_to_type", "typing", "utils", bodo]:
         return True
+    if call_list == ["str_arr_from_sequence", "str_arr_ext", "libs", bodo]:
+        return True
     if call_list == [list]:
         return True
     if call_list == ["groupby"]:
@@ -188,6 +196,8 @@ def remove_hiframes(rhs, lives, call_list):
     if len(call_list) == 2 and call_list[0] == "copy":
         return True
     if call_list == ["parse_datetime_str", "pd_timestamp_ext", "hiframes", bodo]:
+        return True
+    if call_list == [set]:
         return True
     return False
 
@@ -267,7 +277,7 @@ class UntypedPass:
                 assert isinstance(out_nodes, list)
                 # TODO: fix scope/loc
                 new_body.extend(out_nodes)
-                self._update_definitions(out_nodes)
+                update_node_list_definitions(out_nodes, self.func_ir)
                 for inst in out_nodes:
                     if is_assign(inst):
                         self.rhs_labels[inst.value] = label
@@ -361,7 +371,7 @@ class UntypedPass:
                 return []
 
             # if rhs.op in ('build_list', 'build_tuple'): TODO: test tuple
-            if rhs.op in ("build_list", "build_map"):
+            if rhs.op in ("build_list", "build_map", "build_set"):
                 # if build_list items are constant, add the constant values
                 # to the returned list type as metadata. This enables type
                 # inference for calls like pd.merge() where the values
@@ -385,9 +395,7 @@ class UntypedPass:
                     )
                     tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
                     nodes = [tmp_assign]
-                    nodes += self._gen_add_consts_to_type(
-                        vals, tmp_target, assign.target
-                    )
+                    nodes += gen_add_consts_to_type(vals, tmp_target, assign.target)
                     return nodes
                 except numba.ir_utils.GuardException:
                     pass
@@ -399,7 +407,7 @@ class UntypedPass:
                 if is_expr(val_def, "getattr") and val_def.attr == "date":
                     mod_def = guard(get_definition, self.func_ir, val_def.value)
                     if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
-                        return _compile_func_single_block(
+                        return compile_func_single_block(
                             lambda: bodo.hiframes.datetime_date_ext.today_impl,
                             (),
                             assign.target,
@@ -412,7 +420,7 @@ class UntypedPass:
                 if is_expr(val_def, "getattr") and val_def.attr == "date":
                     mod_def = guard(get_definition, self.func_ir, val_def.value)
                     if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
-                        return _compile_func_single_block(
+                        return compile_func_single_block(
                             lambda: bodo.hiframes.datetime_date_ext.fromordinal_impl,
                             (),
                             assign.target,
@@ -425,7 +433,7 @@ class UntypedPass:
                 if is_expr(val_def, "getattr") and val_def.attr == "datetime":
                     mod_def = guard(get_definition, self.func_ir, val_def.value)
                     if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
-                        return _compile_func_single_block(
+                        return compile_func_single_block(
                             lambda: bodo.hiframes.datetime_datetime_ext.now_impl,
                             (),
                             assign.target,
@@ -438,7 +446,7 @@ class UntypedPass:
                 if is_expr(val_def, "getattr") and val_def.attr == "datetime":
                     mod_def = guard(get_definition, self.func_ir, val_def.value)
                     if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
-                        return _compile_func_single_block(
+                        return compile_func_single_block(
                             lambda: bodo.hiframes.datetime_datetime_ext.strptime_impl,
                             (),
                             assign.target,
@@ -451,7 +459,7 @@ class UntypedPass:
                 if is_expr(val_def, "getattr") and val_def.attr == "chain":
                     mod_def = guard(get_definition, self.func_ir, val_def.value)
                     if isinstance(mod_def, ir.Global) and mod_def.value == itertools:
-                        return _compile_func_single_block(
+                        return compile_func_single_block(
                             lambda: bodo.utils.typing.from_iterable_impl,
                             (),
                             assign.target,
@@ -583,7 +591,7 @@ class UntypedPass:
                 tmp_target = ir.Var(target.scope, mk_unique_var(target.name), rhs.loc)
                 tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
                 nodes = [tmp_assign]
-                nodes += self._gen_add_consts_to_type(list(arg_val), tmp_target, lhs)
+                nodes += gen_add_consts_to_type(list(arg_val), tmp_target, lhs)
                 return nodes
 
         # TODO: update Xenon handling code
@@ -631,59 +639,16 @@ class UntypedPass:
             val_typ = type(vals[0])
             require(all(isinstance(v, val_typ) for v in vals))
             tmp_target = ir.Var(var.scope, mk_unique_var(var.name + "_const"), var.loc)
-            nodes.extend(self._gen_add_consts_to_type(vals, var, tmp_target))
+            nodes.extend(gen_add_consts_to_type(vals, var, tmp_target))
             return tmp_target
         except numba.ir_utils.GuardException:
             return var
-
-    def _gen_add_consts_to_type(self, vals, var, ret_var):
-        """generate add_consts_to_type() call that makes constant values of dict/list
-        available during typing
-        """
-        # convert constants to string representation
-        const_funcs = {}
-        val_reps = []
-        for c in vals:
-            v_rep = "{}".format(c)
-            if isinstance(c, str):
-                v_rep = "'{}'".format(c)
-            # store a name for make_function exprs to replace later
-            elif is_expr(c, "make_function") or isinstance(
-                c, numba.targets.registry.CPUDispatcher
-            ):
-                v_rep = "func{}".format(ir_utils.next_label())
-                const_funcs[v_rep] = c
-            val_reps.append(v_rep)
-
-        vals_expr = ", ".join(val_reps)
-        func_text = "def _build_f(a):\n"
-        func_text += "  return bodo.utils.typing.add_consts_to_type(a, {})\n".format(
-            vals_expr
-        )
-        loc_vars = {}
-        exec(func_text, {"bodo": bodo}, loc_vars)
-        _build_f = loc_vars["_build_f"]
-        nodes = _compile_func_single_block(_build_f, (var,), ret_var)
-        # replace make_function exprs with actual node
-        for stmt in nodes:
-            if (
-                is_assign(stmt)
-                and isinstance(stmt.value, ir.Global)
-                and stmt.value.name in const_funcs
-            ):
-                v = const_funcs[stmt.value.name]
-                if is_expr(v, "make_function"):
-                    stmt.value = const_funcs[stmt.value.name]
-                # CPUDispatcher case
-                else:
-                    stmt.value.value = const_funcs[stmt.value.name]
-        return nodes
 
     def _handle_np_where(self, assign, lhs, rhs):
         """replace np.where() calls with Bodo's version since Numba's typer assumes
         non-Array types like Series are scalars and produces wrong output type.
         """
-        return _compile_func_single_block(
+        return compile_func_single_block(
             lambda c, x, y: bodo.hiframes.series_impl.where_impl(c, x, y), rhs.args, lhs
         )
 
@@ -1030,7 +995,7 @@ class UntypedPass:
         # print(func_text)
         _init_df = loc_vars["_init_df"]
 
-        nodes += _compile_func_single_block(_init_df, data_arrs, lhs)
+        nodes += compile_func_single_block(_init_df, data_arrs, lhs)
         return nodes
 
     def _get_csv_col_info(self, dtype_map, date_cols, col_names, lhs):
@@ -1152,7 +1117,7 @@ class UntypedPass:
             else:
                 in_data = data_def.args[0]
             new_arr = ir.Var(in_data.scope, mk_unique_var("flat_arr"), in_data.loc)
-            nodes = _compile_func_single_block(
+            nodes = compile_func_single_block(
                 lambda A: bodo.utils.conversion.flatten_array(
                     bodo.utils.conversion.coerce_to_array(A)
                 ),
@@ -1193,7 +1158,7 @@ class UntypedPass:
         dtype = numba.numpy_support.as_dtype(typ.dtype)
         arg = rhs.args[0]
 
-        return _compile_func_single_block(
+        return compile_func_single_block(
             lambda arr: bodo.hiframes.series_impl.to_numeric(arr, _dtype),
             [arg],
             lhs,
@@ -1251,7 +1216,7 @@ class UntypedPass:
         # print(func_text)
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars["_init_df"]
-        nodes += _compile_func_single_block(_init_df, data_arrs, lhs)
+        nodes += compile_func_single_block(_init_df, data_arrs, lhs)
         return nodes
 
     def _handle_pd_read_parquet(self, assign, lhs, rhs):
@@ -1611,35 +1576,6 @@ class UntypedPass:
             nodes[-1].target = df_var
 
         return nodes
-
-    def _update_definitions(self, node_list):
-        loc = ir.Loc("", 0)
-        dumm_block = ir.Block(ir.Scope(None, loc), loc)
-        dumm_block.body = node_list
-        build_definitions({0: dumm_block}, self.func_ir._definitions)
-        return
-
-
-def _compile_func_single_block(func, args, ret_var, extra_globals=None):
-    """compiles functions that are just a single basic block.
-    Does not handle defaults, freevars etc.
-    """
-    glbls = {"numba": numba, "np": np, "bodo": bodo, "pd": pd}
-    if extra_globals is not None:
-        glbls.update(extra_globals)
-    f_ir = compile_to_numba_ir(func, glbls)
-    assert len(f_ir.blocks) == 1
-    f_block = f_ir.blocks.popitem()[1]
-    replace_arg_nodes(f_block, args)
-    nodes = f_block.body[:-2]
-
-    # update Loc objects, avoid changing input arg vars
-    update_locs(nodes[len(args) :], ret_var.loc)
-    for stmt in nodes[: len(args)]:
-        stmt.target.loc = ret_var.loc
-
-    nodes[-1].target = ret_var
-    return nodes
 
 
 def _check_type(val, typ):
