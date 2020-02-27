@@ -173,7 +173,9 @@ class InferConstsPass:
             and isinstance(arg2_typ, ConstSet)
             and rhs.fn == operator.sub
         ):
-            vals = set(arg1_typ.consts) - set(arg2_typ.consts)
+            # sort output of set diff op to be consistent across processors since const
+            # values can be keys to groupby/sort/join which require consistent order
+            vals = sorted(set(arg1_typ.consts) - set(arg2_typ.consts))
             return self._gen_consts_call(assign.target, vals, False)
 
         # replace ConstSet with Set if there a set op we don't support here
