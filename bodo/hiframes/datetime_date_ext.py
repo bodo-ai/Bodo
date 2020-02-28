@@ -151,6 +151,7 @@ def box_datetime_date(typ, val, c):
     c.pyapi.decref(year_obj)
     c.pyapi.decref(month_obj)
     c.pyapi.decref(day_obj)
+    c.pyapi.decref(dt_obj)
     return res
 
 

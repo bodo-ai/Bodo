@@ -301,6 +301,7 @@ def box_str_arr_split_view(typ, val, c):
         builder.call(arr_setitem_fn, [out_arr, arr_ptr, list_obj])
 
     c.pyapi.decref(np_class_obj)
+    c.pyapi.decref(dtype)
     return out_arr
 
 
