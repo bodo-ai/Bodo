@@ -655,7 +655,10 @@ def init_datetime_date_array(typingctx, data, nulls=None):
 @numba.njit(no_cpython_wrapper=True)
 def alloc_datetime_date_array(n):
     data_arr = np.empty(n, dtype=np.int64)
-    nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
+    # XXX: set all bits to not null since datetime.date array operations do not support
+    # NA yet. TODO: use 'empty' when all operations support NA
+    # nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
+    nulls = np.full((n + 7) >> 3, 255, np.uint8)
     return init_datetime_date_array(data_arr, nulls)
 
 
