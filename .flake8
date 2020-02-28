@@ -40,7 +40,6 @@ exclude =
 	bodo/tests/test_rolling.py
 	bodo/tests/test_d4p.py
 	bodo/tests/test_series.py
-	bodo/io/xenon_ext.py
 	bodo/io/np_io.py
 	bodo/io/parquet_pio.py
 	bodo/io/h5.py

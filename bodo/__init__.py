@@ -49,9 +49,6 @@ use_cpp_drop_duplicates = True
 use_cpp_sort = True
 from bodo.decorators import jit
 
-if bodo.config._has_xenon:
-    from bodo.io.xenon_ext import read_xenon, xe_connect, xe_open, xe_close
-
 multithread_mode = False
 
 

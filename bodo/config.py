@@ -20,12 +20,3 @@ except ImportError:
     _has_pyarrow = False
 else:
     _has_pyarrow = True
-
-
-try:
-    from . import hxe_ext
-except ImportError:
-    _has_xenon = False
-else:
-    _has_xenon = True
-    import bodo.io.xenon_ext

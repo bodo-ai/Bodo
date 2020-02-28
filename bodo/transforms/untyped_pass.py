@@ -594,14 +594,6 @@ class UntypedPass:
                 nodes += gen_add_consts_to_type(list(arg_val), tmp_target, lhs)
                 return nodes
 
-        # TODO: update Xenon handling code
-        # if fdef == ('read_xenon', 'bodo.xenon_ext'):
-        #     col_items, nodes = bodo.xenon_ext._handle_read(assign, lhs, rhs, self.func_ir)
-        #     df_nodes, col_map = self._process_df_build_map(col_items)
-        #     self._create_df(lhs.name, col_map, label)
-        #     nodes += df_nodes
-        #     return nodes
-
         if fdef == ("where", "numpy") and len(rhs.args) == 3:
             return self._handle_np_where(assign, lhs, rhs)
 

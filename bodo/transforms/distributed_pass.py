@@ -470,57 +470,6 @@ class DistributedPass:
             self._file_open_set_parallel(file_varname)
             return nodes
 
-        # TODO: fix numba.extending
-        if bodo.config._has_xenon and (
-            fdef == ("read_xenon_col", "numba.extending")
-            and self._is_1D_arr(rhs.args[3].name)
-        ):
-            arr = rhs.args[3]
-            nodes = []
-            size_var = self._get_dist_var_len(arr, nodes, equiv_set)
-            start_var = self._get_1D_start(size_var, avail_vars, nodes)
-            count_var = self._get_1D_count(size_var, nodes)
-            assert self.typemap[arr.name].ndim == 1, "only 1D arrs in Xenon"
-            rhs.args += [start_var, count_var]
-
-            def f(
-                connect_tp, dset_tp, col_id_tp, column_tp, schema_arr_tp, start, count
-            ):  # pragma: no cover
-                return bodo.io.xenon_ext.read_xenon_col_parallel(
-                    connect_tp,
-                    dset_tp,
-                    col_id_tp,
-                    column_tp,
-                    schema_arr_tp,
-                    start,
-                    count,
-                )
-
-            return nodes + compile_func_single_block(f, rhs.args, assign.target, self)
-
-        if bodo.config._has_xenon and (
-            fdef == ("read_xenon_str", "numba.extending") and self._is_1D_arr(lhs)
-        ):
-            arr = lhs
-            size_var = rhs.args[3]
-            assert self.typemap[size_var.name] == types.intp
-            out = []
-            start_var = self._get_1D_start(size_var, avail_vars, out)
-            count_var = self._get_1D_count(size_var, out)
-            rhs.args.remove(size_var)
-            rhs.args.append(start_var)
-            rhs.args.append(count_var)
-
-            def f(
-                connect_tp, dset_tp, col_id_tp, schema_arr_tp, start_tp, count_tp
-            ):  # pragma: no cover
-                return bodo.io.xenon_ext.read_xenon_str_parallel(
-                    connect_tp, dset_tp, col_id_tp, schema_arr_tp, start_tp, count_tp
-                )
-
-            out += compile_func_single_block(f, rhs.args, assign.target, self)
-            return out
-
         if fdef == (
             "get_split_view_index",
             "bodo.hiframes.split_impl",
