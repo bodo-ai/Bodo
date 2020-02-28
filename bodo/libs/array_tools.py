@@ -27,6 +27,7 @@ from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArray, get_categories_int_type
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 
 from bodo.libs import array_tools_ext
 from llvmlite import ir as lir
@@ -157,13 +158,15 @@ def array_to_info(typingctx, arr_type_t):
         # nullable integer/bool array
         if (
             isinstance(arr_type, (IntegerArrayType, DecimalArrayType))
-            or arr_type == boolean_array
+            or arr_type in (boolean_array, datetime_date_array_type)
         ):
             arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
             dtype = arr_type.dtype
             np_dtype = dtype
             if isinstance(arr_type, DecimalArrayType):
                 np_dtype = int128_type
+            if arr_type == datetime_date_array_type:
+                np_dtype = types.int64
             data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
                 context, builder, arr.data
             )
@@ -335,12 +338,14 @@ def info_to_array(typingctx, info_type, arr_type):
         # nullable integer/bool array
         if (
             isinstance(arr_type, (IntegerArrayType, DecimalArrayType))
-            or arr_type == boolean_array
+            or arr_type in (boolean_array, datetime_date_array_type)
         ):
             arr = cgutils.create_struct_proxy(arr_type)(context, builder)
             np_dtype = arr_type.dtype
             if isinstance(arr_type, DecimalArrayType):
                 np_dtype = int128_type
+            if arr_type == datetime_date_array_type:
+                np_dtype = types.int64
             data_arr_type = types.Array(np_dtype, 1, "C")
             data_arr = context.make_array(data_arr_type)(context, builder)
             nulls_arr_type = types.Array(types.uint8, 1, "C")

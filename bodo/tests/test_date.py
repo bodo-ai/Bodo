@@ -210,6 +210,11 @@ def test_datetime_boxing():
     dt = datetime.datetime(2020, 1, 4, 13, 44, 33, 22)
     check_func(test_impl, (dt,))
 
+    # test series(datetime.date)
+    S = pd.Series(pd.date_range("2017-01-03", "2017-01-17").date)
+    S[10] = None
+    check_func(test_impl, (S,))
+
 
 # ------------------------- Test datetime.timedelta ------------------------- #
 def test_datetime_timedelta_construct():

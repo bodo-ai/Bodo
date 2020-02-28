@@ -44,6 +44,12 @@ from llvmlite import ir as lir
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.datetime_datetime_ext import DatetimeDatetimeType
 import bodo
+from bodo.libs import hdatetime_ext
+import llvmlite.binding as ll
+
+
+ll.add_symbol("box_datetime_date_array", hdatetime_ext.box_datetime_date_array)
+ll.add_symbol("unbox_datetime_date_array", hdatetime_ext.unbox_datetime_date_array)
 
 
 # datetime.date implementation that uses a single int to store year/month/day
@@ -517,11 +523,15 @@ datetime_date_array_type = DatetimeDateArrayType()
 @register_model(DatetimeDateArrayType)
 class DatetimeDateArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        members = [("data", types.Array(types.int64, 1, "C"))]
+        members = [
+            ("data", types.Array(types.int64, 1, "C")),
+            ("null_bitmap", types.Array(types.uint8, 1, "C")),
+        ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
 make_attribute_wrapper(DatetimeDateArrayType, "data", "_data")
+make_attribute_wrapper(DatetimeDateArrayType, "null_bitmap", "_null_bitmap")
 
 
 # TODO: move to utils or Numba
@@ -549,18 +559,34 @@ def sequence_getitem(c, obj, ind):
 def unbox_datetime_date_array(typ, val, c):
     n = object_length(c, val)
     arr_typ = types.Array(types.intp, 1, "C")
-    out_arr = bodo.utils.utils._empty_nd_impl(c.context, c.builder, arr_typ, [n])
+    data_arr = bodo.utils.utils._empty_nd_impl(c.context, c.builder, arr_typ, [n])
+    n_bitmask_bytes = c.builder.udiv(
+        c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
+        lir.Constant(lir.IntType(64), 8),
+    )
+    bitmap_arr = bodo.utils.utils._empty_nd_impl(
+        c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bitmask_bytes]
+    )
+
+    # function signature of unbox_datetime_date_array
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [
+            lir.IntType(8).as_pointer(),
+            lir.IntType(64),
+            lir.IntType(64).as_pointer(),
+            lir.IntType(8).as_pointer(),
+        ],
+    )
+    fn = c.builder.module.get_or_insert_function(fnty, name="unbox_datetime_date_array")
+    c.builder.call(
+        fn, [val, n, data_arr.data, bitmap_arr.data,],
+    )
+
     out_dt_date_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    out_dt_date_arr.data = data_arr._getvalue()
+    out_dt_date_arr.null_bitmap = bitmap_arr._getvalue()
 
-    with cgutils.for_range(c.builder, n) as loop:
-        dt_date = sequence_getitem(c, val, loop.index)
-        int_date = unbox_datetime_date(datetime_date_type, dt_date, c).value
-        dataptr, shapes, strides = basic_indexing(
-            c.context, c.builder, arr_typ, out_arr, (types.intp,), (loop.index,)
-        )
-        store_item(c.context, c.builder, arr_typ, int_date, dataptr)
-
-    out_dt_date_arr.data = out_arr._getvalue()
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(out_dt_date_arr._getvalue(), is_error=is_error)
 
@@ -576,47 +602,64 @@ def int_array_to_datetime_date(ia):
 
 @box(DatetimeDateArrayType)
 def box_datetime_date_array(typ, val, c):
-    dt_date_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-    ary = c.pyapi.from_native_value(
-        types.Array(types.int64, 1, "C"), dt_date_arr.data, c.env_manager
+    in_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+
+    data_arr = c.context.make_array(types.Array(types.int64, 1, "C"))(
+        c.context, c.builder, in_arr.data
     )
-    hpat_name = c.context.insert_const_string(c.builder.module, "bodo")
-    hpat_mod = c.pyapi.import_module_noblock(hpat_name)
-    hi_mod = c.pyapi.object_getattr_string(hpat_mod, "hiframes")
-    pte_mod = c.pyapi.object_getattr_string(hi_mod, "datetime_date_ext")
-    iatdd = c.pyapi.object_getattr_string(pte_mod, "int_array_to_datetime_date")
-    res = c.pyapi.call_function_objargs(iatdd, [ary])
-    return res
+    bitmap_arr_data = c.context.make_array(types.Array(types.uint8, 1, "C"))(
+        c.context, c.builder, in_arr.null_bitmap
+    ).data
+
+    n = c.builder.extract_value(data_arr.shape, 0)
+
+    fnty = lir.FunctionType(
+        c.pyapi.pyobj,
+        [lir.IntType(64), lir.IntType(64).as_pointer(), lir.IntType(8).as_pointer(),],
+    )
+    fn_get = c.builder.module.get_or_insert_function(
+        fnty, name="box_datetime_date_array"
+    )
+    obj_arr = c.builder.call(fn_get, [n, data_arr.data, bitmap_arr_data,],)
+
+    return obj_arr
 
 
 @intrinsic
-def init_datetime_date_array(typingctx, data=None):
+def init_datetime_date_array(typingctx, data, nulls=None):
     """Create a DatetimeDateArrayType with provided data values.
     """
     assert data == types.Array(types.int64, 1, "C")
+    assert nulls == types.Array(types.uint8, 1, "C")
 
     def codegen(context, builder, signature, args):
-        (data_val,) = args
+        (data_val, bitmap_val) = args
         # create arr struct and store values
         dt_date_arr = cgutils.create_struct_proxy(signature.return_type)(
             context, builder
         )
         dt_date_arr.data = data_val
+        dt_date_arr.null_bitmap = bitmap_val
 
         # increase refcount of stored values
         if context.enable_nrt:
             context.nrt.incref(builder, signature.args[0], data_val)
+            context.nrt.incref(builder, signature.args[1], bitmap_val)
 
         return dt_date_arr._getvalue()
 
-    sig = datetime_date_array_type(data)
+    sig = datetime_date_array_type(data, nulls)
     return sig, codegen
 
 
 @numba.njit(no_cpython_wrapper=True)
-def alloc_datetime_date_array(n):
+def alloc_datetime_date_array(n):  # pragma: no cover
     data_arr = np.empty(n, dtype=np.int64)
-    return init_datetime_date_array(data_arr)
+    # XXX: set all bits to not null since datetime.date array operations do not support
+    # NA yet. TODO: use 'empty' when all operations support NA
+    # nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
+    nulls = np.full((n + 7) >> 3, 255, np.uint8)
+    return init_datetime_date_array(data_arr, nulls)
 
 
 def alloc_datetime_date_array_equiv(self, scope, equiv_set, args, kws):
@@ -659,6 +702,11 @@ def dt_date_arr_setitem(A, ind, val):
 def overload_len_datetime_date_arr(A):
     if A == datetime_date_array_type:
         return lambda A: len(A._data)
+
+
+@overload_attribute(DatetimeDateArrayType, "shape")
+def overload_datetime_date_arr_shape(A):
+    return lambda A: (len(A._data),)
 
 
 @overload(operator.sub)

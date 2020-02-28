@@ -114,10 +114,12 @@ def get_constant(func_ir, var, default=NOT_CONSTANT):
     return default
 
 
-
 def numba_to_c_type(t):
     if isinstance(t, bodo.libs.decimal_arr_ext.Decimal128Type):
         return CTypeEnum.Decimal.value
+
+    if t == bodo.hiframes.datetime_date_ext.datetime_date_type:
+        return CTypeEnum.Int64.value
 
     return _numba_to_c_type_map[t]
 
@@ -194,15 +196,23 @@ def is_alloc_callname(func_name, mod_name):
             func_name == "pre_alloc_string_array"
             and mod_name == "bodo.libs.str_arr_ext"
         )
-        or (func_name == "alloc_random_access_string_array" and mod_name == "bodo.libs.str_ext")
+        or (
+            func_name == "alloc_random_access_string_array"
+            and mod_name == "bodo.libs.str_ext"
+        )
         or (
             func_name == "pre_alloc_list_string_array"
             and mod_name == "bodo.libs.list_str_arr_ext"
         )
         or (func_name == "alloc_bool_array" and mod_name == "bodo.libs.bool_arr_ext")
-        or (func_name == "alloc_datetime_date_array"
-            and mod_name == "bodo.hiframes.datetime_date_ext")
-        or (func_name == "alloc_decimal_array" and mod_name == "bodo.libs.decimal_arr_ext")
+        or (
+            func_name == "alloc_datetime_date_array"
+            and mod_name == "bodo.hiframes.datetime_date_ext"
+        )
+        or (
+            func_name == "alloc_decimal_array"
+            and mod_name == "bodo.libs.decimal_arr_ext"
+        )
     )
 
 
@@ -374,30 +384,32 @@ def is_distributable_typ(var_typ):
     return (
         is_array_typ(var_typ)
         or isinstance(var_typ, bodo.hiframes.pd_dataframe_ext.DataFrameType)
+        or (isinstance(var_typ, types.List) and is_distributable_typ(var_typ.dtype))
         or (
-            isinstance(var_typ, types.List)
-            and is_distributable_typ(var_typ.dtype)
-        ) or (
-        isinstance(var_typ, types.DictType)
-        # only dictionary values can be distributed since keys should be hashable
-        and is_distributable_typ(var_typ.value_type)
+            isinstance(var_typ, types.DictType)
+            # only dictionary values can be distributed since keys should be hashable
+            and is_distributable_typ(var_typ.value_type)
         )
     )
 
 
 def is_distributable_tuple_typ(var_typ):
     return (
-        isinstance(var_typ, types.BaseTuple)
-        and any(
-            is_distributable_typ(t) or is_distributable_tuple_typ(t)
-            for t in var_typ.types
+        (
+            isinstance(var_typ, types.BaseTuple)
+            and any(
+                is_distributable_typ(t) or is_distributable_tuple_typ(t)
+                for t in var_typ.types
+            )
         )
-    ) or (
-        isinstance(var_typ, types.List)
-        and is_distributable_tuple_typ(var_typ.dtype)
-    ) or (
-        isinstance(var_typ, types.DictType)
-        and is_distributable_tuple_typ(var_typ.value_type)
+        or (
+            isinstance(var_typ, types.List)
+            and is_distributable_tuple_typ(var_typ.dtype)
+        )
+        or (
+            isinstance(var_typ, types.DictType)
+            and is_distributable_tuple_typ(var_typ.value_type)
+        )
     )
 
 
@@ -531,14 +543,16 @@ def empty_like_type_overload(n, arr):
     if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArray):
         from bodo.hiframes.pd_categorical_ext import init_categorical_array
 
-        return lambda n, arr: init_categorical_array(np.empty(n, arr._codes.dtype), arr.dtype)
+        return lambda n, arr: init_categorical_array(
+            np.empty(n, arr._codes.dtype), arr.dtype
+        )
 
     if isinstance(arr, types.Array):
         return lambda n, arr: np.empty(n, arr.dtype)
 
     if isinstance(arr, types.List) and arr.dtype == string_type:
 
-        def empty_like_type_str_list(n, arr):
+        def empty_like_type_str_list(n, arr):  # pragma: no cover
             return [""] * n
 
         return empty_like_type_str_list
@@ -557,7 +571,7 @@ def empty_like_type_overload(n, arr):
 
     if arr == boolean_array:
 
-        def empty_like_type_bool_arr(n, arr):
+        def empty_like_type_bool_arr(n, arr):  # pragma: no cover
             n_bytes = (n + 7) >> 3
             return bodo.libs.bool_arr_ext.init_bool_array(
                 np.empty(n, np.bool_), np.empty(n_bytes, np.uint8)
@@ -565,14 +579,19 @@ def empty_like_type_overload(n, arr):
 
         return empty_like_type_bool_arr
 
+    if arr == bodo.hiframes.datetime_date_ext.datetime_date_array_type:
+
+        def empty_like_type_datetime_date_arr(n, arr):  # pragma: no cover
+            return bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
+
+        return empty_like_type_datetime_date_arr
+
     if isinstance(arr, bodo.libs.decimal_arr_ext.DecimalArrayType):
         precision = arr.precision
         scale = arr.scale
-        def empty_like_type_decimal_arr(n, arr):
 
-            return bodo.libs.decimal_arr_ext.alloc_decimal_array(
-                n, precision, scale
-            )
+        def empty_like_type_decimal_arr(n, arr):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.alloc_decimal_array(n, precision, scale)
 
         return empty_like_type_decimal_arr
 
@@ -591,7 +610,7 @@ def empty_like_type_overload(n, arr):
 
 # copied from numba.targets.arrayobj (0.47), except the raising exception code is
 # changed to just a print since unboxing call convention throws an error for exceptions
-def _empty_nd_impl(context, builder, arrtype, shapes):
+def _empty_nd_impl(context, builder, arrtype, shapes):  # pragma: no cover
     """Utility function used for allocating a new array during LLVM code
     generation (lowering).  Given a target context, builder, array
     type, and a tuple or list of lowered dimension sizes, returns a
@@ -609,26 +628,24 @@ def _empty_nd_impl(context, builder, arrtype, shapes):
     for s in shapes:
         arrlen_mult = builder.smul_with_overflow(arrlen, s)
         arrlen = builder.extract_value(arrlen_mult, 0)
-        overflow = builder.or_(
-            overflow, builder.extract_value(arrlen_mult, 1)
-        )
+        overflow = builder.or_(overflow, builder.extract_value(arrlen_mult, 1))
 
     if arrtype.ndim == 0:
         strides = ()
-    elif arrtype.layout == 'C':
+    elif arrtype.layout == "C":
         strides = [itemsize]
         for dimension_size in reversed(shapes[1:]):
             strides.append(builder.mul(strides[-1], dimension_size))
         strides = tuple(reversed(strides))
-    elif arrtype.layout == 'F':
+    elif arrtype.layout == "F":
         strides = [itemsize]
         for dimension_size in shapes[:-1]:
             strides.append(builder.mul(strides[-1], dimension_size))
         strides = tuple(strides)
     else:
         raise NotImplementedError(
-            "Don't know how to allocate array with layout '{0}'.".format(
-                arrtype.layout))
+            "Don't know how to allocate array with layout '{0}'.".format(arrtype.layout)
+        )
 
     # Check overflow, numpy also does this after checking order
     allocsize_mult = builder.smul_with_overflow(arrlen, itemsize)
@@ -636,14 +653,16 @@ def _empty_nd_impl(context, builder, arrtype, shapes):
     overflow = builder.or_(overflow, builder.extract_value(allocsize_mult, 1))
 
     with builder.if_then(overflow, likely=False):
-        cgutils.printf(builder,
-            ("array is too big; `arr.size * arr.dtype.itemsize` is larger than"
-             " the maximum possible size.")
+        cgutils.printf(
+            builder,
+            (
+                "array is too big; `arr.size * arr.dtype.itemsize` is larger than"
+                " the maximum possible size."
+            ),
         )
 
     align = context.get_preferred_array_alignment(arrtype.dtype)
-    meminfo = context.nrt.meminfo_alloc_aligned(builder, size=allocsize,
-                                                align=align)
+    meminfo = context.nrt.meminfo_alloc_aligned(builder, size=allocsize, align=align)
 
     data = context.nrt.meminfo_data(builder, meminfo)
 
@@ -651,12 +670,14 @@ def _empty_nd_impl(context, builder, arrtype, shapes):
     shape_array = cgutils.pack_array(builder, shapes, ty=intp_t)
     strides_array = cgutils.pack_array(builder, strides, ty=intp_t)
 
-    populate_array(ary,
-                   data=builder.bitcast(data, datatype.as_pointer()),
-                   shape=shape_array,
-                   strides=strides_array,
-                   itemsize=itemsize,
-                   meminfo=meminfo)
+    populate_array(
+        ary,
+        data=builder.bitcast(data, datatype.as_pointer()),
+        shape=shape_array,
+        strides=strides_array,
+        itemsize=itemsize,
+        meminfo=meminfo,
+    )
 
     return ary
 
@@ -798,7 +819,7 @@ def get_ctypes_ptr(typingctx, ctypes_typ=None):
     assert isinstance(ctypes_typ, types.ArrayCTypes)
 
     def codegen(context, builder, sig, args):
-        in_carr, = args
+        (in_carr,) = args
         ctinfo = context.make_helper(builder, sig.args[0], in_carr)
         return ctinfo.data
 
@@ -811,7 +832,7 @@ def incref(typingctx, data=None):
     """
 
     def codegen(context, builder, signature, args):
-        data_val, = args
+        (data_val,) = args
 
         if context.enable_nrt:
             context.nrt.incref(builder, signature.args[0], data_val)

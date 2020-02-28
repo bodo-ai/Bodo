@@ -45,6 +45,7 @@ from bodo.libs.str_arr_ext import (
 from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.timsort import copyElement_tup, getitem_arr_tup, setitem_arr_tup
 from bodo.utils.shuffle import (
@@ -1522,7 +1523,10 @@ def setitem_arr_nan_overload(arr, ind, int_nan_const=0):
     if arr == string_array_type:
         return lambda arr, ind, int_nan_const=0: str_arr_set_na(arr, ind)
 
-    if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr == boolean_array:
+    if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
+        boolean_array,
+        datetime_date_array_type,
+    ):
         return lambda arr, ind, int_nan_const=0: bodo.libs.int_arr_ext.set_bit_to_arr(
             arr._null_bitmap, ind, 0
         )
