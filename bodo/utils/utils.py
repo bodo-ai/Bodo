@@ -552,7 +552,7 @@ def empty_like_type_overload(n, arr):
 
     if isinstance(arr, types.List) and arr.dtype == string_type:
 
-        def empty_like_type_str_list(n, arr):
+        def empty_like_type_str_list(n, arr):  # pragma: no cover
             return [""] * n
 
         return empty_like_type_str_list
@@ -571,7 +571,7 @@ def empty_like_type_overload(n, arr):
 
     if arr == boolean_array:
 
-        def empty_like_type_bool_arr(n, arr):
+        def empty_like_type_bool_arr(n, arr):  # pragma: no cover
             n_bytes = (n + 7) >> 3
             return bodo.libs.bool_arr_ext.init_bool_array(
                 np.empty(n, np.bool_), np.empty(n_bytes, np.uint8)
@@ -581,7 +581,7 @@ def empty_like_type_overload(n, arr):
 
     if arr == bodo.hiframes.datetime_date_ext.datetime_date_array_type:
 
-        def empty_like_type_datetime_date_arr(n, arr):
+        def empty_like_type_datetime_date_arr(n, arr):  # pragma: no cover
             return bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
 
         return empty_like_type_datetime_date_arr
@@ -590,8 +590,7 @@ def empty_like_type_overload(n, arr):
         precision = arr.precision
         scale = arr.scale
 
-        def empty_like_type_decimal_arr(n, arr):
-
+        def empty_like_type_decimal_arr(n, arr):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.alloc_decimal_array(n, precision, scale)
 
         return empty_like_type_decimal_arr
@@ -611,7 +610,7 @@ def empty_like_type_overload(n, arr):
 
 # copied from numba.targets.arrayobj (0.47), except the raising exception code is
 # changed to just a print since unboxing call convention throws an error for exceptions
-def _empty_nd_impl(context, builder, arrtype, shapes):
+def _empty_nd_impl(context, builder, arrtype, shapes):  # pragma: no cover
     """Utility function used for allocating a new array during LLVM code
     generation (lowering).  Given a target context, builder, array
     type, and a tuple or list of lowered dimension sizes, returns a
