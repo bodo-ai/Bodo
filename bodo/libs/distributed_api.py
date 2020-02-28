@@ -34,10 +34,7 @@ from bodo.libs.list_str_arr_ext import (
     pre_alloc_list_string_array,
 )
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
-from bodo.hiframes.datetime_date_ext import (
-    datetime_date_array_type,
-    init_datetime_date_array,
-)
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.utils.utils import (
     debug_prints,
     empty_like_type,
@@ -502,7 +499,10 @@ def gatherv(data, allgather=False):
 
         return gatherv_str_arr_impl
 
-    if isinstance(data, (IntegerArrayType, DecimalArrayType)) or data == boolean_array:
+    if isinstance(data, (IntegerArrayType, DecimalArrayType)) or data in (
+        boolean_array,
+        datetime_date_array_type,
+    ):
         typ_val = numba_to_c_type(data.dtype)
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
@@ -738,14 +738,6 @@ def gatherv(data, allgather=False):
             return all_data
 
         return gatherv_list_str_arr_impl
-
-    if data == datetime_date_array_type:
-
-        def impl_datetime_date(data, allgather=False):
-            arr = bodo.libs.distributed_api.gatherv(data._data, allgather)
-            return init_datetime_date_array(arr)
-
-        return impl_datetime_date
 
     # Tuple of data containers
     if isinstance(data, types.BaseTuple):
