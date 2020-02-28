@@ -227,5 +227,20 @@ sdf.write.parquet("list_str_parts.pq", "overwrite")
 # data for testing read of parquet files with unsupported column types in unselected
 # columns.
 # using list(list(int)) type that we are not likely to support soon
-t = pa.Table.from_pandas(pd.DataFrame({'A': [[[1], [3]], [[3, 5]]], "B": [3.5, 1.2]}))
+t = pa.Table.from_pandas(pd.DataFrame({"A": [[[1], [3]], [[3, 5]]], "B": [3.5, 1.2]}))
 pq.write_table(t, "nested_struct_example.pq")
+
+
+# date32 values
+df = pd.DataFrame(
+    {
+        "A": [
+            datetime.date(2012, 1, 2),
+            datetime.date(1944, 12, 21),
+            None,
+            datetime.date(1999, 6, 11),
+        ]
+        * 3
+    }
+)
+df.to_parquet("date32_1.pq")
