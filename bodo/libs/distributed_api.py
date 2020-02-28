@@ -793,7 +793,10 @@ def bcast_overload(data):
 
         return bcast_impl
 
-    if isinstance(data, (IntegerArrayType, DecimalArrayType)) or data == boolean_array:
+    if isinstance(data, (IntegerArrayType, DecimalArrayType)) or data in (
+        boolean_array,
+        datetime_date_array_type,
+    ):
 
         def bcast_impl_int_arr(data):  # pragma: no cover
             bcast(data._data)
@@ -1081,9 +1084,9 @@ def alltoallv(
     typ_enum_o = get_type_enum(out_data)
     assert typ_enum == typ_enum_o
 
-    if (
-        isinstance(send_data, (IntegerArrayType, DecimalArrayType))
-        or send_data == boolean_array
+    if isinstance(send_data, (IntegerArrayType, DecimalArrayType)) or send_data in (
+        boolean_array,
+        datetime_date_array_type,
     ):
         return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: c_alltoallv(
             send_data._data.ctypes,

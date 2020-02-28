@@ -53,6 +53,7 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 
 
 MIN_SAMPLES = 1000000
@@ -716,7 +717,10 @@ def parallel_sort(
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def sort_array(A):
     # TODO: handle NAs
-    if isinstance(A, (IntegerArrayType, DecimalArrayType)) or A == boolean_array:
+    if isinstance(A, (IntegerArrayType, DecimalArrayType)) or A in (
+        boolean_array,
+        datetime_date_array_type,
+    ):
         return lambda A: A._data.sort()
 
     return lambda A: A.sort()
