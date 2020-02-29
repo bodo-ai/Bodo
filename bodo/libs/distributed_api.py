@@ -1147,17 +1147,6 @@ def get_start_count(n):  # pragma: no cover
     return start, count
 
 
-def remove_dist_calls(rhs, lives, call_list):
-    if call_list == ["dist_reduce", "distributed_api", "libs", bodo]:
-        return True
-    if call_list == [dist_reduce]:
-        return True
-    return False
-
-
-numba.ir_utils.remove_call_handlers.append(remove_dist_calls)
-
-
 @numba.njit
 def get_start(total_size, pes, rank):  # pragma: no cover
     """get start index in 1D distribution"""

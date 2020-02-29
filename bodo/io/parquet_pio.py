@@ -85,22 +85,6 @@ def get_column_size_parquet():  # pragma: no cover
     return 0
 
 
-def remove_parquet(rhs, lives, call_list):
-    # the call is dead if the read array is dead
-    if call_list == [read_parquet] and rhs.args[2].name not in lives:
-        return True
-    if call_list == [get_column_size_parquet]:
-        return True
-    if call_list == [read_parquet_str]:
-        return True
-    if call_list == [read_parquet_list_str]:
-        return True
-    return False
-
-
-numba.ir_utils.remove_call_handlers.append(remove_parquet)
-
-
 class ParquetHandler:
     """analyze and transform parquet IO calls"""
 
