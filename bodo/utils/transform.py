@@ -115,7 +115,12 @@ def remove_hiframes(rhs, lives, call_list):
     if call_tuple in no_side_effect_call_tuples:
         return True
 
-    if len(call_list) == 4 and call_list[1:] == ["conversion", "utils", bodo]:
+    # TODO: probably not reachable here since always inlined?
+    if len(call_list) == 4 and call_list[1:] == [
+        "conversion",
+        "utils",
+        bodo,
+    ]:  # pragma: no cover
         # all conversion functions are side effect-free
         return True
 
@@ -123,18 +128,20 @@ def remove_hiframes(rhs, lives, call_list):
     if len(call_list) == 2 and call_list[0] == "copy":
         return True
 
+    # TODO: probably not reachable here since only used in backend?
     if (
         call_list == [bodo.io.parquet_pio.read_parquet]
         and rhs.args[2].name not in lives
-    ):
+    ):  # pragma: no cover
         return True
 
     # can't add these to no_side_effect_call_tuples due to import issues, TODO: fix
+    # TODO: probably not reachable here since only used in backend?
     if call_tuple in (
         (bodo.io.parquet_pio.get_column_size_parquet,),
         (bodo.io.parquet_pio.read_parquet_str,),
         (bodo.io.parquet_pio.read_parquet_list_str,),
-    ):
+    ):  # pragma: no cover
         return True
 
     # the call is dead if the read array is dead
