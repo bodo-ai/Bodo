@@ -46,7 +46,6 @@ no_side_effect_call_tuples = {
     ("get_series_name", "pd_series_ext", "hiframes", bodo),
     ("convert_tup_to_rec", "typing", "utils", bodo),
     ("convert_rec_to_tup", "typing", "utils", bodo),
-    ("internal_prange", "parfor", numba),
     # Index
     ("init_string_index", "pd_index_ext", "hiframes", bodo),
     ("init_numeric_index", "pd_index_ext", "hiframes", bodo),
@@ -86,10 +85,22 @@ no_side_effect_call_tuples = {
     ("copy",),
     ("from_iterable_impl", "typing", "utils", bodo),
     ("chain", itertools),
-    ("empty_inferred", "ndarray", "unsafe", numba),
     ("groupby",),
     ("rolling",),
     (pd.CategoricalDtype,),
+    # Numpy
+    ("int32", np),
+    ("int64", np),
+    ("float64", np),
+    ("float32", np),
+    ("bool_", np),
+    # Numba
+    ("internal_prange", "parfor", numba),
+    ("empty_inferred", "ndarray", "unsafe", numba),
+    ("_slice_span", "unicode", numba),
+    ("_normalize_slice", "unicode", numba),
+    # hdf5
+    ("h5size", "h5_api", "io", bodo),
 }
 
 
@@ -102,9 +113,16 @@ def remove_hiframes(rhs, lives, call_list):
         # all conversion functions are side effect-free
         return True
 
+    # TODO: handle copy() of the relevant types properly
     if len(call_list) == 2 and call_list[0] == "copy":
         return True
 
+    # the call is dead if the read array is dead
+    # TODO: return array from call to avoid using lives
+    if call_list == ["h5read", "h5_api", "io", bodo] and rhs.args[5].name not in lives:
+        return True
+
+    # TODO: needed?
     # if call_list == ['set_parent_dummy', 'pd_dataframe_ext', 'hiframes', bodo]:
     #     return True
 

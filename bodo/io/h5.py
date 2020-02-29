@@ -29,18 +29,6 @@ from bodo.utils.utils import debug_prints
 from bodo.utils.transform import find_str_const
 
 
-def remove_h5(rhs, lives, call_list):
-    # the call is dead if the read array is dead
-    if call_list == ["h5read", "io", h5_api] and rhs.args[6].name not in lives:
-        return True
-    if call_list == ["h5size", "io", h5_api]:
-        return True
-    return False
-
-
-numba.ir_utils.remove_call_handlers.append(remove_h5)
-
-
 class H5_IO:
     """analyze and transform hdf5 calls"""
 
