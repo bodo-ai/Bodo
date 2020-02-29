@@ -49,10 +49,6 @@ except ImportError:
 else:
     _has_pyarrow = True
 
-_has_xenon = False
-
-if "BODO_XE_SUPPORT" in os.environ and os.environ["BODO_XE_SUPPORT"] != "0":
-    _has_xenon = True
 
 ind = [PREFIX_DIR + "/include"]
 extra_hash_ind1 = ["bodo/libs/HashLibs/TSL/hopscotch-map"]
@@ -271,18 +267,6 @@ ext_parquet = Extension(
     library_dirs=lid,
 )
 
-
-ext_xenon_wrapper = Extension(
-    name="bodo.hxe_ext",
-    sources=["bodo/io/_xe_wrapper.cpp"],
-    # include_dirs = ['/usr/include'],
-    include_dirs=["."] + ind,
-    library_dirs=["."] + lid,
-    libraries=["xe"],
-    extra_compile_args=eca,
-    extra_link_args=ela,
-)
-
 _ext_mods = [
     ext_hdist,
     ext_dict,
@@ -300,9 +284,6 @@ if _has_h5py:
 if _has_pyarrow:
     _ext_mods.append(ext_parquet)
 
-
-if _has_xenon:
-    _ext_mods.append(ext_xenon_wrapper)
 
 setup(
     name="bodo",
