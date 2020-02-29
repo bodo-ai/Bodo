@@ -531,17 +531,6 @@ ArrayAnalysis._analyze_op_call_bodo_libs_list_str_arr_ext_pre_alloc_list_string_
 )
 
 
-def remove_str_arr(rhs, lives, call_list):
-    if call_list == ["pre_alloc_list_string_array", "list_str_arr_ext", "libs", bodo]:
-        return True
-    if call_list == call_list == [pre_alloc_list_string_array]:
-        return True
-    return False
-
-
-numba.ir_utils.remove_call_handlers.append(remove_str_arr)
-
-
 # XXX helper functions to establish aliasing between array and pointer
 # TODO: fix getattr aliasing
 # TODO: remove dead for these calls

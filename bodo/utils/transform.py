@@ -101,6 +101,12 @@ no_side_effect_call_tuples = {
     ("_normalize_slice", "unicode", numba),
     # hdf5
     ("h5size", "h5_api", "io", bodo),
+    ("pre_alloc_list_string_array", "list_str_arr_ext", "libs", bodo),
+    (bodo.libs.list_str_arr_ext.pre_alloc_list_string_array,),
+    ("dist_reduce", "distributed_api", "libs", bodo),
+    (bodo.libs.distributed_api.dist_reduce,),
+    ("pre_alloc_string_array", "str_arr_ext", "libs", bodo),
+    (bodo.libs.str_arr_ext.pre_alloc_string_array,),
 }
 
 
@@ -115,6 +121,20 @@ def remove_hiframes(rhs, lives, call_list):
 
     # TODO: handle copy() of the relevant types properly
     if len(call_list) == 2 and call_list[0] == "copy":
+        return True
+
+    if (
+        call_list == [bodo.io.parquet_pio.read_parquet]
+        and rhs.args[2].name not in lives
+    ):
+        return True
+
+    # can't add these to no_side_effect_call_tuples due to import issues, TODO: fix
+    if call_tuple in (
+        (bodo.io.parquet_pio.get_column_size_parquet,),
+        (bodo.io.parquet_pio.read_parquet_str,),
+        (bodo.io.parquet_pio.read_parquet_list_str,),
+    ):
         return True
 
     # the call is dead if the read array is dead
