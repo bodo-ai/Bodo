@@ -219,7 +219,7 @@ ext_arr = Extension(
 ext_dt = Extension(
     name="bodo.libs.hdatetime_ext",
     sources=["bodo/libs/_datetime_ext.cpp"],
-    libraries=np_compile_args["libraries"],
+    libraries=np_compile_args["libraries"] + ["arrow"],
     define_macros=np_compile_args["define_macros"],
     extra_compile_args=["-std=c++11"],
     extra_link_args=["-std=c++11"],
