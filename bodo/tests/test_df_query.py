@@ -56,6 +56,31 @@ def test_df_query_stringliteral_expr():
     check_func(impl, (df,))
 
 
+def test_df_query_dt():
+    """Test DataFrame.query with Series.dt expression (#451)
+    """
+    def impl(df):
+        return df.query("A.dt.year == 2012")
+
+    df = pd.DataFrame({"A": pd.date_range("1/1/2012", periods=5)})
+    check_func(impl, (df,))
+
+
+def test_df_query_bool_expr():
+    """Test DataFrame.query with boolean expressions (#453)
+    """
+    def impl(df):
+        return df.query("A | B")
+
+    df = pd.DataFrame(
+        {
+            "A": [True, False, True, False, True],
+            "B": [False, True, True, False, False],
+        }
+    )
+    check_func(impl, (df,))
+
+
 ################### df.query() errorchecking ######################
 
 
@@ -168,25 +193,6 @@ def test_df_query_str_column():
     with pytest.raises(BodoError, match="column .* is not found in dataframe columns"):
         bodo.jit(impl1)(df)
     with pytest.raises(BodoError, match="column .* is not found in dataframe columns"):
-        bodo.jit(impl2)(df, expr)
-
-
-def test_df_query_series_dt():
-    """
-    Test df.query(): Series.dt is not supported in expr
-    """
-
-    def impl1(df):
-        return df.query("A.dt.year == 2012")
-
-    def impl2(df, expr):
-        return df.query(expr)
-
-    expr = "A.dt.year == 2012"
-    df = pd.DataFrame({"A": pd.date_range("1/1/2012", periods=5)})
-    with pytest.raises(BodoError, match="Series.dt is not supported"):
-        bodo.jit(impl1)(df)
-    with pytest.raises(BodoError, match="Series.dt is not supported"):
         bodo.jit(impl2)(df, expr)
 
 
