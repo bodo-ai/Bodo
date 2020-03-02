@@ -116,7 +116,6 @@ def df_getitem_overload(df, ind):
             func_text, ind_columns, new_data, index
         )
 
-
     # df1 = df[df.A > .5]
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
         # implement using array filtering (not using the old Filter node)
@@ -135,7 +134,9 @@ def df_getitem_overload(df, ind):
         )
 
     # TODO: error-checking test
-    raise BodoError("df[] getitem using {} not supported".format(ind))  # pragma: no cover
+    raise BodoError(
+        "df[] getitem using {} not supported".format(ind)
+    )  # pragma: no cover
 
 
 ##################################  df.iloc  ##################################
@@ -162,7 +163,7 @@ make_attribute_wrapper(DataFrameILocType, "obj", "_obj")
 @intrinsic
 def init_dataframe_iloc(typingctx, obj=None):
     def codegen(context, builder, signature, args):
-        obj_val, = args
+        (obj_val,) = args
         iloc_type = signature.return_type
 
         iloc_val = cgutils.create_struct_proxy(iloc_type)(context, builder)
@@ -195,18 +196,23 @@ def overload_iloc_getitem(I, idx):
     if isinstance(idx, types.Integer):  # pragma: no cover
         # TODO: support cases that can be typed, e.g. all float64
         # TODO: return namedtuple instead of Series?
-        raise BodoError("df.iloc[] with integer index is not supported since output Series cannot be typed")
+        raise BodoError(
+            "df.iloc[] with integer index is not supported since output Series cannot be typed"
+        )
 
-    # df.iloc[cond]
-    # list of ints or array of ints
-    # list of bools or array of bools
-    if is_list_like_index_type(idx) and isinstance(
-        idx.dtype, (types.Integer, types.Boolean)
-    ):
+    # df.iloc[idx]
+    # array of bools/ints, or slice
+    if (
+        is_list_like_index_type(idx)
+        and isinstance(idx.dtype, (types.Integer, types.Boolean))
+    ) or isinstance(idx, types.SliceType):
         # TODO: refactor with df filter
         func_text = "def impl(I, idx):\n"
         func_text += "  df = I._obj\n"
-        func_text += "  idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)\n"
+        if isinstance(idx, types.SliceType):
+            func_text += "  idx_t = idx\n"
+        else:
+            func_text += "  idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)\n"
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx_t]"
         new_data = ", ".join(
             "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[idx_t]".format(
@@ -219,7 +225,9 @@ def overload_iloc_getitem(I, idx):
         )
 
     # TODO: error-checking test
-    raise BodoError("df.iloc[] getitem using {} not supported".format(idx))  # pragma: no cover
+    raise BodoError(
+        "df.iloc[] getitem using {} not supported".format(idx)
+    )  # pragma: no cover
 
 
 # TODO: handle dataframe pass

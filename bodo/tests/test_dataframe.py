@@ -1221,19 +1221,26 @@ def test_get_dataframe_data_array_analysis():
 def test_column_list_getitem1():
     """Test df[["A", "B"]] getitem case
     """
+
     def test_impl(df):
         return df[["A", "C", "B"]]
 
-    df = pd.DataFrame({"A": [1.1, 2.3, np.nan, 1.7, 3.6],
-        "A2": [3, 1, 2, 3, 5],
-        "B": [True, False, None, False, True], "C":
-        ["AA", "C", None, "ABC", ""]}, index=[3, 1, 2, 4, 0])
+    df = pd.DataFrame(
+        {
+            "A": [1.1, 2.3, np.nan, 1.7, 3.6],
+            "A2": [3, 1, 2, 3, 5],
+            "B": [True, False, None, False, True],
+            "C": ["AA", "C", None, "ABC", ""],
+        },
+        index=[3, 1, 2, 4, 0],
+    )
     check_func(test_impl, (df,))
 
 
 def test_iloc_bool_arr():
     """test df.iloc[bool_arr]
     """
+
     def test_impl(df):
         return df.iloc[(df.A > 3).values]
 
@@ -1242,9 +1249,21 @@ def test_iloc_bool_arr():
     check_func(test_impl, (df,))
 
 
+def test_iloc_slice():
+    def test_impl(df, n):
+        return df.iloc[1:n]
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
+    bodo_func = bodo.jit(test_impl)
+    # TODO: proper distributed support for slicing
+    pd.testing.assert_frame_equal(bodo_func(df, n), test_impl(df, n))
+
+
 def test_iloc_slice_col_ind():
     """test df.iloc[slice, col_ind]
     """
+
     def test_impl(df):
         return df.iloc[:, 1].values
 
@@ -1256,13 +1275,13 @@ def test_iloc_slice_col_ind():
 def test_iloc_int_col_ind():
     """test df.iloc[int, col_ind]
     """
+
     def test_impl(df):
         return df.iloc[3, 1]
 
     n = 11
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
     check_func(test_impl, (df,))
-
 
 
 ############################# old tests ###############################
