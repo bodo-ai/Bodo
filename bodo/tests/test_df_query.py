@@ -26,6 +26,9 @@ from bodo.utils.typing import BodoError
         "abs(A) > @a",
         "A in [1, 4]",
         "A not in [1, 4]",
+        "C.str.len() < 3",
+        "C.str.lower() != 'A'",
+        "C.str.isalpha()",
     ],
 )
 def test_df_query_unicode_expr(expr):

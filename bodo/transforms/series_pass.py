@@ -830,6 +830,8 @@ class SeriesPass:
                 impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
             )
 
+        # inlining SeriesStrMethod methods is necessary since they may be used in
+        # df.query() which is handled in dataframe pass currently (TODO: use overload)
         if isinstance(func_mod, ir.Var) and isinstance(
             self.typemap[func_mod.name], SeriesStrMethodType
         ):
@@ -837,24 +839,23 @@ class SeriesPass:
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
 
-            inline_str_op = (
-                "contains",
-                "pad",
-                "slice",
-                "get",
-            )
-            if func_name in inline_str_op:
+            if func_name in bodo.hiframes.pd_series_ext.str2str_methods:
+                impl = bodo.hiframes.series_str_impl.create_str2str_methods_overload(
+                    func_name
+                )(self.typemap[func_mod.name])
+            elif func_name in bodo.hiframes.pd_series_ext.str2bool_methods:
+                impl = bodo.hiframes.series_str_impl.create_str2bool_methods_overload(
+                    func_name
+                )(self.typemap[func_mod.name])
+            else:
                 impl = getattr(
                     bodo.hiframes.series_str_impl, "overload_str_method_" + func_name
                 )(*arg_typs, **kw_typs)
-                return self._replace_func(
-                    impl,
-                    rhs.args,
-                    pysig=numba.utils.pysignature(impl),
-                    kws=dict(rhs.kws),
-                )
-            else:
-                return [assign]
+
+            return self._replace_func(
+                impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
+            )
+
         # replace _get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
         # TODO: min
