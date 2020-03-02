@@ -1430,6 +1430,10 @@ class DataFramePass:
             def __call__(self, *args):
                 return pd.core.computation.ops.MathCall(self, args)
 
+            # __repr__ is needed if this attr node is not called, e.g. A.dt.year
+            def __repr__(self):
+                return pd.io.formats.printing.pprint_thing(self.name)
+
         def visit_Attribute(self, node, **kwargs):
             """handles value.attr cases such as C.str.contains()
             functions are turned into NewFuncNode. Intermediate values like C.str
@@ -1439,7 +1443,7 @@ class DataFramePass:
             value = node.value
             sentinel = pd.core.computation.ops._LOCAL_TAG
 
-            if attr == "str":
+            if attr in ("str", "dt"):
                 # check the case where df.column.str where column is not in df
                 try:
                     value_str = str(self.visit(value))
@@ -1457,7 +1461,7 @@ class DataFramePass:
                 name = name[len(sentinel) :]
 
             # make local variable in case of C.str
-            if attr == "str":
+            if attr in ("str", "dt"):
                 orig_col_name = columns[cleaned_columns.index(value_str)]
                 used_cols[orig_col_name] = value_str
                 self.env.scope[name] = 0
@@ -1530,9 +1534,11 @@ class DataFramePass:
             pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop
         )
         saved_visit_Attribute = pd.core.computation.expr.BaseExprVisitor.visit_Attribute
+        saved__maybe_downcast_constants = pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants
         saved__str__ = pd.core.computation.ops.Term.__str__
         saved_math__str__ = pd.core.computation.ops.MathCall.__str__
         saved_op__str__ = pd.core.computation.ops.Op.__str__
+        saved__disallow_scalar_only_bool_ops = pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops
         try:
             pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (
                 _rewrite_membership_op
@@ -1541,9 +1547,13 @@ class DataFramePass:
                 _maybe_evaluate_binop
             )
             pd.core.computation.expr.BaseExprVisitor.visit_Attribute = visit_Attribute
+            # _maybe_downcast_constants accesses actual value which is not possible
+            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = lambda self, left, right: (left, right)
             pd.core.computation.ops.Term.__str__ = __str__
             pd.core.computation.ops.MathCall.__str__ = math__str__
             pd.core.computation.ops.Op.__str__ = op__str__
+            # _disallow_scalar_only_bool_ops accesses actual value which is not possible
+            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = lambda self: None
             parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
             parsed_expr_str = str(parsed_expr)
         except pd.core.computation.ops.UndefinedVariableError as e:
@@ -1565,23 +1575,6 @@ class DataFramePass:
                 # this includes: columns does not exist in dataframe,
                 #                undefined local variable using @
                 raise BodoError("df.query(): undefined variable, {}".format(e))
-        except AttributeError as e:
-            if e.args[0] == "'NewFuncNode' object has no attribute 'is_scalar'":
-                # AttributeError with this error message is thrown
-                # when expr has unsupported expressions
-                if ".dt." in expr:
-                    # currently do not support series.dt in expr
-                    raise BodoError(
-                        "df.query(): Series.dt is not supported in expression"
-                    )
-                else:
-                    raise BodoError(
-                        "df.query(): unsupported expression: {}, ".format(expr)
-                    )
-            else:
-                # still throwing attribute error
-                # because during testing, no other kinds of AttributeError were found
-                raise AttributeError(e)
         finally:
             pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (
                 saved_rewrite_membership_op
@@ -1592,9 +1585,11 @@ class DataFramePass:
             pd.core.computation.expr.BaseExprVisitor.visit_Attribute = (
                 saved_visit_Attribute
             )
+            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = saved__maybe_downcast_constants
             pd.core.computation.ops.Term.__str__ = saved__str__
             pd.core.computation.ops.MathCall.__str__ = saved_math__str__
             pd.core.computation.ops.Op.__str__ = saved_op__str__
+            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = saved__disallow_scalar_only_bool_ops
 
         used_cols.update(
             {c: clean_name(c) for c in columns if clean_name(c) in parsed_expr.names}
