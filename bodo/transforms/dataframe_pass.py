@@ -366,7 +366,9 @@ class DataFramePass:
             # use iloc of Series
             func = lambda A, ind, df_index, name: bodo.hiframes.pd_series_ext.init_series(
                 A, df_index, name
-            ).iloc[ind]
+            ).iloc[
+                ind
+            ]
 
             return self._replace_func(
                 func, [in_arr, ind_var, df_index_var, name_var], pre_nodes=nodes
@@ -1353,8 +1355,10 @@ class DataFramePass:
 
         # check whether the output of generated function is a boolean array
         if (
-            type(self.typemap[nodes[-1].value.name])
-            != bodo.hiframes.pd_series_ext.SeriesType
+            not isinstance(
+                self.typemap[nodes[-1].value.name],
+                bodo.hiframes.pd_series_ext.SeriesType,
+            )
             or self.typemap[nodes[-1].value.name].dtype != types.bool_
         ):
             raise BodoError(
