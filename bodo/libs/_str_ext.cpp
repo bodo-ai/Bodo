@@ -887,9 +887,8 @@ int is_bool_array(PyArrayObject* arr) {
     // returning int instead of bool to avoid potential bool call convention
     // issues
     int res = dtype->kind == 'b';
-    Py_DECREF(dtype);
+    PyGILState_Release(gilstate);
     return res;
-
 #undef CHECK
 }
 
@@ -898,9 +897,11 @@ int is_pd_boolean_array(PyObject* arr) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
         return false;                  \
     }
 
+    auto gilstate = PyGILState_Ensure();
     // pd.arrays.BooleanArray
     PyObject* pd_mod = PyImport_ImportModule("pandas");
     CHECK(pd_mod, "importing pandas module failed");
@@ -916,6 +917,7 @@ int is_pd_boolean_array(PyObject* arr) {
     Py_DECREF(pd_mod);
     Py_DECREF(pd_arrays_obj);
     Py_DECREF(pd_arrays_bool_arr_obj);
+    PyGILState_Release(gilstate);
     return ret;
 
 #undef CHECK
@@ -961,6 +963,7 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
 
     Py_DECREF(pd_mod);
     Py_DECREF(isna_call_obj);
+    PyGILState_Release(gilstate);
 #undef CHECK
 }
 

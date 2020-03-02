@@ -11,6 +11,7 @@
 
 #include "../libs/_datetime_ext.h"
 #include "_parquet_reader.h"
+#include "arrow/array.h"
 #include "arrow/io/hdfs.h"
 #include "arrow/table.h"
 #include "arrow/type.h"
@@ -21,9 +22,9 @@
 #include "parquet/arrow/reader.h"
 #include "parquet/arrow/schema.h"
 
-using parquet::arrow::FileReader;
-using parquet::ParquetFileReader;
 using arrow::Type;
+using parquet::ParquetFileReader;
+using parquet::arrow::FileReader;
 
 void pack_null_bitmap(uint8_t** out_nulls, std::vector<bool>& null_vec,
                       int64_t n_all_vals);
@@ -49,6 +50,9 @@ void append_bits_to_vec(std::vector<bool>* null_vec, const uint8_t* null_buff,
 
 typedef void (*s3_opener_t)(const char*,
                             std::shared_ptr<::arrow::io::RandomAccessFile>*);
+
+typedef void (*hdfs_open_file_t)(
+    const char*, std::shared_ptr<::arrow::io::HdfsReadableFile>*);
 
 #define PQ_DT64_TYPE 3  // using INT96 value as dt64, TODO: refactor
 #define kNanosecondsInDay 86400000000000LL  // TODO: reuse from type_traits.h
@@ -569,14 +573,12 @@ int pq_read_string_parallel_single_file(
     return 0;
 }
 
-std::pair<int64_t,int64_t> pq_read_list_string_single_file(std::shared_ptr<FileReader> arrow_reader,
-                                   int64_t column_idx, uint32_t** out_offsets,
-                                   uint32_t** index_offsets,
-                                   uint8_t** out_data, uint8_t** out_nulls,
-                                   std::vector<uint32_t>* offset_vec,
-                                   std::vector<uint32_t>* index_offset_vec,
-                                   std::vector<uint8_t>* data_vec,
-                                   std::vector<bool>* null_vec) {
+std::pair<int64_t, int64_t> pq_read_list_string_single_file(
+    std::shared_ptr<FileReader> arrow_reader, int64_t column_idx,
+    uint32_t** out_offsets, uint32_t** index_offsets, uint8_t** out_data,
+    uint8_t** out_nulls, std::vector<uint32_t>* offset_vec,
+    std::vector<uint32_t>* index_offset_vec, std::vector<uint8_t>* data_vec,
+    std::vector<bool>* null_vec) {
     std::shared_ptr<::arrow::ChunkedArray> chunked_arr;
     arrow_reader->ReadColumn(column_idx, &chunked_arr);
     if (chunked_arr == NULL) return {-1, -1};
@@ -587,16 +589,19 @@ std::pair<int64_t,int64_t> pq_read_list_string_single_file(std::shared_ptr<FileR
     if (arrow_type->id() != Type::LIST)
         std::cerr << "Invalid Parquet list data type" << '\n';
 
-    std::vector<std::shared_ptr<arrow::ArrayData>> &child_data = arr->data()->child_data;
+    std::vector<std::shared_ptr<arrow::ArrayData>>& child_data =
+        arr->data()->child_data;
     if (child_data.size() != 1) {
-        std::cerr << "arrow list array of strings must contain a child array" << std::endl;
+        std::cerr << "arrow list array of strings must contain a child array"
+                  << std::endl;
         return {-1, -1};
     }
 
     auto parent_buffers = arr->data()->buffers;
     if (parent_buffers.size() != 2) {
-        std::cerr << "invalid parquet list string number of parent array buffers " << parent_buffers.size()
-                  << std::endl;
+        std::cerr
+            << "invalid parquet list string number of parent array buffers "
+            << parent_buffers.size() << std::endl;
         return {-1, -1};
     }
     int64_t parent_null_size = parent_buffers[0]->size();
@@ -604,14 +609,15 @@ std::pair<int64_t,int64_t> pq_read_list_string_single_file(std::shared_ptr<FileR
 
     auto child_buffers = child_data[0]->buffers;
     if (child_buffers.size() != 3) {
-        std::cerr << "invalid parquet string number of array buffers " << child_buffers.size()
-                  << std::endl;
+        std::cerr << "invalid parquet string number of array buffers "
+                  << child_buffers.size() << std::endl;
         return {-1, -1};
     }
     int64_t num_strings = child_data[0]->length;
     int64_t offsets_size = child_buffers[1]->size();
     int64_t data_size = child_buffers[2]->size();
-    const uint32_t* index_offsets_buff = (const uint32_t*)parent_buffers[1]->data();
+    const uint32_t* index_offsets_buff =
+        (const uint32_t*)parent_buffers[1]->data();
     const uint32_t* offsets_buff = (const uint32_t*)child_buffers[1]->data();
     const uint8_t* data_buff = child_buffers[2]->data();
     const uint8_t* null_buff = arr->null_bitmap_data();
@@ -636,29 +642,29 @@ std::pair<int64_t,int64_t> pq_read_list_string_single_file(std::shared_ptr<FileR
     } else {
         offset_vec->insert(offset_vec->end(), offsets_buff,
                            offsets_buff + offsets_size / sizeof(uint32_t));
-        index_offset_vec->insert(index_offset_vec->end(), index_offsets_buff,
-                           index_offsets_buff + parent_offsets_size / sizeof(uint32_t));
+        index_offset_vec->insert(
+            index_offset_vec->end(), index_offsets_buff,
+            index_offsets_buff + parent_offsets_size / sizeof(uint32_t));
         // we are reading a dataset split into multiple parquet files. some
         // files might not have any string data at all (because all strings are
         // empty or there are nan lists). In that case, we don't want to insert
         // nulls in the middle of the data buffer
-        if ((offsets_size / sizeof(uint32_t) > 0) && (offsets_buff[offsets_size / sizeof(uint32_t) - 1] > 0))
+        if ((offsets_size / sizeof(uint32_t) > 0) &&
+            (offsets_buff[offsets_size / sizeof(uint32_t) - 1] > 0))
             data_vec->insert(data_vec->end(), data_buff, data_buff + data_size);
-        append_bits_to_vec(null_vec, null_buff, parent_null_size, 0, num_values);
+        append_bits_to_vec(null_vec, null_buff, parent_null_size, 0,
+                           num_values);
     }
 
     return {num_values, num_strings};
 }
 
-int64_t pq_read_list_string_parallel_single_file(std::shared_ptr<FileReader> arrow_reader,
-                                   int64_t column_idx, uint32_t** out_offsets,
-                                   uint32_t** out_index_offsets,
-                                   uint8_t** out_data, uint8_t** out_nulls,
-                                   int64_t start, int64_t count,
-                                   std::vector<uint32_t>* offset_vec,
-                                   std::vector<uint32_t>* index_offset_vec,
-                                   std::vector<uint8_t>* data_vec,
-                                   std::vector<bool>* null_vec) {
+int64_t pq_read_list_string_parallel_single_file(
+    std::shared_ptr<FileReader> arrow_reader, int64_t column_idx,
+    uint32_t** out_offsets, uint32_t** out_index_offsets, uint8_t** out_data,
+    uint8_t** out_nulls, int64_t start, int64_t count,
+    std::vector<uint32_t>* offset_vec, std::vector<uint32_t>* index_offset_vec,
+    std::vector<uint8_t>* data_vec, std::vector<bool>* null_vec) {
     if (count == 0) {
         if (offset_vec == NULL) {
             *out_offsets = NULL;
@@ -722,23 +728,29 @@ int64_t pq_read_list_string_parallel_single_file(std::shared_ptr<FileReader> arr
         std::shared_ptr<::arrow::Array> arr = chunked_arr->chunk(0);
         auto parent_buffers = arr->data()->buffers;
         if (parent_buffers.size() != 2) {
-            std::cerr << "invalid parquet list string number of parent array buffers " << parent_buffers.size()
-                      << std::endl;
+            std::cerr
+                << "invalid parquet list string number of parent array buffers "
+                << parent_buffers.size() << std::endl;
         }
 
-        std::vector<std::shared_ptr<arrow::ArrayData>> &child_data = arr->data()->child_data;
+        std::vector<std::shared_ptr<arrow::ArrayData>>& child_data =
+            arr->data()->child_data;
         if (child_data.size() != 1) {
-            std::cerr << "arrow list array of strings must contain a child array" << std::endl;
+            std::cerr
+                << "arrow list array of strings must contain a child array"
+                << std::endl;
         }
 
         auto child_buffers = child_data[0]->buffers;
         if (child_buffers.size() != 3) {
-            std::cerr << "invalid parquet string number of array buffers " << child_buffers.size()
-                      << std::endl;
+            std::cerr << "invalid parquet string number of array buffers "
+                      << child_buffers.size() << std::endl;
         }
         int64_t parent_null_size = parent_buffers[0]->size();
-        const uint32_t* parent_offsets_buf = (const uint32_t*)parent_buffers[1]->data();
-        const uint32_t* offsets_buff = (const uint32_t*)child_buffers[1]->data();
+        const uint32_t* parent_offsets_buf =
+            (const uint32_t*)parent_buffers[1]->data();
+        const uint32_t* offsets_buff =
+            (const uint32_t*)child_buffers[1]->data();
         const uint8_t* data_buff = child_buffers[2]->data();
         const uint8_t* null_buff = arr->null_bitmap_data();
 
@@ -752,11 +764,11 @@ int64_t pq_read_list_string_parallel_single_file(std::shared_ptr<FileReader> arr
         for (int64_t i = 0; i < rows_to_read; i++) {
             uint32_t str_offset_start = parent_offsets_buf[rows_to_skip + i];
             uint32_t str_offset_end = parent_offsets_buf[rows_to_skip + i + 1];
-            data_size += offsets_buff[str_offset_end] -
-                                offsets_buff[str_offset_start];
+            data_size +=
+                offsets_buff[str_offset_end] - offsets_buff[str_offset_start];
             for (int64_t j = str_offset_start; j < str_offset_end; j++) {
                 offset_vec->push_back(curr_offset);
-                uint32_t str_size = offsets_buff[j+1] - offsets_buff[j];
+                uint32_t str_size = offsets_buff[j + 1] - offsets_buff[j];
                 curr_offset += str_size;
                 num_strings++;
             }
@@ -769,8 +781,7 @@ int64_t pq_read_list_string_parallel_single_file(std::shared_ptr<FileReader> arr
         }
 
         uint32_t data_start = offsets_buff[parent_offsets_buf[rows_to_skip]];
-        data_vec->insert(data_vec->end(),
-                         data_buff + data_start,
+        data_vec->insert(data_vec->end(), data_buff + data_start,
                          data_buff + data_start + data_size);
         append_bits_to_vec(null_vec, null_buff, parent_null_size, rows_to_skip,
                            rows_to_read);
@@ -792,7 +803,8 @@ int64_t pq_read_list_string_parallel_single_file(std::shared_ptr<FileReader> arr
     if (!output_vectors) {
         offset_vec->push_back(curr_offset);
         *out_offsets = new uint32_t[offset_vec->size()];
-        memcpy(*out_offsets, offset_vec->data(), offset_vec->size() * sizeof(uint32_t));
+        memcpy(*out_offsets, offset_vec->data(),
+               offset_vec->size() * sizeof(uint32_t));
 
         (*out_index_offsets)[count] = curr_index_offset;
         *out_data = new uint8_t[curr_offset];
@@ -816,38 +828,22 @@ void pq_init_reader(const char* file_name,
 
     // HDFS if starts with hdfs://
     if (f_name.find("hdfs://") == 0) {
-        ::arrow::Status stat = ::arrow::io::HaveLibHdfs();
-        if (!stat.ok()) {
-            std::cerr << "libhdfs not found" << '\n';
-            return;  // TODO: throw python exception
-        }
-        ::arrow::io::HdfsConnectionConfig hfs_config;
-
-        // TODO: parse URI properly
-        // remove hdfs://
-        f_name = f_name.substr(strlen("hdfs://"));
-        size_t col_char = f_name.find(':');
-        if (col_char != std::string::npos) {
-            hfs_config.host = f_name.substr(0, col_char);
-            size_t slash_char = f_name.find('/');
-            hfs_config.port = std::stoi(
-                f_name.substr(col_char + 1, slash_char - col_char - 1));
-            f_name = f_name.substr(slash_char);
-        } else {
-            hfs_config.host = std::string("default");
-            hfs_config.port = 0;
-        }
-        hfs_config.driver = ::arrow::io::HdfsDriver::LIBHDFS;
-        hfs_config.user = std::string("");
-        hfs_config.kerb_ticket = std::string("");
-
-        std::shared_ptr<::arrow::io::HadoopFileSystem> fs;
-        ::arrow::io::HadoopFileSystem::Connect(&hfs_config, &fs);
-        std::shared_ptr<::arrow::io::HdfsReadableFile> file;
-        fs->OpenReadable(f_name, &file);
         std::unique_ptr<FileReader> arrow_reader;
+        std::shared_ptr<::arrow::io::HdfsReadableFile> file;
+        // get hdfs opener function
+        PyObject* hdfs_mod = PyImport_ImportModule("bodo.io.hdfs_reader");
+        CHECK(hdfs_mod, "importing bodo.io.hdfs_reader module failed");
+        PyObject* func_obj = PyObject_GetAttrString(hdfs_mod, "hdfs_open_file");
+        CHECK(func_obj, "getting hdfs_open_file func_obj failed");
+        hdfs_open_file_t hdfs_open_file =
+            (hdfs_open_file_t)PyNumber_AsSsize_t(func_obj, NULL);
+        // open Parquet file
+        hdfs_open_file(file_name, &file);
+        // create Arrow reader
         FileReader::Make(pool, ParquetFileReader::Open(file), &arrow_reader);
         *a_reader = std::move(arrow_reader);
+        Py_DECREF(hdfs_mod);
+        Py_DECREF(func_obj);
     } else if (f_name.find("s3://") == 0) {
         std::unique_ptr<FileReader> arrow_reader;
         std::shared_ptr<::arrow::io::RandomAccessFile> file;
@@ -857,7 +853,7 @@ void pq_init_reader(const char* file_name,
         PyObject* s3_mod = PyImport_ImportModule("bodo.io.s3_reader");
         CHECK(s3_mod, "importing bodo.io.s3_reader module failed");
         PyObject* func_obj = PyObject_GetAttrString(s3_mod, "s3_open_file");
-        CHECK(func_obj, "getting s3_reader func_obj failed");
+        CHECK(func_obj, "getting s3_open_file func_obj failed");
         s3_opener_t s3_open_file =
             (s3_opener_t)PyNumber_AsSsize_t(func_obj, NULL);
         // open Parquet file
@@ -865,6 +861,8 @@ void pq_init_reader(const char* file_name,
         // create Arrow reader
         FileReader::Make(pool, ParquetFileReader::Open(file), &arrow_reader);
         *a_reader = std::move(arrow_reader);
+        Py_DECREF(s3_mod);
+        Py_DECREF(func_obj);
     } else  // regular file system
     {
         std::unique_ptr<FileReader> arrow_reader;

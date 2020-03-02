@@ -940,18 +940,6 @@ class DistributedAnalysis:
         if fdef == ("file_read", "bodo.io.np_io"):
             return
 
-        # TODO: fix "numba.extending" in function def
-        if bodo.config._has_xenon and fdef == ("read_xenon_col", "numba.extending"):
-            array_dists[args[4].name] = Distribution.REP
-            return
-
-        if bodo.config._has_xenon and fdef == ("read_xenon_str", "numba.extending"):
-            array_dists[args[4].name] = Distribution.REP
-            # string read creates array in output
-            if lhs not in array_dists:
-                array_dists[lhs] = Distribution.OneD
-            return
-
         # TODO: make sure assert_equiv is not generated unnecessarily
         # TODO: fix assert_equiv for np.stack from df.value
         if fdef == ("assert_equiv", "numba.array_analysis"):

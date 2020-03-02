@@ -345,7 +345,7 @@ example::
 Amazon S3
 ~~~~~~~~~
 
-Reading :ref:`csv <csv-section>` and :ref:`Parquet <parquet-section>` files from Amazon S3 is also supported. 
+Reading :ref:`csv <csv-section>`, reading and writing :ref:`Parquet <parquet-section>` files from and to Amazon S3 is supported. 
 The ``s3fs`` package must be available, and the file path should start with :code:`s3://`::
 
     @bodo.jit
@@ -362,8 +362,19 @@ These environment variables are used for File I/O with S3 credentials:
 Hadoop Distributed File System (HDFS)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Reading Parquet files from Hadoop Distributed File System (HDFS)
-is supported. The file path should start with `hdfs://`.
+Reading :ref:`csv <csv-section>` and :ref:`Parquet <parquet-section>` 
+from Hadoop Distributed File System (HDFS) is supported. The file path should start with ``hdfs://``::
+
+    @bodo.jit
+    def example_hdfs_parquet():
+        df = pd.read_parquet('hdfs://host:port/dir/file_name.pq')
+
+These environment variables are used for File I/O with HDFS:
+  - ``HADOOP_HOME``: the root of your installed Hadoop distribution. Often has `lib/native/libhdfs.so`.
+  - ``ARROW_LIBHDFS_DIR``: location of libhdfs. Often as ``$HADOOP_HOME/lib/native``.
+  - ``CLASSPATH``: must contain the Hadoop jars. You can set these using::
+
+        export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
 
 
 Print

@@ -200,6 +200,8 @@ def unbox_bool_array(typ, obj, c):
             fn = c.builder.module.get_or_insert_function(fnty, name="mask_arr_to_bitmap")
             c.builder.call(fn, [bitmap_arr_struct.data, mask_arr_struct.data, n])
             bool_arr.null_bitmap = bitmap_arr_struct._getvalue()
+            c.pyapi.decref(data_obj)
+            c.pyapi.decref(mask_arr_obj)
 
         with pd_otherwise:
             is_bool_dtype = c.builder.call(fn_bool, [obj])

@@ -24,6 +24,8 @@ from bodo.tests.utils import (
     _test_equal_guard,
     DeadcodeTestPipeline,
 )
+from bodo.utils.utils import is_call_assign
+from numba.ir_utils import find_callname, build_definitions
 from decimal import Decimal
 
 
@@ -141,6 +143,7 @@ def test_pq_list_str(datapath):
 def test_pq_unsupported_types(datapath):
     """test unsupported data types in unselected columns
     """
+
     def test_impl(fname):
         return pd.read_parquet(fname, columns=["B"])
 
@@ -150,6 +153,7 @@ def test_pq_unsupported_types(datapath):
 def test_pq_invalid_column_selection(datapath):
     """test error raise when selected column is not in file schema
     """
+
     def test_impl(fname):
         return pd.read_parquet(fname, columns=["C"])
 
@@ -196,6 +200,27 @@ def test_csv_remove_col0_used_for_len(datapath):
             assert len(stmt.df_colnames) == 1
             break
     assert read_csv_found
+
+
+def test_h5_remove_dead(datapath):
+    """make sure dead hdf5 read calls are removed properly
+    """
+    fname = datapath("lr.hdf5")
+
+    def impl():
+        f = h5py.File(fname, "r")
+        X = f["points"][:, :]
+        f.close()
+
+    bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(impl)
+    bodo_func()
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    fir._definitions = build_definitions(fir.blocks)
+    for stmt in fir.blocks[0].body:
+        assert not (
+            is_call_assign(stmt)
+            and find_callname(fir, stmt.value) == ("h5read", "bodo.io.h5_api")
+        )
 
 
 def clean_pq_files(mode, pandas_pq_path, bodo_pq_path):
@@ -260,18 +285,18 @@ def test_write_parquet():
             elif dtype == "Decimal":
                 assert num_elements % 8 == 0
                 data = np.array(
-                     [
-                         Decimal("1.6"),
-                         None,
-                         Decimal("-0.222"),
-                         Decimal("1111.316"),
-                         Decimal("1234.00046"),
-                         Decimal("5.1"),
-                         Decimal("-11131.0056"),
-                         Decimal("0.0"),
-                     ]
-                     * (num_elements // 8)
-                     )
+                    [
+                        Decimal("1.6"),
+                        None,
+                        Decimal("-0.222"),
+                        Decimal("1111.316"),
+                        Decimal("1234.00046"),
+                        Decimal("5.1"),
+                        Decimal("-11131.0056"),
+                        Decimal("0.0"),
+                    ]
+                    * (num_elements // 8)
+                )
                 df[col_name] = pd.Series(data, dtype=object)
             else:
                 df[col_name] = np.arange(num_elements, dtype=dtype)
@@ -378,6 +403,7 @@ def test_write_parquet_decimal(datapath):
     """ Here we check that we can write the data read from decimal1.pq directory
         (has columns that use a precision and scale different from our default).
         See test_write_parquet above for main parquet write decimal test """
+
     def write(read_path, write_filename):
         df = pd.read_parquet(read_path)
         df.to_parquet(write_filename)

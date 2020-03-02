@@ -1147,17 +1147,6 @@ def get_start_count(n):  # pragma: no cover
     return start, count
 
 
-def remove_dist_calls(rhs, lives, call_list):
-    if call_list == ["dist_reduce", "distributed_api", "libs", bodo]:
-        return True
-    if call_list == [dist_reduce]:
-        return True
-    return False
-
-
-numba.ir_utils.remove_call_handlers.append(remove_dist_calls)
-
-
 @numba.njit
 def get_start(total_size, pes, rank):  # pragma: no cover
     """get start index in 1D distribution"""
@@ -1472,21 +1461,26 @@ def dist_permutation_array_index(
     )
 
 
-########### finalize MPI&s3_reader when exiting ####################
+########### finalize MPI & s3_reader, disconnect hdfs when exiting ############
 
+
+from bodo.io import s3_reader
+from bodo.io import hdfs_reader
 
 ll.add_symbol("finalize", hdist.finalize)
 finalize = types.ExternalFunction("finalize", types.int32())
-from bodo.io import s3_reader
 
 ll.add_symbol("finalize_s3", s3_reader.finalize_s3)
 finalize_s3 = types.ExternalFunction("finalize_s3", types.int32())
 
+ll.add_symbol("disconnect_hdfs", hdfs_reader.disconnect_hdfs)
+disconnect_hdfs = types.ExternalFunction("disconnect_hdfs", types.int32())
 
 @numba.njit
 def call_finalize():  # pragma: no cover
     finalize()
     finalize_s3()
+    disconnect_hdfs()
 
 
 def flush_stdout():

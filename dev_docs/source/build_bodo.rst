@@ -30,6 +30,7 @@ such as Numba on Ubuntu Linux::
     # build Bodo
     HDF5_DIR=$CONDA_PREFIX python setup.py develop
 
+For hdfs related development, use the :ref:`docker image <docker-images>`.
 
 On Windows
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -90,6 +91,7 @@ and set for `minio <https://min.io/?gclid=Cj0KCQiAsvTxBRDkARIsAH4W_j9rNeSft9zVAr
 
 In case of issues, reinstalling in a new conda environment is recommended.
 
+To run hdfs related unit tests, use the :ref:`docker image <docker-images>`.
 
 Other useful packages for development::
 

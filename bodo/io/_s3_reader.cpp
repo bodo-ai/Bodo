@@ -56,7 +56,7 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs() {
 
 static int finalize_s3(){ 
     if(is_fs_initialized){
-        CHECK_ARROW(arrow::fs::FinalizeS3(), "Finalize34"); 
+        CHECK_ARROW(arrow::fs::FinalizeS3(), "Finalize S3"); 
         is_fs_initialized = false;
     }
     return 0;

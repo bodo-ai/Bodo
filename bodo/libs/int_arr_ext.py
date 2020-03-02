@@ -175,6 +175,8 @@ def unbox_int_array(typ, obj, c):
     mask_arr = c.pyapi.to_native_value(
         types.Array(types.bool_, 1, "C"), mask_arr_obj
     ).value
+    c.pyapi.decref(data_obj)
+    c.pyapi.decref(mask_arr_obj)
 
     # TODO: use this when Numba's #4435 is resolved
     # bt_typ = c.context.typing_context.resolve_value_type(mask_arr_to_bitmap)

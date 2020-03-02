@@ -3,6 +3,8 @@
 Helper functions for transformations.
 """
 import operator
+import math
+import itertools
 import pandas as pd
 import numpy as np
 import math
@@ -24,6 +26,137 @@ from bodo.utils.utils import is_assign, is_expr
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import is_call
+
+
+no_side_effect_call_tuples = {
+    # general python functions
+    (int,),
+    (list,),
+    (set,),
+    (dict,),
+    (min,),
+    (max,),
+    (abs,),
+    (len,),
+    ("ceil", math),
+    # Series
+    ("init_series", "pd_series_ext", "hiframes", bodo),
+    ("get_series_data", "pd_series_ext", "hiframes", bodo),
+    ("get_series_index", "pd_series_ext", "hiframes", bodo),
+    ("get_series_name", "pd_series_ext", "hiframes", bodo),
+    ("convert_tup_to_rec", "typing", "utils", bodo),
+    ("convert_rec_to_tup", "typing", "utils", bodo),
+    # Index
+    ("init_string_index", "pd_index_ext", "hiframes", bodo),
+    ("init_numeric_index", "pd_index_ext", "hiframes", bodo),
+    ("_dti_val_finalize", "pd_index_ext", "hiframes", bodo),
+    ("init_datetime_index", "pd_index_ext", "hiframes", bodo),
+    ("init_timedelta_index", "pd_index_ext", "hiframes", bodo),
+    ("init_range_index", "pd_index_ext", "hiframes", bodo),
+    # Int array
+    ("get_int_arr_data", "int_arr_ext", "libs", bodo),
+    ("get_int_arr_bitmap", "int_arr_ext", "libs", bodo),
+    ("init_integer_array", "int_arr_ext", "libs", bodo),
+    # bool array
+    ("get_bool_arr_data", "bool_arr_ext", "libs", bodo),
+    ("get_bool_arr_bitmap", "bool_arr_ext", "libs", bodo),
+    ("init_bool_array", "bool_arr_ext", "libs", bodo),
+    ("alloc_bool_array", "bool_arr_ext", "libs", bodo),
+    ("alloc_datetime_date_array", "datetime_date_ext", "hiframes", bodo,),
+    ("_sum_handle_nan", "series_kernels", "hiframes", bodo),
+    ("_mean_handle_nan", "series_kernels", "hiframes", bodo),
+    ("_var_handle_nan", "series_kernels", "hiframes", bodo),
+    ("dist_return", "distributed_api", bodo),
+    # dataframe
+    ("init_dataframe", "pd_dataframe_ext", "hiframes", bodo),
+    ("get_dataframe_data", "pd_dataframe_ext", "hiframes", bodo),
+    ("get_dataframe_index", "pd_dataframe_ext", "hiframes", bodo),
+    ("rolling_dummy", "pd_rolling_ext", "hiframes", bodo),
+    # array kernels
+    ("calc_nitems", "array_kernels", "libs", bodo),
+    ("concat", "array_kernels", "libs", bodo),
+    ("unique", "array_kernels", "libs", bodo),
+    ("nunique", "array_kernels", "libs", bodo),
+    ("quantile", "array_kernels", "libs", bodo),
+    ("add_consts_to_type", "typing", "utils", bodo),
+    ("str_arr_from_sequence", "str_arr_ext", "libs", bodo),
+    ("parse_datetime_str", "pd_timestamp_ext", "hiframes", bodo),
+    # TODO: handle copy properly, copy of some types can have side effects?
+    ("copy",),
+    ("from_iterable_impl", "typing", "utils", bodo),
+    ("chain", itertools),
+    ("groupby",),
+    ("rolling",),
+    (pd.CategoricalDtype,),
+    # Numpy
+    ("int32", np),
+    ("int64", np),
+    ("float64", np),
+    ("float32", np),
+    ("bool_", np),
+    # Numba
+    ("internal_prange", "parfor", numba),
+    ("empty_inferred", "ndarray", "unsafe", numba),
+    ("_slice_span", "unicode", numba),
+    ("_normalize_slice", "unicode", numba),
+    # hdf5
+    ("h5size", "h5_api", "io", bodo),
+    ("pre_alloc_list_string_array", "list_str_arr_ext", "libs", bodo),
+    (bodo.libs.list_str_arr_ext.pre_alloc_list_string_array,),
+    ("dist_reduce", "distributed_api", "libs", bodo),
+    (bodo.libs.distributed_api.dist_reduce,),
+    ("pre_alloc_string_array", "str_arr_ext", "libs", bodo),
+    (bodo.libs.str_arr_ext.pre_alloc_string_array,),
+}
+
+
+def remove_hiframes(rhs, lives, call_list):
+    call_tuple = tuple(call_list)
+    if call_tuple in no_side_effect_call_tuples:
+        return True
+
+    # TODO: probably not reachable here since always inlined?
+    if len(call_list) == 4 and call_list[1:] == [
+        "conversion",
+        "utils",
+        bodo,
+    ]:  # pragma: no cover
+        # all conversion functions are side effect-free
+        return True
+
+    # TODO: handle copy() of the relevant types properly
+    if len(call_list) == 2 and call_list[0] == "copy":
+        return True
+
+    # TODO: probably not reachable here since only used in backend?
+    if (
+        call_list == [bodo.io.parquet_pio.read_parquet]
+        and rhs.args[2].name not in lives
+    ):  # pragma: no cover
+        return True
+
+    # can't add these to no_side_effect_call_tuples due to import issues, TODO: fix
+    # TODO: probably not reachable here since only used in backend?
+    if call_tuple in (
+        (bodo.io.parquet_pio.get_column_size_parquet,),
+        (bodo.io.parquet_pio.read_parquet_str,),
+        (bodo.io.parquet_pio.read_parquet_list_str,),
+    ):  # pragma: no cover
+        return True
+
+    # the call is dead if the read array is dead
+    # TODO: return array from call to avoid using lives
+    if call_list == ["h5read", "h5_api", "io", bodo] and rhs.args[5].name not in lives:
+        return True
+
+    # TODO: needed?
+    # if call_list == ['set_parent_dummy', 'pd_dataframe_ext', 'hiframes', bodo]:
+    #     return True
+
+    return False
+
+
+numba.ir_utils.remove_call_handlers.append(remove_hiframes)
 
 
 def compile_func_single_block(

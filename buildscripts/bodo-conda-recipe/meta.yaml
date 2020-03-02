@@ -40,6 +40,7 @@ requirements:
     - pyarrow =0.16.0
     - boost-cpp
     - numba 0.48.*
+    - openjdk =8
     - mpich # [not win]
     - impi_rt # [win]
     - vs2015_runtime # [win]

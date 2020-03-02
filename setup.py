@@ -49,10 +49,6 @@ except ImportError:
 else:
     _has_pyarrow = True
 
-_has_xenon = False
-
-if "BODO_XE_SUPPORT" in os.environ and os.environ["BODO_XE_SUPPORT"] != "0":
-    _has_xenon = True
 
 ind = [PREFIX_DIR + "/include"]
 extra_hash_ind1 = ["bodo/libs/HashLibs/TSL/hopscotch-map"]
@@ -125,6 +121,18 @@ ext_s3 = Extension(
     language="c++",
 )
 
+ext_hdfs = Extension(
+    name="bodo.io.hdfs_reader",
+    sources=["bodo/io/_hdfs_reader.cpp"],
+    depends=["bodo/io/_bodo_csv_file_reader.h"],
+    libraries=["arrow"],
+    include_dirs=ind + np_compile_args["include_dirs"],
+    library_dirs=lid,
+    define_macros=[],
+    extra_compile_args=eca,
+    extra_link_args=ela,
+    language="c++",
+)
 
 ext_hdf5 = Extension(
     name="bodo.io._hdf5",
@@ -223,7 +231,7 @@ ext_arr = Extension(
 ext_dt = Extension(
     name="bodo.libs.hdatetime_ext",
     sources=["bodo/libs/_datetime_ext.cpp"],
-    libraries=np_compile_args["libraries"],
+    libraries=np_compile_args["libraries"] + ["arrow"],
     define_macros=np_compile_args["define_macros"],
     extra_compile_args=["-std=c++11"],
     extra_link_args=["-std=c++11"],
@@ -271,18 +279,6 @@ ext_parquet = Extension(
     library_dirs=lid,
 )
 
-
-ext_xenon_wrapper = Extension(
-    name="bodo.hxe_ext",
-    sources=["bodo/io/_xe_wrapper.cpp"],
-    # include_dirs = ['/usr/include'],
-    include_dirs=["."] + ind,
-    library_dirs=["."] + lid,
-    libraries=["xe"],
-    extra_compile_args=eca,
-    extra_link_args=ela,
-)
-
 _ext_mods = [
     ext_hdist,
     ext_dict,
@@ -293,6 +289,7 @@ _ext_mods = [
     ext_io,
     ext_arr,
     ext_s3,
+    ext_hdfs,
 ]
 
 if _has_h5py:
@@ -300,9 +297,6 @@ if _has_h5py:
 if _has_pyarrow:
     _ext_mods.append(ext_parquet)
 
-
-if _has_xenon:
-    _ext_mods.append(ext_xenon_wrapper)
 
 setup(
     name="bodo",

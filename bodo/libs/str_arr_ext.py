@@ -1639,17 +1639,6 @@ ArrayAnalysis._analyze_op_call_bodo_libs_str_arr_ext_pre_alloc_string_array = (
 )
 
 
-def remove_str_arr(rhs, lives, call_list):
-    if call_list == ["pre_alloc_string_array", "str_arr_ext", "libs", bodo]:
-        return True
-    if call_list == call_list == [pre_alloc_string_array]:
-        return True
-    return False
-
-
-numba.ir_utils.remove_call_handlers.append(remove_str_arr)
-
-
 #### glob support #####
 
 
