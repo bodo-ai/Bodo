@@ -204,13 +204,13 @@ class DataFrameAttribute(AttributeTemplate):
         return types.UniTuple(types.intp, 2)
 
     def resolve_iat(self, ary):
-        return DataFrameIatType(ary)
+        return bodo.hiframes.dataframe_indexing.DataFrameIatType(ary)
 
     def resolve_iloc(self, ary):
-        return DataFrameILocType(ary)
+        return bodo.hiframes.dataframe_indexing.DataFrameILocType(ary)
 
     def resolve_loc(self, ary):
-        return DataFrameLocType(ary)
+        return bodo.hiframes.dataframe_indexing.DataFrameLocType(ary)
 
     @bound_function("df.apply")
     def resolve_apply(self, df, args, kws):
@@ -851,81 +851,6 @@ def df_len_overload(df):
     return lambda df: len(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 0))
 
 
-@overload(operator.getitem)
-def df_getitem_overload(df, ind):
-    if isinstance(df, DataFrameType) and is_overload_constant_str(ind):
-        ind_str = get_overload_const_str(ind)
-        # df with multi-level column names returns a lower level dataframe
-        if isinstance(df.columns[0], tuple):
-            new_names = []
-            new_data = []
-            for i, v in enumerate(df.columns):
-                if v[0] != ind_str:
-                    continue
-                # output names are str in 2 level case, not tuple
-                # TODO: test more than 2 levels
-                new_names.append(v[1] if len(v) == 2 else v[1:])
-                new_data.append(
-                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(
-                        i
-                    )
-                )
-            func_text = "def impl(df, ind):\n"
-            index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
-            return bodo.hiframes.dataframe_impl._gen_init_df(
-                func_text, new_names, ", ".join(new_data), index
-            )
-
-        # regular single level case
-        if ind_str not in df.columns:
-            raise BodoError(
-                "dataframe {} does not include column {}".format(df, ind_str)
-            )
-        col_no = df.columns.index(ind_str)
-        return lambda df, ind: bodo.hiframes.pd_series_ext.init_series(
-            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_no),
-            bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df),
-            ind_str,
-        )
-
-
-@infer_global(operator.getitem)
-class GetItemDataFrame(AbstractTemplate):
-    key = operator.getitem
-
-    def generic(self, args, kws):
-        df, idx = args
-        # df1 = df[df.A > .5]
-        if (
-            isinstance(df, DataFrameType)
-            and isinstance(idx, (SeriesType, types.Array, BooleanArrayType))
-            and idx.dtype == types.bool_
-        ):
-            index = df.index
-            if index is types.none or isinstance(
-                index, bodo.hiframes.pd_index_ext.RangeIndexType
-            ):
-                index = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
-            return signature(df.copy(has_parent=False, index=index), *args)
-
-
-@infer
-class StaticGetItemDataFrame(AbstractTemplate):
-    key = "static_getitem"
-
-    def generic(self, args, kws):
-        df, idx = args
-        if (
-            isinstance(df, DataFrameType)
-            and isinstance(idx, list)
-            and all(isinstance(c, str) for c in idx)
-        ):
-            data_typs = tuple(df.data[df.columns.index(c)] for c in idx)
-            columns = tuple(idx)
-            ret_typ = DataFrameType(data_typs, df.index, columns)
-            return signature(ret_typ, *args)
-
-
 # dummy lowering for filter (TODO: use proper overload and avoid this)
 @lower_builtin(operator.getitem, DataFrameType, types.Array(types.bool_, 1, "C"))
 @lower_builtin(operator.getitem, DataFrameType, SeriesType)
@@ -976,163 +901,6 @@ def getitem_tuple_lower(context, builder, sig, args):
     else:
         raise NotImplementedError("unexpected index %r for %s" % (idx, sig.args[0]))
     return impl_ret_borrowed(context, builder, sig.return_type, res)
-
-
-# TODO: handle dataframe pass
-# df.ia[] type
-class DataFrameIatType(types.Type):
-    def __init__(self, df_type):
-        self.df_type = df_type
-        name = "DataFrameIatType({})".format(df_type)
-        super(DataFrameIatType, self).__init__(name)
-
-
-# df.iloc[] type
-class DataFrameILocType(types.Type):
-    def __init__(self, df_type):
-        self.df_type = df_type
-        name = "DataFrameILocType({})".format(df_type)
-        super(DataFrameILocType, self).__init__(name)
-
-
-# df.loc[] type
-class DataFrameLocType(types.Type):
-    def __init__(self, df_type):
-        self.df_type = df_type
-        name = "DataFrameLocType({})".format(df_type)
-        super(DataFrameLocType, self).__init__(name)
-
-
-@infer
-class StaticGetItemDataFrameIat(AbstractTemplate):
-    key = "static_getitem"
-
-    def generic(self, args, kws):
-        df, idx = args
-        # TODO: handle df.at[]
-        if isinstance(df, DataFrameIatType):
-            # df.iat[3,1]
-            if (
-                isinstance(idx, tuple)
-                and len(idx) == 2
-                and isinstance(idx[0], int)
-                and isinstance(idx[1], int)
-            ):
-                col_no = idx[1]
-                data_typ = df.df_type.data[col_no]
-                return signature(data_typ.dtype, *args)
-
-
-@infer_global(operator.getitem)
-class GetItemDataFrameIat(AbstractTemplate):
-    key = operator.getitem
-
-    def generic(self, args, kws):
-        df, idx = args
-        # TODO: handle df.at[]
-        if isinstance(df, DataFrameIatType):
-            # df.iat[n,1]
-            if (
-                isinstance(idx, types.BaseTuple)
-                and len(idx) == 2
-                and isinstance(idx.types[1], types.IntegerLiteral)
-            ):
-                col_no = idx.types[1].literal_value
-                data_typ = df.df_type.data[col_no]
-                return signature(data_typ.dtype, *args)
-
-
-@infer_global(operator.setitem)
-class SetItemDataFrameIat(AbstractTemplate):
-    key = operator.setitem
-
-    def generic(self, args, kws):
-        df, idx, val = args
-        # TODO: handle df.at[]
-        if isinstance(df, DataFrameIatType):
-            # df.iat[n,1] = 3
-            if (
-                isinstance(idx, types.BaseTuple)
-                and len(idx) == 2
-                and isinstance(idx.types[1], types.IntegerLiteral)
-            ):
-                col_no = idx.types[1].literal_value
-                data_typ = df.df_type.data[col_no]
-                return signature(types.none, data_typ, idx.types[0], val)
-
-
-@infer_global(operator.getitem)
-class GetItemDataFrameLoc(AbstractTemplate):
-    key = operator.getitem
-
-    def generic(self, args, kws):
-        df, idx = args
-        # handling df.loc similar to df.iloc as temporary hack
-        # TODO: handle proper labeled indexes
-        if isinstance(df, DataFrameLocType):
-            # df1 = df.loc[df.A > .5], df1 = df.loc[np.array([1,2,3])]
-            if isinstance(
-                idx, (SeriesType, types.Array, types.List, BooleanArrayType)
-            ) and (idx.dtype == types.bool_ or isinstance(idx.dtype, types.Integer)):
-                return signature(df.df_type, *args)
-            # df.loc[1:n]
-            if isinstance(idx, types.SliceType):
-                return signature(df.df_type, *args)
-            # df.loc[1:n,'A']
-            if (
-                isinstance(idx, types.BaseTuple)
-                and len(idx) == 2
-                and isinstance(idx.types[1], types.StringLiteral)
-            ):
-                col_name = idx.types[1].literal_value
-                col_no = df.df_type.columns.index(col_name)
-                data_typ = df.df_type.data[col_no]
-                # TODO: index
-                ret_typ = SeriesType(data_typ.dtype, data_typ, None, bodo.string_type)
-                return signature(ret_typ, *args)
-
-
-# TODO: use overload
-@infer_global(operator.getitem)
-class GetItemDataFrameILoc(AbstractTemplate):
-    key = operator.getitem
-
-    def generic(self, args, kws):
-        df, idx = args
-        if isinstance(df, DataFrameILocType):
-            # df1 = df.iloc[df.A > .5], df1 = df.iloc[np.array([1,2,3])]
-            if isinstance(
-                idx, (SeriesType, types.Array, types.List, BooleanArrayType)
-            ) and (idx.dtype == types.bool_ or isinstance(idx.dtype, types.Integer)):
-                return signature(df.df_type, *args)
-            # df.iloc[1:n]
-            if isinstance(idx, types.SliceType):
-                return signature(df.df_type, *args)
-            # df.iloc[1:n,0]
-            if (
-                isinstance(idx, types.BaseTuple)
-                and len(idx) == 2
-                and isinstance(idx.types[0], types.SliceType)
-                and isinstance(idx.types[1], types.IntegerLiteral)
-            ):
-                col_no = idx.types[1].literal_value
-                data_typ = df.df_type.data[col_no]
-                # TODO: index
-                index = RangeIndexType(types.none)
-                ret_typ = SeriesType(data_typ.dtype, data_typ, index, bodo.string_type)
-                return signature(ret_typ, *args)
-            # df.iloc[1,0]
-            if (
-                isinstance(idx, types.BaseTuple)
-                and len(idx) == 2
-                and isinstance(idx.types[0], types.Integer)
-                and isinstance(idx.types[1], types.IntegerLiteral)
-            ):
-                col_no = idx.types[1].literal_value
-                data_typ = df.df_type.data[col_no]
-                # TODO: proper Series getitem
-                ret_typ = data_typ.dtype
-                return signature(ret_typ, *args)
 
 
 def validate_unicity_output_column_names(

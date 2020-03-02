@@ -44,7 +44,7 @@ from bodo.utils.utils import (
     sanitize_varname,
     get_getsetitem_index_var,
 )
-from bodo.hiframes.pd_dataframe_ext import (
+from bodo.hiframes.dataframe_indexing import (
     DataFrameType,
     DataFrameLocType,
     DataFrameILocType,
