@@ -39,8 +39,10 @@ from bodo.utils.typing import (
     is_overload_true,
     is_overload_false,
     is_overload_zero,
+    is_overload_constant_int,
     get_overload_const_str,
     get_const_str_list,
+    get_overload_const_int,
     is_overload_bool_list,
     get_index_names,
     get_index_data_arr_types,
@@ -224,6 +226,19 @@ def overload_iloc_getitem(I, idx):
             func_text, df.columns, new_data, index
         )
 
+    # df.iloc[1:n,0], df.iloc[1,0]
+    if isinstance(idx, types.BaseTuple) and len(idx) == 2 and is_overload_constant_int(idx.types[1]):
+        # create Series from column data and reuse Series.iloc[]
+        col_ind = get_overload_const_int(idx.types[1])
+        col_name = df.columns[col_ind]
+        def impl_col_ind(I, idx):
+            df = I._obj
+            index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
+            data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
+            return bodo.hiframes.pd_series_ext.init_series(data, index, col_name).iloc[idx[0]]
+
+        return impl_col_ind
+
     # TODO: error-checking test
     raise BodoError(
         "df.iloc[] getitem using {} not supported".format(idx)
@@ -333,47 +348,4 @@ class GetItemDataFrameLoc(AbstractTemplate):
                 data_typ = df.df_type.data[col_no]
                 # TODO: index
                 ret_typ = SeriesType(data_typ.dtype, data_typ, None, bodo.string_type)
-                return signature(ret_typ, *args)
-
-
-# TODO: use overload
-@infer_global(operator.getitem)
-class GetItemDataFrameILoc(AbstractTemplate):
-    key = operator.getitem
-
-    def generic(self, args, kws):
-        df, idx = args
-        if isinstance(df, DataFrameILocType):
-            # df1 = df.iloc[df.A > .5], df1 = df.iloc[np.array([1,2,3])]
-            if isinstance(
-                idx, (SeriesType, types.Array, types.List, BooleanArrayType)
-            ) and (idx.dtype == types.bool_ or isinstance(idx.dtype, types.Integer)):
-                return signature(df.df_type, *args)
-            # df.iloc[1:n]
-            if isinstance(idx, types.SliceType):
-                return signature(df.df_type, *args)
-            # df.iloc[1:n,0]
-            if (
-                isinstance(idx, types.BaseTuple)
-                and len(idx) == 2
-                and isinstance(idx.types[0], types.SliceType)
-                and isinstance(idx.types[1], types.IntegerLiteral)
-            ):
-                col_no = idx.types[1].literal_value
-                data_typ = df.df_type.data[col_no]
-                # TODO: index
-                index = RangeIndexType(types.none)
-                ret_typ = SeriesType(data_typ.dtype, data_typ, index, bodo.string_type)
-                return signature(ret_typ, *args)
-            # df.iloc[1,0]
-            if (
-                isinstance(idx, types.BaseTuple)
-                and len(idx) == 2
-                and isinstance(idx.types[0], types.Integer)
-                and isinstance(idx.types[1], types.IntegerLiteral)
-            ):
-                col_no = idx.types[1].literal_value
-                data_typ = df.df_type.data[col_no]
-                # TODO: proper Series getitem
-                ret_typ = data_typ.dtype
                 return signature(ret_typ, *args)

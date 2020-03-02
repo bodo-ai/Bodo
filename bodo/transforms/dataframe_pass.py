@@ -317,48 +317,6 @@ class DataFramePass:
             df_var = guard(get_definition, self.func_ir, rhs.value).value
             return self._gen_df_filter(df_var, index_var, lhs)
 
-        # df.iloc[1:n,0], df.loc[1:n,'A']
-        # df.iloc[3, 0]
-        if (
-            (self._is_df_loc_var(rhs.value) or self._is_df_iloc_var(rhs.value))
-            and isinstance(index_typ, types.BaseTuple)
-            and len(index_typ) == 2
-        ):
-            df_var = guard(get_definition, self.func_ir, rhs.value).value
-            df_typ = self.typemap[df_var.name]
-            ind_def = guard(get_definition, self.func_ir, index_var)
-            # TODO check and report errors
-            assert isinstance(ind_def, ir.Expr) and ind_def.op == "build_tuple"
-
-            if self._is_df_iloc_var(rhs.value):
-                # find_const doesn't support globals so use static value
-                # TODO: fix find_const()
-                if rhs.op == "static_getitem":
-                    col_ind = rhs.index[1]
-                else:
-                    col_ind = guard(find_const, self.func_ir, ind_def.items[1])
-                col_name = df_typ.columns[col_ind]
-            else:  # df.loc
-                col_name = guard(find_const, self.func_ir, ind_def.items[1])
-
-            ind_var = ind_def.items[0]
-            name_var = ir.Var(lhs.scope, mk_unique_var("df_col_name"), lhs.loc)
-            self.typemap[name_var.name] = types.StringLiteral(col_name)
-            nodes.append(ir.Assign(ir.Const(col_name, lhs.loc), name_var, lhs.loc))
-            in_arr = self._get_dataframe_data(df_var, col_name, nodes)
-            df_index_var = self._get_dataframe_index(df_var, nodes)
-
-            # use iloc of Series
-            func = lambda A, ind, df_index, name: bodo.hiframes.pd_series_ext.init_series(
-                A, df_index, name
-            ).iloc[
-                ind
-            ]
-
-            return self._replace_func(
-                func, [in_arr, ind_var, df_index_var, name_var], pre_nodes=nodes
-            )
-
         if self._is_df_iat_var(rhs.value):
             df_var = guard(get_definition, self.func_ir, rhs.value).value
             df_typ = self.typemap[df_var.name]
