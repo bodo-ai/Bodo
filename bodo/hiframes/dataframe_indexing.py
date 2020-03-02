@@ -51,9 +51,14 @@ from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
 
+# DataFrame getitem
 @overload(operator.getitem)
 def df_getitem_overload(df, ind):
-    if isinstance(df, DataFrameType) and is_overload_constant_str(ind):
+    if not isinstance(df, DataFrameType):
+        return
+
+    # A = df["column"]
+    if is_overload_constant_str(ind):
         ind_str = get_overload_const_str(ind)
         # df with multi-level column names returns a lower level dataframe
         if isinstance(df.columns[0], tuple):
@@ -88,6 +93,27 @@ def df_getitem_overload(df, ind):
             ind_str,
         )
 
+    # A = df[["C1", "C2"]]
+    if is_overload_constant_str_list(ind):
+        ind_columns = get_const_str_list(ind)
+        # error checking, TODO: test
+        for c in ind_columns:
+            if c not in df.columns:
+                raise BodoError(
+                    "Column {} not found in dataframe columns {}".format(c, df.columns)
+                )
+        new_data = ", ".join(
+            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}).copy()".format(
+                df.columns.index(c)
+            )
+            for c in ind_columns
+        )
+        func_text = "def impl(df, ind):\n"
+        index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
+        return bodo.hiframes.dataframe_impl._gen_init_df(
+            func_text, ind_columns, new_data, index
+        )
+
 
 @infer_global(operator.getitem)
 class GetItemDataFrame(AbstractTemplate):
@@ -107,23 +133,6 @@ class GetItemDataFrame(AbstractTemplate):
             ):
                 index = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
             return signature(df.copy(has_parent=False, index=index), *args)
-
-
-@infer
-class StaticGetItemDataFrame(AbstractTemplate):
-    key = "static_getitem"
-
-    def generic(self, args, kws):
-        df, idx = args
-        if (
-            isinstance(df, DataFrameType)
-            and isinstance(idx, list)
-            and all(isinstance(c, str) for c in idx)
-        ):
-            data_typs = tuple(df.data[df.columns.index(c)] for c in idx)
-            columns = tuple(idx)
-            ret_typ = DataFrameType(data_typs, df.index, columns)
-            return signature(ret_typ, *args)
 
 
 # TODO: handle dataframe pass
@@ -226,7 +235,7 @@ class GetItemDataFrameLoc(AbstractTemplate):
             # df.loc[1:n]
             if isinstance(idx, types.SliceType):
                 return signature(df.df_type, *args)
-            # df.loc[1:n,'A']
+            # df.loc[1:n,"A"]
             if (
                 isinstance(idx, types.BaseTuple)
                 and len(idx) == 2
@@ -238,6 +247,7 @@ class GetItemDataFrameLoc(AbstractTemplate):
                 # TODO: index
                 ret_typ = SeriesType(data_typ.dtype, data_typ, None, bodo.string_type)
                 return signature(ret_typ, *args)
+
 
 # TODO: use overload
 @infer_global(operator.getitem)

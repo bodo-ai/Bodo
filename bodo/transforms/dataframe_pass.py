@@ -292,29 +292,12 @@ class DataFramePass:
         target = rhs.value
         target_typ = self.typemap[target.name]
 
-        # A = df['column']
-        if self._is_df_var(target) and is_overload_constant_str(index_typ):
-            impl = bodo.hiframes.pd_dataframe_ext.df_getitem_overload(
+        # inline DataFrame getitem
+        if isinstance(target_typ, DataFrameType):
+            impl = bodo.hiframes.dataframe_indexing.df_getitem_overload(
                 target_typ, index_typ
             )
             return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
-
-        # A = df[['C1', 'C2']]
-        if rhs.op == "static_getitem" and self._is_df_var(rhs.value):
-            # TODO: avoid 'static_getitem' check since not reliable
-            df_var = rhs.value
-            df_typ = self.typemap[df_var.name]
-            index = rhs.index
-
-            # df[['C1', 'C2']]
-            if isinstance(index, list) and all(isinstance(c, str) for c in index):
-                nodes = []
-                in_arrs = [self._get_dataframe_data(df_var, c, nodes) for c in index]
-                out_arrs = [self._gen_arr_copy(A, nodes) for A in in_arrs]
-                df_index = self._get_dataframe_index(df_var, nodes)
-                out_arrs.append(df_index)
-                _init_df = _gen_init_df(index, "index")
-                return nodes + compile_func_single_block(_init_df, out_arrs, lhs, self)
 
         # df1 = df[df.A > .5]
         if self.is_bool_arr(index_var.name) and self._is_df_var(rhs.value):

@@ -1215,6 +1215,22 @@ def test_get_dataframe_data_array_analysis():
     assert eq_set._get_ind("df#0") == eq_set._get_ind("B#0")
 
 
+################################## indexing  #################################
+
+
+def test_column_list_getitem1():
+    """Test df[["A", "B"]] getitem case
+    """
+    def test_impl(df):
+        return df[["A", "C", "B"]]
+
+    df = pd.DataFrame({"A": [1.1, 2.3, np.nan, 1.7, 3.6],
+        "A2": [3, 1, 2, 3, 5],
+        "B": [True, False, None, False, True], "C":
+        ["AA", "C", None, "ABC", ""]}, index=[3, 1, 2, 4, 0])
+    check_func(test_impl, (df,))
+
+
 def test_iloc_slice_col_ind():
     """test df.iloc[slice, col_ind]
     """
@@ -1473,15 +1489,6 @@ class TestDataFrame(unittest.TestCase):
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
         self.assertEqual(count_parfor_OneDs(), 1)
-
-    def test_column_list_getitem1(self):
-        def test_impl(df):
-            return df[["A", "C"]]
-
-        bodo_func = bodo.jit(test_impl)
-        n = 11
-        df = pd.DataFrame({"A": np.arange(n), "B": np.ones(n), "C": np.random.ranf(n)})
-        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
 
     def test_filter1(self):
         def test_impl(n):
