@@ -1331,9 +1331,15 @@ class DistributedAnalysis:
             new_dist = self._meet_array_dists(
                 index_var.name, rhs.value.name, array_dists
             )
-            array_dists[lhs] = Distribution(
+            out_dist = Distribution(
                 min(Distribution.OneD_Var.value, new_dist.value)
             )
+            array_dists[lhs] = out_dist
+            # output can cause input REP
+            if out_dist != Distribution.OneD_Var:
+                self._meet_array_dists(
+                    index_var.name, rhs.value.name, array_dists, out_dist
+                )
             return
 
         # whole slice or strided slice access
