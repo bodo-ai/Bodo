@@ -46,6 +46,7 @@ from bodo.utils.typing import (
     raise_const_error,
     is_overload_constant_tuple,
     get_overload_const_tuple,
+    is_list_like_index_type,
 )
 from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
@@ -115,24 +116,22 @@ def df_getitem_overload(df, ind):
         )
 
 
-@infer_global(operator.getitem)
-class GetItemDataFrame(AbstractTemplate):
-    key = operator.getitem
-
-    def generic(self, args, kws):
-        df, idx = args
-        # df1 = df[df.A > .5]
-        if (
-            isinstance(df, DataFrameType)
-            and isinstance(idx, (SeriesType, types.Array, BooleanArrayType))
-            and idx.dtype == types.bool_
-        ):
-            index = df.index
-            if index is types.none or isinstance(
-                index, bodo.hiframes.pd_index_ext.RangeIndexType
-            ):
-                index = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
-            return signature(df.copy(has_parent=False, index=index), *args)
+    # df1 = df[df.A > .5]
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+        # implement using array filtering (not using the old Filter node)
+        # TODO: create an IR node for enforcing same dist for all columns and ind array
+        func_text = "def impl(df, ind):\n"
+        func_text += "  idx = bodo.utils.conversion.coerce_to_ndarray(ind)\n"
+        index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx]"
+        new_data = ", ".join(
+            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[idx]".format(
+                df.columns.index(c)
+            )
+            for c in df.columns
+        )
+        return bodo.hiframes.dataframe_impl._gen_init_df(
+            func_text, df.columns, new_data, index
+        )
 
 
 # TODO: handle dataframe pass

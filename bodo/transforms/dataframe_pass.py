@@ -299,11 +299,6 @@ class DataFramePass:
             )
             return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
 
-        # df1 = df[df.A > .5]
-        if self.is_bool_arr(index_var.name) and self._is_df_var(rhs.value):
-            df_var = rhs.value
-            return self._gen_df_filter(df_var, index_var, lhs)
-
         # df.loc[df.A > .5], df.iloc[df.A > .5]
         # df.iloc[1:n], df.iloc[np.array([1,2,3])], ...
         if (self._is_df_loc_var(rhs.value) or self._is_df_iloc_var(rhs.value)) and (
