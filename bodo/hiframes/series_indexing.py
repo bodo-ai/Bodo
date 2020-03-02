@@ -44,7 +44,7 @@ from bodo.hiframes.pd_timestamp_ext import (
     integer_to_dt64,
 )
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
-from bodo.utils.typing import is_list_like_index_type
+from bodo.utils.typing import is_list_like_index_type, BodoError
 
 
 ##############################  iat  ######################################
@@ -189,17 +189,17 @@ def overload_series_iloc_getitem(I, idx):
         # list of ints or array of ints
         # list of bools or array of bools
         # TODO: fix list of int getitem on Arrays in Numba
-        # TODO: fix none Index
         # TODO: other list-like such as Series/Index
         if is_list_like_index_type(idx) and isinstance(
             idx.dtype, (types.Integer, types.Boolean)
         ):
 
             def impl(I, idx):  # pragma: no cover
+                S = I._obj
                 idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
-                arr = bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx_t]
-                index = bodo.hiframes.pd_series_ext.get_series_index(I._obj)[idx_t]
-                name = bodo.hiframes.pd_series_ext.get_series_name(I._obj)
+                arr = bodo.hiframes.pd_series_ext.get_series_data(S)[idx_t]
+                index = bodo.hiframes.pd_series_ext.get_series_index(S)[idx_t]
+                name = bodo.hiframes.pd_series_ext.get_series_name(S)
                 return bodo.hiframes.pd_series_ext.init_series(arr, index, name)
 
             return impl
@@ -207,15 +207,17 @@ def overload_series_iloc_getitem(I, idx):
         # slice
         if isinstance(idx, types.SliceType):
 
-            def impl(I, idx):  # pragma: no cover
-                arr = bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx]
-                index = bodo.hiframes.pd_series_ext.get_series_index(I._obj)[idx]
-                name = bodo.hiframes.pd_series_ext.get_series_name(I._obj)
+            def impl_slice(I, idx):  # pragma: no cover
+                S = I._obj
+                arr = bodo.hiframes.pd_series_ext.get_series_data(S)[idx]
+                index = bodo.hiframes.pd_series_ext.get_series_index(S)[idx]
+                name = bodo.hiframes.pd_series_ext.get_series_name(S)
                 return bodo.hiframes.pd_series_ext.init_series(arr, index, name)
 
-            return impl
+            return impl_slice
 
-        raise ValueError("iloc[] getitem using {} not supported".format(idx))
+        # TODO: error-checking test
+        raise BodoError("iloc[] getitem using {} not supported".format(idx))  # pragma: no cover
 
 
 @overload(operator.setitem)
@@ -223,7 +225,8 @@ def overload_series_iloc_setitem(I, idx, val):
     if isinstance(I, SeriesIlocType):
         # check string setitem
         if I.stype.dtype == bodo.string_type:
-            raise ValueError("Series string setitem not supported yet")
+            # TODO: error-checking test
+            raise BodoError("Series string setitem not supported yet")  # pragma: no cover
 
         # integer case same as iat
         if isinstance(idx, types.Integer):
@@ -267,7 +270,8 @@ def overload_series_iloc_setitem(I, idx, val):
 
             return impl_arr
 
-        raise ValueError("iloc[] setitem using {} not supported".format(idx))
+        # TODO: error-checking test
+        raise BodoError("iloc[] setitem using {} not supported".format(idx))  # pragma: no cover
 
 
 ######################## __getitem__/__setitem__ ########################
