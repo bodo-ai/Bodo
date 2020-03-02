@@ -460,6 +460,54 @@ def get_parquet_dataset(file_name):
             pass
         if file_names is not None:  # pragma: no cover
             return pq.ParquetDataset(file_names, filesystem=fs)
+    elif file_name.startswith("hdfs://"):
+        # this HadoopFileSystem is the new file system of pyarrow
+        from pyarrow.fs import HadoopFileSystem, FileSelector, FileType, HdfsOptions
+
+        # this HadoopFileSystem is the deprecated file system of pyarrow
+        # need this for pq.ParquetDataset
+        # because the new HadoopFileSystem is not a subclass of
+        # pyarrow.filesystem.FileSystem which causes an error
+        from pyarrow.hdfs import HadoopFileSystem as HdFS
+
+        # creates a new Hadoop file system from uri
+        try:
+            hdfs, path = HadoopFileSystem.from_uri(file_name)
+            hdfs_options = HdfsOptions.from_uri(file_name)
+            (host, port) = hdfs_options.endpoint
+            host = host[7:] # remove hdfs:// prefix
+            fs = HdFS(host=host, port=port, user=hdfs_options.user)
+        except Exception as e:
+            raise BodoError(
+                "read_parquet(): Hadoop file system " " cannot be created: {}".format(e)
+            )
+
+        # prefix in form of hdfs://host:port
+        prefix = file_name[: len(file_name) - len(path)]
+        file_names = None
+        # target stat of the path: file or just the directory itself
+        target_stat = hdfs.get_target_stats([path])
+
+        if target_stat[0].type == FileType.NonExistent:
+            raise BodoError(
+                "read_parquet(): {} is a "
+                "non-existing or unreachable file".format(file_name)
+            )
+
+        if (not target_stat[0].size) and target_stat[0].type == FileType.Directory:
+            file_selector = FileSelector(path, allow_non_existent=False, recursive=True)
+            try:
+                file_stats = hdfs.get_target_stats(file_selector)
+            except Exception as e:
+                raise BodoError(
+                    "read_parquet(): Exception on getting target stats "
+                    "of {}: {}".format(path, e)
+                )
+            for file_stat in file_stats:
+                file_names = [prefix + file_stat.path for file_stat in file_stats]
+
+        if file_names is not None:
+            return pq.ParquetDataset(file_names, filesystem=fs)
 
     return pq.ParquetDataset(file_name, filesystem=fs)
 

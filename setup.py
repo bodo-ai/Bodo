@@ -121,6 +121,18 @@ ext_s3 = Extension(
     language="c++",
 )
 
+ext_hdfs = Extension(
+    name="bodo.io.hdfs_reader",
+    sources=["bodo/io/_hdfs_reader.cpp"],
+    depends=["bodo/io/_bodo_csv_file_reader.h"],
+    libraries=["arrow"],
+    include_dirs=ind + np_compile_args["include_dirs"],
+    library_dirs=lid,
+    define_macros=[],
+    extra_compile_args=eca,
+    extra_link_args=ela,
+    language="c++",
+)
 
 ext_hdf5 = Extension(
     name="bodo.io._hdf5",
@@ -277,6 +289,7 @@ _ext_mods = [
     ext_io,
     ext_arr,
     ext_s3,
+    ext_hdfs,
 ]
 
 if _has_h5py:

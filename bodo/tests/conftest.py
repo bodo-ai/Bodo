@@ -69,6 +69,9 @@ def pytest_collection_modifyitems(items):
 
 @pytest.fixture(scope="session")
 def minio_server():
+    """
+    spins up minio server
+    """
     import subprocess
 
     host, port = "127.0.0.1", "9000"
@@ -110,6 +113,9 @@ def minio_server():
 
 @pytest.fixture(scope="session")
 def s3_bucket(minio_server, datapath):
+    """
+    creates a bucket in s3 and adds files to it
+    """
     boto3 = pytest.importorskip("boto3")
     botocore = pytest.importorskip("botocore")
 
@@ -137,3 +143,72 @@ def s3_bucket(minio_server, datapath):
 
     bodo.barrier()
     return "bodo-test"
+
+
+@pytest.mark.hdfs
+@pytest.fixture(scope="session")
+def hadoop_server():
+    """
+    host and port of hadoop server
+    """
+
+    host = "localhost"
+    port = 9000
+
+    return host, port
+
+
+@pytest.mark.hdfs
+@pytest.fixture(scope="session")
+def hdfs_dir(hadoop_server, datapath):
+    """
+    create a directory in hdfs and add files to it
+    """
+    hdfs3 = pytest.importorskip("hdfs3")
+    from hdfs3 import HDFileSystem
+    import glob
+
+    host, port = hadoop_server
+    dir_name = "bodo-test"
+
+    if bodo.get_rank() == 0:
+        hdfs = HDFileSystem(host=host, port=port)
+        hdfs.mkdir("/" + dir_name)
+        test_hdfs_files = [
+            ("csv_data1.csv", datapath("csv_data1.csv")),
+            ("csv_data_date1.csv", datapath("csv_data_date1.csv")),
+            ("asof1.pq", datapath("asof1.pq")),
+            ("groupby3.pq", datapath("groupby3.pq"))
+        ]
+        for fname, path in test_hdfs_files:
+            formatted_fname = "/{}/{}".format(dir_name, fname)
+            hdfs.put(path, formatted_fname)
+
+        hdfs.mkdir("/bodo-test/int_nulls_multi.pq")
+        prefix = datapath("int_nulls_multi.pq")
+        pat = prefix+"/*.snappy.parquet"
+        int_nulls_multi_parts = [f for f in glob.glob(pat)]
+        for path in int_nulls_multi_parts:
+            fname = path[len(prefix)+1:]
+            fname = "/{}/int_nulls_multi.pq/{}".format(dir_name, fname)
+            hdfs.put(path, fname)
+
+    bodo.barrier()
+    return dir_name
+
+
+@pytest.mark.hdfs
+@pytest.fixture(scope="session")
+def hdfs_datapath(hadoop_server, hdfs_dir):
+    """
+    Get the path to a test data file in hdfs
+    """
+
+    host, port = hadoop_server
+    BASE_PATH = "hdfs://{}:{}/{}".format(host, port, hdfs_dir)
+
+    def deco(*args):
+        path = os.path.join(BASE_PATH, *args)
+        return path
+
+    return deco

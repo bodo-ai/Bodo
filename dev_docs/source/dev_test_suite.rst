@@ -50,6 +50,13 @@ We have three customized `pytest markers <http://doc.pytest.org/en/latest/exampl
    <https://boto3.amazonaws.com/v1/documentation/api/latest/index.html>`_ or `botocore
    <https://botocore.amazonaws.com/v1/documentation/api/latest/index.html>`_ is not installed.
 
+4. :code:`hdfs` defined in `pytest.ini <https://github.com/Bodo-inc/Bodo/blob/master/pytest.ini>`_::
+
+      pytest -s -v -m "hdfs" -W ignore
+
+  This marker marks the tests that test for hdfs file system.
+  These tests will be skipped, if `hdfs3 <https://hdfs3.readthedocs.io/en/latest/>`_ is not installed.
+
 More than one markers can be used together::
     
    pytest -s -v -m "not slow and firsthalf" -W ignore
@@ -133,7 +140,8 @@ In certain cases, distributed tests are not performed. Check the comments in `ch
 
 
 Other useful testing functions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 In some cases, we do not want to perfrom distributed testing. In such cases, we can use non-Bodo testing functions. 
 List of Non-Bodo testing functions that can also be used while testing are
 

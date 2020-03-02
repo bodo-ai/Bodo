@@ -1461,21 +1461,26 @@ def dist_permutation_array_index(
     )
 
 
-########### finalize MPI&s3_reader when exiting ####################
+########### finalize MPI & s3_reader, disconnect hdfs when exiting ############
 
+
+from bodo.io import s3_reader
+from bodo.io import hdfs_reader
 
 ll.add_symbol("finalize", hdist.finalize)
 finalize = types.ExternalFunction("finalize", types.int32())
-from bodo.io import s3_reader
 
 ll.add_symbol("finalize_s3", s3_reader.finalize_s3)
 finalize_s3 = types.ExternalFunction("finalize_s3", types.int32())
 
+ll.add_symbol("disconnect_hdfs", hdfs_reader.disconnect_hdfs)
+disconnect_hdfs = types.ExternalFunction("disconnect_hdfs", types.int32())
 
 @numba.njit
 def call_finalize():  # pragma: no cover
     finalize()
     finalize_s3()
+    disconnect_hdfs()
 
 
 def flush_stdout():
