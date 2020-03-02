@@ -1231,6 +1231,17 @@ def test_column_list_getitem1():
     check_func(test_impl, (df,))
 
 
+def test_iloc_bool_arr():
+    """test df.iloc[bool_arr]
+    """
+    def test_impl(df):
+        return df.iloc[(df.A > 3).values]
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
+    check_func(test_impl, (df,))
+
+
 def test_iloc_slice_col_ind():
     """test df.iloc[slice, col_ind]
     """

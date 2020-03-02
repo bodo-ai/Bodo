@@ -299,6 +299,13 @@ class DataFramePass:
             )
             return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
 
+        # inline DataFrame getitem
+        if isinstance(target_typ, DataFrameILocType):
+            impl = bodo.hiframes.dataframe_indexing.overload_iloc_getitem(
+                target_typ, index_typ
+            )
+            return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
+
         # df.loc[df.A > .5], df.iloc[df.A > .5]
         # df.iloc[1:n], df.iloc[np.array([1,2,3])], ...
         if (self._is_df_loc_var(rhs.value) or self._is_df_iloc_var(rhs.value)) and (
@@ -513,6 +520,11 @@ class DataFramePass:
             return nodes + compile_func_single_block(
                 _init_df, new_data + [index], assign.target, self
             )
+
+        # replace df.iloc._obj with df
+        if isinstance(rhs_type, DataFrameILocType) and rhs.attr == "_obj":
+            assign.value  = guard(get_definition, self.func_ir, rhs.value).value
+            return [assign]
 
         return [assign]
 

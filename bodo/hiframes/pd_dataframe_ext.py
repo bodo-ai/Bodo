@@ -206,9 +206,6 @@ class DataFrameAttribute(AttributeTemplate):
     def resolve_iat(self, ary):
         return bodo.hiframes.dataframe_indexing.DataFrameIatType(ary)
 
-    def resolve_iloc(self, ary):
-        return bodo.hiframes.dataframe_indexing.DataFrameILocType(ary)
-
     def resolve_loc(self, ary):
         return bodo.hiframes.dataframe_indexing.DataFrameLocType(ary)
 

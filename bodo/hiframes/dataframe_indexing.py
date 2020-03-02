@@ -3,7 +3,7 @@
 Indexing support for pd.DataFrame type.
 """
 import operator
-from numba import types
+from numba import types, cgutils
 from numba.extending import (
     models,
     register_model,
@@ -16,6 +16,7 @@ from numba.extending import (
     intrinsic,
     lower_builtin,
     overload_method,
+    overload_attribute,
 )
 from numba.typing.templates import (
     infer_global,
@@ -133,14 +134,11 @@ def df_getitem_overload(df, ind):
             func_text, df.columns, new_data, index
         )
 
+    # TODO: error-checking test
+    raise BodoError("df[] getitem using {} not supported".format(ind))  # pragma: no cover
 
-# TODO: handle dataframe pass
-# df.ia[] type
-class DataFrameIatType(types.Type):
-    def __init__(self, df_type):
-        self.df_type = df_type
-        name = "DataFrameIatType({})".format(df_type)
-        super(DataFrameIatType, self).__init__(name)
+
+##################################  df.iloc  ##################################
 
 
 # df.iloc[] type
@@ -149,6 +147,88 @@ class DataFrameILocType(types.Type):
         self.df_type = df_type
         name = "DataFrameILocType({})".format(df_type)
         super(DataFrameILocType, self).__init__(name)
+
+
+@register_model(DataFrameILocType)
+class DataFrameILocModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [("obj", fe_type.df_type)]
+        super(DataFrameILocModel, self).__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(DataFrameILocType, "obj", "_obj")
+
+
+@intrinsic
+def init_dataframe_iloc(typingctx, obj=None):
+    def codegen(context, builder, signature, args):
+        obj_val, = args
+        iloc_type = signature.return_type
+
+        iloc_val = cgutils.create_struct_proxy(iloc_type)(context, builder)
+        iloc_val.obj = obj_val
+
+        # increase refcount of stored values
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[0], obj_val)
+
+        return iloc_val._getvalue()
+
+    return DataFrameILocType(obj)(obj), codegen
+
+
+@overload_attribute(DataFrameType, "iloc")
+def overload_series_iloc(s):
+    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_iloc(s)
+
+
+# df.iloc[] getitem
+@overload(operator.getitem)
+def overload_iloc_getitem(I, idx):
+    if not isinstance(I, DataFrameILocType):
+        return
+
+    df = I.df_type
+
+    # Integer case returns Series(object) which is not supported
+    # TODO: error checking test
+    if isinstance(idx, types.Integer):  # pragma: no cover
+        # TODO: support cases that can be typed, e.g. all float64
+        # TODO: return namedtuple instead of Series?
+        raise BodoError("df.iloc[] with integer index is not supported since output Series cannot be typed")
+
+    # df.iloc[cond]
+    # list of ints or array of ints
+    # list of bools or array of bools
+    if is_list_like_index_type(idx) and isinstance(
+        idx.dtype, (types.Integer, types.Boolean)
+    ):
+        # TODO: refactor with df filter
+        func_text = "def impl(I, idx):\n"
+        func_text += "  df = I._obj\n"
+        func_text += "  idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)\n"
+        index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx_t]"
+        new_data = ", ".join(
+            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[idx_t]".format(
+                df.columns.index(c)
+            )
+            for c in df.columns
+        )
+        return bodo.hiframes.dataframe_impl._gen_init_df(
+            func_text, df.columns, new_data, index
+        )
+
+    # TODO: error-checking test
+    raise BodoError("df.iloc[] getitem using {} not supported".format(idx))  # pragma: no cover
+
+
+# TODO: handle dataframe pass
+# df.ia[] type
+class DataFrameIatType(types.Type):
+    def __init__(self, df_type):
+        self.df_type = df_type
+        name = "DataFrameIatType({})".format(df_type)
+        super(DataFrameIatType, self).__init__(name)
 
 
 # df.loc[] type
