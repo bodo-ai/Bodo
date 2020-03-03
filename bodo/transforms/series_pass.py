@@ -1971,7 +1971,7 @@ class SeriesPass:
         other_data = self._get_series_data(other_var, nodes)
 
         # Use NaN if fill_value is not provided
-        use_nan = fill_var is "" or self.typemap[fill_var.name] == types.none
+        use_nan = fill_var == "" or self.typemap[fill_var.name] == types.none
 
         # prange func to inline
         if use_nan:

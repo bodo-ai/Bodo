@@ -723,7 +723,7 @@ class UntypedPass:
             usecols = self._get_const_val_or_list(usecols_var, err_msg=err_msg, typ=int)
 
         # if inference is required
-        if dtype_var is "" or col_names == 0:
+        if dtype_var == "" or col_names == 0:
             # infer column names and types from constant filename
             msg = (
                 "pd.read_csv() requires explicit type "
