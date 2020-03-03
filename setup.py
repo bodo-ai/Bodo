@@ -243,7 +243,7 @@ ext_dt = Extension(
     define_macros=np_compile_args["define_macros"],
     extra_compile_args=["-std=c++11"],
     extra_link_args=["-std=c++11"],
-    include_dirs=np_compile_args["include_dirs"],
+    include_dirs=np_compile_args["include_dirs"] + ind,
     library_dirs=np_compile_args["library_dirs"],
     language="c++",
 )
