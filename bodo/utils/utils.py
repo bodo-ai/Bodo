@@ -695,7 +695,7 @@ def alloc_arr_tup_overload(n, data, init_vals=()):
 
     allocs = ",".join(["empty_like_type(n, data[{}])".format(i) for i in range(count)])
 
-    if init_vals is not ():
+    if init_vals != ():
         # TODO check for numeric value
         allocs = ",".join(
             [
