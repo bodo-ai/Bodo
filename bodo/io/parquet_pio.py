@@ -26,6 +26,7 @@ from bodo.libs.list_str_arr_ext import (
     ListStringArrayPayloadType,
     construct_list_string_array,
 )
+from bodo.hiframes.datetime_date_ext import datetime_date_type, datetime_date_array_type, DatetimeDateArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.decimal_arr_ext import DecimalArrayType, Decimal128Type
 from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
@@ -313,6 +314,10 @@ def _gen_alloc(c_type, cname, alloc_size, el_type):
         return "  {0} = bodo.libs.decimal_arr_ext.alloc_decimal_array({1}, {2}, {3})\n".format(
             cname, alloc_size, c_type.precision, c_type.scale
         )
+    if c_type == datetime_date_array_type:
+        return "  {0} = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array({1})\n".format(
+            cname, alloc_size
+        )
     return "  {} = np.empty({}, dtype={})\n".format(cname, alloc_size, el_type)
 
 
@@ -326,6 +331,9 @@ def get_element_type(dtype):
     # TODO: refactor _type_to_pq_dtype_number and remove this
     if isinstance(dtype, Decimal128Type):
         return "int128"
+
+    if dtype == datetime_date_type:
+        return "np.int32"
 
     out = repr(dtype)
     if out == "bool":  # fix bool string
@@ -367,7 +375,7 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index):
         # String
         pa.string(): string_type,
         # date
-        pa.date32(): types.NPDatetime("ns"),
+        pa.date32(): datetime_date_type,
         pa.date64(): types.NPDatetime("ns"),
         # time (TODO: time32, time64, ...)
         pa.timestamp("ns"): types.NPDatetime("ns"),
@@ -378,6 +386,9 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index):
     if pa_typ.type not in _typ_map:
         raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
     dtype = _typ_map[pa_typ.type]
+
+    if dtype == datetime_date_type:
+        return datetime_date_array_type
 
     arr_typ = string_array_type if dtype == string_type else types.Array(dtype, 1, "C")
 
@@ -754,6 +765,13 @@ def pq_read_parallel_lower(context, builder, sig, args):
     DecimalArrayType,
     types.int32,
 )
+@lower_builtin(
+    read_parquet,
+    types.Opaque("arrow_reader"),
+    types.intp,
+    datetime_date_array_type,
+    types.int32,
+)
 def pq_read_int_arr_lower(context, builder, sig, args):
     fnty = lir.FunctionType(
         lir.IntType(64),
@@ -770,6 +788,8 @@ def pq_read_int_arr_lower(context, builder, sig, args):
     dtype = int_arr_typ.dtype
     if isinstance(int_arr_typ, DecimalArrayType):
         dtype = bodo.libs.decimal_arr_ext.int128_type
+    if int_arr_typ == datetime_date_array_type:
+        dtype = types.int64
     data_typ = types.Array(dtype, 1, "C")
     data_array = make_array(data_typ)(context, builder, int_arr.data)
     null_arr_typ = types.Array(types.uint8, 1, "C")
@@ -815,6 +835,15 @@ def pq_read_int_arr_lower(context, builder, sig, args):
     types.intp,
     types.intp,
 )
+@lower_builtin(
+    read_parquet_parallel,
+    types.Opaque("arrow_reader"),
+    types.intp,
+    datetime_date_array_type,
+    types.int32,
+    types.intp,
+    types.intp,
+)
 def pq_read_parallel_int_arr_lower(context, builder, sig, args):
     fnty = lir.FunctionType(
         lir.IntType(32),
@@ -833,6 +862,8 @@ def pq_read_parallel_int_arr_lower(context, builder, sig, args):
     dtype = int_arr_typ.dtype
     if isinstance(int_arr_typ, DecimalArrayType):
         dtype = bodo.libs.decimal_arr_ext.int128_type
+    if int_arr_typ == datetime_date_array_type:
+        dtype = types.int64
     data_typ = types.Array(dtype, 1, "C")
     data_array = make_array(data_typ)(context, builder, int_arr.data)
     null_arr_typ = types.Array(types.uint8, 1, "C")
