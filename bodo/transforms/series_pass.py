@@ -2641,7 +2641,7 @@ def get_stmt_writes(stmt):
             writes.update({v.name for v in stmt.out_key_vars})
     if isinstance(stmt, (bodo.ir.csv_ext.CsvReader, bodo.ir.parquet_ext.ParquetReader)):
         writes = {v.name for v in stmt.out_vars}
-    if isinstance(stmt, (bodo.ir.filter.Filter, bodo.ir.join.Join)):
+    if isinstance(stmt, bodo.ir.join.Join):
         writes = {v.name for v in stmt.df_out_vars.values()}
     if isinstance(stmt, bodo.ir.sort.Sort):
         if not stmt.inplace:

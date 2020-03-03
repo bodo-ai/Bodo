@@ -349,51 +349,6 @@ class DataFramePass:
         nodes.append(assign)
         return nodes
 
-    def _gen_df_filter(self, df_var, bool_arr_var, lhs):
-        nodes = []
-        if isinstance(self.typemap[bool_arr_var.name], SeriesType):
-            nodes += compile_func_single_block(
-                lambda s: bodo.hiframes.pd_series_ext.get_series_data(s),
-                (bool_arr_var,),
-                None,
-                self,
-            )
-            bool_arr_var = nodes[-1].target
-        df_typ = self.typemap[df_var.name]
-        in_vars = {}
-        out_vars = {}
-        for col in df_typ.columns:
-            in_arr = self._get_dataframe_data(df_var, col, nodes)
-            out_arr = ir.Var(lhs.scope, mk_unique_var(col), lhs.loc)
-            self.typemap[out_arr.name] = self.typemap[in_arr.name]
-            in_vars[col] = in_arr
-            out_vars[col] = out_arr
-
-        # add index array to filter node
-        in_df_index = self._get_dataframe_index(df_var, nodes)
-        in_df_index_name = self._get_index_name(in_df_index, nodes)
-        in_index_arr = self._gen_array_from_index(df_var, nodes)
-        out_index_arr = ir.Var(lhs.scope, mk_unique_var("index"), lhs.loc)
-        self.typemap[out_index_arr.name] = self.typemap[in_index_arr.name]
-        in_vars["$_bodo_index_"] = in_index_arr
-        out_vars["$_bodo_index_"] = out_index_arr
-
-        nodes.append(
-            bodo.ir.filter.Filter(
-                lhs.name, df_var.name, bool_arr_var, out_vars, in_vars, lhs.loc
-            )
-        )
-
-        df_index_var = self._gen_index_from_array(
-            out_index_arr, in_df_index_name, nodes
-        )
-
-        _init_df = _gen_init_df(df_typ.columns, "index")
-        out_vars = [out_vars[col] for col in df_typ.columns]
-        out_vars.append(df_index_var)
-
-        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
-
     def _run_setitem(self, inst):
         target_typ = self.typemap[inst.target.name]
         nodes = []
@@ -2485,12 +2440,6 @@ class DataFramePass:
 
     def _is_df_var(self, var):
         return isinstance(self.typemap[var.name], DataFrameType)
-
-    def _is_df_loc_var(self, var):
-        return isinstance(self.typemap[var.name], DataFrameLocType)
-
-    def _is_df_iloc_var(self, var):
-        return isinstance(self.typemap[var.name], DataFrameILocType)
 
     def _is_df_iat_var(self, var):
         return isinstance(self.typemap[var.name], DataFrameIatType)
