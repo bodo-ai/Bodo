@@ -245,13 +245,7 @@ def overload_iloc_getitem(I, idx):
     )  # pragma: no cover
 
 
-# TODO: handle dataframe pass
-# df.ia[] type
-class DataFrameIatType(types.Type):
-    def __init__(self, df_type):
-        self.df_type = df_type
-        name = "DataFrameIatType({})".format(df_type)
-        super(DataFrameIatType, self).__init__(name)
+##################################  df.loc  ##################################
 
 
 # df.loc[] type
@@ -260,6 +254,94 @@ class DataFrameLocType(types.Type):
         self.df_type = df_type
         name = "DataFrameLocType({})".format(df_type)
         super(DataFrameLocType, self).__init__(name)
+
+
+@register_model(DataFrameLocType)
+class DataFrameLocModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [("obj", fe_type.df_type)]
+        super(DataFrameLocModel, self).__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(DataFrameLocType, "obj", "_obj")
+
+
+@intrinsic
+def init_dataframe_loc(typingctx, obj=None):
+    def codegen(context, builder, signature, args):
+        (obj_val,) = args
+        loc_type = signature.return_type
+
+        loc_val = cgutils.create_struct_proxy(loc_type)(context, builder)
+        loc_val.obj = obj_val
+
+        # increase refcount of stored values
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[0], obj_val)
+
+        return loc_val._getvalue()
+
+    return DataFrameLocType(obj)(obj), codegen
+
+
+@overload_attribute(DataFrameType, "loc")
+def overload_series_loc(s):
+    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_loc(s)
+
+
+# df.loc[] getitem
+@overload(operator.getitem)
+def overload_loc_getitem(I, idx):
+    if not isinstance(I, DataFrameLocType):
+        return
+
+    df = I.df_type
+
+    # df.loc[idx] with array of bools
+    if is_list_like_index_type(idx) and idx.dtype == types.bool_:
+        # TODO: refactor with df filter
+        func_text = "def impl(I, idx):\n"
+        func_text += "  df = I._obj\n"
+        func_text += "  idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)\n"
+        index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx_t]"
+        new_data = ", ".join(
+            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[idx_t]".format(
+                df.columns.index(c)
+            )
+            for c in df.columns
+        )
+        return bodo.hiframes.dataframe_impl._gen_init_df(
+            func_text, df.columns, new_data, index
+        )
+
+    # df.loc[idx, "A"]
+    if isinstance(idx, types.BaseTuple) and len(idx) == 2 and is_overload_constant_str(idx.types[1]):
+        # TODO: support non-str dataframe names
+        # TODO: error checking
+        # create Series from column data and reuse Series.loc[]
+        col_name = get_overload_const_str(idx.types[1])
+        col_ind = df.columns.index(col_name)
+        def impl_col_name(I, idx):
+            df = I._obj
+            index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
+            data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
+            return bodo.hiframes.pd_series_ext.init_series(data, index, col_name).loc[idx[0]]
+
+        return impl_col_name
+
+    # TODO: error-checking test
+    raise BodoError(
+        "DataFrame.loc[] getitem (location-based indexing) using {} not supported yet.".format(idx)
+    )  # pragma: no cover
+
+
+# TODO: handle dataframe pass
+# df.ia[] type
+class DataFrameIatType(types.Type):
+    def __init__(self, df_type):
+        self.df_type = df_type
+        name = "DataFrameIatType({})".format(df_type)
+        super(DataFrameIatType, self).__init__(name)
 
 
 @infer
@@ -318,34 +400,3 @@ class SetItemDataFrameIat(AbstractTemplate):
                 col_no = idx.types[1].literal_value
                 data_typ = df.df_type.data[col_no]
                 return signature(types.none, data_typ, idx.types[0], val)
-
-
-@infer_global(operator.getitem)
-class GetItemDataFrameLoc(AbstractTemplate):
-    key = operator.getitem
-
-    def generic(self, args, kws):
-        df, idx = args
-        # handling df.loc similar to df.iloc as temporary hack
-        # TODO: handle proper labeled indexes
-        if isinstance(df, DataFrameLocType):
-            # df1 = df.loc[df.A > .5], df1 = df.loc[np.array([1,2,3])]
-            if isinstance(
-                idx, (SeriesType, types.Array, types.List, BooleanArrayType)
-            ) and (idx.dtype == types.bool_ or isinstance(idx.dtype, types.Integer)):
-                return signature(df.df_type, *args)
-            # df.loc[1:n]
-            if isinstance(idx, types.SliceType):
-                return signature(df.df_type, *args)
-            # df.loc[1:n,"A"]
-            if (
-                isinstance(idx, types.BaseTuple)
-                and len(idx) == 2
-                and isinstance(idx.types[1], types.StringLiteral)
-            ):
-                col_name = idx.types[1].literal_value
-                col_no = df.df_type.columns.index(col_name)
-                data_typ = df.df_type.data[col_no]
-                # TODO: index
-                ret_typ = SeriesType(data_typ.dtype, data_typ, None, bodo.string_type)
-                return signature(ret_typ, *args)

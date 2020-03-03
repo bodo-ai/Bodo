@@ -1284,6 +1284,31 @@ def test_iloc_int_col_ind():
     check_func(test_impl, (df,))
 
 
+def test_loc_bool_arr():
+    """test df.loc[bool_arr]
+    """
+
+    def test_impl(df):
+        return df.loc[(df.A > 3).values]
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
+    check_func(test_impl, (df,))
+
+
+def test_loc_col_name():
+    """test df.iloc[slice, col_ind]
+    """
+
+    def test_impl(df):
+        return df.loc[(df.A > 3).values, "B"].values
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
+    check_func(test_impl, (df,))
+
+
+
 ############################# old tests ###############################
 
 

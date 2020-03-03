@@ -299,23 +299,19 @@ class DataFramePass:
             )
             return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
 
-        # inline DataFrame getitem
+        # inline DataFrame iloc getitem
         if isinstance(target_typ, DataFrameILocType):
             impl = bodo.hiframes.dataframe_indexing.overload_iloc_getitem(
                 target_typ, index_typ
             )
             return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
 
-        # df.loc[df.A > .5], df.iloc[df.A > .5]
-        # df.iloc[1:n], df.iloc[np.array([1,2,3])], ...
-        if (self._is_df_loc_var(rhs.value) or self._is_df_iloc_var(rhs.value)) and (
-            self.is_bool_arr(index_var.name)
-            or self.is_int_list_or_arr(index_var.name)
-            or isinstance(index_typ, types.SliceType)
-        ):
-            # TODO: check for errors
-            df_var = guard(get_definition, self.func_ir, rhs.value).value
-            return self._gen_df_filter(df_var, index_var, lhs)
+        # inline DataFrame loc getitem
+        if isinstance(target_typ, DataFrameLocType):
+            impl = bodo.hiframes.dataframe_indexing.overload_loc_getitem(
+                target_typ, index_typ
+            )
+            return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
 
         if self._is_df_iat_var(rhs.value):
             df_var = guard(get_definition, self.func_ir, rhs.value).value
