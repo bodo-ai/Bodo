@@ -59,7 +59,7 @@ from bodo.utils.typing import (
 )
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
-from bodo.libs.array_tools import array_to_info, arr_info_list_to_table
+from bodo.libs.array import array_to_info, arr_info_list_to_table
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.str_arr_ext import string_array_type, str_arr_from_sequence

@@ -32,7 +32,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
-from bodo.libs.array_tools import (
+from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
     info_to_array,

@@ -1,7 +1,8 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_distributed.h"
 #include <ctime>
-#include "_common_defs.h"
+
+MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
 
 PyMODINIT_FUNC PyInit_hdist(void) {
     PyObject *m;

@@ -11,7 +11,7 @@ from numba.ir_utils import (
     replace_arg_nodes,
     mk_unique_var,
 )
-from bodo.libs.array_tools import (
+from bodo.libs.array import (
     array_to_info,
     arr_info_list_to_table,
     sort_values_table,

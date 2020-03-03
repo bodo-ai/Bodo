@@ -118,6 +118,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     // init numpy
     import_array();
 
+    bodo_common_init();
+
     PyObject_SetAttrString(m, "init_string_const",
                            PyLong_FromVoidPtr((void*)(&init_string_const)));
     PyObject_SetAttrString(m, "dtor_string_array",

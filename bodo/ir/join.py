@@ -58,7 +58,7 @@ from bodo.utils.shuffle import (
     _get_keys_tup,
     _get_data_tup,
 )
-from bodo.libs.array_tools import (
+from bodo.libs.array import (
     array_to_info,
     arr_info_list_to_table,
     shuffle_table,

@@ -829,7 +829,7 @@ def overload_series_isin(S, values):
             numba.parfor.init_prange()
             n = len(A)
             out_arr = np.empty(n, np.bool_)
-            bodo.libs.array_tools.array_isin(out_arr, A, values_arr, False)
+            bodo.libs.array.array_isin(out_arr, A, values_arr, False)
             return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
         return impl_arr

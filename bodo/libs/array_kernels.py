@@ -44,7 +44,7 @@ from llvmlite import ir as lir
 from bodo.libs import quantile_alg
 import llvmlite.binding as ll
 
-from bodo.libs.array_tools import (
+from bodo.libs.array import (
     array_to_info,
     arr_info_list_to_table,
     shuffle_table,

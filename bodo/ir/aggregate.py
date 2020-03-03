@@ -78,7 +78,7 @@ from bodo.utils.shuffle import (
     _get_data_tup,
 )
 from bodo.utils.typing import is_overload_true, get_overload_const_func
-from bodo.libs.array_tools import (
+from bodo.libs.array import (
     array_to_info,
     arr_info_list_to_table,
     groupby_and_aggregate,

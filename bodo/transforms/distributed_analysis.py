@@ -656,7 +656,7 @@ class DistributedAnalysis:
             array_dists[lhs] = new_dist
             return
 
-        if fdef == ("array_isin", "bodo.libs.array_tools"):
+        if fdef == ("array_isin", "bodo.libs.array"):
             # out_arr and in_arr should have the same distribution
             new_dist = self._meet_array_dists(
                 rhs.args[0].name, rhs.args[1].name, array_dists

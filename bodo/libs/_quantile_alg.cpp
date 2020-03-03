@@ -14,6 +14,8 @@
 
 #define root 0
 
+MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
+
 template <class T>
 std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T> &my_array,
                                              int64_t total_size, int myrank,

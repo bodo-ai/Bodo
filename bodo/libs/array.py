@@ -29,30 +29,30 @@ from bodo.hiframes.pd_categorical_ext import CategoricalArray, get_categories_in
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 
-from bodo.libs import array_tools_ext
+from bodo.libs import array_ext
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 
-ll.add_symbol("string_array_to_info", array_tools_ext.string_array_to_info)
-ll.add_symbol("numpy_array_to_info", array_tools_ext.numpy_array_to_info)
-ll.add_symbol("nullable_array_to_info", array_tools_ext.nullable_array_to_info)
-ll.add_symbol("decimal_array_to_info", array_tools_ext.decimal_array_to_info)
-ll.add_symbol("info_to_string_array", array_tools_ext.info_to_string_array)
-ll.add_symbol("info_to_numpy_array", array_tools_ext.info_to_numpy_array)
-ll.add_symbol("info_to_nullable_array", array_tools_ext.info_to_nullable_array)
-ll.add_symbol("alloc_numpy", array_tools_ext.alloc_numpy)
-ll.add_symbol("alloc_string_array", array_tools_ext.alloc_string_array)
-ll.add_symbol("arr_info_list_to_table", array_tools_ext.arr_info_list_to_table)
-ll.add_symbol("info_from_table", array_tools_ext.info_from_table)
-ll.add_symbol("delete_table", array_tools_ext.delete_table)
-ll.add_symbol("shuffle_table", array_tools_ext.shuffle_table)
-ll.add_symbol("hash_join_table", array_tools_ext.hash_join_table)
-ll.add_symbol("drop_duplicates_table", array_tools_ext.drop_duplicates_table)
-ll.add_symbol("sort_values_table", array_tools_ext.sort_values_table)
-ll.add_symbol("groupby_and_aggregate", array_tools_ext.groupby_and_aggregate)
-ll.add_symbol("array_isin", array_tools_ext.array_isin)
+ll.add_symbol("string_array_to_info", array_ext.string_array_to_info)
+ll.add_symbol("numpy_array_to_info", array_ext.numpy_array_to_info)
+ll.add_symbol("nullable_array_to_info", array_ext.nullable_array_to_info)
+ll.add_symbol("decimal_array_to_info", array_ext.decimal_array_to_info)
+ll.add_symbol("info_to_string_array", array_ext.info_to_string_array)
+ll.add_symbol("info_to_numpy_array", array_ext.info_to_numpy_array)
+ll.add_symbol("info_to_nullable_array", array_ext.info_to_nullable_array)
+ll.add_symbol("alloc_numpy", array_ext.alloc_numpy)
+ll.add_symbol("alloc_string_array", array_ext.alloc_string_array)
+ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
+ll.add_symbol("info_from_table", array_ext.info_from_table)
+ll.add_symbol("delete_table", array_ext.delete_table)
+ll.add_symbol("shuffle_table", array_ext.shuffle_table)
+ll.add_symbol("hash_join_table", array_ext.hash_join_table)
+ll.add_symbol("drop_duplicates_table", array_ext.drop_duplicates_table)
+ll.add_symbol("sort_values_table", array_ext.sort_values_table)
+ll.add_symbol("groupby_and_aggregate", array_ext.groupby_and_aggregate)
+ll.add_symbol("array_isin", array_ext.array_isin)
 ll.add_symbol(
-    "compute_node_partition_by_hash", array_tools_ext.compute_node_partition_by_hash
+    "compute_node_partition_by_hash", array_ext.compute_node_partition_by_hash
 )
 
 

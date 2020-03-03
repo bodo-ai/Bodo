@@ -186,7 +186,7 @@ ext_dict = Extension(
 
 ext_str = Extension(
     name="bodo.libs.hstr_ext",
-    sources=["bodo/libs/_str_ext.cpp"],
+    sources=["bodo/libs/_str_ext.cpp", "bodo/libs/_bodo_common.cpp"],
     libraries=np_compile_args["libraries"],
     define_macros=np_compile_args["define_macros"],
     extra_compile_args=eca,
@@ -211,12 +211,20 @@ ext_decimal = Extension(
 
 
 ext_arr = Extension(
-    name="bodo.libs.array_tools_ext",
-    sources=["bodo/libs/_array_tools.cpp"],
+    name="bodo.libs.array_ext",
+    sources=["bodo/libs/_array.cpp",
+        "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_array_utils.cpp",
+        "bodo/libs/_array_hash.cpp",
+        "bodo/libs/_shuffle.cpp",
+        "bodo/libs/_join.cpp",
+        "bodo/libs/_groupby.cpp",
+        "bodo/libs/_array_operations.cpp",
+        "bodo/libs/_murmurhash3.cpp",
+    ],
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_murmurhash3.h",
-        "bodo/libs/_murmurhash3.cpp",
         "bodo/libs/_distributed.h",
     ],
     libraries=MPI_LIBS,

@@ -40,7 +40,7 @@ from numba.targets.imputils import lower_builtin, impl_ret_untracked
 from bodo.hiframes.pd_series_ext import if_series_to_array_type
 from numba.extending import register_model, models
 import llvmlite.llvmpy.core as lc
-from bodo.libs.array_tools import (
+from bodo.libs.array import (
     array_to_info,
     arr_info_list_to_table,
     info_from_table,

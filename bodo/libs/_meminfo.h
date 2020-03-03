@@ -30,6 +30,11 @@
 // typedef MemInfo* (*MemInfo_alloc_aligned_type)(size_t size, unsigned align);
 // typedef void* (*MemInfo_data_type)(MemInfo* mi);
 
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
+#include <iostream>
+
 // ******** copied from Numba
 // TODO: make Numba C library
 typedef void (*NRT_dtor_function)(void *ptr, size_t size, void *info);
@@ -43,7 +48,7 @@ struct MemInfo {
 
 typedef struct MemInfo NRT_MemInfo;
 
-void nrt_debug_print(char *fmt, ...) {
+inline void nrt_debug_print(char *fmt, ...) {
     va_list args;
 
     va_start(args, fmt);
@@ -52,30 +57,30 @@ void nrt_debug_print(char *fmt, ...) {
 }
 
 #if 0
-# define BODO_DEBUG
+#define BODO_DEBUG
 #else
-# undef BODO_DEBUG
+#undef BODO_DEBUG
 #endif
 
 #if !defined MIN
 #define MIN(a, b) ((a) < (b)) ? (a) : (b)
 #endif
 
-void NRT_Free(void *ptr) {
+inline void NRT_Free(void *ptr) {
 #ifdef BODO_DEBUG
-  std::cerr << "NRT_Free " << ptr << "\n";
+    std::cerr << "NRT_Free " << ptr << "\n";
 #endif
-  free(ptr);
-  // TheMSys.allocator.free(ptr);
-  // TheMSys.atomic_inc(&TheMSys.stats_free);
+    free(ptr);
+    // TheMSys.allocator.free(ptr);
+    // TheMSys.atomic_inc(&TheMSys.stats_free);
 }
 
-void NRT_MemInfo_destroy(NRT_MemInfo *mi) {
+inline void NRT_MemInfo_destroy(NRT_MemInfo *mi) {
     NRT_Free(mi);
     // TheMSys.atomic_inc(&TheMSys.stats_mi_free);
 }
 
-void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
+inline void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
 #ifdef BODO_DEBUG
     std::cerr << "NRT_MemInfo_call_dtor " << mi << "\n";
 #endif
@@ -86,7 +91,7 @@ void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
     NRT_MemInfo_destroy(mi);
 }
 
-void *NRT_Allocate(size_t size) {
+inline void *NRT_Allocate(size_t size) {
     // void *ptr = TheMSys.allocator.malloc(size);
     void *ptr = malloc(size);
 #ifdef BODO_DEBUG
@@ -96,7 +101,7 @@ void *NRT_Allocate(size_t size) {
     return ptr;
 }
 
-static void *nrt_allocate_meminfo_and_data(size_t size, NRT_MemInfo **mi_out) {
+inline void *nrt_allocate_meminfo_and_data(size_t size, NRT_MemInfo **mi_out) {
     NRT_MemInfo *mi;
     char *base = (char *)NRT_Allocate(sizeof(NRT_MemInfo) + size);
     mi = (NRT_MemInfo *)base;
@@ -104,8 +109,8 @@ static void *nrt_allocate_meminfo_and_data(size_t size, NRT_MemInfo **mi_out) {
     return base + sizeof(NRT_MemInfo);
 }
 
-void NRT_MemInfo_init(NRT_MemInfo *mi, void *data, size_t size,
-                      NRT_dtor_function dtor, void *dtor_info) {
+inline void NRT_MemInfo_init(NRT_MemInfo *mi, void *data, size_t size,
+                             NRT_dtor_function dtor, void *dtor_info) {
     mi->refct = 1; /* starts with 1 refct */
     mi->dtor = dtor;
     mi->dtor_info = dtor_info;
@@ -115,7 +120,7 @@ void NRT_MemInfo_init(NRT_MemInfo *mi, void *data, size_t size,
     // TheMSys.atomic_inc(&TheMSys.stats_mi_alloc);
 }
 
-static void nrt_internal_dtor_safe(void *ptr, size_t size, void *info) {
+inline void nrt_internal_dtor_safe(void *ptr, size_t size, void *info) {
 #ifdef BODO_DEBUG
     std::cerr << "nrt_internal_dtor_safe " << ptr << ", " << info << "\n";
 #endif
@@ -123,10 +128,11 @@ static void nrt_internal_dtor_safe(void *ptr, size_t size, void *info) {
     memset(ptr, 0xDE, MIN(size, 256));
 }
 
-static void nrt_internal_custom_dtor_safe(void *ptr, size_t size, void *info) {
+inline void nrt_internal_custom_dtor_safe(void *ptr, size_t size, void *info) {
     NRT_dtor_function dtor = (NRT_dtor_function)info;
 #ifdef BODO_DEBUG
-    std::cerr << "nrt_internal_custom_dtor_safe " << ptr << ", " << info << "\n";
+    std::cerr << "nrt_internal_custom_dtor_safe " << ptr << ", " << info
+              << "\n";
 #endif
     if (dtor) {
         dtor(ptr, size, NULL);
@@ -135,7 +141,8 @@ static void nrt_internal_custom_dtor_safe(void *ptr, size_t size, void *info) {
     nrt_internal_dtor_safe(ptr, size, NULL);
 }
 
-NRT_MemInfo *NRT_MemInfo_alloc_dtor_safe(size_t size, NRT_dtor_function dtor) {
+inline NRT_MemInfo *NRT_MemInfo_alloc_dtor_safe(size_t size,
+                                                NRT_dtor_function dtor) {
     NRT_MemInfo *mi;
     void *data = nrt_allocate_meminfo_and_data(size, &mi);
     /* Only fill up a couple cachelines with debug markers, to minimize
@@ -149,11 +156,11 @@ NRT_MemInfo *NRT_MemInfo_alloc_dtor_safe(size_t size, NRT_dtor_function dtor) {
     return mi;
 }
 
-NRT_MemInfo *NRT_MemInfo_alloc_safe(size_t size) {
+inline NRT_MemInfo *NRT_MemInfo_alloc_safe(size_t size) {
     return NRT_MemInfo_alloc_dtor_safe(size, NULL);
 }
 
-static void *nrt_allocate_meminfo_and_data_align(size_t size, unsigned align,
+inline void *nrt_allocate_meminfo_and_data_align(size_t size, unsigned align,
                                                  NRT_MemInfo **mi) {
     size_t offset, intptr, remainder;
     char *base = (char *)nrt_allocate_meminfo_and_data(size + 2 * align, mi);
@@ -168,7 +175,7 @@ static void *nrt_allocate_meminfo_and_data_align(size_t size, unsigned align,
     return base + offset;
 }
 
-NRT_MemInfo *NRT_MemInfo_alloc_aligned(size_t size, unsigned align) {
+inline NRT_MemInfo *NRT_MemInfo_alloc_aligned(size_t size, unsigned align) {
     NRT_MemInfo *mi;
     void *data = nrt_allocate_meminfo_and_data_align(size, align, &mi);
 #ifdef BODO_DEBUG
@@ -178,14 +185,16 @@ NRT_MemInfo *NRT_MemInfo_alloc_aligned(size_t size, unsigned align) {
     return mi;
 }
 
-NRT_MemInfo *NRT_MemInfo_alloc_safe_aligned(size_t size, unsigned align) {
+inline NRT_MemInfo *NRT_MemInfo_alloc_safe_aligned(size_t size,
+                                                   unsigned align) {
     NRT_MemInfo *mi;
     void *data = nrt_allocate_meminfo_and_data_align(size, align, &mi);
     /* Only fill up a couple cachelines with debug markers, to minimize
        overhead. */
     memset(data, 0xCB, MIN(size, 256));
 #ifdef BODO_DEBUG
-    std::cerr << "NRT_MemInfo_alloc_safe_aligned " << data << " " << size << "\n";
+    std::cerr << "NRT_MemInfo_alloc_safe_aligned " << data << " " << size
+              << "\n";
 #endif
     NRT_MemInfo_init(mi, data, size, nrt_internal_dtor_safe, (void *)size);
     return mi;

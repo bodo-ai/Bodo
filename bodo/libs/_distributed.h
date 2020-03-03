@@ -34,7 +34,7 @@ struct HPAT_ReduceOps {
 // data type for Decimal128 values (2 64-bit ints)
 // initialized in dist/array tools C extensions
 // NOTE: needs to be initialized in all C extensions that use it
-MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
+extern MPI_Datatype decimal_mpi_type;
 
 
 static int dist_get_rank() __UNUSED__;

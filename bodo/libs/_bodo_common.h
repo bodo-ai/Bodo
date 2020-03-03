@@ -8,18 +8,9 @@
 #define __UNUSED__
 #endif
 
+#include <Python.h>
 #include <vector>
 #include "_meminfo.h"
-
-// class CTypeEnum(Enum):
-//     Int8 = 0
-//     UInt8 = 1
-//     Int32 = 2
-//     UInt32 = 3
-//     Int64 = 4
-//     UInt64 = 5
-//     Float32 = 6
-//     Float64 = 7
 
 struct Bodo_CTypes {
     enum CTypeEnum {
@@ -40,9 +31,10 @@ struct Bodo_CTypes {
     };
 };
 
-#define BODO_NUMPY_ARRAY_NUM_DTYPES Bodo_CTypes::_numtypes
 #define BYTES_PER_DECIMAL 16
 
+// for numpy arrays, this maps dtype to sizeof(dtype)
+extern std::vector<size_t> numpy_item_size;
 
 /**
  * @brief enum for array types supported by Bodo
@@ -76,7 +68,7 @@ struct array_info {
     NRT_MemInfo* meminfo;
     NRT_MemInfo* meminfo_bitmask;
     int32_t precision;  // for array of decimals
-    int32_t scale;  // for array of decimals
+    int32_t scale;      // for array of decimals
     // TODO: shape/stride for multi-dim arrays
     explicit array_info(bodo_array_type::arr_type_enum _arr_type,
                         Bodo_CTypes::CTypeEnum _dtype, int64_t _length,
@@ -97,18 +89,21 @@ struct array_info {
           precision(_precision),
           scale(_scale) {}
 
-    template<typename T>
-    T& at(size_t idx) { return ((T*)data1)[idx]; }
+    template <typename T>
+    T& at(size_t idx) {
+        return ((T*)data1)[idx];
+    }
 };
 
 struct table_info {
     std::vector<array_info*> columns;
-    // this is set and used by groupby to avoid putting additional info in multi_col_key
-    // (which is only needed when key equality is checked but not for hashing)
+    // this is set and used by groupby to avoid putting additional info in
+    // multi_col_key (which is only needed when key equality is checked but not
+    // for hashing)
     // TODO consider passing 'num_keys' to the constructor
     int64_t num_keys;
     table_info() {}
-    explicit table_info(std::vector<array_info*> &_columns)
+    explicit table_info(std::vector<array_info*>& _columns)
         : columns(_columns) {}
 
     int64_t nrows() const { return columns[0]->length; }
@@ -117,8 +112,41 @@ struct table_info {
     const array_info* operator[](size_t idx) const { return columns[idx]; }
 };
 
-#define DEC_MOD_METHOD(func) \
-    PyObject_SetAttrString(m, #func, PyLong_FromVoidPtr((void*)(&func)))
+/// Initialize numpy_item_size and verify size of dtypes
+void bodo_common_init();
+
+array_info* alloc_array(int64_t length, int64_t n_sub_elems,
+                        bodo_array_type::arr_type_enum arr_type,
+                        Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes);
+
+array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum);
+
+array_info* alloc_nullable_array(int64_t length,
+                                 Bodo_CTypes::CTypeEnum typ_enum,
+                                 int64_t extra_null_bytes);
+
+array_info* alloc_string_array(int64_t length, int64_t n_chars,
+                               int64_t extra_null_bytes);
+
+array_info* copy_array(array_info* arr);
+
+void delete_table(table_info* table);
+
+/**
+ * Free all arrays of a table and delete the table.
+ */
+void delete_table_free_arrays(table_info* table);
+
+/**
+ * Free all memory of an array.
+ */
+void free_array(array_info* arr);
+
+inline void Bodo_PyErr_SetString(PyObject* type, const char* message) {
+    std::cerr << "BodoRuntimeCppError, setting PyErr_SetString to " << message
+              << "\n";
+    PyErr_SetString(type, message);
+}
 
 extern "C" {
 
@@ -129,7 +157,6 @@ struct str_arr_payload {
     uint8_t* null_bitmap;
 };
 
-
 // XXX: equivalent to payload data model in list_str_arr_ext.py
 struct list_str_arr_payload {
     char* data;
@@ -138,7 +165,6 @@ struct list_str_arr_payload {
     uint8_t* null_bitmap;
 };
 
-
 // XXX: equivalent to payload data model in split_impl.py
 struct str_arr_split_view_payload {
     uint32_t* index_offsets;
@@ -146,88 +172,35 @@ struct str_arr_split_view_payload {
     // uint8_t* null_bitmap;
 };
 
-void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in) {
-    // printf("str arr dtor size: %lld\n", in_str_arr->size);
-    // printf("num chars: %d\n", in_str_arr->offsets[in_str_arr->size]);
-    delete[] in_str_arr->offsets;
-    delete[] in_str_arr->data;
-    if (in_str_arr->null_bitmap != nullptr)
-        delete[] in_str_arr->null_bitmap;
-    return;
-}
+void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in);
 
-
-void dtor_list_string_array(list_str_arr_payload* in_list_str_arr, int64_t size, void* in) {
-    delete[] in_list_str_arr->data;
-    delete[] in_list_str_arr->data_offsets;
-    delete[] in_list_str_arr->index_offsets;
-    if (in_list_str_arr->null_bitmap != nullptr)
-        delete[] in_list_str_arr->null_bitmap;
-    return;
-}
-
+void dtor_list_string_array(list_str_arr_payload* in_list_str_arr, int64_t size,
+                            void* in);
 
 void allocate_string_array(uint32_t** offsets, char** data,
                            uint8_t** null_bitmap, int64_t num_strings,
-                           int64_t total_size, int64_t extra_null_bytes) {
-    // std::cout << "allocating string array: " << num_strings << " " <<
-    //                                                 total_size << std::endl;
-    *offsets = new uint32_t[num_strings + 1];
-    *data = new char[total_size];
-    (*offsets)[0] = 0;
-    (*offsets)[num_strings] =
-        (uint32_t)total_size;  // in case total chars is read from here
-    // allocate nulls
-    int64_t n_bytes = ((num_strings + 7) >> 3) + extra_null_bytes;
-    *null_bitmap = new uint8_t[(size_t)n_bytes];
-    // set all bits to 1 indicating non-null as default
-    memset(*null_bitmap, 0xff, n_bytes);
-    // *data = (char*) new std::string("gggg");
-    return;
-}
+                           int64_t total_size, int64_t extra_null_bytes);
 
-
-void allocate_list_string_array(char** data, uint32_t** data_offsets, uint32_t** index_offsets,
-                           uint8_t** null_bitmap, int64_t num_lists, int64_t num_strings,
-                           int64_t num_chars, int64_t extra_null_bytes) {
-    // std::cout << "allocating list string array: " << num_lists << " "<< num_strings << " " <<
-    //                                                 num_chars << std::endl;
-    *data = new char[num_chars];
-
-    *data_offsets = new uint32_t[num_strings + 1];
-    (*data_offsets)[0] = 0;
-    (*data_offsets)[num_strings] =
-        (uint32_t)num_chars;  // in case total chars is read from here
-
-    *index_offsets = new uint32_t[num_lists + 1];
-    (*index_offsets)[0] = 0;
-    (*index_offsets)[num_lists] =
-        (uint32_t)num_strings;  // in case total strings is read from here
-
-    // allocate nulls
-    int64_t n_bytes = ((num_lists + 7) >> 3) + extra_null_bytes;
-    *null_bitmap = new uint8_t[(size_t)n_bytes];
-    // set all bits to 1 indicating non-null as default
-    memset(*null_bitmap, 0xff, n_bytes);
-    return;
-}
-
+void allocate_list_string_array(char** data, uint32_t** data_offsets,
+                                uint32_t** index_offsets, uint8_t** null_bitmap,
+                                int64_t num_lists, int64_t num_strings,
+                                int64_t num_chars, int64_t extra_null_bytes);
 
 // copied from Arrow bit_util.h
 // Bitmask selecting the k-th bit in a byte
 static constexpr uint8_t kBitmask[] = {1, 2, 4, 8, 16, 32, 64, 128};
 
-static inline bool GetBit(const uint8_t* bits, uint64_t i) {
+inline bool GetBit(const uint8_t* bits, uint64_t i) {
     return (bits[i >> 3] >> (i & 0x07)) & 1;
 }
 
-static inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
+inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
     bits[i / 8] ^=
         static_cast<uint8_t>(-static_cast<uint8_t>(bit_is_set) ^ bits[i / 8]) &
         kBitmask[i % 8];
 }
 
-static inline void InitializeBitMask(uint8_t* bits, size_t length, bool val) {
+inline void InitializeBitMask(uint8_t* bits, size_t length, bool val) {
     size_t n_bytes = (length + 7) >> 3;
     if (!val)
         memset(bits, 0, n_bytes);
@@ -235,11 +208,9 @@ static inline void InitializeBitMask(uint8_t* bits, size_t length, bool val) {
         memset(bits, 0xff, n_bytes);
 }
 
-
-bool is_na(const uint8_t* null_bitmap, int64_t i) {
+inline bool is_na(const uint8_t* null_bitmap, int64_t i) {
     return (null_bitmap[i / 8] & kBitmask[i % 8]) == 0;
 }
-
 }
 
 #endif /* BODO_COMMON_H_ */

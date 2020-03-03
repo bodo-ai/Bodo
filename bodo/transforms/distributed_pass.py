@@ -587,11 +587,11 @@ class DistributedPass:
             rhs.args[2] = true_var
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
 
-        if fdef == ("array_isin", "bodo.libs.array_tools") and (
+        if fdef == ("array_isin", "bodo.libs.array") and (
             self._is_1D_arr(rhs.args[2].name) or self._is_1D_Var_arr(rhs.args[2].name)
         ):
             # array_isin requires shuffling data only if values array is distributed
-            f = lambda out_arr, in_arr, vals, p: bodo.libs.array_tools.array_isin(
+            f = lambda out_arr, in_arr, vals, p: bodo.libs.array.array_isin(
                 out_arr, in_arr, vals, True
             )
             return compile_func_single_block(f, rhs.args, assign.target, self)
