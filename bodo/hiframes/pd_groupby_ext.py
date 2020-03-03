@@ -381,7 +381,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 dtype = IntDtype(out_data[0].dtype)
             else:
                 dtype = out_data[0].dtype
-            out_res = SeriesType(dtype, index=index, name_typ=bodo.string_type)
+            out_res = SeriesType(
+                dtype, index=index, name_typ=types.StringLiteral(grp.selection[0])
+            )
         return signature(out_res, *args)
 
     def _get_agg_funcname_and_outtyp(self, grp, args, col, f_val):
@@ -595,7 +597,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 out_data[0].dtype,
                 data=out_data[0],
                 index=index,
-                name_typ=bodo.string_type,
+                name_typ=types.StringLiteral(grp.selection[0]),
             )
         return signature(out_res, *args)
 

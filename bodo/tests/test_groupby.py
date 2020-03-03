@@ -984,6 +984,15 @@ def test_as_index_count():
     check_func(impl2, (df,), sort_output=True)
 
 
+def test_single_col_reset_index(test_df):
+
+    def impl1(df):
+        A = df.groupby("A")["B"].sum().reset_index()
+        return A
+
+    check_func(impl1, (test_df,), sort_output=True)
+
+
 def test_cumsum_large_random_numpy():
     def get_random_array(n, sizlen):
         elist = []

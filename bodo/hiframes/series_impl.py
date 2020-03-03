@@ -24,6 +24,8 @@ from bodo.utils.typing import (
     is_overload_str,
     BodoError,
     is_overload_constant_str,
+    is_literal_type,
+    get_literal_value
 )
 from numba.typing.templates import infer_global, AbstractTemplate
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
@@ -153,6 +155,47 @@ def overload_series_to_numpy(S, dtype=None, copy=False):
         return S.values
 
     return impl
+
+
+@overload_method(SeriesType, "reset_index", inline="always")
+def overload_series_reset_index(S):
+    """ overload for Series.reset_index(). Note that it requires the series'
+        name and index name to be literal values, and so will only currently
+        work in very specific cases where these are known at compile time
+        (e.g. groupby("A")["B"].sum().reset_index()) """
+
+    def get_name_literal(name_typ):
+        """ return literal value or throw errow in non-literal type """
+        if is_literal_type(name_typ):
+            return get_literal_value(name_typ)
+        else:
+            raise BodoError(
+                "Series.reset_index() not supported for non-literal series names"
+            )
+
+    columns = [get_name_literal(S.index.name_typ), get_name_literal(S.name_typ)]
+    col_seq = ", ".join(
+        "'{}'".format(c) if isinstance(c, str) else "{}".format(c) for c in columns
+    )
+
+    func_text = "def _impl(S):\n"
+    func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+    func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+    func_text += "    df_index = bodo.hiframes.pd_index_ext.init_range_index(0, len(S), 1, None)\n"
+    func_text += "    col_var = bodo.utils.typing.add_consts_to_type([{}], {})\n".format(
+        col_seq, col_seq
+    )
+    func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe((index, arr), df_index, col_var)\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+        },
+        loc_vars,
+    )
+    _impl = loc_vars["_impl"]
+    return _impl
 
 
 @overload_method(SeriesType, "isna", inline="always")
