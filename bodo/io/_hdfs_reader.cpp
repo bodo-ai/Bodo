@@ -2,7 +2,7 @@
 #include <Python.h>
 #include <iostream>
 
-#include "../libs/_common_defs.h"
+#include "../libs/_bodo_common.h"
 #include "_bodo_csv_file_reader.h"
 #include "arrow/filesystem/filesystem.h"
 #include "arrow/filesystem/hdfs.h"

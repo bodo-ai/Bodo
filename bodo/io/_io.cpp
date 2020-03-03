@@ -8,6 +8,10 @@
 #include "_csv.h"
 #include "mpi.h"
 
+// decimal_mpi_type declared in _distributed.h as extern has
+// to be defined in each extension module that includes it
+MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
+
 extern "C" {
 
 uint64_t get_file_size(char* file_name);
