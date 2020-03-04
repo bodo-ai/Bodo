@@ -54,15 +54,14 @@ jobs:
       cd buildscripts/bodo-conda-recipe/
       export TRIAL_PERIOD=$(TRIAL_PERIOD)
       export MAX_CORE_COUNT=$(MAX_CORE_COUNT)
-      conda build . -c bodo.ai -c conda-forge -c intel --no-test
+      conda build . -c bodo.ai -c conda-forge -c intel --no-test --output-folder ../../
     displayName: 'Conda build Bodo'
 
   - bash: |
       source activate bodo_build
-      cd $(System.DefaultWorkingDirectory)
       mkdir bodo-inc
       mkdir bodo-inc/windows-64
-      cp $HOME/miniconda3/envs/bodo_build/conda-bld/windows-64/bodo*.tar.bz2 bodo-inc/windows-64/
+      cp ./win-64/bodo*.tar.bz2 bodo-inc/windows-64/
       conda index bodo-inc/
     displayName: 'index bodo-inc'
 
