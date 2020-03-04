@@ -293,7 +293,7 @@ def get_groupby_output_dtype(arr_type, func_name):
                     )
                 )
         else:
-            if func_name not in {"count", "nunique", "min"}:
+            if func_name not in {"count", "nunique", "min", "max"}:
                 raise BodoError(
                     "column type of {} is not supported in groupby built-in function {}".format(
                         in_dtype, func_name

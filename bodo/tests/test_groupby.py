@@ -1260,6 +1260,27 @@ def test_groupby_as_index_max():
     check_func(impl2, (11,))
 
 
+def test_max_datetime():
+    """
+    Test Groupby.max() on datetime column
+    for both dataframe and series returns
+    """
+
+    def impl1(df):
+        df2 = df.groupby("A", as_index=False).max()
+        return df2
+
+    def impl2(df):
+        df2 = df.groupby("A", as_index=False)["B"].max()
+        return df2
+
+    df = pd.DataFrame(
+        {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
+    )
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
+
+
 def test_mean(test_df):
     """
     Test Groupby.mean()
