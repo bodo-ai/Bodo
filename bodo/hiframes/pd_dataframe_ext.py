@@ -203,12 +203,6 @@ class DataFrameAttribute(AttributeTemplate):
     def resolve_shape(self, ary):
         return types.UniTuple(types.intp, 2)
 
-    def resolve_iat(self, ary):
-        return bodo.hiframes.dataframe_indexing.DataFrameIatType(ary)
-
-    def resolve_loc(self, ary):
-        return bodo.hiframes.dataframe_indexing.DataFrameLocType(ary)
-
     @bound_function("df.apply")
     def resolve_apply(self, df, args, kws):
         kws = dict(kws)
