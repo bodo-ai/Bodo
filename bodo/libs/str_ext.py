@@ -128,18 +128,9 @@ def unicode_to_utf8_and_len(typingctx, str_typ=None):
                 out_tup.f1 = uni_str.length
             # non-ascii case
             with orelse:
-                # add null padding character
-                # XXX: assuming kind is same as number of bytes per char
-                nbytes_val = builder.mul(
-                    context.cast(builder, uni_str.kind, types.uint32, types.intp),
-                    builder.add(uni_str.length, lir.Constant(uni_str.length.type, 1)),
-                )
-                utf8_str.meminfo = context.nrt.meminfo_alloc_aligned(
-                    builder, size=nbytes_val, align=32
-                )
 
-                utf8_str.data = context.nrt.meminfo_data(builder, utf8_str.meminfo)
-
+                # call utf8 encoder once to get the allocation size, then call again
+                # to write to output buffer (TODO: avoid two calls?)
                 fnty = lir.FunctionType(
                     lir.IntType(64),
                     [
@@ -152,11 +143,24 @@ def unicode_to_utf8_and_len(typingctx, str_typ=None):
                 fn_encode = builder.module.get_or_insert_function(
                     fnty, name="unicode_to_utf8"
                 )
+                null_ptr = context.get_constant_null(types.voidptr)
                 utf8_len = builder.call(
+                    fn_encode,
+                    [null_ptr, uni_str.data, uni_str.length, uni_str.kind],
+                )
+                out_tup.f1 = utf8_len
+
+                # add null padding character
+                nbytes_val = builder.add(utf8_len, lir.Constant(lir.IntType(64), 1))
+                utf8_str.meminfo = context.nrt.meminfo_alloc_aligned(
+                    builder, size=nbytes_val, align=32
+                )
+
+                utf8_str.data = context.nrt.meminfo_data(builder, utf8_str.meminfo)
+                builder.call(
                     fn_encode,
                     [utf8_str.data, uni_str.data, uni_str.length, uni_str.kind],
                 )
-                out_tup.f1 = utf8_len
 
         out_tup.f0 = utf8_str._getvalue()
 
