@@ -1619,15 +1619,6 @@ class TestDataFrame(unittest.TestCase):
         df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
         np.testing.assert_array_equal(bodo_func(df), test_impl(df))
 
-    def test_loc1(self):
-        def test_impl(df):
-            return df.loc[:, "B"].values
-
-        bodo_func = bodo.jit(test_impl)
-        n = 11
-        df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
-        np.testing.assert_array_equal(bodo_func(df), test_impl(df))
-
     def test_iat1(self):
         def test_impl(n):
             df = pd.DataFrame({"B": np.ones(n), "A": np.arange(n) + n})
