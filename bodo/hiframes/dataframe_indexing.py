@@ -227,15 +227,22 @@ def overload_iloc_getitem(I, idx):
         )
 
     # df.iloc[1:n,0], df.iloc[1,0]
-    if isinstance(idx, types.BaseTuple) and len(idx) == 2 and is_overload_constant_int(idx.types[1]):
+    if (
+        isinstance(idx, types.BaseTuple)
+        and len(idx) == 2
+        and is_overload_constant_int(idx.types[1])
+    ):
         # create Series from column data and reuse Series.iloc[]
         col_ind = get_overload_const_int(idx.types[1])
         col_name = df.columns[col_ind]
+
         def impl_col_ind(I, idx):
             df = I._obj
             index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
             data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
-            return bodo.hiframes.pd_series_ext.init_series(data, index, col_name).iloc[idx[0]]
+            return bodo.hiframes.pd_series_ext.init_series(data, index, col_name).iloc[
+                idx[0]
+            ]
 
         return impl_col_ind
 
@@ -315,27 +322,38 @@ def overload_loc_getitem(I, idx):
         )
 
     # df.loc[idx, "A"]
-    if isinstance(idx, types.BaseTuple) and len(idx) == 2 and is_overload_constant_str(idx.types[1]):
+    if (
+        isinstance(idx, types.BaseTuple)
+        and len(idx) == 2
+        and is_overload_constant_str(idx.types[1])
+    ):
         # TODO: support non-str dataframe names
         # TODO: error checking
         # create Series from column data and reuse Series.loc[]
         col_name = get_overload_const_str(idx.types[1])
         col_ind = df.columns.index(col_name)
+
         def impl_col_name(I, idx):
             df = I._obj
             index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
             data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
-            return bodo.hiframes.pd_series_ext.init_series(data, index, col_name).loc[idx[0]]
+            return bodo.hiframes.pd_series_ext.init_series(data, index, col_name).loc[
+                idx[0]
+            ]
 
         return impl_col_name
 
     # TODO: error-checking test
     raise BodoError(
-        "DataFrame.loc[] getitem (location-based indexing) using {} not supported yet.".format(idx)
+        "DataFrame.loc[] getitem (location-based indexing) using {} not supported yet.".format(
+            idx
+        )
     )  # pragma: no cover
 
 
-# TODO: handle dataframe pass
+##################################  df.iat  ##################################
+
+
 # df.ia[] type
 class DataFrameIatType(types.Type):
     def __init__(self, df_type):
@@ -344,59 +362,92 @@ class DataFrameIatType(types.Type):
         super(DataFrameIatType, self).__init__(name)
 
 
-@infer
-class StaticGetItemDataFrameIat(AbstractTemplate):
-    key = "static_getitem"
-
-    def generic(self, args, kws):
-        df, idx = args
-        # TODO: handle df.at[]
-        if isinstance(df, DataFrameIatType):
-            # df.iat[3,1]
-            if (
-                isinstance(idx, tuple)
-                and len(idx) == 2
-                and isinstance(idx[0], int)
-                and isinstance(idx[1], int)
-            ):
-                col_no = idx[1]
-                data_typ = df.df_type.data[col_no]
-                return signature(data_typ.dtype, *args)
+@register_model(DataFrameIatType)
+class DataFrameIatModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [("obj", fe_type.df_type)]
+        super(DataFrameIatModel, self).__init__(dmm, fe_type, members)
 
 
-@infer_global(operator.getitem)
-class GetItemDataFrameIat(AbstractTemplate):
-    key = operator.getitem
-
-    def generic(self, args, kws):
-        df, idx = args
-        # TODO: handle df.at[]
-        if isinstance(df, DataFrameIatType):
-            # df.iat[n,1]
-            if (
-                isinstance(idx, types.BaseTuple)
-                and len(idx) == 2
-                and isinstance(idx.types[1], types.IntegerLiteral)
-            ):
-                col_no = idx.types[1].literal_value
-                data_typ = df.df_type.data[col_no]
-                return signature(data_typ.dtype, *args)
+make_attribute_wrapper(DataFrameIatType, "obj", "_obj")
 
 
-@infer_global(operator.setitem)
-class SetItemDataFrameIat(AbstractTemplate):
-    key = operator.setitem
+@intrinsic
+def init_dataframe_iat(typingctx, obj=None):
+    def codegen(context, builder, signature, args):
+        (obj_val,) = args
+        iat_type = signature.return_type
 
-    def generic(self, args, kws):
-        df, idx, val = args
-        # TODO: handle df.at[]
-        if isinstance(df, DataFrameIatType):
-            # df.iat[n,1] = 3
-            if (
-                isinstance(idx, types.BaseTuple)
-                and len(idx) == 2
-                and isinstance(idx.types[1], types.IntegerLiteral)
-            ):
-                col_no = idx.types[1].literal_value
-                data_typ = df.df_type.data[col_no]
-                return signature(types.none, data_typ, idx.types[0], val)
+        iat_val = cgutils.create_struct_proxy(iat_type)(context, builder)
+        iat_val.obj = obj_val
+
+        # increase refcount of stored values
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[0], obj_val)
+
+        return iat_val._getvalue()
+
+    return DataFrameIatType(obj)(obj), codegen
+
+
+@overload_attribute(DataFrameType, "iat")
+def overload_series_iat(s):
+    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_iat(s)
+
+
+# df.iat[] getitem
+@overload(operator.getitem)
+def overload_iat_getitem(I, idx):
+    if not isinstance(I, DataFrameIatType):
+        return
+
+    df = I.df_type
+
+    # df.iat[1,0]
+    if (
+        isinstance(idx, types.BaseTuple)
+        and len(idx) == 2
+        and is_overload_constant_int(idx.types[1])
+    ):
+        col_ind = get_overload_const_int(idx.types[1])
+
+        def impl_col_ind(I, idx):
+            df = I._obj
+            data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
+            return data[idx[0]]
+
+        return impl_col_ind
+
+    # TODO: error-checking test
+    raise BodoError(
+        "df.iat[] getitem using {} not supported".format(idx)
+    )  # pragma: no cover
+
+
+# df.iat[] setitem
+@overload(operator.setitem)
+def overload_iat_setitem(I, idx, val):
+    if not isinstance(I, DataFrameIatType):
+        return
+
+    df = I.df_type
+
+    # df.iat[1,0]
+    if (
+        isinstance(idx, types.BaseTuple)
+        and len(idx) == 2
+        and is_overload_constant_int(idx.types[1])
+    ):
+        col_ind = get_overload_const_int(idx.types[1])
+
+        def impl_col_ind(I, idx, val):
+            df = I._obj
+            data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
+            data[idx[0]] = val
+
+        return impl_col_ind
+
+    # TODO: error-checking test
+    raise BodoError(
+        "df.iat[] setitem using {} not supported".format(idx)
+    )  # pragma: no cover

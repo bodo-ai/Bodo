@@ -49,7 +49,6 @@ from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 import bodo.ir
 import bodo.ir.aggregate
-import bodo.ir.filter
 import bodo.ir.join
 import bodo.ir.sort
 from bodo.ir import csv_ext

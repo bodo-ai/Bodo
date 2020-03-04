@@ -194,6 +194,10 @@ class DataFramePass:
                         (),
                         inst.loc,
                     )
+                    # replace "target" of Setitem nodes since inline_closure_call
+                    # assumes an assignment and sets "target" to return value
+                    if isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
+                        inst.target = ir.Var(block.scope, "dummy", inst.loc)
                     block.body = new_body + block.body[i:]
                     callee_blocks, _ = inline_closure_call(
                         self.func_ir,
@@ -299,52 +303,26 @@ class DataFramePass:
             )
             return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
 
-        # inline DataFrame iloc getitem
+        # inline DataFrame.iloc[] getitem
         if isinstance(target_typ, DataFrameILocType):
             impl = bodo.hiframes.dataframe_indexing.overload_iloc_getitem(
                 target_typ, index_typ
             )
             return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
 
-        # inline DataFrame loc getitem
+        # inline DataFrame.loc[] getitem
         if isinstance(target_typ, DataFrameLocType):
             impl = bodo.hiframes.dataframe_indexing.overload_loc_getitem(
                 target_typ, index_typ
             )
             return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
 
-        if self._is_df_iat_var(rhs.value):
-            df_var = guard(get_definition, self.func_ir, rhs.value).value
-            df_typ = self.typemap[df_var.name]
-            # df.iat[3,1]
-            if (
-                rhs.op == "static_getitem"
-                and isinstance(rhs.index, tuple)
-                and len(rhs.index) == 2
-                and isinstance(rhs.index[0], int)
-                and isinstance(rhs.index[1], int)
-            ):
-                col_ind = rhs.index[1]
-                row_ind = rhs.index[0]
-                col_name = df_typ.columns[col_ind]
-                in_arr = self._get_dataframe_data(df_var, col_name, nodes)
-                return self._replace_func(
-                    lambda A: A[row_ind],
-                    [in_arr],
-                    extra_globals={"row_ind": row_ind},
-                    pre_nodes=nodes,
-                )
-
-            # df.iat[n,1]
-            if isinstance(index_typ, types.BaseTuple) and len(index_typ) == 2:
-                ind_def = guard(get_definition, self.func_ir, index_var)
-                col_ind = guard(find_const, self.func_ir, ind_def.items[1])
-                col_name = df_typ.columns[col_ind]
-                in_arr = self._get_dataframe_data(df_var, col_name, nodes)
-                row_ind = ind_def.items[0]
-                return self._replace_func(
-                    lambda A, row_ind: A[row_ind], [in_arr, row_ind], pre_nodes=nodes
-                )
+        # inline DataFrame.iat[] getitem
+        if isinstance(target_typ, DataFrameIatType):
+            impl = bodo.hiframes.dataframe_indexing.overload_iat_getitem(
+                target_typ, index_typ
+            )
+            return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
 
         nodes.append(assign)
         return nodes
@@ -355,24 +333,15 @@ class DataFramePass:
         index_var = get_getsetitem_index_var(inst, self.typemap, nodes)
         index_typ = self.typemap[index_var.name]
 
-        if self._is_df_iat_var(inst.target):
-            df_var = guard(get_definition, self.func_ir, inst.target).value
-            df_typ = self.typemap[df_var.name]
-            val = inst.value
-            # df.iat[n,1] = 3
-            if isinstance(index_typ, types.BaseTuple) and len(index_typ) == 2:
-                ind_def = guard(get_definition, self.func_ir, index_var)
-                col_ind = guard(find_const, self.func_ir, ind_def.items[1])
-                col_name = df_typ.columns[col_ind]
-                in_arr = self._get_dataframe_data(df_var, col_name, nodes)
-                row_ind = ind_def.items[0]
+        # inline DataFrame.iat[] setitem
+        if isinstance(target_typ, DataFrameIatType):
+            impl = bodo.hiframes.dataframe_indexing.overload_iat_setitem(
+                target_typ, index_typ, self.typemap[inst.value.name]
+            )
+            return self._replace_func(
+                impl, [inst.target, index_var, inst.value], pre_nodes=nodes
+            )
 
-                def _impl(A, row_ind, val):  # pragma: no cover
-                    A[row_ind] = val
-
-                return self._replace_func(
-                    _impl, [in_arr, row_ind, val], pre_nodes=nodes
-                )
         return nodes + [inst]
 
     def _run_getattr(self, assign, rhs):
@@ -431,8 +400,13 @@ class DataFramePass:
             )
 
         # replace df.iloc._obj with df
-        if isinstance(rhs_type, DataFrameILocType) and rhs.attr == "_obj":
-            assign.value  = guard(get_definition, self.func_ir, rhs.value).value
+        if (
+            isinstance(
+                rhs_type, (DataFrameILocType, DataFrameLocType, DataFrameIatType)
+            )
+            and rhs.attr == "_obj"
+        ):
+            assign.value = guard(get_definition, self.func_ir, rhs.value).value
             return [assign]
 
         return [assign]
@@ -1433,11 +1407,15 @@ class DataFramePass:
             pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop
         )
         saved_visit_Attribute = pd.core.computation.expr.BaseExprVisitor.visit_Attribute
-        saved__maybe_downcast_constants = pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants
+        saved__maybe_downcast_constants = (
+            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants
+        )
         saved__str__ = pd.core.computation.ops.Term.__str__
         saved_math__str__ = pd.core.computation.ops.MathCall.__str__
         saved_op__str__ = pd.core.computation.ops.Op.__str__
-        saved__disallow_scalar_only_bool_ops = pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops
+        saved__disallow_scalar_only_bool_ops = (
+            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops
+        )
         try:
             pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (
                 _rewrite_membership_op
@@ -1447,12 +1425,17 @@ class DataFramePass:
             )
             pd.core.computation.expr.BaseExprVisitor.visit_Attribute = visit_Attribute
             # _maybe_downcast_constants accesses actual value which is not possible
-            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = lambda self, left, right: (left, right)
+            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = lambda self, left, right: (
+                left,
+                right,
+            )
             pd.core.computation.ops.Term.__str__ = __str__
             pd.core.computation.ops.MathCall.__str__ = math__str__
             pd.core.computation.ops.Op.__str__ = op__str__
             # _disallow_scalar_only_bool_ops accesses actual value which is not possible
-            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = lambda self: None
+            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
+                lambda self: None
+            )
             parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
             parsed_expr_str = str(parsed_expr)
         except pd.core.computation.ops.UndefinedVariableError as e:
@@ -1484,11 +1467,15 @@ class DataFramePass:
             pd.core.computation.expr.BaseExprVisitor.visit_Attribute = (
                 saved_visit_Attribute
             )
-            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = saved__maybe_downcast_constants
+            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = (
+                saved__maybe_downcast_constants
+            )
             pd.core.computation.ops.Term.__str__ = saved__str__
             pd.core.computation.ops.MathCall.__str__ = saved_math__str__
             pd.core.computation.ops.Op.__str__ = saved_op__str__
-            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = saved__disallow_scalar_only_bool_ops
+            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
+                saved__disallow_scalar_only_bool_ops
+            )
 
         used_cols.update(
             {c: clean_name(c) for c in columns if clean_name(c) in parsed_expr.names}
@@ -2440,9 +2427,6 @@ class DataFramePass:
 
     def _is_df_var(self, var):
         return isinstance(self.typemap[var.name], DataFrameType)
-
-    def _is_df_iat_var(self, var):
-        return isinstance(self.typemap[var.name], DataFrameIatType)
 
     def is_bool_arr(self, varname):
         typ = self.typemap[varname]
