@@ -146,7 +146,8 @@ is not supported yet.
 
 * :meth:`pandas.Series.iat`
 * :meth:`pandas.Series.iloc`
-
+  Read support for all indexers except using a `callable` object.
+  Label-based indexing is not supported yet.
 
 Binary operator functions:
 
@@ -322,6 +323,9 @@ Indexing, iteration:
 * :meth:`pandas.DataFrame.head` (including `n` argument)
 * :meth:`pandas.DataFrame.iat`
 * :meth:`pandas.DataFrame.iloc`
+  Read support for all indexers except reading a single row using an
+  interger, slicing across columns, or using a `callable` object.
+  Label-based indexing is not supported yet.
 * :meth:`pandas.DataFrame.tail` (including `n` argument)
 * :meth:`pandas.DataFrame.isin` (`values` can be a dataframe with matching index
   or a list or a set)
