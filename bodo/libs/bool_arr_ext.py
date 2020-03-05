@@ -683,24 +683,6 @@ def overload_str_bool(val):
 ############################### numpy ufuncs #################################
 
 
-def set_cmp_out_for_nan(out_arr, bitmap, handle_na, na_val):  # pragma: no cover
-    pass
-
-
-@overload(set_cmp_out_for_nan)
-def overload_set_cmp_out_for_nan(out_arr, bitmap, handle_na, na_val):
-    if out_arr != types.Array(types.bool_, 1, "C") or is_overload_false(handle_na):
-        return lambda out_arr, bitmap, handle_na, na_val: None
-
-    def impl(out_arr, bitmap, handle_na, na_val):  # pragma: no cover
-        n = len(out_arr)
-        for i in numba.parfor.internal_prange(n):
-            if not bodo.libs.int_arr_ext.get_bit_bitmap_arr(bitmap, i):
-                out_arr[i] = na_val
-
-    return impl
-
-
 ufunc_aliases = {
     "equal": "eq",
     "not_equal": "ne",
