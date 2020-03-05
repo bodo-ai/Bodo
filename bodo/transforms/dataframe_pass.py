@@ -108,62 +108,8 @@ class DataFramePass:
         # be performed in one pass
         topo_order = find_topo_order(blocks)
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
-        dead_labels = []
         while work_list:
             label, block = work_list.pop()
-            if label in dead_labels:
-                continue
-
-            # find dead blocks based on constant condition expression
-            # for example, implementation of pd.merge() has comparison to None
-            # TODO: add dead_branch_prune pass to inline_closure_call
-            branch_or_jump = block.body[-1]
-            if isinstance(branch_or_jump, ir.Branch):
-                branch = branch_or_jump
-                cond_val = guard(_eval_const_var, self.func_ir, branch.cond)
-                if cond_val is not None:
-                    # replace branch with Jump
-                    dead_label = branch.falsebr if cond_val else branch.truebr
-                    jmp_label = branch.truebr if cond_val else branch.falsebr
-                    jmp = ir.Jump(jmp_label, branch.loc)
-                    block.body[-1] = jmp
-                    cfg = compute_cfg_from_blocks(self.func_ir.blocks)
-                    if dead_label in cfg.dead_nodes():
-                        dead_labels.append(dead_label)
-                        # remove definitions in dead block so const variables can
-                        # be found later (pd.merge() example)
-                        # TODO: add this to dead_branch_prune pass
-                        for inst in self.func_ir.blocks[dead_label].body:
-                            if is_assign(inst):
-                                self.func_ir._definitions[inst.target.name].remove(
-                                    inst.value
-                                )
-
-                        del self.func_ir.blocks[dead_label]
-                    else:
-                        # the jmp block overrides some definitions of current
-                        # block so remove dead defs and update _definitions
-                        # example: test_join_left_seq1
-                        jmp_defs = set()
-                        for inst in self.func_ir.blocks[jmp_label].body:
-                            if is_assign(inst):
-                                jmp_defs.add(inst.target.name)
-                        used_vars = set()
-                        new_body = []
-                        for inst in reversed(block.body):
-                            if (
-                                is_assign(inst)
-                                and inst.target.name not in used_vars
-                                and inst.target.name in jmp_defs
-                            ):
-                                self.func_ir._definitions[inst.target.name].remove(
-                                    inst.value
-                                )
-                                continue
-                            used_vars.update(v.name for v in inst.list_vars())
-                            new_body.append(inst)
-                        new_body.reverse()
-                        block.body = new_body
 
             new_body = []
             replaced = False
