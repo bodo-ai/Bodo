@@ -118,7 +118,7 @@ Setup:
 
   To stop Hadoop, run ``sbin/stop-dfs.sh``. 
 
-  If you need to restart Hadoop after, run ``rm -rf /tmp/hadoop-root`` (without removing this direcotry, DataNode will not start), and then repeat above steps from formatting the filesystem. If ``jps`` ouput is still not as expected, run a new docker container.
+  If you need to restart Hadoop after, run ``rm -rf /tmp/hadoop-root`` (without removing this directory, DataNode will not restart), and then repeat above steps from formatting the filesystem. If ``jps`` output is still not as expected, run a new docker container.
 
 Other useful docker commands
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

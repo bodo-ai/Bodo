@@ -1,11 +1,11 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
+#include <boost/filesystem/operations.hpp>
 #include <cmath>
 #include <cstring>
 #include <iostream>
 #include <string>
 #include "mpi.h"
-#include <boost/filesystem/operations.hpp>
 
 #if _MSC_VER >= 1900
 #undef timezone
@@ -14,16 +14,18 @@
 #include "arrow/record_batch.h"
 #include "parquet/arrow/reader.h"
 using parquet::arrow::FileReader;
-#include "_parquet_reader.h"
 #include "../libs/_bodo_common.h"
+#include "_parquet_reader.h"
 
-#include "parquet/arrow/writer.h"
 #include <arrow/api.h>
 #include <arrow/io/api.h>
+#include "parquet/arrow/writer.h"
 
-typedef std::vector<std::shared_ptr<FileReader> > FileReaderVec;
+typedef std::vector<std::shared_ptr<FileReader>> FileReaderVec;
 
-typedef void (*s3_get_fs_t)(std::shared_ptr<::arrow::fs::S3FileSystem>*);
+typedef void (*s3_get_fs_t)(std::shared_ptr<::arrow::fs::S3FileSystem> *);
+typedef void (*hdfs_get_fs_t)(const std::string&,
+                              std::shared_ptr<::arrow::io::HadoopFileSystem> *);
 
 FileReaderVec *get_arrow_readers(char *file_name);
 void del_arrow_readers(FileReaderVec *readers);
@@ -42,17 +44,19 @@ int pq_read_string_parallel(FileReaderVec *readers, int64_t column_idx,
                             uint32_t **out_offsets, uint8_t **out_data,
                             uint8_t **out_nulls, int64_t start, int64_t count);
 int pq_read_list_string(FileReaderVec *readers, int64_t column_idx,
-                        uint32_t **out_offsets, uint32_t **index_offsets, uint8_t **out_data,
-                        uint8_t **out_nulls);
+                        uint32_t **out_offsets, uint32_t **index_offsets,
+                        uint8_t **out_data, uint8_t **out_nulls);
 int pq_read_list_string_parallel(FileReaderVec *readers, int64_t column_idx,
-                                 uint32_t **out_offsets, uint32_t **index_offsets, uint8_t **out_data,
-                                 uint8_t **out_nulls, int64_t start, int64_t count);
+                                 uint32_t **out_offsets,
+                                 uint32_t **index_offsets, uint8_t **out_data,
+                                 uint8_t **out_nulls, int64_t start,
+                                 int64_t count);
 
 void pack_null_bitmap(uint8_t **out_nulls, std::vector<bool> &null_vec,
                       int64_t n_all_vals);
-void pq_write(const char* filename, const table_info* table,
-              const array_info* col_names, const array_info* index,
-              const char *metadata, const char* compression, bool parallel);
+void pq_write(const char *filename, const table_info *table,
+              const array_info *col_names, const array_info *index,
+              const char *metadata, const char *compression, bool parallel);
 
 static PyMethodDef parquet_cpp_methods[] = {
     {"str_list_to_vec", str_list_to_vec, METH_O,  // METH_STATIC
@@ -87,9 +91,8 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
     PyObject_SetAttrString(
         m, "read_list_string_parallel",
         PyLong_FromVoidPtr((void *)(&pq_read_list_string_parallel)));
-    PyObject_SetAttrString(
-        m, "pq_write",
-        PyLong_FromVoidPtr((void *)(&pq_write)));
+    PyObject_SetAttrString(m, "pq_write",
+                           PyLong_FromVoidPtr((void *)(&pq_write)));
 
     return m;
 }
@@ -423,8 +426,8 @@ int pq_read_string_parallel(FileReaderVec *readers, int64_t column_idx,
 }
 
 int pq_read_list_string(FileReaderVec *readers, int64_t column_idx,
-                   uint32_t **out_offsets, uint32_t **index_offsets, uint8_t **out_data,
-                   uint8_t **out_nulls) {
+                        uint32_t **out_offsets, uint32_t **index_offsets,
+                        uint8_t **out_data, uint8_t **out_nulls) {
     if (readers->size() == 0) {
         printf("empty parquet dataset\n");
         return 0;
@@ -439,9 +442,10 @@ int pq_read_list_string(FileReaderVec *readers, int64_t column_idx,
         int32_t last_str_offset = 0;
         int64_t n_all_vals = 0;
         for (size_t i = 0; i < readers->size(); i++) {
-            std::pair<int64_t, int64_t> n_vals = pq_read_list_string_single_file(
-                readers->at(i), column_idx, NULL, NULL, NULL, NULL,
-                &offset_vec, &index_offset_vec, &data_vec, &null_vec);
+            std::pair<int64_t, int64_t> n_vals =
+                pq_read_list_string_single_file(
+                    readers->at(i), column_idx, NULL, NULL, NULL, NULL,
+                    &offset_vec, &index_offset_vec, &data_vec, &null_vec);
             int64_t n_lists = n_vals.first;
             int64_t n_strings = n_vals.second;
             if (n_lists == -1) continue;
@@ -476,16 +480,18 @@ int pq_read_list_string(FileReaderVec *readers, int64_t column_idx,
 
         return n_all_vals;
     } else {
-        std::pair<int64_t, int64_t> n_vals = pq_read_list_string_single_file(readers->at(0), column_idx,
-                                               out_offsets, index_offsets,
-                                               out_data, out_nulls);
+        std::pair<int64_t, int64_t> n_vals = pq_read_list_string_single_file(
+            readers->at(0), column_idx, out_offsets, index_offsets, out_data,
+            out_nulls);
         return n_vals.first;
     }
 }
 
 int pq_read_list_string_parallel(FileReaderVec *readers, int64_t column_idx,
-                                 uint32_t **out_offsets, uint32_t **index_offsets, uint8_t **out_data,
-                                 uint8_t **out_nulls, int64_t start, int64_t count) {
+                                 uint32_t **out_offsets,
+                                 uint32_t **index_offsets, uint8_t **out_data,
+                                 uint8_t **out_nulls, int64_t start,
+                                 int64_t count) {
     if (readers->size() == 0) {
         printf("empty parquet dataset\n");
         return 0;
@@ -517,8 +523,9 @@ int pq_read_list_string_parallel(FileReaderVec *readers, int64_t column_idx,
                 std::min(count - read_rows, file_size - start);
             if (rows_to_read > 0) {
                 int64_t n_strings = pq_read_list_string_parallel_single_file(
-                    readers->at(file_ind), column_idx, NULL, NULL, NULL, NULL, start,
-                    rows_to_read, &offset_vec, &index_offset_vec, &data_vec, &null_vec);
+                    readers->at(file_ind), column_idx, NULL, NULL, NULL, NULL,
+                    start, rows_to_read, &offset_vec, &index_offset_vec,
+                    &data_vec, &null_vec);
 
                 int size = offset_vec.size();
                 for (int64_t i = 1; i <= n_strings + 1; i++)
@@ -557,10 +564,9 @@ int pq_read_list_string_parallel(FileReaderVec *readers, int64_t column_idx,
         pack_null_bitmap(out_nulls, null_vec, n_all_vals);
         return n_all_vals;
     } else {
-        pq_read_list_string_parallel_single_file(readers->at(0), column_idx,
-                                                        out_offsets, index_offsets,
-                                                        out_data,
-                                                        out_nulls, start, count);
+        pq_read_list_string_parallel_single_file(
+            readers->at(0), column_idx, out_offsets, index_offsets, out_data,
+            out_nulls, start, count);
     }
     return 0;
 }
@@ -570,7 +576,6 @@ void bodo_array_to_arrow(
     const std::string &col_name,
     std::vector<std::shared_ptr<arrow::Field>> &schema_vector,
     std::shared_ptr<arrow::ChunkedArray> *out) {
-
     // allocate null bitmap
     std::shared_ptr<arrow::ResizableBuffer> null_bitmap;
     int64_t null_bytes = arrow::BitUtil::BytesForBits(array->length);
@@ -664,7 +669,8 @@ void bodo_array_to_arrow(
                 break;
             default:
                 std::cerr << "Fatal error: invalid dtype found in conversion"
-                             " of numeric Bodo array to Arrow" << std::endl;
+                             " of numeric Bodo array to Arrow"
+                          << std::endl;
                 exit(1);
         }
         schema_vector.push_back(arrow::field(col_name, type));
@@ -713,7 +719,7 @@ void bodo_array_to_arrow(
 
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK_ARROW(res.status(), msg)            \
-    lhs = std::move(res).ValueOrDie();        \
+    lhs = std::move(res).ValueOrDie();
 
 /*
  * Write the Bodo table (the chunk in this process) to a parquet file.
@@ -732,18 +738,25 @@ void pq_write(const char *_path_name, const table_info *table,
     int myrank, num_ranks;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-    std::string path_name;  // original path passed to this function
+    std::string orig_path(_path_name);  // original path passed to this function
+    std::string
+        path_name;  // original path passed to this function (excluding prefix)
     std::string dirname;  // path and directory name to store the parquet files
                           // (only if is_parallel=true)
     std::string fname;    // name of parquet file to write (excludes path)
     std::shared_ptr<::arrow::io::OutputStream> out_stream;
 
     bool is_s3 = false;
+    bool is_hdfs = false;
     if (strncmp(_path_name, "s3://", 5) == 0) {
         is_s3 = true;
         path_name = std::string(_path_name + 5);  // remove s3://
+    } else if (strncmp(_path_name, "hdfs://", 7) == 0) {
+        is_hdfs = true;
+        arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
+            ::arrow::fs::FileSystemFromUri(orig_path, &path_name);
     } else {
-        path_name = std::string(_path_name);
+        path_name = orig_path;
     }
 
     // TODO add compression scheme to file name
@@ -779,12 +792,44 @@ void pq_write(const char *_path_name, const table_info *table,
         if (is_parallel) {
             arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
                 fs->OpenOutputStream(dirname + "/" + fname);
-            CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::OpenOutputStream", out_stream)
+            CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::OpenOutputStream",
+                                   out_stream)
         } else {
-            arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result = 
+            arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
                 fs->OpenOutputStream(fname);
-            CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::OpenOutputStream", out_stream)
+            CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::OpenOutputStream",
+                                   out_stream)
         }
+        Py_DECREF(s3_mod);
+        Py_DECREF(func_obj);
+    } else if (is_hdfs) {
+        PyObject *hdfs_mod = PyImport_ImportModule("bodo.io.hdfs_reader");
+        CHECK(hdfs_mod, "importing bodo.io.hdfs_reader module failed");
+        PyObject *func_obj = PyObject_GetAttrString(hdfs_mod, "hdfs_get_fs");
+        CHECK(func_obj, "getting hdfs_get_fs func_obj failed");
+        hdfs_get_fs_t hdfs_get_fs =
+            (hdfs_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
+
+        std::shared_ptr<::arrow::io::HadoopFileSystem> fs;
+        std::shared_ptr<::arrow::io::HdfsOutputStream> hdfs_out_stream;
+        arrow::Status status;
+        hdfs_get_fs(orig_path, &fs);
+        if (is_parallel) {
+            if (myrank == 0){
+                status = fs->MakeDirectory(dirname);
+                CHECK_ARROW(status, "Hdfs::MakeDirectory");
+            } 
+            MPI_Barrier(MPI_COMM_WORLD);
+            status = fs->OpenWritable(dirname + "/" + fname, false, &hdfs_out_stream);
+            CHECK_ARROW(status, "Hdfs::OpenWritable");
+            out_stream = hdfs_out_stream;
+        } else {
+            status = fs->OpenWritable(fname, false, &hdfs_out_stream);
+            CHECK_ARROW(status, "Hdfs::OpenWritable");
+            out_stream = hdfs_out_stream;
+        }
+        Py_DECREF(hdfs_mod);
+        Py_DECREF(func_obj);
     } else {
         if (is_parallel) {
             // create output directory
@@ -881,8 +926,7 @@ void pq_write(const char *_path_name, const table_info *table,
 
     // open file and write table
     parquet::arrow::WriteTable(
-        *arrow_table, pool, out_stream, row_group_size,
-        writer_properties,
+        *arrow_table, pool, out_stream, row_group_size, writer_properties,
         // store_schema() = true is needed to write the schema metadata to file
         ::parquet::ArrowWriterProperties::Builder().store_schema()->build());
 }

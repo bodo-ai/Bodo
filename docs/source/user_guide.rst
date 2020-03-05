@@ -362,8 +362,9 @@ These environment variables are used for File I/O with S3 credentials:
 Hadoop Distributed File System (HDFS)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Reading :ref:`csv <csv-section>` and :ref:`Parquet <parquet-section>` 
-from Hadoop Distributed File System (HDFS) is supported. The file path should start with ``hdfs://``::
+Reading :ref:`csv <csv-section>`, reading and writing:ref:`Parquet <
+parquet-section>` from and to Hadoop Distributed File System (HDFS) is supported. 
+The file path should start with ``hdfs://``::
 
     @bodo.jit
     def example_hdfs_parquet():
@@ -375,6 +376,17 @@ These environment variables are used for File I/O with HDFS:
   - ``CLASSPATH``: must contain the Hadoop jars. You can set these using::
 
         export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
+
+``$HADOOP_HOME/etc/hadoop/hdfs-site.xml`` provides default behaviors for the HDFS client.
+For example, the following configuration has default block replication set as 3::
+    
+    <configuration>
+        <property>
+            <name>dfs.replication</name>
+            <value>3</value>
+        </property>
+    </configuration>
+
 
 
 Print

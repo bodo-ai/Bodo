@@ -825,7 +825,6 @@ void pq_init_reader(const char* file_name,
                     std::shared_ptr<FileReader>* a_reader) {
     std::string f_name(file_name);
     auto pool = ::arrow::default_memory_pool();
-
     // HDFS if starts with hdfs://
     if (f_name.find("hdfs://") == 0) {
         std::unique_ptr<FileReader> arrow_reader;
