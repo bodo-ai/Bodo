@@ -487,6 +487,21 @@ def get_literal_value(t):
         return t
 
 
+
+def scalar_to_array_type(t):
+    """convert scalar type "t" to array of "t" values
+    """
+    if isinstance(t, (types.UnicodeType, types.StringLiteral)):
+        return bodo.string_array_type
+
+    # Timestamp values are stored as dt64 arrays
+    if t == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+        return types.Array(types.NPDatetime("ns"), 1, "C")
+
+    # TODO: make sure t is a Numpy dtype
+    return types.Array(t, 1, "C")
+
+
 # add constant metadata to list or tuple type, see untyped_pass.py
 def add_consts_to_type(a, *args):
     return a

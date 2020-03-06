@@ -32,6 +32,7 @@ from bodo.utils.typing import (
     is_overload_constant_bool,
     BodoError,
     ConstDictType,
+    scalar_to_array_type,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -1037,6 +1038,8 @@ class SetDfColInfer(AbstractTemplate):
         if isinstance(target, DataFrameType):
             if isinstance(val, SeriesType):
                 val = val.data
+            if not bodo.utils.utils.is_array_typ(val):
+                val = scalar_to_array_type(val)
             if ind in target.columns:
                 # set existing column, with possibly a new array type
                 new_cols = target.columns

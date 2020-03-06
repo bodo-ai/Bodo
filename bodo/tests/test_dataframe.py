@@ -1006,6 +1006,43 @@ def test_pd_notna(na_test_obj):
     check_func(impl, (obj,), is_out_distributed)
 
 
+def test_set_column_scalar_str():
+    """set df column with a string scalar
+    """
+    def test_impl(n):
+        df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
+        df["C"] = "AA"
+        return df
+
+    n = 11
+    check_func(test_impl, (n,))
+
+
+def test_set_column_scalar_num():
+    """set df column with a numeric scalar
+    """
+    def test_impl(n):
+        df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
+        df["C"] = 3
+        return df
+
+    n = 11
+    check_func(test_impl, (n,))
+
+
+def test_set_column_scalar_timestamp():
+    """set df column with a timestamp scalar
+    """
+    def test_impl(n, t):
+        df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
+        df["C"] = t
+        return df
+
+    n = 11
+    t = pd.Timestamp("1994-11-23T10:11:35")
+    check_func(test_impl, (n, t))
+
+
 def test_set_column_cond1():
     # df created inside function case
     def test_impl(n, cond):

@@ -1491,7 +1491,7 @@ class DataFramePass:
         if df_typ.has_parent:
             return self._replace_func(
                 lambda df, cname, arr, inplace: bodo.hiframes.pd_dataframe_ext.set_df_column_with_reflect(
-                    df, cname, bodo.utils.conversion.coerce_to_array(arr), inplace
+                    df, cname, bodo.utils.conversion.coerce_to_array(arr, scalar_to_arr_len=len(df)), inplace
                 ),
                 [df_var, rhs.args[1], new_arr, rhs.args[3]],
                 pre_nodes=nodes,
@@ -1500,7 +1500,7 @@ class DataFramePass:
         if inplace:
             return self._replace_func(
                 lambda df, arr: bodo.hiframes.pd_dataframe_ext.set_dataframe_data(
-                    df, c_ind, bodo.utils.conversion.coerce_to_array(arr)
+                    df, c_ind, bodo.utils.conversion.coerce_to_array(arr, scalar_to_arr_len=len(df))
                 ),
                 [df_var, new_arr],
                 pre_nodes=nodes,
@@ -1529,7 +1529,7 @@ class DataFramePass:
             col_args, col_args
         )
         func_text = "def _init_df({}, df_index):\n".format(data_args)
-        func_text += "  {} = bodo.utils.conversion.coerce_to_array({})\n".format(
+        func_text += "  {} = bodo.utils.conversion.coerce_to_array({}, scalar_to_arr_len=len(df_index))\n".format(
             new_arr_arg, new_arr_arg
         )
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), df_index, {})\n".format(
