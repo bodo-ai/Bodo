@@ -721,12 +721,12 @@ def test_series_explicit_binary_op(numeric_series_val, op, fill):
         return
     # XXX ne operator is buggy in Pandas and doesn't set NaNs in output
     # when both inputs are NaNs
-    if op is "ne" and numeric_series_val.hasnans:
+    if op == "ne" and numeric_series_val.hasnans:
         return
     # Numba returns float32 for truediv but Numpy returns float64
-    if op is "truediv" and numeric_series_val.dtype == np.uint8:
+    if op == "truediv" and numeric_series_val.dtype == np.uint8:
         return
-    if op is "pow" and numeric_series_val.dtype in (
+    if op == "pow" and numeric_series_val.dtype in (
         np.int8,
         np.int16,
         np.int32,
@@ -1711,12 +1711,12 @@ def test_random_series_all():
         random.seed(5)
         eList = []
         for i in range(n):
-            val = random.randint(0,2)
-            if val==0:
+            val = random.randint(0, 2)
+            if val == 0:
                 val_B = True
-            if val==1:
+            if val == 1:
                 val_B = False
-            if val==2:
+            if val == 2:
                 val_B = np.nan
             eList.append(val_B)
         return pd.Series(eList)
@@ -1734,12 +1734,12 @@ def test_random_series_any():
         random.seed(5)
         eList = []
         for i in range(n):
-            val = random.randint(0,2)
-            if val==0:
+            val = random.randint(0, 2)
+            if val == 0:
                 val_B = True
-            if val==1:
+            if val == 1:
                 val_B = False
-            if val==2:
+            if val == 2:
                 val_B = np.nan
             eList.append(val_B)
         return pd.Series(eList)
@@ -1838,6 +1838,7 @@ def test_series_astype_num_constructors():
     """
     test Series.astype() with number constructor functions "float" and "int"
     """
+
     def impl1(A):
         return A.astype(float)
 
