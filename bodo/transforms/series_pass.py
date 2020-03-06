@@ -77,7 +77,7 @@ import bodo.hiframes.series_str_impl  # side effect: install Series overloads
 import bodo.hiframes.series_dt_impl  # side effect: install Series overloads
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
-from bodo.hiframes.series_indexing import SeriesIatType, SeriesIlocType
+from bodo.hiframes.series_indexing import SeriesIatType, SeriesIlocType, SeriesLocType
 from bodo.ir.aggregate import Aggregate
 from bodo.hiframes import series_kernels, split_impl
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
@@ -302,8 +302,16 @@ class SeriesPass:
             )
             return self._replace_func(impl, (target, idx), pre_nodes=nodes)
 
+        # Series.iloc[]
         if isinstance(target_typ, SeriesIlocType):
             impl = bodo.hiframes.series_indexing.overload_series_iloc_getitem(
+                self.typemap[target.name], self.typemap[idx.name]
+            )
+            return self._replace_func(impl, (target, idx), pre_nodes=nodes)
+
+        # Series.loc[]
+        if isinstance(target_typ, SeriesLocType):
+            impl = bodo.hiframes.series_indexing.overload_series_loc_getitem(
                 self.typemap[target.name], self.typemap[idx.name]
             )
             return self._replace_func(impl, (target, idx), pre_nodes=nodes)
@@ -454,8 +462,11 @@ class SeriesPass:
                 impl = bodo.hiframes.pd_index_ext.gen_tdi_field_impl(rhs.attr)
                 return self._replace_func(impl, [rhs.value])
 
-        if isinstance(rhs_type, SeriesIlocType) and rhs.attr == "_obj":
-            assign.value  = guard(get_definition, self.func_ir, rhs.value).value
+        if (
+            isinstance(rhs_type, (SeriesIlocType, SeriesLocType, SeriesIatType))
+            and rhs.attr == "_obj"
+        ):
+            assign.value = guard(get_definition, self.func_ir, rhs.value).value
             return [assign]
 
         return [assign]
@@ -476,7 +487,7 @@ class SeriesPass:
         if is_dt64_series_typ(typ1) and is_dt64_series_typ(typ2):
             func = rhs.fn
 
-            def impl(S1, S2):
+            def impl(S1, S2):  # pragma: no cover
                 index = bodo.hiframes.pd_series_ext.get_series_index(S1)
                 arr1 = bodo.hiframes.pd_series_ext.get_series_data(S1)
                 arr2 = bodo.hiframes.pd_series_ext.get_series_data(S2)
@@ -761,11 +772,6 @@ class SeriesPass:
         if fdef == ("merge_bitmaps", "bodo.libs.int_arr_ext"):
             in_typs = tuple(self.typemap[a.name] for a in rhs.args)
             impl = bodo.libs.int_arr_ext.merge_bitmaps.py_func(*in_typs)
-            return self._replace_func(impl, rhs.args)
-
-        if fdef == ("set_cmp_out_for_nan", "bodo.libs.bool_arr_ext"):
-            in_typs = tuple(self.typemap[a.name] for a in rhs.args)
-            impl = bodo.libs.bool_arr_ext.overload_set_cmp_out_for_nan(*in_typs)
             return self._replace_func(impl, rhs.args)
 
         if fdef == ("get_int_arr_data", "bodo.libs.int_arr_ext"):
@@ -1880,7 +1886,7 @@ class SeriesPass:
 
         if func_name == "rolling_corr":
 
-            def rolling_corr_impl(arr, other, win, center):
+            def rolling_corr_impl(arr, other, win, center):  # pragma: no cover
                 cov = bodo.hiframes.rolling.rolling_cov(arr, other, win, center)
                 a_std = bodo.hiframes.rolling.rolling_fixed(
                     arr, win, center, False, "std"
@@ -2186,29 +2192,6 @@ class SeriesPass:
             impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
         )
 
-    def _is_dt_index_binop(self, rhs):
-        if rhs.op != "binop":
-            return False
-
-        if rhs.fn not in _dt_index_binops:
-            return False
-
-        arg1, arg2 = self.typemap[rhs.lhs.name], self.typemap[rhs.rhs.name]
-        # one of them is dt_index but not both
-        if (is_dt64_series_typ(arg1) or is_dt64_series_typ(arg2)) and not (
-            is_dt64_series_typ(arg1) and is_dt64_series_typ(arg2)
-        ):
-            return True
-
-        if (
-            isinstance(arg1, DatetimeIndexType) or isinstance(arg2, DatetimeIndexType)
-        ) and not (
-            isinstance(arg1, DatetimeIndexType) and isinstance(arg2, DatetimeIndexType)
-        ):
-            return True
-
-        return False
-
     def _handle_string_array_expr(self, assign, rhs):
         # convert str_arr==str into parfor
         if (
@@ -2320,7 +2303,7 @@ class SeriesPass:
         tup_expr = ir.Expr.build_tuple(arrs, arr_tup.loc)
         nodes.append(ir.Assign(tup_expr, arr_tup, arr_tup.loc))
         # TODO: index and name
-        def impl(arr_list):
+        def impl(arr_list):  # pragma: no cover
             arr = bodo.libs.array_kernels.concat(arr_list)
             index = bodo.hiframes.pd_index_ext.init_range_index(0, len(arr), 1, None)
             return bodo.hiframes.pd_series_ext.init_series(arr, index)
@@ -2630,7 +2613,7 @@ def get_stmt_writes(stmt):
             writes.update({v.name for v in stmt.out_key_vars})
     if isinstance(stmt, (bodo.ir.csv_ext.CsvReader, bodo.ir.parquet_ext.ParquetReader)):
         writes = {v.name for v in stmt.out_vars}
-    if isinstance(stmt, (bodo.ir.filter.Filter, bodo.ir.join.Join)):
+    if isinstance(stmt, bodo.ir.join.Join):
         writes = {v.name for v in stmt.df_out_vars.values()}
     if isinstance(stmt, bodo.ir.sort.Sort):
         if not stmt.inplace:

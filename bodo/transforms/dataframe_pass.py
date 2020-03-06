@@ -44,7 +44,7 @@ from bodo.utils.utils import (
     sanitize_varname,
     get_getsetitem_index_var,
 )
-from bodo.hiframes.pd_dataframe_ext import (
+from bodo.hiframes.dataframe_indexing import (
     DataFrameType,
     DataFrameLocType,
     DataFrameILocType,
@@ -108,62 +108,8 @@ class DataFramePass:
         # be performed in one pass
         topo_order = find_topo_order(blocks)
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
-        dead_labels = []
         while work_list:
             label, block = work_list.pop()
-            if label in dead_labels:
-                continue
-
-            # find dead blocks based on constant condition expression
-            # for example, implementation of pd.merge() has comparison to None
-            # TODO: add dead_branch_prune pass to inline_closure_call
-            branch_or_jump = block.body[-1]
-            if isinstance(branch_or_jump, ir.Branch):
-                branch = branch_or_jump
-                cond_val = guard(_eval_const_var, self.func_ir, branch.cond)
-                if cond_val is not None:
-                    # replace branch with Jump
-                    dead_label = branch.falsebr if cond_val else branch.truebr
-                    jmp_label = branch.truebr if cond_val else branch.falsebr
-                    jmp = ir.Jump(jmp_label, branch.loc)
-                    block.body[-1] = jmp
-                    cfg = compute_cfg_from_blocks(self.func_ir.blocks)
-                    if dead_label in cfg.dead_nodes():
-                        dead_labels.append(dead_label)
-                        # remove definitions in dead block so const variables can
-                        # be found later (pd.merge() example)
-                        # TODO: add this to dead_branch_prune pass
-                        for inst in self.func_ir.blocks[dead_label].body:
-                            if is_assign(inst):
-                                self.func_ir._definitions[inst.target.name].remove(
-                                    inst.value
-                                )
-
-                        del self.func_ir.blocks[dead_label]
-                    else:
-                        # the jmp block overrides some definitions of current
-                        # block so remove dead defs and update _definitions
-                        # example: test_join_left_seq1
-                        jmp_defs = set()
-                        for inst in self.func_ir.blocks[jmp_label].body:
-                            if is_assign(inst):
-                                jmp_defs.add(inst.target.name)
-                        used_vars = set()
-                        new_body = []
-                        for inst in reversed(block.body):
-                            if (
-                                is_assign(inst)
-                                and inst.target.name not in used_vars
-                                and inst.target.name in jmp_defs
-                            ):
-                                self.func_ir._definitions[inst.target.name].remove(
-                                    inst.value
-                                )
-                                continue
-                            used_vars.update(v.name for v in inst.list_vars())
-                            new_body.append(inst)
-                        new_body.reverse()
-                        block.body = new_body
 
             new_body = []
             replaced = False
@@ -194,6 +140,10 @@ class DataFramePass:
                         (),
                         inst.loc,
                     )
+                    # replace "target" of Setitem nodes since inline_closure_call
+                    # assumes an assignment and sets "target" to return value
+                    if isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
+                        inst.target = ir.Var(block.scope, "dummy", inst.loc)
                     block.body = new_body + block.body[i:]
                     callee_blocks, _ = inline_closure_call(
                         self.func_ir,
@@ -292,168 +242,36 @@ class DataFramePass:
         target = rhs.value
         target_typ = self.typemap[target.name]
 
-        # A = df['column']
-        if self._is_df_var(target) and is_overload_constant_str(index_typ):
-            impl = bodo.hiframes.pd_dataframe_ext.df_getitem_overload(
+        # inline DataFrame getitem
+        if isinstance(target_typ, DataFrameType):
+            impl = bodo.hiframes.dataframe_indexing.df_getitem_overload(
                 target_typ, index_typ
             )
             return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
 
-        # A = df[['C1', 'C2']]
-        if rhs.op == "static_getitem" and self._is_df_var(rhs.value):
-            # TODO: avoid 'static_getitem' check since not reliable
-            df_var = rhs.value
-            df_typ = self.typemap[df_var.name]
-            index = rhs.index
-
-            # df[['C1', 'C2']]
-            if isinstance(index, list) and all(isinstance(c, str) for c in index):
-                nodes = []
-                in_arrs = [self._get_dataframe_data(df_var, c, nodes) for c in index]
-                out_arrs = [self._gen_arr_copy(A, nodes) for A in in_arrs]
-                df_index = self._get_dataframe_index(df_var, nodes)
-                out_arrs.append(df_index)
-                _init_df = _gen_init_df(index, "index")
-                return nodes + compile_func_single_block(_init_df, out_arrs, lhs, self)
-
-        # df1 = df[df.A > .5]
-        if self.is_bool_arr(index_var.name) and self._is_df_var(rhs.value):
-            df_var = rhs.value
-            return self._gen_df_filter(df_var, index_var, lhs)
-
-        # df.loc[df.A > .5], df.iloc[df.A > .5]
-        # df.iloc[1:n], df.iloc[np.array([1,2,3])], ...
-        if (self._is_df_loc_var(rhs.value) or self._is_df_iloc_var(rhs.value)) and (
-            self.is_bool_arr(index_var.name)
-            or self.is_int_list_or_arr(index_var.name)
-            or isinstance(index_typ, types.SliceType)
-        ):
-            # TODO: check for errors
-            df_var = guard(get_definition, self.func_ir, rhs.value).value
-            return self._gen_df_filter(df_var, index_var, lhs)
-
-        # df.iloc[1:n,0], df.loc[1:n,'A']
-        # df.iloc[3, 0]
-        if (
-            (self._is_df_loc_var(rhs.value) or self._is_df_iloc_var(rhs.value))
-            and isinstance(index_typ, types.BaseTuple)
-            and len(index_typ) == 2
-        ):
-            df_var = guard(get_definition, self.func_ir, rhs.value).value
-            df_typ = self.typemap[df_var.name]
-            ind_def = guard(get_definition, self.func_ir, index_var)
-            # TODO check and report errors
-            assert isinstance(ind_def, ir.Expr) and ind_def.op == "build_tuple"
-
-            if self._is_df_iloc_var(rhs.value):
-                # find_const doesn't support globals so use static value
-                # TODO: fix find_const()
-                if rhs.op == "static_getitem":
-                    col_ind = rhs.index[1]
-                else:
-                    col_ind = guard(find_const, self.func_ir, ind_def.items[1])
-                col_name = df_typ.columns[col_ind]
-            else:  # df.loc
-                col_name = guard(find_const, self.func_ir, ind_def.items[1])
-
-            ind_var = ind_def.items[0]
-            name_var = ir.Var(lhs.scope, mk_unique_var("df_col_name"), lhs.loc)
-            self.typemap[name_var.name] = types.StringLiteral(col_name)
-            nodes.append(ir.Assign(ir.Const(col_name, lhs.loc), name_var, lhs.loc))
-            in_arr = self._get_dataframe_data(df_var, col_name, nodes)
-            df_index_var = self._get_dataframe_index(df_var, nodes)
-
-            # use iloc of Series
-            func = lambda A, ind, df_index, name: bodo.hiframes.pd_series_ext.init_series(
-                A, df_index, name
-            ).iloc[
-                ind
-            ]
-
-            return self._replace_func(
-                func, [in_arr, ind_var, df_index_var, name_var], pre_nodes=nodes
+        # inline DataFrame.iloc[] getitem
+        if isinstance(target_typ, DataFrameILocType):
+            impl = bodo.hiframes.dataframe_indexing.overload_iloc_getitem(
+                target_typ, index_typ
             )
+            return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
 
-        if self._is_df_iat_var(rhs.value):
-            df_var = guard(get_definition, self.func_ir, rhs.value).value
-            df_typ = self.typemap[df_var.name]
-            # df.iat[3,1]
-            if (
-                rhs.op == "static_getitem"
-                and isinstance(rhs.index, tuple)
-                and len(rhs.index) == 2
-                and isinstance(rhs.index[0], int)
-                and isinstance(rhs.index[1], int)
-            ):
-                col_ind = rhs.index[1]
-                row_ind = rhs.index[0]
-                col_name = df_typ.columns[col_ind]
-                in_arr = self._get_dataframe_data(df_var, col_name, nodes)
-                return self._replace_func(
-                    lambda A: A[row_ind],
-                    [in_arr],
-                    extra_globals={"row_ind": row_ind},
-                    pre_nodes=nodes,
-                )
+        # inline DataFrame.loc[] getitem
+        if isinstance(target_typ, DataFrameLocType):
+            impl = bodo.hiframes.dataframe_indexing.overload_loc_getitem(
+                target_typ, index_typ
+            )
+            return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
 
-            # df.iat[n,1]
-            if isinstance(index_typ, types.BaseTuple) and len(index_typ) == 2:
-                ind_def = guard(get_definition, self.func_ir, index_var)
-                col_ind = guard(find_const, self.func_ir, ind_def.items[1])
-                col_name = df_typ.columns[col_ind]
-                in_arr = self._get_dataframe_data(df_var, col_name, nodes)
-                row_ind = ind_def.items[0]
-                return self._replace_func(
-                    lambda A, row_ind: A[row_ind], [in_arr, row_ind], pre_nodes=nodes
-                )
+        # inline DataFrame.iat[] getitem
+        if isinstance(target_typ, DataFrameIatType):
+            impl = bodo.hiframes.dataframe_indexing.overload_iat_getitem(
+                target_typ, index_typ
+            )
+            return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
 
         nodes.append(assign)
         return nodes
-
-    def _gen_df_filter(self, df_var, bool_arr_var, lhs):
-        nodes = []
-        if isinstance(self.typemap[bool_arr_var.name], SeriesType):
-            nodes += compile_func_single_block(
-                lambda s: bodo.hiframes.pd_series_ext.get_series_data(s),
-                (bool_arr_var,),
-                None,
-                self,
-            )
-            bool_arr_var = nodes[-1].target
-        df_typ = self.typemap[df_var.name]
-        in_vars = {}
-        out_vars = {}
-        for col in df_typ.columns:
-            in_arr = self._get_dataframe_data(df_var, col, nodes)
-            out_arr = ir.Var(lhs.scope, mk_unique_var(col), lhs.loc)
-            self.typemap[out_arr.name] = self.typemap[in_arr.name]
-            in_vars[col] = in_arr
-            out_vars[col] = out_arr
-
-        # add index array to filter node
-        in_df_index = self._get_dataframe_index(df_var, nodes)
-        in_df_index_name = self._get_index_name(in_df_index, nodes)
-        in_index_arr = self._gen_array_from_index(df_var, nodes)
-        out_index_arr = ir.Var(lhs.scope, mk_unique_var("index"), lhs.loc)
-        self.typemap[out_index_arr.name] = self.typemap[in_index_arr.name]
-        in_vars["$_bodo_index_"] = in_index_arr
-        out_vars["$_bodo_index_"] = out_index_arr
-
-        nodes.append(
-            bodo.ir.filter.Filter(
-                lhs.name, df_var.name, bool_arr_var, out_vars, in_vars, lhs.loc
-            )
-        )
-
-        df_index_var = self._gen_index_from_array(
-            out_index_arr, in_df_index_name, nodes
-        )
-
-        _init_df = _gen_init_df(df_typ.columns, "index")
-        out_vars = [out_vars[col] for col in df_typ.columns]
-        out_vars.append(df_index_var)
-
-        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
     def _run_setitem(self, inst):
         target_typ = self.typemap[inst.target.name]
@@ -461,24 +279,15 @@ class DataFramePass:
         index_var = get_getsetitem_index_var(inst, self.typemap, nodes)
         index_typ = self.typemap[index_var.name]
 
-        if self._is_df_iat_var(inst.target):
-            df_var = guard(get_definition, self.func_ir, inst.target).value
-            df_typ = self.typemap[df_var.name]
-            val = inst.value
-            # df.iat[n,1] = 3
-            if isinstance(index_typ, types.BaseTuple) and len(index_typ) == 2:
-                ind_def = guard(get_definition, self.func_ir, index_var)
-                col_ind = guard(find_const, self.func_ir, ind_def.items[1])
-                col_name = df_typ.columns[col_ind]
-                in_arr = self._get_dataframe_data(df_var, col_name, nodes)
-                row_ind = ind_def.items[0]
+        # inline DataFrame.iat[] setitem
+        if isinstance(target_typ, DataFrameIatType):
+            impl = bodo.hiframes.dataframe_indexing.overload_iat_setitem(
+                target_typ, index_typ, self.typemap[inst.value.name]
+            )
+            return self._replace_func(
+                impl, [inst.target, index_var, inst.value], pre_nodes=nodes
+            )
 
-                def _impl(A, row_ind, val):  # pragma: no cover
-                    A[row_ind] = val
-
-                return self._replace_func(
-                    _impl, [in_arr, row_ind, val], pre_nodes=nodes
-                )
         return nodes + [inst]
 
     def _run_getattr(self, assign, rhs):
@@ -535,6 +344,16 @@ class DataFramePass:
             return nodes + compile_func_single_block(
                 _init_df, new_data + [index], assign.target, self
             )
+
+        # replace df.iloc._obj with df
+        if (
+            isinstance(
+                rhs_type, (DataFrameILocType, DataFrameLocType, DataFrameIatType)
+            )
+            and rhs.attr == "_obj"
+        ):
+            assign.value = guard(get_definition, self.func_ir, rhs.value).value
+            return [assign]
 
         return [assign]
 
@@ -1534,11 +1353,15 @@ class DataFramePass:
             pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop
         )
         saved_visit_Attribute = pd.core.computation.expr.BaseExprVisitor.visit_Attribute
-        saved__maybe_downcast_constants = pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants
+        saved__maybe_downcast_constants = (
+            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants
+        )
         saved__str__ = pd.core.computation.ops.Term.__str__
         saved_math__str__ = pd.core.computation.ops.MathCall.__str__
         saved_op__str__ = pd.core.computation.ops.Op.__str__
-        saved__disallow_scalar_only_bool_ops = pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops
+        saved__disallow_scalar_only_bool_ops = (
+            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops
+        )
         try:
             pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (
                 _rewrite_membership_op
@@ -1548,12 +1371,17 @@ class DataFramePass:
             )
             pd.core.computation.expr.BaseExprVisitor.visit_Attribute = visit_Attribute
             # _maybe_downcast_constants accesses actual value which is not possible
-            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = lambda self, left, right: (left, right)
+            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = lambda self, left, right: (
+                left,
+                right,
+            )
             pd.core.computation.ops.Term.__str__ = __str__
             pd.core.computation.ops.MathCall.__str__ = math__str__
             pd.core.computation.ops.Op.__str__ = op__str__
             # _disallow_scalar_only_bool_ops accesses actual value which is not possible
-            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = lambda self: None
+            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
+                lambda self: None
+            )
             parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
             parsed_expr_str = str(parsed_expr)
         except pd.core.computation.ops.UndefinedVariableError as e:
@@ -1585,11 +1413,15 @@ class DataFramePass:
             pd.core.computation.expr.BaseExprVisitor.visit_Attribute = (
                 saved_visit_Attribute
             )
-            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = saved__maybe_downcast_constants
+            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = (
+                saved__maybe_downcast_constants
+            )
             pd.core.computation.ops.Term.__str__ = saved__str__
             pd.core.computation.ops.MathCall.__str__ = saved_math__str__
             pd.core.computation.ops.Op.__str__ = saved_op__str__
-            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = saved__disallow_scalar_only_bool_ops
+            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
+                saved__disallow_scalar_only_bool_ops
+            )
 
         used_cols.update(
             {c: clean_name(c) for c in columns if clean_name(c) in parsed_expr.names}
@@ -2541,15 +2373,6 @@ class DataFramePass:
 
     def _is_df_var(self, var):
         return isinstance(self.typemap[var.name], DataFrameType)
-
-    def _is_df_loc_var(self, var):
-        return isinstance(self.typemap[var.name], DataFrameLocType)
-
-    def _is_df_iloc_var(self, var):
-        return isinstance(self.typemap[var.name], DataFrameILocType)
-
-    def _is_df_iat_var(self, var):
-        return isinstance(self.typemap[var.name], DataFrameIatType)
 
     def is_bool_arr(self, varname):
         typ = self.typemap[varname]

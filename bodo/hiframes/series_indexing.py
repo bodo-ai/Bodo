@@ -44,7 +44,7 @@ from bodo.hiframes.pd_timestamp_ext import (
     integer_to_dt64,
 )
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
-from bodo.utils.typing import is_list_like_index_type
+from bodo.utils.typing import is_list_like_index_type, BodoError
 
 
 ##############################  iat  ######################################
@@ -70,7 +70,7 @@ make_attribute_wrapper(SeriesIatType, "obj", "_obj")
 @intrinsic
 def init_series_iat(typingctx, obj=None):
     def codegen(context, builder, signature, args):
-        obj_val, = args
+        (obj_val,) = args
         iat_type = signature.return_type
 
         iat_val = cgutils.create_struct_proxy(iat_type)(context, builder)
@@ -154,7 +154,7 @@ make_attribute_wrapper(SeriesIlocType, "obj", "_obj")
 @intrinsic
 def init_series_iloc(typingctx, obj=None):
     def codegen(context, builder, signature, args):
-        obj_val, = args
+        (obj_val,) = args
         iloc_type = signature.return_type
 
         iloc_val = cgutils.create_struct_proxy(iloc_type)(context, builder)
@@ -189,17 +189,17 @@ def overload_series_iloc_getitem(I, idx):
         # list of ints or array of ints
         # list of bools or array of bools
         # TODO: fix list of int getitem on Arrays in Numba
-        # TODO: fix none Index
         # TODO: other list-like such as Series/Index
         if is_list_like_index_type(idx) and isinstance(
             idx.dtype, (types.Integer, types.Boolean)
         ):
 
             def impl(I, idx):  # pragma: no cover
+                S = I._obj
                 idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
-                arr = bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx_t]
-                index = bodo.hiframes.pd_series_ext.get_series_index(I._obj)[idx_t]
-                name = bodo.hiframes.pd_series_ext.get_series_name(I._obj)
+                arr = bodo.hiframes.pd_series_ext.get_series_data(S)[idx_t]
+                index = bodo.hiframes.pd_series_ext.get_series_index(S)[idx_t]
+                name = bodo.hiframes.pd_series_ext.get_series_name(S)
                 return bodo.hiframes.pd_series_ext.init_series(arr, index, name)
 
             return impl
@@ -207,15 +207,19 @@ def overload_series_iloc_getitem(I, idx):
         # slice
         if isinstance(idx, types.SliceType):
 
-            def impl(I, idx):  # pragma: no cover
-                arr = bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx]
-                index = bodo.hiframes.pd_series_ext.get_series_index(I._obj)[idx]
-                name = bodo.hiframes.pd_series_ext.get_series_name(I._obj)
+            def impl_slice(I, idx):  # pragma: no cover
+                S = I._obj
+                arr = bodo.hiframes.pd_series_ext.get_series_data(S)[idx]
+                index = bodo.hiframes.pd_series_ext.get_series_index(S)[idx]
+                name = bodo.hiframes.pd_series_ext.get_series_name(S)
                 return bodo.hiframes.pd_series_ext.init_series(arr, index, name)
 
-            return impl
+            return impl_slice
 
-        raise ValueError("iloc[] getitem using {} not supported".format(idx))
+        # TODO: error-checking test
+        raise BodoError(
+            "Series.iloc[] getitem using {} not supported".format(idx)
+        )  # pragma: no cover
 
 
 @overload(operator.setitem)
@@ -223,7 +227,10 @@ def overload_series_iloc_setitem(I, idx, val):
     if isinstance(I, SeriesIlocType):
         # check string setitem
         if I.stype.dtype == bodo.string_type:
-            raise ValueError("Series string setitem not supported yet")
+            # TODO: error-checking test
+            raise BodoError(
+                "Series string setitem not supported yet"
+            )  # pragma: no cover
 
         # integer case same as iat
         if isinstance(idx, types.Integer):
@@ -267,7 +274,79 @@ def overload_series_iloc_setitem(I, idx, val):
 
             return impl_arr
 
-        raise ValueError("iloc[] setitem using {} not supported".format(idx))
+        # TODO: error-checking test
+        raise BodoError(
+            "Series.iloc[] setitem using {} not supported".format(idx)
+        )  # pragma: no cover
+
+
+###############################  loc  ######################################
+
+
+class SeriesLocType(types.Type):
+    def __init__(self, stype):
+        self.stype = stype
+        name = "SeriesLocType({})".format(stype)
+        super(SeriesLocType, self).__init__(name)
+
+
+@register_model(SeriesLocType)
+class SeriesLocModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [("obj", fe_type.stype)]
+        super(SeriesLocModel, self).__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(SeriesLocType, "obj", "_obj")
+
+
+@intrinsic
+def init_series_loc(typingctx, obj=None):
+    def codegen(context, builder, signature, args):
+        (obj_val,) = args
+        loc_type = signature.return_type
+
+        loc_val = cgutils.create_struct_proxy(loc_type)(context, builder)
+        loc_val.obj = obj_val
+
+        # increase refcount of stored values
+        if context.enable_nrt:
+            context.nrt.incref(builder, signature.args[0], obj_val)
+
+        return loc_val._getvalue()
+
+    return SeriesLocType(obj)(obj), codegen
+
+
+@overload_attribute(SeriesType, "loc")
+def overload_series_loc(s):
+    return lambda s: bodo.hiframes.series_indexing.init_series_loc(s)
+
+
+@overload(operator.getitem)
+def overload_series_loc_getitem(I, idx):
+    if not isinstance(I, SeriesLocType):
+        return
+
+    # S.loc[cond]
+    if is_list_like_index_type(idx) and idx.dtype == types.bool_:
+
+        def impl(I, idx):  # pragma: no cover
+            S = I._obj
+            idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)[idx_t]
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)[idx_t]
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            return bodo.hiframes.pd_series_ext.init_series(arr, index, name)
+
+        return impl
+
+    # TODO: error-checking test
+    raise BodoError(
+        "Series.loc[] getitem (location-based indexing) using {} not supported yet".format(
+            idx
+        )
+    )  # pragma: no cover
 
 
 ######################## __getitem__/__setitem__ ########################
