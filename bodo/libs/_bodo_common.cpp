@@ -25,6 +25,8 @@ void bodo_common_init() {
     numpy_item_size[Bodo_CTypes::FLOAT32] = sizeof(float);
     numpy_item_size[Bodo_CTypes::FLOAT64] = sizeof(double);
     numpy_item_size[Bodo_CTypes::DECIMAL] = BYTES_PER_DECIMAL;
+    numpy_item_size[Bodo_CTypes::DATE] = sizeof(uint64_t);
+    numpy_item_size[Bodo_CTypes::DATETIME] = sizeof(uint64_t);
 
     PyObject* np_mod = PyImport_ImportModule("numpy");
     PyObject* dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "bool");

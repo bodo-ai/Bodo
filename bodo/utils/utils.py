@@ -55,6 +55,8 @@ class CTypeEnum(Enum):
     # NOTE: 10 is used by STRING in bodo_common.h
     Bool = 11
     Decimal = 12
+    Date = 13
+    Datetime = 14
 
 
 _numba_to_c_type_map = {
@@ -66,7 +68,7 @@ _numba_to_c_type_map = {
     types.uint64: CTypeEnum.UInt64.value,
     types.float32: CTypeEnum.Float32.value,
     types.float64: CTypeEnum.Float64.value,
-    types.NPDatetime("ns"): CTypeEnum.UInt64.value,
+    types.NPDatetime("ns"): CTypeEnum.Datetime.value,
     types.NPTimedelta("ns"): CTypeEnum.UInt64.value,
     types.bool_: CTypeEnum.Bool.value,
     types.int16: CTypeEnum.Int16.value,
@@ -119,7 +121,7 @@ def numba_to_c_type(t):
         return CTypeEnum.Decimal.value
 
     if t == bodo.hiframes.datetime_date_ext.datetime_date_type:
-        return CTypeEnum.Int64.value
+        return CTypeEnum.Date.value
 
     return _numba_to_c_type_map[t]
 

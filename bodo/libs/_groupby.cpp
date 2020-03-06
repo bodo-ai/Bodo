@@ -1410,6 +1410,8 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT64:
+        case Bodo_CTypes::DATE:
+        case Bodo_CTypes::DATETIME:
             switch (ftype) {
                 case Bodo_FTypes::sum:
                     return apply_to_column<uint64_t, Bodo_FTypes::sum>(
@@ -1621,6 +1623,8 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                               std::numeric_limits<int64_t>::max());
                     return;
                 case Bodo_CTypes::UINT64:
+                case Bodo_CTypes::DATE:
+                case Bodo_CTypes::DATETIME:
                     std::fill((uint64_t*)out_col->data1,
                               (uint64_t*)out_col->data1 + out_col->length,
                               std::numeric_limits<uint64_t>::max());
@@ -1689,6 +1693,8 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                               std::numeric_limits<int64_t>::min());
                     return;
                 case Bodo_CTypes::UINT64:
+                case Bodo_CTypes::DATE:
+                case Bodo_CTypes::DATETIME:
                     std::fill((uint64_t*)out_col->data1,
                               (uint64_t*)out_col->data1 + out_col->length,
                               std::numeric_limits<uint64_t>::min());

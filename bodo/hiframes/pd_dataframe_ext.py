@@ -62,6 +62,7 @@ from bodo.utils.conversion import index_to_array
 from bodo.libs.array import array_to_info, arr_info_list_to_table
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.libs.str_arr_ext import string_array_type, str_arr_from_sequence
 from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
 from bodo.hiframes.pd_index_ext import is_pd_index_type
@@ -2409,6 +2410,8 @@ def gen_pandas_parquet_metadata(df):
     for col_name, col_type in zip(df.columns, df.data):
         if isinstance(col_type, types.Array) or col_type == boolean_array:
             pandas_type = numpy_type = col_type.dtype.name
+            if numpy_type.startswith("datetime"):
+                pandas_type = "datetime"
         elif col_type == string_array_type:
             pandas_type = "unicode"
             numpy_type = "object"
@@ -2427,6 +2430,9 @@ def gen_pandas_parquet_metadata(df):
                     )
                 )
             numpy_type = col_type.dtype.name
+        elif col_type == datetime_date_array_type:
+            pandas_type = "datetime"
+            numpy_type = "object"
         else:  # pragma: no cover
             raise BodoError(
                 "to_parquet(): unsupported column type for metadata generation : {} {}".format(

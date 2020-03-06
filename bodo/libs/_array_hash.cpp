@@ -53,7 +53,9 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
     if (array->dtype == Bodo_CTypes::INT64)
         return hash_array_inner<int64_t>(out_hashes, (int64_t*)array->data1,
                                          n_rows, seed);
-    if (array->dtype == Bodo_CTypes::UINT64)
+    if (array->dtype == Bodo_CTypes::UINT64 ||
+        array->dtype == Bodo_CTypes::DATE ||
+        array->dtype == Bodo_CTypes::DATETIME)
         return hash_array_inner<uint64_t>(out_hashes, (uint64_t*)array->data1,
                                           n_rows, seed);
     if (array->dtype == Bodo_CTypes::FLOAT32)
@@ -128,7 +130,9 @@ static void hash_array_combine(uint32_t* out_hashes, array_info* array,
     if (array->dtype == Bodo_CTypes::INT64)
         return hash_array_combine_inner<int64_t>(
             out_hashes, (int64_t*)array->data1, n_rows, seed);
-    if (array->dtype == Bodo_CTypes::UINT64)
+    if (array->dtype == Bodo_CTypes::UINT64 ||
+        array->dtype == Bodo_CTypes::DATE ||
+        array->dtype == Bodo_CTypes::DATETIME)
         return hash_array_combine_inner<uint64_t>(
             out_hashes, (uint64_t*)array->data1, n_rows, seed);
     if (array->dtype == Bodo_CTypes::FLOAT32)

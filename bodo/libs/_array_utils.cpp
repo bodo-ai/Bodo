@@ -345,7 +345,8 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
         int64_t* ptr = (int64_t*)ptrdata;
         return std::to_string(*ptr);
     }
-    if (dtype == Bodo_CTypes::UINT64) {
+    if (dtype == Bodo_CTypes::UINT64 || dtype == Bodo_CTypes::DATE ||
+        dtype == Bodo_CTypes::DATETIME) {
         uint64_t* ptr = (uint64_t*)ptrdata;
         return std::to_string(*ptr);
     }

@@ -15,6 +15,7 @@
 #include "parquet/arrow/reader.h"
 using parquet::arrow::FileReader;
 #include "../libs/_bodo_common.h"
+#include "../libs/_datetime_ext.h"
 #include "_parquet_reader.h"
 
 #include <arrow/api.h>
@@ -571,6 +572,24 @@ int pq_read_list_string_parallel(FileReaderVec *readers, int64_t column_idx,
     return 0;
 }
 
+/// Convert Bodo date (year, month, day) from int64 to Arrow date32
+static int32_t bodo_date64_to_arrow_date32(int64_t date) {
+    int64_t year = date >> 32;
+    int64_t month = (date >> 16) & 0xFFFF;
+    int64_t day = date & 0xFFFF;
+    // NOTE that get_days_from_date returns int64 and we are downcasting to
+    // int32
+    return get_days_from_date(year, month, day);
+}
+
+/// Convert Bodo date array (year, month, day elements) to Arrow date32 array
+static void CastBodoDateToArrowDate32(const int64_t* input, int64_t length,
+                                      int32_t* output) {
+    for (int64_t i = 0; i < length; ++i) {
+        *output++ = bodo_date64_to_arrow_date32(*input++);
+    }
+}
+
 void bodo_array_to_arrow(
     arrow::MemoryPool *pool, const array_info *array,
     const std::string &col_name,
@@ -620,52 +639,63 @@ void bodo_array_to_arrow(
     if (array->arr_type == bodo_array_type::NUMPY ||
         (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
          array->dtype != Bodo_CTypes::_BOOL)) {
-        int64_t num_bytes;
+        int64_t in_num_bytes;
         std::shared_ptr<arrow::DataType> type;
         switch (array->dtype) {
             case Bodo_CTypes::INT8:
-                num_bytes = sizeof(int8_t) * array->length;
+                in_num_bytes = sizeof(int8_t) * array->length;
                 type = arrow::int8();
                 break;
             case Bodo_CTypes::UINT8:
-                num_bytes = sizeof(uint8_t) * array->length;
+                in_num_bytes = sizeof(uint8_t) * array->length;
                 type = arrow::uint8();
                 break;
             case Bodo_CTypes::INT16:
-                num_bytes = sizeof(int16_t) * array->length;
+                in_num_bytes = sizeof(int16_t) * array->length;
                 type = arrow::int16();
                 break;
             case Bodo_CTypes::UINT16:
-                num_bytes = sizeof(uint16_t) * array->length;
+                in_num_bytes = sizeof(uint16_t) * array->length;
                 type = arrow::uint16();
                 break;
             case Bodo_CTypes::INT32:
-                num_bytes = sizeof(int32_t) * array->length;
+                in_num_bytes = sizeof(int32_t) * array->length;
                 type = arrow::int32();
                 break;
             case Bodo_CTypes::UINT32:
-                num_bytes = sizeof(uint32_t) * array->length;
+                in_num_bytes = sizeof(uint32_t) * array->length;
                 type = arrow::uint32();
                 break;
             case Bodo_CTypes::INT64:
-                num_bytes = sizeof(int64_t) * array->length;
+                in_num_bytes = sizeof(int64_t) * array->length;
                 type = arrow::int64();
                 break;
             case Bodo_CTypes::UINT64:
-                num_bytes = sizeof(uint64_t) * array->length;
+                in_num_bytes = sizeof(uint64_t) * array->length;
                 type = arrow::uint64();
                 break;
             case Bodo_CTypes::FLOAT32:
-                num_bytes = sizeof(float) * array->length;
+                in_num_bytes = sizeof(float) * array->length;
                 type = arrow::float32();
                 break;
             case Bodo_CTypes::FLOAT64:
-                num_bytes = sizeof(double) * array->length;
+                in_num_bytes = sizeof(double) * array->length;
                 type = arrow::float64();
                 break;
             case Bodo_CTypes::DECIMAL:
-                num_bytes = BYTES_PER_DECIMAL * array->length;
-                arrow::Decimal128Type::Make(array->precision, array->scale, &type);
+                in_num_bytes = BYTES_PER_DECIMAL * array->length;
+                arrow::Decimal128Type::Make(array->precision, array->scale,
+                                            &type);
+                break;
+            case Bodo_CTypes::DATE:
+                // input from Bodo uses int64 for dates
+                in_num_bytes = sizeof(int64_t) * array->length;
+                type = arrow::date32();
+                break;
+            case Bodo_CTypes::DATETIME:
+                // input from Bodo uses int64 for datetimes (datetime64[ns])
+                in_num_bytes = sizeof(int64_t) * array->length;
+                type = arrow::timestamp(arrow::TimeUnit::NANO);
                 break;
             default:
                 std::cerr << "Fatal error: invalid dtype found in conversion"
@@ -674,11 +704,20 @@ void bodo_array_to_arrow(
                 exit(1);
         }
         schema_vector.push_back(arrow::field(col_name, type));
-        std::shared_ptr<arrow::Buffer> data =
-            std::make_shared<arrow::Buffer>((uint8_t *)array->data1, num_bytes);
-        auto arr_data = arrow::ArrayData::Make(
-            type, array->length, {null_bitmap, data}, null_count_, 0);
+        std::shared_ptr<arrow::Buffer> out_buffer;
+        if (array->dtype == Bodo_CTypes::DATE) {
+            // allocate buffer to store date32 values in Arrow format
+            AllocateBuffer(pool, sizeof(int32_t) * array->length, &out_buffer);
+            CastBodoDateToArrowDate32((int64_t*)array->data1, array->length,
+                                      (int32_t*)out_buffer->mutable_data());
+        } else {
+            // we can use the same input buffer (no need to cast or convert)
+            out_buffer = std::make_shared<arrow::Buffer>(
+                (uint8_t *)array->data1, in_num_bytes);
+        }
 
+        auto arr_data = arrow::ArrayData::Make(
+            type, array->length, {null_bitmap, out_buffer}, null_count_, 0);
         *out =
             std::make_shared<arrow::ChunkedArray>(arrow::MakeArray(arr_data));
     } else if (array->arr_type == bodo_array_type::STRING) {

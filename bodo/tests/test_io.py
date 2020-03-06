@@ -243,6 +243,13 @@ def test_write_parquet():
     def write(df, filename):
         df.to_parquet(filename)
 
+    def pandas_write(df, filename):
+        # pandas/pyarrow throws this error when writing datetime64[ns]:
+        # pyarrow.lib.ArrowInvalid: Casting from timestamp[ns] to timestamp[ms] would lose data: xxx
+        # unless allow_truncated_timestamps=True.
+        # NOTE: it will write with ms precision
+        df.to_parquet(filename, allow_truncated_timestamps=True)
+
     def gen_dataframe(num_elements, write_index):
         df = pd.DataFrame()
         cur_col = 0
@@ -269,6 +276,8 @@ def test_write_parquet():
             "Int64",
             "UInt64",
             "Decimal",
+            "Date",
+            "Datetime",
         ]:
             col_name = "col_" + str(cur_col)
             if dtype == "String":
@@ -298,6 +307,13 @@ def test_write_parquet():
                     * (num_elements // 8)
                 )
                 df[col_name] = pd.Series(data, dtype=object)
+            elif dtype == "Date":
+                dates = pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=num_elements))
+                df[col_name] = dates.dt.date
+            elif dtype == "Datetime":
+                dates = pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=num_elements))
+                df[col_name] = dates
+                df._datetime_col = col_name
             else:
                 df[col_name] = np.arange(num_elements, dtype=dtype)
             cur_col += 1
@@ -340,7 +356,7 @@ def test_write_parquet():
             try:
                 # write the same dataset with pandas and bodo
                 if bodo.get_rank() == 0:
-                    write(df, pandas_pq_filename)
+                    pandas_write(df, pandas_pq_filename)
                 if mode == "sequential":
                     bodo_write = bodo.jit(write)
                     bodo_write(df, bodo_pq_filename)
@@ -354,6 +370,14 @@ def test_write_parquet():
                 # read both files with pandas
                 df1 = pd.read_parquet(pandas_pq_filename)
                 df2 = pd.read_parquet(bodo_pq_filename)
+                # to test equality, we have to coerce datetime columns to ms
+                # because pandas writes to parquet as datetime64[ms]
+                df[df._datetime_col] = df[df._datetime_col].astype("datetime64[ms]")
+                # need to coerce column from bodo-generated parquet to ms (note
+                # that the column has us precision because Arrow cpp converts
+                # nanoseconds to microseconds when writing to parquet version 1)
+                df2[df._datetime_col] = df2[df._datetime_col].astype("datetime64[ms]")
+
                 # read dataframes must be same as original except for dtypes
                 passed = _test_equal_guard(
                     df, df1, sort_output=False, check_names=True, check_dtype=False

@@ -27,6 +27,8 @@ struct Bodo_CTypes {
         STRING = 10,
         _BOOL = 11,
         DECIMAL = 12,
+        DATE = 13,
+        DATETIME = 14,
         _numtypes
     };
 };

@@ -120,6 +120,8 @@ inline std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
     if (dtype == Bodo_CTypes::UINT32) return GetCharVector<uint32_t>(0);
     if (dtype == Bodo_CTypes::INT64) return GetCharVector<int64_t>(-1);
     if (dtype == Bodo_CTypes::UINT64) return GetCharVector<uint64_t>(0);
+    if (dtype == Bodo_CTypes::DATE) return GetCharVector<uint64_t>(0);
+    if (dtype == Bodo_CTypes::DATETIME) return GetCharVector<uint64_t>(0);
     if (dtype == Bodo_CTypes::FLOAT32)
         return GetCharVector<float>(std::nanf("1"));
     if (dtype == Bodo_CTypes::FLOAT64)
@@ -250,7 +252,7 @@ NumericComparison_T(char* ptr1, char* ptr2, bool const& na_position) {
 }
 
 /**
- * The comparison function for innteger/floating point
+ * The comparison function for integer/floating point
  * If na_position = True then the NaN are considered larger than any other.
  *
  * @param ptr1: char* pointer to the first value
@@ -276,7 +278,8 @@ inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
         return NumericComparison_T<uint32_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::INT64)
         return NumericComparison_T<int64_t>(ptr1, ptr2, na_position);
-    if (dtype == Bodo_CTypes::UINT64)
+    if (dtype == Bodo_CTypes::UINT64 || dtype == Bodo_CTypes::DATE ||
+        dtype == Bodo_CTypes::DATETIME)
         return NumericComparison_T<uint64_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::FLOAT32)
         return NumericComparison_T<float>(ptr1, ptr2, na_position);
