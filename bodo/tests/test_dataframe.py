@@ -1030,6 +1030,19 @@ def test_set_column_scalar_num():
     check_func(test_impl, (n,))
 
 
+def test_set_column_scalar_timestamp():
+    """set df column with a timestamp scalar
+    """
+    def test_impl(n, t):
+        df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
+        df["C"] = t
+        return df
+
+    n = 11
+    t = pd.Timestamp("1994-11-23T10:11:35")
+    check_func(test_impl, (n, t))
+
+
 def test_set_column_cond1():
     # df created inside function case
     def test_impl(n, cond):

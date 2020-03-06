@@ -494,6 +494,10 @@ def scalar_to_array_type(t):
     if isinstance(t, (types.UnicodeType, types.StringLiteral)):
         return bodo.string_array_type
 
+    # Timestamp values are stored as dt64 arrays
+    if t == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+        return types.Array(types.NPDatetime("ns"), 1, "C")
+
     # TODO: make sure t is a Numpy dtype
     return types.Array(t, 1, "C")
 

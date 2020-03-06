@@ -103,6 +103,24 @@ def overload_coerce_to_ndarray(
     # TODO: make sure scalar is a Numpy dtype
     if not is_overload_none(scalar_to_arr_len):
 
+        # Timestamp values are stored as dt64 arrays
+        if data == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+            dt64_dtype = np.dtype("datetime64[ns]")
+
+            def impl_ts(
+                data,
+                error_on_nonarray=True,
+                bool_arr_convert=None,
+                scalar_to_arr_len=None,
+            ):  # pragma: no cover
+                A = np.empty(scalar_to_arr_len, dt64_dtype)
+                v = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(data.value)
+                for i in numba.parfor.internal_prange(scalar_to_arr_len):
+                    A[i] = v
+                return A
+
+            return impl_ts
+
         def impl_num(
             data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None
         ):  # pragma: no cover
