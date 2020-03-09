@@ -1264,12 +1264,12 @@ def test_column_list_getitem1():
 
     df = pd.DataFrame(
         {
-            "A": [1.1, 2.3, np.nan, 1.7, 3.6],
-            "A2": [3, 1, 2, 3, 5],
-            "B": [True, False, None, False, True],
-            "C": ["AA", "C", None, "ABC", ""],
+            "A": [1.1, 2.3, np.nan, 1.7, 3.6] * 2,
+            "A2": [3, 1, 2, 3, 5] * 2,
+            "B": [True, False, None, False, True] * 2,
+            "C": ["AA", "C", None, "ABC", ""] * 2,
         },
-        index=[3, 1, 2, 4, 0],
+        index=[3, 1, 2, 4, 0] * 2,
     )
     check_func(test_impl, (df,))
 
