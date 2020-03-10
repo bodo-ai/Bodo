@@ -21,7 +21,7 @@ from numba.ir_utils import (
 import bodo
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import ConstList, ConstSet, BodoError
-from bodo.utils.utils import is_call, is_assign, is_expr
+from bodo.utils.utils import is_call, is_assign, is_expr, get_getsetitem_index_var
 from bodo.utils.transform import update_node_list_definitions, compile_func_single_block
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
@@ -116,11 +116,8 @@ class TypingTransforms:
 
                 # handle potential dataframe set column here
                 # df['col'] = arr
-                if isinstance(inst, ir.StaticSetItem) and isinstance(inst.index, str):
-                    # cfg needed for set df column
-                    cfg = compute_cfg_from_blocks(blocks)
-                    out_nodes = self._run_df_set_column(inst, label, cfg)
-
+                if isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
+                    out_nodes = self._run_setitem(inst, label)
                 elif isinstance(inst, ir.Assign):
                     self.func_ir._definitions[inst.target.name].remove(inst.value)
                     self.rhs_labels[inst.value] = label
@@ -168,6 +165,20 @@ class TypingTransforms:
             self.typemap[rhs.value.name] = types.Set(val_typ.dtype)
 
         return [assign]
+
+    def _run_setitem(self, inst, label):
+        target_typ = self.typemap.get(inst.target.name, None)
+        nodes = []
+        idx = get_getsetitem_index_var(inst, self.typemap, nodes)
+        # idx_typ = self.typemap.get(idx.name, None)
+
+        # df["B"] = A
+        if isinstance(target_typ, DataFrameType):
+            # cfg needed for set df column
+            cfg = compute_cfg_from_blocks(self.func_ir.blocks)
+            return nodes + self._run_df_set_column(inst, label, cfg)
+
+        return nodes + [inst]
 
     def _run_call(self, assign, rhs, label):
         fdef = guard(find_callname, self.func_ir, rhs, self.typemap)

@@ -141,6 +141,19 @@ def df_getitem_overload(df, ind):
     )  # pragma: no cover
 
 
+# DataFrame setitem
+@overload(operator.setitem)
+def df_setitem_overload(df, idx, val):
+    if not isinstance(df, DataFrameType):
+        return
+
+    # df["B"] = A
+    # handle in typing pass since the dataframe type can change
+    # TODO: better error checking here
+    bodo.transforms.typing_pass.typing_transform_required = True
+    raise Exception("DataFrame setitem: transform necessary")
+
+
 ##################################  df.iloc  ##################################
 
 
