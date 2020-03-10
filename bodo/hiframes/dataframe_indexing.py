@@ -31,6 +31,7 @@ from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.utils.typing import (
     BodoWarning,
     BodoError,
+    raise_bodo_error,
     is_overload_none,
     is_overload_constant_bool,
     is_overload_bool,
@@ -62,14 +63,18 @@ def df_getitem_overload(df, ind):
         return
 
     # A = df["column"]
-    if is_overload_constant_str(ind):
-        ind_str = get_overload_const_str(ind)
+    if is_overload_constant_str(ind) or is_overload_constant_int(ind):
+        ind_val = (
+            get_overload_const_str(ind)
+            if is_overload_constant_str(ind)
+            else get_overload_const_int(ind)
+        )
         # df with multi-level column names returns a lower level dataframe
         if isinstance(df.columns[0], tuple):
             new_names = []
             new_data = []
             for i, v in enumerate(df.columns):
-                if v[0] != ind_str:
+                if v[0] != ind_val:
                     continue
                 # output names are str in 2 level case, not tuple
                 # TODO: test more than 2 levels
@@ -86,18 +91,19 @@ def df_getitem_overload(df, ind):
             )
 
         # regular single level case
-        if ind_str not in df.columns:
-            raise BodoError(
-                "dataframe {} does not include column {}".format(df, ind_str)
+        if ind_val not in df.columns:
+            raise_bodo_error(
+                "dataframe {} does not include column {}".format(df, ind_val)
             )
-        col_no = df.columns.index(ind_str)
+        col_no = df.columns.index(ind_val)
         return lambda df, ind: bodo.hiframes.pd_series_ext.init_series(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_no),
             bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df),
-            ind_str,
+            ind_val,
         )
 
     # A = df[["C1", "C2"]]
+    # TODO: support int names
     if is_overload_constant_str_list(ind):
         ind_columns = get_const_str_list(ind)
         # error checking, TODO: test
@@ -136,7 +142,7 @@ def df_getitem_overload(df, ind):
         )
 
     # TODO: error-checking test
-    raise BodoError(
+    raise_bodo_error(
         "df[] getitem using {} not supported".format(ind)
     )  # pragma: no cover
 

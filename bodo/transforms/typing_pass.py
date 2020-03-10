@@ -169,7 +169,7 @@ class TypingTransforms:
     def _run_setitem(self, inst, label):
         target_typ = self.typemap.get(inst.target.name, None)
         nodes = []
-        idx = get_getsetitem_index_var(inst, self.typemap, nodes)
+        # idx = get_getsetitem_index_var(inst, self.typemap, nodes)
         # idx_typ = self.typemap.get(idx.name, None)
 
         # df["B"] = A

@@ -604,11 +604,6 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
         if is_new_col:
             data_arrs.append(arr_arg)
 
-        column_strs = [
-            numba.unicode.make_string_from_constant(context, builder, string_type, c)
-            for c in column_names
-        ]
-
         zero = context.get_constant(types.int8, 0)
         one = context.get_constant(types.int8, 1)
         unboxed_vals = [
@@ -625,9 +620,10 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
         index_val = in_dataframe_payload.index
 
         data_tup = context.make_tuple(builder, types.Tuple(data_typs), data_arrs)
-        column_tup = context.make_tuple(
-            builder, types.UniTuple(string_type, new_n_cols), column_strs
-        )
+
+        # column names
+        columns_type = numba.typeof(column_names)
+        columns_tup = context.get_constant_generic(builder, columns_type, column_names)
         unboxed_tup = context.make_tuple(
             builder, types.UniTuple(types.int8, new_n_cols + 1), unboxed_vals
         )
@@ -639,7 +635,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
             signature.return_type,
             data_tup,
             index_val,
-            column_tup,
+            columns_tup,
             unboxed_tup,
             in_dataframe.parent,
         )
@@ -649,8 +645,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
             context.nrt.incref(builder, index_typ, index_val)
             for var, typ in zip(data_arrs, data_typs):
                 context.nrt.incref(builder, typ, var)
-            for var in column_strs:
-                context.nrt.incref(builder, string_type, var)
+            context.nrt.incref(builder, columns_type, columns_tup)
 
         # TODO: test this
         # test_set_column_cond3 doesn't test it for some reason
@@ -679,9 +674,15 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
         c = numba.pythonapi._BoxContext(context, builder, pyapi, env_manager)
         py_arr = bodo.hiframes.boxing._box_series_data(arr.dtype, arr, arr_arg, c)
 
-        # get column as string obj
-        cstr = context.insert_const_string(builder.module, col_name)
-        cstr_obj = pyapi.string_from_string(cstr)
+        # get column as string or int obj
+        if isinstance(col_name, str):
+            cstr = context.insert_const_string(builder.module, col_name)
+            cstr_obj = pyapi.string_from_string(cstr)
+        else:
+            assert isinstance(col_name, int)
+            cstr_obj = pyapi.long_from_longlong(
+                context.get_constant(types.intp, col_name)
+            )
 
         # set column array
         pyapi.object_setitem(in_dataframe.parent, cstr_obj, py_arr)
