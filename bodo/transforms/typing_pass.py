@@ -176,6 +176,7 @@ class TypingTransforms:
         if isinstance(target_typ, DataFrameType):
             # cfg needed for set df column
             cfg = compute_cfg_from_blocks(self.func_ir.blocks)
+            self.changed = True
             return nodes + self._run_df_set_column(inst, label, cfg)
 
         return nodes + [inst]
@@ -328,6 +329,7 @@ class TypingTransforms:
             nodes.append(ir.Assign(getitem1, lhs, lhs.loc))
             # replace old variable with new one
             self.replace_var_dict[df_var.name] = new_df_var
+            self.changed = True
             return nodes
 
         return [assign]
