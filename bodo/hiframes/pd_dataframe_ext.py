@@ -56,6 +56,8 @@ from bodo.utils.typing import (
     raise_const_error,
     is_overload_constant_tuple,
     get_overload_const_tuple,
+    get_overload_const_int,
+    is_overload_constant_int,
 )
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
@@ -2257,6 +2259,19 @@ def drop_overload(
     errors="raise",
 ):
 
+    # df type can change if inplace is set, so variable replacement in typing pass is
+    # necessary for type stability
+    if bodo.transforms.typing_pass.in_partial_typing and (
+        is_overload_true(inplace) or not is_overload_constant_bool(inplace)
+    ):
+        bodo.transforms.typing_pass.typing_transform_required = True
+        raise Exception("DataFrame.drop(): transform necessary for inplace")
+
+    if not is_overload_constant_bool(inplace):
+        raise BodoError(
+            "DataFrame.drop(): 'inplace' parameter should be a constant bool"
+        )
+
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: inplace of df with parent (reflection)
     def _impl(
@@ -2286,27 +2301,26 @@ class DropDummyTyper(AbstractTemplate):
         df, labels, axis, columns, inplace = args
 
         if labels != types.none:
-            if (
-                not isinstance(axis, types.IntegerLiteral)
-                or not axis.literal_value == 1
-            ):
-                raise ValueError("only axis=1 supported for df.drop()")
-            if isinstance(labels, types.StringLiteral):
-                drop_cols = (labels.literal_value,)
-            elif hasattr(labels, "consts"):
-                drop_cols = labels.consts
+            # make sure axis=1
+            if not is_overload_constant_int(axis) or get_overload_const_int(axis) != 1:
+                raise BodoError("only axis=1 supported for df.drop()")
+            # get 'labels' column list
+            if is_overload_constant_str(labels):
+                drop_cols = (get_overload_const_str(labels),)
+            elif is_overload_constant_str_list(labels):
+                drop_cols = get_const_str_list(labels)
             else:
-                raise ValueError(
+                raise BodoError(
                     "constant list of columns expected for labels in df.drop()"
                 )
         else:
             assert columns != types.none
-            if isinstance(columns, types.StringLiteral):
-                drop_cols = (columns.literal_value,)
-            elif hasattr(columns, "consts"):
-                drop_cols = columns.consts
+            if is_overload_constant_str(columns):
+                drop_cols = (get_overload_const_str(columns),)
+            elif is_overload_constant_str_list(columns):
+                drop_cols = get_const_str_list(columns)
             else:
-                raise ValueError(
+                raise BodoError(
                     "constant list of columns expected for labels in df.drop()"
                 )
 

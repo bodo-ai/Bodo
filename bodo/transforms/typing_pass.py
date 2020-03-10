@@ -29,6 +29,10 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 # global flag indicating that we are in partial type inference, so that error checking
 # code can raise regular Exceptions that can potentially be handled here
 in_partial_typing = False
+# global flag set by error checking code (e.g. df.drop) indicating that a transformation
+# in the typing pass is required. Necessary since types.unknown may not be assigned to
+# all types by Numba properly, e.g. TestDataFrame::test_df_drop_inplace1.
+typing_transform_required = False
 
 
 @register_pass(mutates_CFG=True, analysis_only=False)
@@ -36,17 +40,21 @@ class BodoTypeInference(PartialTypeInference):
     _name = "bodo_type_inference"
 
     def run_pass(self, state):
-        global in_partial_typing
+        global in_partial_typing, typing_transform_required
         while True:
             try:
                 # set global partial typing flag, see comment above
                 in_partial_typing = True
+                typing_transform_required = False
                 super(BodoTypeInference, self).run_pass(state)
             finally:
                 in_partial_typing = False
 
-            # done if all types are available
-            if types.unknown not in state.typemap.values():
+            # done if all types are available and transform not required
+            if (
+                types.unknown not in state.typemap.values()
+                and not typing_transform_required
+            ):
                 break
             typing_transforms_pass = TypingTransforms(
                 state.func_ir, state.typingctx, state.typemap, state.calltypes,
@@ -140,6 +148,7 @@ class TypingTransforms:
         # replace df.columns with constant StringIndex
         if (
             is_expr(rhs, "getattr")
+            and rhs.value.name in self.typemap
             and isinstance(self.typemap[rhs.value.name], DataFrameType)
             and rhs.attr == "columns"
         ):
@@ -148,8 +157,10 @@ class TypingTransforms:
 
         # replace ConstSet with Set since we don't support 'set' methods yet
         # e.g. s.add()
-        if is_expr(rhs, "getattr") and isinstance(
-            self.typemap[rhs.value.name], ConstSet
+        if (
+            is_expr(rhs, "getattr")
+            and rhs.value.name in self.typemap
+            and isinstance(self.typemap[rhs.value.name], ConstSet)
         ):  # pragma: no cover
             # TODO: test coverage
             val_typ = self.typemap[rhs.value.name]
@@ -166,7 +177,10 @@ class TypingTransforms:
 
         func_name, func_mod = fdef
 
-        if isinstance(func_mod, ir.Var) and isinstance(self.typemap[func_mod.name], DataFrameType):
+        # handle df.method() calls
+        if isinstance(func_mod, ir.Var) and isinstance(
+            self._get_method_obj_type(func_mod, rhs.func), DataFrameType
+        ):
             return self._run_call_dataframe(assign, rhs, func_mod, func_name, label)
 
         # set() with constant list arg
@@ -431,7 +445,9 @@ class TypingTransforms:
         returns None
         """
         # constant list/set type
-        if isinstance(self.typemap[var.name], (ConstList, ConstSet)):
+        if var.name in self.typemap and isinstance(
+            self.typemap[var.name], (ConstList, ConstSet)
+        ):
             return self.typemap[var.name].consts
 
         # constant StringIndex case coming from df.columns
@@ -446,7 +462,9 @@ class TypingTransforms:
                 "str_arr_from_sequence",
                 "bodo.libs.str_arr_ext",
             ):
-                if isinstance(self.typemap[arg_def.args[0].name], ConstList):
+                if arg_def.args[0].name in self.typemap and isinstance(
+                    self.typemap[arg_def.args[0].name], ConstList
+                ):
                     return self.typemap[arg_def.args[0].name].consts
 
     def _get_arg(self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):
@@ -480,3 +498,14 @@ class TypingTransforms:
                 self.func_ir._definitions[inst.target.name] = self.func_ir._definitions[
                     lhs
                 ]
+
+    def _get_method_obj_type(self, obj_var, func_var):
+        """Get obj type for obj.method() calls, e.g. df.drop().
+        Sometimes obj variable is not in typemap at this stage, but the bound function
+        variable is in typemap, so try both.
+        e.g. TestDataFrame::test_df_drop_inplace2
+        """
+        if obj_var.name in self.typemap:
+            return self.typemap[obj_var.name]
+        if func_var.name in self.typemap:
+            return self.typemap[func_var.name].this
