@@ -1869,6 +1869,15 @@ def sort_values_overload(
 ):
     validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position)
 
+    # Handle in typing pass if inplace is set
+    # TODO: avoid transformation since data type doesn't change and we can just update
+    # the dataframe object struct
+    if bodo.transforms.typing_pass.in_partial_typing and (
+        is_overload_true(inplace) or not is_overload_constant_bool(inplace)
+    ):
+        bodo.transforms.typing_pass.typing_transform_required = True
+        raise Exception("DataFrame.sort_values(): transform necessary for inplace")
+
     def _impl(
         df,
         by,

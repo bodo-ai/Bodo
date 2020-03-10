@@ -762,6 +762,10 @@ def overload_series_argsort(S, axis=0, kind="quicksort", order=None):
 def overload_series_sort_values(
     S, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last"
 ):
+
+    if not is_overload_false(inplace):
+        raise BodoError("Series.sort_values(): 'inplace' is not supported yet")
+
     def impl(
         S, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last"
     ):  # pragma: no cover
