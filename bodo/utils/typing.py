@@ -50,6 +50,16 @@ def raise_const_error(msg):
         raise BodoError(msg)
 
 
+def raise_bodo_error(msg):
+    """Raises a regular error during partial typing in case typing transforms can handle
+    the issue. Otherwise, raises BodoError
+    """
+    if bodo.transforms.typing_pass.in_partial_typing:
+        raise Exception(msg)
+    else:  # pragma: no cover
+        raise BodoError(msg)
+
+
 class BodoWarning(Warning):
     """
     Warning class for Bodo-related potential issues such as prevention of

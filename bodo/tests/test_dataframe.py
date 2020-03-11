@@ -1788,6 +1788,20 @@ class TestDataFrame(unittest.TestCase):
         self.assertIn("C", df)
         np.testing.assert_almost_equal(df.C.values, arr)
 
+    def test_set_column_reflect1_2(self):
+        # same as previous test but with integer column names
+        def test_impl(df, arr):
+            df[2] = arr
+            return df[2].sum()
+
+        bodo_func = bodo.jit(test_impl)
+        n = 11
+        arr = np.random.ranf(n)
+        df = pd.DataFrame({1: np.ones(n), 3: np.random.ranf(n)})
+        bodo_func(df, arr)
+        self.assertIn(2, df)
+        np.testing.assert_almost_equal(df[2].values, arr)
+
     def test_set_column_reflect2(self):
         def test_impl(df, arr):
             df["C"] = arr

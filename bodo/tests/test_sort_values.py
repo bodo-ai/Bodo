@@ -784,15 +784,15 @@ def test_sort_values_na_position_no_spec():
         bodo.jit(impl3)(df)
 
 
-def test_inplace_sort_values_df():
+def test_inplace_sort_values_series():
     """
-    Test sort_values(inplace=True): df must be of type dataframe
+    Test sort_values(inplace=True): inplace not supported for Series.sort_values
     """
 
-    def impl1(df):
-        return df.sort_values(by=["A", "B"], inplace=True)
+    def impl1(S):
+        return S.sort_values(inplace=True)
 
     s = pd.Series([1, 8, 4, 10, 3])
 
-    with pytest.raises(BodoError, match="requires dataframe inputs"):
+    with pytest.raises(BodoError, match="'inplace' is not supported yet"):
         bodo.jit(impl1)(s)

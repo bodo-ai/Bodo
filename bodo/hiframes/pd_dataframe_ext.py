@@ -56,6 +56,8 @@ from bodo.utils.typing import (
     raise_const_error,
     is_overload_constant_tuple,
     get_overload_const_tuple,
+    get_overload_const_int,
+    is_overload_constant_int,
 )
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
@@ -602,11 +604,6 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
         if is_new_col:
             data_arrs.append(arr_arg)
 
-        column_strs = [
-            numba.unicode.make_string_from_constant(context, builder, string_type, c)
-            for c in column_names
-        ]
-
         zero = context.get_constant(types.int8, 0)
         one = context.get_constant(types.int8, 1)
         unboxed_vals = [
@@ -623,9 +620,10 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
         index_val = in_dataframe_payload.index
 
         data_tup = context.make_tuple(builder, types.Tuple(data_typs), data_arrs)
-        column_tup = context.make_tuple(
-            builder, types.UniTuple(string_type, new_n_cols), column_strs
-        )
+
+        # column names
+        columns_type = numba.typeof(column_names)
+        columns_tup = context.get_constant_generic(builder, columns_type, column_names)
         unboxed_tup = context.make_tuple(
             builder, types.UniTuple(types.int8, new_n_cols + 1), unboxed_vals
         )
@@ -637,7 +635,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
             signature.return_type,
             data_tup,
             index_val,
-            column_tup,
+            columns_tup,
             unboxed_tup,
             in_dataframe.parent,
         )
@@ -647,8 +645,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
             context.nrt.incref(builder, index_typ, index_val)
             for var, typ in zip(data_arrs, data_typs):
                 context.nrt.incref(builder, typ, var)
-            for var in column_strs:
-                context.nrt.incref(builder, string_type, var)
+            context.nrt.incref(builder, columns_type, columns_tup)
 
         # TODO: test this
         # test_set_column_cond3 doesn't test it for some reason
@@ -677,9 +674,15 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
         c = numba.pythonapi._BoxContext(context, builder, pyapi, env_manager)
         py_arr = bodo.hiframes.boxing._box_series_data(arr.dtype, arr, arr_arg, c)
 
-        # get column as string obj
-        cstr = context.insert_const_string(builder.module, col_name)
-        cstr_obj = pyapi.string_from_string(cstr)
+        # get column as string or int obj
+        if isinstance(col_name, str):
+            cstr = context.insert_const_string(builder.module, col_name)
+            cstr_obj = pyapi.string_from_string(cstr)
+        else:
+            assert isinstance(col_name, int)
+            cstr_obj = pyapi.long_from_longlong(
+                context.get_constant(types.intp, col_name)
+            )
 
         # set column array
         pyapi.object_setitem(in_dataframe.parent, cstr_obj, py_arr)
@@ -1867,6 +1870,15 @@ def sort_values_overload(
 ):
     validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position)
 
+    # Handle in typing pass if inplace is set
+    # TODO: avoid transformation since data type doesn't change and we can just update
+    # the dataframe object struct
+    if bodo.transforms.typing_pass.in_partial_typing and (
+        is_overload_true(inplace) or not is_overload_constant_bool(inplace)
+    ):
+        bodo.transforms.typing_pass.typing_transform_required = True
+        raise Exception("DataFrame.sort_values(): transform necessary for inplace")
+
     def _impl(
         df,
         by,
@@ -2257,6 +2269,19 @@ def drop_overload(
     errors="raise",
 ):
 
+    # df type can change if inplace is set, so variable replacement in typing pass is
+    # necessary for type stability
+    if bodo.transforms.typing_pass.in_partial_typing and (
+        is_overload_true(inplace) or not is_overload_constant_bool(inplace)
+    ):
+        bodo.transforms.typing_pass.typing_transform_required = True
+        raise Exception("DataFrame.drop(): transform necessary for inplace")
+
+    if not is_overload_constant_bool(inplace):  # pragma: no cover
+        raise BodoError(
+            "DataFrame.drop(): 'inplace' parameter should be a constant bool"
+        )
+
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: inplace of df with parent (reflection)
     def _impl(
@@ -2286,27 +2311,27 @@ class DropDummyTyper(AbstractTemplate):
         df, labels, axis, columns, inplace = args
 
         if labels != types.none:
-            if (
-                not isinstance(axis, types.IntegerLiteral)
-                or not axis.literal_value == 1
-            ):
-                raise ValueError("only axis=1 supported for df.drop()")
-            if isinstance(labels, types.StringLiteral):
-                drop_cols = (labels.literal_value,)
-            elif hasattr(labels, "consts"):
-                drop_cols = labels.consts
-            else:
-                raise ValueError(
+            # make sure axis=1
+            if not is_overload_constant_int(axis) or get_overload_const_int(axis) != 1:  # pragma: no cover
+                raise BodoError("only axis=1 supported for df.drop()")
+            # get 'labels' column list
+            if is_overload_constant_str(labels):
+                drop_cols = (get_overload_const_str(labels),)
+            elif is_overload_constant_str_list(labels):  # pragma: no cover
+                drop_cols = get_const_str_list(labels)
+            else:  # pragma: no cover
+                raise BodoError(
                     "constant list of columns expected for labels in df.drop()"
                 )
         else:
             assert columns != types.none
-            if isinstance(columns, types.StringLiteral):
-                drop_cols = (columns.literal_value,)
-            elif hasattr(columns, "consts"):
-                drop_cols = columns.consts
-            else:
-                raise ValueError(
+            # TODO: error checking
+            if is_overload_constant_str(columns):  # pragma: no cover
+                drop_cols = (get_overload_const_str(columns),)
+            elif is_overload_constant_str_list(columns):
+                drop_cols = get_const_str_list(columns)
+            else:  # pragma: no cover
+                raise BodoError(
                     "constant list of columns expected for labels in df.drop()"
                 )
 

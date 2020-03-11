@@ -1491,7 +1491,12 @@ class DataFramePass:
         if df_typ.has_parent:
             return self._replace_func(
                 lambda df, cname, arr, inplace: bodo.hiframes.pd_dataframe_ext.set_df_column_with_reflect(
-                    df, cname, bodo.utils.conversion.coerce_to_array(arr, scalar_to_arr_len=len(df)), inplace
+                    df,
+                    cname,
+                    bodo.utils.conversion.coerce_to_array(
+                        arr, scalar_to_arr_len=len(df)
+                    ),
+                    inplace,
                 ),
                 [df_var, rhs.args[1], new_arr, rhs.args[3]],
                 pre_nodes=nodes,
@@ -1500,7 +1505,11 @@ class DataFramePass:
         if inplace:
             return self._replace_func(
                 lambda df, arr: bodo.hiframes.pd_dataframe_ext.set_dataframe_data(
-                    df, c_ind, bodo.utils.conversion.coerce_to_array(arr, scalar_to_arr_len=len(df))
+                    df,
+                    c_ind,
+                    bodo.utils.conversion.coerce_to_array(
+                        arr, scalar_to_arr_len=len(df)
+                    ),
                 ),
                 [df_var, new_arr],
                 pre_nodes=nodes,
@@ -1516,7 +1525,9 @@ class DataFramePass:
         # if column is being added
         if cname not in df_typ.columns:
             data_args += ", new_arr"
-            col_args += ", '{}'".format(cname)
+            col_args += ", {}".format(
+                "'{}'".format(cname) if isinstance(cname, str) else cname
+            )
             in_arrs.append(new_arr)
             new_arr_arg = "new_arr"
         else:  # updating existing column
