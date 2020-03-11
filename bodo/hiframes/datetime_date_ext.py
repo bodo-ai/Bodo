@@ -44,6 +44,7 @@ from llvmlite import ir as lir
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.datetime_datetime_ext import DatetimeDatetimeType
 import bodo
+from bodo.utils.typing import is_list_like_index_type
 from bodo.libs import hdatetime_ext
 import llvmlite.binding as ll
 
@@ -684,6 +685,65 @@ def dt_date_arr_getitem(A, ind):
 
     if isinstance(ind, types.Integer):
         return lambda A, ind: cast_int_to_datetime_date(A._data[ind])
+
+    # bool arr indexing
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+
+        def impl_bool(A, ind):  # pragma: no cover
+            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
+            old_mask = A._null_bitmap
+            new_data = A._data[ind]
+            n = len(new_data)
+            n_bytes = (n + 7) >> 3
+            new_mask = np.empty(n_bytes, np.uint8)
+            curr_bit = 0
+            for i in numba.parfor.internal_prange(len(ind)):
+                if ind[i]:
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
+                    curr_bit += 1
+            return init_datetime_date_array(new_data, new_mask)
+
+        return impl_bool
+
+    # int arr indexing
+    if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
+
+        def impl(A, ind):  # pragma: no cover
+            ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
+            old_mask = A._null_bitmap
+            new_data = A._data[ind_t]
+            n = len(new_data)
+            n_bytes = (n + 7) >> 3
+            new_mask = np.empty(n_bytes, np.uint8)
+            curr_bit = 0
+            for i in range(len(ind)):
+                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, ind_t[i])
+                bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
+                curr_bit += 1
+            return init_datetime_date_array(new_data, new_mask)
+
+        return impl
+
+    # slice case
+    if isinstance(ind, types.SliceType):
+
+        def impl_slice(A, ind):  # pragma: no cover
+            n = len(A._data)
+            old_mask = A._null_bitmap
+            new_data = np.ascontiguousarray(A._data[ind])
+            slice_idx = numba.unicode._normalize_slice(ind, n)
+            span = numba.unicode._slice_span(slice_idx)
+            n_bytes = (span + 7) >> 3
+            new_mask = np.empty(n_bytes, np.uint8)
+            curr_bit = 0
+            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
+                bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
+                curr_bit += 1
+            return init_datetime_date_array(new_data, new_mask)
+
+        return impl_slice
 
 
 @overload(operator.setitem)
