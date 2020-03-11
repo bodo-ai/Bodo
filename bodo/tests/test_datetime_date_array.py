@@ -53,3 +53,14 @@ def test_getitem_slice(date_arr_value):
     np.testing.assert_array_equal(
         bodo_func(date_arr_value, ind), test_impl(date_arr_value, ind)
     )
+
+def test_getitem_int_arr(date_arr_value):
+    def test_impl(A, ind):
+        return A[ind]
+
+    bodo_func = bodo.jit(test_impl)
+    ind = np.array([2, 3])
+    # TODO: parallel test
+    np.testing.assert_array_equal(
+        bodo_func(date_arr_value, ind), test_impl(date_arr_value, ind)
+    )
