@@ -56,7 +56,7 @@ def raise_bodo_error(msg):
     """
     if bodo.transforms.typing_pass.in_partial_typing:
         raise Exception(msg)
-    else:
+    else:  # pragma: no cover
         raise BodoError(msg)
 
 

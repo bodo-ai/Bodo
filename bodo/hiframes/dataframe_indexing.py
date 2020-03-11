@@ -100,7 +100,7 @@ def df_getitem_overload(df, ind):
             bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_no),
             bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df),
             ind_val,
-        )
+        )  # pragma: no cover
 
     # A = df[["C1", "C2"]]
     # TODO: support int names

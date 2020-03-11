@@ -2277,7 +2277,7 @@ def drop_overload(
         bodo.transforms.typing_pass.typing_transform_required = True
         raise Exception("DataFrame.drop(): transform necessary for inplace")
 
-    if not is_overload_constant_bool(inplace):
+    if not is_overload_constant_bool(inplace):  # pragma: no cover
         raise BodoError(
             "DataFrame.drop(): 'inplace' parameter should be a constant bool"
         )
@@ -2312,24 +2312,25 @@ class DropDummyTyper(AbstractTemplate):
 
         if labels != types.none:
             # make sure axis=1
-            if not is_overload_constant_int(axis) or get_overload_const_int(axis) != 1:
+            if not is_overload_constant_int(axis) or get_overload_const_int(axis) != 1:  # pragma: no cover
                 raise BodoError("only axis=1 supported for df.drop()")
             # get 'labels' column list
             if is_overload_constant_str(labels):
                 drop_cols = (get_overload_const_str(labels),)
-            elif is_overload_constant_str_list(labels):
+            elif is_overload_constant_str_list(labels):  # pragma: no cover
                 drop_cols = get_const_str_list(labels)
-            else:
+            else:  # pragma: no cover
                 raise BodoError(
                     "constant list of columns expected for labels in df.drop()"
                 )
         else:
             assert columns != types.none
-            if is_overload_constant_str(columns):
+            # TODO: error checking
+            if is_overload_constant_str(columns):  # pragma: no cover
                 drop_cols = (get_overload_const_str(columns),)
             elif is_overload_constant_str_list(columns):
                 drop_cols = get_const_str_list(columns)
-            else:
+            else:  # pragma: no cover
                 raise BodoError(
                     "constant list of columns expected for labels in df.drop()"
                 )

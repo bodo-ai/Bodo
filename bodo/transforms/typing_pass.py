@@ -276,7 +276,7 @@ class TypingTransforms:
         if func_name == "drop":
             kws = dict(rhs.kws)
             inplace_var = self._get_arg("drop", rhs.args, kws, 5, "inplace", "")
-            replace_func = lambda: bodo.hiframes.dataframe_impl.drop_inplace
+            replace_func = lambda: bodo.hiframes.dataframe_impl.drop_inplace  # pragma: no cover
             return self._handle_df_inplace_func(
                 assign, lhs, rhs, df_var, inplace_var, replace_func, label
             )
@@ -286,7 +286,7 @@ class TypingTransforms:
             # variable replacement
             kws = dict(rhs.kws)
             inplace_var = self._get_arg("sort_values", rhs.args, kws, 3, "inplace", "")
-            replace_func = lambda: bodo.hiframes.dataframe_impl.sort_values_inplace
+            replace_func = lambda: bodo.hiframes.dataframe_impl.sort_values_inplace  # pragma: no cover
             return self._handle_df_inplace_func(
                 assign, lhs, rhs, df_var, inplace_var, replace_func, label
             )
@@ -403,7 +403,7 @@ class TypingTransforms:
 
         func = lambda df, cname, arr: bodo.hiframes.dataframe_impl.set_df_col(
             df, cname, arr, _inplace
-        )
+        )  # pragma: no cover
         f_block = compile_to_numba_ir(
             func, {"bodo": bodo, "_inplace": inplace}
         ).blocks.popitem()[1]
@@ -480,7 +480,7 @@ class TypingTransforms:
                 ):
                     return self.typemap[arg_def.args[0].name].consts
 
-    def _get_arg(self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):
+    def _get_arg(self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):  # pragma: no cover
         arg = None
         if len(args) > arg_no:
             arg = args[arg_no]
