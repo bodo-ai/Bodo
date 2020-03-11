@@ -481,7 +481,7 @@ def is_literal_type(t):
     return (
         isinstance(t, (types.Literal, types.Omitted))
         or isinstance(t, types.Dispatcher)
-        or (isinstance(t, types.Tuple) and all(is_literal_type(v) for v in t.types))
+        or (isinstance(t, types.BaseTuple) and all(is_literal_type(v) for v in t.types))
     )
 
 
@@ -491,11 +491,10 @@ def get_literal_value(t):
         return t.literal_value
     if isinstance(t, types.Omitted):
         return t.value
-    if isinstance(t, types.Tuple):
+    if isinstance(t, types.BaseTuple):
         return tuple(get_literal_value(v) for v in t.types)
     if isinstance(t, types.Dispatcher):
         return t
-
 
 
 def scalar_to_array_type(t):

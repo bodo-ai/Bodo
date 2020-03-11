@@ -640,35 +640,47 @@ def test_groupby_agg_const_dict():
         return df2
 
     def impl4(df):
-        df2 = df.groupby("A").agg({"D": "nunique", "B": "median", "C": "var"})
+        df2 = df.groupby("A").agg({"B": ["median"]})
         return df2
 
     def impl5(df):
-        df2 = df.groupby("A").agg({"B": ["median", "nunique"]})
+        df2 = df.groupby("A").agg({"D": "nunique", "B": "median", "C": "var"})
         return df2
 
     def impl6(df):
-        df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": ["std", "sum"]})
+        df2 = df.groupby("A").agg({"B": ["median", "nunique"]})
         return df2
 
     def impl7(df):
+        df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": ["std", "sum"]})
+        return df2
+
+    def impl8(df):
+        df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": "std"})
+        return df2
+
+    def impl9(df):
+        df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": ["std"]})
+        return df2
+
+    def impl10(df):
         df2 = df.groupby("A").agg(
             {"B": ["count", "median", "prod"], "C": ["nunique", "sum"]}
         )
         return df2
 
-    def impl8(df):
+    def impl11(df):
         def id1(x):
             return (x >= 2).sum()
 
         df2 = df.groupby("D").agg({"B": "var", "A": id1, "C": "sum"})
         return df2
 
-    def impl9(df):
+    def impl12(df):
         df2 = df.groupby("D").agg({"B": lambda x: x.max() - x.min(), "A": "sum"})
         return df2
 
-    def impl10(df):
+    def impl13(df):
         df2 = df.groupby("A").agg(
             {
                 "D": lambda x: (x == "BB").sum(),
@@ -678,7 +690,7 @@ def test_groupby_agg_const_dict():
         )
         return df2
 
-    def impl11(df):
+    def impl14(df):
         df2 = df.groupby("A").agg({"B": "cumsum", "C": "cumprod"})
         return df2
 
@@ -701,6 +713,9 @@ def test_groupby_agg_const_dict():
     check_func(impl9, (df,), sort_output=True)
     check_func(impl10, (df,), sort_output=True)
     check_func(impl11, (df,), sort_output=True)
+    check_func(impl12, (df,), sort_output=True)
+    check_func(impl13, (df,), sort_output=True)
+    check_func(impl14, (df,), sort_output=True)
 
 
 def g(x):

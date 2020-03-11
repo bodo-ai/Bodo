@@ -458,6 +458,12 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     )
                 )
 
+            # if a list/tuple of functions is applied to any column, have to use
+            # MultiLevel for every column (even if list/tuple length is one)
+            multi_level_names = any(
+                isinstance(f_val, (tuple, list)) for f_val in col_map.values()
+            )
+
             # get output names and output types
             out_columns = []
             out_data = []
@@ -482,7 +488,10 @@ class DataframeGroupByAttribute(AttributeTemplate):
                         grp, args, col_name, f_val
                     )
                     has_cumulative_ops = f_name in {"cumsum", "cumprod"}
-                    out_columns.append(col_name)
+                    if multi_level_names:
+                        out_columns.append((col_name, f_name))
+                    else:
+                        out_columns.append(col_name)
                     _append_out_type(grp, out_data, out_tp)
 
             if has_cumulative_ops:
