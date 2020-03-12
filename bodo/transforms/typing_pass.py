@@ -88,7 +88,8 @@ class TypingTransforms:
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.typemap = typemap
-        self.calltypes = calltypes
+        # calltypes may be None (example in forecast code, hard to reproduce in test)
+        self.calltypes = {} if calltypes is None else calltypes  # pragma: no cover
         # replace inst variables as determined previously during the pass
         # currently use to keep lhs of Arg nodes intact
         self.replace_var_dict = {}
@@ -242,7 +243,8 @@ class TypingTransforms:
 
         # replace ConstSet with Set if there a set op we don't support here
         # e.g. s1 | s2
-        if isinstance(arg1_typ, ConstSet):  # pragma: no cover
+        # target type may be unknown
+        if isinstance(arg1_typ, ConstSet) and isinstance(target_typ, ConstSet):  # pragma: no cover
             # TODO: test coverage
             arg_def = guard(get_definition, self.func_ir, rhs.lhs)
             assert is_call(arg_def) and guard(find_callname, self.func_ir, arg_def) == (
@@ -253,7 +255,7 @@ class TypingTransforms:
             self.typemap.pop(assign.target.name)
             self.typemap[assign.target.name] = types.Set(target_typ.dtype)
 
-        if isinstance(arg2_typ, ConstSet):  # pragma: no cover
+        if isinstance(arg2_typ, ConstSet) and isinstance(target_typ, ConstSet):  # pragma: no cover
             # TODO: test coverage
             arg_def = guard(get_definition, self.func_ir, rhs.rhs)
             assert is_call(arg_def) and guard(find_callname, self.func_ir, arg_def) == (
