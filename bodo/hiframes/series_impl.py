@@ -25,7 +25,7 @@ from bodo.utils.typing import (
     BodoError,
     is_overload_constant_str,
     is_literal_type,
-    get_literal_value
+    get_literal_value,
 )
 from numba.typing.templates import infer_global, AbstractTemplate
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
@@ -188,11 +188,7 @@ def overload_series_reset_index(S):
     func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe((index, arr), df_index, col_var)\n"
     loc_vars = {}
     exec(
-        func_text,
-        {
-            "bodo": bodo,
-        },
-        loc_vars,
+        func_text, {"bodo": bodo,}, loc_vars,
     )
     _impl = loc_vars["_impl"]
     return _impl
@@ -1307,6 +1303,14 @@ _install_explicit_binary_ops()
 
 def create_binary_op_overload(op):
     def overload_series_binary_op(S, other):
+        # sub for dt64 arrays fails in Numba, so we use our own function instead
+        # TODO: fix it in Numba
+        if (
+            S.dtype == types.NPDatetime("ns")
+            and other.dtype == types.NPDatetime("ns")
+            and op == operator.sub
+        ):
+            op = dt64_arr_sub
         if isinstance(S, SeriesType):
 
             def impl(S, other):  # pragma: no cover
@@ -1343,6 +1347,32 @@ def _install_binary_ops():
 
 
 _install_binary_ops()
+
+
+# sub for dt64 arrays since it fails in Numba
+def dt64_arr_sub(arg1, arg2):  # pragma: no cover
+    return arg1 - arg2
+
+
+@overload(dt64_arr_sub)
+def overload_dt64_arr_sub(arg1, arg2):
+    assert arg1 == types.Array(types.NPDatetime("ns"), 1, "C") and arg2 == types.Array(
+        types.NPDatetime("ns"), 1, "C"
+    )
+    td64_dtype = np.dtype("timedelta64[ns]")
+
+    def impl(arg1, arg2):  # pragma: no cover
+        numba.parfor.init_prange()
+        n = len(arg1)
+        S = np.empty(n, td64_dtype)
+        for i in numba.parfor.internal_prange(n):
+            S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arg1[i])
+                - bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arg2[i])
+            )
+        return S
+
+    return impl
 
 
 ####################### binary inplace operators #############################
