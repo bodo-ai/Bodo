@@ -1306,11 +1306,22 @@ def create_binary_op_overload(op):
         # sub for dt64 arrays fails in Numba, so we use our own function instead
         # TODO: fix it in Numba
         if (
-            S.dtype == types.NPDatetime("ns")
+            isinstance(S, SeriesType)
+            and isinstance(other, SeriesType)
+            and S.dtype == types.NPDatetime("ns")
             and other.dtype == types.NPDatetime("ns")
             and op == operator.sub
         ):
-            op = dt64_arr_sub
+            def impl_dt64(S, other):  # pragma: no cover
+                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+                index = bodo.hiframes.pd_series_ext.get_series_index(S)
+                name = bodo.hiframes.pd_series_ext.get_series_name(S)
+                other_arr = bodo.utils.conversion.get_array_if_series_or_index(other)
+                out_arr = dt64_arr_sub(arr, other_arr)
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+            return impl_dt64
+
         if isinstance(S, SeriesType):
 
             def impl(S, other):  # pragma: no cover
