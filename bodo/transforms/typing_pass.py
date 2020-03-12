@@ -217,9 +217,9 @@ class TypingTransforms:
         return [assign]
 
     def _run_binop(self, assign, rhs):
-        arg1_typ = self.typemap[rhs.lhs.name]
-        arg2_typ = self.typemap[rhs.rhs.name]
-        target_typ = self.typemap[assign.target.name]
+        arg1_typ = self.typemap.get(rhs.lhs.name, None)
+        arg2_typ = self.typemap.get(rhs.rhs.name, None)
+        target_typ = self.typemap.get(assign.target.name, None)
 
         # add of constant lists, e.g. ["A"] + ["B"]
         if (
