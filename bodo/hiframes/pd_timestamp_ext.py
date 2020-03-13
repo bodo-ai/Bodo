@@ -750,7 +750,7 @@ types.pandas_timestamp_type = pandas_timestamp_type
 
 
 @register_jitable
-def to_datetime_scalar(a):
+def to_datetime_scalar(a):  # pragma: no cover
     """call pd.to_datetime() with scalar value 'a'
     separate call to avoid adding extra basic blocks to user function for simplicity
     """
@@ -785,7 +785,7 @@ def overload_to_datetime(arg_a):
         return impl_series
 
     # datetime.date() array
-    if arg_a == bodo.hiframes.datetime_date_ext.datetime_date_array_type:
+    if arg_a == bodo.hiframes.datetime_date_ext.datetime_date_array_type:  # pragma: no cover
         dt64_dtype = np.dtype("datetime64[ns]")
         iNaT = pd._libs.tslibs.iNaT
 
