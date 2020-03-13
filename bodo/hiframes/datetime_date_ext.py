@@ -499,6 +499,26 @@ def date_gt(lhs, rhs):
         return impl
 
 
+@overload(min)
+def date_min(lhs, rhs):
+    if lhs == datetime_date_type and rhs == datetime_date_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs < rhs else rhs
+
+        return impl
+
+
+@overload(max)
+def date_max(lhs, rhs):
+    if lhs == datetime_date_type and rhs == datetime_date_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs > rhs else rhs
+
+        return impl
+
+
 ##################### Array of datetime.date objects ##########################
 
 

@@ -20,6 +20,7 @@ import random
 import pytest
 from bodo.utils.typing import BodoError
 
+
 # ------------------------- Test datetime OPs ------------------------- #
 def test_datetime_operations():
     """
@@ -53,6 +54,12 @@ def test_datetime_operations():
     def test_divmod(a, b):
         return divmod(a, b)
 
+    def test_min(a, b):
+        return min(a, b)
+
+    def test_max(a, b):
+        return max(a, b)
+
     def test_abs(a):
         return abs(a)
 
@@ -80,6 +87,10 @@ def test_datetime_operations():
     check_func(test_add, (td, date))
     check_func(test_sub, (date, td))
     check_func(test_sub, (date, date2))
+    check_func(test_min, (date, date2))
+    check_func(test_min, (date2, date))
+    check_func(test_max, (date, date2))
+    check_func(test_max, (date2, date))
 
     # Test datetime
     dt = datetime.datetime(2020, 1, 20, 10, 20, 30, 40)
