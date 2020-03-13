@@ -32,6 +32,92 @@ from decimal import Decimal
 kde_file = os.path.join("bodo", "tests", "data", "kde.parquet")
 
 
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame(
+            {"A": [4, 6, 7, 1, 3]}, index=pd.RangeIndex(start=1, stop=15, step=3)
+        ),
+        pd.DataFrame(
+            {"A": [4, 6, 7, 1, 3]},
+            index=pd.RangeIndex(start=0, stop=5, step=1, name=None),
+        ),
+        pd.DataFrame({"A": [4, 6, 7, 1, 3]}, index=["X", "Y", "Z", "M", "N"]),
+        pd.DataFrame({"A": [4, 6, 7, 1, 3]}, index=[-1, -2, -3, -4, -5]),
+    ],
+)
+@pytest.mark.parametrize("index_name", [None, "HELLO"])
+def test_pq_write_metadata(df, index_name):
+    import pyarrow.parquet as pq
+
+    def impl_index_false(df, path):
+        df.to_parquet(path, index=False)
+
+    def impl_index_none(df, path):
+        df.to_parquet(path, index=None)
+
+    def impl_index_true(df, path):
+        df.to_parquet(path, index=True)
+
+    df.index.name = index_name
+    try:
+        if bodo.libs.distributed_api.get_size() == 1:
+            for func in [impl_index_false, impl_index_none, impl_index_true]:
+                func(df, "pandas_metadatatest.pq")
+                pandas_table = pq.read_table("pandas_metadatatest.pq")
+
+                bodo_func = bodo.jit(func)
+                bodo_func(df, "bodo_metadatatest.pq")
+                bodo_table = pq.read_table("bodo_metadatatest.pq")
+
+                assert bodo_table.schema.pandas_metadata.get(
+                    "index_columns"
+                ) == pandas_table.schema.pandas_metadata.get("index_columns")
+
+                # Also make sure result of reading parquet file is same as that of pandas
+                pd.testing.assert_frame_equal(
+                    pd.read_parquet("bodo_metadatatest.pq"),
+                    pd.read_parquet("pandas_metadatatest.pq"),
+                )
+
+        elif bodo.libs.distributed_api.get_size() > 1:
+            for mode in ["1d-distributed", "1d-distributed-varlength"]:
+                for func in [impl_index_false, impl_index_none, impl_index_true]:
+                    if mode == "1d-distributed":
+                        bodo_func = bodo.jit(func, all_args_distributed=True)
+                    else:
+                        bodo_func = bodo.jit(func, all_args_distributed_varlength=True)
+
+                    bodo_func(_get_dist_arg(df, False), "bodo_metadatatest.pq")
+                    bodo_table = pq.read_table("bodo_metadatatest.pq")
+                    if func is impl_index_false:
+                        assert [] == bodo_table.schema.pandas_metadata.get(
+                            "index_columns"
+                        )
+                    else:
+                        if df.index.name is None:
+                            assert (
+                                "__index_level_0__"
+                                in bodo_table.schema.pandas_metadata.get(
+                                    "index_columns"
+                                )
+                            )
+                        else:
+                            assert (
+                                df.index.name
+                                in bodo_table.schema.pandas_metadata.get(
+                                    "index_columns"
+                                )
+                            )
+                    bodo.barrier()
+    finally:
+        if bodo.libs.distributed_api.get_size() == 1:
+            os.remove("bodo_metadatatest.pq")
+            os.remove("pandas_metadatatest.pq")
+        else:
+            shutil.rmtree("bodo_metadatatest.pq", ignore_errors=True)
+
+
 def test_pq_pandas_date(datapath):
     fname = datapath("pandas_dt.pq")
 
@@ -171,6 +257,7 @@ def test_pq_decimal(datapath):
 def test_pq_date32(datapath):
     """Test reading date32 values into datetime.date array
     """
+
     def test_impl(fname):
         return pd.read_parquet(fname)
 
@@ -308,10 +395,18 @@ def test_write_parquet():
                 )
                 df[col_name] = pd.Series(data, dtype=object)
             elif dtype == "Date":
-                dates = pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=num_elements))
+                dates = pd.Series(
+                    pd.date_range(
+                        start="1998-04-24", end="1998-04-29", periods=num_elements
+                    )
+                )
                 df[col_name] = dates.dt.date
             elif dtype == "Datetime":
-                dates = pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=num_elements))
+                dates = pd.Series(
+                    pd.date_range(
+                        start="1998-04-24", end="1998-04-29", periods=num_elements
+                    )
+                )
                 df[col_name] = dates
                 df._datetime_col = col_name
             else:
@@ -342,7 +437,6 @@ def test_write_parquet():
 
     for write_index in [None, "string", "numeric"]:
         for mode in ["sequential", "1d-distributed", "1d-distributed-varlength"]:
-
             df = gen_dataframe(NUM_ELEMS, write_index)
 
             pandas_pq_filename = "test_io___pandas.pq"
@@ -370,6 +464,7 @@ def test_write_parquet():
                 # read both files with pandas
                 df1 = pd.read_parquet(pandas_pq_filename)
                 df2 = pd.read_parquet(bodo_pq_filename)
+
                 # to test equality, we have to coerce datetime columns to ms
                 # because pandas writes to parquet as datetime64[ms]
                 df[df._datetime_col] = df[df._datetime_col].astype("datetime64[ms]")

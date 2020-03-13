@@ -26,7 +26,11 @@ from bodo.libs.list_str_arr_ext import (
     ListStringArrayPayloadType,
     construct_list_string_array,
 )
-from bodo.hiframes.datetime_date_ext import datetime_date_type, datetime_date_array_type, DatetimeDateArrayType
+from bodo.hiframes.datetime_date_ext import (
+    datetime_date_type,
+    datetime_date_array_type,
+    DatetimeDateArrayType,
+)
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.decimal_arr_ext import DecimalArrayType, Decimal128Type
 from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
@@ -486,7 +490,7 @@ def get_parquet_dataset(file_name):
             hdfs, path = HadoopFileSystem.from_uri(file_name)
             hdfs_options = HdfsOptions.from_uri(file_name)
             (host, port) = hdfs_options.endpoint
-            host = host[7:] # remove hdfs:// prefix
+            host = host[7:]  # remove hdfs:// prefix
             fs = HdFS(host=host, port=port, user=hdfs_options.user)
         except Exception as e:
             raise BodoError(
@@ -1138,6 +1142,11 @@ def parquet_write_table_cpp(
     metadata_t,
     compression_t,
     is_parallel_t,
+    write_index,
+    start,
+    stop,
+    step,
+    name,
 ):
     """
     Call C++ parquet write function
@@ -1154,6 +1163,11 @@ def parquet_write_table_cpp(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(32),
+                lir.IntType(32),
+                lir.IntType(32),
+                lir.IntType(8).as_pointer(),
             ],
         )
         fn_tp = builder.module.get_or_insert_function(fnty, name="pq_write")
@@ -1168,6 +1182,11 @@ def parquet_write_table_cpp(
             types.voidptr,
             types.voidptr,
             types.boolean,
+            types.boolean,
+            types.int32,
+            types.int32,
+            types.int32,
+            types.voidptr,
         ),
         codegen,
     )
