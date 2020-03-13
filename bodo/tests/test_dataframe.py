@@ -10,6 +10,7 @@ import pytest
 
 import numba
 import bodo
+from bodo.utils.typing import BodoError
 from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
@@ -1344,6 +1345,16 @@ def test_loc_col_name():
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
     check_func(test_impl, (df,))
 
+
+def test_df_drop_column_check():
+    def test_impl(df):
+        return df.drop(columns=["C"])
+
+    df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [4, 5, 6, 7]})
+    with pytest.raises(
+        BodoError, match="not in DataFrame columns"
+    ):
+        bodo.jit(test_impl)(df)
 
 
 ############################# old tests ###############################

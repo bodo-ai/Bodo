@@ -2337,7 +2337,11 @@ class DropDummyTyper(AbstractTemplate):
                     "constant list of columns expected for labels in df.drop()"
                 )
 
-        assert all(c in df.columns for c in drop_cols)
+        # check drop columns to be in df schema
+        for c in drop_cols:
+            if c not in df.columns:
+                raise BodoError("DataFrame.drop(): column {} not in DataFrame columns {}".format(c, df.columns))
+
         new_cols = tuple(c for c in df.columns if c not in drop_cols)
         new_data = tuple(df.data[df.columns.index(c)] for c in new_cols)
 
