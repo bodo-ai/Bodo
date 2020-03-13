@@ -36,7 +36,12 @@ from numba.typing.templates import (
 )
 import bodo.libs.str_ext
 import bodo.utils.utils
-from bodo.utils.typing import is_overload_constant_str
+from bodo.utils.typing import (
+    is_overload_constant_str,
+    get_overload_const_str,
+    is_list_like_index_type,
+    BodoError,
+)
 
 from llvmlite import ir as lir
 
@@ -76,6 +81,7 @@ date_fields = [
     "nanosecond",
 ]
 timedelta_fields = ["days", "seconds", "microseconds", "nanoseconds"]
+iNaT = pd._libs.tslibs.iNaT
 
 
 class PandasTimestampType(types.Type):
@@ -478,9 +484,8 @@ def overload_pd_timestamp(
 
         return impl_datetime
 
-
     if ts_input == bodo.hiframes.datetime_date_ext.datetime_date_type:
-    
+
         def impl_date(
             ts_input=_no_input,
             freq=None,
@@ -496,7 +501,7 @@ def overload_pd_timestamp(
             nanosecond=None,
             tzinfo=None,
         ):  # pragma: no cover
-        
+
             year = ts_input.year
             month = ts_input.month
             day = ts_input.day
@@ -524,6 +529,7 @@ def overload_pd_timestamp(
             )
 
         return impl_date
+
 
 @overload_method(PandasTimestampType, "date")
 def overload_pd_timestamp_date(ptt):
@@ -764,6 +770,57 @@ def overload_to_datetime(arg):
 
     # TODO: input Type of a dataframe or series
     # TODO: input type of an array
+
+
+@overload(pd.to_timedelta, inline="always")
+def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
+    # changed 'arg' to 'arg_a' since inliner uses vname.startswith("arg.") to find
+    # argument variables which causes conflict
+    # TODO: fix call inliner to hande 'arg' name properly
+
+    if not is_overload_constant_str(unit):  # pragma: no cover
+        raise BodoError("pd.to_timedelta(): unit should be a constant string")
+
+    # internal Pandas API that normalizes variations of unit. e.g. 'seconds' -> 's'
+    unit = pd._libs.tslibs.timedeltas.parse_timedelta_unit(get_overload_const_str(unit))
+
+    # Series input, call on values and wrap to Series
+    if isinstance(arg_a, bodo.hiframes.pd_series_ext.SeriesType):  # pragma: no cover
+
+        def impl_series(arg_a, unit="ns", errors="raise"):  # pragma: no cover
+            arr = bodo.hiframes.pd_series_ext.get_series_data(arg_a)
+            index = bodo.hiframes.pd_series_ext.get_series_index(arg_a)
+            name = bodo.hiframes.pd_series_ext.get_series_name(arg_a)
+            # calls to_timedelta() recursively to pick up the array implementation
+            # such as the one for float arrays below. Inlined recursively in series pass
+            A = pd.to_timedelta(arr, unit, errors)
+            return bodo.hiframes.pd_series_ext.init_series(A, index, name)
+
+        return impl_series
+
+    # float input
+    # from Pandas implementation:
+    # https://github.com/pandas-dev/pandas/blob/2e0e013703390377faad57ee97f2cfaf98ba039e/pandas/core/arrays/timedeltas.py#L956
+    if is_list_like_index_type(arg_a) and isinstance(arg_a.dtype, types.Float):
+        m, p = pd._libs.tslibs.timedeltas.precision_from_unit(unit)
+        td64_dtype = np.dtype("timedelta64[ns]")
+
+        def impl_float(arg_a, unit="ns", errors="raise"):  # pragma: no cover
+            n = len(arg_a)
+            B = np.empty(n, td64_dtype)
+            for i in numba.parfor.internal_prange(n):
+                val = iNaT
+                if not bodo.libs.array_kernels.isna(arg_a, i):
+                    data = arg_a[i]
+                    base = np.int64(data)
+                    frac = data - base
+                    if p:
+                        frac = np.round(frac, p)
+                    val = base * m + np.int64(frac * m)
+                B[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val)
+            return B
+
+        return impl_float
 
 
 # -- builtin operators for dt64 ----------------------------------------------

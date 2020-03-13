@@ -601,6 +601,17 @@ def test_pd_to_datetime():
     # date_str_arr = ['1991-1-1', '1992-1-1', '1993-1-1']
 
 
+def test_pd_to_timedelta():
+    """Test pd.to_timedelta()
+    """
+
+    def impl(a):
+        return pd.to_timedelta(a, "D")
+
+    S = pd.Series([1.0, 2.2, np.nan, 4.2], [3, 1, 0, -2], name="AA")
+    check_func(impl, (S,))
+
+
 def test_extract():
     """ Test extracting an attribute of timestamp
     """
