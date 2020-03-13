@@ -781,6 +781,7 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
     if not is_overload_constant_str(unit):  # pragma: no cover
         raise BodoError("pd.to_timedelta(): unit should be a constant string")
 
+    # internal Pandas API that normalizes variations of unit. e.g. 'seconds' -> 's'
     unit = pd._libs.tslibs.timedeltas.parse_timedelta_unit(get_overload_const_str(unit))
 
     # Series input, call on values and wrap to Series
@@ -790,6 +791,8 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
             arr = bodo.hiframes.pd_series_ext.get_series_data(arg_a)
             index = bodo.hiframes.pd_series_ext.get_series_index(arg_a)
             name = bodo.hiframes.pd_series_ext.get_series_name(arg_a)
+            # calls to_timedelta() recursively to pick up the array implementation
+            # such as the one for float arrays below. Inlined recursively in series pass
             A = pd.to_timedelta(arr, unit, errors)
             return bodo.hiframes.pd_series_ext.init_series(A, index, name)
 
