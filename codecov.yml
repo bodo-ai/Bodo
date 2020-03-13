@@ -4,5 +4,5 @@ codecov:
       default:
         threshold: 0.2%
     patch:
-        default:
+      default:
         threshold: 5%
