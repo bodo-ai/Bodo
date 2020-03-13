@@ -103,6 +103,7 @@ def test_datetime_operations():
 
     # Test series(dt64)
     S = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
+    S2 = pd.Series(pd.date_range(start="2018-04-20", end="2018-04-25", periods=5))
     timestamp = pd.to_datetime("2018-04-24")
     dt_dt = datetime.datetime(2001, 1, 1)
     dt_td = datetime.timedelta(1, 1, 1)
@@ -113,6 +114,7 @@ def test_datetime_operations():
     check_func(test_sub, (dt_dt, S))
     check_func(test_add, (S, dt_td))
     check_func(test_add, (dt_td, S))
+    check_func(test_sub, (S, S2))
 
     # Test series(timedelta64)
     tdS = pd.Series(

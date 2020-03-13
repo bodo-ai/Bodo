@@ -494,7 +494,11 @@ class SeriesPass:
             return self._replace_func(impl, [arg1, arg2])
 
         # both dt64
-        if is_dt64_series_typ(typ1) and is_dt64_series_typ(typ2):
+        if (
+            is_dt64_series_typ(typ1)
+            and is_dt64_series_typ(typ2)
+            and rhs.fn != operator.sub
+        ):
             func = rhs.fn
 
             def impl(S1, S2):  # pragma: no cover
@@ -1489,6 +1493,14 @@ class SeriesPass:
 
             return self._replace_func(
                 impl_agg_c, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+            )
+
+        if fdef == ("dt64_arr_sub", "bodo.hiframes.series_impl"):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+            impl = bodo.hiframes.series_impl.overload_dt64_arr_sub(*arg_typs, **kw_typs)
+            return self._replace_func(
+                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
         # convert Series to Array for unhandled calls
