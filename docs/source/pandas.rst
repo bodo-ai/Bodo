@@ -30,6 +30,7 @@ Input/Output
     or ``filepath_or_buffer`` should be a constant string for Bodo to infer types by looking at the file at compile time.
   * ``names``, ``usecols``, ``parse_dates`` should be constant lists.
   * ``dtype`` should be a constant dictionary of strings and types.
+  * When a CSV file is read in parallel (distributed mode) and each process reads only a portion of the file, reading columns that contain line breaks is not supported.
 
 * :func:`pandas.read_parquet`
 
