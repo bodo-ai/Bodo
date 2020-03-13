@@ -331,20 +331,22 @@ def overload_series_mean(S):
 @overload_method(SeriesType, "var", inline="always")
 def overload_series_var(S):
     def impl(S):  # pragma: no cover
-        m = S.mean()
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         numba.parfor.init_prange()
-        s = 0
+        first_moment = 0
+        second_moment = 0
         count = 0
         for i in numba.parfor.internal_prange(len(A)):
             val = 0
             count_val = 0
             if not bodo.libs.array_kernels.isna(A, i):
-                val = (A[i] - m) ** 2
+                val = A[i]
                 count_val = 1
-            s += val
+            first_moment += val
+            second_moment += val * val
             count += count_val
 
+        s = second_moment - first_moment * first_moment / count
         res = bodo.hiframes.series_kernels._var_handle_nan(s, count)
         return res
 
