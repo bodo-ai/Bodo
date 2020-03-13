@@ -1485,6 +1485,14 @@ class SeriesPass:
                 impl_agg_c, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
+        if fdef == ("dt64_arr_sub", "bodo.hiframes.series_impl"):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+            impl = bodo.hiframes.series_impl.overload_dt64_arr_sub(*arg_typs, **kw_typs)
+            return self._replace_func(
+                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+            )
+
         # convert Series to Array for unhandled calls
         # TODO check all the functions that get here and handle if necessary
         # e.g. np.sum, prod, min, max, argmin, argmax, mean, var, and std
@@ -1555,14 +1563,6 @@ class SeriesPass:
             expr = ir.Expr.unary(func, rhs.args[0], rhs.loc)
             self.calltypes[expr] = self.calltypes[rhs]
             return [ir.Assign(expr, assign.target, rhs.loc)]
-
-        if func == bodo.hiframes.series_impl.dt64_arr_sub:
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.series_impl.overload_dt64_arr_sub(*arg_typs, **kw_typs)
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
 
         # TODO: handle other calls
         return [assign]
