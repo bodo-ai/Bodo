@@ -1587,12 +1587,42 @@ def test_series_describe(numeric_series_val):
     "S,value",
     [
         (pd.Series([1.0, 2.0, np.nan, 1.0], [3, 4, 2, 1], name="A"), 5.0),
+        (
+            pd.Series([1.0, 2.0, np.nan, 1.0, np.nan], name="A"),
+            pd.Series([2.1, 3.1, np.nan, 3.3, 1.2]),
+        ),
         (pd.Series(["aa", "b", None, "ccc"], [3, 4, 2, 1], name="A"), "dd"),
+        (
+            pd.Series(["aa", "b", None, "ccc", None, "AA"] * 2, name="A"),
+            pd.Series(["A", "C", None, "aa", "dd", "d"] * 2),
+        ),
     ],
 )
 def test_series_fillna(S, value):
     def test_impl(A, val):
         return A.fillna(val)
+
+    check_func(test_impl, (S, value))
+
+
+@pytest.mark.parametrize(
+    "S,value",
+    [
+        (pd.Series([1.0, 2.0, np.nan, 1.0], [3, 4, 2, 1], name="A"), 5.0),
+        (
+            pd.Series([1.0, 2.0, np.nan, 1.0, np.nan], name="A"),
+            pd.Series([2.1, 3.1, np.nan, 3.3, 1.2]),
+        ),
+        (pd.Series(["aa", "b", None, "ccc"], [3, 4, 2, 1], name="A"), "dd"),
+        (
+            pd.Series(["aa", "b", None, "ccc", None, "AA"] * 2, name="A"),
+            pd.Series(["A", "C", None, "aa", "dd", "d"] * 2),
+        ),
+    ],
+)
+def test_series_fillna_inplace(S, value):
+    def test_impl(A, val):
+        return A.fillna(val, inplace=True)
 
     check_func(test_impl, (S, value))
 
