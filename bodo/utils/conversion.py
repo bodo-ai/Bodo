@@ -441,6 +441,9 @@ def overload_index_from_array(data, name=None):
     if data.dtype == types.NPDatetime("ns"):
         return lambda data, name=None: pd.DatetimeIndex(data, name=name)
 
+    if data.dtype == types.NPTimedelta("ns"):
+        return lambda data, name=None: pd.TimedeltaIndex(data, name=name)
+
     if isinstance(data.dtype, types.Integer):
         if not data.dtype.signed:
             return lambda data, name=None: pd.UInt64Index(data, name=name)
