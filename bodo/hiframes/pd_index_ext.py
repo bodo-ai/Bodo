@@ -117,6 +117,14 @@ make_attribute_wrapper(DatetimeIndexType, "data", "_data")
 make_attribute_wrapper(DatetimeIndexType, "name", "_name")
 
 
+@overload_attribute(DatetimeIndexType, "name")
+def DatetimeIndex_get_name(di):
+    def impl(di):  # pragma: no cover
+        return di._name
+
+    return impl
+
+
 @box(DatetimeIndexType)
 def box_dt_index(typ, val, c):
     """
@@ -778,6 +786,14 @@ make_attribute_wrapper(TimedeltaIndexType, "data", "_data")
 make_attribute_wrapper(TimedeltaIndexType, "name", "_name")
 
 
+@overload_attribute(TimedeltaIndexType, "name")
+def TimeDeltaIndex_get_name(tdi):
+    def impl(tdi):  # pragma: no cover
+        return tdi._name
+
+    return impl
+
+
 # support TimedeltaIndex time fields such as T.days
 def gen_tdi_field_impl(field):
     # TODO: NaN
@@ -888,6 +904,14 @@ class RangeIndexType(types.IterableType):
     @property
     def dtype(self):
         return types.int64
+
+    @property
+    def pandas_type_name(self):
+        return str(self.dtype)
+
+    @property
+    def numpy_type_name(self):
+        return str(self.dtype)
 
 
 @typeof_impl.register(pd.RangeIndex)
@@ -1025,6 +1049,38 @@ def range_index_overload(
     return _pd_range_index_imp
 
 
+@overload_attribute(RangeIndexType, "name")
+def rangeIndex_get_name(ri):
+    def impl(ri):  # pragma: no cover
+        return ri._name
+
+    return impl
+
+
+@overload_attribute(RangeIndexType, "start")
+def rangeIndex_get_start(ri):
+    def impl(ri):  # pragma: no cover
+        return ri._start
+
+    return impl
+
+
+@overload_attribute(RangeIndexType, "stop")
+def rangeIndex_get_stop(ri):
+    def impl(ri):  # pragma: no cover
+        return ri._stop
+
+    return impl
+
+
+@overload_attribute(RangeIndexType, "step")
+def rangeIndex_get_step(ri):
+    def impl(ri):  # pragma: no cover
+        return ri._step
+
+    return impl
+
+
 @overload(operator.getitem)
 def overload_range_index_getitem(I, idx):
     if isinstance(I, RangeIndexType):
@@ -1107,6 +1163,14 @@ class PeriodIndexModel(models.StructModel):
 
 make_attribute_wrapper(PeriodIndexType, "data", "_data")
 make_attribute_wrapper(PeriodIndexType, "name", "_name")
+
+
+@overload_attribute(PeriodIndexType, "name")
+def PeriodIndex_get_name(pi):
+    def impl(pi):  # pragma: no cover
+        return pi._name
+
+    return impl
 
 
 @box(PeriodIndexType)
@@ -1219,6 +1283,14 @@ class NumericIndexModel(models.StructModel):
 
 make_attribute_wrapper(NumericIndexType, "data", "_data")
 make_attribute_wrapper(NumericIndexType, "name", "_name")
+
+
+@overload_attribute(NumericIndexType, "name")
+def NumericIndex_get_name(ni):
+    def impl(ni):  # pragma: no cover
+        return ni._name
+
+    return impl
 
 
 @box(NumericIndexType)
@@ -1434,6 +1506,14 @@ def unbox_string_index(typ, val, c):
     index_val.data = data
     index_val.name = name
     return NativeValue(index_val._getvalue())
+
+
+@overload_attribute(StringIndexType, "name")
+def stringIndex_get_name(si):
+    def impl(si):  # pragma: no cover
+        return si._name
+
+    return impl
 
 
 @overload(operator.getitem)

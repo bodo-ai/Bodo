@@ -9,20 +9,20 @@
   lines (not neessarily number of bytes). The actual file read is
   done lazily in the objects read method.
 */
+#include "_csv.h"
 #include <mpi.h>
 #include <algorithm>
 #include <boost/filesystem/operations.hpp>
 #include <boost/tokenizer.hpp>
 #include <cinttypes>
+#include <ciso646>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <ciso646>
 #include "../libs/_distributed.h"
-#include "_csv.h"
 
 #include <Python.h>
 #include "_bodo_csv_file_reader.h"
@@ -209,7 +209,9 @@ static PyObject *stream_reader_iternext(PyObject *self) {
 // our class has only one method
 static PyMethodDef stream_reader_methods[] = {
     {
-        "read", (PyCFunction)stream_reader_read, METH_VARARGS,
+        "read",
+        (PyCFunction)stream_reader_read,
+        METH_VARARGS,
         "Read at most n characters, returned as a unicode.",
     },
     {NULL} /* Sentinel */
@@ -290,15 +292,27 @@ static std::vector<size_t> count_lines(FileReader *f, size_t n) {
     std::vector<size_t> pos;
     size_t i = 0;
     char *buffer = new char[BUFF_SIZE];
-
+    size_t rank = dist_get_rank();
+    bool quot = false;
+    bool linebreak = false;
     while (i < n) {
         size_t n_read = std::min(n - i, BUFF_SIZE);
         bool ok = f->read(buffer, n_read);
         if (!ok) break;
-        for (size_t j = 0; j < n_read; j++)
-            if (buffer[j] == '\n') pos.push_back(i + j);
+        for (size_t j = 0; j < n_read; j++) {
+            if (buffer[j] == '\"') quot = !quot;
+            if (buffer[j] == '\n') {
+                if (quot) linebreak = true;
+                pos.push_back(i + j);
+            }
+        }
         i += n_read;
     }
+    if (rank == 0 && linebreak)
+        std::cerr << "Line break within the columns of CSV file in distributed "
+                     "mode is NOT supported"
+                  << std::endl;
+
     if (i < n)
         std::cerr << "Warning, read only " << i << " bytes out of " << n
                   << "requested\n";
@@ -493,9 +507,10 @@ extern "C" PyObject *csv_file_chunk_reader(const char *fname, bool is_parallel,
         Py_DECREF(func_obj);
     } else if (strncmp("hdfs://", fname, 7) == 0) {
         // load hdfs_reader module if path starts with hdfs://
-        PyObject* hdfs_reader = PyImport_ImportModule("bodo.io.hdfs_reader");
+        PyObject *hdfs_reader = PyImport_ImportModule("bodo.io.hdfs_reader");
         CHECK(hdfs_reader, "importing bodo.io.hdfs_reader module failed");
-        PyObject* func_obj = PyObject_GetAttrString(hdfs_reader, "init_hdfs_reader");
+        PyObject *func_obj =
+            PyObject_GetAttrString(hdfs_reader, "init_hdfs_reader");
         CHECK(func_obj, "getting hdfs_reader func_obj failed");
         hdfs_reader_init_t func =
             (hdfs_reader_init_t)PyNumber_AsSsize_t(func_obj, NULL);

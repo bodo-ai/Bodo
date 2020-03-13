@@ -25,7 +25,7 @@ using parquet::arrow::FileReader;
 typedef std::vector<std::shared_ptr<FileReader>> FileReaderVec;
 
 typedef void (*s3_get_fs_t)(std::shared_ptr<::arrow::fs::S3FileSystem> *);
-typedef void (*hdfs_get_fs_t)(const std::string&,
+typedef void (*hdfs_get_fs_t)(const std::string &,
                               std::shared_ptr<::arrow::io::HadoopFileSystem> *);
 
 FileReaderVec *get_arrow_readers(char *file_name);
@@ -57,7 +57,9 @@ void pack_null_bitmap(uint8_t **out_nulls, std::vector<bool> &null_vec,
                       int64_t n_all_vals);
 void pq_write(const char *filename, const table_info *table,
               const array_info *col_names, const array_info *index,
-              const char *metadata, const char *compression, bool parallel);
+              const char *metadata, const char *compression, bool parallel,
+              bool write_rangeindex_to_metadata, const int start,
+              const int stop, const int step, const char *name);
 
 static PyMethodDef parquet_cpp_methods[] = {
     {"str_list_to_vec", str_list_to_vec, METH_O,  // METH_STATIC
@@ -583,8 +585,8 @@ static int32_t bodo_date64_to_arrow_date32(int64_t date) {
 }
 
 /// Convert Bodo date array (year, month, day elements) to Arrow date32 array
-static void CastBodoDateToArrowDate32(const int64_t* input, int64_t length,
-                                      int32_t* output) {
+static void CastBodoDateToArrowDate32(const int64_t *input, int64_t length,
+                                      int32_t *output) {
     for (int64_t i = 0; i < length; ++i) {
         *output++ = bodo_date64_to_arrow_date32(*input++);
     }
@@ -708,8 +710,8 @@ void bodo_array_to_arrow(
         if (array->dtype == Bodo_CTypes::DATE) {
             // allocate buffer to store date32 values in Arrow format
             AllocateBuffer(pool, sizeof(int32_t) * array->length, &out_buffer);
-            CastBodoDateToArrowDate32((int64_t*)array->data1, array->length,
-                                      (int32_t*)out_buffer->mutable_data());
+            CastBodoDateToArrowDate32((int64_t *)array->data1, array->length,
+                                      (int32_t *)out_buffer->mutable_data());
         } else {
             // we can use the same input buffer (no need to cast or convert)
             out_buffer = std::make_shared<arrow::Buffer>(
@@ -762,18 +764,43 @@ void bodo_array_to_arrow(
 
 /*
  * Write the Bodo table (the chunk in this process) to a parquet file.
- * @param path of output file or directory
- * @param table to write to parquet file
- * @param array containing the table's column names (index not included)
- * @param array containing the table index (can be an empty array if no index)
- * @param string containing table metadata
- * @param true if the table is part of a distributed table (in this case, this
- *        process writes a file named "part-000X.parquet" where X is my rank
+ * @param _path_name path of output file or directory
+ * @param table table to write to parquet file
+ * @param col_names_arr array containing the table's column names (index not
+ * included)
+ * @param index array containing the table index (can be an empty array if no
+ * index)
+ * @param metadata string containing table metadata
+ * @param is_parallel true if the table is part of a distributed table (in this
+ * case, this process writes a file named "part-000X.parquet" where X is my rank
  *        into the directory specified by 'path_name'
+ * @param ri_start,ri_stop,ri_step start,stop,step parameters of given
+ * RangeIndex
+ * @param idx_name name of the given index
  */
 void pq_write(const char *_path_name, const table_info *table,
               const array_info *col_names_arr, const array_info *index,
-              const char *metadata, const char *compression, bool is_parallel) {
+              const char *metadata, const char *compression, bool is_parallel,
+              bool write_rangeindex_to_metadata, const int ri_start,
+              const int ri_stop, const int ri_step, const char *idx_name) {
+    // Write actual values of start, stop, step to the metadata which is a
+    // string that contains %d
+    int check;
+    std::vector<char> new_metadata;
+    if (write_rangeindex_to_metadata) {
+        new_metadata.resize((strlen(metadata) + strlen(idx_name) + 50));
+        check = sprintf(new_metadata.data(), metadata, idx_name, ri_start,
+                        ri_stop, ri_step);
+    } else {
+        new_metadata.resize((strlen(metadata) + strlen(idx_name) * 4));
+        check = sprintf(new_metadata.data(), metadata, idx_name, idx_name,
+                        idx_name, idx_name);
+    }
+    if (check + 1 > new_metadata.size())
+        std::cerr << "Fatal error: number of written char for metadata is "
+                     "greater than new_metadata size"
+                  << std::endl;
+
     int myrank, num_ranks;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
@@ -854,12 +881,13 @@ void pq_write(const char *_path_name, const table_info *table,
         arrow::Status status;
         hdfs_get_fs(orig_path, &fs);
         if (is_parallel) {
-            if (myrank == 0){
+            if (myrank == 0) {
                 status = fs->MakeDirectory(dirname);
                 CHECK_ARROW(status, "Hdfs::MakeDirectory");
-            } 
+            }
             MPI_Barrier(MPI_COMM_WORLD);
-            status = fs->OpenWritable(dirname + "/" + fname, false, &hdfs_out_stream);
+            status = fs->OpenWritable(dirname + "/" + fname, false,
+                                      &hdfs_out_stream);
             CHECK_ARROW(status, "Hdfs::OpenWritable");
             out_stream = hdfs_out_stream;
         } else {
@@ -931,16 +959,19 @@ void pq_write(const char *_path_name, const table_info *table,
         // if there is an index, construct ChunkedArray index column and add
         // metadata to the schema
         std::shared_ptr<arrow::ChunkedArray> chunked_arr;
-        bodo_array_to_arrow(pool, index, "__index_level_0__", schema_vector,
-                            &chunked_arr);
+        if (strcmp(idx_name, "null") != 0)
+            bodo_array_to_arrow(pool, index, idx_name, schema_vector,
+                                &chunked_arr);
+        else
+            bodo_array_to_arrow(pool, index, "__index_level_0__", schema_vector,
+                                &chunked_arr);
         columns.push_back(chunked_arr);
-        auto schema_metadata =
-            ::arrow::key_value_metadata({{"pandas", metadata}});
-        schema =
-            std::make_shared<arrow::Schema>(schema_vector, schema_metadata);
-    } else {
-        schema = std::make_shared<arrow::Schema>(schema_vector);
     }
+
+    auto schema_metadata =
+        ::arrow::key_value_metadata({{"pandas", new_metadata.data()}});
+
+    schema = std::make_shared<arrow::Schema>(schema_vector, schema_metadata);
 
     // make Arrow table from Schema and ChunkedArray columns
     int64_t row_group_size = table->nrows();

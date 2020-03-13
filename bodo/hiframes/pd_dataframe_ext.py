@@ -2312,7 +2312,9 @@ class DropDummyTyper(AbstractTemplate):
 
         if labels != types.none:
             # make sure axis=1
-            if not is_overload_constant_int(axis) or get_overload_const_int(axis) != 1:  # pragma: no cover
+            if (
+                not is_overload_constant_int(axis) or get_overload_const_int(axis) != 1
+            ):  # pragma: no cover
                 raise BodoError("only axis=1 supported for df.drop()")
             # get 'labels' column list
             if is_overload_constant_str(labels):
@@ -2424,7 +2426,9 @@ def append_overload(df, other, ignore_index=False, verify_integrity=False, sort=
     )
 
 
-def gen_pandas_parquet_metadata(df):
+def gen_pandas_parquet_metadata(
+    df, write_non_range_index_to_metadata, write_rangeindex_to_metadata
+):
     # returns dict with pandas dataframe metadata for parquet storage.
     # For more information, see:
     # https://pandas.pydata.org/pandas-docs/stable/development/developer.html#storing-pandas-dataframe-objects-in-apache-parquet-format
@@ -2432,6 +2436,7 @@ def gen_pandas_parquet_metadata(df):
     pandas_metadata = {}
 
     pandas_metadata["columns"] = []
+
     for col_name, col_type in zip(df.columns, df.data):
         if isinstance(col_type, types.Array) or col_type == boolean_array:
             pandas_type = numpy_type = col_type.dtype.name
@@ -2464,6 +2469,7 @@ def gen_pandas_parquet_metadata(df):
                     col_name, col_type
                 )
             )
+
         col_metadata = {
             "name": col_name,
             "field_name": col_name,
@@ -2473,22 +2479,33 @@ def gen_pandas_parquet_metadata(df):
         }
         pandas_metadata["columns"].append(col_metadata)
 
-    if df.index is not None and not isinstance(
-        df.index, bodo.hiframes.pd_index_ext.RangeIndexType
-    ):
+    if write_non_range_index_to_metadata:
         # TODO multi-level
-        pandas_metadata["index_columns"] = ["__index_level_0__"]
+        if "none" in df.index.name:
+            _idxname = "__index_level_0__"
+            _colidxname = None
+        else:
+            _idxname = "%s"
+            _colidxname = "%s"
+
+        pandas_metadata["index_columns"] = [_idxname]
 
         # add index column metadata
         pandas_metadata["columns"].append(
             {
-                "name": None,
-                "field_name": "__index_level_0__",
+                "name": _colidxname,
+                "field_name": _idxname,
                 "pandas_type": df.index.pandas_type_name,
                 "numpy_type": df.index.numpy_type_name,
                 "metadata": None,
             }
         )
+    elif write_rangeindex_to_metadata:
+        pandas_metadata["index_columns"] = [
+            {"kind": "range", "name": "%s", "start": "%d", "stop": "%d", "step": "%d"}
+        ]
+    else:
+        pandas_metadata["index_columns"] = []
 
     pandas_metadata["pandas_version"] = pd.__version__
 
@@ -2525,16 +2542,44 @@ def to_parquet_overload(
     from bodo.io.parquet_pio import parquet_write_table_cpp
 
     # if index=False, we don't write index to the parquet file
-    write_index = (
-        (is_overload_none(index) or is_overload_true(index))
-        and (df.index is not None)
-        and not (
-            isinstance(df.index, bodo.hiframes.pd_index_ext.RangeIndexType)
-            and df.index.name == "RangeIndexType(none)"
+    # if index=True we write index to the parquet file even if the index is trivial RangeIndex.
+    # if index=None and sequential and RangeIndex:
+    #    do not write index value, and write dict to metadata
+    # if index=None and sequential and non-RangeIndex:
+    #    write index to the parquet file and write non-dict to metadata
+    # if index=None and parallel:
+    #    write index to the parquet file and write non-dict to metadata regardless of index type
+    is_range_index = isinstance(df.index, bodo.hiframes.pd_index_ext.RangeIndexType)
+    write_non_rangeindex = (df.index is not None) and (
+        is_overload_true(_is_parallel)
+        or (not is_overload_true(_is_parallel) and not is_range_index)
+    )
+
+    # we write index to metadata always if index=True
+    write_non_range_index_to_metadata = is_overload_true(index) or (
+        is_overload_none(index)
+        and (not is_range_index or is_overload_true(_is_parallel))
+    )
+
+    write_rangeindex_to_metadata = (
+        is_overload_none(index)
+        and is_range_index
+        and not is_overload_true(_is_parallel)
+    )
+
+    # write pandas metadata for the parquet file
+    pandas_metadata_str = json.dumps(
+        gen_pandas_parquet_metadata(
+            df, write_non_range_index_to_metadata, write_rangeindex_to_metadata
         )
     )
-    if write_index:
-        pandas_metadata_str = json.dumps(gen_pandas_parquet_metadata(df))
+    if not is_overload_true(_is_parallel) and is_range_index:
+        pandas_metadata_str = pandas_metadata_str.replace('"%d"', "%d")
+        if df.index.name == "RangeIndexType(none)":
+            # if the index name is None then we need to write just "null" to the metadata file
+            # without quotation marks(null). But if a name is provided we need to
+            # wrap the name with quotation mark to indicate it is a string
+            pandas_metadata_str = pandas_metadata_str.replace('"%s"', "%s")
 
     # convert dataframe columns to array_info
     data_args = ", ".join(
@@ -2553,15 +2598,32 @@ def to_parquet_overload(
     func_text += "    col_names = array_to_info(str_arr_from_sequence([{}]))\n".format(
         col_names_text
     )
-    if write_index:
+    if is_overload_true(index) or (is_overload_none(index) and write_non_rangeindex):
         func_text += "    index_col = array_to_info(index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)))\n"
-        func_text += '    metadata = """' + pandas_metadata_str + '"""\n'
     else:
         func_text += "    index_col = array_to_info(np.empty(0))\n"
-        func_text += '    metadata = ""\n'
+    func_text += '    metadata = """' + pandas_metadata_str + '"""\n'
     func_text += "    if compression is None:\n"
     func_text += "        compression = 'none'\n"
-    func_text += "    parquet_write_table_cpp(unicode_to_char_ptr(fname), table, col_names, index_col, unicode_to_char_ptr(metadata), unicode_to_char_ptr(compression), _is_parallel)\n"
+    func_text += "    if df.index.name is not None:\n"
+    func_text += "        name_ptr = df.index.name\n"
+    func_text += "    else:\n"
+    func_text += "        name_ptr = 'null'\n"
+    if write_rangeindex_to_metadata:
+        func_text += "    parquet_write_table_cpp(unicode_to_char_ptr(fname),\n"
+        func_text += "                            table, col_names, index_col,\n"
+        func_text += "                            unicode_to_char_ptr(metadata),\n"
+        func_text += "                            unicode_to_char_ptr(compression),\n"
+        func_text += "                            _is_parallel, 1, df.index.start,\n"
+        func_text += "                            df.index.stop, df.index.step,\n"
+        func_text += "                            unicode_to_char_ptr(name_ptr))\n"
+    else:
+        func_text += "    parquet_write_table_cpp(unicode_to_char_ptr(fname),\n"
+        func_text += "                            table, col_names, index_col,\n"
+        func_text += "                            unicode_to_char_ptr(metadata),\n"
+        func_text += "                            unicode_to_char_ptr(compression),\n"
+        func_text += "                            _is_parallel, 0, 0, 0, 0,\n"
+        func_text += "                            unicode_to_char_ptr(name_ptr))\n"
 
     loc_vars = {}
     exec(
