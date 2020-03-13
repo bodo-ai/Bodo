@@ -396,14 +396,24 @@ class SeriesPass:
             assign.value = rhs_def.value
             return [assign]
 
+        # inline Series.dt.field
         if isinstance(rhs_type, SeriesDatetimePropertiesType):
-            if rhs.attr == "date":
-                impl = bodo.hiframes.series_dt_impl.series_dt_date_overload(rhs_type)
+            if rhs_type.stype.dtype == types.NPDatetime("ns"):
+                if rhs.attr == "date":
+                    impl = bodo.hiframes.series_dt_impl.series_dt_date_overload(
+                        rhs_type
+                    )
+                else:
+                    impl = bodo.hiframes.series_dt_impl.create_date_field_overload(
+                        rhs.attr
+                    )(rhs_type)
+                return self._replace_func(impl, [rhs.value])
             else:
-                impl = bodo.hiframes.series_dt_impl.create_date_field_overload(
+                assert rhs_type.stype.dtype == types.NPTimedelta("ns")
+                impl = bodo.hiframes.series_dt_impl.create_timedelta_field_overload(
                     rhs.attr
                 )(rhs_type)
-            return self._replace_func(impl, [rhs.value])
+                return self._replace_func(impl, [rhs.value])
 
         # replace arr.dtype for dt64 since PA replaces with
         # np.datetime64[ns] which invalid, TODO: fix PA

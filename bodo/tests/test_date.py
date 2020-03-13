@@ -468,6 +468,20 @@ def test_dt_extract_date(series_value):
     check_func(impl, (series_value,))
 
 
+@pytest.mark.parametrize("timedelta_fields", bodo.hiframes.pd_timestamp_ext.timedelta_fields)
+def test_dt_timedelta_fileds(timedelta_fields):
+    """Test Series.dt for timedelta64 fields
+    """
+    func_text = "def impl(S, date_fields):\n"
+    func_text += "  return S.dt.{}\n".format(timedelta_fields)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars["impl"]
+
+    S = pd.timedelta_range("1s", "1d", freq="s").to_series()
+    check_func(impl, (S, timedelta_fields))
+
+
 def test_series_dt64_timestamp_cmp():
     """Test Series.dt comparison with pandas.timestamp scalar
     """

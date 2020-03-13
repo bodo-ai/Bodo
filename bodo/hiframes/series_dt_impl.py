@@ -1,6 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """
-Support for Series.dt methods
+Support for Series.dt attributes and methods
 """
 import operator
 import datetime
@@ -44,7 +44,8 @@ from bodo.libs.str_arr_ext import string_array_type, pre_alloc_string_array
 
 
 class SeriesDatetimePropertiesType(types.Type):
-    """accessor for datetime64 values (same as DatetimeProperties object of Pandas)
+    """accessor for datetime64/timedelta64 values
+    (same as DatetimeProperties/TimedeltaProperties objects of Pandas)
     """
 
     # TODO: Timedelta and Period accessors
@@ -67,7 +68,7 @@ make_attribute_wrapper(SeriesDatetimePropertiesType, "obj", "_obj")
 @intrinsic
 def init_series_dt_properties(typingctx, obj=None):
     def codegen(context, builder, signature, args):
-        obj_val, = args
+        (obj_val,) = args
         dt_properties_type = signature.return_type
 
         dt_properties_val = cgutils.create_struct_proxy(dt_properties_type)(
@@ -86,13 +87,18 @@ def init_series_dt_properties(typingctx, obj=None):
 
 @overload_attribute(SeriesType, "dt")
 def overload_series_dt(s):
-    if not bodo.hiframes.pd_series_ext.is_dt64_series_typ(s):
+    if not (
+        bodo.hiframes.pd_series_ext.is_dt64_series_typ(s)
+        or bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(s)
+    ):
         raise BodoError("Can only use .dt accessor with datetimelike values.")
     return lambda s: bodo.hiframes.series_dt_impl.init_series_dt_properties(s)
 
 
 def create_date_field_overload(field):
     def overload_field(S_dt):
+        if not S_dt.stype.dtype == types.NPDatetime("ns"):  # pragma: no cover
+            return
         func_text = "def impl(S_dt):\n"
         func_text += "    S = S_dt._obj\n"
         func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
@@ -136,6 +142,9 @@ _install_date_fields()
 
 @overload_attribute(SeriesDatetimePropertiesType, "date")
 def series_dt_date_overload(S_dt):
+    if not S_dt.stype.dtype == types.NPDatetime("ns"):  # pragma: no cover
+        return
+
     def impl(S_dt):  # pragma: no cover
         S = S_dt._obj
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -153,6 +162,54 @@ def series_dt_date_overload(S_dt):
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
+
+
+# support Timedelta fields such as S.dt.days
+def create_timedelta_field_overload(field):
+    def overload_field(S_dt):
+        if not S_dt.stype.dtype == types.NPTimedelta("ns"):  # pragma: no cover
+            return
+        # TODO: refactor with TimedeltaIndex?
+        # TODO: NAs
+        func_text = "def impl(S_dt):\n"
+        func_text += "    S = S_dt._obj\n"
+        func_text += "    A = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+        func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+        func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+        func_text += "    numba.parfor.init_prange()\n"
+        func_text += "    n = len(A)\n"
+        # all timedelta fields return int64
+        func_text += "    B = np.empty(n, np.int64)\n"
+        func_text += "    for i in numba.parfor.internal_prange(n):\n"
+        func_text += "        td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(A[i])\n"
+        if field == "nanoseconds":
+            func_text += "        B[i] = td64 % 1000\n"
+        elif field == "microseconds":
+            func_text += "        B[i] = td64 // 1000 % 100000\n"
+        elif field == "seconds":
+            func_text += "        B[i] = td64 // (1000 * 1000000) % (60 * 60 * 24)\n"
+        elif field == "days":
+            func_text += "        B[i] = td64 // (1000 * 1000000 * 60 * 60 * 24)\n"
+        else:  # pragma: no cover
+            assert False, "invalid timedelta field"
+        func_text += (
+            "    return bodo.hiframes.pd_series_ext.init_series(B, index, name)\n"
+        )
+        loc_vars = {}
+        exec(func_text, {"numba": numba, "np": np, "bodo": bodo}, loc_vars)
+        impl = loc_vars["impl"]
+        return impl
+
+    return overload_field
+
+
+def _install_S_dt_timedelta_fields():
+    for field in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
+        overload_impl = create_timedelta_field_overload(field)
+        overload_attribute(SeriesDatetimePropertiesType, field)(overload_impl)
+
+
+_install_S_dt_timedelta_fields()
 
 
 def create_bin_op_overload(op):
