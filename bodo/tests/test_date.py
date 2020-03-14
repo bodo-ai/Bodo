@@ -595,6 +595,14 @@ def test_pd_to_datetime():
     check_func(test_scalar, ())
     check_func(test_input, (date_str,))
 
+    date_arr = pd.Series(
+        np.append(
+            pd.date_range("2017-10-01", "2017-10-10").date,
+            [None, datetime.date(2019, 3, 3)],
+        )
+    )
+    check_func(test_input, (date_arr,))
+
     # TODO: Support following inputs
     # df = pd.DataFrame({'year': [2015, 2016], 'month': [2, 3], 'day': [4, 5]})
     # date_str_arr = np.array(['1991-1-1', '1992-1-1', '1993-1-1'])

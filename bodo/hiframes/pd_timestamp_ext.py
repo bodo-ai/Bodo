@@ -21,6 +21,7 @@ from numba.extending import (
     overload,
     intrinsic,
     overload_attribute,
+    register_jitable,
 )
 from numba.targets.imputils import lower_constant
 from numba import cgutils
@@ -754,19 +755,60 @@ def datetime_datetime_to_dt64(val):  # pragma: no cover
 types.pandas_timestamp_type = pandas_timestamp_type
 
 
-@overload(pd.to_datetime)
-def overload_to_datetime(arg):
+@register_jitable
+def to_datetime_scalar(a):  # pragma: no cover
+    """call pd.to_datetime() with scalar value 'a'
+    separate call to avoid adding extra basic blocks to user function for simplicity
+    """
+    with numba.objmode(t="pandas_timestamp_type"):
+        t = pd.to_datetime(a)
+    return t
+
+
+@overload(pd.to_datetime, inline="always")
+def overload_to_datetime(arg_a):
     """implementation for pd.to_datetime
     """
+    # TODO: change 'arg_a' to 'arg' when inliner can handle it
 
-    if arg == bodo.string_type or bodo.utils.typing.is_overload_constant_str(arg):
+    if arg_a == bodo.string_type or bodo.utils.typing.is_overload_constant_str(arg_a):
 
-        def pd_to_datetime_impl(arg):  # pragma: no cover
-            with numba.objmode(t="pandas_timestamp_type"):
-                t = pd.to_datetime(arg)
-            return t
+        def pd_to_datetime_impl(arg_a):  # pragma: no cover
+            return to_datetime_scalar(arg_a)
 
         return pd_to_datetime_impl
+
+    # Series input, call on values and wrap to Series
+    if isinstance(arg_a, bodo.hiframes.pd_series_ext.SeriesType):  # pragma: no cover
+
+        def impl_series(arg_a):  # pragma: no cover
+            arr = bodo.hiframes.pd_series_ext.get_series_data(arg_a)
+            index = bodo.hiframes.pd_series_ext.get_series_index(arg_a)
+            name = bodo.hiframes.pd_series_ext.get_series_name(arg_a)
+            A = pd.to_datetime(arr)
+            return bodo.hiframes.pd_series_ext.init_series(A, index, name)
+
+        return impl_series
+
+    # datetime.date() array
+    if arg_a == bodo.hiframes.datetime_date_ext.datetime_date_array_type:  # pragma: no cover
+        dt64_dtype = np.dtype("datetime64[ns]")
+        iNaT = pd._libs.tslibs.iNaT
+
+        def impl_date_arr(arg_a):  # pragma: no cover
+            n = len(arg_a)
+            B = np.empty(n, dt64_dtype)
+            for i in numba.parfor.internal_prange(n):
+                val = iNaT
+                if not bodo.libs.array_kernels.isna(arg_a, i):
+                    data = arg_a[i]
+                    val = npy_datetimestruct_to_datetime(
+                        data.year, data.month, data.day, 0, 0, 0, 0
+                    )
+                B[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val)
+            return B
+
+        return impl_date_arr
 
     # TODO: input Type of a dataframe or series
     # TODO: input type of an array
