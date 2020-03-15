@@ -1357,6 +1357,20 @@ def test_df_drop_column_check():
         bodo.jit(test_impl)(df)
 
 
+def test_df_alias():
+    """Test alias analysis for df data arrays. Without proper alias info, the fillna
+    changes in data array will be optimized away incorrectly.
+    This example is from the forecast code.
+    """
+    def test_impl():
+        df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1]})
+        df.B.fillna(1, inplace=True)
+        return df
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_frame_equal(bodo_func(), test_impl())
+
+
 ############################# old tests ###############################
 
 

@@ -17,6 +17,7 @@ from numba.ir_utils import (
     compile_to_numba_ir,
     compute_cfg_from_blocks,
     replace_arg_nodes,
+    dprint_func_ir,
 )
 import bodo
 from bodo.libs.str_ext import string_type
@@ -65,6 +66,7 @@ class BodoTypeInference(PartialTypeInference):
                 # error will be raised below if there are still unknown types
                 break
 
+        dprint_func_ir(state.func_ir, "after typing pass")
         # run regular type inference again with _raise_errors = True to set function
         # return type and raise errors if any
         # TODO: avoid this extra pass when possible in Numba
