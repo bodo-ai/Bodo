@@ -235,11 +235,8 @@ def create_bin_op_overload(op):
 
                 for i in numba.parfor.internal_prange(n):
                     int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
-                    td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
-                        arr2[i]
-                    )
                     int_td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(
-                        td64
+                        arr2[i]
                     )
                     S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
                         op(int_dt64, int_td64)
@@ -264,11 +261,8 @@ def create_bin_op_overload(op):
 
                 for i in numba.parfor.internal_prange(n):
                     int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
-                    td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
-                        arr2[i]
-                    )
                     int_td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(
-                        td64
+                        arr2[i]
                     )
                     S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
                         op(int_dt64, int_td64)
