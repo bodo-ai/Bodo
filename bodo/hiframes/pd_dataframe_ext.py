@@ -58,6 +58,7 @@ from bodo.utils.typing import (
     get_overload_const_tuple,
     get_overload_const_int,
     is_overload_constant_int,
+    raise_bodo_error,
 )
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
@@ -2278,9 +2279,45 @@ def drop_overload(
         raise Exception("DataFrame.drop(): transform necessary for inplace")
 
     if not is_overload_constant_bool(inplace):  # pragma: no cover
-        raise BodoError(
+        raise_bodo_error(
             "DataFrame.drop(): 'inplace' parameter should be a constant bool"
         )
+
+    if not is_overload_none(labels):
+        # make sure axis=1
+        if (
+            not is_overload_constant_int(axis) or get_overload_const_int(axis) != 1
+        ):  # pragma: no cover
+            raise_bodo_error("only axis=1 supported for df.drop()")
+        # get 'labels' column list
+        if is_overload_constant_str(labels):
+            drop_cols = (get_overload_const_str(labels),)
+        elif is_overload_constant_str_list(labels):  # pragma: no cover
+            drop_cols = get_const_str_list(labels)
+        else:  # pragma: no cover
+            raise_bodo_error(
+                "constant list of columns expected for labels in df.drop()"
+            )
+    else:
+        assert not is_overload_none(columns)
+        # TODO: error checking
+        if is_overload_constant_str(columns):  # pragma: no cover
+            drop_cols = (get_overload_const_str(columns),)
+        elif is_overload_constant_str_list(columns):
+            drop_cols = get_const_str_list(columns)
+        else:  # pragma: no cover
+            raise_bodo_error(
+                "constant list of columns expected for labels in df.drop()"
+            )
+
+    # check drop columns to be in df schema
+    for c in drop_cols:
+        if c not in df.columns:
+            raise_bodo_error(
+                "DataFrame.drop(): column {} not in DataFrame columns {}".format(
+                    c, df.columns
+                )
+            )
 
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: inplace of df with parent (reflection)
@@ -2311,20 +2348,11 @@ class DropDummyTyper(AbstractTemplate):
         df, labels, axis, columns, inplace = args
 
         if labels != types.none:
-            # make sure axis=1
-            if (
-                not is_overload_constant_int(axis) or get_overload_const_int(axis) != 1
-            ):  # pragma: no cover
-                raise BodoError("only axis=1 supported for df.drop()")
             # get 'labels' column list
             if is_overload_constant_str(labels):
                 drop_cols = (get_overload_const_str(labels),)
             elif is_overload_constant_str_list(labels):  # pragma: no cover
                 drop_cols = get_const_str_list(labels)
-            else:  # pragma: no cover
-                raise BodoError(
-                    "constant list of columns expected for labels in df.drop()"
-                )
         else:
             assert columns != types.none
             # TODO: error checking
@@ -2332,15 +2360,6 @@ class DropDummyTyper(AbstractTemplate):
                 drop_cols = (get_overload_const_str(columns),)
             elif is_overload_constant_str_list(columns):
                 drop_cols = get_const_str_list(columns)
-            else:  # pragma: no cover
-                raise BodoError(
-                    "constant list of columns expected for labels in df.drop()"
-                )
-
-        # check drop columns to be in df schema
-        for c in drop_cols:
-            if c not in df.columns:
-                raise BodoError("DataFrame.drop(): column {} not in DataFrame columns {}".format(c, df.columns))
 
         new_cols = tuple(c for c in df.columns if c not in drop_cols)
         new_data = tuple(df.data[df.columns.index(c)] for c in new_cols)

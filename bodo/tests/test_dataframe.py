@@ -1346,6 +1346,23 @@ def test_loc_col_name():
     check_func(test_impl, (df,))
 
 
+def test_df_schema_change():
+    """
+    Dataframe operations like setting new columns change the schema, so other
+    operations need to handle type change during typing pass.
+
+    df.drop() checks for drop columns to be in the schema, so it has to let typing pass
+    change the type. This example is from the forecast code.
+    """
+    def test_impl(df):
+        df["C"] = 3
+        return df.drop(["C"], 1)
+
+    df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1]})
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
+
+
 def test_df_drop_column_check():
     def test_impl(df):
         return df.drop(columns=["C"])

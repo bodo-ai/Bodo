@@ -25,8 +25,20 @@ from numba.targets.imputils import lower_builtin, impl_ret_borrowed, impl_ret_ne
 import bodo
 
 
-# error used to avoid numba's error checking
 class BodoError(BaseException):
+    """Bodo error class that inherits from BaseException instead of Exception to avoid
+    numba's error catching, which enables raising simpler error directly to the user.
+    TODO: change to Exception when possible.
+    """
+
+    pass
+
+
+class BodoException(Exception):
+    """Bodo exception that inherits from Exception to allow typing pass to catch it
+    and potentially transform the IR.
+    """
+
     pass
 
 
@@ -51,12 +63,12 @@ def raise_const_error(msg):
 
 
 def raise_bodo_error(msg):
-    """Raises a regular error during partial typing in case typing transforms can handle
-    the issue. Otherwise, raises BodoError
+    """Raises BodoException during partial typing in case typing transforms can handle
+    the issue. Otherwise, raises BodoError.
     """
     if bodo.transforms.typing_pass.in_partial_typing:
-        raise Exception(msg)
-    else:  # pragma: no cover
+        raise BodoException(msg)
+    else:
         raise BodoError(msg)
 
 
