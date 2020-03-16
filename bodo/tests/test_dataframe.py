@@ -10,7 +10,7 @@ import pytest
 
 import numba
 import bodo
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, BodoWarning
 from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
@@ -1251,6 +1251,25 @@ def test_get_dataframe_data_array_analysis():
     ]
     eq_set = array_analysis.equiv_sets[0]
     assert eq_set._get_ind("df#0") == eq_set._get_ind("B#0")
+
+
+def test_df_const_set_rm_index():
+    """Make sure dataframe related variables like the index are removed correctly and
+    parallelism warning is thrown when a column is being set using a constant.
+    Test for a bug that was keeping RangeIndex around as a 1D so warning wasn't thrown.
+    """
+
+    def impl(A):
+        df = pd.DataFrame({"A": A})
+        df["B"] = 1
+        return df.A.values
+
+    A = np.arange(10)
+    if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+        with pytest.warns(BodoWarning, match="No parallelism found for function"):
+            bodo.jit(impl)(A)
+    else:
+        bodo.jit(impl)(A)
 
 
 ################################## indexing  #################################

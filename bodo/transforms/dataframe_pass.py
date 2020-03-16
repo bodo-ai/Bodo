@@ -1539,8 +1539,10 @@ class DataFramePass:
         col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
             col_args, col_args
         )
-        func_text = "def _init_df({}, df_index):\n".format(data_args)
-        func_text += "  {} = bodo.utils.conversion.coerce_to_array({}, scalar_to_arr_len=len(df_index))\n".format(
+        func_text = "def _init_df({}, df_index, df):\n".format(data_args)
+        # using len(df) instead of len(df_index) since len optimization works better for
+        # dataframes
+        func_text += "  {} = bodo.utils.conversion.coerce_to_array({}, scalar_to_arr_len=len(df))\n".format(
             new_arr_arg, new_arr_arg
         )
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), df_index, {})\n".format(
@@ -1549,7 +1551,9 @@ class DataFramePass:
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars["_init_df"]
-        return self._replace_func(_init_df, in_arrs + [df_index_var], pre_nodes=nodes)
+        return self._replace_func(
+            _init_df, in_arrs + [df_index_var, df_var], pre_nodes=nodes
+        )
 
     def _run_call_len(self, lhs, df_var):
         df_typ = self.typemap[df_var.name]
