@@ -68,7 +68,11 @@ from bodo.hiframes.pd_series_ext import (
     is_series_type,
     SeriesRollingType,
 )
-from bodo.hiframes.pd_index_ext import DatetimeIndexType, TimedeltaIndexType
+from bodo.hiframes.pd_index_ext import (
+    DatetimeIndexType,
+    TimedeltaIndexType,
+    RangeIndexType,
+)
 from bodo.io.h5_api import h5dataset_type
 from bodo.hiframes.rolling import get_rolling_setup_args
 import bodo.hiframes.series_impl  # side effect: install Series overloads
@@ -319,7 +323,7 @@ class SeriesPass:
         # inline index getitem, TODO: test
         if bodo.hiframes.pd_index_ext.is_pd_index_type(target_typ):
             typ1, typ2 = self.typemap[target.name], self.typemap[idx.name]
-            if isinstance(target_typ, bodo.hiframes.pd_index_ext.RangeIndexType):
+            if isinstance(target_typ, RangeIndexType):
                 impl = bodo.hiframes.pd_index_ext.overload_range_index_getitem(
                     typ1, typ2
                 )
@@ -477,6 +481,27 @@ class SeriesPass:
             and rhs.attr == "_obj"
         ):
             assign.value = guard(get_definition, self.func_ir, rhs.value).value
+            return [assign]
+
+        # optimize away RangeIndex._start/_stop/_step if definition can be found
+        # no need for checking other references to the RangeIndex since it is immutable
+        if isinstance(rhs_type, RangeIndexType) and rhs.attr in (
+            "_start",
+            "_stop",
+            "_step",
+        ):
+            r_def = guard(get_definition, self.func_ir, rhs.value)
+            # find init_range_index(start, stop, step) call and replace value
+            if r_def is not None and guard(find_callname, self.func_ir, r_def) == (
+                "init_range_index",
+                "bodo.hiframes.pd_index_ext",
+            ):
+                if rhs.attr == "_start":
+                    assign.value = r_def.args[0]
+                if rhs.attr == "_stop":
+                    assign.value = r_def.args[1]
+                if rhs.attr == "_step":
+                    assign.value = r_def.args[2]
             return [assign]
 
         return [assign]
