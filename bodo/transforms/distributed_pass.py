@@ -1356,6 +1356,17 @@ class DistributedPass:
     #     return nodes
 
     def _get_1D_Var_size(self, size_var, equiv_set, avail_vars, out):
+        size_def = guard(get_definition, self.func_ir, size_var)
+        # find trivial calc_nitems(0, n, 1) call and use n instead
+        if (
+            guard(find_callname, self.func_ir, size_def)
+            == ("calc_nitems", "bodo.libs.array_kernels")
+            and guard(find_const, self.func_ir, size_def.args[0]) == 0
+            and guard(find_const, self.func_ir, size_def.args[2]) == 1
+        ):
+            size_var = size_def.args[1]
+            size_def = guard(get_definition, self.func_ir, size_var)
+
         new_size_var = None
         for v in equiv_set.get_equiv_set(size_var):
             if "#" in v and self._is_1D_Var_arr(v.split("#")[0]):
@@ -1369,9 +1380,20 @@ class DistributedPass:
                 new_size_var = out[-1].target
                 break
 
+        # branches can cause array analysis to remove size equivalences for some array
+        # definitions since array analysis pass is not proper data flow yet.
+        # This code tries pattern matching for definition of the size.
+        # e.g. size = arr.shape[0]
+        if new_size_var is None:
+            arr_var = guard(_get_array_var_from_size, size_var, self.func_ir)
+            if arr_var is not None:
+                out += compile_func_single_block(
+                    lambda A: len(A), (arr_var,), None, self
+                )
+                new_size_var = out[-1].target
+
         if new_size_var is None:
             # Series.combine() uses max(s1, s2) to get output size
-            size_def = guard(get_definition, self.func_ir, size_var)
             calc_call = guard(find_callname, self.func_ir, size_def)
             if calc_call == ("max", "builtins"):
                 s1 = self._get_1D_Var_size(size_def.args[0], equiv_set, avail_vars, out)
@@ -2552,6 +2574,20 @@ def _set_getsetitem_index(node, new_ind):
 def dprint(*s):  # pragma: no cover
     if debug_prints():
         print(*s)
+
+
+def _get_array_var_from_size(size_var, func_ir):
+    """
+    Return 'arr' from pattern 'size_var = arr.shape[0]' if exists.
+    Otherwise, raise GuardException.
+    """
+    size_def = get_definition(func_ir, size_var)
+    require(is_expr(size_def, "static_getitem") and size_def.index == 0)
+    shape_var = size_def.value
+    get_attr = get_definition(func_ir, shape_var)
+    require(is_expr(get_attr, "getattr") and get_attr.attr == "shape")
+    arr_var = get_attr.value
+    return arr_var
 
 
 def find_available_vars(blocks, cfg, init_avail=None):
