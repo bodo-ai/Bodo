@@ -121,10 +121,18 @@ def overload_coerce_to_ndarray(
 
             return impl_ts
 
+        dtype = types.unliteral(data)
         def impl_num(
             data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None
         ):  # pragma: no cover
-            return np.full(scalar_to_arr_len, data)
+            # TODO: parallelize np.full in PA
+            # return np.full(scalar_to_arr_len, data)
+            numba.parfor.init_prange()
+            n = scalar_to_arr_len
+            out_arr = np.empty(n, dtype)
+            for i in numba.parfor.internal_prange(n):
+                out_arr[i] = data
+            return out_arr
 
         return impl_num
 
@@ -367,12 +375,12 @@ def overload_convert_to_td64ns(data):
     raise TypeError("invalid data type {} for dt64 conversion".format(data))
 
 
-def convert_to_index(data):  # pragma: no cover
+def convert_to_index(data, name=None):  # pragma: no cover
     return data
 
 
 @overload(convert_to_index)
-def overload_convert_to_index(data):
+def overload_convert_to_index(data, name=None):
     """
     convert data to Index object if necessary.
     """
@@ -396,11 +404,11 @@ def overload_convert_to_index(data):
             types.NoneType,
         ),
     ):
-        return lambda data: data
+        return lambda data, name=None: data
 
-    def impl(data):  # pragma: no cover
+    def impl(data, name=None):  # pragma: no cover
         data_arr = bodo.utils.conversion.coerce_to_array(data)
-        return bodo.utils.conversion.index_from_array(data_arr)
+        return bodo.utils.conversion.index_from_array(data_arr, name)
 
     return impl
 

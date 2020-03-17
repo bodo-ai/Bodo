@@ -19,16 +19,25 @@ stages:
       vmImage: macOS-latest
     steps:
     - script: |
-        if [[ ! -z "${TRIAL_PERIOD}" ]]; then
+        export BUILD_DATE=`date  +"%Y-%m-%d"`
+        if [[ $TRIAL_END_OF_MONTH == 1 ]]; then
+          export END_DATE=`date -v+1m -v-$(date +%d)d +"%Y-%m-%d"`
+          export d1=`date -v+1m -v-$(date +%d)d +"%s"`
+          export d2=`date +"%s"`
+          export TRIAL_PERIOD=`expr $(( (d1-d2 + 43200) / 86400 ))`
+        elif [[ ! -z "${TRIAL_DAYS}" ]]; then
           export END_DATE=`date -v +${TRIAL_PERIOD}d  +"%m-%d-%y"`
+          export TRIAL_PERIOD=TRIAL_DAYS
         fi
+        
         if [[ ! -z "${MAX_CORE_COUNT}" ]]; then
-          export FILE_SUFFIX=expires-${END_DATE}-max-core-count-${MAX_CORE_COUNT}
+          export FILE_SUFFIX=built-${BUILD_DATE}-expires-${END_DATE}-max-core-count-${MAX_CORE_COUNT}
         else
-          export FILE_SUFFIX=expires-${END_DATE}
+          export FILE_SUFFIX=built-${BUILD_DATE}-expires-${END_DATE}
         fi
         echo "##vso[task.setvariable variable=fileSuffix;isOutput=true]$FILE_SUFFIX"
-      displayName: 'write FILE_SUFFIX for future use'
+        echo "##vso[task.setvariable variable=trialPeriod;isOutput=true]$TRIAL_PERIOD"
+      displayName: 'write FILE_SUFFIX, TRIAL_PERIOD for future use'
       name: suffix_step
 
   - template: buildscripts/azure/azure-build-binary-linux-macos.yml
@@ -38,7 +47,7 @@ stages:
   - template: buildscripts/azure/azure-build-binary-linux-macos.yml
     parameters:
       name: Mac
-      vmImage: xcode9-macos10.13
+      vmImage: macOS-latest
   - template: buildscripts/azure/azure-build-binary-windows.yml
     parameters:
       name: Windows
@@ -50,7 +59,7 @@ stages:
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
       name: Mac
-      vmImage: xcode9-macos10.13
+      vmImage: macOS-latest
       matrix:
         TEST_1P_SLOW:
           NP: 1

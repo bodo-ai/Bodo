@@ -627,7 +627,6 @@ def overload_dataframe_cumprod(df, axis=None, skipna=True):
 
 @overload_method(DataFrameType, "cumsum", inline="always")
 def overload_dataframe_cumsum(df, axis=None, skipna=True):
-    # TODO: handle NA
     data_args = ", ".join("df['{}'].values.cumsum()".format(c) for c in df.columns)
     header = "def impl(df, axis=None, skipna=True):\n"
     return _gen_init_df(header, df.columns, data_args)

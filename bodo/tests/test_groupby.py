@@ -1038,6 +1038,63 @@ def test_cumsum_large_random_numpy():
     check_func(impl3, (df1,), sort_output=True)
 
 
+
+def test_cummin_cummax_large_random_numpy():
+    def get_random_array(n, sizlen):
+        elist = []
+        for i in range(n):
+            eval = random.randint(1, sizlen)
+            if eval == 1:
+                eval = None
+            elist.append(eval)
+        return np.array(elist, dtype=np.float64)
+
+    def impl1(df):
+        A = df.groupby("A")["B"].agg(("cummin", "cummax"))
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").cummin()
+        return A
+
+    def impl3(df):
+        A = df.groupby("A").cummax()
+        return A
+
+    def impl4(df):
+        A = df.groupby("A")["B"].cummin()
+        return A
+
+    def impl5(df):
+        A = df.groupby("A")["B"].cummax()
+        return A
+
+    def impl6(df):
+        A = df.groupby("A").agg({"B": "cummin"})
+        return A
+
+    # The as_index option has no bearing for cumulative operations but better be safe than sorry.
+    def impl7(df):
+        A = df.groupby("A", as_index=True)["B"].cummin()
+        return A
+
+    # ditto
+    def impl8(df):
+        A = df.groupby("A", as_index=False)["B"].cummin()
+        return A
+
+    random.seed(5)
+    nb = 100
+    df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)})
+    check_func(impl1, (df1,), sort_output=True)
+    check_func(impl2, (df1,), sort_output=True)
+    check_func(impl3, (df1,), sort_output=True)
+    check_func(impl4, (df1,), sort_output=True)
+    check_func(impl5, (df1,), sort_output=True)
+    check_func(impl6, (df1,), sort_output=True)
+    check_func(impl7, (df1,), sort_output=True)
+    check_func(impl8, (df1,), sort_output=True)
+
 def test_groupby_cumsum_simple():
     """
     Test Groupby.cumsum(): a simple case

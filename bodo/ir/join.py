@@ -505,7 +505,7 @@ def join_distributed_run(
             # only the right key needs to be aligned
             func_text += "    t2_keys, data_right = parallel_asof_comm(t1_keys, t2_keys, data_right)\n"
     else:
-        if left_parallel:
+        if left_parallel and right_parallel:
             func_text += _gen_par_shuffle(
                 left_key_names,
                 left_other_names,
@@ -514,7 +514,6 @@ def join_distributed_run(
                 left_key_types,
                 right_key_types,
             )
-        if right_parallel:
             func_text += _gen_par_shuffle(
                 right_key_names,
                 right_other_names,

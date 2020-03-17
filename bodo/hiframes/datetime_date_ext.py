@@ -601,9 +601,7 @@ def unbox_datetime_date_array(typ, val, c):
         ],
     )
     fn = c.builder.module.get_or_insert_function(fnty, name="unbox_datetime_date_array")
-    c.builder.call(
-        fn, [val, n, data_arr.data, bitmap_arr.data,],
-    )
+    c.builder.call(fn, [val, n, data_arr.data, bitmap_arr.data])
 
     out_dt_date_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     out_dt_date_arr.data = data_arr._getvalue()
@@ -637,12 +635,12 @@ def box_datetime_date_array(typ, val, c):
 
     fnty = lir.FunctionType(
         c.pyapi.pyobj,
-        [lir.IntType(64), lir.IntType(64).as_pointer(), lir.IntType(8).as_pointer(),],
+        [lir.IntType(64), lir.IntType(64).as_pointer(), lir.IntType(8).as_pointer()],
     )
     fn_get = c.builder.module.get_or_insert_function(
         fnty, name="box_datetime_date_array"
     )
-    obj_arr = c.builder.call(fn_get, [n, data_arr.data, bitmap_arr_data,],)
+    obj_arr = c.builder.call(fn_get, [n, data_arr.data, bitmap_arr_data])
 
     return obj_arr
 

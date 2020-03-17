@@ -1257,17 +1257,10 @@ def test_merge_index_column_how():
         df3 = df1.merge(df2, left_index=True, right_on=["A"], how="outer")
         return df3
 
-    random.seed(5)
-
-    def get_random_list(n):
-        eList = []
-        for i in range(n):
-            eVal = 0.0 + random.randint(1, 10)
-            eList.append(eVal)
-        return eList
+    np.random.seed(5)
 
     df1 = pd.DataFrame(
-        {"A": get_random_list(50), "C": get_random_list(50)}, index=get_random_list(50)
+        {"A": np.random.randint(0,10,50), "C": np.random.randint(0,10,50)}, index=np.random.randint(0,10,50)
     )
 
     check_func(f1, (df1, df1), sort_output=True)
@@ -1275,6 +1268,28 @@ def test_merge_index_column_how():
     check_func(f3, (df1, df1), sort_output=True)
     check_func(f4, (df1, df1), sort_output=True)
 
+
+def test_merge_partial_distributed():
+    """Only one dataframe is distributed, the other fixed.
+    In that case in principle we do not need exchanges"""
+
+    def test_impl(df1, df2):
+        df3 = df1.merge(df2, on="A")
+        return df3
+
+    np.random.seed(5)
+    siz=50
+    df1 = pd.DataFrame({"A": np.random.randint(0,10,siz), "C": np.random.randint(0,10,siz)})
+    df2 = pd.DataFrame({"A": np.random.randint(0,10,siz), "D": np.random.randint(0,10,siz)})
+    start, end = get_start_end(len(df1))
+    bdf1 = df1.iloc[start:end]
+
+    bodo_impl = bodo.jit(distributed={"df1", "df3"})(test_impl)
+    df3_bodo1 = bodo_impl(bdf1, df2)
+    df3_bodo2 = bodo.gatherv(df3_bodo1).sort_values(by=["A","C","D"]).reset_index(drop=True)
+    df3_pd = test_impl(df1, df2).sort_values(by=["A","C","D"]).reset_index(drop=True)
+    if bodo.get_rank()==0:
+        pd.testing.assert_frame_equal(df3_bodo2, df3_pd)
 
 # ------------------------------ merge_asof() ------------------------------ #
 

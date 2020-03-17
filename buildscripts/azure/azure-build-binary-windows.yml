@@ -7,6 +7,7 @@ jobs:
   dependsOn: find_suffix
   variables:
     suffix: $[ dependencies.find_suffix.outputs['suffix_step.fileSuffix'] ]
+    trial_period:  $[ dependencies.find_suffix.outputs['suffix_step.trialPeriod'] ]
   pool:
     vmImage: ${{ parameters.vmImage }}
   
@@ -52,7 +53,7 @@ jobs:
   - bash: |
       source activate bodo_build
       cd buildscripts/bodo-conda-recipe/
-      export TRIAL_PERIOD=$(TRIAL_PERIOD)
+      export TRIAL_PERIOD=$(trial_period)
       export MAX_CORE_COUNT=$(MAX_CORE_COUNT)
       conda build . -c bodo.ai -c conda-forge -c intel --no-test --output-folder ../../
     displayName: 'Conda build Bodo'

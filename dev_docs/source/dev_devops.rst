@@ -11,7 +11,9 @@ We currently have three build pipelines on `Azure DevOps <https://dev.azure.com/
 
 3. Bodo-build-binary-obfuscated: This pipeline is performing exactly same operations as :code:`Bodo-build-binary` pipeline does, except that the files in the artifact are obfuscated.
 
-The default :code:`TRIAL_PERIOD` is 14(days) set through Azure's UI, and this enviroment variable can be changed before manually triggering the build. 
+The default :code:`TRIAL_DAYS` is 14(days) set through Azure's UI, and this enviroment variable can be changed before manually triggering the build.
+
+:code:`TRIAL_END_OF_MONTH` has default value 0: :code:`TRIAL_PERIOD = TRIAL_DAYS`. When it is set to 1, :code:`TRIAL_DAYS` is ignored. The binary will be set to expire at the end of the month. :code:`TRIAL_PERIOD` will be calculated according to when the binary is built and when it should expire.
 
 :code:`MAX_CORE_COUNT` does not have a default value, it can be set through Azure's UI when manually triggering it.
 
