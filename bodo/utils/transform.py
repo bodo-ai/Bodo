@@ -94,6 +94,7 @@ no_side_effect_call_tuples = {
     ("float64", np),
     ("float32", np),
     ("bool_", np),
+    ("full", np),
     # Numba
     ("internal_prange", "parfor", numba),
     ("empty_inferred", "ndarray", "unsafe", numba),
