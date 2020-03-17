@@ -32,6 +32,102 @@ from decimal import Decimal
 kde_file = os.path.join("bodo", "tests", "data", "kde.parquet")
 
 
+@pytest.fixture(
+    params=[
+        pd.DataFrame(
+            {"A": [4, 6, 7, 1, 3], "B": [11, 12, 13, 14, 15], "C": [9, 7, 5, 3, 1]},
+            index=pd.RangeIndex(start=1, stop=15, step=3, name="RI"),
+        ),
+        pd.DataFrame(
+            {"A": [4, 6, 7, 1, 3], "B": [11, 12, 13, 14, 15], "C": [9, 7, 5, 3, 1]},
+            index=pd.RangeIndex(start=1, stop=15, step=3, name=None),
+        ),
+        pd.DataFrame(
+            {"A": [4, 6, 7, 1, 3], "B": [11, 12, 13, 14, 15], "C": [9, 7, 5, 3, 1]},
+            index=pd.RangeIndex(start=1, stop=15, step=3),
+        ),
+        pd.DataFrame(
+            {"A": [4, 6, 7, 1, 3], "B": [11, 12, 13, 14, 15], "C": [9, 7, 5, 3, 1]},
+            index=None,
+        ),
+        pd.DataFrame(
+            {"A": [4, 6, 7, 1, 3], "B": [11, 12, 13, 14, 15], "C": [9, 7, 5, 3, 1]},
+            index=[-1, -2, -3, -4, -5],
+        ),
+    ]
+)
+def test_RangeIndex_input(request):
+    return request.param
+
+
+@pytest.mark.parametrize("pq_write_idx", [True, None, False])
+def test_pq_RangeIndex(test_RangeIndex_input, pq_write_idx):
+    def impl():
+        df = pd.read_parquet("test.pq")
+        return df
+
+    try:
+        if bodo.libs.distributed_api.get_rank() == 0:
+            test_RangeIndex_input.to_parquet("test.pq", index=pq_write_idx)
+        bodo.barrier()
+        bodo_func = bodo.jit(impl)
+        # TODO: Parallel Test
+        pd.testing.assert_frame_equal(bodo_func(), impl())
+        bodo.barrier()
+    finally:
+        if bodo.libs.distributed_api.get_rank() == 0:
+            os.remove("test.pq")
+
+
+@pytest.mark.parametrize("index_name", [None, "HELLO"])
+@pytest.mark.parametrize("pq_write_idx", [True, None, False])
+def test_pq_select_column(test_RangeIndex_input, index_name, pq_write_idx):
+    def impl():
+        df = pd.read_parquet("test.pq", columns=["A", "C"])
+        return df
+
+    try:
+        if bodo.libs.distributed_api.get_rank() == 0:
+            test_RangeIndex_input.index.name = index_name
+            test_RangeIndex_input.to_parquet("test.pq", index=pq_write_idx)
+        bodo.barrier()
+        bodo_func = bodo.jit(impl)
+        # # TODO: Parallel Test
+        pd.testing.assert_frame_equal(bodo_func(), impl())
+        bodo.barrier()
+    finally:
+        if bodo.libs.distributed_api.get_rank() == 0:
+            os.remove("test.pq")
+
+
+def test_pq_multiIdx_errcheck():
+    """ Remove this test when multi index is supported for read_parquet """
+    np.random.seed(0)
+
+    def impl():
+        df = pd.read_parquet("multi_idx_parquet.pq")
+
+    try:
+        if bodo.libs.distributed_api.get_rank() == 0:
+            arrays = [
+                ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
+                ["one", "two", "one", "two", "one", "two", "one", "two"],
+            ]
+            tuples = list(zip(*arrays))
+            idx = pd.MultiIndex.from_tuples(tuples, names=["first", "second"])
+            df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
+            df.to_parquet("multi_idx_parquet.pq")
+        bodo.barrier()
+        with pytest.raises(
+            BodoError, match="read_parquet: MultiIndex not supported yet"
+        ):
+            bodo.jit(impl)()
+        bodo.barrier()
+    finally:
+        if bodo.libs.distributed_api.get_rank() == 0:
+            os.remove("multi_idx_parquet.pq")
+
+
 @pytest.mark.parametrize(
     "df",
     [

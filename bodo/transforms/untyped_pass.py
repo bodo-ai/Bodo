@@ -853,10 +853,10 @@ class UntypedPass:
 
         fdef = guard(find_callname, self.func_ir, data_def)
         if is_call(data_def) and fdef in (
-            ("chain", "itertools",),
+            ("chain", "itertools"),
             ("from_iterable_impl", "bodo.utils.typing"),
         ):
-            if fdef == ("chain", "itertools",):
+            if fdef == ("chain", "itertools"):
                 in_data = data_def.vararg
                 data_def.vararg = None  # avoid typing error
             else:
@@ -934,7 +934,11 @@ class UntypedPass:
         data_args = ", ".join(
             "data{}".format(i)
             for i in range(n_cols)
-            if (index_col is None or i != columns.index(index_col))
+            if (
+                isinstance(index_col, dict)
+                or index_col is None
+                or i != columns.index(index_col)
+            )
         )
 
         if index_col is None:
@@ -942,13 +946,30 @@ class UntypedPass:
             index_arg = (
                 "bodo.hiframes.pd_index_ext.init_range_index(0, len(data0), 1, None)"
             )
-        else:
-            index_arg = "bodo.utils.conversion.convert_to_index(data{})".format(
-                columns.index(index_col)
+        elif isinstance(index_col, dict):
+            if index_col["name"] is None:
+                index_col_name = None
+            else:
+                index_col_name = "'{}'".format(index_col["name"])
+            index_arg = "bodo.hiframes.pd_index_ext.init_range_index({}, {}, {}, {})".format(
+                index_col["start"], index_col["stop"], index_col["step"], index_col_name
             )
+        else:
+            # if the index_col is __index_level_0_, it means it has no name.
+            # Thus we do not write the name instead of writing '__index_level_0_' as the name
+            if "__index_level_" in index_col:
+                index_arg = "bodo.utils.conversion.convert_to_index(data{}, None)".format(
+                    columns.index(index_col)
+                )
+            else:
+                index_arg = "bodo.utils.conversion.convert_to_index(data{}, '{}')".format(
+                    columns.index(index_col), index_col
+                )
 
         col_args = ", ".join(
-            "'{}'".format(c) for c in columns if (index_col is None or c != index_col)
+            "'{}'".format(c)
+            for c in columns
+            if (isinstance(index_col, dict) or index_col is None or c != index_col)
         )
         col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
             col_args, col_args
@@ -958,7 +979,6 @@ class UntypedPass:
             data_args, index_arg, col_var
         )
         loc_vars = {}
-        # print(func_text)
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars["_init_df"]
         nodes += compile_func_single_block(_init_df, data_arrs, lhs)

@@ -750,3 +750,11 @@ def test_datetimeindex_df():
     np.testing.assert_array_equal(bodo_func(dt_df), test_impl(dt_df))
     # TODO: Use check_func when #522 is closed
     # check_func(test_impl, (dt_df,))
+
+
+def test_datetime_date_array_len():
+    def test_impl(A):
+        return len(A)
+
+    A = np.array([datetime.date(2012, 1, 1), datetime.date(2011, 3, 3)])
+    check_func(test_impl, (A,))

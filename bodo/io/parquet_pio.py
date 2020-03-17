@@ -536,6 +536,9 @@ def parquet_file_schema(file_name, selected_columns):
     pa_schema = pq_dataset.schema.to_arrow_schema()
     # NOTE: use arrow schema instead of the dataset schema to avoid issues with names of
     # list types columns (arrow 0.16.0)
+    # col_names is an array that contains all the column's name and
+    # index's name if there is one, otherwise "__index__level_0"
+    # If there is no index at all, col_names will not include anything.
     col_names = pa_schema.names
 
     # find pandas index column if any
@@ -551,10 +554,8 @@ def parquet_file_schema(file_name, selected_columns):
         if n_indices > 1:
             raise BodoError("read_parquet: MultiIndex not supported yet")
         index_col = pandas_metadata["index_columns"][0] if n_indices else None
-        # arrow >=0.13 stores RangeIndex as just a dictionary here and it's
-        # not a column name anymore
-        # TODO: support RangeIndex in parquet properly
-        index_col = index_col if isinstance(index_col, str) else None
+
+        index_col = index_col if isinstance(index_col, (str, dict)) else None
 
     # handle column selection if available
     col_indices = list(range(len(col_names)))
@@ -565,9 +566,13 @@ def parquet_file_schema(file_name, selected_columns):
                 raise BodoError(
                     "Selected column {} not in Parquet file schema".format(c)
                 )
+        if index_col and not isinstance(index_col, dict):
+            # if index_col is "__index__level_0" or some other name, append it.
+            # If the index column is not selected when reading parquet, the index
+            # should still be included.
+            selected_columns.append(index_col)
         col_indices = [col_names.index(c) for c in selected_columns]
         col_names = selected_columns
-        index_col = index_col if index_col in col_names else None
 
     col_types = [
         _get_numba_typ_from_pa_typ(pa_schema.field(c), c == index_col)
