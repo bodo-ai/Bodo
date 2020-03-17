@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import numba
 from numba import ir, types, typing, config, numpy_support, ir_utils, postproc
+from bodo.utils.typing import list_cumulative
 from numba.ir_utils import (
     mk_unique_var,
     replace_vars_inner,
@@ -819,7 +820,7 @@ class DistributedPass:
         if func_name == "ravel" and self._is_1D_arr(args[0].name):
             assert self.typemap[args[0].name].ndim == 1, "only 1D ravel supported"
 
-        if func_name in ("cumsum", "cumprod") and (
+        if func_name in list_cumulative and (
             self._is_1D_arr(args[0].name) or self._is_1D_Var_arr(args[0].name)
         ):
             in_arr_var = args[0]

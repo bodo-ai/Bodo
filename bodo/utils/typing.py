@@ -24,6 +24,7 @@ from numba.typing import signature
 from numba.targets.imputils import lower_builtin, impl_ret_borrowed, impl_ret_new_ref
 import bodo
 
+list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
 
 # error used to avoid numba's error checking
 class BodoError(BaseException):

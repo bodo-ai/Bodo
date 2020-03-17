@@ -54,6 +54,7 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.utils.utils import build_set
+from bodo.utils.typing import list_cumulative
 from bodo.libs.str_arr_ext import (
     string_array_type,
     StringArrayType,
@@ -104,6 +105,8 @@ supported_agg_funcs = [
     "median",
     "cumsum",
     "cumprod",
+    "cummin",
+    "cummax",
     "mean",
     "min",
     "max",
@@ -112,8 +115,6 @@ supported_agg_funcs = [
     "std",
     "udf",
 ]
-
-list_cumulative = {"cumsum", "cumprod"}
 
 
 def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):

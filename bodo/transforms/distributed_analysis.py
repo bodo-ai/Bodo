@@ -1023,6 +1023,8 @@ class DistributedAnalysis:
         if func_name in [
             "cumsum",
             "cumprod",
+            "cummin",
+            "cummax",
             "empty_like",
             "zeros_like",
             "ones_like",

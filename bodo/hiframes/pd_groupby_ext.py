@@ -34,6 +34,7 @@ from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.ir.aggregate import get_agg_func
 from bodo.utils.typing import (
+    list_cumulative,
     BodoError,
     raise_const_error,
     is_overload_none,
@@ -476,7 +477,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                         f_name, out_tp = self._get_agg_funcname_and_outtyp(
                             grp, args, col_name, f
                         )
-                        has_cumulative_ops = f_name in {"cumsum", "cumprod"}
+                        has_cumulative_ops = f_name in list_cumulative
                         # TODO f_name == "<lambda>"
                         # output column name is 2-level (col_name, func_name)
                         # This happens, for example, with
@@ -487,7 +488,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     f_name, out_tp = self._get_agg_funcname_and_outtyp(
                         grp, args, col_name, f_val
                     )
-                    has_cumulative_ops = f_name in {"cumsum", "cumprod"}
+                    has_cumulative_ops = f_name in list_cumulative
                     if multi_level_names:
                         out_columns.append((col_name, f_name))
                     else:
@@ -519,7 +520,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 f_name, out_tp = self._get_agg_funcname_and_outtyp(
                     grp, args, grp.selection[0], f_val
                 )
-                has_cumulative_ops = f_name in {"cumsum", "cumprod"}
+                has_cumulative_ops = f_name in list_cumulative
                 # if tuple has lambdas they will be named <lambda_0>,
                 # <lambda_1>, ... in output
                 if f_name == "<lambda>":
@@ -618,6 +619,16 @@ class DataframeGroupByAttribute(AttributeTemplate):
     @bound_function("groupby.cumprod")
     def resolve_cumprod(self, grp, args, kws):
         msg = "Groupby.cumprod() only supports columns of types integer and float"
+        return self.resolve_cumulative(grp, args, kws, msg)
+
+    @bound_function("groupby.cummin")
+    def resolve_cummin(self, grp, args, kws):
+        msg = "Groupby.cummin() only supports columns of types integer and float"
+        return self.resolve_cumulative(grp, args, kws, msg)
+
+    @bound_function("groupby.cummax")
+    def resolve_cummax(self, grp, args, kws):
+        msg = "Groupby.cummax() only supports columns of types integer and float"
         return self.resolve_cumulative(grp, args, kws, msg)
 
     def generic_resolve(self, grpby, attr):

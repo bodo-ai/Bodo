@@ -22,6 +22,8 @@ struct Bodo_FTypes {
         median,
         cumsum,
         cumprod,
+        cummin,
+        cummax,
         mean,
         min,
         max,
@@ -448,8 +450,8 @@ static void std_eval(double& result, uint64_t& count, double& m2) {
    such as sum, mean, etc. for which the full group structure does not need to
    be known.
     -- get_group_info_iterate computes all the entries. This is needed for some
-   operations such as nunique, median, cumsum, cumprod. The entry list_missing
-   is computed only for cumsum and cumprod and computed only if needed.
+   operations such as nunique, median, and cumulative operations. The entry list_missing
+   is computed only for cumulative operations and computed only if needed.
  */
 struct grouping_info {
     std::vector<int64_t> row_to_group;
@@ -661,8 +663,8 @@ isnan_T(char* ptr) {
 }
 
 /**
- * The cumsum_cumprod_computation function. It uses the symbolic information
- * to compute the cumsum/cumprod.
+ * The cumulative_computation function. It uses the symbolic information
+ * to compute the cumsum/cumprod/cummin/cummax
  *
  * @param The column on which we do the computation
  * @param The array containing information on how the rows are organized
@@ -670,7 +672,7 @@ isnan_T(char* ptr) {
  * @return the returning array.
  */
 template <typename T>
-void cumsum_cumprod_computation_T(array_info* arr, array_info* out_arr,
+void cumulative_computation_T(array_info* arr, array_info* out_arr,
                                   grouping_info const& grp_inf,
                                   int32_t const& ftype, bool const& skipna) {
     size_t num_group = grp_inf.group_to_first_row.size();
@@ -686,7 +688,10 @@ void cumsum_cumprod_computation_T(array_info* arr, array_info* out_arr,
                 set_entry) -> void {
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             int64_t i = grp_inf.group_to_first_row[igrp];
-            T initVal = 0;
+            T initVal;
+            if (ftype == Bodo_FTypes::cumsum) initVal = 0;
+            if (ftype == Bodo_FTypes::cummin) initVal = std::numeric_limits<T>::max();
+            if (ftype == Bodo_FTypes::cummax) initVal = std::numeric_limits<T>::min();
             if (ftype == Bodo_FTypes::cumprod) initVal = 1;
             std::pair<bool, T> ePair{false, initVal};
             while (true) {
@@ -701,8 +706,12 @@ void cumsum_cumprod_computation_T(array_info* arr, array_info* out_arr,
                 } else {  // The value is a normal one.
                     if (ftype == Bodo_FTypes::cumsum)
                         ePair.second += fPair.second;
-                    else
+                    if (ftype == Bodo_FTypes::cumprod)
                         ePair.second *= fPair.second;
+                    if (ftype == Bodo_FTypes::cummin)
+                        ePair.second = std::min(ePair.second, fPair.second);
+                    if (ftype == Bodo_FTypes::cummax)
+                        ePair.second = std::max(ePair.second, fPair.second);
                     set_entry(i, ePair);
                 }
                 i = grp_inf.next_row_in_group[i];
@@ -742,43 +751,43 @@ void cumsum_cumprod_computation_T(array_info* arr, array_info* out_arr,
     }
 }
 
-void cumsum_cumprod_computation(array_info* arr, array_info* out_arr,
+void cumulative_computation(array_info* arr, array_info* out_arr,
                                 grouping_info const& grp_inf,
                                 int32_t const& ftype, bool const& skipna) {
     if (arr->dtype == Bodo_CTypes::INT8)
-        return cumsum_cumprod_computation_T<int8_t>(arr, out_arr, grp_inf,
-                                                    ftype, skipna);
+        return cumulative_computation_T<int8_t>(arr, out_arr, grp_inf,
+                                                ftype, skipna);
     if (arr->dtype == Bodo_CTypes::UINT8)
-        return cumsum_cumprod_computation_T<uint8_t>(arr, out_arr, grp_inf,
-                                                     ftype, skipna);
+        return cumulative_computation_T<uint8_t>(arr, out_arr, grp_inf,
+                                                 ftype, skipna);
 
     if (arr->dtype == Bodo_CTypes::INT16)
-        return cumsum_cumprod_computation_T<int16_t>(arr, out_arr, grp_inf,
-                                                     ftype, skipna);
+        return cumulative_computation_T<int16_t>(arr, out_arr, grp_inf,
+                                                 ftype, skipna);
     if (arr->dtype == Bodo_CTypes::UINT16)
-        return cumsum_cumprod_computation_T<uint16_t>(arr, out_arr, grp_inf,
-                                                      ftype, skipna);
+        return cumulative_computation_T<uint16_t>(arr, out_arr, grp_inf,
+                                                  ftype, skipna);
 
     if (arr->dtype == Bodo_CTypes::INT32)
-        return cumsum_cumprod_computation_T<int32_t>(arr, out_arr, grp_inf,
-                                                     ftype, skipna);
+        return cumulative_computation_T<int32_t>(arr, out_arr, grp_inf,
+                                                 ftype, skipna);
     if (arr->dtype == Bodo_CTypes::UINT32)
-        return cumsum_cumprod_computation_T<uint32_t>(arr, out_arr, grp_inf,
-                                                      ftype, skipna);
+        return cumulative_computation_T<uint32_t>(arr, out_arr, grp_inf,
+                                                  ftype, skipna);
 
     if (arr->dtype == Bodo_CTypes::INT64)
-        return cumsum_cumprod_computation_T<int64_t>(arr, out_arr, grp_inf,
-                                                     ftype, skipna);
+        return cumulative_computation_T<int64_t>(arr, out_arr, grp_inf,
+                                                 ftype, skipna);
     if (arr->dtype == Bodo_CTypes::UINT64)
-        return cumsum_cumprod_computation_T<uint64_t>(arr, out_arr, grp_inf,
-                                                      ftype, skipna);
+        return cumulative_computation_T<uint64_t>(arr, out_arr, grp_inf,
+                                                  ftype, skipna);
 
     if (arr->dtype == Bodo_CTypes::FLOAT32)
-        return cumsum_cumprod_computation_T<float>(arr, out_arr, grp_inf, ftype,
-                                                   skipna);
+        return cumulative_computation_T<float>(arr, out_arr, grp_inf, ftype,
+                                               skipna);
     if (arr->dtype == Bodo_CTypes::FLOAT64)
-        return cumsum_cumprod_computation_T<double>(arr, out_arr, grp_inf,
-                                                    ftype, skipna);
+        return cumulative_computation_T<double>(arr, out_arr, grp_inf,
+                                                ftype, skipna);
 }
 
 /**
@@ -2166,8 +2175,7 @@ class CumOpColSet : public BasicColSet {
     }
 
     virtual void update(const grouping_info& grp_info) {
-        cumsum_cumprod_computation(in_col, update_cols[0], grp_info, ftype,
-                                   skipna);
+        cumulative_computation(in_col, update_cols[0], grp_info, ftype, skipna);
     }
 
    private:
@@ -2202,14 +2210,15 @@ class GroupbyPipeline {
              i++) {
             int ftype = ftypes[i];
             if (ftype == Bodo_FTypes::nunique || ftype == Bodo_FTypes::median ||
-                ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod) {
+                ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod ||
+                ftype == Bodo_FTypes::cummin || ftype == Bodo_FTypes::cummax) {
                 // these operations first require shuffling the data to
                 // gather all rows with the same key in the same process
                 if (is_parallel) shuffle_before_update = true;
                 // these operations require extended group info
                 req_extended_group_info = true;
-                if (ftype == Bodo_FTypes::cumsum ||
-                    ftype == Bodo_FTypes::cumprod)
+                if (ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cummin ||
+                    ftype == Bodo_FTypes::cumprod || ftype == Bodo_FTypes::cummax)
                     cumulative_op = true;
                 break;
             }
@@ -2263,7 +2272,7 @@ class GroupbyPipeline {
      * @param ftype function type associated with this column set.
      * @param do_combine whether GroupbyPipeline will perform combine operation
      *        or not.
-     * @param skipna option used for nunique, cumsum, cumprod
+     * @param skipna option used for nunique, cumsum, cumprod, cummin, cummax
      */
     BasicColSet* makeColSet(array_info* in_col, int ftype, bool do_combine,
                             bool skipna) {
@@ -2280,6 +2289,8 @@ class GroupbyPipeline {
             case Bodo_FTypes::nunique:
                 return new NUniqueColSet(in_col, skipna);
             case Bodo_FTypes::cumsum:
+            case Bodo_FTypes::cummin:
+            case Bodo_FTypes::cummax:
             case Bodo_FTypes::cumprod:
                 return new CumOpColSet(in_col, ftype, skipna);
             case Bodo_FTypes::mean:
@@ -2309,7 +2320,7 @@ class GroupbyPipeline {
 
         update_table = cur_table = new table_info();
         if (cumulative_op)
-            num_keys = 0;  // there are no key columns in output of cumsum, etc.
+            num_keys = 0;  // there are no key columns in output of cumulative operations
         else
             alloc_init_keys(in_table, update_table);
 
@@ -2453,7 +2464,7 @@ class GroupbyPipeline {
     int n_udf = 0;
     int udf_table_idx = 0;
     // shuffling before update requires more communication and is needed
-    // when one of the groupby functions is median/nunique/cumsum/cumprod
+    // when one of the groupby functions is median/nunique/cumsum/cumprod/cummin/cummax
     bool shuffle_before_update = false;
     bool cumulative_op = false;
     bool req_extended_group_info = false;

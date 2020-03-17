@@ -33,6 +33,7 @@ from numba.extending import overload
 from numba.typing.templates import signature
 
 import bodo
+from bodo.utils.typing import list_cumulative
 from bodo import hiframes
 from bodo.utils.utils import (
     debug_prints,
@@ -1689,7 +1690,7 @@ class DataFramePass:
         # same_index is True if we return the index from the table (which is the case for
         # cumulative operations not using RangeIndex
         for func in allfuncs:
-            if func.ftype in bodo.ir.aggregate.list_cumulative:
+            if func.ftype in list_cumulative:
                 same_index = True
                 return_key = False
         if same_index and isinstance(grp_typ.df_type.index, RangeIndexType):

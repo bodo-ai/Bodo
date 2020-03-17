@@ -187,6 +187,8 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.cov`
 * :meth:`pandas.Series.cumsum`
 * :meth:`pandas.Series.cumprod`
+* :meth:`pandas.Series.cummin`
+* :meth:`pandas.Series.cummax`
 * :meth:`pandas.Series.describe` currently returns a string instead of Series object.
 * :meth:`pandas.Series.max`
 * :meth:`pandas.Series.mean`
@@ -351,6 +353,8 @@ Computations / Descriptive Stats:
 * :meth:`pandas.DataFrame.cov` (`min_periods` argument supported)
 * :meth:`pandas.DataFrame.cumprod`
 * :meth:`pandas.DataFrame.cumsum`
+* :meth:`pandas.DataFrame.cummin`
+* :meth:`pandas.DataFrame.cummax`
 * :meth:`pandas.DataFrame.describe`
 * :meth:`pandas.DataFrame.max`
 * :meth:`pandas.DataFrame.mean`

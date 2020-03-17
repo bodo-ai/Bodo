@@ -381,6 +381,30 @@ def overload_series_cumprod(S):
     return impl
 
 
+@overload_method(SeriesType, "cummin", inline="always")
+def overload_series_cummin(S):
+    # TODO: support skipna
+    def impl(S):  # pragma: no cover
+        A = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        return bodo.hiframes.pd_series_ext.init_series(A.cummin(), index, name)
+
+    return impl
+
+
+@overload_method(SeriesType, "cummax", inline="always")
+def overload_series_cummax(S):
+    # TODO: support skipna
+    def impl(S):  # pragma: no cover
+        A = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        return bodo.hiframes.pd_series_ext.init_series(A.cummax(), index, name)
+
+    return impl
+
+
 @overload_method(SeriesType, "rename", inline="always")
 def overload_series_rename(S, index=None):
     if not (index == bodo.string_type or isinstance(index, types.StringLiteral)):
