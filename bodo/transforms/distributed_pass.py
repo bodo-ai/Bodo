@@ -1363,7 +1363,8 @@ class DistributedPass:
             == ("calc_nitems", "bodo.libs.array_kernels")
             and guard(find_const, self.func_ir, size_def.args[0]) == 0
             and guard(find_const, self.func_ir, size_def.args[2]) == 1
-        ):
+        ):  # pragma: no cover
+            # TODO: unittest for this case
             size_var = size_def.args[1]
             size_def = guard(get_definition, self.func_ir, size_var)
 
@@ -1376,7 +1377,7 @@ class DistributedPass:
                 arr_var = ir.Var(size_var.scope, arr_name, size_var.loc)
                 out += compile_func_single_block(
                     lambda A: len(A), (arr_var,), None, self
-                )
+                )  # pragma: no cover
                 new_size_var = out[-1].target
                 break
 
@@ -1389,7 +1390,7 @@ class DistributedPass:
             if arr_var is not None:
                 out += compile_func_single_block(
                     lambda A: len(A), (arr_var,), None, self
-                )
+                )  # pragma: no cover
                 new_size_var = out[-1].target
 
         if new_size_var is None:
