@@ -1291,6 +1291,42 @@ def test_merge_partial_distributed():
     if bodo.get_rank()==0:
         pd.testing.assert_frame_equal(df3_bodo2, df3_pd)
 
+
+def _gen_df_rand_col_names():
+    """
+    generate a dataframe with random column names
+    """
+    random.seed(3)
+    df = pd.DataFrame()
+    # 20 columns should have significant probability of hash difference in set ops
+    for i in range(20):
+        k = random.randint(2, 20)
+        name = "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
+        # different value types in columns
+        val = np.int32(2)
+        if i % 2 == 0:
+            val = 3.2
+        df[name] = val
+
+    return df
+
+
+def test_merge_common_col_ordering():
+    """
+    Test merge() with several common column names as keys to make sure ordering of set
+    operations to find key names is consistent across processors
+    (it will hang or crash otherwise)
+    """
+
+    def impl(df1, df2):
+        return df1.merge(df2)
+
+    df1 = _gen_df_rand_col_names()
+    df2 = df1.copy()
+    df2["C"] = 3
+    check_func(impl, (df1, df2), sort_output=True)
+
+
 # ------------------------------ merge_asof() ------------------------------ #
 
 

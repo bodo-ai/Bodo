@@ -968,7 +968,8 @@ def merge_overload(
     )
 
     how = get_overload_const_str(how)
-    comm_cols = tuple(set(left.columns) & set(right.columns))
+    # NOTE: using sorted to avoid inconsistent ordering across processors
+    comm_cols = tuple(sorted(set(left.columns) & set(right.columns)))
 
     if not is_overload_none(on):
         left_on = right_on = on
@@ -1581,7 +1582,8 @@ def merge_asof_overload(
     if not isinstance(left, DataFrameType) or not isinstance(right, DataFrameType):
         raise TypeError("merge_asof() requires dataframe inputs")
 
-    comm_cols = tuple(set(left.columns) & set(right.columns))
+    # NOTE: using sorted to avoid inconsistent ordering across processors
+    comm_cols = tuple(sorted(set(left.columns) & set(right.columns)))
 
     if not is_overload_none(on):
         left_on = right_on = on
