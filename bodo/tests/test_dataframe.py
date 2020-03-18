@@ -1178,6 +1178,25 @@ def test_df_drop_inplace_branch():
     check_func(test_impl, (True,), False)
 
 
+def test_df_filter_rm_index():
+    """
+    Make sure dataframe index is removed correctly and parallelism warning is thrown
+    when a dataframe is filtered after a join.
+    """
+
+    def impl(df1, df2):
+        df3 = df1.merge(df2, on="A")
+        return df3[df3.A > 3]
+
+    df1 = pd.DataFrame({"A": [2, 3, 4], "B": [1, 2, 6]})
+    df2 = pd.DataFrame({"A": [3, 4, 1]})
+    if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+        with pytest.warns(BodoWarning, match="No parallelism found for function"):
+            bodo.jit(impl)(df1, df2)
+    else:
+        bodo.jit(impl)(df1, df2)
+
+
 from numba.compiler_machinery import FunctionPass, register_pass
 
 
