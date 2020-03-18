@@ -574,7 +574,7 @@ class DataFramePass:
                 break
 
         # remove duplicates with set() since a column can be used multiple times
-        used_cols = set(used_cols)
+        used_cols = sorted(set(used_cols))
         Row = namedtuple(sanitize_varname(df_var.name), used_cols)
         # TODO: handle non numpy alloc types
         # prange func to inline
@@ -2033,7 +2033,7 @@ class DataFramePass:
         # in corr/cov case, Pandas makes non-common columns NaNs
         if func_name in ("cov", "corr"):
             nan_cols = list(
-                set(self.typemap[other.name].columns) ^ set(df_type.columns)
+                sorted(set(self.typemap[other.name].columns) ^ set(df_type.columns))
             )
             len_arr = list(in_vars.values())[0]
             for cname in nan_cols:
