@@ -615,6 +615,28 @@ def test_dist_warning3():
         bodo.jit(impl)(10)
 
 
+def test_df_filter_branch():
+    """branches can cause array analysis to remove size equivalences for some array
+    definitions since the array analysis pass is not proper data flow yet. However,
+    1D_Var size adjustment needs to find the array to get the local size so it tries
+    pattern matching for definition of the size. This test (from customer code)
+    exercises this case.
+    """
+    def test_impl(df, flag):
+        df2 = df[df.A == 1]
+        if flag:
+            todelete = np.zeros(len(df2), np.bool_)
+            todelete = np.where(df2.A != 2, True, todelete)
+            df2 = df2[~todelete]
+
+        df2 = df2[df2.A == 3]
+        return df2
+
+    df = pd.DataFrame({"A": [1, 11, 2, 0, 3]})
+    check_func(test_impl, (df, True), False)
+
+
+
 def test_empty_object_array_warning():
     """Make sure BodoWarning is thrown when there is an empty object array in input
     """
