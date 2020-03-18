@@ -19,10 +19,6 @@ from numba.extending import (
 )
 from numba import numpy_support, types, cgutils
 from numba.typing import signature
-from numba.typing.templates import infer_global, AbstractTemplate, CallableTemplate
-from numba.targets.imputils import lower_builtin
-from numba.targets.boxing import _NumbaTypeHelper
-from numba.targets import listobj
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import (
@@ -44,9 +40,6 @@ from bodo.utils.typing import BodoWarning
 
 from bodo.libs import hstr_ext
 import llvmlite.binding as ll
-from llvmlite import ir as lir
-import llvmlite.llvmpy.core as lc
-from llvmlite.llvmpy.core import Type as LLType
 
 ll.add_symbol("array_size", hstr_ext.array_size)
 ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)

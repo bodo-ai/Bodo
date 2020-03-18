@@ -3,7 +3,7 @@ import numpy as np
 import math
 from collections import defaultdict
 import numba
-from numba import typeinfer, ir, ir_utils, config, types
+from numba import ir, ir_utils, typeinfer, types
 from numba.ir_utils import (
     visit_vars_inner,
     replace_vars_inner,
@@ -21,14 +21,12 @@ from bodo.libs.array import (
 )
 
 
-from numba.typing import signature
-from numba.extending import overload
 import bodo
 import bodo.libs.timsort
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.utils import debug_prints, empty_like_type, get_ctypes_ptr, gen_getitem
+from bodo.utils.utils import debug_prints, empty_like_type, gen_getitem
 
 from bodo.utils.shuffle import (
     alltoallv_tup,
@@ -49,7 +47,6 @@ from bodo.libs.str_arr_ext import (
     pre_alloc_string_array,
     num_total_chars,
 )
-from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.bool_arr_ext import boolean_array

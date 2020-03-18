@@ -1,9 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import operator
-import pandas as pd
-import numpy as np
 import numba
-from numba import types, cgutils
+from numba import types
 from numba.extending import (
     models,
     register_model,
@@ -24,7 +21,6 @@ from numba.typing.templates import (
     AttributeTemplate,
     bound_function,
 )
-from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type

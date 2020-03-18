@@ -1,15 +1,13 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
 from collections import namedtuple, defaultdict
-from functools import reduce
 import ctypes
 import types as pytypes
-import copy
 import numpy as np
 import pandas as pd
 import numba
 from bodo.utils.typing import BodoError
-from numba import typeinfer, ir, ir_utils, config, types, compiler
+from numba import compiler, ir, ir_utils, types
 from numba.ir_utils import (
     visit_vars_inner,
     replace_vars_inner,

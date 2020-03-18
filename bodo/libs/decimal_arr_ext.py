@@ -8,7 +8,6 @@ The precision can be up to 38, the scale must be less or equal to precision.'
 'When infer schema from decimal.Decimal objects, it will be DecimalType(38, 18).'
 """
 import operator
-import pandas as pd
 import numpy as np
 import numba
 import bodo

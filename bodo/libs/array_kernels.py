@@ -12,7 +12,7 @@ from numba.extending import overload
 from numba import types, cgutils
 from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
-from numba.targets.imputils import lower_builtin, impl_ret_untracked
+from numba.targets.imputils import lower_builtin
 from numba.targets.arrayobj import make_array
 from numba.numpy_support import as_dtype
 
@@ -34,12 +34,10 @@ from bodo.ir.sort import (
     update_shuffle_meta,
     alloc_pre_shuffle_metadata,
 )
-from bodo.ir.join import write_send_buff
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 
-import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
 from bodo.libs import quantile_alg
 import llvmlite.binding as ll

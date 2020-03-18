@@ -1,10 +1,8 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import unittest
 import random
 import string
 import pandas as pd
 import numpy as np
-import numba
 import bodo
 from bodo.tests.utils import (
     count_array_REPs,

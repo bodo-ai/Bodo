@@ -2,7 +2,6 @@
 """
 Implementation of DataFrame attributes and methods using overload.
 """
-import operator
 from collections import namedtuple
 import numpy as np
 import pandas as pd
@@ -37,7 +36,7 @@ from bodo.utils.typing import (
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
-from numba.targets.imputils import lower_builtin, impl_ret_untracked
+from numba.targets.imputils import lower_builtin
 from bodo.hiframes.pd_series_ext import if_series_to_array_type
 from numba.extending import register_model, models
 import llvmlite.llvmpy.core as lc

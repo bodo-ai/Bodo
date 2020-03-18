@@ -19,9 +19,7 @@ from numba.extending import (
     overload_attribute,
     intrinsic,
 )
-from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
-from numba.typing.templates import infer_global, AbstractTemplate
-from numba import types, typing, cgutils
+from numba import cgutils, types
 
 
 # type for pd.CategoricalDtype objects in Pandas

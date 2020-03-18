@@ -1,7 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Tools for handling bodo arrays, e.g. passing to C/C++ code
 """
-import numpy as np
 import numba
 from numba import types, cgutils
 from numba.extending import (
@@ -20,7 +19,6 @@ from numba.extending import (
     overload,
     overload_attribute,
 )
-import bodo
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.utils import numba_to_c_type
 from bodo.libs.int_arr_ext import IntegerArrayType

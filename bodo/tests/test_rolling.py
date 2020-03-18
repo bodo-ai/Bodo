@@ -4,7 +4,6 @@ import itertools
 import os
 import pandas as pd
 import numpy as np
-import numba
 import bodo
 from bodo.tests.utils import (
     count_array_REPs,

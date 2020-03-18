@@ -27,7 +27,7 @@ from bodo.libs.str_ext import (
     std_str_to_unicode,
 )
 import bodo
-from bodo.utils.utils import unliteral_all, numba_to_c_type
+from bodo.utils.utils import numba_to_c_type
 from bodo.utils.typing import parse_dtype, is_overload_none
 import bodo.io
 

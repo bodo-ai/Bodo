@@ -29,7 +29,7 @@ from numba.extending import (
 )
 from numba.array_analysis import ArrayAnalysis
 from bodo.libs.list_str_arr_ext import list_string_array_type
-from bodo.libs.str_arr_ext import kBitmask, string_array_type
+from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import is_list_like_index_type
 from numba.targets.imputils import impl_ret_borrowed
 from llvmlite import ir as lir

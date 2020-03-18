@@ -4,13 +4,9 @@ converts Series operations to array operations as much as possible
 to provide implementation and enable optimization.
 """
 import operator
-from collections import defaultdict, namedtuple
-import re
-import types as pytypes
 import numpy as np
 import pandas as pd
 import warnings
-import datetime
 
 import numba
 from numba import ir, ir_utils, types
@@ -32,12 +28,8 @@ from numba.ir_utils import (
     find_build_sequence,
 )
 from numba.inline_closurecall import inline_closure_call
-from numba.typing.templates import Signature, bound_function, signature
-from numba.typing.arraydecl import ArrayAttribute
-from numba.extending import overload
-from numba.typing.templates import infer_global, AbstractTemplate, signature
+from numba.typing.templates import Signature
 import bodo
-from bodo import hiframes
 from bodo.utils.utils import (
     debug_prints,
     inline_new_blocks,
@@ -46,8 +38,7 @@ from bodo.utils.utils import (
     get_getsetitem_index_var,
     is_expr,
 )
-from bodo.libs.str_ext import string_type, unicode_to_std_str, std_str_to_unicode
-from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import (
     string_array_type,
     StringArrayType,
@@ -83,7 +74,7 @@ from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
 from bodo.hiframes.series_indexing import SeriesIatType, SeriesIlocType, SeriesLocType
 from bodo.ir.aggregate import Aggregate
-from bodo.hiframes import series_kernels, split_impl
+from bodo.hiframes import series_kernels
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
@@ -96,8 +87,7 @@ from bodo.hiframes.split_impl import (
     get_split_view_data_ptr,
 )
 from bodo.utils.transform import compile_func_single_block, update_locs
-from bodo.utils.utils import is_array_typ
-from bodo.utils.typing import get_overload_const_func, BodoError
+from bodo.utils.typing import get_overload_const_func
 
 
 ufunc_names = set(f.__name__ for f in numba.typing.npydecl.supported_ufuncs)

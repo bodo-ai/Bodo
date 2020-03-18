@@ -2,12 +2,11 @@
 """Numba extension support for datetime.date objects and their arrays.
 """
 import operator
-import pandas as pd
 import numpy as np
 import datetime
 import numba
 from numba import types
-from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed, lower_builtin
+from numba.targets.imputils import lower_builtin
 from numba.typing import signature
 from numba.extending import (
     typeof_impl,
@@ -29,7 +28,6 @@ from numba.extending import (
     register_jitable,
 )
 from numba import cgutils
-from numba.targets.arrayobj import store_item, basic_indexing
 from numba.typing.templates import (
     infer_getattr,
     AttributeTemplate,

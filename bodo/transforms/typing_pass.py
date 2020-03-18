@@ -20,9 +20,8 @@ from numba.ir_utils import (
     dprint_func_ir,
 )
 import bodo
-from bodo.libs.str_ext import string_type
 from bodo.utils.typing import ConstList, ConstSet, BodoError
-from bodo.utils.utils import is_call, is_assign, is_expr, get_getsetitem_index_var
+from bodo.utils.utils import is_assign, is_call, is_expr
 from bodo.utils.transform import update_node_list_definitions, compile_func_single_block
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 

@@ -31,7 +31,7 @@ from numba.typing.templates import (
     AttributeTemplate,
     bound_function,
 )
-from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
+from numba.targets.imputils import impl_ret_borrowed
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.series_indexing import SeriesIlocType
@@ -67,7 +67,7 @@ from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.libs.str_arr_ext import string_array_type, str_arr_from_sequence
-from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
+from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_index_ext import is_pd_index_type
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 

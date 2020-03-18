@@ -1,7 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import operator
-import numba
-from numba import types, typing
+from numba import types
 from numba.typing.templates import (
     signature,
     AbstractTemplate,
@@ -11,10 +9,8 @@ from numba.typing.templates import (
     bound_function,
     infer_global,
 )
-from numba.extending import typeof_impl, lower_cast
-from numba.extending import type_callable, box, unbox, NativeValue
-from numba.extending import models, register_model, infer_getattr
-from numba.extending import lower_builtin, overload_method, overload
+from numba.extending import models, register_model
+from numba.extending import lower_builtin
 from numba.targets.imputils import (
     impl_ret_new_ref,
     impl_ret_borrowed,
@@ -26,11 +22,9 @@ from bodo.libs.str_ext import (
     gen_unicode_to_std_str,
     gen_std_str_to_unicode,
 )
-from numba import cgutils
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import hdict_ext
-from bodo.utils.utils import unliteral_all
 
 ll_voidp = lir.IntType(8).as_pointer()
 

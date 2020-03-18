@@ -1,8 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
-import re
-from collections import namedtuple
-import ctypes
 import numpy as np
 import numba
 from numba.extending import (
@@ -21,8 +18,7 @@ from numba.extending import (
     make_attribute_wrapper,
     overload_attribute,
 )
-from numba.targets.imputils import lower_constant, impl_ret_new_ref, impl_ret_untracked
-from numba import types, typing
+from numba import types
 from numba.typing.templates import (
     signature,
     AbstractTemplate,
@@ -35,7 +31,6 @@ from numba.typing.templates import (
 )
 from numba import cgutils
 from numba.array_analysis import ArrayAnalysis
-import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 import bodo

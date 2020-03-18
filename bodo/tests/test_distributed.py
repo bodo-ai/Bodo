@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import pytest
 
-import numba
 import bodo
 from bodo.utils.typing import BodoWarning, BodoError
 from bodo.tests.utils import (

@@ -4,7 +4,6 @@ Support for Series.str methods
 """
 import operator
 import numpy as np
-import pandas as pd
 import re
 import numba
 from numba import types, cgutils
@@ -32,9 +31,9 @@ from bodo.hiframes.pd_timestamp_ext import (
     convert_datetime64_to_timestamp,
     integer_to_dt64,
 )
-from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType, StringIndexType
+from bodo.hiframes.pd_index_ext import StringIndexType
 from bodo.utils.typing import is_overload_false, is_overload_true
-from bodo.libs.str_ext import string_type, str_findall_count
+from bodo.libs.str_ext import str_findall_count
 from bodo.libs.str_arr_ext import (
     string_array_type,
     pre_alloc_string_array,

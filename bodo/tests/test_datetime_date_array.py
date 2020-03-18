@@ -1,11 +1,9 @@
 # Copyright (C) 2020 Bodo Inc. All rights reserved.
-import operator
 import datetime
 import pandas as pd
 import numpy as np
 import pytest
 
-import numba
 import bodo
 
 

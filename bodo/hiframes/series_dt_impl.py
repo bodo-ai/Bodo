@@ -5,7 +5,6 @@ Support for Series.dt attributes and methods
 import operator
 import datetime
 import numpy as np
-import pandas as pd
 import numba
 from numba import types, cgutils
 from numba.extending import (
@@ -32,15 +31,12 @@ from bodo.hiframes.pd_timestamp_ext import (
     convert_datetime64_to_timestamp,
     integer_to_dt64,
 )
-from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
 from bodo.utils.typing import (
     BodoError,
     is_list_like_index_type,
     is_overload_false,
     is_overload_true,
 )
-from bodo.libs.str_ext import string_type
-from bodo.libs.str_arr_ext import string_array_type, pre_alloc_string_array
 
 
 class SeriesDatetimePropertiesType(types.Type):

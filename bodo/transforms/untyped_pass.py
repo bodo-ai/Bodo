@@ -8,11 +8,9 @@ import itertools
 import datetime
 import pandas as pd
 import numpy as np
-import math
 
 import numba
 from numba import ir, ir_utils, types
-from numba.targets.registry import CPUDispatcher
 
 from numba.ir_utils import (
     mk_unique_var,
@@ -34,15 +32,13 @@ from numba.ir_utils import (
     find_build_sequence,
 )
 
-from numba.inline_closurecall import inline_closure_call
-from numba.analysis import compute_cfg_from_blocks
 
 import bodo
 from bodo import config
 import bodo.io
-from bodo.io import h5, parquet_pio
+from bodo.io import h5
 from bodo.io.parquet_pio import ParquetHandler
-from bodo.utils.utils import inline_new_blocks, ReplaceFunc, is_call, is_assign, is_expr
+from bodo.utils.utils import is_call, is_expr
 from bodo.utils.transform import get_const_nested
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType

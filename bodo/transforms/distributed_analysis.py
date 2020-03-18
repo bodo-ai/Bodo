@@ -8,7 +8,6 @@ import copy
 import warnings
 import inspect
 from enum import Enum
-import numpy as np
 
 import numba
 from numba import ir, ir_utils, types
@@ -31,7 +30,6 @@ from numba.parfor import wrap_parfor_blocks, unwrap_parfor_blocks
 import bodo
 import bodo.io
 import bodo.io.np_io
-from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.utils import (
     get_constant,
     is_alloc_callname,

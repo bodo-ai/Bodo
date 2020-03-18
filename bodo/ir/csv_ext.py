@@ -1,9 +1,8 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 from collections import defaultdict
 import numba
-from numba import typeinfer, ir, ir_utils, config, types, cgutils
-from numba.typing.templates import signature
-from numba.extending import overload, intrinsic, register_model, models, box
+from numba import ir, ir_utils, typeinfer, types
+from numba.extending import box, models, register_model
 from numba.ir_utils import (
     visit_vars_inner,
     replace_vars_inner,
@@ -18,12 +17,10 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.timsort import copyElement_tup, getitem_arr_tup
 from bodo.utils.utils import sanitize_varname
 from bodo import objmode
 import pandas as pd
 import numpy as np
-
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 
 
@@ -216,7 +213,6 @@ def build_csv_definitions(csv_node, definitions=None):
 ir_utils.build_defs_extensions[CsvReader] = build_csv_definitions
 
 from bodo.libs import hio
-from llvmlite import ir as lir
 import llvmlite.binding as ll
 
 ll.add_symbol("csv_file_chunk_reader", hio.csv_file_chunk_reader)

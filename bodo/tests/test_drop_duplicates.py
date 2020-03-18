@@ -3,7 +3,6 @@
 """
 import pandas as pd
 import numpy as np
-import bodo
 import random
 import pytest
 from bodo.tests.utils import check_func

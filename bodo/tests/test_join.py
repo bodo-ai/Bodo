@@ -19,7 +19,6 @@ from bodo.tests.utils import (
     get_start_end,
     DeadcodeTestPipeline,
 )
-from bodo.utils.typing import BodoError
 import pytest
 
 

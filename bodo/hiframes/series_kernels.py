@@ -2,7 +2,6 @@
 """Some kernels for Series related functions. This is a legacy file that needs to be
 refactored.
 """
-from collections import defaultdict
 import numpy as np
 
 import numba
@@ -10,7 +9,6 @@ from numba import types
 from numba.extending import overload
 
 import bodo
-from bodo.libs.str_arr_ext import pre_alloc_string_array
 from bodo.libs.int_arr_ext import IntDtype
 
 

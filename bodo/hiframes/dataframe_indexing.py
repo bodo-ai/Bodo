@@ -26,8 +26,6 @@ from numba.typing.templates import (
     bound_function,
 )
 import bodo
-from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.utils.typing import (
     BodoWarning,
     BodoError,
@@ -52,7 +50,6 @@ from bodo.utils.typing import (
     get_overload_const_tuple,
     is_list_like_index_type,
 )
-from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
 

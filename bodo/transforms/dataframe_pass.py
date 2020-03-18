@@ -29,8 +29,6 @@ from numba.ir_utils import (
     compute_cfg_from_blocks,
 )
 from numba.inline_closurecall import inline_closure_call
-from numba.extending import overload
-from numba.typing.templates import signature
 
 import bodo
 from bodo.utils.typing import list_cumulative

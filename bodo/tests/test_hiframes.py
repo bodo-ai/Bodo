@@ -1,14 +1,9 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import unittest
 import os
-import itertools
 import pandas as pd
 import numpy as np
-import random
-import string
-import numba
 import bodo
-from bodo import hiframes
 from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.tests.utils import (
     count_array_REPs,

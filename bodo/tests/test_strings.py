@@ -12,7 +12,6 @@ import glob
 import gc
 import re
 from bodo.libs.str_arr_ext import str_arr_from_sequence
-from bodo.libs.str_ext import unicode_to_std_str, std_str_to_unicode, str_findall_count
 from bodo.tests.utils import check_func
 import pytest
 

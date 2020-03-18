@@ -1,7 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import warnings
 import numba
-from numba import ir, config, ir_utils, types
+from numba import ir, types
 from numba.ir_utils import (
     mk_unique_var,
     find_const,
@@ -12,7 +12,7 @@ from numba.ir_utils import (
 
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.typing import signature
-from numba.targets.imputils import impl_ret_new_ref, impl_ret_borrowed
+from numba.targets.imputils import impl_ret_new_ref
 import numpy as np
 import bodo
 from bodo.libs.str_ext import string_type, unicode_to_char_ptr

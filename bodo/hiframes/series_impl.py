@@ -4,7 +4,6 @@ Implementation of Series attributes and methods using overload.
 """
 import operator
 import numpy as np
-import pandas as pd
 import numba
 from numba import types
 from numba.extending import overload, overload_attribute, overload_method

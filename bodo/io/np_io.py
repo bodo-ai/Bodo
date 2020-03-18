@@ -1,9 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import numpy as np
-import numba
 import bodo
-from numba import types, cgutils
-from numba.targets.arrayobj import make_array
+from numba import types
 from numba.extending import overload, intrinsic, overload_method
 from bodo.libs.str_ext import string_type
 

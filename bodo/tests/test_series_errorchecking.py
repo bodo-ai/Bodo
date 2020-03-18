@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import numba
 import bodo
 from bodo.utils.typing import BodoError
 import pytest

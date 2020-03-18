@@ -1,12 +1,10 @@
 # Copyright (C) 2019 Bodo Inc.
 """Test df.query()
 """
-import random
 import pandas as pd
 import numpy as np
 import pytest
 
-import numba
 import bodo
 from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError

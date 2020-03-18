@@ -49,7 +49,6 @@ from numba.targets.imputils import (
     iternext_impl,
     RefType,
 )
-from numba.targets.hashing import _Py_hash_t
 import llvmlite.llvmpy.core as lc
 from glob import glob
 
@@ -779,7 +778,6 @@ def str_arr_shape_overload(str_arr):
     return lambda str_arr: (str_arr.size,)
 
 
-from numba.targets.listobj import ListInstance
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import hstr_ext

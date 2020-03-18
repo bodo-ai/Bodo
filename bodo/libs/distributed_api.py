@@ -9,7 +9,7 @@ import atexit
 
 import numba
 from numba import types, cgutils
-from numba.typing.templates import infer_global, AbstractTemplate, infer
+from numba.typing.templates import AbstractTemplate, infer_global
 from numba.typing import signature
 from numba.extending import models, register_model, intrinsic, overload
 

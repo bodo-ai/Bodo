@@ -45,7 +45,6 @@ from bodo.libs.str_arr_ext import (
     _memcpy,
 )
 
-import llvmlite.llvmpy.core as lc
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 from llvmlite.llvmpy.core import Type as LLType

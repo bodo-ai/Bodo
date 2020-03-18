@@ -3,7 +3,6 @@
 Collection of utility functions. Needs to be refactored in separate files.
 """
 from collections import namedtuple
-import operator
 import keyword
 import numba
 from numba import ir_utils, ir, types, cgutils
@@ -17,13 +16,11 @@ from numba.ir_utils import (
     find_const,
     mk_unique_var,
 )
-from numba.parfor import wrap_parfor_blocks, unwrap_parfor_blocks
 from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.targets.imputils import lower_builtin
 from numba.extending import overload, intrinsic
 from numba.targets.arrayobj import populate_array, get_itemsize, make_array
-import collections
 import numpy as np
 import bodo
 from bodo.libs.str_ext import string_type

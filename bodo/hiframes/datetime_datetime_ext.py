@@ -17,7 +17,6 @@ from numba.extending import (
     register_jitable,
 )
 from numba import cgutils
-import bodo
 
 
 """

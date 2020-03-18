@@ -5,7 +5,7 @@ Analysis and transformation for HDF5 support.
 import types as pytypes  # avoid confusion with numba.types
 
 import numba
-from numba import ir, analysis, types, config, numpy_support
+from numba import ir, types
 from numba.ir_utils import (
     mk_unique_var,
     replace_vars_inner,
@@ -20,12 +20,9 @@ from numba.ir_utils import (
     replace_arg_nodes,
 )
 
-import numpy as np
 
 import bodo
 import bodo.io
-from bodo.io import h5_api
-from bodo.utils.utils import debug_prints
 from bodo.utils.transform import find_str_const
 
 

@@ -1,11 +1,8 @@
 # Copyright (C) 2019 Bodo Inc.
 import pytest
-import os
 import pandas as pd
 import numpy as np
-import numba
 import bodo
-from bodo.utils.typing import BodoError
 from bodo.tests.utils import check_func, _get_dist_arg, _test_equal_guard, reduce_sum
 
 pytestmark = pytest.mark.hdfs

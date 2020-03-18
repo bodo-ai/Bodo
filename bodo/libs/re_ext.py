@@ -21,7 +21,6 @@ from numba.extending import (
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import is_overload_constant_str, get_overload_const_str
 from numba.targets.imputils import impl_ret_borrowed
-from llvmlite import ir as lir
 
 
 # re.Pattern and re.Match classes are exposed starting Python 3.7, so we get the type

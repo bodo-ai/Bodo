@@ -25,7 +25,6 @@ from numba.extending import (
 )
 from numba.targets.imputils import lower_constant
 from numba import cgutils
-from numba.targets.arrayobj import make_array, store_item, basic_indexing
 from numba.typing.templates import (
     infer_getattr,
     AttributeTemplate,

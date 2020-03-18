@@ -1,12 +1,11 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import operator
 from collections import defaultdict
 import numpy as np
 import pandas as pd
 
 from bodo.utils.typing import BodoError
 import numba
-from numba import typeinfer, ir, ir_utils, config, types, generated_jit
+from numba import generated_jit, ir, ir_utils, typeinfer, types
 from numba.extending import overload
 from numba.ir_utils import (
     visit_vars_inner,
@@ -47,7 +46,7 @@ from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
-from bodo.libs.timsort import copyElement_tup, getitem_arr_tup, setitem_arr_tup
+from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.utils.shuffle import (
     getitem_arr_tup_single,
     val_to_tup,
@@ -1019,14 +1018,9 @@ def write_data_buff_overload(meta, node_id, i, key_arrs, data):
     return write_impl
 
 
-from numba.typing.templates import signature, AbstractTemplate, infer_global, infer
-from numba.extending import register_model, models, lower_builtin
-from numba import cgutils
 
 
-from llvmlite import ir as lir
 import llvmlite.binding as ll
-from numba.targets.arrayobj import make_array
 from bodo.libs import hdist
 
 ll.add_symbol("c_alltoallv", hdist.c_alltoallv)

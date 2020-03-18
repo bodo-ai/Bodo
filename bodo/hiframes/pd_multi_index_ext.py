@@ -14,7 +14,6 @@ from numba.extending import (
     NativeValue,
     intrinsic,
 )
-import bodo
 from bodo.utils.typing import get_val_type_maybe_str_literal
 
 

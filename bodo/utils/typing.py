@@ -49,7 +49,6 @@ class BodoNotConstError(Exception):
     Exception class for this purpose.
     """
 
-    pass
 
 
 def raise_const_error(msg):
@@ -79,7 +78,6 @@ class BodoWarning(Warning):
     parallelization by unsupported functions.
     """
 
-    pass
 
 
 def is_overload_none(val):
@@ -260,7 +258,6 @@ def is_list_like_index_type(t):
     from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
     from bodo.hiframes.pd_series_ext import SeriesType
     from bodo.libs.bool_arr_ext import boolean_array
-    from bodo.libs.int_arr_ext import IntegerArrayType
 
     # TODO: include datetimeindex/timedeltaindex?
 
@@ -379,7 +376,6 @@ class FunctionLiteral(types.Literal, types.Opaque):
     """Literal type for function objects (i.e. pytypes.FunctionType)
     """
 
-    pass
 
 
 @typeof_impl.register(pytypes.FunctionType)
