@@ -1,5 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import random
+import datetime
 import h5py
 import numpy as np
 import pyarrow.parquet as pq
@@ -135,8 +136,6 @@ sdf = sdf.repartition(1)
 sdf.write.parquet("int_nulls_single.pq", "overwrite")
 # copy data file from int_nulls_single.pq directory to make single file
 
-spark.stop()
-
 df = pd.DataFrame({"A": [True, False, False, np.nan, True]})
 df.to_parquet("bool_nulls.pq")
 
@@ -223,6 +222,7 @@ df.to_parquet("list_str_arr.pq")
 sdf = spark.createDataFrame(df)
 sdf.write.parquet("list_str_parts.pq", "overwrite")
 
+spark.stop()
 
 # data for testing read of parquet files with unsupported column types in unselected
 # columns.
