@@ -32,7 +32,6 @@ from numba.typing.templates import Signature
 import bodo
 from bodo.utils.utils import (
     debug_prints,
-    inline_new_blocks,
     ReplaceFunc,
     is_whole_slice,
     get_getsetitem_index_var,
@@ -222,11 +221,6 @@ class SeriesPass:
                     for c_block in callee_blocks.values():
                         c_block.loc = self.curr_loc
                         update_locs(c_block.body, self.curr_loc)
-                    replaced = True
-                    break
-                if isinstance(out_nodes, dict):
-                    block.body = new_body + block.body[i:]
-                    inline_new_blocks(self.func_ir, block, i, out_nodes, work_list)
                     replaced = True
                     break
 
@@ -1843,10 +1837,8 @@ class SeriesPass:
         if isinstance(out_dtype, types.BaseTuple):
             out_dtype = np.dtype(",".join(str(t) for t in out_dtype.types), align=True)
 
-        _globals = self.func_ir.func_id.func.__globals__
-        f_ir = compile_to_numba_ir(
-            f,
-            {
+        args = [data, index, name] + extra_args
+        return self._replace_func(f, args, extra_globals={
                 "numba": numba,
                 "np": np,
                 "pd": pd,
@@ -1854,44 +1846,8 @@ class SeriesPass:
                 "out_dtype": out_dtype,
                 "get_utf8_size": get_utf8_size,
                 "pre_alloc_string_array": pre_alloc_string_array,
-            },
-        )
-
-        # fix definitions to enable finding sentinel
-        f_ir._definitions = build_definitions(f_ir.blocks)
-        topo_order = find_topo_order(f_ir.blocks)
-
-        # find sentinel function and replace with user func
-        for l in topo_order:
-            block = f_ir.blocks[l]
-            for i, stmt in enumerate(block.body):
-                if (
-                    isinstance(stmt, ir.Assign)
-                    and isinstance(stmt.value, ir.Expr)
-                    and stmt.value.op == "call"
-                ):
-                    fdef = guard(get_definition, f_ir, stmt.value.func)
-                    if isinstance(fdef, ir.Global) and fdef.name == "map_func":
-                        inline_closure_call(f_ir, _globals, block, i, func)
-
-        # remove sentinel global to avoid type inference issues
-        ir_utils.remove_dead(f_ir.blocks, f_ir.arg_names, f_ir)
-        f_ir._definitions = build_definitions(f_ir.blocks)
-        args = [data, index, name] + extra_args
-        arg_typs = tuple(self.typemap[v.name] for v in args)
-
-        f_typemap, _f_ret_t, f_calltypes = numba.typed_passes.type_inference_stage(
-            self.typingctx, f_ir, arg_typs, self.typemap[lhs.name]
-        )
-        # remove argument entries like arg.a from typemap
-        arg_names = [vname for vname in f_typemap if vname.startswith("arg.")]
-        for a in arg_names:
-            f_typemap.pop(a)
-        self.typemap.update(f_typemap)
-        self.calltypes.update(f_calltypes)
-        replace_arg_nodes(f_ir.blocks[topo_order[0]], args)
-        f_ir.blocks[topo_order[0]].body = nodes + f_ir.blocks[topo_order[0]].body
-        return f_ir.blocks
+                "map_func": numba.njit(func),
+            }, pre_nodes=nodes)
 
     def _run_call_index(self, assign, lhs, rhs, index_var, func_name):
         if func_name in ("isna", "take"):
@@ -2063,60 +2019,18 @@ class SeriesPass:
         exec(func_text, {}, loc_vars)
         f = loc_vars["f"]
 
-        _globals = self.func_ir.func_id.func.__globals__
-        f_ir = compile_to_numba_ir(
-            f,
-            {
+        func_args = [data, other_data]
+        if not use_nan:
+            func_args.append(fill_var)
+        func_args += [index, name]
+        return self._replace_func(f, func_args, extra_globals={
                 "numba": numba,
                 "np": np,
                 "pd": pd,
                 "bodo": bodo,
                 "out_dtype": self.typemap[lhs.name].dtype,
-            },
-        )
-
-        # fix definitions to enable finding sentinel
-        f_ir._definitions = build_definitions(f_ir.blocks)
-        topo_order = find_topo_order(f_ir.blocks)
-
-        # find sentinel function and replace with user func
-        for l in topo_order:
-            block = f_ir.blocks[l]
-            for i, stmt in enumerate(block.body):
-                if (
-                    isinstance(stmt, ir.Assign)
-                    and isinstance(stmt.value, ir.Expr)
-                    and stmt.value.op == "call"
-                ):
-                    fdef = guard(get_definition, f_ir, stmt.value.func)
-                    if isinstance(fdef, ir.Global) and fdef.name == "map_func":
-                        inline_closure_call(f_ir, _globals, block, i, func)
-                        break
-
-        # remove sentinel global to avoid type inference issues
-        ir_utils.remove_dead(f_ir.blocks, f_ir.arg_names, f_ir)
-        f_ir._definitions = build_definitions(f_ir.blocks)
-        arg_typs = (self.typemap[data.name], self.typemap[other_data.name])
-        if not use_nan:
-            arg_typs += (self.typemap[fill_var.name],)
-        arg_typs += (self.typemap[index.name], self.typemap[name.name])
-        f_typemap, _f_ret_t, f_calltypes = numba.typed_passes.type_inference_stage(
-            self.typingctx, f_ir, arg_typs, self.typemap[lhs.name]
-        )
-        # remove argument entries like arg.a from typemap
-        arg_names = [vname for vname in f_typemap if vname.startswith("arg.")]
-        for a in arg_names:
-            f_typemap.pop(a)
-        self.typemap.update(f_typemap)
-        self.calltypes.update(f_calltypes)
-        func_args = [data, other_data]
-        if not use_nan:
-            func_args.append(fill_var)
-        func_args += [index, name]
-        first_block = f_ir.blocks[topo_order[0]]
-        replace_arg_nodes(first_block, func_args)
-        first_block.body = nodes + first_block.body
-        return f_ir.blocks
+                "map_func": numba.njit(func),
+            }, pre_nodes=nodes)
 
     def _run_call_series_rolling(self, assign, lhs, rhs, rolling_var, func_name):
         """
