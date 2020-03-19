@@ -315,11 +315,16 @@ def get_groupby_output_dtype(arr_type, func_name):
 class DataframeGroupByAttribute(AttributeTemplate):
     key = DataFrameGroupByType
 
-    def _get_keys_not_as_index(self, grp, out_columns, out_data):
+    def _get_keys_not_as_index(
+        self, grp, out_columns, out_data, multi_level_names=False
+    ):
         """ Add groupby keys to output columns (to be used when
             as_index=False) """
         for k in grp.keys:
-            out_columns.append(k)
+            if multi_level_names:
+                out_columns.append((k, ""))
+            else:
+                out_columns.append(k)
             ind = grp.df_type.columns.index(k)
             out_data.append(grp.df_type.data[ind])
 
@@ -465,7 +470,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
             out_columns = []
             out_data = []
             if not grp.as_index:
-                self._get_keys_not_as_index(grp, out_columns, out_data)
+                self._get_keys_not_as_index(
+                    grp, out_columns, out_data, multi_level_names=multi_level_names
+                )
             for col_name, f_val in col_map.items():
                 if isinstance(f_val, (tuple, list)):
                     # TODO tuple containing function objects (not just strings)

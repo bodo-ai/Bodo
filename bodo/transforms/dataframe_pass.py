@@ -1822,7 +1822,14 @@ class DataFramePass:
         # XXX the order of output variables passed should match out_typ.columns
         out_vars = []
         for c in out_typ.columns:
-            if c in grp_typ.keys:
+            is_key = False
+            if isinstance(c, tuple) and len(c) > 1 and c[1] == "":
+                if c[0] in grp_typ.keys:
+                    is_key = True
+                    c = c[0]
+            elif c in grp_typ.keys:
+                is_key = True
+            if is_key:
                 assert not grp_typ.as_index
                 ind = grp_typ.keys.index(c)
                 out_vars.append(out_key_vars[ind])
