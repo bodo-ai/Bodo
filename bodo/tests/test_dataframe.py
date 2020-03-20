@@ -1007,6 +1007,7 @@ def test_pd_notna(na_test_obj):
 def test_set_column_scalar_str():
     """set df column with a string scalar
     """
+
     def test_impl(n):
         df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
         df["C"] = "AA"
@@ -1019,6 +1020,7 @@ def test_set_column_scalar_str():
 def test_set_column_scalar_num():
     """set df column with a numeric scalar
     """
+
     def test_impl(n):
         df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
         df["C"] = 3
@@ -1031,6 +1033,7 @@ def test_set_column_scalar_num():
 def test_set_column_scalar_timestamp():
     """set df column with a timestamp scalar
     """
+
     def test_impl(n, t):
         df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
         df["C"] = t
@@ -1192,6 +1195,27 @@ def test_df_filter_rm_index():
             bodo.jit(impl)(df1, df2)
     else:
         bodo.jit(impl)(df1, df2)
+
+
+def test_append_str_nulls():
+    def test_impl(df, df2):
+        return df.append(df2, ignore_index=True)
+
+    n = 5
+    df = pd.DataFrame(
+        {
+            "A": ["ABC", None, "AA", "B", None, "AA"],
+            "D": pd.date_range(start="2017-01-12", periods=6),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "B": np.arange(n),
+            "C": np.ones(n),
+            "E": pd.timedelta_range(start=3, periods=n),
+        }
+    )
+    check_func(test_impl, (df, df2), sort_output=True)
 
 
 from numba.compiler_machinery import FunctionPass, register_pass
@@ -1389,6 +1413,7 @@ def test_df_schema_change():
     df.drop() checks for drop columns to be in the schema, so it has to let typing pass
     change the type. This example is from the forecast code.
     """
+
     def test_impl(df):
         df["C"] = 3
         return df.drop(["C"], 1)
@@ -1403,9 +1428,7 @@ def test_df_drop_column_check():
         return df.drop(columns=["C"])
 
     df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [4, 5, 6, 7]})
-    with pytest.raises(
-        BodoError, match="not in DataFrame columns"
-    ):
+    with pytest.raises(BodoError, match="not in DataFrame columns"):
         bodo.jit(test_impl)(df)
 
 
@@ -1414,6 +1437,7 @@ def test_df_alias():
     changes in data array will be optimized away incorrectly.
     This example is from the forecast code.
     """
+
     def test_impl():
         df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1]})
         df.B.fillna(1, inplace=True)

@@ -2159,8 +2159,6 @@ class DataFramePass:
             return self._run_call_concat_columns(df_list, out_typ, lhs)
 
         # generate a concat call for each output column
-        # TODO: support non-numericals like string
-        gen_nan_func = lambda A: np.full(len(A), np.nan)
         # gen concat function
         arg_names = ", ".join(["in{}".format(i) for i in range(len(df_list))])
         func_text = "def _concat_imp({}):\n".format(arg_names)
@@ -2173,6 +2171,14 @@ class DataFramePass:
 
         out_vars = []
         for cname in out_typ.columns:
+            # find an example input array for this output array to use for typing in
+            # gen_na_array()
+            example_arr = None
+            for df in df_list:
+                df_typ = self.typemap[df.name]
+                if cname in df_typ.columns:
+                    example_arr = self._get_dataframe_data(df, cname, nodes)
+                    break
             # arguments to the generated function
             args = []
             # get input columns
@@ -2181,7 +2187,14 @@ class DataFramePass:
                 # generate full NaN column
                 if cname not in df_typ.columns:
                     arr = self._get_dataframe_data(df, df_typ.columns[0], nodes)
-                    nodes += compile_func_single_block(gen_nan_func, (arr,), None, self)
+                    nodes += compile_func_single_block(
+                        lambda arr, A: bodo.libs.array_kernels.gen_na_array(
+                            len(arr), A
+                        ),
+                        (arr, example_arr),
+                        None,
+                        self,
+                    )
                     args.append(nodes[-1].target)
                 else:
                     arr = self._get_dataframe_data(df, cname, nodes)

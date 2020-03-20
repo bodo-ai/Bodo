@@ -51,6 +51,7 @@ from bodo.libs.array import (
     info_to_array,
     delete_table,
 )
+from bodo.utils.typing import BodoError
 
 ll.add_symbol("quantile_sequential", quantile_alg.quantile_sequential)
 ll.add_symbol("quantile_parallel", quantile_alg.quantile_parallel)
@@ -637,6 +638,63 @@ def unique_overload_parallel(A):
         return bodo.utils.utils.unique(out_arr)
 
     return unique_par
+
+
+def gen_na_array(n, arr):
+    return np.full(n, np.nan)
+
+
+@overload(gen_na_array)
+def overload_gen_na_array(n, arr):
+    """
+    generate an array full of NA values with the same type as 'arr'
+    """
+    # array of np.nan values if 'arr' is float or int Numpy array
+    if isinstance(arr, types.Array) and isinstance(
+        arr.dtype, (types.Integer, types.Float)
+    ):
+        dtype = arr.dtype if isinstance(arr.dtype, types.Float) else types.float64
+
+        def impl_float(n, arr):  # pragma: no cover
+            numba.parfor.init_prange()
+            out_arr = np.empty(n, dtype)
+            for i in numba.parfor.internal_prange(n):
+                out_arr[i] = np.nan
+            return out_arr
+
+        return impl_float
+
+    if isinstance(arr, types.Array) and isinstance(
+        arr.dtype, (types.NPDatetime, types.NPTimedelta)
+    ):
+        nat = arr.dtype("NaT")
+
+        def impl_dt64(n, arr):  # pragma: no cover
+            numba.parfor.init_prange()
+            out_arr = np.empty(n, arr.dtype)
+            for i in numba.parfor.internal_prange(n):
+                out_arr[i] = nat
+            return out_arr
+
+        return impl_dt64
+
+    if arr == string_array_type:
+
+        def impl_str(n, arr):  # pragma: no cover
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, 0)
+            for j in numba.parfor.internal_prange(n):
+                out_arr[j] = ""
+                bodo.ir.join.setitem_arr_nan(out_arr, j)
+            return out_arr
+
+        return impl_str
+
+    # TODO: support all array types
+    raise BodoError(
+        "array type {} not supported for all NA generation in gen_na_array() yet".format(
+            arr
+        )
+    )  # pragma: no cover
 
 
 # np.arange implementation is copied from parfor.py and range length

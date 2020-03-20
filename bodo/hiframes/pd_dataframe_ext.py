@@ -1819,7 +1819,8 @@ class ConcatDummyTyper(AbstractTemplate):
             for df in objs.types:
                 all_colnames.extend(df.columns)
             # TODO: verify how Pandas sorts column names
-            all_colnames = sorted(set(all_colnames))
+            # remove duplicates but keep original order
+            all_colnames = list(dict.fromkeys(all_colnames).keys())
 
             # get output data types
             all_data = []
@@ -1830,11 +1831,14 @@ class ConcatDummyTyper(AbstractTemplate):
                     for df in objs.types
                     if cname in df.columns
                 ]
-                # XXX we add arrays of float64 NaNs if a column is missing
+                # XXX we add arrays of float64 NaNs if an Integer column is missing
                 # so add a dummy array of float64 for accurate typing
                 # e.g. int to float conversion
+                # TODO: use nullable integer array when pandas switches
                 # TODO: fix NA column additions for other types
-                if len(arr_args) < len(objs.types):
+                if len(arr_args) < len(objs.types) and all(
+                    isinstance(t.dtype, types.Integer) for t in arr_args
+                ):
                     arr_args.append(types.Array(types.float64, 1, "C"))
                 # use bodo.libs.array_kernels.concat() typer
                 concat_typ = self.context.resolve_function_type(
