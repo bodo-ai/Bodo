@@ -338,6 +338,10 @@ def _test_equal(
     elif isinstance(py_out, float):
         # avoid equality check since paralellism can affect floating point operations
         np.testing.assert_allclose(py_out, bodo_out, 1e-4)
+    elif isinstance(py_out, tuple):
+        assert len(py_out) == len(bodo_out)
+        for p, b in zip(py_out, bodo_out):
+            _test_equal(b, p)
     else:
         assert bodo_out == py_out
 
