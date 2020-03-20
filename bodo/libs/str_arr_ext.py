@@ -252,6 +252,89 @@ def _install_binary_ops():
 _install_binary_ops()
 
 
+@overload(operator.add)
+def overload_string_array_add(A, B):
+    # both string array
+    if A == string_array_type and B == string_array_type:
+
+        def impl_both(A, B):  # pragma: no cover
+            numba.parfor.init_prange()
+            l = len(A)
+            num_chars = 0
+            for i in numba.parfor.internal_prange(l):
+                s = 0
+                if not (
+                    bodo.libs.array_kernels.isna(A, i)
+                    or bodo.libs.array_kernels.isna(B, i)
+                ):
+                    s = bodo.libs.str_arr_ext.get_utf8_size(A[i] + B[i])
+                num_chars += s
+
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
+            for j in numba.parfor.internal_prange(l):
+                if bodo.libs.array_kernels.isna(A, j) or bodo.libs.array_kernels.isna(
+                    B, j
+                ):
+                    out_arr[j] = ""
+                    bodo.ir.join.setitem_arr_nan(out_arr, j)
+                else:
+                    out_arr[j] = A[j] + B[j]
+
+            return out_arr
+
+        return impl_both
+
+    # left arg is string array
+    if A == string_array_type and types.unliteral(B) == string_type:
+
+        def impl_left(A, B):  # pragma: no cover
+            numba.parfor.init_prange()
+            l = len(A)
+            num_chars = 0
+            for i in numba.parfor.internal_prange(l):
+                s = 0
+                if not bodo.libs.array_kernels.isna(A, i):
+                    s = bodo.libs.str_arr_ext.get_utf8_size(A[i] + B)
+                num_chars += s
+
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
+            for j in numba.parfor.internal_prange(l):
+                if bodo.libs.array_kernels.isna(A, j):
+                    out_arr[j] = ""
+                    bodo.ir.join.setitem_arr_nan(out_arr, j)
+                else:
+                    out_arr[j] = A[j] + B
+
+            return out_arr
+
+        return impl_left
+
+    # right arg is string array
+    if types.unliteral(A) == string_type and B == string_array_type:
+
+        def impl_right(A, B):  # pragma: no cover
+            numba.parfor.init_prange()
+            l = len(B)
+            num_chars = 0
+            for i in numba.parfor.internal_prange(l):
+                s = 0
+                if not bodo.libs.array_kernels.isna(B, i):
+                    s = bodo.libs.str_arr_ext.get_utf8_size(A + B[i])
+                num_chars += s
+
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
+            for j in numba.parfor.internal_prange(l):
+                if bodo.libs.array_kernels.isna(B, j):
+                    out_arr[j] = ""
+                    bodo.ir.join.setitem_arr_nan(out_arr, j)
+                else:
+                    out_arr[j] = A + B[j]
+
+            return out_arr
+
+        return impl_right
+
+
 class StringArrayIterator(types.SimpleIteratorType):
     """
     Type class for iterators of string arrays.
