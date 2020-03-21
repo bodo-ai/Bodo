@@ -608,6 +608,12 @@ class SeriesPass:
                 )
                 return self._replace_func(impl, [arg1, arg2])
 
+            if typ1 == string_array_type or typ2 == string_array_type:
+                impl = bodo.libs.str_arr_ext.overload_string_array_add(
+                    typ1, typ2
+                )
+                return self._replace_func(impl, [arg1, arg2])
+
         # inline overload for comparisons
         if rhs.fn in (
             operator.eq,
@@ -2233,8 +2239,8 @@ class SeriesPass:
         # convert str_arr==str into parfor
         if (
             rhs.fn in _string_array_comp_ops
-            and is_str_arr_typ(self.typemap[rhs.lhs.name])
-            or is_str_arr_typ(self.typemap[rhs.rhs.name])
+            and (is_str_arr_typ(self.typemap[rhs.lhs.name])
+            or is_str_arr_typ(self.typemap[rhs.rhs.name]))
         ):
             nodes = []
             arg1 = rhs.lhs

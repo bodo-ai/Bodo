@@ -920,6 +920,19 @@ def test_series_bool_vals_cmp_op(S, op):
     check_func(test_impl, (S, S))
 
 
+def test_series_str_add():
+    """Test addition for string Series
+    """
+    def test_impl(S, other):
+        return S + other
+
+    S = pd.Series(["AA", "D", None, "녁은", "AA🐍"], [3, 5, 0, 7, -1])
+    S2 = pd.Series(["C🐍", "녁은", "D", None, "AA"], [3, 5, 0, 7, -1])
+    check_func(test_impl, (S, S2))
+    check_func(test_impl, (S, "CC"))
+    check_func(test_impl, ("CC", S))
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "S1,S2,fill,raises",
