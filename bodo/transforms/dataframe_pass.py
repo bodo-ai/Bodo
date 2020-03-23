@@ -35,7 +35,6 @@ from bodo.utils.typing import list_cumulative
 from bodo import hiframes
 from bodo.utils.utils import (
     debug_prints,
-    inline_new_blocks,
     ReplaceFunc,
     is_whole_slice,
     is_array_typ,
@@ -182,11 +181,6 @@ class DataFramePass:
                                         )
                                     )
                             work_list.append((c_label, c_block))
-                    replaced = True
-                    break
-                if isinstance(out_nodes, dict):
-                    block.body = new_body + block.body[i:]
-                    inline_new_blocks(self.func_ir, block, i, out_nodes, work_list)
                     replaced = True
                     break
 
@@ -610,9 +604,11 @@ class DataFramePass:
         f = loc_vars["f"]
 
         arr_typ = self.typemap[lhs.name].data
-        f_ir = compile_to_numba_ir(
-            f,
-            {
+        nodes = []
+        col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
+        df_index_var = self._get_dataframe_index(df_var, nodes)
+
+        return self._replace_func(f, col_vars + [df_index_var], extra_globals={
                 "numba": numba,
                 "np": np,
                 "Row": Row,
@@ -620,42 +616,8 @@ class DataFramePass:
                 "_arr_typ": arr_typ,
                 "get_utf8_size": get_utf8_size,
                 "pre_alloc_string_array": pre_alloc_string_array,
-            },
-        )
-        # fix definitions to enable finding sentinel
-        f_ir._definitions = build_definitions(f_ir.blocks)
-        topo_order = find_topo_order(f_ir.blocks)
-
-        # find sentinel function and replace with user func
-        for l in topo_order:
-            block = f_ir.blocks[l]
-            for i, stmt in enumerate(block.body):
-                if (
-                    isinstance(stmt, ir.Assign)
-                    and isinstance(stmt.value, ir.Expr)
-                    and stmt.value.op == "call"
-                ):
-                    fdef = guard(get_definition, f_ir, stmt.value.func)
-                    if isinstance(fdef, ir.Global) and fdef.name == "map_func":
-                        inline_closure_call(f_ir, _globals, block, i, func)
-                        # fix the global value to avoid typing errors
-                        fdef.value = 1
-                        fdef.name = "A"
-
-        arg_typs = tuple(df_typ.data[df_typ.columns.index(c)] for c in used_cols)
-        arg_typs += (df_typ.index,)
-        f_typemap, f_return_type, f_calltypes = numba.typed_passes.type_inference_stage(
-            self.typingctx, f_ir, arg_typs, None
-        )
-        self.typemap.update(f_typemap)
-        self.calltypes.update(f_calltypes)
-
-        nodes = []
-        col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
-        df_index_var = self._get_dataframe_index(df_var, nodes)
-        replace_arg_nodes(f_ir.blocks[topo_order[0]], col_vars + [df_index_var])
-        f_ir.blocks[topo_order[0]].body = nodes + f_ir.blocks[topo_order[0]].body
-        return f_ir.blocks
+                "map_func": numba.njit(func),
+            }, pre_nodes=nodes)
 
     def _run_call_df_sort_values(self, assign, lhs, rhs):
         df_var, by_var, ascending_var, inplace_var, na_position_var = rhs.args
