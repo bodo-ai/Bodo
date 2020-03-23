@@ -1109,6 +1109,14 @@ class SeriesPass:
                     return self._replace_func(lambda arr, i: False, [arr, ind])
             return [assign]
 
+        if fdef == ("gen_na_array", "bodo.libs.array_kernels"):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+            impl = bodo.libs.array_kernels.overload_gen_na_array(*arg_typs, **kw_typs)
+            return self._replace_func(
+                impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
+            )
+
         if fdef == ("argsort", "bodo.hiframes.series_impl"):
             lhs = assign.target
             data = rhs.args[0]
