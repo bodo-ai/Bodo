@@ -384,7 +384,9 @@ def gen_add_consts_to_type(vals, var, ret_var, typing_info=None):
     return nodes
 
 
-# The code below is copied from Numba and modified to handle raise nodes by running
+# `run_frontend` function of Numba is used in inline_closure_call to get the IR of the
+# function to be inlined.
+# The code below is copied from Numba and modified to handle 'raise' nodes by running
 # rewrite passes before inlining (feature copied from numba.ir_utils.get_ir_of_code).
 # usecase example: bodo/tests/test_series.py::test_series_combine"[S13-S23-None-True]"
 # https://github.com/numba/numba/blob/cc7e7c7cfa6389b54d3b5c2c95751c97eb531a96/numba/compiler.py#L186
@@ -401,6 +403,7 @@ def run_frontend(func, inline_closures=False):
     bc = numba.bytecode.ByteCode(func_id=func_id)
     func_ir = interp.interpret(bc)
     if inline_closures:
+        # code added to original 'run_frontend' to add rewrite passes
         # we need to run the before inference rewrite pass to normalize the IR
         # XXX: check rewrite pass flag?
         # for example, Raise nodes need to become StaticRaise before type inference
@@ -414,9 +417,13 @@ def run_frontend(func, inline_closures=False):
                 self.state.typemap = None
                 self.state.return_type = None
                 self.state.calltypes = None
-        numba.rewrites.rewrite_registry.apply('before-inference', DummyPipeline(func_ir).state)
-        inline_pass = numba.inline_closurecall.InlineClosureCallPass(func_ir, numba.targets.cpu.ParallelOptions(False),
-                                            {}, False)
+
+        numba.rewrites.rewrite_registry.apply(
+            "before-inference", DummyPipeline(func_ir).state
+        )
+        inline_pass = numba.inline_closurecall.InlineClosureCallPass(
+            func_ir, numba.targets.cpu.ParallelOptions(False), {}, False
+        )
         inline_pass.run()
     post_proc = numba.postproc.PostProcessor(func_ir)
     post_proc.run()
