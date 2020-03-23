@@ -640,7 +640,7 @@ def unique_overload_parallel(A):
     return unique_par
 
 
-def gen_na_array(n, arr):
+def gen_na_array(n, arr):  # pragma: no cover
     return np.full(n, np.nan)
 
 

@@ -1197,9 +1197,14 @@ def test_df_filter_rm_index():
         bodo.jit(impl)(df1, df2)
 
 
-def test_append_str_nulls():
+def test_concat_nulls():
+    """Test dataframe concatenation when full NA arrays need to be appended
+    """
     def test_impl(df, df2):
         return df.append(df2, ignore_index=True)
+
+    def test_impl_concat(df, df2):
+        return pd.concat((df, df2), ignore_index=True)
 
     n = 5
     df = pd.DataFrame(
@@ -1216,6 +1221,7 @@ def test_append_str_nulls():
         }
     )
     check_func(test_impl, (df, df2), sort_output=True)
+    check_func(test_impl_concat, (df, df2), sort_output=True)
 
 
 from numba.compiler_machinery import FunctionPass, register_pass
