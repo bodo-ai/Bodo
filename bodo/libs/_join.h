@@ -29,13 +29,19 @@
  * @param n_key_t : the number of columns of keys on input
  * @param n_data_left_t : the number of columns of data on the left
  * @param n_data_right_t : the number of columns of data on the right
+ * @param vect_same_key : a vector of integers specifying if a key has the same name
+ *    on the left and on the right.
+ * @param vect_need_typechange : a vector specifying whether a column needs to be changed
+ *    or not. This usage is due to the need to support categorical array.
  * @param is_left : whether we do merging on the left
  * @param is_right : whether we do merging on the right.
+ * @param is_join ;: whether the call is a join or not.
  * @param optional_col : When doing a merge on column and index, the key
  *    is put also in output, so we need one additional column in that case.
  * @return the returned table used in the code.
  */
 table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
                             int64_t n_data_left_t, int64_t n_data_right_t,
-                            int64_t* vect_same_key, bool is_left, bool is_right,
-                            bool optional_col);
+                            int64_t* vect_same_key, int64_t* vect_need_typechange,
+                            bool is_left, bool is_right,
+                            bool is_join, bool optional_col);

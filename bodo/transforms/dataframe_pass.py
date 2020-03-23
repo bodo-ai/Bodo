@@ -1554,11 +1554,8 @@ class DataFramePass:
         is_join = guard(find_const, self.func_ir, is_join_var)
         out_typ = self.typemap[lhs.name]
         # convert right join to left join
-        if how == "right":
-            how = "left"
-            left_df, right_df = right_df, left_df
-            left_on, right_on = right_on, left_on
-            suffix_x, suffix_y = suffix_y, suffix_x
+        is_left = how in {"left", "outer"}
+        is_right = how in {"right", "outer"}
 
         nodes = []
         out_data_vars = {
@@ -1571,11 +1568,16 @@ class DataFramePass:
             c: self._get_dataframe_data(left_df, c, nodes)
             for c in self.typemap[left_df.name].columns
         }
-
         right_arrs = {
             c: self._get_dataframe_data(right_df, c, nodes)
             for c in self.typemap[right_df.name].columns
         }
+        # In the case of pd.merge we have following behavior for the index:
+        # ---if the key is a normal column then the joined table has a trivial index.
+        # ---if one of the key is an index then it becomes an index.
+        # In the case of df1.join(df2, ....) we have following behavior for the index:
+        # ---the index of df1 is used for the merging. and the index of df2 or some other column.
+        # ---The index of the joined table is assigned from the non-joined column.
 
         in_index_var = None
         out_index_var = None
@@ -1587,7 +1589,7 @@ class DataFramePass:
             in_df_index_name = self._get_index_name(in_df_index, nodes)
             in_index_var = self._gen_array_from_index(right_df, nodes)
             right_arrs["$_bodo_index_"] = in_index_var
-        if left_index:
+        if left_index or is_join:
             in_df_index = self._get_dataframe_index(left_df, nodes)
             in_df_index_name = self._get_index_name(in_df_index, nodes)
             in_index_var = self._gen_array_from_index(left_df, nodes)
@@ -1612,6 +1614,8 @@ class DataFramePass:
                 suffix_x,
                 suffix_y,
                 lhs.loc,
+                is_left,
+                is_right,
                 is_join,
             )
         )

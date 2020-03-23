@@ -91,12 +91,12 @@ def test_merge_suffixes_bracket():
         o1 = df1.merge(df2, on="key", how="outer", suffixes=["_a", "_b"])
         return o1
 
-    df1 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [1, 2, 3, 5]})
+    df1 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [1, 2, 3, 4]})
     df2 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [5, 6, 7, 8]})
     check_func(test_impl1, (df1, df2), sort_output=True)
-    check_func(test_impl2, (df1, df2), sort_output=True)
-    check_func(test_impl3, (df1, df2), sort_output=True)
-    check_func(test_impl4, (df1, df2), sort_output=True)
+    check_func(test_impl2, (df1, df2), sort_output=True, check_dtype=False)
+    check_func(test_impl3, (df1, df2), sort_output=True, check_dtype=False)
+    check_func(test_impl4, (df1, df2), sort_output=True, check_dtype=False)
 
 
 def test_merge_suffixes_parenthesis():
@@ -664,10 +664,7 @@ def test_merge_index_left():
     df1 = pd.DataFrame({"a": [20, 10, 0]}, index=[2, 1, 0])
     df2 = pd.DataFrame({"b": [300, 100, 200]}, index=[3, 1, 2])
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(df1, df2), impl(df1, df2).fillna(-1), check_dtype=False
-    )
+    check_func(impl, (df1, df2), sort_output=True, check_dtype=False)
 
 
 def test_merge_index_right():
@@ -680,12 +677,9 @@ def test_merge_index_right():
         df3 = df1.merge(df2, left_index=True, right_index=True, how="right")
         return df3
 
-    bodo_func = bodo.jit(impl)
     df1 = pd.DataFrame({"a": [20, 10, 0]}, index=[2, 1, 0])
     df2 = pd.DataFrame({"b": [300, 100, 200]}, index=[3, 1, 2])
-    pd.testing.assert_frame_equal(
-        bodo_func(df1, df2), impl(df1, df2).fillna(-1), check_dtype=False
-    )
+    check_func(impl, (df1, df2), sort_output=True, check_dtype=False)
 
 
 def test_merge_index_outer():
@@ -702,11 +696,7 @@ def test_merge_index_outer():
     df1 = pd.DataFrame({"a": [20, 10, 0]}, index=[2, 1, 0])
     df2 = pd.DataFrame({"b": [300, 100, 200]}, index=[3, 1, 2])
 
-    pd.testing.assert_frame_equal(
-        bodo_func(df1, df2).sort_values(["a", "b"]).reset_index(drop=True),
-        impl(df1, df2).fillna(-1).sort_values(["a", "b"]).reset_index(drop=True),
-        check_dtype=False,
-    )
+    check_func(impl, (df1, df2), sort_output=True, check_dtype=False)
 
 
 @pytest.mark.parametrize(
@@ -1045,20 +1035,12 @@ def test_join_call(df1, df2):
         df3 = df1.join(df2)
         return df3
 
-    bodo_func = bodo.jit(impl1)
-    pd.testing.assert_frame_equal(
-        bodo_func(df1, df2).sort_values("A").reset_index(drop=True),
-        impl1(df1, df2).sort_values("A").reset_index(drop=True),
-    )
+    check_func(impl1, (df1, df2), sort_output=True, check_dtype=False)
 
     def impl2(df1, df2):
         return df1.join(df2, on="A")
 
-    bodo_func = bodo.jit(impl2)
-    pd.testing.assert_frame_equal(
-        bodo_func(df1, df2).sort_values("A").reset_index(drop=True),
-        impl2(df1, df2).sort_values("A").reset_index(drop=True),
-    )
+    check_func(impl2, (df1, df2), sort_output=True, check_dtype=False)
 
 
 @pytest.mark.parametrize(
@@ -1101,55 +1083,10 @@ def test_join_how(df1, df2):
         df3 = df1.join(df2, how="inner")
         return df3
 
-    bodo_func_left = bodo.jit(impl_left)
-    bodo_func_right = bodo.jit(impl_right)
-    bodo_func_outer = bodo.jit(impl_outer)
-    bodo_func_inner = bodo.jit(impl_inner)
-
-    pd.testing.assert_frame_equal(
-        bodo_func_left(df1, df2)
-        .fillna(-1)
-        .sort_values(["A", "B", "D", "E"])
-        .reset_index(drop=True),
-        impl_left(df1, df2)
-        .fillna(-1)
-        .sort_values(["A", "B", "D", "E"])
-        .reset_index(drop=True),
-        check_dtype=False,
-    )
-    pd.testing.assert_frame_equal(
-        bodo_func_right(df1, df2)
-        .fillna(-1)
-        .sort_values(["A", "B", "D", "E"])
-        .reset_index(drop=True),
-        impl_right(df1, df2)
-        .fillna(-1)
-        .sort_values(["A", "B", "D", "E"])
-        .reset_index(drop=True),
-        check_dtype=False,
-    )
-    pd.testing.assert_frame_equal(
-        bodo_func_outer(df1, df2)
-        .fillna(-1)
-        .sort_values(["A", "B", "D", "E"])
-        .reset_index(drop=True),
-        impl_outer(df1, df2)
-        .fillna(-1)
-        .sort_values(["A", "B", "D", "E"])
-        .reset_index(drop=True),
-        check_dtype=False,
-    )
-    pd.testing.assert_frame_equal(
-        bodo_func_inner(df1, df2)
-        .fillna(-1)
-        .sort_values(["A", "B", "D", "E"])
-        .reset_index(drop=True),
-        impl_inner(df1, df2)
-        .fillna(-1)
-        .sort_values(["A", "B", "D", "E"])
-        .reset_index(drop=True),
-        check_dtype=False,
-    )
+    check_func(impl_left, (df1, df2), sort_output=True, check_dtype=False)
+    check_func(impl_right, (df1, df2), sort_output=True, check_dtype=False)
+    check_func(impl_outer, (df1, df2), sort_output=True, check_dtype=False)
+    check_func(impl_inner, (df1, df2), sort_output=True, check_dtype=False)
 
 
 # ------------------------------ merge on the index and column ------------------------------ #
@@ -1238,6 +1175,11 @@ def test_merge_index_column_string_index():
 def test_merge_index_column_how():
     """
     Test merge(): Same as first but with a variety of how merging.
+    We need to have an index column that is made of floats since
+    otherwise we would need to accept an index made of IntegerArrayType
+    and that is not possible right now.
+    The check_dtype=False is here because otherwise we have a collision
+    between the dtype: one side is "Int64" and the other "int64".
     """
 
     def f1(df1, df2):
@@ -1258,14 +1200,18 @@ def test_merge_index_column_how():
 
     np.random.seed(5)
 
+    siz = 40
     df1 = pd.DataFrame(
-        {"A": np.random.randint(0,10,50), "C": np.random.randint(0,10,50)}, index=np.random.randint(0,10,50)
+        {"A": 0.0 + np.random.randint(0,10,siz), "C": np.random.randint(0,10,siz)}, index=0.0 + np.random.randint(0,10,siz)
+    )
+    df2 = pd.DataFrame(
+        {"A": 0.0 + np.random.randint(0,10,siz), "C": np.random.randint(0,10,siz)}, index=0.0 + np.random.randint(0,10,siz)
     )
 
-    check_func(f1, (df1, df1), sort_output=True)
-    check_func(f2, (df1, df1), sort_output=True)
-    check_func(f3, (df1, df1), sort_output=True)
-    check_func(f4, (df1, df1), sort_output=True)
+    check_func(f1, (df1, df2), sort_output=True, check_dtype=False)
+    check_func(f2, (df1, df2), sort_output=True, check_dtype=False)
+    check_func(f3, (df1, df2), sort_output=True, check_dtype=False)
+    check_func(f4, (df1, df2), sort_output=True, check_dtype=False)
 
 
 def test_merge_partial_distributed():

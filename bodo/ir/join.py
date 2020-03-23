@@ -7,6 +7,7 @@ import pandas as pd
 from bodo.utils.typing import BodoError
 import numba
 from numba import generated_jit, ir, ir_utils, typeinfer, types
+from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from numba.extending import overload
 from numba.ir_utils import (
     visit_vars_inner,
@@ -86,6 +87,8 @@ class Join(ir.Stmt):
         suffix_x,
         suffix_y,
         loc,
+        is_left,
+        is_right,
         is_join,
     ):
         self.df_out = df_out
@@ -100,6 +103,8 @@ class Join(ir.Stmt):
         self.suffix_x = suffix_x
         self.suffix_y = suffix_y
         self.loc = loc
+        self.is_left = is_left
+        self.is_right = is_right
         self.is_join = is_join
         # keep the origin of output columns to enable proper dead code elimination
         # columns with common name that are not common keys will get a suffix
@@ -395,14 +400,15 @@ def join_distributed_run(
     join_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass
 ):
     left_parallel, right_parallel = _get_table_parallel_flags(join_node, array_dists)
-    method = "hash"
-    pd_join_func = None
-    if bodo.use_pandas_join:
-        method = "pandas"
-    # method = 'sort'
     # TODO: rebalance if output distributions are 1D instead of 1D_Var
     loc = join_node.loc
     n_keys = len(join_node.left_keys)
+    # vect_same_key is a vector of boolean containing whether the key have the same
+    # name on the left and right. This has impact how they show up in the output:
+    # ---If they have the same name then they show up just once (and have no additional
+    #   missing entry)
+    # ---If they have different name then they show up two times (and can have additional
+    #   missing entry)
     vect_same_key = []
     for iKey in range(n_keys):
         name_left = join_node.left_keys[iKey]
@@ -428,6 +434,20 @@ def join_distributed_run(
         optional_key_tuple = (optional_key,)
         optional_col_var = (join_node.left_vars[optional_key],)
         optional_column = True
+
+    # It is a fairly complex construction
+    # ---keys can have same name on left and right.
+    # ---keys can be two times or one time in output.
+    # ---output keys can be computed from just one column (and so additional NaN may occur)
+    #  or from two columns
+    # ---keys may be from the index or not.
+    #
+    # The following rules apply:
+    # ---A key that is an index or not behave in the same way. If it is an index key
+    #  then its name is just the fancy "$_bodo_index_", so please don't use that one.
+    # ---Identity of key is determined by their name, whether they are index or not.
+    # ---If a key appears on same name on left and right then both columns are used
+    #  and so the name will never have additional NaNs
 
     out_optional_key_vars = tuple(
         join_node.df_out_vars[cname] for cname in optional_key_tuple
@@ -458,7 +478,8 @@ def join_distributed_run(
 
     left_other_names = tuple("t1_c" + str(i) for i in range(len(left_other_col_vars)))
     right_other_names = tuple("t2_c" + str(i) for i in range(len(right_other_col_vars)))
-
+    left_other_types = tuple([typemap[c.name] for c in left_other_col_vars])
+    right_other_types = tuple([typemap[c.name] for c in right_other_col_vars])
     left_key_names = tuple("t1_key" + str(i) for i in range(n_keys))
     right_key_names = tuple("t2_key" + str(i) for i in range(n_keys))
 
@@ -524,11 +545,20 @@ def join_distributed_run(
             )
         # func_text += "    print(t2_key, data_right)\n"
 
-    if method == "sort" and join_node.how != "asof":
-        # asof key is already sorted, TODO: add error checking
-        # local sort
-        func_text += "    bodo.ir.sort.local_sort(t1_keys, data_left)\n"
-        func_text += "    bodo.ir.sort.local_sort(t2_keys, data_right)\n"
+    out_keys = []
+    for cname in join_node.left_keys:
+        if cname + join_node.suffix_x in join_node.df_out_vars:
+            cname_work = cname + join_node.suffix_x
+        else:
+            cname_work = cname
+        out_keys.append(join_node.df_out_vars[cname_work])
+    for i, cname in enumerate(join_node.right_keys):
+        if not vect_same_key[i] and not join_node.is_join:
+            cname_work = cname + join_node.suffix_y
+            if not cname_work in join_node.df_out_vars:
+                cname_work = cname
+            assert cname_work in join_node.df_out_vars
+            out_keys.append(join_node.df_out_vars[cname_work])
 
     def _get_out_col_var(cname, is_left):
         if is_left and cname + join_node.suffix_x in join_node.df_out_vars:
@@ -538,18 +568,7 @@ def join_distributed_run(
 
         return join_node.df_out_vars[cname]
 
-    out_l_key_vars = tuple(_get_out_col_var(c, True) for c in join_node.left_keys)
-    out_r_key_vars = tuple(_get_out_col_var(c, False) for c in join_node.right_keys)
-    # create dummy variable if right key is not actually returned
-    # using the same output left key causes errors for asof case
-    if join_node.left_keys == join_node.right_keys:
-        out_r_key_vars = tuple(
-            ir.Var(scope, mk_unique_var("dummy_k"), loc) for _ in range(n_keys)
-        )
-        for v, w in zip(out_r_key_vars, out_l_key_vars):
-            typemap[v.name] = typemap[w.name]
-
-    merge_out = out_optional_key_vars + out_l_key_vars + out_r_key_vars
+    merge_out = out_optional_key_vars + tuple(out_keys)
     merge_out += tuple(
         _get_out_col_var(n, True)
         for (n, v) in sorted(join_node.left_vars.items())
@@ -567,32 +586,7 @@ def join_distributed_run(
             "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
             " = bodo.ir.join.local_merge_asof(t1_keys, t2_keys, data_left, data_right)\n"
         )
-    elif method == "sort":
-        func_text += (
-            "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
-            " = bodo.ir.join.local_merge_new(t1_keys, t2_keys, data_left, data_right, {}, {})\n".format(
-                join_node.how in ("left", "outer"), join_node.how == "outer"
-            )
-        )
-    elif method == "pandas":
-        pd_join_func = _gen_pd_join(
-            left_key_vars,
-            right_key_vars,
-            left_other_col_vars,
-            right_other_col_vars,
-            typemap,
-            join_node.how,
-        )
-        func_text += (
-            "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
-            " = pd_join_func(t1_keys, t2_keys, data_left, data_right, '{}', {})\n".format(
-                join_node.how, join_node.left_keys == join_node.right_keys
-            )
-        )
     else:
-        assert method == "hash"
-        is_left = join_node.how in ("left", "outer")
-        is_right = join_node.how == "outer"
         func_text += _gen_local_hash_join(
             optional_column,
             left_key_names,
@@ -601,11 +595,14 @@ def join_distributed_run(
             right_key_types,
             left_other_names,
             right_other_names,
+            left_other_types,
+            right_other_types,
             vect_same_key,
-            is_left,
-            is_right,
+            join_node.is_left,
+            join_node.is_right,
+            join_node.is_join,
         )
-    if join_node.how == "asof" or method != "hash":
+    if join_node.how == "asof":
         for i in range(len(left_other_names)):
             func_text += "    left_{} = out_data_left[{}]\n".format(i, i)
         for i in range(len(right_other_names)):
@@ -627,8 +624,9 @@ def join_distributed_run(
         func_text += "    {} = t1_keys_{}\n".format(out_names[idx], i)
         idx += 1
     for i in range(n_keys):
-        func_text += "    {} = t2_keys_{}\n".format(out_names[idx], i)
-        idx += 1
+        if not vect_same_key[i] and not join_node.is_join:
+            func_text += "    {} = t2_keys_{}\n".format(out_names[idx], i)
+            idx += 1
     for i in range(len(left_other_names)):
         func_text += "    {} = left_{}\n".format(out_names[idx], i)
         idx += 1
@@ -642,7 +640,7 @@ def join_distributed_run(
     glbs = {
         "bodo": bodo,
         "np": np,
-        "pd_join_func": pd_join_func,
+        "pd": pd,
         "to_string_list": to_string_list,
         "cp_str_list_to_array": cp_str_list_to_array,
         "parallel_asof_comm": parallel_asof_comm,
@@ -660,6 +658,7 @@ def join_distributed_run(
     ).blocks.popitem()[1]
     replace_arg_nodes(f_block, arg_vars)
 
+    tuple_assign = f_block.body[-3]
     nodes = f_block.body[:-3]
     for i in range(len(merge_out)):
         nodes[-len(merge_out) + i].target = merge_out[i]
@@ -735,10 +734,75 @@ def _gen_local_hash_join(
     right_key_types,
     left_other_names,
     right_other_names,
+    left_other_types,
+    right_other_types,
     vect_same_key,
     is_left,
     is_right,
+    is_join,
 ):
+    # In some case the column in output has a type different from the one in input.
+    # TODO: Unify those type changes between all cases.
+    def needs_typechange(in_type, need_nullable, is_same_key):
+        return (
+            isinstance(in_type, types.Array)
+            and not isinstance(in_type.dtype, types.Float)
+            and need_nullable
+            and not is_same_key
+        )
+
+    # The vect_need_typechange is computed in the python code and is sent to C++.
+    # This is a general approach for this kind of combinatorial problem: compute in python
+    # preferably to C++. Compute in dataframe_pass.py preferably to the IR node.
+    #
+    # The vect_need_typechange is for the need to change the type in some cases.
+    # Following constraints have to be taken into account:
+    # ---For NullableArrayType the output column has the same format as the input column
+    # ---For numpy array of float the output column has the same format as the input column
+    # ---For numpy array of integer it may happen that we need to add missing entries and so
+    #  we change the output type.
+    # ---For categorical array data, the input is integer and we do not change the type.
+    #   We may have to change this if missing data in categorical gets treated differently.
+    # ALSO: The interaction with the _gen_reverse_type_match has maybe potential problems.
+
+    vect_need_typechange = []
+    for i in range(len(left_key_names)):
+        vect_need_typechange.append(
+            needs_typechange(left_key_types[i], is_right, vect_same_key[i])
+        )
+    for i in range(len(left_other_names)):
+        vect_need_typechange.append(
+            needs_typechange(left_other_types[i], is_right, False)
+        )
+    for i in range(len(right_key_names)):
+        if not vect_same_key[i] and not is_join:
+            vect_need_typechange.append(
+                needs_typechange(right_key_types[i], is_left, False)
+            )
+    for i in range(len(right_other_names)):
+        vect_need_typechange.append(
+            needs_typechange(right_other_types[i], is_left, False)
+        )
+
+    def get_out_type(idx, in_type, in_name, need_nullable, is_same_key):
+        if (
+            isinstance(in_type, types.Array)
+            and in_type.dtype not in (types.float32, types.float64)
+            and need_nullable
+            and not is_same_key
+        ):
+            int_typ_name = IntDtype(in_type.dtype).name
+            assert int_typ_name.endswith("Dtype()")
+            int_typ_name = int_typ_name[:-7]
+            ins_text = '    typ_{} = pd.Series([1], dtype="{}").values\n'.format(
+                idx, int_typ_name
+            )
+            out_type = "typ_{}".format(idx)
+        else:
+            ins_text = ""
+            out_type = in_name
+        return (ins_text, out_type)
+
     n_keys = len(left_key_names)
     func_text = "    # beginning of _gen_local_hash_join\n"
     eList = []
@@ -757,12 +821,16 @@ def _gen_local_hash_join(
     func_text += "    vect_same_key = np.array([{}])\n".format(
         ",".join("1" if x else "0" for x in vect_same_key)
     )
-    func_text += "    out_table = hash_join_table(table_total, {}, {}, {}, vect_same_key.ctypes, {}, {}, {})\n".format(
+    func_text += "    vect_need_typechange = np.array([{}])\n".format(
+        ",".join("1" if x else "0" for x in vect_need_typechange)
+    )
+    func_text += "    out_table = hash_join_table(table_total, {}, {}, {}, vect_same_key.ctypes, vect_need_typechange.ctypes, {}, {}, {}, {})\n".format(
         n_keys,
         len(left_other_names),
         len(right_other_names),
         is_left,
         is_right,
+        is_join,
         optional_column,
     )
     func_text += "    delete_table(table_total)\n"
@@ -773,23 +841,42 @@ def _gen_local_hash_join(
         )
         idx += 1
     for i, t in enumerate(left_key_names):
-        func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), t1_keys[{}]){}\n".format(
-            i, idx, i, _gen_reverse_type_match(left_key_types[i], right_key_types[i])
+        rec_typ = get_out_type(
+            idx, left_key_types[i], "t1_keys[{}]".format(i), is_right, vect_same_key[i]
+        )
+        func_text += rec_typ[0]
+        func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), {}){}\n".format(
+            i,
+            idx,
+            rec_typ[1],
+            _gen_reverse_type_match(left_key_types[i], right_key_types[i]),
         )
         idx += 1
     for i, t in enumerate(left_other_names):
+        rec_typ = get_out_type(idx, left_other_types[i], t, is_right, False)
+        func_text += rec_typ[0]
         func_text += "    left_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-            i, idx, t
+            i, idx, rec_typ[1]
         )
         idx += 1
     for i, t in enumerate(right_key_names):
-        func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), t2_keys[{}]){}\n".format(
-            i, idx, i, _gen_reverse_type_match(right_key_types[i], left_key_types[i])
-        )
-        idx += 1
+        if not vect_same_key[i] and not is_join:
+            rec_typ = get_out_type(
+                idx, right_key_types[i], "t2_keys[{}]".format(i), is_right, False
+            )
+            func_text += rec_typ[0]
+            func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), {}){}\n".format(
+                i,
+                idx,
+                rec_typ[1],
+                _gen_reverse_type_match(right_key_types[i], left_key_types[i]),
+            )
+            idx += 1
     for i, t in enumerate(right_other_names):
+        rec_typ = get_out_type(idx, right_other_types[i], t, is_left, False)
+        func_text += rec_typ[0]
         func_text += "    right_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-            i, idx, t
+            i, idx, rec_typ[1]
         )
         idx += 1
 
@@ -1248,208 +1335,6 @@ def _check_ind_if_hashed(right_keys, r_ind, l_key):
         return r_ind
 
     return _impl
-
-
-def _gen_pd_join(
-    left_key_vars,
-    right_key_vars,
-    left_other_col_vars,
-    right_other_col_vars,
-    typemap,
-    how,
-):
-    l_keys_typ = types.Tuple([typemap[v.name] for v in left_key_vars])
-    r_keys_typ = types.Tuple([typemap[v.name] for v in right_key_vars])
-    l_data_typ = types.Tuple([typemap[v.name] for v in left_other_col_vars])
-    r_data_typ = types.Tuple([typemap[v.name] for v in right_other_col_vars])
-    lk_name = "pd_join{}".format(str(ir_utils.next_label()))
-    rk_name = "pd_join{}".format(str(ir_utils.next_label()))
-    ld_name = "pd_join{}".format(str(ir_utils.next_label()))
-    rd_name = "pd_join{}".format(str(ir_utils.next_label()))
-    setattr(types, lk_name, l_keys_typ)
-    setattr(types, rk_name, r_keys_typ)
-    setattr(types, ld_name, l_data_typ)
-    setattr(types, rd_name, r_data_typ)
-
-    typ_strs = "out_t1_keys='{}', out_t2_keys='{}', out_data_left='{}', out_data_right='{}'".format(
-        lk_name, rk_name, ld_name, rd_name
-    )
-
-    func_text = "def f(t1_keys, t2_keys, data_left, data_right, how, same_keys):\n"
-    func_text += "  with objmode({}):\n".format(typ_strs)
-    func_text += "    out_t1_keys, out_t2_keys, out_data_left, out_data_right = bodo.ir.join.pd_join(t1_keys, t2_keys, data_left, data_right, how, same_keys)\n"
-    func_text += "  return out_t1_keys, out_t2_keys, out_data_left, out_data_right\n"
-
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo, "objmode": objmode}, loc_vars)
-    f = loc_vars["f"]
-
-    # TODO: no_cpython_wrapper=True crashes for some reason
-    jit_func = numba.njit(f)
-    bodo.ir.csv_ext.compiled_funcs.append(jit_func)
-    return jit_func
-
-
-def pd_join(t1_keys, t2_keys, data_left, data_right, how, same_keys):
-    # construct dataframes and call join
-    lk_prefix = "lk"
-    rk_prefix = "rk"
-    if same_keys:
-        # same key case matters since Pandas avoids NAs in outer case
-        # like test_join_outer_seq1
-        rk_prefix = "lk"
-
-    data1 = {"{}{}".format(lk_prefix, i): v for i, v in enumerate(t1_keys)}
-    data2 = {"{}{}".format(rk_prefix, i): v for i, v in enumerate(t2_keys)}
-    left_on = list(data1.keys())
-    right_on = list(data2.keys())
-    data1.update({"ld{}".format(i): v for i, v in enumerate(data_left)})
-    data2.update({"rd{}".format(i): v for i, v in enumerate(data_right)})
-    df1 = pd.DataFrame(data1)
-    df2 = pd.DataFrame(data2)
-    df3 = df1.merge(df2, left_on=left_on, right_on=right_on, how=how)
-    out_t1_keys = tuple(
-        _get_pd_out_arr(df3["{}{}".format(lk_prefix, i)], t1_keys[i])
-        for i in range(len(t1_keys))
-    )
-    out_t2_keys = tuple(
-        _get_pd_out_arr(df3["{}{}".format(rk_prefix, i)], t2_keys[i])
-        for i in range(len(t2_keys))
-    )
-    out_data_left = tuple(
-        _get_pd_out_arr(df3["ld{}".format(i)], data_left[i])
-        for i in range(len(data_left))
-    )
-    out_data_right = tuple(
-        _get_pd_out_arr(df3["rd{}".format(i)], data_right[i])
-        for i in range(len(data_right))
-    )
-    return out_t1_keys, out_t2_keys, out_data_left, out_data_right
-
-
-def _get_pd_out_arr(out_series, in_arr):
-    # Pandas converts int to float in case of NAs so convert back
-    if out_series.hasnans and in_arr.dtype in (
-        np.int8,
-        np.int16,
-        np.int32,
-        np.int64,
-        np.uint8,
-        np.uint16,
-        np.uint32,
-        np.uint64,
-    ):
-        out_series = out_series.fillna(0)
-    return out_series.astype(in_arr.dtype).values
-
-
-@numba.njit
-def local_merge_new(
-    left_keys, right_keys, data_left, data_right, is_left=False, is_outer=False
-):  # pragma: no cover
-    l_len = len(left_keys[0])
-    r_len = len(right_keys[0])
-    # TODO: approximate output size properly
-    curr_size = 101 + min(l_len, r_len) // 2
-    if is_left:
-        curr_size = int(1.1 * l_len)
-    if is_outer:
-        curr_size = int(1.1 * r_len)
-    if is_left and is_outer:
-        curr_size = int(1.1 * (l_len + r_len))
-
-    out_left_key = alloc_arr_tup(curr_size, left_keys)
-    out_data_left = alloc_arr_tup(curr_size, data_left)
-    out_data_right = alloc_arr_tup(curr_size, data_right)
-
-    out_ind = 0
-    left_ind = 0
-    right_ind = 0
-
-    while left_ind < len(left_keys[0]) and right_ind < len(right_keys[0]):
-        if getitem_arr_tup(left_keys, left_ind) == getitem_arr_tup(
-            right_keys, right_ind
-        ):
-            key = getitem_arr_tup(left_keys, left_ind)
-            # catesian product in case of duplicate keys on either side
-            left_run = left_ind
-            while (
-                left_run < len(left_keys[0])
-                and getitem_arr_tup(left_keys, left_run) == key
-            ):
-                right_run = right_ind
-                while (
-                    right_run < len(right_keys[0])
-                    and getitem_arr_tup(right_keys, right_run) == key
-                ):
-                    out_left_key = copy_elem_buff_tup(out_left_key, out_ind, key)
-                    l_data_val = getitem_arr_tup(data_left, left_run)
-                    out_data_left = copy_elem_buff_tup(
-                        out_data_left, out_ind, l_data_val
-                    )
-                    r_data_val = getitem_arr_tup(data_right, right_run)
-                    out_data_right = copy_elem_buff_tup(
-                        out_data_right, out_ind, r_data_val
-                    )
-                    out_ind += 1
-                    right_run += 1
-                left_run += 1
-            left_ind = left_run
-            right_ind = right_run
-        elif getitem_arr_tup(left_keys, left_ind) < getitem_arr_tup(
-            right_keys, right_ind
-        ):
-            if is_left:
-                out_left_key = copy_elem_buff_tup(
-                    out_left_key, out_ind, getitem_arr_tup(left_keys, left_ind)
-                )
-                l_data_val = getitem_arr_tup(data_left, left_ind)
-                out_data_left = copy_elem_buff_tup(out_data_left, out_ind, l_data_val)
-                out_data_right = setnan_elem_buff_tup(out_data_right, out_ind)
-                out_ind += 1
-            left_ind += 1
-        else:
-            if is_outer:
-                # TODO: support separate keys?
-                out_left_key = copy_elem_buff_tup(
-                    out_left_key, out_ind, getitem_arr_tup(right_keys, right_ind)
-                )
-                out_data_left = setnan_elem_buff_tup(out_data_left, out_ind)
-                r_data_val = getitem_arr_tup(data_right, right_ind)
-                out_data_right = copy_elem_buff_tup(out_data_right, out_ind, r_data_val)
-                out_ind += 1
-            right_ind += 1
-
-    if is_left and left_ind < len(left_keys[0]):
-        while left_ind < len(left_keys[0]):
-            out_left_key = copy_elem_buff_tup(
-                out_left_key, out_ind, getitem_arr_tup(left_keys, left_ind)
-            )
-            l_data_val = getitem_arr_tup(data_left, left_ind)
-            out_data_left = copy_elem_buff_tup(out_data_left, out_ind, l_data_val)
-            out_data_right = setnan_elem_buff_tup(out_data_right, out_ind)
-            out_ind += 1
-            left_ind += 1
-
-    if is_outer and right_ind < len(right_keys[0]):
-        while right_ind < len(right_keys[0]):
-            out_left_key = copy_elem_buff_tup(
-                out_left_key, out_ind, getitem_arr_tup(right_keys, right_ind)
-            )
-            out_data_left = setnan_elem_buff_tup(out_data_left, out_ind)
-            r_data_val = getitem_arr_tup(data_right, right_ind)
-            out_data_right = copy_elem_buff_tup(out_data_right, out_ind, r_data_val)
-            out_ind += 1
-            right_ind += 1
-
-    # out_left_key = out_left_key[:out_ind]
-    out_left_key = trim_arr_tup(out_left_key, out_ind)
-
-    out_right_key = copy_arr_tup(out_left_key)
-    out_data_left = trim_arr_tup(out_data_left, out_ind)
-    out_data_right = trim_arr_tup(out_data_right, out_ind)
-
-    return out_left_key, out_right_key, out_data_left, out_data_right
 
 
 @numba.njit

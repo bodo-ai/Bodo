@@ -152,12 +152,15 @@ inline std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
  * @param shift1 is the first shift (of the left array)
  * @param shift2 is the second shift (of the left array)
  * @param ChoiceColumn is the chosen option
+ * @param map_integer_type is the choice of mapping the integer type from
+ *    NUMPY to NULLABLE_INT_ARRAY if not available.
  * @return one column of the table output.
  */
 array_info* RetrieveArray(
     table_info* const& in_table,
     std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
-    size_t const& shift1, size_t const& shift2, int const& ChoiceColumn);
+    size_t const& shift1, size_t const& shift2, int const& ChoiceColumn,
+    bool const& map_integer_type);
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same

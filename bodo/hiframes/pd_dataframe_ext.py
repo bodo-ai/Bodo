@@ -1471,7 +1471,16 @@ class JoinTyper(AbstractTemplate):
         from bodo.utils.typing import is_overload_str
 
         assert not kws
-        left_df, right_df, left_on, right_on, how, suffix_x, suffix_y, is_join = args
+        (
+            left_df,
+            right_df,
+            left_on,
+            right_on,
+            how_var,
+            suffix_x,
+            suffix_y,
+            is_join,
+        ) = args
 
         # columns with common name that are not common keys will get a suffix
         comm_keys = set(left_on.consts) & set(right_on.consts)
@@ -1481,25 +1490,44 @@ class JoinTyper(AbstractTemplate):
         left_index = "$_bodo_index_" in left_on.consts
         right_index = "$_bodo_index_" in right_on.consts
 
+        how = get_overload_const_str(how_var)
+        is_left = how in {"left", "outer"}
+        is_right = how in {"right", "outer"}
         columns = []
         data = []
         # In the case of merging on one index and a column we have to add another
         # column to the output. And that requires additional work.
         if left_index and not right_index and not is_join.literal_value:
             c_col = right_on.consts[0]
-            columns += [c_col]
-            data += [right_df.data[right_df.columns.index(c_col)]]
+            columns.append(c_col)
+            data.append(right_df.data[right_df.columns.index(c_col)])
         if right_index and not left_index and not is_join.literal_value:
             c_col = left_on.consts[0]
-            columns += [c_col]
-            data += [left_df.data[left_df.columns.index(c_col)]]
+            columns.append(c_col)
+            data.append(left_df.data[left_df.columns.index(c_col)])
 
-        # The left side
+        def map_data_type(in_type, need_nullable):
+            if (
+                isinstance(in_type, types.Array)
+                and not isinstance(in_type.dtype, types.Float)
+                and need_nullable
+            ):
+                return IntegerArrayType(in_type.dtype)
+            else:
+                return in_type
+
+        # The left side. All of it got included.
         columns += [
             (c + suffix_x.literal_value if c in add_suffix else c)
             for c in left_df.columns
         ]
-        data += list(left_df.data)
+        for in_type, col in zip(left_df.data, left_df.columns):
+            if col in comm_keys:
+                # For a common key we take either from left or right, so no additional NaN occurs.
+                data.append(in_type)
+            else:
+                # For a key that is not common OR data column, we have to plan for a NaN column
+                data.append(map_data_type(in_type, is_right))
         # The right side
         # common keys are added only once so avoid adding them
         columns += [
@@ -1507,12 +1535,11 @@ class JoinTyper(AbstractTemplate):
             for c in right_df.columns
             if c not in comm_keys
         ]
-        data += [
-            right_df.data[right_df.columns.index(c)]
-            for c in right_df.columns
-            if c not in comm_keys
-        ]
-
+        for in_type, col in zip(right_df.data, right_df.columns):
+            if col not in comm_keys:
+                # a key column that is not common needs to plan for NaN.
+                # Same for a data column of course.
+                data.append(map_data_type(in_type, is_left))
         # TODO: unify left/right indices if necessary (e.g. RangeIndex/Int64)
         index_typ = RangeIndexType(types.none)
         if left_index and right_index and not is_overload_str(how, "asof"):

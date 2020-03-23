@@ -5,8 +5,9 @@
 
 table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
                             int64_t n_data_left_t, int64_t n_data_right_t,
-                            int64_t* vect_same_key, bool is_left, bool is_right,
-                            bool optional_col) {
+                            int64_t* vect_same_key, int64_t* vect_need_typechange,
+                            bool is_left, bool is_right,
+                            bool is_join, bool optional_col) {
 #undef DEBUG_JOIN
 #ifdef DEBUG_JOIN
     std::cout << "IN_TABLE:\n";
@@ -235,52 +236,58 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
     // Inserting the optional column in the case of merging on column and index.
     if (optional_col) {
         size_t i = 0;
+        bool map_integer_type = false;
         if (ChoiceOpt == 0) {
             out_arrs.push_back(
-                RetrieveArray(in_table, ListPairWrite, i, n_tot_left + i, 2));
+                RetrieveArray(in_table, ListPairWrite, i, n_tot_left + i, 2, map_integer_type));
         } else {
             out_arrs.push_back(
-                RetrieveArray(in_table, ListPairWrite, n_tot_left + i, i, 2));
+                RetrieveArray(in_table, ListPairWrite, n_tot_left + i, i, 2, map_integer_type));
         }
     }
-    // Inserting the left data
+    // Inserting the Left side of the table
+    int idx=0;
     for (size_t i = 0; i < n_tot_left; i++) {
         if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
+            // We are in the case of a key that has the same name on left and right.
+            // This means that additional NaNs cannot happen.
+            bool map_integer_type=false;
             if (ChoiceOpt == 0) {
-                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, i,
-                                                    n_tot_left + i, 2));
+                out_arrs.emplace_back(
+                    RetrieveArray(in_table, ListPairWrite, i, n_tot_left + i, 2, map_integer_type));
             } else {
-                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite,
-                                                    n_tot_left + i, i, 2));
+                out_arrs.emplace_back(
+                    RetrieveArray(in_table, ListPairWrite, n_tot_left + i, i, 2, map_integer_type));
             }
         } else {
+            // We are in data case or in the case of a key that is taken only from one side.
+            // Therefore we have to plan for the possibility of additional NaN.
+            bool map_integer_type = vect_need_typechange[idx];
             if (ChoiceOpt == 0) {
                 out_arrs.emplace_back(
-                    RetrieveArray(in_table, ListPairWrite, i, -1, 0));
+                    RetrieveArray(in_table, ListPairWrite, i, -1, 0, map_integer_type));
             } else {
                 out_arrs.emplace_back(
-                    RetrieveArray(in_table, ListPairWrite, -1, i, 1));
+                    RetrieveArray(in_table, ListPairWrite, -1, i, 1, map_integer_type));
             }
         }
+        idx++;
     }
-    // Inserting the right data
+    // Inserting the right side of the table.
     for (size_t i = 0; i < n_tot_right; i++) {
-        if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
+        // There are two cases where we put the column in output:
+        // ---It is a right key column with different name from the left.
+        // ---It is a right data column
+        if (i >= n_key || (i < n_key && vect_same_key[i < n_key ? i : 0] == 0 && !is_join)) {
+            bool map_integer_type = vect_need_typechange[idx];
             if (ChoiceOpt == 0) {
-                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, i,
-                                                    n_tot_left + i, 2));
+                out_arrs.emplace_back(
+                    RetrieveArray(in_table, ListPairWrite, -1, n_tot_left + i, 1, map_integer_type));
             } else {
-                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite,
-                                                    n_tot_left + i, i, 2));
+                out_arrs.emplace_back(
+                    RetrieveArray(in_table, ListPairWrite, n_tot_left + i, -1, 0, map_integer_type));
             }
-        } else {
-            if (ChoiceOpt == 0) {
-                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, -1,
-                                                    n_tot_left + i, 1));
-            } else {
-                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite,
-                                                    n_tot_left + i, -1, 0));
-            }
+            idx++;
         }
     }
 #ifdef DEBUG_JOIN

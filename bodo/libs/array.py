@@ -154,9 +154,9 @@ def array_to_info(typingctx, arr_type_t):
             )
 
         # nullable integer/bool array
-        if (
-            isinstance(arr_type, (IntegerArrayType, DecimalArrayType))
-            or arr_type in (boolean_array, datetime_date_array_type)
+        if isinstance(arr_type, (IntegerArrayType, DecimalArrayType)) or arr_type in (
+            boolean_array,
+            datetime_date_array_type,
         ):
             arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
             dtype = arr_type.dtype
@@ -334,9 +334,9 @@ def info_to_array(typingctx, info_type, arr_type):
             return _lower_info_to_array_numpy(arr_type, context, builder, in_info)
 
         # nullable integer/bool array
-        if (
-            isinstance(arr_type, (IntegerArrayType, DecimalArrayType))
-            or arr_type in (boolean_array, datetime_date_array_type)
+        if isinstance(arr_type, (IntegerArrayType, DecimalArrayType)) or arr_type in (
+            boolean_array,
+            datetime_date_array_type,
         ):
             arr = cgutils.create_struct_proxy(arr_type)(context, builder)
             np_dtype = arr_type.dtype
@@ -543,8 +543,10 @@ def hash_join_table(
     n_data_left_t,
     n_data_right_t,
     same_vect_t,
+    same_need_typechange_t,
     is_left_t,
     is_right_t,
+    is_join_t,
     optional_col_t,
 ):
     """
@@ -561,6 +563,8 @@ def hash_join_table(
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(1),
@@ -576,6 +580,8 @@ def hash_join_table(
             types.int64,
             types.int64,
             types.voidptr,
+            types.voidptr,
+            types.boolean,
             types.boolean,
             types.boolean,
             types.boolean,

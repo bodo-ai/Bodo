@@ -173,9 +173,10 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     //
     std::vector<array_info*> out_arrs;
     // Inserting the left data
+    bool map_integer_type = false;
     for (size_t i_col = 0; i_col < n_cols; i_col++)
         out_arrs.emplace_back(
-            RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
+            RetrieveArray(in_table, ListPairWrite, i_col, -1, 0, map_integer_type));
         //
 #ifdef DEBUG_SORT
     std::cout << "OUTPUT:\n";
@@ -332,9 +333,10 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
     // Now building the out_arrs array.
     std::vector<array_info*> out_arrs;
     // Inserting the left data
+    bool map_integer_type = false;
     for (size_t i_col = 0; i_col < n_col; i_col++)
         out_arrs.emplace_back(
-            RetrieveArray(in_table, ListPairWrite, i_col, -1, 0));
+            RetrieveArray(in_table, ListPairWrite, i_col, -1, 0, map_integer_type));
     //
     delete[] hashes;
 #ifdef DEBUG_DD

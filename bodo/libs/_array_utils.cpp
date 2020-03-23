@@ -6,7 +6,8 @@
 array_info* RetrieveArray(
     table_info* const& in_table,
     std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
-    size_t const& shift1, size_t const& shift2, int const& ChoiceColumn) {
+    size_t const& shift1, size_t const& shift2, int const& ChoiceColumn,
+    bool const& map_integer_type) {
     size_t nRowOut = ListPairWrite.size();
     array_info* out_arr = NULL;
     /* The function for computing the returning values
@@ -31,7 +32,9 @@ array_info* RetrieveArray(
     if (ChoiceColumn == 0) eshift = shift1;
     if (ChoiceColumn == 1) eshift = shift2;
     if (ChoiceColumn == 2) eshift = shift1;
-    if (in_table->columns[eshift]->arr_type == bodo_array_type::STRING) {
+    bodo_array_type::arr_type_enum arr_type = in_table->columns[eshift]->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = in_table->columns[eshift]->dtype;
+    if (arr_type == bodo_array_type::STRING) {
         // In the first case of STRING, we have to deal with offsets first so we
         // need one first loop to determine the needed length. In the second
         // loop, the assignation is made. If the entries are missing then the
@@ -51,9 +54,7 @@ array_info* RetrieveArray(
             ListSizes[iRow] = size;
             n_chars += size;
         }
-        out_arr =
-            alloc_array(nRowOut, n_chars, in_table->columns[eshift]->arr_type,
-                        in_table->columns[eshift]->dtype, 0);
+        out_arr = alloc_array(nRowOut, n_chars, arr_type, dtype, 0);
         uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
         uint32_t pos = 0;
         uint32_t* out_offsets = (uint32_t*)out_arr->data2;
@@ -81,18 +82,16 @@ array_info* RetrieveArray(
         }
         out_offsets[nRowOut] = pos;
     }
-    if (in_table->columns[eshift]->arr_type ==
-        bodo_array_type::NULLABLE_INT_BOOL) {
+    if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // In the case of NULLABLE array, we do a single loop for
         // assigning the arrays.
         // We do not need to reassign the pointers, only their size
         // suffices for the copy.
         // In the case of missing array a value of false is assigned
         // to the bitmask.
-        out_arr = alloc_array(nRowOut, -1, in_table->columns[eshift]->arr_type,
-                              in_table->columns[eshift]->dtype, 0);
+        out_arr = alloc_array(nRowOut, -1, arr_type, dtype, 0);
         uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
-        uint64_t siztype = numpy_item_size[in_table->columns[eshift]->dtype];
+        uint64_t siztype = numpy_item_size[dtype];
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
             bool bit = false;
@@ -109,7 +108,7 @@ array_info* RetrieveArray(
             SetBitTo(out_null_bitmask, iRow, bit);
         }
     }
-    if (in_table->columns[eshift]->arr_type == bodo_array_type::NUMPY) {
+    if (arr_type == bodo_array_type::NUMPY) {
         // In the case of NUMPY array we have only to put a single
         // entry.
         // In the case of missing data we have to assign a NaN and that is
@@ -118,22 +117,40 @@ array_info* RetrieveArray(
         // ---signed integer: value -1
         // ---unsigned integer: value 0
         // ---floating point: std::nan as here both notions match.
-        out_arr = alloc_array(nRowOut, -1, in_table->columns[eshift]->arr_type,
-                              in_table->columns[eshift]->dtype, 0);
-        uint64_t siztype = numpy_item_size[in_table->columns[eshift]->dtype];
-        std::vector<char> vectNaN =
-            RetrieveNaNentry(in_table->columns[eshift]->dtype);
-        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
-            //
-            if (pairShiftRow.second >= 0) {
-                for (uint64_t u = 0; u < siztype; u++)
-                    out_arr->data1[siztype * iRow + u] =
-                        in_table->columns[pairShiftRow.first]
+        uint64_t siztype = numpy_item_size[dtype];
+        if (!map_integer_type) {
+            std::vector<char> vectNaN = RetrieveNaNentry(dtype);
+            out_arr = alloc_array(nRowOut, -1, arr_type, dtype, 0);
+            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+                std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+                //
+                if (pairShiftRow.second >= 0) {
+                    for (uint64_t u = 0; u < siztype; u++)
+                        out_arr->data1[siztype * iRow + u] =
+                            in_table->columns[pairShiftRow.first]
                             ->data1[siztype * pairShiftRow.second + u];
-            } else {
-                for (uint64_t u = 0; u < siztype; u++)
-                    out_arr->data1[siztype * iRow + u] = vectNaN[u];
+                } else {
+                    for (uint64_t u = 0; u < siztype; u++)
+                        out_arr->data1[siztype * iRow + u] = vectNaN[u];
+                }
+            }
+        }
+        else {
+            bodo_array_type::arr_type_enum arr_type_o = bodo_array_type::NULLABLE_INT_BOOL;
+            out_arr = alloc_array(nRowOut, -1, arr_type_o, dtype, 0);
+            uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
+            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+                std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+                //
+                bool bit = false;
+                if (pairShiftRow.second >= 0) {
+                    for (uint64_t u = 0; u < siztype; u++)
+                        out_arr->data1[siztype * iRow + u] =
+                            in_table->columns[pairShiftRow.first]
+                            ->data1[siztype * pairShiftRow.second + u];
+                    bit = true;
+                }
+                SetBitTo(out_null_bitmask, iRow, bit);
             }
         }
     }
