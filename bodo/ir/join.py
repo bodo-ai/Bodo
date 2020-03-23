@@ -1,4 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+"""IR node for the join and merge"""
 from collections import defaultdict
 import numpy as np
 import pandas as pd

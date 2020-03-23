@@ -10,6 +10,8 @@ from numba.ir_utils import (
     replace_arg_nodes,
 )
 import bodo
+from bodo.hiframes.datetime_date_ext import datetime_date_type
+from bodo.hiframes.datetime_date_ext import DatetimeDateType
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.utils.utils import debug_prints
 from bodo.transforms.distributed_analysis import Distribution
@@ -322,6 +324,9 @@ def _get_dtype_str(t):
 
     if dtype == types.bool_:
         dtype = "bool_"
+
+    if dtype == datetime_date_type:
+        return "datetime_date_array_type"
 
     return "{}[::1]".format(dtype)
 

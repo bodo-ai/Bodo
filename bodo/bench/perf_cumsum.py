@@ -8,19 +8,7 @@ import random
 import time
 import string
 import pytest
-
-
-def check_timing_func(func, args):
-    """Function for computing runtimes. First run is to get the code compiled and second
-    run is to recompute with the compiled code"""
-    bodo_func = bodo.jit(func)
-    the_res1 = bodo_func(*args)
-    t1 = time.time()
-    the_res2 = bodo_func(*args)
-    t2 = time.time()
-    delta_t = round(t2-t1, 4)
-    print("Time:", delta_t, end=" ")
-    assert True
+from bodo.tests.utils import check_timing_func
 
 
 def test_median_large_random_numpy():

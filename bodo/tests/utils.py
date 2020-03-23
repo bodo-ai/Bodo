@@ -7,6 +7,7 @@ from numba.typed_passes import NopythonRewrites
 import bodo
 from bodo.utils.typing import BodoWarning
 import warnings
+import time
 from bodo.utils.utils import is_distributable_typ, is_distributable_tuple_typ
 
 
@@ -392,3 +393,16 @@ class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):
         pipeline.add_pass_after(PreserveIR, NopythonRewrites)
         pipeline.finalize()
         return [pipeline]
+
+
+def check_timing_func(func, args):
+    """Function for computing runtimes. First run is to get the code compiled and second
+    run is to recompute with the compiled code"""
+    bodo_func = bodo.jit(func)
+    the_res1 = bodo_func(*args)
+    t1 = time.time()
+    the_res2 = bodo_func(*args)
+    t2 = time.time()
+    delta_t = round(t2 - t1, 4)
+    print("Time:", delta_t, end=" ")
+    assert True

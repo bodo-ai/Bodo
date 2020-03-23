@@ -1,4 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+"""IR node for the groupby, pivot and cross_tabulation"""
 import operator
 from collections import namedtuple, defaultdict
 import ctypes

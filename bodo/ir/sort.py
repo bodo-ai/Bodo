@@ -1,4 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+"""IR node for the data sorting"""
 import numpy as np
 import math
 from collections import defaultdict

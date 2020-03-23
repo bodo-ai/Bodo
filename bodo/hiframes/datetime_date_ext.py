@@ -537,7 +537,7 @@ class DatetimeDateArrayType(types.ArrayCompatible):
 
 
 datetime_date_array_type = DatetimeDateArrayType()
-
+types.datetime_date_array_type = datetime_date_array_type
 
 # datetime.date array has only an array integers to store data
 @register_model(DatetimeDateArrayType)

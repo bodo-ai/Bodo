@@ -1,4 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+"""IR node for the parquet data access"""
 from collections import defaultdict
 import numba
 from numba import ir, ir_utils, typeinfer

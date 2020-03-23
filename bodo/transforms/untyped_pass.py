@@ -48,6 +48,7 @@ import bodo.ir.aggregate
 import bodo.ir.join
 import bodo.ir.sort
 from bodo.ir import csv_ext
+from bodo.ir import sql_ext
 
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 import bodo.hiframes.pd_dataframe_ext
@@ -361,6 +362,11 @@ class UntypedPass:
         if fdef == ("read_csv", "pandas"):
             return self._handle_pd_read_csv(assign, lhs, rhs, label)
 
+        # handling pd.read_sql() here since input can have constants
+        # like dictionaries for typing
+        if fdef == ("read_sql", "pandas"):
+            return self._handle_pd_read_sql(assign, lhs, rhs, label)
+
         # match flatmap pd.Series(list(itertools.chain(*A))) and flatten
         if fdef == ("Series", "pandas"):
             return self._handle_pd_Series(assign, lhs, rhs)
@@ -537,6 +543,118 @@ class UntypedPass:
 
         return nodes
 
+    def _handle_pd_read_sql(self, assign, lhs, rhs, label):
+        """transform pd.read_sql calls"""
+        # schema: pd.read_sql(sql, con, index_col=None,
+        # coerce_float=True, params=None, parse_dates=None,
+        # columns=None, chunksize=None
+        kws = dict(rhs.kws)
+        sql = self._get_const_arg(
+            "read_sql", rhs.args, kws, 0, "sql"
+        )  # The sql request has to be constant
+        con = self._get_const_arg(
+            "read_sql", rhs.args, kws, 1, "con", ""
+        )  # the connection.
+        index_col = self._get_const_arg(
+            "read_sql", rhs.args, kws, 2, "index_col", default=-1
+        )
+        coerce_float = self._get_const_arg(
+            "read_sql", rhs.args, kws, 3, "coerce_float", default=True
+        )
+        params = self._get_const_arg("read_sql", rhs.args, kws, 4, "params", default=-1)
+        parse_dates = self._get_const_arg(
+            "read_sql", rhs.args, kws, 5, "parse_dates", default=-1
+        )
+        columns = self._get_const_arg(
+            "read_sql", rhs.args, kws, 6, "columns", default=""
+        )
+        chunksize = self._get_arg("read_sql", rhs.args, kws, 7, "chunksize", -1)
+
+        # SUPPORTED:
+        # sql is supported since it is fundamental
+        # con is supported since it is fundamental but only as a string
+        # index_col is supported since setting the index is something useful.
+        # UNSUPPORTED:
+        # chunksize is unsupported because it is a different API and it makes for a different usage of pd.read_sql
+        # columns   is unsupported because selecting columns could actually be done in SQL.
+        # coerce_float is currently unsupported but it could be useful to support it.
+        # params is currently unsupported because not needed for mysql but surely will be needed later.
+        supported_args = ("sql", "con", "index_col", "parse_dates")
+
+        unsupported_args = set(kws.keys()) - set(supported_args)
+        if unsupported_args:
+            raise ValueError(
+                "read_sql() arguments {} not supported yet".format(unsupported_args)
+            )
+
+        # Computation of the dtypes
+
+        # During compilation step, all processor access to the database
+        # Ideally, we would like to access from just one processor during
+        # the compilation stage.
+        rows_to_read = 100  # TODO: tune this
+        sql_call = "(" + sql + ") LIMIT 100"
+        df = pd.read_sql(sql_call, con,)
+        dtypes = numba.typeof(df).data
+
+        dtype_map = {c: dtypes[i] for i, c in enumerate(df.columns)}
+        col_names = [c for c in df.columns]
+
+        # The dates.
+
+        date_cols = []
+
+        columns, data_arrs, out_types = self._get_csv_sql_col_info(
+            dtype_map, date_cols, col_names, lhs
+        )
+
+        nodes = [
+            sql_ext.SqlReader(
+                sql, con, lhs.name, columns, data_arrs, out_types, lhs.loc,
+            )
+        ]
+
+        columns = columns.copy()  # copy since modified below
+        n_cols = len(columns)
+        args = ["data{}".format(i) for i in range(n_cols)]
+        data_args = args.copy()
+
+        # one column is index
+        if index_col != -1 and index_col != False:
+            # convert column number to column name
+            if isinstance(index_col, int):
+                index_col = columns[index_col]
+            index_ind = columns.index(index_col)
+            index_arg = "bodo.utils.conversion.convert_to_index({})".format(
+                data_args[index_ind]
+            )
+            columns.remove(index_col)
+            data_args.remove(data_args[index_ind])
+        else:
+            # generate RangeIndex as default index
+            assert len(data_args) > 0
+            index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
+                data_args[0]
+            )
+
+        # Below we assume that the columns are strings
+        col_args = ", ".join("'{}'".format(c) for c in columns)
+
+        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
+            col_args, col_args
+        )
+        func_text = "def _init_df({}):\n".format(", ".join(args))
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
+            ", ".join(data_args), index_arg, col_var
+        )
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        # print(func_text)
+        _init_df = loc_vars["_init_df"]
+
+        nodes += compile_func_single_block(_init_df, data_arrs, lhs)
+        return nodes
+
     def _handle_pd_read_csv(self, assign, lhs, rhs, label):
         """transform pd.read_csv(names=[A], dtype={'A': np.int32}) call
         """
@@ -681,7 +799,7 @@ class UntypedPass:
                 kws["parse_dates"], err_msg=err_msg, typ=[int, str]
             )
 
-        columns, data_arrs, out_types = self._get_csv_col_info(
+        columns, data_arrs, out_types = self._get_csv_sql_col_info(
             dtype_map, date_cols, col_names, lhs
         )
 
@@ -722,6 +840,7 @@ class UntypedPass:
                 data_args[0]
             )
 
+        # Below we assume that the columns are strings
         col_args = ", ".join("'{}'".format(c) for c in columns)
 
         col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
@@ -739,7 +858,7 @@ class UntypedPass:
         nodes += compile_func_single_block(_init_df, data_arrs, lhs)
         return nodes
 
-    def _get_csv_col_info(self, dtype_map, date_cols, col_names, lhs):
+    def _get_csv_sql_col_info(self, dtype_map, date_cols, col_names, lhs):
         if isinstance(dtype_map, types.Type):
             typ = dtype_map
             data_arrs = [
