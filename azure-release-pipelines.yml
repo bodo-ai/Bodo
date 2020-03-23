@@ -27,7 +27,7 @@ stages:
           export TRIAL_PERIOD=`expr $(( (d1-d2 + 43200) / 86400 ))`
         elif [[ ! -z "${TRIAL_DAYS}" ]]; then
           export END_DATE=`date -v +${TRIAL_PERIOD}d  +"%m-%d-%y"`
-          export TRIAL_PERIOD=TRIAL_DAYS
+          export TRIAL_PERIOD=${TRIAL_DAYS}
         fi
         
         if [[ ! -z "${MAX_CORE_COUNT}" ]]; then
