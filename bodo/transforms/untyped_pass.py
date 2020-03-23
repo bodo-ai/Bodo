@@ -3,6 +3,7 @@
 transforms the IR to remove features that Numba's type inference cannot support
 such as non-uniform dictionary input of `pd.DataFrame({})`.
 """
+import types as pytypes
 import warnings
 import itertools
 import datetime
@@ -158,6 +159,7 @@ class UntypedPass:
                 val_def = guard(get_definition, self.func_ir, rhs.value)
                 if (
                     isinstance(val_def, ir.Global)
+                    and isinstance(val_def.value, pytypes.ModuleType)
                     and val_def.value == pd
                     and rhs.attr in ("read_csv", "read_parquet", "to_numeric")
                 ):
@@ -171,6 +173,7 @@ class UntypedPass:
                 val_def = guard(get_definition, self.func_ir, rhs.value)
                 if (
                     isinstance(val_def, ir.Global)
+                    and isinstance(val_def.value, pytypes.ModuleType)
                     and val_def.value == np
                     and rhs.attr == "fromfile"
                 ):
