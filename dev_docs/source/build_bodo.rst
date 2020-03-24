@@ -22,6 +22,7 @@ such as Numba on Ubuntu Linux::
     conda install numba=0.48.0 -c conda-forge
     conda install -c bodo.ai -c conda-forge hdf5=*=*mpich*
     conda install -c conda-forge pyarrow=0.16.0
+    conda install -c conda-forge pymysql sqlalchemy
     # The following 2 commands are required for s3 related development and tests
     # conda install -c conda-forge botocore s3fs
     # conda install -c conda-forge boto3

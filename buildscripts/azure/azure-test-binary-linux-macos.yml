@@ -40,8 +40,8 @@ jobs:
       chmod +x miniconda.sh
       ./miniconda.sh -b
       export PATH=$HOME/miniconda3/bin:${PATH}
-      conda create -y -n BODOENV
-      source activate BODOENV
+      conda create -y -n $CONDA_ENV
+      source activate $CONDA_ENV
       conda install -y h5py scipy bodo -c file://$(HOME)/bodo-inc/bodo-inc/ -c bodo.ai -c conda-forge
     displayName: 'Install Bodo from conda'
 
@@ -70,12 +70,12 @@ jobs:
   - script: |
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge pymysql sqlalchemy
+      conda install -y -c conda-forge pymysql
     displayName: 'Setup MySQL tesing'
 
   - script: |
       export PATH=$HOME/miniconda3/bin:${PATH}
-      source activate BODOENV
+      source activate $CONDA_ENV
       pip install pytest pytest-azurepipelines
       cd $HOME/bodo-inc
       mpiexec -n $NP pytest --pyargs bodo -s -v -m "$(PYTEST_MARKER) and firsthalf" -W ignore
