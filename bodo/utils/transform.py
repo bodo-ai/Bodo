@@ -349,7 +349,11 @@ def gen_add_consts_to_type(vals, var, ret_var, typing_info=None):
     val_reps = []
     for c in vals:
         v_rep = "{}".format(c)
-        if isinstance(c, str):
+        # if c is a python class (like str, float, int, list),
+        # v_rep should be the class name
+        if isinstance(c, type):
+            v_rep = c.__name__
+        elif isinstance(c, str):
             v_rep = "'{}'".format(c)
         # store a name for make_function exprs to replace later
         elif is_expr(c, "make_function") or isinstance(

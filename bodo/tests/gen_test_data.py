@@ -160,6 +160,25 @@ data = (
 with open("csv_data_date1.csv", "w") as f:
     f.write(data)
 
+data = (
+    "2015-01-03\n"
+    "1966-11-13\n"
+    "1998-05-21\n"
+    "2018-07-11\n"
+)
+
+with open("csv_data_only_date1.csv", "w") as f:
+    f.write(data)
+
+data = (
+    "2015-01-03,1966-11-13\n"
+    "1966-11-13,1998-05-21\n"
+    "1998-05-21,2018-07-11\n"
+    "2018-07-11,2015-01-03\n"
+)
+
+with open("csv_data_only_date2.csv", "w") as f:
+    f.write(data)
 
 # test_csv_cat1
 data = "2,B,SA\n" "3,A,SBC\n" "4,C,S123\n" "5,B,BCD\n"

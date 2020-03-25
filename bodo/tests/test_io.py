@@ -1070,6 +1070,37 @@ def test_csv_date_col_name(datapath):
 
     check_func(test_impl, ())
 
+def test_csv_read_only_datetime1(datapath):
+    """Test the use of reading dataframe containing
+    single datetime like column
+    """
+    fname = datapath("csv_data_only_date1.csv")
+
+    def test_impl():
+        return pd.read_csv(
+            fname,
+            names=["A"],
+            dtype={"A": str},
+            parse_dates=["A"],
+        )
+
+    check_func(test_impl, ())
+
+def test_csv_read_only_datetime2(datapath):
+    """Test the use of reading dataframe containing
+    only datetime-like columns
+    """
+    fname = datapath("csv_data_only_date2.csv")
+
+    def test_impl():
+        return pd.read_csv(
+            fname,
+            names=["A", "B"],
+            dtype={"A": str, "B": str},
+            parse_dates=[0, 1],
+        )
+
+    check_func(test_impl, ())
 
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
