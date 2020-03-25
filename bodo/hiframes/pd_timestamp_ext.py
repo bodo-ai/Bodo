@@ -801,7 +801,7 @@ def overload_to_datetime(arg_a):
                 val = iNaT
                 if not bodo.libs.array_kernels.isna(arg_a, i):
                     data = arg_a[i]
-                    val = npy_datetimestruct_to_datetime(
+                    val = bodo.hiframes.pd_timestamp_ext.npy_datetimestruct_to_datetime(
                         data.year, data.month, data.day, 0, 0, 0, 0
                     )
                 B[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val)
