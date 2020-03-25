@@ -303,6 +303,7 @@ def unbox_dataframe_column(typingctx, df, i=None):
         # in boxing of tuples
         # TODO: fix boxing refcount
         context.nrt.incref(builder, columns_typ, dataframe.columns)
+        # no decref for 'col_name_obj' since tuple_getitem returns borrowed reference
         col_name_obj = pyapi.tuple_getitem(columns_obj, col_ind)
         series_obj = c.pyapi.object_getitem(dataframe.parent, col_name_obj)
         arr_obj_orig = c.pyapi.object_getattr_string(series_obj, "values")

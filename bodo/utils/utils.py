@@ -21,6 +21,7 @@ from numba.typing.templates import infer_global, AbstractTemplate
 from numba.targets.imputils import lower_builtin
 from numba.extending import overload, intrinsic
 from numba.targets.arrayobj import populate_array, get_itemsize, make_array
+from llvmlite import ir as lir
 import numpy as np
 import bodo
 from bodo.libs.str_ext import string_type
@@ -182,12 +183,14 @@ def find_build_tuple(func_ir, var):
     return var_def.items
 
 
-def cprint(*s):
+# print function used for debugging that uses printf in C, instead of Numba's print that
+# calls Python's print in object mode (which can fail sometimes)
+def cprint(*s):  # pragma: no cover
     print(*s)
 
 
 @infer_global(cprint)
-class CprintInfer(AbstractTemplate):
+class CprintInfer(AbstractTemplate):  # pragma: no cover
     def generic(self, args, kws):
         assert not kws
         return signature(types.none, *unliteral_all(args))
@@ -202,32 +205,12 @@ typ_to_format = {
     types.float64: "lf",
 }
 
-from llvmlite import ir as lir
-import llvmlite.binding as ll
-from bodo.libs import hstr_ext
-
-ll.add_symbol("print_str", hstr_ext.print_str)
-ll.add_symbol("print_char", hstr_ext.print_char)
-
 
 @lower_builtin(cprint, types.VarArg(types.Any))
-def cprint_lower(context, builder, sig, args):
-    from bodo.libs.str_ext import string_type, char_type
+def cprint_lower(context, builder, sig, args):  # pragma: no cover
 
     for i, val in enumerate(args):
         typ = sig.args[i]
-        if typ == string_type:
-            fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer()])
-            fn = builder.module.get_or_insert_function(fnty, name="print_str")
-            builder.call(fn, [val])
-            cgutils.printf(builder, " ")
-            continue
-        if typ == char_type:
-            fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8)])
-            fn = builder.module.get_or_insert_function(fnty, name="print_char")
-            builder.call(fn, [val])
-            cgutils.printf(builder, " ")
-            continue
         if isinstance(typ, types.ArrayCTypes):
             cgutils.printf(builder, "%p ", val)
             continue

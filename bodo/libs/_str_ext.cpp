@@ -75,9 +75,7 @@ void set_string_array_range(uint32_t* out_offsets, char* out_data,
 void convert_len_arr_to_offset(uint32_t* offsets, int64_t num_strs);
 char* getitem_string_array(uint32_t* offsets, char* data, int64_t index);
 void* getitem_string_array_std(uint32_t* offsets, char* data, int64_t index);
-void print_str(std::string* str);
-void print_char(char c);
-void print_int(int64_t val);
+
 int str_arr_to_int64(int64_t* out, uint32_t* offsets, char* data,
                      int64_t index);
 int str_arr_to_float64(double* out, uint32_t* offsets, char* data,
@@ -175,12 +173,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject_SetAttrString(
         m, "getitem_string_array_std",
         PyLong_FromVoidPtr((void*)(&getitem_string_array_std)));
-    PyObject_SetAttrString(m, "print_str",
-                           PyLong_FromVoidPtr((void*)(&print_str)));
-    PyObject_SetAttrString(m, "print_char",
-                           PyLong_FromVoidPtr((void*)(&print_char)));
-    PyObject_SetAttrString(m, "print_int",
-                           PyLong_FromVoidPtr((void*)(&print_int)));
     PyObject_SetAttrString(m, "print_str_arr",
                            PyLong_FromVoidPtr((void*)(&print_str_arr)));
     PyObject_SetAttrString(m, "str_arr_to_int64",
@@ -443,18 +435,6 @@ int64_t str_to_int64(char* data, int64_t length) {
     return -1;
 }
 
-
-void print_str(std::string* str) {
-    std::cout << *str;
-    return;
-}
-
-void print_char(char c) {
-    std::cout << c;
-    return;
-}
-
-void print_int(int64_t val) { printf("%ld\n", val); }
 
 void* str_from_int32(int in) { return new std::string(std::to_string(in)); }
 

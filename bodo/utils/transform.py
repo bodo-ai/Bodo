@@ -81,6 +81,11 @@ no_side_effect_call_tuples = {
     ("add_consts_to_type", "typing", "utils", bodo),
     ("str_arr_from_sequence", "str_arr_ext", "libs", bodo),
     ("parse_datetime_str", "pd_timestamp_ext", "hiframes", bodo),
+    ("integer_to_dt64", "pd_timestamp_ext", "hiframes", bodo),
+    ("dt64_to_integer", "pd_timestamp_ext", "hiframes", bodo),
+    ("timedelta64_to_integer", "pd_timestamp_ext", "hiframes", bodo),
+    ("integer_to_timedelta64", "pd_timestamp_ext", "hiframes", bodo),
+    ("npy_datetimestruct_to_datetime", "pd_timestamp_ext", "hiframes", bodo),
     # TODO: handle copy properly, copy of some types can have side effects?
     ("copy",),
     ("from_iterable_impl", "typing", "utils", bodo),
@@ -95,6 +100,8 @@ no_side_effect_call_tuples = {
     ("float32", np),
     ("bool_", np),
     ("full", np),
+    ("round", np),
+    ("isnan", np),
     # Numba
     ("internal_prange", "parfor", numba),
     ("empty_inferred", "ndarray", "unsafe", numba),
