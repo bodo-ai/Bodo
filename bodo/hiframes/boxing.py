@@ -326,6 +326,7 @@ def unbox_dataframe_column(typingctx, df, i=None):
 
         c.pyapi.decref(series_obj)
         c.pyapi.decref(arr_obj)
+        c.pyapi.decref(col_name_obj)
         pyapi.gil_release(gil_state)  # release GIL
 
         # assign array and set unboxed flag
