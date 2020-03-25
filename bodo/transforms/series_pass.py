@@ -2240,7 +2240,7 @@ class SeriesPass:
             impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
         )
 
-    def _handle_string_array_expr(self, assign, rhs):
+    def _handle_string_array_expr(self, assign, rhs):  # pragma: no cover
         # convert str_arr==str into parfor
         if rhs.fn in _string_array_comp_ops and (
             is_str_arr_typ(self.typemap[rhs.lhs.name])
@@ -2285,29 +2285,19 @@ class SeriesPass:
 
             op_str = _binop_to_str[rhs.fn]
 
-            func_text = "def f(A, B{}):\n".format(", index" if is_series else "")
+            func_text = "def f(A, B, index):\n"
             func_text += "  l = {}\n".format(len_call)
-            if is_series:
-                func_text += "  S = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
-            else:
-                func_text += "  S = np.empty(l, dtype=np.bool_)\n"
+            func_text += "  S = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
             func_text += "  for i in numba.parfor.internal_prange(l):\n"
             func_text += "    S[i] = {} {} {}\n".format(
                 arg1_access, op_str, arg2_access
             )
-            if is_series:
-                func_text += (
-                    "  return bodo.hiframes.pd_series_ext.init_series(S, index)\n"
-                )
-            else:
-                func_text += "  return S\n"
+            func_text += "  return bodo.hiframes.pd_series_ext.init_series(S, index)\n"
 
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             f = loc_vars["f"]
-            args = [arg1, arg2]
-            if is_series:
-                args.append(index_var)
+            args = [arg1, arg2, index_var]
             return self._replace_func(f, args, pre_nodes=nodes)
 
         return None
