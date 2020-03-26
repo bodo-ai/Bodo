@@ -1654,9 +1654,6 @@ def test_series_dropna(S):
 
 
 def test_series_shift(numeric_series_val):
-    # not supported for dt64 yet, TODO: support and test
-    if numeric_series_val.dtype == np.dtype("datetime64[ns]"):
-        return
 
     # TODO: support nullable int
     if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):

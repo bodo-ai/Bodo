@@ -9,7 +9,7 @@ import numba
 from numba import types
 from numba.extending import overload
 import bodo
-from bodo.utils.typing import is_overload_none, is_overload_true
+from bodo.utils.typing import is_overload_none, is_overload_true, BodoError
 
 
 NS_DTYPE = np.dtype("M8[ns]")  # similar pandas/_libs/tslibs/conversion.pyx
@@ -609,6 +609,25 @@ def overload_extract_index_array_tup(series_tup):
     exec(func_text, {"bodo": bodo}, loc_vars)
     impl = loc_vars["f"]
     return impl
+
+
+
+# return the NA value for array type (dtypes that support sentinel NA)
+def get_NA_val_for_arr(arr):  # pragma: no cover
+    return np.nan
+
+
+@overload(get_NA_val_for_arr)
+def overload_get_NA_val_for_arr(arr):
+    if isinstance(arr.dtype, (types.NPDatetime, types.NPTimedelta)):
+        nat = arr.dtype("NaT")
+        return lambda arr: nat  # pragma: no cover
+
+    if isinstance(arr.dtype, types.Float):
+        return lambda arr: np.nan  # pragma: no cover
+
+    # TODO: other types?
+    raise BodoError("Array {} does not support sentinel NA".format(arr))  # pragma: no cover
 
 
 # def to_bool_array_if_np_bool(A):
