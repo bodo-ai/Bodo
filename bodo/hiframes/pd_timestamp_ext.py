@@ -790,7 +790,9 @@ def overload_to_datetime(arg_a):
         return impl_series
 
     # datetime.date() array
-    if arg_a == bodo.hiframes.datetime_date_ext.datetime_date_array_type:  # pragma: no cover
+    if (
+        arg_a == bodo.hiframes.datetime_date_ext.datetime_date_array_type
+    ):  # pragma: no cover
         dt64_dtype = np.dtype("datetime64[ns]")
         iNaT = pd._libs.tslibs.iNaT
 
@@ -862,6 +864,58 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
             return B
 
         return impl_float
+
+
+# comparison of Timestamp and datetime.date
+def create_timestamp_cmp_op_overload(op):
+    """
+    create overloads for comparison operators with datetime.date and Timestamp
+    """
+
+    def overload_date_timestamp_cmp(A1, A2):
+        # Timestamp, datetime.date
+        if (
+            A1 == pandas_timestamp_type
+            and A2 == bodo.hiframes.datetime_date_ext.datetime_date_type
+        ):
+            return lambda A1, A2: op(
+                A1.value,
+                bodo.hiframes.pd_timestamp_ext.npy_datetimestruct_to_datetime(
+                    A2.year, A2.month, A2.day, 0, 0, 0, 0
+                ),
+            )
+
+        # datetime.date, Timestamp
+        if (
+            A1 == bodo.hiframes.datetime_date_ext.datetime_date_type
+            and A2 == pandas_timestamp_type
+        ):
+            return lambda A1, A2: op(
+                bodo.hiframes.pd_timestamp_ext.npy_datetimestruct_to_datetime(
+                    A1.year, A1.month, A1.day, 0, 0, 0, 0
+                ),
+                A2.value,
+            )
+
+    return overload_date_timestamp_cmp
+
+
+def _install_timestamp_cmp_ops():
+    """install overloads for comparison operators with datetime.date and datetime64
+    """
+    for op in (
+        operator.eq,
+        operator.ne,
+        operator.ge,
+        operator.gt,
+        operator.le,
+        operator.lt,
+    ):
+        overload_impl = create_timestamp_cmp_op_overload(op)
+        overload(op)(overload_impl)
+
+
+_install_timestamp_cmp_ops()
 
 
 # -- builtin operators for dt64 ----------------------------------------------
