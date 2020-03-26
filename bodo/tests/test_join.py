@@ -520,15 +520,28 @@ def test_merge_nontrivial_index():
 
 def test_merge_out_str_na():
     """
-    Test merge(): setting NA in output string data column
+    Test merge(): setting NA in output string data column.
+    Sorting has to be done in the code since option sort_output=True does not
+    work for series.
+    reset_index(drop=True) is needed so as to avoid index collisions.
+    Size of the test has been extended so that empty bins do not occur for test on 2 or 3 processors.
     """
 
     def test_impl(df1, df2):
-        df3 = df1.merge(df2, left_on="key1", right_on="key2", how="left")
+        df3 = (
+            df1.merge(df2, left_on="key1", right_on="key2", how="inner")
+            .sort_values(by="B")
+            .reset_index(drop=True)
+        )
         return df3.B
 
-    df1 = pd.DataFrame({"key1": ["foo", "bar", "baz"]})
-    df2 = pd.DataFrame({"key2": ["baz", "bar", "baz"], "B": ["b", "zzz", "ss"]})
+    df1 = pd.DataFrame({"key1": ["foo", "bar", "baz", "fab", "faz", "fay"]})
+    df2 = pd.DataFrame(
+        {
+            "key2": ["baz", "bar", "baz", "faq", "fau", "fab"],
+            "B": ["b", "zzz", "ss", "aaa", "bb", "wuk"],
+        }
+    )
 
     check_func(test_impl, (df1, df2))
 
@@ -703,8 +716,13 @@ def test_merge_index_outer():
     "df1, df2",
     [
         (
-            pd.DataFrame({"A": ["foo", "bar"], "B": [3, 4]}, index=[-1, -1]),
-            pd.DataFrame({"A": ["baz"], "B": [1]}, index=[-1]),
+            pd.DataFrame(
+                {"A": ["foo", "bar", "baz", "bat", "fab"], "B": [3, 4, 5, 6, 7]},
+                index=[-1, -1, -2, -3, -4],
+            ),
+            pd.DataFrame(
+                {"A": ["baz", "bat", "fab"], "B": [1, 3, 5]}, index=[-1, 4, 5]
+            ),
         ),
         (
             pd.DataFrame(
@@ -1202,10 +1220,12 @@ def test_merge_index_column_how():
 
     siz = 40
     df1 = pd.DataFrame(
-        {"A": 0.0 + np.random.randint(0,10,siz), "C": np.random.randint(0,10,siz)}, index=0.0 + np.random.randint(0,10,siz)
+        {"A": 0.0 + np.random.randint(0, 10, siz), "C": np.random.randint(0, 10, siz)},
+        index=0.0 + np.random.randint(0, 10, siz),
     )
     df2 = pd.DataFrame(
-        {"A": 0.0 + np.random.randint(0,10,siz), "C": np.random.randint(0,10,siz)}, index=0.0 + np.random.randint(0,10,siz)
+        {"A": 0.0 + np.random.randint(0, 10, siz), "C": np.random.randint(0, 10, siz)},
+        index=0.0 + np.random.randint(0, 10, siz),
     )
 
     check_func(f1, (df1, df2), sort_output=True, check_dtype=False)
@@ -1223,17 +1243,23 @@ def test_merge_partial_distributed():
         return df3
 
     np.random.seed(5)
-    siz=50
-    df1 = pd.DataFrame({"A": np.random.randint(0,10,siz), "C": np.random.randint(0,10,siz)})
-    df2 = pd.DataFrame({"A": np.random.randint(0,10,siz), "D": np.random.randint(0,10,siz)})
+    siz = 50
+    df1 = pd.DataFrame(
+        {"A": np.random.randint(0, 10, siz), "C": np.random.randint(0, 10, siz)}
+    )
+    df2 = pd.DataFrame(
+        {"A": np.random.randint(0, 10, siz), "D": np.random.randint(0, 10, siz)}
+    )
     start, end = get_start_end(len(df1))
     bdf1 = df1.iloc[start:end]
 
     bodo_impl = bodo.jit(distributed={"df1", "df3"})(test_impl)
     df3_bodo1 = bodo_impl(bdf1, df2)
-    df3_bodo2 = bodo.gatherv(df3_bodo1).sort_values(by=["A","C","D"]).reset_index(drop=True)
-    df3_pd = test_impl(df1, df2).sort_values(by=["A","C","D"]).reset_index(drop=True)
-    if bodo.get_rank()==0:
+    df3_bodo2 = (
+        bodo.gatherv(df3_bodo1).sort_values(by=["A", "C", "D"]).reset_index(drop=True)
+    )
+    df3_pd = test_impl(df1, df2).sort_values(by=["A", "C", "D"]).reset_index(drop=True)
+    if bodo.get_rank() == 0:
         pd.testing.assert_frame_equal(df3_bodo2, df3_pd)
 
 
