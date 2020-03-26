@@ -1644,7 +1644,8 @@ def gen_top_level_agg_func(
     out_typs = [t.dtype for t in out_col_typs]
 
     # arg names
-    in_names = tuple("in_{}".format(c) for c in in_col_names)
+    key_names = tuple(sanitize_varname(c) for c in key_names)
+    in_names = tuple("in_{}".format(sanitize_varname(c)) for c in in_col_names)
     out_names = []
     for c in out_col_names:
         if not isinstance(c, (tuple, list)):
@@ -1658,7 +1659,7 @@ def gen_top_level_agg_func(
             # errors
             # TODO lambdas inside tuple (depends on a TODO in pd_groupby_ext.py)
             out_names.append("out_{}".format("__".join(v for v in c)))
-    out_names = tuple(out_names)
+    out_names = tuple(sanitize_varname(c) for c in out_names)
     key_args = ", ".join("key_{}".format(sanitize_varname(c)) for c in key_names)
 
     in_args = ", ".join(in_names)
