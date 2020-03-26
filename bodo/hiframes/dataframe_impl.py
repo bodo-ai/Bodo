@@ -1036,6 +1036,8 @@ class SetDfColInfer(AbstractTemplate):
         if isinstance(target, DataFrameType):
             if isinstance(val, SeriesType):
                 val = val.data
+            if isinstance(val, types.List):
+                val = scalar_to_array_type(val.dtype)
             if not bodo.utils.utils.is_array_typ(val):
                 val = scalar_to_array_type(val)
             if ind in target.columns:

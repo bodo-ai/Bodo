@@ -1363,19 +1363,19 @@ def validate_keys_dtypes(
             l_is_str = lk_type == string_type
             r_is_str = rk_type == string_type
             if l_is_str ^ r_is_str:
-                raise BodoError(msg)
+                raise_bodo_error(msg)
 
             try:
                 ret_dtype = typing_context.resolve_function_type(
                     operator.eq, (lk_type, rk_type), {}
                 )
             except:
-                raise BodoError(msg)
+                raise_bodo_error(msg)
 
 
 def validate_keys(keys, columns):
     if len(set(keys).difference(set(columns))) > 0:
-        raise BodoError(
+        raise_bodo_error(
             "merge(): invalid key {} for on/left_on/right_on".format(
                 set(keys).difference(set(columns))
             )
