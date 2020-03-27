@@ -177,6 +177,9 @@ def test_datetime_comparisons():
     check_func(test_eq, (t, date2))
     check_func(test_ne, (date2, t))
     check_func(test_le, (date, t))
+    check_func(test_lt, (t, date2))
+    check_func(test_ge, (date, t))
+    check_func(test_gt, (t, date2))
 
     # datetime.datetime comparisons
     dt = datetime.datetime(2020, 1, 4, 10, 40, 55, 11)
