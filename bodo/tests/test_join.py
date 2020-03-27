@@ -424,6 +424,44 @@ def test_merge_multi_int_key():
     check_func(test_impl3, (df1, df2), sort_output=True)
 
 
+def test_merge_key_type_change():
+    """
+    Test merge() key type check when key type changes in the program (handled in partial
+    typing pass)
+    """
+
+    def test_impl():
+        df1 = pd.DataFrame(
+            {"A": [3, 1, 1, 3, 4], "B": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}
+        )
+        df2 = pd.DataFrame(
+            {"A": ["2", "1", "4", "4", "3"], "B": [1, 3, 2, 3, 2], "D": [1, 2, 3, 4, 8]}
+        )
+        df1["A"] = df1["A"].astype(str)
+        df3 = df1.merge(df2, on="A")
+        return df3
+
+    check_func(test_impl, (), sort_output=True, is_out_distributed=False)
+
+
+def test_merge_schema_change():
+    """
+    Test merge() key check when schema changes in the program (handled in partial
+    typing pass)
+    """
+
+    def test_impl():
+        df1 = pd.DataFrame({"B": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]})
+        df2 = pd.DataFrame(
+            {"A": [2, 1, 4, 4, 3], "B": [1, 3, 2, 3, 2], "D": [1, 2, 3, 4, 8]}
+        )
+        df1["A"] = [3, 1, 1, 3, 4]
+        df3 = df1.merge(df2, on="A")
+        return df3
+
+    check_func(test_impl, (), sort_output=True, is_out_distributed=False)
+
+
 def test_merge_str_key():
     """
     Test merge(): sequentially merge on key column of type string
