@@ -1498,6 +1498,7 @@ def overload_str_arr_astype(A, dtype, copy=True):
     if isinstance(nb_dtype, types.Float):
         # TODO: raise error if conversion not possible
         def impl_float(A, dtype, copy=True):  # pragma: no cover
+            numba.parfor.init_prange()  # TODO: test fusion
             n = len(A)
             B = np.empty(n, nb_dtype)
             for i in numba.parfor.internal_prange(n):
@@ -1513,6 +1514,7 @@ def overload_str_arr_astype(A, dtype, copy=True):
         # int dtype doesn't support NAs
         # TODO: raise some form of error for NAs
         def impl_int(A, dtype, copy=True):  # pragma: no cover
+            numba.parfor.init_prange()  # TODO: test fusion
             n = len(A)
             B = np.empty(n, nb_dtype)
             for i in numba.parfor.internal_prange(n):

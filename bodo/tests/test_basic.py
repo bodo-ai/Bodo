@@ -14,7 +14,9 @@ from bodo.tests.utils import (
     dist_IR_contains,
     get_rank,
     get_start_end,
+    DeadcodeTestPipeline,
 )
+from bodo.utils.utils import is_expr, is_assign
 import pytest
 from bodo.tests.utils import check_func
 
@@ -257,6 +259,40 @@ def test_array_reduce():
         assert count_parfor_OneDs() == 1
 
 
+def _check_IR_no_getitem(test_impl, args):
+    """makes sure there is no getitem/static_getitem left in the IR after optimization
+    """
+    bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(
+        test_impl
+    )
+    bodo_func(*args)  # calling the function to get function IR
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert len(fir.blocks) == 1
+    # make sure there is no getitem in IR
+    for stmt in fir.blocks[0].body:
+        assert not (
+            is_assign(stmt)
+            and (
+                is_expr(stmt.value, "getitem") or is_expr(stmt.value, "static_getitem")
+            )
+        )
+
+
+def test_trivial_slice_getitem_opt():
+    """Make sure trivial slice getitem is optimized out, e.g. B = A[:]
+    """
+
+    def test_impl1(df):
+        return df.iloc[:, 0]
+
+    def test_impl2(A):
+        return A[:]
+
+    df = pd.DataFrame({"A": [1, 2, 5]})
+    _check_IR_no_getitem(test_impl1, (df,))
+    _check_IR_no_getitem(test_impl2, (np.arange(10),))
+
+
 def test_return():
     def test_impl(N):
         A = np.arange(N)
@@ -473,4 +509,3 @@ def test_permuted_array_indexing():
     for arr_len in [15, 23, 26]:
         A, B, _ = hpat_func3(arr_len)
         np.testing.assert_allclose(A, B)
-

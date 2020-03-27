@@ -36,6 +36,7 @@ from bodo.utils.utils import (
     is_whole_slice,
     get_getsetitem_index_var,
     is_expr,
+    is_array_typ,
 )
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import (
@@ -273,6 +274,12 @@ class SeriesPass:
         nodes = []
         idx = get_getsetitem_index_var(rhs, self.typemap, nodes)
         idx_typ = self.typemap[idx.name]
+
+        # optimize out trivial slicing on arrays
+        if is_array_typ(target_typ) and guard(
+            is_whole_slice, self.typemap, self.func_ir, idx
+        ):
+            return [ir.Assign(target, assign.target, assign.loc)]
 
         # optimize out getitem on built_tuple, important for pd.DataFrame()
         # since dictionary is converted to tuple
@@ -603,9 +610,7 @@ class SeriesPass:
                 return self._replace_func(impl, [arg1, arg2])
 
             if typ1 == string_array_type or typ2 == string_array_type:
-                impl = bodo.libs.str_arr_ext.overload_string_array_add(
-                    typ1, typ2
-                )
+                impl = bodo.libs.str_arr_ext.overload_string_array_add(typ1, typ2)
                 return self._replace_func(impl, [arg1, arg2])
 
         # inline overload for comparisons
@@ -2157,12 +2162,11 @@ class SeriesPass:
             impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
         )
 
-    def _handle_string_array_expr(self, assign, rhs):
+    def _handle_string_array_expr(self, assign, rhs):  # pragma: no cover
         # convert str_arr==str into parfor
-        if (
-            rhs.fn in _string_array_comp_ops
-            and (is_str_arr_typ(self.typemap[rhs.lhs.name])
-            or is_str_arr_typ(self.typemap[rhs.rhs.name]))
+        if rhs.fn in _string_array_comp_ops and (
+            is_str_arr_typ(self.typemap[rhs.lhs.name])
+            or is_str_arr_typ(self.typemap[rhs.rhs.name])
         ):
             nodes = []
             arg1 = rhs.lhs
@@ -2203,29 +2207,19 @@ class SeriesPass:
 
             op_str = _binop_to_str[rhs.fn]
 
-            func_text = "def f(A, B{}):\n".format(", index" if is_series else "")
+            func_text = "def f(A, B, index):\n"
             func_text += "  l = {}\n".format(len_call)
-            if is_series:
-                func_text += "  S = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
-            else:
-                func_text += "  S = np.empty(l, dtype=np.bool_)\n"
+            func_text += "  S = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
             func_text += "  for i in numba.parfor.internal_prange(l):\n"
             func_text += "    S[i] = {} {} {}\n".format(
                 arg1_access, op_str, arg2_access
             )
-            if is_series:
-                func_text += (
-                    "  return bodo.hiframes.pd_series_ext.init_series(S, index)\n"
-                )
-            else:
-                func_text += "  return S\n"
+            func_text += "  return bodo.hiframes.pd_series_ext.init_series(S, index)\n"
 
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             f = loc_vars["f"]
-            args = [arg1, arg2]
-            if is_series:
-                args.append(index_var)
+            args = [arg1, arg2, index_var]
             return self._replace_func(f, args, pre_nodes=nodes)
 
         return None
