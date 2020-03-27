@@ -1369,7 +1369,8 @@ def validate_keys_dtypes(
                 ret_dtype = typing_context.resolve_function_type(
                     operator.eq, (lk_type, rk_type), {}
                 )
-            except:
+            except:  # pragma: no cover
+                # TODO: cover this case in unittests
                 raise_bodo_error(msg)
 
 
