@@ -172,6 +172,14 @@ def test_datetime_comparisons():
     check_func(test_lt, (date, date2))
     check_func(test_ge, (date, date2))
     check_func(test_gt, (date, date2))
+    # compare timestamp and date
+    t = pd.Timestamp("2020-03-01")
+    check_func(test_eq, (t, date2))
+    check_func(test_ne, (date2, t))
+    check_func(test_le, (date, t))
+    check_func(test_lt, (t, date2))
+    check_func(test_ge, (date, t))
+    check_func(test_gt, (t, date2))
 
     # datetime.datetime comparisons
     dt = datetime.datetime(2020, 1, 4, 10, 40, 55, 11)
@@ -198,6 +206,22 @@ def test_datetime_comparisons():
     S = pd.Series(pd.date_range("2017-01-03", "2017-01-07").date)
     t = datetime.date(2017, 1, 4)
     check_func(test_ge, (S, t))
+
+
+def test_date_isin():
+    """test Series.isin with datetime.date values
+    """
+
+    def test_isin(S, vals):
+        return S.isin(vals)
+
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
+    v = [
+        datetime.date(2018, 1, 24),
+        datetime.date(2011, 1, 3),
+        datetime.date(2018, 4, 27),
+    ]
+    check_func(test_isin, (S, v))
 
 
 def test_datetime_boxing():
@@ -467,7 +491,9 @@ def test_dt_extract_date(series_value):
     check_func(impl, (series_value,))
 
 
-@pytest.mark.parametrize("timedelta_fields", bodo.hiframes.pd_timestamp_ext.timedelta_fields)
+@pytest.mark.parametrize(
+    "timedelta_fields", bodo.hiframes.pd_timestamp_ext.timedelta_fields
+)
 def test_dt_timedelta_fileds(timedelta_fields):
     """Test Series.dt for timedelta64 fields
     """

@@ -915,7 +915,8 @@ def overload_series_isin(S, values):
         n = len(A)
         out_arr = np.empty(n, np.bool_)
         for i in numba.parfor.internal_prange(n):
-            out_arr[i] = A[i] in values
+            # TODO: avoid Timestamp conversion for date comparisons if possible
+            out_arr[i] = bodo.utils.conversion.box_if_dt64(A[i]) in values
 
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
