@@ -70,7 +70,15 @@ from bodo.libs.str_arr_ext import string_array_type, str_arr_from_sequence
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_index_ext import is_pd_index_type
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+from bodo.io import csv_cpp
+import llvmlite.binding as ll
 
+
+_csv_write = types.ExternalFunction(
+    "csv_write",
+    types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.bool_),
+)
+ll.add_symbol("csv_write", csv_cpp.csv_write)
 
 class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column names
     """Temporary type class for DataFrame objects.
@@ -2725,7 +2733,6 @@ def to_csv_overload(
     escapechar=None,
     decimal=".",
 ):
-
     # TODO: refactor when objmode() can understand global string constant
     # String output case
     if path_or_buf is None or path_or_buf == types.none:
@@ -2800,9 +2807,11 @@ def to_csv_overload(
         escapechar=None,
         decimal=".",
     ):  # pragma: no cover
-        with numba.objmode:
-            df.to_csv(
-                path_or_buf,
+        # passing None for the first argument returns a string
+        # containing contents to write to csv
+        with numba.objmode(D="unicode_type"):
+            D = df.to_csv(
+                None,
                 sep,
                 na_rep,
                 float_format,
@@ -2822,5 +2831,6 @@ def to_csv_overload(
                 escapechar,
                 decimal,
             )
+        _csv_write(path_or_buf._data, D._data, 0, len(D), False)
 
     return _impl

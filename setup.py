@@ -83,20 +83,19 @@ if is_win:
     H5_CPP_FLAGS = [("H5_BUILT_AS_DYNAMIC_LIB", None)]
 
 hdf5_libs = MPI_LIBS + ["hdf5"]
-io_libs = MPI_LIBS
+io_libs = MPI_LIBS + ["arrow"]
 if not is_win:
     io_libs += ["boost_filesystem", "boost_system"]
 
 
 ext_io = Extension(
     name="bodo.libs.hio",
-    sources=["bodo/io/_io.cpp", "bodo/io/_csv.cpp"],
+    sources=["bodo/io/_io.cpp"],
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_distributed.h",
         "bodo/libs/_import_py.h",
-        "bodo/io/_csv.h",
-        "bodo/io/_bodo_csv_file_reader.h",
+        "bodo/io/_io.h",
     ],
     libraries=io_libs,
     include_dirs=ind + np_compile_args["include_dirs"],
@@ -111,7 +110,7 @@ ext_io = Extension(
 ext_s3 = Extension(
     name="bodo.io.s3_reader",
     sources=["bodo/io/_s3_reader.cpp"],
-    depends=["bodo/io/_bodo_csv_file_reader.h"],
+    depends=["bodo/io/_bodo_file_reader.h"],
     libraries=["arrow"],
     include_dirs=ind + np_compile_args["include_dirs"],
     library_dirs=lid,
@@ -124,7 +123,7 @@ ext_s3 = Extension(
 ext_hdfs = Extension(
     name="bodo.io.hdfs_reader",
     sources=["bodo/io/_hdfs_reader.cpp"],
-    depends=["bodo/io/_bodo_csv_file_reader.h"],
+    depends=["bodo/io/_bodo_file_reader.h"],
     libraries=["arrow"],
     include_dirs=ind + np_compile_args["include_dirs"],
     library_dirs=lid,
@@ -269,14 +268,38 @@ pq_libs = MPI_LIBS.copy()
 if not is_win:
     pq_libs += ["boost_filesystem"]
 
+csv_libs = pq_libs + ["arrow"]
 pq_libs += ["arrow", "parquet"]
 
+ext_csv = Extension(
+    name="bodo.io.csv_cpp",
+    sources=["bodo/io/_io.cpp",
+             "bodo/io/_writer.cpp",
+             "bodo/io/_csv_reader.cpp", 
+             "bodo/io/_csv_writer.cpp"],
+    depends=[
+        "bodo/libs/_bodo_common.h",
+        "bodo/libs/_distributed.h",
+        "bodo/libs/_import_py.h",
+        "bodo/io/_io.h",
+        "bodo/io/_writer.h",
+        "bodo/io/_csv_reader.h",
+        "bodo/io/_bodo_file_reader.h",
+    ],
+    libraries= csv_libs,
+    include_dirs=["."] + ind,
+    define_macros=[],
+    extra_compile_args=eca,
+    extra_link_args=ela,
+    library_dirs=lid,
+)
 
 ext_parquet = Extension(
     name="bodo.io.parquet_cpp",
-    sources=["bodo/io/_parquet.cpp", "bodo/io/_parquet_reader.cpp"],
+    sources=["bodo/io/_writer.cpp", "bodo/io/_parquet.cpp", "bodo/io/_parquet_reader.cpp"],
     depends=[
         "bodo/libs/_bodo_common.h",
+        "bodo/io/_writer.h",
         "bodo/io/_parquet_reader.h"
     ],
     libraries=pq_libs,
@@ -304,6 +327,7 @@ if _has_h5py:
     _ext_mods.append(ext_hdf5)
 if _has_pyarrow:
     _ext_mods.append(ext_parquet)
+    _ext_mods.append(ext_csv)
 
 
 setup(

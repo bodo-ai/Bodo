@@ -167,6 +167,48 @@ def test_hdfs_parquet_write_1D_var(datapath, hdfs_datapath, test_df):
     bodo_write(_get_dist_arg(test_df, False, True), hdfs_fname)
 
 
+def test_hdfs_csv_write_seq(datapath, hdfs_datapath, test_df):
+    """
+    test hdfs to_csv sequentially
+    """
+
+    hdfs_fname = hdfs_datapath("test_df_bodo_seq.csv")
+
+    def test_write(test_df, hdfs_fname):
+        test_df.to_csv(hdfs_fname)
+
+    bodo_write = bodo.jit(test_write)
+    bodo_write(test_df, hdfs_fname)
+
+
+def test_hdfs_csv_write_1D(datapath, hdfs_datapath, test_df):
+    """
+    test hdfs to_csv in 1D distributed
+    """
+
+    hdfs_fname = hdfs_datapath("test_df_bodo_1D.csv")
+
+    def test_write(test_df, hdfs_fname):
+        test_df.to_csv(hdfs_fname)
+
+    bodo_write = bodo.jit(all_args_distributed=True)(test_write)
+    bodo_write(_get_dist_arg(test_df, False), hdfs_fname)
+
+
+def test_hdfs_csv_write_1D_var(datapath, hdfs_datapath, test_df):
+    """
+    test hdfs to_csv in 1D Var distributed
+    """
+
+    hdfs_fname = hdfs_datapath("test_df_bodo_1D_var.csv")
+
+    def test_write(test_df, hdfs_fname):
+        test_df.to_csv(hdfs_fname)
+
+    bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
+    bodo_write(_get_dist_arg(test_df, False, True), hdfs_fname)
+
+
 def test_hdfs_parquet_read_seq(datapath, hdfs_datapath, test_df):
     """
     read_parquet sequentially

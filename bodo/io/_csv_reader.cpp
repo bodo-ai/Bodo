@@ -9,7 +9,6 @@
   lines (not neessarily number of bytes). The actual file read is
   done lazily in the objects read method.
 */
-#include "_csv.h"
 #include <mpi.h>
 #include <algorithm>
 #include <boost/filesystem/operations.hpp>
@@ -23,9 +22,10 @@
 #include <string>
 #include <vector>
 #include "../libs/_distributed.h"
+#include "_csv_reader.h"
 
 #include <Python.h>
-#include "_bodo_csv_file_reader.h"
+#include "_bodo_file_reader.h"
 #include "structmember.h"
 
 #define CHECK(expr, msg)                                        \

@@ -5,7 +5,6 @@
 #include <cstdio>
 #include <iostream>
 #include <string>
-#include "_csv.h"
 #include "mpi.h"
 
 // decimal_mpi_type declared in _distributed.h as extern has
@@ -44,8 +43,6 @@ PyMODINIT_FUNC PyInit_hio(void) {
                            PyLong_FromVoidPtr((void*)(&file_read_parallel)));
     PyObject_SetAttrString(m, "file_write_parallel",
                            PyLong_FromVoidPtr((void*)(&file_write_parallel)));
-
-    PyInit_csv(m);
 
     return m;
 }
@@ -149,7 +146,7 @@ void file_read_parallel(char* file_name, char* buff, int64_t start,
 
 void file_write_parallel(char* file_name, char* buff, int64_t start,
                          int64_t count, int64_t elem_size) {
-    // std::cout << file_name;
+    // std::cout << "file_write_parallel: " << file_name << "\n";
     // printf(" MPI WRITE %lld %lld %lld\n", start, count, elem_size);
 
     char err_string[MPI_MAX_ERROR_STRING];

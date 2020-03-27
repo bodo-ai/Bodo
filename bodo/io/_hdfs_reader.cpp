@@ -3,7 +3,7 @@
 #include <iostream>
 
 #include "../libs/_bodo_common.h"
-#include "_bodo_csv_file_reader.h"
+#include "_bodo_file_reader.h"
 #include "arrow/filesystem/filesystem.h"
 #include "arrow/filesystem/hdfs.h"
 #include "arrow/io/interfaces.h"

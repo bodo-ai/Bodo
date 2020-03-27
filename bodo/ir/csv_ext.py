@@ -214,10 +214,11 @@ def build_csv_definitions(csv_node, definitions=None):
 
 ir_utils.build_defs_extensions[CsvReader] = build_csv_definitions
 
-from bodo.libs import hio
+from bodo.io import csv_cpp
+from llvmlite import ir as lir
 import llvmlite.binding as ll
 
-ll.add_symbol("csv_file_chunk_reader", hio.csv_file_chunk_reader)
+ll.add_symbol("csv_file_chunk_reader", csv_cpp.csv_file_chunk_reader)
 
 
 def csv_distributed_run(

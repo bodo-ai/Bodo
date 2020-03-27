@@ -1,6 +1,6 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
-#ifndef _CSV_H_INCLUDED
-#define _CSV_H_INCLUDED
+#ifndef _CSV_READER_H_INCLUDED
+#define _CSV_READER_H_INCLUDED
 
 #include <Python.h>
 #include <string>
@@ -34,4 +34,4 @@ extern "C" PyObject* csv_file_chunk_reader(const char* fname, bool is_parallel,
 // extern "C" PyObject* csv_string_chunk_reader(const std::string * str, bool
 // is_parallel);
 
-#endif  // _CSV_H_INCLUDED
+#endif  // _CSV_READER_H_INCLUDED

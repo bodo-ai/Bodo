@@ -89,6 +89,10 @@ dist_analysis = None
 fir_text = None
 saved_array_analysis = None
 
+_csv_write = types.ExternalFunction(
+    "csv_write",
+    types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.bool_),
+)
 
 class DistributedPass:
     """
@@ -935,14 +939,13 @@ class DistributedPass:
                 f, [df, fname, compression, index], assign.target, self
             )
         elif func_name == "to_csv" and (
-            self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
-        ):
+            self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)):
             # avoid header for non-zero ranks
             # write to string then parallel file write
             # df.to_csv(fname) ->
             # header = header and is_root  # only first line has header
             # str_out = df.to_csv(None, header=header)
-            # bodo.io.np_io._file_write_parallel(fname, str_out)
+            # bodo.io.csv_cpp(fname, str_out)
 
             df_typ = self.typemap[df.name]
             rhs = assign.value
@@ -995,18 +998,14 @@ class DistributedPass:
             # nodes.append(print_node)
 
             # TODO: fix lazy IO load
-            from bodo.libs import hio
+            from bodo.io import csv_cpp
             import llvmlite.binding as ll
-
-            ll.add_symbol("file_write_parallel", hio.file_write_parallel)
 
             def f(fname, str_out):  # pragma: no cover
                 utf8_str, utf8_len = unicode_to_utf8_and_len(str_out)
                 start = bodo.libs.distributed_api.dist_exscan(utf8_len, _op)
                 # TODO: unicode file name
-                bodo.io.np_io._file_write_parallel(
-                    fname._data, utf8_str, start, utf8_len, 1
-                )
+                _csv_write(fname._data, utf8_str, start, utf8_len, True)
 
             return nodes + compile_func_single_block(
                 f,
@@ -1016,6 +1015,7 @@ class DistributedPass:
                 extra_globals={
                     "unicode_to_utf8_and_len": unicode_to_utf8_and_len,
                     "_op": np.int32(Reduce_Type.Sum.value),
+                    "_csv_write": _csv_write,
                 },
             )
 
