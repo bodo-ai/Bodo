@@ -981,7 +981,7 @@ def shift_seq(in_arr, shift):  # pragma: no cover
     N = len(in_arr)
     output = alloc_shift(in_arr)
     shift = min(shift, N)
-    output[:shift] = np.nan
+    output[:shift] = bodo.utils.conversion.get_NA_val_for_arr(output)
 
     for i in range(shift, N):
         output[i] = in_arr[i - shift]
@@ -1104,7 +1104,7 @@ def pct_change_seq(in_arr, shift):  # pragma: no cover
     N = len(in_arr)
     output = alloc_shift(in_arr)
     shift = min(shift, N)
-    output[:shift] = np.nan
+    output[:shift] = bodo.utils.conversion.get_NA_val_for_arr(output)
 
     # using 'pad' method for handling NAs, TODO: support bfill
     fill_prev = get_first_non_na(in_arr[:shift])
