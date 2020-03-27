@@ -265,6 +265,20 @@ def test_box_df():
     pd.testing.assert_frame_equal(bodo_func(), impl(), check_dtype=False)
 
 
+def test_df_dtor(memory_leak_check):
+    """make sure df destructor is working and there is no memory leak when columns are
+    unboxed.
+    """
+
+    def impl(df):
+        # len() forces unbox for a column to get its length
+        return len(df)
+
+    # TODO: use df_value fixture when Index types and nullable Int have dtors
+    df = pd.DataFrame({"A": ["AA", "BB", "C", np.nan] * 3, "B": [3, 1, 2, 4] * 3})
+    check_func(impl, (df,))
+
+
 def test_df_index(df_value):
     def impl(df):
         return df.index
@@ -1200,6 +1214,7 @@ def test_df_filter_rm_index():
 def test_concat_nulls():
     """Test dataframe concatenation when full NA arrays need to be appended
     """
+
     def test_impl(df, df2):
         return df.append(df2, ignore_index=True)
 
