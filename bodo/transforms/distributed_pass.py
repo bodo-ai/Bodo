@@ -65,6 +65,7 @@ from bodo.utils.transform import compile_func_single_block
 from bodo.utils.utils import (
     is_alloc_callname,
     is_whole_slice,
+    is_slice_equiv_arr,
     get_slice_step,
     is_np_array_typ,
     find_build_tuple,
@@ -148,6 +149,7 @@ class DistributedPass:
             self.typingctx,
             self.metadata,
             self.flags,
+            self.arr_analysis,
         )
         self._dist_analysis = dist_analysis_pass.run()
         # dprint_func_ir(self.func_ir, "after analysis distributed")
@@ -1563,11 +1565,16 @@ class DistributedPass:
                 is_multi_dim = True
 
             # no need for transformation for whole slices
-            if guard(is_whole_slice, self.typemap, self.func_ir, index_var):
+            if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
+                is_slice_equiv_arr, arr, index_var, self.func_ir, equiv_set
+            ):
                 return out
 
             # TODO: support multi-dim slice setitem like X[a:b, c:d]
-            assert not is_multi_dim
+            if is_multi_dim:  # pragma: no cover
+                raise BodoError(
+                    "multi-dimensional slicing of distributed data not supported yet"
+                )
             nodes, start_var, count_var = self._get_dist_var_start_count(
                 arr, equiv_set, avail_vars
             )
@@ -1640,7 +1647,9 @@ class DistributedPass:
 
             index_typ = self.typemap[index_var.name]
             # no need for transformation for whole slices
-            if guard(is_whole_slice, self.typemap, self.func_ir, index_var):
+            if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
+                is_slice_equiv_arr, arr, index_var, self.func_ir, equiv_set
+            ):
                 # A = X[:,3]
                 pass
 
@@ -1651,6 +1660,13 @@ class DistributedPass:
                 self.typemap,
                 self.func_ir,
                 index_var,
+                accept_stride=True,
+            ) or guard(
+                is_slice_equiv_arr,
+                arr,
+                index_var,
+                self.func_ir,
+                equiv_set,
                 accept_stride=True,
             ):
                 # FIXME: we use rebalance array to handle the output array

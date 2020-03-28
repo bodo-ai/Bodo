@@ -388,14 +388,54 @@ def test_getitem_const_slice_multidim():
     """test getitem of multi-dim distributed array with a constant slice in first
     dimension.
     """
+
     def impl(A):
-        return A[1:3,0,1:]
+        return A[1:3, 0, 1:]
 
     bodo_func = bodo.jit(distributed={"A"})(impl)
     n = 5
-    A = np.arange(n*n*n).reshape(n, n, n)
+    A = np.arange(n * n * n).reshape(n, n, n)
     start, end = get_start_end(len(A))
     np.testing.assert_array_equal(bodo_func(A[start:end]), impl(A))
+
+
+def test_getitem_slice_const_size():
+    """test getitem of multi-dim distributed array with a constant slice in first
+    dimension.
+    """
+    # setitem without stride
+    def impl1():
+        N = 10
+        X = np.ones((N, 3))
+        X[:, 1] = 3
+        return X.sum()
+
+    # getitem without stride
+    def impl2():
+        N = 10
+        X = np.ones((N, 3))
+        A = X[:, 1]
+        return A.sum()
+
+    # TODO: support
+    # setitem with stride
+    # def impl3():
+    #     N = 10
+    #     X = np.ones((N, 3))
+    #     X[::2,1] = 3
+    #     return X.sum()
+
+    # getitem with stride
+    # def impl4():
+    #     N = 10
+    #     X = np.ones((N, 3))
+    #     A = X[::2,1]
+    #     return A.sum()
+
+    check_func(impl1, ())
+    check_func(impl2, ())
+    # check_func(impl3, ())
+    # check_func(impl4, ())
 
 
 def test_dist_tuple1():
@@ -622,6 +662,7 @@ def test_df_filter_branch():
     pattern matching for definition of the size. This test (from customer code)
     exercises this case.
     """
+
     def test_impl(df, flag):
         df2 = df[df.A == 1]
         if flag:
@@ -634,7 +675,6 @@ def test_df_filter_branch():
 
     df = pd.DataFrame({"A": [1, 11, 2, 0, 3]})
     check_func(test_impl, (df, True), False)
-
 
 
 def test_empty_object_array_warning():
