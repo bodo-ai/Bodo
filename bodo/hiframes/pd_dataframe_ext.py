@@ -32,6 +32,8 @@ from numba.typing.templates import (
     bound_function,
 )
 from numba.targets.imputils import impl_ret_borrowed
+from llvmlite import ir as lir
+
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.series_indexing import SeriesIlocType
@@ -269,6 +271,61 @@ class DataFrameAttribute(AttributeTemplate):
             return DataFrameType(tuple(new_data), df.index, tuple(new_names))
 
 
+
+def decref_df_data(context, builder, payload, df_type):
+    """call decref() on all data arrays and index of dataframe
+    """
+    # decref all unboxed arrays
+    for i in range(len(df_type.data)):
+        unboxed = builder.extract_value(payload.unboxed, i)
+        is_unboxed = builder.icmp_unsigned("==", unboxed, lir.Constant(unboxed.type, 1))
+
+        with builder.if_then(is_unboxed):
+            arr = builder.extract_value(payload.data, i)
+            context.nrt.decref(builder, df_type.data[i], arr)
+
+    # decref index
+    # last unboxed flag is for index
+    index_unboxed = builder.extract_value(payload.unboxed, len(df_type.data))
+    is_index_unboxed = builder.icmp_unsigned(
+        "==", index_unboxed, lir.Constant(index_unboxed.type, 1)
+    )
+    with builder.if_then(is_index_unboxed):
+        context.nrt.decref(builder, df_type.index, payload.index)
+
+
+def define_df_dtor(context, builder, df_type, payload_type):
+    """
+    Define destructor for dataframe type if not already defined
+    Similar to Numba's List dtor:
+    https://github.com/numba/numba/blob/cc7e7c7cfa6389b54d3b5c2c95751c97eb531a96/numba/targets/listobj.py#L273
+    """
+    mod = builder.module
+    # Declare dtor
+    fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
+    # TODO(ehsan): do we need to sanitize the name in any case?
+    fn = mod.get_or_insert_function(fnty, name=".dtor.df.{}".format(df_type))
+
+    # End early if the dtor is already defined
+    if not fn.is_declaration:
+        return fn
+
+    fn.linkage = "linkonce_odr"
+    # Populate the dtor
+    builder = lir.IRBuilder(fn.append_basic_block())
+    base_ptr = fn.args[0]  # void*
+
+    # get payload struct
+    ptrty = context.get_data_type(payload_type).as_pointer()
+    payload_ptr = builder.bitcast(base_ptr, ptrty)
+    payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
+
+    decref_df_data(context, builder, payload, df_type)
+
+    builder.ret_void()
+    return fn
+
+
 def construct_dataframe(
     context, builder, df_type, data_tup, index_val, column_tup, unboxed_tup, parent=None
 ):
@@ -283,8 +340,9 @@ def construct_dataframe(
     # create meminfo and store payload
     payload_ll_type = context.get_data_type(payload_type)
     payload_size = context.get_abi_sizeof(payload_ll_type)
-    meminfo = context.nrt.meminfo_alloc(
-        builder, context.get_constant(types.uintp, payload_size)
+    dtor_fn = define_df_dtor(context, builder, df_type, payload_type)
+    meminfo = context.nrt.meminfo_alloc_dtor(
+        builder, context.get_constant(types.uintp, payload_size), dtor_fn
     )
     meminfo_data_ptr = context.nrt.meminfo_data(builder, meminfo)
     meminfo_data_ptr = builder.bitcast(meminfo_data_ptr, payload_ll_type.as_pointer())
@@ -506,6 +564,7 @@ def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
     col_ind = c_ind_typ.literal_value
 
     def codegen(context, builder, signature, args):
+        # TODO: fix refcount
         df_arg, _, arr_arg = args
         dataframe_payload = get_dataframe_payload(context, builder, df_typ, df_arg)
         # assign array and set unboxed flag
@@ -659,6 +718,9 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
         # TODO: test this
         # test_set_column_cond3 doesn't test it for some reason
         if is_inplace:
+            # TODO: test refcount properly
+            # old data arrays will be replaced so need a decref
+            decref_df_data(context, builder, in_dataframe_payload, df)
             # store payload
             payload_type = DataFramePayloadType(df)
             payload_ptr = context.nrt.meminfo_data(builder, in_dataframe.meminfo)
@@ -668,6 +730,14 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
                 context, builder, df, out_dataframe
             )
             builder.store(out_dataframe_payload._getvalue(), payload_ptr)
+
+            # incref data again since there will be too references updated
+            # TODO: incref only unboxed arrays to be safe?
+            if context.enable_nrt:
+                context.nrt.incref(builder, index_typ, index_val)
+                for var, typ in zip(data_arrs, data_typs):
+                    context.nrt.incref(builder, typ, var)
+                context.nrt.incref(builder, columns_type, columns_tup)
 
         # set column of parent
         # get boxed array
