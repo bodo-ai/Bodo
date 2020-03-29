@@ -205,7 +205,9 @@ def unbox_int_array(typ, obj, c):
 
     # int_arr.null_bitmap = retval
 
-    n = c.pyapi.long_as_longlong(c.pyapi.call_method(obj, "__len__", ()))
+    n_obj = c.pyapi.call_method(obj, "__len__", ())
+    n = c.pyapi.long_as_longlong(n_obj)
+    c.pyapi.decref(n_obj)
     n_bytes = c.builder.udiv(
         c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
         lir.Constant(lir.IntType(64), 8),
@@ -225,6 +227,9 @@ def unbox_int_array(typ, obj, c):
     c.builder.call(fn, [bitmap_arr_struct.data, mask_arr_struct.data, n])
 
     int_arr.null_bitmap = bitmap_arr_struct._getvalue()
+
+    # clean up native mask array after creating bitmap from it
+    c.context.nrt.decref(c.builder, types.Array(types.bool_, 1, "C"), mask_arr)
 
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(int_arr._getvalue(), is_error=is_error)
