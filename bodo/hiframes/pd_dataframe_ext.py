@@ -386,10 +386,10 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
         # column names
         columns_tup = context.get_constant_generic(builder, columns_type, column_names)
 
-        # unboxed flags
-        zero = context.get_constant(types.int8, 0)
+        # set unboxed flags to 1 so that dtor decrefs all arrays
+        one = context.get_constant(types.int8, 1)
         unboxed_tup = context.make_tuple(
-            builder, types.UniTuple(types.int8, n_cols + 1), [zero] * (n_cols + 1)
+            builder, types.UniTuple(types.int8, n_cols + 1), [one] * (n_cols + 1)
         )
 
         dataframe_val = construct_dataframe(
