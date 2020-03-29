@@ -285,13 +285,15 @@ def decref_df_data(context, builder, payload, df_type):
             context.nrt.decref(builder, df_type.data[i], arr)
 
     # decref index
+    # NOTE: currently, Index is always unboxed so no check of unboxed flag, TODO: fix
+    context.nrt.decref(builder, df_type.index, payload.index)
     # last unboxed flag is for index
-    index_unboxed = builder.extract_value(payload.unboxed, len(df_type.data))
-    is_index_unboxed = builder.icmp_unsigned(
-        "==", index_unboxed, lir.Constant(index_unboxed.type, 1)
-    )
-    with builder.if_then(is_index_unboxed):
-        context.nrt.decref(builder, df_type.index, payload.index)
+    # index_unboxed = builder.extract_value(payload.unboxed, len(df_type.data))
+    # is_index_unboxed = builder.icmp_unsigned(
+    #     "==", index_unboxed, lir.Constant(index_unboxed.type, 1)
+    # )
+    # with builder.if_then(is_index_unboxed):
+    #     context.nrt.decref(builder, df_type.index, payload.index)
 
 
 def define_df_dtor(context, builder, df_type, payload_type):
