@@ -159,7 +159,9 @@ def unbox_bool_array(typ, obj, c):
     structure. The array's dtype can be bool or object, depending on the presense of
     nans.
     """
-    n = c.pyapi.long_as_longlong(c.pyapi.call_method(obj, "__len__", ()))
+    n_obj = c.pyapi.call_method(obj, "__len__", ())
+    n = c.pyapi.long_as_longlong(n_obj)
+    c.pyapi.decref(n_obj)
 
     fnty = lir.FunctionType(lir.IntType(32), [lir.IntType(8).as_pointer()])
     fn_bool = c.builder.module.get_or_insert_function(fnty, name="is_bool_array")
@@ -200,6 +202,8 @@ def unbox_bool_array(typ, obj, c):
             fn = c.builder.module.get_or_insert_function(fnty, name="mask_arr_to_bitmap")
             c.builder.call(fn, [bitmap_arr_struct.data, mask_arr_struct.data, n])
             bool_arr.null_bitmap = bitmap_arr_struct._getvalue()
+            # clean up native mask array after creating bitmap from it
+            c.context.nrt.decref(c.builder, types.Array(types.bool_, 1, "C"), mask_arr)
             c.pyapi.decref(data_obj)
             c.pyapi.decref(mask_arr_obj)
 
