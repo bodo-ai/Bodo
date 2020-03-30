@@ -285,13 +285,15 @@ def decref_df_data(context, builder, payload, df_type):
             context.nrt.decref(builder, df_type.data[i], arr)
 
     # decref index
+    # NOTE: currently, Index is always unboxed so no check of unboxed flag, TODO: fix
+    context.nrt.decref(builder, df_type.index, payload.index)
     # last unboxed flag is for index
-    index_unboxed = builder.extract_value(payload.unboxed, len(df_type.data))
-    is_index_unboxed = builder.icmp_unsigned(
-        "==", index_unboxed, lir.Constant(index_unboxed.type, 1)
-    )
-    with builder.if_then(is_index_unboxed):
-        context.nrt.decref(builder, df_type.index, payload.index)
+    # index_unboxed = builder.extract_value(payload.unboxed, len(df_type.data))
+    # is_index_unboxed = builder.icmp_unsigned(
+    #     "==", index_unboxed, lir.Constant(index_unboxed.type, 1)
+    # )
+    # with builder.if_then(is_index_unboxed):
+    #     context.nrt.decref(builder, df_type.index, payload.index)
 
 
 def define_df_dtor(context, builder, df_type, payload_type):
@@ -384,10 +386,10 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
         # column names
         columns_tup = context.get_constant_generic(builder, columns_type, column_names)
 
-        # unboxed flags
-        zero = context.get_constant(types.int8, 0)
+        # set unboxed flags to 1 so that dtor decrefs all arrays
+        one = context.get_constant(types.int8, 1)
         unboxed_tup = context.make_tuple(
-            builder, types.UniTuple(types.int8, n_cols + 1), [zero] * (n_cols + 1)
+            builder, types.UniTuple(types.int8, n_cols + 1), [one] * (n_cols + 1)
         )
 
         dataframe_val = construct_dataframe(

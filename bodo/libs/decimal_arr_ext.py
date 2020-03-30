@@ -273,7 +273,10 @@ def unbox_decimal_arr(typ, val, c):
     decimal_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
 
     # allocate data and null_bitmap arrays
-    n = c.pyapi.long_as_longlong(c.pyapi.call_method(val, "__len__", ()))
+    n_obj = c.pyapi.call_method(val, "__len__", ())
+    n = c.pyapi.long_as_longlong(n_obj)
+    c.pyapi.decref(n_obj)
+
     n_bitmask_bytes = c.builder.udiv(
         c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
         lir.Constant(lir.IntType(64), 8),

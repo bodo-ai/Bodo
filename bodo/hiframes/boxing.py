@@ -95,6 +95,7 @@ def unbox_dataframe(typ, val, c):
     )
 
     # unbox index
+    # TODO: unbox index only if necessary
     ind_obj = c.pyapi.object_getattr_string(val, "index")
     index_val = c.pyapi.to_native_value(typ.index, ind_obj).value
     c.pyapi.decref(ind_obj)
