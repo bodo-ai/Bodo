@@ -139,14 +139,16 @@ def box_dt_index(typ, val, c):
     name_obj = c.pyapi.from_native_value(typ.name_typ, dt_index.name, c.env_manager)
 
     # call pd.DatetimeIndex(arr, name=name)
+    args = c.pyapi.tuple_pack([arr_obj])
     kws = c.pyapi.dict_pack([("name", name_obj)])
     const_call = c.pyapi.object_getattr_string(pd_class_obj, "DatetimeIndex")
-    res = c.pyapi.call(const_call, c.pyapi.tuple_pack([arr_obj]), kws)
+    res = c.pyapi.call(const_call, args, kws)
 
     c.pyapi.decref(arr_obj)
     c.pyapi.decref(name_obj)
     c.pyapi.decref(pd_class_obj)
     c.pyapi.decref(const_call)
+    c.pyapi.decref(args)
     c.pyapi.decref(kws)
     return res
 
@@ -715,14 +717,16 @@ def box_timedelta_index(typ, val, c):
     )
 
     # call pd.TimedeltaIndex(arr, name=name)
+    args = c.pyapi.tuple_pack([arr_obj])
     kws = c.pyapi.dict_pack([("name", name_obj)])
     const_call = c.pyapi.object_getattr_string(pd_class_obj, "TimedeltaIndex")
-    res = c.pyapi.call(const_call, c.pyapi.tuple_pack([arr_obj]), kws)
+    res = c.pyapi.call(const_call, args, kws)
 
     c.pyapi.decref(arr_obj)
     c.pyapi.decref(name_obj)
     c.pyapi.decref(pd_class_obj)
     c.pyapi.decref(const_call)
+    c.pyapi.decref(args)
     c.pyapi.decref(kws)
     return res
 
@@ -957,11 +961,10 @@ def box_range_index(typ, val, c):
     name_obj = c.pyapi.from_native_value(typ.name_typ, range_val.name, c.env_manager)
 
     # call pd.RangeIndex(start, stop, step, name=name)
+    args = c.pyapi.tuple_pack([start_obj, stop_obj, step_obj])
     kws = c.pyapi.dict_pack([("name", name_obj)])
     const_call = c.pyapi.object_getattr_string(class_obj, "RangeIndex")
-    index_obj = c.pyapi.call(
-        const_call, c.pyapi.tuple_pack([start_obj, stop_obj, step_obj]), kws
-    )
+    index_obj = c.pyapi.call(const_call, args, kws)
 
     c.pyapi.decref(start_obj)
     c.pyapi.decref(stop_obj)
@@ -969,6 +972,7 @@ def box_range_index(typ, val, c):
     c.pyapi.decref(name_obj)
     c.pyapi.decref(class_obj)
     c.pyapi.decref(const_call)
+    c.pyapi.decref(args)
     c.pyapi.decref(kws)
     return index_obj
 
@@ -1205,17 +1209,19 @@ def box_period_index(typ, val, c):
     freq_obj = c.pyapi.string_from_constant_string(typ.freq)
 
     # call pd.PeriodIndex(ordinal=data, name=name, freq=freq)
+    args = c.pyapi.tuple_pack([])
     kws = c.pyapi.dict_pack(
         [("ordinal", data_obj), ("name", name_obj), ("freq", freq_obj)]
     )
     const_call = c.pyapi.object_getattr_string(class_obj, "PeriodIndex")
-    index_obj = c.pyapi.call(const_call, c.pyapi.tuple_pack([]), kws)
+    index_obj = c.pyapi.call(const_call, args, kws)
 
     c.pyapi.decref(data_obj)
     c.pyapi.decref(name_obj)
     c.pyapi.decref(freq_obj)
     c.pyapi.decref(class_obj)
     c.pyapi.decref(const_call)
+    c.pyapi.decref(args)
     c.pyapi.decref(kws)
     return index_obj
 
