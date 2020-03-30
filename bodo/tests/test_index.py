@@ -8,7 +8,7 @@ import bodo
 import pytest
 
 
-def test_range_index_constructor():
+def test_range_index_constructor(memory_leak_check):
     """
     Test pd.RangeIndex()
     """
@@ -50,7 +50,7 @@ def test_range_index_constructor():
     assert bodo.jit(impl7)(r) == impl7(r)
 
 
-def test_numeric_index_constructor():
+def test_numeric_index_constructor(memory_leak_check):
     """
     Test pd.Int64Index/UInt64Index/Float64Index objects
     """
@@ -105,7 +105,7 @@ def test_numeric_index_constructor():
         pd.Index(["A", "B"]),
     ],
 )
-def test_array_index_box(index):
+def test_array_index_box(index, memory_leak_check):
     def impl(A):
         return A
 
@@ -122,7 +122,7 @@ def dti_val(request):
     return request.param
 
 
-def test_datetime_index_unbox(dti_val):
+def test_datetime_index_unbox(dti_val, memory_leak_check):
     def test_impl(dti):
         return dti
 
@@ -291,7 +291,7 @@ def timedelta_index_val(request):
     return request.param
 
 
-def test_timedelta_index_unbox(timedelta_index_val):
+def test_timedelta_index_unbox(timedelta_index_val, memory_leak_check):
     def test_impl(timedelta_index):
         return timedelta_index
 
@@ -341,7 +341,7 @@ def test_timedelta_field(timedelta_index_val, field):
         pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
     ],
 )
-def test_period_index_box(period_index):
+def test_period_index_box(period_index, memory_leak_check):
     def impl(A):
         return A
 
@@ -361,7 +361,7 @@ def test_period_index_box(period_index):
         ),
     ],
 )
-def test_multi_index_unbox(m_ind):
+def test_multi_index_unbox(m_ind, memory_leak_check):
     def test_impl(m_ind):
         return m_ind
 

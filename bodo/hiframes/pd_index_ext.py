@@ -133,13 +133,18 @@ def box_dt_index(typ, val, c):
 
     dt_index = numba.cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
-    arr = c.pyapi.from_native_value(_dt_index_data_typ, dt_index.data, c.env_manager)
-    name = c.pyapi.from_native_value(typ.name_typ, dt_index.name, c.env_manager)
+    arr_obj = c.pyapi.from_native_value(
+        _dt_index_data_typ, dt_index.data, c.env_manager
+    )
+    name_obj = c.pyapi.from_native_value(typ.name_typ, dt_index.name, c.env_manager)
 
     # call pd.DatetimeIndex(arr, name=name)
-    kws = c.pyapi.dict_pack([("name", name)])
+    kws = c.pyapi.dict_pack([("name", name_obj)])
     const_call = c.pyapi.object_getattr_string(pd_class_obj, "DatetimeIndex")
-    res = c.pyapi.call(const_call, c.pyapi.tuple_pack([arr]), kws)
+    res = c.pyapi.call(const_call, c.pyapi.tuple_pack([arr_obj]), kws)
+
+    c.pyapi.decref(arr_obj)
+    c.pyapi.decref(name_obj)
     c.pyapi.decref(pd_class_obj)
     c.pyapi.decref(const_call)
     c.pyapi.decref(kws)
@@ -702,15 +707,20 @@ def box_timedelta_index(typ, val, c):
 
     timedelta_index = numba.cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
-    arr = c.pyapi.from_native_value(
+    arr_obj = c.pyapi.from_native_value(
         _timedelta_index_data_typ, timedelta_index.data, c.env_manager
     )
-    name = c.pyapi.from_native_value(typ.name_typ, timedelta_index.name, c.env_manager)
+    name_obj = c.pyapi.from_native_value(
+        typ.name_typ, timedelta_index.name, c.env_manager
+    )
 
     # call pd.TimedeltaIndex(arr, name=name)
-    kws = c.pyapi.dict_pack([("name", name)])
+    kws = c.pyapi.dict_pack([("name", name_obj)])
     const_call = c.pyapi.object_getattr_string(pd_class_obj, "TimedeltaIndex")
-    res = c.pyapi.call(const_call, c.pyapi.tuple_pack([arr]), kws)
+    res = c.pyapi.call(const_call, c.pyapi.tuple_pack([arr_obj]), kws)
+
+    c.pyapi.decref(arr_obj)
+    c.pyapi.decref(name_obj)
     c.pyapi.decref(pd_class_obj)
     c.pyapi.decref(const_call)
     c.pyapi.decref(kws)
@@ -941,13 +951,22 @@ def box_range_index(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     class_obj = c.pyapi.import_module_noblock(mod_name)
     range_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-    start = c.pyapi.from_native_value(types.int64, range_val.start, c.env_manager)
-    stop = c.pyapi.from_native_value(types.int64, range_val.stop, c.env_manager)
-    step = c.pyapi.from_native_value(types.int64, range_val.step, c.env_manager)
-    name = c.pyapi.from_native_value(typ.name_typ, range_val.name, c.env_manager)
-    kws = c.pyapi.dict_pack([("name", name)])
+    start_obj = c.pyapi.from_native_value(types.int64, range_val.start, c.env_manager)
+    stop_obj = c.pyapi.from_native_value(types.int64, range_val.stop, c.env_manager)
+    step_obj = c.pyapi.from_native_value(types.int64, range_val.step, c.env_manager)
+    name_obj = c.pyapi.from_native_value(typ.name_typ, range_val.name, c.env_manager)
+
+    # call pd.RangeIndex(start, stop, step, name=name)
+    kws = c.pyapi.dict_pack([("name", name_obj)])
     const_call = c.pyapi.object_getattr_string(class_obj, "RangeIndex")
-    index_obj = c.pyapi.call(const_call, c.pyapi.tuple_pack([start, stop, step]), kws)
+    index_obj = c.pyapi.call(
+        const_call, c.pyapi.tuple_pack([start_obj, stop_obj, step_obj]), kws
+    )
+
+    c.pyapi.decref(start_obj)
+    c.pyapi.decref(stop_obj)
+    c.pyapi.decref(step_obj)
+    c.pyapi.decref(name_obj)
     c.pyapi.decref(class_obj)
     c.pyapi.decref(const_call)
     c.pyapi.decref(kws)
@@ -1178,17 +1197,23 @@ def box_period_index(typ, val, c):
     class_obj = c.pyapi.import_module_noblock(mod_name)
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-    data = c.pyapi.from_native_value(
+
+    data_obj = c.pyapi.from_native_value(
         types.Array(types.int64, 1, "C"), index_val.data, c.env_manager
     )
-    name = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
-
-    freq = c.pyapi.string_from_constant_string(typ.freq)
+    name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
+    freq_obj = c.pyapi.string_from_constant_string(typ.freq)
 
     # call pd.PeriodIndex(ordinal=data, name=name, freq=freq)
-    kws = c.pyapi.dict_pack([("ordinal", data), ("name", name), ("freq", freq)])
+    kws = c.pyapi.dict_pack(
+        [("ordinal", data_obj), ("name", name_obj), ("freq", freq_obj)]
+    )
     const_call = c.pyapi.object_getattr_string(class_obj, "PeriodIndex")
     index_obj = c.pyapi.call(const_call, c.pyapi.tuple_pack([]), kws)
+
+    c.pyapi.decref(data_obj)
+    c.pyapi.decref(name_obj)
+    c.pyapi.decref(freq_obj)
     c.pyapi.decref(class_obj)
     c.pyapi.decref(const_call)
     c.pyapi.decref(kws)
@@ -1297,10 +1322,10 @@ def box_numeric_index(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     class_obj = c.pyapi.import_module_noblock(mod_name)
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-    data = c.pyapi.from_native_value(
+    data_obj = c.pyapi.from_native_value(
         types.Array(typ.dtype, 1, "C"), index_val.data, c.env_manager
     )
-    name = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
+    name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
 
     assert typ.dtype in (types.int64, types.uint64, types.float64)
     func_name = "Int64Index"
@@ -1311,10 +1336,17 @@ def box_numeric_index(typ, val, c):
     else:
         assert typ.dtype == types.int64
 
-    dtype = c.pyapi.make_none()
-    copy = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
+    dtype_obj = c.pyapi.make_none()
+    copy_obj = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
 
-    index_obj = c.pyapi.call_method(class_obj, func_name, (data, dtype, copy, name))
+    index_obj = c.pyapi.call_method(
+        class_obj, func_name, (data_obj, dtype_obj, copy_obj, name_obj)
+    )
+
+    c.pyapi.decref(data_obj)
+    c.pyapi.decref(dtype_obj)
+    c.pyapi.decref(copy_obj)
+    c.pyapi.decref(name_obj)
     c.pyapi.decref(class_obj)
     return index_obj
 
@@ -1456,14 +1488,25 @@ make_attribute_wrapper(StringIndexType, "name", "_name")
 def box_string_index(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     class_obj = c.pyapi.import_module_noblock(mod_name)
+
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-    data = c.pyapi.from_native_value(string_array_type, index_val.data, c.env_manager)
-    name = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
+    data_obj = c.pyapi.from_native_value(
+        string_array_type, index_val.data, c.env_manager
+    )
+    name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
 
-    dtype = c.pyapi.make_none()
-    copy = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
+    dtype_obj = c.pyapi.make_none()
+    copy_obj = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
 
-    index_obj = c.pyapi.call_method(class_obj, "Index", (data, dtype, copy, name))
+    # call pd.Index(data, dtype, copy, name)
+    index_obj = c.pyapi.call_method(
+        class_obj, "Index", (data_obj, dtype_obj, copy_obj, name_obj)
+    )
+
+    c.pyapi.decref(data_obj)
+    c.pyapi.decref(dtype_obj)
+    c.pyapi.decref(copy_obj)
+    c.pyapi.decref(name_obj)
     c.pyapi.decref(class_obj)
     return index_obj
 
