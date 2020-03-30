@@ -640,6 +640,7 @@ def box_datetime_date_array(typ, val, c):
     )
     obj_arr = c.builder.call(fn_get, [n, data_arr.data, bitmap_arr_data])
 
+    c.context.nrt.decref(c.builder, typ, val)
     return obj_arr
 
 
