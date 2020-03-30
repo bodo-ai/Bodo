@@ -569,7 +569,7 @@ def list_str_arr_value(request):
     return request.param
 
 
-def test_list_str_arr_unbox(list_str_arr_value):
+def test_list_str_arr_unbox(list_str_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):
         return True
