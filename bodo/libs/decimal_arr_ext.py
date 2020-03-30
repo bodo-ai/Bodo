@@ -262,6 +262,7 @@ def box_decimal_arr(typ, val, c):
     fn_get = c.builder.module.get_or_insert_function(fnty, name="box_decimal_array")
     obj_arr = c.builder.call(fn_get, [n, data_arr.data, bitmap_arr_data, scale,],)
 
+    c.context.nrt.decref(c.builder, typ, val)
     return obj_arr
 
 
