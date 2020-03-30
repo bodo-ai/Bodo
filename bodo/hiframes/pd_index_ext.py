@@ -150,12 +150,12 @@ def box_dt_index(typ, val, c):
 def unbox_datetime_index(typ, val, c):
     # get data and name attributes
     # TODO: use to_numpy()
-    data = c.pyapi.to_native_value(
-        _dt_index_data_typ, c.pyapi.object_getattr_string(val, "values")
-    ).value
-    name = c.pyapi.to_native_value(
-        typ.name_typ, c.pyapi.object_getattr_string(val, "name")
-    ).value
+    values_obj = c.pyapi.object_getattr_string(val, "values")
+    data = c.pyapi.to_native_value(_dt_index_data_typ, values_obj).value
+    name_obj = c.pyapi.object_getattr_string(val, "name")
+    name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
+    c.pyapi.decref(values_obj)
+    c.pyapi.decref(name_obj)
 
     # create index struct
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
@@ -721,12 +721,12 @@ def box_timedelta_index(typ, val, c):
 def unbox_timedelta_index(typ, val, c):
     # get data and name attributes
     # TODO: use to_numpy()
-    data = c.pyapi.to_native_value(
-        _timedelta_index_data_typ, c.pyapi.object_getattr_string(val, "values")
-    ).value
-    name = c.pyapi.to_native_value(
-        typ.name_typ, c.pyapi.object_getattr_string(val, "name")
-    ).value
+    values_obj = c.pyapi.object_getattr_string(val, "values")
+    data = c.pyapi.to_native_value(_timedelta_index_data_typ, values_obj).value
+    name_obj = c.pyapi.object_getattr_string(val, "name")
+    name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
+    c.pyapi.decref(values_obj)
+    c.pyapi.decref(name_obj)
 
     # create index struct
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
@@ -975,18 +975,18 @@ def init_range_index(typingctx, start, stop, step, name=None):
 @unbox(RangeIndexType)
 def unbox_range_index(typ, val, c):
     # get start/stop/step attributes
-    start = c.pyapi.to_native_value(
-        types.int64, c.pyapi.object_getattr_string(val, "start")
-    ).value
-    stop = c.pyapi.to_native_value(
-        types.int64, c.pyapi.object_getattr_string(val, "stop")
-    ).value
-    step = c.pyapi.to_native_value(
-        types.int64, c.pyapi.object_getattr_string(val, "step")
-    ).value
-    name = c.pyapi.to_native_value(
-        typ.name_typ, c.pyapi.object_getattr_string(val, "name")
-    ).value
+    start_obj = c.pyapi.object_getattr_string(val, "start")
+    start = c.pyapi.to_native_value(types.int64, start_obj).value
+    stop_obj = c.pyapi.object_getattr_string(val, "stop")
+    stop = c.pyapi.to_native_value(types.int64, stop_obj).value
+    step_obj = c.pyapi.object_getattr_string(val, "step")
+    step = c.pyapi.to_native_value(types.int64, step_obj).value
+    name_obj = c.pyapi.object_getattr_string(val, "name")
+    name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
+    c.pyapi.decref(start_obj)
+    c.pyapi.decref(stop_obj)
+    c.pyapi.decref(step_obj)
+    c.pyapi.decref(name_obj)
 
     # create range struct
     range_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
@@ -1199,12 +1199,12 @@ def box_period_index(typ, val, c):
 def unbox_period_index(typ, val, c):
     # get data and name attributes
     arr_typ = types.Array(types.int64, 1, "C")
-    data = c.pyapi.to_native_value(
-        arr_typ, c.pyapi.object_getattr_string(val, "asi8")
-    ).value
-    name = c.pyapi.to_native_value(
-        typ.name_typ, c.pyapi.object_getattr_string(val, "name")
-    ).value
+    asi8_obj = c.pyapi.object_getattr_string(val, "asi8")
+    data = c.pyapi.to_native_value(arr_typ, asi8_obj).value
+    name_obj = c.pyapi.object_getattr_string(val, "name")
+    name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
+    c.pyapi.decref(asi8_obj)
+    c.pyapi.decref(name_obj)
 
     # create index struct
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
@@ -1346,12 +1346,12 @@ def unbox_numeric_index(typ, val, c):
     # get data and name attributes
     # TODO: use to_numpy()
     arr_typ = types.Array(typ.dtype, 1, "C")
-    data = c.pyapi.to_native_value(
-        arr_typ, c.pyapi.object_getattr_string(val, "values")
-    ).value
-    name = c.pyapi.to_native_value(
-        typ.name_typ, c.pyapi.object_getattr_string(val, "name")
-    ).value
+    values_obj = c.pyapi.object_getattr_string(val, "values")
+    data = c.pyapi.to_native_value(arr_typ, values_obj).value
+    name_obj = c.pyapi.object_getattr_string(val, "name")
+    name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
+    c.pyapi.decref(values_obj)
+    c.pyapi.decref(name_obj)
 
     # create index struct
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
@@ -1493,12 +1493,12 @@ def init_string_index(typingctx, data, name=None):
 def unbox_string_index(typ, val, c):
     # get data and name attributes
     # TODO: use to_numpy()
-    data = c.pyapi.to_native_value(
-        string_array_type, c.pyapi.object_getattr_string(val, "values")
-    ).value
-    name = c.pyapi.to_native_value(
-        typ.name_typ, c.pyapi.object_getattr_string(val, "name")
-    ).value
+    values_obj = c.pyapi.object_getattr_string(val, "values")
+    data = c.pyapi.to_native_value(string_array_type, values_obj).value
+    name_obj = c.pyapi.object_getattr_string(val, "name")
+    name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
+    c.pyapi.decref(values_obj)
+    c.pyapi.decref(name_obj)
 
     # create index struct
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
