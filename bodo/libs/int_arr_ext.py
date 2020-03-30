@@ -279,6 +279,11 @@ def box_int_arr(typ, val, c):
         ptr = cgutils.gep(c.builder, mask_arr_ptr, i)
         c.builder.store(val, ptr)
 
+    # clean up bitmap after mask array is created
+    c.context.nrt.decref(
+        c.builder, types.Array(types.uint8, 1, "C"), int_arr.null_bitmap
+    )
+
     # create IntegerArray
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
@@ -293,6 +298,8 @@ def box_int_arr(typ, val, c):
     c.pyapi.decref(mask_arr_ctypes)
     c.pyapi.decref(mask_arr_data)
     c.pyapi.decref(arr_mod_obj)
+    c.pyapi.decref(data)
+    c.pyapi.decref(mask_arr)
     return res
 
 
