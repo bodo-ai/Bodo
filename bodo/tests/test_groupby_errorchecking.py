@@ -53,7 +53,7 @@ def test_groupby_by_labels():
         return df.groupby(by=["A", "D"])
 
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
-    with pytest.raises(BodoError, match="invalid key .* for by"):
+    with pytest.raises(BodoError, match="invalid key .* for 'by'"):
         bodo.jit(impl)(df)
 
 

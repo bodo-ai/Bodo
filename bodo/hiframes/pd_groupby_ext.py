@@ -145,9 +145,9 @@ def validate_groupby_spec(
 
     # make sure by has valid label(s)
     if len(set(get_const_str_list(by)).difference(set(df.columns))) > 0:
-        raise BodoError(
-            "groupby(): invalid key {} for by.".format(
-                set(df.columns).difference(set(get_const_str_list(by)))
+        raise_const_error(
+            "groupby(): invalid key {} for 'by' (not available in columns {}).".format(
+                get_const_str_list(by), df.columns
             )
         )
 

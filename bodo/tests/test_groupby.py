@@ -1924,6 +1924,12 @@ def test_const_list_inference():
     def impl2(df):
         return df.groupby(list(set(df.columns) - set(["A", "C"]))).sum()
 
+    # test df schema change by setting a column
+    def impl3(n):
+        df = pd.DataFrame({"A": np.arange(n), "B": np.ones(n)})
+        df["D"] = 4
+        return df.groupby("D").sum()
+
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
@@ -1934,6 +1940,7 @@ def test_const_list_inference():
 
     check_func(impl1, (df,), sort_output=True)
     check_func(impl2, (df,), sort_output=True)
+    check_func(impl3, (11,), sort_output=True)
 
 
 # ------------------------------ pivot, crosstab ------------------------------ #
