@@ -1124,7 +1124,8 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                             nb_char += ListString[i_grp].size();
                     }
                     // Doing the additional needed allocations
-                    delete[] out_col->data1;
+                    // FIXME: this code leaks memory
+                    // delete[] out_col->data1;
                     out_col->data1 = new char[nb_char];
                     out_col->n_sub_elems = nb_char;
                     // Writing the strings in output
