@@ -31,6 +31,7 @@ from numba.ir_utils import (
     build_definitions,
     replace_vars_stmt,
     find_build_sequence,
+    compute_cfg_from_blocks,
 )
 
 
@@ -105,6 +106,8 @@ class UntypedPass:
         # call build definition since rewrite pass doesn't update definitions
         # e.g. getitem to static_getitem in test_column_list_select2
         self.func_ir._definitions = build_definitions(blocks)
+        # remove dead branches to avoid unnecessary typing issues
+        remove_dead_branches(self.func_ir)
         # topo_order necessary since df vars need to be found before use
         topo_order = find_topo_order(blocks)
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
@@ -1386,6 +1389,29 @@ class UntypedPass:
         f_block = compile_to_numba_ir(f, {"bodo": bodo}).blocks.popitem()[1]
         replace_arg_nodes(f_block, [var])
         return f_block.body[:-3]  # remove none return
+
+
+def remove_dead_branches(func_ir):
+    """
+    Remove branches that have a compile-time constant as condition.
+    Similar to dead_branch_prune() of Numba, but dead_branch_prune() only focuses on
+    binary expressions in conditions, not simple constants like global values.
+    """
+    for block in func_ir.blocks.values():
+        assert len(block.body) > 0
+        last_stmt = block.body[-1]
+        if isinstance(last_stmt, ir.Branch):
+            try:
+                cond_val = find_const(func_ir, last_stmt.cond)
+                target_label = last_stmt.truebr if cond_val else last_stmt.falsebr
+                block.body[-1] = ir.Jump(target_label, last_stmt.loc)
+            except GuardException:
+                pass
+
+    # Remove dead blocks using CFG
+    cfg = compute_cfg_from_blocks(func_ir.blocks)
+    for dead in cfg.dead_nodes():
+        del func_ir.blocks[dead]
 
 
 def _check_type(val, typ):
