@@ -1011,6 +1011,25 @@ def test_single_col_reset_index(test_df):
     check_func(impl1, (test_df,), sort_output=True)
 
 
+def test_nonvar_column_names():
+    """Test column names that cannot be variable names to make sure groupby code
+    generation sanitizes variable names properly.
+    """
+
+    def impl1(df):
+        A = df.groupby("A: A")["B: B"].sum()
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A: A": [2, 1, 1, 1, 2, 2, 1],
+            "B: B": [-8, 2, 3, np.nan, 5, 6, 7],
+            "C: C": [2, 3, -1, 1, 2, 3, -1],
+        }
+    )
+    check_func(impl1, (df,), sort_output=True)
+
+
 def test_cumsum_large_random_numpy():
     def get_random_array(n, sizlen):
         elist = []
