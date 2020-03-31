@@ -408,14 +408,14 @@ def test_getitem_slice_const_size():
         N = 10
         X = np.ones((N, 3))
         X[:, 1] = 3
-        return X.sum()
+        return X
 
     # getitem without stride
     def impl2():
         N = 10
         X = np.ones((N, 3))
         A = X[:, 1]
-        return A.sum()
+        return A
 
     # TODO: support
     # setitem with stride
