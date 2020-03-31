@@ -259,6 +259,7 @@ def box_list_str_arr(typ, val, c):
         ],
     )
 
+    c.context.nrt.decref(c.builder, typ, val)
     return arr
 
 

@@ -185,7 +185,7 @@ def unbox_bool_array(typ, obj, c):
                 types.Array(types.bool_, 1, "C"), mask_arr_obj
             ).value
             n_bytes = c.builder.udiv(
-            c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
+                c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
                 lir.Constant(lir.IntType(64), 8),
             )
             mask_arr_struct = c.context.make_array(types.Array(types.bool_, 1, "C"))(
@@ -197,9 +197,15 @@ def unbox_bool_array(typ, obj, c):
 
             fnty = lir.FunctionType(
                 lir.VoidType(),
-                [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer(), lir.IntType(64)],
+                [
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(64),
+                ],
             )
-            fn = c.builder.module.get_or_insert_function(fnty, name="mask_arr_to_bitmap")
+            fn = c.builder.module.get_or_insert_function(
+                fnty, name="mask_arr_to_bitmap"
+            )
             c.builder.call(fn, [bitmap_arr_struct.data, mask_arr_struct.data, n])
             bool_arr.null_bitmap = bitmap_arr_struct._getvalue()
             # clean up native mask array after creating bitmap from it
@@ -231,7 +237,10 @@ def unbox_bool_array(typ, obj, c):
                         lir.Constant(lir.IntType(64), 8),
                     )
                     bool_arr.null_bitmap = bodo.utils.utils._empty_nd_impl(
-                        c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bytes]
+                        c.context,
+                        c.builder,
+                        types.Array(types.uint8, 1, "C"),
+                        [n_bytes],
                     )._getvalue()
                     # get array pointers for data and bitmap
                     data_ptr = c.context.make_array(types.Array(types.bool_, 1, "C"))(
@@ -301,6 +310,11 @@ def box_bool_arr(typ, val, c):
         ptr = cgutils.gep(c.builder, mask_arr_ptr, i)
         c.builder.store(val, ptr)
 
+    # clean up bitmap after mask array is created
+    c.context.nrt.decref(
+        c.builder, types.Array(types.uint8, 1, "C"), bool_arr.null_bitmap
+    )
+
     # create BooleanArray
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
@@ -315,6 +329,8 @@ def box_bool_arr(typ, val, c):
     c.pyapi.decref(mask_arr_ctypes)
     c.pyapi.decref(mask_arr_data)
     c.pyapi.decref(arr_mod_obj)
+    c.pyapi.decref(data)
+    c.pyapi.decref(mask_arr)
     return res
 
 
@@ -904,6 +920,7 @@ def bool_arr_ind_getitem(A, ind):
 @lower_cast(types.Array(types.bool_, 1, "C"), boolean_array)
 def cast_np_bool_arr_to_bool_arr(context, builder, fromty, toty, val):
     func = lambda A: bodo.libs.bool_arr_ext.init_bool_array(
-                         A, np.full((len(A) + 7) >> 3, 255, np.uint8))
+        A, np.full((len(A) + 7) >> 3, 255, np.uint8)
+    )
     res = context.compile_internal(builder, func, toty(fromty), [val])
     return impl_ret_borrowed(context, builder, toty, res)

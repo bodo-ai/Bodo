@@ -224,7 +224,7 @@ def test_date_isin():
     check_func(test_isin, (S, v))
 
 
-def test_datetime_boxing():
+def test_datetime_boxing(memory_leak_check):
     """
     Test boxing and unboxing of datetime module object in Bodo
     """

@@ -1129,9 +1129,8 @@ def box_str_arr(typ, val, c):
         ],
     )
 
-    # TODO: double check refcounting here
-    # c.context.nrt.decref(c.builder, typ, val)
-    return arr  # c.builder.load(arr)
+    c.context.nrt.decref(c.builder, typ, val)
+    return arr
 
 
 @intrinsic

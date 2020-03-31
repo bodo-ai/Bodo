@@ -407,16 +407,30 @@ def box_series(typ, val, c):
         c.context, c.builder, typ, val
     )
 
-    arr = _box_series_data(dtype, typ.data, series_payload.data, c)
+    # box data/index/name
+    # incref since boxing functions steal a reference
+    c.context.nrt.incref(c.builder, typ.data, series_payload.data)
+    c.context.nrt.incref(c.builder, typ.index, series_payload.index)
+    c.context.nrt.incref(c.builder, typ.name_typ, series_payload.name)
+    arr_obj = _box_series_data(dtype, typ.data, series_payload.data, c)
+    index_obj = c.pyapi.from_native_value(
+        typ.index, series_payload.index, c.env_manager
+    )
+    name_obj = c.pyapi.from_native_value(
+        typ.name_typ, series_payload.name, c.env_manager
+    )
 
-    index = c.pyapi.from_native_value(typ.index, series_payload.index, c.env_manager)
-
-    name = c.pyapi.from_native_value(typ.name_typ, series_payload.name, c.env_manager)
-
+    # call pd.Series()
     dtype = c.pyapi.make_none()  # TODO: dtype
-    res = c.pyapi.call_method(pd_class_obj, "Series", (arr, index, dtype, name))
+    res = c.pyapi.call_method(
+        pd_class_obj, "Series", (arr_obj, index_obj, dtype, name_obj)
+    )
+    c.pyapi.decref(arr_obj)
+    c.pyapi.decref(index_obj)
+    c.pyapi.decref(name_obj)
 
     c.pyapi.decref(pd_class_obj)
+    c.context.nrt.decref(c.builder, typ, val)
     return res
 
 

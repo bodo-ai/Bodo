@@ -37,6 +37,8 @@ from numba.typing.npydecl import (
     NumpyRulesInplaceArrayOperator,
 )
 from numba.targets.imputils import impl_ret_borrowed
+from llvmlite import ir as lir
+
 import bodo
 from bodo.libs.str_ext import string_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
@@ -238,6 +240,38 @@ class SeriesModel(models.StructModel):
         super(SeriesModel, self).__init__(dmm, fe_type, members)
 
 
+def define_series_dtor(context, builder, series_type, payload_type):
+    """
+    Define destructor for Series type if not already defined
+    """
+    mod = builder.module
+    # Declare dtor
+    fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
+    # TODO(ehsan): do we need to sanitize the name in any case?
+    fn = mod.get_or_insert_function(fnty, name=".dtor.series.{}".format(series_type))
+
+    # End early if the dtor is already defined
+    if not fn.is_declaration:
+        return fn
+
+    fn.linkage = "linkonce_odr"
+    # Populate the dtor
+    builder = lir.IRBuilder(fn.append_basic_block())
+    base_ptr = fn.args[0]  # void*
+
+    # get payload struct
+    ptrty = context.get_data_type(payload_type).as_pointer()
+    payload_ptr = builder.bitcast(base_ptr, ptrty)
+    payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
+
+    context.nrt.decref(builder, series_type.data, payload.data)
+    context.nrt.decref(builder, series_type.index, payload.index)
+    context.nrt.decref(builder, series_type.name_typ, payload.name)
+
+    builder.ret_void()
+    return fn
+
+
 def construct_series(context, builder, series_type, data_val, index_val, name_val):
     # create payload struct and store values
     payload_type = SeriesPayloadType(series_type)
@@ -249,8 +283,9 @@ def construct_series(context, builder, series_type, data_val, index_val, name_va
     # create meminfo and store payload
     payload_ll_type = context.get_data_type(payload_type)
     payload_size = context.get_abi_sizeof(payload_ll_type)
-    meminfo = context.nrt.meminfo_alloc(
-        builder, context.get_constant(types.uintp, payload_size)
+    dtor_fn = define_series_dtor(context, builder, series_type, payload_type)
+    meminfo = context.nrt.meminfo_alloc_dtor(
+        builder, context.get_constant(types.uintp, payload_size), dtor_fn
     )
     meminfo_data_ptr = context.nrt.meminfo_data(builder, meminfo)
     meminfo_data_ptr = builder.bitcast(meminfo_data_ptr, payload_ll_type.as_pointer())
@@ -601,7 +636,6 @@ class SeriesAttribute(AttributeTemplate):
             dtype2 = pandas_timestamp_type
 
         f_return_type = get_const_func_output_type(func, (dtype1, dtype2), self.context)
-
 
         # TODO: output name is always None in Pandas?
         sig = signature(

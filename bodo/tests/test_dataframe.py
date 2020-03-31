@@ -156,7 +156,7 @@ def column_name_df_value(request):
     return request.param
 
 
-def test_unbox_df1(df_value):
+def test_unbox_df1(df_value, memory_leak_check):
     # just unbox
     def impl(df_arg):
         return True
