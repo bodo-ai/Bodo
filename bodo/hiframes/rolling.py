@@ -949,6 +949,7 @@ def shift_overload(in_arr, shift, parallel):
 def shift_impl(in_arr, shift, parallel):  # pragma: no cover
     N = len(in_arr)
     send_right = shift > 0
+    send_left = shift <= 0
     if parallel:
         rank = bodo.libs.distributed_api.get_rank()
         n_pes = bodo.libs.distributed_api.get_size()
@@ -957,7 +958,7 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
             return _handle_small_data_shift(in_arr, shift, rank, n_pes)
 
         comm_data = _border_icomm(
-            in_arr, rank, n_pes, halo_size, in_arr.dtype, send_right, not send_right
+            in_arr, rank, n_pes, halo_size, in_arr.dtype, send_right, send_left
         )
         (
             l_recv_buff,
@@ -998,15 +999,17 @@ def shift_seq(in_arr, shift):  # pragma: no cover
     N = len(in_arr)
     output = alloc_shift(in_arr)
     # maximum shift size is N
-    shift = min(shift, N) if shift > 0 else -min(-shift, N)
+    sign_shift = 1 if shift > 0 else -1
+    shift = sign_shift * min(abs(shift), N)
     # set border values to NA
     if shift > 0:
         output[:shift] = bodo.utils.conversion.get_NA_val_for_arr(output)
     else:
         output[shift:] = bodo.utils.conversion.get_NA_val_for_arr(output)
 
-    start = shift if shift > 0 else 0
-    end = N if shift > 0 else N + shift
+    # range is shift..N for positive shift, 0..N+shift for negative shift
+    start = max(shift, 0)
+    end = min(N, N + shift)
 
     for i in range(start, end):
         output[i] = in_arr[i - shift]
@@ -1031,6 +1034,7 @@ def pct_change_overload(in_arr, shift, parallel):
 def pct_change_impl(in_arr, shift, parallel):  # pragma: no cover
     N = len(in_arr)
     send_right = shift > 0
+    send_left = shift <= 0
     if parallel:
         rank = bodo.libs.distributed_api.get_rank()
         n_pes = bodo.libs.distributed_api.get_size()
@@ -1039,7 +1043,7 @@ def pct_change_impl(in_arr, shift, parallel):  # pragma: no cover
             return _handle_small_data_pct_change(in_arr, shift, rank, n_pes)
 
         comm_data = _border_icomm(
-            in_arr, rank, n_pes, halo_size, in_arr.dtype, send_right, not send_right
+            in_arr, rank, n_pes, halo_size, in_arr.dtype, send_right, send_left
         )
         (
             l_recv_buff,
@@ -1145,7 +1149,8 @@ def pct_change_seq(in_arr, shift):  # pragma: no cover
     N = len(in_arr)
     output = alloc_shift(in_arr)
     # maximum shift size is N
-    shift = min(shift, N) if shift > 0 else -min(-shift, N)
+    sign_shift = 1 if shift > 0 else -1
+    shift = sign_shift * min(abs(shift), N)
     # set border values to NA
     if shift > 0:
         output[:shift] = bodo.utils.conversion.get_NA_val_for_arr(output)
@@ -1162,8 +1167,9 @@ def pct_change_seq(in_arr, shift):  # pragma: no cover
 
     one = get_one_from_arr_dtype(output)
 
-    start = shift if shift > 0 else 0
-    end = N if shift > 0 else N + shift
+    # range is shift..N for positive shift, 0..N+shift for negative shift
+    start = max(shift, 0)
+    end = min(N, N + shift)
 
     for i in range(start, end):
         prev = in_arr[i - shift]
