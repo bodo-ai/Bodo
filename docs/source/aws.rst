@@ -29,6 +29,15 @@ recommended for production usage due to security, performance and other consider
 
         echo -e "ip-11-11-11-11.us-east-2.compute.internal\nip-11-11-11-12.us-east-2.compute.internal\n" > hosts
 
+    d. Set permission for ``~/.ssh/config`` ::
+
+        chmod 600 ~/.ssh/config
+
+    e. Set permission for ``~/.ssh/id_rsa`` ::
+
+        chmod 400 ~/.ssh/id_rsa
+
+
 3. Install Anaconda Python distribution and Bodo on all instances::
 
     wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
