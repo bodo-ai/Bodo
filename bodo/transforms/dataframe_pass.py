@@ -36,7 +36,6 @@ from bodo import hiframes
 from bodo.utils.utils import (
     debug_prints,
     ReplaceFunc,
-    is_whole_slice,
     is_array_typ,
     is_assign,
     sanitize_varname,

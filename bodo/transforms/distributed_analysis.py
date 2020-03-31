@@ -34,6 +34,7 @@ from bodo.utils.utils import (
     get_constant,
     is_alloc_callname,
     is_whole_slice,
+    is_slice_equiv_arr,
     is_array_typ,
     is_np_array_typ,
     find_build_tuple,
@@ -192,13 +193,16 @@ class DistributedAnalysis:
         assert (typ, func) not in cls._extra_call
         cls._extra_call[(typ, func)] = analysis_func
 
-    def __init__(self, func_ir, typemap, calltypes, typingctx, metadata, flags):
+    def __init__(
+        self, func_ir, typemap, calltypes, typingctx, metadata, flags, arr_analysis
+    ):
         self.func_ir = func_ir
         self.typemap = typemap
         self.calltypes = calltypes
         self.typingctx = typingctx
         self.metadata = metadata
         self.flags = flags
+        self.arr_analysis = arr_analysis
         self.parfor_locs = {}
         self.array_locs = {}
         self.diag_info = []
@@ -260,19 +264,20 @@ class DistributedAnalysis:
             save_array_dists = copy.copy(array_dists)
             save_parfor_dists = copy.copy(parfor_dists)
             for label in topo_order:
-                self._analyze_block(blocks[label], array_dists, parfor_dists)
+                equiv_set = self.arr_analysis.get_equiv_set(label)
+                self._analyze_block(blocks[label], equiv_set, array_dists, parfor_dists)
 
-    def _analyze_block(self, block, array_dists, parfor_dists):
+    def _analyze_block(self, block, equiv_set, array_dists, parfor_dists):
         for inst in block.body:
             inst_defs = get_stmt_defs(inst)
             for a in inst_defs:
                 self.array_locs[a] = inst.loc
             if isinstance(inst, ir.Assign):
-                self._analyze_assign(inst, array_dists, parfor_dists)
+                self._analyze_assign(inst, equiv_set, array_dists, parfor_dists)
             elif isinstance(inst, Parfor):
                 self._analyze_parfor(inst, array_dists, parfor_dists)
             elif isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
-                self._analyze_setitem(inst, array_dists)
+                self._analyze_setitem(inst, equiv_set, array_dists)
             elif isinstance(inst, ir.Print):
                 continue
             elif type(inst) in distributed_analysis_extensions:
@@ -284,7 +289,7 @@ class DistributedAnalysis:
             else:
                 self._set_REP(inst.list_vars(), array_dists)
 
-    def _analyze_assign(self, inst, array_dists, parfor_dists):
+    def _analyze_assign(self, inst, equiv_set, array_dists, parfor_dists):
         lhs = inst.target.name
         rhs = inst.value
         lhs_typ = self.typemap[lhs]
@@ -315,7 +320,7 @@ class DistributedAnalysis:
                 self._meet_array_dists(lhs, arg2, array_dists, dist)
             return
         elif isinstance(rhs, ir.Expr) and rhs.op in ("getitem", "static_getitem"):
-            self._analyze_getitem(inst, lhs, rhs, array_dists)
+            self._analyze_getitem(inst, lhs, rhs, equiv_set, array_dists)
             return
         elif is_expr(rhs, "build_tuple") and is_distributable_tuple_typ(lhs_typ):
             # parallel arrays can be packed and unpacked from tuples
@@ -469,7 +474,9 @@ class DistributedAnalysis:
             self.parfor_locs[parfor.id] = loc
 
         # analyze init block first to see array definitions
-        self._analyze_block(parfor.init_block, array_dists, parfor_dists)
+        self._analyze_block(
+            parfor.init_block, parfor.equiv_set, array_dists, parfor_dists
+        )
         out_dist = Distribution.OneD
         if self.in_parallel_parfor != -1:
             out_dist = Distribution.REP
@@ -519,8 +526,10 @@ class DistributedAnalysis:
         if self.second_pass and out_dist in [Distribution.OneD, Distribution.OneD_Var]:
             self.in_parallel_parfor = parfor.id
         blocks = wrap_parfor_blocks(parfor)
-        for b in blocks.values():
-            self._analyze_block(b, array_dists, parfor_dists)
+        for l, b in blocks.items():
+            # init_block (label 0) equiv set is parfor.equiv_set in array analysis
+            eq_set = parfor.equiv_set if l == 0 else self.arr_analysis.get_equiv_set(l)
+            self._analyze_block(b, eq_set, array_dists, parfor_dists)
         unwrap_parfor_blocks(parfor)
         if self.in_parallel_parfor == parfor.id:
             self.in_parallel_parfor = -1
@@ -1260,7 +1269,7 @@ class DistributedAnalysis:
             if info not in self.diag_info:
                 self.diag_info.append(info)
 
-    def _analyze_getitem(self, inst, lhs, rhs, array_dists):
+    def _analyze_getitem(self, inst, lhs, rhs, equiv_set, array_dists):
         in_typ = self.typemap[rhs.value.name]
         # get index_var without changing IR since we are in analysis
         index_var = get_getsetitem_index_var(rhs, self.typemap, [])
@@ -1331,9 +1340,7 @@ class DistributedAnalysis:
             new_dist = self._meet_array_dists(
                 index_var.name, rhs.value.name, array_dists
             )
-            out_dist = Distribution(
-                min(Distribution.OneD_Var.value, new_dist.value)
-            )
+            out_dist = Distribution(min(Distribution.OneD_Var.value, new_dist.value))
             array_dists[lhs] = out_dist
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
@@ -1346,6 +1353,13 @@ class DistributedAnalysis:
         # for example: A = X[:,5], A = X[::2,5]
         if guard(
             is_whole_slice, self.typemap, self.func_ir, index_var, accept_stride=True
+        ) or guard(
+            is_slice_equiv_arr,
+            inst.target,
+            index_var,
+            self.func_ir,
+            equiv_set,
+            accept_stride=True,
         ):
             self._meet_array_dists(lhs, rhs.value.name, array_dists)
             return
@@ -1376,7 +1390,7 @@ class DistributedAnalysis:
         self._set_REP(inst.list_vars(), array_dists)
         return
 
-    def _analyze_setitem(self, inst, array_dists):
+    def _analyze_setitem(self, inst, equiv_set, array_dists):
         index_var = inst.index_var if is_static_getsetitem(inst) else inst.index
         target_typ = self.typemap[inst.target.name]
         value_typ = self.typemap[inst.value.name]
@@ -1403,7 +1417,9 @@ class DistributedAnalysis:
             # rest of indices should be replicated if array
             self._set_REP(tup_list[1:], array_dists)
 
-        if guard(is_whole_slice, self.typemap, self.func_ir, index_var):
+        if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
+            is_slice_equiv_arr, inst.target, index_var, self.func_ir, equiv_set
+        ):
             # for example: X[:,3] = A
             self._meet_array_dists(inst.target.name, inst.value.name, array_dists)
             return

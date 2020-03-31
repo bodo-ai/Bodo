@@ -265,6 +265,30 @@ def is_whole_slice(typemap, func_ir, var, accept_stride=False):
     return True
 
 
+def is_slice_equiv_arr(arr_var, index_var, func_ir, equiv_set, accept_stride=False):
+    """check whether 'index_var' is a slice equivalent to first dimension of 'arr_var'.
+    Note: array analysis replaces some slices with 0:n form.
+    """
+    # index definition should be a slice() call
+    index_def = get_definition(func_ir, index_var)
+    require(find_callname(func_ir, index_def) == ("slice", "builtins"))
+    require(len(index_def.args) in (2, 3))
+
+    # start of slice should be 0
+    require(find_const(func_ir, index_def.args[0]) in (0, None))
+
+    # slice size should be the same as first dimension of array
+    require(equiv_set.is_equiv(index_def.args[1], arr_var.name + "#0"))
+
+    # check strides
+    require(
+        accept_stride
+        or len(index_def.args) == 2
+        or find_const(func_ir, index_def.args[2]) == 1
+    )
+    return True
+
+
 def is_const_slice(typemap, func_ir, var, accept_stride=False):
     """ return True if var can be determined to be a constant size slice """
     require(
