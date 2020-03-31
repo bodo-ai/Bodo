@@ -923,6 +923,7 @@ def test_series_bool_vals_cmp_op(S, op):
 def test_series_str_add():
     """Test addition for string Series
     """
+
     def test_impl(S, other):
         return S + other
 
@@ -1653,19 +1654,25 @@ def test_series_dropna(S):
     check_func(test_impl, (S,))
 
 
-def test_series_shift(numeric_series_val):
+@pytest.mark.parametrize(
+    "periods", [2, -2],
+)
+def test_series_shift(numeric_series_val, periods):
 
     # TODO: support nullable int
     if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
         return
 
-    def test_impl(A):
-        return A.shift(2)
+    def test_impl(A, periods):
+        return A.shift(periods)
 
-    check_func(test_impl, (numeric_series_val,))
+    check_func(test_impl, (numeric_series_val, periods))
 
 
-def test_series_pct_change(numeric_series_val):
+@pytest.mark.parametrize(
+    "periods", [2, -2],
+)
+def test_series_pct_change(numeric_series_val, periods):
     # not supported for dt64 yet, TODO: support and test
     if numeric_series_val.dtype == np.dtype("datetime64[ns]"):
         return
@@ -1674,10 +1681,10 @@ def test_series_pct_change(numeric_series_val):
     if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
         return
 
-    def test_impl(A):
-        return A.pct_change(2)
+    def test_impl(A, periods):
+        return A.pct_change(periods)
 
-    check_func(test_impl, (numeric_series_val,))
+    check_func(test_impl, (numeric_series_val, periods))
 
 
 def test_series_index_cast():

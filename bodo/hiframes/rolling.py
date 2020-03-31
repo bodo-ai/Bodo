@@ -297,7 +297,9 @@ def roll_fixed_linear_generic(
                 calc_out,
             )
 
-        comm_data = _border_icomm(in_arr, rank, n_pes, halo_size, in_arr.dtype, center)
+        comm_data = _border_icomm(
+            in_arr, rank, n_pes, halo_size, in_arr.dtype, True, center
+        )
         (
             l_recv_buff,
             r_recv_buff,
@@ -312,7 +314,7 @@ def roll_fixed_linear_generic(
     )
 
     if parallel:
-        _border_send_wait(r_send_req, l_send_req, rank, n_pes, center)
+        _border_send_wait(r_send_req, l_send_req, rank, n_pes, True, center)
 
         # recv right
         if center and rank != n_pes - 1:
@@ -404,7 +406,9 @@ def roll_fixed_apply(in_arr, win, center, parallel, kernel_func):  # pragma: no 
                 in_arr, win, center, rank, n_pes, kernel_func
             )
 
-        comm_data = _border_icomm(in_arr, rank, n_pes, halo_size, in_arr.dtype, center)
+        comm_data = _border_icomm(
+            in_arr, rank, n_pes, halo_size, in_arr.dtype, True, center
+        )
         (
             l_recv_buff,
             r_recv_buff,
@@ -417,7 +421,7 @@ def roll_fixed_apply(in_arr, win, center, parallel, kernel_func):  # pragma: no 
     output = roll_fixed_apply_seq(in_arr, win, center, kernel_func)
 
     if parallel:
-        _border_send_wait(r_send_req, l_send_req, rank, n_pes, center)
+        _border_send_wait(r_send_req, l_send_req, rank, n_pes, True, center)
 
         # recv right
         if center and rank != n_pes - 1:
@@ -508,8 +512,8 @@ def roll_var_linear_generic(
     )
 
     if parallel:
-        _border_send_wait(r_send_req, r_send_req, rank, n_pes, False)
-        _border_send_wait(r_send_t_req, r_send_t_req, rank, n_pes, False)
+        _border_send_wait(r_send_req, r_send_req, rank, n_pes, True, False)
+        _border_send_wait(r_send_t_req, r_send_t_req, rank, n_pes, True, False)
 
         # recv left
         if rank != 0:
@@ -658,8 +662,8 @@ def roll_variable_apply(
     output = roll_variable_apply_seq(in_arr, on_arr, win, start, end, kernel_func)
 
     if parallel:
-        _border_send_wait(r_send_req, r_send_req, rank, n_pes, False)
-        _border_send_wait(r_send_t_req, r_send_t_req, rank, n_pes, False)
+        _border_send_wait(r_send_req, r_send_req, rank, n_pes, True, False)
+        _border_send_wait(r_send_t_req, r_send_t_req, rank, n_pes, True, False)
 
         # recv left
         if rank != 0:
@@ -944,14 +948,18 @@ def shift_overload(in_arr, shift, parallel):
 
 def shift_impl(in_arr, shift, parallel):  # pragma: no cover
     N = len(in_arr)
+    send_right = shift > 0
+    send_left = shift <= 0
     if parallel:
         rank = bodo.libs.distributed_api.get_rank()
         n_pes = bodo.libs.distributed_api.get_size()
-        halo_size = np.int32(shift)
+        halo_size = np.int32(abs(shift))
         if _is_small_for_parallel(N, halo_size):
             return _handle_small_data_shift(in_arr, shift, rank, n_pes)
 
-        comm_data = _border_icomm(in_arr, rank, n_pes, halo_size, in_arr.dtype, False)
+        comm_data = _border_icomm(
+            in_arr, rank, n_pes, halo_size, in_arr.dtype, send_right, send_left
+        )
         (
             l_recv_buff,
             r_recv_buff,
@@ -964,14 +972,24 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
     output = shift_seq(in_arr, shift)
 
     if parallel:
-        _border_send_wait(r_send_req, l_send_req, rank, n_pes, False)
+        if send_right:
+            _border_send_wait(r_send_req, l_send_req, rank, n_pes, True, False)
 
-        # recv left
-        if rank != 0:
-            bodo.libs.distributed_api.wait(l_recv_req, True)
+            # recv left
+            if rank != 0:
+                bodo.libs.distributed_api.wait(l_recv_req, True)
 
-            for i in range(0, halo_size):
-                output[i] = l_recv_buff[i]
+                for i in range(0, halo_size):
+                    output[i] = l_recv_buff[i]
+        else:
+            _border_send_wait(r_send_req, l_send_req, rank, n_pes, False, True)
+
+            # recv right
+            if rank != n_pes - 1:
+                bodo.libs.distributed_api.wait(r_recv_req, True)
+
+                for i in range(0, halo_size):
+                    output[N - halo_size + i] = r_recv_buff[i]
 
     return output
 
@@ -980,10 +998,20 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
 def shift_seq(in_arr, shift):  # pragma: no cover
     N = len(in_arr)
     output = alloc_shift(in_arr)
-    shift = min(shift, N)
-    output[:shift] = bodo.utils.conversion.get_NA_val_for_arr(output)
+    # maximum shift size is N
+    sign_shift = 1 if shift > 0 else -1
+    shift = sign_shift * min(abs(shift), N)
+    # set border values to NA
+    if shift > 0:
+        output[:shift] = bodo.utils.conversion.get_NA_val_for_arr(output)
+    else:
+        output[shift:] = bodo.utils.conversion.get_NA_val_for_arr(output)
 
-    for i in range(shift, N):
+    # range is shift..N for positive shift, 0..N+shift for negative shift
+    start = max(shift, 0)
+    end = min(N, N + shift)
+
+    for i in range(start, end):
         output[i] = in_arr[i - shift]
 
     return output
@@ -1005,14 +1033,18 @@ def pct_change_overload(in_arr, shift, parallel):
 
 def pct_change_impl(in_arr, shift, parallel):  # pragma: no cover
     N = len(in_arr)
+    send_right = shift > 0
+    send_left = shift <= 0
     if parallel:
         rank = bodo.libs.distributed_api.get_rank()
         n_pes = bodo.libs.distributed_api.get_size()
-        halo_size = np.int32(shift)
+        halo_size = np.int32(abs(shift))
         if _is_small_for_parallel(N, halo_size):
             return _handle_small_data_pct_change(in_arr, shift, rank, n_pes)
 
-        comm_data = _border_icomm(in_arr, rank, n_pes, halo_size, in_arr.dtype, False)
+        comm_data = _border_icomm(
+            in_arr, rank, n_pes, halo_size, in_arr.dtype, send_right, send_left
+        )
         (
             l_recv_buff,
             r_recv_buff,
@@ -1025,15 +1057,28 @@ def pct_change_impl(in_arr, shift, parallel):  # pragma: no cover
     output = pct_change_seq(in_arr, shift)
 
     if parallel:
-        _border_send_wait(r_send_req, l_send_req, rank, n_pes, False)
+        if send_right:
+            _border_send_wait(r_send_req, l_send_req, rank, n_pes, True, False)
 
-        # recv left
-        if rank != 0:
-            bodo.libs.distributed_api.wait(l_recv_req, True)
+            # recv left
+            if rank != 0:
+                bodo.libs.distributed_api.wait(l_recv_req, True)
 
-            for i in range(0, halo_size):
-                prev = l_recv_buff[i]
-                output[i] = (in_arr[i] - prev) / prev
+                for i in range(0, halo_size):
+                    prev = l_recv_buff[i]
+                    output[i] = (in_arr[i] - prev) / prev
+        else:
+            _border_send_wait(r_send_req, l_send_req, rank, n_pes, False, True)
+
+            # recv right
+            if rank != n_pes - 1:
+                bodo.libs.distributed_api.wait(r_recv_req, True)
+
+                for i in range(0, halo_size):
+                    prev = r_recv_buff[i]
+                    output[N - halo_size + i] = (
+                        in_arr[N - halo_size + i] - prev
+                    ) / prev
 
     return output
 
@@ -1103,16 +1148,32 @@ def pct_change_seq(in_arr, shift):  # pragma: no cover
     # TODO: parallel 'pad' fill
     N = len(in_arr)
     output = alloc_shift(in_arr)
-    shift = min(shift, N)
-    output[:shift] = bodo.utils.conversion.get_NA_val_for_arr(output)
+    # maximum shift size is N
+    sign_shift = 1 if shift > 0 else -1
+    shift = sign_shift * min(abs(shift), N)
+    # set border values to NA
+    if shift > 0:
+        output[:shift] = bodo.utils.conversion.get_NA_val_for_arr(output)
+    else:
+        output[shift:] = bodo.utils.conversion.get_NA_val_for_arr(output)
 
     # using 'pad' method for handling NAs, TODO: support bfill
-    fill_prev = get_first_non_na(in_arr[:shift])
-    fill = get_last_non_na(in_arr[:shift])
+    if shift > 0:
+        fill_prev = get_first_non_na(in_arr[:shift])
+        fill = get_last_non_na(in_arr[:shift])
+    else:
+        fill_prev = get_last_non_na(in_arr[:-shift])
+        fill = get_first_non_na(in_arr[:-shift])
+
     one = get_one_from_arr_dtype(output)
 
-    for i in range(shift, N):
+    # range is shift..N for positive shift, 0..N+shift for negative shift
+    start = max(shift, 0)
+    end = min(N, N + shift)
+
+    for i in range(start, end):
         prev = in_arr[i - shift]
+        # TODO: support non-float output (e.g. timedelta64?)
         if np.isnan(prev):
             prev = fill_prev
         else:
@@ -1131,29 +1192,30 @@ def pct_change_seq(in_arr, shift):  # pragma: no cover
 
 
 @register_jitable(cache=True)
-def _border_icomm(in_arr, rank, n_pes, halo_size, dtype, center):  # pragma: no cover
+def _border_icomm(
+    in_arr, rank, n_pes, halo_size, dtype, send_right=True, send_left=False
+):  # pragma: no cover
     comm_tag = np.int32(comm_border_tag)
     l_recv_buff = np.empty(halo_size, dtype)
-    if center:
-        r_recv_buff = np.empty(halo_size, dtype)
+    r_recv_buff = np.empty(halo_size, dtype)
     # send right
-    if rank != n_pes - 1:
+    if send_right and rank != n_pes - 1:
         r_send_req = bodo.libs.distributed_api.isend(
             in_arr[-halo_size:], halo_size, np.int32(rank + 1), comm_tag, True
         )
     # recv left
-    if rank != 0:
+    if send_right and rank != 0:
         l_recv_req = bodo.libs.distributed_api.irecv(
             l_recv_buff, halo_size, np.int32(rank - 1), comm_tag, True
         )
-    # center cases
+    # send_left cases
     # send left
-    if center and rank != 0:
+    if send_left and rank != 0:
         l_send_req = bodo.libs.distributed_api.isend(
             in_arr[:halo_size], halo_size, np.int32(rank - 1), comm_tag, True
         )
     # recv right
-    if center and rank != n_pes - 1:
+    if send_left and rank != n_pes - 1:
         r_recv_req = bodo.libs.distributed_api.irecv(
             r_recv_buff, halo_size, np.int32(rank + 1), comm_tag, True
         )
@@ -1208,12 +1270,14 @@ def _border_icomm_var(in_arr, on_arr, rank, n_pes, win_size, dtype):  # pragma: 
 
 
 @register_jitable
-def _border_send_wait(r_send_req, l_send_req, rank, n_pes, center):  # pragma: no cover
+def _border_send_wait(
+    r_send_req, l_send_req, rank, n_pes, right, left
+):  # pragma: no cover
     # wait on send right
-    if rank != n_pes - 1:
+    if right and rank != n_pes - 1:
         bodo.libs.distributed_api.wait(r_send_req, True)
     # wait on send left
-    if center and rank != 0:
+    if left and rank != 0:
         bodo.libs.distributed_api.wait(l_send_req, True)
 
 
