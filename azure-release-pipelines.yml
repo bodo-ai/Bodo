@@ -25,6 +25,11 @@ stages:
           export d1=`date -v+1m -v-$(date +%d)d +"%s"`
           export d2=`date +"%s"`
           export TRIAL_PERIOD=`expr $(( (d1-d2 + 43200) / 86400 ))`
+        elif [[ $TRIAL_END_OF_NEXT_MONTH == 1 ]]; then
+          export END_DATE=`date -v+2m -v-$(date +%d)d +"%Y-%m-%d"`
+          export d1=`date -v+2m -v-$(date +%d)d +"%s"`
+          export d2=`date +"%s"`
+          export TRIAL_PERIOD=`expr $(( (d1-d2 + 43200) / 86400 ))`
         elif [[ ! -z "${TRIAL_DAYS}" ]]; then
           export END_DATE=`date -v +${TRIAL_PERIOD}d  +"%m-%d-%y"`
           export TRIAL_PERIOD=${TRIAL_DAYS}
