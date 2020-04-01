@@ -940,7 +940,7 @@ def shift():  # pragma: no cover
 
 
 # using overload since njit bakes in Literal[bool](False) for parallel
-@overload(shift)
+@overload(shift, jit_options={"cache": True})
 def shift_overload(in_arr, shift, parallel):
     if not isinstance(parallel, types.Literal):
         return shift_impl
@@ -1025,7 +1025,7 @@ def pct_change():  # pragma: no cover
 
 
 # using overload since njit bakes in Literal[bool](False) for parallel
-@overload(pct_change)
+@overload(pct_change, jit_options={"cache": True})
 def pct_change_overload(in_arr, shift, parallel):
     if not isinstance(parallel, types.Literal):
         return pct_change_impl
