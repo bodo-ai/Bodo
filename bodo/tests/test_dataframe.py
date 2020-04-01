@@ -232,6 +232,32 @@ def test_unbox_df_multi():
     check_func(impl, (df,))
 
 
+def test_df_from_np_array_int():
+    """
+    Create a dataframe from numpy 2D-array of type int
+    """
+    def impl():
+        arr = [[1, 2, 3, 4, 5], 
+               [1, 2, 3, 4, 6]]
+        np_arr = np.array(arr)
+        return pd.DataFrame({"A": np_arr[:, 0], "B": np_arr[:, 1], "C": np_arr[:, 2]})
+
+    check_func(impl, (), is_out_distributed=False)
+
+
+def test_df_from_np_array_bool():
+    """
+    Create a dataframe from numpy 2D-array of type bool
+    """
+    def impl():
+        arr = [[True, False, False, False, True], 
+               [False, False, True, True, False]]
+        np_arr = np.array(arr)
+        return pd.DataFrame({"A": np_arr[:, 0], "B": np_arr[:, 1], "C": np_arr[:, 2]})
+
+    check_func(impl, (), is_out_distributed=False)
+
+
 def test_df_multi_get_level():
     """
     getitem with string to get a level of dataframe with MultiIndex columns structure

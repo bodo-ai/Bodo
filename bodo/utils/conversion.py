@@ -52,8 +52,17 @@ def overload_coerce_to_ndarray(
 
     if isinstance(data, types.Array):
         if not is_overload_none(bool_arr_convert) and data.dtype == types.bool_:
-            return lambda data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None: bodo.libs.bool_arr_ext.init_bool_array(
-                data, np.full((len(data) + 7) >> 3, 255, np.uint8)
+            if data.layout != 'C':
+                return lambda data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None: bodo.libs.bool_arr_ext.init_bool_array(
+                    np.ascontiguousarray(data), np.full((len(data) + 7) >> 3, 255, np.uint8)
+                )  # pragma: no cover
+            else:
+                return lambda data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None: bodo.libs.bool_arr_ext.init_bool_array(
+                    data, np.full((len(data) + 7) >> 3, 255, np.uint8)
+                )  # pragma: no cover
+        if data.layout != 'C':
+            return (
+                lambda data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None: np.ascontiguousarray(data)
             )  # pragma: no cover
         return (
             lambda data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None: data
