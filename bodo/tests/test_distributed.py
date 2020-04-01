@@ -18,6 +18,7 @@ from bodo.tests.utils import (
     check_func,
     reduce_sum,
     _test_equal_guard,
+    gen_random_string_array,
 )
 
 
@@ -802,5 +803,11 @@ def test_scatterv():
     # 2D np array
     if rank == 0:
         data = np.arange(n * n_col).reshape(n, n_col)
+
+    _check_scatterv(data, n)
+
+    # string array
+    if rank == 0:
+        data = gen_random_string_array(n)
 
     _check_scatterv(data, n)

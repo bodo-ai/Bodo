@@ -25,8 +25,9 @@ from bodo.libs.str_arr_ext import (
     getitem_str_bitmap,
     setitem_str_bitmap,
     set_bit_to,
+    get_bit_bitmap,
 )
-from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.list_str_arr_ext import (
@@ -771,12 +772,40 @@ def gatherv(data, allgather=False):
     if data is types.none:
         return lambda data: None
 
-    raise NotImplementedError("gatherv() not available for {}".format(data))
+    raise BodoError("gatherv() not available for {}".format(data))
 
 
 @numba.generated_jit(nopython=True)
 def allgatherv(data):
     return lambda data: gatherv(data, True)
+
+
+@numba.njit
+def get_scatter_null_bytes_buff(
+    null_bitmap_ptr, sendcounts, sendcounts_nulls
+):  # pragma: no cover
+    """copy null bytes into a padded buffer for scatter.
+    Padding is needed since processors recieve whole bytes and data inside border bytes
+    has to be split.
+    """
+    null_bytes_buff = np.empty(sendcounts_nulls.sum(), np.int8)
+
+    curr_tmp_byte = 0  # current location in scatter buffer
+    curr_str = 0  # current string in input bitmap
+
+    # for each rank
+    for i in range(len(sendcounts)):
+        n_strs = sendcounts[i]
+        n_bytes = sendcounts_nulls[i]
+        chunk_bytes = null_bytes_buff[curr_tmp_byte : curr_tmp_byte + n_bytes]
+        # for each string in chunk
+        for j in range(n_strs):
+            set_bit_to_arr(chunk_bytes, j, get_bit_bitmap(null_bitmap_ptr, curr_str))
+            curr_str += 1
+
+        curr_tmp_byte += n_bytes
+
+    return null_bytes_buff
 
 
 @numba.generated_jit(nopython=True)
@@ -849,6 +878,106 @@ def scatterv(data):
             return recv_data.reshape((-1,) + shape[1:])
 
         return scatterv_arr_impl
+
+    if data == string_array_type:
+        int32_typ_enum = np.int32(numba_to_c_type(types.int32))
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def scatterv_str_arr_impl(data):  # pragma: no cover
+            if data is None:
+                data_in = pre_alloc_string_array(0, 0)
+            else:
+                data_in = data
+
+            n_all = bcast_scalar(len(data_in))
+            n_all_chars = bcast_scalar(num_total_chars(data_in))
+
+            # ------- calculate buffer counts -------
+
+            # compute send counts
+            sendcounts = np.empty(n_pes, np.int32)
+            for i in range(n_pes):
+                sendcounts[i] = get_node_portion(n_all, n_pes, i)
+
+            # displacements
+            displs = bodo.ir.join.calc_disp(sendcounts)
+
+            # compute send counts for characters
+            sendcounts_char = np.empty(n_pes, np.int32)
+            for i in range(n_pes):
+                sendcounts_char[i] = get_node_portion(n_all_chars, n_pes, i)
+
+            # displacements for characters
+            displs_char = bodo.ir.join.calc_disp(sendcounts_char)
+
+            # compute send counts for nulls
+            sendcounts_nulls = np.empty(n_pes, np.int32)
+            for i in range(n_pes):
+                sendcounts_nulls[i] = (sendcounts[i] + 7) >> 3
+
+            # displacements for nulls
+            displs_nulls = bodo.ir.join.calc_disp(sendcounts_nulls)
+
+            # alloc output array
+            n_loc = sendcounts[rank]  # total number of elements on this PE
+            n_loc_char = sendcounts_char[rank]
+            recv_arr = pre_alloc_string_array(n_loc, n_loc_char)
+
+            # ----- string lengths -----------
+
+            # convert offsets to lengths of strings
+            send_arr_lens = np.empty(
+                len(data_in), np.uint32
+            )  # XXX offset type is uint32
+            for i in range(len(data_in)):
+                send_arr_lens[i] = bodo.libs.str_arr_ext.get_str_arr_item_length(
+                    data_in, i
+                )
+
+            c_scatterv(
+                send_arr_lens.ctypes,
+                sendcounts.ctypes,
+                displs.ctypes,
+                get_offset_ptr(recv_arr),
+                np.int32(n_loc),
+                int32_typ_enum,
+            )
+
+            convert_len_arr_to_offset(get_offset_ptr(recv_arr), n_loc)
+
+            # ----- string characters -----------
+
+            c_scatterv(
+                get_data_ptr(data_in),
+                sendcounts_char.ctypes,
+                displs_char.ctypes,
+                get_data_ptr(recv_arr),
+                np.int32(n_loc_char),
+                char_typ_enum,
+            )
+
+            # ----------- null bitmap -------------
+
+            n_recv_bytes = (n_loc + 7) >> 3
+
+            send_null_bitmap = get_scatter_null_bytes_buff(
+                get_null_bitmap_ptr(data_in), sendcounts, sendcounts_nulls
+            )
+
+            c_scatterv(
+                send_null_bitmap.ctypes,
+                sendcounts_nulls.ctypes,
+                displs_nulls.ctypes,
+                get_null_bitmap_ptr(recv_arr),
+                np.int32(n_recv_bytes),
+                char_typ_enum,
+            )
+
+            return recv_arr
+
+        return scatterv_str_arr_impl
+
+    raise BodoError("scatterv() not available for {}".format(data))
 
 
 @intrinsic
