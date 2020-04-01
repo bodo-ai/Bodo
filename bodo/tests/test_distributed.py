@@ -16,6 +16,8 @@ from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal,
     check_func,
+    reduce_sum,
+    _test_equal_guard,
 )
 
 
@@ -756,3 +758,49 @@ def test_sort_output_1D_Var_size():
 
     S = pd.Series([3, 4, 1, 2, 5])
     check_func(impl, (S,))
+
+
+def _check_scatterv(data, n):
+    """check the output of scatterv() on 'data'
+    """
+    recv_data = bodo.scatterv(data)
+    rank = bodo.get_rank()
+    n_pes = bodo.get_size()
+
+    # check length
+    # checking on all PEs that all PEs passed avoids hangs
+    passed = _test_equal_guard(
+        len(recv_data), bodo.libs.distributed_api.get_node_portion(n, n_pes, rank)
+    )
+    n_passed = reduce_sum(passed)
+    assert n_passed == n_pes
+
+    # check data
+    all_data = bodo.gatherv(recv_data)
+    if rank != 0:
+        all_data = None
+
+    passed = _test_equal_guard(all_data, data)
+    n_passed = reduce_sum(passed)
+    assert n_passed == n_pes
+
+
+def test_scatterv():
+    """Test bodo.scatterv() for Bodo distributed data types
+    """
+    rank = bodo.get_rank()
+    data = None
+    n = 11
+    n_col = 3
+
+    # 1D np array
+    if rank == 0:
+        data = np.arange(n, dtype=np.float32)
+
+    _check_scatterv(data, n)
+
+    # 2D np array
+    if rank == 0:
+        data = np.arange(n * n_col).reshape(n, n_col)
+
+    _check_scatterv(data, n)

@@ -30,6 +30,7 @@ from bodo.libs.distributed_api import (
     barrier,
     gatherv,
     allgatherv,
+    scatterv,
 )
 
 from bodo.libs.str_ext import string_type

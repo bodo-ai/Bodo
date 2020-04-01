@@ -265,7 +265,7 @@ def _get_dist_arg(a, copy=False, var_length=False):
 
 
 def _test_equal_guard(
-    bodo_out, py_out, sort_output, check_names=True, check_dtype=True
+    bodo_out, py_out, sort_output=False, check_names=True, check_dtype=True
 ):
     passed = 1
     try:

@@ -41,6 +41,7 @@ from bodo.utils.utils import (
     numba_to_c_type,
     unliteral_all,
 )
+from bodo.utils.typing import BodoError
 from numba.typing.builtins import IndexValueType
 from llvmlite import ir as lir
 from bodo.libs import hdist
@@ -72,6 +73,7 @@ ll.add_symbol("c_barrier", hdist.barrier)
 ll.add_symbol("c_alltoall", hdist.c_alltoall)
 ll.add_symbol("c_gather_scalar", hdist.c_gather_scalar)
 ll.add_symbol("c_gatherv", hdist.c_gatherv)
+ll.add_symbol("c_scatterv", hdist.c_scatterv)
 ll.add_symbol("c_allgatherv", hdist.c_allgatherv)
 ll.add_symbol("c_bcast", hdist.c_bcast)
 ll.add_symbol("c_recv", hdist.dist_recv)
@@ -258,6 +260,19 @@ c_gatherv = types.ExternalFunction(
         types.voidptr,
         types.int32,
         types.bool_,
+    ),
+)
+
+# sendbuff, sendcounts, displs, recvbuf, recv_count, dtype
+c_scatterv = types.ExternalFunction(
+    "c_scatterv",
+    types.void(
+        types.voidptr,
+        types.voidptr,
+        types.voidptr,
+        types.voidptr,
+        types.int32,
+        types.int32,
     ),
 )
 
@@ -764,6 +779,78 @@ def allgatherv(data):
     return lambda data: gatherv(data, True)
 
 
+@numba.generated_jit(nopython=True)
+def scatterv(data):
+    """scatterv() distributes data from rank 0 to all ranks.
+    Rank 0 passes the data but the other ranks just pass None.
+    """
+    # This is a rare function that takes different types on different processors.
+    # the compiled function is different on rank 0 than other ranks.
+    rank = bodo.libs.distributed_api.get_rank()
+    n_pes = bodo.libs.distributed_api.get_size()
+
+    if rank != MPI_ROOT and data != types.none:
+        raise BodoError(
+            "bodo.scatterv() requires 'data' argument to be None on all ranks except rank 0."
+        )
+
+    # using MPI to broadcast data type from rank 0
+    try:
+        from mpi4py import MPI
+    except:
+        raise BodoError("mpi4py is required for scatterv")
+
+    comm = MPI.COMM_WORLD
+    data = comm.bcast(data)
+
+    if isinstance(data, types.Array):
+        typ_val = numba_to_c_type(data.dtype)
+        ndim = data.ndim
+        dtype = data.dtype
+        zero_shape = (0,) * ndim
+
+        def scatterv_arr_impl(data):  # pragma: no cover
+            if data is None:
+                data_in = data
+                data_ptr = np.empty(zero_shape, dtype).ctypes
+            else:
+                data_in = np.ascontiguousarray(data)
+                data_ptr = data.ctypes
+
+            # broadcast shape to all processors
+            shape = zero_shape
+            if rank == MPI_ROOT:
+                shape = data_in.shape
+            shape = bcast_tuple(shape)
+            n_elem_per_row = get_tuple_prod(shape[1:])
+
+            # compute send counts
+            sendcounts = np.empty(n_pes, np.int32)
+            for i in range(n_pes):
+                sendcounts[i] = get_node_portion(shape[0], n_pes, i) * n_elem_per_row
+
+            # allocate output
+            n_loc = sendcounts[rank]  # total number of elements on this PE
+            recv_data = np.empty(n_loc, dtype)
+
+            # displacements
+            displs = bodo.ir.join.calc_disp(sendcounts)
+
+            c_scatterv(
+                data_ptr,
+                sendcounts.ctypes,
+                displs.ctypes,
+                recv_data.ctypes,
+                np.int32(n_loc),
+                np.int32(typ_val),
+            )
+
+            # handle multi-dim case
+            return recv_data.reshape((-1,) + shape[1:])
+
+        return scatterv_arr_impl
+
+
 @intrinsic
 def cptr_to_voidptr(typingctx, cptr_tp=None):
     def codegen(context, builder, sig, args):
@@ -876,6 +963,31 @@ def bcast_scalar_overload(val):
     )
     bcast_scalar_impl = loc_vars["bcast_scalar_impl"]
     return bcast_scalar_impl
+
+
+def bcast_tuple(val):  # pragma: no cover
+    return val
+
+
+@overload(bcast_tuple)
+def overload_bcast_tuple(val):
+    """broadcast a tuple value (root == 0)
+    calls bcast_scalar() on individual elements
+    """
+    assert isinstance(val, types.BaseTuple)
+    n_elem = len(val)
+    func_text = "def bcast_tuple_impl(val):\n"
+    func_text += "  return ({}{})".format(
+        ",".join("bcast_scalar(val[{}])".format(i) for i in range(n_elem)),
+        "," if n_elem else "",
+    )
+
+    loc_vars = {}
+    exec(
+        func_text, {"bcast_scalar": bcast_scalar}, loc_vars,
+    )
+    bcast_tuple_impl = loc_vars["bcast_tuple_impl"]
+    return bcast_tuple_impl
 
 
 # if arr is string array, pre-allocate on non-root the same size as root
@@ -1475,6 +1587,7 @@ finalize_s3 = types.ExternalFunction("finalize_s3", types.int32())
 
 ll.add_symbol("disconnect_hdfs", hdfs_reader.disconnect_hdfs)
 disconnect_hdfs = types.ExternalFunction("disconnect_hdfs", types.int32())
+
 
 @numba.njit
 def call_finalize():  # pragma: no cover

@@ -30,21 +30,18 @@ struct HPAT_ReduceOps {
     };
 };
 
-
 // data type for Decimal128 values (2 64-bit ints)
 // initialized in dist/array tools C extensions
 // NOTE: needs to be initialized in all C extensions that use it
 extern MPI_Datatype decimal_mpi_type;
 
-
 static int dist_get_rank() __UNUSED__;
 static int dist_get_size() __UNUSED__;
 static int64_t dist_get_start(int64_t total, int num_pes,
-                                   int node_id) __UNUSED__;
-static int64_t dist_get_end(int64_t total, int num_pes,
-                                 int node_id) __UNUSED__;
+                              int node_id) __UNUSED__;
+static int64_t dist_get_end(int64_t total, int num_pes, int node_id) __UNUSED__;
 static int64_t dist_get_node_portion(int64_t total, int num_pes,
-                                          int node_id) __UNUSED__;
+                                     int node_id) __UNUSED__;
 static double dist_get_time() __UNUSED__;
 static double get_time() __UNUSED__;
 static int barrier() __UNUSED__;
@@ -53,19 +50,20 @@ static MPI_Datatype get_val_rank_MPI_typ(int typ_enum) __UNUSED__;
 static MPI_Op get_MPI_op(int op_enum) __UNUSED__;
 static int get_elem_size(int type_enum) __UNUSED__;
 static void dist_reduce(char* in_ptr, char* out_ptr, int op,
-                             int type_enum) __UNUSED__;
+                        int type_enum) __UNUSED__;
 static void dist_exscan(char* in_ptr, char* out_ptr, int op,
-                             int type_enum) __UNUSED__;
+                        int type_enum) __UNUSED__;
 
-static void dist_arr_reduce(void* out, int64_t total_size, int op_enum, int type_enum) __UNUSED__;
+static void dist_arr_reduce(void* out, int64_t total_size, int op_enum,
+                            int type_enum) __UNUSED__;
 static MPI_Request dist_irecv(void* out, int size, int type_enum, int pe,
-                                   int tag, bool cond) __UNUSED__;
+                              int tag, bool cond) __UNUSED__;
 static MPI_Request dist_isend(void* out, int size, int type_enum, int pe,
-                                   int tag, bool cond) __UNUSED__;
+                              int tag, bool cond) __UNUSED__;
 static void dist_recv(void* out, int size, int type_enum, int pe,
-                           int tag) __UNUSED__;
+                      int tag) __UNUSED__;
 static void dist_send(void* out, int size, int type_enum, int pe,
-                           int tag) __UNUSED__;
+                      int tag) __UNUSED__;
 static void dist_wait(MPI_Request req, bool cond) __UNUSED__;
 static void dist_waitall(int size, MPI_Request* req) __UNUSED__;
 
@@ -74,6 +72,9 @@ static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum,
 static void c_gatherv(void* send_data, int sendcount, void* recv_data,
                       int* recv_counts, int* displs, int typ_enum,
                       bool allgather) __UNUSED__;
+static void c_scatterv(void* send_data, int* sendcounts, int* displs,
+                       void* recv_data, int recv_count,
+                       int typ_enum) __UNUSED__;
 static void c_allgatherv(void* send_data, int sendcount, void* recv_data,
                          int* recv_counts, int* displs,
                          int typ_enum) __UNUSED__;
@@ -85,7 +86,7 @@ static void c_alltoallv(void* send_data, void* recv_data, int* send_counts,
 static void c_alltoall(void* send_data, void* recv_data, int count,
                        int typ_enum) __UNUSED__;
 static int64_t dist_get_item_pointer(int64_t ind, int64_t start,
-                                          int64_t count) __UNUSED__;
+                                     int64_t count) __UNUSED__;
 static void allgather(void* out_data, int size, void* in_data,
                       int type_enum) __UNUSED__;
 static MPI_Request* comm_req_alloc(int size) __UNUSED__;
@@ -147,8 +148,7 @@ static int64_t dist_get_end(int64_t total, int num_pes, int node_id) {
     return end;
 }
 
-static int64_t dist_get_node_portion(int64_t total, int num_pes,
-                                          int node_id) {
+static int64_t dist_get_node_portion(int64_t total, int num_pes, int node_id) {
     return dist_get_end(total, num_pes, node_id) -
            dist_get_start(total, num_pes, node_id);
 }
@@ -177,7 +177,7 @@ static int barrier() {
 }
 
 static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
-                             int type_enum) {
+                        int type_enum) {
     // printf("reduce value: %d\n", value);
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     MPI_Op mpi_op = get_MPI_op(op_enum);
@@ -231,7 +231,8 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
     return;
 }
 
-static void dist_arr_reduce(void* out, int64_t total_size, int op_enum, int type_enum) {
+static void dist_arr_reduce(void* out, int64_t total_size, int op_enum,
+                            int type_enum) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     MPI_Op mpi_op = get_MPI_op(op_enum);
     int elem_size = get_elem_size(type_enum);
@@ -242,30 +243,26 @@ static void dist_arr_reduce(void* out, int64_t total_size, int op_enum, int type
     return;
 }
 
-
 static void dist_exscan(char* in_ptr, char* out_ptr, int op_enum,
-                             int type_enum) {
+                        int type_enum) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     MPI_Op mpi_op = get_MPI_op(op_enum);
     MPI_Exscan(in_ptr, out_ptr, 1, mpi_typ, mpi_op, MPI_COMM_WORLD);
     return;
 }
 
-
-static void dist_recv(void* out, int size, int type_enum, int pe,
-                           int tag) {
+static void dist_recv(void* out, int size, int type_enum, int pe, int tag) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     MPI_Recv(out, size, mpi_typ, pe, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 }
 
-static void dist_send(void* out, int size, int type_enum, int pe,
-                           int tag) {
+static void dist_send(void* out, int size, int type_enum, int pe, int tag) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     MPI_Send(out, size, mpi_typ, pe, tag, MPI_COMM_WORLD);
 }
 
 static MPI_Request dist_irecv(void* out, int size, int type_enum, int pe,
-                                   int tag, bool cond) {
+                              int tag, bool cond) {
     MPI_Request mpi_req_recv(MPI_REQUEST_NULL);
     // printf("irecv size:%d pe:%d tag:%d, cond:%d\n", size, pe, tag, cond);
     // fflush(stdout);
@@ -280,7 +277,7 @@ static MPI_Request dist_irecv(void* out, int size, int type_enum, int pe,
 }
 
 static MPI_Request dist_isend(void* out, int size, int type_enum, int pe,
-                                   int tag, bool cond) {
+                              int tag, bool cond) {
     MPI_Request mpi_req_recv(MPI_REQUEST_NULL);
     // printf("isend size:%d pe:%d tag:%d, cond:%d\n", size, pe, tag, cond);
     // fflush(stdout);
@@ -295,8 +292,7 @@ static MPI_Request dist_isend(void* out, int size, int type_enum, int pe,
 }
 
 static void dist_wait(MPI_Request req, bool cond) {
-    if (cond)
-        MPI_Wait(&req, MPI_STATUS_IGNORE);
+    if (cond) MPI_Wait(&req, MPI_STATUS_IGNORE);
 }
 
 static void allgather(void* out_data, int size, void* in_data, int type_enum) {
@@ -320,7 +316,8 @@ static void dist_waitall(int size, MPI_Request* req_arr) {
 static MPI_Datatype get_MPI_typ(int typ_enum) {
     switch (typ_enum) {
         case Bodo_CTypes::_BOOL:
-            return MPI_UNSIGNED_CHAR; // MPI_C_BOOL doesn't support operations like min
+            return MPI_UNSIGNED_CHAR;  // MPI_C_BOOL doesn't support operations
+                                       // like min
         case Bodo_CTypes::INT8:
             return MPI_CHAR;
         case Bodo_CTypes::UINT8:
@@ -397,7 +394,7 @@ static int get_elem_size(int type_enum) {
 }
 
 static int64_t dist_get_item_pointer(int64_t ind, int64_t start,
-                                          int64_t count) {
+                                     int64_t count) {
     // printf("ind:%lld start:%lld count:%lld\n", ind, start, count);
     if (ind >= start && ind < start + count) return ind - start;
     return -1;
@@ -433,6 +430,14 @@ static void c_allgatherv(void* send_data, int sendcount, void* recv_data,
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
     MPI_Allgatherv(send_data, sendcount, mpi_typ, recv_data, recv_counts,
                    displs, mpi_typ, MPI_COMM_WORLD);
+    return;
+}
+
+static void c_scatterv(void* send_data, int* sendcounts, int* displs,
+                       void* recv_data, int recv_count, int typ_enum) {
+    MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
+    MPI_Scatterv(send_data, sendcounts, displs, mpi_typ, recv_data, recv_count,
+                 mpi_typ, ROOT_PE, MPI_COMM_WORLD);
     return;
 }
 
@@ -653,15 +658,13 @@ static void oneD_reshape_shuffle(char* output, char* input,
 
     // get my old and new data interval and convert to byte offsets
     int64_t my_old_start =
-        in_lower_dims_size *
-        dist_get_start(old_0dim_global_len, num_pes, rank);
-    int64_t my_new_start =
-        out_lower_dims_size *
-        dist_get_start(new_0dim_global_len, num_pes, rank);
-    int64_t my_old_end = in_lower_dims_size *
-                         dist_get_end(old_0dim_global_len, num_pes, rank);
-    int64_t my_new_end = out_lower_dims_size *
-                         dist_get_end(new_0dim_global_len, num_pes, rank);
+        in_lower_dims_size * dist_get_start(old_0dim_global_len, num_pes, rank);
+    int64_t my_new_start = out_lower_dims_size *
+                           dist_get_start(new_0dim_global_len, num_pes, rank);
+    int64_t my_old_end =
+        in_lower_dims_size * dist_get_end(old_0dim_global_len, num_pes, rank);
+    int64_t my_new_end =
+        out_lower_dims_size * dist_get_end(new_0dim_global_len, num_pes, rank);
 
     int64_t* send_counts = new int64_t[num_pes];
     int64_t* recv_counts = new int64_t[num_pes];
@@ -676,16 +679,14 @@ static void oneD_reshape_shuffle(char* output, char* input,
         recv_disp[i] = curr_recv_offset;
 
         // get pe's old and new data interval and convert to byte offsets
-        int64_t pe_old_start =
-            in_lower_dims_size *
-            dist_get_start(old_0dim_global_len, num_pes, i);
-        int64_t pe_new_start =
-            out_lower_dims_size *
-            dist_get_start(new_0dim_global_len, num_pes, i);
-        int64_t pe_old_end = in_lower_dims_size *
-                             dist_get_end(old_0dim_global_len, num_pes, i);
-        int64_t pe_new_end = out_lower_dims_size *
-                             dist_get_end(new_0dim_global_len, num_pes, i);
+        int64_t pe_old_start = in_lower_dims_size *
+                               dist_get_start(old_0dim_global_len, num_pes, i);
+        int64_t pe_new_start = out_lower_dims_size *
+                               dist_get_start(new_0dim_global_len, num_pes, i);
+        int64_t pe_old_end =
+            in_lower_dims_size * dist_get_end(old_0dim_global_len, num_pes, i);
+        int64_t pe_new_end =
+            out_lower_dims_size * dist_get_end(new_0dim_global_len, num_pes, i);
 
         send_counts[i] = 0;
         recv_counts[i] = 0;
