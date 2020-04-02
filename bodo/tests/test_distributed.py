@@ -24,6 +24,10 @@ from bodo.tests.utils import (
 )
 
 
+random.seed(4)
+np.random.seed(1)
+
+
 @pytest.mark.parametrize("A", [np.arange(11), np.arange(33).reshape(11, 3)])
 def test_array_shape1(A):
     # get first dimention size using array.shape for distributed arrays
@@ -788,17 +792,13 @@ def _check_scatterv(data, n):
     assert n_passed == n_pes
 
 
-def test_scatterv():
-    """Test bodo.scatterv() for Bodo distributed data types
-    """
-    rank = bodo.get_rank()
-    data = None
-    n = 11
-    n_col = 3
-    random.seed(4)
-    np.random.seed(1)
+n = 11
+n_col = 3
 
-    for data in (
+
+@pytest.mark.parametrize(
+    "data",
+    [
         np.arange(n, dtype=np.float32),  # 1D np array
         np.arange(n * n_col).reshape(n, n_col),  # 2D np array
         gen_random_string_array(n),  # string array
@@ -808,8 +808,16 @@ def test_scatterv():
         pd.date_range("2017-01-13", periods=n).date,  # date array
         pd.RangeIndex(n),  # RangeIndex, TODO: test non-trivial start/step when gatherv() supports them
         pd.RangeIndex(n, name="A"),  # RangeIndex with name
-    ):
-        if rank != 0:
-            data = None
+        pd.Int64Index(np.random.randint(0, 10, n)),  # Int64Index
+        pd.Index(gen_random_string_array(n), name="A"),  # String Index
+        pd.DatetimeIndex(pd.date_range("1983-10-15", periods=n)),  # DatetimeIndex
+        pd.timedelta_range(start="1D", periods=n, name="A"),  # TimedeltaIndex
+    ],
+)
+def test_scatterv(data):
+    """Test bodo.scatterv() for Bodo distributed data types
+    """
+    if bodo.get_rank() != 0:
+        data = None
 
-        _check_scatterv(data, n)
+    _check_scatterv(data, n)

@@ -857,6 +857,11 @@ def _scatterv_np(data):
     typ_val = numba_to_c_type(data.dtype)
     ndim = data.ndim
     dtype = data.dtype
+    # using np.dtype since empty() doesn't work with typeref[datetime/timedelta]
+    if dtype == types.NPDatetime("ns"):
+        dtype = np.dtype("datetime64[ns]")
+    elif dtype == types.NPTimedelta("ns"):
+        dtype = np.dtype("timedelta64[ns]")
     zero_shape = (0,) * ndim
 
     def scatterv_arr_impl(data):  # pragma: no cover
@@ -1126,6 +1131,21 @@ def scatterv(data):
             )
 
         return impl_range_index
+
+    if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
+
+        def impl_pd_index(data):  # pragma: no cover
+            if data is None:
+                data_in = None
+                name = None
+            else:
+                data_in = data._data
+                name = data._name
+            name = bcast_scalar(name)
+            arr = bodo.libs.distributed_api.scatterv(fix_scatter_type(data_in))
+            return bodo.utils.conversion.index_from_array(arr, name)
+
+        return impl_pd_index
 
     raise BodoError("scatterv() not available for {}".format(data))
 
