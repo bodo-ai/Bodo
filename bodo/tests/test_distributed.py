@@ -2,6 +2,8 @@
 import pandas as pd
 import numpy as np
 import pytest
+import random
+from decimal import Decimal
 
 import bodo
 from bodo.utils.typing import BodoWarning, BodoError
@@ -793,21 +795,19 @@ def test_scatterv():
     data = None
     n = 11
     n_col = 3
+    random.seed(4)
+    np.random.seed(1)
 
-    # 1D np array
-    if rank == 0:
-        data = np.arange(n, dtype=np.float32)
+    for data in (
+        np.arange(n, dtype=np.float32),  # 1D np array
+        np.arange(n * n_col).reshape(n, n_col),  # 2D np array
+        gen_random_string_array(n),  # string array
+        pd.arrays.IntegerArray(np.random.randint(0,10,n, np.int32), np.random.ranf(n)<.30),  # Integer array
+        pd.arrays.BooleanArray(np.random.ranf(n)<.50, np.random.ranf(n)<.30),  # Boolean array
+        np.array([None if a < .3 else Decimal(str(a)) for a in np.random.ranf(n)]),  # Decimal array
+        pd.date_range("2017-01-13", periods=n).date,  # date array
+    ):
+        if rank != 0:
+            data = None
 
-    _check_scatterv(data, n)
-
-    # 2D np array
-    if rank == 0:
-        data = np.arange(n * n_col).reshape(n, n_col)
-
-    _check_scatterv(data, n)
-
-    # string array
-    if rank == 0:
-        data = gen_random_string_array(n)
-
-    _check_scatterv(data, n)
+        _check_scatterv(data, n)

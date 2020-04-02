@@ -29,6 +29,7 @@ struct Bodo_CTypes {
         DECIMAL = 12,
         DATE = 13,
         DATETIME = 14,
+        INT128 = 15,
         _numtypes
     };
 };

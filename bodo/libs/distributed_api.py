@@ -788,7 +788,7 @@ def get_scatter_null_bytes_buff(
     Padding is needed since processors recieve whole bytes and data inside border bytes
     has to be split.
     """
-    null_bytes_buff = np.empty(sendcounts_nulls.sum(), np.int8)
+    null_bytes_buff = np.empty(sendcounts_nulls.sum(), np.uint8)
 
     curr_tmp_byte = 0  # current location in scatter buffer
     curr_str = 0  # current string in input bitmap
@@ -806,6 +806,27 @@ def get_scatter_null_bytes_buff(
         curr_tmp_byte += n_bytes
 
     return null_bytes_buff
+
+
+@intrinsic
+def fix_scatter_type(typingctx, obj=None):
+    """scatterv() implementation checks for None values on non-zero ranks, which creates
+    an Optional type for data. This function returns the array on rank zero but None on
+    other processors.
+    """
+    rank = get_rank()
+    if rank == 0:
+        new_obj = obj.type
+        def codegen(context, builder, signature, args):
+            data = context.make_helper(builder, obj, value=args[0]).data
+            context.nrt.incref(builder, new_obj,data)
+            return data
+    else:
+        new_obj = types.none
+        def codegen(context, builder, signature, args):
+            return context.get_dummy_value()
+
+    return new_obj(obj), codegen
 
 
 @numba.generated_jit(nopython=True)
@@ -976,6 +997,70 @@ def scatterv(data):
             return recv_arr
 
         return scatterv_str_arr_impl
+
+    if isinstance(data, (IntegerArrayType, DecimalArrayType)) or data in (
+        boolean_array,
+        datetime_date_array_type,
+    ):
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        # these array need a data array and a null bitmap array to be initialized by
+        # their init functions
+        if isinstance(data, IntegerArrayType):
+            init_func = bodo.libs.int_arr_ext.init_integer_array
+        if isinstance(data, DecimalArrayType):
+            init_func = bodo.libs.decimal_arr_ext.init_decimal_array
+        if data == boolean_array:
+            init_func = bodo.libs.bool_arr_ext.init_bool_array
+        if data == datetime_date_array_type:
+            init_func = bodo.hiframes.datetime_date_ext.init_datetime_date_array
+
+
+        def scatterv_impl_int_arr(data):  # pragma: no cover
+            if data is None:
+                data_in = None
+                null_bitmap = np.empty(0, np.uint8)
+                n_in = 0
+            else:
+                data_in = data._data
+                null_bitmap = data._null_bitmap
+                n_in = len(data_in)
+
+            data_recv = bodo.scatterv(fix_scatter_type(data_in))
+
+            n_all = bcast_scalar(n_in)
+            n_recv_bytes = (len(data_recv) + 7) >> 3
+            bitmap_recv = np.empty(n_recv_bytes, np.uint8)
+
+            # compute send counts
+            sendcounts = np.empty(n_pes, np.int32)
+            for i in range(n_pes):
+                sendcounts[i] = get_node_portion(n_all, n_pes, i)
+
+            # compute send counts for nulls
+            sendcounts_nulls = np.empty(n_pes, np.int32)
+            for i in range(n_pes):
+                sendcounts_nulls[i] = (sendcounts[i] + 7) >> 3
+
+            # displacements for nulls
+            displs_nulls = bodo.ir.join.calc_disp(sendcounts_nulls)
+
+            send_null_bitmap = get_scatter_null_bytes_buff(
+                null_bitmap.ctypes, sendcounts, sendcounts_nulls
+            )
+
+            c_scatterv(
+                send_null_bitmap.ctypes,
+                sendcounts_nulls.ctypes,
+                displs_nulls.ctypes,
+                bitmap_recv.ctypes,
+                np.int32(n_recv_bytes),
+                char_typ_enum,
+            )
+            return init_func(data_recv, bitmap_recv)
+
+        return scatterv_impl_int_arr
+
 
     raise BodoError("scatterv() not available for {}".format(data))
 

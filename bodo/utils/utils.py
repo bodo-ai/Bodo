@@ -37,6 +37,9 @@ from bodo.libs.bool_arr_ext import boolean_array
 from enum import Enum
 
 
+int128_type = types.Integer("int128", 128)
+
+
 # int values for types to pass to C code
 # XXX: These are defined in _bodo_common.h and must match here
 class CTypeEnum(Enum):
@@ -55,6 +58,8 @@ class CTypeEnum(Enum):
     Decimal = 12
     Date = 13
     Datetime = 14
+    # NOTE: currently, only used for handling decimal array's data array for scatterv
+    Int128 = 15
 
 
 _numba_to_c_type_map = {
@@ -71,6 +76,7 @@ _numba_to_c_type_map = {
     types.bool_: CTypeEnum.Bool.value,
     types.int16: CTypeEnum.Int16.value,
     types.uint16: CTypeEnum.UInt16.value,
+    int128_type: CTypeEnum.Int128.value,
 }
 
 

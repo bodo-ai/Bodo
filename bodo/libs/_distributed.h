@@ -341,6 +341,7 @@ static MPI_Datatype get_MPI_typ(int typ_enum) {
             return MPI_SHORT;
         case Bodo_CTypes::UINT16:
             return MPI_UNSIGNED_SHORT;
+        case Bodo_CTypes::INT128:
         case Bodo_CTypes::DECIMAL:
             return decimal_mpi_type;
         default:

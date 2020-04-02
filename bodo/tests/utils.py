@@ -414,7 +414,7 @@ def check_timing_func(func, args):
 
 def gen_random_string_array(n, max_str_len=10):
     """
-    helper function that generate dataframe with int and string columns
+    helper function that generates a random string array
     """
     str_vals = []
     for _ in range(n):
