@@ -817,16 +817,74 @@ def fix_scatter_type(typingctx, obj=None):
     rank = get_rank()
     if rank == 0:
         new_obj = obj.type
+
         def codegen(context, builder, signature, args):
             data = context.make_helper(builder, obj, value=args[0]).data
-            context.nrt.incref(builder, new_obj,data)
+            context.nrt.incref(builder, new_obj, data)
             return data
+
     else:
         new_obj = types.none
+
         def codegen(context, builder, signature, args):
             return context.get_dummy_value()
 
     return new_obj(obj), codegen
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def _scatterv_np(data):
+    """scatterv() implementation for numpy arrays, refactored here with
+    no_cpython_wrapper=True to enable int128 data array of decimal arrays. Otherwise,
+    Numba creates a wrapper and complains about unboxing int128.
+    """
+    rank = bodo.libs.distributed_api.get_rank()
+    n_pes = bodo.libs.distributed_api.get_size()
+    typ_val = numba_to_c_type(data.dtype)
+    ndim = data.ndim
+    dtype = data.dtype
+    zero_shape = (0,) * ndim
+
+    def scatterv_arr_impl(data):  # pragma: no cover
+        if data is None:
+            data_in = data
+            data_ptr = np.empty(zero_shape, dtype).ctypes
+        else:
+            data_in = np.ascontiguousarray(data)
+            data_ptr = data.ctypes
+
+        # broadcast shape to all processors
+        shape = zero_shape
+        if rank == MPI_ROOT:
+            shape = data_in.shape
+        shape = bcast_tuple(shape)
+        n_elem_per_row = get_tuple_prod(shape[1:])
+
+        # compute send counts
+        sendcounts = np.empty(n_pes, np.int32)
+        for i in range(n_pes):
+            sendcounts[i] = get_node_portion(shape[0], n_pes, i) * n_elem_per_row
+
+        # allocate output
+        n_loc = sendcounts[rank]  # total number of elements on this PE
+        recv_data = np.empty(n_loc, dtype)
+
+        # displacements
+        displs = bodo.ir.join.calc_disp(sendcounts)
+
+        c_scatterv(
+            data_ptr,
+            sendcounts.ctypes,
+            displs.ctypes,
+            recv_data.ctypes,
+            np.int32(n_loc),
+            np.int32(typ_val),
+        )
+
+        # handle multi-dim case
+        return recv_data.reshape((-1,) + shape[1:])
+
+    return scatterv_arr_impl
 
 
 @numba.generated_jit(nopython=True)
@@ -854,51 +912,7 @@ def scatterv(data):
     data = comm.bcast(data)
 
     if isinstance(data, types.Array):
-        typ_val = numba_to_c_type(data.dtype)
-        ndim = data.ndim
-        dtype = data.dtype
-        zero_shape = (0,) * ndim
-
-        def scatterv_arr_impl(data):  # pragma: no cover
-            if data is None:
-                data_in = data
-                data_ptr = np.empty(zero_shape, dtype).ctypes
-            else:
-                data_in = np.ascontiguousarray(data)
-                data_ptr = data.ctypes
-
-            # broadcast shape to all processors
-            shape = zero_shape
-            if rank == MPI_ROOT:
-                shape = data_in.shape
-            shape = bcast_tuple(shape)
-            n_elem_per_row = get_tuple_prod(shape[1:])
-
-            # compute send counts
-            sendcounts = np.empty(n_pes, np.int32)
-            for i in range(n_pes):
-                sendcounts[i] = get_node_portion(shape[0], n_pes, i) * n_elem_per_row
-
-            # allocate output
-            n_loc = sendcounts[rank]  # total number of elements on this PE
-            recv_data = np.empty(n_loc, dtype)
-
-            # displacements
-            displs = bodo.ir.join.calc_disp(sendcounts)
-
-            c_scatterv(
-                data_ptr,
-                sendcounts.ctypes,
-                displs.ctypes,
-                recv_data.ctypes,
-                np.int32(n_loc),
-                np.int32(typ_val),
-            )
-
-            # handle multi-dim case
-            return recv_data.reshape((-1,) + shape[1:])
-
-        return scatterv_arr_impl
+        return lambda data: _scatterv_np(data)
 
     if data == string_array_type:
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
@@ -1009,12 +1023,17 @@ def scatterv(data):
         if isinstance(data, IntegerArrayType):
             init_func = bodo.libs.int_arr_ext.init_integer_array
         if isinstance(data, DecimalArrayType):
-            init_func = bodo.libs.decimal_arr_ext.init_decimal_array
+            precision = data.precision
+            scale = data.scale
+            init_func = numba.njit(no_cpython_wrapper=True)(
+                lambda d, b: bodo.libs.decimal_arr_ext.init_decimal_array(
+                    d, b, precision, scale
+                )
+            )
         if data == boolean_array:
             init_func = bodo.libs.bool_arr_ext.init_bool_array
         if data == datetime_date_array_type:
             init_func = bodo.hiframes.datetime_date_ext.init_datetime_date_array
-
 
         def scatterv_impl_int_arr(data):  # pragma: no cover
             if data is None:
@@ -1026,7 +1045,7 @@ def scatterv(data):
                 null_bitmap = data._null_bitmap
                 n_in = len(data_in)
 
-            data_recv = bodo.scatterv(fix_scatter_type(data_in))
+            data_recv = _scatterv_np(fix_scatter_type(data_in))
 
             n_all = bcast_scalar(n_in)
             n_recv_bytes = (len(data_recv) + 7) >> 3
@@ -1060,7 +1079,6 @@ def scatterv(data):
             return init_func(data_recv, bitmap_recv)
 
         return scatterv_impl_int_arr
-
 
     raise BodoError("scatterv() not available for {}".format(data))
 
