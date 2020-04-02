@@ -554,8 +554,12 @@ def parquet_file_schema(file_name, selected_columns):
         if n_indices > 1:
             raise BodoError("read_parquet: MultiIndex not supported yet")
         index_col = pandas_metadata["index_columns"][0] if n_indices else None
-
-        index_col = index_col if isinstance(index_col, (str, dict)) else None
+        # ignore RangeIndex metadata for multi-part datasets
+        # TODO: check what pandas/pyarrow does
+        if not isinstance(index_col, str) and (
+            not isinstance(index_col, dict) or len(pq_dataset.pieces) != 1
+        ):
+            index_col = None
 
     # handle column selection if available
     col_indices = list(range(len(col_names)))
