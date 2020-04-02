@@ -806,6 +806,8 @@ def test_scatterv():
         pd.arrays.BooleanArray(np.random.ranf(n)<.50, np.random.ranf(n)<.30),  # Boolean array
         np.array([None if a < .3 else Decimal(str(a)) for a in np.random.ranf(n)]),  # Decimal array
         pd.date_range("2017-01-13", periods=n).date,  # date array
+        pd.RangeIndex(n),  # RangeIndex, TODO: test non-trivial start/step when gatherv() supports them
+        pd.RangeIndex(n, name="A"),  # RangeIndex with name
     ):
         if rank != 0:
             data = None

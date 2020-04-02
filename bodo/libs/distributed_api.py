@@ -1094,6 +1094,39 @@ def scatterv(data):
 
         return scatterv_impl_int_arr
 
+    if isinstance(data, bodo.hiframes.pd_index_ext.RangeIndexType):
+
+        def impl_range_index(data):  # pragma: no cover
+            if data is None:
+                start = 0
+                stop = 0
+                step = 0
+                name = None
+            else:
+                start = data._start
+                stop = data._stop
+                step = data._step
+                name = data._name
+
+            name = bcast_scalar(name)
+
+            start = bcast_scalar(start)
+            stop = bcast_scalar(stop)
+            step = bcast_scalar(step)
+            n_items = bodo.libs.array_kernels.calc_nitems(start, stop, step)
+            chunk_start = bodo.libs.distributed_api.get_start(n_items, n_pes, rank)
+            chunk_count = bodo.libs.distributed_api.get_node_portion(
+                n_items, n_pes, rank
+            )
+            new_start = start + step * chunk_start
+            new_stop = start + step * (chunk_start + chunk_count)
+            new_stop = min(new_stop, stop)
+            return bodo.hiframes.pd_index_ext.init_range_index(
+                new_start, new_stop, step, name
+            )
+
+        return impl_range_index
+
     raise BodoError("scatterv() not available for {}".format(data))
 
 
@@ -1186,9 +1219,48 @@ def bcast_scalar(val):  # pragma: no cover
 # TODO: test
 @overload(bcast_scalar)
 def bcast_scalar_overload(val):
-    assert isinstance(val, (types.Integer, types.Float)) or val == types.NPDatetime(
-        "ns"
+    """broadcast for a scalar value
+    """
+    # NOTE: scatterv() can call this with string on rank 0 and None on others, or an
+    # Optional type
+    assert (
+        isinstance(val, (types.Integer, types.Float))
+        or val == types.NPDatetime("ns")
+        or isinstance(val, (types.UnicodeType, types.StringLiteral))
+        or val == types.none
+        or (isinstance(val, types.Optional) and val.type == bodo.string_type)
     )
+    rank = bodo.libs.distributed_api.get_rank()
+
+    if val == types.Optional(bodo.string_type):
+        val = val.type
+
+    # broadcast of type is necessary in case of scatterv()
+    if val in (bodo.string_type, types.none):
+        val = _bcast_dtype(val)
+
+    if val == types.none:
+        return lambda val: None
+
+    if val == bodo.string_type:
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def impl_str(val):
+            if rank != MPI_ROOT:
+                n_char = 0
+                utf8_str = np.empty(0, np.uint8).ctypes
+            else:
+                utf8_str, n_char = bodo.libs.str_ext.unicode_to_utf8_and_len(
+                    fix_scatter_type(val)
+                )
+            n_char = bodo.libs.distributed_api.bcast_scalar(n_char)
+            if rank != MPI_ROOT:
+                utf8_str = np.empty(n_char, np.uint8).ctypes
+            c_bcast(utf8_str, np.int32(n_char), char_typ_enum)
+            return bodo.libs.str_arr_ext.decode_utf8(utf8_str, n_char)
+
+        return impl_str
+
     # TODO: other types like boolean
     typ_val = numba_to_c_type(val)
     # TODO: fix np.full and refactor
