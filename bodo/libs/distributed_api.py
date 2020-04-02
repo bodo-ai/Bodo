@@ -832,6 +832,19 @@ def fix_scatter_type(typingctx, obj=None):
     return new_obj(obj), codegen
 
 
+def _bcast_dtype(data):
+    """broadcast data type from rank 0 using mpi4py
+    """
+    try:
+        from mpi4py import MPI
+    except:
+        raise BodoError("mpi4py is required for scatterv")
+
+    comm = MPI.COMM_WORLD
+    data = comm.bcast(data)
+    return data
+
+
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def _scatterv_np(data):
     """scatterv() implementation for numpy arrays, refactored here with
@@ -840,6 +853,7 @@ def _scatterv_np(data):
     """
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
+    data = _bcast_dtype(data)
     typ_val = numba_to_c_type(data.dtype)
     ndim = data.ndim
     dtype = data.dtype
@@ -902,14 +916,7 @@ def scatterv(data):
             "bodo.scatterv() requires 'data' argument to be None on all ranks except rank 0."
         )
 
-    # using MPI to broadcast data type from rank 0
-    try:
-        from mpi4py import MPI
-    except:
-        raise BodoError("mpi4py is required for scatterv")
-
-    comm = MPI.COMM_WORLD
-    data = comm.bcast(data)
+    data = _bcast_dtype(data)
 
     if isinstance(data, types.Array):
         return lambda data: _scatterv_np(data)
