@@ -2055,7 +2055,7 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
         )
 
     # make sure 'kind' is not specified
-    if kind != "quicksort":
+    if kind != "quicksort" and not isinstance(kind, types.Omitted):
         warnings.warn(
             BodoWarning(
                 "sort_values(): specifying sorting algorithm "
