@@ -932,7 +932,15 @@ def scatterv(data):
                 data_in = data
 
             n_all = bcast_scalar(len(data_in))
-            n_all_chars = bcast_scalar(num_total_chars(data_in))
+
+            # convert offsets to lengths of strings
+            send_arr_lens = np.empty(
+                len(data_in), np.uint32
+            )  # XXX offset type is uint32
+            for i in range(len(data_in)):
+                send_arr_lens[i] = bodo.libs.str_arr_ext.get_str_arr_item_length(
+                    data_in, i
+                )
 
             # ------- calculate buffer counts -------
 
@@ -946,8 +954,16 @@ def scatterv(data):
 
             # compute send counts for characters
             sendcounts_char = np.empty(n_pes, np.int32)
-            for i in range(n_pes):
-                sendcounts_char[i] = get_node_portion(n_all_chars, n_pes, i)
+            if rank == 0:
+                curr_str = 0
+                for i in range(n_pes):
+                    c = 0
+                    for _ in range(sendcounts[i]):
+                        c += send_arr_lens[curr_str]
+                        curr_str += 1
+                    sendcounts_char[i] = c
+
+            bcast(sendcounts_char)
 
             # displacements for characters
             displs_char = bodo.ir.join.calc_disp(sendcounts_char)
@@ -966,15 +982,6 @@ def scatterv(data):
             recv_arr = pre_alloc_string_array(n_loc, n_loc_char)
 
             # ----- string lengths -----------
-
-            # convert offsets to lengths of strings
-            send_arr_lens = np.empty(
-                len(data_in), np.uint32
-            )  # XXX offset type is uint32
-            for i in range(len(data_in)):
-                send_arr_lens[i] = bodo.libs.str_arr_ext.get_str_arr_item_length(
-                    data_in, i
-                )
 
             c_scatterv(
                 send_arr_lens.ctypes,
