@@ -829,6 +829,14 @@ n_col = 3
             names=["AA", "B", None],
         ),
         pd.Series(gen_random_string_array(n), np.arange(n) + 1, name="A"),
+        pd.DataFrame(
+            {
+                "A": gen_random_string_array(n),
+                "AB": np.arange(n),
+                "CCC": pd.date_range("2001-10-15", periods=n),
+            },
+            np.arange(n) + 2,
+        ),
     ],
 )
 def test_scatterv(data):

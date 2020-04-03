@@ -951,6 +951,13 @@ def get_value_for_type(dtype):
         index = get_value_for_type(dtype.index)
         return pd.Series(arr, index, name=name)
 
+    if isinstance(dtype, bodo.hiframes.pd_dataframe_ext.DataFrameType):
+        arrs = tuple(get_value_for_type(t) for t in dtype.data)
+        index = get_value_for_type(dtype.index)
+        return pd.DataFrame(
+            {name: arr for name, arr in zip(dtype.columns, arrs)}, index
+        )
+
     if isinstance(dtype, types.BaseTuple):
         return tuple(get_value_for_type(t) for t in dtype.types)
 
@@ -1215,6 +1222,35 @@ def scatterv_impl(data):
             return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, out_name)
 
         return impl_series
+
+    if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
+        n_cols = len(data.columns)
+        data_args = ", ".join("g_data_{}".format(i) for i in range(n_cols))
+        col_var = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
+            ", ".join(
+                "'{}'".format(c) if isinstance(c, str) else str(c) for c in data.columns
+            )
+        )
+
+        func_text = "def impl_df(data):\n"
+        for i in range(n_cols):
+            func_text += "  data_{} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {})\n".format(
+                i, i
+            )
+            func_text += "  g_data_{} = bodo.libs.distributed_api.scatterv_impl(data_{})\n".format(
+                i, i
+            )
+        func_text += (
+            "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)\n"
+        )
+        func_text += "  g_index = bodo.libs.distributed_api.scatterv_impl(index)\n"
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), g_index, {})\n".format(
+            data_args, col_var
+        )
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+        impl_df = loc_vars["impl_df"]
+        return impl_df
 
     # Tuple of data containers
     if isinstance(data, types.BaseTuple):
