@@ -162,6 +162,20 @@ array_info* RetrieveArray(
     size_t const& shift1, size_t const& shift2, int const& ChoiceColumn,
     bool const& map_integer_type);
 
+/** This function takes a table, a list of rows and returns the rows obtained
+ * by selecting the rows.
+ *
+ * @param in_table is the input table.
+ * @param ListPairWrite is the vector of list of pairs for the writing of the
+ * output table
+ * @param the number of columns to be selected. if equal to -1 then all columns are selected.
+ * @return the table output.
+ */
+table_info* RetrieveTable(
+    table_info* const& in_table,
+    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const&
+    ListPairWrite, int const& n_col);
+
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same
  * type as the right keys. The computation is for just one column and it is used
@@ -301,19 +315,21 @@ inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
  * are different. Thus the test iterates over the columns and if one is
  * different then we can conclude. We consider all types of bodo_array_type.
  *
- * @param in_table the input table
  * @param n_key the number of keys considered for the comparison
  * @param vect_ascending the vector of ascending values for the comparison
+ * @param columns1 the list of columns of the first table
  * @param shift_key1 the column shift for the first key
  * @param iRow1 the row of the first key
+ * @param columns2 the list of columns of the second table
  * @param shift_key2 the column for the second key
  * @param iRow2 the row of the second key
  * @param na_position: if true NaN values are largest, if false smallest.
  * @return true if (shift_key1,iRow1) < (shift_key2,iRow2) , false otherwise
  */
-bool KeyComparisonAsPython(std::vector<array_info*> const& columns,
-                           size_t const& n_key, int64_t* vect_ascending,
+bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
+                           std::vector<array_info*> const& columns1,
                            size_t const& shift_key1, size_t const& iRow1,
+                           std::vector<array_info*> const& columns2,
                            size_t const& shift_key2, size_t const& iRow2,
                            bool const& na_position);
 

@@ -32,7 +32,8 @@ array_info* RetrieveArray(
     if (ChoiceColumn == 0) eshift = shift1;
     if (ChoiceColumn == 1) eshift = shift2;
     if (ChoiceColumn == 2) eshift = shift1;
-    bodo_array_type::arr_type_enum arr_type = in_table->columns[eshift]->arr_type;
+    bodo_array_type::arr_type_enum arr_type =
+        in_table->columns[eshift]->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_table->columns[eshift]->dtype;
     if (arr_type == bodo_array_type::STRING) {
         // In the first case of STRING, we have to deal with offsets first so we
@@ -128,15 +129,15 @@ array_info* RetrieveArray(
                     for (uint64_t u = 0; u < siztype; u++)
                         out_arr->data1[siztype * iRow + u] =
                             in_table->columns[pairShiftRow.first]
-                            ->data1[siztype * pairShiftRow.second + u];
+                                ->data1[siztype * pairShiftRow.second + u];
                 } else {
                     for (uint64_t u = 0; u < siztype; u++)
                         out_arr->data1[siztype * iRow + u] = vectNaN[u];
                 }
             }
-        }
-        else {
-            bodo_array_type::arr_type_enum arr_type_o = bodo_array_type::NULLABLE_INT_BOOL;
+        } else {
+            bodo_array_type::arr_type_enum arr_type_o =
+                bodo_array_type::NULLABLE_INT_BOOL;
             out_arr = alloc_array(nRowOut, -1, arr_type_o, dtype, 0);
             uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
@@ -147,7 +148,7 @@ array_info* RetrieveArray(
                     for (uint64_t u = 0; u < siztype; u++)
                         out_arr->data1[siztype * iRow + u] =
                             in_table->columns[pairShiftRow.first]
-                            ->data1[siztype * pairShiftRow.second + u];
+                                ->data1[siztype * pairShiftRow.second + u];
                     bit = true;
                 }
                 SetBitTo(out_null_bitmask, iRow, bit);
@@ -156,6 +157,23 @@ array_info* RetrieveArray(
     }
     return out_arr;
 };
+
+table_info* RetrieveTable(
+    table_info* const& in_table,
+    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const&
+    ListPairWrite, int const& n_cols_arg) {
+    std::vector<array_info*> out_arrs;
+    bool map_integer_type = false;
+    size_t n_cols;
+    if (n_cols_arg == -1)
+      n_cols = (size_t)in_table->ncols();
+    else
+      n_cols = n_cols_arg;
+    for (size_t i_col = 0; i_col < n_cols; i_col++)
+        out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, i_col, -1,
+                                            0, map_integer_type));
+    return new table_info(out_arrs);
+}
 
 bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
                      int64_t pos2) {
@@ -213,9 +231,10 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
     return true;
 };
 
-bool KeyComparisonAsPython(std::vector<array_info*> const& columns,
-                           size_t const& n_key, int64_t* vect_ascending,
+bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
+                           std::vector<array_info*> const& columns1,
                            size_t const& shift_key1, size_t const& iRow1,
+                           std::vector<array_info*> const& columns2,
                            size_t const& shift_key2, size_t const& iRow2,
                            bool const& na_position) {
     // iteration over the list of key for the comparison.
@@ -228,23 +247,23 @@ bool KeyComparisonAsPython(std::vector<array_info*> const& columns,
             return value < 0;
         };
         bool na_position_bis = (!na_position) ^ ascending;
-        if (columns[shift_key1 + iKey]->arr_type == bodo_array_type::NUMPY) {
+        if (columns1[shift_key1 + iKey]->arr_type == bodo_array_type::NUMPY) {
             // In the case of NUMPY, we compare the values for concluding.
             uint64_t siztype =
-                numpy_item_size[columns[shift_key1 + iKey]->dtype];
-            char* ptr1 = columns[shift_key1 + iKey]->data1 + (siztype * iRow1);
-            char* ptr2 = columns[shift_key2 + iKey]->data1 + (siztype * iRow2);
-            int test = NumericComparison(columns[shift_key1 + iKey]->dtype,
+                numpy_item_size[columns1[shift_key1 + iKey]->dtype];
+            char* ptr1 = columns1[shift_key1 + iKey]->data1 + (siztype * iRow1);
+            char* ptr2 = columns2[shift_key2 + iKey]->data1 + (siztype * iRow2);
+            int test = NumericComparison(columns1[shift_key1 + iKey]->dtype,
                                          ptr1, ptr2, na_position_bis);
             if (test != 0) return ProcessOutput(test);
         }
-        if (columns[shift_key1 + iKey]->arr_type ==
+        if (columns1[shift_key1 + iKey]->arr_type ==
             bodo_array_type::NULLABLE_INT_BOOL) {
             // NULLABLE case. We need to consider the bitmask and the values.
             uint8_t* null_bitmask1 =
-                (uint8_t*)columns[shift_key1 + iKey]->null_bitmask;
+                (uint8_t*)columns1[shift_key1 + iKey]->null_bitmask;
             uint8_t* null_bitmask2 =
-                (uint8_t*)columns[shift_key2 + iKey]->null_bitmask;
+                (uint8_t*)columns2[shift_key2 + iKey]->null_bitmask;
             bool bit1 = GetBit(null_bitmask1, iRow1);
             bool bit2 = GetBit(null_bitmask2, iRow2);
             // If one bitmask is T and the other the reverse then they are
@@ -261,22 +280,22 @@ bool KeyComparisonAsPython(std::vector<array_info*> const& columns,
             // they are storing. Comparison is the same as for NUMPY.
             if (bit1) {
                 uint64_t siztype =
-                    numpy_item_size[columns[shift_key1 + iKey]->dtype];
+                    numpy_item_size[columns1[shift_key1 + iKey]->dtype];
                 char* ptr1 =
-                    columns[shift_key1 + iKey]->data1 + (siztype * iRow1);
+                    columns1[shift_key1 + iKey]->data1 + (siztype * iRow1);
                 char* ptr2 =
-                    columns[shift_key2 + iKey]->data1 + (siztype * iRow2);
-                int test = NumericComparison(columns[shift_key1 + iKey]->dtype,
+                    columns2[shift_key2 + iKey]->data1 + (siztype * iRow2);
+                int test = NumericComparison(columns1[shift_key1 + iKey]->dtype,
                                              ptr1, ptr2, na_position_bis);
                 if (test != 0) return ProcessOutput(test);
             }
         }
-        if (columns[shift_key1 + iKey]->arr_type == bodo_array_type::STRING) {
+        if (columns1[shift_key1 + iKey]->arr_type == bodo_array_type::STRING) {
             // For STRING case we need to deal bitmask and the values.
             uint8_t* null_bitmask1 =
-                (uint8_t*)columns[shift_key1 + iKey]->null_bitmask;
+                (uint8_t*)columns1[shift_key1 + iKey]->null_bitmask;
             uint8_t* null_bitmask2 =
-                (uint8_t*)columns[shift_key2 + iKey]->null_bitmask;
+                (uint8_t*)columns2[shift_key2 + iKey]->null_bitmask;
             bool bit1 = GetBit(null_bitmask1, iRow1);
             bool bit2 = GetBit(null_bitmask2, iRow2);
             // If bitmasks are different then we can conclude the comparison
@@ -293,9 +312,9 @@ bool KeyComparisonAsPython(std::vector<array_info*> const& columns,
             if (bit1) {
                 // Here we consider the shifts in data2 for the comparison.
                 uint32_t* data2_1 =
-                    (uint32_t*)columns[shift_key1 + iKey]->data2;
+                    (uint32_t*)columns1[shift_key1 + iKey]->data2;
                 uint32_t* data2_2 =
-                    (uint32_t*)columns[shift_key2 + iKey]->data2;
+                    (uint32_t*)columns2[shift_key2 + iKey]->data2;
                 uint32_t len1 = data2_1[iRow1 + 1] - data2_1[iRow1];
                 uint32_t len2 = data2_2[iRow2 + 1] - data2_2[iRow2];
                 // Compute minimal length
@@ -305,9 +324,9 @@ bool KeyComparisonAsPython(std::vector<array_info*> const& columns,
                 uint32_t pos1_prev = data2_1[iRow1];
                 uint32_t pos2_prev = data2_2[iRow2];
                 char* data1_1 =
-                    (char*)columns[shift_key1 + iKey]->data1 + pos1_prev;
+                    (char*)columns1[shift_key1 + iKey]->data1 + pos1_prev;
                 char* data1_2 =
-                    (char*)columns[shift_key2 + iKey]->data1 + pos2_prev;
+                    (char*)columns2[shift_key2 + iKey]->data1 + pos2_prev;
                 int test = std::strncmp(data1_2, data1_1, minlen);
                 if (test != 0) return ProcessOutput(test);
                 // If not, we may be able to conclude via the string length.

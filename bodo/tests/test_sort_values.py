@@ -31,7 +31,7 @@ import os
                 },
                 range(0, 5, 1)
             ),
-            marks=pytest.mark.skip, 
+            marks=pytest.mark.skip,
             #TODO: remove skip mark after remove none as index, PR #407
         ),
         # uint8, float32 dtypes, datetime index
@@ -54,10 +54,10 @@ import os
                 }
             ),
             marks=pytest.mark.skip,
-            #TODO: remove skip mark after boolean shuffle properly handled 
+            #TODO: remove skip mark after boolean shuffle properly handled
         ),
         # string and int columns, float index
-        # TODO: change to "A": ["AA", np.nan, "", "D", "GG"] 
+        # TODO: change to "A": ["AA", np.nan, "", "D", "GG"]
         # after string column with nans is properly sorted
         # and a Series(str list) test too
         pd.DataFrame(
@@ -67,7 +67,7 @@ import os
         # TODO: parallel range index with start != 0 and stop != 1
         # datetime columns, int index
         pd.DataFrame(
-            {"A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5), 
+            {"A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
              "B": pd.date_range(start="2013-09-04", end="2013-09-29", periods=5),
              "C": [1.1, np.nan, 4.2, 3.1, -1.3],},
              [-2, 1, 3, 5, 9]
@@ -79,24 +79,24 @@ def df_value(request):
     return request.param
 
 
-def test_single_col():    
+def test_single_col():
     """
     sorts a dataframe that has only one column
     modify bodo.ir.sort.MIN_SAMPLES to test sampling
     """
-    fname = os.path.join("bodo", "tests", "data", "kde.parquet")    
+    fname = os.path.join("bodo", "tests", "data", "kde.parquet")
 
-    def test_impl():    
-        df = pd.read_parquet(fname) 
-        df.sort_values("points", inplace=True)  
+    def test_impl():
+        df = pd.read_parquet(fname)
+        df.sort_values("points", inplace=True)
         res = df.points.values
-        return res    
+        return res
 
-    save_min_samples = bodo.ir.sort.MIN_SAMPLES 
-    try:    
-        bodo.ir.sort.MIN_SAMPLES = 10   
+    save_min_samples = bodo.ir.sort.MIN_SAMPLES
+    try:
+        bodo.ir.sort.MIN_SAMPLES = 10
         check_func(test_impl, (), )
-    finally:    
+    finally:
         bodo.ir.sort.MIN_SAMPLES = save_min_samples  # restore global val
 
 
@@ -179,7 +179,7 @@ def test_sort_values_str():
     """
     def test_impl(df):
         return df.sort_values(by="A", kind="mergesort")
-    
+
     def _gen_df_str(n):
         str_vals = []
         for _ in range(n):
@@ -206,7 +206,7 @@ def test_sort_values_str():
 
 def test_sort_values_1col_long_int_list():
     """
-    Test sort_values(): with 1 longer int column 
+    Test sort_values(): with 1 longer int column
     """
 
     def test_impl1(df1):
@@ -224,7 +224,7 @@ def test_sort_values_1col_long_int_list():
             eListA.append(eVal)
         return pd.DataFrame({"A": eListA})
 
-    n = 100
+    n = 10
     check_func(test_impl1, (get_quasi_random(n),))
     check_func(test_impl2, (get_quasi_random(n),))
 
@@ -324,7 +324,7 @@ def test_sort_values_2col_np_array(dtype1, dtype2):
 
     n = 1000
     check_func(
-        test_impl, (get_quasi_random_dtype(n, dtype1, dtype2),), 
+        test_impl, (get_quasi_random_dtype(n, dtype1, dtype2),),
     )
 
 
@@ -370,9 +370,8 @@ def test_sort_values_strings_variable_length(n, len_str):
         df = pd.DataFrame({"A": str_vals})
         return df
 
-    check_func(
-        test_impl, (get_random_var_length_strings_array(n, len_str),), 
-    )
+    df1 = get_random_var_length_strings_array(n, len_str)
+    check_func(test_impl, (df1,))
 
 
 @pytest.mark.parametrize("n, len_str", [(100, 30), pytest.param(1000, 10, marks=pytest.mark.slow), (10, 30), (100, 30)])
@@ -397,22 +396,11 @@ def test_sort_values_strings(n, len_str):
                 k = random.randint(1, len_str)
                 val = "".join(random.choices(string.ascii_uppercase, k=k))
             str_vals.append(val)
-        str_valB = ["A", np.nan, "B", np.nan]
-        df = pd.DataFrame({"A": str_valB})
+        df = pd.DataFrame({"A": str_vals})
         return df
 
-    bodo_func = bodo.jit(test_impl)
     df1 = get_random_strings_array(n, len_str)
-    pd.testing.assert_frame_equal(
-        bodo_func(df1), test_impl(df1), check_dtype=False
-    )
-
-
-#    TODO: Solve the bug in the check that makes the following fail
-#    (problem of conversion of dataFrames)
-#    check_func(
-#        test_impl, (get_random_strings_array(n, len_str),), 
-#    )
+    check_func(test_impl, (df1,))
 
 
 @pytest.mark.parametrize("n, len_siz", [(100, 30), pytest.param(1000, 10, marks=pytest.mark.slow), (10, 30)])
@@ -467,7 +455,7 @@ def test_sort_values_two_columns_nan(n, len_siz):
     check_func(test_impl3, (df1,), )
     check_func(test_impl4, (df1,), )
 
-    
+
 def test_sort_values_by_index():
     """Sorting with a non-trivial index"""
 
@@ -544,10 +532,7 @@ def test_sort_values_nullable_int_array():
 
     nullarr = pd.array([13, None, 17], dtype="UInt16")
     df1 = pd.DataFrame({"A": nullarr})
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(df1), test_impl(df1),
-    )
+    check_func(test_impl, (df1,))
 
 
 def test_sort_with_nan_entries():

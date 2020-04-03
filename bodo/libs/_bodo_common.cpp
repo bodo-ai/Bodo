@@ -141,8 +141,10 @@ void delete_table(table_info* table) {
 
 void delete_table_free_arrays(table_info* table) {
     for (array_info* a : table->columns) {
-        free_array(a);
-        delete a;
+        if (a != NULL) {
+            free_array(a);
+            delete a;
+        }
     }
     delete table;
 }

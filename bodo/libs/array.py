@@ -611,7 +611,7 @@ def compute_node_partition_by_hash(typingctx, table_t, n_keys_t, n_pes_t):
 
 
 @intrinsic
-def sort_values_table(typingctx, table_t, n_keys_t, vect_ascending_t, na_position_b_t):
+def sort_values_table(typingctx, table_t, n_keys_t, vect_ascending_t, na_position_b_t, parallel_t):
     """
     Interface to the sorting of tables.
     """
@@ -625,12 +625,13 @@ def sort_values_table(typingctx, table_t, n_keys_t, vect_ascending_t, na_positio
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
+                lir.IntType(1),
             ],
         )
         fn_tp = builder.module.get_or_insert_function(fnty, name="sort_values_table")
         return builder.call(fn_tp, args)
 
-    return table_type(table_t, types.int64, types.voidptr, types.boolean), codegen
+    return table_type(table_t, types.int64, types.voidptr, types.boolean, types.boolean), codegen
 
 
 @intrinsic

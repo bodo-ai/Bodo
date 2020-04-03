@@ -25,9 +25,11 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
  * @param number of key columns in the table used for the comparison
  * @param ascending, whether to sort ascending or not
  * @param na_position, true corresponds to last, false to first
+   @param parallel, true in case of parallel computation, false otherwise.
  */
 table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
-                              int64_t* vect_ascending, bool na_position);
+                              int64_t* vect_ascending, bool na_position,
+                              bool parallel);
 
 /** This function is the function for the dropping of duplicated rows.
  * This C++ code should provide following functionality of pandas

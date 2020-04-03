@@ -385,6 +385,201 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
     return table;
 }
 
+table_info* broadcast_table(table_info* in_table, size_t n_cols) {
+    int n_pes, myrank;
+    int mpi_root = 0;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    std::vector<array_info*> out_arrs;
+    for (size_t i_col = 0; i_col < n_cols; i_col++) {
+        int64_t arr_bcast[5];
+        if (myrank == mpi_root) {
+            arr_bcast[0] = in_table->columns[i_col]->length;
+            arr_bcast[1] = in_table->columns[i_col]->dtype;
+            arr_bcast[2] = in_table->columns[i_col]->arr_type;
+            arr_bcast[3] = in_table->columns[i_col]->n_sub_elems;
+            arr_bcast[4] =
+                0;  // for the n_sub_sub_elems of the list-string case.
+        }
+        MPI_Bcast(arr_bcast, 5, MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD);
+        int64_t n_rows = arr_bcast[0];
+        Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::CTypeEnum(arr_bcast[1]);
+        bodo_array_type::arr_type_enum arr_type =
+            bodo_array_type::arr_type_enum(arr_bcast[2]);
+        int64_t n_sub_elems = arr_bcast[3];
+        //        int64_t n_sub_sub_elems = arr_bcast[4];
+        //
+        array_info* out_arr;
+        if (arr_type == bodo_array_type::NUMPY ||
+            arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            MPI_Datatype mpi_typ = get_MPI_typ(dtype);
+            if (myrank == mpi_root)
+                out_arr = copy_array(in_table->columns[i_col]);
+            else
+                out_arr = alloc_array(n_rows, -1, arr_type, dtype, 0);
+            MPI_Bcast(out_arr->data1, n_rows, mpi_typ, mpi_root,
+                      MPI_COMM_WORLD);
+        }
+        if (arr_type == bodo_array_type::STRING) {
+            MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
+            MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
+            if (myrank == mpi_root)
+                out_arr = copy_array(in_table->columns[i_col]);
+            else
+                out_arr = alloc_array(n_rows, n_sub_elems, arr_type, dtype, 0);
+            MPI_Bcast(out_arr->data1, n_sub_elems, mpi_typ8, mpi_root,
+                      MPI_COMM_WORLD);
+            MPI_Bcast(out_arr->data2, n_rows, mpi_typ32, mpi_root,
+                      MPI_COMM_WORLD);
+        }
+        if (arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+            arr_type == bodo_array_type::STRING) {
+            MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+            int n_bytes = (n_rows + 7) >> 3;
+            MPI_Bcast(out_arr->null_bitmask, n_bytes, mpi_typ, mpi_root,
+                      MPI_COMM_WORLD);
+        }
+        out_arrs.push_back(out_arr);
+    }
+    return new table_info(out_arrs);
+}
+
+table_info* gather_table(table_info* in_table, size_t n_cols) {
+#undef DEBUG_GATHER
+    int n_pes, myrank;
+    int mpi_root = 0;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    std::vector<array_info*> out_arrs;
+#ifdef DEBUG_GATHER
+    std::cout << "n_cols=" << n_cols << "\n";
+#endif
+    for (size_t i_col = 0; i_col < n_cols; i_col++) {
+        int64_t arr_gath_s[3];
+        int64_t n_rows = in_table->columns[i_col]->length;
+        int64_t n_sub_elems = in_table->columns[i_col]->n_sub_elems;
+#ifdef DEBUG_GATHER
+        std::cout << "n_rows=" << n_rows << " n_sub_elems=" << n_sub_elems
+                  << "\n";
+#endif
+        arr_gath_s[0] = n_rows;
+        arr_gath_s[1] = n_sub_elems;
+        arr_gath_s[2] = 0;
+        std::vector<int64_t> arr_gath_r(3 * n_pes, 0);
+        MPI_Gather(arr_gath_s, 3, MPI_LONG_LONG_INT, arr_gath_r.data(), 3,
+                   MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD);
+        Bodo_CTypes::CTypeEnum dtype = in_table->columns[i_col]->dtype;
+        bodo_array_type::arr_type_enum arr_type =
+            in_table->columns[i_col]->arr_type;
+        //
+        std::vector<int> rows_disps(n_pes), rows_counts(n_pes);
+        int rows_pos = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            int siz = arr_gath_r[3 * i_p];
+            rows_counts[i_p] = siz;
+            rows_disps[i_p] = rows_pos;
+            rows_pos += siz;
+        }
+        //
+        array_info* out_arr = NULL;
+        if (arr_type == bodo_array_type::NUMPY ||
+            arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            MPI_Datatype mpi_typ = get_MPI_typ(dtype);
+#ifdef DEBUG_GATHER
+            std::cout << "dtype=" << dtype << " mpi_typ=" << mpi_typ << "\n";
+#endif
+            // Computing the total number of rows.
+            // On mpi_root, all rows, on others just 1 row for consistency.
+            int64_t n_rows_tot = 0;
+            for (int i_p = 0; i_p < n_pes; i_p++)
+                n_rows_tot += arr_gath_r[3 * i_p];
+#ifdef DEBUG_GATHER
+            std::cout << "n_rows_tot=" << n_rows_tot << "\n";
+#endif
+            char* data1_ptr = NULL;
+            if (myrank == mpi_root) {
+                out_arr = alloc_array(n_rows_tot, -1, arr_type, dtype, 0);
+                data1_ptr = out_arr->data1;
+            }
+            MPI_Gatherv(in_table->columns[i_col]->data1, n_rows, mpi_typ,
+                        data1_ptr, rows_counts.data(), rows_disps.data(),
+                        mpi_typ, mpi_root, MPI_COMM_WORLD);
+        }
+        if (arr_type == bodo_array_type::STRING) {
+            MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
+            MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
+            // Computing indexing data in characters and rows.
+            int64_t n_rows_tot = 0;
+            int64_t n_chars_tot = 0;
+            for (int i_p = 0; i_p < n_pes; i_p++) {
+                n_rows_tot += arr_gath_r[3 * i_p];
+                n_chars_tot += arr_gath_r[3 * i_p + 1];
+            }
+            char* data1_ptr = NULL;
+            if (myrank == mpi_root) {
+                out_arr =
+                    alloc_array(n_rows_tot, n_chars_tot, arr_type, dtype, 0);
+                data1_ptr = out_arr->data1;
+            }
+            // Collecting the offsets data
+            std::vector<uint32_t> list_count_loc(n_rows);
+            uint32_t* offsets_i = (uint32_t*)in_table->columns[i_col]->data2;
+            uint32_t curr_offset = 0;
+            for (int64_t pos = 0; pos < n_rows; pos++) {
+                uint32_t new_offset = offsets_i[pos + 1];
+                list_count_loc[pos] = new_offset - curr_offset;
+                curr_offset = new_offset;
+            }
+            std::vector<uint32_t> list_count_tot(n_rows_tot);
+            MPI_Gatherv(list_count_loc.data(), n_rows, mpi_typ32,
+                        list_count_tot.data(), rows_counts.data(),
+                        rows_disps.data(), mpi_typ32, mpi_root, MPI_COMM_WORLD);
+            if (myrank == mpi_root) {
+                uint32_t* offsets_o = (uint32_t*)out_arr->data2;
+                offsets_o[0] = 0;
+                for (int64_t pos = 0; pos < n_rows_tot; pos++)
+                    offsets_o[pos + 1] = offsets_o[pos] + list_count_tot[pos];
+            }
+            // Collecting the character data
+            std::vector<int> char_disps(n_pes), char_counts(n_pes);
+            int pos = 0;
+            for (int i_p = 0; i_p < n_pes; i_p++) {
+                int siz = arr_gath_r[3 * i_p + 1];
+                char_disps[i_p] = pos;
+                char_counts[i_p] = siz;
+                pos += siz;
+            }
+            MPI_Gatherv(in_table->columns[i_col]->data1, n_sub_elems, mpi_typ8,
+                        data1_ptr, char_counts.data(), char_disps.data(),
+                        mpi_typ8, mpi_root, MPI_COMM_WORLD);
+        }
+        if (arr_type == bodo_array_type::STRING ||
+            arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            char* null_bitmask_i = in_table->columns[i_col]->null_bitmask;
+            std::vector<int> recv_count_null(n_pes), recv_disp_null(n_pes);
+            for (int i_p = 0; i_p < n_pes; i_p++)
+                recv_count_null[i_p] = (rows_counts[i_p] + 7) >> 3;
+            calc_disp(recv_disp_null, recv_count_null);
+            size_t n_null_bytes = std::accumulate(recv_count_null.begin(),
+                                                  recv_count_null.end(), 0);
+            std::vector<uint8_t> tmp_null_bytes(n_null_bytes);
+            MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+            int n_bytes = (n_rows + 7) >> 3;
+            MPI_Gatherv(null_bitmask_i, n_bytes, mpi_typ, tmp_null_bytes.data(),
+                        recv_count_null.data(), recv_disp_null.data(), mpi_typ,
+                        mpi_root, MPI_COMM_WORLD);
+            if (myrank == mpi_root) {
+                char* null_bitmask_o = out_arr->null_bitmask;
+                copy_gathered_null_bytes((uint8_t*)null_bitmask_o,
+                                         tmp_null_bytes, recv_count_null,
+                                         rows_counts);
+            }
+        }
+        out_arrs.push_back(out_arr);
+    }
+    return new table_info(out_arrs);
+}
+
 table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys,
                                            int64_t n_pes) {
 #undef DEBUG_COMP_HASH
