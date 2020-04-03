@@ -11,7 +11,7 @@ from decimal import Decimal
 import datetime
 
 import numba
-from numba import types, cgutils
+from numba import types, cgutils, ir_utils
 from numba.typing.templates import AbstractTemplate, infer_global
 from numba.typing import signature
 from numba.extending import models, register_model, intrinsic, overload
@@ -881,31 +881,45 @@ def _scatterv_np(data):
     return scatterv_arr_impl
 
 
+def _get_name_value_for_type(name_typ):
+    """get a value for name of a Series/Index type
+    """
+    # assuming name is either None or a string
+    assert (
+        isinstance(name_typ, (types.UnicodeType, types.StringLiteral))
+        or name_typ == types.none
+    )
+    # make names unique with next_label to avoid MultiIndex unboxing issue #811
+    return None if name_typ == types.none else "_" + str(ir_utils.next_label())
+
+
 def get_value_for_type(dtype):
     """returns a value of type 'dtype' to enable calling an njit function with the
     proper input type.
     """
+    # object arrays like decimal array can't be empty since they are not typed so we
+    # create all arrays with size of 1 to be consistent
+
     # numpy arrays
     if isinstance(dtype, types.Array):
-        return np.empty((0,) * dtype.ndim, numba.numpy_support.as_dtype(dtype.dtype))
+        return np.zeros((1,) * dtype.ndim, numba.numpy_support.as_dtype(dtype.dtype))
 
     # string array
     if dtype == string_array_type:
-        return pd.array([], "string")
+        return pd.array(["A"], "string")
 
     # Int array
     if isinstance(dtype, IntegerArrayType):
         pd_dtype = "{}Int{}".format(
             "" if dtype.dtype.signed else "U", dtype.dtype.bitwidth
         )
-        return pd.array([], pd_dtype)
+        return pd.array([3], pd_dtype)
 
     # bool array
     if dtype == boolean_array:
-        return pd.array([], "boolean")
+        return pd.array([True], "boolean")
 
     # Decimal array
-    # object arrays like decimal array can't be empty since they are not typed
     if isinstance(dtype, DecimalArrayType):
         return np.array([Decimal("32.1")])
 
@@ -915,17 +929,24 @@ def get_value_for_type(dtype):
 
     # Index types
     if bodo.hiframes.pd_index_ext.is_pd_index_type(dtype):
-        # assuming name is either None or a string
-        assert (
-            isinstance(dtype.name_typ, (types.UnicodeType, types.StringLiteral))
-            or dtype.name_typ == types.none
-        )
-        name = None if dtype.name_typ == types.none else "_"
+        name = _get_name_value_for_type(dtype.name_typ)
         if isinstance(dtype, bodo.hiframes.pd_index_ext.RangeIndexType):
-            return pd.RangeIndex(0, name=name)
+            return pd.RangeIndex(1, name=name)
         arr_type = bodo.utils.typing.get_index_data_arr_types(dtype)[0]
         arr = get_value_for_type(arr_type)
         return pd.Index(arr, name=name)
+
+    # MultiIndex index
+    if isinstance(dtype, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
+        name = _get_name_value_for_type(dtype.name_typ)
+        names = tuple(_get_name_value_for_type(t) for t in dtype.names_typ)
+        arrs = tuple(get_value_for_type(t) for t in dtype.array_types)
+        val = pd.MultiIndex.from_arrays(arrs, names=names)
+        val.name = name
+        return val
+
+    if isinstance(dtype, types.BaseTuple):
+        return tuple(get_value_for_type(t) for t in dtype.types)
 
 
 def scatterv(data):
@@ -1078,7 +1099,6 @@ def scatterv_impl(data):
             init_func = bodo.hiframes.datetime_date_ext.init_datetime_date_array
 
         def scatterv_impl_int_arr(data):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
             n_pes = bodo.libs.distributed_api.get_size()
 
             data_in = data._data
@@ -1153,9 +1173,6 @@ def scatterv_impl(data):
     if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
 
         def impl_pd_index(data):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
-            n_pes = bodo.libs.distributed_api.get_size()
-
             data_in = data._data
             name = data._name
             name = bcast_scalar(name)
@@ -1163,6 +1180,37 @@ def scatterv_impl(data):
             return bodo.utils.conversion.index_from_array(arr, name)
 
         return impl_pd_index
+
+    # MultiIndex index
+    if isinstance(data, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
+        # TODO: handle `levels` and `codes` when available
+        def impl_multi_index(data):  # pragma: no cover
+            all_data = bodo.libs.distributed_api.scatterv_impl(data._data)
+            name = bcast_scalar(data._name)
+            names = bcast_tuple(data._names)
+            return bodo.hiframes.pd_multi_index_ext.init_multi_index(
+                all_data, names, name
+            )
+
+        return impl_multi_index
+
+    # Tuple of data containers
+    if isinstance(data, types.BaseTuple):
+        func_text = "def impl_tuple(data):\n"
+        func_text += "  return ({}{})\n".format(
+            ", ".join(
+                "bodo.libs.distributed_api.scatterv_impl(data[{}])".format(i)
+                for i in range(len(data))
+            ),
+            "," if len(data) > 0 else "",
+        )
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+        impl_tuple = loc_vars["impl_tuple"]
+        return impl_tuple
+
+    if data is types.none:
+        return lambda data: None
 
     raise BodoError("scatterv() not available for {}".format(data))
 
@@ -1264,7 +1312,11 @@ def bcast_scalar_overload(val):
         isinstance(val, (types.Integer, types.Float))
         or val == types.NPDatetime("ns")
         or val == bodo.string_type
+        or val == types.none
     )
+
+    if val == types.none:
+        return lambda val: None
 
     if val == bodo.string_type:
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
