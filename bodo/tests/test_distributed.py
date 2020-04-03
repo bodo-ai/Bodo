@@ -837,6 +837,7 @@ n_col = 3
             },
             np.arange(n) + 2,
         ),
+        pd.Series(["BB", "CC"] + (["AA"] * (n - 2)), dtype="category"),
     ],
 )
 def test_scatterv(data):

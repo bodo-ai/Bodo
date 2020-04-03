@@ -958,6 +958,9 @@ def get_value_for_type(dtype):
             {name: arr for name, arr in zip(dtype.columns, arrs)}, index
         )
 
+    if isinstance(dtype, CategoricalArray):
+        return pd.Categorical.from_codes([0], dtype.dtype.categories)
+
     if isinstance(dtype, types.BaseTuple):
         return tuple(get_value_for_type(t) for t in dtype.types)
 
@@ -1251,6 +1254,16 @@ def scatterv_impl(data):
         exec(func_text, {"bodo": bodo}, loc_vars)
         impl_df = loc_vars["impl_df"]
         return impl_df
+
+    if isinstance(data, CategoricalArray):
+
+        def impl_cat(data):  # pragma: no cover
+            codes = bodo.libs.distributed_api.scatterv_impl(data._codes)
+            return bodo.hiframes.pd_categorical_ext.init_categorical_array(
+                codes, data.dtype
+            )
+
+        return impl_cat
 
     # Tuple of data containers
     if isinstance(data, types.BaseTuple):
