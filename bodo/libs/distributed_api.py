@@ -3,9 +3,12 @@ import operator
 from enum import Enum
 import math
 import time
+import pandas as pd
 import numpy as np
 import sys
 import atexit
+from decimal import Decimal
+import datetime
 
 import numba
 from numba import types, cgutils
@@ -808,30 +811,6 @@ def get_scatter_null_bytes_buff(
     return null_bytes_buff
 
 
-@intrinsic
-def fix_scatter_type(typingctx, obj=None):
-    """scatterv() implementation checks for None values on non-zero ranks, which creates
-    an Optional type for data. This function returns the array on rank zero but None on
-    other processors.
-    """
-    rank = get_rank()
-    if rank == 0:
-        new_obj = obj.type
-
-        def codegen(context, builder, signature, args):
-            data = context.make_helper(builder, obj, value=args[0]).data
-            context.nrt.incref(builder, new_obj, data)
-            return data
-
-    else:
-        new_obj = types.none
-
-        def codegen(context, builder, signature, args):
-            return context.get_dummy_value()
-
-    return new_obj(obj), codegen
-
-
 def _bcast_dtype(data):
     """broadcast data type from rank 0 using mpi4py
     """
@@ -851,9 +830,6 @@ def _scatterv_np(data):
     no_cpython_wrapper=True to enable int128 data array of decimal arrays. Otherwise,
     Numba creates a wrapper and complains about unboxing int128.
     """
-    rank = bodo.libs.distributed_api.get_rank()
-    n_pes = bodo.libs.distributed_api.get_size()
-    data = _bcast_dtype(data)
     typ_val = numba_to_c_type(data.dtype)
     ndim = data.ndim
     dtype = data.dtype
@@ -865,12 +841,11 @@ def _scatterv_np(data):
     zero_shape = (0,) * ndim
 
     def scatterv_arr_impl(data):  # pragma: no cover
-        if data is None:
-            data_in = data
-            data_ptr = np.empty(zero_shape, dtype).ctypes
-        else:
-            data_in = np.ascontiguousarray(data)
-            data_ptr = data.ctypes
+        rank = bodo.libs.distributed_api.get_rank()
+        n_pes = bodo.libs.distributed_api.get_size()
+
+        data_in = np.ascontiguousarray(data)
+        data_ptr = data.ctypes
 
         # broadcast shape to all processors
         shape = zero_shape
@@ -906,23 +881,76 @@ def _scatterv_np(data):
     return scatterv_arr_impl
 
 
-@numba.generated_jit(nopython=True)
+def get_value_for_type(dtype):
+    """returns a value of type 'dtype' to enable calling an njit function with the
+    proper input type.
+    """
+    # numpy arrays
+    if isinstance(dtype, types.Array):
+        return np.empty((0,) * dtype.ndim, numba.numpy_support.as_dtype(dtype.dtype))
+
+    # string array
+    if dtype == string_array_type:
+        return pd.array([], "string")
+
+    # Int array
+    if isinstance(dtype, IntegerArrayType):
+        pd_dtype = "{}Int{}".format(
+            "" if dtype.dtype.signed else "U", dtype.dtype.bitwidth
+        )
+        return pd.array([], pd_dtype)
+
+    # bool array
+    if dtype == boolean_array:
+        return pd.array([], "boolean")
+
+    # Decimal array
+    # object arrays like decimal array can't be empty since they are not typed
+    if isinstance(dtype, DecimalArrayType):
+        return np.array([Decimal("32.1")])
+
+    # date array
+    if dtype == datetime_date_array_type:
+        return np.array([datetime.date(2011, 8, 9)])
+
+    # Index types
+    if bodo.hiframes.pd_index_ext.is_pd_index_type(dtype):
+        # assuming name is either None or a string
+        assert (
+            isinstance(dtype.name_typ, (types.UnicodeType, types.StringLiteral))
+            or dtype.name_typ == types.none
+        )
+        name = None if dtype.name_typ == types.none else "_"
+        if isinstance(dtype, bodo.hiframes.pd_index_ext.RangeIndexType):
+            return pd.RangeIndex(0, name=name)
+        arr_type = bodo.utils.typing.get_index_data_arr_types(dtype)[0]
+        arr = get_value_for_type(arr_type)
+        return pd.Index(arr, name=name)
+
+
 def scatterv(data):
     """scatterv() distributes data from rank 0 to all ranks.
     Rank 0 passes the data but the other ranks just pass None.
     """
-    # This is a rare function that takes different types on different processors.
-    # the compiled function is different on rank 0 than other ranks.
     rank = bodo.libs.distributed_api.get_rank()
-    n_pes = bodo.libs.distributed_api.get_size()
-
-    if rank != MPI_ROOT and data != types.none:
+    if rank != MPI_ROOT and data is not None:
         raise BodoError(
             "bodo.scatterv() requires 'data' argument to be None on all ranks except rank 0."
         )
 
-    data = _bcast_dtype(data)
+    # make sure all ranks receive the proper data type as input (instead of None)
+    dtype = bodo.typeof(data)
+    dtype = _bcast_dtype(dtype)
+    if rank != MPI_ROOT:
+        data = get_value_for_type(dtype)
 
+    return scatterv_impl(data)
+
+
+@numba.generated_jit(nopython=True)
+def scatterv_impl(data):
+    """nopython implementation of scatterv()
+    """
     if isinstance(data, types.Array):
         return lambda data: _scatterv_np(data)
 
@@ -931,20 +959,15 @@ def scatterv(data):
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def scatterv_str_arr_impl(data):  # pragma: no cover
-            if data is None:
-                data_in = pre_alloc_string_array(0, 0)
-            else:
-                data_in = data
-
-            n_all = bcast_scalar(len(data_in))
+            rank = bodo.libs.distributed_api.get_rank()
+            n_pes = bodo.libs.distributed_api.get_size()
+            n_all = bcast_scalar(len(data))
 
             # convert offsets to lengths of strings
-            send_arr_lens = np.empty(
-                len(data_in), np.uint32
-            )  # XXX offset type is uint32
-            for i in range(len(data_in)):
+            send_arr_lens = np.empty(len(data), np.uint32)  # XXX offset type is uint32
+            for i in range(len(data)):
                 send_arr_lens[i] = bodo.libs.str_arr_ext.get_str_arr_item_length(
-                    data_in, i
+                    data, i
                 )
 
             # ------- calculate buffer counts -------
@@ -1002,7 +1025,7 @@ def scatterv(data):
             # ----- string characters -----------
 
             c_scatterv(
-                get_data_ptr(data_in),
+                get_data_ptr(data),
                 sendcounts_char.ctypes,
                 displs_char.ctypes,
                 get_data_ptr(recv_arr),
@@ -1015,7 +1038,7 @@ def scatterv(data):
             n_recv_bytes = (n_loc + 7) >> 3
 
             send_null_bitmap = get_scatter_null_bytes_buff(
-                get_null_bitmap_ptr(data_in), sendcounts, sendcounts_nulls
+                get_null_bitmap_ptr(data), sendcounts, sendcounts_nulls
             )
 
             c_scatterv(
@@ -1055,16 +1078,14 @@ def scatterv(data):
             init_func = bodo.hiframes.datetime_date_ext.init_datetime_date_array
 
         def scatterv_impl_int_arr(data):  # pragma: no cover
-            if data is None:
-                data_in = None
-                null_bitmap = np.empty(0, np.uint8)
-                n_in = 0
-            else:
-                data_in = data._data
-                null_bitmap = data._null_bitmap
-                n_in = len(data_in)
+            rank = bodo.libs.distributed_api.get_rank()
+            n_pes = bodo.libs.distributed_api.get_size()
 
-            data_recv = _scatterv_np(fix_scatter_type(data_in))
+            data_in = data._data
+            null_bitmap = data._null_bitmap
+            n_in = len(data_in)
+
+            data_recv = _scatterv_np(data_in)
 
             n_all = bcast_scalar(n_in)
             n_recv_bytes = (len(data_recv) + 7) >> 3
@@ -1102,16 +1123,13 @@ def scatterv(data):
     if isinstance(data, bodo.hiframes.pd_index_ext.RangeIndexType):
 
         def impl_range_index(data):  # pragma: no cover
-            if data is None:
-                start = 0
-                stop = 0
-                step = 0
-                name = None
-            else:
-                start = data._start
-                stop = data._stop
-                step = data._step
-                name = data._name
+            rank = bodo.libs.distributed_api.get_rank()
+            n_pes = bodo.libs.distributed_api.get_size()
+
+            start = data._start
+            stop = data._stop
+            step = data._step
+            name = data._name
 
             name = bcast_scalar(name)
 
@@ -1135,14 +1153,13 @@ def scatterv(data):
     if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
 
         def impl_pd_index(data):  # pragma: no cover
-            if data is None:
-                data_in = None
-                name = None
-            else:
-                data_in = data._data
-                name = data._name
+            rank = bodo.libs.distributed_api.get_rank()
+            n_pes = bodo.libs.distributed_api.get_size()
+
+            data_in = data._data
+            name = data._name
             name = bcast_scalar(name)
-            arr = bodo.libs.distributed_api.scatterv(fix_scatter_type(data_in))
+            arr = bodo.libs.distributed_api.scatterv_impl(data_in)
             return bodo.utils.conversion.index_from_array(arr, name)
 
         return impl_pd_index
@@ -1246,33 +1263,19 @@ def bcast_scalar_overload(val):
     assert (
         isinstance(val, (types.Integer, types.Float))
         or val == types.NPDatetime("ns")
-        or isinstance(val, (types.UnicodeType, types.StringLiteral))
-        or val == types.none
-        or (isinstance(val, types.Optional) and val.type == bodo.string_type)
+        or val == bodo.string_type
     )
-    rank = bodo.libs.distributed_api.get_rank()
-
-    if val == types.Optional(bodo.string_type):
-        val = val.type
-
-    # broadcast of type is necessary in case of scatterv()
-    if val in (bodo.string_type, types.none):
-        val = _bcast_dtype(val)
-
-    if val == types.none:
-        return lambda val: None
 
     if val == bodo.string_type:
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def impl_str(val):
+            rank = bodo.libs.distributed_api.get_rank()
             if rank != MPI_ROOT:
                 n_char = 0
                 utf8_str = np.empty(0, np.uint8).ctypes
             else:
-                utf8_str, n_char = bodo.libs.str_ext.unicode_to_utf8_and_len(
-                    fix_scatter_type(val)
-                )
+                utf8_str, n_char = bodo.libs.str_ext.unicode_to_utf8_and_len(val)
             n_char = bodo.libs.distributed_api.bcast_scalar(n_char)
             if rank != MPI_ROOT:
                 utf8_str = np.empty(n_char, np.uint8).ctypes
