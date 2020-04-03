@@ -990,6 +990,7 @@ def init_range_index(typingctx, start, stop, step, name=None):
         range_val.stop = args[1]
         range_val.step = args[2]
         range_val.name = args[3]
+        context.nrt.incref(builder, signature.return_type.name_typ, args[3])
         return range_val._getvalue()
 
     return RangeIndexType(name)(start, stop, step, name), codegen
