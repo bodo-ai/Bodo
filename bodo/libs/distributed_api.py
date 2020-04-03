@@ -945,6 +945,12 @@ def get_value_for_type(dtype):
         val.name = name
         return val
 
+    if isinstance(dtype, bodo.hiframes.pd_series_ext.SeriesType):
+        name = _get_name_value_for_type(dtype.name_typ)
+        arr = get_value_for_type(dtype.data)
+        index = get_value_for_type(dtype.index)
+        return pd.Series(arr, index, name=name)
+
     if isinstance(dtype, types.BaseTuple):
         return tuple(get_value_for_type(t) for t in dtype.types)
 
@@ -1193,6 +1199,22 @@ def scatterv_impl(data):
             )
 
         return impl_multi_index
+
+    if isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
+
+        def impl_series(data):  # pragma: no cover
+            # get data and index arrays
+            arr = bodo.hiframes.pd_series_ext.get_series_data(data)
+            index = bodo.hiframes.pd_series_ext.get_series_index(data)
+            name = bodo.hiframes.pd_series_ext.get_series_name(data)
+            # scatter data
+            out_name = bcast_scalar(name)
+            out_arr = bodo.libs.distributed_api.scatterv_impl(arr)
+            out_index = bodo.libs.distributed_api.scatterv_impl(index)
+            # create output Series
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, out_name)
+
+        return impl_series
 
     # Tuple of data containers
     if isinstance(data, types.BaseTuple):

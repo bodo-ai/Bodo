@@ -828,6 +828,7 @@ n_col = 3
             ],
             names=["AA", "B", None],
         ),
+        pd.Series(gen_random_string_array(n), np.arange(n) + 1, name="A"),
     ],
 )
 def test_scatterv(data):
