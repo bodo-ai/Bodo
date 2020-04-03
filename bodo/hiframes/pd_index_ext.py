@@ -1671,6 +1671,16 @@ def overload_index_isna(I):
     return impl
 
 
+@overload_attribute(RangeIndexType, "values")
+@overload_attribute(NumericIndexType, "values")
+@overload_attribute(StringIndexType, "values")
+@overload_attribute(PeriodIndexType, "values")
+@overload_attribute(DatetimeIndexType, "values")
+@overload_attribute(TimedeltaIndexType, "values")
+def overload_values(I):
+    return lambda I: bodo.utils.conversion.coerce_to_array(I)
+
+
 @overload(len)
 def overload_index_len(I):
     if isinstance(

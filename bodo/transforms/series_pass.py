@@ -63,6 +63,9 @@ from bodo.hiframes.pd_index_ext import (
     DatetimeIndexType,
     TimedeltaIndexType,
     RangeIndexType,
+    NumericIndexType,
+    StringIndexType,
+    PeriodIndexType,
 )
 from bodo.io.h5_api import h5dataset_type
 from bodo.hiframes.rolling import get_rolling_setup_args
@@ -444,13 +447,30 @@ class SeriesPass:
             impl = overload_func(rhs_type)
             return self._replace_func(impl, [rhs.value])
 
-        if isinstance(rhs_type, DatetimeIndexType) and rhs.attr == "values":
+        if (
+            isinstance(
+                rhs_type,
+                (
+                    NumericIndexType,
+                    StringIndexType,
+                    PeriodIndexType,
+                    DatetimeIndexType,
+                    TimedeltaIndexType,
+                ),
+            )
+            and rhs.attr == "values"
+        ):
             # simply return the data array
             nodes = []
             var = self._get_index_data(rhs.value, nodes)
             assign.value = var
             nodes.append(assign)
             return nodes
+
+        if isinstance(rhs_type, RangeIndexType) and rhs.attr == "values":
+            return self._replace_func(
+                lambda A: bodo.utils.conversion.coerce_to_ndarray(A), [rhs.value]
+            )
 
         if isinstance(rhs_type, DatetimeIndexType):
             # TODO: test this inlining
@@ -1857,7 +1877,10 @@ class SeriesPass:
             out_dtype = np.dtype(",".join(str(t) for t in out_dtype.types), align=True)
 
         args = [data, index, name] + extra_args
-        return self._replace_func(f, args, extra_globals={
+        return self._replace_func(
+            f,
+            args,
+            extra_globals={
                 "numba": numba,
                 "np": np,
                 "pd": pd,
@@ -1866,7 +1889,9 @@ class SeriesPass:
                 "get_utf8_size": get_utf8_size,
                 "pre_alloc_string_array": pre_alloc_string_array,
                 "map_func": numba.njit(func),
-            }, pre_nodes=nodes)
+            },
+            pre_nodes=nodes,
+        )
 
     def _run_call_index(self, assign, lhs, rhs, index_var, func_name):
         if func_name in ("isna", "take"):
@@ -2042,14 +2067,19 @@ class SeriesPass:
         if not use_nan:
             func_args.append(fill_var)
         func_args += [index, name]
-        return self._replace_func(f, func_args, extra_globals={
+        return self._replace_func(
+            f,
+            func_args,
+            extra_globals={
                 "numba": numba,
                 "np": np,
                 "pd": pd,
                 "bodo": bodo,
                 "out_dtype": self.typemap[lhs.name].dtype,
                 "map_func": numba.njit(func),
-            }, pre_nodes=nodes)
+            },
+            pre_nodes=nodes,
+        )
 
     def _run_call_series_rolling(self, assign, lhs, rhs, rolling_var, func_name):
         """

@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import bodo
 import pytest
+from bodo.tests.utils import check_func
 
 
 def test_range_index_constructor(memory_leak_check):
@@ -110,6 +111,28 @@ def test_array_index_box(index, memory_leak_check):
         return A
 
     pd.testing.assert_index_equal(bodo.jit(impl)(index), impl(index))
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.Int64Index([10, 12]),
+        pd.Float64Index([10.1, 12.1]),
+        pd.UInt64Index([10, 12]),
+        pd.Index(["A", "B"]),
+        pd.RangeIndex(10),
+        # pd.RangeIndex(3, 10, 2), # TODO: support
+        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
+        pd.timedelta_range(start="1D", end="3D", name="A"),
+        # TODO: PeriodIndex.values returns object array of Period objects
+        # pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+    ],
+)
+def test_index_values(index):
+    def impl(A):
+        return A.values
+
+    check_func(impl, (index,))
 
 
 @pytest.fixture(
