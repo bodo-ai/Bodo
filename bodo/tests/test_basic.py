@@ -293,6 +293,41 @@ def test_trivial_slice_getitem_opt():
     _check_IR_no_getitem(test_impl2, (np.arange(10),))
 
 
+def _check_IR_single_label(test_impl, args):
+    """makes sure the IR has a single label
+    """
+    bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(
+        test_impl
+    )
+    bodo_func(*args)  # calling the function to get function IR
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert len(fir.blocks) == 1
+
+
+# global flag used for testing below
+g_flag = True
+
+
+def test_dead_branch_remove():
+    """Make sure dead branches are removed
+    """
+
+    def test_impl1():
+        if g_flag:
+            return 3
+        return 2
+
+    def test_impl2():
+        f = False
+        if f:
+            return 3
+        return 2
+
+
+    _check_IR_single_label(test_impl1, ())
+    _check_IR_single_label(test_impl2, ())
+
+
 def test_return():
     def test_impl(N):
         A = np.arange(N)
