@@ -39,6 +39,11 @@ import bodo.hiframes.dataframe_indexing  # side effect: initialize Numba extensi
 import bodo.utils
 import bodo.utils.typing
 import bodo.io
+# required for _compile_for_args defined below (can be removed once the
+# function is fixed in numba)
+from numba import types, errors
+from numba.six import reraise
+from numba.typing.typeof import Purpose, typeof
 
 if config._has_h5py:
     from bodo.io import h5
@@ -371,3 +376,127 @@ def inline_calls(func_ir, _locals):
     # at the end and there are agg constraints (categorical_split case)
     # CFG simplification fixes this case
     func_ir.blocks = ir_utils.simplify_CFG(func_ir.blocks)
+
+
+# This replaces Numba's numba.dispatcher._DispatcherBase._compile_for_args
+# method to delete args before returning the dispatcher object. Otherwise
+# the code is the same
+def _compile_for_args(self, *args, **kws):  # pragma: no cover
+    """
+    For internal use.  Compile a specialized version of the function
+    for the given *args* and *kws*, and return the resulting callable.
+    """
+    assert not kws
+
+    def error_rewrite(e, issue_type):
+        """
+        Rewrite and raise Exception `e` with help supplied based on the
+        specified issue_type.
+        """
+        if numba.config.SHOW_HELP:
+            help_msg = errors.error_extras[issue_type]
+            e.patch_message('\n'.join((str(e).rstrip(), help_msg)))
+        if numba.config.FULL_TRACEBACKS:
+            raise e
+        else:
+            reraise(type(e), e, None)
+
+    argtypes = []
+    for a in args:
+        if isinstance(a, numba.dispatcher.OmittedArg):
+            argtypes.append(types.Omitted(a.value))
+        else:
+            argtypes.append(self.typeof_pyval(a))
+    try:
+        return self.compile(tuple(argtypes))
+    except errors.ForceLiteralArg as e:
+        # Received request for compiler re-entry with the list of arguments
+        # indicated by e.requested_args.
+        # First, check if any of these args are already Literal-ized
+        already_lit_pos = [i for i in e.requested_args
+                           if isinstance(args[i], types.Literal)]
+        if already_lit_pos:
+            # Abort compilation if any argument is already a Literal.
+            # Letting this continue will cause infinite compilation loop.
+            m = ("Repeated literal typing request.\n"
+                 "{}.\n"
+                 "This is likely caused by an error in typing. "
+                 "Please see nested and suppressed exceptions.")
+            info = ', '.join('Arg #{} is {}'.format(i, args[i])
+                             for i in  sorted(already_lit_pos))
+            raise errors.CompilerError(m.format(info))
+        # Convert requested arguments into a Literal.
+        args = [(types.literal
+                 if i in e.requested_args
+                 else lambda x: x)(args[i])
+                for i, v in enumerate(args)]
+        # Re-enter compilation with the Literal-ized arguments
+        return self._compile_for_args(*args)
+
+    except errors.TypingError as e:
+        # Intercept typing error that may be due to an argument
+        # that failed inferencing as a Numba type
+        failed_args = []
+        for i, arg in enumerate(args):
+            val = arg.value if isinstance(arg, numba.dispatcher.OmittedArg) else arg
+            try:
+                tp = typeof(val, Purpose.argument)
+            except ValueError as typeof_exc:
+                failed_args.append((i, str(typeof_exc)))
+            else:
+                if tp is None:
+                    failed_args.append(
+                        (i,
+                         "cannot determine Numba type of value %r" % (val,)))
+        if failed_args:
+            # Patch error message to ease debugging
+            msg = str(e).rstrip() + (
+                "\n\nThis error may have been caused by the following argument(s):\n%s\n"
+                % "\n".join("- argument %d: %s" % (i, err)
+                            for i, err in failed_args))
+            e.patch_message(msg)
+
+        error_rewrite(e, 'typing')
+    except errors.UnsupportedError as e:
+        # Something unsupported is present in the user code, add help info
+        error_rewrite(e, 'unsupported_error')
+    except (errors.NotDefinedError, errors.RedefinedError,
+            errors.VerificationError) as e:
+        # These errors are probably from an issue with either the code supplied
+        # being syntactically or otherwise invalid
+        error_rewrite(e, 'interpreter')
+    except errors.ConstantInferenceError as e:
+        # this is from trying to infer something as constant when it isn't
+        # or isn't supported as a constant
+        error_rewrite(e, 'constant_inference')
+    except Exception as e:
+        if numba.config.SHOW_HELP:
+            if hasattr(e, 'patch_message'):
+                help_msg = errors.error_extras['reportable']
+                e.patch_message('\n'.join((str(e).rstrip(), help_msg)))
+        # ignore the FULL_TRACEBACKS config, this needs reporting!
+        raise e
+    finally:
+        # avoid issue of reference leak of arguments to jitted function:
+        # https://github.com/numba/numba/issues/5419
+        del args
+
+
+# workaround for Numba #5419 issue (https://github.com/numba/numba/issues/5419)
+# first we check that the hash of the Numba function that we are replacing
+# matches the one of the function that we copied from Numba
+import inspect
+import hashlib
+
+lines = inspect.getsource(numba.dispatcher._DispatcherBase._compile_for_args)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "1e12bb18f3ed09e608ba6c56a7fcd4cf2fe342b71af9d2e9767aee817d92f4b8"
+):  # pragma: no cover
+    warnings.warn(
+        bodo.utils.typing.BodoWarning(
+            "numba.dispatcher._DispatcherBase._compile_for_args has changed"
+        )
+    )
+# now replace the function with our own
+numba.dispatcher._DispatcherBase._compile_for_args = _compile_for_args
