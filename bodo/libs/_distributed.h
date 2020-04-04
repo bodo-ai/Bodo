@@ -439,7 +439,6 @@ static void c_scatterv(void* send_data, int* sendcounts, int* displs,
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
     MPI_Scatterv(send_data, sendcounts, displs, mpi_typ, recv_data, recv_count,
                  mpi_typ, ROOT_PE, MPI_COMM_WORLD);
-    return;
 }
 
 static void c_bcast(void* send_data, int sendcount, int typ_enum) {

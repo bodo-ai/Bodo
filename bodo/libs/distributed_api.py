@@ -788,7 +788,7 @@ def get_scatter_null_bytes_buff(
     null_bitmap_ptr, sendcounts, sendcounts_nulls
 ):  # pragma: no cover
     """copy null bytes into a padded buffer for scatter.
-    Padding is needed since processors recieve whole bytes and data inside border bytes
+    Padding is needed since processors receive whole bytes and data inside border bytes
     has to be split.
     """
     null_bytes_buff = np.empty(sendcounts_nulls.sum(), np.uint8)
@@ -797,9 +797,9 @@ def get_scatter_null_bytes_buff(
     curr_str = 0  # current string in input bitmap
 
     # for each rank
-    for i in range(len(sendcounts)):
-        n_strs = sendcounts[i]
-        n_bytes = sendcounts_nulls[i]
+    for i_rank in range(len(sendcounts)):
+        n_strs = sendcounts[i_rank]
+        n_bytes = sendcounts_nulls[i_rank]
         chunk_bytes = null_bytes_buff[curr_tmp_byte : curr_tmp_byte + n_bytes]
         # for each string in chunk
         for j in range(n_strs):

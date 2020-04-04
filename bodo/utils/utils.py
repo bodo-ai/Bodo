@@ -59,6 +59,7 @@ class CTypeEnum(Enum):
     Date = 13
     Datetime = 14
     # NOTE: currently, only used for handling decimal array's data array for scatterv
+    # since it handles the data array inside decimal array separately
     Int128 = 15
 
 
