@@ -36,6 +36,18 @@ not supported since function ``f`` is not known in advance::
 
 One can usually avoid these cases in numerical code without significant effort.
 
+Type stability forces us to change the behavior of some functions. For example
+we have here a difference of behavior::
+
+    def test_impl(df):
+        return df["A"].iat[1]
+    df1 = pd.DataFrame({"A":[["A"], np.nan, ["AB", "CD"]]})
+    bodo_impl = bodo.jit(test_impl)
+    df2_pandas = test_impl(df1) # Will be nan
+    df2_bodo = bodo_impl(df1)   # Will be []
+
+This difference in behavior is needed in order to enforce the type stability of the
+getitem function.
 
 .. _heterogeneousdtype:
 

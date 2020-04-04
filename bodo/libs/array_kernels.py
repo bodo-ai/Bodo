@@ -80,27 +80,20 @@ def isna(arr, i):  # pragma: no cover
 @overload(isna)
 def isna_overload(arr, i):
     # String array
-    if arr == string_array_type:
+    if arr in (string_array_type, list_string_array_type):
         return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
 
     # masked Integer array, boolean array
     if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
         boolean_array,
         datetime_date_array_type,
+        string_array_split_view_type,
     ):
         return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
             arr._null_bitmap, i
         )
 
-    if arr == list_string_array_type:
-        # reuse string array function
-        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
-
-    # TODO: support NAs in split view
-    if arr == string_array_split_view_type:
-        return lambda arr, i: False
-
-    # TODO: extend to other types
+    # TODO: extend to other types (which ones are missing?)
     assert isinstance(arr, types.Array)
     dtype = arr.dtype
     if isinstance(dtype, types.Float):

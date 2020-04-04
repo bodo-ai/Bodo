@@ -724,3 +724,15 @@ def test_join_splitview(test_unicode_no_nan):
         return B.str.join("-")
 
     check_func(test_impl, (test_unicode_no_nan,))
+
+
+def test_join_splitview_nan_entry():
+    """test the functionality of bodo's join with split view type as an input
+    """
+
+    def test_impl(S):
+        B = S.str.split(",")
+        return B.str.join("-")
+
+    S = pd.Series(["ABCDD,OSAJD", "a1b2d314f,sdf234", np.nan], [4,3,1], name="A")
+    check_func(test_impl, (S,))

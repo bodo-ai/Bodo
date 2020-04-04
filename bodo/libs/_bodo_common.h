@@ -171,7 +171,7 @@ struct list_str_arr_payload {
 struct str_arr_split_view_payload {
     uint32_t* index_offsets;
     uint32_t* data_offsets;
-    // uint8_t* null_bitmap;
+    uint8_t* null_bitmap;
 };
 
 void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in);

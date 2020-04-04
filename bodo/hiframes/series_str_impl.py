@@ -270,13 +270,17 @@ def overload_str_method_get(S_str, i):
             n = len(arr)
             n_total_chars = 0
             for k in numba.parfor.internal_prange(n):
-                data_start, length = get_split_view_index(arr, k, i)
+                _, _, length = get_split_view_index(arr, k, i)
                 n_total_chars += length
             numba.parfor.init_prange()
             out_arr = pre_alloc_string_array(n, n_total_chars)
             for j in numba.parfor.internal_prange(n):
-                data_start, length = get_split_view_index(arr, j, i)
-                ptr = get_split_view_data_ptr(arr, data_start)
+                status, data_start, length = get_split_view_index(arr, j, i)
+                if status == 0:
+                    bodo.ir.join.setitem_arr_nan(out_arr, j)
+                    ptr = get_split_view_data_ptr(arr, 0)
+                else:
+                    ptr = get_split_view_data_ptr(arr, data_start)
                 bodo.libs.str_arr_ext.setitem_str_arr_ptr(out_arr, j, ptr, length)
             return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 

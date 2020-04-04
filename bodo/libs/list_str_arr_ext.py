@@ -347,7 +347,14 @@ def list_str_arr_getitem_array(arr, ind):
         return
 
     if isinstance(ind, types.Integer):
-        # XXX: cannot handle NA for scalar getitem since not type stable
+        # In the case of the entry being indicated as NA, we return a []
+        # We are forced to do that since [] and np.nan are not of the same type.
+        # Note that this behavior is different from pandas which returns a NaN
+        # in the case of data not available.
+        #
+        # There is no immediate solution to this problem since the type stability
+        # is necessary for numba and make it impossible to return nan or an array depending
+        # on the case
         def list_str_arr_getitem_impl(arr, ind):  # pragma: no cover
             l_start_offset = arr._index_offsets[ind]
             l_end_offset = arr._index_offsets[ind + 1]

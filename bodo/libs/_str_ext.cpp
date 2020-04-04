@@ -40,7 +40,7 @@ void str_arr_split_view_alloc(str_arr_split_view_payload* out_view,
                               int64_t num_items, int64_t num_offsets);
 void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
                              int64_t n_strs, uint32_t* offsets, char* data,
-                             char sep);
+                             char* null_bitmap, char sep);
 const char* get_c_str(std::string* s);
 
 int64_t str_to_int64(char* data, int64_t length);
@@ -236,16 +236,17 @@ void dtor_str_arr_split_view(str_arr_split_view_payload* in_str_arr,
     // printf("num chars: %d\n", in_str_arr->offsets[in_str_arr->size]);
     delete[] in_str_arr->index_offsets;
     delete[] in_str_arr->data_offsets;
+    delete[] in_str_arr->null_bitmap;
     // if (in_str_arr->null_bitmap != nullptr)
     //     delete[] in_str_arr->null_bitmap;
-    return;
 }
 
 void str_arr_split_view_alloc(str_arr_split_view_payload* out_view,
                               int64_t num_items, int64_t num_offsets) {
     out_view->index_offsets = new uint32_t[num_items + 1];
     out_view->data_offsets = new uint32_t[num_offsets];
-    return;
+    int64_t n_bytes = (num_items + 7) >> 3;
+    out_view->null_bitmap = new uint8_t[n_bytes];
 }
 
 // example: ['AB,CC', 'C,ABB,D', 'G', '', 'g,f']
@@ -254,7 +255,7 @@ void str_arr_split_view_alloc(str_arr_split_view_payload* out_view,
 // index_offsets [0, 3, 7, 9, 11, 14]
 void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
                              int64_t n_strs, uint32_t* offsets, char* data,
-                             char sep) {
+                             char* null_bitmap, char sep) {
     uint32_t total_chars = offsets[n_strs];
     // printf("n_strs %d sep %c total chars:%d\n", n_strs, sep, total_chars);
     uint32_t* index_offsets = new uint32_t[n_strs + 1];
@@ -288,6 +289,12 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
     out_view->data_offsets = new uint32_t[data_offs.size()];
     // TODO: avoid copy
     std::copy(data_offs.cbegin(), data_offs.cend(), out_view->data_offsets);
+
+    // copying the null_bitmap. Maybe we can avoid that
+    // in some cases.
+    int64_t n_bytes = (n_strs + sizeof(uint8_t) - 1) / sizeof(uint8_t);
+    out_view->null_bitmap = new uint8_t[n_bytes];
+    memcpy(out_view->null_bitmap, null_bitmap, n_bytes);
 
     // printf("index_offsets: ");
     // for (int i=0; i<=n_strs; i++)

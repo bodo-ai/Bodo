@@ -42,6 +42,20 @@ def test_cmp_binary_op(op):
         check_func(test_impl, ("CCD", A2))
 
 
+
+def test_get_list_string():
+    """In this test bodo returns the array [] when pandas returns NaN in that case.
+    We are forced to implement things in this way since type stability is required for
+    numba"""
+    def test_impl(df1):
+        value = df1["A"].iat[1]
+        return value
+
+    df1 = pd.DataFrame({"A":[["A"], np.nan, ["AB","CD"]]})
+    bodo_impl = bodo.jit(test_impl)
+    np.testing.assert_allclose(bodo_impl(df1), test_impl(df1), 1e-4)
+
+
 @pytest.mark.parametrize(
     "ind",
     [

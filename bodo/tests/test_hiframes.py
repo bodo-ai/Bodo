@@ -386,13 +386,24 @@ class TestHiFrames(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
 
+
+    def test_str_split(self):
+        def test_impl(df):
+            B = df.A.str.split(",")
+            return B
+
+        df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D", "G", "", np.nan, "g,f"]})
+        bodo_func = bodo.jit(test_impl)
+        pd.testing.assert_series_equal(bodo_func(df), test_impl(df))
+
+
     def test_str_split_filter(self):
         def test_impl(df):
             B = df.A.str.split(",")
             df2 = pd.DataFrame({"B": B})
             return df2[df2.B.str.len() > 1]
 
-        df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D", "G", "", "g,f"]})
+        df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D", "G", "", np.nan, "g,f"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
 
@@ -443,7 +454,7 @@ class TestHiFrames(unittest.TestCase):
             B = df.A.str.split(",")
             return B.str.get(1)
 
-        df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D"]})
+        df = pd.DataFrame({"A": ["AAA", "AB,CC", np.nan, "C,ABB,D"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
