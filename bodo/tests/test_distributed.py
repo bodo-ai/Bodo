@@ -838,6 +838,10 @@ n_col = 3
             np.arange(n) + 2,
         ),
         pd.Series(["BB", "CC"] + (["AA"] * (n - 2)), dtype="category"),
+        # list(str) array
+        # unboxing crashes for case below (issue #812)
+        # pd.Series(gen_random_string_array(n)).map(lambda a: None if pd.isna(a) else [a, "A"]).values
+        pd.Series(["A"] * n).map(lambda a: None if pd.isna(a) else [a, "A"]).values,
     ],
 )
 def test_scatterv(data):

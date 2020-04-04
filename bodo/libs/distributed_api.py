@@ -961,6 +961,9 @@ def get_value_for_type(dtype):
     if isinstance(dtype, CategoricalArray):
         return pd.Categorical.from_codes([0], dtype.dtype.categories)
 
+    if dtype == list_string_array_type:
+        return pd.Series([["AA", "B"],]).values
+
     if isinstance(dtype, types.BaseTuple):
         return tuple(get_value_for_type(t) for t in dtype.types)
 
@@ -1264,6 +1267,145 @@ def scatterv_impl(data):
             )
 
         return impl_cat
+
+    if data == list_string_array_type:
+        int32_typ_enum = np.int32(numba_to_c_type(types.int32))
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def scatterv_list_str_arr_impl(data):  # pragma: no cover
+            rank = bodo.libs.distributed_api.get_rank()
+            n_pes = bodo.libs.distributed_api.get_size()
+
+            n_in = len(data)
+            n_in_strs = data._num_total_strings
+
+            n_all = bcast_scalar(n_in)
+
+            # convert offsets to lengths of strings
+            send_list_lens = np.empty(n_in, np.uint32)  # XXX offset type is uint32
+            send_str_lens = np.empty(n_in_strs, np.uint32)
+
+            for i in range(n_in):
+                send_list_lens[i] = data._index_offsets[i + 1] - data._index_offsets[i]
+            for j in range(n_in_strs):
+                send_str_lens[j] = data._data_offsets[j + 1] - data._data_offsets[j]
+
+            # ------- calculate buffer counts -------
+
+            # compute send counts
+            sendcounts = np.empty(n_pes, np.int32)
+            for ii in range(n_pes):
+                sendcounts[ii] = get_node_portion(n_all, n_pes, ii)
+
+            # displacements
+            displs = bodo.ir.join.calc_disp(sendcounts)
+
+            # compute send counts for list lengths (number of strings)
+            sendcounts_str = np.empty(n_pes, np.int32)
+            if rank == 0:
+                curr_str = 0
+                for k in range(n_pes):
+                    c = 0
+                    for _ in range(sendcounts[k]):
+                        c += send_list_lens[curr_str]
+                        curr_str += 1
+                    sendcounts_str[k] = c
+
+            bcast(sendcounts_str)
+
+            # displacements for characters
+            displs_str = bodo.ir.join.calc_disp(sendcounts_str)
+
+            # compute send counts for string lengths (number of characters)
+            sendcounts_char = np.empty(n_pes, np.int32)
+            if rank == 0:
+                curr_str = 0
+                for kk in range(n_pes):
+                    c = 0
+                    for _ in range(sendcounts_str[kk]):
+                        c += send_str_lens[curr_str]
+                        curr_str += 1
+                    sendcounts_char[kk] = c
+
+            bcast(sendcounts_char)
+
+            # displacements for characters
+            displs_char = bodo.ir.join.calc_disp(sendcounts_char)
+
+            # compute send counts for nulls
+            sendcounts_nulls = np.empty(n_pes, np.int32)
+            for i_i in range(n_pes):
+                sendcounts_nulls[i_i] = (sendcounts[i_i] + 7) >> 3
+
+            # displacements for nulls
+            displs_nulls = bodo.ir.join.calc_disp(sendcounts_nulls)
+
+            # alloc output array
+            n_loc = sendcounts[rank]  # total number of elements on this PE
+            n_loc_str = sendcounts_str[rank]
+            n_loc_char = sendcounts_char[rank]
+            recv_arr = pre_alloc_list_string_array(n_loc, n_loc_str, n_loc_char)
+
+            # ----- list lengths -----------
+
+            c_scatterv(
+                send_list_lens.ctypes,
+                sendcounts.ctypes,
+                displs.ctypes,
+                cptr_to_voidptr(recv_arr._index_offsets),
+                np.int32(n_loc),
+                int32_typ_enum,
+            )
+
+            convert_len_arr_to_offset(cptr_to_voidptr(recv_arr._index_offsets), n_loc)
+
+            # ----- string lengths -----------
+
+            c_scatterv(
+                send_str_lens.ctypes,
+                sendcounts_str.ctypes,
+                displs_str.ctypes,
+                cptr_to_voidptr(recv_arr._data_offsets),
+                np.int32(n_loc_str),
+                int32_typ_enum,
+            )
+
+            convert_len_arr_to_offset(
+                cptr_to_voidptr(recv_arr._data_offsets), n_loc_str
+            )
+
+            # ----- string characters -----------
+
+            c_scatterv(
+                cptr_to_voidptr(data._data),
+                sendcounts_char.ctypes,
+                displs_char.ctypes,
+                cptr_to_voidptr(recv_arr._data),
+                np.int32(n_loc_char),
+                char_typ_enum,
+            )
+
+            # ----------- null bitmap -------------
+
+            n_recv_bytes = (n_loc + 7) >> 3
+
+            send_null_bitmap = get_scatter_null_bytes_buff(
+                cptr_to_voidptr(data._null_bitmap), sendcounts, sendcounts_nulls
+            )
+
+            c_scatterv(
+                send_null_bitmap.ctypes,
+                sendcounts_nulls.ctypes,
+                displs_nulls.ctypes,
+                cptr_to_voidptr(recv_arr._null_bitmap),
+                np.int32(n_recv_bytes),
+                char_typ_enum,
+            )
+            dummy_use(data)  # needed?
+
+            return recv_arr
+
+        return scatterv_list_str_arr_impl
 
     # Tuple of data containers
     if isinstance(data, types.BaseTuple):
