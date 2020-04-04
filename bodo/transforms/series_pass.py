@@ -85,7 +85,6 @@ from bodo.hiframes.split_impl import (
     string_array_split_view_type,
     StringArraySplitViewType,
     getitem_c_arr,
-    get_array_ctypes_ptr,
     get_split_view_index,
     get_split_view_data_ptr,
 )

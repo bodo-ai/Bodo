@@ -1,6 +1,10 @@
+"""Utility functions for testing such as check_func() that tests a function.
+"""
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import pandas as pd
 import numpy as np
+import random
+import string
 import numba
 from numba.untyped_passes import PreserveIR
 from numba.typed_passes import NopythonRewrites
@@ -265,7 +269,7 @@ def _get_dist_arg(a, copy=False, var_length=False):
 
 
 def _test_equal_guard(
-    bodo_out, py_out, sort_output, check_names=True, check_dtype=True
+    bodo_out, py_out, sort_output=False, check_names=True, check_dtype=True
 ):
     passed = 1
     try:
@@ -406,3 +410,21 @@ def check_timing_func(func, args):
     delta_t = round(t2 - t1, 4)
     print("Time:", delta_t, end=" ")
     assert True
+
+
+def gen_random_string_array(n, max_str_len=10):
+    """
+    helper function that generates a random string array
+    """
+    str_vals = []
+    for _ in range(n):
+        # store NA with 30% chance
+        if random.random() < 0.3:
+            str_vals.append(np.nan)
+            continue
+
+        k = random.randint(1, max_str_len)
+        val = "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
+        str_vals.append(val)
+
+    return pd.array(str_vals, "string")

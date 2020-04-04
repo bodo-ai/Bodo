@@ -20,7 +20,8 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     std::time_t start_time = TRIAL_START;
     double time_diff = std::difftime(curr_time, start_time) / (60 * 60 * 24);
     if (time_diff > TRIAL_PERIOD) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError, "Bodo trial period has expired!");
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Bodo trial period has expired!");
         return NULL;
     }
 #endif
@@ -36,9 +37,10 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
     // printf("max core count %d\n", MAX_CORE_COUNT);
     // printf("number of processors %d\n", num_pes);
-    if (num_pes>MAX_CORE_COUNT) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError, "Exceeded the max core count!");
-          return NULL;
+    if (num_pes > MAX_CORE_COUNT) {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Exceeded the max core count!");
+        return NULL;
     }
 #endif
 
@@ -100,6 +102,8 @@ PyMODINIT_FUNC PyInit_hdist(void) {
                            PyLong_FromVoidPtr((void *)(&c_gatherv)));
     PyObject_SetAttrString(m, "c_allgatherv",
                            PyLong_FromVoidPtr((void *)(&c_allgatherv)));
+    PyObject_SetAttrString(m, "c_scatterv",
+                           PyLong_FromVoidPtr((void *)(&c_scatterv)));
     PyObject_SetAttrString(m, "c_bcast",
                            PyLong_FromVoidPtr((void *)(&c_bcast)));
     PyObject_SetAttrString(m, "c_alltoallv",
