@@ -775,7 +775,7 @@ def gatherv(data, allgather=False):
     if data is types.none:
         return lambda data: None
 
-    raise BodoError("gatherv() not available for {}".format(data))
+    raise BodoError("gatherv() not available for {}".format(data))  # pragma: no cover
 
 
 @numba.generated_jit(nopython=True)
@@ -816,7 +816,7 @@ def _bcast_dtype(data):
     """
     try:
         from mpi4py import MPI
-    except:
+    except:  # pragma: no cover
         raise BodoError("mpi4py is required for scatterv")
 
     comm = MPI.COMM_WORLD
@@ -881,7 +881,8 @@ def _scatterv_np(data):
     return scatterv_arr_impl
 
 
-def _get_name_value_for_type(name_typ):
+# skipping coverage since only called on multiple core case
+def _get_name_value_for_type(name_typ):  # pragma: no cover
     """get a value for name of a Series/Index type
     """
     # assuming name is either None or a string
@@ -893,7 +894,8 @@ def _get_name_value_for_type(name_typ):
     return None if name_typ == types.none else "_" + str(ir_utils.next_label())
 
 
-def get_value_for_type(dtype):
+# skipping coverage since only called on multiple core case
+def get_value_for_type(dtype):  # pragma: no cover
     """returns a value of type 'dtype' to enable calling an njit function with the
     proper input type.
     """
@@ -973,7 +975,7 @@ def scatterv(data):
     Rank 0 passes the data but the other ranks just pass None.
     """
     rank = bodo.libs.distributed_api.get_rank()
-    if rank != MPI_ROOT and data is not None:
+    if rank != MPI_ROOT and data is not None:  # pragma: no cover
         raise BodoError(
             "bodo.scatterv() requires 'data' argument to be None on all ranks except rank 0."
         )
@@ -992,7 +994,7 @@ def scatterv_impl(data):
     """nopython implementation of scatterv()
     """
     if isinstance(data, types.Array):
-        return lambda data: _scatterv_np(data)
+        return lambda data: _scatterv_np(data)  # pragma: no cover
 
     if data == string_array_type:
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
@@ -1110,7 +1112,7 @@ def scatterv_impl(data):
             init_func = numba.njit(no_cpython_wrapper=True)(
                 lambda d, b: bodo.libs.decimal_arr_ext.init_decimal_array(
                     d, b, precision, scale
-                )
+                )  # pragma: no cover
             )
         if data == boolean_array:
             init_func = bodo.libs.bool_arr_ext.init_bool_array
@@ -1422,10 +1424,10 @@ def scatterv_impl(data):
         impl_tuple = loc_vars["impl_tuple"]
         return impl_tuple
 
-    if data is types.none:
+    if data is types.none:  # pragma: no cover
         return lambda data: None
 
-    raise BodoError("scatterv() not available for {}".format(data))
+    raise BodoError("scatterv() not available for {}".format(data))  # pragma: no cover
 
 
 @intrinsic
@@ -1534,7 +1536,7 @@ def bcast_scalar_overload(val):
     if val == bodo.string_type:
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
-        def impl_str(val):
+        def impl_str(val):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
             if rank != MPI_ROOT:
                 n_char = 0
