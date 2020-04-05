@@ -1943,6 +1943,33 @@ def test_const_list_inference():
     check_func(impl3, (11,), sort_output=True)
 
 
+def test_schema_change():
+    """
+    Test df schema change for groupby() to make sure errors are not thrown
+    """
+
+    # schema change in dict agg case
+    def impl1(df):
+        df["AA"] = np.arange(len(df))
+        return df.groupby(["A"]).agg({"AA": "sum", "B": "count"})
+
+    # schema change for groupby object getitem
+    def impl2(df):
+        df["AA"] = np.arange(len(df))
+        return df.groupby(["A"]).AA.sum()
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": ["a", "b", "c", "c", "b", "c", "a"],
+            "C": [1, 3, 1, 2, -4, 0, 5],
+        }
+    )
+
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
+
+
 # ------------------------------ pivot, crosstab ------------------------------ #
 
 
