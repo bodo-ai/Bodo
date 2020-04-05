@@ -508,7 +508,6 @@ class DistributedPass:
             "str_arr_item_to_numeric",
             "bodo.libs.str_arr_ext",
         ) and self._dist_arr_needs_adjust(rhs.args[0].name):
-            # TODO: test parallel
             arr = rhs.args[0]
             index_var = self._fix_index_var(rhs.args[1])
             start_var, nodes = self._get_parallel_access_start_var(
