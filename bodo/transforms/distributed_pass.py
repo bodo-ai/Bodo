@@ -2630,42 +2630,21 @@ def _get_array_var_from_size(size_var, func_ir):
 
 def find_available_vars(blocks, cfg, init_avail=None):
     """
-    Find available variables to use at ENTRY point of basic blocks. Similar
-    to available expressions algorithm but does not kill values on defs.
-    In_l = intersect(Out_i for i in pred)
-    Out_l = In_l | def(l)
-    `init_avail` is used to initialize first block of parfors with available vars
-    before the parfor. The label of first block is assumed to be 0.
+    Finds available variables at entry point of each basic block by gathering all
+    variables defined in the block's dominators in CFG.
     """
     # TODO: unittest
     in_avail_vars = defaultdict(set)
-    usedefs = numba.analysis.compute_use_defs(blocks)
-    var_def_map = usedefs.defmap
-    out_avail_vars = var_def_map.copy()
+    var_def_map = numba.analysis.compute_use_defs(blocks).defmap
 
     if init_avail:
         assert 0 in blocks
         for label in var_def_map:
             in_avail_vars[label] = init_avail
-            out_avail_vars[label] |= init_avail
 
-    old_point = None
-    new_point = tuple(len(v) for v in in_avail_vars.values())
-
-    while old_point != new_point:
-        for label in var_def_map:
-            if label == 0:
-                continue
-            # intersect out of predecessors
-            preds = list(l for l, _ in cfg.predecessors(label))
-            in_avail_vars[label] = out_avail_vars[preds[0]] if preds else {}
-            for inc_blk in preds:
-                in_avail_vars[label] &= out_avail_vars[inc_blk]
-            # include defs
-            out_avail_vars[label] = in_avail_vars[label] | var_def_map[label]
-
-        old_point = new_point
-        new_point = tuple(len(v) for v in in_avail_vars.values())
+    for label, doms in cfg.dominators().items():
+        for d in doms:
+            in_avail_vars[label] |= var_def_map[d]
 
     return in_avail_vars
 
