@@ -1208,7 +1208,7 @@ def common_validate_merge_merge_asof_spec(
     if not is_overload_none(on):
         # make sure two dataframes have common columns
         if len(comm_cols) == 0:
-            raise BodoError(
+            raise_bodo_error(
                 name_func + "(): No common columns to perform merge on. "
                 "Merge options: left_on={lon}, right_on={ron}, "
                 "left_index={lidx}, right_index={ridx}".format(
@@ -1414,7 +1414,7 @@ def validate_keys_dtypes(
                 operator.eq, (lk_type, rk_type), {}
             )
         except:
-            raise BodoError(
+            raise_bodo_error(
                 "merge: You are trying to merge on {lk_dtype} and "
                 "{rk_dtype} columns. If you wish to proceed "
                 "you should use pd.concat".format(lk_dtype=lk_type, rk_dtype=rk_type)
@@ -2028,7 +2028,7 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
     if is_overload_constant_str(df.index.name_typ):
         set_possible_keys.add(get_overload_const_str(df.index.name_typ))
     if len(set(get_const_str_list(by)).difference(set_possible_keys)) > 0:
-        raise BodoError(
+        raise_bodo_error(
             "sort_values(): invalid key {} for by.".format(
                 set_possible_keys.difference(set(get_const_str_list(by)))
             )
