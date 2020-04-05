@@ -1735,13 +1735,14 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
         downcast_str = get_overload_const_str(downcast)
         if downcast_str in ("integer", "signed"):
             out_dtype = types.int64
-        if downcast_str == "unsigned":
+        elif downcast_str == "unsigned":
             out_dtype = types.uint64
-        assert downcast_str == "float"
+        else:
+            assert downcast_str == "float"
 
     # just return numeric array
     # TODO: handle dt64/td64 to int64 conversion
-    if isinstance(arg_a, types.Array):
+    if isinstance(arg_a, (types.Array, IntegerArrayType)):
         return lambda arg_a, errors="raise", downcast=None: arg_a.astype(out_dtype)
 
     # Series case
@@ -1778,6 +1779,24 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
             return B
 
         return to_numeric_float_impl
+    else:
+
+        def to_numeric_int_impl(
+            arg_a, errors="raise", downcast=None
+        ):  # pragma: no cover
+            numba.parfor.init_prange()
+            n = len(arg_a)
+            B = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)
+            for i in numba.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(arg_a, i):
+                    bodo.ir.join.setitem_arr_nan(B, i)
+                else:
+                    bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arg_a, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(B._null_bitmap, i, 1)
+
+            return B
+
+        return to_numeric_int_impl
 
 
 def series_filter_bool(arr, bool_arr):  # pragma: no cover

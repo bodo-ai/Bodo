@@ -124,6 +124,7 @@ def test_strided_getitem():
     check_func(test_impl, (n,))
 
 
+@pytest.mark.skip(reason="TODO: replace since to_numeric() doesn't need locals anymore")
 def test_inline_locals():
     # make sure locals in inlined function works
     @bodo.jit(locals={"B": bodo.float64[:]})

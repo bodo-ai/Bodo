@@ -476,36 +476,12 @@ class TestHiFrames(unittest.TestCase):
     def test_str_get_to_numeric(self):
         def test_impl(df):
             B = df.A.str.split(",")
-            C = pd.to_numeric(B.str.get(1), errors="coerce")
+            C = pd.to_numeric(B.str.get(1), errors="coerce", downcast="integer")
             return C
 
         df = pd.DataFrame({"A": ["AB,12", "C,321,D"]})
-        bodo_func = bodo.jit(locals={"C": bodo.int64[:]})(test_impl)
-        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
-
-    def test_to_numeric(self):
-        def test_impl(df):
-            B = pd.to_numeric(df.A, errors="coerce")
-            return B
-
-        df = pd.DataFrame({"A": ["123.1", "331.2"]})
-        bodo_func = bodo.jit(locals={"B": bodo.float64[:]})(test_impl)
-        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
-
-    @unittest.skip("fix distributed -n 3")
-    def test_to_numeric_parallel(self):
-        def test_impl(S):
-            B = pd.to_numeric(S, errors="coerce")
-            return B.sum()
-
-        S = pd.Series(["123.1", "331.2", "1.3", "5.1", "55.2"], name="A")
-        bodo_func = bodo.jit(locals={"B": bodo.float64[:]}, distributed=["S"])(
-            test_impl
-        )
-        start, end = get_start_end(len(S))
-        self.assertEqual(bodo_func(S[start:end]), test_impl(S))
-        self.assertEqual(count_array_REPs(), 0)
-        self.assertEqual(count_parfor_REPs(), 0)
+        bodo_func = bodo.jit(test_impl)
+        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
     def test_1D_Var_len(self):
         def test_impl(n):
