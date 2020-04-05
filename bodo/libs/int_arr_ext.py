@@ -389,6 +389,27 @@ numba.ir_utils.alias_func_extensions[
 ] = alias_ext_dummy_func
 
 
+# high-level allocation function for int arrays
+@numba.njit(no_cpython_wrapper=True)
+def alloc_int_array(n, dtype):
+    data_arr = np.empty(n, dtype)
+    nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
+    return init_integer_array(data_arr, nulls)
+
+
+def alloc_int_array_equiv(self, scope, equiv_set, args, kws):
+    """Array analysis function for alloc_int_array() passed to Numba's array analysis
+    extension. Assigns output array's size as equivalent to the input size variable.
+    """
+    assert len(args) == 2 and not kws
+    return args[0], []
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_int_arr_ext_alloc_int_array = (
+    alloc_int_array_equiv
+)
+
+
 @numba.extending.register_jitable
 def set_bit_to_arr(bits, i, bit_is_set):  # pragma: no cover
     bits[i // 8] ^= np.uint8(-np.uint8(bit_is_set) ^ bits[i // 8]) & kBitmask[i % 8]

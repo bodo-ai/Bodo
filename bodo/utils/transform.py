@@ -57,6 +57,7 @@ no_side_effect_call_tuples = {
     ("get_int_arr_data", "int_arr_ext", "libs", bodo),
     ("get_int_arr_bitmap", "int_arr_ext", "libs", bodo),
     ("init_integer_array", "int_arr_ext", "libs", bodo),
+    ("alloc_int_array", "int_arr_ext", "libs", bodo),
     # bool array
     ("get_bool_arr_data", "bool_arr_ext", "libs", bodo),
     ("get_bool_arr_bitmap", "bool_arr_ext", "libs", bodo),

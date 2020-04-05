@@ -167,6 +167,7 @@ def is_alloc_callname(func_name, mod_name):
             and mod_name == "bodo.libs.list_str_arr_ext"
         )
         or (func_name == "alloc_bool_array" and mod_name == "bodo.libs.bool_arr_ext")
+        or (func_name == "alloc_int_array" and mod_name == "bodo.libs.int_arr_ext")
         or (
             func_name == "alloc_datetime_date_array"
             and mod_name == "bodo.hiframes.datetime_date_ext"
