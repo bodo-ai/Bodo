@@ -148,6 +148,29 @@ def test_1D_Var_parfor2():
     assert count_array_REPs() == 0
 
 
+def test_1D_Var_parfor3():
+    """test 1D parfor on length of an array that is assigned in an if/else block.
+    Array analysis may not generate 'size_var = C.shape[0]' (keep 'len(C)').
+    """
+    def impl1(A, B, flag):
+        if flag:
+            C = A[B]
+        else:
+            C = A[~B]
+        s = 0
+        for j in range(3):
+            for i in bodo.prange(len(C)):
+                s += i + C[i, 0] + j
+        return s
+
+    bodo_func = bodo.jit(distributed={"A", "B"})(impl1)
+    A = np.arange(33).reshape(11, 3)
+    start, end = get_start_end(len(A))
+    B = (np.arange(len(A)) % 2) != 0
+    assert bodo_func(A[start:end], B[start:end], True) == impl1(A, B, True)
+    assert count_array_REPs() == 0
+
+
 def test_print1():
     # no vararg
     # TODO: capture stdout and make sure there is only one print
