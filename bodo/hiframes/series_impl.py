@@ -1770,7 +1770,10 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
             n = len(arg_a)
             B = np.empty(n, np.float64)
             for i in numba.parfor.internal_prange(n):
-                bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arg_a, i)
+                if bodo.libs.array_kernels.isna(arg_a, i):
+                    bodo.ir.join.setitem_arr_nan(B, i)
+                else:
+                    bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arg_a, i)
 
             return B
 
