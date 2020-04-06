@@ -13,7 +13,7 @@ import warnings
 import numba
 from numba.core import ir, ir_utils, types
 from bodo.utils.typing import is_overload_none
-from numba.ir_utils import (
+from numba.core.ir_utils import (
     replace_arg_nodes,
     compile_to_numba_ir,
     find_topo_order,
@@ -28,7 +28,7 @@ from numba.ir_utils import (
     GuardException,
     compute_cfg_from_blocks,
 )
-from numba.inline_closurecall import inline_closure_call
+from numba.core.inline_closurecall import inline_closure_call
 
 import bodo
 from bodo.utils.typing import list_cumulative
@@ -390,7 +390,7 @@ class DataFramePass:
     def _run_call(self, assign, lhs, rhs):
         fdef = guard(find_callname, self.func_ir, rhs, self.typemap)
         if fdef is None:
-            from numba.stencil import StencilFunc
+            from numba.stencils.stencil import StencilFunc
 
             # could be make_function from list comprehension which is ok
             func_def = guard(get_definition, self.func_ir, rhs.func)
@@ -501,7 +501,7 @@ class DataFramePass:
                 bodo.hiframes.dataframe_impl, "overload_dataframe_" + func_name
             )(*arg_typs, **kw_typs)
             return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
             )
 
         if func_name == "pivot_table":
@@ -515,7 +515,7 @@ class DataFramePass:
                 lambda df, values=None, index=None, columns=None, aggfunc="mean", fill_value=None, margins=False, dropna=True, margins_name="All", _pivot_values=None: None
             )
             return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(stub), kws=dict(rhs.kws)
+                impl, rhs.args, pysig=numba.core.utils.pysignature(stub), kws=dict(rhs.kws)
             )
         # df.apply(lambda a:..., axis=1)
         if func_name == "apply":
@@ -581,18 +581,18 @@ class DataFramePass:
         func_text = "def f({}, df_index):\n".format(col_name_args)
 
         if self.typemap[lhs.name].data == string_array_type:
-            func_text += "  numba.parfor.init_prange()\n"
+            func_text += "  numba.parfors.parfor.init_prange()\n"
             func_text += "  n = len(c0)\n"
             func_text += "  n_chars = 0\n"
-            func_text += "  for i in numba.parfor.internal_prange(n):\n"
+            func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
             func_text += "     row = Row({})\n".format(row_args)
             func_text += "     n_chars += get_utf8_size(map_func(row))\n"
             func_text += "  S = pre_alloc_string_array(n, n_chars)\n"
         else:
-            func_text += "  numba.parfor.init_prange()\n"
+            func_text += "  numba.parfors.parfor.init_prange()\n"
             func_text += "  n = len(c0)\n"
             func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ)\n"
-        func_text += "  for i in numba.parfor.internal_prange(n):\n"
+        func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "     row = Row({})\n".format(row_args)
         func_text += "     S[i] = map_func(row)\n"
         func_text += (
@@ -890,7 +890,7 @@ class DataFramePass:
         for c in list_str_colnames:
             func_text += "  num_lists_{} = 0\n".format(c)
             func_text += "  num_chars_{} = 0\n".format(c)
-        func_text += "  for i in numba.parfor.internal_prange(old_len):\n"
+        func_text += "  for i in numba.parfors.parfor.internal_prange(old_len):\n"
         func_text += "    if not ({}):\n".format(" or ".join(isna_calls))
         func_text += "      new_len += 1\n"
         for c in str_colnames:
@@ -926,7 +926,7 @@ class DataFramePass:
                 func_text += "  curr_s_offset_{} = 0\n".format(c)
                 func_text += "  curr_d_offset_{} = 0\n".format(c)
         # fill new array
-        func_text += "  for ii in numba.parfor.internal_prange(old_len):\n"
+        func_text += "  for ii in numba.parfors.parfor.internal_prange(old_len):\n"
         func_text += "    if not ({}):\n".format(
             " or ".join(
                 [
@@ -2322,7 +2322,7 @@ class DataFramePass:
                 return d_var
 
             # TODO: stararg needs special handling?
-            args = numba.typing.fold_arguments(
+            args = numba.core.typing.fold_arguments(
                 pysig, args, kws, normal_handler, default_handler, normal_handler
             )
 

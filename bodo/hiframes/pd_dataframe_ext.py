@@ -9,7 +9,7 @@ from collections import namedtuple
 import pandas as pd
 import numpy as np
 import numba
-from numba import types, cgutils
+from numba.core import types, cgutils
 from bodo.hiframes.pd_index_ext import StringIndexType
 from numba.extending import (
     models,
@@ -24,14 +24,15 @@ from numba.extending import (
     lower_builtin,
     overload_method,
 )
-from numba.typing.templates import (
+from numba.core.typing.templates import (
     infer_global,
     AbstractTemplate,
     signature,
     AttributeTemplate,
     bound_function,
 )
-from numba.targets.imputils import impl_ret_borrowed
+from numba.parfors.array_analysis import ArrayAnalysis
+from numba.core.imputils import impl_ret_borrowed
 from llvmlite import ir as lir
 
 import bodo
@@ -515,13 +516,13 @@ def get_dataframe_index(df):
 
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
     assert len(args) >= 1
-    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
 
 
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext")
 ] = alias_ext_dummy_func
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("get_dataframe_index", "bodo.hiframes.pd_dataframe_ext")
 ] = alias_ext_dummy_func
 
@@ -529,18 +530,14 @@ numba.ir_utils.alias_func_extensions[
 def alias_ext_init_dataframe(lhs_name, args, alias_map, arg_aliases):
     assert len(args) == 3
     # add alias for data tuple
-    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
     # add alias for index
-    numba.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
+    numba.core.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
 
 
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("init_dataframe", "bodo.hiframes.pd_dataframe_ext")
 ] = alias_ext_init_dataframe
-
-
-# array analysis extension
-from numba.array_analysis import ArrayAnalysis
 
 
 def init_dataframe_equiv(self, scope, equiv_set, args, kws):
@@ -772,7 +769,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
 
         # call boxing for array data
         # TODO: check complex data types possible for Series for dataframes set column here
-        c = numba.pythonapi._BoxContext(context, builder, pyapi, env_manager)
+        c = numba.core.pythonapi._BoxContext(context, builder, pyapi, env_manager)
         py_arr = bodo.hiframes.boxing._box_series_data(arr.dtype, arr, arr_arg, c)
 
         # get column as string or int obj

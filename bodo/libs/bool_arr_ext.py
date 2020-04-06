@@ -8,8 +8,8 @@ import pandas as pd
 import numpy as np
 import numba
 import bodo
-from numba import types
-from numba import cgutils
+from numba.core import types
+from numba.core import cgutils
 from numba.extending import (
     typeof_impl,
     type_callable,
@@ -27,11 +27,11 @@ from numba.extending import (
     overload_attribute,
     lower_cast,
 )
-from numba.array_analysis import ArrayAnalysis
+from numba.parfors.array_analysis import ArrayAnalysis
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import is_list_like_index_type
-from numba.targets.imputils import impl_ret_borrowed
+from numba.core.imputils import impl_ret_borrowed
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import hstr_ext
@@ -399,22 +399,22 @@ ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_init_bool_array = (
 
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
     assert len(args) >= 1
-    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
 
 
 def alias_ext_init_bool_array(lhs_name, args, alias_map, arg_aliases):
     assert len(args) == 2
-    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
-    numba.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
+    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    numba.core.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
 
 
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("init_bool_array", "bodo.libs.bool_arr_ext")
 ] = alias_ext_init_bool_array
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("get_bool_arr_data", "bodo.libs.bool_arr_ext")
 ] = alias_ext_dummy_func
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("get_bool_arr_bitmap", "bodo.libs.bool_arr_ext")
 ] = alias_ext_dummy_func
 
@@ -462,7 +462,7 @@ def bool_arr_getitem(A, ind):
             n_bytes = (n + 7) >> 3
             new_mask = np.empty(n_bytes, np.uint8)
             curr_bit = 0
-            for i in numba.parfor.internal_prange(len(ind)):
+            for i in numba.parfors.parfor.internal_prange(len(ind)):
                 if ind[i]:
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
                     bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
@@ -497,8 +497,8 @@ def bool_arr_getitem(A, ind):
             n = len(A._data)
             old_mask = A._null_bitmap
             new_data = np.ascontiguousarray(A._data[ind])
-            slice_idx = numba.unicode._normalize_slice(ind, n)
-            span = numba.unicode._slice_span(slice_idx)
+            slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
+            span = numba.cpython.unicode._slice_span(slice_idx)
             n_bytes = (span + 7) >> 3
             new_mask = np.empty(n_bytes, np.uint8)
             curr_bit = 0
@@ -592,7 +592,7 @@ def bool_arr_setitem(A, idx, val):
                 # XXX: conservative copy of bitmap in case there is overlap
                 # TODO: check for overlap and copy only if necessary
                 src_bitmap = val._null_bitmap.copy()
-                slice_idx = numba.unicode._normalize_slice(idx, n)
+                slice_idx = numba.cpython.unicode._normalize_slice(idx, n)
                 val_ind = 0
                 for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(src_bitmap, val_ind)
@@ -604,7 +604,7 @@ def bool_arr_setitem(A, idx, val):
         def impl_slice(A, idx, val):  # pragma: no cover
             n = len(A._data)
             A._data[idx] = val
-            slice_idx = numba.unicode._normalize_slice(idx, n)
+            slice_idx = numba.cpython.unicode._normalize_slice(idx, n)
             val_ind = 0
             for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
                 bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
@@ -672,7 +672,7 @@ def overload_bool_arr_astype(A, dtype, copy=True):
             data = bodo.libs.bool_arr_ext.get_bool_arr_data(A)
             n = len(data)
             B = np.empty(n, nb_dtype)
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 B[i] = data[i]
                 if bodo.libs.array_kernels.isna(A, i):
                     B[i] = np.nan
@@ -736,7 +736,7 @@ def create_op_overload(op, n_inputs):
                 def impl(A):  # pragma: no cover
                     n = len(A)
                     out_arr = np.empty(n, ret_dtype)
-                    for i in numba.parfor.internal_prange(n):
+                    for i in numba.parfors.parfor.internal_prange(n):
                         out_arr[i] = op(A[i])
                     return out_arr
 
@@ -760,7 +760,7 @@ def create_op_overload(op, n_inputs):
                 # def impl(A1, A2):
                 # n = len(A1)
                 # out_arr = np.empty(n, ret_dtype)
-                # for i in numba.parfor.internal_prange(n):
+                # for i in numba.parfors.parfor.internal_prange(n):
                 #     out_arr[i] = op(A1[i], A2[i])
                 #     if (bodo.libs.array_kernels.isna(A1, i)
                 #         or bodo.libs.array_kernels.isna(A2, i)):
@@ -779,7 +779,7 @@ def create_op_overload(op, n_inputs):
                     "A1" if not is_A1_scalar else "A2"
                 )
                 func_text += "  out_arr = np.empty(n, ret_dtype)\n"
-                func_text += "  for i in numba.parfor.internal_prange(n):\n"
+                func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
                 func_text += "    out_arr[i] = op({}, {})\n".format(
                     access_str1, access_str2
                 )
@@ -811,9 +811,9 @@ def create_op_overload(op, n_inputs):
 
 
 def _install_np_ufuncs():
-    import numba.targets.ufunc_db
+    import numba.np.ufunc_db
 
-    for ufunc in numba.targets.ufunc_db.get_ufuncs():
+    for ufunc in numba.np.ufunc_db.get_ufuncs():
         overload_impl = create_op_overload(ufunc, ufunc.nin)
         overload(ufunc)(overload_impl)
 
@@ -826,7 +826,7 @@ _install_np_ufuncs()
 
 def _install_binary_ops():
     # install binary ops such as add, sub, pow, eq, ...
-    for op in numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys():
+    for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys():
         overload_impl = create_op_overload(op, 2)
         overload(op)(overload_impl)
 
@@ -839,7 +839,7 @@ _install_binary_ops()
 
 def _install_inplace_binary_ops():
     # install inplace binary ops such as iadd, isub, ...
-    for op in numba.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys():
+    for op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys():
         overload_impl = create_op_overload(op, 2)
         overload(op)(overload_impl)
 

@@ -18,8 +18,8 @@ from numba.extending import (
     make_attribute_wrapper,
     overload_attribute,
 )
-from numba import types
-from numba.typing.templates import (
+from numba.core import types
+from numba.core.typing.templates import (
     signature,
     AbstractTemplate,
     infer,
@@ -29,8 +29,8 @@ from numba.typing.templates import (
     bound_function,
     infer_global,
 )
-from numba import cgutils
-from numba.array_analysis import ArrayAnalysis
+from numba.core import cgutils
+from numba.parfors.array_analysis import ArrayAnalysis
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 import bodo
@@ -279,11 +279,11 @@ def gen_unicode_to_std_str(context, builder, unicode_val):
 
 
 def gen_std_str_to_unicode(context, builder, std_str_val, del_str=False):
-    kind = numba.unicode.PY_UNICODE_1BYTE_KIND
+    kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
 
     def _std_str_to_unicode(std_str):  # pragma: no cover
         length = bodo.libs.str_ext.get_std_str_len(std_str)
-        ret = numba.unicode._empty_string(kind, length)
+        ret = numba.cpython.unicode._empty_string(kind, length)
         bodo.libs.str_arr_ext._memcpy(
             ret._data, bodo.libs.str_ext.get_c_str(std_str), length, 1
         )
@@ -374,7 +374,7 @@ def alloc_random_access_string_array(typingctx, n_t=None):
 
         # alloc a list
         list_type = types.List(string_type)
-        l = numba.targets.listobj.ListInstance.allocate(
+        l = numba.cpython.listobj.ListInstance.allocate(
             context, builder, list_type, nitems
         )
         l.size = nitems

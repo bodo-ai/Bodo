@@ -1,6 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-from numba import types
-from numba.typing.templates import (
+from numba.core import types
+from numba.core.typing.templates import (
     signature,
     AbstractTemplate,
     infer,
@@ -11,7 +11,7 @@ from numba.typing.templates import (
 )
 from numba.extending import models, register_model
 from numba.extending import lower_builtin
-from numba.targets.imputils import (
+from numba.core.imputils import (
     impl_ret_new_ref,
     impl_ret_borrowed,
     iternext_impl,

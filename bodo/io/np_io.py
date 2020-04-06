@@ -1,11 +1,11 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import numpy as np
 import bodo
-from numba import types
+from numba.core import types
 from numba.extending import overload, intrinsic, overload_method
 from bodo.libs.str_ext import string_type
 
-from numba.ir_utils import compile_to_numba_ir, replace_arg_nodes
+from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 
 _get_file_size = types.ExternalFunction("get_file_size", types.int64(types.voidptr))
 _file_read = types.ExternalFunction(

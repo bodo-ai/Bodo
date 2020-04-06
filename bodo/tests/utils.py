@@ -6,8 +6,8 @@ import numpy as np
 import random
 import string
 import numba
-from numba.untyped_passes import PreserveIR
-from numba.typed_passes import NopythonRewrites
+from numba.core.untyped_passes import PreserveIR
+from numba.core.typed_passes import NopythonRewrites
 import bodo
 from bodo.utils.typing import BodoWarning
 import warnings
@@ -373,7 +373,7 @@ def is_bool_object_series(S):
         S = S.values
     return (
         S.dtype == np.dtype("O")
-        and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(S) == numba.types.bool_
+        and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(S) == numba.core.types.bool_
     )
 
 
@@ -382,7 +382,7 @@ def is_list_str_object_series(S):
         S = S.values
     return S.dtype == np.dtype("O") and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(
         S
-    ) == numba.types.List(numba.types.unicode_type)
+    ) == numba.core.types.List(numba.core.types.unicode_type)
 
 
 class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):

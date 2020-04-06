@@ -23,7 +23,7 @@ from bodo.tests.utils import check_func
 
 def test_membership():
     d = numba.typed.Dict.empty(
-        key_type=numba.types.unicode_type, value_type=numba.types.int64
+        key_type=numba.core.types.unicode_type, value_type=numba.core.types.int64
     )
     d["A"] = 0
     d["B"] = 0

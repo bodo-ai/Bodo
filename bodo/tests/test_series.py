@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import random
 import numba
-import numba.targets.ufunc_db
+import numba.np.ufunc_db
 import bodo
 from decimal import Decimal
 from bodo.utils.typing import BodoError
@@ -814,7 +814,7 @@ def test_series_explicit_binary_op_nullable_int_bool():
 @pytest.mark.slow
 @pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_binary_ops)
 def test_series_binary_op(op):
-    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(S, other):\n"
     func_text += "  return S {} other\n".format(op_str)
     loc_vars = {}
@@ -830,7 +830,7 @@ def test_series_binary_op(op):
 @pytest.mark.slow
 @pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_inplace_binary_ops)
 def test_series_inplace_binary_op(op):
-    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(S, other):\n"
     func_text += "  S {} other\n".format(op_str)
     func_text += "  return S\n"
@@ -857,7 +857,7 @@ def test_series_unary_op(op):
     if op == operator.pos:
         return
 
-    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(S):\n"
     func_text += "  return {} S\n".format(op_str)
     loc_vars = {}
@@ -869,7 +869,7 @@ def test_series_unary_op(op):
 
 
 def test_series_ufunc():
-    ufunc = list(numba.targets.ufunc_db.get_ufuncs())[0]
+    ufunc = list(numba.np.ufunc_db.get_ufuncs())[0]
 
     def test_impl(S):
         return ufunc(S)
@@ -880,7 +880,7 @@ def test_series_ufunc():
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "ufunc", [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 1]
+    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1]
 )
 def test_series_unary_ufunc(ufunc):
     def test_impl(S):
@@ -902,7 +902,7 @@ def test_series_unary_ufunc_np_call():
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "ufunc", [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 2]
+    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2]
 )
 def test_series_binary_ufunc(ufunc):
     def test_impl(S1, S2):
@@ -927,7 +927,7 @@ def test_series_binary_ufunc(ufunc):
     ],
 )
 def test_series_bool_cmp_op(S, op):
-    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(S, other):\n"
     func_text += "  return S {} other\n".format(op_str)
     loc_vars = {}
@@ -951,7 +951,7 @@ def test_series_bool_cmp_op(S, op):
     ],
 )
 def test_series_bool_vals_cmp_op(S, op):
-    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(S, other):\n"
     func_text += "  return S.values {} other.values\n".format(op_str)
     loc_vars = {}

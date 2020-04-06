@@ -1,6 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import numba
-from numba import types
+from numba.core import types
 from numba.extending import (
     models,
     register_model,
@@ -14,7 +14,7 @@ from numba.extending import (
     lower_builtin,
     overload_method,
 )
-from numba.typing.templates import (
+from numba.core.typing.templates import (
     infer_global,
     AbstractTemplate,
     signature,
@@ -692,10 +692,10 @@ class PivotTyper(AbstractTemplate):
         # get output data type
         data = df.data[df.columns.index(values)]
         func = get_agg_func(None, aggfunc.literal_value, None)
-        f_ir = numba.ir_utils.get_ir_of_code(func.__globals__, func.__code__)
+        f_ir = numba.core.ir_utils.get_ir_of_code(func.__globals__, func.__code__)
         in_series_typ = SeriesType(data.dtype, data, None, string_type)
         bodo.ir.aggregate.replace_closures(f_ir, func.__closure__, func.__code__)
-        _, out_dtype, _ = numba.typed_passes.type_inference_stage(
+        _, out_dtype, _ = numba.core.typed_passes.type_inference_stage(
             self.context, f_ir, (in_series_typ,), None
         )
         out_arr_typ = _get_series_array_type(out_dtype)

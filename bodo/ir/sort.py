@@ -5,7 +5,7 @@ import math
 from collections import defaultdict
 import numba
 from numba.core import ir, ir_utils, typeinfer, types
-from numba.ir_utils import (
+from numba.core.ir_utils import (
     visit_vars_inner,
     replace_vars_inner,
     compile_to_numba_ir,
@@ -144,7 +144,7 @@ def sort_array_analysis(sort_node, equiv_set, typemap, array_analysis):
     return [], post
 
 
-numba.array_analysis.array_analysis_extensions[Sort] = sort_array_analysis
+numba.parfors.array_analysis.array_analysis_extensions[Sort] = sort_array_analysis
 
 
 def sort_distributed_analysis(sort_node, array_dists):

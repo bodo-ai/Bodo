@@ -4,7 +4,7 @@ Indexing support for Series objects, including loc/iloc/at/iat types.
 """
 import operator
 import numpy as np
-from numba import types, cgutils
+from numba.core import types, cgutils
 from numba.extending import (
     models,
     register_model,
@@ -27,7 +27,7 @@ from numba.extending import (
     overload,
     make_attribute_wrapper,
 )
-from numba.typing.templates import (
+from numba.core.typing.templates import (
     infer_global,
     AbstractTemplate,
     signature,

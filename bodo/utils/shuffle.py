@@ -8,7 +8,8 @@ import os
 import numpy as np
 
 import numba
-from numba import types, generated_jit
+from numba import generated_jit
+from numba.core import types
 from numba.extending import overload
 
 import bodo

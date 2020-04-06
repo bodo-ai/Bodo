@@ -13,13 +13,13 @@ from bodo.transforms.series_pass import SeriesPass
 from bodo.transforms.dataframe_pass import DataFramePass
 from bodo.transforms.typing_pass import BodoTypeInference
 import numba
-from numba.compiler import DefaultPassBuilder
-from numba.compiler_machinery import (
+from numba.core.compiler import DefaultPassBuilder
+from numba.core.compiler_machinery import (
     FunctionPass, AnalysisPass, register_pass, PassManager
 )
-from numba.untyped_passes import WithLifting
+from numba.core.untyped_passes import WithLifting
 
-from numba.typed_passes import (
+from numba.core.typed_passes import (
     NopythonTypeInference,
     PreParforPass,
     ParforPass,
@@ -27,9 +27,9 @@ from numba.typed_passes import (
 )
 
 from numba.core import ir_utils, ir, postproc
-from numba.targets.registry import CPUDispatcher
-from numba.ir_utils import guard, get_definition
-from numba.inline_closurecall import inline_closure_call, InlineClosureCallPass
+from numba.core.registry import CPUDispatcher
+from numba.core.ir_utils import guard, get_definition
+from numba.core.inline_closurecall import inline_closure_call, InlineClosureCallPass
 from bodo import config
 import bodo.libs
 import bodo.libs.array_kernels  # side effect: install Numba functions
@@ -56,7 +56,7 @@ from llvmlite import binding
 binding.set_option("tmp", "-non-global-value-max-name-size=2048")
 
 
-from numba.errors import NumbaPerformanceWarning
+from numba.core.errors import NumbaPerformanceWarning
 
 warnings.simplefilter("ignore", category=NumbaPerformanceWarning)
 
@@ -335,7 +335,7 @@ class LowerParforSeq(FunctionPass):
         FunctionPass.__init__(self)
 
     def run_pass(self, state):
-        numba.parfor.lower_parfor_sequential(
+        numba.parfors.parfor.lower_parfor_sequential(
             state.typingctx, state.func_ir, state.typemap, state.calltypes
         )
         return True
@@ -400,10 +400,10 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         Rewrite and raise Exception `e` with help supplied based on the
         specified issue_type.
         """
-        if numba.config.SHOW_HELP:
+        if numba.core.config.SHOW_HELP:
             help_msg = errors.error_extras[issue_type]
             e.patch_message('\n'.join((str(e).rstrip(), help_msg)))
-        if numba.config.FULL_TRACEBACKS:
+        if numba.core.config.FULL_TRACEBACKS:
             raise e
         else:
             reraise(type(e), e, None)
@@ -477,7 +477,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         # or isn't supported as a constant
         error_rewrite(e, 'constant_inference')
     except Exception as e:
-        if numba.config.SHOW_HELP:
+        if numba.core.config.SHOW_HELP:
             if hasattr(e, 'patch_message'):
                 help_msg = errors.error_extras['reportable']
                 e.patch_message('\n'.join((str(e).rstrip(), help_msg)))

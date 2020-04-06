@@ -3,7 +3,7 @@
 Parallelizes the IR for distributed execution and inserts MPI calls.
 """
 import operator
-import types as pytypes  # avoid confusion with numba.types
+import types as pytypes  # avoid confusion with numba.core.types
 import copy
 import warnings
 from collections import defaultdict
@@ -42,7 +42,7 @@ from numba.core.ir_utils import (
     rename_labels,
     simplify,
 )
-from numba.parfor import (
+from numba.parfors.parfor import (
     get_parfor_reductions,
     get_parfor_params,
     wrap_parfor_blocks,
@@ -118,7 +118,7 @@ class DistributedPass:
         self.curr_loc = self.func_ir.loc
         self.metadata = metadata
         self.flags = flags
-        self.arr_analysis = numba.array_analysis.ArrayAnalysis(
+        self.arr_analysis = numba.parfors.array_analysis.ArrayAnalysis(
             self.typingctx, self.func_ir, self.typemap, self.calltypes
         )
 
@@ -764,17 +764,17 @@ class DistributedPass:
 
         # replace get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
-        if fdef == ("get_type_max_value", "numba.targets.builtins"):
+        if fdef == ("get_type_max_value", "numba.cpython.builtins"):
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
                 # XXX: not using replace since init block of parfor can't be
                 # processed. test_series_idxmin
                 # return self._replace_func(
                 #     lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-                #         numba.targets.builtins.get_type_max_value(
-                #             numba.types.int64)), [])
+                #         numba.cpython.builtins.get_type_max_value(
+                #             numba.core.types.int64)), [])
                 f_block = compile_to_numba_ir(
                     lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-                        numba.targets.builtins.get_type_max_value(numba.types.uint64)
+                        numba.cpython.builtins.get_type_max_value(numba.core.types.uint64)
                     ),
                     {"bodo": bodo, "numba": numba},
                     self.typingctx,
@@ -785,11 +785,11 @@ class DistributedPass:
                 out = f_block.body[:-2]
                 out[-1].target = assign.target
 
-        if fdef == ("get_type_min_value", "numba.targets.builtins"):
+        if fdef == ("get_type_min_value", "numba.cpython.builtins"):
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
                 f_block = compile_to_numba_ir(
                     lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-                        numba.targets.builtins.get_type_min_value(numba.types.uint64)
+                        numba.cpython.builtins.get_type_min_value(numba.core.types.uint64)
                     ),
                     {"bodo": bodo, "numba": numba},
                     self.typingctx,
@@ -984,7 +984,7 @@ class DistributedPass:
             arg_typs = tuple(arg_typs)
             # self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
             #      self.typingctx, arg_typs, {})
-            self.calltypes[rhs] = numba.typing.Signature(
+            self.calltypes[rhs] = numba.core.typing.Signature(
                 string_type, arg_typs, df_typ, call_type.pysig
             )
 
@@ -2346,13 +2346,13 @@ class DistributedPass:
             func = find_callname(self.func_ir, rhs, self.typemap)
             if func == ("min", "builtins"):
                 if isinstance(
-                    self.typemap[rhs.args[0].name], numba.typing.builtins.IndexValueType
+                    self.typemap[rhs.args[0].name], numba.core.typing.builtins.IndexValueType
                 ):
                     return Reduce_Type.Argmin
                 return Reduce_Type.Min
             if func == ("max", "builtins"):
                 if isinstance(
-                    self.typemap[rhs.args[0].name], numba.typing.builtins.IndexValueType
+                    self.typemap[rhs.args[0].name], numba.core.typing.builtins.IndexValueType
                 ):
                     return Reduce_Type.Argmax
                 return Reduce_Type.Max
@@ -2378,14 +2378,14 @@ class DistributedPass:
             if el_typ == types.bool_:
                 init_val = "True"
             else:
-                init_val = "numba.targets.builtins.get_type_max_value(np.ones(1,dtype=np.{}).dtype)".format(
+                init_val = "numba.cpython.builtins.get_type_max_value(np.ones(1,dtype=np.{}).dtype)".format(
                     el_typ
                 )
         if reduce_op == Reduce_Type.Max:
             if el_typ == types.bool_:
                 init_val = "False"
             else:
-                init_val = "numba.targets.builtins.get_type_min_value(np.ones(1,dtype=np.{}).dtype)".format(
+                init_val = "numba.cpython.builtins.get_type_min_value(np.ones(1,dtype=np.{}).dtype)".format(
                     el_typ
                 )
         if reduce_op in [Reduce_Type.Argmin, Reduce_Type.Argmax]:

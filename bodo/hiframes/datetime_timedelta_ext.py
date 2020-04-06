@@ -3,7 +3,7 @@
 """
 import operator
 import datetime
-from numba import types
+from numba.core import types
 from numba.extending import (
     typeof_impl,
     models,
@@ -19,7 +19,7 @@ from numba.extending import (
     overload_method,
     register_jitable,
 )
-from numba import cgutils
+from numba.core import cgutils
 import bodo
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 

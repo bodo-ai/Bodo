@@ -14,7 +14,7 @@ import warnings
 
 import numba
 from numba.core import ir, ir_utils, types
-from numba.ir_utils import (
+from numba.core.ir_utils import (
     compile_to_numba_ir,
     replace_arg_nodes,
     find_const,
@@ -112,6 +112,7 @@ no_side_effect_call_tuples = {
     ("isnan", np),
     # Numba
     ("internal_prange", "parfor", numba),
+    ("internal_prange", "parfor", "parfors", numba),
     ("empty_inferred", "ndarray", "unsafe", numba),
     ("_slice_span", "unicode", numba),
     ("_normalize_slice", "unicode", numba),
@@ -180,7 +181,7 @@ def remove_hiframes(rhs, lives, call_list):
     return False
 
 
-numba.ir_utils.remove_call_handlers.append(remove_hiframes)
+numba.core.ir_utils.remove_call_handlers.append(remove_hiframes)
 
 
 def compile_func_single_block(
@@ -290,7 +291,7 @@ def find_str_const(func_ir, var, arg_types=None, typemap=None):
         return val
     # argument dispatch, force literal only if argument is string
     elif isinstance(var_def, ir.Arg) and typ == string_type:
-        raise numba.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
+        raise numba.core.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
 
     # only add supported (s1+s2), TODO: extend to other expressions
     require(
@@ -341,7 +342,7 @@ def get_const_func_output_type(func, arg_types, typing_context):
             # TODO: use code.co_names to find globals actually used?
             _globals = func.literal_value.globals
 
-        f_ir = numba.ir_utils.get_ir_of_code(_globals, code)
+        f_ir = numba.core.ir_utils.get_ir_of_code(_globals, code)
     elif isinstance(func, bodo.utils.typing.FunctionLiteral):
         f_ir = numba.core.compiler.run_frontend(func.literal_value, inline_closures=True)
     else:
@@ -349,7 +350,7 @@ def get_const_func_output_type(func, arg_types, typing_context):
         py_func = func.dispatcher.py_func
         f_ir = numba.core.compiler.run_frontend(py_func, inline_closures=True)
 
-    _, f_return_type, _ = numba.typed_passes.type_inference_stage(
+    _, f_return_type, _ = numba.core.typed_passes.type_inference_stage(
         typing_context, f_ir, arg_types, None
     )
     return f_return_type
@@ -380,7 +381,7 @@ def gen_add_consts_to_type(vals, var, ret_var, typing_info=None):
             v_rep = "'{}'".format(c)
         # store a name for make_function exprs to replace later
         elif is_expr(c, "make_function") or isinstance(
-            c, numba.targets.registry.CPUDispatcher
+            c, numba.core.registry.CPUDispatcher
         ):
             v_rep = "func{}".format(ir_utils.next_label())
             const_funcs[v_rep] = c
@@ -434,7 +435,7 @@ def get_call_expr_arg(f_name, args, kws, arg_no, arg_name, default=None, err_msg
 # `run_frontend` function of Numba is used in inline_closure_call to get the IR of the
 # function to be inlined.
 # The code below is copied from Numba and modified to handle 'raise' nodes by running
-# rewrite passes before inlining (feature copied from numba.ir_utils.get_ir_of_code).
+# rewrite passes before inlining (feature copied from numba.core.ir_utils.get_ir_of_code).
 # usecase example: bodo/tests/test_series.py::test_series_combine"[S13-S23-None-True]"
 # https://github.com/numba/numba/blob/cc7e7c7cfa6389b54d3b5c2c95751c97eb531a96/numba/compiler.py#L186
 def run_frontend(func, inline_closures=False, emit_dels=False):
@@ -469,7 +470,7 @@ def run_frontend(func, inline_closures=False, emit_dels=False):
         numba.core.rewrites.rewrite_registry.apply(
             "before-inference", DummyPipeline(func_ir).state
         )
-        inline_pass = numba.inline_closurecall.InlineClosureCallPass(
+        inline_pass = numba.core.inline_closurecall.InlineClosureCallPass(
             func_ir, numba.core.cpu.ParallelOptions(False), {}, False
         )
         inline_pass.run()
@@ -485,7 +486,7 @@ numba.core.compiler.run_frontend = run_frontend
 # https://github.com/numba/numba/blob/cc7e7c7cfa6389b54d3b5c2c95751c97eb531a96/numba/ir_utils.py#L725
 # This case happens for Bodo dataframes since init_dataframe takes a tuple of arrays as
 # input, and output dataframe is aliased with all of these arrays. see test_df_alias.
-from numba.ir_utils import _add_alias, alias_analysis_extensions, alias_func_extensions
+from numba.core.ir_utils import _add_alias, alias_analysis_extensions, alias_func_extensions
 import copy
 
 

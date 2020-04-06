@@ -11,7 +11,7 @@ from enum import Enum
 
 import numba
 from numba.core import ir, ir_utils, types
-from numba.ir_utils import (
+from numba.core.ir_utils import (
     find_topo_order,
     guard,
     get_definition,
@@ -24,8 +24,8 @@ from numba.ir_utils import (
     find_build_sequence,
     find_const,
 )
-from numba.parfor import Parfor
-from numba.parfor import wrap_parfor_blocks, unwrap_parfor_blocks
+from numba.parfors.parfor import Parfor
+from numba.parfors.parfor import wrap_parfor_blocks, unwrap_parfor_blocks
 
 import bodo
 import bodo.io
@@ -943,7 +943,7 @@ class DistributedAnalysis:
 
         # TODO: make sure assert_equiv is not generated unnecessarily
         # TODO: fix assert_equiv for np.stack from df.value
-        if fdef == ("assert_equiv", "numba.array_analysis"):
+        if fdef == ("assert_equiv", "numba.parfors.array_analysis"):
             return
 
         # handle calling other Bodo functions that have distributed flags

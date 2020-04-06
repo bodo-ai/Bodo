@@ -19,7 +19,7 @@ from numba.extending import (
     overload_attribute,
     intrinsic,
 )
-from numba import cgutils, types
+from numba.core import cgutils, types
 
 
 # type for pd.CategoricalDtype objects in Pandas

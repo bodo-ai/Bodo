@@ -5,9 +5,9 @@ import operator
 import numpy as np
 import datetime
 import numba
-from numba import types
-from numba.targets.imputils import lower_builtin
-from numba.typing import signature
+from numba.core import types
+from numba.core.imputils import lower_builtin
+from numba.core.typing import signature
 from numba.extending import (
     typeof_impl,
     type_callable,
@@ -27,8 +27,8 @@ from numba.extending import (
     overload_attribute,
     register_jitable,
 )
-from numba import cgutils
-from numba.typing.templates import (
+from numba.core import cgutils
+from numba.core.typing.templates import (
     infer_getattr,
     AttributeTemplate,
     bound_function,
@@ -37,7 +37,7 @@ from numba.typing.templates import (
     AbstractTemplate,
     ConcreteTemplate,
 )
-from numba.array_analysis import ArrayAnalysis
+from numba.parfors.array_analysis import ArrayAnalysis
 from llvmlite import ir as lir
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.datetime_datetime_ext import DatetimeDatetimeType
@@ -693,7 +693,7 @@ def dt_date_arr_getitem(A, ind):
             n_bytes = (n + 7) >> 3
             new_mask = np.empty(n_bytes, np.uint8)
             curr_bit = 0
-            for i in numba.parfor.internal_prange(len(ind)):
+            for i in numba.parfors.parfor.internal_prange(len(ind)):
                 if ind[i]:
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
                     bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
@@ -728,8 +728,8 @@ def dt_date_arr_getitem(A, ind):
             n = len(A._data)
             old_mask = A._null_bitmap
             new_data = np.ascontiguousarray(A._data[ind])
-            slice_idx = numba.unicode._normalize_slice(ind, n)
-            span = numba.unicode._slice_span(slice_idx)
+            slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
+            span = numba.cpython.unicode._slice_span(slice_idx)
             n_bytes = (span + 7) >> 3
             new_mask = np.empty(n_bytes, np.uint8)
             curr_bit = 0
@@ -775,10 +775,10 @@ def overload_datetime_date_arr_sub(arg1, arg2):
 
         def impl(arg1, arg2):  # pragma: no cover
             in_arr = arg1
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             n = len(in_arr)
             A = alloc_datetime_date_array(n)
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 A[i] = in_arr[i] - arg2
             return A
 
@@ -794,10 +794,10 @@ def create_cmp_op_overload(op):
         if A1 == datetime_date_array_type and A2 == datetime_date_array_type:
 
             def impl(A1, A2):
-                numba.parfor.init_prange()
+                numba.parfors.parfor.init_prange()
                 n = len(A1)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
-                for i in numba.parfor.internal_prange(n):
+                for i in numba.parfors.parfor.internal_prange(n):
                     out_arr[i] = op(A1[i], A2[i])
                 return out_arr
 
@@ -806,10 +806,10 @@ def create_cmp_op_overload(op):
         elif A1 == datetime_date_array_type:
 
             def impl(A1, A2):
-                numba.parfor.init_prange()
+                numba.parfors.parfor.init_prange()
                 n = len(A1)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
-                for i in numba.parfor.internal_prange(n):
+                for i in numba.parfors.parfor.internal_prange(n):
                     out_arr[i] = op(A1[i], A2)
                 return out_arr
 
@@ -818,10 +818,10 @@ def create_cmp_op_overload(op):
         elif A2 == datetime_date_array_type:
 
             def impl(A1, A2):
-                numba.parfor.init_prange()
+                numba.parfors.parfor.init_prange()
                 n = len(A2)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
-                for i in numba.parfor.internal_prange(n):
+                for i in numba.parfors.parfor.internal_prange(n):
                     out_arr[i] = op(A1, A2[i])
                 return out_arr
 

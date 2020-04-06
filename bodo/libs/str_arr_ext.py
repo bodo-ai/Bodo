@@ -14,13 +14,13 @@ import numpy as np
 import pandas as pd
 import numba
 import bodo
-from numba import types
-from numba.typing.templates import (
+from numba.core import types
+from numba.core.typing.templates import (
     infer_global,
     AbstractTemplate,
     signature,
 )
-import numba.typing.typeof
+import numba.core.typing.typeof
 from numba.extending import (
     typeof_impl,
     type_callable,
@@ -37,7 +37,7 @@ from numba.extending import (
     overload_attribute,
     register_jitable,
 )
-from numba import cgutils
+from numba.core import cgutils
 from bodo.libs.str_ext import string_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.list_item_arr_ext import ListItemArrayType
@@ -51,7 +51,7 @@ from bodo.utils.typing import (
     parse_dtype,
     BodoError,
 )
-from numba.targets.imputils import (
+from numba.core.imputils import (
     impl_ret_new_ref,
     impl_ret_borrowed,
     iternext_impl,
@@ -176,10 +176,10 @@ def create_binary_op_overload(op):
         if A == string_array_type and B == string_array_type:
 
             def impl_both(A, B):  # pragma: no cover
-                numba.parfor.init_prange()
+                numba.parfors.parfor.init_prange()
                 n = len(A)
                 out_arr = np.empty(n, np.bool_)
-                for i in numba.parfor.internal_prange(n):
+                for i in numba.parfors.parfor.internal_prange(n):
                     if bodo.libs.array_kernels.isna(
                         A, i
                     ) or bodo.libs.array_kernels.isna(B, i):
@@ -199,10 +199,10 @@ def create_binary_op_overload(op):
         if A == string_array_type and types.unliteral(B) == string_type:
 
             def impl_left(A, B):  # pragma: no cover
-                numba.parfor.init_prange()
+                numba.parfors.parfor.init_prange()
                 n = len(A)
                 out_arr = np.empty(n, np.bool_)
-                for i in numba.parfor.internal_prange(n):
+                for i in numba.parfors.parfor.internal_prange(n):
                     if bodo.libs.array_kernels.isna(A, i):
                         val = na_fill
                     else:
@@ -217,10 +217,10 @@ def create_binary_op_overload(op):
         if types.unliteral(A) == string_type and B == string_array_type:
 
             def impl_right(A, B):  # pragma: no cover
-                numba.parfor.init_prange()
+                numba.parfors.parfor.init_prange()
                 n = len(B)
                 out_arr = np.empty(n, np.bool_)
-                for i in numba.parfor.internal_prange(n):
+                for i in numba.parfors.parfor.internal_prange(n):
                     if bodo.libs.array_kernels.isna(B, i):
                         val = na_fill
                     else:
@@ -257,10 +257,10 @@ def overload_string_array_add(A, B):
     if A == string_array_type and B == string_array_type:
 
         def impl_both(A, B):  # pragma: no cover
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             l = len(A)
             num_chars = 0
-            for i in numba.parfor.internal_prange(l):
+            for i in numba.parfors.parfor.internal_prange(l):
                 s = 0
                 if not (
                     bodo.libs.array_kernels.isna(A, i)
@@ -270,7 +270,7 @@ def overload_string_array_add(A, B):
                 num_chars += s
 
             out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
-            for j in numba.parfor.internal_prange(l):
+            for j in numba.parfors.parfor.internal_prange(l):
                 if bodo.libs.array_kernels.isna(A, j) or bodo.libs.array_kernels.isna(
                     B, j
                 ):
@@ -287,17 +287,17 @@ def overload_string_array_add(A, B):
     if A == string_array_type and types.unliteral(B) == string_type:
 
         def impl_left(A, B):  # pragma: no cover
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             l = len(A)
             num_chars = 0
-            for i in numba.parfor.internal_prange(l):
+            for i in numba.parfors.parfor.internal_prange(l):
                 s = 0
                 if not bodo.libs.array_kernels.isna(A, i):
                     s = bodo.libs.str_arr_ext.get_utf8_size(A[i] + B)
                 num_chars += s
 
             out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
-            for j in numba.parfor.internal_prange(l):
+            for j in numba.parfors.parfor.internal_prange(l):
                 if bodo.libs.array_kernels.isna(A, j):
                     out_arr[j] = ""
                     bodo.ir.join.setitem_arr_nan(out_arr, j)
@@ -312,17 +312,17 @@ def overload_string_array_add(A, B):
     if types.unliteral(A) == string_type and B == string_array_type:
 
         def impl_right(A, B):  # pragma: no cover
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             l = len(B)
             num_chars = 0
-            for i in numba.parfor.internal_prange(l):
+            for i in numba.parfors.parfor.internal_prange(l):
                 s = 0
                 if not bodo.libs.array_kernels.isna(B, i):
                     s = bodo.libs.str_arr_ext.get_utf8_size(A + B[i])
                 num_chars += s
 
             out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
-            for j in numba.parfor.internal_prange(l):
+            for j in numba.parfors.parfor.internal_prange(l):
                 if bodo.libs.array_kernels.isna(B, j):
                     out_arr[j] = ""
                     bodo.ir.join.setitem_arr_nan(out_arr, j)
@@ -1426,14 +1426,14 @@ def str_arr_getitem_int(A, ind):
         return
 
     if isinstance(ind, types.Integer):
-        # kind = numba.unicode.PY_UNICODE_1BYTE_KIND
+        # kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
         def str_arr_getitem_impl(A, ind):  # pragma: no cover
             start_offset = getitem_str_offset(A, ind)
             end_offset = getitem_str_offset(A, ind + 1)
             length = end_offset - start_offset
             ptr = get_data_ptr_ind(A, start_offset)
             ret = decode_utf8(ptr, length)
-            # ret = numba.unicode._empty_string(kind, length)
+            # ret = numba.cpython.unicode._empty_string(kind, length)
             # _memcpy(ret._data, ptr, length, 1)
             return ret
 
@@ -1494,8 +1494,8 @@ def str_arr_getitem_int(A, ind):
 
         def str_arr_slice_impl(A, ind):  # pragma: no cover
             n = len(A)
-            slice_idx = numba.unicode._normalize_slice(ind, n)
-            span = numba.unicode._slice_span(slice_idx)
+            slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
+            span = numba.cpython.unicode._slice_span(slice_idx)
 
             if slice_idx.step == 1:
                 start_offset = getitem_str_offset(A, slice_idx.start)
@@ -1590,10 +1590,10 @@ def overload_str_arr_astype(A, dtype, copy=True):
     if isinstance(nb_dtype, types.Float):
         # TODO: raise error if conversion not possible
         def impl_float(A, dtype, copy=True):  # pragma: no cover
-            numba.parfor.init_prange()  # TODO: test fusion
+            numba.parfors.parfor.init_prange()  # TODO: test fusion
             n = len(A)
             B = np.empty(n, nb_dtype)
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 if bodo.libs.array_kernels.isna(A, i):
                     B[i] = np.nan
                 else:
@@ -1606,10 +1606,10 @@ def overload_str_arr_astype(A, dtype, copy=True):
         # int dtype doesn't support NAs
         # TODO: raise some form of error for NAs
         def impl_int(A, dtype, copy=True):  # pragma: no cover
-            numba.parfor.init_prange()  # TODO: test fusion
+            numba.parfors.parfor.init_prange()  # TODO: test fusion
             n = len(A)
             B = np.empty(n, nb_dtype)
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 B[i] = int(A[i])
             return B
 
@@ -1707,7 +1707,7 @@ def _str_arr_item_to_numeric(typingctx, out_ptr_t, str_arr_t, ind_t, out_dtype_t
 @typeof_impl.register(np.ndarray)
 def _typeof_ndarray(val, c):
     try:
-        dtype = numba.numpy_support.from_dtype(val.dtype)
+        dtype = numba.np.numpy_support.from_dtype(val.dtype)
     except NotImplementedError:
         dtype = _infer_ndarray_obj_dtype(val)
         if dtype == string_type:
@@ -1723,7 +1723,7 @@ def _typeof_ndarray(val, c):
         if isinstance(dtype, Decimal128Type):
             return DecimalArrayType(dtype.precision, dtype.scale)
         raise ValueError("Unsupported array dtype: %s" % (val.dtype,))
-    layout = numba.numpy_support.map_layout(val)
+    layout = numba.np.numpy_support.map_layout(val)
     readonly = not val.flags.writeable
     return types.Array(dtype, val.ndim, layout, readonly=readonly)
 
@@ -1764,7 +1764,7 @@ def _infer_ndarray_obj_dtype(val):
 # TODO: support array of strings
 # @typeof_impl.register(np.ndarray)
 # def typeof_np_string(val, c):
-#     arr_typ = numba.typing.typeof._typeof_ndarray(val, c)
+#     arr_typ = numba.core.typing.typeof._typeof_ndarray(val, c)
 #     # match string dtype
 #     if isinstance(arr_typ.dtype, (types.UnicodeCharSeq, types.CharSeq)):
 #         return string_array_type
@@ -1827,7 +1827,7 @@ def pre_alloc_str_arr_equiv(self, scope, equiv_set, args, kws):
     return args[0], []
 
 
-from numba.array_analysis import ArrayAnalysis
+from numba.parfors.array_analysis import ArrayAnalysis
 
 ArrayAnalysis._analyze_op_call_bodo_libs_str_arr_ext_pre_alloc_string_array = (
     pre_alloc_str_arr_equiv

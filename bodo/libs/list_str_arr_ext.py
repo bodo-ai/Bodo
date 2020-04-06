@@ -12,8 +12,8 @@ import operator
 import numpy as np
 import numba
 import bodo
-from numba import types
-from numba.typing.templates import (
+from numba.core import types
+from numba.core.typing.templates import (
     infer_global,
     AbstractTemplate,
     infer,
@@ -22,7 +22,7 @@ from numba.typing.templates import (
     infer_getattr,
     bound_function,
 )
-import numba.typing.typeof
+import numba.core.typing.typeof
 from numba.extending import (
     typeof_impl,
     type_callable,
@@ -39,9 +39,9 @@ from numba.extending import (
     overload,
     overload_attribute,
 )
-from numba import cgutils
+from numba.core import cgutils
 from bodo.libs.str_ext import string_type
-from numba.targets.imputils import (
+from numba.core.imputils import (
     impl_ret_new_ref,
     impl_ret_borrowed,
     iternext_impl,
@@ -481,7 +481,7 @@ def list_str_arr_getitem_array(arr, ind):
 
         def impl_slice(arr, ind):  # pragma: no cover
             n = len(arr)
-            slice_idx = numba.unicode._normalize_slice(ind, n)
+            slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
             # reusing integer array slicing above
             arr_ind = np.arange(slice_idx.start, slice_idx.stop, slice_idx.step)
             return arr[arr_ind]
@@ -529,7 +529,7 @@ def pre_alloc_list_str_arr_equiv(self, scope, equiv_set, args, kws):
     return args[0], []
 
 
-from numba.array_analysis import ArrayAnalysis
+from numba.parfors.array_analysis import ArrayAnalysis
 
 ArrayAnalysis._analyze_op_call_bodo_libs_list_str_arr_ext_pre_alloc_list_string_array = (
     pre_alloc_list_str_arr_equiv
@@ -551,14 +551,14 @@ def get_data_offset_ptr(A):  # pragma: no cover
 
 def alias_ext_ptr(lhs_name, args, alias_map, arg_aliases):
     assert len(args) == 1
-    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
 
 
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("get_index_offset_ptr", "bodo.libs.list_str_arr_ext")
 ] = alias_ext_ptr
 
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("get_data_offset_ptr", "bodo.libs.list_str_arr_ext")
 ] = alias_ext_ptr
 
@@ -567,11 +567,11 @@ numba.ir_utils.alias_func_extensions[
 def str_split(arr, pat, n):  # pragma: no cover
     """spits string array's elements into lists and creates an array of string lists
     """
-    # numba.parfor.init_prange()
+    # numba.parfors.parfor.init_prange()
     l = len(arr)
     num_strs = 0
     num_chars = 0
-    for i in numba.parfor.internal_prange(l):
+    for i in numba.parfors.parfor.internal_prange(l):
         if bodo.libs.array_kernels.isna(arr, i):
             continue
         vals = arr[i].split(pat, n)
@@ -588,7 +588,7 @@ def str_split(arr, pat, n):  # pragma: no cover
     data_offsets = bodo.libs.list_str_arr_ext.get_data_offset_ptr(out_arr)
     curr_s_offset = 0
     curr_d_offset = 0
-    for j in numba.parfor.internal_prange(l):
+    for j in numba.parfors.parfor.internal_prange(l):
         # TODO: NA
         index_offsets[j] = curr_s_offset
         vals = arr[j].split(pat, n)

@@ -3,7 +3,7 @@ import os
 import gc
 import pytest
 import bodo
-from numba.runtime import rtsys
+from numba.core.runtime import rtsys
 import glob
 
 

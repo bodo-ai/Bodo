@@ -2,14 +2,14 @@
 import operator
 import numpy as np
 import numba
-from numba import types, cgutils
-from numba.typing.templates import (
+from numba.core import types, cgutils
+from numba.core.typing.templates import (
     infer_global,
     AbstractTemplate,
     AttributeTemplate,
     bound_function,
 )
-from numba.typing import signature
+from numba.core.typing import signature
 from llvmlite import ir as lir
 from numba.extending import (
     register_model,

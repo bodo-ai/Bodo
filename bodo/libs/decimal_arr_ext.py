@@ -11,8 +11,8 @@ import operator
 import numpy as np
 import numba
 import bodo
-from numba import types
-from numba import cgutils
+from numba.core import types
+from numba.core import cgutils
 from numba.extending import (
     typeof_impl,
     type_callable,
@@ -29,8 +29,9 @@ from numba.extending import (
     overload,
     overload_attribute,
 )
-from numba.array_analysis import ArrayAnalysis
+from numba.parfors.array_analysis import ArrayAnalysis
 from decimal import Decimal
+
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import decimal_ext
@@ -138,11 +139,11 @@ def decimal_to_str_codegen(context, builder, signature, args, scale):
 
     # output is always ASCII
     uni_str.kind = context.get_constant(
-        types.int32, numba.unicode.PY_UNICODE_1BYTE_KIND
+        types.int32, numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
     )
     uni_str.is_ascii = context.get_constant(types.int32, 1)
     # set hash value -1 to indicate "need to compute hash"
-    uni_str.hash = context.get_constant(numba.unicode._Py_hash_t, -1)
+    uni_str.hash = context.get_constant(numba.cpython.unicode._Py_hash_t, -1)
     uni_str.data = context.nrt.meminfo_data(builder, uni_str.meminfo)
     # Set parent to NULL
     uni_str.parent = cgutils.get_null_value(uni_str.parent.type)

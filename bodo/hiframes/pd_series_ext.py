@@ -6,7 +6,7 @@ import operator
 import pandas as pd
 import numpy as np
 import numba
-from numba import types, cgutils
+from numba.core import types, cgutils
 from numba.extending import (
     models,
     register_model,
@@ -18,25 +18,25 @@ from numba.extending import (
     make_attribute_wrapper,
     intrinsic,
 )
-from numba.typing.templates import (
+from numba.core.typing.templates import (
     infer_global,
     AbstractTemplate,
     signature,
     AttributeTemplate,
     bound_function,
 )
-from numba.typing.arraydecl import (
+from numba.core.typing.arraydecl import (
     get_array_index_type,
     _expand_integer,
     ArrayAttribute,
     SetItemBuffer,
 )
-from numba.typing.npydecl import (
+from numba.core.typing.npydecl import (
     Numpy_rules_ufunc,
     NumpyRulesArrayOperator,
     NumpyRulesInplaceArrayOperator,
 )
-from numba.targets.imputils import impl_ret_borrowed
+from numba.core.imputils import impl_ret_borrowed
 from llvmlite import ir as lir
 
 import bodo
@@ -180,7 +180,7 @@ def _get_series_array_type(dtype):
                 "series tuple dtype {} includes non-numerics".format(dtype)
             )
         np_dtype = np.dtype(",".join(str(t) for t in dtype.types), align=True)
-        dtype = numba.numpy_support.from_dtype(np_dtype)
+        dtype = numba.np.numpy_support.from_dtype(np_dtype)
 
     if dtype == datetime_date_type:
         return bodo.hiframes.datetime_date_ext.datetime_date_array_type
@@ -350,7 +350,7 @@ def init_series_equiv(self, scope, equiv_set, args, kws):
     return None
 
 
-from numba.array_analysis import ArrayAnalysis
+from numba.parfors.array_analysis import ArrayAnalysis
 
 ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_series_ext_init_series = (
     init_series_equiv
@@ -436,7 +436,7 @@ def get_series_data_equiv(self, scope, equiv_set, args, kws):
     return None
 
 
-from numba.array_analysis import ArrayAnalysis
+from numba.parfors.array_analysis import ArrayAnalysis
 
 ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_series_ext_get_series_data = (
     get_series_data_equiv
@@ -445,25 +445,25 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_series_ext_get_series_data = (
 
 def alias_ext_init_series(lhs_name, args, alias_map, arg_aliases):
     assert len(args) >= 1
-    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
     if len(args) > 1:  # has index
-        numba.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
+        numba.core.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
 
 
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("init_series", "bodo.hiframes.pd_series_ext")
 ] = alias_ext_init_series
 
 
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
     assert len(args) >= 1
-    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
 
 
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("get_series_data", "bodo.hiframes.pd_series_ext")
 ] = alias_ext_dummy_func
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("get_series_index", "bodo.hiframes.pd_series_ext")
 ] = alias_ext_dummy_func
 
@@ -535,7 +535,7 @@ class SeriesAttribute(AttributeTemplate):
         ):  # pragma: no cover
             pass
 
-        pysig = numba.utils.pysignature(rolling_stub)
+        pysig = numba.core.utils.pysignature(rolling_stub)
         return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
 
     def _resolve_map_func(self, ary, func, pysig, f_args=None):
@@ -567,7 +567,7 @@ class SeriesAttribute(AttributeTemplate):
         def map_stub(arg, na_action=None):  # pragma: no cover
             pass
 
-        pysig = numba.utils.pysignature(map_stub)
+        pysig = numba.core.utils.pysignature(map_stub)
         return self._resolve_map_func(ary, func, pysig)
 
     @bound_function("series.apply")
@@ -579,7 +579,7 @@ class SeriesAttribute(AttributeTemplate):
         def apply_stub(func, convert_dtype=True, args=()):  # pragma: no cover
             pass
 
-        pysig = numba.utils.pysignature(apply_stub)
+        pysig = numba.core.utils.pysignature(apply_stub)
         # TODO: handle apply differences: extra args, np ufuncs etc.
         return self._resolve_map_func(ary, func, pysig, f_args)
 
@@ -597,7 +597,7 @@ class SeriesAttribute(AttributeTemplate):
         def combine_stub(other, func, fill_value=None):  # pragma: no cover
             pass
 
-        pysig = numba.utils.pysignature(combine_stub)
+        pysig = numba.core.utils.pysignature(combine_stub)
 
         # get return type
         dtype1 = ary.dtype
@@ -635,7 +635,7 @@ class SeriesAttribute(AttributeTemplate):
 # pd.Series supports all operators except << and >>
 series_binary_ops = tuple(
     op
-    for op in numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
+    for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
     if op not in (operator.lshift, operator.rshift)
 )
 
@@ -644,7 +644,7 @@ series_binary_ops = tuple(
 # a different type (output of integer division is float)
 series_inplace_binary_ops = tuple(
     op
-    for op in numba.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+    for op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
     if op not in (operator.ilshift, operator.irshift, operator.itruediv)
 )
 

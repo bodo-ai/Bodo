@@ -3,12 +3,12 @@ import numpy as np
 import pandas as pd
 import bodo
 import numba
-from numba import types
+from numba.core import types
 from numba.extending import lower_builtin, overload, register_jitable
-from numba.targets.imputils import impl_ret_borrowed
-from numba.typing import signature
-from numba.typing.templates import infer_global, AbstractTemplate
-from numba.ir_utils import guard, find_const
+from numba.core.imputils import impl_ret_borrowed
+from numba.core.typing import signature
+from numba.core.typing.templates import infer_global, AbstractTemplate
+from numba.core.ir_utils import guard, find_const
 
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.utils.utils import unliteral_all

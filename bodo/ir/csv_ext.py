@@ -3,7 +3,7 @@ from collections import defaultdict
 import numba
 from numba.core import ir, ir_utils, typeinfer, types
 from numba.extending import box, models, register_model
-from numba.ir_utils import (
+from numba.core.ir_utils import (
     visit_vars_inner,
     replace_vars_inner,
     compile_to_numba_ir,
@@ -171,7 +171,7 @@ def _get_dtype_str(t):
     dtype = t.dtype
     if isinstance(dtype, PDCategoricalDtype):
         cat_arr = CategoricalArray(dtype)
-        # HACK: add cat type to numba.types
+        # HACK: add cat type to numba.core.types
         # FIXME: fix after Numba #3372 is resolved
         cat_arr_name = "CategoricalArray" + str(ir_utils.next_label())
         setattr(types, cat_arr_name, cat_arr)
@@ -181,7 +181,7 @@ def _get_dtype_str(t):
         dtype = 'NPDatetime("ns")'
 
     if t == string_array_type:
-        # HACK: add string_array_type to numba.types
+        # HACK: add string_array_type to numba.core.types
         # FIXME: fix after Numba #3372 is resolved
         types.string_array_type = string_array_type
         return "string_array_type"

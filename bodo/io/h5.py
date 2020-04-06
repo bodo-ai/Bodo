@@ -2,11 +2,11 @@
 """
 Analysis and transformation for HDF5 support.
 """
-import types as pytypes  # avoid confusion with numba.types
+import types as pytypes  # avoid confusion with numba.core.types
 
 import numba
 from numba.core import ir, types
-from numba.ir_utils import (
+from numba.core.ir_utils import (
     mk_unique_var,
     replace_vars_inner,
     find_topo_order,
@@ -112,7 +112,7 @@ class H5_IO:
             obj = obj[obj_name]
         require(isinstance(obj, h5py.Dataset))
         ndims = len(obj.shape)
-        numba_dtype = numba.numpy_support.from_dtype(obj.dtype)
+        numba_dtype = numba.np.numpy_support.from_dtype(obj.dtype)
         f.close()
         return types.Array(numba_dtype, ndims, "C")
 

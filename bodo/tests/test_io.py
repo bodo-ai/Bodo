@@ -25,7 +25,7 @@ from bodo.tests.utils import (
     DeadcodeTestPipeline,
 )
 from bodo.utils.utils import is_call_assign
-from numba.ir_utils import find_callname, build_definitions
+from numba.core.ir_utils import find_callname, build_definitions
 from decimal import Decimal
 
 

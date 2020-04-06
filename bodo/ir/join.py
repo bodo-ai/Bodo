@@ -6,10 +6,11 @@ import pandas as pd
 
 from bodo.utils.typing import BodoError, is_dtype_nullable
 import numba
-from numba import generated_jit, ir, ir_utils, typeinfer, types
+from numba import generated_jit
+from numba.core import ir, ir_utils, typeinfer, types
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from numba.extending import overload
-from numba.ir_utils import (
+from numba.core.ir_utils import (
     visit_vars_inner,
     replace_vars_inner,
     compile_to_numba_ir,
@@ -189,7 +190,7 @@ def join_array_analysis(join_node, equiv_set, typemap, array_analysis):
     return [], post
 
 
-numba.array_analysis.array_analysis_extensions[Join] = join_array_analysis
+numba.parfors.array_analysis.array_analysis_extensions[Join] = join_array_analysis
 
 
 def join_distributed_analysis(join_node, array_dists):

@@ -18,8 +18,9 @@ from numba.extending import (
     box,
     intrinsic,
 )
-from numba import numpy_support, types, cgutils
-from numba.typing import signature
+from numba.core import types, cgutils
+from numba.np import numpy_support
+from numba.core.typing import signature
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import (
@@ -307,7 +308,7 @@ def box_dataframe(typ, val, c):
 def unbox_dataframe_column(typingctx, df, i=None):
     def codegen(context, builder, sig, args):
         pyapi = context.get_python_api(builder)
-        c = numba.pythonapi._UnboxContext(context, builder, pyapi)
+        c = numba.core.pythonapi._UnboxContext(context, builder, pyapi)
         gil_state = pyapi.gil_ensure()  # acquire GIL
 
         df_typ = sig.args[0]
@@ -460,7 +461,7 @@ def _box_series_data(dtype, data_typ, val, c):
 
     if isinstance(dtype, types.BaseTuple):
         np_dtype = np.dtype(",".join(str(t) for t in dtype.types), align=True)
-        dtype = numba.numpy_support.from_dtype(np_dtype)
+        dtype = numpy_support.from_dtype(np_dtype)
 
     arr = c.pyapi.from_native_value(data_typ, val, c.env_manager)
 

@@ -3,7 +3,7 @@
 from collections import defaultdict
 import numba
 from numba.core import ir, ir_utils, typeinfer
-from numba.ir_utils import (
+from numba.core.ir_utils import (
     visit_vars_inner,
     replace_vars_inner,
     compile_to_numba_ir,

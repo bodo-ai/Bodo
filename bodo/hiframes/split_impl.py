@@ -3,8 +3,8 @@ import operator
 import numpy as np
 import numba
 import bodo
-from numba import types
-from numba.typing.templates import (
+from numba.core import types
+from numba.core.typing.templates import (
     infer_global,
     AbstractTemplate,
     infer,
@@ -13,7 +13,7 @@ from numba.typing.templates import (
     infer_getattr,
     bound_function,
 )
-import numba.typing.typeof
+import numba.core.typing.typeof
 from numba.extending import (
     typeof_impl,
     type_callable,
@@ -30,9 +30,9 @@ from numba.extending import (
     overload,
     overload_attribute,
 )
-from numba import cgutils
+from numba.core import cgutils
 from bodo.libs.str_ext import string_type
-from numba.targets.imputils import (
+from numba.core.imputils import (
     impl_ret_new_ref,
     impl_ret_borrowed,
     iternext_impl,
@@ -476,7 +476,7 @@ def overload_split_view_arr_shape(A):
 @overload(operator.getitem)
 def str_arr_split_view_getitem_overload(A, ind):
     if A == string_array_split_view_type and isinstance(ind, types.Integer):
-        kind = numba.unicode.PY_UNICODE_1BYTE_KIND
+        kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
 
         def _impl(A, ind):  # pragma: no cover
             # In the case of missing data, we return an empty array [] instead of np.nan

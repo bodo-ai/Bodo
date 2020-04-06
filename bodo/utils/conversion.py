@@ -6,7 +6,7 @@ Need to be inlined for better optimization.
 import pandas as pd
 import numpy as np
 import numba
-from numba import types
+from numba.core import types
 from numba.extending import overload
 import bodo
 from bodo.utils.typing import is_overload_none, is_overload_true, BodoError
@@ -124,7 +124,7 @@ def overload_coerce_to_ndarray(
             ):  # pragma: no cover
                 A = np.empty(scalar_to_arr_len, dt64_dtype)
                 v = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(data.value)
-                for i in numba.parfor.internal_prange(scalar_to_arr_len):
+                for i in numba.parfors.parfor.internal_prange(scalar_to_arr_len):
                     A[i] = v
                 return A
 
@@ -136,10 +136,10 @@ def overload_coerce_to_ndarray(
         ):  # pragma: no cover
             # TODO: parallelize np.full in PA
             # return np.full(scalar_to_arr_len, data)
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             n = scalar_to_arr_len
             out_arr = np.empty(n, dtype)
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 out_arr[i] = data
             return out_arr
 
@@ -224,7 +224,7 @@ def overload_coerce_to_array(
             n = scalar_to_arr_len
             n_chars = n * len(data)
             A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, n_chars)
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 A[i] = data
             return A
 
@@ -272,7 +272,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
                 n = len(data)
                 numba.parfor.init_prange()
                 B = bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)
-                for i in numba.parfor.internal_prange(n):
+                for i in numba.parfors.parfor.internal_prange(n):
                     if bodo.libs.array_kernels.isna(data, i):
                         bodo.ir.join.setitem_arr_nan(B, i)
                     else:
@@ -287,7 +287,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
                 n = len(data)
                 n_bytes = (n + 7) >> 3
                 bitmap = np.empty(n_bytes, np.uint8)
-                for i in numba.parfor.internal_prange(n):
+                for i in numba.parfors.parfor.internal_prange(n):
                     # TODO: use simple set_bit
                     bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 1)
                 return bodo.libs.int_arr_ext.init_integer_array(
@@ -325,10 +325,10 @@ def overload_parse_datetimes_from_strings(data):
     assert data == bodo.string_array_type
 
     def parse_impl(data):  # pragma: no cover
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         n = len(data)
         S = np.empty(n, bodo.utils.conversion.NS_DTYPE)
-        for i in numba.parfor.internal_prange(n):
+        for i in numba.parfors.parfor.internal_prange(n):
             S[i] = bodo.hiframes.pd_timestamp_ext.parse_datetime_str(data[i])
         return S
 

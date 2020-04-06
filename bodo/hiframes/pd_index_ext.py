@@ -4,7 +4,7 @@ import datetime
 import pandas as pd
 import numpy as np
 import numba
-from numba import types, cgutils
+from numba.core import types, cgutils
 from numba.extending import (
     models,
     register_model,
@@ -22,7 +22,7 @@ from numba.extending import (
     overload_attribute,
     overload_method,
 )
-from numba.typing.templates import (
+from numba.core.typing.templates import (
     infer_global,
     AbstractTemplate,
     signature,
@@ -131,7 +131,7 @@ def box_dt_index(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
 
-    dt_index = numba.cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    dt_index = numba.core.cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
     arr_obj = c.pyapi.from_native_value(
         _dt_index_data_typ, dt_index.data, c.env_manager
@@ -200,13 +200,13 @@ def init_datetime_index(typingctx, data, name=None):
 def gen_dti_field_impl(field):
     # TODO: NaN
     func_text = "def impl(dti):\n"
-    func_text += "    numba.parfor.init_prange()\n"
+    func_text += "    numba.parfors.parfor.init_prange()\n"
     func_text += "    A = bodo.hiframes.pd_index_ext.get_index_data(dti)\n"
     func_text += "    name = bodo.hiframes.pd_index_ext.get_index_name(dti)\n"
     func_text += "    n = len(A)\n"
     # all datetimeindex fields return int64 same as Timestamp fields
     func_text += "    S = np.empty(n, np.int64)\n"
-    func_text += "    for i in numba.parfor.internal_prange(n):\n"
+    func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
     func_text += "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])\n"
     func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
     func_text += "        S[i] = ts." + field + "\n"
@@ -232,11 +232,11 @@ def overload_datetime_index_date(dti):
     # TODO: NaN
 
     def impl(dti):  # pragma: no cover
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         A = bodo.hiframes.pd_index_ext.get_index_data(dti)
         n = len(A)
         S = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
-        for i in numba.parfor.internal_prange(n):
+        for i in numba.parfors.parfor.internal_prange(n):
             dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])
             ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)
             S[i] = datetime.date(ts.year, ts.month, ts.day)
@@ -259,11 +259,11 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
         raise ValueError("Index.min(): axis and skipna arguments not supported yet")
 
     def impl(dti, axis=None, skipna=True):  # pragma: no cover
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         in_arr = bodo.hiframes.pd_index_ext.get_index_data(dti)
-        s = numba.targets.builtins.get_type_max_value(numba.types.int64)
+        s = numba.cpython.builtins.get_type_max_value(numba.core.types.int64)
         count = 0
-        for i in numba.parfor.internal_prange(len(in_arr)):
+        for i in numba.parfors.parfor.internal_prange(len(in_arr)):
             if not bodo.libs.array_kernels.isna(in_arr, i):
                 val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
                 s = min(s, val)
@@ -281,11 +281,11 @@ def overload_datetime_index_max(dti, axis=None, skipna=True):
         raise ValueError("Index.max(): axis and skipna arguments not supported yet")
 
     def impl(dti, axis=None, skipna=True):  # pragma: no cover
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         in_arr = bodo.hiframes.pd_index_ext.get_index_data(dti)
-        s = numba.targets.builtins.get_type_min_value(numba.types.int64)
+        s = numba.cpython.builtins.get_type_min_value(numba.core.types.int64)
         count = 0
-        for i in numba.parfor.internal_prange(len(in_arr)):
+        for i in numba.parfors.parfor.internal_prange(len(in_arr)):
             if not bodo.libs.array_kernels.isna(in_arr, i):
                 val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
                 s = max(s, val)
@@ -362,13 +362,13 @@ def overload_datetime_index_sub(arg1, arg2):
     ):
 
         def impl(arg1, arg2):  # pragma: no cover
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             in_arr = bodo.hiframes.pd_index_ext.get_index_data(arg1)
             name = bodo.hiframes.pd_index_ext.get_index_name(arg1)
             n = len(in_arr)
-            S = numba.unsafe.ndarray.empty_inferred((n,))
+            S = numba.core.unsafe.ndarray.empty_inferred((n,))
             tsint = arg2.value
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
                     bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i]) - tsint
                 )
@@ -383,13 +383,13 @@ def overload_datetime_index_sub(arg1, arg2):
     ):
 
         def impl(arg1, arg2):  # pragma: no cover
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             in_arr = bodo.hiframes.pd_index_ext.get_index_data(arg2)
             name = bodo.hiframes.pd_index_ext.get_index_name(arg2)
             n = len(in_arr)
-            S = numba.unsafe.ndarray.empty_inferred((n,))
+            S = numba.core.unsafe.ndarray.empty_inferred((n,))
             tsint = arg1.value
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
                     tsint - bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
                 )
@@ -401,7 +401,7 @@ def overload_datetime_index_sub(arg1, arg2):
 # bionp of DatetimeIndex and string
 def gen_dti_str_binop_impl(op, is_arg1_dti):
     # is_arg1_dti: is the first argument DatetimeIndex and second argument str
-    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def impl(arg1, arg2):\n"
     if is_arg1_dti:
         func_text += "  dt_index, _str = arg1, arg2\n"
@@ -412,8 +412,8 @@ def gen_dti_str_binop_impl(op, is_arg1_dti):
     func_text += "  arr = bodo.hiframes.pd_index_ext.get_index_data(dt_index)\n"
     func_text += "  l = len(arr)\n"
     func_text += "  other = bodo.hiframes.pd_timestamp_ext.parse_datetime_str(_str)\n"
-    func_text += "  S = numba.unsafe.ndarray.empty_inferred((l,))\n"
-    func_text += "  for i in numba.parfor.internal_prange(l):\n"
+    func_text += "  S = numba.core.unsafe.ndarray.empty_inferred((l,))\n"
+    func_text += "  for i in numba.parfors.parfor.internal_prange(l):\n"
     func_text += "    S[i] = {}\n".format(comp)
     func_text += "  return S\n"
     # print(func_text)
@@ -707,7 +707,7 @@ def box_timedelta_index(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
 
-    timedelta_index = numba.cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    timedelta_index = numba.core.cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
     arr_obj = c.pyapi.from_native_value(
         _timedelta_index_data_typ, timedelta_index.data, c.env_manager
@@ -811,13 +811,13 @@ def TimeDeltaIndex_get_name(tdi):
 def gen_tdi_field_impl(field):
     # TODO: NaN
     func_text = "def impl(tdi):\n"
-    func_text += "    numba.parfor.init_prange()\n"
+    func_text += "    numba.parfors.parfor.init_prange()\n"
     func_text += "    A = bodo.hiframes.pd_index_ext.get_index_data(tdi)\n"
     func_text += "    name = bodo.hiframes.pd_index_ext.get_index_name(tdi)\n"
     func_text += "    n = len(A)\n"
     # all timedeltaindex fields return int64 same as Timestamp fields
     func_text += "    S = np.empty(n, np.int64)\n"
-    func_text += "    for i in numba.parfor.internal_prange(n):\n"
+    func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
     func_text += (
         "        td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(A[i])\n"
     )
@@ -1115,7 +1115,7 @@ def overload_range_index_getitem(I, idx):
         if isinstance(idx, types.SliceType):
             # TODO: test
             def impl(I, idx):  # pragma: no cover
-                slice_idx = numba.unicode._normalize_slice(idx, len(I))
+                slice_idx = numba.cpython.unicode._normalize_slice(idx, len(I))
                 start = I._start + I._step * slice_idx.start
                 stop = I._start + I._step * slice_idx.stop
                 step = I._step * slice_idx.step
@@ -1651,21 +1651,21 @@ def overload_index_isna(I):
         # TODO: parallelize np.full in PA
         # return lambda I: np.full(len(I), False, np.bool_)
         def impl(I):  # pragma: no cover
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             n = len(I)
             out_arr = np.empty(n, np.bool_)
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 out_arr[i] = False
             return out_arr
 
         return impl
 
     def impl(I):  # pragma: no cover
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         arr = bodo.hiframes.pd_index_ext.get_index_data(I)
         n = len(arr)
         out_arr = np.empty(n, np.bool_)
-        for i in numba.parfor.internal_prange(n):
+        for i in numba.parfors.parfor.internal_prange(n):
             out_arr[i] = bodo.libs.array_kernels.isna(arr, i)
         return out_arr
 
@@ -1710,21 +1710,21 @@ def get_index_name(S):
 
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
     assert len(args) >= 1
-    numba.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
 
 
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("get_index_data", "bodo.hiframes.pd_index_ext")
 ] = alias_ext_dummy_func
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("init_datetime_index", "bodo.hiframes.pd_index_ext")
 ] = alias_ext_dummy_func
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("init_timedelta_index", "bodo.hiframes.pd_index_ext")
 ] = alias_ext_dummy_func
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("init_numeric_index", "bodo.hiframes.pd_index_ext")
 ] = alias_ext_dummy_func
-numba.ir_utils.alias_func_extensions[
+numba.core.ir_utils.alias_func_extensions[
     ("init_string_index", "bodo.hiframes.pd_index_ext")
 ] = alias_ext_dummy_func

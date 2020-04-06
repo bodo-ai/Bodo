@@ -2,7 +2,7 @@
 """Tools for handling bodo arrays, e.g. passing to C/C++ code
 """
 import numba
-from numba import types, cgutils
+from numba.core import types, cgutils
 from numba.extending import (
     typeof_impl,
     type_callable,
@@ -543,7 +543,7 @@ def arr_info_list_to_table(typingctx, list_arr_info_typ):
 
     def codegen(context, builder, sig, args):
         (info_list,) = args
-        inst = numba.targets.listobj.ListInstance(
+        inst = numba.cpython.listobj.ListInstance(
             context, builder, sig.args[0], info_list
         )
         fnty = lir.FunctionType(
