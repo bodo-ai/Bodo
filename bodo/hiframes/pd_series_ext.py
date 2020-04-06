@@ -341,7 +341,7 @@ def init_series(typingctx, data, index, name=None):
     return sig, codegen
 
 
-def init_series_equiv(self, scope, equiv_set, args, kws):
+def init_series_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) >= 1 and not kws
     # TODO: add shape for index
     var = args[0]
@@ -428,7 +428,7 @@ def get_series_name(S):
 
 
 # array analysis extension
-def get_series_data_equiv(self, scope, equiv_set, args, kws):
+def get_series_data_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) == 1 and not kws
     var = args[0]
     if equiv_set.has_shape(var):

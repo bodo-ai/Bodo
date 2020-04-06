@@ -341,7 +341,7 @@ def get_int_arr_bitmap(A):
 
 
 # array analysis extension
-def get_int_arr_data_equiv(self, scope, equiv_set, args, kws):
+def get_int_arr_data_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) == 1 and not kws
     var = args[0]
     if equiv_set.has_shape(var):
@@ -354,7 +354,7 @@ ArrayAnalysis._analyze_op_call_bodo_libs_int_arr_ext_get_int_arr_data = (
 )
 
 
-def init_integer_array_equiv(self, scope, equiv_set, args, kws):
+def init_integer_array_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) == 2 and not kws
     var = args[0]
     if equiv_set.has_shape(var):
@@ -397,7 +397,7 @@ def alloc_int_array(n, dtype):
     return init_integer_array(data_arr, nulls)
 
 
-def alloc_int_array_equiv(self, scope, equiv_set, args, kws):
+def alloc_int_array_equiv(self, scope, equiv_set, loc, args, kws):
     """Array analysis function for alloc_int_array() passed to Numba's array analysis
     extension. Assigns output array's size as equivalent to the input size variable.
     """

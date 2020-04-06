@@ -303,7 +303,7 @@ def alloc_decimal_array(n, precision, scale):
     return init_decimal_array(data_arr, nulls, precision, scale)
 
 
-def alloc_decimal_array_equiv(self, scope, equiv_set, args, kws):
+def alloc_decimal_array_equiv(self, scope, equiv_set, loc, args, kws):
     """Array analysis function for alloc_decimal_array() passed to Numba's array
     analysis extension. Assigns output array's size as equivalent to the input size
     variable.

@@ -421,7 +421,7 @@ def overload_str_arr_shape(A):
     return lambda A: (len(A._data),)
 
 
-def alloc_random_access_str_arr_equiv(self, scope, equiv_set, args, kws):
+def alloc_random_access_str_arr_equiv(self, scope, equiv_set, loc, args, kws):
     """Array analysis function for alloc_random_access_string_array()
     """
     assert len(args) == 1 and not kws

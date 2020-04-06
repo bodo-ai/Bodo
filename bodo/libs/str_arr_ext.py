@@ -1822,7 +1822,7 @@ def unbox_str_series(typ, val, c):
 # TODO: array analysis and remove call for other functions
 
 
-def pre_alloc_str_arr_equiv(self, scope, equiv_set, args, kws):
+def pre_alloc_str_arr_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) == 2 and not kws
     return args[0], []
 

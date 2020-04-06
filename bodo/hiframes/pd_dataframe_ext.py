@@ -540,7 +540,7 @@ numba.core.ir_utils.alias_func_extensions[
 ] = alias_ext_init_dataframe
 
 
-def init_dataframe_equiv(self, scope, equiv_set, args, kws):
+def init_dataframe_equiv(self, scope, equiv_set, loc, args, kws):
     """shape analysis for init_dataframe() calls. All input arrays have the same shape,
     which is the same as output dataframe's shape.
     """
@@ -562,7 +562,7 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_init_dataframe = (
 )
 
 
-def get_dataframe_data_equiv(self, scope, equiv_set, args, kws):
+def get_dataframe_data_equiv(self, scope, equiv_set, loc, args, kws):
     """array analysis for get_dataframe_data(). output array has the same shape as input
     dataframe.
     """

@@ -524,7 +524,7 @@ def overload_list_str_arr_copy(A):
 
 
 # TODO: test array analysis and remove call
-def pre_alloc_list_str_arr_equiv(self, scope, equiv_set, args, kws):
+def pre_alloc_list_str_arr_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) == 3 and not kws
     return args[0], []
 

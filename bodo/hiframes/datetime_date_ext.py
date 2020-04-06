@@ -660,7 +660,7 @@ def alloc_datetime_date_array(n):  # pragma: no cover
     return init_datetime_date_array(data_arr, nulls)
 
 
-def alloc_datetime_date_array_equiv(self, scope, equiv_set, args, kws):
+def alloc_datetime_date_array_equiv(self, scope, equiv_set, loc, args, kws):
     """Array analysis function for alloc_datetime_date_array() passed to Numba's array
     analysis extension. Assigns output array's size as equivalent to the input size
     variable.
