@@ -625,7 +625,7 @@ def dot_2_vm(context, builder, sig, args):
     return impl_ret_new_ref(context, builder, sig.return_type, res)
 
 
-numba.targets.linalg.dot_2_vm = dot_2_vm
+numba.np.linalg.dot_2_vm = dot_2_vm
 
 
 # replace Numba's overload/overload_method handling functions to support a new option
@@ -966,3 +966,9 @@ numba.types.functions.BoundFunction.get_call_type = get_call_type2
 
 
 # ----------------------- unliteral monkey patch done ------------------------- #
+
+
+# replace ArrayAnalysis.copy() method to no-op due to issue introduced in 0.49
+# see https://github.com/numba/numba/issues/5515
+# TODO: remove when Numba is fixed
+numba.parfors.array_analysis.ArrayAnalysis.copy = lambda self: self
