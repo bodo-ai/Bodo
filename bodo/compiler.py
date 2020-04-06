@@ -14,7 +14,9 @@ from bodo.transforms.dataframe_pass import DataFramePass
 from bodo.transforms.typing_pass import BodoTypeInference
 import numba
 from numba.compiler import DefaultPassBuilder
-from numba.compiler_machinery import FunctionPass, register_pass, PassManager
+from numba.compiler_machinery import (
+    FunctionPass, AnalysisPass, register_pass, PassManager
+)
 from numba.untyped_passes import WithLifting
 
 from numba.typed_passes import (
@@ -288,14 +290,14 @@ class BodoDataFramePass(FunctionPass):
 
 
 @register_pass(mutates_CFG=False, analysis_only=True)
-class BodoDumpDiagnosticsPass(FunctionPass):
+class BodoDumpDiagnosticsPass(AnalysisPass):
     """Print Bodo's distributed diagnostics info if needed
     """
 
     _name = "bodo_dump_diagnostics_pass"
 
     def __init__(self):
-        FunctionPass.__init__(self)
+        AnalysisPass.__init__(self)
 
     def run_pass(self, state):
         """
