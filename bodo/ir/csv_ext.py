@@ -1,7 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 from collections import defaultdict
 import numba
-from numba import ir, ir_utils, typeinfer, types
+from numba.core import ir, ir_utils, typeinfer, types
 from numba.extending import box, models, register_model
 from numba.ir_utils import (
     visit_vars_inner,

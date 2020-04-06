@@ -1342,7 +1342,7 @@ def create_explicit_binary_op_overload(op):
         if not isinstance(S.dtype, types.Number):
             raise TypeError("only numeric values supported")
 
-        typing_context = numba.targets.registry.cpu_target.typing_context
+        typing_context = numba.core.registry.cpu_target.typing_context
         # scalar case
         if isinstance(other, types.Number):
             args = (S.data, other)

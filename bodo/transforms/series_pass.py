@@ -9,7 +9,7 @@ import pandas as pd
 import warnings
 
 import numba
-from numba import ir, ir_utils, types
+from numba.core import ir, ir_utils, types
 from numba.ir_utils import (
     replace_arg_nodes,
     compile_to_numba_ir,

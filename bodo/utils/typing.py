@@ -463,7 +463,7 @@ class FunctionLiteral(types.Literal, types.Opaque):
 def typeof_function(val, c):
     """Assign literal type to constant functions that are not overloaded in numba.
     """
-    if not numba.targets.registry.cpu_target.typing_context._get_global_type(val):
+    if not numba.core.registry.cpu_target.typing_context._get_global_type(val):
         return FunctionLiteral(val)
 
 
@@ -647,7 +647,7 @@ class ConstDictType(types.DictType):
 
 
 @register_model(ConstDictType)
-class ConstDictModel(numba.dictobject.DictModel):
+class ConstDictModel(numba.typed.dictobject.DictModel):
     def __init__(self, dmm, fe_type):
         l_type = types.DictType(fe_type.key_type, fe_type.value_type)
         super(ConstDictModel, self).__init__(dmm, l_type)

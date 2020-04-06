@@ -13,7 +13,7 @@ from numba import types, cgutils
 from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.targets.imputils import lower_builtin
-from numba.targets.arrayobj import make_array
+from numba.np.arrayobj import make_array
 from numba.numpy_support import as_dtype
 
 import bodo

@@ -341,10 +341,10 @@ def join_usedefs(join_node, use_set=None, def_set=None):
     # output columns are defined
     def_set.update({v.name for v in join_node.df_out_vars.values()})
 
-    return numba.analysis._use_defs_result(usemap=use_set, defmap=def_set)
+    return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
 
-numba.analysis.ir_extension_usedefs[Join] = join_usedefs
+numba.core.analysis.ir_extension_usedefs[Join] = join_usedefs
 
 
 def get_copies_join(join_node, typemap):

@@ -10,7 +10,7 @@ import inspect
 from enum import Enum
 
 import numba
-from numba import ir, ir_utils, types
+from numba.core import ir, ir_utils, types
 from numba.ir_utils import (
     find_topo_order,
     guard,
@@ -536,7 +536,7 @@ class DistributedAnalysis:
             # blocks of data are passed in, TODO: document
             func_def = guard(get_definition, self.func_ir, rhs.func)
             if isinstance(func_def, ir.Const) and isinstance(
-                func_def.value, numba.dispatcher.ObjModeLiftedWith
+                func_def.value, numba.core.dispatcher.ObjModeLiftedWith
             ):
                 return
             warnings.warn("function call couldn't be found for distributed analysis")
@@ -1631,7 +1631,7 @@ class DistributedAnalysis:
         # arrays or is in a loop
 
         # find sequential loop bodies
-        cfg = numba.analysis.compute_cfg_from_blocks(self.func_ir.blocks)
+        cfg = numba.core.analysis.compute_cfg_from_blocks(self.func_ir.blocks)
         loop_bodies = set()
         for loop in cfg.loops().values():
             loop_bodies |= loop.body

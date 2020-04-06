@@ -1384,7 +1384,7 @@ def validate_keys_dtypes(
 ):
     # make sure left keys and right keys have comparable dtypes
 
-    typing_context = numba.targets.registry.cpu_target.typing_context
+    typing_context = numba.core.registry.cpu_target.typing_context
 
     if is_overload_true(left_index) or is_overload_true(right_index):
         # cases where index is used in merging

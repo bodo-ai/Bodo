@@ -1,7 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import warnings
 import numba
-from numba import ir, types
+from numba.core import ir, types
 from numba.ir_utils import (
     mk_unique_var,
     find_const,
@@ -660,7 +660,7 @@ class ReadParallelParquetInfer(AbstractTemplate):
 
 from numba import cgutils
 from numba.targets.imputils import lower_builtin
-from numba.targets.arrayobj import make_array
+from numba.np.arrayobj import make_array
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 

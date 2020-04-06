@@ -13,7 +13,7 @@ import hashlib
 import warnings
 
 import numba
-from numba import ir, ir_utils, types
+from numba.core import ir, ir_utils, types
 from numba.ir_utils import (
     compile_to_numba_ir,
     replace_arg_nodes,
@@ -246,8 +246,8 @@ def get_stmt_defs(stmt):
     if is_assign(stmt):
         return set([stmt.target.name])
 
-    if type(stmt) in numba.analysis.ir_extension_usedefs:
-        def_func = numba.analysis.ir_extension_usedefs[type(stmt)]
+    if type(stmt) in numba.core.analysis.ir_extension_usedefs:
+        def_func = numba.core.analysis.ir_extension_usedefs[type(stmt)]
         _uses, defs = def_func(stmt)
         return defs
 
@@ -343,11 +343,11 @@ def get_const_func_output_type(func, arg_types, typing_context):
 
         f_ir = numba.ir_utils.get_ir_of_code(_globals, code)
     elif isinstance(func, bodo.utils.typing.FunctionLiteral):
-        f_ir = numba.compiler.run_frontend(func.literal_value, inline_closures=True)
+        f_ir = numba.core.compiler.run_frontend(func.literal_value, inline_closures=True)
     else:
         assert isinstance(func, types.Dispatcher)
         py_func = func.dispatcher.py_func
-        f_ir = numba.compiler.run_frontend(py_func, inline_closures=True)
+        f_ir = numba.core.compiler.run_frontend(py_func, inline_closures=True)
 
     _, f_return_type, _ = numba.typed_passes.type_inference_stage(
         typing_context, f_ir, arg_types, None
@@ -445,9 +445,9 @@ def run_frontend(func, inline_closures=False):
     If inline_closures is Truthy then closure inlining will be run
     """
     # XXX make this a dedicated Pipeline?
-    func_id = numba.bytecode.FunctionIdentity.from_function(func)
-    interp = numba.interpreter.Interpreter(func_id)
-    bc = numba.bytecode.ByteCode(func_id=func_id)
+    func_id = numba.core.bytecode.FunctionIdentity.from_function(func)
+    interp = numba.core.interpreter.Interpreter(func_id)
+    bc = numba.core.bytecode.ByteCode(func_id=func_id)
     func_ir = interp.interpret(bc)
     if inline_closures:
         # code added to original 'run_frontend' to add rewrite passes
@@ -456,7 +456,7 @@ def run_frontend(func, inline_closures=False):
         # for example, Raise nodes need to become StaticRaise before type inference
         class DummyPipeline:
             def __init__(self, f_ir):
-                self.state = numba.compiler.StateDict()
+                self.state = numba.core.compiler.StateDict()
                 self.state.typingctx = None
                 self.state.targetctx = None
                 self.state.args = None
@@ -465,19 +465,19 @@ def run_frontend(func, inline_closures=False):
                 self.state.return_type = None
                 self.state.calltypes = None
 
-        numba.rewrites.rewrite_registry.apply(
+        numba.core.rewrites.rewrite_registry.apply(
             "before-inference", DummyPipeline(func_ir).state
         )
         inline_pass = numba.inline_closurecall.InlineClosureCallPass(
-            func_ir, numba.targets.cpu.ParallelOptions(False), {}, False
+            func_ir, numba.core.cpu.ParallelOptions(False), {}, False
         )
         inline_pass.run()
-    post_proc = numba.postproc.PostProcessor(func_ir)
+    post_proc = numba.core.postproc.PostProcessor(func_ir)
     post_proc.run()
     return func_ir
 
 
-numba.compiler.run_frontend = run_frontend
+numba.core.compiler.run_frontend = run_frontend
 
 
 # The code below is copied from Numba and modified to handle aliases with tuple values.

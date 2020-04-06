@@ -440,10 +440,10 @@ def aggregate_usedefs(aggregate_node, use_set=None, def_set=None):
     if aggregate_node.out_key_vars is not None:
         def_set.update({v.name for v in aggregate_node.out_key_vars})
 
-    return numba.analysis._use_defs_result(usemap=use_set, defmap=def_set)
+    return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
 
-numba.analysis.ir_extension_usedefs[Aggregate] = aggregate_usedefs
+numba.core.analysis.ir_extension_usedefs[Aggregate] = aggregate_usedefs
 
 
 def remove_dead_aggregate(
@@ -2034,7 +2034,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
 
     assert f_ir.arg_count == 1, "agg function should have one input"
     # construct default flags similar to numba.compiler
-    flags = numba.compiler.Flags()
+    flags = numba.core.compiler.Flags()
     flags.set("nrt")
     untyped_pass = bodo.transforms.untyped_pass.UntypedPass(
         f_ir, typingctx, arg_typs, {}, {}, flags
@@ -2045,9 +2045,9 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
         typingctx, f_ir, arg_typs, None
     )
 
-    options = numba.targets.cpu.ParallelOptions(True)
+    options = numba.core.cpu.ParallelOptions(True)
     flags = compiler.Flags()
-    targetctx = numba.targets.cpu.CPUContext(typingctx)
+    targetctx = numba.core.cpu.CPUContext(typingctx)
 
     DummyPipeline = namedtuple(
         "DummyPipeline",
@@ -2105,14 +2105,14 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     )
     preparfor_pass.run()
     f_ir._definitions = build_definitions(f_ir.blocks)
-    state = numba.compiler.StateDict()
+    state = numba.core.compiler.StateDict()
     state.func_ir = f_ir
     state.typemap = typemap
     state.calltypes = calltypes
     state.typingctx = typingctx
     state.targetctx = targetctx
     state.return_type = return_type
-    numba.rewrites.rewrite_registry.apply("after-inference", state)
+    numba.core.rewrites.rewrite_registry.apply("after-inference", state)
     parfor_pass = numba.parfor.ParforPass(
         f_ir, typemap, calltypes, return_type, typingctx, options, flags
     )

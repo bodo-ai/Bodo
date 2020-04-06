@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 
 import numba
-from numba import ir, ir_utils, types
+from numba.core import ir, ir_utils, types
 
 from numba.ir_utils import (
     mk_unique_var,
@@ -353,7 +353,7 @@ class UntypedPass:
                 func_name = func_def.attr
             # ignore objmode block calls
             elif isinstance(func_def, ir.Const) and isinstance(
-                func_def.value, numba.dispatcher.ObjModeLiftedWith
+                func_def.value, numba.core.dispatcher.ObjModeLiftedWith
             ):
                 return [assign]
             else:

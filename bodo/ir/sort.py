@@ -4,7 +4,7 @@ import numpy as np
 import math
 from collections import defaultdict
 import numba
-from numba import ir, ir_utils, typeinfer, types
+from numba.core import ir, ir_utils, typeinfer, types
 from numba.ir_utils import (
     visit_vars_inner,
     replace_vars_inner,
@@ -288,10 +288,10 @@ def sort_usedefs(sort_node, use_set=None, def_set=None):
         def_set.update({v.name for v in sort_node.out_key_arrs})
         def_set.update({v.name for v in sort_node.df_out_vars.values()})
 
-    return numba.analysis._use_defs_result(usemap=use_set, defmap=def_set)
+    return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
 
-numba.analysis.ir_extension_usedefs[Sort] = sort_usedefs
+numba.core.analysis.ir_extension_usedefs[Sort] = sort_usedefs
 
 
 def get_copies_sort(sort_node, typemap):

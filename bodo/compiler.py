@@ -24,7 +24,7 @@ from numba.typed_passes import (
     DumpParforDiagnostics,
 )
 
-from numba import ir_utils, ir, postproc
+from numba.core import ir_utils, ir, postproc
 from numba.targets.registry import CPUDispatcher
 from numba.ir_utils import guard, get_definition
 from numba.inline_closurecall import inline_closure_call, InlineClosureCallPass
@@ -41,9 +41,9 @@ import bodo.utils.typing
 import bodo.io
 # required for _compile_for_args defined below (can be removed once the
 # function is fixed in numba)
-from numba import types, errors
-from numba.six import reraise
-from numba.typing.typeof import Purpose, typeof
+from numba.core import types, errors
+from numba.core.utils import reraise
+from numba.core.typing.typeof import Purpose, typeof
 
 if config._has_h5py:
     from bodo.io import h5
@@ -63,7 +63,7 @@ warnings.simplefilter("ignore", category=NumbaPerformanceWarning)
 inline_all_calls = False
 
 
-class BodoCompiler(numba.compiler.CompilerBase):
+class BodoCompiler(numba.core.compiler.CompilerBase):
     """Bodo compiler pipeline which adds the following passes to Numba's pipeline:
     InlinePass, BodoUntypedPass, BodoTypeInference, BodoDataFramePass, BodoSeriesPass,
     LowerParforSeq, BodoDumpDiagnosticsPass.
@@ -383,7 +383,7 @@ def inline_calls(func_ir, _locals):
     func_ir.blocks = ir_utils.simplify_CFG(func_ir.blocks)
 
 
-# This replaces Numba's numba.dispatcher._DispatcherBase._compile_for_args
+# This replaces Numba's numba.core.dispatcher._DispatcherBase._compile_for_args
 # method to delete args before returning the dispatcher object. Otherwise
 # the code is the same
 def _compile_for_args(self, *args, **kws):  # pragma: no cover
@@ -408,7 +408,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
 
     argtypes = []
     for a in args:
-        if isinstance(a, numba.dispatcher.OmittedArg):
+        if isinstance(a, numba.core.dispatcher.OmittedArg):
             argtypes.append(types.Omitted(a.value))
         else:
             argtypes.append(self.typeof_pyval(a))
@@ -443,7 +443,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         # that failed inferencing as a Numba type
         failed_args = []
         for i, arg in enumerate(args):
-            val = arg.value if isinstance(arg, numba.dispatcher.OmittedArg) else arg
+            val = arg.value if isinstance(arg, numba.core.dispatcher.OmittedArg) else arg
             try:
                 tp = typeof(val, Purpose.argument)
             except ValueError as typeof_exc:
@@ -493,15 +493,15 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
 import inspect
 import hashlib
 
-lines = inspect.getsource(numba.dispatcher._DispatcherBase._compile_for_args)
+lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
     != "1e12bb18f3ed09e608ba6c56a7fcd4cf2fe342b71af9d2e9767aee817d92f4b8"
 ):  # pragma: no cover
     warnings.warn(
         bodo.utils.typing.BodoWarning(
-            "numba.dispatcher._DispatcherBase._compile_for_args has changed"
+            "numba.core.dispatcher._DispatcherBase._compile_for_args has changed"
         )
     )
 # now replace the function with our own
-numba.dispatcher._DispatcherBase._compile_for_args = _compile_for_args
+numba.core.dispatcher._DispatcherBase._compile_for_args = _compile_for_args

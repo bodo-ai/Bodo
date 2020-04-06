@@ -722,7 +722,7 @@ def create_op_overload(op, n_inputs):
     na_val = False
     if op_name == "ne":
         na_val = True
-    typing_context = numba.targets.registry.cpu_target.typing_context
+    typing_context = numba.core.registry.cpu_target.typing_context
 
     if n_inputs == 1:
 

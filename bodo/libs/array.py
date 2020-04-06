@@ -312,7 +312,7 @@ def _lower_info_to_array_numpy(arr_type, context, builder, in_info):
         builder.load(data_ptr), context.get_data_type(arr_type.dtype).as_pointer(),
     )
 
-    numba.targets.arrayobj.populate_array(
+    numba.np.arrayobj.populate_array(
         arr,
         data=data,
         shape=shape_array,
@@ -470,7 +470,7 @@ def info_to_array(typingctx, info_type, arr_type):
                 builder.load(data_ptr), context.get_data_type(np_dtype).as_pointer(),
             )
 
-            numba.targets.arrayobj.populate_array(
+            numba.np.arrayobj.populate_array(
                 data_arr,
                 data=data,
                 shape=shape_array,
@@ -493,7 +493,7 @@ def info_to_array(typingctx, info_type, arr_type):
                 builder.load(nulls_ptr), context.get_data_type(types.uint8).as_pointer()
             )
 
-            numba.targets.arrayobj.populate_array(
+            numba.np.arrayobj.populate_array(
                 nulls_arr,
                 data=data,
                 shape=shape_array,

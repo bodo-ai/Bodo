@@ -10,7 +10,7 @@ from collections import defaultdict
 import math
 import numpy as np
 import numba
-from numba import ir, ir_utils, postproc, types
+from numba.core import ir, ir_utils, postproc, types
 from bodo.utils.typing import list_cumulative
 from numba.ir_utils import (
     mk_unique_var,
@@ -1066,7 +1066,7 @@ class DistributedPass:
 
     # Returns an IR node that defines a variable holding the size of |dtype|.
     def dtype_size_assign_ir(self, dtype, scope, loc):
-        context = numba.targets.cpu.CPUContext(self.typingctx)
+        context = numba.core.cpu.CPUContext(self.typingctx)
         dtype_size = context.get_abi_sizeof(context.get_data_type(dtype))
         dtype_size_var = ir.Var(scope, mk_unique_var("dtype_size"), loc)
         self.typemap[dtype_size_var.name] = types.intp
@@ -2459,8 +2459,8 @@ class DistributedPass:
 
     def _update_avail_vars(self, avail_vars, nodes):
         for stmt in nodes:
-            if type(stmt) in numba.analysis.ir_extension_usedefs:
-                def_func = numba.analysis.ir_extension_usedefs[type(stmt)]
+            if type(stmt) in numba.core.analysis.ir_extension_usedefs:
+                def_func = numba.core.analysis.ir_extension_usedefs[type(stmt)]
                 _uses, defs = def_func(stmt)
                 avail_vars |= defs
             if is_assign(stmt):
@@ -2629,7 +2629,7 @@ def find_available_vars(blocks, cfg, init_avail=None):
     """
     # TODO: unittest
     in_avail_vars = defaultdict(set)
-    var_def_map = numba.analysis.compute_use_defs(blocks).defmap
+    var_def_map = numba.core.analysis.compute_use_defs(blocks).defmap
 
     if init_avail:
         assert 0 in blocks

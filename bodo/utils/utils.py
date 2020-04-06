@@ -5,7 +5,7 @@ Collection of utility functions. Needs to be refactored in separate files.
 from collections import namedtuple
 import keyword
 import numba
-from numba import ir_utils, ir, types, cgutils
+from numba.core import ir_utils, ir, types, cgutils
 from numba.ir_utils import (
     guard,
     get_definition,
@@ -20,7 +20,7 @@ from numba.typing import signature
 from numba.typing.templates import infer_global, AbstractTemplate
 from numba.targets.imputils import lower_builtin
 from numba.extending import overload, intrinsic
-from numba.targets.arrayobj import populate_array, get_itemsize, make_array
+from numba.np.arrayobj import populate_array, get_itemsize, make_array
 from llvmlite import ir as lir
 import numpy as np
 import bodo
@@ -544,7 +544,7 @@ def empty_like_type_overload(n, arr):
     return empty_like_type_str_arr
 
 
-# copied from numba.targets.arrayobj (0.47), except the raising exception code is
+# copied from numba.np.arrayobj (0.47), except the raising exception code is
 # changed to just a print since unboxing call convention throws an error for exceptions
 def _empty_nd_impl(context, builder, arrtype, shapes):  # pragma: no cover
     """Utility function used for allocating a new array during LLVM code

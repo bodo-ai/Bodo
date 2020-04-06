@@ -16,7 +16,7 @@ from numba.targets.imputils import (
     iternext_impl,
     RefType,
 )
-from numba import ir
+from numba.core import ir
 from numba.ir_utils import mk_unique_var, next_label
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType, handle_inplace_df_type_change

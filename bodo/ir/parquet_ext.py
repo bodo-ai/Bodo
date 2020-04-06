@@ -2,7 +2,7 @@
 """IR node for the parquet data access"""
 from collections import defaultdict
 import numba
-from numba import ir, ir_utils, typeinfer
+from numba.core import ir, ir_utils, typeinfer
 from numba.ir_utils import (
     visit_vars_inner,
     replace_vars_inner,

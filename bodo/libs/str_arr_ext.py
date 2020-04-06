@@ -356,7 +356,7 @@ class StrArrayIteratorModel(models.StructModel):
         super(StrArrayIteratorModel, self).__init__(dmm, fe_type, members)
 
 
-lower_builtin("getiter", string_array_type)(numba.targets.arrayobj.getiter_array)
+lower_builtin("getiter", string_array_type)(numba.np.arrayobj.getiter_array)
 
 
 @lower_builtin("iternext", StringArrayIterator)
