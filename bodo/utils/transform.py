@@ -437,12 +437,13 @@ def get_call_expr_arg(f_name, args, kws, arg_no, arg_name, default=None, err_msg
 # rewrite passes before inlining (feature copied from numba.ir_utils.get_ir_of_code).
 # usecase example: bodo/tests/test_series.py::test_series_combine"[S13-S23-None-True]"
 # https://github.com/numba/numba/blob/cc7e7c7cfa6389b54d3b5c2c95751c97eb531a96/numba/compiler.py#L186
-def run_frontend(func, inline_closures=False):
+def run_frontend(func, inline_closures=False, emit_dels=False):
     """
     Run the compiler frontend over the given Python function, and return
     the function's canonical Numba IR.
 
     If inline_closures is Truthy then closure inlining will be run
+    If emit_dels is Truthy the ir.Del nodes will be emitted appropriately
     """
     # XXX make this a dedicated Pipeline?
     func_id = numba.core.bytecode.FunctionIdentity.from_function(func)
@@ -473,7 +474,7 @@ def run_frontend(func, inline_closures=False):
         )
         inline_pass.run()
     post_proc = numba.core.postproc.PostProcessor(func_ir)
-    post_proc.run()
+    post_proc.run(emit_dels)
     return func_ir
 
 
