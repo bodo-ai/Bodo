@@ -2640,10 +2640,11 @@ def find_available_vars(blocks, cfg, init_avail=None):
     if init_avail:
         assert 0 in blocks
         for label in var_def_map:
-            in_avail_vars[label] = init_avail
+            in_avail_vars[label] = init_avail.copy()
 
     for label, doms in cfg.dominators().items():
-        for d in doms:
+        strict_doms = doms - {label}
+        for d in strict_doms:
             in_avail_vars[label] |= var_def_map[d]
 
     return in_avail_vars
