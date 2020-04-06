@@ -54,6 +54,10 @@ void list_string_array_from_sequence(PyObject* obj, int64_t* num_items,
                                      char** buffer, uint32_t** data_offset,
                                      uint32_t** index_offset,
                                      uint8_t** null_bitmap);
+void* np_array_from_string_array(int64_t no_strings,
+                                 const uint32_t* offset_table,
+                                 const char* buffer,
+                                 const uint8_t* null_bitmap);
 void* pd_array_from_string_array(int64_t no_strings,
                                  const uint32_t* offset_table,
                                  const char* buffer,
@@ -152,6 +156,9 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject_SetAttrString(
         m, "pd_array_from_string_array",
         PyLong_FromVoidPtr((void*)(&pd_array_from_string_array)));
+    PyObject_SetAttrString(
+        m, "np_array_from_string_array",
+        PyLong_FromVoidPtr((void*)(&np_array_from_string_array)));
     PyObject_SetAttrString(
         m, "np_array_from_list_string_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_list_string_array)));
@@ -570,6 +577,55 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
     return;
 #undef CHECK
 }
+
+
+/// @brief  From a StringArray create a numpy array of string objects
+/// @return numpy array of str objects
+/// @param[in] no_strings number of strings found in buffer
+/// @param[in] offset_table offsets for strings in buffer
+/// @param[in] buffer with concatenated strings (from StringArray)
+void* np_array_from_string_array(int64_t no_strings,
+                                 const uint32_t* offset_table,
+                                 const char* buffer,
+                                 const uint8_t* null_bitmap) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return NULL;                   \
+    }
+    auto gilstate = PyGILState_Ensure();
+
+    npy_intp dims[] = {no_strings};
+    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
+    CHECK(ret, "allocating numpy array failed");
+    int err;
+    PyObject* np_mod = PyImport_ImportModule("numpy");
+    CHECK(np_mod, "importing numpy module failed");
+    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
+    CHECK(nan_obj, "getting np.nan failed");
+
+    for (int64_t i = 0; i < no_strings; ++i) {
+        PyObject* s = PyUnicode_FromStringAndSize(
+            buffer + offset_table[i], offset_table[i + 1] - offset_table[i]);
+        CHECK(s, "creating Python string/unicode object failed");
+        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
+        CHECK(p, "getting offset in numpy array failed");
+        if (!is_na(null_bitmap, i))
+            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, s);
+        else
+            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
+        CHECK(err == 0, "setting item in numpy array failed");
+        Py_DECREF(s);
+    }
+
+    Py_DECREF(np_mod);
+    Py_DECREF(nan_obj);
+    PyGILState_Release(gilstate);
+    return ret;
+#undef CHECK
+}
+
 
 /// @brief  Create Pandas StringArray from Bodo's packed StringArray
 /// @return Pandas StringArray of str objects

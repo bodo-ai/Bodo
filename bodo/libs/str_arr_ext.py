@@ -53,6 +53,12 @@ import llvmlite.llvmpy.core as lc
 from glob import glob
 
 
+# flag for creating pd.arrays.StringArray when boxing Bodo's native string array
+# Off currently since Pandas still has issues with this new type (e.g. low performance,
+# parquet write issues)
+use_pd_string_array = False
+
+
 char_typ = types.uint8
 offset_typ = types.uint32
 
@@ -873,6 +879,7 @@ ll.add_symbol("getitem_string_array_std", hstr_ext.getitem_string_array_std)
 ll.add_symbol("is_na", hstr_ext.is_na)
 ll.add_symbol("string_array_from_sequence", hstr_ext.string_array_from_sequence)
 ll.add_symbol("pd_array_from_string_array", hstr_ext.pd_array_from_string_array)
+ll.add_symbol("np_array_from_string_array", hstr_ext.np_array_from_string_array)
 ll.add_symbol("convert_len_arr_to_offset", hstr_ext.convert_len_arr_to_offset)
 ll.add_symbol("set_string_array_range", hstr_ext.set_string_array_range)
 ll.add_symbol("str_arr_to_int64", hstr_ext.str_arr_to_int64)
@@ -1107,6 +1114,10 @@ def box_str_arr(typ, val, c):
     """
     string_array = c.context.make_helper(c.builder, string_array_type, val)
 
+    box_fname = "np_array_from_string_array"
+    if use_pd_string_array:
+        box_fname = "pd_array_from_string_array"
+
     fnty = lir.FunctionType(
         c.context.get_argument_type(types.pyobject),
         [
@@ -1117,7 +1128,7 @@ def box_str_arr(typ, val, c):
         ],
     )
     fn_get = c.builder.module.get_or_insert_function(
-        fnty, name="pd_array_from_string_array"
+        fnty, name=box_fname
     )
     arr = c.builder.call(
         fn_get,

@@ -427,4 +427,7 @@ def gen_random_string_array(n, max_str_len=10):
         val = "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
         str_vals.append(val)
 
-    return pd.array(str_vals, "string")
+    # use consistent string array type with Bodo to avoid output comparison errors
+    if bodo.libs.str_arr_ext.use_pd_string_array:
+        return pd.array(str_vals, "string")
+    return np.array(str_vals, dtype="object")  # avoid unichr dtype (TODO: support?)

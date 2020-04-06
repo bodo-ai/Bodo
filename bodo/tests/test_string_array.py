@@ -80,7 +80,7 @@ def test_getitem_bool(str_arr_value):
     ind = np.random.ranf(len(str_arr_value)) < 0.2
     # TODO: parallel test
     pd.util.testing.assert_extension_array_equal(
-        bodo_func(str_arr_value, ind), test_impl(str_arr_value, ind)
+        pd.array(bodo_func(str_arr_value, ind), "string"), test_impl(str_arr_value, ind)
     )
 
 
@@ -92,7 +92,7 @@ def test_getitem_slice(str_arr_value):
     ind = slice(1, 4)
     # TODO: parallel test
     pd.util.testing.assert_extension_array_equal(
-        bodo_func(str_arr_value, ind), test_impl(str_arr_value, ind)
+        pd.array(bodo_func(str_arr_value, ind), "string"), test_impl(str_arr_value, ind)
     )
 
 
@@ -106,7 +106,7 @@ def test_setitem_int():
     val = "국한"  # same size as element 2 but different value
     bodo_func = bodo.jit(test_impl)
     pd.util.testing.assert_extension_array_equal(
-        bodo_func(A.copy(), idx, val), test_impl(A.copy(), idx, val)
+        pd.array(bodo_func(A.copy(), idx, val), "string"), test_impl(A.copy(), idx, val)
     )
 
 
