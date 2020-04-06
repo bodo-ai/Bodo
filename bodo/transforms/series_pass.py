@@ -1225,11 +1225,6 @@ class SeriesPass:
                 lambda A, B: (A, B), (out_data, out_index), lhs, self
             )
 
-        if fdef == ("to_numeric", "bodo.hiframes.series_impl"):
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            impl = bodo.hiframes.series_impl.to_numeric_overload(*arg_typs)
-            return self._replace_func(impl, rhs.args)
-
         if (
             isinstance(func_mod, ir.Var)
             and self.typemap[func_mod.name] == string_array_type

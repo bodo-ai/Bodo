@@ -1540,10 +1540,36 @@ def decode_utf8(typingctx, ptr_t, len_t=None):
     return string_type(types.voidptr, types.intp), codegen
 
 
+def get_arr_data_ptr(arr, ind):  # pragma: no cover
+    return arr
+
+
+@overload(get_arr_data_ptr)
+def overload_get_arr_data_ptr(arr, ind):
+    """return data pointer for array 'arr' at index 'ind'
+    currently only used in 'str_arr_item_to_numeric' for nullable int and numpy arrays
+    """
+    assert isinstance(ind, types.Integer)
+
+    # nullable int array
+    if isinstance(arr, bodo.libs.int_arr_ext.IntegerArrayType):
+        def impl_int(arr, ind):  # pragma: no cover
+            return bodo.hiframes.split_impl.get_c_arr_ptr(arr._data.ctypes, ind)
+
+        return impl_int
+
+    # numpy case, TODO: other
+    assert isinstance(arr, types.Array)
+    def impl_np(arr, ind):  # pragma: no cover
+        return bodo.hiframes.split_impl.get_c_arr_ptr(arr.ctypes, ind)
+
+    return impl_np
+
+
 @numba.njit(no_cpython_wrapper=True)
 def str_arr_item_to_numeric(out_arr, out_ind, str_arr, ind):  # pragma: no cover
     return _str_arr_item_to_numeric(
-        bodo.hiframes.split_impl.get_c_arr_ptr(out_arr.ctypes, out_ind),
+        get_arr_data_ptr(out_arr, out_ind),
         str_arr,
         ind,
         out_arr.dtype,

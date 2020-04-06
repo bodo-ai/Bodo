@@ -4,6 +4,7 @@ Implementation of Series attributes and methods using overload.
 """
 import operator
 import numpy as np
+import pandas as pd
 import numba
 from numba import types
 from numba.extending import overload, overload_attribute, overload_method
@@ -13,6 +14,7 @@ from bodo.libs.str_arr_ext import (
     get_str_arr_item_length,
     get_utf8_size,
     pre_alloc_string_array,
+    string_array_type,
 )
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
 from bodo.utils.typing import (
@@ -25,6 +27,7 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_literal_type,
     get_literal_value,
+    get_overload_const_str,
 )
 from numba.typing.templates import infer_global, AbstractTemplate
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
@@ -1709,29 +1712,91 @@ def overload_sort(arr, index_arr, ascending, inplace):
     return impl
 
 
-def to_numeric(A, dtype):  # pragma: no cover
-    return A
+@overload(pd.to_numeric, inline="always")
+def overload_to_numeric(arg_a, errors="raise", downcast=None):
+    """pd.to_numeric() converts input to a numeric type determined dynamically, but we
+    use the 'downcast' as type annotation (instead of downcasting the dynamic type).
+    """
+    # TODO: change 'arg_a' to 'arg' when inliner can handle it
 
+    # check 'downcast' argument
+    if not is_overload_none(downcast) and not (
+        is_overload_constant_str(downcast)
+        and get_overload_const_str(downcast)
+        in ("integer", "signed", "unsigned", "float")
+    ):  # pragma: no cover
+        raise BodoError(
+            "pd.to_numeric(): invalid downcasting method provided {}".format(downcast)
+        )
 
-@overload(to_numeric)
-def to_numeric_overload(A, dtype):
-    out_dtype = dtype.dtype
-    assert out_dtype == types.int64 or out_dtype == types.float64
-    # TODO: handle non-Series input
+    # find output dtype
+    out_dtype = types.float64
+    if not is_overload_none(downcast):
+        downcast_str = get_overload_const_str(downcast)
+        if downcast_str in ("integer", "signed"):
+            out_dtype = types.int64
+        elif downcast_str == "unsigned":
+            out_dtype = types.uint64
+        else:
+            assert downcast_str == "float"
 
-    def _to_numeric_impl(A, dtype):  # pragma: no cover
-        # TODO: fix distributed
-        arr = bodo.hiframes.pd_series_ext.get_series_data(A)
-        index = bodo.hiframes.pd_series_ext.get_series_index(A)
-        numba.parfor.init_prange()
-        n = len(arr)
-        B = np.empty(n, out_dtype)
-        for i in numba.parfor.internal_prange(n):
-            bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arr, i)
+    # just return numeric array
+    # TODO: handle dt64/td64 to int64 conversion
+    if isinstance(arg_a, (types.Array, IntegerArrayType)):
+        return lambda arg_a, errors="raise", downcast=None: arg_a.astype(out_dtype)
 
-        return bodo.hiframes.pd_series_ext.init_series(B, index)
+    # Series case
+    if isinstance(arg_a, SeriesType):  # pragma: no cover
 
-    return _to_numeric_impl
+        def impl_series(arg_a, errors="raise", downcast=None):
+            in_arr = bodo.hiframes.pd_series_ext.get_series_data(arg_a)
+            index = bodo.hiframes.pd_series_ext.get_series_index(arg_a)
+            name = bodo.hiframes.pd_series_ext.get_series_name(arg_a)
+            out_arr = pd.to_numeric(in_arr, errors, downcast)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return impl_series
+
+    # string array case
+    # TODO: support tuple, list, scalar
+    if arg_a != string_array_type:
+        raise BodoError("pd.to_numeric(): invalid argument type {}".format(arg_a))
+
+    if out_dtype == types.float64:
+
+        def to_numeric_float_impl(
+            arg_a, errors="raise", downcast=None
+        ):  # pragma: no cover
+            numba.parfor.init_prange()
+            n = len(arg_a)
+            B = np.empty(n, np.float64)
+            for i in numba.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(arg_a, i):
+                    bodo.ir.join.setitem_arr_nan(B, i)
+                else:
+                    bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arg_a, i)
+
+            return B
+
+        return to_numeric_float_impl
+    else:
+
+        def to_numeric_int_impl(
+            arg_a, errors="raise", downcast=None
+        ):  # pragma: no cover
+            numba.parfor.init_prange()
+            n = len(arg_a)
+            B = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)
+            for i in numba.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(arg_a, i):
+                    bodo.ir.join.setitem_arr_nan(B, i)
+                else:
+                    bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arg_a, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(B._null_bitmap, i, 1)
+
+            return B
+
+        return to_numeric_int_impl
 
 
 def series_filter_bool(arr, bool_arr):  # pragma: no cover

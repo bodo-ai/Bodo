@@ -82,8 +82,12 @@ Top-level missing data:
 
 Top-level conversions:
 
-* :func:`pandas.to_numeric` Input can be a Series.
-  Output requires type annotation. `errors='coerce'` required.
+* :func:`pandas.to_numeric` Input can be a Series or array.
+  Output type is float64 by default.
+  Unlike Pandas, Bodo does not dynamically determine output type,
+  and does not downcast to the smallest numerical type.
+  `downcast` parameter should be used for type annotation of output.
+  The `errors` argument is not supported currently (errors will be coerced by default).
 
 
 Top-level dealing with datetime like:

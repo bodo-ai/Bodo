@@ -164,9 +164,8 @@ class UntypedPass:
                     isinstance(val_def, ir.Global)
                     and isinstance(val_def.value, pytypes.ModuleType)
                     and val_def.value == pd
-                    and rhs.attr in ("read_csv", "read_parquet", "to_numeric")
+                    and rhs.attr in ("read_csv", "read_parquet")
                 ):
-                    # TODO: implement to_numeric in typed pass?
                     # put back the definition removed earlier but remove node
                     # enables function matching without node in IR
                     self.func_ir._definitions[lhs].append(rhs)
@@ -392,9 +391,6 @@ class UntypedPass:
 
         if fdef == ("concat", "pandas"):
             return self._handle_concat(assign, lhs, rhs, label)
-
-        if fdef == ("to_numeric", "pandas"):
-            return self._handle_pd_to_numeric(assign, lhs, rhs)
 
         if fdef == ("fromfile", "numpy"):
             return bodo.io.np_io._handle_np_fromfile(assign, lhs, rhs)
@@ -1002,34 +998,6 @@ class UntypedPass:
 
         # pd.Series() is handled in typed pass now
         return [assign]
-
-    def _handle_pd_to_numeric(self, assign, lhs, rhs):
-        """transform pd.to_numeric(A, errors='coerce') call here since dtype
-        has to be specified in locals and applied
-        """
-        kws = dict(rhs.kws)
-        if (
-            "errors" not in kws
-            or guard(find_const, self.func_ir, kws["errors"]) != "coerce"
-        ):
-            raise ValueError("pd.to_numeric() only supports errors='coerce'")
-
-        if (
-            lhs.name not in self.reverse_copies
-            or (self.reverse_copies[lhs.name]) not in self.locals
-        ):
-            raise ValueError("pd.to_numeric() requires annotation of output type")
-
-        typ = self.locals.pop(self.reverse_copies[lhs.name])
-        dtype = numba.numpy_support.as_dtype(typ.dtype)
-        arg = rhs.args[0]
-
-        return compile_func_single_block(
-            lambda arr: bodo.hiframes.series_impl.to_numeric(arr, _dtype),
-            [arg],
-            lhs,
-            extra_globals={"_dtype": dtype},
-        )
 
     def _handle_pq_read_table(self, assign, lhs, rhs):
         if len(rhs.args) != 1:  # pragma: no cover

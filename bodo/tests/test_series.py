@@ -1831,6 +1831,23 @@ def test_series_np_where_num():
     check_func(test_impl2, (S, 12, cond))
 
 
+@pytest.mark.parametrize(
+    "value, downcast",
+    [
+        (pd.Series(["1.4", "2.3333", None, "1.22", "555.1"]), "float"),
+        (pd.Series([1, 2, 9, 11, 3]), "integer"),
+        (pd.Series(["1", "3", None, "12", "-555"]), "integer"),
+        (pd.Series(["1", "3", None, "12", "555"]), "unsigned"),
+    ],
+)
+def test_to_numeric(value, downcast):
+    def test_impl(S):
+        B = pd.to_numeric(S, errors="coerce", downcast=downcast)
+        return B
+
+    check_func(test_impl, (value,), check_dtype=False)
+
+
 ############################### old tests ###############################
 
 
