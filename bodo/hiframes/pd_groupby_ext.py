@@ -245,7 +245,7 @@ class GetItemDataFrameGroupBy(AbstractTemplate):
             if isinstance(idx, (tuple, list)):
                 assert all(isinstance(c, str) for c in idx)
                 if len(set(idx).difference(set(grpby.df_type.columns))) > 0:
-                    raise BodoError(
+                    raise_const_error(
                         "groupby: selected column {} not found in dataframe".format(
                             set(idx).difference(set(grpby.df_type.columns))
                         )
@@ -253,7 +253,7 @@ class GetItemDataFrameGroupBy(AbstractTemplate):
                 selection = idx
             elif isinstance(idx, str):
                 if idx not in grpby.df_type.columns:
-                    raise BodoError(
+                    raise_const_error(
                         "groupby: selected column {} not found in dataframe".format(idx)
                     )
                 selection = (idx,)
@@ -454,7 +454,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
             # make sure selected columns exist in dataframe
             if any(c not in grp.selection for c in col_map.keys()):
-                raise BodoError(
+                raise_const_error(
                     "Selected column names {} not all available in dataframe column names {}".format(
                         tuple(col_map.keys()), grp.selection
                     )
@@ -636,7 +636,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     def generic_resolve(self, grpby, attr):
         if attr not in grpby.df_type.columns:
-            raise BodoError(
+            raise_const_error(
                 "groupby: invalid attribute {} (column not found in dataframe or unsupported function)".format(
                     attr
                 )
