@@ -12,7 +12,7 @@ import numpy as np
 import numba
 from numba.core import ir, ir_utils, postproc, types
 from bodo.utils.typing import list_cumulative
-from numba.ir_utils import (
+from numba.core.ir_utils import (
     mk_unique_var,
     replace_vars_inner,
     find_topo_order,
@@ -39,6 +39,8 @@ from numba.ir_utils import (
     remove_dead_extensions,
     has_no_side_effect,
     analysis,
+    rename_labels,
+    simplify,
 )
 from numba.parfor import (
     get_parfor_reductions,
@@ -46,7 +48,7 @@ from numba.parfor import (
     wrap_parfor_blocks,
     unwrap_parfor_blocks,
 )
-from numba.parfor import Parfor, lower_parfor_sequential
+from numba.parfors.parfor import Parfor, _lower_parfor_sequential_block
 import numpy as np
 
 import bodo
@@ -184,8 +186,6 @@ class DistributedPass:
             _parfor_ids = get_parfor_params(
                 self.func_ir.blocks, True, defaultdict(list)
             )
-        post_proc = postproc.PostProcessor(self.func_ir)
-        post_proc.run()
 
         # save data for debug and test
         global dist_analysis, fir_text
@@ -2642,6 +2642,33 @@ def find_available_vars(blocks, cfg, init_avail=None):
             in_avail_vars[label] |= var_def_map[d]
 
     return in_avail_vars
+
+
+# copied from Numba and modified to avoid ir.Del generation, which is invalid in 0.49
+# https://github.com/numba/numba/blob/1ea770564cb3c0c6cb9d8ab92e7faf23cd4c4c19/numba/parfors/parfor.py#L3050
+def lower_parfor_sequential(typingctx, func_ir, typemap, calltypes):
+    ir_utils._max_label = max(
+        ir_utils._max_label, ir_utils.find_max_label(func_ir.blocks)
+    )
+    parfor_found = False
+    new_blocks = {}
+    for (block_label, block) in func_ir.blocks.items():
+        block_label, parfor_found = _lower_parfor_sequential_block(
+            block_label, block, new_blocks, typemap, calltypes, parfor_found
+        )
+        # old block stays either way
+        new_blocks[block_label] = block
+    func_ir.blocks = new_blocks
+    # rename only if parfor found and replaced (avoid test_flow_control error)
+    if parfor_found:
+        func_ir.blocks = rename_labels(func_ir.blocks)
+    dprint_func_ir(func_ir, "after parfor sequential lowering")
+    simplify(func_ir, typemap, calltypes)
+    dprint_func_ir(func_ir, "after parfor sequential simplify")
+    # changed from Numba code: comment out id.Del generation that causes errors in 0.49
+    # # add dels since simplify removes dels
+    # post_proc = postproc.PostProcessor(func_ir)
+    # post_proc.run(True)
 
 
 # replaces remove_dead_block of Numba to add Bodo optimization (e.g. replace dead array
