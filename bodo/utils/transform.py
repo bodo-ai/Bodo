@@ -973,3 +973,20 @@ numba.types.functions.BoundFunction.get_call_type = get_call_type2
 # see https://github.com/numba/numba/issues/5515
 # TODO: remove when Numba is fixed
 numba.parfors.array_analysis.ArrayAnalysis.copy = lambda self: self
+
+
+# replace string_from_string_and_size since Numba 0.49 removes python 2.7 symbol support
+# leading to a bug in this function
+# https://github.com/numba/numba/blob/1ea770564cb3c0c6cb9d8ab92e7faf23cd4c4c19/numba/core/pythonapi.py#L1102
+# TODO: remove when Numba is fixed
+def string_from_string_and_size(self, string, size):
+    from llvmlite.llvmpy.core import Type
+    fnty = Type.function(self.pyobj, [self.cstring, self.py_ssize_t])
+    # replace PyString_FromStringAndSize with PyUnicode_FromStringAndSize of Python 3
+    # fname = "PyString_FromStringAndSize"
+    fname = "PyUnicode_FromStringAndSize"
+    fn = self._get_function(fnty, name=fname)
+    return self.builder.call(fn, [string, size])
+
+
+numba.core.pythonapi.PythonAPI.string_from_string_and_size = string_from_string_and_size
