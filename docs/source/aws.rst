@@ -44,8 +44,9 @@ recommended for production usage due to security, performance and other consider
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
-    conda create -n Bodo -c bodo.ai -c conda-forge bodo
+    conda create -n Bodo python
     source activate Bodo
+    conda install bodo h5py scipy hdf5=*=*mpich* -c file:///path-to-bodo-package/bodo-inc/ -c conda-forge
 
 
 4. Copy the `Pi example <https://github.com/IntelLabs/bodo#example>`_ to a file called pi.py in the home directory of

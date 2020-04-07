@@ -17,7 +17,7 @@ dependencies (replace path-to-bodo-package)::
 
     conda create -n Bodo python
     source activate Bodo
-    conda install bodo h5py scipy hdf5=*=*mpich* -c file:///path-to-bodo-package/bodo-inc/ -c bodo.ai -c conda-forge
+    conda install bodo h5py scipy hdf5=*=*mpich* -c file:///path-to-bodo-package/bodo-inc/ -c conda-forge
 
 Bodo uses `MPI <https://en.wikipedia.org/wiki/Message_Passing_Interface>`_ for parallelization,
 which is automatically installed as part of
