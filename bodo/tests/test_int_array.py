@@ -220,7 +220,8 @@ def test_shape():
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1]
+    # avoiding isnat since only supported for datetime/timedelta
+    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat]
 )
 def test_unary_ufunc(ufunc):
     def test_impl(A):

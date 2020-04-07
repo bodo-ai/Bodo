@@ -869,7 +869,7 @@ def test_series_unary_op(op):
 
 
 def test_series_ufunc():
-    ufunc = list(numba.np.ufunc_db.get_ufuncs())[0]
+    ufunc = np.negative
 
     def test_impl(S):
         return ufunc(S)
@@ -880,7 +880,8 @@ def test_series_ufunc():
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1]
+    # avoiding isnat since only supported for datetime/timedelta
+    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat]
 )
 def test_series_unary_ufunc(ufunc):
     def test_impl(S):
