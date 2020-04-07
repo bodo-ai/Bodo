@@ -530,7 +530,7 @@ def _dummy_convert_none_to_int(val):
     if is_overload_none(val):
 
         def impl(val):  # pragma: no cover
-            assert 0
+            # assert 0  # fails to compile in Numba 0.49 (test_pd_date_range)
             return 0
 
         return impl
@@ -610,10 +610,12 @@ def pd_date_range_overload(
                 b = start_t.value
                 e = b + (end_t.value - b) // stride * stride + stride // 2 + 1
             elif start is not None:
+                periods = _dummy_convert_none_to_int(periods)
                 b = start_t.value
                 addend = np.int64(periods) * np.int64(stride)
                 e = np.int64(b) + addend
             elif end is not None:
+                periods = _dummy_convert_none_to_int(periods)
                 e = end_t.value + stride
                 addend = np.int64(periods) * np.int64(-stride)
                 b = np.int64(e) + addend
