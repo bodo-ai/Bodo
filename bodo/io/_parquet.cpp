@@ -70,6 +70,8 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
     m = PyModule_Create(&moduledef);
     if (m == NULL) return NULL;
 
+    bodo_common_init();
+
     PyObject_SetAttrString(m, "get_arrow_readers",
                            PyLong_FromVoidPtr((void *)(&get_arrow_readers)));
     PyObject_SetAttrString(m, "del_arrow_readers",
@@ -220,7 +222,7 @@ int64_t pq_read(FileReaderVec *readers, int64_t column_idx, uint8_t *out_data,
 
     if (readers->size() > 1) {
         // std::cout << "pq path is dir" << '\n';
-        int dtype_size = pq_type_sizes[out_dtype];
+        int dtype_size = numpy_item_size[out_dtype];
 
         int64_t num_vals = 0;  // number of values read so for
         for (size_t i = 0; i < readers->size(); i++) {
@@ -268,7 +270,7 @@ int pq_read_parallel(FileReaderVec *readers, int64_t column_idx,
                 pq_get_size_single_file(readers->at(file_ind), column_idx);
         }
 
-        int dtype_size = pq_type_sizes[out_dtype];
+        int dtype_size = numpy_item_size[out_dtype];
         // std::cout << "dtype_size: " << dtype_size << '\n';
 
         // read data

@@ -263,11 +263,7 @@ def test_pq_nullable_int_single(datapath):
     def test_impl():
         return pd.read_parquet(fname)
 
-    try:
-        bodo.io.parquet_pio.use_nullable_int_arr = True
-        check_func(test_impl, (), check_dtype=False)
-    finally:
-        bodo.io.parquet_pio.use_nullable_int_arr = False
+    check_func(test_impl, (), check_dtype=False)
 
 
 def test_pq_nullable_int_multi(datapath):
@@ -277,11 +273,7 @@ def test_pq_nullable_int_multi(datapath):
     def test_impl():
         return pd.read_parquet(fname)
 
-    try:
-        bodo.io.parquet_pio.use_nullable_int_arr = True
-        check_func(test_impl, (), check_dtype=False)
-    finally:
-        bodo.io.parquet_pio.use_nullable_int_arr = False
+    check_func(test_impl, (), check_dtype=False)
 
 
 def test_pq_bool_with_nulls(datapath):
@@ -422,9 +414,12 @@ def clean_pq_files(mode, pandas_pq_path, bodo_pq_path):
         shutil.rmtree(bodo_pq_path, ignore_errors=True)
 
 
-def test_write_parquet():
+def test_read_write_parquet():
     def write(df, filename):
         df.to_parquet(filename)
+
+    def read():
+        return pd.read_parquet("_test_io___.pq")
 
     def pandas_write(df, filename):
         # pandas/pyarrow throws this error when writing datetime64[ns]:
@@ -590,6 +585,19 @@ def test_write_parquet():
                 # cleanup
                 clean_pq_files(mode, pandas_pq_filename, bodo_pq_filename)
                 bodo.barrier()
+
+    for write_index in [None, "string", "numeric"]:
+        try:
+            df = gen_dataframe(NUM_ELEMS, write_index)
+            # to test equality, we have to coerce datetime columns to ms
+            # because pandas writes to parquet as datetime64[ms]
+            df[df._datetime_col] = df[df._datetime_col].astype("datetime64[ms]")
+            if bodo.get_rank() == 0:
+                df.to_parquet("_test_io___.pq")
+            bodo.barrier()
+            check_func(read, (), sort_output=False, check_names=True, check_dtype=False)
+        finally:
+            clean_pq_files("none", "_test_io___.pq", "_test_io___.pq")
 
     def error_check1(df):
         df.to_parquet("out.parquet", partition_cols=["col1"])

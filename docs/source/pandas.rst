@@ -605,13 +605,3 @@ For example, this code reads column `A` into a nullable integer array
         dtype=dtype,
     )
     ...
-
-Bodo can use nullable integer arrays when reading Parquet files if
-the `bodo.io.parquet_pio.use_nullable_int_arr` flag is set by the user.
-For example::
-
-  bodo.io.parquet_pio.use_nullable_int_arr = True
-  @bodo.jit
-  def example(fname):
-    df = pd.read_parquet(fname)
-    ...

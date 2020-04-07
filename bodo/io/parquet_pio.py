@@ -40,26 +40,11 @@ import bodo.ir.parquet_ext
 from bodo.transforms import distributed_pass
 from bodo.utils.transform import get_str_const_value
 from numba.extending import intrinsic
+from collections import defaultdict
 
 
-# TODO: remove this and use our own C types
-# from parquet/types.h
-# boolean, int32, int64, int96, float, double, byte
-# XXX arrow converts int96 timestamp to int64
-_type_to_pq_dtype_number = {
-    "np.bool_": 0,
-    "np.int32": 1,
-    "np.int64": 2,
-    "np.int96": 3,
-    "np.float32": 4,
-    "np.float64": 5,
-    "NS_DTYPE": 3,
-    "np.int8": 6,
-    "int128": 7,
-}
-
-
-use_nullable_int_arr = False
+# read Arrow Int columns as nullable int array (IntegerArrayType)
+use_nullable_int_arr = True
 
 
 def read_parquet():  # pragma: no cover
@@ -295,11 +280,11 @@ def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
         func_text += _gen_alloc(c_type, cname, alloc_size, el_type)
         if is_parallel:
             func_text += "  status = read_parquet_parallel(arrow_readers, {0}, {1}, np.int32({2}), {1}_start, {1}_count)\n".format(
-                c_ind, cname, _type_to_pq_dtype_number[el_type]
+                c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.dtype)
             )
         else:
             func_text += "  status = read_parquet(arrow_readers, {}, {}, np.int32({}))\n".format(
-                c_ind, cname, _type_to_pq_dtype_number[el_type]
+                c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.dtype)
             )
 
     return func_text
@@ -332,7 +317,6 @@ def get_element_type(dtype):
         # NS_DTYPE has to be defined in function globals
         return "NS_DTYPE"
 
-    # TODO: refactor _type_to_pq_dtype_number and remove this
     if isinstance(dtype, Decimal128Type):
         return "int128"
 
@@ -346,7 +330,7 @@ def get_element_type(dtype):
     return "np." + out
 
 
-def _get_numba_typ_from_pa_typ(pa_typ, is_index):
+def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
     import pyarrow as pa
 
     # TODO: comparing list(string) type using pa_typ.type == pa.list_(pa.string())
@@ -399,9 +383,15 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index):
     if dtype == types.bool_:
         arr_typ = boolean_array
 
+    if nullable_from_metadata is not None:
+        # do what metadata says
+        _use_nullable_int_arr = nullable_from_metadata
+    else:
+        # use our global default
+        _use_nullable_int_arr = use_nullable_int_arr
     # TODO: support nullable int for indices
     if (
-        use_nullable_int_arr
+        _use_nullable_int_arr
         and not is_index
         and isinstance(dtype, types.Integer)
         and pa_typ.nullable
@@ -545,6 +535,8 @@ def parquet_file_schema(file_name, selected_columns):
     # TODO: other pandas metadata like dtypes needed?
     # https://pandas.pydata.org/pandas-docs/stable/development/developer.html
     index_col = None
+    # column_name -> is_nullable (or None if unknown)
+    nullable_from_metadata = defaultdict(lambda: None)
     key = b"pandas"
     if pa_schema.metadata is not None and key in pa_schema.metadata:
         import json
@@ -560,6 +552,14 @@ def parquet_file_schema(file_name, selected_columns):
             not isinstance(index_col, dict) or len(pq_dataset.pieces) != 1
         ):
             index_col = None
+
+        for col_dict in pandas_metadata["columns"]:
+            col_name = col_dict["name"]
+            if col_dict["pandas_type"].startswith("int"):
+                if col_dict["numpy_type"].startswith("Int"):
+                    nullable_from_metadata[col_name] = True
+                else:
+                    nullable_from_metadata[col_name] = False
 
     # handle column selection if available
     col_indices = list(range(len(col_names)))
@@ -579,7 +579,7 @@ def parquet_file_schema(file_name, selected_columns):
         col_names = selected_columns
 
     col_types = [
-        _get_numba_typ_from_pa_typ(pa_schema.field(c), c == index_col)
+        _get_numba_typ_from_pa_typ(pa_schema.field(c), c == index_col, nullable_from_metadata[c])
         for c in col_names
     ]
     # TODO: close file?

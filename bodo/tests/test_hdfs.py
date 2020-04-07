@@ -53,11 +53,7 @@ def test_hdfs_pq_int_nulls_multi(datapath, hdfs_datapath):
     fname = datapath("int_nulls_multi.pq")
     py_output = pd.read_parquet(fname)
 
-    try:
-        bodo.io.parquet_pio.use_nullable_int_arr = True
-        check_func(test_impl, (hdfs_fname,), py_output=py_output, check_dtype=False)
-    finally:
-        bodo.io.parquet_pio.use_nullable_int_arr = False
+    check_func(test_impl, (hdfs_fname,), py_output=py_output, check_dtype=False)
 
 
 def test_csv_data1(datapath, hdfs_datapath):

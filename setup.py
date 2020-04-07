@@ -296,7 +296,10 @@ ext_csv = Extension(
 
 ext_parquet = Extension(
     name="bodo.io.parquet_cpp",
-    sources=["bodo/io/_writer.cpp", "bodo/io/_parquet.cpp", "bodo/io/_parquet_reader.cpp"],
+    sources=["bodo/io/_writer.cpp",
+             "bodo/io/_parquet.cpp",
+             "bodo/io/_parquet_reader.cpp",
+             "bodo/libs/_bodo_common.cpp"],
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/io/_writer.h",

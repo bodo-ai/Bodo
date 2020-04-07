@@ -21,6 +21,7 @@
 #include "parquet/api/reader.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/arrow/schema.h"
+#include "../libs/_bodo_common.h"
 
 using arrow::Type;
 using parquet::ParquetFileReader;
@@ -30,8 +31,8 @@ void pack_null_bitmap(uint8_t** out_nulls, std::vector<bool>& null_vec,
                       int64_t n_all_vals);
 std::shared_ptr<arrow::DataType> get_arrow_type(
     std::shared_ptr<FileReader> arrow_reader, int64_t column_idx);
-bool arrowPqTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
-                       ::parquet::Type::type pq_type);
+bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
+                         Bodo_CTypes::CTypeEnum pq_type);
 inline void copy_data(uint8_t* out_data, const uint8_t* buff,
                       int64_t rows_to_skip, int64_t rows_to_read,
                       std::shared_ptr<arrow::DataType> arrow_type,
@@ -56,13 +57,6 @@ typedef void (*hdfs_open_file_t)(
 
 #define PQ_DT64_TYPE 3  // using INT96 value as dt64, TODO: refactor
 #define kNanosecondsInDay 86400000000000LL  // TODO: reuse from type_traits.h
-
-// TODO: use arrow's call
-static inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
-    bits[i / 8] ^=
-        static_cast<uint8_t>(-static_cast<uint8_t>(bit_is_set) ^ bits[i / 8]) &
-        ::arrow::BitUtil::kBitmask[i % 8];
-}
 
 inline void copy_nulls(uint8_t* out_nulls, const uint8_t* null_bitmap_buff,
                        int64_t skip, int64_t num_values, int64_t null_offset) {
@@ -137,7 +131,7 @@ int pq_read_parallel_single_file(std::shared_ptr<FileReader> arrow_reader,
     int64_t nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
     std::shared_ptr<arrow::DataType> arrow_type =
         get_arrow_type(arrow_reader, column_idx);
-    int dtype_size = pq_type_sizes[out_dtype];
+    int dtype_size = numpy_item_size[out_dtype];
 
     // skip whole row groups if no need to read any rows
     while (start - skipped_rows >= nrows_in_group) {
@@ -191,7 +185,6 @@ int pq_read_parallel_single_file(std::shared_ptr<FileReader> arrow_reader,
     return 0;
 }
 
-
 // copied from Arrow since not in exported APIs
 // https://github.com/apache/arrow/blob/329c9944554ddb142b0a2ac26a4abdf477636e37/cpp/src/arrow/python/datetime.cc#L150
 // Extracts the month and year and day number from a number of days
@@ -216,7 +209,6 @@ static void get_date_from_days(int64_t days, int64_t* date_year, int64_t* date_m
   return;
 }
 
-
 /**
  * @brief copy date32 data into our packed datetime.date arrays
  *
@@ -236,7 +228,6 @@ inline void copy_data_dt32(uint64_t* out_data, const int32_t* buff,
     }
 }
 
-
 template <typename T_in, typename T_out>
 inline void copy_data_cast(uint8_t* out_data, const uint8_t* buff,
                            int64_t rows_to_skip, int64_t rows_to_read,
@@ -253,64 +244,13 @@ inline void copy_data_dispatch(uint8_t* out_data, const uint8_t* buff,
                                int64_t rows_to_skip, int64_t rows_to_read,
                                std::shared_ptr<arrow::DataType> arrow_type,
                                int out_dtype) {
-    // TODO: rewrite in macros?
-    // TODO: convert boolean
-    // input is int32
-    if (arrow_type->id() == Type::INT32) {
-        if (out_dtype == 2)
-            copy_data_cast<int, int64_t>(out_data, buff, rows_to_skip,
-                                         rows_to_read, arrow_type, out_dtype);
-        if (out_dtype == 4)
-            copy_data_cast<int, float>(out_data, buff, rows_to_skip,
-                                       rows_to_read, arrow_type, out_dtype);
-        if (out_dtype == 5)
-            copy_data_cast<int, double>(out_data, buff, rows_to_skip,
-                                        rows_to_read, arrow_type, out_dtype);
-    }
-    // input is int64
-    if (arrow_type->id() == Type::INT64) {
-        if (out_dtype == 1)
-            copy_data_cast<int64_t, int>(out_data, buff, rows_to_skip,
-                                         rows_to_read, arrow_type, out_dtype);
-        if (out_dtype == 4)
-            copy_data_cast<int64_t, float>(out_data, buff, rows_to_skip,
-                                           rows_to_read, arrow_type, out_dtype);
-        if (out_dtype == 5)
-            copy_data_cast<int64_t, double>(out_data, buff, rows_to_skip,
-                                            rows_to_read, arrow_type,
-                                            out_dtype);
-    }
-    // input is float
-    if (arrow_type->id() == Type::FLOAT) {
-        if (out_dtype == 1)
-            copy_data_cast<float, int>(out_data, buff, rows_to_skip,
-                                       rows_to_read, arrow_type, out_dtype);
-        if (out_dtype == 2)
-            copy_data_cast<float, int64_t>(out_data, buff, rows_to_skip,
-                                           rows_to_read, arrow_type, out_dtype);
-        if (out_dtype == 5)
-            copy_data_cast<float, double>(out_data, buff, rows_to_skip,
-                                          rows_to_read, arrow_type, out_dtype);
-    }
-    // input is double
-    if (arrow_type->id() == Type::DOUBLE) {
-        if (out_dtype == 1)
-            copy_data_cast<double, int>(out_data, buff, rows_to_skip,
-                                        rows_to_read, arrow_type, out_dtype);
-        if (out_dtype == 2)
-            copy_data_cast<double, int64_t>(out_data, buff, rows_to_skip,
-                                            rows_to_read, arrow_type,
-                                            out_dtype);
-        if (out_dtype == 4)
-            copy_data_cast<double, float>(out_data, buff, rows_to_skip,
-                                          rows_to_read, arrow_type, out_dtype);
-    }
     // read date32 values into datetime.date arrays, default from Arrow >= 0.13
-    if (arrow_type->id() == Type::DATE32 && out_dtype == 1) {
-        copy_data_dt32((uint64_t*)out_data, (int32_t*)buff, rows_to_skip, rows_to_read);
+    if (arrow_type->id() == Type::DATE32 && out_dtype == Bodo_CTypes::DATE) {
+        copy_data_dt32((uint64_t*)out_data, (int32_t*)buff, rows_to_skip,
+                       rows_to_read);
     }
     // datetime64 cases
-    if (out_dtype == PQ_DT64_TYPE) {
+    else if (out_dtype == Bodo_CTypes::DATETIME) {
         // similar to arrow_to_pandas.cc
         if (arrow_type->id() == Type::DATE32) {
             // days since epoch
@@ -346,6 +286,9 @@ inline void copy_data_dispatch(uint8_t* out_data, const uint8_t* buff,
             std::cerr << "Invalid datetime conversion" << out_dtype << " "
                       << arrow_type << std::endl;
         }
+    } else {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "parquet read: invalid dtype conversion");
     }
 }
 
@@ -354,7 +297,7 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
                       std::shared_ptr<arrow::DataType> arrow_type,
                       const uint8_t* null_bitmap_buff, int out_dtype) {
     // unpack booleans from bits
-    if (out_dtype == 0) {
+    if (out_dtype == Bodo_CTypes::_BOOL) {
         if (arrow_type->id() != Type::BOOL)
             std::cerr << "boolean type error" << '\n';
 
@@ -365,8 +308,8 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
         return;
     }
 
-    if (arrowPqTypesEqual(arrow_type, (parquet::Type::type)out_dtype)) {
-        int dtype_size = pq_type_sizes[out_dtype];
+    if (arrowBodoTypesEqual(arrow_type, (Bodo_CTypes::CTypeEnum)out_dtype)) {
+        int dtype_size = numpy_item_size[out_dtype];
         // fast path if no conversion required
         memcpy(out_data, buff + rows_to_skip * dtype_size,
                rows_to_read * dtype_size);
@@ -375,7 +318,7 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
                            arrow_type, out_dtype);
     }
     // set NaNs for double values
-    if (null_bitmap_buff != nullptr && out_dtype == ::parquet::Type::DOUBLE) {
+    if (null_bitmap_buff != nullptr && out_dtype == Bodo_CTypes::FLOAT64) {
         double* double_data = (double*)out_data;
         for (int64_t i = 0; i < rows_to_read; i++) {
             if (!::arrow::BitUtil::GetBit(null_bitmap_buff, i + rows_to_skip)) {
@@ -385,7 +328,7 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
         }
     }
     // set NaNs for float values
-    if (null_bitmap_buff != nullptr && out_dtype == ::parquet::Type::FLOAT) {
+    if (null_bitmap_buff != nullptr && out_dtype == Bodo_CTypes::FLOAT32) {
         float* float_data = (float*)out_data;
         for (int64_t i = 0; i < rows_to_read; i++) {
             if (!::arrow::BitUtil::GetBit(null_bitmap_buff, i + rows_to_skip)) {
@@ -883,30 +826,33 @@ std::shared_ptr<arrow::DataType> get_arrow_type(
     return col_schema->field(column_idx)->type();
 }
 
-bool arrowPqTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
-                       ::parquet::Type::type pq_type) {
-    // TODO: remove parquet types, use Bodo Ctypes, handle more types
-    if (arrow_type->id() == Type::BOOL && pq_type == ::parquet::Type::BOOLEAN)
+bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
+                         Bodo_CTypes::CTypeEnum pq_type) {
+    if (arrow_type->id() == Type::BOOL && pq_type == Bodo_CTypes::_BOOL)
         return true;
-    if (arrow_type->id() == Type::UINT8 &&
-        pq_type == ::parquet::Type::BYTE_ARRAY)
+    if (arrow_type->id() == Type::UINT8 && pq_type == Bodo_CTypes::UINT8)
         return true;
-    if (arrow_type->id() == Type::INT8 &&
-        pq_type == ::parquet::Type::BYTE_ARRAY)
+    if (arrow_type->id() == Type::INT8 && pq_type == Bodo_CTypes::INT8)
         return true;
-    if (arrow_type->id() == Type::INT32 && pq_type == ::parquet::Type::INT32)
+    if (arrow_type->id() == Type::UINT16 && pq_type == Bodo_CTypes::UINT16)
         return true;
-    if (arrow_type->id() == Type::INT64 && pq_type == ::parquet::Type::INT64)
+    if (arrow_type->id() == Type::INT16 && pq_type == Bodo_CTypes::INT16)
         return true;
-    if (arrow_type->id() == Type::FLOAT && pq_type == ::parquet::Type::FLOAT)
+    if (arrow_type->id() == Type::UINT32 && pq_type == Bodo_CTypes::UINT32)
         return true;
-    if (arrow_type->id() == Type::DOUBLE && pq_type == ::parquet::Type::DOUBLE)
+    if (arrow_type->id() == Type::INT32 && pq_type == Bodo_CTypes::INT32)
         return true;
-    if (arrow_type->id() == Type::DECIMAL)
+    if (arrow_type->id() == Type::UINT64 && pq_type == Bodo_CTypes::UINT64)
         return true;
-    // XXX byte array is not always string?
-    if (arrow_type->id() == Type::STRING &&
-        pq_type == ::parquet::Type::BYTE_ARRAY)
+    if (arrow_type->id() == Type::INT64 && pq_type == Bodo_CTypes::INT64)
+        return true;
+    if (arrow_type->id() == Type::FLOAT && pq_type == Bodo_CTypes::FLOAT32)
+        return true;
+    if (arrow_type->id() == Type::DOUBLE && pq_type == Bodo_CTypes::FLOAT64)
+        return true;
+    if (arrow_type->id() == Type::DECIMAL && pq_type == Bodo_CTypes::DECIMAL)
+        return true;
+    if (arrow_type->id() == Type::STRING && pq_type == Bodo_CTypes::STRING)
         return true;
     // TODO: add timestamp[ns]
     return false;
