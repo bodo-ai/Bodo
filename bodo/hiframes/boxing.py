@@ -40,7 +40,7 @@ from bodo.hiframes.split_impl import (
     string_array_split_view_type,
     box_str_arr_split_view,
 )
-from bodo.utils.typing import BodoWarning
+from bodo.utils.typing import BodoWarning, BodoError
 
 from bodo.libs import hstr_ext
 from llvmlite import ir as lir
@@ -486,6 +486,9 @@ def _typeof_ndarray(val, c):
     try:
         dtype = numba.np.numpy_support.from_dtype(val.dtype)
     except NotImplementedError:
+        dtype = types.pyobject
+
+    if dtype == types.pyobject:
         dtype = _infer_ndarray_obj_dtype(val)
         if dtype == string_type:
             return string_array_type
@@ -497,7 +500,8 @@ def _typeof_ndarray(val, c):
             return datetime_date_array_type  # TODO: test array of datetime.date
         if isinstance(dtype, Decimal128Type):
             return DecimalArrayType(dtype.precision, dtype.scale)
-        raise ValueError("Unsupported array dtype: %s" % (val.dtype,))
+        raise BodoError("Unsupported array dtype: {}".format(val.dtype))  # pragma: no cover
+
     layout = numba.np.numpy_support.map_layout(val)
     readonly = not val.flags.writeable
     return types.Array(dtype, val.ndim, layout, readonly=readonly)
@@ -505,12 +509,12 @@ def _typeof_ndarray(val, c):
 
 def _infer_ndarray_obj_dtype(val):
     # strings only have object dtype, TODO: support fixed size np strings
-    if not val.dtype == np.dtype("O"):
-        return False
+    if not val.dtype == np.dtype("O"):  # pragma: no cover
+        raise BodoError("Unsupported array dtype: {}".format(val.dtype))
 
     # XXX assuming the whole array is strings if 1st val is string
     i = 0
-    while i < len(val) and (val[i] is np.nan or val[i] is None):
+    while i < len(val) and pd.isna(val[i]):
         i += 1
     if i == len(val):
         # empty or all NA object arrays are assumed to be strings
@@ -534,6 +538,8 @@ def _infer_ndarray_obj_dtype(val):
     if isinstance(first_val, decimal.Decimal):
         # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
         return Decimal128Type(38, 18)
+
+    raise BodoError("Unsupported object array with first value: {}".format(first_val))  # pragma: no cover
 
 
 # TODO: support array of strings
