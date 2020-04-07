@@ -373,14 +373,14 @@ def is_bool_object_series(S):
         S = S.values
     return (
         S.dtype == np.dtype("O")
-        and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(S) == numba.core.types.bool_
+        and bodo.hiframes.boxing._infer_ndarray_obj_dtype(S) == numba.core.types.bool_
     )
 
 
 def is_list_str_object_series(S):
     if isinstance(S, pd.Series):
         S = S.values
-    return S.dtype == np.dtype("O") and bodo.libs.str_arr_ext._infer_ndarray_obj_dtype(
+    return S.dtype == np.dtype("O") and bodo.hiframes.boxing._infer_ndarray_obj_dtype(
         S
     ) == numba.core.types.List(numba.core.types.unicode_type)
 
