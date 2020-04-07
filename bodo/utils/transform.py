@@ -126,6 +126,8 @@ no_side_effect_call_tuples = {
     (bodo.libs.distributed_api.dist_reduce,),
     ("pre_alloc_string_array", "str_arr_ext", "libs", bodo),
     (bodo.libs.str_arr_ext.pre_alloc_string_array,),
+    ("prange", bodo),
+    (bodo.prange),
 }
 
 
