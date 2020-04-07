@@ -4,7 +4,7 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, is_dtype_nullable
 import numba
 from numba import generated_jit, ir, ir_utils, typeinfer, types
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
@@ -746,7 +746,7 @@ def _gen_local_hash_join(
     def needs_typechange(in_type, need_nullable, is_same_key):
         return (
             isinstance(in_type, types.Array)
-            and not isinstance(in_type.dtype, types.Float)
+            and not is_dtype_nullable(in_type.dtype)
             and need_nullable
             and not is_same_key
         )
@@ -787,7 +787,7 @@ def _gen_local_hash_join(
     def get_out_type(idx, in_type, in_name, need_nullable, is_same_key):
         if (
             isinstance(in_type, types.Array)
-            and in_type.dtype not in (types.float32, types.float64)
+            and not is_dtype_nullable(in_type.dtype)
             and need_nullable
             and not is_same_key
         ):
@@ -1104,8 +1104,6 @@ def write_data_buff_overload(meta, node_id, i, key_arrs, data):
     )
     write_impl = loc_vars["f"]
     return write_impl
-
-
 
 
 import llvmlite.binding as ll

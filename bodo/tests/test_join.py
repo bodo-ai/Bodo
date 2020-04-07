@@ -113,6 +113,31 @@ def test_merge_suffixes_parenthesis():
     check_func(test_impl, (df1, df2), sort_output=True)
 
 
+def test_merge_join_datetime():
+    """
+    merging with some missing datetime and date.
+    ---Datetime requires its own handling.
+    ---Date can be considered as array of int64 without problems.
+    """
+
+    def test_impl(df1, df2):
+        df3 = df2.merge(df1, how="left")
+        return df3
+
+    siz = 10
+    datearr_1 = pd.date_range("2017-01-02", periods=siz)
+    datearr_2 = pd.date_range("2015-01-02", periods=siz)
+    timedelta_arr = datearr_1 - datearr_2
+    df1_timedelta = pd.DataFrame({"A": 1 + np.arange(siz), "B": timedelta_arr})
+    df1_datetime = pd.DataFrame({"A": 1 + np.arange(siz), "B": datearr_1})
+    df1_date = pd.DataFrame({"A": 1 + np.arange(siz), "B": datearr_1.date})
+    df2 = pd.DataFrame({"A": siz - 5 + np.arange(siz)})
+
+    check_func(test_impl, (df1_timedelta, df2), sort_output=True)
+    check_func(test_impl, (df1_datetime, df2), sort_output=True)
+    check_func(test_impl, (df1_date, df2), sort_output=True)
+
+
 def test_merge_left_right_index():
     """
     Test merge(): merging on index and use of suffices on output.

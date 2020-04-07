@@ -41,6 +41,7 @@ from bodo.utils.typing import (
     is_overload_constant_bool,
     is_overload_constant_str,
     is_overload_constant_str_list,
+    is_dtype_nullable,
     ConstDictType,
     get_overload_const_func,
     get_overload_const_str,
@@ -590,7 +591,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
     def resolve_std(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "std")
 
-    def resolve_cumulative(self, grp, args, kws, msg):
+    def resolve_cumulative(self, grp, args, kws, msg, is_minmax):
+        """For datetime and timedelta datatypes, we can support cummin / cummax,
+        but not cumsum / cumprod. Hence the is_minmax entry"""
         index = grp.df_type.index
         out_columns = []
         out_data = []
@@ -598,10 +601,14 @@ class DataframeGroupByAttribute(AttributeTemplate):
             out_columns.append(c)
             ind = grp.df_type.columns.index(c)
             data = grp.df_type.data[ind]
-            if not isinstance(data.dtype, types.Integer) and not isinstance(
-                data.dtype, types.Float
-            ):
-                raise BodoError(msg)
+            if not is_minmax:
+                if not isinstance(data.dtype, (types.Integer, types.Float)):
+                    raise BodoError(msg)
+            else:
+                if not isinstance(data.dtype, types.Integer) and not is_dtype_nullable(
+                    data.dtype
+                ):
+                    raise BodoError(msg)
             out_data.append(data)
         out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
         # XXX output becomes series if single output and explicitly selected
@@ -616,23 +623,23 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.cumsum")
     def resolve_cumsum(self, grp, args, kws):
-        msg = "Groupby.cumsum() only supports columns of types integer and float"
-        return self.resolve_cumulative(grp, args, kws, msg)
+        msg = "Groupby.cumsum() only supports columns of types integer, float, string or liststring"
+        return self.resolve_cumulative(grp, args, kws, msg, False)
 
     @bound_function("groupby.cumprod")
     def resolve_cumprod(self, grp, args, kws):
         msg = "Groupby.cumprod() only supports columns of types integer and float"
-        return self.resolve_cumulative(grp, args, kws, msg)
+        return self.resolve_cumulative(grp, args, kws, msg, False)
 
     @bound_function("groupby.cummin")
     def resolve_cummin(self, grp, args, kws):
-        msg = "Groupby.cummin() only supports columns of types integer and float"
-        return self.resolve_cumulative(grp, args, kws, msg)
+        msg = "Groupby.cummin() only supports columns of types integer, float, string, liststring, date, datetime or timedelta"
+        return self.resolve_cumulative(grp, args, kws, msg, True)
 
     @bound_function("groupby.cummax")
     def resolve_cummax(self, grp, args, kws):
-        msg = "Groupby.cummax() only supports columns of types integer and float"
-        return self.resolve_cumulative(grp, args, kws, msg)
+        msg = "Groupby.cummax() only supports columns of types integer, float, string, liststring, date, datetime or timedelta"
+        return self.resolve_cumulative(grp, args, kws, msg, True)
 
     def generic_resolve(self, grpby, attr):
         if attr not in grpby.df_type.columns:

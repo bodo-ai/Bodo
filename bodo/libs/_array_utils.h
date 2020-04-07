@@ -96,6 +96,10 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
     if (dtype == Bodo_CTypes::UINT64) return GetTentry<uint64_t>(ptr);
     if (dtype == Bodo_CTypes::FLOAT32) return GetTentry<float>(ptr);
     if (dtype == Bodo_CTypes::FLOAT64) return GetTentry<double>(ptr);
+    if (dtype == Bodo_CTypes::DATE) return GetTentry<int64_t>(ptr);
+    if (dtype == Bodo_CTypes::DATETIME) return GetTentry<int64_t>(ptr);
+    if (dtype == Bodo_CTypes::TIMEDELTA) return GetTentry<int64_t>(ptr);
+    Bodo_PyErr_SetString(PyExc_RuntimeError, "Unsupported case in GetDoubleEntry");
     return 0;
 }
 
@@ -120,8 +124,12 @@ inline std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
     if (dtype == Bodo_CTypes::UINT32) return GetCharVector<uint32_t>(0);
     if (dtype == Bodo_CTypes::INT64) return GetCharVector<int64_t>(-1);
     if (dtype == Bodo_CTypes::UINT64) return GetCharVector<uint64_t>(0);
-    if (dtype == Bodo_CTypes::DATE) return GetCharVector<uint64_t>(0);
-    if (dtype == Bodo_CTypes::DATETIME) return GetCharVector<uint64_t>(0);
+    if (dtype == Bodo_CTypes::DATE) {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "In DATE case missing values are handled by NULLABLE_INT_BOOL so this case is impossible");
+    }
+    if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA)
+        return GetCharVector<int64_t>(std::numeric_limits<int64_t>::min());
     if (dtype == Bodo_CTypes::FLOAT32)
         return GetCharVector<float>(std::nanf("1"));
     if (dtype == Bodo_CTypes::FLOAT64)
@@ -230,7 +238,7 @@ inline bool TestEqual(std::vector<array_info*> const& columns,
  */
 template <typename T>
 inline typename std::enable_if<!std::is_floating_point<T>::value, int>::type
-NumericComparison_T(char* ptr1, char* ptr2, bool const& na_position) {
+NumericComparison_int(char* ptr1, char* ptr2, bool const& na_position) {
     T* ptr1_T = (T*)ptr1;
     T* ptr2_T = (T*)ptr2;
     if (*ptr1_T > *ptr2_T) return -1;
@@ -249,7 +257,7 @@ NumericComparison_T(char* ptr1, char* ptr2, bool const& na_position) {
  */
 template <typename T>
 inline typename std::enable_if<std::is_floating_point<T>::value, int>::type
-NumericComparison_T(char* ptr1, char* ptr2, bool const& na_position) {
+NumericComparison_float(char* ptr1, char* ptr2, bool const& na_position) {
     T* ptr1_T = (T*)ptr1;
     T* ptr2_T = (T*)ptr2;
     T val1 = *ptr1_T;
@@ -260,6 +268,40 @@ NumericComparison_T(char* ptr1, char* ptr2, bool const& na_position) {
         return -1;
     }
     if (isnan(val1)) {
+        if (na_position) return -1;
+        return 1;
+    }
+    if (val1 > val2) return -1;
+    if (val1 < val2) return 1;
+    return 0;
+}
+
+/**
+ * The comparison function for dates
+ * If na_position = True then the NaN are considered larger than any other.
+ * The minimum values are considered to be missing values.
+ *
+ * @param ptr1: char* pointer to the first value
+ * @param ptr2: char* pointer to the second value
+ * @param na_position: true for NaN being larger, false for NaN being smallest
+ * @return 1 if *ptr1 < *ptr2
+ */
+template <typename T>
+inline typename std::enable_if<!std::is_floating_point<T>::value, int>::type
+NumericComparison_date(char* ptr1, char* ptr2, bool const& na_position) {
+    T* ptr1_T = (T*)ptr1;
+    T* ptr2_T = (T*)ptr2;
+    T val1 = *ptr1_T;
+    T val2 = *ptr2_T;
+    auto isnan_date=[&](T const& val) {
+      return val == std::numeric_limits<T>::min();
+    };
+    if (isnan_date(val1) && isnan_date(val2)) return 0;
+    if (isnan_date(val2)) {
+        if (na_position) return 1;
+        return -1;
+    }
+    if (isnan_date(val1)) {
         if (na_position) return -1;
         return 1;
     }
@@ -280,28 +322,31 @@ NumericComparison_T(char* ptr1, char* ptr2, bool const& na_position) {
 inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
                              char* ptr2, bool const& na_position) {
     if (dtype == Bodo_CTypes::_BOOL)
-        return NumericComparison_T<bool>(ptr1, ptr2, na_position);
+        return NumericComparison_int<bool>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::INT8)
-        return NumericComparison_T<int8_t>(ptr1, ptr2, na_position);
+        return NumericComparison_int<int8_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT8)
-        return NumericComparison_T<uint8_t>(ptr1, ptr2, na_position);
+        return NumericComparison_int<uint8_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::INT16)
-        return NumericComparison_T<int16_t>(ptr1, ptr2, na_position);
+        return NumericComparison_int<int16_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT16)
-        return NumericComparison_T<uint16_t>(ptr1, ptr2, na_position);
+        return NumericComparison_int<uint16_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::INT32)
-        return NumericComparison_T<int32_t>(ptr1, ptr2, na_position);
+        return NumericComparison_int<int32_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT32)
-        return NumericComparison_T<uint32_t>(ptr1, ptr2, na_position);
-    if (dtype == Bodo_CTypes::INT64)
-        return NumericComparison_T<int64_t>(ptr1, ptr2, na_position);
-    if (dtype == Bodo_CTypes::UINT64 || dtype == Bodo_CTypes::DATE ||
-        dtype == Bodo_CTypes::DATETIME)
-        return NumericComparison_T<uint64_t>(ptr1, ptr2, na_position);
+        return NumericComparison_int<uint32_t>(ptr1, ptr2, na_position);
+    // for DATE, the missing value is done via NULLABLE_INT_BOOL
+    if (dtype == Bodo_CTypes::INT64 || dtype == Bodo_CTypes::DATE)
+        return NumericComparison_int<int64_t>(ptr1, ptr2, na_position);
+    if (dtype == Bodo_CTypes::UINT64)
+        return NumericComparison_int<uint64_t>(ptr1, ptr2, na_position);
+    // For DATETIME and TIMEDELTA the NA is done via the std::numeric_limits<int64_t>::min()
+    if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA)
+        return NumericComparison_date<int64_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::FLOAT32)
-        return NumericComparison_T<float>(ptr1, ptr2, na_position);
+        return NumericComparison_float<float>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::FLOAT64)
-        return NumericComparison_T<double>(ptr1, ptr2, na_position);
+        return NumericComparison_float<double>(ptr1, ptr2, na_position);
     Bodo_PyErr_SetString(PyExc_RuntimeError,
                          "Invalid dtype put on input to NumericComparison");
     return 0;

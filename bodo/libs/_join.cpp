@@ -245,6 +245,9 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
                 RetrieveArray(in_table, ListPairWrite, n_tot_left + i, i, 2, map_integer_type));
         }
     }
+#ifdef DEBUG_JOIN
+    std::cout << "After optional_col construction optional_col=" << optional_col << "\n";
+#endif
     // Inserting the Left side of the table
     int idx=0;
     for (size_t i = 0; i < n_tot_left; i++) {
@@ -273,6 +276,9 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
         }
         idx++;
     }
+#ifdef DEBUG_JOIN
+    std::cout << "After left side construction\n";
+#endif
     // Inserting the right side of the table.
     for (size_t i = 0; i < n_tot_right; i++) {
         // There are two cases where we put the column in output:
@@ -290,6 +296,9 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
             idx++;
         }
     }
+#ifdef DEBUG_JOIN
+    std::cout << "After right side construction\n";
+#endif
 #ifdef DEBUG_JOIN
     std::cout << "hash_join_table, output information\n";
     DEBUG_PrintSetOfColumn(std::cout, out_arrs);

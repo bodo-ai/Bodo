@@ -26,6 +26,12 @@ import bodo
 
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
 
+
+def is_dtype_nullable(in_dtype):
+    """checks whether 'in_dtype' has sentinel NA values (as opposed to bitmap)"""
+    return isinstance(in_dtype, (types.Float, types.NPDatetime, types.NPTimedelta))
+
+
 class BodoError(BaseException):
     """Bodo error class that inherits from BaseException instead of Exception to avoid
     numba's error catching, which enables raising simpler error directly to the user.
@@ -48,7 +54,6 @@ class BodoNotConstError(Exception):
     Only used in partial typing pass to enable IR transformation. Inherits from regular
     Exception class for this purpose.
     """
-
 
 
 def raise_const_error(msg):
@@ -77,7 +82,6 @@ class BodoWarning(Warning):
     Warning class for Bodo-related potential issues such as prevention of
     parallelization by unsupported functions.
     """
-
 
 
 def is_overload_none(val):
@@ -375,7 +379,6 @@ def literal_bool_cast(context, builder, fromty, toty, val):
 class FunctionLiteral(types.Literal, types.Opaque):
     """Literal type for function objects (i.e. pytypes.FunctionType)
     """
-
 
 
 @typeof_impl.register(pytypes.FunctionType)

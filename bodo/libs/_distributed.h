@@ -327,10 +327,11 @@ static MPI_Datatype get_MPI_typ(int typ_enum) {
         case Bodo_CTypes::UINT32:
             return MPI_UNSIGNED;
         case Bodo_CTypes::INT64:
-            return MPI_LONG_LONG_INT;
-        case Bodo_CTypes::UINT64:
         case Bodo_CTypes::DATE:
         case Bodo_CTypes::DATETIME:
+        case Bodo_CTypes::TIMEDELTA:
+            return MPI_LONG_LONG_INT;
+        case Bodo_CTypes::UINT64:
             return MPI_UNSIGNED_LONG_LONG;
         case Bodo_CTypes::FLOAT32:
             return MPI_FLOAT;
@@ -356,9 +357,11 @@ static MPI_Datatype get_val_rank_MPI_typ(int typ_enum) {
     // printf("h5 type enum:%d\n", typ_enum);
     // XXX: LONG is used for int64, which doesn't work on Windows
     // XXX: LONG is used for uint64
-    if (typ_enum == Bodo_CTypes::DATE || typ_enum == Bodo_CTypes::DATETIME)
-        // treat date 64-bit values as uint64
-        typ_enum = Bodo_CTypes::UINT64;
+    if (typ_enum == Bodo_CTypes::DATE ||
+        typ_enum == Bodo_CTypes::DATETIME ||
+        typ_enum == Bodo_CTypes::TIMEDELTA)
+        // treat date 64-bit values as int64
+        typ_enum = Bodo_CTypes::INT64;
     if (typ_enum < 0 || typ_enum > 7) {
         std::cerr << "Invalid MPI_Type"
                   << "\n";

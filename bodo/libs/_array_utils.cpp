@@ -381,9 +381,14 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
         int64_t* ptr = (int64_t*)ptrdata;
         return std::to_string(*ptr);
     }
-    if (dtype == Bodo_CTypes::UINT64 || dtype == Bodo_CTypes::DATE ||
-        dtype == Bodo_CTypes::DATETIME) {
+    if (dtype == Bodo_CTypes::UINT64) {
         uint64_t* ptr = (uint64_t*)ptrdata;
+        return std::to_string(*ptr);
+    }
+    if (dtype == Bodo_CTypes::DATE ||
+        dtype == Bodo_CTypes::DATETIME ||
+        dtype == Bodo_CTypes::TIMEDELTA) {
+        int64_t* ptr = (int64_t*)ptrdata;
         return std::to_string(*ptr);
     }
     if (dtype == Bodo_CTypes::FLOAT32) {
@@ -494,6 +499,44 @@ void DEBUG_PrintSetOfColumn(std::ostream& os,
     for (int iRow = 0; iRow < nRowMax; iRow++) os << ListStrOut[iRow] << "\n";
 }
 
+
+std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype)
+{
+  if (dtype == Bodo_CTypes::INT8)
+    return "INT8";
+  if (dtype == Bodo_CTypes::UINT8)
+    return "UINT8";
+  if (dtype == Bodo_CTypes::INT16)
+    return "INT16";
+  if (dtype == Bodo_CTypes::UINT16)
+    return "UINT16";
+  if (dtype == Bodo_CTypes::INT32)
+    return "INT32";
+  if (dtype == Bodo_CTypes::UINT32)
+    return "UINT32";
+  if (dtype == Bodo_CTypes::INT64)
+    return "INT64";
+  if (dtype == Bodo_CTypes::UINT64)
+    return "UINT64";
+  if (dtype == Bodo_CTypes::FLOAT32)
+    return "FLOAT32";
+  if (dtype == Bodo_CTypes::FLOAT64)
+    return "FLOAT64";
+  if (dtype == Bodo_CTypes::STRING)
+    return "STRING";
+  if (dtype == Bodo_CTypes::_BOOL)
+    return "_BOOL";
+  if (dtype == Bodo_CTypes::DECIMAL)
+    return "DECIMAL";
+  if (dtype == Bodo_CTypes::DATE)
+    return "DATE";
+  if (dtype == Bodo_CTypes::DATETIME)
+    return "DATETIME";
+  if (dtype == Bodo_CTypes::TIMEDELTA)
+    return "TIMEDELTA";
+  return "unmatching dtype";
+}
+
 void DEBUG_PrintRefct(std::ostream& os,
                       std::vector<array_info*> const& ListArr) {
     int nCol = ListArr.size();
@@ -508,7 +551,7 @@ void DEBUG_PrintRefct(std::ostream& os,
     };
     for (int iCol = 0; iCol < nCol; iCol++) {
         os << "iCol=" << iCol << " : " << GetType(ListArr[iCol]->arr_type)
-           << " dtype=" << ListArr[iCol]->dtype
+           << " dtype=" << GetDtype_as_string(ListArr[iCol]->dtype)
            << " : meminfo=" << GetNRTinfo(ListArr[iCol]->meminfo)
            << " meminfo_bitmask=" << GetNRTinfo(ListArr[iCol]->meminfo_bitmask)
            << "\n";

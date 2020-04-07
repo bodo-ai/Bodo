@@ -2,6 +2,7 @@
 import pandas as pd
 import numpy as np
 import bodo
+import datetime
 from bodo.utils.typing import BodoError
 import pytest
 
@@ -79,9 +80,9 @@ def test_groupby_axis_default():
         bodo.jit(impl2)(df)
 
 
-
 def test_groupby_sum_date():
     """dates are currently not supported"""
+
     def impl(df):
         return df.groupby("A").sum()
 
@@ -90,10 +91,6 @@ def test_groupby_sum_date():
         BodoError, match="is not supported in groupby built-in function"
     ):
         bodo.jit(impl)(df1)
-
-
-
-
 
 
 def test_groupby_supply_level():
@@ -409,7 +406,8 @@ def test_groupby_cumsum_in_col_str():
 
     df = pd.DataFrame({"A": [1, 2, 2], "B": ["aa", "bb", "cc"]})
     with pytest.raises(
-        BodoError, match="only supports columns of types integer and float",
+        BodoError,
+        match="Groupby.cumsum.* only supports columns of types integer, float, string or liststring",
     ):
         bodo.jit(impl)(df)
 
@@ -424,7 +422,8 @@ def test_groupby_cumsum_col_type():
 
     df = pd.DataFrame({"A": [1, 2, 2], "B": [True, False, True]})
     with pytest.raises(
-        BodoError, match="only supports columns of types integer and float"
+        BodoError,
+        match="Groupby.cumsum.* only supports columns of types integer, float, string or liststring",
     ):
         bodo.jit(impl)(df)
 
@@ -522,3 +521,94 @@ def test_groupby_nunique_argument_check():
         bodo.jit(impl1)(df)
     with pytest.raises(BodoError, match="argument to nunique can only be dropna"):
         bodo.jit(impl2)(df)
+
+
+def test_groupby_datetimeoperation_checks():
+    """
+    Testing the operations which cannot be done for date / datetime / timedelta
+    """
+
+    def impl_sum(df):
+        return df.groupby("A")["B"].sum()
+
+    def impl_prod(df):
+        return df.groupby("A")["B"].prod()
+
+    def impl_cumsum(df):
+        return df.groupby("A")["B"].cumsum()
+
+    def impl_cumprod(df):
+        return df.groupby("A")["B"].cumprod()
+
+    siz = 10
+    datetime_arr_1 = pd.date_range("1917-01-01", periods=siz)
+    datetime_arr_2 = pd.date_range("2017-01-01", periods=siz)
+    timedelta_arr = datetime_arr_1 - datetime_arr_2
+    date_arr = datetime_arr_1.date
+    df1_datetime = pd.DataFrame({"A": np.arange(siz), "B": datetime_arr_1})
+    df1_date = pd.DataFrame({"A": np.arange(siz), "B": date_arr})
+    df1_timedelta = pd.DataFrame({"A": np.arange(siz), "B": timedelta_arr})
+    # Check for sums
+    with pytest.raises(
+        BodoError,
+        match="column type of datetime64.* is not supported in groupby built-in function sum",
+    ):
+        bodo.jit(impl_sum)(df1_datetime)
+    with pytest.raises(
+        BodoError,
+        match="column type of DatetimeDateType.* is not supported in groupby built-in function sum",
+    ):
+        bodo.jit(impl_sum)(df1_date)
+    with pytest.raises(
+        BodoError,
+        match="column type of timedelta64.* is not supported in groupby built-in function sum",
+    ):
+        bodo.jit(impl_sum)(df1_timedelta)
+    # checks for prod
+    with pytest.raises(
+        BodoError,
+        match="column type of datetime64.* is not supported in groupby built-in function prod",
+    ):
+        bodo.jit(impl_prod)(df1_datetime)
+    with pytest.raises(
+        BodoError,
+        match="column type of DatetimeDateType.* is not supported in groupby built-in function prod",
+    ):
+        bodo.jit(impl_prod)(df1_date)
+    with pytest.raises(
+        BodoError,
+        match="column type of timedelta64.* is not supported in groupby built-in function prod",
+    ):
+        bodo.jit(impl_prod)(df1_timedelta)
+    # checks for cumsum
+    with pytest.raises(
+        BodoError,
+        match="Groupby.cumsum.* only supports columns of types integer, float, string or liststring",
+    ):
+        bodo.jit(impl_cumsum)(df1_datetime)
+    with pytest.raises(
+        BodoError,
+        match="Groupby.cumsum.* only supports columns of types integer, float, string or liststring",
+    ):
+        bodo.jit(impl_cumsum)(df1_date)
+    with pytest.raises(
+        BodoError,
+        match="Groupby.cumsum.* only supports columns of types integer, float, string or liststring",
+    ):
+        bodo.jit(impl_cumsum)(df1_timedelta)
+    # checks for cumprod
+    with pytest.raises(
+        BodoError,
+        match="Groupby.cumprod.* only supports columns of types integer and float",
+    ):
+        bodo.jit(impl_cumprod)(df1_datetime)
+    with pytest.raises(
+        BodoError,
+        match="Groupby.cumprod.* only supports columns of types integer and float",
+    ):
+        bodo.jit(impl_cumprod)(df1_date)
+    with pytest.raises(
+        BodoError,
+        match="Groupby.cumprod.* only supports columns of types integer and float",
+    ):
+        bodo.jit(impl_cumprod)(df1_timedelta)

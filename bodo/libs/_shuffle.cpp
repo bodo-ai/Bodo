@@ -205,12 +205,16 @@ static void fill_send_array(array_info* send_arr, array_info* array,
         return fill_send_array_inner<int64_t>((int64_t*)send_arr->data1,
                                               (int64_t*)array->data1, hashes,
                                               send_disp, n_pes, n_rows);
-    if (array->dtype == Bodo_CTypes::UINT64 ||
-        array->dtype == Bodo_CTypes::DATE ||
-        array->dtype == Bodo_CTypes::DATETIME)
+    if (array->dtype == Bodo_CTypes::UINT64)
         return fill_send_array_inner<uint64_t>((uint64_t*)send_arr->data1,
                                                (uint64_t*)array->data1, hashes,
                                                send_disp, n_pes, n_rows);
+    if (array->dtype == Bodo_CTypes::DATE ||
+        array->dtype == Bodo_CTypes::DATETIME ||
+        array->dtype == Bodo_CTypes::TIMEDELTA)
+        return fill_send_array_inner<int64_t>((int64_t*)send_arr->data1,
+                                              (int64_t*)array->data1, hashes,
+                                              send_disp, n_pes, n_rows);
     if (array->dtype == Bodo_CTypes::FLOAT32)
         return fill_send_array_inner<float>((float*)send_arr->data1,
                                             (float*)array->data1, hashes,

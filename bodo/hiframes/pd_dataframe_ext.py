@@ -50,6 +50,7 @@ from bodo.utils.typing import (
     is_overload_true,
     is_overload_false,
     is_overload_zero,
+    is_dtype_nullable,
     get_overload_const_str,
     get_const_str_list,
     is_overload_bool_list,
@@ -81,6 +82,7 @@ _csv_write = types.ExternalFunction(
     types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.bool_),
 )
 ll.add_symbol("csv_write", csv_cpp.csv_write)
+
 
 class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column names
     """Temporary type class for DataFrame objects.
@@ -269,7 +271,6 @@ class DataFrameAttribute(AttributeTemplate):
                 new_names.append(v[1] if len(v) == 2 else v[1:])
                 new_data.append(df.data[i])
             return DataFrameType(tuple(new_data), df.index, tuple(new_names))
-
 
 
 def decref_df_data(context, builder, payload, df_type):
@@ -1590,7 +1591,7 @@ class JoinTyper(AbstractTemplate):
         def map_data_type(in_type, need_nullable):
             if (
                 isinstance(in_type, types.Array)
-                and not isinstance(in_type.dtype, types.Float)
+                and not is_dtype_nullable(in_type.dtype)
                 and need_nullable
             ):
                 return IntegerArrayType(in_type.dtype)

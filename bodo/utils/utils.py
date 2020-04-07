@@ -58,9 +58,10 @@ class CTypeEnum(Enum):
     Decimal = 12
     Date = 13
     Datetime = 14
+    Timedelta = 15
     # NOTE: currently, only used for handling decimal array's data array for scatterv
     # since it handles the data array inside decimal array separately
-    Int128 = 15
+    Int128 = 16
 
 
 _numba_to_c_type_map = {
@@ -73,7 +74,7 @@ _numba_to_c_type_map = {
     types.float32: CTypeEnum.Float32.value,
     types.float64: CTypeEnum.Float64.value,
     types.NPDatetime("ns"): CTypeEnum.Datetime.value,
-    types.NPTimedelta("ns"): CTypeEnum.UInt64.value,
+    types.NPTimedelta("ns"): CTypeEnum.Timedelta.value,
     types.bool_: CTypeEnum.Bool.value,
     types.int16: CTypeEnum.Int16.value,
     types.uint16: CTypeEnum.UInt16.value,

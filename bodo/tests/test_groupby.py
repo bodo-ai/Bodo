@@ -1,6 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import random
 import string
+import datetime
 import pandas as pd
 import numpy as np
 import bodo
@@ -138,14 +139,13 @@ def test_nullable_int():
     check_func(impl_select_colH, (df,), sort_output=True, check_dtype=False)
 
 
-
-
-
 @pytest.mark.parametrize(
     "df_null",
     [
-        pd.DataFrame({"A": [2, 1, 1, 1], "B": pd.Series(np.full(4, np.nan), dtype="Int64")}),
-        pd.DataFrame({"A": [1, 1, 1, 1], "B": pd.Series([1,2,3,4], dtype='Int64')}),
+        pd.DataFrame(
+            {"A": [2, 1, 1, 1], "B": pd.Series(np.full(4, np.nan), dtype="Int64")}
+        ),
+        pd.DataFrame({"A": [1, 1, 1, 1], "B": pd.Series([1, 2, 3, 4], dtype="Int64")}),
     ],
 )
 def test_return_type_nullable_cumsum_cumprod(df_null):
@@ -154,6 +154,7 @@ def test_return_type_nullable_cumsum_cumprod(df_null):
     A current problem is that cumsum/cumprod with pandas return an array of float for Int64
     in input. That is why we put check_dtype=False here.
     """
+
     def impl1(df):
         df2 = df.groupby("A")["B"].agg(("cumsum", "cumprod"))
         return df2
@@ -288,9 +289,29 @@ def test_agg_bool_expr():
 @pytest.mark.parametrize(
     "df_index",
     [
-        pd.DataFrame({"A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],"B": [1, 2, 3, 2, 1, 1, 1],"C": [3, 5, 6, 5, 4, 4, 3]}, index=[-1, 2, -3, 0, 4, 5, 2]),
-        pd.DataFrame({"A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],"B": [1, 2, 3, 2, 1, 1, 1],"C": [3, 5, 6, 5, 4, 4, 3]}, index=["a", "b", "c", "d", "e", "f", "g"]),
-        pd.DataFrame({"A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],"B": [1, 2, 3, 2, 1, 1, 1],"C": [3, 5, 6, 5, 4, 4, 3]}),
+        pd.DataFrame(
+            {
+                "A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],
+                "B": [1, 2, 3, 2, 1, 1, 1],
+                "C": [3, 5, 6, 5, 4, 4, 3],
+            },
+            index=[-1, 2, -3, 0, 4, 5, 2],
+        ),
+        pd.DataFrame(
+            {
+                "A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],
+                "B": [1, 2, 3, 2, 1, 1, 1],
+                "C": [3, 5, 6, 5, 4, 4, 3],
+            },
+            index=["a", "b", "c", "d", "e", "f", "g"],
+        ),
+        pd.DataFrame(
+            {
+                "A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],
+                "B": [1, 2, 3, 2, 1, 1, 1],
+                "C": [3, 5, 6, 5, 4, 4, 3],
+            }
+        ),
     ],
 )
 def test_cumsum_index_preservation(df_index):
@@ -303,7 +324,9 @@ def test_cumsum_index_preservation(df_index):
         return df2
 
     def test_impl_all(df1):
-        df2 = df1.groupby("B").agg({"A": ["cumprod", "cumsum"], "C": ["cumprod", "cumsum"]})
+        df2 = df1.groupby("B").agg(
+            {"A": ["cumprod", "cumsum"], "C": ["cumprod", "cumsum"]}
+        )
         return df2
 
     check_func(test_impl_basic, (df_index,), sort_output=True, check_dtype=False)
@@ -318,42 +341,42 @@ def test_cumsum_random_index():
 
     def get_random_dataframe_A(n):
         random.seed(5)
-        eListA=[]
-        eListB=[]
+        eListA = []
+        eListB = []
         for i in range(n):
-            eValA = random.randint(1,10)
-            eValB = random.randint(1,10)
+            eValA = random.randint(1, 10)
+            eValB = random.randint(1, 10)
             eListA.append(eValA)
             eListB.append(eValB)
-        return pd.DataFrame({"A":eListA, "B":eListB})
+        return pd.DataFrame({"A": eListA, "B": eListB})
 
     def get_random_dataframe_B(n):
         random.seed(5)
-        eListA=[]
-        eListB=[]
-        eListC=[]
+        eListA = []
+        eListB = []
+        eListC = []
         for i in range(n):
-            eValA = random.randint(1,10)
-            eValB = random.randint(1,10)
-            eValC = random.randint(1,10) + 20
+            eValA = random.randint(1, 10)
+            eValB = random.randint(1, 10)
+            eValC = random.randint(1, 10) + 20
             eListA.append(eValA)
             eListB.append(eValB)
             eListC.append(eValC)
-        return pd.DataFrame({"A":eListA, "B":eListB}, index=eListC)
+        return pd.DataFrame({"A": eListA, "B": eListB}, index=eListC)
 
     def get_random_dataframe_C(n):
         random.seed(5)
-        eListA=[]
-        eListB=[]
-        eListC=[]
+        eListA = []
+        eListB = []
+        eListC = []
         for i in range(n):
-            eValA = random.randint(1,10)
-            eValB = random.randint(1,10)
+            eValA = random.randint(1, 10)
+            eValB = random.randint(1, 10)
             eValC = chr(random.randint(ord("a"), ord("z")))
             eListA.append(eValA)
             eListB.append(eValB)
             eListC.append(eValC)
-        return pd.DataFrame({"A":eListA, "B":eListB}, index=eListC)
+        return pd.DataFrame({"A": eListA, "B": eListB}, index=eListC)
 
     df1 = get_random_dataframe_A(100)
     df2 = get_random_dataframe_B(100)
@@ -362,6 +385,50 @@ def test_cumsum_random_index():
     check_func(test_impl, (df1,), sort_output=True, check_dtype=False)
     check_func(test_impl, (df2,), sort_output=True, check_dtype=False)
     check_func(test_impl, (df3,), sort_output=True, check_dtype=False)
+
+
+def test_groupby_datetime_miss():
+    """Testing the groupby with columns having datetime with missing entries
+    TODO: need to support the cummin/cummax cases after pandas is corrected"""
+
+    def test_impl3(df):
+        A = df.groupby("A", as_index=False).min()
+        return A
+
+    def test_impl4(df):
+        A = df.groupby("A", as_index=False).max()
+        return A
+
+    random.seed(5)
+
+    def get_small_list(shift, elen):
+        small_list_date = []
+        for _ in range(elen):
+            e_year = random.randint(shift, shift + 20)
+            e_month = random.randint(1, 12)
+            e_day = random.randint(1, 28)
+            small_list_date.append(datetime.datetime(e_year, e_month, e_day))
+        return small_list_date
+
+    def get_random_entry(small_list):
+        if random.random() < 0.2:
+            return "NaT"
+        else:
+            pos = random.randint(0, len(small_list) - 1)
+            return small_list[pos]
+
+    n_big = 100
+    col_a = []
+    col_b = []
+    small_list_a = get_small_list(1940, 5)
+    small_list_b = get_small_list(1920, 20)
+    for idx in range(n_big):
+        col_a.append(get_random_entry(small_list_a))
+        col_b.append(get_random_entry(small_list_b))
+    df1 = pd.DataFrame({"A": pd.Series(col_a), "B": pd.Series(col_b)})
+
+    check_func(test_impl3, (df1,), sort_output=True, check_dtype=False)
+    check_func(test_impl4, (df1,), sort_output=True, check_dtype=False)
 
 
 def test_agg_as_index_fast():
@@ -654,7 +721,9 @@ def test_groupby_agg_const_dict():
         return df2
 
     def impl8(df):
-        df2 = df.groupby("A", as_index=False).agg({"B": ["count", "var", "prod"], "C": ["std", "sum"]})
+        df2 = df.groupby("A", as_index=False).agg(
+            {"B": ["count", "var", "prod"], "C": ["std", "sum"]}
+        )
         return df2
 
     def impl9(df):
@@ -1003,7 +1072,6 @@ def test_as_index_count():
 
 
 def test_single_col_reset_index(test_df):
-
     def impl1(df):
         A = df.groupby("A")["B"].sum().reset_index()
         return A
@@ -1058,7 +1126,6 @@ def test_cumsum_large_random_numpy():
     check_func(impl1, (df1,), sort_output=True)
     check_func(impl2, (df1,), sort_output=True)
     check_func(impl3, (df1,), sort_output=True)
-
 
 
 def test_cummin_cummax_large_random_numpy():
@@ -1116,6 +1183,7 @@ def test_cummin_cummax_large_random_numpy():
     check_func(impl6, (df1,), sort_output=True)
     check_func(impl7, (df1,), sort_output=True)
     check_func(impl8, (df1,), sort_output=True)
+
 
 def test_groupby_cumsum_simple():
     """
