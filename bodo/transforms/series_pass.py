@@ -2501,7 +2501,7 @@ class SeriesPass:
         # XXX using replace() since it copies, otherwise cached overload
         # functions fail
         new_sig = sig.replace(return_type=if_series_to_array_type(sig.return_type))
-        new_sig.args = tuple(map(if_series_to_array_type, sig.args))
+        new_sig = new_sig.replace(args=tuple(map(if_series_to_array_type, sig.args)))
 
         # XXX: side effect: force update of call signatures
         if isinstance(call, ir.Expr) and call.op == "call":
