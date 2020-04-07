@@ -136,7 +136,7 @@ def is_alloc_callname(func_name, mod_name):
         (mod_name == "numpy" and func_name in np_alloc_callnames)
         or (
             func_name == "empty_inferred"
-            and mod_name in ("numba.extending", "numba.core.unsafe.ndarray")
+            and mod_name in ("numba.extending", "numba.np.unsafe.ndarray")
         )
         or (
             func_name == "pre_alloc_string_array"

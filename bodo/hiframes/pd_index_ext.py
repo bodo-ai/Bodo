@@ -366,7 +366,7 @@ def overload_datetime_index_sub(arg1, arg2):
             in_arr = bodo.hiframes.pd_index_ext.get_index_data(arg1)
             name = bodo.hiframes.pd_index_ext.get_index_name(arg1)
             n = len(in_arr)
-            S = numba.core.unsafe.ndarray.empty_inferred((n,))
+            S = numba.np.unsafe.ndarray.empty_inferred((n,))
             tsint = arg2.value
             for i in numba.parfors.parfor.internal_prange(n):
                 S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
@@ -387,7 +387,7 @@ def overload_datetime_index_sub(arg1, arg2):
             in_arr = bodo.hiframes.pd_index_ext.get_index_data(arg2)
             name = bodo.hiframes.pd_index_ext.get_index_name(arg2)
             n = len(in_arr)
-            S = numba.core.unsafe.ndarray.empty_inferred((n,))
+            S = numba.np.unsafe.ndarray.empty_inferred((n,))
             tsint = arg1.value
             for i in numba.parfors.parfor.internal_prange(n):
                 S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
@@ -412,7 +412,7 @@ def gen_dti_str_binop_impl(op, is_arg1_dti):
     func_text += "  arr = bodo.hiframes.pd_index_ext.get_index_data(dt_index)\n"
     func_text += "  l = len(arr)\n"
     func_text += "  other = bodo.hiframes.pd_timestamp_ext.parse_datetime_str(_str)\n"
-    func_text += "  S = numba.core.unsafe.ndarray.empty_inferred((l,))\n"
+    func_text += "  S = numba.np.unsafe.ndarray.empty_inferred((l,))\n"
     func_text += "  for i in numba.parfors.parfor.internal_prange(l):\n"
     func_text += "    S[i] = {}\n".format(comp)
     func_text += "  return S\n"

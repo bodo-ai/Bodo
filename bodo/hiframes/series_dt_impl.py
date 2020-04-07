@@ -227,7 +227,7 @@ def create_bin_op_overload(op):
                 name = bodo.hiframes.pd_series_ext.get_series_name(A1)
                 arr2 = bodo.hiframes.pd_series_ext.get_series_data(A2)
                 n = len(arr)
-                S = numba.core.unsafe.ndarray.empty_inferred((n,))
+                S = numba.np.unsafe.ndarray.empty_inferred((n,))
 
                 for i in numba.parfors.parfor.internal_prange(n):
                     int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
@@ -253,7 +253,7 @@ def create_bin_op_overload(op):
                 name = bodo.hiframes.pd_series_ext.get_series_name(A2)
                 arr2 = bodo.hiframes.pd_series_ext.get_series_data(A1)
                 n = len(arr)
-                S = numba.core.unsafe.ndarray.empty_inferred((n,))
+                S = numba.np.unsafe.ndarray.empty_inferred((n,))
 
                 for i in numba.parfors.parfor.internal_prange(n):
                     int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
@@ -279,7 +279,7 @@ def create_bin_op_overload(op):
                 index = bodo.hiframes.pd_series_ext.get_series_index(A1)
                 name = bodo.hiframes.pd_series_ext.get_series_name(A1)
                 n = len(arr)
-                S = numba.core.unsafe.ndarray.empty_inferred((n,))
+                S = numba.np.unsafe.ndarray.empty_inferred((n,))
                 tsint = A2.value
                 for i in numba.parfors.parfor.internal_prange(n):
                     int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
@@ -302,7 +302,7 @@ def create_bin_op_overload(op):
                 index = bodo.hiframes.pd_series_ext.get_series_index(A2)
                 name = bodo.hiframes.pd_series_ext.get_series_name(A2)
                 n = len(arr)
-                S = numba.core.unsafe.ndarray.empty_inferred((n,))
+                S = numba.np.unsafe.ndarray.empty_inferred((n,))
                 tsint = A1.value
                 for i in numba.parfors.parfor.internal_prange(n):
                     int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
@@ -325,7 +325,7 @@ def create_bin_op_overload(op):
                 index = bodo.hiframes.pd_series_ext.get_series_index(A1)
                 name = bodo.hiframes.pd_series_ext.get_series_name(A1)
                 n = len(arr)
-                S = numba.core.unsafe.ndarray.empty_inferred((n,))
+                S = numba.np.unsafe.ndarray.empty_inferred((n,))
                 td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
                     A2
                 )
@@ -351,7 +351,7 @@ def create_bin_op_overload(op):
                 index = bodo.hiframes.pd_series_ext.get_series_index(A2)
                 name = bodo.hiframes.pd_series_ext.get_series_name(A2)
                 n = len(arr)
-                S = numba.core.unsafe.ndarray.empty_inferred((n,))
+                S = numba.np.unsafe.ndarray.empty_inferred((n,))
                 td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
                     A1
                 )
@@ -377,7 +377,7 @@ def create_bin_op_overload(op):
                 index = bodo.hiframes.pd_series_ext.get_series_index(A1)
                 name = bodo.hiframes.pd_series_ext.get_series_name(A1)
                 n = len(arr)
-                S = numba.core.unsafe.ndarray.empty_inferred((n,))
+                S = numba.np.unsafe.ndarray.empty_inferred((n,))
                 dt64 = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(A2)
                 int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dt64)
                 for i in numba.parfors.parfor.internal_prange(n):
@@ -401,7 +401,7 @@ def create_bin_op_overload(op):
                 index = bodo.hiframes.pd_series_ext.get_series_index(A2)
                 name = bodo.hiframes.pd_series_ext.get_series_name(A2)
                 n = len(arr)
-                S = numba.core.unsafe.ndarray.empty_inferred((n,))
+                S = numba.np.unsafe.ndarray.empty_inferred((n,))
                 dt64 = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(A1)
                 int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dt64)
                 for i in numba.parfors.parfor.internal_prange(n):
@@ -425,7 +425,7 @@ def create_bin_op_overload(op):
                 index = bodo.hiframes.pd_series_ext.get_series_index(A1)
                 name = bodo.hiframes.pd_series_ext.get_series_name(A1)
                 n = len(arr)
-                S = numba.core.unsafe.ndarray.empty_inferred((n,))
+                S = numba.np.unsafe.ndarray.empty_inferred((n,))
                 td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
                     A2
                 )
@@ -453,7 +453,7 @@ def create_bin_op_overload(op):
                 index = bodo.hiframes.pd_series_ext.get_series_index(A2)
                 name = bodo.hiframes.pd_series_ext.get_series_name(A2)
                 n = len(arr)
-                S = numba.core.unsafe.ndarray.empty_inferred((n,))
+                S = numba.np.unsafe.ndarray.empty_inferred((n,))
                 td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
                     A1
                 )
