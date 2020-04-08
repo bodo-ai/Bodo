@@ -400,6 +400,8 @@ These environment variables are used for File I/O with S3 credentials:
   - ``AWS_DEFAULT_REGION``: default as ``us-east-1``
   - ``AWS_S3_ENDPOINT``: specify custom host name, default as AWS endpoint(``s3.amazonaws.com``)
 
+Bodo uses `Apache Arrow <https://arrow.apache.org/>`_ internally for reading from S3.
+
 .. _HDFS:
 
 Hadoop Distributed File System (HDFS)
@@ -430,6 +432,7 @@ For example, the following configuration has default block replication set as 3:
         </property>
     </configuration>
 
+Bodo uses `Apache Arrow <https://arrow.apache.org/>`_ internally for reading from HDFS.
 
 
 Print
