@@ -790,7 +790,12 @@ def get_scatter_null_bytes_buff(
     """copy null bytes into a padded buffer for scatter.
     Padding is needed since processors receive whole bytes and data inside border bytes
     has to be split.
+    Only the root rank has the input data and needs to create a valid send buffer.
     """
+    # non-root ranks don't have scatter input
+    if bodo.get_rank() != MPI_ROOT:
+        return np.empty(1, np.uint8)
+
     null_bytes_buff = np.empty(sendcounts_nulls.sum(), np.uint8)
 
     curr_tmp_byte = 0  # current location in scatter buffer
