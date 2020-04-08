@@ -1,20 +1,73 @@
 .. _notsupported:
 
-Unsupported Python 
-=============================
+Unsupported Python Programs
+===========================
 
-Bodo statically compiles user codes to generate efficient parallel programs.
-Hence, the user code needs to be `statically compilable`.
-This means that Bodo should be able to infer all the variable types, and be able
-to analyze the computations.
+Bodo compiles functions into efficient native parallel binaries, which
+requires all the operations used in the code to be
+supported by Bodo. This excludes some Python features explained in this
+section.
+
 
 .. _typestability:
 
 Type Stability
 --------------
 
-To enable type inference, the program should be `type stable`, which means every
-variable should have a single type. The example below is not type stable since
+To enable type inference, the program should be `type stable`, which means Bodo
+should be able to assign a single type to every variable.
+
+
+DataFrame Schema
+~~~~~~~~~~~~~~~~
+
+Deterministic dataframe schemas, which is required in most data system, is key
+for type stability. For example, column `A` of variable `df` in example below could be
+either of type integer or string based on a flag -- Bodo cannot determine it at compilation time::
+
+    @bodo.jit
+    def f(a):
+        if len(a) > 3:  # some computation that cannot be inferred statically
+            df = pd.DataFrame({"A": [1, 2, 3]})
+        else:
+            df = pd.DataFrame({"A": ["a", "b", "c"]})
+        return df
+
+    f([2, 3])
+    # Cannot unify dataframe((array(int64, 1d, C),), RangeIndexType(none), ('A',), False)
+    # and dataframe((StringArrayType(),), RangeIndexType(none), ('A',), False)
+
+The error message means that Bodo cannot find a single type that can `unify` the two
+types into a single type.
+This code can be refactored so that `if flag:`
+is executed in regular Python context, but the rest of computation is in Bodo functions.
+
+Another common place where schema stability may be compromised is in passing non-constant
+list of key column names to dataframe operations such as `groupby`, `merge` and `sort_values`.
+In these operations, the list of key column names should be constant in order to determine
+the output dataframe schema. For example, the program below is potentially type unstable
+since Bodo may not be able to infer `column_list` during compilation::
+
+    @bodo.jit
+    def f(a):
+        column_list = a[0]  # some computation that cannot be inferred statically
+        df = pd.DataFrame({"A": [1, 2, 1], "B": [4, 5, 6]})
+        return df.groupby(column_list).sum()
+
+    f(["A"])
+    # BodoError: groupby(): 'by' parameter only supports a constant column label or column labels.
+
+
+Bodo supports implicitly inferring constant lists automatically for list addition
+and set difference operations such as::
+
+    df.groupby(["A"] + ["B"]).sum()
+    df.groupby(list(set(df.columns) - set(["A", "C"]))).sum()
+
+Variable Types and Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The example below is not type stable since
 variable ``a`` can be both a float and an array of floats::
 
     if flag:
@@ -34,7 +87,9 @@ not supported since function ``f`` is not known in advance::
         f = np.random.ranf
     A = f(10)
 
-One can usually avoid these cases in numerical code without significant effort.
+One can usually avoid these cases in analytics codes without significant effort.
+
+
 
 Type stability forces us to change the behavior of some functions. For example
 we have here a difference of behavior::
