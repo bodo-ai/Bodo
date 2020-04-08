@@ -34,12 +34,12 @@ either of type integer or string based on a flag -- Bodo cannot determine it at 
         return df
 
     f([2, 3])
-    # Cannot unify dataframe((array(int64, 1d, C),), RangeIndexType(none), ('A',), False)
+    # TypeError: Cannot unify dataframe((array(int64, 1d, C),), RangeIndexType(none), ('A',), False)
     # and dataframe((StringArrayType(),), RangeIndexType(none), ('A',), False)
 
-The error message means that Bodo cannot find a single type that can `unify` the two
+The error message means that Bodo cannot find a type that can `unify` the two
 types into a single type.
-This code can be refactored so that `if flag:`
+This code can be refactored so that `if flag`
 is executed in regular Python context, but the rest of computation is in Bodo functions.
 
 Another common place where schema stability may be compromised is in passing non-constant
@@ -121,10 +121,27 @@ We are working on making it possible to avoid stability issues automatically
 in most practical cases.
 
 
+Unsupported Python Constructs
+-----------------------------
+
+Bodo relies on Numba for supporting basic Python features.
+Therefore, Python constructs that are not supported by Numba
+(see Numba documentation `here <http://numba.pydata.org/numba-doc/latest/reference/pysupported.html>`_)
+should be avoided in Bodo programs.
+
+Generally, these Python features are not supported:
+
+* exceptions: `try .. except`, `raise`
+* context manager: `with`
+* list, set, dict and generator comprehensions
+* async features
+* class definition: `class`
+
+
 .. _heterogeneousdtype:
 
 Heterogeneous types inside a data structure
----------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - :code:`List` containing values of heterogeneous type
 	- :code:`myList = [1, "a", 0.1]`
