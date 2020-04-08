@@ -126,22 +126,19 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
         return self.data, self.index, self.columns, self.has_parent
 
     def unify(self, typingctx, other):
+        """unifies two possible dataframe types into a single type
+        see test_dataframe.py::test_df_type_unify_error
+        """
         if (
             isinstance(other, DataFrameType)
             and len(other.data) == len(self.data)
             and other.columns == self.columns
             and other.has_parent == self.has_parent
         ):
-            new_index = types.none
-            if self.index != types.none and other.index != types.none:
-                new_index = self.index.unify(typingctx, other.index)
-            elif other.index != types.none:
-                new_index = other.index
-            elif self.index != types.none:
-                new_index = self.index
-
+            new_index = self.index.unify(typingctx, other.index)
             data = tuple(a.unify(typingctx, b) for a, b in zip(self.data, other.data))
-            return DataFrameType(data, new_index, self.columns, self.has_parent)
+            if new_index is not None and None not in data:
+                return DataFrameType(data, new_index, self.columns, self.has_parent)
 
     def can_convert_to(self, typingctx, other):
         return

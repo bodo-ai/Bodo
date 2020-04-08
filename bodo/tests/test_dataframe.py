@@ -1492,6 +1492,21 @@ def test_df_alias():
     pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
 
+def test_df_type_unify_error():
+    """makes sure type unification error is thrown when two dataframe schemas for the
+    same variable are not compatible.
+    """
+    def test_impl(a):
+        if len(a) > 3:  # some computation that cannot be inferred statically
+            df = pd.DataFrame({"A": [1, 2, 3]})
+        else:
+            df = pd.DataFrame({"A": ["a", "b", "c"]})
+        return df
+
+    with pytest.raises(numba.TypingError, match="Cannot unify dataframe"):
+        bodo.jit(test_impl)([3, 4])
+
+
 ############################# old tests ###############################
 
 
