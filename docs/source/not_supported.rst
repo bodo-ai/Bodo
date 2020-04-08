@@ -136,6 +136,7 @@ Generally, these Python features are not supported:
 * list, set, dict and generator comprehensions
 * async features
 * class definition: `class`
+* string formatting, e.g. `"A: {}".format(a)`
 
 
 .. _heterogeneousdtype:
