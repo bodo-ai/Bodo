@@ -95,6 +95,7 @@ _csv_write = types.ExternalFunction(
     types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.bool_),
 )
 
+
 class DistributedPass:
     """
     This pass analyzes the IR to decide parallelism of arrays and parfors for
@@ -940,7 +941,8 @@ class DistributedPass:
                 f, [df, fname, compression, index], assign.target, self
             )
         elif func_name == "to_csv" and (
-            self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)):
+            self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
+        ):
             # avoid header for non-zero ranks
             # write to string then parallel file write
             # df.to_csv(fname) ->
@@ -1354,6 +1356,20 @@ class DistributedPass:
     #     return nodes
 
     def _get_1D_Var_size(self, size_var, equiv_set, avail_vars, out):
+        """distributed transform needs to find local sizes for some operations on 1D_Var
+        arrays and parfors since sizes are transformed to global sizes previously.
+        For example, consider this program (after transformation of 'n', right before
+        transformation of parfor):
+            C = A[B]
+            n = len(C)
+            n = allreduce(n)  # transformed by distributed pass
+            for i in prange(n):  # parfor needs local size of C, not 'n'
+                ...
+        The number of iterations in the prange on each processor should be the same as
+        the local length of C which is not the same across processors. Therefore,
+        _get_1D_Var_size finds that 'n' is the size of 'C', and replaces 'n' with
+        'len(C)'.
+        """
         size_def = guard(get_definition, self.func_ir, size_var)
         # find trivial calc_nitems(0, n, 1) call and use n instead
         if (
@@ -2591,10 +2607,18 @@ def dprint(*s):  # pragma: no cover
 
 def _get_array_var_from_size(size_var, func_ir):
     """
-    Return 'arr' from pattern 'size_var = arr.shape[0]' if exists.
-    Otherwise, raise GuardException.
+    Return 'arr' from pattern 'size_var = len(arr)' or 'size_var = arr.shape[0]' if
+    exists. Otherwise, raise GuardException.
     """
     size_def = get_definition(func_ir, size_var)
+
+    # len(arr) case
+    if is_call(size_def) and guard(find_callname, func_ir, size_def) == (
+        "len",
+        "builtins",
+    ):
+        return size_def.args[0]
+
     require(is_expr(size_def, "static_getitem") and size_def.index == 0)
     shape_var = size_def.value
     get_attr = get_definition(func_ir, shape_var)
@@ -2605,42 +2629,22 @@ def _get_array_var_from_size(size_var, func_ir):
 
 def find_available_vars(blocks, cfg, init_avail=None):
     """
-    Find available variables to use at ENTRY point of basic blocks. Similar
-    to available expressions algorithm but does not kill values on defs.
-    In_l = intersect(Out_i for i in pred)
-    Out_l = In_l | def(l)
-    `init_avail` is used to initialize first block of parfors with available vars
-    before the parfor. The label of first block is assumed to be 0.
+    Finds available variables at entry point of each basic block by gathering all
+    variables defined in the block's dominators in CFG.
     """
     # TODO: unittest
     in_avail_vars = defaultdict(set)
-    usedefs = numba.analysis.compute_use_defs(blocks)
-    var_def_map = usedefs.defmap
-    out_avail_vars = var_def_map.copy()
+    var_def_map = numba.analysis.compute_use_defs(blocks).defmap
 
     if init_avail:
         assert 0 in blocks
         for label in var_def_map:
-            in_avail_vars[label] = init_avail
-            out_avail_vars[label] |= init_avail
+            in_avail_vars[label] = init_avail.copy()
 
-    old_point = None
-    new_point = tuple(len(v) for v in in_avail_vars.values())
-
-    while old_point != new_point:
-        for label in var_def_map:
-            if label == 0:
-                continue
-            # intersect out of predecessors
-            preds = list(l for l, _ in cfg.predecessors(label))
-            in_avail_vars[label] = out_avail_vars[preds[0]] if preds else {}
-            for inc_blk in preds:
-                in_avail_vars[label] &= out_avail_vars[inc_blk]
-            # include defs
-            out_avail_vars[label] = in_avail_vars[label] | var_def_map[label]
-
-        old_point = new_point
-        new_point = tuple(len(v) for v in in_avail_vars.values())
+    for label, doms in cfg.dominators().items():
+        strict_doms = doms - {label}
+        for d in strict_doms:
+            in_avail_vars[label] |= var_def_map[d]
 
     return in_avail_vars
 
