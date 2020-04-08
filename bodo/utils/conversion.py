@@ -270,15 +270,15 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
 
             def impl_float(data, new_dtype, copy=None):  # pragma: no cover
                 n = len(data)
-                n_bytes = (n + 7) >> 3
-                arr = np.empty(n, _dtype)
-                bitmap = np.empty(n_bytes, np.uint8)
+                numba.parfor.init_prange()
+                B = bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)
                 for i in numba.parfor.internal_prange(n):
-                    arr[i] = data[i]
-                    bodo.libs.int_arr_ext.set_bit_to_arr(
-                        bitmap, i, not np.isnan(data[i])
-                    )
-                return bodo.libs.int_arr_ext.init_integer_array(arr, bitmap)
+                    if bodo.libs.array_kernels.isna(data, i):
+                        bodo.ir.join.setitem_arr_nan(B, i)
+                    else:
+                        B[i] = int(data[i])
+                        # no need for setting null bit since done by int arr's setitem
+                return B
 
             return impl_float
         else:

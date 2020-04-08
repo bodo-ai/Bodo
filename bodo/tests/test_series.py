@@ -325,6 +325,24 @@ def test_series_astype_int_arr(numeric_series_val):
 @pytest.mark.parametrize(
     "S",
     [
+        pd.Series([1.0, np.nan, 3.0, 2.0], dtype="float32"),
+        pd.Series([1.0, np.nan, 3.0, 2.0], dtype="float64"),
+    ],
+)
+def test_series_astype_float_to_int_arr(S):
+    """Test converting float data to nullable int array
+    """
+    # TODO: support converting string to int
+
+    def test_impl(S):
+        return S.astype("Int64")
+
+    check_func(test_impl, (S,))
+
+
+@pytest.mark.parametrize(
+    "S",
+    [
         pd.Series([True, False, False, True, True]),
         pd.Series([True, False, False, np.nan, True]),
     ],
