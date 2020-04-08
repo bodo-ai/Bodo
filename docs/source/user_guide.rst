@@ -461,6 +461,20 @@ support advanced cases that may need them (the reference communicator is `MPI_CO
   (same as `MPI_Gatherv`).
 * :func:`bodo.allgatherv` Gathers all data chunks and delivers to all processes
   (same as `MPI_Allgatherv`).
+* :func:`bodo.scatterv` Scatters data from process 0 to all processes
+  (same as `MPI_Scatterv`). `scatterv()` should be called in regular Python
+  (not in a JIT function). Process 0 should pass the input data, but all other processes
+  should pass `None`. Example::
+
+    @bodo.jit(distributed=["df"])
+    def example(df):
+        ...
+
+    data = None
+    if bodo.get_rank() == 0:
+        data = some_data_read_function()
+    df = bodo.scatterv(data)
+    example(df)
 
 
 Regular Expressions Support
