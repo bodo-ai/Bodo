@@ -174,7 +174,7 @@ def test_1D_Var_parfor3():
 def test_1D_Var_parfor4():
     """test 1D parfor inside a sequential loop
     """
-    def impl1(A, B, flag):
+    def impl1(A, B):
         C = A[B]
         s = 0
         for j in range(3):
@@ -186,7 +186,7 @@ def test_1D_Var_parfor4():
     A = np.arange(33).reshape(11, 3)
     start, end = get_start_end(len(A))
     B = (np.arange(len(A)) % 2) != 0
-    assert bodo_func(A[start:end], B[start:end], True) == impl1(A, B, True)
+    assert bodo_func(A[start:end], B[start:end]) == impl1(A, B)
     assert count_array_REPs() == 0
 
 
