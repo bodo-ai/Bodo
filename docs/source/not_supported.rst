@@ -64,6 +64,21 @@ and set difference operations such as::
     df.groupby(["A"] + ["B"]).sum()
     df.groupby(list(set(df.columns) - set(["A", "C"]))).sum()
 
+Referring to dataframe columns (e.g. `df["A"]`) requires constants for schema stability as well.
+`for` loops over dataframe column names such as below is not supported yet::
+
+
+    @bodo.jit
+    def f(df):
+        s = 0
+        for c in df.columns:
+            s += df[c].sum()
+        return s
+
+    f(pd.DataFrame({"A": [1, 2, 1], "B": [4, 5, 6]}))
+    # BodoError: df[] getitem using unicode_type not supported
+
+
 Variable Types and Functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
