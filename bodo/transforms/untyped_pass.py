@@ -675,7 +675,6 @@ class UntypedPass:
         # warn_bad_lines=True, skipfooter=0, doublequote=True,
         # delim_whitespace=False, low_memory=True, memory_map=False,
         # float_precision=None)
-
         kws = dict(rhs.kws)
         fname = self._get_arg("read_csv", rhs.args, kws, 0, "filepath_or_buffer")
         sep = self._get_const_arg("read_csv", rhs.args, kws, 1, "sep", ",")

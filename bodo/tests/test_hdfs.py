@@ -105,7 +105,7 @@ def test_csv_data_date1(datapath, hdfs_datapath):
 
     check_func(test_impl, (hdfs_fname,), py_output=py_output)
 
-    
+
 @pytest.fixture(
     params=[
         pd.DataFrame(
@@ -171,7 +171,7 @@ def test_hdfs_csv_write_seq(datapath, hdfs_datapath, test_df):
     hdfs_fname = hdfs_datapath("test_df_bodo_seq.csv")
 
     def test_write(test_df, hdfs_fname):
-        test_df.to_csv(hdfs_fname)
+        test_df.to_csv(hdfs_fname, index=False, header=False)
 
     bodo_write = bodo.jit(test_write)
     bodo_write(test_df, hdfs_fname)
@@ -185,7 +185,7 @@ def test_hdfs_csv_write_1D(datapath, hdfs_datapath, test_df):
     hdfs_fname = hdfs_datapath("test_df_bodo_1D.csv")
 
     def test_write(test_df, hdfs_fname):
-        test_df.to_csv(hdfs_fname)
+        test_df.to_csv(hdfs_fname, index=False, header=False)
 
     bodo_write = bodo.jit(all_args_distributed=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False), hdfs_fname)
@@ -199,7 +199,7 @@ def test_hdfs_csv_write_1D_var(datapath, hdfs_datapath, test_df):
     hdfs_fname = hdfs_datapath("test_df_bodo_1D_var.csv")
 
     def test_write(test_df, hdfs_fname):
-        test_df.to_csv(hdfs_fname)
+        test_df.to_csv(hdfs_fname, index=False, header=False)
 
     bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False, True), hdfs_fname)
@@ -207,8 +207,8 @@ def test_hdfs_csv_write_1D_var(datapath, hdfs_datapath, test_df):
 
 def test_hdfs_parquet_read_seq(datapath, hdfs_datapath, test_df):
     """
-    read_parquet sequentially
-    test the parquet file we just wrote
+    read_parquet 
+    test the parquet file we just wrote sequentially
     """
 
     hdfs_fname = hdfs_datapath("test_df_bodo_seq.pq")
@@ -216,18 +216,13 @@ def test_hdfs_parquet_read_seq(datapath, hdfs_datapath, test_df):
     def test_read(hdfs_fname):
         return pd.read_parquet(hdfs_fname)
 
-    n_pes = bodo.get_size()
-    bodo_read = bodo.jit(test_read)
-    bodo_out = bodo_read(hdfs_fname)
-    passed = _test_equal_guard(bodo_out, test_df, False)
-    n_passed = reduce_sum(passed)
-    assert n_passed == n_pes
+    check_func(test_read, (hdfs_fname,), py_output=test_df)
 
 
 def test_hdfs_parquet_read_1D(datapath, hdfs_datapath, test_df):
     """
-    read_parquet in 1D
-    test the parquet file we just wrote
+    read_parquet 
+    test the parquet file we just wrote in 1D
     """
 
     hdfs_fname = hdfs_datapath("test_df_bodo_1D.pq")
@@ -235,21 +230,13 @@ def test_hdfs_parquet_read_1D(datapath, hdfs_datapath, test_df):
     def test_read(hdfs_fname):
         return pd.read_parquet(hdfs_fname)
 
-    n_pes = bodo.get_size()
-    bodo_read = bodo.jit(all_returns_distributed=True)(test_read)
-    bodo_out = bodo_read(hdfs_fname)
-    bodo_out = bodo.gatherv(bodo_out)
-    passed = 1
-    if bodo.get_rank() == 0:
-        passed = _test_equal_guard(bodo_out, test_df, False)
-    n_passed = reduce_sum(passed)
-    assert n_passed == n_pes
+    check_func(test_read, (hdfs_fname,), py_output=test_df)
 
 
 def test_hdfs_parquet_read_1D_var(datapath, hdfs_datapath, test_df):
     """
-    read_parquet in 1D Var
-    test the parquet file we just wrote
+    read_parquet 
+    test the parquet file we just wrote in 1D Var
     """
 
     hdfs_fname = hdfs_datapath("test_df_bodo_1D_var.pq")
@@ -257,12 +244,58 @@ def test_hdfs_parquet_read_1D_var(datapath, hdfs_datapath, test_df):
     def test_read(hdfs_fname):
         return pd.read_parquet(hdfs_fname)
 
-    n_pes = bodo.get_size()
-    bodo_read = bodo.jit(all_returns_distributed=True)(test_read)
-    bodo_out = bodo_read(hdfs_fname)
-    bodo_out = bodo.gatherv(bodo_out)
-    passed = 1
-    if bodo.get_rank() == 0:
-        passed = _test_equal_guard(bodo_out, test_df, False)
-    n_passed = reduce_sum(passed)
-    assert n_passed == n_pes
+    check_func(test_read, (hdfs_fname,), py_output=test_df)
+
+
+def test_hdfs_csv_read_seq(datapath, hdfs_datapath, test_df):
+    """
+    read_csv 
+    test the csv file we just wrote sequentially
+    """
+
+    hdfs_fname = hdfs_datapath("test_df_bodo_seq.csv")
+
+    def test_read(hdfs_fname):
+        return pd.read_csv(
+            hdfs_fname,
+            names=["A", "B", "C"],
+            dtype={"A": np.float, "B": "bool", "C": np.int},
+        )
+
+    check_func(test_read, (hdfs_fname,), py_output=test_df)
+
+
+def test_hdfs_csv_read_1D(datapath, hdfs_datapath, test_df):
+    """
+    read_csv 
+    test the csv file we just wrote in 1D
+    """
+
+    hdfs_fname = hdfs_datapath("test_df_bodo_1D.csv")
+
+    def test_read(hdfs_fname):
+        return pd.read_csv(
+            hdfs_fname,
+            names=["A", "B", "C"],
+            dtype={"A": np.float, "B": "bool", "C": np.int},
+        )
+
+    check_func(test_read, (hdfs_fname,), py_output=test_df)
+
+
+def test_hdfs_csv_read_1D_var(datapath, hdfs_datapath, test_df):
+    """
+    read_csv 
+    test the csv file we just wrote in 1D Var
+    """
+
+    hdfs_fname = hdfs_datapath("test_df_bodo_1D_var.csv")
+
+    def test_read(hdfs_fname):
+        return pd.read_csv(
+            hdfs_fname,
+            names=["A", "B", "C"],
+            dtype={"A": np.float, "B": "bool", "C": np.int},
+        )
+
+    check_func(test_read, (hdfs_fname,), py_output=test_df)

@@ -126,14 +126,18 @@ schema = StructType(
 sdf = spark.createDataFrame(df, schema)
 sdf.write.parquet("sdf_dt.pq", "overwrite")
 
-
 schema = StructType([StructField("A", LongType(), True)])
 A = np.random.randint(0, 100, 1211)
-data = [Row(int(a)) if random.random() < 0.8 else Row(None) for a in A]
+A = [int(a) if random.random() < 0.8 else None for a in A]
+data = [Row(a) for a in A]
+df = pd.DataFrame({"A": A})
+df.to_csv("int_nulls.csv", header=False)
 sdf = spark.createDataFrame(data, schema)
 sdf.write.parquet("int_nulls_multi.pq", "overwrite")
+sdf.write.mode('overwrite').csv('int_nulls_multi.csv')
 sdf = sdf.repartition(1)
 sdf.write.parquet("int_nulls_single.pq", "overwrite")
+sdf.write.mode('overwrite').csv('int_nulls_single.csv')
 # copy data file from int_nulls_single.pq directory to make single file
 
 df = pd.DataFrame({"A": [True, False, False, np.nan, True]})
@@ -240,6 +244,38 @@ df = pd.DataFrame(
 df.to_parquet("list_str_arr.pq")
 sdf = spark.createDataFrame(df)
 sdf.write.parquet("list_str_parts.pq", "overwrite")
+
+spark.stop()
+
+# data for str array read from csv
+df = pd.DataFrame(
+    {
+        "A": [
+            None,
+            "холодн", "¿abc¡Y",
+            "¡úú,úũ¿ééé",
+            None,
+            "ABC", "C", "", "A",
+            "늘 저녁", ",고싶다ㅠ",
+            "",
+        ]
+        * 3,
+        "B": [
+            None,
+            "холодн", "¿abc¡Y",
+            "¡úú,úũ¿ééé",
+            None,
+            "ABC", "C", "", "A",
+            "늘 저녁", ",고싶다ㅠ",
+            "",
+        ]
+        * 3
+    }
+)
+df.to_csv("str_arr.csv", header=False, index=False)
+sdf = spark.createDataFrame(df)
+sdf.write.mode('overwrite').csv('str_arr_parts.csv')
+sdf.repartition(1).write.mode('overwrite').csv('str_arr_single.csv')
 
 spark.stop()
 

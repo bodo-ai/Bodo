@@ -189,6 +189,7 @@ The example below demonstrates a parallel loop with a reduction::
 Currently, reductions using ``+=``, ``*=``, ``min``, and ``max`` operators are
 supported.
 
+.. _userguide-io:
 
 File I/O
 --------
@@ -257,32 +258,70 @@ For csv, the syntax is the also same as Pandas::
     def example_csv():
         df = pd.read_csv('example.csv')
 
-``to_csv()`` always writes to a single file, regardless of the number
-of processes and whether the data is distributed::
+Unlike :func:`pandas.read_csv`, Bodo can read a single csv file and a directory that contains multiple partitioned csv files.
 
-    df = pd.DataFrame({'A': np.arange(n)})
+``to_csv(name)`` has different behaviors for different file systems:
 
-    @bodo.jit
-    def example1_csv(df):
-        df.to_csv('example1.csv')
+    1. POSIX file systems: always writes to a single file, 
+    regardless of the number of processes and whether the data is distributed, but writing is still done in parallel when more than 1 processor is used::
 
-    @bodo.jit(distributed={'df'})
-    def example2_csv(df):
-        df.to_csv('example2.csv')
+            df = pd.DataFrame({'A': np.arange(n)})
 
-    if bodo.get_rank() == 0:
-        example1_csv(df)
-    example2_csv(df)
+            @bodo.jit
+            def example1_csv(df):
+                df.to_csv('example1.csv')
 
-Run the code above with 4 processors::
+            @bodo.jit(distributed={'df'})
+            def example2_csv(df):
+                df.to_csv('example2.csv')
 
-    $ mpiexec -n 4 python ../example_csv.py
+            if bodo.get_rank() == 0:
+                example1_csv(df)
+            example2_csv(df)
 
-each ``example1_csv(df)`` and ``example2_csv(df)`` writes to a single file::
+    Run the code above with 4 processors::
 
-    .
-    ├── example1.csv
-    ├── example2.csv
+            $ mpiexec -n 4 python ../example_csv.py
+
+    each ``example1_csv(df)`` and ``example2_csv(df)`` writes to a single file::
+
+            .
+            ├── example1.csv
+            ├── example2.csv
+
+    2. `S3`_ and `HDFS`_: With distributed data writes to a 'folder' called ``name``.
+    Each process writes one file into the folder, but if the data is not distributed,
+    ``to_csv(name)`` writes to a file called ``name``:: 
+
+            df = pd.DataFrame({'A': np.arange(n)})
+
+            @bodo.jit
+            def example1_csv(df):
+                df.to_csv('example1.csv')
+
+            @bodo.jit(distributed={'df'})
+            def example2_csv(df):
+                df.to_csv('example2.csv')
+
+            if bodo.get_rank() == 0:
+                example1_csv(df)
+            example2_csv(df)
+
+
+    Run the code above with 4 processors::
+
+            $ mpiexec -n 4 python ../example_csv.py
+
+    ``example1_csv(df)`` writes 1 single file, and ``example2_csv(df)`` writes a folder containing 4 csv files::
+
+            .
+            ├── example1.csv
+            ├── example2.csv
+            │   ├── part-00.csv
+            │   ├── part-01.csv
+            │   ├── part-02.csv
+            │   └── part-03.csv
+
 
 HDF5
 ^^^^
@@ -342,10 +381,13 @@ example::
          X = f['points'][:]
          Y = f['responses'][:]
 
+.. _S3:
+
 Amazon S3
 ~~~~~~~~~
 
-Reading :ref:`csv <csv-section>`, reading and writing :ref:`Parquet <parquet-section>` files from and to Amazon S3 is supported. 
+Reading and writing :ref:`csv <csv-section>`, :ref:`Parquet <parquet-section>` files from and to Amazon S3 is supported. 
+
 The ``s3fs`` package must be available, and the file path should start with :code:`s3://`::
 
     @bodo.jit
@@ -358,12 +400,13 @@ These environment variables are used for File I/O with S3 credentials:
   - ``AWS_DEFAULT_REGION``: default as ``us-east-1``
   - ``AWS_S3_ENDPOINT``: specify custom host name, default as AWS endpoint(``s3.amazonaws.com``)
 
+.. _HDFS:
 
 Hadoop Distributed File System (HDFS)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Reading :ref:`csv <csv-section>`, reading and writing:ref:`Parquet <
-parquet-section>` from and to Hadoop Distributed File System (HDFS) is supported. 
+Reading and writing :ref:`csv <csv-section>`, :ref:`Parquet <parquet-section>` files from and to Hadoop Distributed File System (HDFS) is supported.  
+
 The file path should start with ``hdfs://``::
 
     @bodo.jit

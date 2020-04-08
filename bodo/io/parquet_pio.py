@@ -464,7 +464,13 @@ def get_parquet_dataset(file_name):
         except:  # pragma: no cover
             pass
         if file_names is not None:  # pragma: no cover
-            return pq.ParquetDataset(file_names, filesystem=fs)
+            try:
+                ParquetDataset = pq.ParquetDataset(file_names, filesystem=fs)
+            except Exception as e:
+                raise BodoError(
+                    "read_parquet(): S3 file system cannot be created: {}".format(e)
+                )
+            return ParquetDataset
     elif file_name.startswith("hdfs://"):
         # this HadoopFileSystem is the new file system of pyarrow
         from pyarrow.fs import HadoopFileSystem, FileSelector, FileType, HdfsOptions
@@ -484,7 +490,7 @@ def get_parquet_dataset(file_name):
             fs = HdFS(host=host, port=port, user=hdfs_options.user)
         except Exception as e:
             raise BodoError(
-                "read_parquet(): Hadoop file system " " cannot be created: {}".format(e)
+                "read_parquet(): Hadoop file system cannot be created: {}".format(e)
             )
 
         # prefix in form of hdfs://host:port

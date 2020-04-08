@@ -21,22 +21,26 @@ In addition:
 Input/Output
 ~~~~~~~~~~~~
 
+Also see :ref:`S3` and :ref:`HDFS` configuration requirements.
+
 * :func:`pandas.read_csv`
 
-  * Arguments ``filepath_or_buffer``, ``sep``, ``delimiter``, ``header``, ``names``,
+  * :ref:`example usage and more system specific instructions <csv-section>`
+  * Argument ``filepath_or_buffer`` is supported. file_path could be pointing to a single csv file, or a directory containing multiple partitioned csv files. ``header`` is not supported when reading a directory.
+  * Arguments ``sep``, ``delimiter``, ``header``, ``names``,
     ``index_col``, ``usecols``, ``dtype``, ``skiprows`` and ``parse_dates`` are supported.
   * ``filepath_or_buffer`` should be a string and is required.
   * Either ``names`` and ``dtype`` arguments should be provided to enable type inference,
-    or ``filepath_or_buffer`` should be a constant string for Bodo to infer types by looking at the file at compile time.
+    or ``filepath_or_buffer`` should be a constant string for Bodo to infer types by looking at the file at compile time (only supported when reading a single csv file from Posix or S3).
   * ``names``, ``usecols``, ``parse_dates`` should be constant lists.
   * ``dtype`` should be a constant dictionary of strings and types.
   * When a CSV file is read in parallel (distributed mode) and each process reads only a portion of the file, reading columns that contain line breaks is not supported.
 
 * :func:`pandas.read_parquet`
 
+  * :ref:`example usage and more system specific instructions <parquet-section>`
   * Arguments ``path`` and ``columns`` are supported. ``columns``
     should be a constant list of strings.
-
   * If ``path`` is constant, Bodo finds the schema from file at compilation time.
     Otherwise, schema should be provided. For example::
 

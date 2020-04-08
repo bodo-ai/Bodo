@@ -2,21 +2,27 @@
 #include <Python.h>
 #include <iostream>
 
+#include "../libs/_bodo_common.h"
 #include "_bodo_file_reader.h"
+#include "arrow/filesystem/filesystem.h"
 #include "arrow/filesystem/s3fs.h"
 #include "arrow/io/interfaces.h"
-#include "arrow/status.h"
 #include "arrow/result.h"
+#include "arrow/status.h"
 
-#define CHECK_ARROW(expr, msg)                                   \
-    if (!(expr.ok())) {                                          \
-        std::cerr << "Error in arrow s3: " << msg << " " << expr \
-                  << std::endl;                                  \
+#define CHECK(expr, msg)                                        \
+    if (!(expr)) {                                              \
+        std::cerr << "Error in arrow s3: " << msg << std::endl; \
+    }
+
+#define CHECK_ARROW(expr, msg)                                                 \
+    if (!(expr.ok())) {                                                        \
+        std::cerr << "Error in arrow s3: " << msg << " " << expr << std::endl; \
     }
 
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK_ARROW(res.status(), msg)            \
-    lhs = std::move(res).ValueOrDie();        \
+    lhs = std::move(res).ValueOrDie();
 
 // a global singleton instance of S3FileSystem that is
 // initialized the first time it is needed and reused afterwards
@@ -54,22 +60,32 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs() {
     return s3_fs;
 }
 
-static int finalize_s3(){ 
-    if(is_fs_initialized){
-        CHECK_ARROW(arrow::fs::FinalizeS3(), "Finalize S3"); 
+static int finalize_s3() {
+    if (is_fs_initialized) {
+        CHECK_ARROW(arrow::fs::FinalizeS3(), "Finalize S3");
         is_fs_initialized = false;
     }
     return 0;
 }
 
+std::pair<std::string, int64_t> extract_file_name_size(
+    const arrow::fs::FileStats &file_stat) {
+    return make_pair(file_stat.path(), file_stat.size());
+}
+
+bool sort_by_name(const std::pair<std::string, int64_t> &a,
+                  const std::pair<std::string, int64_t> &b) {
+    return (a.first < b.first);
+}
+
 // read S3 files using Arrow 0.15
-class S3FileReader : public FileReader {
+class S3FileReader : public SingleFileReader {
    public:
     std::shared_ptr<arrow::io::RandomAccessFile> s3_file;
     std::shared_ptr<arrow::fs::S3FileSystem> fs;
     arrow::Status status;
     arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> result;
-    S3FileReader(const char *_fname) : FileReader(_fname) {
+    S3FileReader(const char *_fname) : SingleFileReader(_fname) {
         fs = get_s3_fs();
         // open file
         result = fs->OpenInputFile(std::string(_fname));
@@ -81,7 +97,7 @@ class S3FileReader : public FileReader {
     }
     bool ok() { return status.ok(); }
     bool read(char *s, int64_t size) {
-        if(size == 0){ // hack for minio, read_csv size 0
+        if (size == 0) {  // hack for minio, read_csv size 0
             return 1;
         }
         int64_t bytes_read;
@@ -91,9 +107,50 @@ class S3FileReader : public FileReader {
     uint64_t getSize() {
         int64_t size = -1;
         status = s3_file->GetSize(&size);
-        CHECK_ARROW(status, "S3 file GetSize()");
+        CHECK_ARROW(status, "S3 file GetSize() ");
         return (uint64_t)size;
     }
+};
+
+class S3DirectoryFileReader : public DirectoryFileReader {
+   public:
+    std::shared_ptr<arrow::fs::S3FileSystem> fs;
+    // sorted names of each csv file inside the directory
+    name_size_vec file_names_sizes;
+    // FileSelector used to get Directory information
+    arrow::fs::FileSelector dir_selector;
+    // FileStats used to determine types, names, sizes
+    std::vector<arrow::fs::FileStats> file_stats;
+    arrow::Status status;
+
+    S3DirectoryFileReader(const char *_dirname)
+        : DirectoryFileReader(_dirname) {
+        // dirname is in format of s3://host:port/path/dir]
+        // initialize dir_selector
+        dir_selector.base_dir = this->dirname;
+
+        fs = get_s3_fs();
+
+        arrow::Result<std::vector<arrow::fs::FileStats>> result =
+            fs->GetTargetStats(dir_selector);
+        CHECK_ARROW_AND_ASSIGN(result, "fs->GetTargetStats", file_stats)
+
+        // extract file names and file sizes from file_stats
+        // then sort by file names
+        // assuming the directory contains files only, i.e. no subdirectory
+        std::transform(this->file_stats.begin(), this->file_stats.end(),
+                       std::back_inserter(this->file_names_sizes),
+                       extract_file_name_size);
+        std::sort(this->file_names_sizes.begin(), this->file_names_sizes.end(),
+                  sort_by_name);
+
+        this->file_names =
+            this->findDirSizeFileSizesFileNames(file_names_sizes);
+    };
+
+    void initFileReader(const char *fname) {
+        this->f_reader = new S3FileReader(fname);
+    };
 };
 
 extern "C" {
@@ -103,7 +160,20 @@ void s3_get_fs(std::shared_ptr<arrow::fs::S3FileSystem> *fs) {
 }
 
 FileReader *init_s3_reader(const char *fname) {
-    return new S3FileReader(fname);
+    arrow::fs::FileStats file_stat;
+    std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs();
+    arrow::Result<arrow::fs::FileStats> result =
+        fs->GetTargetStats(std::string(fname));
+    CHECK_ARROW_AND_ASSIGN(result, "fs->GetTargetStats", file_stat)
+    if (file_stat.IsDirectory()) {
+        return new S3DirectoryFileReader(fname);
+    } else if (file_stat.IsFile()) {
+        return new S3FileReader(fname);
+    } else {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Error in arrow s3: invalid path");
+        return NULL;
+    }
 }
 
 void s3_open_file(const char *fname,
@@ -133,5 +203,9 @@ PyMODINIT_FUNC PyInit_s3_reader(void) {
 
     return m;
 }
+
+// #undef CHECK
+// #undef CHECK_ARROW
+// #undef CHECK_ARROW_AND_ASSIGN
 
 }  // extern "C"

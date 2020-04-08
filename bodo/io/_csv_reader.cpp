@@ -9,9 +9,13 @@
   lines (not neessarily number of bytes). The actual file read is
   done lazily in the objects read method.
 */
+#include "_csv_reader.h"
 #include <mpi.h>
 #include <algorithm>
+#include <boost/algorithm/string/predicate.hpp>
+#include <boost/filesystem.hpp>
 #include <boost/filesystem/operations.hpp>
+#include <boost/filesystem/path.hpp>
 #include <boost/tokenizer.hpp>
 #include <cinttypes>
 #include <ciso646>
@@ -22,7 +26,6 @@
 #include <string>
 #include <vector>
 #include "../libs/_distributed.h"
-#include "_csv_reader.h"
 
 #include <Python.h>
 #include "_bodo_file_reader.h"
@@ -33,12 +36,17 @@
         std::cerr << "Error in csv_read: " << msg << std::endl; \
     }
 
+bool endsWithCsv(const boost::filesystem::path &path) {
+    return (boost::filesystem::is_regular_file(path) &&
+            boost::ends_with(path.string(), ".csv"));
+}
+
 // read local files
 // currently using ifstream, TODO: benchmark Arrow's LocalFS
-class LocalFileReader : public FileReader {
+class LocalFileReader : public SingleFileReader {
    public:
     std::ifstream *fstream;
-    LocalFileReader(const char *_fname) : FileReader(_fname) {
+    LocalFileReader(const char *_fname) : SingleFileReader(_fname) {
         this->fstream = new std::ifstream(fname);
         CHECK(fstream->good() && !fstream->eof() && fstream->is_open(),
               "could not open file.");
@@ -58,6 +66,35 @@ class LocalFileReader : public FileReader {
     }
 };
 
+class LocalDirectoryFileReader : public DirectoryFileReader {
+   public:
+    path_vec file_paths;  // sorted paths of each csv file inside the directory
+    LocalDirectoryFileReader(const char *_dirname)
+        : DirectoryFileReader(_dirname) {
+        // only keep the files that are csv files
+        std::copy_if(boost::filesystem::directory_iterator(_dirname),
+                     boost::filesystem::directory_iterator(),
+                     std::back_inserter(this->file_paths), endsWithCsv);
+
+        // sort all files in directory
+        std::sort(this->file_paths.begin(), this->file_paths.end());
+
+        // find dir_size and construct file_sizes
+        // assuming the directory contains files only, i.e. no subdirectory
+        this->dir_size = 0;
+        for (auto it = this->file_paths.begin(); it != this->file_paths.end();
+             ++it) {
+            (this->file_sizes).push_back(this->dir_size);
+            (this->file_names).push_back((*it).string());
+            this->dir_size += boost::filesystem::file_size(*it);
+        }
+        this->file_sizes.push_back(this->dir_size);
+    };
+
+    void initFileReader(const char *fname) {
+        this->f_reader = new LocalFileReader(fname);
+    };
+};
 #undef CHECK
 
 // ***********************************************************************************
@@ -139,7 +176,8 @@ static void stream_reader_init(stream_reader *self, FileReader *ifs,
     // seek to our chunk beginning
     bool ok = self->ifs->seek(start);
     if (!ok) {
-        std::cerr << "Could not seek to start position " << start << std::endl;
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                                 "Could not seek to start position");
         return;
     }
     self->chunk_start = start;
@@ -359,8 +397,8 @@ static PyObject *csv_chunk_reader(FileReader *f, size_t fsz, bool is_parallel,
         size_t byte_offset = dist_get_start(fsz, nranks, rank);
         f->seek(byte_offset);
         if (!f->ok()) {
-            std::cerr << "Could not seek to start position "
-                      << dist_get_start(fsz, nranks, rank) << std::endl;
+            Bodo_PyErr_SetString(PyExc_RuntimeError,
+                                 "Could not seek to start position");
             return NULL;
         }
         // We evenly distribute the 'data' byte-wise
@@ -458,6 +496,11 @@ static PyObject *csv_chunk_reader(FileReader *f, size_t fsz, bool is_parallel,
         dist_waitall(mpi_reqs.size(), mpi_reqs.data());
     }  // if is_parallel
     else if (skiprows > 0 || nrows != -1) {
+        f->seek(0);
+        if (!f->ok()) {
+            Bodo_PyErr_SetString(PyExc_RuntimeError,
+                                 "Could not seek to start position");
+        }
         std::vector<size_t> line_offset = count_lines(f, fsz);
         if (skiprows > 0) my_off_start = line_offset[skiprows - 1] + 1;
         if (nrows != -1) my_off_end = line_offset[nrows - 1] + 1;
@@ -518,7 +561,11 @@ extern "C" PyObject *csv_file_chunk_reader(const char *fname, bool is_parallel,
         Py_DECREF(hdfs_reader);
         Py_DECREF(func_obj);
     } else {
-        f_reader = new LocalFileReader(fname);
+        if (boost::filesystem::is_directory(fname)) {
+            f_reader = new LocalDirectoryFileReader(fname);
+        } else {
+            f_reader = new LocalFileReader(fname);
+        }
         CHECK(f_reader->ok(), "could not open file.");
     }
     // TODO: support other file systems like HDFS

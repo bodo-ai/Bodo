@@ -1078,6 +1078,7 @@ def test_csv_date_col_name(datapath):
 
     check_func(test_impl, ())
 
+
 def test_csv_read_only_datetime1(datapath):
     """Test the use of reading dataframe containing
     single datetime like column
@@ -1085,14 +1086,10 @@ def test_csv_read_only_datetime1(datapath):
     fname = datapath("csv_data_only_date1.csv")
 
     def test_impl():
-        return pd.read_csv(
-            fname,
-            names=["A"],
-            dtype={"A": str},
-            parse_dates=["A"],
-        )
+        return pd.read_csv(fname, names=["A"], dtype={"A": str}, parse_dates=["A"],)
 
     check_func(test_impl, ())
+
 
 def test_csv_read_only_datetime2(datapath):
     """Test the use of reading dataframe containing
@@ -1102,13 +1099,83 @@ def test_csv_read_only_datetime2(datapath):
 
     def test_impl():
         return pd.read_csv(
-            fname,
-            names=["A", "B"],
-            dtype={"A": str, "B": str},
-            parse_dates=[0, 1],
+            fname, names=["A", "B"], dtype={"A": str, "B": str}, parse_dates=[0, 1],
         )
 
     check_func(test_impl, ())
+
+
+def test_csv_dir_int_nulls_single(datapath):
+    """
+    Test read_csv reading dataframe containing int column with nulls
+    from a directory(Spark output) containing single csv file.
+    """
+    fname = datapath("int_nulls_single.csv")
+
+    def test_impl():
+        return pd.read_csv(fname, names=["A"], dtype={"A": "Int32"},)
+
+    py_output = pd.read_csv(
+        datapath("int_nulls.csv"), names=["A"], dtype={"A": "Int32"},
+    )
+
+    check_func(test_impl, (), py_output=py_output)
+
+
+def test_csv_dir_int_nulls_multi(datapath):
+    """
+    Test read_csv reading dataframe containing int column with nulls
+    from a directory(Spark output) containing multiple csv file.
+    """
+    fname = datapath("int_nulls_multi.csv")
+
+    def test_impl():
+        return pd.read_csv(fname, names=["A"], dtype={"A": "Int32"},)
+
+    py_output = pd.read_csv(
+        datapath("int_nulls.csv"), names=["A"], dtype={"A": "Int32"},
+    )
+
+    check_func(test_impl, (), py_output=py_output)
+
+
+def test_csv_dir_str_arr_single(datapath):
+    """
+    Test read_csv reading dataframe containing str column with nulls
+    from a directory(Spark output) containing single csv file.
+    """
+    fname = datapath("str_arr_single.csv")
+
+    def test_impl():
+        return pd.read_csv(fname, names=["A", "B"], dtype={"A": str, "B": str},).fillna(
+            ""
+        )
+
+    py_output = pd.read_csv(
+        datapath("str_arr.csv"), names=["A", "B"], dtype={"A": str, "B": str},
+    ).fillna("")
+
+    check_func(test_impl, (), py_output=py_output)
+
+
+def test_csv_dir_str_arr_multi(datapath):
+    """
+    Test read_csv reading dataframe containing str column with nulls
+    from a directory(Spark output) containing multiple csv file.
+    """
+    fname = datapath("str_arr_parts.csv")
+
+    def test_impl():
+        return pd.read_csv(fname, names=["A", "B"], dtype={"A": str, "B": str},).fillna(
+            ""
+        )
+
+    py_output = pd.read_csv(
+        datapath("str_arr.csv"), names=["A", "B"], dtype={"A": str, "B": str},
+    ).fillna("")
+
+    check_func(test_impl, (), py_output=py_output)
+
 
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):

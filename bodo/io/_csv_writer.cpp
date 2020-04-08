@@ -9,6 +9,7 @@
 #include "mpi.h"
 
 extern "C" {
+
 #define CHECK_ARROW(expr, msg)                                         \
     if (!(expr.ok())) {                                                \
         std::cerr << "Error in arrow csv write " << msg << " " << expr \
@@ -30,8 +31,8 @@ extern "C" {
  * @param count: number of bytes to write
  * @param is_parallel: true if df, from pandas to_csv(df), is distributed
  */
-void csv_write(char* _path_name, char* buff, int64_t start, 
-    int64_t count, bool is_parallel) {
+void csv_write(char *_path_name, char *buff, int64_t start, int64_t count,
+               bool is_parallel) {
     int myrank, num_ranks;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
@@ -47,7 +48,7 @@ void csv_write(char* _path_name, char* buff, int64_t start,
 
     extract_fs_dir_path(_path_name, is_parallel, ".csv", myrank, num_ranks,
                         &fs_option, &dirname, &fname, &orig_path, &path_name);
-    
+
     // handling posix with mpi/fwrite
     if (fs_option == Bodo_Fs::posix) {
         if (is_parallel) {
@@ -59,8 +60,8 @@ void csv_write(char* _path_name, char* buff, int64_t start,
     }
 
     // handling s3 and hdfs with arrow
-    open_outstream(fs_option, is_parallel, myrank, "csv", dirname,
-                   fname, orig_path, path_name, &out_stream);
+    open_outstream(fs_option, is_parallel, myrank, "csv", dirname, fname,
+                   orig_path, path_name, &out_stream);
 
     status = out_stream->Write(buff, count);
     CHECK_ARROW(status, "arrow::io::OutputStream::Write");
@@ -70,7 +71,7 @@ void csv_write(char* _path_name, char* buff, int64_t start,
 }
 
 PyMODINIT_FUNC PyInit_csv_cpp(void) {
-    PyObject* m;
+    PyObject *m;
     static struct PyModuleDef moduledef = {
         PyModuleDef_HEAD_INIT, "csv_cpp", "No docs", -1, NULL,
     };
@@ -78,7 +79,7 @@ PyMODINIT_FUNC PyInit_csv_cpp(void) {
     if (m == NULL) return NULL;
 
     PyObject_SetAttrString(m, "csv_write",
-                           PyLong_FromVoidPtr((void*)(&csv_write)));
+                           PyLong_FromVoidPtr((void *)(&csv_write)));
 
     PyInit_csv(m);
     return m;

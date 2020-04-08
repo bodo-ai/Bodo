@@ -137,7 +137,7 @@ def test_s3_csv_write_seq(minio_server, s3_bucket, test_df):
     """
 
     def test_write(test_df):
-        test_df.to_csv("s3://bodo-test/test_df_bodo_seq.csv")
+        test_df.to_csv("s3://bodo-test/test_df_bodo_seq.csv", index=False, header=False)
 
     bodo_write = bodo.jit(test_write)
     bodo_write(test_df)
@@ -149,7 +149,7 @@ def test_s3_csv_write_1D(minio_server, s3_bucket, test_df):
     """
 
     def test_write(test_df):
-        test_df.to_csv("s3://bodo-test/test_df_bodo_1D.csv")
+        test_df.to_csv("s3://bodo-test/test_df_bodo_1D.csv", index=False, header=False)
 
     bodo_write = bodo.jit(all_args_distributed=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False))
@@ -161,7 +161,9 @@ def test_s3_csv_write_1D_var(minio_server, s3_bucket, test_df):
     """
 
     def test_write(test_df):
-        test_df.to_csv("s3://bodo-test/test_df_bodo_1D_var.csv")
+        test_df.to_csv(
+            "s3://bodo-test/test_df_bodo_1D_var.csv", index=False, header=False
+        )
 
     bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False, True))
@@ -169,56 +171,83 @@ def test_s3_csv_write_1D_var(minio_server, s3_bucket, test_df):
 
 def test_s3_parquet_read_seq(minio_server, s3_bucket, test_df):
     """
-    read_parquet sequentially
-    test the parquet file we just wrote
+    read_parquet
+    test the parquet file we just wrote sequentially
     """
 
     def test_read():
         return pd.read_parquet("s3://bodo-test/test_df_bodo_seq.pq")
 
-    n_pes = bodo.get_size()
-    bodo_read = bodo.jit(test_read)
-    bodo_out = bodo_read()
-    passed = _test_equal_guard(bodo_out, test_df, False)
-    n_passed = reduce_sum(passed)
-    assert n_passed == n_pes
+    check_func(test_read, (), py_output=test_df)
 
 
 def test_s3_parquet_read_1D(minio_server, s3_bucket, test_df, datapath):
     """
-    read_parquet in 1D
-    test the parquet file we just wrote
+    read_parquet
+    test the parquet file we just wrote in 1D
     """
 
     def test_read():
         return pd.read_parquet("s3://bodo-test/test_df_bodo_1D.pq")
 
-    n_pes = bodo.get_size()
-    bodo_read = bodo.jit(all_returns_distributed=True)(test_read)
-    bodo_out = bodo_read()
-    bodo_out = bodo.gatherv(bodo_out)
-    passed = 1
-    if bodo.get_rank() == 0:
-        passed = _test_equal_guard(bodo_out, test_df, False)
-    n_passed = reduce_sum(passed)
-    assert n_passed == n_pes
+    check_func(test_read, (), py_output=test_df)
 
 
 def test_s3_parquet_read_1D_var(minio_server, s3_bucket, test_df):
     """
-    read_parquet in 1D Var
-    test the parquet file we just wrote
+    read_parquet
+    test the parquet file we just wrote  in 1D Var
     """
 
     def test_read():
         return pd.read_parquet("s3://bodo-test/test_df_bodo_1D_var.pq")
 
-    n_pes = bodo.get_size()
-    bodo_read = bodo.jit(all_returns_distributed=True)(test_read)
-    bodo_out = bodo_read()
-    bodo_out = bodo.gatherv(bodo_out)
-    passed = 1
-    if bodo.get_rank() == 0:
-        passed = _test_equal_guard(bodo_out, test_df, False)
-    n_passed = reduce_sum(passed)
-    assert n_passed == n_pes
+    check_func(test_read, (), py_output=test_df)
+
+
+def test_s3_csv_read_seq(minio_server, s3_bucket, test_df):
+    """
+    read_csv 
+    test the csv file we just wrote sequentially
+    """
+
+    def test_read():
+        return pd.read_csv(
+            "s3://bodo-test/test_df_bodo_seq.csv",
+            names=["A", "B", "C"],
+            dtype={"A": np.float, "B": "bool", "C": np.int},
+        )
+
+    check_func(test_read, (), py_output=test_df)
+
+
+def test_s3_csv_read_1D(minio_server, s3_bucket, test_df):
+    """
+    read_csv 
+    test the csv file we just wrote in 1D
+    """
+
+    def test_read():
+        return pd.read_csv(
+            "s3://bodo-test/test_df_bodo_1D.csv",
+            names=["A", "B", "C"],
+            dtype={"A": np.float, "B": "bool", "C": np.int},
+        )
+
+    check_func(test_read, (), py_output=test_df)
+
+
+def test_s3_csv_read_1D_var(minio_server, s3_bucket, test_df):
+    """
+    read_csv 
+    test the csv file we just wrote in 1D Var
+    """
+
+    def test_read():
+        return pd.read_csv(
+            "s3://bodo-test/test_df_bodo_1D_var.csv",
+            names=["A", "B", "C"],
+            dtype={"A": np.float, "B": "bool", "C": np.int},
+        )
+
+    check_func(test_read, (), py_output=test_df)
