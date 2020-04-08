@@ -105,19 +105,21 @@ not supported since function ``f`` is not known in advance::
 One can usually avoid these cases in analytics codes without significant effort.
 
 
+Accessing individual values of nullable data
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Type stability forces us to change the behavior of some functions. For example
-we have here a difference of behavior::
+The type of null (NA) value for most nullable data arrays is different than
+regular values (except float data which stores `np.nan`). Therefore, accessing
+individual values (i.e. using `[]` with an integer index) may not be type stable::
 
-    def test_impl(df):
-        return df["A"].iat[1]
-    df1 = pd.DataFrame({"A":[["A"], np.nan, ["AB", "CD"]]})
-    bodo_impl = bodo.jit(test_impl)
-    df2_pandas = test_impl(df1) # Will be nan
-    df2_bodo = bodo_impl(df1)   # Will be []
+    @bodo.jit
+    def f(S, i):
+        return S.iloc[i]  # not type stable
+    S = pd.Series(["A", None, "CC"])
 
-This difference in behavior is needed in order to enforce the type stability of the
-getitem function.
+We are working on making it possible to avoid stability issues automatically
+in most practical cases.
+
 
 .. _heterogeneousdtype:
 
