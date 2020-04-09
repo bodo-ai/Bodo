@@ -58,6 +58,7 @@ from bodo.utils.transform import (
     compile_func_single_block,
     update_locs,
     get_str_const_value,
+    get_call_expr_arg,
 )
 from bodo.utils.utils import gen_getitem
 from bodo.libs.str_arr_ext import (
@@ -526,7 +527,7 @@ class DataFramePass:
         df_typ = self.typemap[df_var.name]
         # get apply function
         kws = dict(rhs.kws)
-        func_var = self._get_arg("apply", rhs.args, kws, 0, "func")
+        func_var = get_call_expr_arg("apply", rhs.args, kws, 0, "func")
         func = get_overload_const_func(self.typemap[func_var.name])
         # TODO: get globals directly from passed lambda if possible?
         _globals = self.func_ir.func_id.func.__globals__
@@ -2396,21 +2397,6 @@ class DataFramePass:
         dumm_block.body = node_list
         build_definitions({0: dumm_block}, self.func_ir._definitions)
         return
-
-    def _get_arg(self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):
-        arg = None
-        if len(args) > arg_no:
-            arg = args[arg_no]
-        elif arg_name in kws:
-            arg = kws[arg_name]
-
-        if arg is None:
-            if default is not None:
-                return default
-            if err_msg is None:
-                err_msg = "{} requires '{}' argument".format(f_name, arg_name)
-            raise ValueError(err_msg)
-        return arg
 
     def _gen_arr_copy(self, in_arr, nodes):
         nodes += compile_func_single_block(lambda A: A.copy(), (in_arr,), None, self)

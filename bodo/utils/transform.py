@@ -396,6 +396,26 @@ def gen_add_consts_to_type(vals, var, ret_var, typing_info=None):
     return nodes
 
 
+def get_call_expr_arg(f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):
+    """get a specific argument from all argument variables of a call expr, which could
+    be specified either as a positional argument or keyword argument.
+    If argument is not specified, an error is raised unless if a default is specified.
+    """
+    arg = None
+    if len(args) > arg_no:
+        arg = args[arg_no]
+    elif arg_name in kws:
+        arg = kws[arg_name]
+
+    if arg is None:
+        if default is not None:
+            return default
+        if err_msg is None:
+            err_msg = "{} requires '{}' argument".format(f_name, arg_name)
+        raise BodoError(err_msg)
+    return arg
+
+
 # `run_frontend` function of Numba is used in inline_closure_call to get the IR of the
 # function to be inlined.
 # The code below is copied from Numba and modified to handle 'raise' nodes by running
