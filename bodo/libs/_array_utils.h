@@ -86,19 +86,19 @@ inline T GetTentry(char* ptr) {
  * @return the value as a double.
  */
 inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
-    if (dtype == Bodo_CTypes::INT8) return GetTentry<int8_t>(ptr);
-    if (dtype == Bodo_CTypes::UINT8) return GetTentry<uint8_t>(ptr);
-    if (dtype == Bodo_CTypes::INT16) return GetTentry<int16_t>(ptr);
-    if (dtype == Bodo_CTypes::UINT16) return GetTentry<uint16_t>(ptr);
-    if (dtype == Bodo_CTypes::INT32) return GetTentry<int32_t>(ptr);
-    if (dtype == Bodo_CTypes::UINT32) return GetTentry<uint32_t>(ptr);
-    if (dtype == Bodo_CTypes::INT64) return GetTentry<int64_t>(ptr);
-    if (dtype == Bodo_CTypes::UINT64) return GetTentry<uint64_t>(ptr);
-    if (dtype == Bodo_CTypes::FLOAT32) return GetTentry<float>(ptr);
-    if (dtype == Bodo_CTypes::FLOAT64) return GetTentry<double>(ptr);
-    if (dtype == Bodo_CTypes::DATE) return GetTentry<int64_t>(ptr);
-    if (dtype == Bodo_CTypes::DATETIME) return GetTentry<int64_t>(ptr);
-    if (dtype == Bodo_CTypes::TIMEDELTA) return GetTentry<int64_t>(ptr);
+    if (dtype == Bodo_CTypes::INT8) return double(GetTentry<int8_t>(ptr));
+    if (dtype == Bodo_CTypes::UINT8) return double(GetTentry<uint8_t>(ptr));
+    if (dtype == Bodo_CTypes::INT16) return double(GetTentry<int16_t>(ptr));
+    if (dtype == Bodo_CTypes::UINT16) return double(GetTentry<uint16_t>(ptr));
+    if (dtype == Bodo_CTypes::INT32) return double(GetTentry<int32_t>(ptr));
+    if (dtype == Bodo_CTypes::UINT32) return double(GetTentry<uint32_t>(ptr));
+    if (dtype == Bodo_CTypes::INT64) return double(GetTentry<int64_t>(ptr));
+    if (dtype == Bodo_CTypes::UINT64) return double(GetTentry<uint64_t>(ptr));
+    if (dtype == Bodo_CTypes::FLOAT32) return double(GetTentry<float>(ptr));
+    if (dtype == Bodo_CTypes::FLOAT64) return double(GetTentry<double>(ptr));
+    if (dtype == Bodo_CTypes::DATE) return double(GetTentry<int64_t>(ptr));
+    if (dtype == Bodo_CTypes::DATETIME) return double(GetTentry<int64_t>(ptr));
+    if (dtype == Bodo_CTypes::TIMEDELTA) return double(GetTentry<int64_t>(ptr));
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Unsupported case in GetDoubleEntry");
     return 0;
 }
@@ -226,6 +226,25 @@ inline bool TestEqual(std::vector<array_info*> const& columns,
     // If all keys are equal then we are ok and the keys are equals.
     return true;
 };
+
+
+template<typename T>
+inline typename std::enable_if<std::is_floating_point<T>::value, bool>::type
+isnan_alltype(T const& val)
+{
+  return isnan(val);
+}
+
+
+template<typename T>
+inline typename std::enable_if<!std::is_floating_point<T>::value, bool>::type
+isnan_alltype(T const& val)
+{
+  return false;
+}
+
+
+
 
 /**
  * The comparison function for integer types.

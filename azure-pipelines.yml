@@ -43,3 +43,7 @@ jobs:
         PYTEST_MARKER: not slow and not firsthalf
         NP: 1
 
+- template: buildscripts/azure/azure-test-build-windows.yml
+  parameters:
+    name: Windows_conda_build
+    vmImage: vs2017-win2016

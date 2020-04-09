@@ -916,7 +916,7 @@ void cumulative_computation_T(array_info* arr, array_info* out_arr,
             cum_computation(
                 [=](int64_t pos) -> std::pair<bool, T> {
                     T eVal = arr->at<T>(pos);
-                    bool isna = isnan(eVal);
+                    bool isna = isnan_alltype<T>(eVal);
                     return {isna, eVal};
                 },
                 [=](int64_t pos, std::pair<bool, T> const& ePair) -> void {
@@ -941,44 +941,44 @@ void cumulative_computation_T(array_info* arr, array_info* out_arr,
 void cumulative_computation(array_info* arr, array_info* out_arr,
                             grouping_info const& grp_inf, int32_t const& ftype,
                             bool const& skipna) {
-    if (arr->dtype == Bodo_CTypes::INT8)
+    Bodo_CTypes::CTypeEnum dtype = arr->dtype;
+    if (dtype == Bodo_CTypes::INT8)
         return cumulative_computation_T<int8_t>(arr, out_arr, grp_inf, ftype,
                                                 skipna);
-    if (arr->dtype == Bodo_CTypes::UINT8)
+    if (dtype == Bodo_CTypes::UINT8)
         return cumulative_computation_T<uint8_t>(arr, out_arr, grp_inf, ftype,
                                                  skipna);
 
-    if (arr->dtype == Bodo_CTypes::INT16)
+    if (dtype == Bodo_CTypes::INT16)
         return cumulative_computation_T<int16_t>(arr, out_arr, grp_inf, ftype,
                                                  skipna);
-    if (arr->dtype == Bodo_CTypes::UINT16)
+    if (dtype == Bodo_CTypes::UINT16)
         return cumulative_computation_T<uint16_t>(arr, out_arr, grp_inf, ftype,
                                                   skipna);
 
-    if (arr->dtype == Bodo_CTypes::INT32)
+    if (dtype == Bodo_CTypes::INT32)
         return cumulative_computation_T<int32_t>(arr, out_arr, grp_inf, ftype,
                                                  skipna);
-    if (arr->dtype == Bodo_CTypes::UINT32)
+    if (dtype == Bodo_CTypes::UINT32)
         return cumulative_computation_T<uint32_t>(arr, out_arr, grp_inf, ftype,
                                                   skipna);
 
-    if (arr->dtype == Bodo_CTypes::INT64)
+    if (dtype == Bodo_CTypes::INT64)
         return cumulative_computation_T<int64_t>(arr, out_arr, grp_inf, ftype,
                                                  skipna);
-    if (arr->dtype == Bodo_CTypes::UINT64)
+    if (dtype == Bodo_CTypes::UINT64)
         return cumulative_computation_T<uint64_t>(arr, out_arr, grp_inf, ftype,
                                                   skipna);
 
-    if (arr->dtype == Bodo_CTypes::FLOAT32)
+    if (dtype == Bodo_CTypes::FLOAT32)
         return cumulative_computation_T<float>(arr, out_arr, grp_inf, ftype,
                                                skipna);
-    if (arr->dtype == Bodo_CTypes::FLOAT64)
+    if (dtype == Bodo_CTypes::FLOAT64)
         return cumulative_computation_T<double>(arr, out_arr, grp_inf, ftype,
                                                 skipna);
 
-    if (arr->dtype == Bodo_CTypes::DATE ||
-        arr->dtype == Bodo_CTypes::DATETIME ||
-        arr->dtype == Bodo_CTypes::TIMEDELTA)
+    if (dtype == Bodo_CTypes::DATE || dtype == Bodo_CTypes::DATETIME ||
+        dtype == Bodo_CTypes::TIMEDELTA)
         return cumulative_computation_T<int64_t>(arr, out_arr, grp_inf, ftype,
                                                  skipna);
 }
@@ -1340,7 +1340,7 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                          i_grp++) {
                         offsets_o[i_grp] = pos;
                         if (GetBit(null_bitmask_o, i_grp)) {
-                            int len = ListString[i_grp].size();
+                            int len = int(ListString[i_grp].size());
                             memcpy(data_o, ListString[i_grp].data(), len);
                             data_o += len;
                             pos += len;

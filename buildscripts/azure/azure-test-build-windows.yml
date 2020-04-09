@@ -1,0 +1,50 @@
+parameters:
+  name: ''
+  vmImage: ''
+
+jobs:
+- job: ${{ parameters.name }}
+  pool:
+    vmImage: ${{ parameters.vmImage }}
+  
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.8'
+    displayName: 'Use Python $(python.version)'
+
+  - script: |
+      pip install astunparse
+      chmod +x buildscripts/remove_docstring.py
+    displayName: 'Prepare to build'
+
+  - powershell: |
+        Write-Host "##vso[task.prependpath]$env:CONDA\Scripts"
+        Write-Host "##vso[task.prependpath]$HOME/miniconda3/bin"
+    displayName: 'Add conda to PATH'
+
+  - script: conda update -q -n base conda
+    displayName: 'Update conda'
+
+  - script: |
+      conda install -y flake8
+      flake8 bodo
+    displayName: 'Flake8'
+
+  - bash: |
+      conda create -y -n bodo_build conda-build anaconda-client conda-verify
+    displayName: 'Create Conda Env'
+
+  - bash: |
+      source activate bodo_build
+      cd buildscripts/bodo-conda-recipe/
+      conda build . -c bodo.ai -c conda-forge -c intel --no-test --output-folder ../../
+    displayName: 'Conda build Bodo'
+
+  - bash: |
+      source activate bodo_build
+      mkdir bodo-inc
+      mkdir bodo-inc/windows-64
+      cp ./win-64/bodo*.tar.bz2 bodo-inc/windows-64/
+      conda index bodo-inc/
+    displayName: 'index bodo-inc'
