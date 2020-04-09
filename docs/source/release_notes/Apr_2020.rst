@@ -1,0 +1,53 @@
+.. _Apr_2020:
+
+Bodo 2020.04 Release (Date: 04/08/2020)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+New Features and Improvements
+------------------------------------------
+- Support for `scatterv` operation
+- Improved memory management for DataFrame and Series data
+- Initial support for ``pandas.read_sql()``
+- ``pandas.read_csv()`` reads a directory of csv files
+- ``pandas.read_csv()`` reads from S3, and Hadoop Distributed File System (HDFS)
+- ``pandas.read_parquet()`` now reads all integer types (like int16) and gets nullable information for integer columns from pandas metadata
+- ``pandas.read_parquet()`` now supports reading columns of list of string elements
+- avoid type error for unselected columns in Parquet files
+- support ``pandas.RangeIndex`` when reading a non-partitioned parquet dataset
+- ``pandas.Dataframe.to_parquet()`` to Hadoop Distributed File System (HDFS)
+- ``pandas.Dataframe.to_parquet()`` always writes ``pandas.RangeIndex`` to Parquet metadata
+- support ``pandas.Dataframe.to_parquet()`` writing datetime64 (default in Pandas) and ``datatime.date`` types to Parquet files
+- support ``decimal.Decimal`` type in dataframes and Parquet I/O
+- Support for ``&``, ``|``, and ``pandas.Series.dt`` in ``pandas.Dataframe.query()``
+- Support added for groupby ``last`` operation
+- ``min``, ``max``, and ``sum`` support in ``groupby()`` for string columns
+- non-constant list of column names as argument support for functions like ``groupby()``
+- MultiIndex support for ``groupby(...).agg(as_index=False)`` 
+- ``pandas.Dataframe.merge()`` one dataframe on index, and the other on a column
+- sorting compilation time improvement
+- supports for integer, float, string, string list, ``datetime.date``, ``datetime.datetime``, and ``datetime.timedelta`` types in``pandas.Series.cummin()``, ``pandas.DataFrame.cummin()``, ``pandas.Series.cummax()``, and ``pandas.DataFrame.cummax()``
+- ``NA``s in ``datetime.date`` array 
+- better ``datetime.timedelta`` support
+- Support for ``min`` and ``max`` in  ``pandas.Timestamp`` and ``datetime.date``
+-  ``pandas.DataFrame.all()`` for boolean series
+-  ``pandas.Series.astype()`` to float, int, str
+-  Convert string columns to float using ``astype()``
+- `NA` support for ``Series.str.split()``
+- refactored and improved Dataframe indexing: ``pandas.loc()``, ``pandas.Dataframe.iloc()``, and ``pandas.Dataframe.iat()``
+- better support for  ``pandas.Series.shift()``, ``pandas.Series.pct_change()``, ``pandas.Dataframe.drop()``
+- set dataframe column using a scalar
+- support for ``Index.values``
+- Addition support for String columns
+
+
+Bug Fix
+--------------
+- ``pandas.join()`` produce the correct index.
+- ``pandas.groupby()`` use the latest schema
+- ``groupby(...).cumsum()`` preserves index
+- ``groupby(...).agg()`` when passing a dictionary of functions: support mix of multi-function lists and single functions
+- Fixed Numpy slicing error in a corner case when the slice is equivalent to array and array size is a constant
+- proper contruction of dataframe from slicing Numpy 2D array
+- ``pandas.read_csv`` reads a dataframe containing only datetime like columns
+- When using ``pandas.merge()`` and ``pandas.join()`` integer columns which can have a missing value `NA` are returned as nullable integer array (as opposed to `0` and `-1` before)
+- avoid errors in comparing Pandas and Numpy
