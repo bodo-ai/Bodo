@@ -115,7 +115,7 @@ def test_s3_parquet_write_1D(minio_server, s3_bucket, test_df):
     def test_write(test_df):
         test_df.to_parquet("s3://bodo-test/test_df_bodo_1D.pq")
 
-    bodo_write = bodo.jit(all_args_distributed=True)(test_write)
+    bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False))
 
 
@@ -151,7 +151,7 @@ def test_s3_csv_write_1D(minio_server, s3_bucket, test_df):
     def test_write(test_df):
         test_df.to_csv("s3://bodo-test/test_df_bodo_1D.csv", index=False, header=False)
 
-    bodo_write = bodo.jit(all_args_distributed=True)(test_write)
+    bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False))
 
 

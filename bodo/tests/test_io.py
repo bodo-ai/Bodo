@@ -180,7 +180,7 @@ def test_pq_write_metadata(df, index_name):
             for mode in ["1d-distributed", "1d-distributed-varlength"]:
                 for func in [impl_index_false, impl_index_none, impl_index_true]:
                     if mode == "1d-distributed":
-                        bodo_func = bodo.jit(func, all_args_distributed=True)
+                        bodo_func = bodo.jit(func, all_args_distributed_block=True)
                     else:
                         bodo_func = bodo.jit(func, all_args_distributed_varlength=True)
 
@@ -546,7 +546,7 @@ def test_read_write_parquet():
                     bodo_write = bodo.jit(write)
                     bodo_write(df, bodo_pq_filename)
                 elif mode == "1d-distributed":
-                    bodo_write = bodo.jit(write, all_args_distributed=True)
+                    bodo_write = bodo.jit(write, all_args_distributed_block=True)
                     bodo_write(_get_dist_arg(df, False), bodo_pq_filename)
                 elif mode == "1d-distributed-varlength":
                     bodo_write = bodo.jit(write, all_args_distributed_varlength=True)
@@ -677,7 +677,7 @@ def test_write_parquet_params():
                     bodo_func = bodo.jit(func)
                     data = df
                 elif mode == "1d-distributed":
-                    bodo_func = bodo.jit(func, all_args_distributed=True)
+                    bodo_func = bodo.jit(func, all_args_distributed_block=True)
                     data = _get_dist_arg(df, False)
                 if bodo.get_rank() == 0:
                     func(df, pd_fname)  # write with pandas
@@ -763,7 +763,7 @@ def test_write_csv_parallel_unicode():
     def test_impl(df, fname):
         df.to_csv(fname)
 
-    bodo_func = bodo.jit(all_args_distributed=True)(test_impl)
+    bodo_func = bodo.jit(all_args_distributed_block=True)(test_impl)
     S1 = ["¡Y tú quién te crees?", "🐍⚡", "大处着眼，小处着手。"] * 2
     S2 = ["abc¡Y tú quién te crees?", "dd2🐍⚡", "22 大处着眼，小处着手。"] * 2
     df = pd.DataFrame({"A": S1, "B": S2})

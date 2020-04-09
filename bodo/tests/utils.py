@@ -194,7 +194,7 @@ def check_func_1D(
     """
     # 1D distributed
     bodo_func = bodo.jit(
-        all_args_distributed=True, all_returns_distributed=is_out_distributed
+        all_args_distributed_block=True, all_returns_distributed=is_out_distributed
     )(func)
     dist_args = tuple(_get_dist_arg(a, copy_input) for a in args)
     bodo_output = bodo_func(*dist_args)

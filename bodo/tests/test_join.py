@@ -643,7 +643,7 @@ def test_merge_datetime_parallel():
         df3 = pd.merge(df1, df2, on="time")
         return (df3.A.sum(), df3.time.max(), df3.B.sum())
 
-    bodo_func = bodo.jit(distributed=["df1", "df2"])(test_impl)
+    bodo_func = bodo.jit(distributed_block=["df1", "df2"])(test_impl)
     df1 = pd.DataFrame(
         {
             "time": pd.DatetimeIndex(["2017-01-03", "2017-01-06", "2017-02-21"]),
@@ -1002,7 +1002,7 @@ def test_merge_left_parallel():
         df3 = df1.merge(df2, on=["A", "B"])
         return df3.C.sum() + df3.D.sum()
 
-    bodo_func = bodo.jit(distributed=["df1"])(test_impl)
+    bodo_func = bodo.jit(distributed_block=["df1"])(test_impl)
     df1 = pd.DataFrame(
         {"A": [3, 1, 1, 3, 4], "B": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}
     )
@@ -1316,7 +1316,7 @@ def test_merge_partial_distributed():
     start, end = get_start_end(len(df1))
     bdf1 = df1.iloc[start:end]
 
-    bodo_impl = bodo.jit(distributed={"df1", "df3"})(test_impl)
+    bodo_impl = bodo.jit(distributed_block={"df1", "df3"})(test_impl)
     df3_bodo1 = bodo_impl(bdf1, df2)
     df3_bodo2 = (
         bodo.gatherv(df3_bodo1).sort_values(by=["A", "C", "D"]).reset_index(drop=True)
@@ -1445,7 +1445,7 @@ class TestJoin(unittest.TestCase):
             df3 = df1.merge(df2, on="C1")
             return df3
 
-        bodo_func = bodo.jit(distributed=["df3"])(test_impl)
+        bodo_func = bodo.jit(distributed_block=["df3"])(test_impl)
         # TODO: check results
         self.assertTrue((bodo_func().columns == test_impl().columns).all())
 

@@ -2500,7 +2500,7 @@ class TestSeries(unittest.TestCase):
             return (B == "gg").sum()
 
         S1 = pd.Series(["aa", "b", None, "ccc", "dd", "gg"])
-        bodo_func = bodo.jit(distributed=["A"])(test_impl)
+        bodo_func = bodo.jit(distributed_block=["A"])(test_impl)
         start, end = get_start_end(len(S1))
         # TODO: gatherv
         self.assertEqual(bodo_func(S1[start:end]), test_impl(S1))
@@ -2623,7 +2623,7 @@ class TestSeries(unittest.TestCase):
         def test_impl(S):
             return S.max()
 
-        bodo_func = bodo.jit(distributed={"S"})(test_impl)
+        bodo_func = bodo.jit(distributed_block={"S"})(test_impl)
         n = 111
         S = pd.Series(np.arange(n))
         start, end = get_start_end(n)
@@ -2931,7 +2931,7 @@ class TestSeries(unittest.TestCase):
             return S.head(3)
 
         S = pd.Series([6, 9, 2, 3, 6, 4, 5], ["a", "ab", "abc", "c", "f", "hh", ""])
-        bodo_func = bodo.jit(distributed={"S"})(test_impl)
+        bodo_func = bodo.jit(distributed_block={"S"})(test_impl)
         start, end = get_start_end(len(S))
         pd.testing.assert_series_equal(bodo_func(S[start:end]), test_impl(S))
         self.assertTrue(count_array_OneDs() > 0)

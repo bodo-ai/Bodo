@@ -145,7 +145,7 @@ def test_hdfs_parquet_write_1D(datapath, hdfs_datapath, test_df):
     def test_write(test_df, hdfs_fname):
         test_df.to_parquet(hdfs_fname)
 
-    bodo_write = bodo.jit(all_args_distributed=True)(test_write)
+    bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False), hdfs_fname)
 
 
@@ -187,7 +187,7 @@ def test_hdfs_csv_write_1D(datapath, hdfs_datapath, test_df):
     def test_write(test_df, hdfs_fname):
         test_df.to_csv(hdfs_fname, index=False, header=False)
 
-    bodo_write = bodo.jit(all_args_distributed=True)(test_write)
+    bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False), hdfs_fname)
 
 
