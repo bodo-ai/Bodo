@@ -36,6 +36,15 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements.
   * ``dtype`` should be a constant dictionary of strings and types.
   * When a CSV file is read in parallel (distributed mode) and each process reads only a portion of the file, reading columns that contain line breaks is not supported.
 
+* :func:`pandas.read_sql`
+
+  * :ref:`example usage and more system specific instructions <sql-section>`
+  * Argument ``sql`` is supported but only as a string form. SQLalchemy `Selectable` is not supported. There is no restriction on the form of the sql request.
+  * Argument ``con`` is supported but only as a string form. SQLalchemy `connectable` is not supported.
+  * Argument ``index_col`` is supported.
+  * Arguments ``chunksize``, ``column``, ``coerce_float``, ``params`` are not supported.
+
+
 * :func:`pandas.read_parquet`
 
   * :ref:`example usage and more system specific instructions <parquet-section>`

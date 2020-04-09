@@ -322,6 +322,15 @@ Unlike :func:`pandas.read_csv`, Bodo can read a single csv file and a directory 
             │   ├── part-02.csv
             │   └── part-03.csv
 
+.. _sql-section:
+
+SQL
+^^^
+For sql, the syntax is the also same as Pandas::
+
+    @bodo.jit
+    def example_sql():
+        df = pd.read_sql('select * from employees', 'mysql+pymysql://admin:server')
 
 HDF5
 ^^^^
