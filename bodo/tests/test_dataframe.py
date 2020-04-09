@@ -1379,6 +1379,26 @@ def test_column_list_getitem1():
     check_func(test_impl, (df,))
 
 
+def test_column_list_getitem_infer():
+    """Test df[["A", "B"]] getitem case when column names list has to be inferred in
+    partial typing.
+    """
+
+    def test_impl(df):
+        return df[["A"] + ["C", "B"]]
+
+    df = pd.DataFrame(
+        {
+            "A": [1.1, 2.3, np.nan, 1.7, 3.6] * 2,
+            "A2": [3, 1, 2, 3, 5] * 2,
+            "B": [True, False, None, False, True] * 2,
+            "C": ["AA", "C", None, "ABC", ""] * 2,
+        },
+        index=[3, 1, 2, 4, 0] * 2,
+    )
+    check_func(test_impl, (df,))
+
+
 def test_iloc_bool_arr():
     """test df.iloc[bool_arr]
     """
