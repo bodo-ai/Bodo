@@ -897,6 +897,10 @@ def create_timestamp_cmp_op_overload(op):
                 A2.value,
             )
 
+        # Timestamp/Timestamp
+        if A1 == pandas_timestamp_type and A2 == pandas_timestamp_type:
+            return lambda A1, A2: op(A1.value, A2.value)
+
     return overload_date_timestamp_cmp
 
 
@@ -916,6 +920,26 @@ def _install_timestamp_cmp_ops():
 
 
 _install_timestamp_cmp_ops()
+
+
+@overload(min)
+def timestamp_min(lhs, rhs):
+    if lhs == pandas_timestamp_type and rhs == pandas_timestamp_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs < rhs else rhs
+
+        return impl
+
+
+@overload(max)
+def timestamp_max(lhs, rhs):
+    if lhs == pandas_timestamp_type and rhs == pandas_timestamp_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs > rhs else rhs
+
+        return impl
 
 
 # -- builtin operators for dt64 ----------------------------------------------

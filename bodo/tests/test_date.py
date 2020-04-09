@@ -129,6 +129,12 @@ def test_datetime_operations():
     check_func(test_add, (S, tdS))
     check_func(test_add, (tdS, S))
 
+    # Test Timestamp
+    t1 = pd.Timestamp(1993, 12, 1)
+    t2 = pd.Timestamp(2013, 1, 13)
+    check_func(test_min, (t1, t2))
+    check_func(test_max, (t2, t1))
+
 
 def test_datetime_comparisons():
     """
