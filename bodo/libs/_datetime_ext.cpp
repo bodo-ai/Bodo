@@ -10,7 +10,6 @@
 
 extern "C" {
 
-
 /**
  * @brief Computes the python `ret, d = divmod(d, unit)`.
  * copied from Pandas:
@@ -32,7 +31,6 @@ npy_int64 extract_unit(npy_datetime* d, npy_datetime unit) {
     return div;
 }
 
-
 /**
  * @brief extracts year and days from dt64 value, and updates to the remaining
  * dt64 from Pandas:
@@ -41,8 +39,7 @@ npy_int64 extract_unit(npy_datetime* d, npy_datetime unit) {
  * @param year[out] extracted year
  * @param days[out] extracted days
  */
-static void extract_year_days(npy_datetime* dt, int64_t* year,
-                              int64_t* days) {
+static void extract_year_days(npy_datetime* dt, int64_t* year, int64_t* days) {
     //
     npy_int64 perday = 24LL * 60LL * 60LL * 1000LL * 1000LL * 1000LL;
     *days = extract_unit(dt, perday);  // NOTE: dt is updated here as well
@@ -236,11 +233,14 @@ void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
     CHECK(PySequence_Check(obj), "expecting a PySequence");
     CHECK(n >= 0 && data && null_bitmap, "output arguments must not be NULL");
 
-    // get pd.isna object to call in the loop to check for NAs
+    // get pd.NA object to check for new NA kind
+    // simple equality check is enough since the object is a singleton
+    // example:
+    // https://github.com/pandas-dev/pandas/blob/fcadff30da9feb3edb3acda662ff6143b7cb2d9f/pandas/_libs/missing.pyx#L57
     PyObject* pd_mod = PyImport_ImportModule("pandas");
     CHECK(pd_mod, "importing pandas module failed");
-    PyObject* isna_call_obj = PyObject_GetAttrString(pd_mod, "isna");
-    CHECK(isna_call_obj, "getting pd.isna failed");
+    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
+    CHECK(C_NA, "getting pd.NA failed");
 
     arrow::Status status;
 
@@ -248,9 +248,9 @@ void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
         PyObject* s = PySequence_GetItem(obj, i);
         CHECK(s, "getting element failed");
         // Pandas stores NA as either None, nan, or pd.NA
-        PyObject* isna_obj =
-            PyObject_CallFunctionObjArgs(isna_call_obj, s, NULL);
-        if (PyObject_IsTrue(isna_obj)) {
+        if (s == Py_None ||
+            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
+            s == C_NA) {
             // null bit
             ::arrow::BitUtil::ClearBit(null_bitmap, i);
             data[i] = 0;
@@ -271,10 +271,9 @@ void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
             Py_DECREF(day_obj);
         }
         Py_DECREF(s);
-        Py_DECREF(isna_obj);
     }
 
-    Py_DECREF(isna_call_obj);
+    Py_DECREF(C_NA);
     Py_DECREF(pd_mod);
 
     PyGILState_Release(gilstate);

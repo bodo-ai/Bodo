@@ -24,8 +24,8 @@ struct decimal_value {
     int64_t high;
 };
 
-void decimal_to_str(decimal_value val, NRT_MemInfo **meminfo_ptr, int64_t *len_ptr, int scale);
-
+void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
+                    int64_t* len_ptr, int scale);
 
 PyMODINIT_FUNC PyInit_decimal_ext(void) {
     PyObject* m;
@@ -134,11 +134,14 @@ void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
     CHECK(PySequence_Check(obj), "expecting a PySequence");
     CHECK(n >= 0 && data && null_bitmap, "output arguments must not be NULL");
 
-    // get pd.isna object to call in the loop to check for NAs
+    // get pd.NA object to check for new NA kind
+    // simple equality check is enough since the object is a singleton
+    // example:
+    // https://github.com/pandas-dev/pandas/blob/fcadff30da9feb3edb3acda662ff6143b7cb2d9f/pandas/_libs/missing.pyx#L57
     PyObject* pd_mod = PyImport_ImportModule("pandas");
     CHECK(pd_mod, "importing pandas module failed");
-    PyObject* isna_call_obj = PyObject_GetAttrString(pd_mod, "isna");
-    CHECK(isna_call_obj, "getting pd.isna failed");
+    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
+    CHECK(C_NA, "getting pd.NA failed");
 
     arrow::Status status;
 
@@ -146,9 +149,9 @@ void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
         PyObject* s = PySequence_GetItem(obj, i);
         CHECK(s, "getting element failed");
         // Pandas stores NA as either None, nan, or pd.NA
-        PyObject* isna_obj =
-            PyObject_CallFunctionObjArgs(isna_call_obj, s, NULL);
-        if (PyObject_IsTrue(isna_obj)) {
+        if (s == Py_None ||
+            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
+            s == C_NA) {
             // null bit
             ::arrow::BitUtil::ClearBit(null_bitmap, i);
             memset(data + i * BYTES_PER_DECIMAL, 0, BYTES_PER_DECIMAL);
@@ -174,10 +177,9 @@ void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
             Py_DECREF(s_str_obj);
         }
         Py_DECREF(s);
-        Py_DECREF(isna_obj);
     }
 
-    Py_DECREF(isna_call_obj);
+    Py_DECREF(C_NA);
     Py_DECREF(pd_mod);
 
     PyGILState_Release(gilstate);
@@ -186,26 +188,25 @@ void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
 #undef CHECK
 }
 
-
 /**
- * @brief convert decimal128 value to string and create a memptr pointer with the data
- * 
+ * @brief convert decimal128 value to string and create a memptr pointer with
+ * the data
+ *
  * @param val decimal128 input value
  * @param meminfo_ptr output memptr pointer to set
  * @param len_ptr output length to set
  * @param scale scale parameter of decimal128
  */
-void decimal_to_str(decimal_value val, NRT_MemInfo **meminfo_ptr, int64_t *len_ptr, int scale)
-{
+void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
+                    int64_t* len_ptr, int scale) {
     arrow::Decimal128 arrow_decimal(val.high, val.low);
     std::string str = arrow_decimal.ToString(scale);
     int64_t l = (int64_t)str.length();
-    NRT_MemInfo *meminfo = NRT_MemInfo_alloc_safe(l+1);
+    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe(l + 1);
     memcpy(meminfo->data, str.c_str(), l);
     ((char*)meminfo->data)[l] = 0;
     *len_ptr = l;
     *meminfo_ptr = meminfo;
 }
-
 
 }  // extern "C"
