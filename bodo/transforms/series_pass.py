@@ -88,7 +88,11 @@ from bodo.hiframes.split_impl import (
     get_split_view_index,
     get_split_view_data_ptr,
 )
-from bodo.utils.transform import compile_func_single_block, update_locs, get_call_expr_arg
+from bodo.utils.transform import (
+    compile_func_single_block,
+    update_locs,
+    get_call_expr_arg,
+)
 from bodo.utils.typing import get_overload_const_func
 
 
