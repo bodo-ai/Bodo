@@ -577,7 +577,7 @@ def dot_2_vm(context, builder, sig, args):
     """
     np.dot(vector, matrix)
     """
-    def dot_impl(a, b):
+    def dot_impl(a, b):  # pragma: no cover
         m, = a.shape
         _m, n = b.shape
         # changed code: initialize with zeros if inputs are empty
