@@ -44,8 +44,8 @@ is executed in regular Python context, but the rest of computation is in Bodo fu
 
 Another common place where schema stability may be compromised is in passing non-constant
 list of key column names to dataframe operations such as `groupby`, `merge` and `sort_values`.
-In these operations, the list of key column names should be constant in order to determine
-the output dataframe schema. For example, the program below is potentially type unstable
+In these operations, Bodo should be able to deduce the list of key column names at compile time
+in order to determine the output dataframe schema. For example, the program below is potentially type unstable
 since Bodo may not be able to infer `column_list` during compilation::
 
     @bodo.jit
