@@ -21,7 +21,7 @@ should be able to assign a single type to every variable.
 DataFrame Schema
 ~~~~~~~~~~~~~~~~
 
-Deterministic dataframe schemas, which is required in most data system, is key
+Deterministic dataframe schemas, which are required in most data systems, is key
 for type stability. For example, column `A` of variable `df` in example below could be
 either of type integer or string based on a flag -- Bodo cannot determine it at compilation time::
 
@@ -63,6 +63,9 @@ and set difference operations such as::
 
     df.groupby(["A"] + ["B"]).sum()
     df.groupby(list(set(df.columns) - set(["A", "C"]))).sum()
+
+Bodo will support inferring more implicit constant cases in the future
+(e.g. more list and set operations).
 
 Referring to dataframe columns (e.g. `df["A"]`) requires constants for schema stability as well.
 `for` loops over dataframe column names such as below is not supported yet::
