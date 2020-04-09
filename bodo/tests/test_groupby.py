@@ -214,7 +214,7 @@ def test_sum_string():
     check_func(impl, (df1,), sort_output=True)
 
 
-def test_random_string_sum_min_max():
+def test_random_string_sum_min_max_last():
     def impl1(df):
         A = df.groupby("A").sum()
         return A
@@ -225,6 +225,10 @@ def test_random_string_sum_min_max():
 
     def impl3(df):
         A = df.groupby("A").max()
+        return A
+
+    def impl4(df):
+        A = df.groupby("A").last()
         return A
 
     def random_dataframe(n):
@@ -243,6 +247,7 @@ def test_random_string_sum_min_max():
     check_func(impl1, (df1,), sort_output=True)
     check_func(impl2, (df1,), sort_output=True)
     check_func(impl3, (df1,), sort_output=True)
+    check_func(impl4, (df1,), sort_output=True)
 
 
 def test_agg_str_key():
@@ -391,12 +396,16 @@ def test_groupby_datetime_miss():
     """Testing the groupby with columns having datetime with missing entries
     TODO: need to support the cummin/cummax cases after pandas is corrected"""
 
-    def test_impl3(df):
+    def test_impl1(df):
         A = df.groupby("A", as_index=False).min()
         return A
 
-    def test_impl4(df):
+    def test_impl2(df):
         A = df.groupby("A", as_index=False).max()
+        return A
+
+    def test_impl3(df):
+        A = df.groupby("A").last()
         return A
 
     random.seed(5)
@@ -427,8 +436,9 @@ def test_groupby_datetime_miss():
         col_b.append(get_random_entry(small_list_b))
     df1 = pd.DataFrame({"A": pd.Series(col_a), "B": pd.Series(col_b)})
 
-    check_func(test_impl3, (df1,), sort_output=True, check_dtype=False)
-    check_func(test_impl4, (df1,), sort_output=True, check_dtype=False)
+    check_func(test_impl1, (df1,), sort_output=True, check_dtype=False)
+    check_func(test_impl2, (df1,), sort_output=True, check_dtype=False)
+    check_func(test_impl3, (df1,), sort_output=True)
 
 
 def test_agg_as_index_fast():
@@ -1673,6 +1683,108 @@ def test_groupby_as_index_prod():
     def impl2(n):
         df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
         df2 = df.groupby("A", as_index=False)["B"].prod()
+        return df2
+
+    check_func(impl1, (11,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
+
+
+def test_last(test_df):
+    """
+    Test Groupby.last()
+    """
+
+    def impl1(df):
+        A = df.groupby("A").last()
+        return A
+
+    def impl2(n):
+        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+        A = df.groupby("A").last()
+        return A
+
+    df_str = pd.DataFrame(
+        {
+            "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
+            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+            "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
+        }
+    )
+    df_bool = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "C": [True, True, False, True, True, False, False, False],
+        }
+    )
+    df_dt = pd.DataFrame(
+        {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
+    )
+
+    check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (df_str,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl1, (df_dt,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
+
+
+def test_last_one_col(test_df):
+    """
+    Test Groupby.last() with one column selected
+    """
+
+    def impl1(df):
+        A = df.groupby("A")["B"].last()
+        return A
+
+    def impl2(n):
+        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+        A = df.groupby("A")["B"].last()
+        return A
+
+    df_str = pd.DataFrame(
+        {
+            "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
+            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+            "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
+        }
+    )
+    df_bool = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "C": [True, True, False, True, True, False, False, False],
+        }
+    )
+    df_dt = pd.DataFrame(
+        {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
+    )
+
+    # seems like Pandas 1.0 has a regression and returns float64 for Int64 in this case
+    check_dtype = True
+    if pd.Int64Dtype() in test_df.dtypes.to_list():
+        check_dtype = False
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
+    check_func(impl1, (df_str,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl1, (df_dt,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
+
+
+def test_groupby_as_index_last():
+    """
+    Test last on groupby() as_index=False
+    for both dataframe and series returns
+    """
+
+    def impl1(n):
+        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+        df2 = df.groupby("A", as_index=False).last()
+        return df2
+
+    def impl2(n):
+        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+        df2 = df.groupby("A", as_index=False)["B"].last()
         return df2
 
     check_func(impl1, (11,), sort_output=True)

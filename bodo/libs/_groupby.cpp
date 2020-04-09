@@ -28,6 +28,7 @@ struct Bodo_FTypes {
         min,
         max,
         prod,
+        last,
         var,
         std,
         udf,
@@ -59,6 +60,7 @@ void groupby_init() {
     combine_funcs[Bodo_FTypes::min] = Bodo_FTypes::min;
     combine_funcs[Bodo_FTypes::max] = Bodo_FTypes::max;
     combine_funcs[Bodo_FTypes::prod] = Bodo_FTypes::prod;
+    combine_funcs[Bodo_FTypes::last] = Bodo_FTypes::last;
 }
 
 /**
@@ -328,6 +330,13 @@ struct aggstring<Bodo_FTypes::max> {
     }
 };
 
+template <>
+struct aggstring<Bodo_FTypes::last> {
+    static void apply(std::string& v1, std::string& v2) {
+        v1 = v2;
+    }
+};
+
 // count
 
 template <typename T, int dtype, typename Enable = void>
@@ -563,6 +572,47 @@ static void std_eval(double& result, uint64_t& count, double& m2) {
     else
         result = sqrt(m2 / (count - 1));
 }
+
+// last
+
+template <typename T, int dtype>
+struct aggfunc<
+    T, dtype, Bodo_FTypes::last,
+    typename std::enable_if<!std::is_floating_point<T>::value &&
+                            is_datetime_timedelta<dtype>::value>::type> {
+    /**
+     * Aggregation function for last. Assigns value if not a nat
+     *
+     * @param[in,out] last value, and holds the result
+     * @param second input value.
+     */
+    static void apply(T& v1, T& v2) {
+        if (v2 != std::numeric_limits<T>::min()) v1 = v2;
+    }
+};
+
+template <typename T, int dtype>
+struct aggfunc<
+    T, dtype, Bodo_FTypes::last,
+    typename std::enable_if<!std::is_floating_point<T>::value &&
+                            !is_datetime_timedelta<dtype>::value>::type> {
+    /**
+     * Aggregation function for last. Just assigns value
+     *
+     * @param[in,out] last value, and holds the result
+     * @param second input value.
+     */
+    static void apply(T& v1, T& v2) { v1 = v2; }
+};
+
+template <typename T, int dtype>
+struct aggfunc<
+    T, dtype, Bodo_FTypes::last,
+    typename std::enable_if<std::is_floating_point<T>::value>::type> {
+    static void apply(T& v1, T& v2) {
+        if (!isnan(v2)) v1 = v2;
+    }
+};
 
 /** Data structure used for the computation of groups.
 
@@ -1386,6 +1436,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                 return apply_to_column<int, Bodo_FTypes::max,
                                        Bodo_CTypes::STRING>(in_col, out_col,
                                                             aux_cols, grp_info);
+            case Bodo_FTypes::last:
+                return apply_to_column<int, Bodo_FTypes::last,
+                                       Bodo_CTypes::STRING>(in_col, out_col,
+                                                            aux_cols, grp_info);
         }
     }
     if (ftype == Bodo_FTypes::count) {
@@ -1423,6 +1477,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<bool, Bodo_FTypes::prod,
                                            Bodo_CTypes::_BOOL>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<bool, Bodo_FTypes::last,
+                                           Bodo_CTypes::_BOOL>(
+                        in_col, out_col, aux_cols, grp_info);
                 default:
                     Bodo_PyErr_SetString(
                         PyExc_RuntimeError,
@@ -1445,6 +1503,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<int8_t, Bodo_FTypes::prod,
+                                           Bodo_CTypes::INT8>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<int8_t, Bodo_FTypes::last,
                                            Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
@@ -1475,6 +1537,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<uint8_t, Bodo_FTypes::prod,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<uint8_t, Bodo_FTypes::last,
+                                           Bodo_CTypes::UINT8>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<uint8_t, Bodo_FTypes::mean,
                                            Bodo_CTypes::UINT8>(
@@ -1501,6 +1567,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<int16_t, Bodo_FTypes::prod,
+                                           Bodo_CTypes::INT16>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<int16_t, Bodo_FTypes::last,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
@@ -1531,6 +1601,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<uint16_t, Bodo_FTypes::prod,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<uint16_t, Bodo_FTypes::last,
+                                           Bodo_CTypes::UINT16>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<uint16_t, Bodo_FTypes::mean,
                                            Bodo_CTypes::UINT16>(
@@ -1557,6 +1631,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<int32_t, Bodo_FTypes::prod,
+                                           Bodo_CTypes::INT32>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<int32_t, Bodo_FTypes::last,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
@@ -1587,6 +1665,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<uint32_t, Bodo_FTypes::prod,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<uint32_t, Bodo_FTypes::last,
+                                           Bodo_CTypes::UINT32>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<uint32_t, Bodo_FTypes::mean,
                                            Bodo_CTypes::UINT32>(
@@ -1613,6 +1695,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<int64_t, Bodo_FTypes::prod,
+                                           Bodo_CTypes::INT64>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<int64_t, Bodo_FTypes::last,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
@@ -1643,6 +1729,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<uint64_t, Bodo_FTypes::prod,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<uint64_t, Bodo_FTypes::last,
+                                           Bodo_CTypes::UINT64>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<uint64_t, Bodo_FTypes::mean,
                                            Bodo_CTypes::UINT64>(
@@ -1669,6 +1759,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<int64_t, Bodo_FTypes::prod,
+                                           Bodo_CTypes::DATE>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<int64_t, Bodo_FTypes::last,
                                            Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
@@ -1699,6 +1793,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int64_t, Bodo_FTypes::prod,
                                            Bodo_CTypes::DATETIME>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<int64_t, Bodo_FTypes::last,
+                                           Bodo_CTypes::DATETIME>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<int64_t, Bodo_FTypes::mean,
                                            Bodo_CTypes::DATETIME>(
@@ -1727,6 +1825,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int64_t, Bodo_FTypes::prod,
                                            Bodo_CTypes::TIMEDELTA>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<int64_t, Bodo_FTypes::last,
+                                           Bodo_CTypes::TIMEDELTA>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
                     return apply_to_column<int64_t, Bodo_FTypes::mean,
                                            Bodo_CTypes::TIMEDELTA>(
@@ -1753,6 +1855,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<float, Bodo_FTypes::prod,
+                                           Bodo_CTypes::FLOAT32>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<float, Bodo_FTypes::last,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
@@ -1793,6 +1899,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<double, Bodo_FTypes::prod,
+                                           Bodo_CTypes::FLOAT64>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<double, Bodo_FTypes::last,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
@@ -1837,8 +1947,8 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
  */
 void aggfunc_output_initialize(array_info* out_col, int ftype) {
     if (out_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max)
-            // if input is all nulls, max and min output will be null
+        if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max || ftype == Bodo_FTypes::last)
+            // if input is all nulls, max, min and last output will be null
             InitializeBitMask((uint8_t*)out_col->null_bitmask, out_col->length,
                               false);
         else
@@ -2051,6 +2161,37 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                 default:
                     Bodo_PyErr_SetString(PyExc_RuntimeError,
                                          "unsupported/not implemented");
+                    return;
+            }
+        case Bodo_FTypes::last:
+            switch (out_col->dtype) {
+                // for last, we only need an initial value for the non-null
+                // bitmask cases where the datatype has a nan representation
+                case Bodo_CTypes::DATE:
+                case Bodo_CTypes::DATETIME:
+                case Bodo_CTypes::TIMEDELTA:
+                    // nat representation for date values is int64_t min value
+                    std::fill((int64_t*)out_col->data1,
+                              (int64_t*)out_col->data1 + out_col->length,
+                              std::numeric_limits<int64_t>::min());
+                    return;
+                case Bodo_CTypes::FLOAT32:
+                    // initialize to quiet_NaN so that result is nan if all
+                    // input values are nan
+                    std::fill((float*)out_col->data1,
+                              (float*)out_col->data1 + out_col->length,
+                              std::numeric_limits<float>::quiet_NaN());
+                    return;
+                case Bodo_CTypes::FLOAT64:
+                    // initialize to quiet_NaN so that result is nan if all
+                    // input values are nan
+                    std::fill((double*)out_col->data1,
+                              (double*)out_col->data1 + out_col->length,
+                              std::numeric_limits<double>::quiet_NaN());
+                    return;
+                default:
+                    // for most cases we don't need an initial value, last
+                    // will just replace that with the last value
                     return;
             }
         default:

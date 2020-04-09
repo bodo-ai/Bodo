@@ -110,6 +110,7 @@ supported_agg_funcs = [
     "min",
     "max",
     "prod",
+    "last",
     "var",
     "std",
     "udf",
@@ -153,7 +154,16 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.ncols_pre_shuffle = 3
         func.ncols_post_shuffle = 4
         return func
-    if func_name in supported_agg_funcs[:-3]:
+    if func_name == "last":
+        # We don't have a function definition for last, and it is not needed
+        # for the groupby C++ codepath, so we just use a dummy object.
+        # Also NOTE: Series last and df.groupby.last() are different operations
+        func = pytypes.SimpleNamespace()
+        func.ftype = func_name
+        func.ncols_pre_shuffle = 1
+        func.ncols_post_shuffle = 1
+        return func
+    if func_name in supported_agg_funcs[:-4]:
         func = getattr(series_impl, "overload_series_" + func_name)(series_type)
         func.ftype = func_name
         func.ncols_pre_shuffle = 1

@@ -284,14 +284,14 @@ def get_groupby_output_dtype(arr_type, func_name):
         and not isinstance(in_dtype, types.Boolean)
     ):
         if in_dtype == types.unicode_type:
-            if func_name not in {"count", "nunique", "min", "max", "sum"}:
+            if func_name not in {"count", "nunique", "min", "max", "sum", "last"}:
                 raise BodoError(
                     "column type of strings is not supported in groupby built-in function {}".format(
                         func_name
                     )
                 )
         else:
-            if func_name not in {"count", "nunique", "min", "max"}:
+            if func_name not in {"count", "nunique", "min", "max", "last"}:
                 raise BodoError(
                     "column type of {} is not supported in groupby built-in function {}".format(
                         in_dtype, func_name
@@ -590,6 +590,10 @@ class DataframeGroupByAttribute(AttributeTemplate):
     @bound_function("groupby.std")
     def resolve_std(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "std")
+
+    @bound_function("groupby.last")
+    def resolve_last(self, grp, args, kws):
+        return self._get_agg_typ(grp, args, "last")
 
     def resolve_cumulative(self, grp, args, kws, msg, is_minmax):
         """For datetime and timedelta datatypes, we can support cummin / cummax,
