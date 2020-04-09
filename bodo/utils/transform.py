@@ -21,6 +21,9 @@ from numba.ir_utils import (
     find_callname,
     build_definitions,
 )
+import numba.targets.linalg
+from numba.targets.imputils import impl_ret_new_ref
+
 import bodo
 from bodo.utils.utils import is_assign, is_expr
 from bodo.libs.str_ext import string_type
@@ -565,3 +568,27 @@ def find_potential_aliases(
 
 
 ir_utils.find_potential_aliases = find_potential_aliases
+
+
+# The code below is copied from Numba and modified to fix Numba #5539.
+# TODO: remove when the issue is fixed
+# https://github.com/numba/numba/blob/afd5c67b1ed6f51c040d1845a014abea8b87846a/numba/np/linalg.py#L462
+def dot_2_vm(context, builder, sig, args):
+    """
+    np.dot(vector, matrix)
+    """
+    def dot_impl(a, b):
+        m, = a.shape
+        _m, n = b.shape
+        # changed code: initialize with zeros if inputs are empty
+        if m == 0:
+            out = np.zeros((n, ), a.dtype)
+        else:
+            out = np.empty((n, ), a.dtype)
+        return np.dot(a, b, out)
+
+    res = context.compile_internal(builder, dot_impl, sig, args)
+    return impl_ret_new_ref(context, builder, sig.return_type, res)
+
+
+numba.targets.linalg.dot_2_vm = dot_2_vm

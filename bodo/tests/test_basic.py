@@ -408,6 +408,16 @@ def test_np_dot():
     check_func(test_impl, (n, k))
 
 
+def test_np_dot_empty_vm():
+    """test for np.dot() called on empty vector and matrix (for Numba #5539)
+    """
+    X = np.array([]).reshape(0, 2)
+    Y = np.array([])
+    nb_res = numba.njit(lambda X, Y: np.dot(Y, X))(X, Y)
+    py_res = np.dot(Y, X)
+    np.testing.assert_array_equal(py_res, nb_res)
+
+
 @pytest.mark.skip(reason="Numba's perfmute generation needs to use np seed properly")
 def test_permuted_array_indexing():
     def get_np_state_ptr():
