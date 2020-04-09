@@ -1225,10 +1225,8 @@ class UntypedPass:
             # TODO: keep updated in variable renaming?
             self.metadata["distributed"] = self.flags.distributed.copy()
 
-        if "distributed_varlength" not in self.metadata:
-            self.metadata[
-                "distributed_varlength"
-            ] = self.flags.distributed_varlength.copy()
+        if "distributed_block" not in self.metadata:
+            self.metadata["distributed_block"] = self.flags.distributed_block.copy()
 
         if "threaded" not in self.metadata:
             self.metadata["threaded"] = self.flags.threaded.copy()
@@ -1279,8 +1277,11 @@ class UntypedPass:
     def _run_return(self, ret_node):
         # TODO: handle distributed analysis, requires handling variable name
         # change in simplify() and replace_var_names()
-        # TODO: include distributed_varlength?
-        flagged_vars = self.metadata["distributed"] | self.metadata["threaded"]
+        flagged_vars = (
+            self.metadata["distributed"]
+            | self.metadata["distributed_block"]
+            | self.metadata["threaded"]
+        )
         all_returns_distributed = self.flags.all_returns_distributed
         nodes = [ret_node]
         cast = guard(get_definition, self.func_ir, ret_node.value)
@@ -1294,7 +1295,11 @@ class UntypedPass:
         if ret_name in flagged_vars or all_returns_distributed:
             flag = (
                 "distributed"
-                if (ret_name in self.metadata["distributed"] or all_returns_distributed)
+                if (
+                    ret_name in self.metadata["distributed"]
+                    or ret_name in self.metadata["distributed_block"]
+                    or all_returns_distributed
+                )
                 else "threaded"
             )
             nodes = self._gen_replace_dist_return(cast.value, flag)

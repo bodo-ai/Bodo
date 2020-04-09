@@ -7,19 +7,19 @@ import bodo
 
 
 # Add Bodo's options to Numba's allowed options/flags
-numba.targets.cpu.CPUTargetOptions.OPTIONS["all_args_distributed"] = bool
+numba.targets.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_block"] = bool
 numba.targets.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_varlength"] = bool
 numba.targets.cpu.CPUTargetOptions.OPTIONS["all_returns_distributed"] = bool
 numba.targets.cpu.CPUTargetOptions.OPTIONS["distributed"] = set
-numba.targets.cpu.CPUTargetOptions.OPTIONS["distributed_varlength"] = set
+numba.targets.cpu.CPUTargetOptions.OPTIONS["distributed_block"] = set
 numba.targets.cpu.CPUTargetOptions.OPTIONS["threaded"] = set
 numba.targets.cpu.CPUTargetOptions.OPTIONS["pivots"] = dict
 numba.targets.cpu.CPUTargetOptions.OPTIONS["h5_types"] = dict
-numba.compiler.Flags.OPTIONS["all_args_distributed"] = False
+numba.compiler.Flags.OPTIONS["all_args_distributed_block"] = False
 numba.compiler.Flags.OPTIONS["all_args_distributed_varlength"] = False
 numba.compiler.Flags.OPTIONS["all_returns_distributed"] = False
 numba.compiler.Flags.OPTIONS["distributed"] = set()
-numba.compiler.Flags.OPTIONS["distributed_varlength"] = set()
+numba.compiler.Flags.OPTIONS["distributed_block"] = set()
 numba.compiler.Flags.OPTIONS["threaded"] = set()
 numba.compiler.Flags.OPTIONS["pivots"] = dict()
 numba.compiler.Flags.OPTIONS["h5_types"] = dict()
@@ -33,8 +33,8 @@ def bodo_set_flags(self, flags):
     orig_values = self.values.copy()
     kws = self.values
 
-    if kws.pop("all_args_distributed", False):
-        flags.set("all_args_distributed")
+    if kws.pop("all_args_distributed_block", False):
+        flags.set("all_args_distributed_block")
 
     if kws.pop("all_args_distributed_varlength", False):
         flags.set("all_args_distributed_varlength")
@@ -45,8 +45,8 @@ def bodo_set_flags(self, flags):
     if "distributed" in kws:
         flags.set("distributed", kws.pop("distributed"))
 
-    if "distributed_varlength" in kws:
-        flags.set("distributed_varlength", kws.pop("distributed_varlength"))
+    if "distributed_block" in kws:
+        flags.set("distributed_block", kws.pop("distributed_block"))
 
     if "threaded" in kws:
         flags.set("threaded", kws.pop("threaded"))

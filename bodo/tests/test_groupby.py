@@ -2023,7 +2023,7 @@ def test_agg_multikey_parallel():
         A = df.groupby(["A", "C"])["B"].sum()
         return A.sum()
 
-    bodo_func = bodo.jit(distributed=["df"])(test_impl)
+    bodo_func = bodo.jit(distributed_block=["df"])(test_impl)
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],

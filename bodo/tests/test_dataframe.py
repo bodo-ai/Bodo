@@ -1679,7 +1679,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
             return df
 
-        bodo_func = bodo.jit(distributed={"df"})(test_impl)
+        bodo_func = bodo.jit(distributed_block={"df"})(test_impl)
         n = 11
         hres, res = bodo_func(n), test_impl(n)
         self.assertTrue(count_array_OneDs() >= 3)
