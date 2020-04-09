@@ -11,7 +11,6 @@
 
 #include "_str_decode.cpp"
 
-
 #include <boost/lexical_cast.hpp>
 
 #ifndef _WIN32
@@ -84,7 +83,6 @@ int str_arr_to_int64(int64_t* out, uint32_t* offsets, char* data,
                      int64_t index);
 int str_arr_to_float64(double* out, uint32_t* offsets, char* data,
                        int64_t index);
-
 
 void* str_from_int32(int in);
 void* str_from_int64(int64_t in);
@@ -214,18 +212,16 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject_SetAttrString(m, "is_bool_array",
                            PyLong_FromVoidPtr((void*)(&is_bool_array)));
     PyObject_SetAttrString(m, "is_pd_boolean_array",
-                        PyLong_FromVoidPtr((void*)(&is_pd_boolean_array)));
+                           PyLong_FromVoidPtr((void*)(&is_pd_boolean_array)));
     PyObject_SetAttrString(m, "unbox_bool_array_obj",
                            PyLong_FromVoidPtr((void*)(&unbox_bool_array_obj)));
     return m;
 }
 
-
 void* init_string_const(char* in_str, int64_t size) {
     // std::cout<<"init str: "<<in_str<<" "<<size<<std::endl;
     return new std::string(in_str, size);
 }
-
 
 void del_str(std::string* in_str) {
     delete in_str;
@@ -318,7 +314,6 @@ const char* get_c_str(std::string* s) {
     // printf("in get %s\n", s->c_str());
     return s->c_str();
 }
-
 
 double str_to_float64(std::string* str) { return std::stod(*str); }
 
@@ -449,7 +444,6 @@ int64_t str_to_int64(char* data, int64_t length) {
     return -1;
 }
 
-
 void* str_from_int32(int in) { return new std::string(std::to_string(in)); }
 
 void* str_from_int64(int64_t in) { return new std::string(std::to_string(in)); }
@@ -459,7 +453,6 @@ void* str_from_float32(float in) { return new std::string(std::to_string(in)); }
 void* str_from_float64(double in) {
     return new std::string(std::to_string(in));
 }
-
 
 /// @brief create a concatenated string and offset table from a pandas series of
 /// strings
@@ -526,11 +519,14 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
         obj = PyObject_GetAttrString(obj, "values");
     }
 
-    // get pd.isna object to call in the loop to check for NAs
+    // get pd.NA object to check for new NA kind
+    // simple equality check is enough since the object is a singleton
+    // example:
+    // https://github.com/pandas-dev/pandas/blob/fcadff30da9feb3edb3acda662ff6143b7cb2d9f/pandas/_libs/missing.pyx#L57
     PyObject* pd_mod = PyImport_ImportModule("pandas");
     CHECK(pd_mod, "importing pandas module failed");
-    PyObject* isna_call_obj = PyObject_GetAttrString(pd_mod, "isna");
-    CHECK(isna_call_obj, "getting pd.isna failed");
+    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
+    CHECK(C_NA, "getting pd.NA failed");
 
     offsets = new uint32_t[n + 1];
     std::vector<const char*> tmp_store(n);
@@ -540,8 +536,9 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
         PyObject* s = PySequence_GetItem(obj, i);
         CHECK(s, "getting element failed");
         // Pandas stores NA as either None, nan, or pd.NA
-        PyObject* isna_obj = PyObject_CallFunctionObjArgs(isna_call_obj, s, NULL);
-        if (PyObject_IsTrue(isna_obj)) {
+        if (s == Py_None ||
+            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
+            s == C_NA) {
             // leave null bit as 0
             tmp_store[i] = "";
         } else {
@@ -556,7 +553,6 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
             len += size;
         }
         Py_DECREF(s);
-        Py_DECREF(isna_obj);
     }
     offsets[n] = len;
 
@@ -565,7 +561,7 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
         memcpy(outbuf + offsets[i], tmp_store[i], offsets[i + 1] - offsets[i]);
     }
 
-    Py_DECREF(isna_call_obj);
+    Py_DECREF(C_NA);
     Py_DECREF(pd_mod);
 
     PyGILState_Release(gilstate);
@@ -577,7 +573,6 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
     return;
 #undef CHECK
 }
-
 
 /// @brief  From a StringArray create a numpy array of string objects
 /// @return numpy array of str objects
@@ -626,7 +621,6 @@ void* np_array_from_string_array(int64_t no_strings,
 #undef CHECK
 }
 
-
 /// @brief  Create Pandas StringArray from Bodo's packed StringArray
 /// @return Pandas StringArray of str objects
 /// @param[in] no_strings number of strings found in buffer
@@ -668,7 +662,8 @@ void* pd_array_from_string_array(int64_t no_strings,
         Py_DECREF(s);
     }
 
-    PyObject* str_arr_obj = PyObject_CallMethod(pd_mod, "array", "Osl", ret, "string", 0);
+    PyObject* str_arr_obj =
+        PyObject_CallMethod(pd_mod, "array", "Osl", ret, "string", 0);
 
     Py_DECREF(pd_mod);
     Py_DECREF(na_obj);
@@ -915,7 +910,6 @@ void mask_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* mask_arr, int64_t n) {
             kBitmask[i % 8];
 }
 
-
 int is_bool_array(PyArrayObject* arr) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
@@ -937,7 +931,6 @@ int is_bool_array(PyArrayObject* arr) {
 #undef CHECK
 }
 
-
 int is_pd_boolean_array(PyObject* arr) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
@@ -952,7 +945,8 @@ int is_pd_boolean_array(PyObject* arr) {
     CHECK(pd_mod, "importing pandas module failed");
     PyObject* pd_arrays_obj = PyObject_GetAttrString(pd_mod, "arrays");
     CHECK(pd_arrays_obj, "getting pd.arrays failed");
-    PyObject* pd_arrays_bool_arr_obj = PyObject_GetAttrString(pd_arrays_obj, "BooleanArray");
+    PyObject* pd_arrays_bool_arr_obj =
+        PyObject_GetAttrString(pd_arrays_obj, "BooleanArray");
     CHECK(pd_arrays_obj, "getting pd.arrays.BooleanArray failed");
 
     // isinstance(arr, BooleanArray)
@@ -968,7 +962,6 @@ int is_pd_boolean_array(PyObject* arr) {
 #undef CHECK
 }
 
-
 void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
                           int64_t n) {
 #define CHECK(expr, msg)               \
@@ -979,11 +972,14 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
     }
     auto gilstate = PyGILState_Ensure();
 
-    // get pd.isna object to call in the loop to check for NAs
+    // get pd.NA object to check for new NA kind
+    // simple equality check is enough since the object is a singleton
+    // example:
+    // https://github.com/pandas-dev/pandas/blob/fcadff30da9feb3edb3acda662ff6143b7cb2d9f/pandas/_libs/missing.pyx#L57
     PyObject* pd_mod = PyImport_ImportModule("pandas");
     CHECK(pd_mod, "importing pandas module failed");
-    PyObject* isna_call_obj = PyObject_GetAttrString(pd_mod, "isna");
-    CHECK(isna_call_obj, "getting pd.isna failed");
+    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
+    CHECK(C_NA, "getting pd.NA failed");
 
     for (uint64_t i = 0; i < uint64_t(n); ++i) {
         auto p = PyArray_GETPTR1((PyArrayObject*)arr, i);
@@ -991,8 +987,9 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
         PyObject* s = PyArray_GETITEM(arr, (const char*)p);
         CHECK(s, "getting element failed");
         // Pandas stores NA as either None or nan
-        PyObject* isna_obj = PyObject_CallFunctionObjArgs(isna_call_obj, s, NULL);
-        if (PyObject_IsTrue(isna_obj)) {
+        if (s == Py_None ||
+            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
+            s == C_NA) {
             // null bit
             ClearBit(bitmap, i);
             data[i] = 0;
@@ -1003,25 +1000,25 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
             data[i] = (uint8_t)is_true;
         }
         Py_DECREF(s);
-        Py_DECREF(isna_obj);
     }
 
     Py_DECREF(pd_mod);
-    Py_DECREF(isna_call_obj);
+    Py_DECREF(C_NA);
     PyGILState_Release(gilstate);
 #undef CHECK
 }
 
 void print_str_arr(uint64_t n, uint64_t n_chars, uint32_t* offsets,
                    uint8_t* data) {
-  std::cout << "n: " << n << " n_chars: " << n_chars << "\n";
-  for (uint64_t i = 0; i < n; i++) {
-    std::cout << "offsets: " << offsets[i] << " " << offsets[i + 1] << "  chars:";
-    for (uint64_t j = offsets[i]; j < offsets[i + 1]; j++) {
-      std::cout << data[j] << " ";
+    std::cout << "n: " << n << " n_chars: " << n_chars << "\n";
+    for (uint64_t i = 0; i < n; i++) {
+        std::cout << "offsets: " << offsets[i] << " " << offsets[i + 1]
+                  << "  chars:";
+        for (uint64_t j = offsets[i]; j < offsets[i + 1]; j++) {
+            std::cout << data[j] << " ";
+        }
+        std::cout << "\n";
     }
-    std::cout << "\n";
-  }
 }
 
 void print_list_str_arr(uint64_t n, const char* data,
@@ -1030,15 +1027,17 @@ void print_list_str_arr(uint64_t n, const char* data,
                         const uint8_t* null_bitmap) {
     uint64_t n_strs = index_offsets[n];
     uint64_t n_chars = data_offsets[n_strs];
-    std::cout << "n: " << n << " n_strs: " << n_strs << " n_chars: " << n_chars << "\n";
+    std::cout << "n: " << n << " n_strs: " << n_strs << " n_chars: " << n_chars
+              << "\n";
     for (uint64_t i = 0; i < n; i++) {
-      std::cout << "index_offsets: " << index_offsets[i] << " " << index_offsets[i + 1] << "  lists:";
-      for (uint64_t j = index_offsets[i]; j < index_offsets[i + 1]; j++) {
-        for (uint64_t k = data_offsets[j]; k < data_offsets[j + 1]; k++)
-          std::cout << data[k] << " ";
+        std::cout << "index_offsets: " << index_offsets[i] << " "
+                  << index_offsets[i + 1] << "  lists:";
+        for (uint64_t j = index_offsets[i]; j < index_offsets[i + 1]; j++) {
+            for (uint64_t k = data_offsets[j]; k < data_offsets[j + 1]; k++)
+                std::cout << data[k] << " ";
+            std::cout << "\n";
+        }
         std::cout << "\n";
-      }
-      std::cout << "\n";
     }
 }
 
