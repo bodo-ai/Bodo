@@ -197,6 +197,10 @@ def _infer_series_list_dtype(A, name):
             # TODO: can nulls be inside the list?
             if isinstance(first_val[0], str):
                 return types.List(string_type)
+            elif isinstance(first_val[0], int):
+                return types.List(types.int64)
+            elif isinstance(first_val[0], float):
+                return types.List(types.float64)
             else:
                 raise ValueError("data type for column {} not supported".format(name))
     # assuming array of all empty lists is string by default
