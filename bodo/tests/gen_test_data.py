@@ -116,6 +116,8 @@ from pyspark.sql.types import (
     DateType,
     TimestampType,
     LongType,
+    FloatType,
+    ArrayType,
     Row,
 )
 
@@ -142,6 +144,38 @@ sdf.write.mode('overwrite').csv('int_nulls_single.csv')
 
 df = pd.DataFrame({"A": [True, False, False, np.nan, True]})
 df.to_parquet("bool_nulls.pq")
+
+
+# list(int) data generation
+schema = StructType(
+    [StructField("A", ArrayType(LongType()), True)]
+)
+data = [
+    Row([1, 2, 3]),
+    Row([1, 2]),
+    Row(None),
+    Row([1, 11, 123, 1, 2]),
+    Row([]),
+    Row([3, 1])
+]
+sdf = spark.createDataFrame(data, schema)
+sdf.write.parquet("list_int.pq", "overwrite")
+
+
+# list(float32) data generation
+schema = StructType(
+    [StructField("B", ArrayType(FloatType()), True)]
+)
+data = [
+    Row([1.3, -2.4, 3.2]),
+    Row([-0.3, 3.3]),
+    Row(None),
+    Row([1.234, -11.11, 123.0, 1.0, 2.0]),
+    Row([]),
+    Row([-3.0, 1.2])
+]
+sdf = spark.createDataFrame(data, schema)
+sdf.write.parquet("list_float32.pq", "overwrite")
 
 
 # CSV reader test
