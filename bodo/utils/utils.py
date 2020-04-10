@@ -62,6 +62,7 @@ class CTypeEnum(Enum):
     # NOTE: currently, only used for handling decimal array's data array for scatterv
     # since it handles the data array inside decimal array separately
     Int128 = 16
+    # NOTE: 17 is used by LIST_STRING in bodo_common.h
 
 
 _numba_to_c_type_map = {

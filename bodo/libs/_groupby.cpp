@@ -7,6 +7,8 @@
 #include "_murmurhash3.h"
 #include "_shuffle.h"
 
+#undef DEBUG_GROUPBY
+
 /**
  * Enum of aggregation, combine and eval functions used by groubpy.
  * Some functions like sum can be used for multiple purposes, like aggregation
@@ -333,6 +335,68 @@ struct aggstring<Bodo_FTypes::max> {
 template <>
 struct aggstring<Bodo_FTypes::last> {
     static void apply(std::string& v1, std::string& v2) {
+        v1 = v2;
+    }
+};
+
+
+
+
+template <int ftype, typename Enable = void>
+struct aggliststring {
+    /**
+     * Apply the function.
+     * @param[in,out] first input value, and holds the result
+     * @param[in] second input value.
+     */
+    static void apply(std::vector<std::string>& v1,
+                      std::vector<std::string>& v2) {}
+};
+
+template <>
+struct aggliststring<Bodo_FTypes::sum> {
+    static void apply(std::vector<std::string>& v1,
+                      std::vector<std::string>& v2) {
+        v1.insert(v1.end(), v2.begin(), v2.end());
+    }
+};
+
+// returns -1 if v1 < v2, 0 if v1=v2 and 1 if v1 > v2
+int compare_list_string(std::vector<std::string> const& v1,
+                        std::vector<std::string> const& v2) {
+    size_t len1 = v1.size();
+    size_t len2 = v2.size();
+    size_t minlen = len1;
+    if (len2 < len1) minlen = len2;
+    for (size_t i = 0; i < minlen; i++) {
+        if (v1[i] < v2[i]) return -1;
+        if (v1[i] > v2[i]) return 1;
+    }
+    if (len1 < len2) return -1;
+    if (len1 > len2) return 1;
+    return 0;
+}
+
+template <>
+struct aggliststring<Bodo_FTypes::min> {
+    static void apply(std::vector<std::string>& v1,
+                      std::vector<std::string>& v2) {
+        if (compare_list_string(v1, v2) == 1) v1 = v2;
+    }
+};
+
+template <>
+struct aggliststring<Bodo_FTypes::max> {
+    static void apply(std::vector<std::string>& v1,
+                      std::vector<std::string>& v2) {
+        if (compare_list_string(v1, v2) == -1) v1 = v2;
+    }
+};
+
+template <>
+struct aggliststring<Bodo_FTypes::last> {
+    static void apply(std::vector<std::string>& v1,
+                      std::vector<std::string>& v2) {
         v1 = v2;
     }
 };
@@ -670,7 +734,7 @@ struct multi_col_key {
                         return false;
                     }
                     continue;
-                case bodo_array_type::STRING:
+                case bodo_array_type::STRING: {
                     uint32_t* c1_offsets = (uint32_t*)c1->data2;
                     uint32_t* c2_offsets = (uint32_t*)c2->data2;
                     uint32_t c1_str_len = c1_offsets[row + 1] - c1_offsets[row];
@@ -680,6 +744,42 @@ struct multi_col_key {
                     char* c1_str = c1->data1 + c1_offsets[row];
                     char* c2_str = c2->data1 + c2_offsets[other.row];
                     if (strncmp(c1_str, c2_str, c1_str_len) != 0) return false;
+                }
+                    continue;
+                case bodo_array_type::LIST_STRING:
+                    uint32_t* c1_index_offsets = (uint32_t*)c1->data3;
+                    uint32_t* c2_index_offsets = (uint32_t*)c2->data3;
+                    uint32_t* c1_data_offsets = (uint32_t*)c1->data2;
+                    uint32_t* c2_data_offsets = (uint32_t*)c2->data2;
+                    // Comparing the number of strings.
+                    uint32_t c1_index_len =
+                        c1_index_offsets[row + 1] - c1_index_offsets[row];
+                    uint32_t c2_index_len = c2_index_offsets[other.row + 1] -
+                                            c2_index_offsets[other.row];
+                    if (c1_index_len != c2_index_len) return false;
+                    // comparing the length of the strings.
+                    for (uint32_t u = 0; u < c1_index_len; u++) {
+                        uint32_t size_data1 =
+                            c1_data_offsets[c1_index_offsets[row] + u + 1] -
+                            c1_data_offsets[c1_index_offsets[row] + u];
+                        uint32_t size_data2 =
+                            c2_data_offsets[c2_index_offsets[other.row] + u +
+                                            1] -
+                            c2_data_offsets[c2_index_offsets[other.row] + u];
+                        if (size_data1 != size_data2) return false;
+                    }
+                    // Now comparing the strings. Their length is the same since
+                    // we pass above check
+                    uint32_t common_len =
+                        c1_data_offsets[c1_index_offsets[row + 1]] -
+                        c1_data_offsets[c1_index_offsets[row]];
+                    char* c1_strB =
+                        c1->data1 + c1_data_offsets[c1_index_offsets[row]];
+                    char* c2_strB =
+                        c2->data1 +
+                        c2_data_offsets[c2_index_offsets[other.row]];
+                    if (strncmp(c1_strB, c2_strB, common_len) != 0)
+                        return false;
             }
         }
         return true;
@@ -698,6 +798,7 @@ static bool does_keys_have_nulls(std::vector<array_info*> const& key_cols) {
               key_col->dtype == Bodo_CTypes::DATETIME ||
               key_col->dtype == Bodo_CTypes::TIMEDELTA)) ||
             key_col->arr_type == bodo_array_type::STRING ||
+            key_col->arr_type == bodo_array_type::LIST_STRING ||
             key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             return true;
         }
@@ -709,6 +810,7 @@ static bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
                                int64_t const& i) {
     for (auto key_col : key_cols) {
         if (key_col->arr_type == bodo_array_type::STRING ||
+            key_col->arr_type == bodo_array_type::LIST_STRING ||
             key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             if (!GetBit((uint8_t*)key_col->null_bitmask, i)) return true;
         } else if (key_col->arr_type == bodo_array_type::NUMPY) {
@@ -846,9 +948,11 @@ void cumulative_computation_T(array_info* arr, array_info* out_arr,
                               grouping_info const& grp_inf,
                               int32_t const& ftype, bool const& skipna) {
     size_t num_group = grp_inf.group_to_first_row.size();
-    if (arr->arr_type == bodo_array_type::STRING) {
+    if (arr->arr_type == bodo_array_type::STRING ||
+        arr->arr_type == bodo_array_type::LIST_STRING) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "There is no median for the string case");
+                             "There is no cumulative operation for the string "
+                             "or list string case");
         return;
     }
     auto cum_computation =
@@ -995,9 +1099,11 @@ void median_computation(array_info* arr, array_info* out_arr,
                         grouping_info const& grp_inf, bool const& skipna) {
     size_t num_group = grp_inf.group_to_first_row.size();
     size_t siztype = numpy_item_size[arr->dtype];
-    if (arr->arr_type == bodo_array_type::STRING) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "There is no median for the string case");
+    if (arr->arr_type == bodo_array_type::STRING ||
+        arr->arr_type == bodo_array_type::LIST_STRING) {
+        Bodo_PyErr_SetString(
+            PyExc_RuntimeError,
+            "There is no median for the string or list string case");
         return;
     }
     if (arr->dtype == Bodo_CTypes::DATE ||
@@ -1125,6 +1231,67 @@ void nunique_computation(array_info* arr, array_info* out_arr,
             while (true) {
                 char* ptr = arr->data1 + (i * siztype);
                 if (!isnan_entry(ptr)) {
+                    eset.insert(i);
+                } else {
+                    HasNullRow = true;
+                }
+                i = grp_inf.next_row_in_group[i];
+                if (i == -1) break;
+            }
+            int64_t size = eset.size();
+            if (HasNullRow && !dropna) size++;
+            out_arr->at<int64_t>(igrp) = size;
+        }
+    }
+    if (arr->arr_type == bodo_array_type::LIST_STRING) {
+        uint32_t* in_index_offsets = (uint32_t*)arr->data3;
+        uint32_t* in_data_offsets = (uint32_t*)arr->data2;
+        uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+        uint32_t seed = 0xb0d01280;
+        for (size_t igrp = 0; igrp < num_group; igrp++) {
+            std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
+                char* val_chars =
+                    arr->data1 + in_data_offsets[in_index_offsets[i]];
+                int len = in_data_offsets[in_index_offsets[i + 1]] -
+                          in_data_offsets[in_index_offsets[i]];
+                uint32_t val;
+                hash_string_32(val_chars, len, seed, &val);
+                return size_t(val);
+            };
+            std::function<bool(int64_t, int64_t)> equal_fct =
+                [&](int64_t i1, int64_t i2) -> bool {
+                size_t len1 = in_index_offsets[i1 + 1] - in_index_offsets[i1];
+                size_t len2 = in_index_offsets[i2 + 1] - in_index_offsets[i2];
+                if (len1 != len2) return false;
+                for (size_t u = 0; u < len1; u++) {
+                    uint32_t len_str1 =
+                        in_data_offsets[in_index_offsets[i1] + 1] -
+                        in_data_offsets[in_index_offsets[i1]];
+                    uint32_t len_str2 =
+                        in_data_offsets[in_index_offsets[i2] + 1] -
+                        in_data_offsets[in_index_offsets[i2]];
+                    if (len_str1 != len_str2) return false;
+                }
+                uint32_t nb_char1 = in_data_offsets[in_index_offsets[i1 + 1]] -
+                                    in_data_offsets[in_index_offsets[i1]];
+                uint32_t nb_char2 = in_data_offsets[in_index_offsets[i2 + 1]] -
+                                    in_data_offsets[in_index_offsets[i2]];
+                if (nb_char1 != nb_char2) return false;
+                char* ptr1 =
+                    arr->data1 +
+                    sizeof(uint32_t) * in_data_offsets[in_index_offsets[i1]];
+                char* ptr2 =
+                    arr->data1 +
+                    sizeof(uint32_t) * in_data_offsets[in_index_offsets[i2]];
+                return strncmp(ptr1, ptr2, len1) == 0;
+            };
+            SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
+                          std::function<bool(int64_t, int64_t)>>
+                eset({}, hash_fct, equal_fct);
+            int64_t i = grp_inf.group_to_first_row[igrp];
+            bool HasNullRow = false;
+            while (true) {
+                if (GetBit(null_bitmask, i)) {
                     eset.insert(i);
                 } else {
                     HasNullRow = true;
@@ -1283,8 +1450,104 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                             in_col->at<T>(i));
             }
             return;
-        // for strings, we are only supporting count for now, and count function
-        // works for strings because the input value doesn't matter
+        // for list strings, we are supporting count, sum, max, min
+        case bodo_array_type::LIST_STRING:
+            switch (ftype) {
+                case Bodo_FTypes::count:
+                    for (int64_t i = 0; i < in_col->length; i++) {
+                        if ((grp_info.row_to_group[i] != -1) &&
+                            GetBit((uint8_t*)in_col->null_bitmask, i))
+                            count_agg<T, dtype>::apply(
+                                out_col->at<int64_t>(grp_info.row_to_group[i]),
+                                in_col->at<T>(i));
+                    }
+                    return;
+                default:
+                    size_t num_groups = grp_info.group_to_first_row.size();
+                    std::vector<std::vector<std::string>> ListListString(
+                        num_groups);
+                    char* data_i = in_col->data1;
+                    uint32_t* index_offsets_i = (uint32_t*)in_col->data3;
+                    uint32_t* data_offsets_i = (uint32_t*)in_col->data2;
+                    uint8_t* null_bitmask_i = (uint8_t*)in_col->null_bitmask;
+                    uint8_t* null_bitmask_o = (uint8_t*)out_col->null_bitmask;
+                    // Computing the strings used in output.
+                    for (int64_t i = 0; i < in_col->length; i++) {
+                        if ((grp_info.row_to_group[i] != -1) &&
+                            GetBit(null_bitmask_i, i)) {
+                            uint32_t start_offset = index_offsets_i[i];
+                            uint32_t end_offset = index_offsets_i[i + 1];
+                            uint32_t len = end_offset - start_offset;
+                            std::vector<std::string> LString(len);
+                            for (uint32_t i = 0; i < len; i++) {
+                                uint32_t len_str =
+                                    data_offsets_i[start_offset + i + 1] -
+                                    data_offsets_i[start_offset + i];
+                                uint32_t pos_start =
+                                    data_offsets_i[start_offset + i];
+                                std::string val(&data_i[pos_start], len_str);
+                                LString[i] = val;
+                            }
+                            int64_t i_grp = grp_info.row_to_group[i];
+                            if (GetBit(null_bitmask_o, i_grp)) {
+                                aggliststring<ftype>::apply(
+                                    ListListString[i_grp], LString);
+                            } else {
+                                ListListString[i_grp] = LString;
+                                SetBitTo(null_bitmask_o, i_grp, true);
+                            }
+                        }
+                    }
+                    // Determining the number of characters in output.
+                    size_t nb_string = 0;
+                    size_t nb_char = 0;
+                    for (int64_t i_grp = 0; i_grp < int64_t(num_groups);
+                         i_grp++) {
+                        if (GetBit(null_bitmask_o, i_grp)) {
+                            nb_string += ListListString[i_grp].size();
+                            for (auto& e_str : ListListString[i_grp])
+                                nb_char += e_str.size();
+                        }
+                    }
+                    //                    delete[] out_col->data1;
+                    //                    delete[] out_col->data2;
+                    out_col->data1 = new char[nb_char];
+                    out_col->data2 =
+                        new char[sizeof(uint32_t) * (nb_string + 1)];
+                    out_col->n_sub_elems = nb_string;
+                    out_col->n_sub_sub_elems = nb_char;
+                    uint32_t* index_offsets_o = (uint32_t*)out_col->data3;
+                    uint32_t* data_offsets_o = (uint32_t*)out_col->data2;
+                    // Writing the list_strings in output
+                    char* data_o = out_col->data1;
+                    data_offsets_o[0] = 0;
+                    uint32_t pos_index = 0;
+                    uint32_t pos_data = 0;
+                    for (int64_t i_grp = 0; i_grp < int64_t(num_groups);
+                         i_grp++) {
+                        index_offsets_o[i_grp] = pos_index;
+                        if (GetBit(null_bitmask_o, i_grp)) {
+                            uint32_t n_string = ListListString[i_grp].size();
+                            for (uint32_t i_str = 0; i_str < n_string;
+                                 i_str++) {
+                                uint32_t n_char =
+                                    ListListString[i_grp][i_str].size();
+                                memcpy(data_o,
+                                       ListListString[i_grp][i_str].data(),
+                                       n_char);
+                                data_o += n_char;
+                                pos_data++;
+                                data_offsets_o[pos_data] =
+                                    data_offsets_o[pos_data - 1] + n_char;
+                            }
+                            pos_index += n_string;
+                        }
+                    }
+                    index_offsets_o[num_groups] = pos_index;
+                    return;
+            }
+
+        // For the STRING we compute the count, sum, max, min
         case bodo_array_type::STRING:
             switch (ftype) {
                 case Bodo_FTypes::count:
@@ -1420,7 +1683,8 @@ void apply_to_column(array_info* in_col, array_info* out_col,
 void do_apply_to_column(array_info* in_col, array_info* out_col,
                         std::vector<array_info*>& aux_cols,
                         const grouping_info& grp_info, int ftype) {
-    if (in_col->arr_type == bodo_array_type::STRING) {
+    if (in_col->arr_type == bodo_array_type::STRING ||
+        in_col->arr_type == bodo_array_type::LIST_STRING) {
         switch (ftype) {
             // NOTE: The int template argument is not used in this call to
             // apply_to_column
@@ -1956,7 +2220,8 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
             InitializeBitMask((uint8_t*)out_col->null_bitmask, out_col->length,
                               true);
     }
-    if (out_col->arr_type == bodo_array_type::STRING) {
+    if (out_col->arr_type == bodo_array_type::STRING ||
+        out_col->arr_type == bodo_array_type::LIST_STRING) {
         InitializeBitMask((uint8_t*)out_col->null_bitmask, out_col->length,
                           false);
     }
@@ -2083,6 +2348,9 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                 case Bodo_CTypes::STRING:
                     // Nothing to initilize with in the case of strings.
                     return;
+                case Bodo_CTypes::LIST_STRING:
+                    // Nothing to initilize with in the case of list strings.
+                    return;
                 default:
                     Bodo_PyErr_SetString(PyExc_RuntimeError,
                                          "unsupported/not implemented");
@@ -2157,6 +2425,9 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                     return;
                 case Bodo_CTypes::STRING:
                     // nothing to initialize in the case of strings
+                    return;
+                case Bodo_CTypes::LIST_STRING:
+                    // nothing to initialize in the case of list strings
                     return;
                 default:
                     Bodo_PyErr_SetString(PyExc_RuntimeError,
@@ -2286,7 +2557,7 @@ class BasicColSet {
         Bodo_CTypes::CTypeEnum dtype = in_col->dtype;
         // calling this modifies arr_type and dtype
         get_groupby_output_dtype(ftype, arr_type, dtype, false);
-        out_cols.push_back(alloc_array(num_groups, 1, arr_type, dtype, 0));
+        out_cols.push_back(alloc_array(num_groups, 1, 1, arr_type, dtype, 0));
         update_cols.push_back(out_cols.back());
     }
 
@@ -2330,7 +2601,8 @@ class BasicColSet {
             Bodo_CTypes::CTypeEnum dtype = col->dtype;
             // calling this modifies arr_type and dtype
             get_groupby_output_dtype(combine_ftype, arr_type, dtype, false);
-            out_cols.push_back(alloc_array(num_groups, 1, arr_type, dtype, 0));
+            out_cols.push_back(
+                alloc_array(num_groups, 1, 1, arr_type, dtype, 0));
             combine_cols.push_back(out_cols.back());
         }
     }
@@ -2398,9 +2670,9 @@ class MeanColSet : public BasicColSet {
     virtual void alloc_update_columns(size_t num_groups,
                                       std::vector<array_info*>& out_cols) {
         array_info* c1 =
-            alloc_array(num_groups, 1, bodo_array_type::NUMPY,
+            alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
                         Bodo_CTypes::FLOAT64, 0);  // for sum and result
-        array_info* c2 = alloc_array(num_groups, 1, bodo_array_type::NUMPY,
+        array_info* c2 = alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
                                      Bodo_CTypes::UINT64, 0);  // for counts
         out_cols.push_back(c1);
         out_cols.push_back(c2);
@@ -2447,17 +2719,17 @@ class VarStdColSet : public BasicColSet {
         if (!combine_step) {
             // need to create output column now
             array_info* col =
-                alloc_array(num_groups, 1, bodo_array_type::NUMPY,
+                alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
                             Bodo_CTypes::FLOAT64, 0);  // for result
             out_cols.push_back(col);
             update_cols.push_back(col);
         }
         array_info* count_col = alloc_array(
-            num_groups, 1, bodo_array_type::NUMPY, Bodo_CTypes::UINT64, 0);
+            num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::UINT64, 0);
         array_info* mean_col = alloc_array(
-            num_groups, 1, bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64, 0);
-        array_info* m2_col = alloc_array(num_groups, 1, bodo_array_type::NUMPY,
-                                         Bodo_CTypes::FLOAT64, 0);
+            num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64, 0);
+        array_info* m2_col = alloc_array(
+            num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64, 0);
         aggfunc_output_initialize(count_col,
                                   Bodo_FTypes::count);  // zero initialize
         aggfunc_output_initialize(mean_col,
@@ -2488,7 +2760,7 @@ class VarStdColSet : public BasicColSet {
 
     virtual void alloc_combine_columns(size_t num_groups,
                                        std::vector<array_info*>& out_cols) {
-        array_info* col = alloc_array(num_groups, 1, bodo_array_type::NUMPY,
+        array_info* col = alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
                                       Bodo_CTypes::FLOAT64, 0);  // for result
         out_cols.push_back(col);
         combine_cols.push_back(col);
@@ -2550,7 +2822,8 @@ class UdfColSet : public BasicColSet {
             bodo_array_type::arr_type_enum arr_type =
                 udf_table->columns[i]->arr_type;
             Bodo_CTypes::CTypeEnum dtype = udf_table->columns[i]->dtype;
-            out_cols.push_back(alloc_array(num_groups, 1, arr_type, dtype, 0));
+            out_cols.push_back(
+                alloc_array(num_groups, 1, 1, arr_type, dtype, 0));
             if (!combine_step) update_cols.push_back(out_cols.back());
         }
     }
@@ -2574,7 +2847,8 @@ class UdfColSet : public BasicColSet {
             bodo_array_type::arr_type_enum arr_type =
                 udf_table->columns[i]->arr_type;
             Bodo_CTypes::CTypeEnum dtype = udf_table->columns[i]->dtype;
-            out_cols.push_back(alloc_array(num_groups, 1, arr_type, dtype, 0));
+            out_cols.push_back(
+                alloc_array(num_groups, 1, 1, arr_type, dtype, 0));
             combine_cols.push_back(out_cols.back());
         }
     }
@@ -2633,8 +2907,8 @@ class CumOpColSet : public BasicColSet {
                                       std::vector<array_info*>& out_cols) {
         // NOTE: output size of cum ops is the same as input size
         //       (NOT the number of groups)
-        out_cols.push_back(
-            alloc_array(in_col->length, 1, in_col->arr_type, in_col->dtype, 0));
+        out_cols.push_back(alloc_array(in_col->length, 1, 1, in_col->arr_type,
+                                       in_col->dtype, 0));
         update_cols.push_back(out_cols.back());
     }
 
@@ -2876,6 +3150,17 @@ class GroupbyPipeline {
         for (int64_t i = 0; i < num_keys; i++) {
             const array_info* key_col = (*from_table)[i];
             array_info* new_key_col;
+            if (key_col->arr_type == bodo_array_type::NUMPY ||
+                key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+                new_key_col = alloc_array(num_groups, 1, 1, key_col->arr_type,
+                                          key_col->dtype, 0);
+                int64_t dtype_size = numpy_item_size[key_col->dtype];
+                for (size_t j = 0; j < num_groups; j++)
+                    memcpy(new_key_col->data1 + j * dtype_size,
+                           key_col->data1 +
+                               grp_info.group_to_first_row[j] * dtype_size,
+                           dtype_size);
+            }
             if (key_col->arr_type == bodo_array_type::STRING) {
                 // new key col will have num_groups rows containing the
                 // string for each group
@@ -2886,7 +3171,7 @@ class GroupbyPipeline {
                     int64_t row = grp_info.group_to_first_row[j];
                     n_chars += in_offsets[row + 1] - in_offsets[row];
                 }
-                new_key_col = alloc_array(num_groups, n_chars,
+                new_key_col = alloc_array(num_groups, n_chars, 1,
                                           key_col->arr_type, key_col->dtype, 0);
 
                 uint8_t* in_null_bitmask = (uint8_t*)key_col->null_bitmask;
@@ -2905,15 +3190,60 @@ class GroupbyPipeline {
                              GetBit(in_null_bitmask, in_row));
                 }
                 out_offsets[num_groups] = pos;
-            } else {
-                new_key_col = alloc_array(num_groups, 1, key_col->arr_type,
-                                          key_col->dtype, 0);
-                int64_t dtype_size = numpy_item_size[key_col->dtype];
-                for (size_t j = 0; j < num_groups; j++)
-                    memcpy(new_key_col->data1 + j * dtype_size,
-                           key_col->data1 +
-                               grp_info.group_to_first_row[j] * dtype_size,
-                           dtype_size);
+            }
+            if (key_col->arr_type == bodo_array_type::LIST_STRING) {
+                // new key col will have num_groups rows containing the
+                // list string for each group
+                int64_t n_strings =
+                    0;                // total number of strings of all keys for
+                                      // this column
+                int64_t n_chars = 0;  // total number of chars of all keys for
+                                      // this column
+                uint32_t* in_index_offsets = (uint32_t*)key_col->data3;
+                uint32_t* in_data_offsets = (uint32_t*)key_col->data2;
+                for (size_t j = 0; j < num_groups; j++) {
+                    int64_t row = grp_info.group_to_first_row[j];
+                    n_strings +=
+                        in_index_offsets[row + 1] - in_index_offsets[row];
+                    n_chars += in_data_offsets[in_index_offsets[row + 1]] -
+                               in_data_offsets[in_index_offsets[row]];
+                }
+                new_key_col = alloc_array(num_groups, n_strings, n_chars,
+                                          key_col->arr_type, key_col->dtype, 0);
+                uint8_t* in_null_bitmask = (uint8_t*)key_col->null_bitmask;
+                uint8_t* out_null_bitmask = (uint8_t*)new_key_col->null_bitmask;
+                uint32_t* out_index_offsets = (uint32_t*)new_key_col->data3;
+                uint32_t* out_data_offsets = (uint32_t*)new_key_col->data2;
+                uint32_t pos_data = 0;
+                uint32_t pos_index = 0;
+                out_data_offsets[0] = 0;
+                out_index_offsets[0] = 0;
+                for (size_t j = 0; j < num_groups; j++) {
+                    size_t in_row = grp_info.group_to_first_row[j];
+                    uint32_t size_index =
+                        in_index_offsets[in_row + 1] - in_index_offsets[in_row];
+                    uint32_t pos_start = in_index_offsets[in_row];
+                    for (uint32_t i_str = 0; i_str < size_index; i_str++) {
+                        uint32_t len_str =
+                            in_data_offsets[pos_start + i_str + 1] -
+                            in_data_offsets[pos_start + i_str];
+                        pos_index++;
+                        out_data_offsets[pos_index] =
+                            out_data_offsets[pos_index - 1] + len_str;
+                    }
+                    out_index_offsets[j + 1] = pos_index;
+                    // Now the strings themselves
+                    uint32_t in_start_offset =
+                        in_data_offsets[in_index_offsets[in_row]];
+                    uint32_t n_chars_o =
+                        in_data_offsets[in_index_offsets[in_row + 1]] -
+                        in_data_offsets[in_index_offsets[in_row]];
+                    memcpy(&new_key_col->data1[pos_data],
+                           &key_col->data1[in_start_offset], n_chars_o);
+                    pos_data += n_chars_o;
+                    SetBitTo(out_null_bitmask, j,
+                             GetBit(in_null_bitmask, in_row));
+                }
             }
             out_table->columns.push_back(new_key_col);
         }
@@ -2957,7 +3287,7 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                                   table_info* udf_dummy_table) {
 #undef DEBUG_GROUPBY
 #ifdef DEBUG_GROUPBY
-    std::cout << "IN_TABLE:\n";
+    std::cout << "IN_TABLE (groupby):\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     DEBUG_PrintRefct(std::cout, in_table->columns);
 #endif
@@ -2967,9 +3297,10 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                             (udf_table_op_fn)update_cb,
                             (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb,
                             skipdropna, return_key, return_index);
+
     table_info* ret_table = groupby.run();
 #ifdef DEBUG_GROUPBY
-    std::cout << "OUT_TABLE:\n";
+    std::cout << "RET_TABLE (groupby):\n";
     DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
     DEBUG_PrintRefct(std::cout, ret_table->columns);
 #endif

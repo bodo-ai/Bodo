@@ -61,7 +61,7 @@ array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
     int64_t size = length * numpy_item_size[typ_enum];
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
-    return new array_info(bodo_array_type::NUMPY, typ_enum, length, -1, data,
+    return new array_info(bodo_array_type::NUMPY, typ_enum, length, -1, -1, data,
                           NULL, NULL, NULL, meminfo, NULL);
 }
 
@@ -76,9 +76,25 @@ array_info* alloc_nullable_array(int64_t length,
         NRT_MemInfo_alloc_safe_aligned(n_bytes * sizeof(uint8_t), ALIGNMENT);
     char* null_bitmap = (char*)meminfo_bitmask->data;
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL, typ_enum, length,
-                          -1, data, NULL, NULL, null_bitmap, meminfo,
+                          -1, -1, data, NULL, NULL, null_bitmap, meminfo,
                           meminfo_bitmask);
 }
+
+
+array_info* alloc_list_string_array(int64_t length, int64_t n_strings, int64_t n_chars,
+                                    int64_t extra_null_bytes) {
+    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_dtor_safe(
+        sizeof(list_str_arr_payload), (NRT_dtor_function)dtor_list_string_array);
+    list_str_arr_payload* payload = (list_str_arr_payload*)meminfo->data;
+    allocate_list_string_array(&(payload->data), &(payload->data_offsets),
+                               &(payload->index_offsets), &(payload->null_bitmap),
+                               length, n_strings, n_chars, extra_null_bytes);
+    return new array_info(bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, length,
+                          n_strings, n_chars,
+                          payload->data, (char*)payload->data_offsets, (char*)payload->index_offsets,
+                          (char*)payload->null_bitmap, meminfo, NULL);
+}
+
 
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
                                int64_t extra_null_bytes) {
@@ -90,14 +106,32 @@ array_info* alloc_string_array(int64_t length, int64_t n_chars,
                           &(payload->null_bitmap), length, n_chars,
                           extra_null_bytes);
     return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, length,
-                          n_chars, payload->data, (char*)payload->offsets, NULL,
+                          n_chars, -1, payload->data, (char*)payload->offsets, NULL,
                           (char*)payload->null_bitmap, meminfo, NULL);
 }
 
-array_info* alloc_array(int64_t length, int64_t n_sub_elems,
+
+/**
+ * The allocations array function for the function.
+ *
+ * In the case of NUMPY or NULLABLE_INT_BOOL,
+ * -- length is the number of rows, and n_sub_elems, n_sub_sub_elems do not matter.
+ * In the case of STRING:
+ * -- length is the number of rows (= number of strings)
+ * -- n_sub_elems is the total number of characters.
+ * In the case of LIST_STRING:
+ * -- length is the number of rows.
+ * -- n_sub_elems is the number of strings.
+ * -- n_sub_sub_elems is the total number of characters.
+ *
+ */
+array_info* alloc_array(int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems,
                         bodo_array_type::arr_type_enum arr_type,
                         Bodo_CTypes::CTypeEnum dtype,
                         int64_t extra_null_bytes) {
+    if (arr_type == bodo_array_type::LIST_STRING)
+        return alloc_list_string_array(length, n_sub_elems, n_sub_sub_elems, extra_null_bytes);
+
     if (arr_type == bodo_array_type::STRING)
         return alloc_string_array(length, n_sub_elems, extra_null_bytes);
 
@@ -113,7 +147,7 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
 array_info* copy_array(array_info* earr) {
     int64_t extra_null_bytes = 0;
     array_info* farr =
-        alloc_array(earr->length, earr->n_sub_elems, earr->arr_type,
+        alloc_array(earr->length, earr->n_sub_elems, earr->n_sub_sub_elems, earr->arr_type,
                     earr->dtype, extra_null_bytes);
     if (earr->arr_type == bodo_array_type::NUMPY) {
         uint64_t siztype = numpy_item_size[earr->dtype];
@@ -128,6 +162,13 @@ array_info* copy_array(array_info* earr) {
     if (earr->arr_type == bodo_array_type::STRING) {
         memcpy(farr->data1, earr->data1, earr->n_sub_elems);
         memcpy(farr->data2, earr->data2, sizeof(uint32_t) * (earr->length + 1));
+        int64_t n_bytes = ((earr->length + 7) >> 3);
+        memcpy(farr->null_bitmask, earr->null_bitmask, n_bytes);
+    }
+    if (earr->arr_type == bodo_array_type::LIST_STRING) {
+        memcpy(farr->data1, earr->data1, earr->n_sub_sub_elems);
+        memcpy(farr->data2, earr->data2, sizeof(uint32_t) * (earr->n_sub_elems + 1));
+        memcpy(farr->data3, earr->data3, sizeof(uint32_t) * (earr->length + 1));
         int64_t n_bytes = ((earr->length + 7) >> 3);
         memcpy(farr->null_bitmask, earr->null_bitmask, n_bytes);
     }
@@ -152,19 +193,24 @@ void delete_table_free_arrays(table_info* table) {
 }
 
 void free_array(array_info* arr) {
-    // string array
+    if (arr->arr_type == bodo_array_type::LIST_STRING) {
+        delete[] arr->data1; // data
+        delete[] arr->data2; // data_offsets
+        delete[] arr->data3; // index_offsets
+        if (arr->null_bitmask != nullptr) delete[] arr->null_bitmask;
+    }
     if (arr->arr_type == bodo_array_type::STRING) {
-        // data
-        delete[] arr->data1;
-        // offsets
-        delete[] arr->data2;
+        // string array
+        delete[] arr->data1; // data
+        delete[] arr->data2; // offsets
         // nulls
         if (arr->null_bitmask != nullptr) delete[] arr->null_bitmask;
-    } else {                 // Numpy or nullable array
+    }
+    if (arr->arr_type == bodo_array_type::NUMPY ||
+        arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         free(arr->meminfo);  // TODO: decref for cleanup?
         if (arr->meminfo_bitmask != NULL) free(arr->meminfo_bitmask);
     }
-    return;
 }
 
 extern "C" {

@@ -12,10 +12,12 @@ import bodo
 import random
 import string
 import pytest
-from bodo.tests.utils import check_func, is_bool_object_series
+from bodo.tests.utils import check_func, is_bool_object_series, check_parallel_coherency
 from bodo.utils.typing import BodoWarning, BodoError
 import os
 
+random.seed(5)
+np.random.seed(3)
 
 @pytest.fixture(
     params=[
@@ -151,7 +153,9 @@ def test_single_col():
     save_min_samples = bodo.ir.sort.MIN_SAMPLES
     try:
         bodo.ir.sort.MIN_SAMPLES = 10
-        check_func(test_impl, (), )
+        check_func(
+            test_impl, (),
+        )
     finally:
         bodo.ir.sort.MIN_SAMPLES = save_min_samples  # restore global val
 
@@ -261,8 +265,6 @@ def test_sort_values_str():
         return df
 
     # seeds should be the same on different processors for consistent input
-    random.seed(2)
-    np.random.seed(3)
     n = 17  # 1211
     df = _gen_df_str(n)
     check_func(test_impl, (df,))
@@ -407,7 +409,6 @@ def test_sort_values_strings_constant_length(n, len_str):
         return df2
 
     def get_random_strings_array(n, len_str):
-        random.seed(5)
         str_vals = []
         for _ in range(n):
             val = "".join(random.choices(string.ascii_uppercase, k=len_str))
@@ -433,7 +434,6 @@ def test_sort_values_strings_variable_length(n, len_str):
         return df2
 
     def get_random_var_length_strings_array(n, len_str):
-        random.seed(5)
         str_vals = []
         for _ in range(n):
             k = random.randint(1, len_str)
@@ -461,7 +461,6 @@ def test_sort_values_strings(n, len_str):
         return df2
 
     def get_random_strings_array(n, len_str):
-        random.seed(5)
         str_vals = []
         for _ in range(n):
             prob = random.randint(1, 10)
@@ -520,7 +519,6 @@ def test_sort_values_two_columns_nan(n, len_siz):
         return str_vals
 
     def get_random_dataframe_two_columns(n, len_siz):
-        random.seed(5)
         df = pd.DataFrame(
             {"A": get_random_column(n, len_siz), "B": get_random_column(n, len_siz)}
         )
@@ -657,6 +655,32 @@ def test_sort_values_list_inference():
         }
     )
     check_func(impl, (df,))
+
+
+def test_list_string():
+    """Sorting values by list of strings"""
+    def test_impl(df1):
+        df2 = df1.sort_values(by="A")
+        return df2
+
+    def rand_col_l_str(n):
+        e_list = []
+        for _ in range(n):
+            if random.random() < -0.1:
+                e_ent = np.nan
+            else:
+                e_ent = []
+                for _ in range(random.randint(1, 2)):
+                    k = random.randint(1, 3)
+                    val = "".join(random.choices(["A", "B", "C"], k=k))
+                    e_ent.append(val)
+            e_list.append(e_ent)
+        return e_list
+
+    n=100
+    df1 = pd.DataFrame({"A":rand_col_l_str(n)})
+    check_parallel_coherency(test_impl, (df1,), sort_output=True, reset_index=True)
+
 
 
 # ------------------------------ error checking ------------------------------ #

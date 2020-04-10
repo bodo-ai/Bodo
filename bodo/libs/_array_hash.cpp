@@ -2,6 +2,16 @@
 #include "_bodo_common.h"
 #include "_murmurhash3.h"
 
+
+/**
+ * Computation of the inner hash of the functions. This covers the NUMPY case.
+ *
+ * @param out_hashes: The hashes on output.
+ * @param array: the list of data in input.
+ * @param n_rows: the number of rows of the table.
+ * @param seed: the seed of the computation.
+ *
+ */
 template <class T>
 static void hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows,
                              const uint32_t seed) {
@@ -10,8 +20,70 @@ static void hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows,
     }
 }
 
+
+/**
+ * Computation of the hashes for the case of list of strings array column. Covers LIST_STRING
+ *
+ * @param out_hashes: The hashes on output.
+ * @param data: the strings
+ * @param data_offsets: the data offsets (that separates the strings)
+ * @param index_offsets: the index offsets (for separating the block of strings)
+ * @param null_bitmap: the bitmap array for the values.
+ * @param n_rows: the number of rows of the table.
+ * @param seed: the seed of the computation.
+ *
+ * The hash is computed in 3 stages:
+ * 1) The hash of the concatenated strings
+ * 2) The hash of the string length
+ * 3) The hash of the bitmask
+ */
+static void hash_array_list_string(uint32_t* out_hashes,
+                                   char* data, uint32_t* data_offsets, uint32_t* index_offsets, uint8_t* null_bitmask,
+                                   size_t n_rows,
+                                   const uint32_t seed) {
+    uint32_t start_index_offset = 0;
+    for (size_t i = 0; i < n_rows; i++) {
+        uint32_t hash1, hash2, hash3;
+        // First the hash from the strings.
+        uint32_t end_index_offset = index_offsets[i + 1];
+        uint32_t len1 = data_offsets[end_index_offset] - data_offsets[start_index_offset];
+        std::string val(&data[data_offsets[start_index_offset]], len1);
+        const char* val_chars1 = val.c_str();
+        hash_string_32(val_chars1, (const int)len1, seed, &hash1);
+        // Second the hash from the length of strings (approx that most strings have less than 256 characters)
+        uint32_t len2=end_index_offset - start_index_offset;
+        std::vector<char> V(len2);
+        for (size_t j=0; j<len2; j++) {
+          uint32_t n_chars = data_offsets[start_index_offset+j+1] - data_offsets[start_index_offset+j];
+          V[j] = (char)n_chars;
+        }
+        const char* val_chars2 = V.data();
+        hash_string_32(val_chars2, (const int)len2, hash1, &hash2);
+        // Third the hash from whether it is missing or not
+        bool bit = GetBit(null_bitmask, i);
+        char val_sing = bit;
+        hash_string_32(&val_sing, 1, hash2, &hash3);
+        out_hashes[i] = hash3;
+        start_index_offset = end_index_offset;
+    }
+}
+
+
+/**
+ * Computation of the hashes for the case of strings array column. Covers STRING
+ *
+ * @param out_hashes: The hashes on output.
+ * @param data: the strings
+ * @param offsets: the offsets (that separates the strings)
+ * @param null_bitmap: the bitmap array for the values.
+ * @param n_rows: the number of rows of the table.
+ * @param seed: the seed of the computation.
+ *
+ * Right now, the bitmask is not used in the computation, which
+ * may be a problem to consider later on.
+ */
 static void hash_array_string(uint32_t* out_hashes, char* data,
-                              uint32_t* offsets, size_t n_rows,
+                              uint32_t* offsets, uint8_t* null_bitmask, size_t n_rows,
                               const uint32_t seed) {
     uint32_t start_offset = 0;
     for (size_t i = 0; i < n_rows; i++) {
@@ -24,6 +96,16 @@ static void hash_array_string(uint32_t* out_hashes, char* data,
     }
 }
 
+
+/**
+ * Top function for the computation of the hashes. It calls all the other hash functions.
+ *
+ * @param out_hashes: The hashes on output.
+ * @param array: the list of columns in input
+ * @param n_rows: the number of rows of the table.
+ * @param seed: the seed of the computation.
+ *
+ */
 void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
                 const uint32_t seed) {
     // dispatch to proper function
@@ -68,10 +150,18 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
         return hash_array_inner<double>(out_hashes, (double*)array->data1,
                                         n_rows, seed);
     if (array->arr_type == bodo_array_type::STRING)
-        return hash_array_string(out_hashes, (char*)array->data1,
-                                 (uint32_t*)array->data2, n_rows, seed);
+        return hash_array_string(out_hashes,
+                                 (char*)array->data1, (uint32_t*)array->data2,
+                                 (uint8_t*)array->null_bitmask,
+                                 n_rows, seed);
+    if (array->arr_type == bodo_array_type::LIST_STRING)
+        return hash_array_list_string(out_hashes,
+                                      (char*)array->data1,(uint32_t*)array->data2,
+                                      (uint32_t*)array->data3,(uint8_t*)array->null_bitmask,
+                                      n_rows, seed);
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid data type for hash");
 }
+
 
 template <class T>
 static void hash_array_combine_inner(uint32_t* out_hashes, T* data,
@@ -85,6 +175,7 @@ static void hash_array_combine_inner(uint32_t* out_hashes, T* data,
             out_hash + 0x9e3779b9 + (out_hashes[i] << 6) + (out_hashes[i] >> 2);
     }
 }
+
 
 static void hash_array_combine_string(uint32_t* out_hashes, char* data,
                                       uint32_t* offsets, size_t n_rows,

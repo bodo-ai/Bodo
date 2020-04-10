@@ -18,12 +18,21 @@
 
 MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
 
+array_info* list_string_array_to_info(uint64_t n_items, uint64_t n_strings, uint64_t n_chars,
+                                      char* data, char* data_offsets, char* index_offsets,
+                                      char* null_bitmap, NRT_MemInfo* meminfo) {
+    // TODO: better memory management of struct, meminfo refcount?
+    return new array_info(bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_items,
+                          n_strings, n_chars, data, data_offsets, index_offsets, null_bitmap, meminfo,
+                          NULL);
+}
+
 array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
                                  char* offsets, char* null_bitmap,
                                  NRT_MemInfo* meminfo) {
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, n_items,
-                          n_chars, data, offsets, NULL, null_bitmap, meminfo,
+                          n_chars, -1, data, offsets, NULL, null_bitmap, meminfo,
                           NULL);
 }
 
@@ -31,7 +40,7 @@ array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                 NRT_MemInfo* meminfo) {
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NUMPY,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, data,
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1, data,
                           NULL, NULL, NULL, meminfo, NULL);
 }
 
@@ -40,7 +49,7 @@ array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                    NRT_MemInfo* meminfo_bitmask) {
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, data,
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1, data,
                           NULL, NULL, null_bitmap, meminfo, meminfo_bitmask);
 }
 
@@ -50,10 +59,32 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                   int32_t precision, int32_t scale) {
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, data,
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1, data,
                           NULL, NULL, null_bitmap, meminfo, meminfo_bitmask,
                           precision, scale);
 }
+
+
+void info_to_list_string_array(array_info* info,
+                               uint64_t* n_items, uint64_t* n_strings, uint64_t* n_chars,
+                               char** data, char** data_offsets, char** index_offsets,
+                               char** null_bitmap, NRT_MemInfo** meminfo) {
+    if (info->arr_type != bodo_array_type::LIST_STRING) {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "info_to_list_string_array requires list string input");
+        return;
+    }
+    *n_items = info->length;
+    *n_strings = info->n_sub_elems;
+    *n_chars = info->n_sub_sub_elems;
+    *data = info->data1;
+    *data_offsets = info->data2;
+    *index_offsets = info->data3;
+    *null_bitmap = info->null_bitmask;
+    *meminfo = info->meminfo;
+}
+
+
 
 void info_to_string_array(array_info* info, uint64_t* n_items,
                           uint64_t* n_chars, char** data, char** offsets,
@@ -132,6 +163,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     groupby_init();
 
     // DEC_MOD_METHOD(string_array_to_info);
+    PyObject_SetAttrString(m, "list_string_array_to_info",
+                           PyLong_FromVoidPtr((void*)(&list_string_array_to_info)));
     PyObject_SetAttrString(m, "string_array_to_info",
                            PyLong_FromVoidPtr((void*)(&string_array_to_info)));
     PyObject_SetAttrString(m, "numpy_array_to_info",
@@ -143,6 +176,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
                            PyLong_FromVoidPtr((void*)(&decimal_array_to_info)));
     PyObject_SetAttrString(m, "info_to_string_array",
                            PyLong_FromVoidPtr((void*)(&info_to_string_array)));
+    PyObject_SetAttrString(m, "info_to_list_string_array",
+                           PyLong_FromVoidPtr((void*)(&info_to_list_string_array)));
     PyObject_SetAttrString(m, "info_to_numpy_array",
                            PyLong_FromVoidPtr((void*)(&info_to_numpy_array)));
     PyObject_SetAttrString(

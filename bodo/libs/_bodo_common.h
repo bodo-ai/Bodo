@@ -31,6 +31,7 @@ struct Bodo_CTypes {
         DATETIME = 14,
         TIMEDELTA = 15,
         INT128 = 16,
+        LIST_STRING = 17,
         _numtypes
     };
 };
@@ -49,13 +50,37 @@ struct bodo_array_type {
         NUMPY = 0,
         STRING = 1,
         NULLABLE_INT_BOOL = 2,  // nullable int or bool
-        // TODO: add all Bodo arrays list_string_array_type,
+        LIST_STRING = 3, // list_string_array_type
         // string_array_split_view_type, etc.
     };
 };
 
 /**
  * @brief generic struct that holds info of Bodo arrays to enable communication.
+ *
+ * The column of a dataframe.
+ *
+ * Case of NUMPY column:
+ * --- Only the data1 array is used.
+ * --- length is the number of rows.
+ * Case of NULLABLE_INT_BOOL:
+ * --- The data1 is used for the data
+ * --- null_bitmask is the mask
+ * --- length is the number of rows.
+ * Case of STRING:
+ * --- The length is the number of rows.
+ * --- The n_sub_elems is the total number of characters
+ * --- data1 is for the characters
+ * --- data2 is for the index offsets
+ * --- null_bitmask is for the missing entries
+ * Case of LIST_STRING:
+ * --- The length is the number of rows.
+ * --- The n_sub_elems is the total number of strings.
+ * --- The n_sub_sub_elems is the total number of characters
+ * --- data1 is the characters
+ * --- data2 is for the data_offsets
+ * --- data3 is for the index_offsets
+ * --- null_bitmask for whether the data is missing or not.
  */
 struct array_info {
     bodo_array_type::arr_type_enum arr_type;
@@ -63,6 +88,7 @@ struct array_info {
     int64_t length;       // number of elements in the array (not bytes)
     int64_t n_sub_elems;  // number of sub-elements for variable length arrays,
                           // e.g. characters in string array
+    int64_t n_sub_sub_elems; // second level of subelements (e.g. for the list_string_array_type)
     // data1 is the main data pointer. some arrays have multiple data pointers
     // e.g. string offsets
     char* data1;
@@ -76,7 +102,8 @@ struct array_info {
     // TODO: shape/stride for multi-dim arrays
     explicit array_info(bodo_array_type::arr_type_enum _arr_type,
                         Bodo_CTypes::CTypeEnum _dtype, int64_t _length,
-                        int64_t _n_sub_elems, char* _data1, char* _data2,
+                        int64_t _n_sub_elems, int64_t _n_sub_sub_elems,
+                        char* _data1, char* _data2,
                         char* _data3, char* _null_bitmask,
                         NRT_MemInfo* _meminfo, NRT_MemInfo* _meminfo_bitmask,
                         int32_t _precision = 0, int32_t _scale = 0)
@@ -84,6 +111,7 @@ struct array_info {
           dtype(_dtype),
           length(_length),
           n_sub_elems(_n_sub_elems),
+          n_sub_sub_elems(_n_sub_sub_elems),
           data1(_data1),
           data2(_data2),
           data3(_data3),
@@ -119,7 +147,7 @@ struct table_info {
 /// Initialize numpy_item_size and verify size of dtypes
 void bodo_common_init();
 
-array_info* alloc_array(int64_t length, int64_t n_sub_elems,
+array_info* alloc_array(int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems, 
                         bodo_array_type::arr_type_enum arr_type,
                         Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes);
 
@@ -128,6 +156,9 @@ array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum);
 array_info* alloc_nullable_array(int64_t length,
                                  Bodo_CTypes::CTypeEnum typ_enum,
                                  int64_t extra_null_bytes);
+
+array_info* alloc_list_string_array(int64_t length, int64_t n_strings, int64_t n_chars,
+                                    int64_t extra_null_bytes);
 
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
                                int64_t extra_null_bytes);

@@ -283,10 +283,11 @@ def get_groupby_output_dtype(arr_type, func_name):
         and not isinstance(in_dtype, types.Float)
         and not isinstance(in_dtype, types.Boolean)
     ):
-        if in_dtype == types.unicode_type:
+        is_list_string = isinstance(in_dtype, numba.types.containers.List) and in_dtype.dtype == types.unicode_type
+        if is_list_string or in_dtype == types.unicode_type:
             if func_name not in {"count", "nunique", "min", "max", "sum", "last"}:
                 raise BodoError(
-                    "column type of strings is not supported in groupby built-in function {}".format(
+                    "column type of strings or list of strings is not supported in groupby built-in function {}".format(
                         func_name
                     )
                 )

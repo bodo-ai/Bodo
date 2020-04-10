@@ -10,7 +10,7 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
                             bool is_join, bool optional_col) {
 #undef DEBUG_JOIN
 #ifdef DEBUG_JOIN
-    std::cout << "IN_TABLE:\n";
+    std::cout << "IN_TABLE (hash_join_table):\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     DEBUG_PrintRefct(std::cout, in_table->columns);
 #endif
@@ -29,12 +29,11 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
         return NULL;
     }
 #ifdef DEBUG_JOIN
-    std::cout << "pointer=" << vect_same_key << "\n";
+    std::cout << "n_key_t=" << n_key_t << "\n";
     for (size_t iKey = 0; iKey < n_key; iKey++) {
         int64_t val = vect_same_key[iKey];
-        std::cout << "iKey=" << iKey << " vect_same_key[iKey]=" << val << "\n";
+        std::cout << "iKey=" << iKey << "/" << n_key_t << " vect_same_key[iKey]=" << val << "\n";
     }
-    std::cout << "n_key_t=" << n_key_t << "\n";
     std::cout << "n_data_left_t=" << n_data_left_t
               << " n_data_right_t=" << n_data_right_t << "\n";
     std::cout << "is_left=" << is_left << " is_right=" << is_right << "\n";
@@ -42,8 +41,8 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
 #endif
     // in the case of merging on index and one column, it can only be one column
     if (n_key_t > 1 && optional_col) {
-        PyErr_SetString(PyExc_RuntimeError,
-                        "if optional_col=true then we must have n_key_t=1");
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "if optional_col=true then we must have n_key_t=1");
         return NULL;
     }
     // This is a hack because we may access vect_same_key_b above n_key
@@ -297,11 +296,9 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
         }
     }
 #ifdef DEBUG_JOIN
-    std::cout << "After right side construction\n";
-#endif
-#ifdef DEBUG_JOIN
     std::cout << "hash_join_table, output information\n";
     DEBUG_PrintSetOfColumn(std::cout, out_arrs);
+    std::cout << "hash_join_table, output information\n";
     DEBUG_PrintRefct(std::cout, out_arrs);
     std::cout << "Finally leaving\n";
 #endif

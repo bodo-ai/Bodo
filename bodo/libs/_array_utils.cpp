@@ -35,6 +35,71 @@ array_info* RetrieveArray(
     bodo_array_type::arr_type_enum arr_type =
         in_table->columns[eshift]->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_table->columns[eshift]->dtype;
+    if (arr_type == bodo_array_type::LIST_STRING) {
+        // In the first case of STRING, we have to deal with offsets first so we
+        // need one first loop to determine the needed length. In the second
+        // loop, the assignation is made. If the entries are missing then the
+        // bitmask is set to false.
+        std::vector<uint32_t> ListSizes_index(nRowOut);
+        std::vector<uint32_t> ListSizes_data(nRowOut);
+        int64_t tot_size_index = 0;
+        int64_t tot_size_data = 0;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+            uint32_t size_index = 0;
+            uint32_t size_data = 0;
+            if (pairShiftRow.second >= 0) {
+                uint32_t* index_offsets =
+                    (uint32_t*)in_table->columns[pairShiftRow.first]->data3;
+                uint32_t* data_offsets =
+                    (uint32_t*)in_table->columns[pairShiftRow.first]->data2;
+                uint32_t start_offset_index = index_offsets[pairShiftRow.second];
+                uint32_t end_offset_index = index_offsets[pairShiftRow.second + 1];
+                size_index = end_offset_index - start_offset_index;
+                uint32_t start_offset_data = data_offsets[start_offset_index];
+                uint32_t end_offset_data = data_offsets[end_offset_index];
+                size_data = end_offset_data - start_offset_data;
+            }
+            ListSizes_index[iRow] = size_index;
+            ListSizes_data[iRow] = size_data;
+            tot_size_index += size_index;
+            tot_size_data += size_data;
+        }
+        out_arr = alloc_array(nRowOut, tot_size_index, tot_size_data, arr_type, dtype, 0);
+        uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
+        uint32_t pos_index = 0;
+        uint32_t pos_data = 0;
+        uint32_t* out_index_offsets = (uint32_t*)out_arr->data3;
+        uint32_t* out_data_offsets = (uint32_t*)out_arr->data2;
+        out_data_offsets[0] = 0;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+            uint32_t size_index = ListSizes_index[iRow];
+            uint32_t size_data  = ListSizes_data[iRow];
+            out_index_offsets[iRow] = pos_index;
+            bool bit = false;
+            if (pairShiftRow.second >= 0) {
+                size_t i_col = pairShiftRow.first;
+                size_t i_row = pairShiftRow.second;
+                uint8_t* in_null_bitmask = (uint8_t*)in_table->columns[i_col]->null_bitmask;
+                uint32_t* in_index_offsets = (uint32_t*)in_table->columns[i_col]->data3;
+                uint32_t* in_data_offsets = (uint32_t*)in_table->columns[i_col]->data2;
+                char* data1 = in_table->columns[i_col]->data1;
+                uint32_t start_index_offset = in_index_offsets[i_row];
+                uint32_t start_data_offset = in_data_offsets[start_index_offset];
+                for (uint32_t u=0; u<size_index; u++) {
+                  uint32_t len_str = in_data_offsets[start_index_offset+u+1] - in_data_offsets[start_index_offset+u];
+                  out_data_offsets[pos_index+u+1] = out_data_offsets[pos_index+u] + len_str;
+                }
+                memcpy(&out_arr->data1[pos_data], &data1[start_data_offset], size_data);
+                bit = GetBit(in_null_bitmask, pairShiftRow.second);
+            }
+            pos_index += size_index;
+            pos_data += size_data;
+            SetBitTo(out_null_bitmask, iRow, bit);
+        }
+        out_index_offsets[nRowOut] = pos_index;
+    }
     if (arr_type == bodo_array_type::STRING) {
         // In the first case of STRING, we have to deal with offsets first so we
         // need one first loop to determine the needed length. In the second
@@ -55,7 +120,7 @@ array_info* RetrieveArray(
             ListSizes[iRow] = size;
             n_chars += size;
         }
-        out_arr = alloc_array(nRowOut, n_chars, arr_type, dtype, 0);
+        out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0);
         uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
         uint32_t pos = 0;
         uint32_t* out_offsets = (uint32_t*)out_arr->data2;
@@ -90,7 +155,7 @@ array_info* RetrieveArray(
         // suffices for the copy.
         // In the case of missing array a value of false is assigned
         // to the bitmask.
-        out_arr = alloc_array(nRowOut, -1, arr_type, dtype, 0);
+        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0);
         uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
         uint64_t siztype = numpy_item_size[dtype];
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
@@ -121,24 +186,23 @@ array_info* RetrieveArray(
         uint64_t siztype = numpy_item_size[dtype];
         if (!map_integer_type) {
             std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-            out_arr = alloc_array(nRowOut, -1, arr_type, dtype, 0);
+            out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0);
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
                 //
                 if (pairShiftRow.second >= 0) {
                     for (uint64_t u = 0; u < siztype; u++)
                         out_arr->data1[siztype * iRow + u] =
-                            in_table->columns[pairShiftRow.first]
-                                ->data1[siztype * pairShiftRow.second + u];
+                            in_table->columns[pairShiftRow.first]->data1[siztype * pairShiftRow.second + u];
                 } else {
                     for (uint64_t u = 0; u < siztype; u++)
                         out_arr->data1[siztype * iRow + u] = vectNaN[u];
                 }
             }
-        } else {
-            bodo_array_type::arr_type_enum arr_type_o =
-                bodo_array_type::NULLABLE_INT_BOOL;
-            out_arr = alloc_array(nRowOut, -1, arr_type_o, dtype, 0);
+        }
+        else {
+            bodo_array_type::arr_type_enum arr_type_o = bodo_array_type::NULLABLE_INT_BOOL;
+            out_arr = alloc_array(nRowOut, -1, -1, arr_type_o, dtype, 0);
             uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
@@ -200,6 +264,43 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
             char* ptr1 = arr1->data1 + siztype * pos1;
             char* ptr2 = arr2->data1 + siztype * pos2;
             if (memcmp(ptr1, ptr2, siztype) != 0) return false;
+        }
+    }
+    if (arr1->arr_type == bodo_array_type::LIST_STRING) {
+        // For STRING case we need to deal bitmask and the values.
+        uint8_t* null_bitmask1 = (uint8_t*)arr1->null_bitmask;
+        uint8_t* null_bitmask2 = (uint8_t*)arr2->null_bitmask;
+        bool bit1 = GetBit(null_bitmask1, pos1);
+        bool bit2 = GetBit(null_bitmask2, pos2);
+        // (1): If bitmasks are different then we conclude they are not equal.
+        if (bit1 != bit2) return false;
+        // If bitmasks are both false, then no need to compare the string
+        // values.
+        if (bit1) {
+            // Here we consider the shifts in data2 for the comparison.
+            uint32_t* data3_1 = (uint32_t*)arr1->data3;
+            uint32_t* data3_2 = (uint32_t*)arr2->data3;
+            uint32_t len1 = data3_1[pos1 + 1] - data3_1[pos1];
+            uint32_t len2 = data3_2[pos2 + 1] - data3_2[pos2];
+            // (2): If number of strings are different the they are different
+            if (len1 != len2) return false;
+            // (3): Checking that the string lengths are the same
+            uint32_t* data2_1 = (uint32_t*)arr1->data2;
+            uint32_t* data2_2 = (uint32_t*)arr2->data2;
+            uint32_t pos1_prev = data3_1[pos1];
+            uint32_t pos2_prev = data3_2[pos2];
+            for (uint32_t u=0; u<len1; u++) {
+              uint32_t len1_str = data2_1[pos1_prev + u + 1] - data2_1[pos1_prev + u];
+              uint32_t len2_str = data2_2[pos2_prev + u + 1] - data2_2[pos2_prev + u];
+              if (len1_str != len2_str) return false;
+            }
+            uint32_t tot_nb_char = data2_1[data3_1[pos1 + 1]] - data2_1[data3_1[pos1]];
+            // (4): Checking the data1 array
+            uint32_t pos1_B = data2_1[data3_1[pos1]];
+            uint32_t pos2_B = data2_2[data3_2[pos2]];
+            char* data1_1_comp = arr1->data1 + pos1_B;
+            char* data1_2_comp = arr2->data1 + pos2_B;
+            if (memcmp(data1_1_comp, data1_2_comp, tot_nb_char) != 0) return false;
         }
     }
     if (arr1->arr_type == bodo_array_type::STRING) {
@@ -288,6 +389,59 @@ bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
                 int test = NumericComparison(columns1[shift_key1 + iKey]->dtype,
                                              ptr1, ptr2, na_position_bis);
                 if (test != 0) return ProcessOutput(test);
+            }
+        }
+        if (columns1[shift_key1 + iKey]->arr_type == bodo_array_type::LIST_STRING) {
+            // For LIST_STRING case we need to deal bitmask and the values.
+            uint8_t* null_bitmask1 =
+                (uint8_t*)columns1[shift_key1 + iKey]->null_bitmask;
+            uint8_t* null_bitmask2 =
+                (uint8_t*)columns2[shift_key2 + iKey]->null_bitmask;
+            bool bit1 = GetBit(null_bitmask1, iRow1);
+            bool bit2 = GetBit(null_bitmask2, iRow2);
+            // If bitmasks are different then we can conclude the comparison
+            if (bit1 && !bit2) {
+                if (na_position_bis) return ProcessOutput(1);
+                return ProcessOutput(-1);
+            }
+            if (!bit1 && bit2) {
+                if (na_position_bis) return ProcessOutput(-1);
+                return ProcessOutput(1);
+            }
+            if (bit1) {
+                uint32_t* data3_1 =
+                    (uint32_t*)columns1[shift_key1 + iKey]->data3;
+                uint32_t* data3_2 =
+                    (uint32_t*)columns2[shift_key2 + iKey]->data3;
+                uint32_t* data2_1 =
+                    (uint32_t*)columns1[shift_key1 + iKey]->data2;
+                uint32_t* data2_2 =
+                    (uint32_t*)columns2[shift_key2 + iKey]->data2;
+                // Computing the number of strings and their minimum
+                uint32_t nb_string1 = data3_1[iRow1 + 1] - data3_1[iRow1];
+                uint32_t nb_string2 = data3_2[iRow2 + 1] - data3_2[iRow2];
+                uint32_t min_nb_string = nb_string1;
+                if (nb_string2 < nb_string1) min_nb_string = nb_string2;
+                // Iterating over the number of strings.
+                for (size_t istr=0; istr<min_nb_string; istr++) {
+                    size_t pos1_prev = data2_1[istr + data3_1[iRow1]];
+                    size_t pos2_prev = data2_2[istr + data3_2[iRow2]];
+                    size_t len1=data2_1[istr + 1 + data3_1[iRow1]] - data2_1[istr + data3_1[iRow1]];
+                    size_t len2=data2_2[istr + 1 + data3_2[iRow2]] - data2_2[istr + data3_2[iRow2]];
+                    uint32_t minlen = len1;
+                    if (len2 < len1) minlen = len2;
+                    char* data1_1 = columns1[shift_key1 + iKey]->data1 + pos1_prev;
+                    char* data1_2 = columns2[shift_key2 + iKey]->data1 + pos2_prev;
+                    // We check the strings for comparison and check if we can conclude.
+                    int test = std::strncmp(data1_2, data1_1, minlen);
+                    if (test != 0) return ProcessOutput(test);
+                    // If not, we may be able to conclude via their length
+                    if (len1 > len2) return ProcessOutput(-1);
+                    if (len1 < len2) return ProcessOutput(1);
+                }
+                // If the number of strings is different then we can conclude.
+                if (nb_string1 > nb_string2) return ProcessOutput(-1);
+                if (nb_string1 < nb_string2) return ProcessOutput(1);
             }
         }
         if (columns1[shift_key1 + iKey]->arr_type == bodo_array_type::STRING) {
@@ -452,6 +606,38 @@ std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
             ListStr[iRow] = strOut;
         }
     }
+    if (arr->arr_type == bodo_array_type::LIST_STRING) {
+        uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+        uint32_t* data3 = (uint32_t*)arr->data3;
+        uint32_t* data2 = (uint32_t*)arr->data2;
+        char* data1 = arr->data1;
+        for (size_t iRow = 0; iRow < nRow; iRow++) {
+            bool bit = GetBit(null_bitmask, iRow);
+            if (bit) {
+                strOut = "[";
+                uint32_t len=data3[iRow+1] - data3[iRow];
+                for (uint32_t u=0; u<len; u++) {
+                    uint32_t start_pos = data2[data3[iRow] + u];
+                    uint32_t end_pos = data2[data3[iRow] + u + 1];
+                    uint32_t lenB = end_pos - start_pos;
+                    char* strname;
+                    strname = new char[lenB + 1];
+                    for (uint32_t i = 0; i < lenB; i++) {
+                        strname[i] = data1[start_pos + i];
+                    }
+                    strname[lenB] = '\0';
+                    if (u>0)
+                        strOut += ",";
+                    strOut += strname;
+                    delete[] strname;
+                }
+                strOut += "]";
+            } else {
+                strOut = "false";
+            }
+            ListStr[iRow] = strOut;
+        }
+    }
     return ListStr;
 }
 
@@ -543,7 +729,9 @@ void DEBUG_PrintRefct(std::ostream& os,
     auto GetType = [](bodo_array_type::arr_type_enum arr_type) -> std::string {
         if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) return "NULLABLE";
         if (arr_type == bodo_array_type::NUMPY) return "NUMPY";
-        return "STRING";
+        if (arr_type == bodo_array_type::STRING) return "STRING";
+        if (arr_type == bodo_array_type::LIST_STRING) return "LIST_STRING";
+        return "Uncovered case in DEBUG_PrintRefct\n";
     };
     auto GetNRTinfo = [](NRT_MemInfo* meminf) -> std::string {
         if (meminf == NULL) return "NULL";

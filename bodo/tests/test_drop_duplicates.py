@@ -5,7 +5,12 @@ import pandas as pd
 import numpy as np
 import random
 import pytest
-from bodo.tests.utils import check_func
+import bodo
+from bodo.tests.utils import (
+    check_func,
+    convert_list_string_columns,
+    check_func_list_string,
+)
 
 
 @pytest.mark.parametrize(
@@ -76,35 +81,74 @@ def test_drop_duplicates_2col_int_string():
     check_func(test_impl, (df1,), sort_output=True)
 
 
-@pytest.mark.parametrize("n, len_siz", [(100,10), (30,3)])
-def test_drop_duplicates_2col_random_nullable_int(n,len_siz):
+@pytest.mark.parametrize("n, len_siz", [(100, 10), (30, 3)])
+def test_drop_duplicates_2col_random_nullable_int(n, len_siz):
     """
     Test drop_duplicates(): 2 columns drop duplicates with nullable_int_bool array
     """
-    
+
     def test_impl(df1):
         df2 = df1.drop_duplicates()
         return df2
-    def get_random_column(n,len_siz):
+
+    def get_random_column(n, len_siz):
         elist = []
         for _ in range(n):
-            prob = random.randint(1,len_siz)
-            if prob==1:
+            prob = random.randint(1, len_siz)
+            if prob == 1:
                 elist.append(None)
             else:
                 elist.append(prob)
-        return pd.array(elist, dtype='UInt16')
-    def get_random_dataframe(n,len_siz):
-        elist1 = get_random_column(n,len_siz)
-        elist2 = get_random_column(n,len_siz)
-        return pd.DataFrame({'A':elist1,'B':elist2})
+        return pd.array(elist, dtype="UInt16")
+
+    def get_random_dataframe(n, len_siz):
+        elist1 = get_random_column(n, len_siz)
+        elist2 = get_random_column(n, len_siz)
+        return pd.DataFrame({"A": elist1, "B": elist2})
 
     random.seed(5)
-    df1 = get_random_dataframe(n,len_siz)
+    df1 = get_random_dataframe(n, len_siz)
     check_func(test_impl, (df1,), sort_output=True)
 
 
+def test_list_string_array_type_specific():
+    """Test of list_string_array_type in a specific case"""
 
+    def test_impl(df1):
+        df2 = df1.drop_duplicates()
+        return df2
+
+    df1 = pd.DataFrame({"A": ["AB", "A,B,C", "AB,CD", "A,B,C"]})
+    df1.A = df1.A.str.split(",")
+    bodo_impl = bodo.jit(test_impl)
+    df2_bodo = bodo_impl(df1)
+    df2_target = pd.DataFrame({"A": [["AB"], ["A", "B", "C"], ["AB", "CD"]]})
+    check_func(test_impl, (df1,), sort_output=True, py_output=df2_target)
+
+
+def test_list_string_array_type_random():
+    """Test of list_string_array_type in parallel with a random list"""
+
+    def test_impl(df1):
+        df2 = df1.drop_duplicates()
+        return df2
+
+    random.seed(5)
+
+    def rand_col_l_str(n):
+        e_list_list = []
+        for _ in range(n):
+            e_list = []
+            for _ in range(random.randint(1, 2)):
+                k = random.randint(1, 3)
+                val = "".join(random.choices(["A", "B", "C"], k=k))
+                e_list.append(val)
+            e_list_list.append(e_list)
+        return e_list_list
+
+    n = 50
+    df1 = pd.DataFrame({"A": rand_col_l_str(n)})
+    check_func_list_string(test_impl, (df1,), sort_output=True, reset_index=True)
 
 
 def test_drop_duplicates_2col_int_numpynan_bool():

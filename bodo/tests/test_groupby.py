@@ -11,6 +11,9 @@ from bodo.tests.utils import (
     count_parfor_OneDs,
     count_array_OneDs,
     dist_IR_contains,
+    check_parallel_coherency,
+    check_func_list_string,
+    convert_list_string_columns,
     get_start_end,
     check_func,
 )
@@ -390,6 +393,92 @@ def test_cumsum_random_index():
     check_func(test_impl, (df1,), sort_output=True, check_dtype=False)
     check_func(test_impl, (df2,), sort_output=True, check_dtype=False)
     check_func(test_impl, (df3,), sort_output=True, check_dtype=False)
+
+
+def test_sum_max_min_list_string_random():
+    """Tests for columns being a list of strings.
+    We have to use as_index=False since list of strings are mutable
+    and index are immutable so cannot be an index"""
+
+    def test_impl1(df1):
+        df2 = df1.groupby("A", as_index=False).sum()
+        return df2
+
+    def test_impl2(df1):
+        df2 = df1.groupby("A", as_index=False).max()
+        return df2
+
+    def test_impl3(df1):
+        df2 = df1.groupby("A", as_index=False).min()
+        return df2
+
+    def test_impl4(df1):
+        df2 = df1.groupby("A", as_index=False).last()
+        return df2
+
+    def test_impl5(df1):
+        df2 = df1.groupby("A", as_index=False).count()
+        return df2
+
+    def test_impl6(df1):
+        df2 = df1.groupby("A", as_index=False)["B"].agg(("sum", "min", "max", "last"))
+        return df2
+
+    def test_impl7(df1):
+        df2 = df1.groupby("A", as_index=False).nunique()
+        return df2
+
+    random.seed(5)
+
+    def rand_col_l_str(n):
+        e_list_list = []
+        for _ in range(n):
+            if random.random() < 0.1:
+                e_ent = np.nan
+            else:
+                e_ent = []
+                for _ in range(random.randint(1, 2)):
+                    k = random.randint(1, 3)
+                    val = "".join(random.choices(["A", "B", "C"], k=k))
+                    e_ent.append(val)
+            e_list_list.append(e_ent)
+        return e_list_list
+
+    n = 10
+    df1 = pd.DataFrame({"A": rand_col_l_str(n), "B": rand_col_l_str(n)})
+    def check_fct(the_fct, df1, select_col_comparison):
+        bodo_fct = bodo.jit(the_fct)
+        # Computing images via pandas and pandas but applying the merging of columns
+        df1_merge = convert_list_string_columns(df1)
+        df2_merge_preA = the_fct(df1_merge)
+        df2_merge_A = df2_merge_preA[select_col_comparison]
+        df2_merge_preB = convert_list_string_columns(bodo_fct(df1))
+        df2_merge_B = df2_merge_preB[select_col_comparison]
+        # Now comparing the results.
+        list_col_names = df2_merge_A.columns.to_list()
+        df2_merge_A_sort = df2_merge_A.sort_values(by=list_col_names).reset_index(drop=True)
+        df2_merge_B_sort = df2_merge_B.sort_values(by=list_col_names).reset_index(drop=True)
+        pd.testing.assert_frame_equal(df2_merge_A_sort, df2_merge_B_sort, check_dtype=False)
+        # Now doing the parallel check
+        check_parallel_coherency(the_fct, (df1,), sort_output=True, reset_index=True)
+
+    # For nunique, we face the problem of difference of formatting between nunique
+    # in Bodo and in Pandas.
+    check_func_list_string(test_impl1, (df1,), sort_output=True, reset_index=True)
+    check_func_list_string(test_impl2, (df1,), sort_output=True, reset_index=True)
+    check_func_list_string(test_impl3, (df1,), sort_output=True, reset_index=True)
+    check_func_list_string(test_impl4, (df1,), sort_output=True, reset_index=True)
+    check_func_list_string(test_impl5, (df1,), sort_output=True, reset_index=True)
+
+    # For test_impl5, we have an error in as_index=False function, that is:
+    # df1.groupby("A", as_index=False)["B"].agg(("sum", "min", "max"))
+    #
+    # The problem is that pandas does it in a way that we consider erroneous.
+    check_fct(test_impl6, df1, ["sum", "min", "max", "last"])
+
+    # For test_impl6 we face the problem that pandas returns a wrong column
+    # for the A. multiplicities are given (always 1) instead of the values.
+    check_fct(test_impl7, df1, ["B"])
 
 
 def test_groupby_datetime_miss():
@@ -1720,7 +1809,6 @@ def test_last(test_df):
     df_dt = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
     )
-
     check_func(impl1, (test_df,), sort_output=True)
     check_func(impl1, (df_str,), sort_output=True)
     check_func(impl1, (df_bool,), sort_output=True)

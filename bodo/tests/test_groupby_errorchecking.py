@@ -391,7 +391,7 @@ def test_groupby_built_in_col_type():
     df = pd.DataFrame({"A": [1, 2, 2], "B": ["aba", "aba", "aba"]})
     with pytest.raises(
         BodoError,
-        match="column type of strings is not supported in groupby built-in function prod",
+            match="column type of strings or list of strings is not supported in groupby built-in function prod",
     ):
         bodo.jit(impl)(df)
 

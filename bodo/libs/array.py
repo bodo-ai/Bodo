@@ -20,6 +20,7 @@ from numba.extending import (
     overload_attribute,
 )
 from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.utils.utils import numba_to_c_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
@@ -31,6 +32,7 @@ from bodo.libs import array_ext
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 
+ll.add_symbol("list_string_array_to_info", array_ext.list_string_array_to_info)
 ll.add_symbol("string_array_to_info", array_ext.string_array_to_info)
 ll.add_symbol("numpy_array_to_info", array_ext.numpy_array_to_info)
 ll.add_symbol("nullable_array_to_info", array_ext.nullable_array_to_info)
@@ -38,6 +40,7 @@ ll.add_symbol("decimal_array_to_info", array_ext.decimal_array_to_info)
 ll.add_symbol("info_to_string_array", array_ext.info_to_string_array)
 ll.add_symbol("info_to_numpy_array", array_ext.info_to_numpy_array)
 ll.add_symbol("info_to_nullable_array", array_ext.info_to_nullable_array)
+ll.add_symbol("info_to_list_string_array", array_ext.info_to_list_string_array)
 ll.add_symbol("alloc_numpy", array_ext.alloc_numpy)
 ll.add_symbol("alloc_string_array", array_ext.alloc_string_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
@@ -80,6 +83,41 @@ def array_to_info(typingctx, arr_type_t):
         # arr_info struct keeps a reference
         if context.enable_nrt:
             context.nrt.incref(builder, arr_type, in_arr)
+
+        # ListStringArray
+        if arr_type == list_string_array_type:
+            list_string_array = context.make_helper(
+                builder, list_string_array_type, in_arr
+            )
+            fnty = lir.FunctionType(
+                lir.IntType(8).as_pointer(),
+                [
+                    lir.IntType(64),
+                    lir.IntType(64),
+                    lir.IntType(64),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(32).as_pointer(),
+                    lir.IntType(32).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                ],
+            )
+            fn_tp = builder.module.get_or_insert_function(
+                fnty, name="list_string_array_to_info"
+            )
+            return builder.call(
+                fn_tp,
+                [
+                    list_string_array.num_items,
+                    list_string_array.num_total_strings,
+                    list_string_array.num_total_chars,
+                    list_string_array.data,
+                    list_string_array.data_offsets,
+                    list_string_array.index_offsets,
+                    list_string_array.null_bitmap,
+                    list_string_array.meminfo,
+                ],
+            )
 
         # StringArray
         if arr_type == string_array_type:
@@ -287,6 +325,42 @@ def info_to_array(typingctx, info_type, arr_type):
     def codegen(context, builder, sig, args):
         in_info, _ = args
         # TODO: update meminfo?
+
+        # ListStringArray
+        if arr_type == list_string_array_type:
+            list_string_array = context.make_helper(builder, list_string_array_type)
+            fnty = lir.FunctionType(
+                lir.VoidType(),
+                [
+                    lir.IntType(8).as_pointer(),  # info
+                    lir.IntType(64).as_pointer(),  # num_items
+                    lir.IntType(64).as_pointer(),  # num_strings
+                    lir.IntType(64).as_pointer(),  # num_tot_chars
+                    lir.IntType(8).as_pointer().as_pointer(),  # data
+                    lir.IntType(32).as_pointer().as_pointer(),  # data_offsets
+                    lir.IntType(32).as_pointer().as_pointer(),  # index_offsets
+                    lir.IntType(8).as_pointer().as_pointer(),  # null_bitmap
+                    lir.IntType(8).as_pointer().as_pointer(),
+                ],
+            )  # meminfo
+            fn_tp = builder.module.get_or_insert_function(
+                fnty, name="info_to_list_string_array"
+            )
+            builder.call(
+                fn_tp,
+                [
+                    in_info,
+                    list_string_array._get_ptr_by_name("num_items"),
+                    list_string_array._get_ptr_by_name("num_total_strings"),
+                    list_string_array._get_ptr_by_name("num_total_chars"),
+                    list_string_array._get_ptr_by_name("data"),
+                    list_string_array._get_ptr_by_name("data_offsets"),
+                    list_string_array._get_ptr_by_name("index_offsets"),
+                    list_string_array._get_ptr_by_name("null_bitmap"),
+                    list_string_array._get_ptr_by_name("meminfo"),
+                ],
+            )
+            return list_string_array._getvalue()
 
         # StringArray
         if arr_type == string_array_type:

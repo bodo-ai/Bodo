@@ -412,6 +412,133 @@ def check_timing_func(func, args):
     assert True
 
 
+# The functionality below exist because in the case of column having
+# a list-string as data type, several functionalities are missing from pandas:
+# ---sort_values
+# ---groupby/join/drop_duplicates
+# ---hashing
+#
+# The solution is to transform a column of list string into a column
+# of strings and therefore amenable to sort_values.
+#
+# Note: We cannot use df_copy["e_col_name"].str.join(',') because of unahashable list.
+def convert_list_string_columns(df):
+    df_copy = df.copy()
+    list_col = df.columns.to_list()
+    n_rows = df_copy[list_col[0]].size
+    col_names = []
+    for e_col_name in list_col:
+        e_col = df[e_col_name]
+        nb_list_string = 0
+        for i_row in range(n_rows):
+            e_ent = e_col.iat[i_row]
+            if isinstance(e_ent, list):
+                if len(e_ent) > 0:
+                    if isinstance(e_ent[0], str):
+                        nb_list_string += 1
+        if nb_list_string > 0:
+            col_names.append(e_col_name)
+    for e_col_name in col_names:
+        e_list_str = []
+        e_col = df[e_col_name]
+        for i_row in range(n_rows):
+            e_ent = e_col.iat[i_row]
+            if isinstance(e_ent, list):
+                e_str = ",".join(e_ent) + ","
+                e_list_str.append(e_str)
+            else:
+                e_list_str.append(np.nan)
+        df_copy[e_col_name] = e_list_str
+    return df_copy
+
+
+# This function allows to check the coherency of parallel output.
+# That is, do we get the same result on one or on two or more MPI processes?
+#
+# No need for fancy stuff here. All output is unsorted. When we have the
+# sort_values working for list_string column the use of conversion with col_names
+# would be removed.
+#
+# Were the functionality of the list-string supported in pandas, we would not need
+# any such function.
+def check_parallel_coherency(
+    func, args, sort_output=False, reset_index=False,
+):
+    n_pes = bodo.get_size()
+
+    # Computing the output in serial mode
+    copy_input = True
+    call_args_serial = tuple(_get_arg(a, copy_input) for a in args)
+    bodo_func_serial = bodo.jit(
+        all_args_distributed_block=False, all_returns_distributed=False
+    )(func)
+    serial_output_raw = bodo_func_serial(*call_args_serial)
+    serial_output_final = convert_list_string_columns(serial_output_raw)
+
+    # If running on just one processor, nothing more is needed.
+    if n_pes == 1:
+        return
+
+    # Computing the parallel input and output.
+    bodo_func_parall = bodo.jit(
+        all_args_distributed_block=True, all_returns_distributed=True
+    )(func)
+    call_args_parall = tuple(
+        _get_dist_arg(a, copy=True, var_length=False) for a in args
+    )
+
+    parall_output_raw = bodo_func_parall(*call_args_parall)
+    parall_output_proc = convert_list_string_columns(parall_output_raw)
+    # Collating the parallel output on just one processor.
+    parall_output_final = bodo.gatherv(parall_output_proc)
+
+    # Doing the sorting. Mandatory here
+    list_col = serial_output_final.columns.to_list()
+    if sort_output:
+        serial_output_final.sort_values(list_col, inplace=True)
+        parall_output_final.sort_values(list_col, inplace=True)
+
+    # reset_index if asked.
+    if reset_index:
+        serial_output_final.reset_index(drop=True, inplace=True)
+        parall_output_final.reset_index(drop=True, inplace=True)
+
+    passed = 1
+    if bodo.get_rank() == 0:
+        try:
+            pd.testing.assert_frame_equal(
+                serial_output_final, parall_output_final, check_dtype=False
+            )
+        except Exception as e:
+            print(e)
+            passed = 0
+    n_passed = reduce_sum(passed)
+    assert n_passed == n_pes
+
+
+
+# This function allows to check the coherency of functions using a list of strings
+# in input and output. The idea is to map the list of strings into strings.
+#
+# The input is a sequence of dataframes. The output is a single dataframe.
+def check_func_list_string(
+    test_func, args, sort_output=False, reset_index=False,
+):
+    args_mapped = tuple(convert_list_string_columns(a) for a in args)
+    bodo_func = bodo.jit(test_func)
+    result_mapped_A = test_func(*args_mapped)
+    result_mapped_B = convert_list_string_columns(bodo_func(*args))
+    if sort_output:
+        list_col_names = result_mapped_A.columns.to_list()
+        result_mapped_A.sort_values(by=list_col_names, inplace=True)
+        result_mapped_B.sort_values(by=list_col_names, inplace=True)
+    if reset_index:
+        result_mapped_A.reset_index(drop=True, inplace=True)
+        result_mapped_B.reset_index(drop=True, inplace=True)
+    pd.testing.assert_frame_equal(result_mapped_A, result_mapped_B)
+    check_parallel_coherency(test_func, args, sort_output=sort_output, reset_index=reset_index)
+
+
 def gen_random_string_array(n, max_str_len=10):
     """
     helper function that generates a random string array

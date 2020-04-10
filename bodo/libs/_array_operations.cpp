@@ -115,7 +115,7 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
     // Creation of the output array.
     int64_t len = shuf_table_in_arr->columns[0]->length;
     array_info* shuf_out_arr =
-        alloc_array(len, -1, out_arr->arr_type, out_arr->dtype, 0);
+        alloc_array(len, -1, -1, out_arr->arr_type, out_arr->dtype, 0);
     // Calling isin on the shuffled info
     array_isin_kernel(shuf_out_arr, shuf_table_in_arr->columns[0],
                       shuf_table_in_values->columns[0]);
@@ -150,7 +150,7 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
     for (int64_t iKey = 0; iKey < n_key_t; iKey++)
         std::cout << "iKey=" << iKey << "/" << n_key_t
                   << "  vect_ascending=" << vect_ascending[iKey] << "\n";
-    std::cout << "INPUT:\n";
+    std::cout << "INPUT (sort_values_table):\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     DEBUG_PrintRefct(std::cout, in_table->columns);
     std::cout << "n_rows=" << n_rows << " n_key=" << n_key << "\n";
@@ -182,6 +182,11 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               int64_t* vect_ascending, bool na_position,
                               bool parallel) {
 #undef DEBUG_SORT
+#ifdef DEBUG_SORT
+    std::cout << "sort_values_table : in_table:\n";
+    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+    DEBUG_PrintRefct(std::cout, in_table->columns);
+#endif
     table_info* local_sort =
         sort_values_table_local(in_table, n_key_t, vect_ascending, na_position);
 #ifdef DEBUG_SORT
@@ -471,7 +476,11 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
     else
         ListPairWrite = RetrievePair2();
 #ifdef DEBUG_DD
-    std::cout << "|ListPairWrite|=" << ListPairWrite.size() << "\n";
+    int nbRow = ListPairWrite.size();
+    std::cout << "|ListPairWrite|=" << nbRow << "\n";
+    for (int iRow=0; iRow<nbRow; iRow++) {
+      std::cout << "iRow=" << iRow << " pair=" << ListPairWrite[iRow].first << " , " << ListPairWrite[iRow].second << "\n";
+    }
 #endif
     // Now building the out_arrs array.
     table_info* ret_table = RetrieveTable(in_table, ListPairWrite, -1);

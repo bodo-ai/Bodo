@@ -13,10 +13,15 @@ struct mpi_comm_info {
     std::vector<int> send_disp;
     std::vector<int> recv_disp;
     // counts required for string arrays
-    std::vector<std::vector<int>> send_count_char;
-    std::vector<std::vector<int>> recv_count_char;
-    std::vector<std::vector<int>> send_disp_char;
-    std::vector<std::vector<int>> recv_disp_char;
+    std::vector<std::vector<int>> send_count_sub;
+    std::vector<std::vector<int>> recv_count_sub;
+    std::vector<std::vector<int>> send_disp_sub;
+    std::vector<std::vector<int>> recv_disp_sub;
+    // counts required for string list arrays
+    std::vector<std::vector<int>> send_count_sub_sub;
+    std::vector<std::vector<int>> recv_count_sub_sub;
+    std::vector<std::vector<int>> send_disp_sub_sub;
+    std::vector<std::vector<int>> recv_disp_sub_sub;
     // counts for arrays with null bitmask
     std::vector<int> send_count_null;
     std::vector<int> recv_count_null;
