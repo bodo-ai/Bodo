@@ -796,6 +796,26 @@ def get_ctypes_ptr(typingctx, ctypes_typ=None):
     return types.voidptr(ctypes_typ), codegen
 
 
+def object_length(c, obj):
+    """
+    len(obj)
+    """
+    pyobj_lltyp = c.context.get_argument_type(types.pyobject)
+    fnty = lir.FunctionType(lir.IntType(64), [pyobj_lltyp])
+    fn = c.builder.module.get_or_insert_function(fnty, name="PyObject_Length")
+    return c.builder.call(fn, (obj,))
+
+
+def sequence_getitem(c, obj, ind):  # pragma: no cover
+    """
+    seq[ind]
+    """
+    pyobj_lltyp = c.context.get_argument_type(types.pyobject)
+    fnty = lir.FunctionType(pyobj_lltyp, [pyobj_lltyp, lir.IntType(64)])
+    fn = c.builder.module.get_or_insert_function(fnty, name="PySequence_GetItem")
+    return c.builder.call(fn, (obj, ind))
+
+
 @intrinsic
 def incref(typingctx, data=None):
     """manual incref of data to workaround bugs. Should be avoided if possible.
