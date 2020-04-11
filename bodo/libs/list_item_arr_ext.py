@@ -234,3 +234,65 @@ def unbox_list_item_array(typ, val, c):
 
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(list_item_array._getvalue(), is_error=is_error)
+
+
+@box(ListItemArrayType)
+def box_list_item_arr(typ, val, c):
+    """box packed native representation of list of item array into python objects
+    """
+    from bodo.libs import array_ext
+
+    ll.add_symbol(
+        "np_array_from_list_item_array", array_ext.np_array_from_list_item_array
+    )
+
+    list_item_array = c.context.make_helper(c.builder, typ, val)
+    payload_type = ListItemArrayPayloadType(typ)
+    meminfo_data_ptr = c.context.nrt.meminfo_data(c.builder, list_item_array.meminfo)
+    meminfo_data_ptr = c.builder.bitcast(
+        meminfo_data_ptr, c.context.get_data_type(payload_type).as_pointer()
+    )
+    payload = cgutils.create_struct_proxy(payload_type)(
+        c.context, c.builder, c.builder.load(meminfo_data_ptr)
+    )
+
+    ctype = bodo.utils.utils.numba_to_c_type(typ.elem_type)
+
+    fnty = lir.FunctionType(
+        c.context.get_argument_type(types.pyobject),
+        [
+            lir.IntType(64),  # num_lists
+            lir.IntType(8).as_pointer(),  # data
+            lir.IntType(32).as_pointer(),  # offsets
+            lir.IntType(8).as_pointer(),  # null_bitmap
+            lir.IntType(32),  # ctype
+        ],
+    )
+    fn_get = c.builder.module.get_or_insert_function(
+        fnty, name="np_array_from_list_item_array"
+    )
+
+    # import pdb; pdb.set_trace()
+    data_ptr = c.context.make_helper(
+        c.builder, types.Array(typ.elem_type, 1, "C"), payload.data
+    ).data
+    offsets_ptr = c.context.make_helper(
+        c.builder, types.Array(offset_typ, 1, "C"), payload.offsets
+    ).data
+    null_bitmap_ptr = c.context.make_helper(
+        c.builder, types.Array(types.uint8, 1, "C"), payload.null_bitmap
+    ).data
+
+    arr = c.builder.call(
+        fn_get,
+        [
+            payload.n_lists,
+            c.builder.bitcast(data_ptr, lir.IntType(8).as_pointer()),
+            offsets_ptr,
+            null_bitmap_ptr,
+            lir.Constant(lir.IntType(32), ctype),
+        ],
+    )
+
+    c.context.nrt.decref(c.builder, typ, val)
+    return arr

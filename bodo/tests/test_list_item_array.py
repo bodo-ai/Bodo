@@ -28,4 +28,9 @@ def test_unbox(list_item_arr_value, memory_leak_check):
     def impl(arr_arg):
         return True
 
+    # unbox and box
+    def impl2(arr_arg):
+        return arr_arg
+
     check_func(impl, (list_item_arr_value,))
+    check_func(impl2, (list_item_arr_value,))
