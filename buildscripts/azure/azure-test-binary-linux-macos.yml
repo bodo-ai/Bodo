@@ -46,7 +46,7 @@ jobs:
     displayName: 'Install Bodo from conda'
 
   - script: |
-      cd $(System.DefaultWorkingDirectory)/bodo-inc
+      cd $HOME/bodo-inc
       mkdir bodo
       mkdir bodo/tests
       if [[ "${{ parameters.name }}" == "Linux" ]]; then

@@ -43,6 +43,7 @@ requirements:
     - openjdk =8
     - sqlalchemy
     - mpich # [not win]
+    - mpi4py
     - impi_rt # [win]
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]

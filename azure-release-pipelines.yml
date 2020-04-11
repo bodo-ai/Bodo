@@ -104,7 +104,10 @@ stages:
         TEST_2P_NOT SLOW:
           NP: 2
           PYTEST_MARKER: not slow
-        TEST_3P_NOT_SLOW:
+        TEST_3P_NOT_SLOW_FIRST_HALF:
           NP: 3
-          PYTEST_MARKER: not slow
+          PYTEST_MARKER: not slow and firsthalf
+        TEST_3P_NOT_SLOW_SECOND_HALF:
+          NP: 3
+          PYTEST_MARKER: not slow and not firsthalf
 

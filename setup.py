@@ -352,7 +352,8 @@ setup(
     author="Bodo",
     packages=find_packages(),
     package_data={
-        "bodo.tests": ["data/*", "data/int_nulls_multi.pq/*", "data/sdf_dt.pq/*"]
+        "bodo.tests": ["data/*",         
+                       "data/*/*", ]
     },
     install_requires=["numba"],
     extras_require={"HDF5": ["h5py"], "Parquet": ["pyarrow"]},

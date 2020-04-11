@@ -5,7 +5,7 @@ Bodo 2020.04 Release (Date: 04/08/2020)
 
 New Features and Improvements
 ------------------------------------------
-- Support for `scatterv` operation
+- Support for ``scatterv`` operation
 - Improved memory management for DataFrame and Series data
 - Initial support for ``pandas.read_sql()``
 - ``pandas.read_csv()`` reads a directory of csv files
@@ -25,7 +25,9 @@ New Features and Improvements
 - MultiIndex support for ``groupby(...).agg(as_index=False)`` 
 - ``pandas.Dataframe.merge()`` one dataframe on index, and the other on a column
 - sorting compilation time improvement
-- supports for integer, float, string, string list, ``datetime.date``, ``datetime.datetime``, and ``datetime.timedelta`` types in``pandas.Series.cummin()``, ``pandas.DataFrame.cummin()``, ``pandas.Series.cummax()``, and ``pandas.DataFrame.cummax()``
+- supports for integer, float, string, string list, 
+  ``datetime.date``, ``datetime.datetime``, and ``datetime.timedelta`` types in ``pandas.Series.cummin()``, ``pandas.DataFrame.cummin()``, 
+  ``pandas.Series.cummax()``, and ``pandas.DataFrame.cummax()``
 - ``NA``s in ``datetime.date`` array 
 - better ``datetime.timedelta`` support
 - Support for ``min`` and ``max`` in  ``pandas.Timestamp`` and ``datetime.date``
