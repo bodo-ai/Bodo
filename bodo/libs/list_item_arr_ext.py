@@ -32,6 +32,7 @@ from numba.extending import (
     overload_attribute,
 )
 from numba import cgutils
+from numba.targets.imputils import impl_ret_borrowed
 
 from bodo.utils.typing import is_list_like_index_type
 from llvmlite import ir as lir
@@ -236,6 +237,21 @@ def unbox_list_item_array(typ, val, c):
     return NativeValue(list_item_array._getvalue(), is_error=is_error)
 
 
+def _get_list_item_arr_payload(context, builder, arr_typ, arr):
+    """get payload struct proxy for a list(item) value
+    """
+    list_item_array = context.make_helper(builder, arr_typ, arr)
+    payload_type = ListItemArrayPayloadType(arr_typ)
+    meminfo_data_ptr = context.nrt.meminfo_data(builder, list_item_array.meminfo)
+    meminfo_data_ptr = builder.bitcast(
+        meminfo_data_ptr, context.get_data_type(payload_type).as_pointer()
+    )
+    payload = cgutils.create_struct_proxy(payload_type)(
+        context, builder, builder.load(meminfo_data_ptr)
+    )
+    return payload
+
+
 @box(ListItemArrayType)
 def box_list_item_arr(typ, val, c):
     """box packed native representation of list of item array into python objects
@@ -246,15 +262,7 @@ def box_list_item_arr(typ, val, c):
         "np_array_from_list_item_array", array_ext.np_array_from_list_item_array
     )
 
-    list_item_array = c.context.make_helper(c.builder, typ, val)
-    payload_type = ListItemArrayPayloadType(typ)
-    meminfo_data_ptr = c.context.nrt.meminfo_data(c.builder, list_item_array.meminfo)
-    meminfo_data_ptr = c.builder.bitcast(
-        meminfo_data_ptr, c.context.get_data_type(payload_type).as_pointer()
-    )
-    payload = cgutils.create_struct_proxy(payload_type)(
-        c.context, c.builder, c.builder.load(meminfo_data_ptr)
-    )
+    payload = _get_list_item_arr_payload(c.context, c.builder, typ, val)
 
     ctype = bodo.utils.utils.numba_to_c_type(typ.elem_type)
 
@@ -272,7 +280,6 @@ def box_list_item_arr(typ, val, c):
         fnty, name="np_array_from_list_item_array"
     )
 
-    # import pdb; pdb.set_trace()
     data_ptr = c.context.make_helper(
         c.builder, types.Array(typ.elem_type, 1, "C"), payload.data
     ).data
@@ -296,3 +303,48 @@ def box_list_item_arr(typ, val, c):
 
     c.context.nrt.decref(c.builder, typ, val)
     return arr
+
+
+@intrinsic
+def get_offsets(typingctx, arr_typ=None):
+    assert isinstance(arr_typ, ListItemArrayType)
+
+    def codegen(context, builder, sig, args):
+        (arr,) = args
+        payload = _get_list_item_arr_payload(context, builder, arr_typ, arr)
+        return impl_ret_borrowed(context, builder, sig.return_type, payload.offsets)
+
+    return types.Array(offset_typ, 1, "C")(arr_typ), codegen
+
+
+@intrinsic
+def get_data(typingctx, arr_typ=None):
+    assert isinstance(arr_typ, ListItemArrayType)
+
+    def codegen(context, builder, sig, args):
+        (arr,) = args
+        payload = _get_list_item_arr_payload(context, builder, arr_typ, arr)
+        return impl_ret_borrowed(context, builder, sig.return_type, payload.data)
+
+    return types.Array(arr_typ.elem_type, 1, "C")(arr_typ), codegen
+
+
+@overload(operator.getitem)
+def list_item_arr_getitem_array(arr, ind):
+    if not isinstance(arr, ListItemArrayType):
+        return
+
+    if isinstance(ind, types.Integer):
+        # returning [] if NA due to type stability issues
+        # TODO: warning if value is NA?
+        def list_item_arr_getitem_impl(arr, ind):  # pragma: no cover
+            offsets = get_offsets(arr)
+            data = get_data(arr)
+            l_start_offset = offsets[ind]
+            l_end_offset = offsets[ind + 1]
+            out = []
+            for i in range(l_start_offset, l_end_offset):
+                out.append(data[i])
+            return out
+
+        return list_item_arr_getitem_impl

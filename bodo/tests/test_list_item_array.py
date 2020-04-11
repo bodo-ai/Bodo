@@ -16,7 +16,7 @@ np.random.seed(0)
 @pytest.fixture(
     params=[
         np.array([[1, 3], [2], None, [4, 5, 6], [], [1, 1]]),
-        np.array([[2.0, -3.2], [2.2], None, [4.1, 5.2, 6.3], [], [1.1, 1.2]]),
+        np.array([[2.0, -3.2], [2.2, 1.3], None, [4.1, 5.2, 6.3], [], [1.1, 1.2]]),
     ]
 )
 def list_item_arr_value(request):
@@ -34,3 +34,13 @@ def test_unbox(list_item_arr_value, memory_leak_check):
 
     check_func(impl, (list_item_arr_value,))
     check_func(impl2, (list_item_arr_value,))
+
+
+def test_getitem_int(list_item_arr_value, memory_leak_check):
+    def test_impl(A, i):
+        return A[i]
+
+    i = 1
+    bodo_out = np.array(bodo.jit(test_impl)(list_item_arr_value, i))
+    py_out = np.array(test_impl(list_item_arr_value, i))
+    np.testing.assert_almost_equal(bodo_out, py_out)
