@@ -306,6 +306,27 @@ def box_list_item_arr(typ, val, c):
 
 
 @intrinsic
+def pre_alloc_list_item_array(typingctx, num_lists_typ, num_values_typ, dtype_typ=None):
+    assert (
+        isinstance(num_lists_typ, types.Integer)
+        and isinstance(num_values_typ, types.Integer)
+        and isinstance(dtype_typ, types.DType)
+    )
+    list_item_type = ListItemArrayType(dtype_typ.dtype)
+
+    def codegen(context, builder, sig, args):
+        num_lists, num_values, _ = args
+        meminfo, _, _, _ = construct_list_item_array(
+            context, builder, list_item_type, num_lists, num_values
+        )
+        list_item_array = context.make_helper(builder, list_item_type)
+        list_item_array.meminfo = meminfo
+        return list_item_array._getvalue()
+
+    return list_item_type(num_lists_typ, num_values_typ, dtype_typ), codegen
+
+
+@intrinsic
 def get_offsets(typingctx, arr_typ=None):
     assert isinstance(arr_typ, ListItemArrayType)
 
@@ -329,6 +350,36 @@ def get_data(typingctx, arr_typ=None):
     return types.Array(arr_typ.elem_type, 1, "C")(arr_typ), codegen
 
 
+@intrinsic
+def get_null_bitmap(typingctx, arr_typ=None):
+    assert isinstance(arr_typ, ListItemArrayType)
+
+    def codegen(context, builder, sig, args):
+        (arr,) = args
+        payload = _get_list_item_arr_payload(context, builder, arr_typ, arr)
+        return impl_ret_borrowed(context, builder, sig.return_type, payload.null_bitmap)
+
+    return types.Array(types.uint8, 1, "C")(arr_typ), codegen
+
+
+@intrinsic
+def get_n_lists(typingctx, arr_typ=None):
+    assert isinstance(arr_typ, ListItemArrayType)
+
+    def codegen(context, builder, sig, args):
+        (arr,) = args
+        payload = _get_list_item_arr_payload(context, builder, arr_typ, arr)
+        return impl_ret_borrowed(context, builder, sig.return_type, payload.n_lists)
+
+    return types.int64(arr_typ), codegen
+
+
+@overload(len)
+def overload_list_item_arr_len(A):
+    if isinstance(A, ListItemArrayType):
+        return lambda A: get_n_lists(A)
+
+
 @overload(operator.getitem)
 def list_item_arr_getitem_array(arr, ind):
     if not isinstance(arr, ListItemArrayType):
@@ -348,3 +399,54 @@ def list_item_arr_getitem_array(arr, ind):
             return out
 
         return list_item_arr_getitem_impl
+
+    # bool arr indexing
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+
+        def impl_bool(arr, ind):  # pragma: no cover
+            n = len(arr)
+            if n != len(ind):
+                raise IndexError(
+                    "boolean index did not match indexed array along dimension 0"
+                )
+            offsets = get_offsets(arr)
+            data = get_data(arr)
+            null_bitmap = get_null_bitmap(arr)
+
+            # count the number of lists and value in output and allocate
+            n_lists = 0
+            n_values = 0
+            for i in range(n):
+                if ind[i]:
+                    n_lists += 1
+                    n_values += int(offsets[i + 1] - offsets[i])
+
+            out_arr = pre_alloc_list_item_array(n_lists, n_values, data.dtype)
+            out_offsets = get_offsets(out_arr)
+            out_data = get_data(out_arr)
+            out_null_bitmap = get_null_bitmap(out_arr)
+
+            # write output
+            out_ind = 0
+            curr_offset = 0
+            for ii in range(n):
+                if ind[ii]:
+                    l_start_offset = offsets[ii]
+                    l_end_offset = offsets[ii + 1]
+                    n_vals = int(l_end_offset - l_start_offset)
+                    val_ind = 0
+                    for jj in range(l_start_offset, l_end_offset):
+                        out_data[curr_offset + val_ind] = data[jj]
+                        val_ind += 1
+
+                    out_offsets[out_ind] = curr_offset
+                    curr_offset += n_vals
+                    # set NA
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(null_bitmap, ii)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(out_null_bitmap, out_ind, bit)
+                    out_ind += 1
+
+            out_offsets[out_ind] = curr_offset
+            return out_arr
+
+        return impl_bool

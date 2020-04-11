@@ -44,3 +44,14 @@ def test_getitem_int(list_item_arr_value, memory_leak_check):
     bodo_out = np.array(bodo.jit(test_impl)(list_item_arr_value, i))
     py_out = np.array(test_impl(list_item_arr_value, i))
     np.testing.assert_almost_equal(bodo_out, py_out)
+
+
+def test_getitem_bool(list_item_arr_value, memory_leak_check):
+    def test_impl(A, ind):
+        return A[ind]
+
+    np.random.seed(0)
+    ind = np.random.ranf(len(list_item_arr_value)) < 0.2
+    bodo_out = np.array(bodo.jit(test_impl)(list_item_arr_value, ind))
+    py_out = np.array(test_impl(list_item_arr_value, ind))
+    np.testing.assert_almost_equal(bodo_out, py_out)
