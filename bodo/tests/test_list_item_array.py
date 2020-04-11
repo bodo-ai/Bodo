@@ -55,3 +55,19 @@ def test_getitem_bool(list_item_arr_value, memory_leak_check):
     bodo_out = np.array(bodo.jit(test_impl)(list_item_arr_value, ind))
     py_out = np.array(test_impl(list_item_arr_value, ind))
     np.testing.assert_almost_equal(bodo_out, py_out)
+
+
+def test_ndim():
+    def test_impl(A):
+        return A.ndim
+
+    A = np.array([[1, 2, 3], [2]])
+    assert bodo.jit(test_impl)(A) == test_impl(A)
+
+
+def test_shape():
+    def test_impl(A):
+        return A.shape
+
+    A = np.array([[1, 2, 3], [2], None, []])
+    assert bodo.jit(test_impl)(A) == test_impl(A)

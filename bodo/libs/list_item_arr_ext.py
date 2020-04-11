@@ -32,6 +32,7 @@ from numba.extending import (
     overload_attribute,
 )
 from numba import cgutils
+from numba.array_analysis import ArrayAnalysis
 from numba.targets.imputils import impl_ret_borrowed
 
 from bodo.utils.typing import is_list_like_index_type
@@ -326,9 +327,26 @@ def pre_alloc_list_item_array(typingctx, num_lists_typ, num_values_typ, dtype_ty
     return list_item_type(num_lists_typ, num_values_typ, dtype_typ), codegen
 
 
+def pre_alloc_list_item_array_equiv(
+    self, scope, equiv_set, args, kws
+):  # pragma: no cover
+    """Array analysis function for pre_alloc_list_item_array() passed to Numba's array
+    analysis extension. Assigns output array's size as equivalent to the input size
+    variable.
+    """
+    assert len(args) == 3 and not kws
+    return args[0], []
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_list_item_arr_ext_pre_alloc_list_item_array = (
+    pre_alloc_list_item_array_equiv
+)
+
+
 @intrinsic
 def get_offsets(typingctx, arr_typ=None):
     assert isinstance(arr_typ, ListItemArrayType)
+    # TODO: alias analysis extension functions for get_offsets, etc.?
 
     def codegen(context, builder, sig, args):
         (arr,) = args
@@ -378,6 +396,16 @@ def get_n_lists(typingctx, arr_typ=None):
 def overload_list_item_arr_len(A):
     if isinstance(A, ListItemArrayType):
         return lambda A: get_n_lists(A)
+
+
+@overload_attribute(ListItemArrayType, "shape")
+def overload_list_item_arr_shape(A):
+    return lambda A: (get_n_lists(A),)
+
+
+@overload_attribute(ListItemArrayType, "ndim")
+def overload_list_item_arr_ndim(A):
+    return lambda A: 1
 
 
 @overload(operator.getitem)
