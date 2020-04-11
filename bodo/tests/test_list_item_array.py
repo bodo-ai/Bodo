@@ -8,7 +8,7 @@ import pytest
 
 import numba
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, _test_list_item_array_equal
 
 np.random.seed(0)
 
@@ -52,9 +52,19 @@ def test_getitem_bool(list_item_arr_value, memory_leak_check):
 
     np.random.seed(0)
     ind = np.random.ranf(len(list_item_arr_value)) < 0.2
-    bodo_out = np.array(bodo.jit(test_impl)(list_item_arr_value, ind))
-    py_out = np.array(test_impl(list_item_arr_value, ind))
-    np.testing.assert_almost_equal(bodo_out, py_out)
+    bodo_out = bodo.jit(test_impl)(list_item_arr_value, ind)
+    py_out = test_impl(list_item_arr_value, ind)
+    _test_list_item_array_equal(bodo_out, py_out)
+
+
+def test_getitem_slice(list_item_arr_value, memory_leak_check):
+    def test_impl(A, ind):
+        return A[ind]
+
+    ind = slice(1, 4)
+    bodo_out = bodo.jit(test_impl)(list_item_arr_value, ind)
+    py_out = test_impl(list_item_arr_value, ind)
+    _test_list_item_array_equal(bodo_out, py_out)
 
 
 def test_ndim():

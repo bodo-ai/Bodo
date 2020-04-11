@@ -478,3 +478,60 @@ def list_item_arr_getitem_array(arr, ind):
             return out_arr
 
         return impl_bool
+
+    # ind arr indexing
+    # TODO: avoid code duplication
+    if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
+
+        def impl_int(arr, ind):  # pragma: no cover
+            offsets = get_offsets(arr)
+            data = get_data(arr)
+            null_bitmap = get_null_bitmap(arr)
+
+            n = len(ind)
+            n_lists = n
+            n_values = 0
+            for k in range(n):
+                i = ind[k]
+                n_values += int(offsets[i + 1] - offsets[i])
+
+            out_arr = pre_alloc_list_item_array(n_lists, n_values, data.dtype)
+            out_offsets = get_offsets(out_arr)
+            out_data = get_data(out_arr)
+            out_null_bitmap = get_null_bitmap(out_arr)
+
+            out_ind = 0
+            curr_offset = 0
+            for kk in range(n):
+                ii = ind[kk]
+                l_start_offset = offsets[ii]
+                l_end_offset = offsets[ii + 1]
+                n_vals = int(l_end_offset - l_start_offset)
+                val_ind = 0
+                for jj in range(l_start_offset, l_end_offset):
+                    out_data[curr_offset + val_ind] = data[jj]
+                    val_ind += 1
+
+                out_offsets[out_ind] = curr_offset
+                curr_offset += n_vals
+                # set NA
+                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(null_bitmap, ii)
+                bodo.libs.int_arr_ext.set_bit_to_arr(out_null_bitmap, out_ind, bit)
+                out_ind += 1
+
+            out_offsets[out_ind] = curr_offset
+            return out_arr
+
+        return impl_int
+
+    # slice case
+    if isinstance(ind, types.SliceType):
+
+        def impl_slice(arr, ind):  # pragma: no cover
+            n = len(arr)
+            slice_idx = numba.unicode._normalize_slice(ind, n)
+            # reusing integer array slicing above
+            arr_ind = np.arange(slice_idx.start, slice_idx.stop, slice_idx.step)
+            return arr[arr_ind]
+
+        return impl_slice
