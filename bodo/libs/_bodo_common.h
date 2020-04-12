@@ -187,6 +187,7 @@ extern "C" {
 
 // XXX: equivalent to payload data model in str_arr_ext.py
 struct str_arr_payload {
+    int64_t num_strings;
     uint32_t* offsets;
     char* data;
     uint8_t* null_bitmap;
