@@ -37,6 +37,10 @@ from bodo.libs.list_str_arr_ext import (
     list_string_array_type,
     pre_alloc_list_string_array,
 )
+from bodo.libs.list_item_arr_ext import (
+    ListItemArrayType,
+    pre_alloc_list_item_array,
+)
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.utils.utils import (
@@ -757,6 +761,101 @@ def gatherv(data, allgather=False):
             return all_data
 
         return gatherv_list_str_arr_impl
+
+    # list(item) array
+    if isinstance(data, ListItemArrayType):
+        int32_typ_enum = np.int32(numba_to_c_type(types.int32))
+        data_typ_enum = np.int32(numba_to_c_type(data.elem_type))
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def gatherv_list_item_arr_impl(data, allgather=False):  # pragma: no cover
+            rank = bodo.libs.distributed_api.get_rank()
+            offsets_arr = bodo.libs.list_item_arr_ext.get_offsets(data)
+            data_arr = bodo.libs.list_item_arr_ext.get_data(data)
+            null_bitmap_arr = bodo.libs.list_item_arr_ext.get_null_bitmap(data)
+            n_loc = len(data)
+            n_all_vals = int(offsets_arr[-1])
+
+            # allocate buffer for sending lengths of lists
+            send_list_lens = np.empty(n_loc, np.uint32)  # XXX offset type is uint32
+            n_bytes = (n_loc + 7) >> 3
+
+            for i in range(n_loc):
+                send_list_lens[i] = offsets_arr[i + 1] - offsets_arr[i]
+
+            recv_counts = gather_scalar(np.int32(n_loc), allgather)
+            recv_counts_vals = gather_scalar(np.int32(n_all_vals), allgather)
+            n_total = recv_counts.sum()
+            n_total_vals = recv_counts_vals.sum()
+
+            # displacements
+            all_data = pre_alloc_list_item_array(
+                0, 0, data_arr.dtype
+            )  # dummy arrays on non-root PEs
+            displs = np.empty(1, np.int32)
+            displs_vals = np.empty(1, np.int32)
+            recv_counts_nulls = np.empty(1, np.int32)
+            displs_nulls = np.empty(1, np.int32)
+            tmp_null_bytes = np.empty(1, np.uint8)
+
+            if rank == MPI_ROOT or allgather:
+                all_data = pre_alloc_list_item_array(
+                    n_total, n_total_vals, data_arr.dtype
+                )
+                displs = bodo.ir.join.calc_disp(recv_counts)
+                displs_vals = bodo.ir.join.calc_disp(recv_counts_vals)
+                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
+                for k in range(len(recv_counts)):
+                    recv_counts_nulls[k] = (recv_counts[k] + 7) >> 3
+                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
+                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
+
+            out_offsets_arr = bodo.libs.list_item_arr_ext.get_offsets(all_data)
+            out_data_arr = bodo.libs.list_item_arr_ext.get_data(all_data)
+            out_null_bitmap_arr = bodo.libs.list_item_arr_ext.get_null_bitmap(all_data)
+
+            # data
+            c_gatherv(
+                data_arr.ctypes,
+                np.int32(n_all_vals),
+                out_data_arr.ctypes,
+                recv_counts_vals.ctypes,
+                displs_vals.ctypes,
+                data_typ_enum,
+                allgather,
+            )
+            # index offset
+            c_gatherv(
+                send_list_lens.ctypes,
+                np.int32(n_loc),
+                out_offsets_arr.ctypes,
+                recv_counts.ctypes,
+                displs.ctypes,
+                int32_typ_enum,
+                allgather,
+            )
+            # nulls
+            c_gatherv(
+                null_bitmap_arr.ctypes,
+                np.int32(n_bytes),
+                tmp_null_bytes.ctypes,
+                recv_counts_nulls.ctypes,
+                displs_nulls.ctypes,
+                char_typ_enum,
+                allgather,
+            )
+            dummy_use(data)  # needed?
+
+            convert_len_arr_to_offset(out_offsets_arr.ctypes, n_total)
+            copy_gathered_null_bytes(
+                out_null_bitmap_arr.ctypes,
+                tmp_null_bytes,
+                recv_counts_nulls,
+                recv_counts,
+            )
+            return all_data
+
+        return gatherv_list_item_arr_impl
 
     # Tuple of data containers
     if isinstance(data, types.BaseTuple):
