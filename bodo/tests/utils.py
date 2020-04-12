@@ -351,16 +351,6 @@ def _test_equal(
         assert bodo_out == py_out
 
 
-def _test_list_item_array_equal(bodo_out, py_out):
-    """make sure list(item) array output of Bodo and Python are equal
-    """
-    for a, b in zip(bodo_out, py_out):
-        if a is None or (isinstance(a, float) and np.isnan(a)):
-            assert b is None or (isinstance(b, float) and np.isnan(b))
-            continue
-        np.testing.assert_almost_equal(np.array(a), np.array(b))
-
-
 def _typeof(val):
     # Pandas returns an object array for .values or to_numpy() call on Series of
     # nullable int, which can't be handled in typeof. Bodo returns a nullable int array
