@@ -25,8 +25,8 @@ from numba.core.ir_utils import (
     find_callname,
     build_definitions,
 )
-import numba.targets.linalg
-from numba.targets.imputils import impl_ret_new_ref
+import numba.np.linalg
+from numba.core.imputils import impl_ret_new_ref
 
 import bodo
 from bodo.utils.utils import is_assign, is_expr

@@ -270,7 +270,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
 
             def impl_float(data, new_dtype, copy=None):  # pragma: no cover
                 n = len(data)
-                numba.parfor.init_prange()
+                numba.parfors.parfor.init_prange()
                 B = bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)
                 for i in numba.parfors.parfor.internal_prange(n):
                     if bodo.libs.array_kernels.isna(data, i):
