@@ -81,3 +81,10 @@ def test_shape():
 
     A = np.array([[1, 2, 3], [2], None, []])
     assert bodo.jit(test_impl)(A) == test_impl(A)
+
+
+def test_copy(list_item_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.copy()
+
+    check_func(test_impl, (list_item_arr_value,))

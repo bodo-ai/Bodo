@@ -324,7 +324,7 @@ def pre_alloc_list_item_array(typingctx, num_lists_typ, num_values_typ, dtype_ty
         list_item_array.meminfo = meminfo
         return list_item_array._getvalue()
 
-    return list_item_type(num_lists_typ, num_values_typ, dtype_typ), codegen
+    return list_item_type(types.int64, types.int64, dtype_typ), codegen
 
 
 def pre_alloc_list_item_array_equiv(
@@ -535,3 +535,28 @@ def list_item_arr_getitem_array(arr, ind):
             return arr[arr_ind]
 
         return impl_slice
+
+
+@overload_method(ListItemArrayType, "copy")
+def overload_list_item_arr_copy(A):
+    def copy_impl(A):  # pragma: no cover
+        offsets = get_offsets(A)
+        data = get_data(A)
+        null_bitmap = get_null_bitmap(A)
+
+        # allocate
+        n = len(A)
+        n_values = offsets[-1]
+        out_arr = pre_alloc_list_item_array(n, n_values, data.dtype)
+        out_offsets = get_offsets(out_arr)
+        out_data = get_data(out_arr)
+        out_null_bitmap = get_null_bitmap(out_arr)
+
+        # copy input values to output values
+        out_offsets[:] = offsets
+        out_data[:] = data
+        out_null_bitmap[:] = null_bitmap
+
+        return out_arr
+
+    return copy_impl
