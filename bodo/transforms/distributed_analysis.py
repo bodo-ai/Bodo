@@ -39,7 +39,6 @@ from bodo.utils.utils import (
     is_np_array_typ,
     find_build_tuple,
     debug_prints,
-    is_const_slice,
     is_expr,
     is_distributable_typ,
     is_distributable_tuple_typ,
