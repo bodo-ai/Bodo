@@ -42,6 +42,7 @@ from llvmlite import ir as lir
 import bodo
 from bodo.libs.str_ext import string_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.libs.list_item_arr_ext import ListItemArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from bodo.libs.bool_arr_ext import boolean_array
@@ -158,6 +159,8 @@ def _get_series_array_type(dtype):
     # string array
     elif dtype == string_type:
         return string_array_type
+    elif isinstance(dtype, types.List):
+        return ListItemArrayType(dtype.dtype)
 
     # categorical
     if isinstance(dtype, PDCategoricalDtype):

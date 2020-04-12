@@ -905,6 +905,7 @@ def bool_arr_ind_getitem(A, ind):
     # TODO: other array types for A?
     if ind == boolean_array and (
         isinstance(A, (types.Array, bodo.libs.int_arr_ext.IntegerArrayType))
+        or isinstance(A, bodo.libs.list_item_arr_ext.ListItemArrayType)
         or A
         in (
             string_array_type,
