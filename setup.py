@@ -93,6 +93,7 @@ ext_io = Extension(
     sources=["bodo/io/_io.cpp", "bodo/io/_fs_io.cpp",],
     depends=[
         "bodo/libs/_bodo_common.h",
+        "bodo/libs/_bodo_common.cpp",
         "bodo/libs/_distributed.h",
         "bodo/libs/_import_py.h",
         "bodo/io/_io.h",
@@ -163,7 +164,11 @@ if "MAX_CORE_COUNT" in os.environ and os.environ["MAX_CORE_COUNT"] != "":
 ext_hdist = Extension(
     name="bodo.libs.hdist",
     sources=["bodo/libs/_distributed.cpp"],
-    depends=["bodo/libs/_bodo_common.h", "bodo/libs/_distributed.h",],
+    depends=[
+        "bodo/libs/_bodo_common.h",
+        "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_distributed.h",
+    ],
     libraries=MPI_LIBS,
     define_macros=dist_macros,
     extra_compile_args=eca,
@@ -199,7 +204,7 @@ ext_str = Extension(
 ext_decimal = Extension(
     name="bodo.libs.decimal_ext",
     sources=["bodo/libs/_decimal_ext.cpp"],
-    depends=["bodo/libs/_bodo_common.h"],
+    depends=["bodo/libs/_bodo_common.h", "bodo/libs/_bodo_common.cpp"],
     libraries=np_compile_args["libraries"] + ["arrow"],
     define_macros=np_compile_args["define_macros"],
     extra_compile_args=eca,
@@ -224,6 +229,7 @@ ext_arr = Extension(
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
+        "bodo/libs/_bodo_common.cpp",
         "bodo/libs/_murmurhash3.h",
         "bodo/libs/_distributed.h",
     ],
@@ -252,7 +258,7 @@ ext_dt = Extension(
 ext_quantile = Extension(
     name="bodo.libs.quantile_alg",
     sources=["bodo/libs/_quantile_alg.cpp"],
-    depends=["bodo/libs/_bodo_common.h"],
+    depends=["bodo/libs/_bodo_common.h", "bodo/libs/_bodo_common.cpp"],
     libraries=MPI_LIBS,
     extra_compile_args=eca,
     extra_link_args=ela,
@@ -282,6 +288,7 @@ ext_csv = Extension(
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
+        "bodo/libs/_bodo_common.cpp",
         "bodo/libs/_distributed.h",
         "bodo/libs/_import_py.h",
         "bodo/io/_io.h",
@@ -307,6 +314,7 @@ ext_parquet = Extension(
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
+        "bodo/libs/_bodo_common.cpp",
         "bodo/io/_fs_io.h",
         "bodo/io/_parquet_reader.h",
     ],
@@ -356,10 +364,7 @@ setup(
     url="https://bodo-inc.com",
     author="Bodo",
     packages=find_packages(),
-    package_data={
-        "bodo.tests": ["data/*",         
-                       "data/*/*", ]
-    },
+    package_data={"bodo.tests": ["data/*", "data/*/*",]},
     install_requires=["numba"],
     extras_require={"HDF5": ["h5py"], "Parquet": ["pyarrow"]},
     cmdclass=versioneer.get_cmdclass(),
