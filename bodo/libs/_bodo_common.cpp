@@ -216,10 +216,9 @@ void free_array(array_info* arr) {
 extern "C" {
 
 void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in) {
-    // printf("str arr dtor size: %lld\n", in_str_arr->size);
-    // printf("num chars: %d\n", in_str_arr->offsets[in_str_arr->size]);
-    delete[] in_str_arr->offsets;
-    delete[] in_str_arr->data;
+    // check for NULL since move_str_arr_payload() may set pointers to NULL
+    if (in_str_arr->offsets != nullptr) delete[] in_str_arr->offsets;
+    if (in_str_arr->data != nullptr) delete[] in_str_arr->data;
     if (in_str_arr->null_bitmap != nullptr) delete[] in_str_arr->null_bitmap;
 }
 

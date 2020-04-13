@@ -1026,7 +1026,7 @@ def overload_series_fillna(
                         ) and not bodo.libs.array_kernels.isna(fill_arr, j):
                             s = fill_arr[j]
                         out_arr[j] = s
-                    bodo.hiframes.pd_series_ext.update_series_data(S, out_arr)
+                    bodo.libs.str_arr_ext.move_str_arr_payload(in_arr, out_arr)
                     return
 
                 return str_fillna_inplace_series_impl
@@ -1062,7 +1062,7 @@ def overload_series_fillna(
                     if bodo.libs.array_kernels.isna(in_arr, j):
                         s = value
                     out_arr[j] = s
-                bodo.hiframes.pd_series_ext.update_series_data(S, out_arr)
+                bodo.libs.str_arr_ext.move_str_arr_payload(in_arr, out_arr)
                 return
 
             return str_fillna_inplace_impl

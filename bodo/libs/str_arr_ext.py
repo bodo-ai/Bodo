@@ -1268,6 +1268,68 @@ def set_null_bits(typingctx, str_arr_typ=None):
     return types.none(string_array_type), codegen
 
 
+@intrinsic
+def move_str_arr_payload(typingctx, to_str_arr_typ, from_str_arr_typ=None):
+    """Move string array payload from one array to another.
+    """
+    assert is_str_arr_typ(to_str_arr_typ) and is_str_arr_typ(from_str_arr_typ)
+
+    def codegen(context, builder, sig, args):
+        (to_str_arr, from_str_arr) = args
+
+        # get payload pointers
+        from_string_array = context.make_helper(
+            builder, string_array_type, from_str_arr
+        )
+        from_meminfo_data_ptr = context.nrt.meminfo_data(
+            builder, from_string_array.meminfo
+        )
+        from_meminfo_data_ptr = builder.bitcast(
+            from_meminfo_data_ptr,
+            context.get_data_type(str_arr_payload_type).as_pointer(),
+        )
+
+        to_string_array = context.make_helper(builder, string_array_type, to_str_arr)
+        to_meminfo_data_void_ptr = context.nrt.meminfo_data(
+            builder, to_string_array.meminfo
+        )
+        to_meminfo_data_ptr = builder.bitcast(
+            to_meminfo_data_void_ptr,
+            context.get_data_type(str_arr_payload_type).as_pointer(),
+        )
+
+        # delete existing data by calling destructor
+        llvoidptr = context.get_value_type(types.voidptr)
+        llsize = context.get_value_type(types.uintp)
+        dtor_ftype = lir.FunctionType(lir.VoidType(), [llvoidptr, llsize, llvoidptr])
+        dtor_fn = builder.module.get_or_insert_function(
+            dtor_ftype, name="dtor_string_array"
+        )
+        # NOTE: passing zero and null for second and third argument, since not needed by
+        # the destructor. This has to change if dependency to those arguments is
+        # introduced.
+        builder.call(
+            dtor_fn,
+            [
+                to_meminfo_data_void_ptr,
+                context.get_constant(types.int64, 0),
+                context.get_constant_null(types.voidptr),
+            ],
+        )
+
+        # copy payload
+        builder.store(builder.load(from_meminfo_data_ptr), to_meminfo_data_ptr)
+
+        # clear "from" array's payload, set to nulls to disable destructor
+        builder.store(
+            context.get_constant_null(str_arr_payload_type), from_meminfo_data_ptr
+        )
+
+        return context.get_dummy_value()
+
+    return types.none(string_array_type, string_array_type), codegen
+
+
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_utf8_size(s):
     if isinstance(s, types.StringLiteral):
