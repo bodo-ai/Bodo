@@ -1497,6 +1497,19 @@ def test_df_drop_column_check():
         bodo.jit(test_impl)(df)
 
 
+def test_df_fillna_str_inplace():
+    """Make sure inplace fillna for string columns is reflected in output
+    """
+    def test_impl(df):
+        df.B.fillna("ABC", inplace=True)
+        return df
+
+    df_str = pd.DataFrame(
+        {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["ab", "b", np.nan, "c", "bdd", "c", "a"]}
+    )
+    check_func(test_impl, (df_str,), copy_input=True)
+
+
 def test_df_alias():
     """Test alias analysis for df data arrays. Without proper alias info, the fillna
     changes in data array will be optimized away incorrectly.
