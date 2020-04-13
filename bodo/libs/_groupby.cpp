@@ -1595,6 +1595,9 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     // delete[] out_col->data1;
                     out_col->data1 = new char[nb_char];
                     out_col->n_sub_elems = nb_char;
+                    // update string array payload to reflect change
+                    str_arr_payload* payload = (str_arr_payload*)out_col->meminfo->data;
+                    payload->data = out_col->data1;
                     // Writing the strings in output
                     char* data_o = out_col->data1;
                     uint32_t* offsets_o = (uint32_t*)out_col->data2;
