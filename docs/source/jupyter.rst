@@ -3,23 +3,22 @@
 Jupyter Notebook Setup
 ######################
 
-To use Bodo with Jupyter Notebook, install `jupyter`, `ipyparallel`, and 'mpi4py'::
+To use Bodo with Jupyter Notebook, install ``jupyter`` and ``ipyparallel``::
 
-    conda install jupyter ipyparallel
-    conda install mpi4py -c conda-forge --no-deps
+    conda install jupyter ipyparallel -c conda-forge
 
-Create an MPI profile for ipython::
+Create an MPI profile for IPython::
 
     ipython profile create --parallel --profile=mpi
 
-Edit the `~/.ipython/profile_mpi/ipython_config.py` file
+Edit the ``~/.ipython/profile_mpi/ipython_config.py`` file
 and add the following line::
 
     c.IPClusterEngines.engine_launcher_class = 'MPIEngineSetLauncher'
 
 Start the Jupyter notebook and go to `IPython Clusters` tab. Select the
 number of engines (i.e., cores) you'd like to use and click `Start` next to the
-`mpi` profile. Alternatively, you can use `ipcluster start -n 4 --profile=mpi`
+`mpi` profile. Alternatively, you can use ``ipcluster start -n 4 --profile=mpi``
 in a terminal to start the engines (this can take several seconds).
 
 Now start a new notebook and run this code in a cell to setup the environment::
@@ -31,7 +30,7 @@ Now start a new notebook and run this code in a cell to setup the environment::
 
 
 You can now run Bodo functions on the execution engines
-using `ipyparallel` hooks such as `%px` magic
+using `ipyparallel` hooks such as ``%%px`` magic
 and the work will be distributed
 across the engines. For example, run this code in a cell::
 
@@ -57,8 +56,9 @@ If you wish to run across multiple nodes, you can add the following to
 
     c.MPILauncher.mpi_args = ["-machinefile", "path_to_file/machinefile"]
 
-`machinefile` (or `hostfile`) is a file with the hostnames of available nodes that MPI can use.
+where `machinefile` (or `hostfile`) is a file with the hostnames of available nodes that MPI can use.
 More information about `machinefiles` can be found
 `here <https://www.open-mpi.org/faq/?category=running#mpirun-hostfile>`_.
 
-It is important to note that other MPI implementation (such as QSUB/PBS) may use a different user interface for the allocation of computational nodes.
+It is important to note that other MPI systems and launchers (such as QSUB/PBS)
+may use a different user interface for the allocation of computational nodes.
