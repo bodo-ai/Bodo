@@ -73,7 +73,6 @@ from bodo.utils.utils import (
     ReplaceFunc,
     gen_getitem,
     is_call,
-    is_const_slice,
     is_assign,
     is_expr,
     is_call_assign,

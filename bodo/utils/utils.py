@@ -133,19 +133,6 @@ def numba_to_c_type(t):
     return _numba_to_c_type_map[t]
 
 
-def is_alloc_call(func_var, call_table):
-    """
-    return true if func_var represents an array creation call
-    """
-    assert func_var in call_table
-    call_list = call_table[func_var]
-    return (
-        len(call_list) == 2
-        and call_list[1] == np
-        and call_list[0] in ["empty", "zeros", "ones", "full"]
-    ) or call_list == [numba.unsafe.ndarray.empty_inferred]
-
-
 def is_alloc_callname(func_name, mod_name):
     """
     return true if function represents an array creation call
@@ -299,21 +286,21 @@ def is_slice_equiv_arr(arr_var, index_var, func_ir, equiv_set, accept_stride=Fal
     return True
 
 
-def is_const_slice(typemap, func_ir, var, accept_stride=False):
-    """ return True if var can be determined to be a constant size slice """
-    require(
-        typemap[var.name] == types.slice2_type
-        or (accept_stride and typemap[var.name] == types.slice3_type)
-    )
-    call_expr = get_definition(func_ir, var)
-    require(isinstance(call_expr, ir.Expr) and call_expr.op == "call")
-    assert len(call_expr.args) == 2 or (accept_stride and len(call_expr.args) == 3)
-    assert find_callname(func_ir, call_expr) == ("slice", "builtins")
-    arg0_def = get_definition(func_ir, call_expr.args[0])
-    require(isinstance(arg0_def, ir.Const) and arg0_def.value == None)
-    size_const = find_const(func_ir, call_expr.args[1])
-    require(isinstance(size_const, int))
-    return True
+# def is_const_slice(typemap, func_ir, var, accept_stride=False):
+#     """ return True if var can be determined to be a constant size slice """
+#     require(
+#         typemap[var.name] == types.slice2_type
+#         or (accept_stride and typemap[var.name] == types.slice3_type)
+#     )
+#     call_expr = get_definition(func_ir, var)
+#     require(isinstance(call_expr, ir.Expr) and call_expr.op == "call")
+#     assert len(call_expr.args) == 2 or (accept_stride and len(call_expr.args) == 3)
+#     assert find_callname(func_ir, call_expr) == ("slice", "builtins")
+#     arg0_def = get_definition(func_ir, call_expr.args[0])
+#     require(isinstance(arg0_def, ir.Const) and arg0_def.value == None)
+#     size_const = find_const(func_ir, call_expr.args[1])
+#     require(isinstance(size_const, int))
+#     return True
 
 
 def get_slice_step(typemap, func_ir, var):
@@ -476,32 +463,10 @@ def to_array_overload(A):
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def unique(A):
     if isinstance(A, IntegerArrayType) or A == boolean_array:
-        return lambda A: A.unique()
+        return lambda A: A.unique()  # pragma: no cover
 
     # TODO: preserve order
-    return lambda A: to_array(build_set(A))
-
-
-@overload(np.array)
-def np_array_array_overload(A):
-    if isinstance(A, types.Array):
-        return lambda A: A
-
-    if isinstance(A, types.containers.Set):
-        # TODO: naive implementation, data from set can probably
-        # be copied to array more efficienty
-        dtype = A.dtype
-
-        def f(A):  # pragma: no cover
-            n = len(A)
-            arr = np.empty(n, dtype)
-            i = 0
-            for a in A:
-                arr[i] = a
-                i += 1
-            return arr
-
-        return f
+    return lambda A: to_array(build_set(A))  # pragma: no cover
 
 
 def empty_like_type(n, arr):  # pragma: no cover
@@ -516,10 +481,10 @@ def empty_like_type_overload(n, arr):
 
         return lambda n, arr: init_categorical_array(
             np.empty(n, arr._codes.dtype), arr.dtype
-        )
+        )  # pragma: no cover
 
     if isinstance(arr, types.Array):
-        return lambda n, arr: np.empty(n, arr.dtype)
+        return lambda n, arr: np.empty(n, arr.dtype)  # pragma: no cover
 
     if isinstance(arr, types.List) and arr.dtype == string_type:
 
@@ -689,8 +654,8 @@ def alloc_arr_tup_overload(n, data, init_vals=()):
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def tuple_to_scalar(n):
     if isinstance(n, types.BaseTuple):
-        return lambda n: n[0]
-    return lambda n: n
+        return lambda n: n[0]  # pragma: no cover
+    return lambda n: n  # pragma: no cover
 
 
 def alloc_type(n, t):  # pragma: no cover
@@ -704,10 +669,14 @@ def overload_alloc_type(n, t):
     if isinstance(typ, bodo.hiframes.pd_categorical_ext.CategoricalArray):
         from bodo.hiframes.pd_categorical_ext import init_categorical_array
 
-        return lambda n, t: init_categorical_array(np.empty(n, t._codes.dtype), t.dtype)
+        return lambda n, t: init_categorical_array(
+            np.empty(n, t._codes.dtype), t.dtype
+        )  # pragma: no cover
 
     if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
-        return lambda n, t: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
+        return lambda n, t: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(
+            n
+        )  # pragma: no cover
 
     dtype = numba.numpy_support.as_dtype(typ.dtype)
 
@@ -717,7 +686,7 @@ def overload_alloc_type(n, t):
             np.empty(n, dtype),
             # XXX using full since nulls are not supported in shuffle keys
             np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8),
-        )
+        )  # pragma: no cover
 
     # nullable bool array
     if typ == boolean_array:
@@ -725,9 +694,9 @@ def overload_alloc_type(n, t):
             np.empty(n, np.bool_),
             # XXX using full since nulls are not supported in shuffle keys
             np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8),
-        )
+        )  # pragma: no cover
 
-    return lambda n, t: np.empty(n, dtype)
+    return lambda n, t: np.empty(n, dtype)  # pragma: no cover
 
 
 def full_type(n, val, t):  # pragma: no cover
@@ -744,16 +713,16 @@ def overload_full_type(n, val, t):
         return lambda n, val, t: bodo.libs.int_arr_ext.init_integer_array(
             np.full(n, val, dtype),
             np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8),
-        )
+        )  # pragma: no cover
 
     # nullable bool array
     if typ == boolean_array:
         return lambda n, val, t: bodo.libs.bool_arr_ext.init_bool_array(
             np.full(n, val, np.bool_),
             np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8),
-        )
+        )  # pragma: no cover
 
-    return lambda n, val, t: np.full(n, val, dtype)
+    return lambda n, val, t: np.full(n, val, dtype)  # pragma: no cover
 
 
 # replacing _analyze_broadcast in array analysis to fix a bug. It's assuming that
@@ -809,60 +778,6 @@ def incref(typingctx, data=None):
             context.nrt.incref(builder, signature.args[0], data_val)
 
     return types.void(data), codegen
-
-
-def remove_return_from_block(last_block):
-    # remove const none, cast, return nodes
-    assert isinstance(last_block.body[-1], ir.Return)
-    last_block.body.pop()
-    assert (
-        isinstance(last_block.body[-1], ir.Assign)
-        and isinstance(last_block.body[-1].value, ir.Expr)
-        and last_block.body[-1].value.op == "cast"
-    )
-    last_block.body.pop()
-    if (
-        isinstance(last_block.body[-1], ir.Assign)
-        and isinstance(last_block.body[-1].value, ir.Const)
-        and last_block.body[-1].value.value is None
-    ):
-        last_block.body.pop()
-
-
-def include_new_blocks(
-    blocks,
-    new_blocks,
-    label,
-    new_body,
-    remove_non_return=True,
-    work_list=None,
-    func_ir=None,
-):
-    inner_blocks = add_offset_to_labels(new_blocks, ir_utils._max_label + 1)
-    blocks.update(inner_blocks)
-    ir_utils._max_label = max(blocks.keys())
-    scope = blocks[label].scope
-    loc = blocks[label].loc
-    inner_topo_order = find_topo_order(inner_blocks)
-    inner_first_label = inner_topo_order[0]
-    inner_last_label = inner_topo_order[-1]
-    if remove_non_return:
-        remove_return_from_block(inner_blocks[inner_last_label])
-    new_body.append(ir.Jump(inner_first_label, loc))
-    blocks[label].body = new_body
-    label = ir_utils.next_label()
-    blocks[label] = ir.Block(scope, loc)
-    if remove_non_return:
-        inner_blocks[inner_last_label].body.append(ir.Jump(label, loc))
-    # new_body.clear()
-    if work_list is not None:
-        topo_order = find_topo_order(inner_blocks)
-        for _label in topo_order:
-            block = inner_blocks[_label]
-            block.scope = scope
-            numba.inline_closurecall._add_definitions(func_ir, block)
-            work_list.append((_label, block))
-    return label
 
 
 def gen_getitem(out_var, in_var, ind, calltypes, nodes):
@@ -940,7 +855,7 @@ def sanitize_varname(varname):
     return new_name
 
 
-def dump_node_list(node_list):
+def dump_node_list(node_list):  # pragma: no cover
     for n in node_list:
         print("   ", n)
 
