@@ -152,7 +152,7 @@ int64_t count_total_elems_list_array(PyObject* list_arr_obj) {
  * @param item python object to read
  * @param dtype data type
  */
-inline void copy_item_to_buffer(uint8_t* data, Py_ssize_t ind, PyObject* item,
+inline void copy_item_to_buffer(char* data, Py_ssize_t ind, PyObject* item,
                                 Bodo_CTypes::CTypeEnum dtype) {
     if (dtype == Bodo_CTypes::INT64) {
         int64_t* ptr = (int64_t*)data;
@@ -168,7 +168,8 @@ inline void copy_item_to_buffer(uint8_t* data, Py_ssize_t ind, PyObject* item,
 
 /**
  * @brief compute offsets, data, and null_bitmap values for list(item) array
- * from an array of lists of values.
+ * from an array of lists of values. The lists inside array can have different
+ * lengths.
  *
  * @param list_item_arr_obj Python Sequence object, intended to be an array of
  * lists of items.
@@ -177,7 +178,7 @@ inline void copy_item_to_buffer(uint8_t* data, Py_ssize_t ind, PyObject* item,
  * @param null_bitmap nulls buffer to be filled
  * @param dtype data type of values, currently only float64 and int64 supported.
  */
-void list_item_array_from_sequence(PyObject* list_arr_obj, uint8_t* data,
+void list_item_array_from_sequence(PyObject* list_arr_obj, char* data,
                                    uint32_t* offsets, uint8_t* null_bitmap,
                                    Bodo_CTypes::CTypeEnum dtype) {
 #define CHECK(expr, msg)               \
@@ -238,7 +239,7 @@ void list_item_array_from_sequence(PyObject* list_arr_obj, uint8_t* data,
  * @param dtype data type
  * @return python object for value
  */
-inline PyObject* value_to_pyobject(const uint8_t* data, int64_t ind,
+inline PyObject* value_to_pyobject(const char* data, int64_t ind,
                                    Bodo_CTypes::CTypeEnum dtype) {
     // TODO: support other types
     if (dtype == Bodo_CTypes::INT64) {
@@ -263,7 +264,7 @@ inline PyObject* value_to_pyobject(const uint8_t* data, int64_t ind,
  * @param dtype data type of values (currently, only int/float)
  * @return numpy array of list of item objects
  */
-void* np_array_from_list_item_array(int64_t num_lists, const uint8_t* buffer,
+void* np_array_from_list_item_array(int64_t num_lists, const char* buffer,
                                     const uint32_t* offsets,
                                     const uint8_t* null_bitmap,
                                     Bodo_CTypes::CTypeEnum dtype) {
