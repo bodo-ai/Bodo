@@ -8,6 +8,7 @@ import random
 import numba
 import numba.targets.ufunc_db
 import bodo
+from bodo.utils.typing import BodoError
 from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
@@ -1672,6 +1673,17 @@ def test_series_dropna(S):
     check_func(test_impl, (S,))
 
 
+def test_series_drop_inplace_check():
+    """make sure inplace=True is not use in Series.dropna()
+    """
+    def test_impl(S):
+        S.dropna(inplace=True)
+
+    S = pd.Series([1.0, 2.0, np.nan, 1.0], [3, 4, 2, 1], name="A")
+    with pytest.raises(BodoError, match="inplace=True is not supported"):
+        bodo.jit(test_impl)(S)
+
+
 @pytest.mark.parametrize(
     "periods", [2, -2],
 )
@@ -2522,26 +2534,6 @@ class TestSeries(unittest.TestCase):
         start, end = get_start_end(len(S1))
         # TODO: gatherv
         self.assertEqual(bodo_func(S1[start:end]), test_impl(S1))
-
-    def test_series_dropna_float_inplace1(self):
-        def test_impl(A):
-            A.dropna(inplace=True)
-            return A.values
-
-        S1 = pd.Series([1.0, 2.0, np.nan, 1.0])
-        S2 = S1.copy()
-        bodo_func = bodo.jit(test_impl)
-        np.testing.assert_array_equal(bodo_func(S1), test_impl(S2))
-
-    def test_series_dropna_str_inplace1(self):
-        def test_impl(A):
-            A.dropna(inplace=True)
-            return A.values
-
-        S1 = pd.Series(["aa", "b", None, "ccc"])
-        S2 = S1.copy()
-        bodo_func = bodo.jit(test_impl)
-        np.testing.assert_array_equal(bodo_func(S1), test_impl(S2))
 
     def test_series_sum1(self):
         def test_impl(S):
