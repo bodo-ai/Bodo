@@ -353,7 +353,7 @@ class TypingTransforms:
                 lambda: bodo.hiframes.dataframe_impl.drop_inplace
             )  # pragma: no cover
             return self._handle_df_inplace_func(
-                assign, lhs, rhs, df_var, inplace_var, replace_func, label
+                assign, lhs, rhs, df_var, inplace_var, replace_func, label, func_name
             )
 
         if func_name == "sort_values":
@@ -367,7 +367,7 @@ class TypingTransforms:
                 lambda: bodo.hiframes.dataframe_impl.sort_values_inplace
             )  # pragma: no cover
             return self._handle_df_inplace_func(
-                assign, lhs, rhs, df_var, inplace_var, replace_func, label
+                assign, lhs, rhs, df_var, inplace_var, replace_func, label, func_name
             )
         return [assign]
 
@@ -403,7 +403,7 @@ class TypingTransforms:
         return compile_func_single_block(impl, [df_var] + list(kws.values()), lhs, self)
 
     def _handle_df_inplace_func(
-        self, assign, lhs, rhs, df_var, inplace_var, replace_func, label
+        self, assign, lhs, rhs, df_var, inplace_var, replace_func, label, func_name
     ):
         """handle possible df.func(inplace=True)
         lhs = A.func(inplace=True) -> A1, lhs = func_inplace(...)
@@ -441,6 +441,12 @@ class TypingTransforms:
             self.replace_var_dict[df_var.name] = new_df_var
             self.changed = True
             return nodes
+        else:
+            raise BodoError((
+                "DataFrame.{}(): non-deterministic inplace change of dataframe schema "
+                "not supported.\nSee "
+                "http://docs.bodo.ai/latest/source/not_supported.html"
+            ).format(func_name))
 
         return [assign]
 

@@ -680,7 +680,7 @@ def overload_dataframe_set_index(
     df, keys, drop=True, append=False, inplace=False, verify_integrity=False
 ):
     if not is_overload_false(inplace):
-        raise ValueError("set_index() inplace argument not supported yet")
+        raise BodoError("set_index() inplace argument not supported yet")
 
     col_name = get_overload_const_str(keys)
     col_ind = df.columns.index(col_name)
@@ -753,10 +753,10 @@ def overload_dataframe_duplicated(df, subset=None, keep="first"):
 def overload_dataframe_drop_duplicates(df, subset=None, keep="first", inplace=False):
     # TODO: support inplace
     if not is_overload_none(subset):
-        raise ValueError("drop_duplicates() subset argument not supported yet")
+        raise BodoError("drop_duplicates() subset argument not supported yet")
 
     if is_overload_true(inplace):
-        raise ValueError("drop_duplicates() inplace argument not supported yet")
+        raise BodoError("drop_duplicates() inplace argument not supported yet")
 
     # XXX: can't reuse duplicated() here since it shuffles data and chunks
     # may not match
