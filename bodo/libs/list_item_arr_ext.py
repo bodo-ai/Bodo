@@ -143,8 +143,8 @@ def construct_list_item_array(context, builder, list_item_type, n_lists, n_elems
     meminfo = context.nrt.meminfo_alloc_dtor(
         builder, context.get_constant(types.uintp, alloc_size), dtor_fn
     )
-    meminfo_data_ptr = context.nrt.meminfo_data(builder, meminfo)
-    meminfo_data_ptr = builder.bitcast(meminfo_data_ptr, alloc_type.as_pointer())
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
 
     # alloc values in payload
     payload = cgutils.create_struct_proxy(payload_type)(context, builder)
@@ -243,9 +243,9 @@ def _get_list_item_arr_payload(context, builder, arr_typ, arr):
     """
     list_item_array = context.make_helper(builder, arr_typ, arr)
     payload_type = ListItemArrayPayloadType(arr_typ)
-    meminfo_data_ptr = context.nrt.meminfo_data(builder, list_item_array.meminfo)
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, list_item_array.meminfo)
     meminfo_data_ptr = builder.bitcast(
-        meminfo_data_ptr, context.get_data_type(payload_type).as_pointer()
+        meminfo_void_ptr, context.get_data_type(payload_type).as_pointer()
     )
     payload = cgutils.create_struct_proxy(payload_type)(
         context, builder, builder.load(meminfo_data_ptr)
