@@ -915,7 +915,7 @@ def pq_read_string_lower(context, builder, sig, args):
     string_array = context.make_helper(builder, typ)
 
     str_arr_payload = cgutils.create_struct_proxy(dtype)(context, builder)
-    string_array.num_items = args[2]
+    str_arr_payload.num_strings = args[2]
 
     fnty = lir.FunctionType(
         lir.IntType(32),
@@ -942,13 +942,6 @@ def pq_read_string_lower(context, builder, sig, args):
     builder.store(str_arr_payload._getvalue(), meminfo_data_ptr)
 
     string_array.meminfo = meminfo
-    string_array.offsets = str_arr_payload.offsets
-    string_array.data = str_arr_payload.data
-    string_array.null_bitmap = str_arr_payload.null_bitmap
-    string_array.num_total_chars = builder.zext(
-        builder.load(builder.gep(string_array.offsets, [string_array.num_items])),
-        lir.IntType(64),
-    )
     ret = string_array._getvalue()
     return impl_ret_new_ref(context, builder, typ, ret)
 
@@ -966,7 +959,7 @@ def pq_read_string_parallel_lower(context, builder, sig, args):
     meminfo, meminfo_data_ptr = construct_string_array(context, builder)
     str_arr_payload = cgutils.create_struct_proxy(dtype)(context, builder)
     string_array = context.make_helper(builder, typ)
-    string_array.num_items = args[3]
+    str_arr_payload.num_strings = args[3]
 
     fnty = lir.FunctionType(
         lir.IntType(32),
@@ -998,13 +991,6 @@ def pq_read_string_parallel_lower(context, builder, sig, args):
     builder.store(str_arr_payload._getvalue(), meminfo_data_ptr)
 
     string_array.meminfo = meminfo
-    string_array.offsets = str_arr_payload.offsets
-    string_array.data = str_arr_payload.data
-    string_array.null_bitmap = str_arr_payload.null_bitmap
-    string_array.num_total_chars = builder.zext(
-        builder.load(builder.gep(string_array.offsets, [string_array.num_items])),
-        lir.IntType(64),
-    )
     ret = string_array._getvalue()
     return impl_ret_new_ref(context, builder, typ, ret)
 

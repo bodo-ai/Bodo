@@ -105,6 +105,7 @@ array_info* alloc_string_array(int64_t length, int64_t n_chars,
     allocate_string_array(&(payload->offsets), &(payload->data),
                           &(payload->null_bitmap), length, n_chars,
                           extra_null_bytes);
+    payload->num_strings = length;
     return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, length,
                           n_chars, -1, payload->data, (char*)payload->offsets, NULL,
                           (char*)payload->null_bitmap, meminfo, NULL);

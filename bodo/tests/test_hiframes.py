@@ -387,7 +387,7 @@ class TestHiFrames(unittest.TestCase):
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
 
 
-    def test_str_split(self):
+    def test_str_split2(self):
         def test_impl(df):
             B = df.A.str.split(",")
             return B
