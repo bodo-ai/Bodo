@@ -9,28 +9,28 @@
 #undef timezone
 #endif
 
+#include "../libs/_bodo_common.h"
 #include "../libs/_datetime_ext.h"
+#include "_fs_io.h"
 #include "_parquet_reader.h"
 #include "arrow/array.h"
 #include "arrow/io/hdfs.h"
-#include "arrow/table.h"
-#include "arrow/type.h"
-#include "arrow/array.h"
 #include "arrow/python/arrow_to_pandas.h"
 #include "arrow/python/pyarrow.h"
+#include "arrow/table.h"
+#include "arrow/type.h"
 #include "parquet/api/reader.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/arrow/schema.h"
-#include "../libs/_bodo_common.h"
 
 using arrow::Type;
 using parquet::ParquetFileReader;
-using parquet::arrow::FileReader;
 
 void pack_null_bitmap(uint8_t** out_nulls, std::vector<bool>& null_vec,
                       int64_t n_all_vals);
 std::shared_ptr<arrow::DataType> get_arrow_type(
-    std::shared_ptr<FileReader> arrow_reader, int64_t column_idx);
+    std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
+    int64_t column_idx);
 bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
                          Bodo_CTypes::CTypeEnum pq_type);
 inline void copy_data(uint8_t* out_data, const uint8_t* buff,
@@ -74,16 +74,17 @@ inline void copy_nulls(uint8_t* out_nulls, const uint8_t* null_bitmap_buff,
     }
 }
 
-int64_t pq_get_size_single_file(std::shared_ptr<FileReader> arrow_reader,
-                                int64_t column_idx) {
+int64_t pq_get_size_single_file(
+    std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
+    int64_t column_idx) {
     int64_t nrows = arrow_reader->parquet_reader()->metadata()->num_rows();
     return nrows;
 }
 
-int64_t pq_read_single_file(std::shared_ptr<FileReader> arrow_reader,
-                            int64_t column_idx, uint8_t* out_data,
-                            int out_dtype, uint8_t* out_nulls,
-                            int64_t null_offset) {
+int64_t pq_read_single_file(
+    std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
+    int64_t column_idx, uint8_t* out_data, int out_dtype, uint8_t* out_nulls,
+    int64_t null_offset) {
     std::shared_ptr<::arrow::ChunkedArray> chunked_array;
     arrow_reader->ReadColumn(column_idx, &chunked_array);
     if (chunked_array == NULL) return 0;
@@ -107,10 +108,10 @@ int64_t pq_read_single_file(std::shared_ptr<FileReader> arrow_reader,
     return num_values;
 }
 
-int pq_read_parallel_single_file(std::shared_ptr<FileReader> arrow_reader,
-                                 int64_t column_idx, uint8_t* out_data,
-                                 int out_dtype, int64_t start, int64_t count,
-                                 uint8_t* out_nulls, int64_t null_offset) {
+int pq_read_parallel_single_file(
+    std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
+    int64_t column_idx, uint8_t* out_data, int out_dtype, int64_t start,
+    int64_t count, uint8_t* out_nulls, int64_t null_offset) {
     if (count == 0) {
         return 0;
     }
@@ -188,25 +189,25 @@ int pq_read_parallel_single_file(std::shared_ptr<FileReader> arrow_reader,
 // copied from Arrow since not in exported APIs
 // https://github.com/apache/arrow/blob/329c9944554ddb142b0a2ac26a4abdf477636e37/cpp/src/arrow/python/datetime.cc#L150
 // Extracts the month and year and day number from a number of days
-static void get_date_from_days(int64_t days, int64_t* date_year, int64_t* date_month,
-                               int64_t* date_day) {
-  int64_t i;
+static void get_date_from_days(int64_t days, int64_t* date_year,
+                               int64_t* date_month, int64_t* date_day) {
+    int64_t i;
 
-  *date_year = days_to_yearsdays(&days);
-  const int *month_lengths = days_per_month_table[is_leapyear(*date_year)];
+    *date_year = days_to_yearsdays(&days);
+    const int* month_lengths = days_per_month_table[is_leapyear(*date_year)];
 
-  for (i = 0; i < 12; ++i) {
-    if (days < month_lengths[i]) {
-      *date_month = i + 1;
-      *date_day = days + 1;
-      return;
-    } else {
-      days -= month_lengths[i];
+    for (i = 0; i < 12; ++i) {
+        if (days < month_lengths[i]) {
+            *date_month = i + 1;
+            *date_day = days + 1;
+            return;
+        } else {
+            days -= month_lengths[i];
+        }
     }
-  }
 
-  // Should never get here
-  return;
+    // Should never get here
+    return;
 }
 
 /**
@@ -340,12 +341,11 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
     return;
 }
 
-int64_t pq_read_string_single_file(std::shared_ptr<FileReader> arrow_reader,
-                                   int64_t column_idx, uint32_t** out_offsets,
-                                   uint8_t** out_data, uint8_t** out_nulls,
-                                   std::vector<uint32_t>* offset_vec,
-                                   std::vector<uint8_t>* data_vec,
-                                   std::vector<bool>* null_vec) {
+int64_t pq_read_string_single_file(
+    std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
+    int64_t column_idx, uint32_t** out_offsets, uint8_t** out_data,
+    uint8_t** out_nulls, std::vector<uint32_t>* offset_vec,
+    std::vector<uint8_t>* data_vec, std::vector<bool>* null_vec) {
     std::shared_ptr<::arrow::ChunkedArray> chunked_arr;
     arrow_reader->ReadColumn(column_idx, &chunked_arr);
     if (chunked_arr == NULL) return -1;
@@ -396,10 +396,11 @@ int64_t pq_read_string_single_file(std::shared_ptr<FileReader> arrow_reader,
 }
 
 int pq_read_string_parallel_single_file(
-    std::shared_ptr<FileReader> arrow_reader, int64_t column_idx,
-    uint32_t** out_offsets, uint8_t** out_data, uint8_t** out_nulls,
-    int64_t start, int64_t count, std::vector<uint32_t>* offset_vec,
-    std::vector<uint8_t>* data_vec, std::vector<bool>* null_vec) {
+    std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
+    int64_t column_idx, uint32_t** out_offsets, uint8_t** out_data,
+    uint8_t** out_nulls, int64_t start, int64_t count,
+    std::vector<uint32_t>* offset_vec, std::vector<uint8_t>* data_vec,
+    std::vector<bool>* null_vec) {
     if (count == 0) {
         if (offset_vec == NULL) {
             *out_offsets = NULL;
@@ -517,9 +518,9 @@ int pq_read_string_parallel_single_file(
 }
 
 std::pair<int64_t, int64_t> pq_read_list_string_single_file(
-    std::shared_ptr<FileReader> arrow_reader, int64_t column_idx,
-    uint32_t** out_offsets, uint32_t** index_offsets, uint8_t** out_data,
-    uint8_t** out_nulls, std::vector<uint32_t>* offset_vec,
+    std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
+    int64_t column_idx, uint32_t** out_offsets, uint32_t** index_offsets,
+    uint8_t** out_data, uint8_t** out_nulls, std::vector<uint32_t>* offset_vec,
     std::vector<uint32_t>* index_offset_vec, std::vector<uint8_t>* data_vec,
     std::vector<bool>* null_vec) {
     std::shared_ptr<::arrow::ChunkedArray> chunked_arr;
@@ -603,9 +604,9 @@ std::pair<int64_t, int64_t> pq_read_list_string_single_file(
 }
 
 int64_t pq_read_list_string_parallel_single_file(
-    std::shared_ptr<FileReader> arrow_reader, int64_t column_idx,
-    uint32_t** out_offsets, uint32_t** out_index_offsets, uint8_t** out_data,
-    uint8_t** out_nulls, int64_t start, int64_t count,
+    std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
+    int64_t column_idx, uint32_t** out_offsets, uint32_t** out_index_offsets,
+    uint8_t** out_data, uint8_t** out_nulls, int64_t start, int64_t count,
     std::vector<uint32_t>* offset_vec, std::vector<uint32_t>* index_offset_vec,
     std::vector<uint8_t>* data_vec, std::vector<bool>* null_vec) {
     if (count == 0) {
@@ -765,51 +766,54 @@ int64_t pq_read_list_string_parallel_single_file(
 }
 
 void pq_init_reader(const char* file_name,
-                    std::shared_ptr<FileReader>* a_reader) {
+                    std::shared_ptr<parquet::arrow::FileReader>* a_reader) {
+    PyObject* f_mod;
+    PyObject* func_obj;
     std::string f_name(file_name);
     auto pool = ::arrow::default_memory_pool();
+
     // HDFS if starts with hdfs://
     if (f_name.find("hdfs://") == 0) {
-        std::unique_ptr<FileReader> arrow_reader;
+        std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
         std::shared_ptr<::arrow::io::HdfsReadableFile> file;
         // get hdfs opener function
-        PyObject* hdfs_mod = PyImport_ImportModule("bodo.io.hdfs_reader");
-        CHECK(hdfs_mod, "importing bodo.io.hdfs_reader module failed");
-        PyObject* func_obj = PyObject_GetAttrString(hdfs_mod, "hdfs_open_file");
+        import_fs_module(Bodo_Fs::hdfs, "parquet", f_mod);
+        PyObject* func_obj = PyObject_GetAttrString(f_mod, "hdfs_open_file");
         CHECK(func_obj, "getting hdfs_open_file func_obj failed");
         hdfs_open_file_t hdfs_open_file =
             (hdfs_open_file_t)PyNumber_AsSsize_t(func_obj, NULL);
         // open Parquet file
         hdfs_open_file(file_name, &file);
         // create Arrow reader
-        FileReader::Make(pool, ParquetFileReader::Open(file), &arrow_reader);
+        parquet::arrow::FileReader::Make(pool, ParquetFileReader::Open(file),
+                                         &arrow_reader);
         *a_reader = std::move(arrow_reader);
-        Py_DECREF(hdfs_mod);
+        Py_DECREF(f_mod);
         Py_DECREF(func_obj);
     } else if (f_name.find("s3://") == 0) {
-        std::unique_ptr<FileReader> arrow_reader;
+        std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
         std::shared_ptr<::arrow::io::RandomAccessFile> file;
         // remove s3://
         f_name = f_name.substr(strlen("s3://"));
         // get s3 opener function
-        PyObject* s3_mod = PyImport_ImportModule("bodo.io.s3_reader");
-        CHECK(s3_mod, "importing bodo.io.s3_reader module failed");
-        PyObject* func_obj = PyObject_GetAttrString(s3_mod, "s3_open_file");
+        import_fs_module(Bodo_Fs::s3, "parquet", f_mod);
+        PyObject* func_obj = PyObject_GetAttrString(f_mod, "s3_open_file");
         CHECK(func_obj, "getting s3_open_file func_obj failed");
         s3_opener_t s3_open_file =
             (s3_opener_t)PyNumber_AsSsize_t(func_obj, NULL);
         // open Parquet file
         s3_open_file(f_name.c_str(), &file);
         // create Arrow reader
-        FileReader::Make(pool, ParquetFileReader::Open(file), &arrow_reader);
+        parquet::arrow::FileReader::Make(pool, ParquetFileReader::Open(file),
+                                         &arrow_reader);
         *a_reader = std::move(arrow_reader);
-        Py_DECREF(s3_mod);
+        Py_DECREF(f_mod);
         Py_DECREF(func_obj);
     } else  // regular file system
     {
-        std::unique_ptr<FileReader> arrow_reader;
-        FileReader::Make(pool, ParquetFileReader::OpenFile(f_name, false),
-                         &arrow_reader);
+        std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
+        parquet::arrow::FileReader::Make(
+            pool, ParquetFileReader::OpenFile(f_name, false), &arrow_reader);
         *a_reader = std::move(arrow_reader);
     }
     return;
@@ -818,7 +822,8 @@ void pq_init_reader(const char* file_name,
 // get type as enum values defined in arrow/cpp/src/arrow/type.h
 // TODO: handle more complex types
 std::shared_ptr<arrow::DataType> get_arrow_type(
-    std::shared_ptr<FileReader> arrow_reader, int64_t column_idx) {
+    std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
+    int64_t column_idx) {
     // TODO: error checking
     // GetSchema supported as of arrow version=0.15.1
     std::shared_ptr<::arrow::Schema> col_schema;

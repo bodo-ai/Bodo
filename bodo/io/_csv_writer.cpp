@@ -4,8 +4,8 @@
 
 #include <arrow/io/api.h>
 #include "_csv_reader.h"
+#include "_fs_io.h"
 #include "_io.h"
-#include "_writer.h"
 #include "mpi.h"
 
 extern "C" {

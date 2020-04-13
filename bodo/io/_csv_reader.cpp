@@ -29,6 +29,7 @@
 
 #include <Python.h>
 #include "_bodo_file_reader.h"
+#include "_fs_io.h"
 #include "structmember.h"
 
 #define CHECK(expr, msg)                                        \
@@ -532,33 +533,32 @@ typedef FileReader *(*hdfs_reader_init_t)(const char *);
 extern "C" PyObject *csv_file_chunk_reader(const char *fname, bool is_parallel,
                                            int64_t skiprows, int64_t nrows) {
     CHECK(fname != NULL, "NULL filename provided.");
-    uint64_t fsz = -1;
-
-    // get reader and total file-size
     FileReader *f_reader;
+    PyObject *f_mod;
+    PyObject *func_obj;
+    uint64_t fsz = -1;
 
     if (strncmp("s3://", fname, 5) == 0) {
         // load s3_reader module if path starts with s3://
-        PyObject *s3_mod = PyImport_ImportModule("bodo.io.s3_reader");
-        CHECK(s3_mod, "importing bodo.io.s3_reader module failed");
-        PyObject *func_obj = PyObject_GetAttrString(s3_mod, "init_s3_reader");
-        CHECK(func_obj, "getting s3_reader func_obj failed");
+        import_fs_module(Bodo_Fs::s3, "csv", f_mod);
+        get_fs_reader_pyobject(Bodo_Fs::s3, "csv", f_mod, func_obj);
+        
         s3_reader_init_t func =
             (s3_reader_init_t)PyNumber_AsSsize_t(func_obj, NULL);
         f_reader = func(fname + 5);
-        Py_DECREF(s3_mod);
+        
+        Py_DECREF(f_mod);
         Py_DECREF(func_obj);
     } else if (strncmp("hdfs://", fname, 7) == 0) {
         // load hdfs_reader module if path starts with hdfs://
-        PyObject *hdfs_reader = PyImport_ImportModule("bodo.io.hdfs_reader");
-        CHECK(hdfs_reader, "importing bodo.io.hdfs_reader module failed");
-        PyObject *func_obj =
-            PyObject_GetAttrString(hdfs_reader, "init_hdfs_reader");
-        CHECK(func_obj, "getting hdfs_reader func_obj failed");
+        import_fs_module(Bodo_Fs::hdfs, "csv", f_mod);
+        get_fs_reader_pyobject(Bodo_Fs::hdfs, "csv", f_mod, func_obj);
+        
         hdfs_reader_init_t func =
             (hdfs_reader_init_t)PyNumber_AsSsize_t(func_obj, NULL);
         f_reader = func(fname);
-        Py_DECREF(hdfs_reader);
+        
+        Py_DECREF(f_mod);
         Py_DECREF(func_obj);
     } else {
         if (boost::filesystem::is_directory(fname)) {

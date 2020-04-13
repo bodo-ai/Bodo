@@ -11,17 +11,17 @@
 #endif
 #include "arrow/record_batch.h"
 #include "parquet/arrow/reader.h"
-using parquet::arrow::FileReader;
+
 #include "../libs/_bodo_common.h"
 #include "../libs/_datetime_ext.h"
+#include "_fs_io.h"
 #include "_parquet_reader.h"
-#include "_writer.h"
 
 #include <arrow/api.h>
 #include <arrow/io/api.h>
 #include "parquet/arrow/writer.h"
 
-typedef std::vector<std::shared_ptr<FileReader>> FileReaderVec;
+typedef std::vector<std::shared_ptr<parquet::arrow::FileReader>> FileReaderVec;
 
 FileReaderVec *get_arrow_readers(char *file_name);
 void del_arrow_readers(FileReaderVec *readers);
@@ -179,7 +179,7 @@ FileReaderVec *get_arrow_readers(char *file_name) {
 
     std::vector<std::string> all_files = get_pq_pieces(file_name);
     for (const auto &inner_file : all_files) {
-        std::shared_ptr<FileReader> arrow_reader;
+        std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
         pq_init_reader(inner_file.c_str(), &arrow_reader);
         readers->push_back(arrow_reader);
     }
@@ -813,8 +813,8 @@ void pq_write(const char *_path_name, const table_info *table,
     extract_fs_dir_path(_path_name, is_parallel, ".parquet", myrank, num_ranks,
                         &fs_option, &dirname, &fname, &orig_path, &path_name);
 
-    open_outstream(fs_option, is_parallel, myrank, "parquet",
-                   dirname, fname, orig_path, path_name, &out_stream);
+    open_outstream(fs_option, is_parallel, myrank, "parquet", dirname, fname,
+                   orig_path, path_name, &out_stream);
 
     // copy column names to a std::vector<string>
     std::vector<std::string> col_names;

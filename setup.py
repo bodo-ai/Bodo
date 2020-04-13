@@ -90,12 +90,14 @@ if not is_win:
 
 ext_io = Extension(
     name="bodo.libs.hio",
-    sources=["bodo/io/_io.cpp"],
+    sources=["bodo/io/_io.cpp", "bodo/io/_fs_io.cpp",],
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_distributed.h",
         "bodo/libs/_import_py.h",
         "bodo/io/_io.h",
+        "bodo/io/_bodo_file_reader.h",
+        "bodo/io/_fs_io.h",
     ],
     libraries=io_libs,
     include_dirs=ind + np_compile_args["include_dirs"],
@@ -161,9 +163,7 @@ if "MAX_CORE_COUNT" in os.environ and os.environ["MAX_CORE_COUNT"] != "":
 ext_hdist = Extension(
     name="bodo.libs.hdist",
     sources=["bodo/libs/_distributed.cpp"],
-    depends=[
-        "bodo/libs/_bodo_common.h", 
-        "bodo/libs/_distributed.h",],
+    depends=["bodo/libs/_bodo_common.h", "bodo/libs/_distributed.h",],
     libraries=MPI_LIBS,
     define_macros=dist_macros,
     extra_compile_args=eca,
@@ -211,7 +211,8 @@ ext_decimal = Extension(
 
 ext_arr = Extension(
     name="bodo.libs.array_ext",
-    sources=["bodo/libs/_array.cpp",
+    sources=[
+        "bodo/libs/_array.cpp",
         "bodo/libs/_bodo_common.cpp",
         "bodo/libs/_array_utils.cpp",
         "bodo/libs/_array_hash.cpp",
@@ -273,20 +274,22 @@ pq_libs += ["arrow", "parquet"]
 
 ext_csv = Extension(
     name="bodo.io.csv_cpp",
-    sources=["bodo/io/_io.cpp",
-             "bodo/io/_writer.cpp",
-             "bodo/io/_csv_reader.cpp", 
-             "bodo/io/_csv_writer.cpp"],
+    sources=[
+        "bodo/io/_io.cpp",
+        "bodo/io/_fs_io.cpp",
+        "bodo/io/_csv_reader.cpp",
+        "bodo/io/_csv_writer.cpp",
+    ],
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_distributed.h",
         "bodo/libs/_import_py.h",
         "bodo/io/_io.h",
-        "bodo/io/_writer.h",
+        "bodo/io/_fs_io.h",
         "bodo/io/_csv_reader.h",
         "bodo/io/_bodo_file_reader.h",
     ],
-    libraries= csv_libs,
+    libraries=csv_libs,
     include_dirs=["."] + ind,
     define_macros=[],
     extra_compile_args=eca,
@@ -296,14 +299,16 @@ ext_csv = Extension(
 
 ext_parquet = Extension(
     name="bodo.io.parquet_cpp",
-    sources=["bodo/io/_writer.cpp",
-             "bodo/io/_parquet.cpp",
-             "bodo/io/_parquet_reader.cpp",
-             "bodo/libs/_bodo_common.cpp"],
+    sources=[
+        "bodo/io/_fs_io.cpp",
+        "bodo/io/_parquet.cpp",
+        "bodo/io/_parquet_reader.cpp",
+        "bodo/libs/_bodo_common.cpp",
+    ],
     depends=[
         "bodo/libs/_bodo_common.h",
-        "bodo/io/_writer.h",
-        "bodo/io/_parquet_reader.h"
+        "bodo/io/_fs_io.h",
+        "bodo/io/_parquet_reader.h",
     ],
     libraries=pq_libs,
     include_dirs=["."] + ind,

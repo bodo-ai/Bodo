@@ -251,3 +251,83 @@ def test_s3_csv_read_1D_var(minio_server, s3_bucket, test_df):
         )
 
     check_func(test_read, (), py_output=test_df)
+
+
+@pytest.fixture(params=[np.arange(5)])
+def test_np_arr(request):
+    return request.param
+
+
+def test_s3_np_tofile_seq(minio_server, s3_bucket, test_np_arr):
+    """
+    test s3 to_file
+    """
+
+    def test_write(test_np_arr):
+        test_np_arr.tofile("s3://bodo-test/test_np_arr_bodo_seq.dat")
+
+    bodo_write = bodo.jit(test_write)
+    bodo_write(test_np_arr)
+
+
+def test_s3_np_tofile_1D(minio_server, s3_bucket, test_np_arr):
+    """
+    test s3 to_file in 1D distributed
+    """
+
+    def test_write(test_np_arr):
+        test_np_arr.tofile("s3://bodo-test/test_np_arr_bodo_1D.dat")
+
+    bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
+    bodo_write(_get_dist_arg(test_np_arr, True))
+
+
+def test_s3_np_tofile_1D_var(minio_server, s3_bucket, test_np_arr):
+    """
+    test s3 to_file in 1D Var
+    """
+
+    def test_write(test_np_arr):
+        test_np_arr.tofile("s3://bodo-test/test_np_arr_bodo_1D_var.dat")
+
+    bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
+    bodo_write(_get_dist_arg(test_np_arr, True, True))
+
+
+def test_s3_np_fromfile_seq(minio_server, s3_bucket, test_np_arr):
+    """
+    fromfile
+    test the dat file we just wrote sequentially
+    """
+
+    def test_read():
+        return np.fromfile("s3://bodo-test/test_np_arr_bodo_seq.dat", np.int64)
+
+    bodo_func = bodo.jit(test_read)
+    check_func(test_read, (), py_output=test_np_arr)
+
+
+def test_s3_np_fromfile_1D(minio_server, s3_bucket, test_np_arr):
+    """
+    fromfile
+    test the dat file we just wrote in 1D
+    """
+
+    def test_read():
+        return np.fromfile("s3://bodo-test/test_np_arr_bodo_1D.dat", np.int64)
+
+    bodo_func = bodo.jit(test_read)
+    check_func(test_read, (), py_output=test_np_arr)
+
+
+def test_s3_np_fromfile_1D_var(minio_server, s3_bucket, test_np_arr):
+    """
+    fromfile
+    test the dat file we just wrote in 1D
+    """
+
+    def test_read():
+        return np.fromfile("s3://bodo-test/test_np_arr_bodo_1D_var.dat", np.int64)
+
+    bodo_func = bodo.jit(test_read)
+    check_func(test_read, (), py_output=test_np_arr)

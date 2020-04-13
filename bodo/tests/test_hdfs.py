@@ -299,3 +299,86 @@ def test_hdfs_csv_read_1D_var(datapath, hdfs_datapath, test_df):
         )
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
+
+
+@pytest.fixture(params=[np.arange(5)])
+def test_np_arr(request):
+    return request.param
+
+
+def test_hdfs_np_tofile_seq(datapath, hdfs_datapath, test_np_arr):
+    """
+    test hdfs to_file
+    """
+
+    def test_write(test_np_arr, hdfs_fname):
+        test_np_arr.tofile(hdfs_fname)
+
+    hdfs_fname = hdfs_datapath("test_np_arr_bodo_seq.dat")
+    bodo_func = bodo.jit(test_write)
+    bodo_func(test_np_arr, hdfs_fname)
+
+
+def test_hdfs_np_tofile_1D(datapath, hdfs_datapath, test_np_arr):
+    """
+    test hdfs to_file in 1D
+    """
+
+    def test_write(test_np_arr, hdfs_fname):
+        test_np_arr.tofile(hdfs_fname)
+
+    hdfs_fname = hdfs_datapath("test_np_arr_bodo_1D.dat")
+    bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
+    bodo_write(_get_dist_arg(test_np_arr, False), hdfs_fname)
+
+
+def test_hdfs_np_tofile_1D_var(datapath, hdfs_datapath, test_np_arr):
+    """
+    test hdfs to_file in 1D distributed
+    """
+
+    def test_write(test_np_arr, hdfs_fname):
+        test_np_arr.tofile(hdfs_fname)
+
+    hdfs_fname = hdfs_datapath("test_np_arr_bodo_1D_var.dat")
+    bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
+    bodo_write(_get_dist_arg(test_np_arr, False, True), hdfs_fname)
+
+
+def test_hdfs_np_fromfile_seq(datapath, hdfs_datapath, test_np_arr):
+    """
+    fromfile
+    test the dat file we just wrote sequentially
+    """
+
+    def test_read(hdfs_fname):
+        return np.fromfile(hdfs_fname, np.int64)
+
+    hdfs_fname = hdfs_datapath("test_np_arr_bodo_seq.dat")
+    check_func(test_read, (hdfs_fname,), py_output=test_np_arr)
+
+
+def test_hdfs_np_fromfile_1D(datapath, hdfs_datapath, test_np_arr):
+    """
+    fromfile
+    test the dat file we just wrote in 1D
+    """
+
+    def test_read(hdfs_fname):
+        return np.fromfile(hdfs_fname, np.int64)
+
+    hdfs_fname = hdfs_datapath("test_np_arr_bodo_1D.dat")
+    check_func(test_read, (hdfs_fname,), py_output=test_np_arr, is_out_distributed=True)
+
+
+def test_hdfs_np_fromfile_1D_var(datapath, hdfs_datapath, test_np_arr):
+    """
+    fromfile
+    test the dat file we just wrote in 1D var
+    """
+
+    def test_read(hdfs_fname):
+        return np.fromfile(hdfs_fname, np.int64)
+
+    hdfs_fname = hdfs_datapath("test_np_arr_bodo_1D_var.dat")
+    check_func(test_read, (hdfs_fname,), py_output=test_np_arr, is_out_distributed=True)

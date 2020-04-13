@@ -204,8 +204,8 @@ PyMODINIT_FUNC PyInit_s3_reader(void) {
     return m;
 }
 
-// #undef CHECK
-// #undef CHECK_ARROW
-// #undef CHECK_ARROW_AND_ASSIGN
+#undef CHECK
+#undef CHECK_ARROW
+#undef CHECK_ARROW_AND_ASSIGN
 
 }  // extern "C"
