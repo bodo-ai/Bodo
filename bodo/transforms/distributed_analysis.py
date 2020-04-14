@@ -181,17 +181,6 @@ class DistributedAnalysis:
     distributable containers (e.g. arrays) and parfors.
     """
 
-    _extra_call = {}
-
-    @classmethod
-    def add_call_analysis(cls, typ, func, analysis_func):
-        """
-        External modules/packages (like daal4py) can register their own call-analysis.
-        Analysis funcs are stored in a dict with keys (typ, funcname)
-        """
-        assert (typ, func) not in cls._extra_call
-        cls._extra_call[(typ, func)] = analysis_func
-
     def __init__(
         self, func_ir, typemap, calltypes, typingctx, metadata, flags, arr_analysis
     ):
@@ -950,15 +939,6 @@ class DistributedAnalysis:
         # TODO: fix assert_equiv for np.stack from df.value
         if fdef == ("assert_equiv", "numba.array_analysis"):
             return
-
-        # we perform call-analysis from external at the end
-        if isinstance(func_mod, ir.Var):
-            ky = (self.typemap[func_mod.name], func_name)
-            if ky in DistributedAnalysis._extra_call:
-                if DistributedAnalysis._extra_call[ky](
-                    lhs, func_mod, *ky, args, array_dists
-                ):
-                    return
 
         # set REP if not found
         self._analyze_call_set_REP(lhs, args, array_dists, fdef)

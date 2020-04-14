@@ -97,7 +97,6 @@ To run hdfs related unit tests, use the :ref:`docker image <docker-images>`.
 Other useful packages for development::
 
     conda install pytest sphinx pylint jupyter
-    .. conda install daal4py -c defaults -c intel
 
 
 
