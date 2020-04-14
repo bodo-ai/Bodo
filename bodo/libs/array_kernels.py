@@ -35,6 +35,7 @@ from bodo.ir.sort import (
     alloc_pre_shuffle_metadata,
 )
 from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.libs.list_item_arr_ext import ListItemArrayType
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 
@@ -81,7 +82,7 @@ def isna(arr, i):  # pragma: no cover
 def isna_overload(arr, i):
     # String array
     if arr in (string_array_type, list_string_array_type):
-        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)
+        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)  # pragma: no cover
 
     # masked Integer array, boolean array
     if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
@@ -91,19 +92,25 @@ def isna_overload(arr, i):
     ):
         return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
             arr._null_bitmap, i
-        )
+        )  # pragma: no cover
+
+    # list(item) array
+    if isinstance(arr, ListItemArrayType):
+        return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+            bodo.libs.list_item_arr_ext.get_null_bitmap(arr), i
+        )  # pragma: no cover
 
     # TODO: extend to other types (which ones are missing?)
     assert isinstance(arr, types.Array)
     dtype = arr.dtype
     if isinstance(dtype, types.Float):
-        return lambda arr, i: np.isnan(arr[i])
+        return lambda arr, i: np.isnan(arr[i])  # pragma: no cover
 
     # NaT for dt64
     if isinstance(dtype, (types.NPDatetime, types.NPTimedelta)):
         nat = dtype("NaT")
         # TODO: replace with np.isnat
-        return lambda arr, i: arr[i] == nat
+        return lambda arr, i: arr[i] == nat  # pragma: no cover
 
     # XXX integers don't have nans, extend to boolean
     return lambda arr, i: False

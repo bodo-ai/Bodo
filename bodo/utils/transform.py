@@ -115,6 +115,8 @@ no_side_effect_call_tuples = {
     ("h5size", "h5_api", "io", bodo),
     ("pre_alloc_list_string_array", "list_str_arr_ext", "libs", bodo),
     (bodo.libs.list_str_arr_ext.pre_alloc_list_string_array,),
+    ("pre_alloc_list_item_array", "list_item_arr_ext", "libs", bodo),
+    (bodo.libs.list_item_arr_ext.pre_alloc_list_item_array,),
     ("dist_reduce", "distributed_api", "libs", bodo),
     (bodo.libs.distributed_api.dist_reduce,),
     ("pre_alloc_string_array", "str_arr_ext", "libs", bodo),

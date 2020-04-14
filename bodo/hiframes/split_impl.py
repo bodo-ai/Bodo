@@ -157,8 +157,8 @@ def construct_str_arr_split_view(context, builder):
     meminfo = context.nrt.meminfo_alloc_dtor(
         builder, context.get_constant(types.uintp, alloc_size), dtor_fn
     )
-    meminfo_data_ptr = context.nrt.meminfo_data(builder, meminfo)
-    meminfo_data_ptr = builder.bitcast(meminfo_data_ptr, alloc_type.as_pointer())
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
 
     # Nullify all data
     # builder.store( cgutils.get_null_value(alloc_type),

@@ -554,30 +554,9 @@ make_attribute_wrapper(DatetimeDateArrayType, "data", "_data")
 make_attribute_wrapper(DatetimeDateArrayType, "null_bitmap", "_null_bitmap")
 
 
-# TODO: move to utils or Numba
-def object_length(c, obj):
-    """
-    len(obj)
-    """
-    pyobj_lltyp = c.context.get_argument_type(types.pyobject)
-    fnty = lir.FunctionType(lir.IntType(64), [pyobj_lltyp])
-    fn = c.builder.module.get_or_insert_function(fnty, name="PyObject_Length")
-    return c.builder.call(fn, (obj,))
-
-
-def sequence_getitem(c, obj, ind):
-    """
-    seq[ind]
-    """
-    pyobj_lltyp = c.context.get_argument_type(types.pyobject)
-    fnty = lir.FunctionType(pyobj_lltyp, [pyobj_lltyp, lir.IntType(64)])
-    fn = c.builder.module.get_or_insert_function(fnty, name="PySequence_GetItem")
-    return c.builder.call(fn, (obj, ind))
-
-
 @unbox(DatetimeDateArrayType)
 def unbox_datetime_date_array(typ, val, c):
-    n = object_length(c, val)
+    n = bodo.utils.utils.object_length(c, val)
     arr_typ = types.Array(types.intp, 1, "C")
     data_arr = bodo.utils.utils._empty_nd_impl(c.context, c.builder, arr_typ, [n])
     n_bitmask_bytes = c.builder.udiv(

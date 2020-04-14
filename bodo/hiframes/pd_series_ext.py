@@ -42,6 +42,7 @@ from llvmlite import ir as lir
 import bodo
 from bodo.libs.str_ext import string_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.libs.list_item_arr_ext import ListItemArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from bodo.libs.bool_arr_ext import boolean_array
@@ -158,6 +159,8 @@ def _get_series_array_type(dtype):
     # string array
     elif dtype == string_type:
         return string_array_type
+    elif isinstance(dtype, types.List):
+        return ListItemArrayType(dtype.dtype)
 
     # categorical
     if isinstance(dtype, PDCategoricalDtype):
@@ -287,8 +290,8 @@ def construct_series(context, builder, series_type, data_val, index_val, name_va
     meminfo = context.nrt.meminfo_alloc_dtor(
         builder, context.get_constant(types.uintp, payload_size), dtor_fn
     )
-    meminfo_data_ptr = context.nrt.meminfo_data(builder, meminfo)
-    meminfo_data_ptr = builder.bitcast(meminfo_data_ptr, payload_ll_type.as_pointer())
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, payload_ll_type.as_pointer())
     builder.store(series_payload._getvalue(), meminfo_data_ptr)
 
     # create Series struct

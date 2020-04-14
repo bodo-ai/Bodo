@@ -155,6 +155,10 @@ def is_alloc_callname(func_name, mod_name):
             func_name == "pre_alloc_list_string_array"
             and mod_name == "bodo.libs.list_str_arr_ext"
         )
+        or (
+            func_name == "pre_alloc_list_item_array"
+            and mod_name == "bodo.libs.list_item_arr_ext"
+        )
         or (func_name == "alloc_bool_array" and mod_name == "bodo.libs.bool_arr_ext")
         or (func_name == "alloc_int_array" and mod_name == "bodo.libs.int_arr_ext")
         or (
@@ -330,6 +334,7 @@ def is_array_typ(var_typ):
         or var_typ == boolean_array
         or isinstance(var_typ, bodo.hiframes.pd_categorical_ext.CategoricalArray)
         or var_typ == bodo.libs.str_ext.random_access_string_array
+        or isinstance(var_typ, bodo.libs.list_item_arr_ext.ListItemArrayType)
     )
 
 
@@ -764,6 +769,26 @@ def get_ctypes_ptr(typingctx, ctypes_typ=None):
         return ctinfo.data
 
     return types.voidptr(ctypes_typ), codegen
+
+
+def object_length(c, obj):
+    """
+    len(obj)
+    """
+    pyobj_lltyp = c.context.get_argument_type(types.pyobject)
+    fnty = lir.FunctionType(lir.IntType(64), [pyobj_lltyp])
+    fn = c.builder.module.get_or_insert_function(fnty, name="PyObject_Length")
+    return c.builder.call(fn, (obj,))
+
+
+def sequence_getitem(c, obj, ind):  # pragma: no cover
+    """
+    seq[ind]
+    """
+    pyobj_lltyp = c.context.get_argument_type(types.pyobject)
+    fnty = lir.FunctionType(pyobj_lltyp, [pyobj_lltyp, lir.IntType(64)])
+    fn = c.builder.module.get_or_insert_function(fnty, name="PySequence_GetItem")
+    return c.builder.call(fn, (obj, ind))
 
 
 @intrinsic

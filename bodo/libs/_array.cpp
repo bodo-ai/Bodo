@@ -140,6 +140,215 @@ array_info* info_from_table(table_info* table, int64_t col_ind) {
     return table->columns[col_ind];
 }
 
+/**
+ * @brief count the total number of data elements in list(item) arrays
+ *
+ * @param list_arr_obj list(item) array object
+ * @return int64_t total number of data elements
+ */
+int64_t count_total_elems_list_array(PyObject* list_arr_obj) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return -1;                     \
+    }
+    // get pd.NA object to check for new NA kind
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
+    CHECK(C_NA, "getting pd.NA failed");
+
+    Py_ssize_t n = PyObject_Size(list_arr_obj);
+    int64_t n_lists = 0;
+    for (Py_ssize_t i = 0; i < n; ++i) {
+        PyObject* s = PySequence_GetItem(list_arr_obj, i);
+        CHECK(s, "getting element failed");
+        // Pandas stores NA as either None or nan
+        if (!(s == Py_None ||
+              (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s)))) ||
+            s == C_NA) {
+            n_lists += PyObject_Size(s);
+        }
+        Py_DECREF(s);
+    }
+    return n_lists;
+#undef CHECK
+}
+
+/**
+ * @brief convert Python object to native value and copies it to data buffer
+ *
+ * @param data data buffer for output native value
+ * @param ind index within the buffer for output
+ * @param item python object to read
+ * @param dtype data type
+ */
+inline void copy_item_to_buffer(char* data, Py_ssize_t ind, PyObject* item,
+                                Bodo_CTypes::CTypeEnum dtype) {
+    if (dtype == Bodo_CTypes::INT64) {
+        int64_t* ptr = (int64_t*)data;
+        ptr[ind] = PyLong_AsLongLong(item);
+    } else if (dtype == Bodo_CTypes::FLOAT64) {
+        double* ptr = (double*)data;
+        ptr[ind] = PyFloat_AsDouble(item);
+    } else
+        std::cerr << "data type " << dtype
+                  << " not supported for unboxing list(item) array."
+                  << std::endl;
+}
+
+/**
+ * @brief compute offsets, data, and null_bitmap values for list(item) array
+ * from an array of lists of values. The lists inside array can have different
+ * lengths.
+ *
+ * @param list_item_arr_obj Python Sequence object, intended to be an array of
+ * lists of items.
+ * @param data data buffer to be filled with all values
+ * @param offsets offsets buffer to be filled with computed offsets
+ * @param null_bitmap nulls buffer to be filled
+ * @param dtype data type of values, currently only float64 and int64 supported.
+ */
+void list_item_array_from_sequence(PyObject* list_arr_obj, char* data,
+                                   uint32_t* offsets, uint8_t* null_bitmap,
+                                   Bodo_CTypes::CTypeEnum dtype) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return;                        \
+    }
+
+    CHECK(PySequence_Check(list_arr_obj), "expecting a PySequence");
+    CHECK(data && offsets && null_bitmap, "buffer arguments must not be NULL");
+
+    // get pd.NA object to check for new NA kind
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
+    CHECK(C_NA, "getting pd.NA failed");
+
+    Py_ssize_t n = PyObject_Size(list_arr_obj);
+
+    int64_t curr_item_ind = 0;
+    for (Py_ssize_t i = 0; i < n; ++i) {
+        offsets[i] = curr_item_ind;
+        PyObject* s = PySequence_GetItem(list_arr_obj, i);
+        CHECK(s, "getting list(item) array element failed");
+        // Pandas stores NA as either None or nan
+        if (s == Py_None ||
+            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
+            s == C_NA) {
+            // set null bit to 0
+            SetBitTo(null_bitmap, i, 0);
+        } else {
+            // set null bit to 1
+            null_bitmap[i / 8] |= kBitmask[i % 8];
+            // check list
+            CHECK(PySequence_Check(s), "expecting a list");
+            Py_ssize_t n_items = PyObject_Size(s);
+            for (Py_ssize_t j = 0; j < n_items; j++) {
+                PyObject* v = PySequence_GetItem(s, j);
+                copy_item_to_buffer(data, curr_item_ind, v, dtype);
+                Py_DECREF(v);
+                curr_item_ind++;
+            }
+            Py_DECREF(s);
+        }
+    }
+    offsets[n] = curr_item_ind;
+
+    Py_DECREF(pd_mod);
+    Py_DECREF(C_NA);
+#undef CHECK
+}
+
+/**
+ * @brief convert native value from buffer to Python object
+ *
+ * @param data data buffer for input native value (only int64/float64 currently)
+ * @param ind index within the buffer
+ * @param dtype data type
+ * @return python object for value
+ */
+inline PyObject* value_to_pyobject(const char* data, int64_t ind,
+                                   Bodo_CTypes::CTypeEnum dtype) {
+    // TODO: support other types
+    if (dtype == Bodo_CTypes::INT64) {
+        int64_t* ptr = (int64_t*)data;
+        return PyLong_FromLongLong(ptr[ind]);
+    } else if (dtype == Bodo_CTypes::FLOAT64) {
+        double* ptr = (double*)data;
+        return PyFloat_FromDouble(ptr[ind]);
+    } else
+        std::cerr << "data type " << dtype
+                  << " not supported for boxing list(item) array." << std::endl;
+    return NULL;
+}
+
+/**
+ * @brief create a numpy array of lists of item objects from a ListItemArray
+ *
+ * @param num_lists number of lists in input array
+ * @param buffer all values
+ * @param offsets offsets to data
+ * @param null_bitmap null bitmask
+ * @param dtype data type of values (currently, only int/float)
+ * @return numpy array of list of item objects
+ */
+void* np_array_from_list_item_array(int64_t num_lists, const char* buffer,
+                                    const uint32_t* offsets,
+                                    const uint8_t* null_bitmap,
+                                    Bodo_CTypes::CTypeEnum dtype) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return NULL;                   \
+    }
+
+    // allocate array and get nan object
+    npy_intp dims[] = {num_lists};
+    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
+    CHECK(ret, "allocating numpy array failed");
+    int err;
+    PyObject* np_mod = PyImport_ImportModule("numpy");
+    CHECK(np_mod, "importing numpy module failed");
+    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
+    CHECK(nan_obj, "getting np.nan failed");
+
+    size_t curr_value = 0;
+    // for each list item
+    for (int64_t i = 0; i < num_lists; ++i) {
+        // set nan if item is NA
+        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
+        CHECK(p, "getting offset in numpy array failed");
+        if (is_na(null_bitmap, i)) {
+            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
+            CHECK(err == 0, "setting item in numpy array failed");
+            continue;
+        }
+
+        // alloc list item
+        Py_ssize_t n_vals = (Py_ssize_t)(offsets[i + 1] - offsets[i]);
+        PyObject* l = PyList_New(n_vals);
+
+        for (Py_ssize_t j = 0; j < n_vals; j++) {
+            PyObject* s = value_to_pyobject(buffer, curr_value, dtype);
+            CHECK(s, "creating Python int/float object failed");
+            PyList_SET_ITEM(l, j, s);  // steals reference to s!
+            curr_value++;
+        }
+
+        err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, l);
+        CHECK(err == 0, "setting item in numpy array failed");
+        Py_DECREF(l);
+    }
+
+    Py_DECREF(np_mod);
+    Py_DECREF(nan_obj);
+    return ret;
+#undef CHECK
+}
+
 PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject* m;
     static struct PyModuleDef moduledef = {
@@ -209,5 +418,14 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "compute_node_partition_by_hash",
         PyLong_FromVoidPtr((void*)(&compute_node_partition_by_hash)));
+    PyObject_SetAttrString(
+        m, "count_total_elems_list_array",
+        PyLong_FromVoidPtr((void*)(&count_total_elems_list_array)));
+    PyObject_SetAttrString(
+        m, "list_item_array_from_sequence",
+        PyLong_FromVoidPtr((void*)(&list_item_array_from_sequence)));
+    PyObject_SetAttrString(
+        m, "np_array_from_list_item_array",
+        PyLong_FromVoidPtr((void*)(&np_array_from_list_item_array)));
     return m;
 }

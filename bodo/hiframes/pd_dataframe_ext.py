@@ -348,8 +348,8 @@ def construct_dataframe(
     meminfo = context.nrt.meminfo_alloc_dtor(
         builder, context.get_constant(types.uintp, payload_size), dtor_fn
     )
-    meminfo_data_ptr = context.nrt.meminfo_data(builder, meminfo)
-    meminfo_data_ptr = builder.bitcast(meminfo_data_ptr, payload_ll_type.as_pointer())
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, payload_ll_type.as_pointer())
     builder.store(dataframe_payload._getvalue(), meminfo_data_ptr)
 
     # create dataframe struct

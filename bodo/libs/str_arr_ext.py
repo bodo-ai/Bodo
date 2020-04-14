@@ -33,6 +33,7 @@ from numba.extending import (
 from numba import cgutils
 from bodo.libs.str_ext import string_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.libs.list_item_arr_ext import ListItemArrayType
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type, datetime_date_type
 from bodo.utils.typing import (
@@ -934,8 +935,8 @@ def construct_string_array(context, builder):
     meminfo = context.nrt.meminfo_alloc_dtor(
         builder, context.get_constant(types.uintp, alloc_size), dtor_fn
     )
-    meminfo_data_ptr = context.nrt.meminfo_data(builder, meminfo)
-    meminfo_data_ptr = builder.bitcast(meminfo_data_ptr, alloc_type.as_pointer())
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
 
     # Nullify all data
     # builder.store( cgutils.get_null_value(alloc_type),
@@ -1634,6 +1635,8 @@ def _typeof_ndarray(val, c):
             return bodo.libs.bool_arr_ext.boolean_array
         if dtype == types.List(string_type):
             return list_string_array_type
+        if isinstance(dtype, types.List):
+            return ListItemArrayType(dtype.dtype)
         if dtype == datetime_date_type:
             return datetime_date_array_type  # TODO: test array of datetime.date
         if isinstance(dtype, Decimal128Type):
