@@ -60,6 +60,7 @@ from bodo.utils.transform import (
     update_node_list_definitions,
     gen_add_consts_to_type,
     compile_func_single_block,
+    get_call_expr_arg,
 )
 from bodo.utils.typing import BodoError
 
@@ -471,8 +472,8 @@ class UntypedPass:
         """
         nodes = [assign]
         kws = dict(rhs.kws)
-        data_arg = self._get_arg("pd.DataFrame", rhs.args, kws, 0, "data")
-        index_arg = self._get_arg("pd.DataFrame", rhs.args, kws, 1, "index", "")
+        data_arg = get_call_expr_arg("pd.DataFrame", rhs.args, kws, 0, "data")
+        index_arg = get_call_expr_arg("pd.DataFrame", rhs.args, kws, 1, "index", "")
 
         arg_def = guard(get_definition, self.func_ir, data_arg)
         # handle converted constant dictionaries
@@ -570,7 +571,7 @@ class UntypedPass:
         columns = self._get_const_arg(
             "read_sql", rhs.args, kws, 6, "columns", default=""
         )
-        chunksize = self._get_arg("read_sql", rhs.args, kws, 7, "chunksize", -1)
+        chunksize = get_call_expr_arg("read_sql", rhs.args, kws, 7, "chunksize", -1)
 
         # SUPPORTED:
         # sql is supported since it is fundamental
@@ -676,14 +677,14 @@ class UntypedPass:
         # delim_whitespace=False, low_memory=True, memory_map=False,
         # float_precision=None)
         kws = dict(rhs.kws)
-        fname = self._get_arg("read_csv", rhs.args, kws, 0, "filepath_or_buffer")
+        fname = get_call_expr_arg("read_csv", rhs.args, kws, 0, "filepath_or_buffer")
         sep = self._get_const_arg("read_csv", rhs.args, kws, 1, "sep", ",")
         sep = self._get_const_arg("read_csv", rhs.args, kws, 2, "delimiter", sep)
         header = self._get_const_arg("read_csv", rhs.args, kws, 3, "header", "infer")
-        names_var = self._get_arg("read_csv", rhs.args, kws, 4, "names", "")
+        names_var = get_call_expr_arg("read_csv", rhs.args, kws, 4, "names", "")
         index_col = self._get_const_arg("read_csv", rhs.args, kws, 5, "index_col", -1)
-        usecols_var = self._get_arg("read_csv", rhs.args, kws, 6, "usecols", "")
-        dtype_var = self._get_arg("read_csv", rhs.args, kws, 10, "dtype", "")
+        usecols_var = get_call_expr_arg("read_csv", rhs.args, kws, 6, "usecols", "")
+        dtype_var = get_call_expr_arg("read_csv", rhs.args, kws, 10, "dtype", "")
         skiprows = self._get_const_arg("read_csv", rhs.args, kws, 16, "skiprows", 0)
 
         # check unsupported arguments
@@ -929,7 +930,7 @@ class UntypedPass:
                     "pd.read_csv() invalid dtype "
                     "(built using a call but not Int or Categorical)"
                 )
-            cats_var = self._get_arg(
+            cats_var = get_call_expr_arg(
                 "CategoricalDtype", dtype_def.args, dict(dtype_def.kws), 0, "categories"
             )
             err_msg = "categories should be constant list"
@@ -956,7 +957,7 @@ class UntypedPass:
         """transform pd.Series(A) call for flatmap case
         """
         kws = dict(rhs.kws)
-        data = self._get_arg("pd.Series", rhs.args, kws, 0, "data")
+        data = get_call_expr_arg("pd.Series", rhs.args, kws, 0, "data")
 
         # match flatmap pd.Series(list(itertools.chain(*A))) and flatten
         data_def = guard(get_definition, self.func_ir, data)
@@ -1075,12 +1076,12 @@ class UntypedPass:
     def _handle_pd_read_parquet(self, assign, lhs, rhs):
         # get args and check values
         kws = dict(rhs.kws)
-        fname = self._get_arg("read_parquet", rhs.args, kws, 0, "path")
-        engine = self._get_arg("read_parquet", rhs.args, kws, 1, "engine", "auto")
+        fname = get_call_expr_arg("read_parquet", rhs.args, kws, 0, "path")
+        engine = get_call_expr_arg("read_parquet", rhs.args, kws, 1, "engine", "auto")
         if engine not in ("auto", "pyarrow"):
             raise ValueError("read_parquet: only pyarrow engine supported")
 
-        columns = self._get_arg("read_parquet", rhs.args, kws, 2, "columns", -1)
+        columns = get_call_expr_arg("read_parquet", rhs.args, kws, 2, "columns", -1)
         if columns == -1:
             columns = None
         elif columns is not None:
@@ -1092,7 +1093,7 @@ class UntypedPass:
         # converting build_list to build_tuple before type inference to avoid
         # errors
         kws = dict(rhs.kws)
-        objs_arg = self._get_arg("concat", rhs.args, kws, 0, "objs")
+        objs_arg = get_call_expr_arg("concat", rhs.args, kws, 0, "objs")
 
         df_list = guard(get_definition, self.func_ir, objs_arg)
         if not isinstance(df_list, ir.Expr) or not (
@@ -1134,21 +1135,6 @@ class UntypedPass:
                 err_msg = ("{} requires '{}' argument as a constant {}").format(
                     f_name, arg_name, typ
                 )
-            raise ValueError(err_msg)
-        return arg
-
-    def _get_arg(self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):
-        arg = None
-        if len(args) > arg_no:
-            arg = args[arg_no]
-        elif arg_name in kws:
-            arg = kws[arg_name]
-
-        if arg is None:
-            if default is not None:
-                return default
-            if err_msg is None:
-                err_msg = "{} requires '{}' argument".format(f_name, arg_name)
             raise ValueError(err_msg)
         return arg
 

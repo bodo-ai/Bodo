@@ -61,7 +61,7 @@ from bodo.transforms.distributed_analysis import (
 
 import bodo.utils.utils
 from bodo.utils.typing import BodoError
-from bodo.utils.transform import compile_func_single_block
+from bodo.utils.transform import compile_func_single_block, get_call_expr_arg
 from bodo.utils.utils import (
     is_alloc_callname,
     is_whole_slice,
@@ -383,7 +383,9 @@ class DistributedPass:
 
         # numpy direct functions
         if isinstance(func_mod, str) and func_mod == "numpy":
-            return self._run_call_np(lhs, func_name, assign, rhs.args, equiv_set)
+            return self._run_call_np(
+                lhs, func_name, assign, rhs.args, dict(rhs.kws), equiv_set
+            )
 
         # array.func calls
         if isinstance(func_mod, ir.Var) and is_np_array_typ(
@@ -800,7 +802,7 @@ class DistributedPass:
 
         return out
 
-    def _run_call_np(self, lhs, func_name, assign, args, equiv_set):
+    def _run_call_np(self, lhs, func_name, assign, args, kws, equiv_set):
         """transform np.func() calls
         """
         # allocs are handled separately
@@ -839,9 +841,11 @@ class DistributedPass:
             )
 
         # sum over the first axis is distributed, A.sum(0)
-        if func_name == "sum" and len(args) == 2:
-            axis_def = guard(get_definition, self.func_ir, args[1])
-            if isinstance(axis_def, ir.Const) and axis_def.value == 0:
+        if func_name == "sum" and (
+            self._is_1D_arr(args[0].name) or self._is_1D_Var_arr(args[0].name)
+        ):
+            axis = get_call_expr_arg("sum", args, kws, 1, "axis", "")
+            if guard(find_const, self.func_ir, axis) == 0:
                 reduce_op = Reduce_Type.Sum
                 reduce_var = assign.target
                 return out + self._gen_reduce(reduce_var, reduce_op, scope, loc)
@@ -913,7 +917,7 @@ class DistributedPass:
             kws = dict(rhs.kws)
             nodes = []
 
-            fname = self._get_arg("to_parquet", rhs.args, kws, 0, "fname")
+            fname = get_call_expr_arg("to_parquet", rhs.args, kws, 0, "fname")
 
             compression_var = ir.Var(
                 assign.target.scope, mk_unique_var("to_pq_compression"), rhs.loc
@@ -922,7 +926,7 @@ class DistributedPass:
                 ir.Assign(ir.Const("snappy", rhs.loc), compression_var, rhs.loc)
             )
             self.typemap[compression_var.name] = types.StringLiteral("snappy")
-            compression = self._get_arg(
+            compression = get_call_expr_arg(
                 "to_parquet", rhs.args, kws, 2, "compression", compression_var
             )
 
@@ -931,7 +935,9 @@ class DistributedPass:
             )
             nodes.append(ir.Assign(ir.Const(None, rhs.loc), index_var, rhs.loc))
             self.typemap[index_var.name] = types.none
-            index = self._get_arg("to_parquet", rhs.args, kws, 3, "index", index_var)
+            index = get_call_expr_arg(
+                "to_parquet", rhs.args, kws, 3, "index", index_var
+            )
 
             f = lambda df, fname, compression, index: df.to_parquet(
                 fname, compression=compression, index=index, _is_parallel=True
@@ -962,7 +968,9 @@ class DistributedPass:
             true_var = ir.Var(assign.target.scope, mk_unique_var("true"), rhs.loc)
             self.typemap[true_var.name] = types.bool_
             nodes.append(ir.Assign(ir.Const(True, df.loc), true_var, df.loc))
-            header_var = self._get_arg("to_csv", rhs.args, kws, 5, "header", true_var)
+            header_var = get_call_expr_arg(
+                "to_csv", rhs.args, kws, 5, "header", true_var
+            )
             nodes += self._gen_is_root_and_cond(header_var)
             header_var = nodes[-1].target
             if len(rhs.args) > 5:
@@ -2530,21 +2538,6 @@ class DistributedPass:
                 vals_list.append(stmt.target)
         out += nodes
         return vals_list
-
-    def _get_arg(self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):
-        arg = None
-        if len(args) > arg_no:
-            arg = args[arg_no]
-        elif arg_name in kws:
-            arg = kws[arg_name]
-
-        if arg is None:
-            if default is not None:
-                return default
-            if err_msg is None:
-                err_msg = "{} requires '{}' argument".format(f_name, arg_name)
-            raise ValueError(err_msg)
-        return arg
 
     def _get_arr_ndim(self, arrname):
         if self.typemap[arrname] == string_array_type:

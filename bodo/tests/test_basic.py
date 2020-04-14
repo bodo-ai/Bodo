@@ -124,6 +124,24 @@ def test_strided_getitem():
     check_func(test_impl, (n,))
 
 
+def test_array_sum_axis():
+    """test array.sum() with axis argument
+    """
+    def test_impl1(A):
+        return A.sum(0)
+
+    def test_impl2(A):
+        return A.sum(axis=0)
+
+    def test_impl3(A):
+        return A.sum(axis=1)
+
+    A = np.arange(33).reshape(11, 3)
+    check_func(test_impl1, (A,), is_out_distributed=False)
+    check_func(test_impl2, (A,), is_out_distributed=False)
+    check_func(test_impl3, (A,))
+
+
 @pytest.mark.skip(reason="TODO: replace since to_numeric() doesn't need locals anymore")
 def test_inline_locals():
     # make sure locals in inlined function works

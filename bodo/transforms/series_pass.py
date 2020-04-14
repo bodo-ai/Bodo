@@ -88,7 +88,11 @@ from bodo.hiframes.split_impl import (
     get_split_view_index,
     get_split_view_data_ptr,
 )
-from bodo.utils.transform import compile_func_single_block, update_locs
+from bodo.utils.transform import (
+    compile_func_single_block,
+    update_locs,
+    get_call_expr_arg,
+)
 from bodo.utils.typing import get_overload_const_func
 
 
@@ -1720,13 +1724,13 @@ class SeriesPass:
             kws = dict(rhs.kws)
             extra_args = []
             if func_name == "apply":
-                func_var = self._get_arg("apply", rhs.args, kws, 0, "func")
-                extra_args = self._get_arg("apply", rhs.args, kws, 2, "args", [])
+                func_var = get_call_expr_arg("apply", rhs.args, kws, 0, "func")
+                extra_args = get_call_expr_arg("apply", rhs.args, kws, 2, "args", [])
                 if extra_args:
                     extra_args = guard(find_build_sequence, self.func_ir, extra_args)
                     extra_args = [] if extra_args is None else extra_args[0]
             else:
-                func_var = self._get_arg("map", rhs.args, kws, 0, "arg")
+                func_var = get_call_expr_arg("map", rhs.args, kws, 0, "arg")
             return self._handle_series_map(
                 assign, lhs, rhs, series_var, func_var, extra_args
             )
@@ -1995,9 +1999,9 @@ class SeriesPass:
         """translate s1.combine(s2, lambda x1,x2 :...) to prange()
         """
         kws = dict(rhs.kws)
-        other_var = self._get_arg("combine", rhs.args, kws, 0, "other")
-        func_var = self._get_arg("combine", rhs.args, kws, 1, "func")
-        fill_var = self._get_arg("combine", rhs.args, kws, 2, "fill_value", default="")
+        other_var = get_call_expr_arg("combine", rhs.args, kws, 0, "other")
+        func_var = get_call_expr_arg("combine", rhs.args, kws, 1, "func")
+        fill_var = get_call_expr_arg("combine", rhs.args, kws, 2, "fill_value", default="")
 
         func = get_overload_const_func(self.typemap[func_var.name])
 
@@ -2546,21 +2550,6 @@ class SeriesPass:
         dumm_block.body = node_list
         build_definitions({0: dumm_block}, self.func_ir._definitions)
         return
-
-    def _get_arg(self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):
-        arg = None
-        if len(args) > arg_no:
-            arg = args[arg_no]
-        elif arg_name in kws:
-            arg = kws[arg_name]
-
-        if arg is None:
-            if default is not None:
-                return default
-            if err_msg is None:
-                err_msg = "{} requires '{}' argument".format(f_name, arg_name)
-            raise ValueError(err_msg)
-        return arg
 
 
 def _fix_typ_undefs(new_typ, old_typ):

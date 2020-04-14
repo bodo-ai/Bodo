@@ -48,7 +48,7 @@ from bodo.utils.utils import (
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
-from bodo.utils.transform import get_stmt_defs
+from bodo.utils.transform import get_stmt_defs, get_call_expr_arg
 from bodo.utils.typing import BodoWarning
 from bodo.libs.bool_arr_ext import boolean_array
 
@@ -353,7 +353,9 @@ class DistributedAnalysis:
         elif is_expr(rhs, "getattr"):
             self._analyze_getattr(lhs, rhs, array_dists)
         elif is_expr(rhs, "call"):
-            self._analyze_call(lhs, rhs, rhs.func.name, rhs.args, array_dists)
+            self._analyze_call(
+                lhs, rhs, rhs.func.name, rhs.args, dict(rhs.kws), array_dists
+            )
         # handle for A in arr_container: ...
         # A = pair_first(iternext(getiter(arr_container)))
         # TODO: support getitem of container
@@ -523,7 +525,7 @@ class DistributedAnalysis:
             self.in_parallel_parfor = -1
         return
 
-    def _analyze_call(self, lhs, rhs, func_var, args, array_dists):
+    def _analyze_call(self, lhs, rhs, func_var, args, kws, array_dists):
         """analyze array distributions in function calls
         """
         func_name = ""
@@ -564,7 +566,7 @@ class DistributedAnalysis:
 
         # numpy direct functions
         if isinstance(func_mod, str) and func_mod == "numpy":
-            self._analyze_call_np(lhs, func_name, args, array_dists)
+            self._analyze_call_np(lhs, func_name, args, kws, array_dists)
             return
 
         # handle array.func calls
@@ -947,7 +949,7 @@ class DistributedAnalysis:
         # set REP if not found
         self._analyze_call_set_REP(lhs, args, array_dists, fdef)
 
-    def _analyze_call_np(self, lhs, func_name, args, array_dists):
+    def _analyze_call_np(self, lhs, func_name, args, kws, array_dists):
         """analyze distributions of numpy functions (np.func_name)
         """
 
@@ -967,11 +969,17 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, args[0].name, array_dists)
             return
 
-        # sum over the first axis is distributed, A.sum(0)
-        if func_name == "sum" and len(args) == 2:
-            axis_def = guard(get_definition, self.func_ir, args[1])
-            if isinstance(axis_def, ir.Const) and axis_def.value == 0:
+        # handle array.sum() with axis
+        if func_name == "sum":
+            axis_var = get_call_expr_arg("sum", args, kws, 1, "axis", "")
+            axis = guard(find_const, self.func_ir, axis_var)
+            # sum over the first axis produces REP output
+            if axis == 0:
                 array_dists[lhs] = Distribution.REP
+                return
+            # sum over other axis doesn't change distribution
+            if axis_var != "" and axis != 0:
+                self._meet_array_dists(lhs, args[0].name, array_dists)
                 return
 
         if func_name == "dot":

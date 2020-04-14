@@ -22,7 +22,11 @@ from numba.ir_utils import (
 import bodo
 from bodo.utils.typing import ConstList, ConstSet, BodoError
 from bodo.utils.utils import is_assign, is_call, is_expr
-from bodo.utils.transform import update_node_list_definitions, compile_func_single_block
+from bodo.utils.transform import (
+    update_node_list_definitions,
+    compile_func_single_block,
+    get_call_expr_arg,
+)
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
 
@@ -278,7 +282,7 @@ class TypingTransforms:
         # transformed away using variable replacement
         if func_name == "drop":
             kws = dict(rhs.kws)
-            inplace_var = self._get_arg("drop", rhs.args, kws, 5, "inplace", "")
+            inplace_var = get_call_expr_arg("drop", rhs.args, kws, 5, "inplace", "")
             replace_func = lambda: bodo.hiframes.dataframe_impl.drop_inplace  # pragma: no cover
             return self._handle_df_inplace_func(
                 assign, lhs, rhs, df_var, inplace_var, replace_func, label
@@ -288,7 +292,7 @@ class TypingTransforms:
             # handle potential df.sort_values(inplace=True) here since it needs
             # variable replacement
             kws = dict(rhs.kws)
-            inplace_var = self._get_arg("sort_values", rhs.args, kws, 3, "inplace", "")
+            inplace_var = get_call_expr_arg("sort_values", rhs.args, kws, 3, "inplace", "")
             replace_func = lambda: bodo.hiframes.dataframe_impl.sort_values_inplace  # pragma: no cover
             return self._handle_df_inplace_func(
                 assign, lhs, rhs, df_var, inplace_var, replace_func, label
@@ -482,21 +486,6 @@ class TypingTransforms:
                     self.typemap[arg_def.args[0].name], ConstList
                 ):
                     return self.typemap[arg_def.args[0].name].consts
-
-    def _get_arg(self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):  # pragma: no cover
-        arg = None
-        if len(args) > arg_no:
-            arg = args[arg_no]
-        elif arg_name in kws:
-            arg = kws[arg_name]
-
-        if arg is None:
-            if default is not None:
-                return default
-            if err_msg is None:
-                err_msg = "{} requires '{}' argument".format(f_name, arg_name)
-            raise BodoError(err_msg)
-        return arg
 
     def _replace_vars(self, inst):
         # variable replacement can affect definitions so handling assignment
