@@ -1385,8 +1385,8 @@ def test_df_const_set_rm_index():
         bodo.jit(impl)(A)
 
 
-def test_df_drop_inplace_check():
-    """make sure inplace=True is not use in df.dropna()
+def test_df_dropna_inplace_check():
+    """make sure inplace=True is not used in df.dropna()
     """
 
     def test_impl(df):
@@ -1395,6 +1395,20 @@ def test_df_drop_inplace_check():
     df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [4, 5, 6, 7]})
     with pytest.raises(BodoError, match="inplace=True is not supported"):
         bodo.jit(test_impl)(df)
+
+
+def test_df_drop_inplace_instability_check():
+    """make sure df.drop(inplace=True) doesn't cause type instability
+    """
+
+    def test_impl(a):
+        df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [4, 5, 6, 7]})
+        if len(a) > 3:
+            df.drop("B", 1, inplace=True)
+        return df
+
+    with pytest.raises(BodoError, match="inplace change of dataframe schema"):
+        bodo.jit(test_impl)([2, 3])
 
 
 ################################## indexing  #################################

@@ -48,7 +48,6 @@ from bodo.libs.array import (
     info_to_array,
     delete_table,
 )
-from bodo.hiframes.pd_dataframe_ext import validate_sort_values_spec
 
 
 @overload_attribute(DataFrameType, "index", inline="always")
@@ -1062,75 +1061,6 @@ class SetDfColInfer(AbstractTemplate):
             ret = DataFrameType(new_typs, target.index, new_cols, target.has_parent)
 
         return ret(*args)
-
-
-def drop_inplace(df):  # pragma: no cover
-    res = None
-    return df, res
-
-
-@overload(drop_inplace, inline="always")
-def drop_inplace_overload(
-    df,
-    labels=None,
-    axis=0,
-    index=None,
-    columns=None,
-    level=None,
-    inplace=False,
-    errors="raise",
-):
-
-    from bodo.hiframes.pd_dataframe_ext import DataFrameType
-
-    assert isinstance(df, DataFrameType)
-    # TODO: support recovery when object is not df
-    def _impl(
-        df,
-        labels=None,
-        axis=0,
-        index=None,
-        columns=None,
-        level=None,
-        inplace=False,
-        errors="raise",
-    ):  # pragma: no cover
-        new_df = bodo.hiframes.pd_dataframe_ext.drop_dummy(
-            df, labels, axis, columns, inplace
-        )
-        return new_df, None
-
-    return _impl
-
-
-def sort_values_inplace(df):  # pragma: no cover
-    res = None
-    return df, res
-
-
-@overload(sort_values_inplace, inline="always")
-def sort_values_inplace_overload(
-    df, by, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last"
-):
-
-    validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position)
-
-    def _impl(
-        df,
-        by,
-        axis=0,
-        ascending=True,
-        inplace=False,
-        kind="quicksort",
-        na_position="last",
-    ):  # pragma: no cover
-
-        new_df = bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
-            df, by, ascending, inplace, na_position
-        )
-        return new_df, None
-
-    return _impl
 
 
 class DataFrameTupleIterator(types.SimpleIteratorType):

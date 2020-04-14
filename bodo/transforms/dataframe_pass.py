@@ -608,7 +608,10 @@ class DataFramePass:
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
         df_index_var = self._get_dataframe_index(df_var, nodes)
 
-        return self._replace_func(f, col_vars + [df_index_var], extra_globals={
+        return self._replace_func(
+            f,
+            col_vars + [df_index_var],
+            extra_globals={
                 "numba": numba,
                 "np": np,
                 "Row": Row,
@@ -617,7 +620,9 @@ class DataFramePass:
                 "get_utf8_size": get_utf8_size,
                 "pre_alloc_string_array": pre_alloc_string_array,
                 "map_func": numba.njit(func),
-            }, pre_nodes=nodes)
+            },
+            pre_nodes=nodes,
+        )
 
     def _run_call_df_sort_values(self, assign, lhs, rhs):
         df_var, by_var, ascending_var, inplace_var, na_position_var = rhs.args
@@ -716,13 +721,9 @@ class DataFramePass:
                 out_arrs.append(out_vars[c])
         out_arrs.append(out_index)
 
-        # return dataframe if untyped pass replacement worked
-        if not inplace or isinstance(self.typemap[lhs.name], DataFrameType):
-            return nodes + compile_func_single_block(_init_df, out_arrs, lhs, self)
-        else:
-            # XXX: set inplace if untyped pass var replacement didn't work
-            # TODO: fix index for inplace case
-            return self._set_df_inplace(_init_df, out_arrs, df_var, lhs.loc, nodes)
+        # return new df even for inplace case, since typing pass replaces input variable
+        # using output of the call
+        return nodes + compile_func_single_block(_init_df, out_arrs, lhs, self)
 
     def _gen_array_from_index(self, df_var, nodes):
         def _get_index(df):  # pragma: no cover
@@ -1399,6 +1400,8 @@ class DataFramePass:
         _init_df = _gen_init_df(out_typ.columns, "index")
         df_index = self._get_dataframe_index(df_var, nodes)
         data.append(df_index)
+        # return new df even for inplace case, since typing pass replaces input variable
+        # using output of the call
         return nodes + compile_func_single_block(_init_df, data, lhs, self)
 
     def _run_call_set_df_column(self, assign, lhs, rhs):
