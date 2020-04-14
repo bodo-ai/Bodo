@@ -22,25 +22,46 @@ DataFrame Schema
 ~~~~~~~~~~~~~~~~
 
 Deterministic dataframe schemas, which are required in most data systems, is key
-for type stability. For example, column `A` of variable `df` in example below could be
-either of type integer or string based on a flag -- Bodo cannot determine it at compilation time::
+for type stability. For example, variable `df` in example below could be
+either a single column dataframe or a two column one -- Bodo cannot determine it at compilation time::
 
     @bodo.jit
     def f(a):
-        if len(a) > 3:  # some computation that cannot be inferred statically
-            df = pd.DataFrame({"A": [1, 2, 3]})
-        else:
-            df = pd.DataFrame({"A": ["a", "b", "c"]})
-        return df
+        df = pd.DataFrame({"A": [1, 2, 3]})
+        df2 = pd.DataFrame({"A": [1, 3, 4], "C": [-1, -2, -3]})
+        if len(a) > 3:
+            df = df.merge(df2)
 
-    f([2, 3])
+        return df.mean()
+
+    print(f([2, 3]))
     # TypeError: Cannot unify dataframe((array(int64, 1d, C),), RangeIndexType(none), ('A',), False)
-    # and dataframe((StringArrayType(),), RangeIndexType(none), ('A',), False)
+    # and dataframe((array(int64, 1d, C), array(int64, 1d, C)), RangeIndexType(none), ('A', 'C'), False) for 'df'
 
 The error message means that Bodo cannot find a type that can `unify` the two
 types into a single type.
-This code can be refactored so that `if flag`
+This code can be refactored so that the `if` control flow
 is executed in regular Python context, but the rest of computation is in Bodo functions.
+For example, one could use two versions of the function::
+
+    @bodo.jit
+    def f1():
+        df = pd.DataFrame({"A": [1, 2, 3]})
+        return df.mean()
+
+    @bodo.jit
+    def f2():
+        df = pd.DataFrame({"A": [1, 2, 3]})
+        df2 = pd.DataFrame({"A": [1, 2, 3], "C": [-1, -2, -3]})
+        df = df.merge(df2)
+        return df.mean()
+
+    a = [2, 3]
+    if len(a) > 3:
+        print(f1())
+    else:
+        print(f2())
+
 
 Another common place where schema stability may be compromised is in passing non-constant
 list of key column names to dataframe operations such as `groupby`, `merge` and `sort_values`.
