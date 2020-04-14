@@ -412,6 +412,15 @@ def num_strings(typingctx, str_arr_typ=None):
     return types.int64(string_array_type), codegen
 
 
+def _get_num_total_chars(builder, offsets, num_strings):
+    """generate llvm code to get the total number of characters for string array using
+    the last element of its offset array
+    """
+    return builder.zext(
+        builder.load(builder.gep(offsets, [num_strings])), lir.IntType(64),
+    )
+
+
 @intrinsic
 def num_total_chars(typingctx, str_arr_typ=None):
     # None default to make IntelliSense happy
@@ -420,10 +429,7 @@ def num_total_chars(typingctx, str_arr_typ=None):
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
         payload = _get_string_arr_payload(context, builder, in_str_arr)
-        return builder.zext(
-            builder.load(builder.gep(payload.offsets, [payload.num_strings])),
-            lir.IntType(64),
-        )
+        return _get_num_total_chars(builder, payload.offsets, payload.num_strings)
 
     return types.uint64(string_array_type), codegen
 
@@ -597,9 +603,8 @@ def copy_data(typingctx, str_arr_typ, out_str_arr_typ=None):
 
         in_payload = _get_string_arr_payload(context, builder, in_str_arr)
         out_payload = _get_string_arr_payload(context, builder, out_str_arr)
-        num_total_chars = builder.zext(
-            builder.load(builder.gep(in_payload.offsets, [in_payload.num_strings])),
-            lir.IntType(64),
+        num_total_chars = _get_num_total_chars(
+            builder, in_payload.offsets, in_payload.num_strings
         )
 
         cgutils.memcpy(
@@ -1067,9 +1072,8 @@ def set_string_array_range(
         # get input/output struct
         in_payload = _get_string_arr_payload(context, builder, in_arr)
         out_payload = _get_string_arr_payload(context, builder, out_arr)
-        num_total_chars = builder.zext(
-            builder.load(builder.gep(in_payload.offsets, [in_payload.num_strings])),
-            lir.IntType(64),
+        num_total_chars = _get_num_total_chars(
+            builder, in_payload.offsets, in_payload.num_strings
         )
 
         fnty = lir.FunctionType(
@@ -1368,9 +1372,8 @@ def setitem_str_arr_ptr(typingctx, str_arr_t, ind_t, ptr_t, len_t=None):
         # kind doesn't matter since input is ASCII
         kind = context.get_constant(types.int32, -1)
         is_ascii = context.get_constant(types.int32, 1)
-        num_total_chars = builder.zext(
-            builder.load(builder.gep(payload.offsets, [payload.num_strings])),
-            lir.IntType(64),
+        num_total_chars = _get_num_total_chars(
+            builder, payload.offsets, payload.num_strings
         )
         builder.call(
             fn_setitem,
