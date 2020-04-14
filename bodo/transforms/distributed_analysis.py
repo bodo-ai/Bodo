@@ -986,11 +986,17 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, args[0].name, array_dists)
             return
 
-        # sum over the first axis is distributed, A.sum(0)
+        # handle array.sum() with axis
         if func_name == "sum":
-            axis = get_call_expr_arg("sum", args, kws, 1, "axis", "")
-            if guard(find_const, self.func_ir, axis) == 0:
+            axis_var = get_call_expr_arg("sum", args, kws, 1, "axis", "")
+            axis = guard(find_const, self.func_ir, axis_var)
+            # sum over the first axis produces REP output
+            if axis == 0:
                 array_dists[lhs] = Distribution.REP
+                return
+            # sum over other axis doesn't change distribution
+            if axis_var != "" and axis != 0:
+                self._meet_array_dists(lhs, args[0].name, array_dists)
                 return
 
         if func_name == "dot":
