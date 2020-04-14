@@ -1357,6 +1357,17 @@ def test_df_const_set_rm_index():
         bodo.jit(impl)(A)
 
 
+def test_df_drop_inplace_check():
+    """make sure inplace=True is not use in df.dropna()
+    """
+    def test_impl(df):
+        df.dropna(inplace=True)
+
+    df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [4, 5, 6, 7]})
+    with pytest.raises(BodoError, match="inplace=True is not supported"):
+        bodo.jit(test_impl)(df)
+
+
 ################################## indexing  #################################
 
 
@@ -1495,6 +1506,19 @@ def test_df_drop_column_check():
     df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [4, 5, 6, 7]})
     with pytest.raises(BodoError, match="not in DataFrame columns"):
         bodo.jit(test_impl)(df)
+
+
+def test_df_fillna_str_inplace():
+    """Make sure inplace fillna for string columns is reflected in output
+    """
+    def test_impl(df):
+        df.B.fillna("ABC", inplace=True)
+        return df
+
+    df_str = pd.DataFrame(
+        {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["ab", "b", np.nan, "c", "bdd", "c", "a"]}
+    )
+    check_func(test_impl, (df_str,), copy_input=True)
 
 
 def test_df_alias():
@@ -2272,20 +2296,6 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         out = test_impl(df)
         h_out = bodo_func(df)
-        pd.testing.assert_frame_equal(out, h_out)
-
-    @unittest.skip("pending index support in dropna()")
-    def test_df_dropna_inplace1(self):
-        # TODO: fix error when no df is returned
-        def test_impl(df):
-            df.dropna(inplace=True)
-            return df
-
-        df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [4, 5, 6, 7]})
-        df2 = df.copy()
-        bodo_func = bodo.jit(test_impl)
-        out = test_impl(df).reset_index(drop=True)
-        h_out = bodo_func(df2)
         pd.testing.assert_frame_equal(out, h_out)
 
     def test_df_dropna_str1(self):

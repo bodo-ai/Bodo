@@ -86,19 +86,12 @@ void info_to_list_string_array(array_info* info,
 
 
 
-void info_to_string_array(array_info* info, uint64_t* n_items,
-                          uint64_t* n_chars, char** data, char** offsets,
-                          char** null_bitmap, NRT_MemInfo** meminfo) {
+void info_to_string_array(array_info* info, NRT_MemInfo** meminfo) {
     if (info->arr_type != bodo_array_type::STRING) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "info_to_string_array requires string input");
         return;
     }
-    *n_items = info->length;
-    *n_chars = info->n_sub_elems;
-    *data = info->data1;
-    *offsets = info->data2;
-    *null_bitmap = info->null_bitmask;
     *meminfo = info->meminfo;
 }
 

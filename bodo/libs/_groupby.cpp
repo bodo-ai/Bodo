@@ -1509,11 +1509,15 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                                 nb_char += e_str.size();
                         }
                     }
-                    //                    delete[] out_col->data1;
-                    //                    delete[] out_col->data2;
+                    delete[] out_col->data1;
+                    delete[] out_col->data2;
                     out_col->data1 = new char[nb_char];
                     out_col->data2 =
                         new char[sizeof(uint32_t) * (nb_string + 1)];
+                    // update list(str) array payload to reflect change
+                    list_str_arr_payload* payload = (list_str_arr_payload*)out_col->meminfo->data;
+                    payload->data = out_col->data1;
+                    payload->data_offsets = (uint32_t*)out_col->data2;
                     out_col->n_sub_elems = nb_string;
                     out_col->n_sub_sub_elems = nb_char;
                     uint32_t* index_offsets_o = (uint32_t*)out_col->data3;
@@ -1590,11 +1594,13 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                         if (GetBit(null_bitmask_o, i_grp))
                             nb_char += ListString[i_grp].size();
                     }
-                    // Doing the additional needed allocations
-                    // FIXME: this code leaks memory
-                    // delete[] out_col->data1;
+                    // resize output string array to fit result size
+                    delete[] out_col->data1;
                     out_col->data1 = new char[nb_char];
                     out_col->n_sub_elems = nb_char;
+                    // update string array payload to reflect change
+                    str_arr_payload* payload = (str_arr_payload*)out_col->meminfo->data;
+                    payload->data = out_col->data1;
                     // Writing the strings in output
                     char* data_o = out_col->data1;
                     uint32_t* offsets_o = (uint32_t*)out_col->data2;

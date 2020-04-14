@@ -163,6 +163,12 @@ def remove_hiframes(rhs, lives, call_list):
     if call_list == ["h5read", "h5_api", "io", bodo] and rhs.args[5].name not in lives:
         return True
 
+    if (
+        call_list == ["move_str_arr_payload", "str_arr_ext", "libs", bodo]
+        and rhs.args[0].name not in lives
+    ):
+        return True
+
     # TODO: needed?
     # if call_list == ['set_parent_dummy', 'pd_dataframe_ext', 'hiframes', bodo]:
     #     return True
@@ -579,14 +585,15 @@ def dot_2_vm(context, builder, sig, args):
     """
     np.dot(vector, matrix)
     """
+
     def dot_impl(a, b):  # pragma: no cover
-        m, = a.shape
+        (m,) = a.shape
         _m, n = b.shape
         # changed code: initialize with zeros if inputs are empty
         if m == 0:
-            out = np.zeros((n, ), a.dtype)
+            out = np.zeros((n,), a.dtype)
         else:
-            out = np.empty((n, ), a.dtype)
+            out = np.empty((n,), a.dtype)
         return np.dot(a, b, out)
 
     res = context.compile_internal(builder, dot_impl, sig, args)

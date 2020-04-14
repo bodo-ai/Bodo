@@ -105,6 +105,7 @@ array_info* alloc_string_array(int64_t length, int64_t n_chars,
     allocate_string_array(&(payload->offsets), &(payload->data),
                           &(payload->null_bitmap), length, n_chars,
                           extra_null_bytes);
+    payload->num_strings = length;
     return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, length,
                           n_chars, -1, payload->data, (char*)payload->offsets, NULL,
                           (char*)payload->null_bitmap, meminfo, NULL);
@@ -216,10 +217,9 @@ void free_array(array_info* arr) {
 extern "C" {
 
 void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in) {
-    // printf("str arr dtor size: %lld\n", in_str_arr->size);
-    // printf("num chars: %d\n", in_str_arr->offsets[in_str_arr->size]);
-    delete[] in_str_arr->offsets;
-    delete[] in_str_arr->data;
+    // check for NULL since move_str_arr_payload() may set pointers to NULL
+    if (in_str_arr->offsets != nullptr) delete[] in_str_arr->offsets;
+    if (in_str_arr->data != nullptr) delete[] in_str_arr->data;
     if (in_str_arr->null_bitmap != nullptr) delete[] in_str_arr->null_bitmap;
 }
 

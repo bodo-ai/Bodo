@@ -19,7 +19,7 @@ from numba.extending import (
     overload,
     overload_attribute,
 )
-from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.str_arr_ext import string_array_type, _get_string_arr_payload
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.utils.utils import numba_to_c_type
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -122,6 +122,11 @@ def array_to_info(typingctx, arr_type_t):
         # StringArray
         if arr_type == string_array_type:
             string_array = context.make_helper(builder, string_array_type, in_arr)
+            payload = _get_string_arr_payload(context, builder, in_arr)
+            num_total_chars = builder.zext(
+                builder.load(builder.gep(payload.offsets, [payload.num_strings])),
+                lir.IntType(64),
+            )
             fnty = lir.FunctionType(
                 lir.IntType(8).as_pointer(),
                 [
@@ -139,11 +144,11 @@ def array_to_info(typingctx, arr_type_t):
             return builder.call(
                 fn_tp,
                 [
-                    string_array.num_items,
-                    string_array.num_total_chars,
-                    string_array.data,
-                    string_array.offsets,
-                    string_array.null_bitmap,
+                    payload.num_strings,
+                    num_total_chars,
+                    payload.data,
+                    payload.offsets,
+                    payload.null_bitmap,
                     string_array.meminfo,
                 ],
             )
@@ -369,14 +374,9 @@ def info_to_array(typingctx, info_type, arr_type):
                 lir.VoidType(),
                 [
                     lir.IntType(8).as_pointer(),  # info
-                    lir.IntType(64).as_pointer(),  # num_items
-                    lir.IntType(64).as_pointer(),  # num_total_chars
-                    lir.IntType(8).as_pointer().as_pointer(),  # data
-                    lir.IntType(32).as_pointer().as_pointer(),  # offsets
-                    lir.IntType(8).as_pointer().as_pointer(),  # null_bitmap
-                    lir.IntType(8).as_pointer().as_pointer(),
+                    lir.IntType(8).as_pointer().as_pointer(),  # meminfo
                 ],
-            )  # meminfo
+            )
             fn_tp = builder.module.get_or_insert_function(
                 fnty, name="info_to_string_array"
             )
@@ -384,11 +384,6 @@ def info_to_array(typingctx, info_type, arr_type):
                 fn_tp,
                 [
                     in_info,
-                    string_array._get_ptr_by_name("num_items"),
-                    string_array._get_ptr_by_name("num_total_chars"),
-                    string_array._get_ptr_by_name("data"),
-                    string_array._get_ptr_by_name("offsets"),
-                    string_array._get_ptr_by_name("null_bitmap"),
                     string_array._get_ptr_by_name("meminfo"),
                 ],
             )

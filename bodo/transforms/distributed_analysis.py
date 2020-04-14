@@ -750,6 +750,10 @@ class DistributedAnalysis:
         if fdef == ("get_str_arr_item_length", "bodo.libs.str_arr_ext"):
             return
 
+        if fdef == ("move_str_arr_payload", "bodo.libs.str_arr_ext"):
+            self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+            return
+
         if fdef == ("get_series_name", "bodo.hiframes.pd_series_ext"):
             return
 

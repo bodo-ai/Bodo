@@ -851,8 +851,6 @@ class DataFramePass:
     def _run_call_df_dropna(self, assign, lhs, rhs):
         # TODO: refactor, support/test all array types
         df_var = rhs.args[0]
-        inplace_var = rhs.args[1]
-        inplace = guard(find_const, self.func_ir, inplace_var)
         df_typ = self.typemap[df_var.name]
 
         nodes = []
@@ -882,7 +880,7 @@ class DataFramePass:
             for v in arg_names[:-n_ind_arrs]
         ]
 
-        func_text = "def _dropna_imp({}, inplace):\n".format(", ".join(arg_names))
+        func_text = "def _dropna_imp({}):\n".format(", ".join(arg_names))
         # find new length, and number of characters etc. if necessary
         func_text += "  old_len = len({})\n".format(arg_names[0])
         func_text += "  new_len = 0\n"
@@ -1000,12 +998,9 @@ class DataFramePass:
         _dropna_imp = loc_vars["_dropna_imp"]
 
         in_index_var = self._gen_array_from_index(df_var, nodes)
-        args = col_vars + [in_index_var, inplace_var]
+        args = col_vars + [in_index_var]
 
-        if not inplace:
-            return self._replace_func(_dropna_imp, args, pre_nodes=nodes)
-        else:
-            return self._set_df_inplace(_dropna_imp, args, df_var, lhs.loc, nodes)
+        return self._replace_func(_dropna_imp, args, pre_nodes=nodes)
 
     def _run_call_reset_index(self, assign, lhs, rhs):
         # TODO: reflection

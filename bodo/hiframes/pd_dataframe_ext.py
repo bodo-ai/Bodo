@@ -2331,12 +2331,16 @@ def lower_reset_index_dummy(context, builder, sig, args):
 @overload_method(DataFrameType, "dropna", inline="always")
 def dropna_overload(df, axis=0, how="any", thresh=None, subset=None, inplace=False):
 
+    # error-checking for inplace=True
+    if not is_overload_constant_bool(inplace) or is_overload_true(inplace):
+        raise BodoError("DataFrame.dropna(): inplace=True is not supported")
+
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: inplace of df with parent (reflection)
     def _impl(
         df, axis=0, how="any", thresh=None, subset=None, inplace=False
     ):  # pragma: no cover
-        return bodo.hiframes.pd_dataframe_ext.dropna_dummy(df, inplace)
+        return bodo.hiframes.pd_dataframe_ext.dropna_dummy(df)
 
     return _impl
 
@@ -2348,24 +2352,13 @@ def dropna_dummy(df, n):  # pragma: no cover
 @infer_global(dropna_dummy)
 class DropnaDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
-        df, inplace = args
-        # inplace value
-        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
-            inplace = inplace.literal_value
-        else:
-            # XXX inplace type is just bool when value not passed. Therefore,
-            # we assume the default False value.
-            # TODO: more robust fix or just check
-            inplace = False
-
-        if not inplace:
-            # copy type to set has_parent False
-            index = df.index
-            if isinstance(index, RangeIndexType):
-                index = NumericIndexType(types.int64)
-            out_df = DataFrameType(df.data, index, df.columns)
-            return signature(out_df, *args)
-        return signature(types.none, *args)
+        df, = args
+        # copy type to set has_parent False
+        index = df.index
+        if isinstance(index, RangeIndexType):
+            index = NumericIndexType(types.int64)
+        out_df = DataFrameType(df.data, index, df.columns)
+        return signature(out_df, *args)
 
 
 @lower_builtin(dropna_dummy, types.VarArg(types.Any))

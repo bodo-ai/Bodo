@@ -44,6 +44,7 @@ from bodo.libs.str_arr_ext import (
     get_bit_bitmap,
     get_null_bitmap_ptr,
     _memcpy,
+    _get_string_arr_payload,
 )
 
 from llvmlite import ir as lir
@@ -174,7 +175,7 @@ def compute_split_view(typingctx, str_arr_typ, sep_typ=None):
         str_arr, _ = args
         meminfo, meminfo_data_ptr = construct_str_arr_split_view(context, builder)
 
-        in_str_arr = context.make_helper(builder, string_array_type, str_arr)
+        in_str_arr_payload = _get_string_arr_payload(context, builder, str_arr)
 
         # (str_arr_split_view_payload* out_view, int64_t n_strs,
         #  uint32_t* offsets, char* data, char sep)
@@ -198,10 +199,10 @@ def compute_split_view(typingctx, str_arr_typ, sep_typ=None):
             fn_impl,
             [
                 meminfo_data_ptr,
-                in_str_arr.num_items,
-                in_str_arr.offsets,
-                in_str_arr.data,
-                in_str_arr.null_bitmap,
+                in_str_arr_payload.num_strings,
+                in_str_arr_payload.offsets,
+                in_str_arr_payload.data,
+                in_str_arr_payload.null_bitmap,
                 sep_val,
             ],
         )
@@ -211,7 +212,7 @@ def compute_split_view(typingctx, str_arr_typ, sep_typ=None):
         )
 
         out_view = context.make_helper(builder, string_array_split_view_type)
-        out_view.num_items = in_str_arr.num_items
+        out_view.num_items = in_str_arr_payload.num_strings
         out_view.index_offsets = view_payload.index_offsets
         out_view.data_offsets = view_payload.data_offsets
         # TODO: incref?

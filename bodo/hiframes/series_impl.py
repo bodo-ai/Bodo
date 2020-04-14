@@ -21,6 +21,7 @@ from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
     is_overload_false,
+    is_overload_constant_bool,
     is_overload_zero,
     is_overload_str,
     BodoError,
@@ -1026,7 +1027,7 @@ def overload_series_fillna(
                         ) and not bodo.libs.array_kernels.isna(fill_arr, j):
                             s = fill_arr[j]
                         out_arr[j] = s
-                    bodo.hiframes.pd_series_ext.update_series_data(S, out_arr)
+                    bodo.libs.str_arr_ext.move_str_arr_payload(in_arr, out_arr)
                     return
 
                 return str_fillna_inplace_series_impl
@@ -1062,7 +1063,7 @@ def overload_series_fillna(
                     if bodo.libs.array_kernels.isna(in_arr, j):
                         s = value
                     out_arr[j] = s
-                bodo.hiframes.pd_series_ext.update_series_data(S, out_arr)
+                bodo.libs.str_arr_ext.move_str_arr_payload(in_arr, out_arr)
                 return
 
             return str_fillna_inplace_impl
@@ -1246,69 +1247,37 @@ def overload_series_fillna(
 
 @overload_method(SeriesType, "dropna", inline="always")
 def overload_series_dropna(S, axis=0, inplace=False):
-    # TODO: fix inplace index output
-    if is_overload_true(inplace):
-        if S.dtype == bodo.string_type:
 
-            def dropna_str_inplace_impl(S, axis=0, inplace=False):  # pragma: no cover
-                in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                mask = S.notna().values
-                index_arr = bodo.utils.conversion.extract_index_array(S)
-                out_index = bodo.utils.conversion.convert_to_index(index_arr[mask])
-                out_arr = bodo.hiframes.series_kernels._series_dropna_str_alloc_impl_inner(
-                    in_arr
-                )
-                bodo.hiframes.pd_series_ext.update_series_data(S, out_arr)
-                out_index_t = bodo.utils.conversion.force_convert_index(
-                    out_index, bodo.hiframes.pd_series_ext.get_series_index(S)
-                )
-                bodo.hiframes.pd_series_ext.update_series_index(S, out_index_t)
-                return
+    # error-checking for inplace=True
+    if not is_overload_constant_bool(inplace) or is_overload_true(inplace):
+        raise BodoError("Series.dropna(): inplace=True is not supported")
 
-            return dropna_str_inplace_impl
-        else:
+    if S.dtype == bodo.string_type:
 
-            def dropna_inplace_impl(S, axis=0, inplace=False):  # pragma: no cover
-                in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                index_arr = bodo.utils.conversion.extract_index_array(S)
-                mask = S.notna().values
-                out_index = bodo.utils.conversion.convert_to_index(index_arr[mask])
-                out_arr = in_arr[mask]
-                bodo.hiframes.pd_series_ext.update_series_data(S, out_arr)
-                out_index_t = bodo.utils.conversion.force_convert_index(
-                    out_index, bodo.hiframes.pd_series_ext.get_series_index(S)
-                )
-                bodo.hiframes.pd_series_ext.update_series_index(S, out_index_t)
-                return
+        def dropna_str_impl(S, axis=0, inplace=False):  # pragma: no cover
+            in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            mask = S.notna().values
+            index_arr = bodo.utils.conversion.extract_index_array(S)
+            out_index = bodo.utils.conversion.convert_to_index(index_arr[mask])
+            out_arr = bodo.hiframes.series_kernels._series_dropna_str_alloc_impl_inner(
+                in_arr
+            )
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
 
-            return dropna_inplace_impl
+        return dropna_str_impl
     else:
-        if S.dtype == bodo.string_type:
 
-            def dropna_str_impl(S, axis=0, inplace=False):  # pragma: no cover
-                in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                name = bodo.hiframes.pd_series_ext.get_series_name(S)
-                mask = S.notna().values
-                index_arr = bodo.utils.conversion.extract_index_array(S)
-                out_index = bodo.utils.conversion.convert_to_index(index_arr[mask])
-                out_arr = bodo.hiframes.series_kernels._series_dropna_str_alloc_impl_inner(
-                    in_arr
-                )
-                return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
+        def dropna_impl(S, axis=0, inplace=False):  # pragma: no cover
+            in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            index_arr = bodo.utils.conversion.extract_index_array(S)
+            mask = S.notna().values
+            out_index = bodo.utils.conversion.convert_to_index(index_arr[mask])
+            out_arr = in_arr[mask]
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
 
-            return dropna_str_impl
-        else:
-
-            def dropna_impl(S, axis=0, inplace=False):  # pragma: no cover
-                in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                name = bodo.hiframes.pd_series_ext.get_series_name(S)
-                index_arr = bodo.utils.conversion.extract_index_array(S)
-                mask = S.notna().values
-                out_index = bodo.utils.conversion.convert_to_index(index_arr[mask])
-                out_arr = in_arr[mask]
-                return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
-
-            return dropna_impl
+        return dropna_impl
 
 
 @overload_method(SeriesType, "shift", inline="always")
