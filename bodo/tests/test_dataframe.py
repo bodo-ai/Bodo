@@ -938,6 +938,21 @@ def test_df_reset_index3():
     check_func(impl2, (df,), sort_output=True)
 
 
+def test_df_reset_index4():
+    """Test DataFrame.reset_index(drop=False, inplace=True)
+    """
+
+    def impl(df):
+        df.reset_index(drop=False, inplace=True)
+        return df
+
+    test_df = pd.DataFrame(
+        {"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]},
+        [3.1, 1.2, 2.3, 4.4, 6.6],
+    )
+    check_func(impl, (test_df,), copy_input=True)
+
+
 def test_df_duplicated():
     def impl(df):
         return df.duplicated()

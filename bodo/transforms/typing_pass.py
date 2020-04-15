@@ -348,7 +348,12 @@ class TypingTransforms:
         # dataframe variable instead of inplace change if possible
         # TODO: handle all necessary df calls
         # map call name to the position of its 'inplace' argument
-        df_inplace_call_arg_no = {"drop": 5, "sort_values": 3, "rename": 5}
+        df_inplace_call_arg_no = {
+            "drop": 5,
+            "sort_values": 3,
+            "rename": 5,
+            "reset_index": 2,
+        }
         # call needs handling if not already transformed (avoid infinite loop)
         if func_name in df_inplace_call_arg_no and not self._is_df_call_transformed(
             rhs

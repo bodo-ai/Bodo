@@ -2092,25 +2092,12 @@ class SortDummyTyper(AbstractTemplate):
         assert not kws
         df, by, ascending, inplace, na_position = args
 
-        # inplace value
-        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
-            inplace = inplace.literal_value
-        else:
-            # XXX inplace type is just bool when value not passed. Therefore,
-            # we assume the default False value.
-            # TODO: more robust fix or just check
-            inplace = False
-
         index = df.index
         if index is types.none or isinstance(
             index, bodo.hiframes.pd_index_ext.RangeIndexType
         ):
             index = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
         ret_typ = df.copy(index=index, has_parent=False)
-        # TODO: handle cases where untyped pass inplace replacement is not
-        # possible and none should be returned
-        # if inplace:
-        #     ret_typ = types.none
         return signature(ret_typ, *args)
 
 
@@ -2282,10 +2269,6 @@ def reset_index_overload(
             "reset_index(): 'inplace' parameter should be a constant boolean value"
         )
 
-    if is_overload_false(drop) and is_overload_true(inplace):
-        raise BodoError(
-            "reset_index(): drop=False and inplace=True parameter combination not supported yet"
-        )
 
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: inplace of df with parent (reflection)
@@ -2314,10 +2297,6 @@ class ResetIndexDummyTyper(AbstractTemplate):
         # safe to just get const values here, since error checking is done in
         # reset_index overload
         drop = is_overload_true(drop)
-        inplace = is_overload_true(inplace)
-
-        if inplace:
-            return signature(types.none, *args)
 
         # default output index is simple integer index with no name
         # TODO: handle MultiIndex and `level` argument case
