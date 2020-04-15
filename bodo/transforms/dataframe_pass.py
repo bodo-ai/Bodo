@@ -829,14 +829,16 @@ class DataFramePass:
             )
             if not inplace:
                 func_text += "  {} = {}.fillna(val)\n".format(d + "_S", d + "_S")
+                func_text += "  {} = bodo.hiframes.pd_series_ext.get_series_data({})\n".format(
+                    d + "_O", d + "_S"
+                )
             else:
                 func_text += "  {}.fillna(val, inplace=True)\n".format(d + "_S")
-            func_text += "  {} = bodo.hiframes.pd_series_ext.get_series_data({})\n".format(
-                d + "_O", d + "_S"
+
+        if not inplace:
+            func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), df_index, {})\n".format(
+                ", ".join(d + "_O" for d in data_args), col_var
             )
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), df_index, {})\n".format(
-            ", ".join(d + "_O" for d in data_args), col_var
-        )
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _fillna_impl = loc_vars["_fillna_impl"]
@@ -845,10 +847,7 @@ class DataFramePass:
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
         index_arg = self._get_dataframe_index(df_var, nodes)
         args = col_vars + [index_arg, value]
-        if not inplace:
-            return self._replace_func(_fillna_impl, args, pre_nodes=nodes)
-        else:
-            return self._set_df_inplace(_fillna_impl, args, df_var, lhs.loc, nodes)
+        return nodes + compile_func_single_block(_fillna_impl, args, lhs, self)
 
     def _run_call_df_dropna(self, assign, lhs, rhs):
         # TODO: refactor, support/test all array types
@@ -2218,31 +2217,6 @@ class DataFramePass:
             if tup_def.op in ("build_tuple", "build_list"):
                 return tup_def.items
         raise ValueError("constant tuple expected")
-
-    def _set_df_inplace(self, _init_df, out_arrs, df_var, loc, nodes):
-        # TODO: refcounted df data object is needed for proper inplace
-        # also, boxed dfs need to be updated
-        # HACK assign output df back to input df variables
-        # TODO CFG backbone?
-        df_typ = self.typemap[df_var.name]
-        nodes += compile_func_single_block(_init_df, out_arrs, None, self)
-        new_df = nodes[-1].target
-
-        if df_typ.has_parent:
-            # XXX fix the output type using dummy call to set_parent=True
-            nodes += compile_func_single_block(
-                lambda df: bodo.hiframes.pd_dataframe_ext.set_parent_dummy(df),
-                (new_df,),
-                None,
-                self,
-            )
-            new_df = nodes[-1].target
-
-        for other_df_var in self.func_ir._definitions[df_var.name]:
-            if isinstance(other_df_var, ir.Var):
-                nodes.append(ir.Assign(new_df, other_df_var, loc))
-        ir.Assign(new_df, df_var, loc)
-        return nodes
 
     def _get_dataframe_data(self, df_var, col_name, nodes):
         # optimization: return data var directly if not ambiguous
