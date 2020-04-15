@@ -1266,7 +1266,7 @@ def overload_series_fillna(
 def overload_series_dropna(S, axis=0, inplace=False):
 
     # error-checking for inplace=True
-    if not is_overload_constant_bool(inplace) or is_overload_true(inplace):
+    if not is_overload_false(inplace):
         raise BodoError("Series.dropna(): inplace=True is not supported")
 
     if S.dtype == bodo.string_type:
