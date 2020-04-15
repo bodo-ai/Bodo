@@ -3291,7 +3291,6 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                                   bool return_index, void* update_cb,
                                   void* combine_cb, void* eval_cb,
                                   table_info* udf_dummy_table) {
-#undef DEBUG_GROUPBY
 #ifdef DEBUG_GROUPBY
     std::cout << "IN_TABLE (groupby):\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);

@@ -32,6 +32,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cassert>
 #include <cstring>
 #include <iostream>
 
@@ -80,10 +81,16 @@ inline void NRT_MemInfo_destroy(NRT_MemInfo *mi) {
     // TheMSys.atomic_inc(&TheMSys.stats_mi_free);
 }
 
+
+/* This function is to be called only from C++.
+   For Python the NUMBA decref functions are called.
+   Assert statements are made for controlling that the reference count is 0.
+ */
 inline void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
 #ifdef BODO_DEBUG
     std::cerr << "NRT_MemInfo_call_dtor " << mi << "\n";
 #endif
+    assert(mi->refct == 0); // The reference count should be exactly 0
     if (mi->dtor)  // && !TheMSys.shutting)
         /* We have a destructor and the system is not shutting down */
         mi->dtor(mi->data, mi->size, mi->dtor_info);

@@ -193,25 +193,34 @@ void delete_table_free_arrays(table_info* table) {
     delete table;
 }
 
+/*
+  The free_array functionality is for deleting arrays.
+  This is more complicated than one might expect since the structure needs to be
+  coherent with the Python side of the equation.
+  *
+  On the Python side, the function to call is the numba
+  def _define_nrt_decref(module, atomic_decr):
+  from
+  https://github.com/numba/numba/blob/ce2139c7dd93127efb04b35f28f4bebc7f44dfd5/numba/core/runtime/nrtdynmod.py#L64
+  *
+  On the C++ side, we cannot call this function directly. But we have to manually calling
+  the destructor. We cannot do operations directly on the arrays. For example deallocating data1
+  and then reallocating it is deadly, since the Python side tries to deallocate again the data1
+  (double free error) and leaves the current allocation intact.
+  *
+  The entries to be called are the NRT_MemInfo*
+  An array_info contains two NRT_MemInfo*: meminfo and meminfo_bitmask
+  Thus we have two calls for destructors when they are not NULL.
+ */
 void free_array(array_info* arr) {
-    if (arr->arr_type == bodo_array_type::LIST_STRING) {
-        delete[] arr->data1; // data
-        delete[] arr->data2; // data_offsets
-        delete[] arr->data3; // index_offsets
-        if (arr->null_bitmask != nullptr) delete[] arr->null_bitmask;
-    }
-    if (arr->arr_type == bodo_array_type::STRING) {
-        // string array
-        delete[] arr->data1; // data
-        delete[] arr->data2; // offsets
-        // nulls
-        if (arr->null_bitmask != nullptr) delete[] arr->null_bitmask;
-    }
-    if (arr->arr_type == bodo_array_type::NUMPY ||
-        arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        free(arr->meminfo);  // TODO: decref for cleanup?
-        if (arr->meminfo_bitmask != NULL) free(arr->meminfo_bitmask);
-    }
+  if (arr->meminfo != NULL) {
+    arr->meminfo->refct--;
+    NRT_MemInfo_call_dtor(arr->meminfo);
+  }
+  if (arr->meminfo_bitmask != NULL) {
+    arr->meminfo_bitmask->refct--;
+    NRT_MemInfo_call_dtor(arr->meminfo_bitmask);
+  }
 }
 
 extern "C" {
