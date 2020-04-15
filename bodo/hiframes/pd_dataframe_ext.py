@@ -2259,8 +2259,17 @@ def lower_fillna_dummy(context, builder, sig, args):
 
 @overload_method(DataFrameType, "reset_index", inline="always")
 def reset_index_overload(
-    df, level=None, drop=False, inplace=False, col_level=0, col_fill=""
+    df,
+    level=None,
+    drop=False,
+    inplace=False,
+    col_level=0,
+    col_fill="",
+    _bodo_transformed=False,
 ):
+
+    handle_inplace_df_type_change(inplace, _bodo_transformed, "reset_index")
+
     # make sure 'drop' is a constant bool
     if not is_overload_constant_bool(drop):
         raise BodoError(
@@ -2281,7 +2290,13 @@ def reset_index_overload(
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: inplace of df with parent (reflection)
     def _impl(
-        df, level=None, drop=False, inplace=False, col_level=0, col_fill=""
+        df,
+        level=None,
+        drop=False,
+        inplace=False,
+        col_level=0,
+        col_fill="",
+        _bodo_transformed=False,
     ):  # pragma: no cover
         return bodo.hiframes.pd_dataframe_ext.reset_index_dummy(df, drop, inplace)
 

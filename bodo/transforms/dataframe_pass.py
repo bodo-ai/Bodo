@@ -1061,10 +1061,9 @@ class DataFramePass:
                 ind_var = self._gen_array_from_index(df_var, nodes)
                 args = [ind_var] + args
 
-        if not inplace:
-            return self._replace_func(_reset_index_impl, args, pre_nodes=nodes)
-        else:
-            return self._set_df_inplace(_reset_index_impl, args, df_var, lhs.loc, nodes)
+        # return new df even for inplace case, since typing pass replaces input variable
+        # using output of the call
+        return nodes + compile_func_single_block(_reset_index_impl, args, lhs, self)
 
     def _run_call_query(self, assign, lhs, rhs):
         """Transform query expr to Numba IR using the expr parser in Pandas.
