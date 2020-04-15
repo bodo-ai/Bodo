@@ -447,6 +447,10 @@ def test_df_rename():
     def impl(df):
         return df.rename(columns={"B": "bb", "C": "cc"})
 
+    def impl2(df):
+        df.rename(columns={"B": "bb", "C": "cc"}, inplace=True)
+        return df
+
     df = pd.DataFrame(
         {
             "A": [1, 8, 4, 11, -3],
@@ -455,6 +459,7 @@ def test_df_rename():
         }
     )
     check_func(impl, (df,))
+    check_func(impl2, (df,))
 
 
 def test_df_isna(df_value):

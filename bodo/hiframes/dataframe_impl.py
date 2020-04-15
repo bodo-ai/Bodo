@@ -19,7 +19,7 @@ from numba.targets.imputils import (
 from numba import ir
 from numba.ir_utils import mk_unique_var
 import bodo
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_dataframe_ext import DataFrameType, handle_inplace_df_type_change
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.typing import (
     is_overload_none,
@@ -170,14 +170,17 @@ def overload_dataframe_rename(
     inplace=False,
     level=None,
     errors="ignore",
+    _bodo_transformed=False,
 ):
+
+    handle_inplace_df_type_change(inplace, _bodo_transformed, "rename")
 
     # check unsupported arguments
     if not (
         is_overload_none(mapper)
         and is_overload_none(index)
         and is_overload_none(axis)
-        and is_overload_false(inplace)
+        and is_overload_constant_bool(inplace)
         and is_overload_none(level)
         and is_overload_constant_str(errors)
         and get_overload_const_str(errors) == "ignore"
@@ -210,7 +213,7 @@ def overload_dataframe_rename(
 
     header = (
         "def impl(df, mapper=None, index=None, columns=None, axis=None, "
-        "copy=True, inplace=False, level=None, errors='ignore'):\n"
+        "copy=True, inplace=False, level=None, errors='ignore', _bodo_transformed=False):\n"
     )
     return _gen_init_df(header, new_cols, ", ".join(data_outs))
 

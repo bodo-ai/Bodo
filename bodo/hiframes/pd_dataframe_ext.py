@@ -1993,16 +1993,8 @@ def sort_values_overload(
     _bodo_transformed=False,
 ):
 
-    # df type can change if inplace is set (e.g. RangeIndex to Int64Index), so variable
-    # replacement in typing pass is necessary for type stability
-    # typing pass sets _bodo_transformed if variable replacement is done already
-    if (
-        is_overload_false(_bodo_transformed)
-        and bodo.transforms.typing_pass.in_partial_typing
-        and (is_overload_true(inplace) or not is_overload_constant_bool(inplace))
-    ):
-        bodo.transforms.typing_pass.typing_transform_required = True
-        raise Exception("DataFrame.sort_values(): transform necessary for inplace")
+    # df type can change if inplace is set (e.g. RangeIndex to Int64Index)
+    handle_inplace_df_type_change(inplace, _bodo_transformed, "sort_values")
 
     validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position)
 
@@ -2391,16 +2383,7 @@ def drop_overload(
     _bodo_transformed=False,
 ):
 
-    # df type can change if inplace is set, so variable replacement in typing pass is
-    # necessary for type stability
-    # typing pass sets _bodo_transformed if variable replacement is done already
-    if (
-        is_overload_false(_bodo_transformed)
-        and bodo.transforms.typing_pass.in_partial_typing
-        and (is_overload_true(inplace) or not is_overload_constant_bool(inplace))
-    ):
-        bodo.transforms.typing_pass.typing_transform_required = True
-        raise Exception("DataFrame.drop(): transform necessary for inplace")
+    handle_inplace_df_type_change(inplace, _bodo_transformed, "drop")
 
     if not is_overload_constant_bool(inplace):  # pragma: no cover
         raise_bodo_error(
@@ -2917,3 +2900,20 @@ def to_csv_overload(
         _csv_write(path_or_buf._data, D._data, 0, len(D), False)
 
     return _impl
+
+
+def handle_inplace_df_type_change(inplace, _bodo_transformed, func_name):
+    """df type can change for functions like drop, rename, etc. if inplace is set, so
+    variable replacement in typing pass is necessary for type stability.
+    This returns control to typing pass to handle it using a normal exception.
+    typing pass sets _bodo_transformed if variable replacement is done already
+    """
+    if (
+        is_overload_false(_bodo_transformed)
+        and bodo.transforms.typing_pass.in_partial_typing
+        and (is_overload_true(inplace) or not is_overload_constant_bool(inplace))
+    ):
+        bodo.transforms.typing_pass.typing_transform_required = True
+        raise Exception(
+            "DataFrame.{}(): transform necessary for inplace".format(func_name)
+        )
