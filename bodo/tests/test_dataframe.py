@@ -1445,6 +1445,33 @@ def test_iloc_slice_col_ind():
     check_func(test_impl, (df,))
 
 
+def test_iloc_slice_col_slice():
+    """test df.iloc[slice, slice] which selects a set of columns
+    """
+
+    def test_impl1(df):
+        return df.iloc[:, 1:]
+
+    def test_impl2(df):
+        return df.iloc[:, 1:3]
+
+    def test_impl3(df):
+        return df.iloc[:, :-1]
+
+    n = 11
+    df = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "B": np.arange(n) ** 2 + 1.0,
+            "C": np.arange(n) + 2.0,
+            "D": np.arange(n) + 3,
+        }
+    )
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+    check_func(test_impl3, (df,))
+
+
 def test_iloc_int_col_ind():
     """test df.iloc[int, col_ind]
     """

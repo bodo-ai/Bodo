@@ -18,16 +18,24 @@ from numba.ir_utils import (
     compute_cfg_from_blocks,
     replace_arg_nodes,
     dprint_func_ir,
+    require,
 )
 import bodo
 from bodo.utils.typing import ConstList, ConstSet, BodoError
-from bodo.utils.utils import is_assign, is_call, is_expr
+from bodo.utils.utils import (
+    is_assign,
+    is_call,
+    is_expr,
+    get_getsetitem_index_var,
+    find_build_tuple,
+)
 from bodo.utils.transform import (
     update_node_list_definitions,
     compile_func_single_block,
     get_call_expr_arg,
 )
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.dataframe_indexing import DataFrameILocType
 
 
 # global flag indicating that we are in partial type inference, so that error checking
@@ -148,6 +156,9 @@ class TypingTransforms:
         if is_call(rhs):
             return self._run_call(assign, rhs, label)
 
+        if isinstance(rhs, ir.Expr) and rhs.op in ("getitem", "static_getitem"):
+            return self._run_getitem(assign, rhs)
+
         # replace df.columns with constant StringIndex
         if (
             is_expr(rhs, "getattr")
@@ -171,6 +182,52 @@ class TypingTransforms:
             self.typemap[rhs.value.name] = types.Set(val_typ.dtype)
 
         return [assign]
+
+    def _run_getitem(self, assign, rhs):
+        target = rhs.value
+        target_typ = self.typemap[target.name]
+        nodes = []
+        idx = get_getsetitem_index_var(rhs, self.typemap, nodes)
+        idx_typ = self.typemap[idx.name]
+
+        # transform df.iloc[:,1:] case here since slice info not available in overload
+        if (
+            isinstance(target_typ, DataFrameILocType)
+            and isinstance(idx_typ, types.BaseTuple)
+            and len(idx_typ.types) == 2
+            and isinstance(idx_typ.types[1], types.SliceType)
+        ):
+            # get second slice
+            tup_list = guard(find_build_tuple, self.func_ir, idx)
+            if tup_list is None or len(tup_list) != 2:  # pragma: no cover
+                raise BodoError("Invalid df.iloc[slice,slice] case")
+            slice_var = tup_list[1]
+
+            # get const value of slice
+            col_slice = guard(_get_const_slice, self.func_ir, slice_var)
+            if col_slice is None:  # pragma: no cover
+                raise BodoError("slice2 in df.iloc[slice1,slice2] should be constant")
+
+            # create output df
+            columns = target_typ.df_type.columns
+            # get df arrays using const slice
+            data_outs = []
+            for i in range(len(columns))[col_slice]:
+                arr = "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[idx]".format(
+                    i
+                )
+                data_outs.append(arr)
+            header = "def impl(I, idx):\n"
+            header += "  df = I._obj\n"
+            impl = bodo.hiframes.dataframe_impl._gen_init_df(
+                header, columns[col_slice], ", ".join(data_outs)
+            )
+            return nodes + compile_func_single_block(
+                impl, [target, tup_list[0]], assign.target, self
+            )
+
+        nodes.append(assign)
+        return nodes
 
     def _run_setitem(self, inst, label):
         target_typ = self.typemap.get(inst.target.name, None)
@@ -514,3 +571,17 @@ class TypingTransforms:
             return self.typemap[obj_var.name]
         if func_var.name in self.typemap:
             return self.typemap[func_var.name].this
+
+
+def _get_const_slice(func_ir, var):
+    """get constant slice value for a slice variable if possible
+    """
+    # var definition should be a slice() call
+    var_def = get_definition(func_ir, var)
+    require(find_callname(func_ir, var_def) == ("slice", "builtins"))
+    require(len(var_def.args) in (2, 3))
+    # get start/stop/step values from call
+    start = find_const(func_ir, var_def.args[0])
+    stop = find_const(func_ir, var_def.args[1])
+    step = find_const(func_ir, var_def.args[2]) if len(var_def.args) == 3 else None
+    return slice(start, stop, step)
