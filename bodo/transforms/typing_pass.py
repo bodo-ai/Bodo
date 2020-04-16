@@ -185,10 +185,10 @@ class TypingTransforms:
 
     def _run_getitem(self, assign, rhs):
         target = rhs.value
-        target_typ = self.typemap[target.name]
+        target_typ = self.typemap.get(target.name, None)
         nodes = []
         idx = get_getsetitem_index_var(rhs, self.typemap, nodes)
-        idx_typ = self.typemap[idx.name]
+        idx_typ = self.typemap.get(idx.name, None)
 
         # transform df.iloc[:,1:] case here since slice info not available in overload
         if (
