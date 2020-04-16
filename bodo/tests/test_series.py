@@ -1676,6 +1676,7 @@ def test_series_dropna(S):
 def test_series_drop_inplace_check():
     """make sure inplace=True is not use in Series.dropna()
     """
+
     def test_impl(S):
         S.dropna(inplace=True)
 
@@ -1943,6 +1944,21 @@ def test_series_astype_num_constructors():
 
     S = pd.Series(["3", "1", "-4"])
     check_func(impl2, (S,))
+
+
+@pytest.mark.parametrize(
+    "S",
+    [
+        pd.Series([1.1234, np.nan, 3.31111, 2.1334, 5.1, -6.3], dtype="float32"),
+        pd.Series([1, 3, 5, -4, -3]),
+    ],
+)
+@pytest.mark.parametrize("d", [0, 2])
+def test_series_round(S, d):
+    def test_impl(S, d):
+        return S.round(d)
+
+    check_func(test_impl, (S, d))
 
 
 class TestSeries(unittest.TestCase):

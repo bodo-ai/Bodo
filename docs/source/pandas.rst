@@ -180,6 +180,7 @@ The `fill_value` optional argument for binary functions below is supported.
 * :meth:`pandas.Series.mod`
 * :meth:`pandas.Series.pow`
 * :meth:`pandas.Series.combine`
+* :meth:`pandas.Series.round` (`decimals` argument supported)
 * :meth:`pandas.Series.lt`
 * :meth:`pandas.Series.gt`
 * :meth:`pandas.Series.le`
