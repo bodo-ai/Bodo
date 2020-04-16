@@ -197,7 +197,7 @@ class TypingTransforms:
             and len(idx_typ.types) == 2
             and isinstance(idx_typ.types[1], types.SliceType)
         ):
-            # get second slice
+            # get slice on columns
             tup_list = guard(find_build_tuple, self.func_ir, idx)
             if tup_list is None or len(tup_list) != 2:  # pragma: no cover
                 raise BodoError("Invalid df.iloc[slice,slice] case")

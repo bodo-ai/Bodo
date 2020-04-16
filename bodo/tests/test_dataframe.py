@@ -1467,6 +1467,9 @@ def test_iloc_slice_col_slice():
     def test_impl6(df, n):
         return df.iloc[:, 1:n]
 
+    def test_impl7(df):
+        return df.iloc[:, 0:3:2]
+
     n = 11
     df = pd.DataFrame(
         {
@@ -1485,6 +1488,7 @@ def test_iloc_slice_col_slice():
     # error checking for when slice is not constant
     with pytest.raises(BodoError, match="df.iloc\[slice1,slice2\] should be constant"):
         bodo.jit(test_impl6)(df, 3)
+    check_func(test_impl7, (df,))
 
 
 def test_iloc_int_col_ind():
