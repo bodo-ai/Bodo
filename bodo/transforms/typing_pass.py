@@ -217,10 +217,11 @@ class TypingTransforms:
                     i
                 )
                 data_outs.append(arr)
+            index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx]"
             header = "def impl(I, idx):\n"
             header += "  df = I._obj\n"
             impl = bodo.hiframes.dataframe_impl._gen_init_df(
-                header, columns[col_slice], ", ".join(data_outs)
+                header, columns[col_slice], ", ".join(data_outs), index
             )
             return nodes + compile_func_single_block(
                 impl, [target, tup_list[0]], assign.target, self

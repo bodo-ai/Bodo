@@ -1458,6 +1458,12 @@ def test_iloc_slice_col_slice():
     def test_impl3(df):
         return df.iloc[:, :-1]
 
+    def test_impl4(df):
+        return df.iloc[1:, 1:]
+
+    def test_impl5(df):
+        return df.iloc[:, :]
+
     n = 11
     df = pd.DataFrame(
         {
@@ -1470,6 +1476,9 @@ def test_iloc_slice_col_slice():
     check_func(test_impl1, (df,))
     check_func(test_impl2, (df,))
     check_func(test_impl3, (df,))
+    # TODO: remove is_out_distributed=False when dist (1:) slice is fully supported
+    check_func(test_impl4, (df,), is_out_distributed=False)
+    check_func(test_impl5, (df,))
 
 
 def test_iloc_int_col_ind():
