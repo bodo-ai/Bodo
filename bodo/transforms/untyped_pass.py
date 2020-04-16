@@ -373,6 +373,10 @@ class UntypedPass:
         if fdef == ("read_sql", "pandas"):
             return self._handle_pd_read_sql(assign, lhs, rhs, label)
 
+        # handling pd.read_excel() here since typing info needs to be extracted
+        if fdef == ("read_excel", "pandas"):
+            return self._handle_pd_read_excel(assign, lhs, rhs, label)
+
         # match flatmap pd.Series(list(itertools.chain(*A))) and flatten
         if fdef == ("Series", "pandas"):
             return self._handle_pd_Series(assign, lhs, rhs)
@@ -657,6 +661,96 @@ class UntypedPass:
 
         nodes += compile_func_single_block(_init_df, data_arrs, lhs)
         return nodes
+
+    def _handle_pd_read_excel(self, assign, lhs, rhs, label):
+        """add typing info to pd.read_excel() using extra argument '_bodo_df_type'
+        This enables the overload implementation to just call Pandas
+        """
+        # schema (Pandas 1.0.3): io, sheet_name=0, header=0, names=None, index_col=None,
+        # usecols=None, squeeze=False, dtype=None, engine=None, converters=None,
+        # true_values=None, false_values=None, skiprows=None, nrows=None,
+        # na_values=None, keep_default_na=True, verbose=False, parse_dates=False,
+        # date_parser=None, thousands=None, comment=None, skipfooter=0,
+        # convert_float=True, mangle_dupe_cols=True,
+        kws = dict(rhs.kws)
+        fname_var = get_call_expr_arg("read_excel", rhs.args, kws, 0, "io")
+        sheet_name = self._get_const_arg(
+            "read_excel", rhs.args, kws, 1, "sheet_name", 0
+        )
+        header = self._get_const_arg("read_excel", rhs.args, kws, 2, "header", 0)
+        names_var = get_call_expr_arg("read_excel", rhs.args, kws, 3, "names", "")
+        index_col = self._get_const_arg("read_excel", rhs.args, kws, 4, "index_col", -1)
+        comment = self._get_const_arg("read_excel", rhs.args, kws, 20, "comment", "")
+        parse_dates_var = get_call_expr_arg(
+            "read_excel", rhs.args, kws, 17, "parse_dates", ""
+        )
+        dtype_var = get_call_expr_arg("read_excel", rhs.args, kws, 7, "dtype", "")
+        skiprows = self._get_const_arg("read_excel", rhs.args, kws, 12, "skiprows", 0)
+
+        # replace "" placeholder with default None (can't use None in _get_const_arg)
+        if comment == "":
+            comment = None
+
+        if index_col == -1:
+            index_col = None
+
+        # get date columns from 'parse_dates'
+        date_cols = []
+        if parse_dates_var != "":
+            err_msg = "pd.read_excel() parse_dates should be constant list"
+            date_cols = self._get_const_val_or_list(
+                kws["parse_dates"], err_msg=err_msg, typ=[int, str]
+            )
+
+        # check unsupported arguments
+        supported_args = (
+            "io",
+            "sheet_name",
+            "header",
+            "names",
+            "index_col",
+            "comment",
+            "dtype",
+            "skiprows",
+            "parse_dates",
+        )
+        unsupported_args = set(kws.keys()) - set(supported_args)
+        if unsupported_args:
+            raise BodoError(
+                "read_excel() arguments {} not supported yet".format(unsupported_args)
+            )
+
+        col_names = self._get_const_val_or_list(names_var, default=0)
+
+        # inference is necessary
+        # TODO: refactor with read_csv
+        if dtype_var == "" or col_names == 0:
+            # infer column names and types from constant filename
+            msg = (
+                "pd.read_excel() requires explicit type "
+                "annotation using 'dtype' if filename is not constant"
+            )
+            fname_const = get_str_const_value(
+                fname_var, self.func_ir, msg, arg_types=self.args
+            )
+            rows_to_read = 100  # TODO: tune this
+            df = pd.read_excel(
+                fname_const,
+                sheet_name=sheet_name,
+                nrows=rows_to_read,
+                skiprows=skiprows,
+                header=header,
+                index_col=index_col,
+                comment=comment,
+                parse_dates=date_cols,
+            )
+            df_type = numba.typeof(df)
+
+        tp_var = ir.Var(lhs.scope, mk_unique_var("df_type_var"), rhs.loc)
+        typ_assign = ir.Assign(ir.Const(df_type, rhs.loc), tp_var, rhs.loc)
+        kws["_bodo_df_type"] = tp_var
+        rhs.kws = list(kws.items())
+        return [typ_assign, assign]
 
     def _handle_pd_read_csv(self, assign, lhs, rhs, label):
         """transform pd.read_csv(names=[A], dtype={'A': np.int32}) call

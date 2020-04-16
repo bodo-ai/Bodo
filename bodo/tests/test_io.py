@@ -1177,6 +1177,22 @@ def test_csv_dir_str_arr_multi(datapath):
     check_func(test_impl, (), py_output=py_output)
 
 
+def test_excel1(datapath):
+    """Test pd.read_excel()
+    """
+
+    def test_impl1(fname):
+        return pd.read_excel(fname)
+
+    def test_impl2(fname):
+        return pd.read_excel(fname, sheet_name="Sheet1", index_col=0)
+
+    # passing file name as argument to exercise value-based dispatch
+    fname = datapath("data.xlsx")
+    check_func(test_impl1, (fname,), is_out_distributed=False)
+    check_func(test_impl2, (fname,), is_out_distributed=False)
+
+
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
         fname = "lr_w.hdf5"

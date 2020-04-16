@@ -17,7 +17,7 @@ from numba.targets.imputils import (
     RefType,
 )
 from numba import ir
-from numba.ir_utils import mk_unique_var
+from numba.ir_utils import mk_unique_var, next_label
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_series_ext import SeriesType
@@ -1022,6 +1022,105 @@ def overload_notna(obj):
 
     # scalars
     return lambda obj: not pd.isna(obj)
+
+
+@overload(pd.read_excel)
+def overload_read_excel(
+    io,
+    sheet_name=0,
+    header=0,
+    names=None,
+    index_col=None,
+    usecols=None,
+    squeeze=False,
+    dtype=None,
+    engine=None,
+    converters=None,
+    true_values=None,
+    false_values=None,
+    skiprows=None,
+    nrows=None,
+    na_values=None,
+    keep_default_na=True,
+    verbose=False,
+    parse_dates=False,
+    date_parser=None,
+    thousands=None,
+    comment=None,
+    skipfooter=0,
+    convert_float=True,
+    mangle_dupe_cols=True,
+    _bodo_df_type=None,
+):
+    # implement pd.read_excel() by just calling Pandas
+    # utyped pass adds _bodo_df_type argument which is a TypeRef of output type
+    df_type = _bodo_df_type.instance_type
+
+    # add output type to numba 'types' module with a unique name, needed for objmode
+    t_name = "read_excel_df{}".format(next_label())
+    setattr(types, t_name, df_type)
+
+    func_text = """
+def impl(
+    io,
+    sheet_name=0,
+    header=0,
+    names=None,
+    index_col=None,
+    usecols=None,
+    squeeze=False,
+    dtype=None,
+    engine=None,
+    converters=None,
+    true_values=None,
+    false_values=None,
+    skiprows=None,
+    nrows=None,
+    na_values=None,
+    keep_default_na=True,
+    verbose=False,
+    parse_dates=False,
+    date_parser=None,
+    thousands=None,
+    comment=None,
+    skipfooter=0,
+    convert_float=True,
+    mangle_dupe_cols=True,
+    _bodo_df_type=None,
+):
+    with numba.objmode(df="{}"):
+        df = pd.read_excel(
+            io,
+            sheet_name,
+            header,
+            names,
+            index_col,
+            usecols,
+            squeeze,
+            dtype,
+            engine,
+            converters,
+            true_values,
+            false_values,
+            skiprows,
+            nrows,
+            na_values,
+            keep_default_na,
+            verbose,
+            parse_dates,
+            date_parser,
+            thousands,
+            comment,
+            skipfooter,
+            convert_float,
+            mangle_dupe_cols,
+        )
+    return df
+    """.format(t_name)
+    loc_vars = {}
+    exec(func_text, {"numba": numba, "pd": pd, "bodo": bodo}, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
 
 
 def set_df_col(df, cname, arr, inplace):  # pragma: no cover
