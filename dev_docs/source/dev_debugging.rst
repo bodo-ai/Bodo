@@ -5,10 +5,18 @@ Debugging
 
 Debugging the Python code
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
-- `pdb <https://docs.python.org/3/library/pdb.html>`_: :code:`import pdb; pdb.set_trace()` for breakpoints
+- `pdb <https://docs.python.org/3/library/pdb.html>`_: setting breakpoints
+  using :code:`import pdb; pdb.set_trace()` and inspecting variables is key
+  for debugging Bodo's python code such as overloads and transformations.
+
+- Debugging overloads: Numba's overload handling may hide errors and raise unrelated
+  and misleading exceptions instead. One can debug these cases by setting a
+  breakpoint right before the return of the relevant overload, and stepping through
+  Numba's internal code until the actual error is raised.
 
 - `NUMBA_DEBUG_PRINT_AFTER <https://numba.pydata.org/numba-doc/dev/reference/envvars.html?highlight=numba_debug_print#envvar-NUMBA_DEBUG_PRINT_AFTER>`_
-  enviroment variable::
+  enviroment variable prints the IR after specified compiler passes,
+  which helps debugging transformations significantly::
 
     # example of printing after parfor pass
     export NUMBA_DEBUG_PRINT_AFTER='parfor_pass'
