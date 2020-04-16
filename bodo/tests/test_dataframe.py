@@ -156,6 +156,34 @@ def column_name_df_value(request):
     return request.param
 
 
+def test_assign():
+    """Assign statements"""
+
+    def test_impl1(df):
+        return df.assign(B=42)
+
+    def test_impl2(df):
+        return df.assign(B=2 * df["A"])
+
+    def test_impl3(df):
+        return df.assign(B=2 * df["A"], C=42)
+
+    def test_impl4(df):
+        return df.assign(B=df["A"] + "XYZ")
+
+    def test_impl5(df):
+        return df.assign(A=df["B"], B=df["B"])
+
+    df_int = pd.DataFrame({"A": [1, 2, 3]})
+    df_str = pd.DataFrame({"A": ["a", "b", "c"]})
+    df_twocol = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+    check_func(test_impl1, (df_int,))
+    check_func(test_impl2, (df_int,))
+    check_func(test_impl3, (df_int,))
+    check_func(test_impl4, (df_str,))
+    check_func(test_impl5, (df_twocol,))
+
+
 def test_unbox_df1(df_value, memory_leak_check):
     # just unbox
     def impl(df_arg):
@@ -236,9 +264,9 @@ def test_df_from_np_array_int():
     """
     Create a dataframe from numpy 2D-array of type int
     """
+
     def impl():
-        arr = [[1, 2, 3, 4, 5], 
-               [1, 2, 3, 4, 6]]
+        arr = [[1, 2, 3, 4, 5], [1, 2, 3, 4, 6]]
         np_arr = np.array(arr)
         return pd.DataFrame({"A": np_arr[:, 0], "B": np_arr[:, 1], "C": np_arr[:, 2]})
 
@@ -249,9 +277,9 @@ def test_df_from_np_array_bool():
     """
     Create a dataframe from numpy 2D-array of type bool
     """
+
     def impl():
-        arr = [[True, False, False, False, True], 
-               [False, False, True, True, False]]
+        arr = [[True, False, False, False, True], [False, False, True, True, False]]
         np_arr = np.array(arr)
         return pd.DataFrame({"A": np_arr[:, 0], "B": np_arr[:, 1], "C": np_arr[:, 2]})
 
@@ -1360,6 +1388,7 @@ def test_df_const_set_rm_index():
 def test_df_drop_inplace_check():
     """make sure inplace=True is not use in df.dropna()
     """
+
     def test_impl(df):
         df.dropna(inplace=True)
 
@@ -1511,6 +1540,7 @@ def test_df_drop_column_check():
 def test_df_fillna_str_inplace():
     """Make sure inplace fillna for string columns is reflected in output
     """
+
     def test_impl(df):
         df.B.fillna("ABC", inplace=True)
         return df
@@ -1540,6 +1570,7 @@ def test_df_type_unify_error():
     """makes sure type unification error is thrown when two dataframe schemas for the
     same variable are not compatible.
     """
+
     def test_impl(a):
         if len(a) > 3:  # some computation that cannot be inferred statically
             df = pd.DataFrame({"A": [1, 2, 3]})

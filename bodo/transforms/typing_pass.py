@@ -249,7 +249,9 @@ class TypingTransforms:
         # replace ConstSet with Set if there a set op we don't support here
         # e.g. s1 | s2
         # target type may be unknown
-        if isinstance(arg1_typ, ConstSet) and isinstance(target_typ, ConstSet):  # pragma: no cover
+        if isinstance(arg1_typ, ConstSet) and isinstance(
+            target_typ, ConstSet
+        ):  # pragma: no cover
             # TODO: test coverage
             arg_def = guard(get_definition, self.func_ir, rhs.lhs)
             assert is_call(arg_def) and guard(find_callname, self.func_ir, arg_def) == (
@@ -260,7 +262,9 @@ class TypingTransforms:
             self.typemap.pop(assign.target.name)
             self.typemap[assign.target.name] = types.Set(target_typ.dtype)
 
-        if isinstance(arg2_typ, ConstSet) and isinstance(target_typ, ConstSet):  # pragma: no cover
+        if isinstance(arg2_typ, ConstSet) and isinstance(
+            target_typ, ConstSet
+        ):  # pragma: no cover
             # TODO: test coverage
             arg_def = guard(get_definition, self.func_ir, rhs.rhs)
             assert is_call(arg_def) and guard(find_callname, self.func_ir, arg_def) == (
@@ -278,12 +282,18 @@ class TypingTransforms:
         """
         lhs = assign.target
 
+        # transform df.assign() here since (**kwargs) is not supported in overload
+        if func_name == "assign":
+            return self._handle_df_assign(assign.target, rhs, df_var)
+
         # df.drop("B", axis=1, inplace=True) changes dataframe type so inplace has to be
         # transformed away using variable replacement
         if func_name == "drop":
             kws = dict(rhs.kws)
             inplace_var = get_call_expr_arg("drop", rhs.args, kws, 5, "inplace", "")
-            replace_func = lambda: bodo.hiframes.dataframe_impl.drop_inplace  # pragma: no cover
+            replace_func = (
+                lambda: bodo.hiframes.dataframe_impl.drop_inplace
+            )  # pragma: no cover
             return self._handle_df_inplace_func(
                 assign, lhs, rhs, df_var, inplace_var, replace_func, label
             )
@@ -292,12 +302,47 @@ class TypingTransforms:
             # handle potential df.sort_values(inplace=True) here since it needs
             # variable replacement
             kws = dict(rhs.kws)
-            inplace_var = get_call_expr_arg("sort_values", rhs.args, kws, 3, "inplace", "")
-            replace_func = lambda: bodo.hiframes.dataframe_impl.sort_values_inplace  # pragma: no cover
+            inplace_var = get_call_expr_arg(
+                "sort_values", rhs.args, kws, 3, "inplace", ""
+            )
+            replace_func = (
+                lambda: bodo.hiframes.dataframe_impl.sort_values_inplace
+            )  # pragma: no cover
             return self._handle_df_inplace_func(
                 assign, lhs, rhs, df_var, inplace_var, replace_func, label
             )
         return [assign]
+
+    def _handle_df_assign(self, lhs, rhs, df_var):
+        """replace df.assign() with its implementation to avoid overload errors with
+        (**kwargs)
+        """
+        kws = dict(rhs.kws)
+        df_type = self.typemap[df_var.name]
+        additional_columns = tuple(kws.keys())
+        previous_columns = set(df_type.columns)
+        # columns below are preserved
+        preserved_columns = previous_columns - set(additional_columns)
+        name_col_total = []
+        data_col_total = []
+        for c in preserved_columns:
+            name_col_total.append(c)
+            data_col_total.append("df['{}'].values".format(c))
+        # The new columns as constructed by the operation
+        for i, c in enumerate(additional_columns):
+            name_col_total.append(c)
+            e_col = "bodo.utils.conversion.coerce_to_array(new_arg{}, scalar_to_arr_len=len(df))".format(
+                i
+            )
+            data_col_total.append(e_col)
+        data_args = ", ".join(data_col_total)
+        header = "def impl(df, {}):\n".format(
+            ", ".join("new_arg{}".format(i) for i in range(len(kws)))
+        )
+        impl = bodo.hiframes.dataframe_impl._gen_init_df(
+            header, tuple(name_col_total), data_args
+        )
+        return compile_func_single_block(impl, [df_var] + list(kws.values()), lhs, self)
 
     def _handle_df_inplace_func(
         self, assign, lhs, rhs, df_var, inplace_var, replace_func, label

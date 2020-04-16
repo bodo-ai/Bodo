@@ -32,6 +32,7 @@ from bodo.utils.typing import (
     BodoError,
     ConstDictType,
     scalar_to_array_type,
+    raise_bodo_error,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -123,6 +124,13 @@ def overload_dataframe_empty(df):
     if len(df.columns) == 0:
         return lambda df: True
     return lambda df: len(df) == 0
+
+
+@overload_method(DataFrameType, "assign")
+def overload_dataframe_assign(df, **kwargs):
+    # raise error to let typing pass handle it, since **kwargs is not supported in
+    # overload
+    raise_bodo_error("Invalid df.assign() call")
 
 
 @overload_method(DataFrameType, "astype", inline="always")
