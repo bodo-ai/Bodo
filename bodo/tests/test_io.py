@@ -1182,10 +1182,10 @@ def test_excel1(datapath):
     """
 
     def test_impl1(fname):
-        return pd.read_excel(fname)
+        return pd.read_excel(fname, parse_dates=[2])
 
     def test_impl2(fname):
-        return pd.read_excel(fname, sheet_name="Sheet1", index_col=0)
+        return pd.read_excel(fname, sheet_name="Sheet1", index_col=0, parse_dates=["C"])
 
     # passing file name as argument to exercise value-based dispatch
     fname = datapath("data.xlsx")

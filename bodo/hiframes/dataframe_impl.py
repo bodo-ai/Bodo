@@ -1060,6 +1060,11 @@ def overload_read_excel(
     t_name = "read_excel_df{}".format(next_label())
     setattr(types, t_name, df_type)
 
+    # objmode doesn't allow lists, embed 'parse_dates' as a constant inside objmode
+    parse_dates_const = False
+    if isinstance(parse_dates, bodo.utils.typing.ConstList):
+        parse_dates_const = list(parse_dates.consts)
+
     func_text = """
 def impl(
     io,
@@ -1107,7 +1112,7 @@ def impl(
             na_values,
             keep_default_na,
             verbose,
-            parse_dates,
+            {},
             date_parser,
             thousands,
             comment,
@@ -1116,7 +1121,7 @@ def impl(
             mangle_dupe_cols,
         )
     return df
-    """.format(t_name)
+    """.format(t_name, parse_dates_const)
     loc_vars = {}
     exec(func_text, {"numba": numba, "pd": pd, "bodo": bodo}, loc_vars)
     impl = loc_vars["impl"]
