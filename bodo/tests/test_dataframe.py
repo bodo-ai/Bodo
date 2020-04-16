@@ -1464,6 +1464,9 @@ def test_iloc_slice_col_slice():
     def test_impl5(df):
         return df.iloc[:, :]
 
+    def test_impl6(df, n):
+        return df.iloc[:, 1:n]
+
     n = 11
     df = pd.DataFrame(
         {
@@ -1479,6 +1482,9 @@ def test_iloc_slice_col_slice():
     # TODO: remove is_out_distributed=False when dist (1:) slice is fully supported
     check_func(test_impl4, (df,), is_out_distributed=False)
     check_func(test_impl5, (df,))
+    # error checking for when slice is not constant
+    with pytest.raises(BodoError, match="df.iloc\[slice1,slice2\] should be constant"):
+        bodo.jit(test_impl6)(df, 3)
 
 
 def test_iloc_int_col_ind():

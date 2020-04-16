@@ -205,7 +205,7 @@ class TypingTransforms:
 
             # get const value of slice
             col_slice = guard(_get_const_slice, self.func_ir, slice_var)
-            if col_slice is None:  # pragma: no cover
+            if col_slice is None:
                 raise BodoError("slice2 in df.iloc[slice1,slice2] should be constant")
 
             # create output df
