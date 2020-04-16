@@ -78,6 +78,10 @@ jobs:
       source activate $CONDA_ENV
       pip install pytest pytest-azurepipelines
       cd $HOME/bodo-inc
-      mpiexec -n $NP pytest --pyargs bodo -s -v -m "$(PYTEST_MARKER) and firsthalf" -W ignore
-      mpiexec -n $NP pytest --pyargs bodo -s -v -m "$(PYTEST_MARKER) and not firsthalf" -W ignore
+      if [[ "$NP" -eq 3 ]] && [[ "${{ parameters.name }}" == "Linux" ]]; then
+        mpiexec -n $NP pytest --pyargs bodo -s -v -m "$(PYTEST_MARKER)" -W ignore
+      else
+        mpiexec -n $NP pytest --pyargs bodo -s -v -m "$(PYTEST_MARKER) and firsthalf" -W ignore
+        mpiexec -n $NP pytest --pyargs bodo -s -v -m "$(PYTEST_MARKER) and not firsthalf" -W ignore
+      fi
     displayName: 'Test Bodo'
