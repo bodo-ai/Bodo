@@ -1474,6 +1474,52 @@ def test_iloc_slice_col_ind():
     check_func(test_impl, (df,))
 
 
+def test_iloc_slice_col_slice():
+    """test df.iloc[slice, slice] which selects a set of columns
+    """
+
+    def test_impl1(df):
+        return df.iloc[:, 1:]
+
+    def test_impl2(df):
+        return df.iloc[:, 1:3]
+
+    def test_impl3(df):
+        return df.iloc[:, :-1]
+
+    def test_impl4(df):
+        return df.iloc[1:, 1:]
+
+    def test_impl5(df):
+        return df.iloc[:, :]
+
+    def test_impl6(df, n):
+        return df.iloc[:, 1:n]
+
+    def test_impl7(df):
+        return df.iloc[:, 0:3:2]
+
+    n = 11
+    df = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "B": np.arange(n) ** 2 + 1.0,
+            "C": np.arange(n) + 2.0,
+            "D": np.arange(n) + 3,
+        }
+    )
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+    check_func(test_impl3, (df,))
+    # TODO: remove is_out_distributed=False when dist (1:) slice is fully supported
+    check_func(test_impl4, (df,), is_out_distributed=False)
+    check_func(test_impl5, (df,))
+    # error checking for when slice is not constant
+    with pytest.raises(BodoError, match="df.iloc\[slice1,slice2\] should be constant"):
+        bodo.jit(test_impl6)(df, 3)
+    check_func(test_impl7, (df,))
+
+
 def test_iloc_int_col_ind():
     """test df.iloc[int, col_ind]
     """

@@ -262,6 +262,15 @@ def overload_iloc_getitem(I, idx):
 
         return impl_col_ind
 
+    # df.iloc[:,1:] case requires typing pass transform since slice info not available
+    # here. TODO: refactor when SliceLiteral of Numba has all the info.
+    if (
+        isinstance(idx, types.BaseTuple)
+        and len(idx.types) == 2
+        and isinstance(idx.types[1], types.SliceType)
+    ):
+        raise_bodo_error("Invalid df.iloc[] getitem using (slice, slice)")
+
     # TODO: error-checking test
     raise BodoError(
         "df.iloc[] getitem using {} not supported".format(idx)
