@@ -59,6 +59,10 @@ from numba.errors import NumbaPerformanceWarning
 warnings.simplefilter("ignore", category=NumbaPerformanceWarning)
 
 
+# global flag for whether all Bodo functions should be inlined
+inline_all_calls = False
+
+
 class BodoCompiler(numba.compiler.CompilerBase):
     """Bodo compiler pipeline which adds the following passes to Numba's pipeline:
     InlinePass, BodoUntypedPass, BodoTypeInference, BodoDataFramePass, BodoSeriesPass,
@@ -76,7 +80,8 @@ class BodoCompiler(numba.compiler.CompilerBase):
         # inline other jit functions right after IR is available
         # NOTE: calling after WithLifting since With blocks should be handled before
         # simplify_CFG() is called (block number is used in EnterWith nodes)
-        pm.add_pass_after(InlinePass, WithLifting)
+        if inline_all_calls:  # pragma: no cover
+            pm.add_pass_after(InlinePass, WithLifting)
         # run untyped pass right before type inference
         add_pass_before(pm, BodoUntypedPass, NopythonTypeInference)
         # replace Numba's type inference pass with Bodo's version, which incorporates
