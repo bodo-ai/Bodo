@@ -49,7 +49,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.utils.transform import get_stmt_defs, get_call_expr_arg
-from bodo.utils.typing import BodoWarning
+from bodo.utils.typing import BodoWarning, BodoError
 from bodo.libs.bool_arr_ext import boolean_array
 
 
@@ -544,6 +544,12 @@ class DistributedAnalysis:
             return
         else:
             func_name, func_mod = fdef
+
+        # handle calling other Bodo functions that have distributed flags
+        func_type = self.typemap[func_var]
+        if isinstance(func_type, types.Dispatcher):
+            self._handle_dispatcher(func_type.dispatcher, lhs, rhs, array_dists)
+            return
 
         if is_alloc_callname(func_name, func_mod):
             if lhs not in array_dists:
@@ -1151,6 +1157,71 @@ class DistributedAnalysis:
         self._analyze_call_set_REP(
             lhs, args, array_dists, "bodo.libs.distributed_api." + func_name
         )
+
+    def _handle_dispatcher(self, dispatcher, lhs, rhs, array_dists):
+        """handles Bodo function calls that have distributed flags.
+        finds if input arguments and return value are marked as distributed and makes
+        sure distributions are set properly
+        """
+        dist_flag_vars = dispatcher.targetoptions.get("distributed", ())
+        dist_vars = []
+        rep_vars = []
+
+        # folds arguments and finds the ones that are flagged as distributed
+        # folding arguments similar to:
+        # https://github.com/numba/numba/blob/5f474010f8f50b3cf358125ba279d345ae5914ef/numba/core/dispatcher.py#L70
+        def normal_handler(index, param, value):
+            if param.name in dist_flag_vars:
+                dist_vars.append(value.name)
+            else:
+                rep_vars.append(value.name)
+            return self.typemap[value.name]
+
+        def default_handler(index, param, default):
+            return types.Omitted(default)
+
+        def stararg_handler(index, param, values):
+            if param.name in dist_flag_vars:
+                dist_vars.extend(v.name for v in values)
+            else:
+                rep_vars.extend(v.name for v in values)
+            val_types = tuple(self.typemap[v.name] for v in values)
+            return types.StarArgTuple(val_types)
+
+        pysig = dispatcher._compiler.pysig
+        arg_types = numba.typing.templates.fold_arguments(
+            pysig,
+            rhs.args,
+            dict(rhs.kws),
+            normal_handler,
+            default_handler,
+            stararg_handler,
+        )
+
+        # check return value for distributed flag
+        metadata = dispatcher.overloads[arg_types].metadata
+        is_return_distributed = metadata.get("is_return_distributed", False)
+        if is_return_distributed:
+            dist_vars.append(lhs)
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+        else:
+            rep_vars.append(lhs)
+
+        # make sure variables marked distributed are not REP
+        # otherwise, leave current distribution in place (1D or 1D_Var)
+        for v in dist_vars:
+            if is_REP(array_dists[v]):
+                raise BodoError(
+                    "variable {} is marked as distribtued by {} but not possible to"
+                    " distribtue in caller function {}".format(
+                        v, dispatcher.__name__, self.func_ir.func_id.func_name
+                    )
+                )
+
+        # set REP vars
+        for v in rep_vars:
+            self._set_var_dist(v, array_dists, Distribution.REP)
 
     def _analyze_call_np_concatenate(self, lhs, args, array_dists):
         assert len(args) == 1

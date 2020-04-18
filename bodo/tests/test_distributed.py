@@ -152,6 +152,7 @@ def test_1D_Var_parfor3():
     """test 1D parfor on length of an array that is assigned in an if/else block.
     Array analysis may not generate 'size_var = C.shape[0]' (keep 'len(C)').
     """
+
     def impl1(A, B, flag):
         if flag:
             C = A[B]
@@ -174,6 +175,7 @@ def test_1D_Var_parfor3():
 def test_1D_Var_parfor4():
     """test 1D parfor inside a sequential loop
     """
+
     def impl1(A, B):
         C = A[B]
         s = 0
@@ -222,6 +224,63 @@ def test_print3():
     bodo_func = bodo.jit()(impl1)
     bodo_func(1, (3, 4))
     bodo_func(np.ones(3), (3, np.ones(3)))
+
+
+def test_bodo_func_dist_call1():
+    """make sure calling other bodo functions with their distributed flags set works as
+    expected (dist info is propagated across functions).
+    """
+
+    @bodo.jit(distributed=["A", "C", "B"])
+    def g(A, C, b=3):  # test default value
+        B = 2 * A + b + C
+        return B
+
+    @bodo.jit(distributed=["Y"])
+    def impl1(n):
+        X = np.arange(n)
+        Y = g(X, C=X + 1)  # call with both positional and kw args
+        return Y
+
+    impl1(11)
+    assert count_array_REPs() == 0
+
+
+def test_bodo_func_dist_call_star_arg():
+    """test calling other bodo functions with star arg set as distributed
+    """
+
+    @bodo.jit(distributed=["A", "B"])
+    def g(*A):
+        B = A[0]
+        return B
+
+    @bodo.jit(distributed=["Y"])
+    def impl1(n):
+        X = np.arange(n)
+        Y = g(X, X + 1)
+        return Y
+
+    impl1(11)
+    assert count_array_REPs() == 0
+
+
+def test_bodo_func_rep():
+    """test calling other bodo functions without distributed flag
+    """
+
+    @bodo.jit
+    def g(A):
+        return A
+
+    @bodo.jit
+    def impl1(n):
+        X = np.arange(n)
+        Y = g(X)
+        return Y.sum()
+
+    impl1(11)
+    assert count_array_REPs() > 0
 
 
 @pytest.mark.parametrize("A", [np.arange(11), np.arange(33).reshape(11, 3)])
