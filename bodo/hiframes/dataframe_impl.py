@@ -1024,6 +1024,17 @@ def overload_notna(obj):
     return lambda obj: not pd.isna(obj)
 
 
+def _get_pd_dtype_str(t):
+    """return dtype string for 'dtype' values in read_excel()
+    it's not fully consistent for read_csv(), since datetime64 requires 'datetime64[ns]'
+    instead of 'str'
+    """
+    if t.dtype == types.NPDatetime("ns"):
+        return "'datetime64[ns]'"
+
+    return bodo.ir.csv_ext._get_pd_dtype_str(t)
+
+
 @overload(pd.read_excel)
 def overload_read_excel(
     io,
@@ -1068,7 +1079,7 @@ def overload_read_excel(
     # embed dtype since objmode doesn't allow list/dict
     pd_dtype_strs = ", ".join(
         [
-            "'{}':{}".format(cname, bodo.ir.csv_ext._get_pd_dtype_str(t))
+            "'{}':{}".format(cname, _get_pd_dtype_str(t))
             for cname, t in zip(df_type.columns, df_type.data)
         ]
     )
