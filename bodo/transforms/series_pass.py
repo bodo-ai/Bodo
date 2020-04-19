@@ -1315,7 +1315,6 @@ class SeriesPass:
             return [assign]
 
         if fdef == ("get_series_data", "bodo.hiframes.pd_series_ext"):
-            # TODO: make sure data is not altered using update_series_data()
             # or other functions, using any reference to payload
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def)
@@ -1324,7 +1323,6 @@ class SeriesPass:
             return [assign]
 
         if fdef == ("get_series_index", "bodo.hiframes.pd_series_ext"):
-            # TODO: make sure index is not altered using update_series_index()
             # or other functions, using any reference to payload
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def)
@@ -1344,12 +1342,6 @@ class SeriesPass:
                 and len(var_def.args) > 2
             ):
                 assign.value = var_def.args[2]
-            return [assign]
-
-        if fdef == ("update_series_data", "bodo.hiframes.pd_series_ext"):
-            return [assign]
-
-        if fdef == ("update_series_index", "bodo.hiframes.pd_series_ext"):
             return [assign]
 
         if func_mod == "bodo.hiframes.rolling":

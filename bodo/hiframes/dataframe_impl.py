@@ -19,7 +19,7 @@ from numba.targets.imputils import (
 from numba import ir
 from numba.ir_utils import mk_unique_var
 import bodo
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_dataframe_ext import DataFrameType, handle_inplace_df_type_change
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.typing import (
     is_overload_none,
@@ -48,7 +48,6 @@ from bodo.libs.array import (
     info_to_array,
     delete_table,
 )
-from bodo.hiframes.pd_dataframe_ext import validate_sort_values_spec
 
 
 @overload_attribute(DataFrameType, "index", inline="always")
@@ -171,14 +170,17 @@ def overload_dataframe_rename(
     inplace=False,
     level=None,
     errors="ignore",
+    _bodo_transformed=False,
 ):
+
+    handle_inplace_df_type_change(inplace, _bodo_transformed, "rename")
 
     # check unsupported arguments
     if not (
         is_overload_none(mapper)
         and is_overload_none(index)
         and is_overload_none(axis)
-        and is_overload_false(inplace)
+        and is_overload_constant_bool(inplace)
         and is_overload_none(level)
         and is_overload_constant_str(errors)
         and get_overload_const_str(errors) == "ignore"
@@ -211,7 +213,7 @@ def overload_dataframe_rename(
 
     header = (
         "def impl(df, mapper=None, index=None, columns=None, axis=None, "
-        "copy=True, inplace=False, level=None, errors='ignore'):\n"
+        "copy=True, inplace=False, level=None, errors='ignore', _bodo_transformed=False):\n"
     )
     return _gen_init_df(header, new_cols, ", ".join(data_outs))
 
@@ -680,7 +682,7 @@ def overload_dataframe_set_index(
     df, keys, drop=True, append=False, inplace=False, verify_integrity=False
 ):
     if not is_overload_false(inplace):
-        raise ValueError("set_index() inplace argument not supported yet")
+        raise BodoError("set_index() inplace argument not supported yet")
 
     col_name = get_overload_const_str(keys)
     col_ind = df.columns.index(col_name)
@@ -753,10 +755,10 @@ def overload_dataframe_duplicated(df, subset=None, keep="first"):
 def overload_dataframe_drop_duplicates(df, subset=None, keep="first", inplace=False):
     # TODO: support inplace
     if not is_overload_none(subset):
-        raise ValueError("drop_duplicates() subset argument not supported yet")
+        raise BodoError("drop_duplicates() subset argument not supported yet")
 
     if is_overload_true(inplace):
-        raise ValueError("drop_duplicates() inplace argument not supported yet")
+        raise BodoError("drop_duplicates() inplace argument not supported yet")
 
     # XXX: can't reuse duplicated() here since it shuffles data and chunks
     # may not match
@@ -1062,75 +1064,6 @@ class SetDfColInfer(AbstractTemplate):
             ret = DataFrameType(new_typs, target.index, new_cols, target.has_parent)
 
         return ret(*args)
-
-
-def drop_inplace(df):  # pragma: no cover
-    res = None
-    return df, res
-
-
-@overload(drop_inplace, inline="always")
-def drop_inplace_overload(
-    df,
-    labels=None,
-    axis=0,
-    index=None,
-    columns=None,
-    level=None,
-    inplace=False,
-    errors="raise",
-):
-
-    from bodo.hiframes.pd_dataframe_ext import DataFrameType
-
-    assert isinstance(df, DataFrameType)
-    # TODO: support recovery when object is not df
-    def _impl(
-        df,
-        labels=None,
-        axis=0,
-        index=None,
-        columns=None,
-        level=None,
-        inplace=False,
-        errors="raise",
-    ):  # pragma: no cover
-        new_df = bodo.hiframes.pd_dataframe_ext.drop_dummy(
-            df, labels, axis, columns, inplace
-        )
-        return new_df, None
-
-    return _impl
-
-
-def sort_values_inplace(df):  # pragma: no cover
-    res = None
-    return df, res
-
-
-@overload(sort_values_inplace, inline="always")
-def sort_values_inplace_overload(
-    df, by, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last"
-):
-
-    validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position)
-
-    def _impl(
-        df,
-        by,
-        axis=0,
-        ascending=True,
-        inplace=False,
-        kind="quicksort",
-        na_position="last",
-    ):  # pragma: no cover
-
-        new_df = bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
-            df, by, ascending, inplace, na_position
-        )
-        return new_df, None
-
-    return _impl
 
 
 class DataFrameTupleIterator(types.SimpleIteratorType):

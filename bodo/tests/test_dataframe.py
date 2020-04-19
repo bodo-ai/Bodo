@@ -447,6 +447,10 @@ def test_df_rename():
     def impl(df):
         return df.rename(columns={"B": "bb", "C": "cc"})
 
+    def impl2(df):
+        df.rename(columns={"B": "bb", "C": "cc"}, inplace=True)
+        return df
+
     df = pd.DataFrame(
         {
             "A": [1, 8, 4, 11, -3],
@@ -455,6 +459,7 @@ def test_df_rename():
         }
     )
     check_func(impl, (df,))
+    check_func(impl2, (df,))
 
 
 def test_df_isna(df_value):
@@ -933,6 +938,21 @@ def test_df_reset_index3():
     check_func(impl2, (df,), sort_output=True)
 
 
+def test_df_reset_index4():
+    """Test DataFrame.reset_index(drop=False, inplace=True)
+    """
+
+    def impl(df):
+        df.reset_index(drop=False, inplace=True)
+        return df
+
+    test_df = pd.DataFrame(
+        {"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]},
+        [3.1, 1.2, 2.3, 4.4, 6.6],
+    )
+    check_func(impl, (test_df,), copy_input=True)
+
+
 def test_df_duplicated():
     def impl(df):
         return df.duplicated()
@@ -1385,8 +1405,8 @@ def test_df_const_set_rm_index():
         bodo.jit(impl)(A)
 
 
-def test_df_drop_inplace_check():
-    """make sure inplace=True is not use in df.dropna()
+def test_df_dropna_inplace_check():
+    """make sure inplace=True is not used in df.dropna()
     """
 
     def test_impl(df):
@@ -1395,6 +1415,20 @@ def test_df_drop_inplace_check():
     df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [4, 5, 6, 7]})
     with pytest.raises(BodoError, match="inplace=True is not supported"):
         bodo.jit(test_impl)(df)
+
+
+def test_df_drop_inplace_instability_check():
+    """make sure df.drop(inplace=True) doesn't cause type instability
+    """
+
+    def test_impl(a):
+        df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [4, 5, 6, 7]})
+        if len(a) > 3:
+            df.drop("B", 1, inplace=True)
+        return df
+
+    with pytest.raises(BodoError, match="inplace change of dataframe schema"):
+        bodo.jit(test_impl)([2, 3])
 
 
 ################################## indexing  #################################

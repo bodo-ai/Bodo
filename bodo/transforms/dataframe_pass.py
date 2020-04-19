@@ -608,7 +608,10 @@ class DataFramePass:
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
         df_index_var = self._get_dataframe_index(df_var, nodes)
 
-        return self._replace_func(f, col_vars + [df_index_var], extra_globals={
+        return self._replace_func(
+            f,
+            col_vars + [df_index_var],
+            extra_globals={
                 "numba": numba,
                 "np": np,
                 "Row": Row,
@@ -617,7 +620,9 @@ class DataFramePass:
                 "get_utf8_size": get_utf8_size,
                 "pre_alloc_string_array": pre_alloc_string_array,
                 "map_func": numba.njit(func),
-            }, pre_nodes=nodes)
+            },
+            pre_nodes=nodes,
+        )
 
     def _run_call_df_sort_values(self, assign, lhs, rhs):
         df_var, by_var, ascending_var, inplace_var, na_position_var = rhs.args
@@ -716,13 +721,9 @@ class DataFramePass:
                 out_arrs.append(out_vars[c])
         out_arrs.append(out_index)
 
-        # return dataframe if untyped pass replacement worked
-        if not inplace or isinstance(self.typemap[lhs.name], DataFrameType):
-            return nodes + compile_func_single_block(_init_df, out_arrs, lhs, self)
-        else:
-            # XXX: set inplace if untyped pass var replacement didn't work
-            # TODO: fix index for inplace case
-            return self._set_df_inplace(_init_df, out_arrs, df_var, lhs.loc, nodes)
+        # return new df even for inplace case, since typing pass replaces input variable
+        # using output of the call
+        return nodes + compile_func_single_block(_init_df, out_arrs, lhs, self)
 
     def _gen_array_from_index(self, df_var, nodes):
         def _get_index(df):  # pragma: no cover
@@ -828,14 +829,16 @@ class DataFramePass:
             )
             if not inplace:
                 func_text += "  {} = {}.fillna(val)\n".format(d + "_S", d + "_S")
+                func_text += "  {} = bodo.hiframes.pd_series_ext.get_series_data({})\n".format(
+                    d + "_O", d + "_S"
+                )
             else:
                 func_text += "  {}.fillna(val, inplace=True)\n".format(d + "_S")
-            func_text += "  {} = bodo.hiframes.pd_series_ext.get_series_data({})\n".format(
-                d + "_O", d + "_S"
+
+        if not inplace:
+            func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), df_index, {})\n".format(
+                ", ".join(d + "_O" for d in data_args), col_var
             )
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), df_index, {})\n".format(
-            ", ".join(d + "_O" for d in data_args), col_var
-        )
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _fillna_impl = loc_vars["_fillna_impl"]
@@ -844,10 +847,7 @@ class DataFramePass:
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
         index_arg = self._get_dataframe_index(df_var, nodes)
         args = col_vars + [index_arg, value]
-        if not inplace:
-            return self._replace_func(_fillna_impl, args, pre_nodes=nodes)
-        else:
-            return self._set_df_inplace(_fillna_impl, args, df_var, lhs.loc, nodes)
+        return nodes + compile_func_single_block(_fillna_impl, args, lhs, self)
 
     def _run_call_df_dropna(self, assign, lhs, rhs):
         # TODO: refactor, support/test all array types
@@ -1005,14 +1005,11 @@ class DataFramePass:
 
     def _run_call_reset_index(self, assign, lhs, rhs):
         # TODO: reflection
-        # TODO: drop actual index, fix inplace
         df_var = rhs.args[0]
         drop = guard(find_const, self.func_ir, rhs.args[1])
         inplace = guard(find_const, self.func_ir, rhs.args[2])
         df_typ = self.typemap[df_var.name]
         out_df_typ = self.typemap[lhs.name]
-        if inplace:  # lhs is None for inplace case and output type is same as input
-            out_df_typ = df_typ
         n_ind = len(out_df_typ.columns) - len(df_typ.columns)
         assert drop or n_ind != 0  # there are index columns when not dropping index
 
@@ -1060,10 +1057,9 @@ class DataFramePass:
                 ind_var = self._gen_array_from_index(df_var, nodes)
                 args = [ind_var] + args
 
-        if not inplace:
-            return self._replace_func(_reset_index_impl, args, pre_nodes=nodes)
-        else:
-            return self._set_df_inplace(_reset_index_impl, args, df_var, lhs.loc, nodes)
+        # return new df even for inplace case, since typing pass replaces input variable
+        # using output of the call
+        return nodes + compile_func_single_block(_reset_index_impl, args, lhs, self)
 
     def _run_call_query(self, assign, lhs, rhs):
         """Transform query expr to Numba IR using the expr parser in Pandas.
@@ -1399,6 +1395,8 @@ class DataFramePass:
         _init_df = _gen_init_df(out_typ.columns, "index")
         df_index = self._get_dataframe_index(df_var, nodes)
         data.append(df_index)
+        # return new df even for inplace case, since typing pass replaces input variable
+        # using output of the call
         return nodes + compile_func_single_block(_init_df, data, lhs, self)
 
     def _run_call_set_df_column(self, assign, lhs, rhs):
@@ -2219,31 +2217,6 @@ class DataFramePass:
             if tup_def.op in ("build_tuple", "build_list"):
                 return tup_def.items
         raise ValueError("constant tuple expected")
-
-    def _set_df_inplace(self, _init_df, out_arrs, df_var, loc, nodes):
-        # TODO: refcounted df data object is needed for proper inplace
-        # also, boxed dfs need to be updated
-        # HACK assign output df back to input df variables
-        # TODO CFG backbone?
-        df_typ = self.typemap[df_var.name]
-        nodes += compile_func_single_block(_init_df, out_arrs, None, self)
-        new_df = nodes[-1].target
-
-        if df_typ.has_parent:
-            # XXX fix the output type using dummy call to set_parent=True
-            nodes += compile_func_single_block(
-                lambda df: bodo.hiframes.pd_dataframe_ext.set_parent_dummy(df),
-                (new_df,),
-                None,
-                self,
-            )
-            new_df = nodes[-1].target
-
-        for other_df_var in self.func_ir._definitions[df_var.name]:
-            if isinstance(other_df_var, ir.Var):
-                nodes.append(ir.Assign(new_df, other_df_var, loc))
-        ir.Assign(new_df, df_var, loc)
-        return nodes
 
     def _get_dataframe_data(self, df_var, col_name, nodes):
         # optimization: return data var directly if not ambiguous

@@ -344,31 +344,29 @@ class TypingTransforms:
         if func_name == "assign":
             return self._handle_df_assign(assign.target, rhs, df_var)
 
-        # df.drop("B", axis=1, inplace=True) changes dataframe type so inplace has to be
-        # transformed away using variable replacement
-        if func_name == "drop":
+        # handle calls that have inplace=True that changes the schema, by replacing the
+        # dataframe variable instead of inplace change if possible
+        # TODO: handle all necessary df calls
+        # map call name to the position of its 'inplace' argument
+        df_inplace_call_arg_no = {
+            "drop": 5,
+            "sort_values": 3,
+            "rename": 5,
+            "reset_index": 2,
+        }
+        # call needs handling if not already transformed (avoid infinite loop)
+        if func_name in df_inplace_call_arg_no and not self._is_df_call_transformed(
+            rhs
+        ):
             kws = dict(rhs.kws)
-            inplace_var = get_call_expr_arg("drop", rhs.args, kws, 5, "inplace", "")
-            replace_func = (
-                lambda: bodo.hiframes.dataframe_impl.drop_inplace
-            )  # pragma: no cover
+            inplace_arg_no = df_inplace_call_arg_no[func_name]
+            inplace_var = get_call_expr_arg(
+                func_name, rhs.args, kws, inplace_arg_no, "inplace", ""
+            )
             return self._handle_df_inplace_func(
-                assign, lhs, rhs, df_var, inplace_var, replace_func, label
+                assign, lhs, rhs, df_var, inplace_var, label, func_name
             )
 
-        if func_name == "sort_values":
-            # handle potential df.sort_values(inplace=True) here since it needs
-            # variable replacement
-            kws = dict(rhs.kws)
-            inplace_var = get_call_expr_arg(
-                "sort_values", rhs.args, kws, 3, "inplace", ""
-            )
-            replace_func = (
-                lambda: bodo.hiframes.dataframe_impl.sort_values_inplace
-            )  # pragma: no cover
-            return self._handle_df_inplace_func(
-                assign, lhs, rhs, df_var, inplace_var, replace_func, label
-            )
         return [assign]
 
     def _handle_df_assign(self, lhs, rhs, df_var):
@@ -402,45 +400,48 @@ class TypingTransforms:
         )
         return compile_func_single_block(impl, [df_var] + list(kws.values()), lhs, self)
 
+    def _is_df_call_transformed(self, rhs):
+        """check for _bodo_transformed=True in call arguments to know if df call has
+        been transformed already (df variable is replaced for inplace=True)
+        """
+        kws = dict(rhs.kws)
+        return "_bodo_transformed" in kws and guard(
+            find_const, self.func_ir, kws["_bodo_transformed"]
+        )
+
     def _handle_df_inplace_func(
-        self, assign, lhs, rhs, df_var, inplace_var, replace_func, label
+        self, assign, lhs, rhs, df_var, inplace_var, label, func_name
     ):
-        """handle possible df.func(inplace=True)
-        lhs = A.func(inplace=True) -> A1, lhs = func_inplace(...)
-        replace A with A1
+        """handle df.func(inplace=True) using variable replacement
+        df.func(inplace=True) -> df2 = df.func(inplace=True)
+        replaces df with df2 in the rest of the program. All definitions of df should
+        dominate the call site for this approach to work.
         """
         inplace = guard(find_const, self.func_ir, inplace_var)
         if not inplace:
             return [assign]
 
+        # TODO: make sure call post dominates df_var definition or df_var
+        # is not used in other code paths
         if self._label_dominates_var_defs(label, df_var):
-            # TODO: make sure call post dominates df_var definition or df_var
-            # is not used in other code paths
-            # replace func variable with replace_func
-            f_block = compile_to_numba_ir(
-                replace_func, {"bodo": bodo}
-            ).blocks.popitem()[1]
-            nodes = f_block.body[:-2]
-            new_func_var = nodes[-1].target
-            rhs.func = new_func_var
-            rhs.args.insert(0, df_var)
-            # new tuple return
-            ret_tup = ir.Var(lhs.scope, mk_unique_var("tuple_ret"), lhs.loc)
-            assign.target = ret_tup
-            nodes.append(assign)
-            new_df_var = ir.Var(df_var.scope, mk_unique_var(df_var.name), df_var.loc)
-            zero_var = ir.Var(df_var.scope, mk_unique_var("zero"), df_var.loc)
-            one_var = ir.Var(df_var.scope, mk_unique_var("one"), df_var.loc)
-            nodes.append(ir.Assign(ir.Const(0, lhs.loc), zero_var, lhs.loc))
-            nodes.append(ir.Assign(ir.Const(1, lhs.loc), one_var, lhs.loc))
-            getitem0 = ir.Expr.static_getitem(ret_tup, 0, zero_var, lhs.loc)
-            nodes.append(ir.Assign(getitem0, new_df_var, lhs.loc))
-            getitem1 = ir.Expr.static_getitem(ret_tup, 1, one_var, lhs.loc)
-            nodes.append(ir.Assign(getitem1, lhs, lhs.loc))
             # replace old variable with new one
+            new_df_var = ir.Var(df_var.scope, mk_unique_var(df_var.name), df_var.loc)
             self.replace_var_dict[df_var.name] = new_df_var
             self.changed = True
-            return nodes
+            true_var = ir.Var(
+                df_var.scope, mk_unique_var("inplace_transform"), df_var.loc
+            )
+            true_assign = ir.Assign(ir.Const(True, lhs.loc), true_var, lhs.loc)
+            rhs.kws.append(("_bodo_transformed", true_var))
+            return [true_assign, assign, ir.Assign(lhs, new_df_var, lhs.loc)]
+        else:
+            raise BodoError(
+                (
+                    "DataFrame.{}(): non-deterministic inplace change of dataframe schema "
+                    "not supported.\nSee "
+                    "http://docs.bodo.ai/latest/source/not_supported.html"
+                ).format(func_name)
+            )
 
         return [assign]
 

@@ -1983,18 +1983,20 @@ def lower_concat_dummy(context, builder, sig, args):
 
 @overload_method(DataFrameType, "sort_values", inline="always")
 def sort_values_overload(
-    df, by, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last"
+    df,
+    by,
+    axis=0,
+    ascending=True,
+    inplace=False,
+    kind="quicksort",
+    na_position="last",
+    _bodo_transformed=False,
 ):
-    validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position)
 
-    # Handle in typing pass if inplace is set
-    # TODO: avoid transformation since data type doesn't change and we can just update
-    # the dataframe object struct
-    if bodo.transforms.typing_pass.in_partial_typing and (
-        is_overload_true(inplace) or not is_overload_constant_bool(inplace)
-    ):
-        bodo.transforms.typing_pass.typing_transform_required = True
-        raise Exception("DataFrame.sort_values(): transform necessary for inplace")
+    # df type can change if inplace is set (e.g. RangeIndex to Int64Index)
+    handle_inplace_df_type_change(inplace, _bodo_transformed, "sort_values")
+
+    validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position)
 
     def _impl(
         df,
@@ -2004,6 +2006,7 @@ def sort_values_overload(
         inplace=False,
         kind="quicksort",
         na_position="last",
+        _bodo_transformed=False,
     ):  # pragma: no cover
 
         return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
@@ -2089,25 +2092,12 @@ class SortDummyTyper(AbstractTemplate):
         assert not kws
         df, by, ascending, inplace, na_position = args
 
-        # inplace value
-        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
-            inplace = inplace.literal_value
-        else:
-            # XXX inplace type is just bool when value not passed. Therefore,
-            # we assume the default False value.
-            # TODO: more robust fix or just check
-            inplace = False
-
         index = df.index
         if index is types.none or isinstance(
             index, bodo.hiframes.pd_index_ext.RangeIndexType
         ):
             index = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
         ret_typ = df.copy(index=index, has_parent=False)
-        # TODO: handle cases where untyped pass inplace replacement is not
-        # possible and none should be returned
-        # if inplace:
-        #     ret_typ = types.none
         return signature(ret_typ, *args)
 
 
@@ -2256,8 +2246,17 @@ def lower_fillna_dummy(context, builder, sig, args):
 
 @overload_method(DataFrameType, "reset_index", inline="always")
 def reset_index_overload(
-    df, level=None, drop=False, inplace=False, col_level=0, col_fill=""
+    df,
+    level=None,
+    drop=False,
+    inplace=False,
+    col_level=0,
+    col_fill="",
+    _bodo_transformed=False,
 ):
+
+    handle_inplace_df_type_change(inplace, _bodo_transformed, "reset_index")
+
     # make sure 'drop' is a constant bool
     if not is_overload_constant_bool(drop):
         raise BodoError(
@@ -2270,15 +2269,17 @@ def reset_index_overload(
             "reset_index(): 'inplace' parameter should be a constant boolean value"
         )
 
-    if is_overload_false(drop) and is_overload_true(inplace):
-        raise BodoError(
-            "reset_index(): drop=False and inplace=True parameter combination not supported yet"
-        )
 
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: inplace of df with parent (reflection)
     def _impl(
-        df, level=None, drop=False, inplace=False, col_level=0, col_fill=""
+        df,
+        level=None,
+        drop=False,
+        inplace=False,
+        col_level=0,
+        col_fill="",
+        _bodo_transformed=False,
     ):  # pragma: no cover
         return bodo.hiframes.pd_dataframe_ext.reset_index_dummy(df, drop, inplace)
 
@@ -2296,10 +2297,6 @@ class ResetIndexDummyTyper(AbstractTemplate):
         # safe to just get const values here, since error checking is done in
         # reset_index overload
         drop = is_overload_true(drop)
-        inplace = is_overload_true(inplace)
-
-        if inplace:
-            return signature(types.none, *args)
 
         # default output index is simple integer index with no name
         # TODO: handle MultiIndex and `level` argument case
@@ -2352,7 +2349,7 @@ def dropna_dummy(df, n):  # pragma: no cover
 @infer_global(dropna_dummy)
 class DropnaDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
-        df, = args
+        (df,) = args
         # copy type to set has_parent False
         index = df.index
         if isinstance(index, RangeIndexType):
@@ -2377,15 +2374,10 @@ def drop_overload(
     level=None,
     inplace=False,
     errors="raise",
+    _bodo_transformed=False,
 ):
 
-    # df type can change if inplace is set, so variable replacement in typing pass is
-    # necessary for type stability
-    if bodo.transforms.typing_pass.in_partial_typing and (
-        is_overload_true(inplace) or not is_overload_constant_bool(inplace)
-    ):
-        bodo.transforms.typing_pass.typing_transform_required = True
-        raise Exception("DataFrame.drop(): transform necessary for inplace")
+    handle_inplace_df_type_change(inplace, _bodo_transformed, "drop")
 
     if not is_overload_constant_bool(inplace):  # pragma: no cover
         raise_bodo_error(
@@ -2439,6 +2431,7 @@ def drop_overload(
         level=None,
         inplace=False,
         errors="raise",
+        _bodo_transformed=False,
     ):  # pragma: no cover
         return bodo.hiframes.pd_dataframe_ext.drop_dummy(
             df, labels, axis, columns, inplace
@@ -2901,3 +2894,20 @@ def to_csv_overload(
         _csv_write(path_or_buf._data, D._data, 0, len(D), False)
 
     return _impl
+
+
+def handle_inplace_df_type_change(inplace, _bodo_transformed, func_name):
+    """df type can change for functions like drop, rename, etc. if inplace is set, so
+    variable replacement in typing pass is necessary for type stability.
+    This returns control to typing pass to handle it using a normal exception.
+    typing pass sets _bodo_transformed if variable replacement is done already
+    """
+    if (
+        is_overload_false(_bodo_transformed)
+        and bodo.transforms.typing_pass.in_partial_typing
+        and (is_overload_true(inplace) or not is_overload_constant_bool(inplace))
+    ):
+        bodo.transforms.typing_pass.typing_transform_required = True
+        raise Exception(
+            "DataFrame.{}(): transform necessary for inplace".format(func_name)
+        )
