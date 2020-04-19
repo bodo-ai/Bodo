@@ -545,12 +545,6 @@ class DistributedAnalysis:
         else:
             func_name, func_mod = fdef
 
-        # handle calling other Bodo functions that have distributed flags
-        func_type = self.typemap[func_var]
-        if isinstance(func_type, types.Dispatcher):
-            self._handle_dispatcher(func_type.dispatcher, lhs, rhs, array_dists)
-            return
-
         if is_alloc_callname(func_name, func_mod):
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
@@ -950,6 +944,12 @@ class DistributedAnalysis:
         # TODO: make sure assert_equiv is not generated unnecessarily
         # TODO: fix assert_equiv for np.stack from df.value
         if fdef == ("assert_equiv", "numba.array_analysis"):
+            return
+
+        # handle calling other Bodo functions that have distributed flags
+        func_type = self.typemap[func_var]
+        if isinstance(func_type, types.Dispatcher):
+            self._handle_dispatcher(func_type.dispatcher, lhs, rhs, array_dists)
             return
 
         # set REP if not found
