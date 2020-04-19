@@ -339,7 +339,7 @@ def _get_pd_dtype_str(t):
         return "pd.CategoricalDtype({})".format(dtype.categories)
 
     if dtype == types.NPDatetime("ns"):
-        dtype = "str"
+        return "'datetime64[ns]'"
 
     if t == string_array_type:
         return "str"

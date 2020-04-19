@@ -1185,7 +1185,20 @@ def test_excel1(datapath):
         return pd.read_excel(fname, parse_dates=[2])
 
     def test_impl2(fname):
-        return pd.read_excel(fname, sheet_name="Sheet1", index_col=0, parse_dates=["C"])
+        dtype = {
+            "A": np.int,
+            "B": np.float,
+            "C": np.dtype("datetime64[ns]"),
+            "D": str,
+            "E": np.bool_,
+        }
+        return pd.read_excel(
+            fname,
+            sheet_name="Sheet1",
+            parse_dates=["C"],
+            dtype=dtype,
+            names=dtype.keys(),
+        )
 
     # passing file name as argument to exercise value-based dispatch
     fname = datapath("data.xlsx")

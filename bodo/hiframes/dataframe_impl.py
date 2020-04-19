@@ -1065,6 +1065,14 @@ def overload_read_excel(
     if isinstance(parse_dates, bodo.utils.typing.ConstList):
         parse_dates_const = list(parse_dates.consts)
 
+    # embed dtype since objmode doesn't allow list/dict
+    pd_dtype_strs = ", ".join(
+        [
+            "'{}':{}".format(cname, bodo.ir.csv_ext._get_pd_dtype_str(t))
+            for cname, t in zip(df_type.columns, df_type.data)
+        ]
+    )
+
     func_text = """
 def impl(
     io,
@@ -1098,11 +1106,11 @@ def impl(
             io,
             sheet_name,
             header,
-            names,
+            {},
             index_col,
             usecols,
             squeeze,
-            dtype,
+            {{{}}},
             engine,
             converters,
             true_values,
@@ -1121,9 +1129,11 @@ def impl(
             mangle_dupe_cols,
         )
     return df
-    """.format(t_name, parse_dates_const)
+    """.format(
+        t_name, list(df_type.columns), pd_dtype_strs, parse_dates_const
+    )
     loc_vars = {}
-    exec(func_text, {"numba": numba, "pd": pd, "bodo": bodo}, loc_vars)
+    exec(func_text, {"numba": numba, "pd": pd, "bodo": bodo, "np": np}, loc_vars)
     impl = loc_vars["impl"]
     return impl
 

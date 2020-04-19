@@ -45,6 +45,7 @@ from bodo.utils.transform import get_const_nested
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.hiframes.pd_index_ext import RangeIndexType
 import bodo.ir
 import bodo.ir.aggregate
 import bodo.ir.join
@@ -54,6 +55,7 @@ from bodo.ir import sql_ext
 
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 import bodo.hiframes.pd_dataframe_ext
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.utils.transform import (
     update_locs,
     get_str_const_value,
@@ -679,7 +681,7 @@ class UntypedPass:
         )
         header = self._get_const_arg("read_excel", rhs.args, kws, 2, "header", 0)
         names_var = get_call_expr_arg("read_excel", rhs.args, kws, 3, "names", "")
-        index_col = self._get_const_arg("read_excel", rhs.args, kws, 4, "index_col", -1)
+        # index_col = self._get_const_arg("read_excel", rhs.args, kws, 4, "index_col", -1)
         comment = self._get_const_arg("read_excel", rhs.args, kws, 20, "comment", "")
         parse_dates_var = get_call_expr_arg(
             "read_excel", rhs.args, kws, 17, "parse_dates", ""
@@ -691,8 +693,9 @@ class UntypedPass:
         if comment == "":
             comment = None
 
-        if index_col == -1:
-            index_col = None
+        # TODO: support index_col
+        # if index_col == -1:
+        #     index_col = None
 
         # get date columns from 'parse_dates'
         date_cols = []
@@ -708,7 +711,7 @@ class UntypedPass:
             "sheet_name",
             "header",
             "names",
-            "index_col",
+            # "index_col",
             "comment",
             "dtype",
             "skiprows",
@@ -740,11 +743,53 @@ class UntypedPass:
                 nrows=rows_to_read,
                 skiprows=skiprows,
                 header=header,
-                index_col=index_col,
+                # index_col=index_col,
                 comment=comment,
                 parse_dates=date_cols,
             )
             df_type = numba.typeof(df)
+
+        else:
+            if dtype_var == "" or col_names == 0:
+                raise BodoError(
+                    "pd.read_excel(): both 'dtype' and 'names' required if filename is not constant"
+                )
+            dtype_map = guard(get_definition, self.func_ir, dtype_var)
+
+            # handle converted constant dictionaries
+            if is_call(dtype_map) and (
+                guard(find_callname, self.func_ir, dtype_map)
+                == ("add_consts_to_type", "bodo.utils.typing")
+            ):
+                dtype_map = guard(get_definition, self.func_ir, dtype_map.args[0])
+
+            if (
+                not isinstance(dtype_map, ir.Expr) or dtype_map.op != "build_map"
+            ):  # pragma: no cover
+                # try single type for all columns case
+                dtype_map = self._get_const_dtype(dtype_var)
+            else:
+                new_dtype_map = {}
+                for n_var, t_var in dtype_map.items:
+                    # find constant column name
+                    c = guard(find_const, self.func_ir, n_var)
+                    if c is None:  # pragma: no cover
+                        raise BodoError("dtype column names should be constant")
+                    new_dtype_map[c] = self._get_const_dtype(t_var)
+
+                # HACK replace build_map to avoid inference errors
+                dtype_map.op = "build_list"
+                dtype_map.items = [v[0] for v in dtype_map.items]
+                dtype_map = new_dtype_map
+
+            index = RangeIndexType(types.none)
+            # TODO: support index_col
+            # if index_col is not None:
+            #     index_name = col_names[index_col]
+            #     index = bodo.hiframes.pd_index_ext.array_typ_to_index(dtype_map[index_name], types.StringLiteral(index_name))
+            #     col_names.remove(index_name)
+            data_arrs = tuple(dtype_map[c] for c in col_names)
+            df_type = DataFrameType(data_arrs, index, tuple(col_names), True)
 
         tp_var = ir.Var(lhs.scope, mk_unique_var("df_type_var"), rhs.loc)
         typ_assign = ir.Assign(ir.Const(df_type, rhs.loc), tp_var, rhs.loc)
@@ -989,6 +1034,10 @@ class UntypedPass:
                 )
                 return IntegerArrayType(dtype.dtype)
 
+            # datetime64 case
+            if typ_name == "datetime64[ns]":
+                return types.Array(types.NPDatetime("ns"), 1, "C")
+
             typ_name = "int64" if typ_name == "int" else typ_name
             typ_name = "float64" if typ_name == "float" else typ_name
             typ_name = "bool_" if typ_name == "bool" else typ_name
@@ -1006,7 +1055,7 @@ class UntypedPass:
         if isinstance(dtype_def, ir.Global) and dtype_def.value == str:
             return string_array_type
 
-        # categorical case
+        # cases that involve a function call like Int, Categorical, np.dtype()
         if isinstance(dtype_def, ir.Expr) and dtype_def.op == "call":
             fdef = guard(find_callname, self.func_ir, dtype_def)
             if (
@@ -1018,6 +1067,11 @@ class UntypedPass:
                 pd_dtype = getattr(pd, fdef[0])()
                 dtype = bodo.libs.int_arr_ext.typeof_pd_int_dtype(pd_dtype, None)
                 return IntegerArrayType(dtype.dtype)
+
+            # np.dtype() case
+            if fdef == ("dtype", "numpy"):
+                assert len(dtype_def.args) == 1
+                return self._get_const_dtype(dtype_def.args[0])
 
             if not fdef == ("CategoricalDtype", "pandas"):
                 raise ValueError(
