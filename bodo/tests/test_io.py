@@ -1200,10 +1200,15 @@ def test_excel1(datapath):
             names=dtype.keys(),
         )
 
+    def test_impl3(fname):
+        return pd.read_excel(fname, parse_dates=[2], comment="#")
+
     # passing file name as argument to exercise value-based dispatch
     fname = datapath("data.xlsx")
     check_func(test_impl1, (fname,), is_out_distributed=False)
     check_func(test_impl2, (fname,), is_out_distributed=False)
+    fname = datapath("data_comment.xlsx")
+    check_func(test_impl3, (fname,), is_out_distributed=False)
 
 
 class TestIO(unittest.TestCase):
