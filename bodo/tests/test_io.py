@@ -1203,12 +1203,19 @@ def test_excel1(datapath):
     def test_impl3(fname):
         return pd.read_excel(fname, parse_dates=[2], comment="#")
 
+    def test_impl4(fname, sheet):
+        return pd.read_excel(fname, sheet, parse_dates=[2])
+
     # passing file name as argument to exercise value-based dispatch
     fname = datapath("data.xlsx")
     check_func(test_impl1, (fname,), is_out_distributed=False)
     check_func(test_impl2, (fname,), is_out_distributed=False)
     fname = datapath("data_comment.xlsx")
     check_func(test_impl3, (fname,), is_out_distributed=False)
+    with pytest.raises(
+        BodoError, match="read_excel requires 'sheet_name' argument as a constant"
+    ):
+        bodo.jit(test_impl4)(fname, "Sheet1")
 
 
 class TestIO(unittest.TestCase):

@@ -677,9 +677,25 @@ class UntypedPass:
         kws = dict(rhs.kws)
         fname_var = get_call_expr_arg("read_excel", rhs.args, kws, 0, "io")
         sheet_name = self._get_const_arg(
-            "read_excel", rhs.args, kws, 1, "sheet_name", 0
+            "read_excel",
+            rhs.args,
+            kws,
+            1,
+            "sheet_name",
+            0,
+            typ="str or int",
+            error_on_non_const=True,
         )
-        header = self._get_const_arg("read_excel", rhs.args, kws, 2, "header", 0)
+        header = self._get_const_arg(
+            "read_excel",
+            rhs.args,
+            kws,
+            2,
+            "header",
+            0,
+            typ="int",
+            error_on_non_const=True,
+        )
         names_var = get_call_expr_arg("read_excel", rhs.args, kws, 3, "names", "")
         # index_col = self._get_const_arg("read_excel", rhs.args, kws, 4, "index_col", -1)
         comment = self._get_const_arg("read_excel", rhs.args, kws, 20, "comment", "")
@@ -687,7 +703,16 @@ class UntypedPass:
             "read_excel", rhs.args, kws, 17, "parse_dates", ""
         )
         dtype_var = get_call_expr_arg("read_excel", rhs.args, kws, 7, "dtype", "")
-        skiprows = self._get_const_arg("read_excel", rhs.args, kws, 12, "skiprows", 0)
+        skiprows = self._get_const_arg(
+            "read_excel",
+            rhs.args,
+            kws,
+            12,
+            "skiprows",
+            0,
+            typ="int",
+            error_on_non_const=True,
+        )
 
         # replace "" placeholder with default None (can't use None in _get_const_arg)
         if comment == "":
@@ -1261,29 +1286,39 @@ class UntypedPass:
         return [assign]
 
     def _get_const_arg(
-        self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None, typ=None
+        self,
+        f_name,
+        args,
+        kws,
+        arg_no,
+        arg_name,
+        default=None,
+        err_msg=None,
+        typ=None,
+        error_on_non_const=False,
     ):
         """Get constant value for a function call argument. Raise error if the value is
         not constant.
         """
         typ = str if typ is None else typ
         arg = CONST_NOT_FOUND
+        if err_msg is None:
+            err_msg = ("{} requires '{}' argument as a constant {}").format(
+                f_name, arg_name, typ
+            )
         try:
             if len(args) > arg_no:
                 arg = find_const(self.func_ir, args[arg_no])
             elif arg_name in kws:
                 arg = find_const(self.func_ir, kws[arg_name])
         except GuardException:
-            pass
+            if error_on_non_const:
+                raise BodoError(err_msg)
 
         if arg is CONST_NOT_FOUND:
             if default is not None:
                 return default
-            if err_msg is None:
-                err_msg = ("{} requires '{}' argument as a constant {}").format(
-                    f_name, arg_name, typ
-                )
-            raise ValueError(err_msg)
+            raise BodoError(err_msg)
         return arg
 
     def _get_const_val_or_list(
