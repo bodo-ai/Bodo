@@ -52,7 +52,7 @@ For example, one could use two versions of the function::
     @bodo.jit
     def f2():
         df = pd.DataFrame({"A": [1, 2, 3]})
-        df2 = pd.DataFrame({"A": [1, 2, 3], "C": [-1, -2, -3]})
+        df2 = pd.DataFrame({"A": [1, 3, 4], "C": [-1, -2, -3]})
         df = df.merge(df2)
         return df.mean()
 
