@@ -750,9 +750,14 @@ class UntypedPass:
 
         col_names = self._get_const_val_or_list(names_var, default=0)
 
+        if dtype_var != "" and col_names == 0 or dtype_var == "" and col_names != 0:
+            raise BodoError(
+                "pd.read_excel(): both 'dtype' and 'names' should be provided if either is provided"
+            )
+
         # inference is necessary
         # TODO: refactor with read_csv
-        if dtype_var == "" or col_names == 0:
+        if dtype_var == "":
             # infer column names and types from constant filename
             msg = (
                 "pd.read_excel() requires explicit type "
@@ -775,10 +780,6 @@ class UntypedPass:
             df_type = numba.typeof(df)
 
         else:
-            if dtype_var == "" or col_names == 0:
-                raise BodoError(
-                    "pd.read_excel(): both 'dtype' and 'names' required if filename is not constant"
-                )
             dtype_map = guard(get_definition, self.func_ir, dtype_var)
 
             # handle converted constant dictionaries

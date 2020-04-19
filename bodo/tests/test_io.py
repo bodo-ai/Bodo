@@ -1206,6 +1206,18 @@ def test_excel1(datapath):
     def test_impl4(fname, sheet):
         return pd.read_excel(fname, sheet, parse_dates=[2])
 
+    def test_impl5(fname):
+        dtype = {
+            "A": np.int,
+            "B": np.float,
+            "C": np.dtype("datetime64[ns]"),
+            "D": str,
+            "E": np.bool_,
+        }
+        return pd.read_excel(
+            fname, sheet_name="Sheet1", parse_dates=["C"], dtype=dtype,
+        )
+
     # passing file name as argument to exercise value-based dispatch
     fname = datapath("data.xlsx")
     check_func(test_impl1, (fname,), is_out_distributed=False)
@@ -1216,6 +1228,8 @@ def test_excel1(datapath):
         BodoError, match="read_excel requires 'sheet_name' argument as a constant"
     ):
         bodo.jit(test_impl4)(fname, "Sheet1")
+    with pytest.raises(BodoError, match="both 'dtype' and 'names' should be provided"):
+        bodo.jit(test_impl5)(fname)
 
 
 class TestIO(unittest.TestCase):
