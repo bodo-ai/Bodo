@@ -193,6 +193,24 @@ def get_overload_const(val):
     return NOT_CONSTANT
 
 
+# string representation of basic types for printing
+_const_type_repr = {str: "string", bool: "boolean", int: "integer"}
+
+
+def ensure_constant_arg(fname, arg_name, val, const_type):
+    """Make sure argument 'val' to overload of function 'fname' is a constant of type
+    'const_type'. Otherwise, raise BodoError.
+    """
+    const_val = get_overload_const(val)
+    const_type_name = _const_type_repr.get(const_type, str(const_type))
+
+    if not isinstance(const_val, const_type):
+        raise BodoError(
+            f"{fname}(): argument '{arg_name}' should be a constant "
+            f"{const_type_name} not {val}"
+        )
+
+
 def check_unsupported_args(fname, args_dict, arg_defaults_dict):
     """Check for unsupported arguments for function 'fname', and raise an error if any
     value other than the default is provided.
