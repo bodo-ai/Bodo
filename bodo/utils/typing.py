@@ -84,6 +84,14 @@ class BodoWarning(Warning):
     """
 
 
+# sentinel value representing non-constant values
+class NotConstant:
+    pass
+
+
+NOT_CONSTANT = NotConstant()
+
+
 def is_overload_none(val):
     return val is None or val == types.none or getattr(val, "value", False) is None
 
@@ -167,6 +175,45 @@ def is_overload_str(val, const):
     )
 
 
+def get_overload_const(val):
+    """Get constant value for overload input. Returns NOT_CONSTANT if not constant.
+    'val' can be a python value, an Omitted type, a literal type, or other Numba type
+    (in case of non-constant).
+    Supports None, bool, int, str, and tuple values.
+    """
+    # actual value
+    if val is None or isinstance(val, (bool, int, str, tuple)):
+        return val
+    # Omitted case
+    if isinstance(val, types.Omitted):
+        return val.value
+    # Literal value
+    if isinstance(val, types.Literal):
+        return val.literal_value
+    return NOT_CONSTANT
+
+
+def check_unsupported_args(fname, args_dict, arg_defaults_dict):
+    """Check for unsupported arguments for function 'fname', and raise an error if any
+    value other than the default is provided.
+    'args_dict' is a dictionary of provided arguments in overload.
+    'arg_defaults_dict' is a dictionary of default values for unsupported arguments.
+    """
+    assert len(args_dict) == len(arg_defaults_dict)
+    for a in args_dict:
+        v1 = get_overload_const(args_dict[a])
+        v2 = arg_defaults_dict[a]
+        if (
+            v1 is NOT_CONSTANT
+            or (v1 is not None and v2 is None)
+            or (v1 is None and v2 is not None)
+            or v1 != v2
+        ):
+            raise BodoError(
+                f"{fname}(): {a} parameter only supports default value {v2}"
+            )
+
+
 def get_overload_const_tuple(val):
     if isinstance(val, tuple):
         return val
@@ -225,7 +272,7 @@ def get_overload_const_int(val):
     if isinstance(val, types.IntegerLiteral):
         assert isinstance(val.literal_value, int)
         return val.literal_value
-    raise ValueError("{} not constant integer".format(val))
+    raise BodoError("{} not constant integer".format(val))
 
 
 def get_overload_const_func(val):

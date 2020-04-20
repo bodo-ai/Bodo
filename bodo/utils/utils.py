@@ -34,6 +34,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.utils.typing import NOT_CONSTANT
 from enum import Enum
 
 
@@ -93,12 +94,6 @@ numba.errors.error_extras = {
     "constant_inference": "",
 }
 
-# sentinel value representing non-constant values
-class NotConstant:
-    pass
-
-
-NOT_CONSTANT = NotConstant()
 
 ReplaceFunc = namedtuple(
     "ReplaceFunc", ["func", "arg_types", "args", "glbls", "pre_nodes"]
