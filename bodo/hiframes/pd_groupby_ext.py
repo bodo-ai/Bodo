@@ -156,7 +156,7 @@ def validate_groupby_spec(
     if not is_overload_constant_bool(as_index):
         raise BodoError(
             "groupby(): 'as_index' parameter must be of type bool, ",
-            "not {}.".format(type(as_index)),
+            "not {}.".format(as_index),
         )
 
     # make sure sort is the default value, sort=True not supported

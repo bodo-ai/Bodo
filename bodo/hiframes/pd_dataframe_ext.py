@@ -1182,13 +1182,13 @@ def common_validate_merge_merge_asof_spec(
     if not is_overload_constant_bool(left_index):
         raise BodoError(
             name_func + "(): left_index parameter must be of type bool, not "
-            "{left_index}".format(left_index=type(left_index))
+            "{left_index}".format(left_index=left_index)
         )
     # make sure rightindex is of type bool
     if not is_overload_constant_bool(right_index):
         raise BodoError(
             name_func + "(): right_index parameter must be of type bool, not "
-            "{right_index}".format(right_index=type(right_index))
+            "{right_index}".format(right_index=right_index)
         )
     # make sure suffixes is not passed in
     # make sure on is of type str or strlist
@@ -1500,7 +1500,7 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
     if not is_overload_constant_str(how):
         raise BodoError(
             "join(): how parameter must be of type str, not "
-            "{how}".format(how=type(how))
+            "{how}".format(how=how)
         )
     how = get_overload_const_str(how)
     # make sure how is one of ["left", "right", "outer", "inner"]
@@ -2066,7 +2066,7 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
     if not is_overload_constant_str(na_position):
         raise BodoError(
             "sort_values(): na_position parameter must be a literal constant of type str, not "
-            "{na_position}".format(na_position=type(na_position))
+            "{na_position}".format(na_position=na_position)
         )
 
     na_position = get_overload_const_str(na_position)
