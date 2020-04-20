@@ -210,7 +210,9 @@ def test_merge_asof_leftindex_bool():
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_index="A", right_index=True)
 
-    with pytest.raises(BodoError, match="left_index parameter must be of type bool"):
+    with pytest.raises(
+        BodoError, match="argument 'left_index' should be a constant boolean"
+    ):
         bodo.jit(impl)(df1, df2)
 
 
@@ -219,7 +221,9 @@ def test_merge_asof_rightindex_bool():
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_index=True, right_index="B")
 
-    with pytest.raises(BodoError, match="right_index parameter must be of type bool"):
+    with pytest.raises(
+        BodoError, match="argument 'right_index' should be a constant boolean"
+    ):
         bodo.jit(impl)(df1, df2)
 
 

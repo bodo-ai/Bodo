@@ -63,6 +63,7 @@ from bodo.utils.typing import (
     is_overload_constant_int,
     raise_bodo_error,
     check_unsupported_args,
+    ensure_constant_arg,
 )
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
@@ -1178,18 +1179,11 @@ def common_validate_merge_merge_asof_spec(
         and (not is_overload_constant_str(right_on))
     ):
         raise_const_error(name_func + "(): right_on must be of type str or str list")
+
     # make sure leftindex is of type bool
-    if not is_overload_constant_bool(left_index):
-        raise BodoError(
-            name_func + "(): left_index parameter must be of type bool, not "
-            "{left_index}".format(left_index=left_index)
-        )
-    # make sure rightindex is of type bool
-    if not is_overload_constant_bool(right_index):
-        raise BodoError(
-            name_func + "(): right_index parameter must be of type bool, not "
-            "{right_index}".format(right_index=right_index)
-        )
+    ensure_constant_arg(name_func, "left_index", left_index, bool)
+    ensure_constant_arg(name_func, "right_index", right_index, bool)
+
     # make sure suffixes is not passed in
     # make sure on is of type str or strlist
     if (not is_overload_constant_tuple(suffixes)) and (
