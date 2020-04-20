@@ -118,11 +118,11 @@ def test_list_string_array_type_specific():
         df2 = df1.drop_duplicates()
         return df2
 
-    df1 = pd.DataFrame({"A": ["AB", "A,B,C", "AB,CD", "A,B,C"]})
+    df1 = pd.DataFrame({"A": ["AB", "A,B,C", "AB,CD", "D,E", "D,F", "A,B,C", "D,E"]})
     df1.A = df1.A.str.split(",")
     bodo_impl = bodo.jit(test_impl)
     df2_bodo = bodo_impl(df1)
-    df2_target = pd.DataFrame({"A": [["AB"], ["A", "B", "C"], ["AB", "CD"]]})
+    df2_target = pd.DataFrame({"A": [["AB"], ["A", "B", "C"], ["D", "E"], ["AB", "CD"], ["D", "F"]]})
     check_func(test_impl, (df1,), sort_output=True, py_output=df2_target)
 
 
