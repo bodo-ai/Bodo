@@ -62,6 +62,7 @@ from bodo.utils.typing import (
     get_overload_const_int,
     is_overload_constant_int,
     raise_bodo_error,
+    check_unsupported_args,
 )
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
@@ -1257,34 +1258,27 @@ def validate_merge_spec(
     indicator,
     validate,
 ):
-    """validate checks of the merge() function"""
+    """validate arguments to merge()
+    """
     common_validate_merge_merge_asof_spec(
         "merge", left, right, on, left_on, right_on, left_index, right_index, suffixes
     )
+
+    unsupported_args = dict(
+        sort=sort, copy=copy, indicator=indicator, validate=validate
+    )
+    merge_defaults = dict(sort=False, copy=True, indicator=False, validate=None)
+    check_unsupported_args("merge", unsupported_args, merge_defaults)
+
     # make sure how is of type str
     if not is_overload_constant_str(how):
         raise BodoError(
-            "merge(): how parameter must be of type str, not "
-            "{how}".format(how=type(how))
+            "merge(): how parameter must be of type str, not " "{how}".format(how=how)
         )
     how = get_overload_const_str(how)
     # make sure how is one of ["left", "right", "outer", "inner"]
     if how not in ["left", "right", "outer", "inner"]:
         raise BodoError("merge(): invalid key '{}' for how".format(how))
-    # make sure sort is the default value, sort=True not supported
-    if not is_overload_false(sort):
-        raise BodoError("merge(): sort parameter only supports default value False")
-    # make sure copy is the default value, copy=False not supported
-    if not is_overload_true(copy):
-        raise BodoError("merge(): copy parameter only supports default value True")
-    # make sure copy is the default value, copy=False not supported
-    if not is_overload_false(indicator):
-        raise BodoError(
-            "merge(): indicator parameter only supports default value False"
-        )
-    # make sure validate is None
-    if not is_overload_none(validate):
-        raise BodoError("merge(): validate parameter only supports default value None")
 
 
 def validate_merge_asof_spec(
@@ -2268,7 +2262,6 @@ def reset_index_overload(
         raise BodoError(
             "reset_index(): 'inplace' parameter should be a constant boolean value"
         )
-
 
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: inplace of df with parent (reflection)
