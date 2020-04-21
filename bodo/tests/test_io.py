@@ -1177,6 +1177,61 @@ def test_csv_dir_str_arr_multi(datapath):
     check_func(test_impl, (), py_output=py_output)
 
 
+def test_excel1(datapath):
+    """Test pd.read_excel()
+    """
+
+    def test_impl1(fname):
+        return pd.read_excel(fname, parse_dates=[2])
+
+    def test_impl2(fname):
+        dtype = {
+            "A": np.int,
+            "B": np.float,
+            "C": np.dtype("datetime64[ns]"),
+            "D": str,
+            "E": np.bool_,
+        }
+        return pd.read_excel(
+            fname,
+            sheet_name="Sheet1",
+            parse_dates=["C"],
+            dtype=dtype,
+            names=dtype.keys(),
+        )
+
+    def test_impl3(fname):
+        return pd.read_excel(fname, parse_dates=[2], comment="#")
+
+    def test_impl4(fname, sheet):
+        return pd.read_excel(fname, sheet, parse_dates=[2])
+
+    def test_impl5(fname):
+        dtype = {
+            "A": np.int,
+            "B": np.float,
+            "C": np.dtype("datetime64[ns]"),
+            "D": str,
+            "E": np.bool_,
+        }
+        return pd.read_excel(
+            fname, sheet_name="Sheet1", parse_dates=["C"], dtype=dtype,
+        )
+
+    # passing file name as argument to exercise value-based dispatch
+    fname = datapath("data.xlsx")
+    check_func(test_impl1, (fname,), is_out_distributed=False)
+    check_func(test_impl2, (fname,), is_out_distributed=False)
+    fname = datapath("data_comment.xlsx")
+    check_func(test_impl3, (fname,), is_out_distributed=False)
+    with pytest.raises(
+        BodoError, match="read_excel requires 'sheet_name' argument as a constant"
+    ):
+        bodo.jit(test_impl4)(fname, "Sheet1")
+    with pytest.raises(BodoError, match="both 'dtype' and 'names' should be provided"):
+        bodo.jit(test_impl5)(fname)
+
+
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
         fname = "lr_w.hdf5"

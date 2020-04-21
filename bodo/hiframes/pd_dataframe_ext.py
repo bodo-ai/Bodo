@@ -190,6 +190,7 @@ class DataFramePayloadModel(models.StructModel):
             # list of flags noting which columns and index are unboxed
             # index flag is last
             ("unboxed", types.UniTuple(types.int8, n_cols + 1)),
+            ("parent", types.pyobject),
         ]
         super(DataFramePayloadModel, self).__init__(dmm, fe_type, members)
 
@@ -326,6 +327,14 @@ def define_df_dtor(context, builder, df_type, payload_type):
 
     decref_df_data(context, builder, payload, df_type)
 
+    # decref parent object
+    has_parent = cgutils.is_not_null(builder, payload.parent)
+    with builder.if_then(has_parent):
+        pyapi = context.get_python_api(builder)
+        gil_state = pyapi.gil_ensure()  # acquire GIL
+        pyapi.decref(payload.parent)
+        pyapi.gil_release(gil_state)  # release GIL
+
     builder.ret_void()
     return fn
 
@@ -350,7 +359,6 @@ def construct_dataframe(
     )
     meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
     meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, payload_ll_type.as_pointer())
-    builder.store(dataframe_payload._getvalue(), meminfo_data_ptr)
 
     # create dataframe struct
     dataframe = cgutils.create_struct_proxy(df_type)(context, builder)
@@ -361,6 +369,13 @@ def construct_dataframe(
         dataframe.parent = cgutils.get_null_value(dataframe.parent.type)
     else:
         dataframe.parent = parent
+        dataframe_payload.parent = parent
+        pyapi = context.get_python_api(builder)
+        gil_state = pyapi.gil_ensure()  # acquire GIL
+        pyapi.incref(parent)
+        pyapi.gil_release(gil_state)  # release GIL
+
+    builder.store(dataframe_payload._getvalue(), meminfo_data_ptr)
     return dataframe._getvalue()
 
 
