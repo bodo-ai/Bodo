@@ -53,19 +53,24 @@ class BodoTypeInference(PartialTypeInference):
 
     def run_pass(self, state):
         global in_partial_typing, typing_transform_required
+        saved_in_partial_typing = in_partial_typing
+        saved_typing_transform_required = typing_transform_required
+        curr_typing_pass_required = False
         while True:
             try:
                 # set global partial typing flag, see comment above
                 in_partial_typing = True
                 typing_transform_required = False
                 super(BodoTypeInference, self).run_pass(state)
+                curr_typing_pass_required = typing_transform_required
             finally:
-                in_partial_typing = False
+                in_partial_typing = saved_in_partial_typing
+                typing_transform_required = saved_typing_transform_required
 
             # done if all types are available and transform not required
             if (
                 types.unknown not in state.typemap.values()
-                and not typing_transform_required
+                and not curr_typing_pass_required
             ):
                 break
             typing_transforms_pass = TypingTransforms(

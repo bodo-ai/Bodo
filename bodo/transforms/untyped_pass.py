@@ -1217,6 +1217,9 @@ class UntypedPass:
         if "threaded" not in self.metadata:
             self.metadata["threaded"] = self.flags.threaded.copy()
 
+        if "is_return_distributed" not in self.metadata:
+            self.metadata["is_return_distributed"] = False
+
         # handle old input flags
         # e.g. {"A:input": "distributed"} -> "A"
         dist_inputs = {
@@ -1288,6 +1291,10 @@ class UntypedPass:
                 )
                 else "threaded"
             )
+            # save in metadata that the return value is distributed
+            # TODO: refactor the tuple case below, which may need to be just deleted
+            if flag == "distributed":
+                self.metadata["is_return_distributed"] = True
             nodes = self._gen_replace_dist_return(cast.value, flag)
             new_arr = nodes[-1].target
             new_cast = ir.Expr.cast(new_arr, loc)
