@@ -36,6 +36,18 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements.
   * ``dtype`` should be a constant dictionary of strings and types.
   * When a CSV file is read in parallel (distributed mode) and each process reads only a portion of the file, reading columns that contain line breaks is not supported.
 
+* :func:`pandas.read_excel`
+
+  * output dataframe cannot be parallelized automatically yet.
+  * only arguments ``io``, ``sheet_name``, ``header``, ``names``, ``comment``, ``dtype``, ``skiprows``, ``parse_dates`` are supported.
+  * ``io`` should be a string and is required.
+  * Either ``names`` and ``dtype`` arguments should be provided to enable type inference,
+    or ``io`` should be a constant string for Bodo to infer types by looking at the file at
+    compile time.
+  * ``sheet_name``, ``header``, ``comment``, and ``skiprows`` should be constant if provided.
+  * ``names`` and ``parse_dates`` should be constant lists if provided.
+  * ``dtype`` should be a constant dictionary of strings and types if provided.
+
 * :func:`pandas.read_sql`
 
   * :ref:`example usage and more system specific instructions <sql-section>`

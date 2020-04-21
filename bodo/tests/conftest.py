@@ -60,10 +60,11 @@ def memory_leak_check():
 def pytest_collection_modifyitems(items):
     """
     called after collection has been performed.
-    Mark the first half of the tests with marker "firsthalf"
+    Mark the first third of the tests with marker "firsthalf"
+    Using first third instead of first half because test suite is imbalanced
     """
     n = len(items)
-    for item in items[0 : n // 2]:
+    for item in items[0 : n // 3]:
         item.add_marker(pytest.mark.firsthalf)
 
 

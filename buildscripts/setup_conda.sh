@@ -39,5 +39,6 @@ $CONDA_INSTALL pandas>=1.0.0 -c conda-forge
 $CONDA_INSTALL numba=0.48.* -c conda-forge
 $CONDA_INSTALL mpi4py -c conda-forge
 $CONDA_INSTALL -c conda-forge hdf5=*=*mpich*
+$CONDA_INSTALL -c conda-forge xlrd xlsxwriter
 
 if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi

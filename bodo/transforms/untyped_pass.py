@@ -45,6 +45,7 @@ from bodo.utils.transform import get_const_nested
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.hiframes.pd_index_ext import RangeIndexType
 import bodo.ir
 import bodo.ir.aggregate
 import bodo.ir.join
@@ -54,6 +55,7 @@ from bodo.ir import sql_ext
 
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 import bodo.hiframes.pd_dataframe_ext
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.utils.transform import (
     update_locs,
     get_str_const_value,
@@ -373,6 +375,10 @@ class UntypedPass:
         if fdef == ("read_sql", "pandas"):
             return self._handle_pd_read_sql(assign, lhs, rhs, label)
 
+        # handling pd.read_excel() here since typing info needs to be extracted
+        if fdef == ("read_excel", "pandas"):
+            return self._handle_pd_read_excel(assign, lhs, rhs, label)
+
         # match flatmap pd.Series(list(itertools.chain(*A))) and flatten
         if fdef == ("Series", "pandas"):
             return self._handle_pd_Series(assign, lhs, rhs)
@@ -658,6 +664,165 @@ class UntypedPass:
         nodes += compile_func_single_block(_init_df, data_arrs, lhs)
         return nodes
 
+    def _handle_pd_read_excel(self, assign, lhs, rhs, label):
+        """add typing info to pd.read_excel() using extra argument '_bodo_df_type'
+        This enables the overload implementation to just call Pandas
+        """
+        # schema (Pandas 1.0.3): io, sheet_name=0, header=0, names=None, index_col=None,
+        # usecols=None, squeeze=False, dtype=None, engine=None, converters=None,
+        # true_values=None, false_values=None, skiprows=None, nrows=None,
+        # na_values=None, keep_default_na=True, verbose=False, parse_dates=False,
+        # date_parser=None, thousands=None, comment=None, skipfooter=0,
+        # convert_float=True, mangle_dupe_cols=True,
+        kws = dict(rhs.kws)
+        fname_var = get_call_expr_arg("read_excel", rhs.args, kws, 0, "io")
+        sheet_name = self._get_const_arg(
+            "read_excel",
+            rhs.args,
+            kws,
+            1,
+            "sheet_name",
+            0,
+            typ="str or int",
+            error_on_non_const=True,
+        )
+        header = self._get_const_arg(
+            "read_excel",
+            rhs.args,
+            kws,
+            2,
+            "header",
+            0,
+            typ="int",
+            error_on_non_const=True,
+        )
+        names_var = get_call_expr_arg("read_excel", rhs.args, kws, 3, "names", "")
+        # index_col = self._get_const_arg("read_excel", rhs.args, kws, 4, "index_col", -1)
+        comment = self._get_const_arg("read_excel", rhs.args, kws, 20, "comment", "")
+        parse_dates_var = get_call_expr_arg(
+            "read_excel", rhs.args, kws, 17, "parse_dates", ""
+        )
+        dtype_var = get_call_expr_arg("read_excel", rhs.args, kws, 7, "dtype", "")
+        skiprows = self._get_const_arg(
+            "read_excel",
+            rhs.args,
+            kws,
+            12,
+            "skiprows",
+            0,
+            typ="int",
+            error_on_non_const=True,
+        )
+
+        # replace "" placeholder with default None (can't use None in _get_const_arg)
+        if comment == "":
+            comment = None
+
+        # TODO: support index_col
+        # if index_col == -1:
+        #     index_col = None
+
+        # get date columns from 'parse_dates'
+        date_cols = []
+        if parse_dates_var != "":
+            err_msg = "pd.read_excel() parse_dates should be constant list"
+            date_cols = self._get_const_val_or_list(
+                kws["parse_dates"], err_msg=err_msg, typ=[int, str]
+            )
+
+        # check unsupported arguments
+        supported_args = (
+            "io",
+            "sheet_name",
+            "header",
+            "names",
+            # "index_col",
+            "comment",
+            "dtype",
+            "skiprows",
+            "parse_dates",
+        )
+        unsupported_args = set(kws.keys()) - set(supported_args)
+        if unsupported_args:
+            raise BodoError(
+                "read_excel() arguments {} not supported yet".format(unsupported_args)
+            )
+
+        col_names = self._get_const_val_or_list(names_var, default=0)
+
+        if dtype_var != "" and col_names == 0 or dtype_var == "" and col_names != 0:
+            raise BodoError(
+                "pd.read_excel(): both 'dtype' and 'names' should be provided if either is provided"
+            )
+
+        # inference is necessary
+        # TODO: refactor with read_csv
+        if dtype_var == "":
+            # infer column names and types from constant filename
+            msg = (
+                "pd.read_excel() requires explicit type "
+                "annotation using 'dtype' if filename is not constant"
+            )
+            fname_const = get_str_const_value(
+                fname_var, self.func_ir, msg, arg_types=self.args
+            )
+            rows_to_read = 100  # TODO: tune this
+            df = pd.read_excel(
+                fname_const,
+                sheet_name=sheet_name,
+                nrows=rows_to_read,
+                skiprows=skiprows,
+                header=header,
+                # index_col=index_col,
+                comment=comment,
+                parse_dates=date_cols,
+            )
+            df_type = numba.typeof(df)
+
+        else:
+            dtype_map = guard(get_definition, self.func_ir, dtype_var)
+
+            # handle converted constant dictionaries
+            if is_call(dtype_map) and (
+                guard(find_callname, self.func_ir, dtype_map)
+                == ("add_consts_to_type", "bodo.utils.typing")
+            ):
+                dtype_map = guard(get_definition, self.func_ir, dtype_map.args[0])
+
+            if (
+                not isinstance(dtype_map, ir.Expr) or dtype_map.op != "build_map"
+            ):  # pragma: no cover
+                # try single type for all columns case
+                dtype_map = self._get_const_dtype(dtype_var)
+            else:
+                new_dtype_map = {}
+                for n_var, t_var in dtype_map.items:
+                    # find constant column name
+                    c = guard(find_const, self.func_ir, n_var)
+                    if c is None:  # pragma: no cover
+                        raise BodoError("dtype column names should be constant")
+                    new_dtype_map[c] = self._get_const_dtype(t_var)
+
+                # HACK replace build_map to avoid inference errors
+                dtype_map.op = "build_list"
+                dtype_map.items = [v[0] for v in dtype_map.items]
+                dtype_map = new_dtype_map
+
+            index = RangeIndexType(types.none)
+            # TODO: support index_col
+            # if index_col is not None:
+            #     index_name = col_names[index_col]
+            #     index = bodo.hiframes.pd_index_ext.array_typ_to_index(dtype_map[index_name], types.StringLiteral(index_name))
+            #     col_names.remove(index_name)
+            data_arrs = tuple(dtype_map[c] for c in col_names)
+            df_type = DataFrameType(data_arrs, index, tuple(col_names), True)
+
+        tp_var = ir.Var(lhs.scope, mk_unique_var("df_type_var"), rhs.loc)
+        typ_assign = ir.Assign(ir.Const(df_type, rhs.loc), tp_var, rhs.loc)
+        kws["_bodo_df_type"] = tp_var
+        rhs.kws = list(kws.items())
+        return [typ_assign, assign]
+
     def _handle_pd_read_csv(self, assign, lhs, rhs, label):
         """transform pd.read_csv(names=[A], dtype={'A': np.int32}) call
         """
@@ -895,6 +1060,10 @@ class UntypedPass:
                 )
                 return IntegerArrayType(dtype.dtype)
 
+            # datetime64 case
+            if typ_name == "datetime64[ns]":
+                return types.Array(types.NPDatetime("ns"), 1, "C")
+
             typ_name = "int64" if typ_name == "int" else typ_name
             typ_name = "float64" if typ_name == "float" else typ_name
             typ_name = "bool_" if typ_name == "bool" else typ_name
@@ -912,7 +1081,7 @@ class UntypedPass:
         if isinstance(dtype_def, ir.Global) and dtype_def.value == str:
             return string_array_type
 
-        # categorical case
+        # cases that involve a function call like Int, Categorical, np.dtype()
         if isinstance(dtype_def, ir.Expr) and dtype_def.op == "call":
             fdef = guard(find_callname, self.func_ir, dtype_def)
             if (
@@ -924,6 +1093,11 @@ class UntypedPass:
                 pd_dtype = getattr(pd, fdef[0])()
                 dtype = bodo.libs.int_arr_ext.typeof_pd_int_dtype(pd_dtype, None)
                 return IntegerArrayType(dtype.dtype)
+
+            # np.dtype() case
+            if fdef == ("dtype", "numpy"):
+                assert len(dtype_def.args) == 1
+                return self._get_const_dtype(dtype_def.args[0])
 
             if not fdef == ("CategoricalDtype", "pandas"):
                 raise ValueError(
@@ -1113,29 +1287,39 @@ class UntypedPass:
         return [assign]
 
     def _get_const_arg(
-        self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None, typ=None
+        self,
+        f_name,
+        args,
+        kws,
+        arg_no,
+        arg_name,
+        default=None,
+        err_msg=None,
+        typ=None,
+        error_on_non_const=False,
     ):
         """Get constant value for a function call argument. Raise error if the value is
         not constant.
         """
         typ = str if typ is None else typ
         arg = CONST_NOT_FOUND
+        if err_msg is None:
+            err_msg = ("{} requires '{}' argument as a constant {}").format(
+                f_name, arg_name, typ
+            )
         try:
             if len(args) > arg_no:
                 arg = find_const(self.func_ir, args[arg_no])
             elif arg_name in kws:
                 arg = find_const(self.func_ir, kws[arg_name])
         except GuardException:
-            pass
+            if error_on_non_const:
+                raise BodoError(err_msg)
 
         if arg is CONST_NOT_FOUND:
             if default is not None:
                 return default
-            if err_msg is None:
-                err_msg = ("{} requires '{}' argument as a constant {}").format(
-                    f_name, arg_name, typ
-                )
-            raise ValueError(err_msg)
+            raise BodoError(err_msg)
         return arg
 
     def _get_const_val_or_list(
@@ -1217,6 +1401,9 @@ class UntypedPass:
         if "threaded" not in self.metadata:
             self.metadata["threaded"] = self.flags.threaded.copy()
 
+        if "is_return_distributed" not in self.metadata:
+            self.metadata["is_return_distributed"] = False
+
         # handle old input flags
         # e.g. {"A:input": "distributed"} -> "A"
         dist_inputs = {
@@ -1288,6 +1475,10 @@ class UntypedPass:
                 )
                 else "threaded"
             )
+            # save in metadata that the return value is distributed
+            # TODO: refactor the tuple case below, which may need to be just deleted
+            if flag == "distributed":
+                self.metadata["is_return_distributed"] = True
             nodes = self._gen_replace_dist_return(cast.value, flag)
             new_arr = nodes[-1].target
             new_cast = ir.Expr.cast(new_arr, loc)
