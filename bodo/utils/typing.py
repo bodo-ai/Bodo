@@ -211,6 +211,19 @@ def ensure_constant_arg(fname, arg_name, val, const_type):
         )
 
 
+def ensure_constant_values(fname, arg_name, val, const_values):
+    """Make sure argument 'val' to overload of function 'fname' is one of the values in
+    'const_values'. Otherwise, raise BodoError.
+    """
+    const_val = get_overload_const(val)
+
+    if const_val not in const_values:
+        raise BodoError(
+            f"{fname}(): argument '{arg_name}' should be a constant value in "
+            f"{const_values} not '{const_val}'"
+        )
+
+
 def check_unsupported_args(fname, args_dict, arg_defaults_dict):
     """Check for unsupported arguments for function 'fname', and raise an error if any
     value other than the default is provided.
