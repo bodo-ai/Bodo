@@ -1214,7 +1214,7 @@ class DistributedAnalysis:
             if is_REP(array_dists[v]):
                 raise BodoError(
                     "variable {} is marked as distribtued by {} but not possible to"
-                    " distribtue in caller function {}".format(
+                    " distribute in caller function {}".format(
                         v, dispatcher.__name__, self.func_ir.func_id.func_name
                     )
                 )
