@@ -158,6 +158,34 @@ def test_merge_on_incompatible_dtype():
         bodo.jit(impl)(df1, df2)
 
 
+def test_merge_on_incompatible_dtype_no_unliteral():
+    """make sure error on incompatible types is not hidden because the merge overload
+    is called again without literals, which would raise wrong error about non-constant
+    'how' (issue #889)
+    """
+
+    def impl(df1, df2):
+        return df1.merge(df2, how="left")
+
+    def impl2(df1, df2):
+        return pd.merge(df1, df2, how="left")
+
+    df1 = pd.DataFrame({"A": [1, 2, 4]})
+    df2 = pd.DataFrame({"A": ["A", "BB"]})
+
+    with pytest.raises(
+        BodoError,
+        match="You are trying to merge on column .* of .*" "and column .* of .*",
+    ):
+        bodo.jit(impl)(df1, df2)
+
+    with pytest.raises(
+        BodoError,
+        match="You are trying to merge on column .* of .*" "and column .* of .*",
+    ):
+        bodo.jit(impl2)(df1, df2)
+
+
 # tests only left_on specified
 def test_merge_lefton_only():
     def impl(df1, df2):

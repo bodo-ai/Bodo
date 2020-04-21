@@ -1016,8 +1016,8 @@ def validate_unicity_output_column_names(
         insertOutColumn(eVar)
 
 
-@overload_method(DataFrameType, "merge", inline="always")
-@overload(pd.merge, inline="always")
+@overload_method(DataFrameType, "merge", inline="always", no_unliteral=True)
+@overload(pd.merge, inline="always", no_unliteral=True)
 def merge_overload(
     left,
     right,
