@@ -64,6 +64,7 @@ from bodo.utils.typing import (
     raise_bodo_error,
     check_unsupported_args,
     ensure_constant_arg,
+    ensure_constant_values,
 )
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
@@ -1264,15 +1265,8 @@ def validate_merge_spec(
     merge_defaults = dict(sort=False, copy=True, indicator=False, validate=None)
     check_unsupported_args("merge", unsupported_args, merge_defaults)
 
-    # make sure how is of type str
-    if not is_overload_constant_str(how):
-        raise BodoError(
-            "merge(): how parameter must be of type str, not " "{how}".format(how=how)
-        )
-    how = get_overload_const_str(how)
-    # make sure how is one of ["left", "right", "outer", "inner"]
-    if how not in ["left", "right", "outer", "inner"]:
-        raise BodoError("merge(): invalid key '{}' for how".format(how))
+    # make sure how is constant and one of ("left", "right", "outer", "inner")
+    ensure_constant_values("merge", "how", how, ("left", "right", "outer", "inner"))
 
 
 def validate_merge_asof_spec(
@@ -1490,16 +1484,10 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
     # make sure left and other are dataframes
     if not isinstance(other, DataFrameType):
         raise BodoError("join() requires dataframe inputs")
-    # make sure how is of type str
-    if not is_overload_constant_str(how):
-        raise BodoError(
-            "join(): how parameter must be of type str, not "
-            "{how}".format(how=how)
-        )
-    how = get_overload_const_str(how)
-    # make sure how is one of ["left", "right", "outer", "inner"]
-    if how not in ["left", "right", "outer", "inner"]:
-        raise BodoError("join(): invalid key '{}' for how".format(how))
+
+    # make sure how is constant and one of ("left", "right", "outer", "inner")
+    ensure_constant_values("merge", "how", how, ("left", "right", "outer", "inner"))
+
     # make sure on is of type str or strlist
     if (
         (not is_overload_none(on))
