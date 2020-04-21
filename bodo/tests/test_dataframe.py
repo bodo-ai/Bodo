@@ -1608,6 +1608,29 @@ def test_df_schema_change():
     pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
 
 
+def test_df_multi_schema_change():
+    """Test multiple df schema changes while also calling other Bodo functions.
+    Makes sure global state variables in typing pass are saved properly and are not
+    disrupted by calling another Bodo function (which calls the compiler recursively)
+    """
+
+    @bodo.jit
+    def g(df):
+        return df.assign(D=np.ones(len(df)))
+
+    # inspired by user code (PO reconciliation project)
+    def test_impl(df):
+        df["C"] = 3
+        df_cols = list(df.columns)
+        df = g(df)
+        df_cols = df_cols + ["D"]
+        return df[df_cols]
+
+    df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1]})
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
+
+
 def test_df_drop_column_check():
     def test_impl(df):
         return df.drop(columns=["C"])
