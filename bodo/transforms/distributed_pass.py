@@ -817,9 +817,15 @@ class DistributedPass:
         scope = assign.target.scope
         loc = assign.loc
 
-        if func_name == "reshape" and self._is_1D_arr(args[0].name):
-            # TODO: handle and test reshape properly
-            return self._run_reshape(assign, args[0], args[1:], equiv_set)
+        if func_name == "reshape" and self._is_1D_or_1D_Var_arr(args[0].name):
+            # shape argument can be int or tuple of ints
+            shape_typ = self.typemap[args[1].name]
+            if isinstance(shape_typ, types.Integer):
+                shape_vars = [args[1]]
+            else:
+                isinstance(shape_typ, types.BaseTuple)
+                shape_vars = find_build_tuple(self.func_ir, args[1])
+            return self._run_np_reshape(assign, args[0], shape_vars, equiv_set)
 
         if func_name == "ravel" and self._is_1D_arr(args[0].name):
             assert self.typemap[args[0].name].ndim == 1, "only 1D ravel supported"
@@ -856,24 +862,16 @@ class DistributedPass:
         return out
 
     def _run_call_array(self, lhs, arr, func_name, assign, args, equiv_set, avail_vars):
-        #
+        """transform distributed ndarray.func calls
+        """
         out = [assign]
 
-        # HACK support A.reshape(n, 1) for 1D_Var
-        if func_name == "reshape" and self._is_1D_Var_arr(arr.name):
-            assert len(args) == 2 and guard(find_const, self.func_ir, args[1]) == 1
-            size_var = args[0]
-            out, new_size_var = self._fix_1D_Var_alloc(
-                size_var, assign.target.scope, assign.loc, equiv_set, avail_vars
-            )
-            # empty_inferred is tuple for some reason
-            assign.value.args = list(args)
-            assign.value.args[0] = new_size_var
-            out.append(assign)
-            return out
-
-        if func_name == "reshape" and self._is_1D_arr(arr.name):
-            return self._run_reshape(assign, arr, args, equiv_set)
+        if func_name == "reshape" and self._is_1D_or_1D_Var_arr(arr.name):
+            shape_vars = args
+            arg_typ = self.typemap[args[0].name]
+            if isinstance(arg_typ, types.BaseTuple):
+                shape_vars = find_build_tuple(self.func_ir, args[0])
+            return self._run_np_reshape(assign, arr, shape_vars, equiv_set)
 
         # TODO: refactor
         # TODO: add unittest
@@ -1103,58 +1101,55 @@ class DistributedPass:
     #     f_block.body = out + f_block.body
     #     return f_block.body[:-3]
 
-    def _run_reshape(self, assign, in_arr, args, equiv_set):
+    def _run_np_reshape(self, assign, in_arr, shape_vars, equiv_set):
+        """distribute array reshape operation by finding new data offsets on every
+        processor and exchanging data using alltoallv.
+        Data exchange is necessary since data distribution is based on first dimension
+        so the actual data may not be available for fully local reshape. Example:
+        A = np.arange(6).reshape(3, 2) on 2 processors
+        rank | data    =>    rank | data
+        0    | 0             0    | 0  1
+        0    | 1             0    | 2  3
+        0    | 2             1    | 4  5
+        1    | 3
+        1    | 4
+        1    | 5
+        """
         lhs = assign.target
-        scope = assign.target.scope
-        loc = assign.target.loc
-        if len(args) == 1:
-            new_shape = args[0]
-        else:
-            # reshape can take list of ints
-            new_shape = args
-        # TODO: avoid alloc and copy if no communication necessary
-        # get new local shape in reshape and set start/count vars like new allocation
-        out, new_local_shape_var = self._run_alloc(new_shape, scope, loc)
-        # get actual tuple for mk_alloc
-        if isinstance(self.typemap[new_local_shape_var.name], types.BaseTuple):
-            sh_list = guard(find_build_tuple, self.func_ir, new_local_shape_var)
-            assert sh_list is not None, "invalid shape in reshape"
-            new_local_shape_var = tuple(sh_list)
-        dtype = self.typemap[in_arr.name].dtype
-        out += mk_alloc(
-            self.typemap, self.calltypes, lhs, new_local_shape_var, dtype, scope, loc
-        )
+        scope = lhs.scope
+        loc = lhs.loc
+        nodes = []
 
-        def f(
-            lhs, in_arr, new_0dim_global_len, old_0dim_global_len, dtype_size
-        ):  # pragma: no cover
-            bodo.libs.distributed_api.dist_oneD_reshape_shuffle(
-                lhs, in_arr, new_0dim_global_len, old_0dim_global_len, dtype_size
+        # optimization: just reshape locally if output has only 1 dimension
+        if len(shape_vars) == 1:
+            assert self._is_1D_Var_arr(lhs.name)
+            return compile_func_single_block(
+                lambda A: A.reshape(A.size), [in_arr], lhs, self
             )
 
-        f_block = compile_to_numba_ir(
-            f,
-            {"bodo": bodo},
-            self.typingctx,
-            (
-                self.typemap[lhs.name],
-                self.typemap[in_arr.name],
-                types.intp,
-                types.intp,
-                types.intp,
-            ),
+        # get local size for 1st dimension and allocate output array
+        # shape_vars[0] is global size
+        count_var = self._get_1D_count(shape_vars[0], nodes)
+        dtype = self.typemap[in_arr.name].dtype
+        nodes += mk_alloc(
             self.typemap,
             self.calltypes,
-        ).blocks.popitem()[1]
-        dtype_ir = self.dtype_size_assign_ir(dtype, scope, loc)
-        out.append(dtype_ir)
-        lhs_size = self._get_dist_var_len(lhs, out, equiv_set)
-        in_arr_size = self._get_dist_var_len(in_arr, out, equiv_set)
-        replace_arg_nodes(
-            f_block, [lhs, in_arr, lhs_size, in_arr_size, dtype_ir.target]
+            lhs,
+            (count_var,) + tuple(shape_vars[1:]),
+            dtype,
+            scope,
+            loc,
         )
-        out += f_block.body[:-3]
-        return out
+
+        # shuffle the data to fill output arrays on different ranks properly
+        return nodes + compile_func_single_block(
+            lambda lhs, in_arr, new_dim0_global_len: bodo.libs.distributed_api.dist_oneD_reshape_shuffle(
+                lhs, in_arr, new_dim0_global_len
+            ),
+            [lhs, in_arr, shape_vars[0]],
+            None,
+            self,
+        )
 
     def _run_call_rebalance_array(self, lhs, assign, args):
         out = [assign]
@@ -2550,6 +2545,14 @@ class DistributedPass:
         return (
             arr_name in self._dist_analysis.array_dists
             and self._dist_analysis.array_dists[arr_name] == Distribution.OneD
+        )
+
+    def _is_1D_or_1D_Var_arr(self, arr_name):
+        return arr_name in self._dist_analysis.array_dists and self._dist_analysis.array_dists[
+            arr_name
+        ] in (
+            Distribution.OneD,
+            Distribution.OneD_Var,
         )
 
     def _is_1D_Var_arr(self, arr_name):

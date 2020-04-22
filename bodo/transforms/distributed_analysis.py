@@ -1014,7 +1014,6 @@ class DistributedAnalysis:
                 return
 
         if func_name == "reshape":
-            # TODO: handle and test reshape properly
             # shape argument can be int or tuple of ints
             shape_typ = self.typemap[args[1].name]
             if isinstance(shape_typ, types.Integer):
@@ -1083,17 +1082,22 @@ class DistributedAnalysis:
     def _analyze_call_np_reshape(self, lhs, arr, shape_vars, array_dists):
         """distributed analysis for array.reshape or np.reshape calls
         """
-        in_arr_name = arr.name
-        self._meet_array_dists(lhs, in_arr_name, array_dists)
-        # TODO: support 1D_Var reshape
-        if array_dists[lhs] == Distribution.OneD_Var:
-            # HACK support A.reshape(n, 1) for 1D_Var
-            if (
-                len(shape_vars) == 2
-                and guard(find_const, self.func_ir, shape_vars[1]) == 1
-            ):
-                return
-            self._analyze_call_set_REP(lhs, [arr], array_dists, "reshape")
+        # REP propagates from input to output and vice versa
+        if is_REP(array_dists[arr.name]) or (
+            lhs in array_dists and is_REP(array_dists[lhs])
+        ):
+            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            self._set_var_dist(arr.name, array_dists, Distribution.REP)
+            return
+
+        # reshape to 1 dimension
+        # special case: output is 1D_Var since we just reshape locally without data
+        # exchange
+        if len(shape_vars) == 1:
+            self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+        # all other cases will have data exchange resulting in 1D distribution
+        else:
+            self._set_var_dist(lhs, array_dists, Distribution.OneD)
 
     def _analyze_call_df(self, lhs, arr, func_name, args, array_dists):
         # to_csv() and to_parquet() can be parallelized

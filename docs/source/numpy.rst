@@ -7,7 +7,7 @@ Supported Numpy Operations
 Below is the list of the data-parallel Numpy operators that Bodo can optimize
 and parallelize.
 
-1. Numpy `element-wise` array operations:
+#. Numpy `element-wise` array operations:
 
     * Unary operators: ``+`` ``-`` ``~``
     * Binary operators: ``+`` ``-`` ``*`` ``/`` ``/?`` ``%`` ``|`` ``>>`` ``^``
@@ -27,24 +27,26 @@ and parallelize.
       ``bitwise_xor``, ``bitwise_not``, ``invert``, ``left_shift``,
       ``right_shift``
 
-2. Numpy reduction functions ``sum``, ``prod``, ``min``, ``max``, ``argmin``
+#. Numpy reduction functions ``sum``, ``prod``, ``min``, ``max``, ``argmin``
    and ``argmax``. Currently, `int64` data type is not supported for
    ``argmin`` and ``argmax``.
 
-3. Numpy array creation functions ``empty``, ``zeros``, ``ones``,
+#. Numpy array creation functions ``empty``, ``zeros``, ``ones``,
    ``empty_like``, ``zeros_like``, ``ones_like``, ``full_like``, ``copy``,
    ``arange`` and ``linspace``.
 
-4. Random number generator functions: ``rand``, ``randn``,
+#. Numpy array ``reshape`` (shape values cannot be -1).
+
+#. Random number generator functions: ``rand``, ``randn``,
    ``ranf``, ``random_sample``, ``sample``, ``random``,
    ``standard_normal``, ``chisquare``, ``weibull``, ``power``, ``geometric``,
    ``exponential``, ``poisson``, ``rayleigh``, ``normal``, ``uniform``,
    ``beta``, ``binomial``, ``f``, ``gamma``, ``lognormal``, ``laplace``,
    ``randint``, ``triangular``.
 
-4. Numpy ``dot`` function between a matrix and a vector, or two vectors.
+#. Numpy ``dot`` function between a matrix and a vector, or two vectors.
 
-5. Numpy array comprehensions, such as::
+#. Numpy array comprehensions, such as::
 
     A = np.array([i**2 for i in range(N)])
 

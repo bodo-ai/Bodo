@@ -95,8 +95,8 @@ static void req_array_setitem(MPI_Request* req_arr, int64_t ind,
                               MPI_Request req) __UNUSED__;
 
 static void oneD_reshape_shuffle(char* output, char* input,
-                                 int64_t new_0dim_global_len,
-                                 int64_t old_0dim_global_len,
+                                 int64_t new_dim0_global_len,
+                                 int64_t old_dim0_local_len,
                                  int64_t out_lower_dims_size,
                                  int64_t in_lower_dims_size) __UNUSED__;
 
@@ -357,8 +357,7 @@ static MPI_Datatype get_val_rank_MPI_typ(int typ_enum) {
     // printf("h5 type enum:%d\n", typ_enum);
     // XXX: LONG is used for int64, which doesn't work on Windows
     // XXX: LONG is used for uint64
-    if (typ_enum == Bodo_CTypes::DATE ||
-        typ_enum == Bodo_CTypes::DATETIME ||
+    if (typ_enum == Bodo_CTypes::DATE || typ_enum == Bodo_CTypes::DATETIME ||
         typ_enum == Bodo_CTypes::TIMEDELTA)
         // treat date 64-bit values as int64
         typ_enum = Bodo_CTypes::INT64;
@@ -651,23 +650,45 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
     MPI_Type_free(&element_t);
 }
 
+/**
+ * @brief Shuffles the data to fill the output array properly for reshape.
+ * Finds global byte offsets for data in each rank and calls alltoallv.
+ *
+ * @param output data pointer to output array
+ * @param input data pointer to input array
+ * @param new_dim0_global_len the new global size for the 1st array dimension
+ * @param old_dim0_local_len local size of 1st array dimension in input
+ * @param out_lower_dims_size total size of lower output dimensions in bytes
+ * @param in_lower_dims_size total size of lower input dimensions in bytes
+ */
 static void oneD_reshape_shuffle(char* output, char* input,
-                                 int64_t new_0dim_global_len,
-                                 int64_t old_0dim_global_len,
+                                 int64_t new_dim0_global_len,
+                                 int64_t old_dim0_local_len,
                                  int64_t out_lower_dims_size,
                                  int64_t in_lower_dims_size) {
     int num_pes = dist_get_size();
     int rank = dist_get_rank();
 
+    // local sizes on all ranks
+    std::vector<int64_t> all_old_dim0_local_sizes(num_pes);
+    MPI_Allgather(&old_dim0_local_len, 1, MPI_LONG_LONG_INT,
+                  all_old_dim0_local_sizes.data(), 1, MPI_LONG_LONG_INT,
+                  MPI_COMM_WORLD);
+    // dim0 start offset (not byte offset) on all pes
+    std::vector<int64_t> all_old_starts(num_pes);
+    all_old_starts[0] = 0;
+    for (size_t i = 1; i < (size_t)num_pes; i++)
+        all_old_starts[i] =
+            all_old_starts[i - 1] + all_old_dim0_local_sizes[i - 1];
+
     // get my old and new data interval and convert to byte offsets
-    int64_t my_old_start =
-        in_lower_dims_size * dist_get_start(old_0dim_global_len, num_pes, rank);
-    int64_t my_new_start = out_lower_dims_size *
-                           dist_get_start(new_0dim_global_len, num_pes, rank);
+    int64_t my_old_start = all_old_starts[rank] * in_lower_dims_size;
+    int64_t my_new_start = dist_get_start(new_dim0_global_len, num_pes, rank) *
+                           out_lower_dims_size;
     int64_t my_old_end =
-        in_lower_dims_size * dist_get_end(old_0dim_global_len, num_pes, rank);
+        (all_old_starts[rank] + old_dim0_local_len) * in_lower_dims_size;
     int64_t my_new_end =
-        out_lower_dims_size * dist_get_end(new_0dim_global_len, num_pes, rank);
+        dist_get_end(new_dim0_global_len, num_pes, rank) * out_lower_dims_size;
 
     int64_t* send_counts = new int64_t[num_pes];
     int64_t* recv_counts = new int64_t[num_pes];
@@ -682,14 +703,13 @@ static void oneD_reshape_shuffle(char* output, char* input,
         recv_disp[i] = curr_recv_offset;
 
         // get pe's old and new data interval and convert to byte offsets
-        int64_t pe_old_start = in_lower_dims_size *
-                               dist_get_start(old_0dim_global_len, num_pes, i);
-        int64_t pe_new_start = out_lower_dims_size *
-                               dist_get_start(new_0dim_global_len, num_pes, i);
-        int64_t pe_old_end =
-            in_lower_dims_size * dist_get_end(old_0dim_global_len, num_pes, i);
+        int64_t pe_old_start = all_old_starts[i] * in_lower_dims_size;
+        int64_t pe_new_start = dist_get_start(new_dim0_global_len, num_pes, i) *
+                               out_lower_dims_size;
+        int64_t pe_old_end = (all_old_starts[i] + all_old_dim0_local_sizes[i]) *
+                             in_lower_dims_size;
         int64_t pe_new_end =
-            out_lower_dims_size * dist_get_end(new_0dim_global_len, num_pes, i);
+            dist_get_end(new_dim0_global_len, num_pes, i) * out_lower_dims_size;
 
         send_counts[i] = 0;
         recv_counts[i] = 0;
