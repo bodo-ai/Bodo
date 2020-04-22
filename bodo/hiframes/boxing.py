@@ -8,6 +8,7 @@ import numpy as np
 import datetime
 import warnings
 import numba
+import math
 from numba.extending import (
     typeof_impl,
     unbox,
@@ -132,7 +133,11 @@ def _infer_series_dtype(S):
         # XXX assuming the whole column is strings if 1st val is string
         # TODO: handle NA as 1st value
         i = 0
-        while i < len(S) and (S.iloc[i] is np.nan or S.iloc[i] is None):
+        while i < len(S) and (
+            S.iloc[i] is np.nan
+            or S.iloc[i] is None
+            or (isinstance(S.iloc[i], float) and math.isnan(S.iloc[i]))
+        ):
             i += 1
         if i == len(S):
             # assume all NA object column is string
