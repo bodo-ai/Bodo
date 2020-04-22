@@ -74,10 +74,10 @@ jobs:
     displayName: 'Setup MySQL tesing'
 
   - script: |
-    export PATH=$HOME/miniconda3/bin:$PATH
-    source activate $CONDA_ENV
-    conda install -y -c conda-forge xlrd xlsxwriter
-  displayName: 'Setup excel testing'
+      export PATH=$HOME/miniconda3/bin:$PATH
+      source activate $CONDA_ENV
+      conda install -y -c conda-forge xlrd xlsxwriter
+    displayName: 'Setup excel testing'
 
   - script: |
       export PATH=$HOME/miniconda3/bin:${PATH}
