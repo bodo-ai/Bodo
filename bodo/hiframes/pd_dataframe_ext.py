@@ -62,6 +62,9 @@ from bodo.utils.typing import (
     get_overload_const_int,
     is_overload_constant_int,
     raise_bodo_error,
+    check_unsupported_args,
+    ensure_constant_arg,
+    ensure_constant_values,
 )
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
@@ -1192,18 +1195,11 @@ def common_validate_merge_merge_asof_spec(
         and (not is_overload_constant_str(right_on))
     ):
         raise_const_error(name_func + "(): right_on must be of type str or str list")
+
     # make sure leftindex is of type bool
-    if not is_overload_constant_bool(left_index):
-        raise BodoError(
-            name_func + "(): left_index parameter must be of type bool, not "
-            "{left_index}".format(left_index=type(left_index))
-        )
-    # make sure rightindex is of type bool
-    if not is_overload_constant_bool(right_index):
-        raise BodoError(
-            name_func + "(): right_index parameter must be of type bool, not "
-            "{right_index}".format(right_index=type(right_index))
-        )
+    ensure_constant_arg(name_func, "left_index", left_index, bool)
+    ensure_constant_arg(name_func, "right_index", right_index, bool)
+
     # make sure suffixes is not passed in
     # make sure on is of type str or strlist
     if (not is_overload_constant_tuple(suffixes)) and (
@@ -1272,34 +1268,20 @@ def validate_merge_spec(
     indicator,
     validate,
 ):
-    """validate checks of the merge() function"""
+    """validate arguments to merge()
+    """
     common_validate_merge_merge_asof_spec(
         "merge", left, right, on, left_on, right_on, left_index, right_index, suffixes
     )
-    # make sure how is of type str
-    if not is_overload_constant_str(how):
-        raise BodoError(
-            "merge(): how parameter must be of type str, not "
-            "{how}".format(how=type(how))
-        )
-    how = get_overload_const_str(how)
-    # make sure how is one of ["left", "right", "outer", "inner"]
-    if how not in ["left", "right", "outer", "inner"]:
-        raise BodoError("merge(): invalid key '{}' for how".format(how))
-    # make sure sort is the default value, sort=True not supported
-    if not is_overload_false(sort):
-        raise BodoError("merge(): sort parameter only supports default value False")
-    # make sure copy is the default value, copy=False not supported
-    if not is_overload_true(copy):
-        raise BodoError("merge(): copy parameter only supports default value True")
-    # make sure copy is the default value, copy=False not supported
-    if not is_overload_false(indicator):
-        raise BodoError(
-            "merge(): indicator parameter only supports default value False"
-        )
-    # make sure validate is None
-    if not is_overload_none(validate):
-        raise BodoError("merge(): validate parameter only supports default value None")
+
+    unsupported_args = dict(
+        sort=sort, copy=copy, indicator=indicator, validate=validate
+    )
+    merge_defaults = dict(sort=False, copy=True, indicator=False, validate=None)
+    check_unsupported_args("merge", unsupported_args, merge_defaults)
+
+    # make sure how is constant and one of ("left", "right", "outer", "inner")
+    ensure_constant_values("merge", "how", how, ("left", "right", "outer", "inner"))
 
 
 def validate_merge_asof_spec(
@@ -1517,16 +1499,10 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
     # make sure left and other are dataframes
     if not isinstance(other, DataFrameType):
         raise BodoError("join() requires dataframe inputs")
-    # make sure how is of type str
-    if not is_overload_constant_str(how):
-        raise BodoError(
-            "join(): how parameter must be of type str, not "
-            "{how}".format(how=type(how))
-        )
-    how = get_overload_const_str(how)
-    # make sure how is one of ["left", "right", "outer", "inner"]
-    if how not in ["left", "right", "outer", "inner"]:
-        raise BodoError("join(): invalid key '{}' for how".format(how))
+
+    # make sure how is constant and one of ("left", "right", "outer", "inner")
+    ensure_constant_values("merge", "how", how, ("left", "right", "outer", "inner"))
+
     # make sure on is of type str or strlist
     if (
         (not is_overload_none(on))
@@ -2087,7 +2063,7 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
     if not is_overload_constant_str(na_position):
         raise BodoError(
             "sort_values(): na_position parameter must be a literal constant of type str, not "
-            "{na_position}".format(na_position=type(na_position))
+            "{na_position}".format(na_position=na_position)
         )
 
     na_position = get_overload_const_str(na_position)
@@ -2283,7 +2259,6 @@ def reset_index_overload(
         raise BodoError(
             "reset_index(): 'inplace' parameter should be a constant boolean value"
         )
-
 
     # TODO: avoid dummy and generate func here when inlining is possible
     # TODO: inplace of df with parent (reflection)

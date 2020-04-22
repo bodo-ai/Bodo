@@ -38,7 +38,7 @@ def test_merge_how_str():
     def impl(df1, df2):
         return df1.merge(df2, how=3)
 
-    with pytest.raises(BodoError, match="how parameter must be of type str"):
+    with pytest.raises(BodoError, match="argument 'how' should be a constant value in"):
         bodo.jit(impl)(df1, df2)
 
 
@@ -47,7 +47,7 @@ def test_merge_how_invalid():
     def impl(df1, df2):
         return df1.merge(df2, how="break")
 
-    with pytest.raises(BodoError, match="invalid key .* for how"):
+    with pytest.raises(BodoError, match="argument 'how' should be a constant value in"):
         bodo.jit(impl)(df1, df2)
 
 
@@ -244,7 +244,9 @@ def test_merge_leftindex_bool():
     def impl(df1, df2):
         return df1.merge(df2, left_index="A", right_index=True)
 
-    with pytest.raises(BodoError, match="left_index parameter must be of type bool"):
+    with pytest.raises(
+        BodoError, match="argument 'left_index' should be a constant boolean"
+    ):
         bodo.jit(impl)(df1, df2)
 
 
@@ -253,7 +255,9 @@ def test_merge_rightindex_bool():
     def impl(df1, df2):
         return df1.merge(df2, left_index=True, right_index="B")
 
-    with pytest.raises(BodoError, match="right_index parameter must be of type bool"):
+    with pytest.raises(
+        BodoError, match="argument 'right_index' should be a constant boolean"
+    ):
         bodo.jit(impl)(df1, df2)
 
 
@@ -405,7 +409,7 @@ def test_join_how_str():
     def impl(df3, df4):
         return df3.join(df4, how=3)
 
-    with pytest.raises(BodoError, match="how parameter must be of type str"):
+    with pytest.raises(BodoError, match="argument 'how' should be a constant value in"):
         bodo.jit(impl)(df3, df4)
 
 
@@ -414,7 +418,7 @@ def test_join_how_invalid():
     def impl(df3, df4):
         return df3.join(df4, how="break")
 
-    with pytest.raises(BodoError, match="invalid key .* for how"):
+    with pytest.raises(BodoError, match="argument 'how' should be a constant value in"):
         bodo.jit(impl)(df3, df4)
 
 
