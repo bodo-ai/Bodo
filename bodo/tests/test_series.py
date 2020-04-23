@@ -8,6 +8,7 @@ import random
 import numba
 import numba.targets.ufunc_db
 import bodo
+from decimal import Decimal
 from bodo.utils.typing import BodoError
 from bodo.tests.utils import (
     count_array_REPs,
@@ -139,6 +140,15 @@ def test_series_constructor_int_arr():
 # TODO: other possible Series types like Categorical, dt64, td64, ...
 @pytest.fixture(
     params=[
+        pd.Series(
+            [
+                Decimal("1.6"),
+                Decimal("-0.2"),
+                Decimal("44.2"),
+                np.nan,
+                Decimal("0"),
+            ]
+        ),
         pytest.param(pd.Series([1, 8, 4, 11, -3]), marks=pytest.mark.slow),
         pytest.param(
             pd.Series([True, False, False, True, True]), marks=pytest.mark.slow
@@ -191,6 +201,13 @@ def series_val(request):
 )
 def numeric_series_val(request):
     return request.param
+
+
+def test_series_notna(series_val):
+    def test_impl(S):
+        return S.notna()
+
+    check_func(test_impl, (series_val,))
 
 
 def test_box(series_val):
@@ -405,6 +422,7 @@ def test_series_copy_shallow(series_val):
 
 
 def test_series_to_list(series_val):
+
     # XXX can't compare nans here, TODO: fix
     if series_val.hasnans:
         return
@@ -434,14 +452,15 @@ def test_series_iat_getitem(series_val):
 
 
 def test_series_iat_setitem(series_val):
+
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
         return
+
     val = series_val.iat[0]
 
     def test_impl(S, val):
         S.iat[2] = val
-        # print(S) TODO: fix crash
         return S
 
     bodo_func = bodo.jit(test_impl)
@@ -495,9 +514,11 @@ def test_series_iloc_getitem_array_bool(series_val):
 
 
 def test_series_iloc_setitem_int(series_val):
+
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
         return
+
     val = series_val.iat[0]
 
     def test_impl(S, val):
@@ -621,6 +642,7 @@ def test_series_getitem_array_bool(series_val):
 
 
 def test_series_setitem_int(series_val):
+
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
         return
@@ -667,6 +689,10 @@ def test_series_setitem_slice(series_val):
 @pytest.mark.parametrize("idx", [[1, 4], np.array([1, 4]), pd.Series([1, 4])])
 @pytest.mark.parametrize("list_val_arg", [True, False])
 def test_series_setitem_list_int(series_val, idx, list_val_arg):
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        return
+
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
         return
@@ -686,13 +712,9 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg):
     else:
         # Pandas coerces Series type to set values, so avoid low precision
         # TODO: warn or error?
-        if list_val_arg and series_val.dtype in (
-            np.int8,
-            np.uint8,
-            np.int16,
-            np.uint16,
-            np.int32,
-            np.uint32,
+        if list_val_arg and (
+            series_val.dtype
+            in (np.int8, np.uint8, np.int16, np.uint16, np.int32, np.uint32,)
         ):
             return
         pd.testing.assert_series_equal(
@@ -1288,6 +1310,10 @@ def test_series_abs():
 
 
 def test_series_min(series_val):
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        return
+
     # skip strings, TODO: handle strings
     if isinstance(series_val.values[0], str):
         return
@@ -1299,6 +1325,10 @@ def test_series_min(series_val):
 
 
 def test_series_max(series_val):
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        return
+
     # skip strings, TODO: handle strings
     if isinstance(series_val.values[0], str):
         return
@@ -1310,6 +1340,10 @@ def test_series_max(series_val):
 
 
 def test_series_idxmin(series_val):
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        return
+
     # IntegerArray doesn't have argmin yet, TODO: implement
     if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
         return
@@ -1331,6 +1365,10 @@ def test_series_idxmin(series_val):
 
 
 def test_series_idxmax(series_val):
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        return
+
     # IntegerArray doesn't have argmin yet, TODO: implement
     if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
         return
@@ -1371,6 +1409,10 @@ def test_series_median(numeric_series_val):
 
 
 def test_series_head(series_val):
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        return
+
     def test_impl(S):
         return S.head(3)
 
@@ -1378,6 +1420,10 @@ def test_series_head(series_val):
 
 
 def test_series_tail(series_val):
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        return
+
     def test_impl(S):
         return S.tail(3)
 
@@ -1494,6 +1540,10 @@ def test_series_argsort_fast():
 
 @pytest.mark.slow
 def test_series_argsort(series_val):
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        return
+
     def test_impl(A):
         return A.argsort()
 
@@ -1504,6 +1554,10 @@ def test_series_argsort(series_val):
 
 
 def test_series_sort_values(series_val):
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        return
+
     # XXX can't push NAs to the end, TODO: fix
     if series_val.hasnans:
         return
@@ -1520,6 +1574,9 @@ def test_series_sort_values(series_val):
 
 @pytest.mark.parametrize("ignore_index", [True, False])
 def test_series_append_single(series_val, ignore_index):
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        return
 
     func_text = "def test_impl(A, B):\n"
     func_text += "  return A.append(B, {})\n".format(ignore_index)
@@ -1538,6 +1595,10 @@ def test_series_append_single(series_val, ignore_index):
 
 @pytest.mark.parametrize("ignore_index", [True, False])
 def test_series_append_multi(series_val, ignore_index):
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        return
+
     func_text = "def test_impl(A, B, C):\n"
     func_text += "  return A.append([B, C], {})\n".format(ignore_index)
     loc_vars = {}
@@ -1566,9 +1627,14 @@ def test_series_quantile(numeric_series_val):
 
 
 def test_series_nunique(series_val):
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        return
+
     # doesn't support NAs yet, TODO: support and test
     if series_val.hasnans:
         return
+
     # not supported for dt64 yet, TODO: support and test
     if series_val.dtype == np.dtype("datetime64[ns]"):
         return
@@ -1584,6 +1650,10 @@ def test_series_nunique(series_val):
 
 
 def test_series_unique(series_val):
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        return
+
     # not supported for dt64 yet, TODO: support and test
     if series_val.dtype == np.dtype("datetime64[ns]"):
         return

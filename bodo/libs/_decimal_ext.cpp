@@ -17,6 +17,7 @@ void* box_decimal_array(int64_t n, const uint8_t* data,
                         const uint8_t* null_bitmap, int scale);
 void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
                          uint8_t* null_bitmap);
+void unbox_decimal(PyObject* obj, uint8_t* data);
 
 #pragma pack(1)
 struct decimal_value {
@@ -46,6 +47,8 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
                            PyLong_FromVoidPtr((void*)(&box_decimal_array)));
     PyObject_SetAttrString(m, "unbox_decimal_array",
                            PyLong_FromVoidPtr((void*)(&unbox_decimal_array)));
+    PyObject_SetAttrString(m, "unbox_decimal",
+                           PyLong_FromVoidPtr((void*)(&unbox_decimal)));
     PyObject_SetAttrString(m, "decimal_to_str",
                            PyLong_FromVoidPtr((void*)(&decimal_to_str)));
     return m;
@@ -108,6 +111,51 @@ void* box_decimal_array(int64_t n, const uint8_t* data,
     return ret;
 #undef CHECK
 }
+
+
+/**
+ * @brief unbox a single Decimal object into a native Decimal128Type
+ *
+ * @param obj ndarray object of Decimal objects
+ * @param data pointer to 128-bit data
+ */
+void unbox_decimal(PyObject* obj, uint8_t* data_ptr)
+{
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return;                        \
+    }
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK(res.status().ok(), msg)             \
+    lhs = std::move(res).ValueOrDie();
+
+    auto gilstate = PyGILState_Ensure();
+
+    PyObject* decimal_mod = PyImport_ImportModule("decimal");
+    CHECK(decimal_mod, "importing decimal module failed");
+    PyObject* str_obj = PyObject_Str(obj);
+    CHECK(str_obj, "str(decimal) failed");
+    // extracting the 128 integer
+    arrow::Decimal128 d128, d128_18;
+    int32_t precision;
+    int32_t scale;
+    arrow::Status status = arrow::Decimal128::FromString(
+        (const char*)PyUnicode_DATA(str_obj), &d128, &precision,
+        &scale);
+    CHECK(status.ok(), "decimal rescale faild");
+    // rescale decimal to 18 (default scale converting from Python)
+    CHECK_ARROW_AND_ASSIGN(d128.Rescale(scale, PY_DECIMAL_SCALE),
+                           "decimal rescale error", d128_18);
+    d128_18.ToBytes(data_ptr);
+    Py_DECREF(str_obj);
+
+    PyGILState_Release(gilstate);
+}
+
+
+
 
 /**
  * @brief unbox ndarray of Decimal objects into native DecimalArray
@@ -199,8 +247,27 @@ void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
  */
 void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
                     int64_t* len_ptr, int scale) {
-    arrow::Decimal128 arrow_decimal(val.high, val.low);
-    std::string str = arrow_decimal.ToString(scale);
+    std::string str = "0";
+    // normalize string representation to remove extra zeros (e.g. 0.45000 -> 0.45, 4.0000 -> 4)
+    if (val.high != 0 || val.low != 0) {
+      // only this case for a non-zero value
+      arrow::Decimal128 arrow_decimal(val.high, val.low);
+      str = arrow_decimal.ToString(scale);
+      // str may be of the form 0.45000000000 or 4.000000000
+      size_t last_char = str.length();
+      while(true) {
+        if (str[last_char-1] != '0')
+          break;
+        last_char--;
+      }
+      // position reduce str to 0.45  or 4.
+      if (str[last_char-1] == '.')
+        last_char--;
+      // position reduce str to 0.45 or 4
+      str = str.substr(0,last_char);
+      // the reduction is done. str is 0.45 or 4
+    }
+    // Now doing the boxing.
     int64_t l = (int64_t)str.length();
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe(l + 1);
     memcpy(meminfo->data, str.c_str(), l);

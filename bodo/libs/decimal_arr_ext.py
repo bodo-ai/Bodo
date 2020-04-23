@@ -30,43 +30,57 @@ from numba.extending import (
     overload_attribute,
 )
 from numba.array_analysis import ArrayAnalysis
-
+from decimal import Decimal
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import decimal_ext
 
 ll.add_symbol("box_decimal_array", decimal_ext.box_decimal_array)
+ll.add_symbol("unbox_decimal", decimal_ext.unbox_decimal)
 ll.add_symbol("unbox_decimal_array", decimal_ext.unbox_decimal_array)
 ll.add_symbol("decimal_to_str", decimal_ext.decimal_to_str)
 
 from bodo.utils.typing import (
     get_overload_const_int,
     is_overload_constant_int,
+    is_list_like_index_type,
     parse_dtype,
 )
 
 
 int128_type = types.Integer("int128", 128)
-# TODO: implement proper decimal.Decimal support
 
 
 class Decimal128Type(types.Type):
     """data type for Decimal128 values similar to Arrow's Decimal128
     """
+
     def __init__(self, precision, scale):
         assert isinstance(precision, int)
         assert isinstance(scale, int)
-        super(Decimal128Type, self).__init__(name="Decimal128Type({}, {})".format(precision, scale))
+        super(Decimal128Type, self).__init__(
+            name="Decimal128Type({}, {})".format(precision, scale)
+        )
         self.precision = precision
         self.scale = scale
         self.bitwidth = 128  # needed for using IntegerModel
+
+
+# For the processing of the data we have to put a precision and scale.
+# As it turn out when reading boxed data we may certainly have precision not 38
+# and scale not 18.
+# But we choose to arbitrarily assign precision=38 and scale=18 and it turns
+# out that it works.
+@typeof_impl.register(Decimal)
+def typeof_decimal_value(val, c):
+    return Decimal128Type(38, 18)
 
 
 register_model(Decimal128Type)(models.IntegerModel)
 
 
 @intrinsic
-def int128_to_decimal(typingctx, val, precision_tp, scale_tp=None):
+def int128_to_decimal128type(typingctx, val, precision_tp, scale_tp=None):
     """cast int128 to decimal128
     """
     assert val == int128_type
@@ -78,7 +92,61 @@ def int128_to_decimal(typingctx, val, precision_tp, scale_tp=None):
 
     precision = get_overload_const_int(precision_tp)
     scale = get_overload_const_int(scale_tp)
-    return Decimal128Type(precision, scale)(int128_type, precision_tp, scale_tp), codegen
+    return (
+        Decimal128Type(precision, scale)(int128_type, precision_tp, scale_tp),
+        codegen,
+    )
+
+
+@intrinsic
+def decimal128type_to_int128(typingctx, val):
+    """cast int128 to decimal128
+    """
+    assert isinstance(val, Decimal128Type)
+
+    def codegen(context, builder, signature, args):
+        return args[0]
+
+    return int128_type(val), codegen
+
+
+def decimal_to_str_codegen(context, builder, signature, args, scale):
+    (val,) = args
+    scale = context.get_constant(types.int32, scale)
+
+    uni_str = cgutils.create_struct_proxy(types.unicode_type)(context, builder)
+
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [
+            lir.IntType(128),
+            lir.IntType(8).as_pointer().as_pointer(),
+            lir.IntType(64).as_pointer(),
+            lir.IntType(32),
+        ],
+    )
+    fn = builder.module.get_or_insert_function(fnty, name="decimal_to_str")
+    builder.call(
+        fn,
+        [
+            val,
+            uni_str._get_ptr_by_name("meminfo"),
+            uni_str._get_ptr_by_name("length"),
+            scale,
+        ],
+    )
+
+    # output is always ASCII
+    uni_str.kind = context.get_constant(
+        types.int32, numba.unicode.PY_UNICODE_1BYTE_KIND
+    )
+    uni_str.is_ascii = context.get_constant(types.int32, 1)
+    # set hash value -1 to indicate "need to compute hash"
+    uni_str.hash = context.get_constant(numba.unicode._Py_hash_t, -1)
+    uni_str.data = context.nrt.meminfo_data(builder, uni_str.meminfo)
+    # Set parent to NULL
+    uni_str.parent = cgutils.get_null_value(uni_str.parent.type)
+    return uni_str._getvalue()
 
 
 @intrinsic
@@ -88,46 +156,16 @@ def decimal_to_str(typingctx, val_t=None):
     assert isinstance(val_t, Decimal128Type)
 
     def codegen(context, builder, signature, args):
-        (val,) = args
-        scale = context.get_constant(types.int32, val_t.scale)
-
-        uni_str = cgutils.create_struct_proxy(types.unicode_type)(context, builder)
-
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [
-                lir.IntType(128),
-                lir.IntType(8).as_pointer().as_pointer(),
-                lir.IntType(64).as_pointer(),
-                lir.IntType(32),
-            ],
-        )
-        fn = builder.module.get_or_insert_function(fnty, name="decimal_to_str")
-        builder.call(
-            fn,
-            [
-                val,
-                uni_str._get_ptr_by_name("meminfo"),
-                uni_str._get_ptr_by_name("length"),
-                scale,
-            ],
-        )
-
-        # output is always ASCII
-        uni_str.kind = context.get_constant(
-            types.int32, numba.unicode.PY_UNICODE_1BYTE_KIND
-        )
-        uni_str.is_ascii = context.get_constant(types.int32, 1)
-        # set hash value -1 to indicate "need to compute hash"
-        uni_str.hash = context.get_constant(numba.unicode._Py_hash_t, -1)
-        uni_str.data = context.nrt.meminfo_data(builder, uni_str.meminfo)
-        # Set parent to NULL
-        uni_str.parent = cgutils.get_null_value(uni_str.parent.type)
-        return uni_str._getvalue()
+        return decimal_to_str_codegen(context, builder, signature, args, val_t.scale)
 
     return bodo.string_type(val_t), codegen
 
 
+# We cannot have exact matching between Python and Bodo
+# regarding the strings between decimal.
+# If you write Decimal("4.0"), Decimal("4.00"), or Decimal("4")
+# their python output is "4.0", "4.00", and "4"
+# but for Bodo thei output is always "4"
 @overload(str)
 def overload_str_decimal(val):
     if isinstance(val, Decimal128Type):
@@ -136,6 +174,52 @@ def overload_str_decimal(val):
             return decimal_to_str(val)
 
         return impl
+
+
+@unbox(Decimal128Type)
+def unbox_decimal(typ, val, c):
+    """
+    Unbox a decimal.Decimal object into native Decimal128Type
+    typ = Decimal128Type(38, 18)
+    val is a Python object of type decimal.Decimal that is fed into
+    the function. We need to return a Decimal128Type data type.
+    Passing val as input to the function appears to be a correct move.
+    
+    """
+    fnty = lir.FunctionType(
+        lir.VoidType(), [lir.IntType(8).as_pointer(), lir.IntType(128).as_pointer(),],
+    )
+    fn = c.builder.module.get_or_insert_function(fnty, name="unbox_decimal")
+    res = cgutils.alloca_once(c.builder, c.context.get_data_type(int128_type))
+    c.builder.call(
+        fn, [val, res],
+    )
+    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
+    res_ret = c.builder.load(res)
+    return NativeValue(res_ret, is_error=is_error)
+
+
+@box(Decimal128Type)
+def box_decimal(typ, val, c):
+    dec_str = decimal_to_str_codegen(
+        c.context, c.builder, bodo.string_type(typ), (val,), typ.scale
+    )
+    dec_str_obj = c.pyapi.from_native_value(bodo.string_type, dec_str, c.env_manager)
+    #
+    mod_name = c.context.insert_const_string(c.builder.module, "decimal")
+    decimal_class_obj = c.pyapi.import_module_noblock(mod_name)
+    res = c.pyapi.call_method(decimal_class_obj, "Decimal", (dec_str_obj,))
+    c.pyapi.decref(dec_str_obj)
+    c.pyapi.decref(decimal_class_obj)
+    return res
+
+
+@overload_method(Decimal128Type, "__hash__")
+def decimal_hash(val):  # pragma: no cover
+    def impl(val):
+        return hash(decimal_to_str(val))
+
+    return impl
 
 
 class DecimalArrayType(types.ArrayCompatible):
@@ -159,7 +243,7 @@ class DecimalArrayType(types.ArrayCompatible):
         return Decimal128Type(self.precision, self.scale)
 
 
-# store data and nulls as regular numpy arrays without payload machineray
+# store data and nulls as regular numpy arrays without payload machinery
 # since this struct is immutable (data and null_bitmap are not assigned new
 # arrays after initialization)
 # NOTE: storing data as int128 elements. struct of 8 bytes could be better depending on
@@ -311,6 +395,15 @@ def unbox_decimal_arr(typ, val, c):
     return NativeValue(decimal_arr._getvalue(), is_error=is_error)
 
 
+@overload_method(DecimalArrayType, "copy")
+def overload_decimal_arr_copy(A):
+    precision = A.precision
+    scale = A.scale
+    return lambda A: bodo.libs.decimal_arr_ext.init_decimal_array(
+        A._data.copy(), A._null_bitmap.copy(), precision, scale,
+    )
+
+
 @overload(len)
 def overload_decimal_arr_len(A):
     if isinstance(A, DecimalArrayType):
@@ -327,13 +420,184 @@ def overload_decimal_arr_ndim(A):
     return lambda A: 1
 
 
+@overload(operator.setitem)
+def decimal_arr_setitem(A, idx, val):
+    if not isinstance(A, DecimalArrayType):
+        return
+
+    # scalar case
+    if isinstance(idx, types.Integer):
+        assert isinstance(val, Decimal128Type)
+
+        def impl_scalar(A, idx, val):  # pragma: no cover
+            A._data[idx] = decimal128type_to_int128(val)
+            bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
+
+        # Covered by test_series_iat_setitem , test_series_iloc_setitem_int , test_series_setitem_int
+        return impl_scalar
+
+    # array
+    if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
+        # value is DecimalArray
+        if isinstance(val, DecimalArrayType):
+
+            def impl_arr_ind_mask(A, idx, val):  # pragma: no cover
+                n = len(val._data)
+                for i in range(n):
+                    A._data[idx[i]] = val._data[i]
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], bit)
+
+            # covered by test_series_iloc_setitem_list_int
+            return impl_arr_ind_mask
+
+        # value is Array/List
+        def impl_arr_ind(A, idx, val):
+            for i in range(len(val)):
+                A._data[idx[i]] = decimal128type_to_int128(val[i])
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], 1)
+
+        return impl_arr_ind
+
+    # bool array
+    if is_list_like_index_type(idx) and idx.dtype == types.bool_:
+        # value is DecimalArray
+        if isinstance(val, DecimalArrayType):
+
+            def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
+                n = len(idx)
+                val_ind = 0
+                for i in range(n):
+                    if idx[i]:
+                        A._data[i] = val._data[val_ind]
+                        bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                            val._null_bitmap, val_ind
+                        )
+                        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
+                        val_ind += 1
+
+            return impl_bool_ind_mask
+
+        # value is Array/List
+        def impl_bool_ind(A, idx, val):  # pragma: no cover
+            n = len(idx)
+            val_ind = 0
+            for i in range(n):
+                if idx[i]:
+                    A._data[i] = val[val_ind]
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+                    val_ind += 1
+
+        return impl_bool_ind
+
+    # slice case
+    if isinstance(idx, types.SliceType):
+        # value is DecimalArray
+        if isinstance(val, DecimalArrayType):
+
+            def impl_slice_mask(A, idx, val):  # pragma: no cover
+                n = len(A._data)
+                # using setitem directly instead of copying in loop since
+                # Array setitem checks for memory overlap and copies source
+                A._data[idx] = val._data
+                # XXX: conservative copy of bitmap in case there is overlap
+                # TODO: check for overlap and copy only if necessary
+                src_bitmap = val._null_bitmap.copy()
+                slice_idx = numba.unicode._normalize_slice(idx, n)
+                val_ind = 0
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(src_bitmap, val_ind)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
+                    val_ind += 1
+
+            # Apparently covered by test_series_setitem_slice
+            return impl_slice_mask
+
+        def impl_slice(A, idx, val):  # pragma: no cover
+            n = len(A._data)
+            A._data[idx] = val
+            slice_idx = numba.unicode._normalize_slice(idx, n)
+            val_ind = 0
+            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+                val_ind += 1
+
+        return impl_slice
+
+
 @overload(operator.getitem)
 def decimal_arr_getitem(A, ind):
     if not isinstance(A, DecimalArrayType):
         return
 
+    # covered by test_series_iat_getitem , test_series_iloc_getitem_int
     if isinstance(ind, types.Integer):
         precision = A.precision
         scale = A.scale
         # XXX: cannot handle NA for scalar getitem since not type stable
-        return lambda A, ind: int128_to_decimal(A._data[ind], precision, scale)
+        return lambda A, ind: int128_to_decimal128type(A._data[ind], precision, scale)
+
+    # bool arr indexing
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+        precision = A.precision
+        scale = A.scale
+
+        def impl(A, ind):  # pragma: no cover
+            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
+            old_mask = A._null_bitmap
+            new_data = A._data[ind]
+            n = len(new_data)
+            n_bytes = (n + 7) >> 3
+            new_mask = np.empty(n_bytes, np.uint8)
+            curr_bit = 0
+            for i in numba.parfor.internal_prange(len(ind)):
+                if ind[i]:
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
+                    curr_bit += 1
+            return init_decimal_array(new_data, new_mask, precision, scale)
+
+        return impl
+
+    # int arr indexing
+    if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
+        precision = A.precision
+        scale = A.scale
+
+        def impl(A, ind):  # pragma: no cover
+            ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
+            old_mask = A._null_bitmap
+            new_data = A._data[ind_t]
+            n = len(new_data)
+            n_bytes = (n + 7) >> 3
+            new_mask = np.empty(n_bytes, np.uint8)
+            curr_bit = 0
+            for i in range(len(ind)):
+                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, ind_t[i])
+                bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
+                curr_bit += 1
+            return init_decimal_array(new_data, new_mask, precision, scale)
+
+        return impl
+
+    # slice case
+    if isinstance(ind, types.SliceType):
+        precision = A.precision
+        scale = A.scale
+
+        def impl_slice(A, ind):  # pragma: no cover
+            n = len(A._data)
+            old_mask = A._null_bitmap
+            new_data = np.ascontiguousarray(A._data[ind])
+            slice_idx = numba.unicode._normalize_slice(ind, n)
+            span = numba.unicode._slice_span(slice_idx)
+            n_bytes = (span + 7) >> 3
+            new_mask = np.empty(n_bytes, np.uint8)
+            curr_bit = 0
+            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
+                bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
+                curr_bit += 1
+            return init_decimal_array(new_data, new_mask, precision, scale)
+
+        return impl_slice
