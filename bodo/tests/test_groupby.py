@@ -217,7 +217,7 @@ def test_sum_string():
     check_func(impl, (df1,), sort_output=True)
 
 
-def test_random_string_sum_min_max_last():
+def test_random_string_sum_min_max_first_last():
     def impl1(df):
         A = df.groupby("A").sum()
         return A
@@ -231,6 +231,10 @@ def test_random_string_sum_min_max_last():
         return A
 
     def impl4(df):
+        A = df.groupby("A").first()
+        return A
+
+    def impl5(df):
         A = df.groupby("A").last()
         return A
 
@@ -251,6 +255,7 @@ def test_random_string_sum_min_max_last():
     check_func(impl2, (df1,), sort_output=True)
     check_func(impl3, (df1,), sort_output=True)
     check_func(impl4, (df1,), sort_output=True)
+    check_func(impl5, (df1,), sort_output=True)
 
 
 def test_agg_str_key():
@@ -413,18 +418,22 @@ def test_sum_max_min_list_string_random():
         return df2
 
     def test_impl4(df1):
-        df2 = df1.groupby("A", as_index=False).last()
+        df2 = df1.groupby("A", as_index=False).first()
         return df2
 
     def test_impl5(df1):
-        df2 = df1.groupby("A", as_index=False).count()
+        df2 = df1.groupby("A", as_index=False).last()
         return df2
 
     def test_impl6(df1):
-        df2 = df1.groupby("A", as_index=False)["B"].agg(("sum", "min", "max", "last"))
+        df2 = df1.groupby("A", as_index=False).count()
         return df2
 
     def test_impl7(df1):
+        df2 = df1.groupby("A", as_index=False)["B"].agg(("sum", "min", "max", "last"))
+        return df2
+
+    def test_impl8(df1):
         df2 = df1.groupby("A", as_index=False).nunique()
         return df2
 
@@ -469,16 +478,17 @@ def test_sum_max_min_list_string_random():
     check_func_list_string(test_impl3, (df1,), sort_output=True, reset_index=True)
     check_func_list_string(test_impl4, (df1,), sort_output=True, reset_index=True)
     check_func_list_string(test_impl5, (df1,), sort_output=True, reset_index=True)
+    check_func_list_string(test_impl6, (df1,), sort_output=True, reset_index=True)
 
-    # For test_impl5, we have an error in as_index=False function, that is:
+    # For test_impl7, we have an error in as_index=False function, that is:
     # df1.groupby("A", as_index=False)["B"].agg(("sum", "min", "max"))
     #
     # The problem is that pandas does it in a way that we consider erroneous.
-    check_fct(test_impl6, df1, ["sum", "min", "max", "last"])
+    check_fct(test_impl7, df1, ["sum", "min", "max", "last"])
 
-    # For test_impl6 we face the problem that pandas returns a wrong column
+    # For test_impl8 we face the problem that pandas returns a wrong column
     # for the A. multiplicities are given (always 1) instead of the values.
-    check_fct(test_impl7, df1, ["B"])
+    check_fct(test_impl8, df1, ["B"])
 
 
 def test_groupby_datetime_miss():
@@ -494,6 +504,10 @@ def test_groupby_datetime_miss():
         return A
 
     def test_impl3(df):
+        A = df.groupby("A").first()
+        return A
+
+    def test_impl4(df):
         A = df.groupby("A").last()
         return A
 
@@ -528,6 +542,7 @@ def test_groupby_datetime_miss():
     check_func(test_impl1, (df1,), sort_output=True, check_dtype=False)
     check_func(test_impl2, (df1,), sort_output=True, check_dtype=False)
     check_func(test_impl3, (df1,), sort_output=True)
+    check_func(test_impl4, (df1,), sort_output=True)
 
 
 def test_agg_as_index_fast():
@@ -1778,16 +1793,25 @@ def test_groupby_as_index_prod():
     check_func(impl2, (11,), sort_output=True)
 
 
-def test_last(test_df):
+def test_first_last(test_df):
     """
-    Test Groupby.last()
+    Test Groupby.first() and Groupby.last()
     """
 
     def impl1(df):
-        A = df.groupby("A").last()
+        A = df.groupby("A").first()
         return A
 
     def impl2(n):
+        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+        A = df.groupby("A").first()
+        return A
+
+    def impl3(df):
+        A = df.groupby("A").last()
+        return A
+
+    def impl4(n):
         df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
         A = df.groupby("A").last()
         return A
@@ -1814,18 +1838,32 @@ def test_last(test_df):
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl1, (df_dt,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
+    check_func(impl3, (test_df,), sort_output=True)
+    check_func(impl3, (df_str,), sort_output=True)
+    check_func(impl3, (df_bool,), sort_output=True)
+    check_func(impl3, (df_dt,), sort_output=True)
+    check_func(impl4, (11,), sort_output=True)
 
 
-def test_last_one_col(test_df):
+def test_first_last_one_col(test_df):
     """
-    Test Groupby.last() with one column selected
+    Test Groupby.first() and Groupby.last() with one column selected
     """
 
     def impl1(df):
-        A = df.groupby("A")["B"].last()
+        A = df.groupby("A")["B"].first()
         return A
 
     def impl2(n):
+        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+        A = df.groupby("A")["B"].first()
+        return A
+
+    def impl3(df):
+        A = df.groupby("A")["B"].last()
+        return A
+
+    def impl4(n):
         df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
         A = df.groupby("A")["B"].last()
         return A
@@ -1857,26 +1895,43 @@ def test_last_one_col(test_df):
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl1, (df_dt,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
+    check_func(impl3, (test_df,), sort_output=True, check_dtype=check_dtype)
+    check_func(impl3, (df_str,), sort_output=True)
+    check_func(impl3, (df_bool,), sort_output=True)
+    check_func(impl3, (df_dt,), sort_output=True)
+    check_func(impl4, (11,), sort_output=True)
 
 
-def test_groupby_as_index_last():
+def test_groupby_as_index_first_last():
     """
-    Test last on groupby() as_index=False
+    Test first and last on groupby() as_index=False
     for both dataframe and series returns
     """
 
     def impl1(n):
         df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
-        df2 = df.groupby("A", as_index=False).last()
+        df2 = df.groupby("A", as_index=False).first()
         return df2
 
     def impl2(n):
+        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+        df2 = df.groupby("A", as_index=False)["B"].first()
+        return df2
+
+    def impl3(n):
+        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+        df2 = df.groupby("A", as_index=False).last()
+        return df2
+
+    def impl4(n):
         df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
         df2 = df.groupby("A", as_index=False)["B"].last()
         return df2
 
     check_func(impl1, (11,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
+    check_func(impl3, (11,), sort_output=True)
+    check_func(impl4, (11,), sort_output=True)
 
 
 def test_std(test_df_int_no_null):

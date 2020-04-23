@@ -30,6 +30,7 @@ struct Bodo_FTypes {
         min,
         max,
         prod,
+        first,
         last,
         var,
         std,
@@ -62,6 +63,7 @@ void groupby_init() {
     combine_funcs[Bodo_FTypes::min] = Bodo_FTypes::min;
     combine_funcs[Bodo_FTypes::max] = Bodo_FTypes::max;
     combine_funcs[Bodo_FTypes::prod] = Bodo_FTypes::prod;
+    combine_funcs[Bodo_FTypes::first] = Bodo_FTypes::first;
     combine_funcs[Bodo_FTypes::last] = Bodo_FTypes::last;
 }
 
@@ -110,21 +112,6 @@ struct udfinfo_t {
      * sets the final output value for each group.
      */
     udf_eval_fn eval;
-};
-
-template <int dtype>
-struct is_datetime_timedelta {
-    static const bool value = false;
-};
-
-template <>
-struct is_datetime_timedelta<Bodo_CTypes::DATETIME> {
-    static const bool value = true;
-};
-
-template <>
-struct is_datetime_timedelta<Bodo_CTypes::TIMEDELTA> {
-    static const bool value = true;
 };
 
 /**
@@ -334,9 +321,7 @@ struct aggstring<Bodo_FTypes::max> {
 
 template <>
 struct aggstring<Bodo_FTypes::last> {
-    static void apply(std::string& v1, std::string& v2) {
-        v1 = v2;
-    }
+    static void apply(std::string& v1, std::string& v2) { v1 = v2; }
 };
 
 
@@ -943,7 +928,7 @@ grouping_info get_group_info_iterate(table_info* table, bool consider_missing) {
  * @param skipna: Whether to skip NaN values or not.
  * @return the returning array.
  */
-template <typename T>
+template <typename T, int dtype>
 void cumulative_computation_T(array_info* arr, array_info* out_arr,
                               grouping_info const& grp_inf,
                               int32_t const& ftype, bool const& skipna) {
@@ -993,15 +978,15 @@ void cumulative_computation_T(array_info* arr, array_info* out_arr,
                 if (i == -1) break;
             }
         }
-        T eVal_nan = GetTentry<T>(RetrieveNaNentry(arr->dtype).data());
+        T eVal_nan = GetTentry<T>(
+            RetrieveNaNentry((Bodo_CTypes::CTypeEnum)dtype).data());
         std::pair<bool, T> pairNaN{true, eVal_nan};
         for (auto& idx_miss : grp_inf.list_missing)
             set_entry(idx_miss, pairNaN);
     };
 
     if (arr->arr_type == bodo_array_type::NUMPY) {
-        if (arr->dtype == Bodo_CTypes::DATETIME ||
-            arr->dtype == Bodo_CTypes::TIMEDELTA) {
+        if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA) {
             cum_computation(
                 [=](int64_t pos) -> std::pair<bool, T> {
                     // in DATETIME/TIMEDELTA case, the types is necessarily
@@ -1020,7 +1005,7 @@ void cumulative_computation_T(array_info* arr, array_info* out_arr,
             cum_computation(
                 [=](int64_t pos) -> std::pair<bool, T> {
                     T eVal = arr->at<T>(pos);
-                    bool isna = isnan_alltype<T>(eVal);
+                    bool isna = isnan_alltype<T, dtype>(eVal);
                     return {isna, eVal};
                 },
                 [=](int64_t pos, std::pair<bool, T> const& ePair) -> void {
@@ -1047,44 +1032,49 @@ void cumulative_computation(array_info* arr, array_info* out_arr,
                             bool const& skipna) {
     Bodo_CTypes::CTypeEnum dtype = arr->dtype;
     if (dtype == Bodo_CTypes::INT8)
-        return cumulative_computation_T<int8_t>(arr, out_arr, grp_inf, ftype,
-                                                skipna);
+        return cumulative_computation_T<int8_t, Bodo_CTypes::INT8>(
+            arr, out_arr, grp_inf, ftype, skipna);
     if (dtype == Bodo_CTypes::UINT8)
-        return cumulative_computation_T<uint8_t>(arr, out_arr, grp_inf, ftype,
-                                                 skipna);
+        return cumulative_computation_T<uint8_t, Bodo_CTypes::UINT8>(
+            arr, out_arr, grp_inf, ftype, skipna);
 
     if (dtype == Bodo_CTypes::INT16)
-        return cumulative_computation_T<int16_t>(arr, out_arr, grp_inf, ftype,
-                                                 skipna);
+        return cumulative_computation_T<int16_t, Bodo_CTypes::INT16>(
+            arr, out_arr, grp_inf, ftype, skipna);
     if (dtype == Bodo_CTypes::UINT16)
-        return cumulative_computation_T<uint16_t>(arr, out_arr, grp_inf, ftype,
-                                                  skipna);
+        return cumulative_computation_T<uint16_t, Bodo_CTypes::UINT16>(
+            arr, out_arr, grp_inf, ftype, skipna);
 
     if (dtype == Bodo_CTypes::INT32)
-        return cumulative_computation_T<int32_t>(arr, out_arr, grp_inf, ftype,
-                                                 skipna);
+        return cumulative_computation_T<int32_t, Bodo_CTypes::INT32>(
+            arr, out_arr, grp_inf, ftype, skipna);
     if (dtype == Bodo_CTypes::UINT32)
-        return cumulative_computation_T<uint32_t>(arr, out_arr, grp_inf, ftype,
-                                                  skipna);
+        return cumulative_computation_T<uint32_t, Bodo_CTypes::UINT32>(
+            arr, out_arr, grp_inf, ftype, skipna);
 
     if (dtype == Bodo_CTypes::INT64)
-        return cumulative_computation_T<int64_t>(arr, out_arr, grp_inf, ftype,
-                                                 skipna);
+        return cumulative_computation_T<int64_t, Bodo_CTypes::INT64>(
+            arr, out_arr, grp_inf, ftype, skipna);
     if (dtype == Bodo_CTypes::UINT64)
-        return cumulative_computation_T<uint64_t>(arr, out_arr, grp_inf, ftype,
-                                                  skipna);
+        return cumulative_computation_T<uint64_t, Bodo_CTypes::UINT64>(
+            arr, out_arr, grp_inf, ftype, skipna);
 
     if (dtype == Bodo_CTypes::FLOAT32)
-        return cumulative_computation_T<float>(arr, out_arr, grp_inf, ftype,
-                                               skipna);
+        return cumulative_computation_T<float, Bodo_CTypes::FLOAT32>(
+            arr, out_arr, grp_inf, ftype, skipna);
     if (dtype == Bodo_CTypes::FLOAT64)
-        return cumulative_computation_T<double>(arr, out_arr, grp_inf, ftype,
-                                                skipna);
+        return cumulative_computation_T<double, Bodo_CTypes::FLOAT64>(
+            arr, out_arr, grp_inf, ftype, skipna);
 
-    if (dtype == Bodo_CTypes::DATE || dtype == Bodo_CTypes::DATETIME ||
-        dtype == Bodo_CTypes::TIMEDELTA)
-        return cumulative_computation_T<int64_t>(arr, out_arr, grp_inf, ftype,
-                                                 skipna);
+    if (dtype == Bodo_CTypes::DATE)
+        return cumulative_computation_T<int64_t, Bodo_CTypes::DATE>(
+            arr, out_arr, grp_inf, ftype, skipna);
+    if (dtype == Bodo_CTypes::DATETIME)
+        return cumulative_computation_T<int64_t, Bodo_CTypes::DATETIME>(
+            arr, out_arr, grp_inf, ftype, skipna);
+    if (dtype == Bodo_CTypes::TIMEDELTA)
+        return cumulative_computation_T<int64_t, Bodo_CTypes::TIMEDELTA>(
+            arr, out_arr, grp_inf, ftype, skipna);
 }
 
 /**
@@ -1442,6 +1432,21 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                         count_agg<T, dtype>::apply(
                             out_col->at<int64_t>(grp_info.row_to_group[i]),
                             in_col->at<T>(i));
+            } else if (ftype == Bodo_FTypes::first) {
+                // create a temporary bitmask to know if we have set a
+                // value for each row/group
+                int64_t n_bytes = ((out_col->length + 7) >> 3);
+                std::vector<char> out_col_bitmask_vec(n_bytes, 0);
+                uint8_t* out_col_bitmask = (uint8_t*)out_col_bitmask_vec.data();
+                for (int64_t i = 0; i < in_col->length; i++) {
+                    const int64_t& group = grp_info.row_to_group[i];
+                    T& val = in_col->at<T>(i);
+                    if ((group != -1) && !GetBit(out_col_bitmask, group) &&
+                        !isnan_alltype<T, dtype>(val)) {
+                        out_col->at<T>(group) = val;
+                        SetBitTo(out_col_bitmask, group, true);
+                    }
+                }
             } else {
                 for (int64_t i = 0; i < in_col->length; i++)
                     if (grp_info.row_to_group[i] != -1)
@@ -1450,7 +1455,7 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                             in_col->at<T>(i));
             }
             return;
-        // for list strings, we are supporting count, sum, max, min
+        // for list strings, we are supporting count, sum, max, min, first, last
         case bodo_array_type::LIST_STRING:
             switch (ftype) {
                 case Bodo_FTypes::count:
@@ -1473,8 +1478,11 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     uint8_t* null_bitmask_o = (uint8_t*)out_col->null_bitmask;
                     // Computing the strings used in output.
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if ((grp_info.row_to_group[i] != -1) &&
-                            GetBit(null_bitmask_i, i)) {
+                        int64_t i_grp = grp_info.row_to_group[i];
+                        if ((i_grp != -1) && GetBit(null_bitmask_i, i)) {
+                            bool out_bit_set = GetBit(null_bitmask_o, i_grp);
+                            if (ftype == Bodo_FTypes::first && out_bit_set)
+                                continue;
                             uint32_t start_offset = index_offsets_i[i];
                             uint32_t end_offset = index_offsets_i[i + 1];
                             uint32_t len = end_offset - start_offset;
@@ -1488,8 +1496,7 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                                 std::string val(&data_i[pos_start], len_str);
                                 LString[i] = val;
                             }
-                            int64_t i_grp = grp_info.row_to_group[i];
-                            if (GetBit(null_bitmask_o, i_grp)) {
+                            if (out_bit_set) {
                                 aggliststring<ftype>::apply(
                                     ListListString[i_grp], LString);
                             } else {
@@ -1551,7 +1558,7 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     return;
             }
 
-        // For the STRING we compute the count, sum, max, min
+        // For the STRING we compute the count, sum, max, min, first, last
         case bodo_array_type::STRING:
             switch (ftype) {
                 case Bodo_FTypes::count:
@@ -1572,14 +1579,16 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     uint8_t* null_bitmask_o = (uint8_t*)out_col->null_bitmask;
                     // Computing the strings used in output.
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if ((grp_info.row_to_group[i] != -1) &&
-                            GetBit(null_bitmask_i, i)) {
+                        int64_t i_grp = grp_info.row_to_group[i];
+                        if ((i_grp != -1) && GetBit(null_bitmask_i, i)) {
+                            bool out_bit_set = GetBit(null_bitmask_o, i_grp);
+                            if (ftype == Bodo_FTypes::first && out_bit_set)
+                                continue;
                             uint32_t start_offset = offsets[i];
                             uint32_t end_offset = offsets[i + 1];
                             uint32_t len = end_offset - start_offset;
-                            int64_t i_grp = grp_info.row_to_group[i];
                             std::string val(&data[start_offset], len);
-                            if (GetBit(null_bitmask_o, i_grp)) {
+                            if (out_bit_set) {
                                 aggstring<ftype>::apply(ListString[i_grp], val);
                             } else {
                                 ListString[i_grp] = val;
@@ -1655,6 +1664,19 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                                     grp_info.row_to_group[i]));
                     }
                     return;
+                case Bodo_FTypes::first:
+                    for (int64_t i = 0; i < in_col->length; i++) {
+                        uint8_t* out_col_null_bitmask =
+                            (uint8_t*)out_col->null_bitmask;
+                        const int64_t& group = grp_info.row_to_group[i];
+                        if ((group != -1) &&
+                            !GetBit(out_col_null_bitmask, group) &&
+                            GetBit((uint8_t*)in_col->null_bitmask, i)) {
+                            out_col->at<T>(group) = in_col->at<T>(i);
+                            SetBitTo(out_col_null_bitmask, group, true);
+                        }
+                    }
+                    return;
                 default:
                     for (int64_t i = 0; i < in_col->length; i++) {
                         if ((grp_info.row_to_group[i] != -1) &&
@@ -1706,6 +1728,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                 return apply_to_column<int, Bodo_FTypes::max,
                                        Bodo_CTypes::STRING>(in_col, out_col,
                                                             aux_cols, grp_info);
+            case Bodo_FTypes::first:
+                return apply_to_column<int, Bodo_FTypes::first,
+                                       Bodo_CTypes::STRING>(in_col, out_col,
+                                                            aux_cols, grp_info);
             case Bodo_FTypes::last:
                 return apply_to_column<int, Bodo_FTypes::last,
                                        Bodo_CTypes::STRING>(in_col, out_col,
@@ -1747,6 +1773,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<bool, Bodo_FTypes::prod,
                                            Bodo_CTypes::_BOOL>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::first:
+                    return apply_to_column<bool, Bodo_FTypes::first,
+                                           Bodo_CTypes::_BOOL>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
                     return apply_to_column<bool, Bodo_FTypes::last,
                                            Bodo_CTypes::_BOOL>(
@@ -1773,6 +1803,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<int8_t, Bodo_FTypes::prod,
+                                           Bodo_CTypes::INT8>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::first:
+                    return apply_to_column<int8_t, Bodo_FTypes::first,
                                            Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
@@ -1807,6 +1841,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<uint8_t, Bodo_FTypes::prod,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::first:
+                    return apply_to_column<uint8_t, Bodo_FTypes::first,
+                                           Bodo_CTypes::UINT8>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
                     return apply_to_column<uint8_t, Bodo_FTypes::last,
                                            Bodo_CTypes::UINT8>(
@@ -1837,6 +1875,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<int16_t, Bodo_FTypes::prod,
+                                           Bodo_CTypes::INT16>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::first:
+                    return apply_to_column<int16_t, Bodo_FTypes::first,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
@@ -1871,6 +1913,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<uint16_t, Bodo_FTypes::prod,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::first:
+                    return apply_to_column<uint16_t, Bodo_FTypes::first,
+                                           Bodo_CTypes::UINT16>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
                     return apply_to_column<uint16_t, Bodo_FTypes::last,
                                            Bodo_CTypes::UINT16>(
@@ -1901,6 +1947,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<int32_t, Bodo_FTypes::prod,
+                                           Bodo_CTypes::INT32>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::first:
+                    return apply_to_column<int32_t, Bodo_FTypes::first,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
@@ -1935,6 +1985,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<uint32_t, Bodo_FTypes::prod,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::first:
+                    return apply_to_column<uint32_t, Bodo_FTypes::first,
+                                           Bodo_CTypes::UINT32>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
                     return apply_to_column<uint32_t, Bodo_FTypes::last,
                                            Bodo_CTypes::UINT32>(
@@ -1965,6 +2019,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<int64_t, Bodo_FTypes::prod,
+                                           Bodo_CTypes::INT64>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::first:
+                    return apply_to_column<int64_t, Bodo_FTypes::first,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
@@ -1999,6 +2057,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<uint64_t, Bodo_FTypes::prod,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::first:
+                    return apply_to_column<uint64_t, Bodo_FTypes::first,
+                                           Bodo_CTypes::UINT64>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
                     return apply_to_column<uint64_t, Bodo_FTypes::last,
                                            Bodo_CTypes::UINT64>(
@@ -2029,6 +2091,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<int64_t, Bodo_FTypes::prod,
+                                           Bodo_CTypes::DATE>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::first:
+                    return apply_to_column<int64_t, Bodo_FTypes::first,
                                            Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
@@ -2063,6 +2129,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int64_t, Bodo_FTypes::prod,
                                            Bodo_CTypes::DATETIME>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::first:
+                    return apply_to_column<int64_t, Bodo_FTypes::first,
+                                           Bodo_CTypes::DATETIME>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
                     return apply_to_column<int64_t, Bodo_FTypes::last,
                                            Bodo_CTypes::DATETIME>(
@@ -2095,6 +2165,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int64_t, Bodo_FTypes::prod,
                                            Bodo_CTypes::TIMEDELTA>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::first:
+                    return apply_to_column<int64_t, Bodo_FTypes::first,
+                                           Bodo_CTypes::TIMEDELTA>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
                     return apply_to_column<int64_t, Bodo_FTypes::last,
                                            Bodo_CTypes::TIMEDELTA>(
@@ -2125,6 +2199,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<float, Bodo_FTypes::prod,
+                                           Bodo_CTypes::FLOAT32>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::first:
+                    return apply_to_column<float, Bodo_FTypes::first,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
@@ -2169,6 +2247,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
                     return apply_to_column<double, Bodo_FTypes::prod,
+                                           Bodo_CTypes::FLOAT64>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::first:
+                    return apply_to_column<double, Bodo_FTypes::first,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
@@ -2217,8 +2299,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
  */
 void aggfunc_output_initialize(array_info* out_col, int ftype) {
     if (out_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max || ftype == Bodo_FTypes::last)
-            // if input is all nulls, max, min and last output will be null
+        if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max ||
+            ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last)
+            // if input is all nulls, max, min, first and last output will be
+            // null
             InitializeBitMask((uint8_t*)out_col->null_bitmask, out_col->length,
                               false);
         else
@@ -2440,10 +2524,12 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                                          "unsupported/not implemented");
                     return;
             }
+        case Bodo_FTypes::first:
         case Bodo_FTypes::last:
             switch (out_col->dtype) {
-                // for last, we only need an initial value for the non-null
-                // bitmask cases where the datatype has a nan representation
+                // for first & last, we only need an initial value for the
+                // non-null bitmask cases where the datatype has a nan
+                // representation
                 case Bodo_CTypes::DATE:
                 case Bodo_CTypes::DATETIME:
                 case Bodo_CTypes::TIMEDELTA:
@@ -2467,8 +2553,8 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                               std::numeric_limits<double>::quiet_NaN());
                     return;
                 default:
-                    // for most cases we don't need an initial value, last
-                    // will just replace that with the last value
+                    // for most cases we don't need an initial value, first/last
+                    // will just replace that with the first/last value
                     return;
             }
         default:

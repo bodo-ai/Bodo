@@ -285,14 +285,14 @@ def get_groupby_output_dtype(arr_type, func_name):
     ):
         is_list_string = isinstance(in_dtype, numba.types.containers.List) and in_dtype.dtype == types.unicode_type
         if is_list_string or in_dtype == types.unicode_type:
-            if func_name not in {"count", "nunique", "min", "max", "sum", "last"}:
+            if func_name not in {"count", "nunique", "min", "max", "sum", "first", "last"}:
                 raise BodoError(
                     "column type of strings or list of strings is not supported in groupby built-in function {}".format(
                         func_name
                     )
                 )
         else:
-            if func_name not in {"count", "nunique", "min", "max", "last"}:
+            if func_name not in {"count", "nunique", "min", "max", "first", "last"}:
                 raise BodoError(
                     "column type of {} is not supported in groupby built-in function {}".format(
                         in_dtype, func_name
@@ -591,6 +591,10 @@ class DataframeGroupByAttribute(AttributeTemplate):
     @bound_function("groupby.std")
     def resolve_std(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "std")
+
+    @bound_function("groupby.first")
+    def resolve_first(self, grp, args, kws):
+        return self._get_agg_typ(grp, args, "first")
 
     @bound_function("groupby.last")
     def resolve_last(self, grp, args, kws):

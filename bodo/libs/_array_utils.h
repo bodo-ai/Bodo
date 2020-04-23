@@ -227,24 +227,42 @@ inline bool TestEqual(std::vector<array_info*> const& columns,
     return true;
 };
 
+template <int dtype>
+struct is_datetime_timedelta {
+    static const bool value = false;
+};
 
-template<typename T>
+template <>
+struct is_datetime_timedelta<Bodo_CTypes::DATETIME> {
+    static const bool value = true;
+};
+
+template <>
+struct is_datetime_timedelta<Bodo_CTypes::TIMEDELTA> {
+    static const bool value = true;
+};
+
+template <typename T, int dtype>
 inline typename std::enable_if<std::is_floating_point<T>::value, bool>::type
-isnan_alltype(T const& val)
-{
-  return isnan(val);
+isnan_alltype(T const& val) {
+    return isnan(val);
 }
 
-
-template<typename T>
-inline typename std::enable_if<!std::is_floating_point<T>::value, bool>::type
-isnan_alltype(T const& val)
-{
-  return false;
+template <typename T, int dtype>
+inline typename std::enable_if<!std::is_floating_point<T>::value &&
+                                   is_datetime_timedelta<dtype>::value,
+                               bool>::type
+isnan_alltype(T const& val) {
+    return val == std::numeric_limits<T>::min();
 }
 
-
-
+template <typename T, int dtype>
+inline typename std::enable_if<!std::is_floating_point<T>::value &&
+                                   !is_datetime_timedelta<dtype>::value,
+                               bool>::type
+isnan_alltype(T const& val) {
+    return false;
+}
 
 /**
  * The comparison function for integer types.
