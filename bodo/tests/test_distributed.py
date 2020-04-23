@@ -548,7 +548,8 @@ def test_getitem_slice_const_size():
     # check_func(impl4, ())
 
 
-def test_arr_reshape():
+@pytest.mark.parametrize("dtype", [np.float32, np.uint8, np.int64])
+def test_arr_reshape(dtype):
     """test reshape of multi-dim distributed arrays
     """
     # reshape to more dimensions
@@ -575,14 +576,14 @@ def test_arr_reshape():
     def impl6(A, n):
         return A.reshape(3, n // 3)
 
-    A = np.arange(12)
+    A = np.arange(12, dtype=dtype)
     check_func(impl1, (A, 12))
     check_func(impl2, (A, 12))
     check_func(impl3, (A, 12))
-    A = np.arange(12).reshape(2, 3, 2)
+    A = np.arange(12, dtype=dtype).reshape(2, 3, 2)
     check_func(impl4, (A, 12))
     check_func(impl5, (A, 12))
-    A = np.arange(12).reshape(3, 4)
+    A = np.arange(12, dtype=dtype).reshape(3, 4)
     check_func(impl6, (A, 12))
 
 
