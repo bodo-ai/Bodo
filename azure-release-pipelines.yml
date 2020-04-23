@@ -95,9 +95,12 @@ stages:
         TEST_2P_SLOW:
           NP: 2
           PYTEST_MARKER: slow
-        TEST_3P_SLOW:
+        TEST_3P_SLOW_FIRST_HALF:
           NP: 3
-          PYTEST_MARKER: slow
+          PYTEST_MARKER: slow and firsthalf
+        TEST_3P_SLOW_SECOND_HALF:
+          NP: 3
+          PYTEST_MARKER: slow and not firsthalf
         TEST_1P_NOT_SLOW:
           NP: 1
           PYTEST_MARKER: not slow
