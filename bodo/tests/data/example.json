@@ -1,0 +1,7 @@
+{"one":-1.0,"two":"foo","three":true,"four":-1.0,"five":"foo"}
+{"one":null,"two":"bar","three":false,"four":5.1,"five":"bar"}
+{"one":2.5,"two":"baz","three":true,"four":2.5,"five":"baz"}
+{"one":3.0,"two":"foo","three":true,"four":3.0,"five":""}
+{"one":4.0,"two":"bar","three":true,"four":4.0,"five":"bar"}
+{"one":6.0,"two":"baz","three":false,"four":6.0,"five":"baz"}
+{"one":10.0,"two":"foo","three":false,"four":11.0,"five":"foo"}

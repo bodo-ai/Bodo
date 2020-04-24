@@ -4,6 +4,7 @@ import gc
 import pytest
 import bodo
 from numba.runtime import rtsys
+import glob
 
 
 # similar to Pandas
@@ -138,9 +139,26 @@ def s3_bucket(minio_server, datapath):
             ("csv_data_date1.csv", datapath("csv_data_date1.csv")),
             ("asof1.pq", datapath("asof1.pq")),
             ("groupby3.pq", datapath("groupby3.pq")),
+            ("example.json", datapath("example.json")),
         ]
         for s3_key, file_name in test_s3_files:
             s3.meta.client.upload_file(file_name, "bodo-test", s3_key)
+
+        prefix = datapath("example_single.json")
+        pat = prefix + "/*.json"
+        example_single_parts = [f for f in glob.glob(pat)]
+        for path in example_single_parts:
+            fname = path[len(prefix) + 1 :]
+            fname = "example_single.json/{}".format(fname)
+            s3.meta.client.upload_file(path, "bodo-test", fname)
+
+        prefix = datapath("example_multi.json")
+        pat = prefix + "/*.json"
+        example_multi_parts = [f for f in glob.glob(pat)]
+        for path in example_multi_parts:
+            fname = path[len(prefix) + 1 :]
+            fname = "example_multi.json/{}".format(fname)
+            s3.meta.client.upload_file(path, "bodo-test", fname)
 
     bodo.barrier()
     return "bodo-test"
@@ -167,7 +185,6 @@ def hdfs_dir(hadoop_server, datapath):
     """
     hdfs3 = pytest.importorskip("hdfs3")
     from hdfs3 import HDFileSystem
-    import glob
 
     host, port = hadoop_server
     dir_name = "bodo-test"
@@ -179,7 +196,8 @@ def hdfs_dir(hadoop_server, datapath):
             ("csv_data1.csv", datapath("csv_data1.csv")),
             ("csv_data_date1.csv", datapath("csv_data_date1.csv")),
             ("asof1.pq", datapath("asof1.pq")),
-            ("groupby3.pq", datapath("groupby3.pq"))
+            ("groupby3.pq", datapath("groupby3.pq")),
+            ("example.json", datapath("example.json")),
         ]
         for fname, path in test_hdfs_files:
             formatted_fname = "/{}/{}".format(dir_name, fname)
@@ -187,11 +205,29 @@ def hdfs_dir(hadoop_server, datapath):
 
         hdfs.mkdir("/bodo-test/int_nulls_multi.pq")
         prefix = datapath("int_nulls_multi.pq")
-        pat = prefix+"/*.snappy.parquet"
+        pat = prefix + "/*.snappy.parquet"
         int_nulls_multi_parts = [f for f in glob.glob(pat)]
         for path in int_nulls_multi_parts:
-            fname = path[len(prefix)+1:]
+            fname = path[len(prefix) + 1 :]
             fname = "/{}/int_nulls_multi.pq/{}".format(dir_name, fname)
+            hdfs.put(path, fname)
+
+        hdfs.mkdir("/bodo-test/example_single.json")
+        prefix = datapath("example_single.json")
+        pat = prefix + "/*.json"
+        example_single_parts = [f for f in glob.glob(pat)]
+        for path in example_single_parts:
+            fname = path[len(prefix) + 1 :]
+            fname = "/{}/example_single.json/{}".format(dir_name, fname)
+            hdfs.put(path, fname)
+
+        hdfs.mkdir("/bodo-test/example_multi.json")
+        prefix = datapath("example_multi.json")
+        pat = prefix + "/*.json"
+        example_multi_parts = [f for f in glob.glob(pat)]
+        for path in example_multi_parts:
+            fname = path[len(prefix) + 1 :]
+            fname = "/{}/example_multi.json/{}".format(dir_name, fname)
             hdfs.put(path, fname)
 
     bodo.barrier()

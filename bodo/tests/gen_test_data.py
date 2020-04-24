@@ -134,12 +134,17 @@ A = [int(a) if random.random() < 0.8 else None for a in A]
 data = [Row(a) for a in A]
 df = pd.DataFrame({"A": A})
 df.to_csv("int_nulls.csv", header=False)
+df.to_json("int_nulls.json",orient = 'records', lines = True)
 sdf = spark.createDataFrame(data, schema)
 sdf.write.parquet("int_nulls_multi.pq", "overwrite")
+
 sdf.write.mode("overwrite").csv("int_nulls_multi.csv")
+sdf.write.mode("overwrite").json("int_nulls_multi.json")
 sdf = sdf.repartition(1)
 sdf.write.parquet("int_nulls_single.pq", "overwrite")
 sdf.write.mode("overwrite").csv("int_nulls_single.csv")
+sdf.write.mode("overwrite").json("int_nulls_single.json")
+
 # copy data file from int_nulls_single.pq directory to make single file
 
 df = pd.DataFrame({"A": [True, False, False, np.nan, True]})
@@ -172,7 +177,6 @@ data = [
 ]
 sdf = spark.createDataFrame(data, schema)
 sdf.write.parquet("list_float32.pq", "overwrite")
-
 
 # CSV reader test
 data = "0,2.3,4.6,47736\n" "1,2.3,4.6,47736\n" "2,2.3,4.6,47736\n" "4,2.3,4.6,47736\n"
@@ -308,10 +312,27 @@ df = pd.DataFrame(
     }
 )
 df.to_csv("str_arr.csv", header=False, index=False)
+df.to_json("str_arr.json",orient = 'records', lines = True)
 sdf = spark.createDataFrame(df)
 sdf.write.mode("overwrite").csv("str_arr_parts.csv")
+sdf.write.mode("overwrite").json("str_arr_parts.json")
 sdf.repartition(1).write.mode("overwrite").csv("str_arr_single.csv")
+sdf.repartition(1).write.mode("overwrite").json("str_arr_single.json")
 
+
+df = pd.DataFrame(
+    {
+        "one": [-1, np.nan, 2.5, 3.0, 4.0, 6.0, 10.0],
+        "two": ["foo", "bar", "baz", "foo", "bar", "baz", "foo"],
+        "three": [True, False, True, True, True, False, False],
+        "four": [-1, 5.1, 2.5, 3.0, 4.0, 6.0, 11.0],  # float without NA
+        "five": ["foo", "bar", "baz", "", "bar", "baz", "foo"],  # str without NA
+    }
+)
+sdf = spark.createDataFrame(df)
+df.to_json("example.json",orient = 'records', lines = True)
+sdf.write.mode('overwrite').json('example_multi.json')
+sdf.repartition(1).write.mode('overwrite').json('example_single.json')
 spark.stop()
 
 # data for testing read of parquet files with unsupported column types in unselected

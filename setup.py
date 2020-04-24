@@ -283,7 +283,7 @@ ext_csv = Extension(
     sources=[
         "bodo/io/_io.cpp",
         "bodo/io/_fs_io.cpp",
-        "bodo/io/_csv_reader.cpp",
+        "bodo/io/_csv_json_reader.cpp",
         "bodo/io/_csv_writer.cpp",
     ],
     depends=[
@@ -293,7 +293,27 @@ ext_csv = Extension(
         "bodo/libs/_import_py.h",
         "bodo/io/_io.h",
         "bodo/io/_fs_io.h",
-        "bodo/io/_csv_reader.h",
+        "bodo/io/_csv_json_reader.h",
+        "bodo/io/_bodo_file_reader.h",
+    ],
+    libraries=csv_libs,
+    include_dirs=["."] + ind,
+    define_macros=[],
+    extra_compile_args=eca,
+    extra_link_args=ela,
+    library_dirs=lid,
+)
+
+ext_json = Extension(
+    name="bodo.io.json_cpp",
+    sources=["bodo/io/_fs_io.cpp", "bodo/io/_csv_json_reader.cpp",],
+    depends=[
+        "bodo/libs/_bodo_common.h",
+        "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_distributed.h",
+        "bodo/libs/_import_py.h",
+        "bodo/io/_fs_io.h",
+        "bodo/io/_csv_json_reader.h",
         "bodo/io/_bodo_file_reader.h",
     ],
     libraries=csv_libs,
@@ -344,6 +364,7 @@ if _has_h5py:
 if _has_pyarrow:
     _ext_mods.append(ext_parquet)
     _ext_mods.append(ext_csv)
+    _ext_mods.append(ext_json)
 
 
 setup(

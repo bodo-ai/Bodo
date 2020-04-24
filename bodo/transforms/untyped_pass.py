@@ -39,7 +39,6 @@ import bodo
 from bodo import config
 import bodo.io
 from bodo.io import h5
-from bodo.io.parquet_pio import ParquetHandler
 from bodo.utils.utils import is_call, is_expr
 from bodo.utils.transform import get_const_nested
 from bodo.libs.str_arr_ext import string_array_type
@@ -52,6 +51,8 @@ import bodo.ir.join
 import bodo.ir.sort
 from bodo.ir import csv_ext
 from bodo.ir import sql_ext
+from bodo.ir import json_ext
+from bodo.io.parquet_pio import ParquetHandler
 
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 import bodo.hiframes.pd_dataframe_ext
@@ -167,7 +168,7 @@ class UntypedPass:
                     isinstance(val_def, ir.Global)
                     and isinstance(val_def.value, pytypes.ModuleType)
                     and val_def.value == pd
-                    and rhs.attr in ("read_csv", "read_parquet")
+                    and rhs.attr in ("read_csv", "read_parquet", "read_json")
                 ):
                     # put back the definition removed earlier but remove node
                     # enables function matching without node in IR
@@ -374,6 +375,11 @@ class UntypedPass:
         # like dictionaries for typing
         if fdef == ("read_sql", "pandas"):
             return self._handle_pd_read_sql(assign, lhs, rhs, label)
+
+        # handling pd.read_json() here since input can have constants
+        # like dictionaries for typing
+        if fdef == ("read_json", "pandas"):
+            return self._handle_pd_read_json(assign, lhs, rhs, label)
 
         # handling pd.read_excel() here since typing info needs to be extracted
         if fdef == ("read_excel", "pandas"):
@@ -613,7 +619,7 @@ class UntypedPass:
 
         date_cols = []
 
-        columns, data_arrs, out_types = self._get_csv_sql_col_info(
+        columns, data_arrs, out_types = self._get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs
         )
 
@@ -966,7 +972,7 @@ class UntypedPass:
                 kws["parse_dates"], err_msg=err_msg, typ=[int, str]
             )
 
-        columns, data_arrs, out_types = self._get_csv_sql_col_info(
+        columns, data_arrs, out_types = self._get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs
         )
 
@@ -1025,7 +1031,207 @@ class UntypedPass:
         nodes += compile_func_single_block(_init_df, data_arrs, lhs)
         return nodes
 
-    def _get_csv_sql_col_info(self, dtype_map, date_cols, col_names, lhs):
+    def _handle_pd_read_json(self, assign, lhs, rhs, label):
+        """transform pd.read_json() call, 
+        where default orient = 'records'
+
+        schema: pandas.read_json(path_or_buf=None, orient=None, typ='frame', 
+        dtype=None, convert_axes=None, convert_dates=True, 
+        keep_default_dates=True, numpy=False, precise_float=False,
+        date_unit=None, encoding=None, lines=False, chunksize=None,
+        compression='infer')
+        """
+        # dtype required for non posix & directory
+        # convert_dates required for date cols
+        kws = dict(rhs.kws)
+        fname = get_call_expr_arg("read_json", rhs.args, kws, 0, "path_or_buf")
+        orient = self._get_const_arg("read_json", rhs.args, kws, 1, "orient", "records")
+        frame_or_series = get_call_expr_arg(
+            "read_json", rhs.args, kws, 3, "typ", "frame"
+        )
+        dtype_var = get_call_expr_arg("read_json", rhs.args, kws, 10, "dtype", "")
+        precise_float = self._get_const_arg(
+            "read_json", rhs.args, kws, 8, "precise_float", False
+        )
+        lines = self._get_const_arg("read_json", rhs.args, kws, 11, "lines", True)
+        # check unsupported arguments
+        unsupported_args = {
+            "convert_axes",
+            "keep_default_dates",
+            "numpy",
+            "date_unit",
+            "encoding",
+            "chunksize",
+            "compression",
+        }
+
+        if "convert_dates" in kws:
+            err_msg = "pd.read_json() parse_dates should be constant list"
+            convert_dates = self._get_const_val_or_list(
+                kws["convert_dates"], err_msg=err_msg, typ=[int, str]
+            )
+            date_cols = convert_dates
+        else:
+            # default value is True
+            convert_dates = True
+            date_cols = []
+
+        passsed_unsupported = unsupported_args.intersection(kws.keys())
+        if len(passsed_unsupported) > 0:
+            if unsupported_args:
+                raise ValueError(
+                    "read_json() arguments {} not supported yet".format(
+                        passsed_unsupported
+                    )
+                )
+
+        if frame_or_series != "frame":
+            raise ValueError(
+                "pd.read_json() typ = {} is not supported."
+                "Currently only supports orient = 'frame'".format(frame_or_series)
+            )
+
+        if orient != "records":
+            raise ValueError(
+                "pd.read_json() orient = {} is not supported."
+                "Currently only supports orient = 'records'".format(orient)
+            )
+
+        if type(lines) != bool:
+            raise ValueError(
+                "pd.read_json() lines = {} is not supported."
+                "lines must be of type bool.".format(lines)
+            )
+
+        col_names = []
+
+        # infer column names and types from constant filenames if:
+        # not explicitly passed with dtype
+        # not reading from s3 & hdfs
+        # not reading from directory
+        msg = (
+            "pd.read_json() requires explicit type "
+            "annotation using 'dtype' if filename is not constant"
+        )
+        fname_const = get_str_const_value(fname, self.func_ir, msg, arg_types=self.args)
+        import os
+
+        if dtype_var == "":
+            if fname_const.startswith("s3://") or fname_const.startswith("hdfs://"):
+                raise ValueError(
+                    "pd.read_json() requires explicit type annotation using 'dtype',"
+                    " when reading from s3 or hdfs"
+                )
+
+            if not os.path.isfile(fname_const):
+                raise ValueError(
+                    "pd.read_json() requires explicit type annotation using 'dtype',"
+                    " when reading a directory"
+                )
+
+            # can only read partial of the json file
+            # when orient == 'records' && lines == True
+            if not lines:
+                raise ValueError(
+                    "pd.read_json() requires explicit type annotation using 'dtype',"
+                    " when lines != True"
+                )
+            # TODO: more error checking needed
+
+            json_reader = pd.read_json(
+                fname_const,
+                orient=orient,
+                convert_dates=convert_dates,
+                precise_float=precise_float,
+                lines=lines,
+                chunksize=10,  # only reading the first 10 rows
+            )
+
+            df = json_reader.__next__()
+
+            # TODO: categorical, etc.
+            # TODO: Integer NA case: sample data might not include NA
+            dtypes = numba.typeof(df).data
+            # convert Pandas generated integer names if any
+            col_names = [str(df.columns[i]) for i in range(len(dtypes))]
+            dtype_map = {c: dtypes[i] for i, c in enumerate(col_names)}
+        else:  # handle dtype arg if provided
+            dtype_map = guard(get_definition, self.func_ir, dtype_var)
+            # handle converted constant dictionaries
+            if is_call(dtype_map) and (
+                guard(find_callname, self.func_ir, dtype_map)
+                == ("add_consts_to_type", "bodo.utils.typing")
+            ):
+                dtype_map = guard(get_definition, self.func_ir, dtype_map.args[0])
+
+            if (
+                not isinstance(dtype_map, ir.Expr) or dtype_map.op != "build_map"
+            ):  # pragma: no cover
+                # try single type for all columns case
+                dtype_map = self._get_const_dtype(dtype_var)
+            else:
+                new_dtype_map = {}
+                for n_var, t_var in dtype_map.items:
+                    # find constant column name
+                    c = guard(find_const, self.func_ir, n_var)
+                    if c is None:  # pragma: no cover
+                        raise ValueError("dtype column names should be constant")
+                    new_dtype_map[c] = self._get_const_dtype(t_var)
+
+                # HACK replace build_map to avoid inference errors
+                dtype_map.op = "build_list"
+                dtype_map.items = [v[0] for v in dtype_map.items]
+                dtype_map = new_dtype_map
+
+        columns, data_arrs, out_types = self._get_read_file_col_info(
+            dtype_map, date_cols, col_names, lhs
+        )
+
+        nodes = [
+            json_ext.JsonReader(
+                lhs.name,
+                lhs.loc,
+                data_arrs,
+                out_types,
+                fname,
+                columns,
+                orient,
+                convert_dates,
+                precise_float,
+                lines,
+            )
+        ]
+
+        columns = columns.copy()  # copy since modified below
+        n_cols = len(columns)
+        args = ["data{}".format(i) for i in range(n_cols)]
+        data_args = args.copy()
+
+        # initialize range index
+        assert len(data_args) > 0
+        index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
+            data_args[0]
+        )
+
+        # Below we assume that the columns are strings
+        col_args = ", ".join("'{}'".format(c) for c in columns)
+
+        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
+            col_args, col_args
+        )
+        func_text = "def _init_df({}):\n".format(", ".join(args))
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
+            ", ".join(data_args), index_arg, col_var
+        )
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        # print(func_text)
+        _init_df = loc_vars["_init_df"]
+
+        nodes += compile_func_single_block(_init_df, data_arrs, lhs)
+        return nodes
+
+    def _get_read_file_col_info(self, dtype_map, date_cols, col_names, lhs):
         if isinstance(dtype_map, types.Type):
             typ = dtype_map
             data_arrs = [

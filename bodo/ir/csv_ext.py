@@ -20,6 +20,7 @@ from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.utils.utils import sanitize_varname
+from bodo.ir import connector
 from bodo import objmode
 import pandas as pd
 import numpy as np
@@ -39,6 +40,7 @@ class CsvReader(ir.Stmt):
         loc,
         skiprows=0,
     ):
+        self.connector_typ = "csv"
         self.file_name = file_name
         self.df_out = df_out  # used only for printing
         self.sep = sep
@@ -55,77 +57,17 @@ class CsvReader(ir.Stmt):
         )
 
 
-def csv_array_analysis(csv_node, equiv_set, typemap, array_analysis):
-    post = []
-    # empty csv nodes should be deleted in remove dead
-    assert len(csv_node.out_vars) > 0, "empty csv in array analysis"
+from bodo.io import csv_cpp
+import llvmlite.binding as ll
 
-    # create correlations for output arrays
-    # arrays of output df have same size in first dimension
-    # gen size variable for an output column
-    all_shapes = []
-    for col_var in csv_node.out_vars:
-        typ = typemap[col_var.name]
-        (shape, c_post) = array_analysis._gen_shape_call(
-            equiv_set, col_var, typ.ndim, None
-        )
-        equiv_set.insert_equiv(col_var, shape)
-        post.extend(c_post)
-        all_shapes.append(shape[0])
-        equiv_set.define(col_var, set())
+ll.add_symbol("csv_file_chunk_reader", csv_cpp.csv_file_chunk_reader)
 
-    if len(all_shapes) > 1:
-        equiv_set.insert_equiv(*all_shapes)
-
-    return [], post
-
-
-numba.array_analysis.array_analysis_extensions[CsvReader] = csv_array_analysis
-
-
-def csv_distributed_analysis(csv_node, array_dists):
-    # all output arrays should have the same distribution
-    out_dist = Distribution.OneD
-    for v in csv_node.out_vars:
-        if v.name in array_dists:
-            out_dist = Distribution(min(out_dist.value, array_dists[v.name].value))
-
-    for v in csv_node.out_vars:
-        array_dists[v.name] = out_dist
-
-
-distributed_analysis.distributed_analysis_extensions[
-    CsvReader
-] = csv_distributed_analysis
-
-
-def csv_typeinfer(csv_node, typeinferer):
-    for col_var, typ in zip(csv_node.out_vars, csv_node.out_types):
-        typeinferer.lock_type(col_var.name, typ, loc=csv_node.loc)
-    return
-
-
-typeinfer.typeinfer_extensions[CsvReader] = csv_typeinfer
-
-
-def visit_vars_csv(csv_node, callback, cbdata):
-    if debug_prints():  # pragma: no cover
-        print("visiting csv vars for:", csv_node)
-        print("cbdata: ", sorted(cbdata.items()))
-
-    # update output_vars
-    new_out_vars = []
-    for col_var in csv_node.out_vars:
-        new_var = visit_vars_inner(col_var, callback, cbdata)
-        new_out_vars.append(new_var)
-
-    csv_node.out_vars = new_out_vars
-    csv_node.file_name = visit_vars_inner(csv_node.file_name, callback, cbdata)
-    return
-
-
-# add call to visit csv variable
-ir_utils.visit_vars_extensions[CsvReader] = visit_vars_csv
+csv_file_chunk_reader = types.ExternalFunction(
+    "csv_file_chunk_reader",
+    bodo.ir.connector.stream_reader_type(
+        types.voidptr, types.bool_, types.int64, types.int64
+    ),
+)
 
 
 def remove_dead_csv(
@@ -153,72 +95,6 @@ def remove_dead_csv(
         return None
 
     return csv_node
-
-
-ir_utils.remove_dead_extensions[CsvReader] = remove_dead_csv
-
-
-def csv_usedefs(csv_node, use_set=None, def_set=None):
-    if use_set is None:
-        use_set = set()
-    if def_set is None:
-        def_set = set()
-
-    # output columns are defined
-    def_set.update({v.name for v in csv_node.out_vars})
-    use_set.add(csv_node.file_name.name)
-
-    return numba.analysis._use_defs_result(usemap=use_set, defmap=def_set)
-
-
-numba.analysis.ir_extension_usedefs[CsvReader] = csv_usedefs
-
-
-def get_copies_csv(csv_node, typemap):
-    # csv doesn't generate copies, it just kills the output columns
-    kill_set = set(v.name for v in csv_node.out_vars)
-    return set(), kill_set
-
-
-ir_utils.copy_propagate_extensions[CsvReader] = get_copies_csv
-
-
-def apply_copies_csv(
-    csv_node, var_dict, name_var_table, typemap, calltypes, save_copies
-):
-    """apply copy propagate in csv node"""
-
-    # update output_vars
-    new_out_vars = []
-    for col_var in csv_node.out_vars:
-        new_var = replace_vars_inner(col_var, var_dict)
-        new_out_vars.append(new_var)
-
-    csv_node.out_vars = new_out_vars
-    csv_node.file_name = replace_vars_inner(csv_node.file_name, var_dict)
-    return
-
-
-ir_utils.apply_copy_propagate_extensions[CsvReader] = apply_copies_csv
-
-
-def build_csv_definitions(csv_node, definitions=None):
-    if definitions is None:
-        definitions = defaultdict(list)
-
-    for col_var in csv_node.out_vars:
-        definitions[col_var.name].append(csv_node)
-
-    return definitions
-
-
-ir_utils.build_defs_extensions[CsvReader] = build_csv_definitions
-
-from bodo.io import csv_cpp
-from llvmlite import ir as lir
-import llvmlite.binding as ll
-
-ll.add_symbol("csv_file_chunk_reader", csv_cpp.csv_file_chunk_reader)
 
 
 def csv_distributed_run(
@@ -271,27 +147,24 @@ def csv_distributed_run(
     return nodes
 
 
+numba.array_analysis.array_analysis_extensions[
+    CsvReader
+] = bodo.ir.connector.connector_array_analysis
+distributed_analysis.distributed_analysis_extensions[
+    CsvReader
+] = bodo.ir.connector.connector_distributed_analysis
+typeinfer.typeinfer_extensions[CsvReader] = bodo.ir.connector.connector_typeinfer
+ir_utils.visit_vars_extensions[CsvReader] = bodo.ir.connector.visit_vars_connector
+ir_utils.remove_dead_extensions[CsvReader] = remove_dead_csv
+numba.analysis.ir_extension_usedefs[CsvReader] = bodo.ir.connector.connector_usedefs
+ir_utils.copy_propagate_extensions[CsvReader] = bodo.ir.connector.get_copies_connector
+ir_utils.apply_copy_propagate_extensions[
+    CsvReader
+] = bodo.ir.connector.apply_copies_connector
+ir_utils.build_defs_extensions[
+    CsvReader
+] = bodo.ir.connector.build_connector_definitions
 distributed_pass.distributed_run_extensions[CsvReader] = csv_distributed_run
-
-
-class StreamReaderType(types.Opaque):
-    def __init__(self):
-        super(StreamReaderType, self).__init__(name="StreamReaderType")
-
-
-stream_reader_type = StreamReaderType()
-register_model(StreamReaderType)(models.OpaqueModel)
-
-
-@box(StreamReaderType)
-def box_stream_reader(typ, val, c):
-    return val
-
-
-csv_file_chunk_reader = types.ExternalFunction(
-    "csv_file_chunk_reader",
-    stream_reader_type(types.voidptr, types.bool_, types.int64, types.int64),
-)
 
 
 def _get_dtype_str(t):
@@ -385,9 +258,8 @@ def _gen_csv_reader_py(
     func_text = "def csv_reader_py(fname):\n"
     func_text += "  skiprows = {}\n".format(skiprows)
     # TODO: unicode name
-    func_text += "  f_reader = csv_file_chunk_reader(fname._data, {}, skiprows, -1)\n".format(
-        parallel
-    )
+    func_text += "  f_reader = csv_file_chunk_reader(fname._data, "
+    func_text += "    {}, skiprows, -1)\n".format(parallel)
     func_text += "  with objmode({}):\n".format(typ_strs)
     func_text += "    df = pd.read_csv(f_reader, names={},\n".format(col_names)
     func_text += "       parse_dates=[{}],\n".format(date_inds)

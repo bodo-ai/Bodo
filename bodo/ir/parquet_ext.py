@@ -22,6 +22,7 @@ class ParquetReader(ir.Stmt):
     def __init__(
         self, file_name, df_out, col_names, col_indices, out_types, out_vars, loc
     ):
+        self.connector_typ = "parquet"
         self.file_name = file_name
         self.df_out = df_out  # used only for printing
         self.col_names = col_names
@@ -40,79 +41,6 @@ class ParquetReader(ir.Stmt):
             self.out_types,
             self.out_vars,
         )
-
-
-def pq_array_analysis(pq_node, equiv_set, typemap, array_analysis):
-    post = []
-    # empty pq nodes should be deleted in remove dead
-    assert len(pq_node.out_vars) > 0, "empty pq in array analysis"
-
-    # create correlations for output arrays
-    # arrays of output df have same size in first dimension
-    # gen size variable for an output column
-    all_shapes = []
-    for col_var in pq_node.out_vars:
-        typ = typemap[col_var.name]
-        (shape, c_post) = array_analysis._gen_shape_call(
-            equiv_set, col_var, typ.ndim, None
-        )
-        equiv_set.insert_equiv(col_var, shape)
-        post.extend(c_post)
-        all_shapes.append(shape[0])
-        equiv_set.define(col_var, set())
-
-    if len(all_shapes) > 1:
-        equiv_set.insert_equiv(*all_shapes)
-
-    return [], post
-
-
-numba.array_analysis.array_analysis_extensions[ParquetReader] = pq_array_analysis
-
-
-def pq_distributed_analysis(pq_node, array_dists):
-    # all output arrays should have the same distribution
-    out_dist = Distribution.OneD
-    for v in pq_node.out_vars:
-        if v.name in array_dists:
-            out_dist = Distribution(min(out_dist.value, array_dists[v.name].value))
-
-    for v in pq_node.out_vars:
-        array_dists[v.name] = out_dist
-
-
-distributed_analysis.distributed_analysis_extensions[
-    ParquetReader
-] = pq_distributed_analysis
-
-
-def pq_typeinfer(pq_node, typeinferer):
-    for col_var, typ in zip(pq_node.out_vars, pq_node.out_types):
-        typeinferer.lock_type(col_var.name, typ, loc=pq_node.loc)
-    return
-
-
-typeinfer.typeinfer_extensions[ParquetReader] = pq_typeinfer
-
-
-def visit_vars_pq(pq_node, callback, cbdata):
-    if debug_prints():  # pragma: no cover
-        print("visiting pq vars for:", pq_node)
-        print("cbdata: ", sorted(cbdata.items()))
-
-    # update output_vars
-    new_out_vars = []
-    for col_var in pq_node.out_vars:
-        new_var = visit_vars_inner(col_var, callback, cbdata)
-        new_out_vars.append(new_var)
-
-    pq_node.out_vars = new_out_vars
-    pq_node.file_name = visit_vars_inner(pq_node.file_name, callback, cbdata)
-    return
-
-
-# add call to visit pq variable
-ir_utils.visit_vars_extensions[ParquetReader] = visit_vars_pq
 
 
 def remove_dead_pq(
@@ -142,59 +70,22 @@ def remove_dead_pq(
     return pq_node
 
 
+numba.array_analysis.array_analysis_extensions[
+    ParquetReader
+] = bodo.ir.connector.connector_array_analysis
+distributed_analysis.distributed_analysis_extensions[
+    ParquetReader
+] = bodo.ir.connector.connector_distributed_analysis
+typeinfer.typeinfer_extensions[ParquetReader] = bodo.ir.connector.connector_typeinfer
+ir_utils.visit_vars_extensions[ParquetReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[ParquetReader] = remove_dead_pq
-
-
-def pq_usedefs(pq_node, use_set=None, def_set=None):
-    if use_set is None:
-        use_set = set()
-    if def_set is None:
-        def_set = set()
-
-    # output columns are defined
-    def_set.update({v.name for v in pq_node.out_vars})
-    use_set.add(pq_node.file_name.name)
-
-    return numba.analysis._use_defs_result(usemap=use_set, defmap=def_set)
-
-
-numba.analysis.ir_extension_usedefs[ParquetReader] = pq_usedefs
-
-
-def get_copies_pq(pq_node, typemap):
-    # pq doesn't generate copies, it just kills the output columns
-    kill_set = set(v.name for v in pq_node.out_vars)
-    return set(), kill_set
-
-
-ir_utils.copy_propagate_extensions[ParquetReader] = get_copies_pq
-
-
-def apply_copies_pq(pq_node, var_dict, name_var_table, typemap, calltypes, save_copies):
-    """apply copy propagate in pq node"""
-
-    # update output_vars
-    new_out_vars = []
-    for col_var in pq_node.out_vars:
-        new_var = replace_vars_inner(col_var, var_dict)
-        new_out_vars.append(new_var)
-
-    pq_node.out_vars = new_out_vars
-    pq_node.file_name = replace_vars_inner(pq_node.file_name, var_dict)
-    return
-
-
-ir_utils.apply_copy_propagate_extensions[ParquetReader] = apply_copies_pq
-
-
-def build_pq_definitions(pq_node, definitions=None):
-    if definitions is None:
-        definitions = defaultdict(list)
-
-    for col_var in pq_node.out_vars:
-        definitions[col_var.name].append(pq_node)
-
-    return definitions
-
-
-ir_utils.build_defs_extensions[ParquetReader] = build_pq_definitions
+numba.analysis.ir_extension_usedefs[ParquetReader] = bodo.ir.connector.connector_usedefs
+ir_utils.copy_propagate_extensions[
+    ParquetReader
+] = bodo.ir.connector.get_copies_connector
+ir_utils.apply_copy_propagate_extensions[
+    ParquetReader
+] = bodo.ir.connector.apply_copies_connector
+ir_utils.build_defs_extensions[
+    ParquetReader
+] = bodo.ir.connector.build_connector_definitions

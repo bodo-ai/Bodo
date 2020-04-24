@@ -13,10 +13,6 @@
 #include "arrow/result.h"
 #include "mpi.h"
 
-// decimal_mpi_type declared in _distributed.h as extern has
-// to be defined in each extension module that includes it
-MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
-
 FileReader* f_reader = nullptr;
 ;                           // File reader used by S3 / Hdfs
 PyObject* f_mod = nullptr;  // imported python module:
@@ -78,7 +74,7 @@ uint64_t get_file_size(char* file_name) {
         s3_reader_init_t func =
             (s3_reader_init_t)PyNumber_AsSsize_t(func_obj, NULL);
 
-        f_reader = func(file_name + 5);
+        f_reader = func(file_name + 5, "");
         f_size = f_reader->getSize();
 
         Py_DECREF(func_obj);
@@ -90,7 +86,7 @@ uint64_t get_file_size(char* file_name) {
         hdfs_reader_init_t func =
             (hdfs_reader_init_t)PyNumber_AsSsize_t(func_obj, NULL);
 
-        f_reader = func(file_name);
+        f_reader = func(file_name, "");
         f_size = f_reader->getSize();
 
         Py_DECREF(func_obj);
@@ -177,7 +173,8 @@ void file_write(char* file_name, void* buff, int64_t size) {
         arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempRes =
             ::arrow::fs::FileSystemFromUri(orig_path, &fname);
 
-        open_file_outstream(Bodo_Fs::hdfs, "", fname, NULL, hdfs_fs, &out_stream);
+        open_file_outstream(Bodo_Fs::hdfs, "", fname, NULL, hdfs_fs,
+                            &out_stream);
 
         CHECK_ARROW(out_stream->Write(buff, size),
                     "arrow::io::HdfsOutputStream::Write");

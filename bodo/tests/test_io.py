@@ -705,7 +705,7 @@ def test_csv_bool1(datapath):
 
     # passing file name as argument to exercise value-based dispatch
     fname = datapath("csv_data_bool1.csv")
-    check_func(test_impl, (fname,))
+    check_func(test_impl, (fname, ))
 
 
 def test_csv_int_na1(datapath):

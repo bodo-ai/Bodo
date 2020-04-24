@@ -1,12 +1,12 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
-#ifndef _CSV_READER_H_INCLUDED
-#define _CSV_READER_H_INCLUDED
+#ifndef _CSV_JSON_READER_H_INCLUDED
+#define _CSV_JSON_READER_H_INCLUDED
 
 #include <Python.h>
 #include <string>
 
 // CSV exports some stuff to the io module
-extern "C" void PyInit_csv(PyObject*);
+extern "C" void PyInit_csv(PyObject *);
 
 /**
  * Split file into chunks and return a file-like object per rank. The returned
@@ -18,8 +18,24 @@ extern "C" void PyInit_csv(PyObject*);
  * @return     HPATIO file-like object to read the owned chunk through
  *pandas.read_csv
  **/
-extern "C" PyObject* csv_file_chunk_reader(const char* fname, bool is_parallel,
+extern "C" PyObject *csv_file_chunk_reader(const char *fname, bool is_parallel,
                                            int64_t skiprows, int64_t nrows);
+
+/**
+ * Split file into chunks and return a file-like object per rank. The returned
+ *object
+ * represents the data to be read on each process.
+ *
+ * @param[in]  fname   the input file name
+ * @param[in]  lines   pd.read_json(lines) when lines = true,
+                       each line is a single record, and we read the json object
+ per line.
+ * @param[in]  is_parallel   if parallel read of different chunks required
+ * @return     HPATIO file-like object to read the owned chunk through
+ *pandas.read_json
+ **/
+extern "C" PyObject *json_file_chunk_reader(const char *fname, bool lines,
+                                            bool is_parallel, int64_t nrows);
 
 /**
  * Split string into chunks and return a file-like object per rank. The returned
@@ -34,4 +50,4 @@ extern "C" PyObject* csv_file_chunk_reader(const char* fname, bool is_parallel,
 // extern "C" PyObject* csv_string_chunk_reader(const std::string * str, bool
 // is_parallel);
 
-#endif  // _CSV_READER_H_INCLUDED
+#endif  // _CSV_JSON_READER_H_INCLUDED

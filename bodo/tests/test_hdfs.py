@@ -382,3 +382,31 @@ def test_hdfs_np_fromfile_1D_var(datapath, hdfs_datapath, test_np_arr):
 
     hdfs_fname = hdfs_datapath("test_np_arr_bodo_1D_var.dat")
     check_func(test_read, (hdfs_fname,), py_output=test_np_arr, is_out_distributed=True)
+
+
+def test_hdfs_read_json(datapath, hdfs_datapath):
+    """
+    test read_json from hdfs
+    """
+    fname_file = hdfs_datapath("example.json")
+    fname_dir_single = hdfs_datapath("example_single.json")
+    fname_dir_multi = hdfs_datapath("example_multi.json")
+
+    def test_impl(fname):
+        return pd.read_json(
+            fname,
+            orient="records",
+            lines=True,
+            dtype={
+                "one": np.float32,
+                "two": str,
+                "three": "bool",
+                "four": np.float32,
+                "five": str,
+            },
+        )
+
+    py_out = test_impl(datapath("example.json"))
+    check_func(test_impl, (fname_file,), py_output=py_out)
+    check_func(test_impl, (fname_dir_single,), py_output=py_out)
+    check_func(test_impl, (fname_dir_multi,), py_output=py_out)

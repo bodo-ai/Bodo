@@ -3,7 +3,7 @@
 #include <iostream>
 
 #include <arrow/io/api.h>
-#include "_csv_reader.h"
+#include "_csv_json_reader.h"
 #include "_fs_io.h"
 #include "_io.h"
 #include "mpi.h"

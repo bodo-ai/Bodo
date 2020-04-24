@@ -42,6 +42,7 @@ class SqlReader(ir.Stmt):
     def __init__(
         self, sql_request, connection, df_out, df_colnames, out_vars, out_types, loc,
     ):
+        self.connector_typ = "sql"
         self.sql_request = sql_request
         self.connection = connection
         self.df_out = df_out  # used only for printing
@@ -52,80 +53,13 @@ class SqlReader(ir.Stmt):
 
     def __repr__(self):  # pragma: no cover
         return "{} = ReadSql(sql_request={}, connection={}, col_names={}, types={}, vars={})".format(
-            self.df_out, self.sql_request, self.connection, self.df_colnames, self.out_types, self.out_vars
+            self.df_out,
+            self.sql_request,
+            self.connection,
+            self.df_colnames,
+            self.out_types,
+            self.out_vars,
         )
-
-
-def sql_array_analysis(sql_node, equiv_set, typemap, array_analysis):
-    post = []
-    # empty sql nodes should be deleted in remove dead
-    assert len(sql_node.out_vars) > 0, "empty sql in array analysis"
-
-    # create correlations for output arrays
-    # arrays of output df have same size in first dimension
-    # gen size variable for an output column
-    all_shapes = []
-    for col_var in sql_node.out_vars:
-        typ = typemap[col_var.name]
-        (shape, c_post) = array_analysis._gen_shape_call(
-            equiv_set, col_var, typ.ndim, None
-        )
-        equiv_set.insert_equiv(col_var, shape)
-        post.extend(c_post)
-        all_shapes.append(shape[0])
-        equiv_set.define(col_var, set())
-
-    if len(all_shapes) > 1:
-        equiv_set.insert_equiv(*all_shapes)
-
-    return [], post
-
-
-numba.array_analysis.array_analysis_extensions[SqlReader] = sql_array_analysis
-
-
-def sql_distributed_analysis(sql_node, array_dists):
-    # all output arrays should have the same distribution
-    out_dist = Distribution.OneD
-    for v in sql_node.out_vars:
-        if v.name in array_dists:
-            out_dist = Distribution(min(out_dist.value, array_dists[v.name].value))
-
-    for v in sql_node.out_vars:
-        array_dists[v.name] = out_dist
-
-
-distributed_analysis.distributed_analysis_extensions[
-    SqlReader
-] = sql_distributed_analysis
-
-
-def sql_typeinfer(sql_node, typeinferer):
-    for col_var, typ in zip(sql_node.out_vars, sql_node.out_types):
-        typeinferer.lock_type(col_var.name, typ, loc=sql_node.loc)
-    return
-
-
-typeinfer.typeinfer_extensions[SqlReader] = sql_typeinfer
-
-
-def visit_vars_sql(sql_node, callback, cbdata):
-    if debug_prints():  # pragma: no cover
-        print("visiting sql vars for:", sql_node)
-        print("cbdata: ", sorted(cbdata.items()))
-
-    # update output_vars
-    new_out_vars = []
-    for col_var in sql_node.out_vars:
-        new_var = visit_vars_inner(col_var, callback, cbdata)
-        new_out_vars.append(new_var)
-
-    sql_node.out_vars = new_out_vars
-    return
-
-
-# add call to visit sql variable
-ir_utils.visit_vars_extensions[SqlReader] = visit_vars_sql
 
 
 def remove_dead_sql(
@@ -150,64 +84,6 @@ def remove_dead_sql(
         return None
 
     return sql_node
-
-
-ir_utils.remove_dead_extensions[SqlReader] = remove_dead_sql
-
-
-def sql_usedefs(sql_node, use_set=None, def_set=None):
-    if use_set is None:
-        use_set = set()
-    if def_set is None:
-        def_set = set()
-
-    # output columns are defined
-    def_set.update({v.name for v in sql_node.out_vars})
-
-    return numba.analysis._use_defs_result(usemap=use_set, defmap=def_set)
-
-
-numba.analysis.ir_extension_usedefs[SqlReader] = sql_usedefs
-
-
-def get_copies_sql(sql_node, typemap):
-    # sql doesn't generate copies, it just kills the output columns
-    kill_set = set(v.name for v in sql_node.out_vars)
-    return set(), kill_set
-
-
-ir_utils.copy_propagate_extensions[SqlReader] = get_copies_sql
-
-
-def apply_copies_sql(
-    sql_node, var_dict, name_var_table, typemap, calltypes, save_copies
-):
-    """apply copy propagate in sql node"""
-
-    # update output_vars
-    new_out_vars = []
-    for col_var in sql_node.out_vars:
-        new_var = replace_vars_inner(col_var, var_dict)
-        new_out_vars.append(new_var)
-
-    sql_node.out_vars = new_out_vars
-    return
-
-
-ir_utils.apply_copy_propagate_extensions[SqlReader] = apply_copies_sql
-
-
-def build_sql_definitions(sql_node, definitions=None):
-    if definitions is None:
-        definitions = defaultdict(list)
-
-    for col_var in sql_node.out_vars:
-        definitions[col_var.name].append(sql_node)
-
-    return definitions
-
-
-ir_utils.build_defs_extensions[SqlReader] = build_sql_definitions
 
 
 def sql_distributed_run(
@@ -255,6 +131,23 @@ def sql_distributed_run(
     return nodes
 
 
+numba.array_analysis.array_analysis_extensions[
+    SqlReader
+] = bodo.ir.connector.connector_array_analysis
+distributed_analysis.distributed_analysis_extensions[
+    SqlReader
+] = bodo.ir.connector.connector_distributed_analysis
+typeinfer.typeinfer_extensions[SqlReader] = bodo.ir.connector.connector_typeinfer
+ir_utils.visit_vars_extensions[SqlReader] = bodo.ir.connector.visit_vars_connector
+ir_utils.remove_dead_extensions[SqlReader] = remove_dead_sql
+numba.analysis.ir_extension_usedefs[SqlReader] = bodo.ir.connector.connector_usedefs
+ir_utils.copy_propagate_extensions[SqlReader] = bodo.ir.connector.get_copies_connector
+ir_utils.apply_copy_propagate_extensions[
+    SqlReader
+] = bodo.ir.connector.apply_copies_connector
+ir_utils.build_defs_extensions[
+    SqlReader
+] = bodo.ir.connector.build_connector_definitions
 distributed_pass.distributed_run_extensions[SqlReader] = sql_distributed_run
 
 

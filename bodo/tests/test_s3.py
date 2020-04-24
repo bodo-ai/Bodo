@@ -331,3 +331,31 @@ def test_s3_np_fromfile_1D_var(minio_server, s3_bucket, test_np_arr):
 
     bodo_func = bodo.jit(test_read)
     check_func(test_read, (), py_output=test_np_arr)
+
+
+def test_s3_read_json(minio_server, s3_bucket, datapath):
+    """
+    test read_json from s3
+    """
+    fname_file = "s3://bodo-test/example.json"
+    fname_dir_single = "s3://bodo-test/example_single.json"
+    fname_dir_multi = "s3://bodo-test/example_multi.json"
+
+    def test_impl(fname):
+        return pd.read_json(
+            fname,
+            orient="records",
+            lines=True,
+            dtype={
+                "one": np.float32,
+                "two": str,
+                "three": "bool",
+                "four": np.float32,
+                "five": str,
+            },
+        )
+
+    py_out = test_impl(datapath("example.json"))
+    check_func(test_impl, (fname_file,), py_output=py_out)
+    check_func(test_impl, (fname_dir_single,), py_output=py_out)
+    check_func(test_impl, (fname_dir_multi,), py_output=py_out)
