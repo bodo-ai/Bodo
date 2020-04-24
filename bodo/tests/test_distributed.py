@@ -576,6 +576,10 @@ def test_arr_reshape(dtype):
     def impl6(A, n):
         return A.reshape(3, n // 3)
 
+    # reshape to same dimensions (no effect)
+    def impl7(A, n):
+        return A.reshape(3, 2, n // 6)
+
     A = np.arange(12, dtype=dtype)
     check_func(impl1, (A, 12))
     check_func(impl2, (A, 12))
@@ -585,6 +589,7 @@ def test_arr_reshape(dtype):
     check_func(impl5, (A, 12))
     A = np.arange(12, dtype=dtype).reshape(3, 4)
     check_func(impl6, (A, 12))
+    check_func(impl7, (A, 12))
 
 
 def test_dist_tuple1():
