@@ -1193,7 +1193,7 @@ class DistributedAnalysis:
             return types.StarArgTuple(val_types)
 
         pysig = dispatcher._compiler.pysig
-        arg_types = numba.typing.templates.fold_arguments(
+        arg_types = numba.core.typing.templates.fold_arguments(
             pysig,
             rhs.args,
             dict(rhs.kws),

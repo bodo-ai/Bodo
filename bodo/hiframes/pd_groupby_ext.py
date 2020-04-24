@@ -283,7 +283,7 @@ def get_groupby_output_dtype(arr_type, func_name):
         and not isinstance(in_dtype, types.Float)
         and not isinstance(in_dtype, types.Boolean)
     ):
-        is_list_string = isinstance(in_dtype, numba.types.containers.List) and in_dtype.dtype == types.unicode_type
+        is_list_string = isinstance(in_dtype, numba.core.types.containers.List) and in_dtype.dtype == types.unicode_type
         if is_list_string or in_dtype == types.unicode_type:
             if func_name not in {"count", "nunique", "min", "max", "sum", "first", "last"}:
                 raise BodoError(
