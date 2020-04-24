@@ -2235,24 +2235,23 @@ sig = types.void(
 oneD_reshape_shuffle = types.ExternalFunction("oneD_reshape_shuffle", sig)
 
 
-@numba.njit
-def dist_oneD_reshape_shuffle(
-    lhs, in_arr, new_0dim_global_len, old_0dim_global_len, dtype_size
-):  # pragma: no cover
+@numba.njit(no_cpython_wrapper=True, cache=True)
+def dist_oneD_reshape_shuffle(lhs, in_arr, new_dim0_global_len):  # pragma: no cover
+    """shuffles the data for ndarray reshape to fill the output array properly
+    """
     c_in_arr = np.ascontiguousarray(in_arr)
     in_lower_dims_size = get_tuple_prod(c_in_arr.shape[1:])
     out_lower_dims_size = get_tuple_prod(lhs.shape[1:])
-    # print(c_in_arr)
-    # print(new_0dim_global_len, old_0dim_global_len, out_lower_dims_size, in_lower_dims_size)
+
+    dtype_size = bodo.io.np_io.get_dtype_size(in_arr.dtype)
     oneD_reshape_shuffle(
         lhs.ctypes,
         c_in_arr.ctypes,
-        new_0dim_global_len,
-        old_0dim_global_len,
+        new_dim0_global_len,
+        len(in_arr),
         dtype_size * out_lower_dims_size,
         dtype_size * in_lower_dims_size,
     )
-    # print(in_arr)
 
 
 permutation_int = types.ExternalFunction(

@@ -548,6 +548,50 @@ def test_getitem_slice_const_size():
     # check_func(impl4, ())
 
 
+@pytest.mark.parametrize("dtype", [np.float32, np.uint8, np.int64])
+def test_arr_reshape(dtype):
+    """test reshape of multi-dim distributed arrays
+    """
+    # reshape to more dimensions
+    def impl1(A, n):
+        return A.reshape(3, n // 3)
+
+    # reshape to more dimensions with tuple input
+    def impl2(A, n):
+        return A.reshape((3, n // 3))
+
+    # reshape to more dimensions np call
+    def impl3(A, n):
+        return np.reshape(A, (3, n // 3))
+
+    # reshape to fewer dimensions
+    def impl4(A, n):
+        return A.reshape(3, n // 3)
+
+    # reshape to 1 dimension
+    def impl5(A, n):
+        return A.reshape(n)
+
+    # reshape to same dimensions (no effect)
+    def impl6(A, n):
+        return A.reshape(3, n // 3)
+
+    # reshape to same dimensions (no effect)
+    def impl7(A, n):
+        return A.reshape(3, 2, n // 6)
+
+    A = np.arange(12, dtype=dtype)
+    check_func(impl1, (A, 12))
+    check_func(impl2, (A, 12))
+    check_func(impl3, (A, 12))
+    A = np.arange(12, dtype=dtype).reshape(2, 3, 2)
+    check_func(impl4, (A, 12))
+    check_func(impl5, (A, 12))
+    A = np.arange(12, dtype=dtype).reshape(3, 4)
+    check_func(impl6, (A, 12))
+    check_func(impl7, (A, 12))
+
+
 def test_dist_tuple1():
     def impl1(A):
         B1, B2 = A
