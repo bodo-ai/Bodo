@@ -483,6 +483,17 @@ def run_frontend(func, inline_closures=False, emit_dels=False):
     return func_ir
 
 
+# make sure run_frontend hasn't changed before replacing it
+lines = inspect.getsource(numba.core.compiler.run_frontend)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "53e6495bcf751f5fdd91ce6f9319cd7e06df8c3e2919fdf3f9fda976ff4c83ea"
+):  # pragma: no cover
+    warnings.warn(
+        bodo.utils.typing.BodoWarning("numba.core.compiler.run_frontend has changed")
+    )
+
+
 numba.core.compiler.run_frontend = run_frontend
 
 
@@ -609,6 +620,17 @@ def find_potential_aliases(
     return alias_map, arg_aliases
 
 
+# make sure find_potential_aliases hasn't changed before replacing it
+lines = inspect.getsource(ir_utils.find_potential_aliases)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "ea2b49b83066d0dca57c8e62202fa6b438b429668b010fc1e9580e7bedfb1a70"
+):  # pragma: no cover
+    warnings.warn(
+        bodo.utils.typing.BodoWarning("ir_utils.find_potential_aliases has changed")
+    )
+
+
 ir_utils.find_potential_aliases = find_potential_aliases
 
 
@@ -632,6 +654,15 @@ def dot_2_vm(context, builder, sig, args):
 
     res = context.compile_internal(builder, dot_impl, sig, args)
     return impl_ret_new_ref(context, builder, sig.return_type, res)
+
+
+# make sure numba.np.linalg.dot_2_vm hasn't changed before replacing it
+lines = inspect.getsource(numba.np.linalg.dot_2_vm)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "85c6fa1687773b818f76b08b2e43cf6251d5cc87ac64906434ba5dfaa0bcc3cb"
+):  # pragma: no cover
+    warnings.warn(bodo.utils.typing.BodoWarning("numba.np.linalg.dot_2_vm has changed"))
 
 
 numba.np.linalg.dot_2_vm = dot_2_vm
